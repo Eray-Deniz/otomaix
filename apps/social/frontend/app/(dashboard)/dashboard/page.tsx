@@ -1,0 +1,146 @@
+'use client'
+
+export const dynamic = 'force-dynamic'
+
+import { useAppStore } from '@/lib/store'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+
+function getGreeting(name: string) {
+  const hour = new Date().getHours()
+  if (hour < 12) return `Günaydın, ${name}!`
+  if (hour < 18) return `İyi günler, ${name}!`
+  return `İyi akşamlar, ${name}!`
+}
+
+function InstagramIcon() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
+
+const PLATFORMS = [
+  { name: 'Instagram', icon: InstagramIcon, color: 'text-pink-500', bg: 'bg-pink-50' },
+  { name: 'TikTok', icon: () => (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.05a8.19 8.19 0 004.79 1.53V7.14a4.85 4.85 0 01-1.02-.45z" />
+    </svg>
+  ), color: 'text-gray-900', bg: 'bg-gray-100' },
+  { name: 'LinkedIn', icon: () => (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"/>
+      <circle cx="4" cy="4" r="2"/>
+    </svg>
+  ), color: 'text-blue-700', bg: 'bg-blue-50' },
+]
+
+const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
+
+export default function DashboardPage() {
+  const user = useAppStore((s) => s.user)
+  const displayName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Kullanıcı'
+
+  return (
+    <div className="p-8 max-w-6xl mx-auto">
+      {/* Greeting */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">{getGreeting(displayName)}</h1>
+        <p className="text-gray-500 text-sm mt-1">Bugün ne yayınlamak istersiniz?</p>
+      </div>
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Bu Ay Üretilen
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-gray-900">0</p>
+            <p className="text-xs text-gray-400 mt-1">içerik</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Yayınlanan
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-gray-900">0</p>
+            <p className="text-xs text-gray-400 mt-1">içerik</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+              Bağlı Platform
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-gray-900">0</p>
+            <p className="text-xs text-gray-400 mt-1">platform</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Posting Streak */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-gray-800">Yayın Serisi</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-2">
+              {DAYS.map((day, i) => (
+                <div key={day} className="flex flex-col items-center gap-1">
+                  <div className={`w-8 h-8 rounded-lg ${i < 3 ? 'bg-blue-600' : 'bg-gray-100'}`} />
+                  <span className="text-xs text-gray-400">{day}</span>
+                </div>
+              ))}
+            </div>
+            <div className="ml-4">
+              <p className="text-2xl font-bold text-blue-600">3</p>
+              <p className="text-xs text-gray-400">gün serisi</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Connect Accounts */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-800 mb-3">Hesabınızı Bağlayın</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Sosyal medya hesaplarınızı bağlayarak içeriklerinizi otomatik yayınlayın.
+        </p>
+        <div className="grid grid-cols-3 gap-4">
+          {PLATFORMS.map((platform) => {
+            const Icon = platform.icon
+            return (
+              <Card key={platform.name} className="hover:shadow-md transition-shadow">
+                <CardContent className="pt-6">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className={`w-12 h-12 ${platform.bg} rounded-xl flex items-center justify-center`}>
+                      <span className={platform.color}>
+                        <Icon />
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium text-gray-800">{platform.name}</p>
+                    <Button size="sm" variant="outline" className="w-full text-xs">
+                      Bağla
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}

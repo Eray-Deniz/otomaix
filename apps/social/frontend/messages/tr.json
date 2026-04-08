@@ -1,0 +1,35 @@
+{
+  "auth": {
+    "login": "Giriş Yap",
+    "logout": "Çıkış Yap",
+    "email": "E-posta",
+    "password": "Şifre",
+    "loginWithGoogle": "Google ile Giriş Yap",
+    "orContinueWith": "veya e-posta ile devam et",
+    "welcomeBack": "Tekrar Hoş Geldiniz",
+    "loginSubtitle": "Hesabınıza giriş yapın"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "createContent": "İçerik Oluştur",
+    "contentLibrary": "İçerik Kütüphanesi",
+    "calendar": "Takvim",
+    "autoPublish": "Otomatik Yayın",
+    "brandSettings": "Marka Ayarları",
+    "competitorAnalysis": "Rakip Analizi"
+  },
+  "dashboard": {
+    "goodMorning": "Günaydın",
+    "goodAfternoon": "İyi günler",
+    "goodEvening": "İyi akşamlar",
+    "postingStreak": "Yayın Serisi",
+    "days": "gün",
+    "statsThisMonth": "Bu Ay",
+    "generatedContent": "Üretilen İçerik",
+    "publishedContent": "Yayınlanan İçerik",
+    "connectedPlatforms": "Bağlı Platform",
+    "connectAccounts": "Hesabınızı Bağlayın",
+    "connectAccountsDesc": "Sosyal medya hesaplarınızı bağlayarak içeriklerinizi otomatik yayınlayın.",
+    "connect": "Bağla"
+  }
+}
