@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(npx --version)",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --yes)",
+      "Bash(npx create-next-app@14 . --typescript --tailwind --eslint --app --no-src-dir --import-alias \"@/*\" --yes)",
+      "Bash(mv CLAUDE.md /tmp/CLAUDE.md.bak)",
+      "Bash(mv /tmp/CLAUDE.md.bak CLAUDE.md)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest init --yes --defaults)",
+      "Bash(npx shadcn@latest add card dropdown-menu avatar separator --yes)",
+      "Bash(npm run:*)",
+      "Bash(node -e \"const l = require\\('lucide-react'\\); console.log\\(Object.keys\\(l\\).filter\\(k => k.toLowerCase\\(\\).includes\\('link'\\) || k.toLowerCase\\(\\).includes\\('share'\\)\\).slice\\(0,10\\)\\)\")",
+      "Bash(node -e \"const m = require\\('@supabase/auth-helpers-nextjs'\\); console.log\\(Object.keys\\(m\\).slice\\(0, 15\\)\\)\")",
+      "Bash(node -e \"const m = require\\('@supabase/auth-helpers-react'\\); console.log\\(Object.keys\\(m\\).slice\\(0, 15\\)\\)\")",
+      "Bash(chmod +x:*)"
+    ]
+  }
+}
