@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import Image from 'next/image'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
@@ -271,7 +272,7 @@ function FileUploadArea({
           isVideo ? (
             <video src={previewUrl} className="max-h-32 rounded-lg" controls />
           ) : (
-            <img src={previewUrl} alt={label} className="max-h-32 rounded-lg object-contain" />
+            <Image src={previewUrl} alt={label} width={200} height={128} className="max-h-32 rounded-lg object-contain" />
           )
         ) : (
           <>
@@ -347,7 +348,6 @@ function onSelect(v: string | null, fn: (val: string) => void) {
 
 export default function MarkaAyarlariPage() {
   const currentBrand = useAppStore((s) => s.currentBrand)
-  const setCurrentBrand = useAppStore((s) => s.setCurrentBrand)
 
   const [brand, setBrand] = useState<Brand | null>(null)
   const [loading, setLoading] = useState(true)
