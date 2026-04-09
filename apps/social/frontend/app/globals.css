@@ -2,6 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
+/* FullCalendar overrides */
+.fc .fc-toolbar-title { font-size: 1rem; font-weight: 700; color: #111827; }
+.fc .fc-button { background: #f3f4f6; border: 1px solid #e5e7eb; color: #374151; font-size: 0.75rem; padding: 0.25rem 0.625rem; border-radius: 0.5rem; }
+.fc .fc-button:hover { background: #e5e7eb; }
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active { background: #2563eb; border-color: #2563eb; color: white; }
+.fc .fc-daygrid-day-number { font-size: 0.75rem; color: #6b7280; padding: 4px 6px; }
+.fc .fc-col-header-cell-cushion { font-size: 0.7rem; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
+.fc .fc-daygrid-day.fc-day-today { background: #EFF6FF; }
+.fc .fc-event { border-radius: 6px; cursor: pointer; border: none; }
+.fc .fc-daygrid-event { margin: 1px 2px; }
+.fc .fc-bg-event { opacity: 0.25; }
+.fc th { border-color: #f3f4f6; }
+.fc td { border-color: #f3f4f6; }
+.fc .fc-scrollgrid { border-color: #f3f4f6; }
+
 @layer base {
   :root {
     --background: 0 0% 100%;
