@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import close_pool, get_pool
 from app.core.redis import close_redis
-from app.routers import ai, auth, brands, calendar, posts, social, storage, webhooks
+from app.routers import ai, auth, autoposting, brands, calendar, posts, social, storage, webhooks
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(ai.router)
+app.include_router(autoposting.router)
 app.include_router(brands.router)
 app.include_router(calendar.router)
 app.include_router(posts.router)
