@@ -75,6 +75,17 @@ class BrandOut(BaseModel):
 
 # ─── Post ───────────────────────────────────────────────────────────────────
 
+class PostGenerate(BaseModel):
+    brand_id: UUID
+    content_type: str  # image | carousel
+    content_category: str | None = None  # product | service | corporate
+    prompt: str | None = None
+    user_text: str | None = None
+    document_ids: list[UUID] = []
+    aspect_ratio: str = "1:1"
+    platforms: list[str] = []
+
+
 class PostCreate(BaseModel):
     brand_id: UUID
     content_type: str
