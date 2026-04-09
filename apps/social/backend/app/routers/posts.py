@@ -116,22 +116,47 @@ async def create_post(
 async def list_posts(
     brand_id: UUID,
     status: str | None = None,
+    content_type: str | None = None,
+    platform: str | None = None,
+    page: int = 1,
+    limit: int = 20,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """List posts for a brand, optionally filtered by status."""
+    """List posts for a brand with optional filters and pagination."""
+    conditions = ["brand_id = $1"]
+    params: list = [brand_id]
+    idx = 2
+
     if status:
-        rows = await db.fetch(
-            "SELECT * FROM social.posts WHERE brand_id = $1 AND status = $2 ORDER BY created_at DESC",
-            brand_id,
-            status,
-        )
-    else:
-        rows = await db.fetch(
-            "SELECT * FROM social.posts WHERE brand_id = $1 ORDER BY created_at DESC",
-            brand_id,
-        )
-    return OkResponse(data=[dict(r) for r in rows])
+        conditions.append(f"status = ${idx}")
+        params.append(status)
+        idx += 1
+
+    if content_type:
+        conditions.append(f"content_type = ${idx}")
+        params.append(content_type)
+        idx += 1
+
+    if platform:
+        conditions.append(f"${idx} = ANY(platforms)")
+        params.append(platform)
+        idx += 1
+
+    where = " AND ".join(conditions)
+    offset = (page - 1) * limit
+
+    rows = await db.fetch(
+        f"SELECT * FROM social.posts WHERE {where} ORDER BY created_at DESC LIMIT {limit} OFFSET {offset}",
+        *params,
+    )
+    total = await db.fetchval(f"SELECT COUNT(*) FROM social.posts WHERE {where}", *params)
+    return OkResponse(data={
+        "items": [dict(r) for r in rows],
+        "total": total,
+        "page": page,
+        "pages": max(1, -(-total // limit)),  # ceil division
+    })
 
 
 @router.get("/{post_id}", response_model=OkResponse)
