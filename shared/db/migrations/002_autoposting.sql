@@ -27,14 +27,14 @@ CREATE TABLE IF NOT EXISTS social.public_holidays (
 );
 
 INSERT INTO social.public_holidays (year, date, name_tr, name_en, category) VALUES
-  (2026,'2026-01-01','Yılbaşı','New Year''s Day','national'),
-  (2026,'2026-04-23','Ulusal Egemenlik ve Çocuk Bayramı','National Sovereignty Day','national'),
-  (2026,'2026-05-01','Emek ve Dayanışma Günü','Labour Day','national'),
-  (2026,'2026-05-19','Atatürk''ü Anma, Gençlik ve Spor Bayramı','Youth Day','national'),
-  (2026,'2026-07-15','Demokrasi ve Millî Birlik Günü','Democracy Day','national'),
-  (2026,'2026-08-30','Zafer Bayramı','Victory Day','national'),
-  (2026,'2026-10-29','Cumhuriyet Bayramı','Republic Day','national'),
-  (2026,'2026-02-14','Sevgililer Günü','Valentine''s Day','commercial'),
-  (2026,'2026-03-08','Dünya Kadınlar Günü','International Women''s Day','commercial'),
-  (2026,'2026-11-27','Black Friday','Black Friday','commercial')
+  (2026, '2026-01-01', 'Yılbaşı',                                 'New Year''s Day',            'national'),
+  (2026, '2026-04-23', 'Ulusal Egemenlik ve Çocuk Bayramı',       'National Sovereignty Day',   'national'),
+  (2026, '2026-05-01', 'Emek ve Dayanışma Günü',                  'Labour Day',                 'national'),
+  (2026, '2026-05-19', 'Atatürk''ü Anma, Gençlik ve Spor Bayramı','Youth and Sports Day',       'national'),
+  (2026, '2026-07-15', 'Demokrasi ve Millî Birlik Günü',           'Democracy Day',              'national'),
+  (2026, '2026-08-30', 'Zafer Bayramı',                            'Victory Day',                'national'),
+  (2026, '2026-10-29', 'Cumhuriyet Bayramı',                       'Republic Day',               'national'),
+  (2026, '2026-02-14', 'Sevgililer Günü',                          'Valentine''s Day',           'commercial'),
+  (2026, '2026-03-08', 'Dünya Kadınlar Günü',                      'International Women''s Day', 'commercial'),
+  (2026, '2026-11-27', 'Black Friday',                             'Black Friday',               'commercial')
 ON CONFLICT (year, date) DO NOTHING;
