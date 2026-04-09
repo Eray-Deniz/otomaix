@@ -29,11 +29,27 @@ async function apiFetch<T>(
   return res.json()
 }
 
+async function apiUpload<T>(
+  path: string,
+  formData: FormData
+): Promise<{ success: boolean; data?: T; error?: string }> {
+  const authHeader = await getAuthHeader()
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: authHeader,
+    body: formData,
+  })
+  return res.json()
+}
+
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
   post: <T>(path: string, body: unknown) =>
     apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) =>
+    apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
+  upload: <T>(path: string, formData: FormData) => apiUpload<T>(path, formData),
 }

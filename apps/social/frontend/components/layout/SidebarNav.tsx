@@ -15,12 +15,12 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/create', label: 'İçerik Oluştur', icon: Wand2 },
-  { href: '/library', label: 'İçerik Kütüphanesi', icon: Library },
-  { href: '/calendar', label: 'Takvim', icon: Calendar },
-  { href: '/auto-publish', label: 'Otomatik Yayın', icon: Send },
-  { href: '/brand-settings', label: 'Marka Ayarları', icon: Settings },
-  { href: '/competitor', label: 'Rakip Analizi', icon: BarChart2 },
+  { href: '/icerik-olustur', label: 'İçerik Oluştur', icon: Wand2 },
+  { href: '/icerik-kutuphanesi', label: 'İçerik Kütüphanesi', icon: Library },
+  { href: '/takvim', label: 'Takvim', icon: Calendar },
+  { href: '/otomatik-yayin', label: 'Otomatik Yayın', icon: Send },
+  { href: '/marka-ayarlari', label: 'Marka Ayarları', icon: Settings },
+  { href: '/rakip-analizi', label: 'Rakip Analizi', icon: BarChart2 },
 ]
 
 export function SidebarNav() {

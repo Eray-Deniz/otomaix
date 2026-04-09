@@ -34,6 +34,18 @@ class BrandCreate(BaseModel):
     sector: str | None = None
 
 
+class BrandKitUpdate(BaseModel):
+    colors: list[str] | None = None
+    fonts: dict | None = None
+    social_handle: str | None = None
+    hashtags: list[str] | None = None
+    tonality: str | None = None
+    timezone: str | None = None
+    voiceover: str | None = None
+    logo_overlay: dict | None = None
+    intro_video: dict | None = None
+
+
 class BrandUpdate(BaseModel):
     name: str | None = None
     description: str | None = None

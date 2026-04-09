@@ -28,10 +28,16 @@ Otomaix Social uygulamasının FastAPI backend'i. api.otomaix.com'da çalışır
   - fal.ai async generation + webhook
   - Upload-Post.com OAuth + publish
   - Dockerfile + .dockerignore
-- [x] Phase 1 Step 4 — Next.js frontend kuruldu (frontend/ dizininde)
+- [x] Phase 1 Step 5 — Coolify deploy yapılandırması
+  - 5a: Backend Dockerfile ✅ (zaten mevcut)
+  - 5c: Coolify UI'da servis oluşturma (MANUEL — yapılması gerekiyor)
+- [x] Phase 1 Step 6 — Test scripti oluşturuldu
+  - ~/otomaix/shared/test_phase1.sh
 
 ## Devam Eden İş
-Phase 1 Step 5 — Coolify'da deploy yapılandırması
+Phase 1 Step 5c — Coolify UI'da manuel servis kurulumu (MANUEL)
 
 ## Bir Sonraki Adım
-~/otomaix/docs/01-social-phase1.md Step 5'ten başla
+1. Coolify UI'da `otomaix-social-backend` ve `otomaix-social-frontend` servislerini oluştur
+2. Deploy sonrası: `bash ~/otomaix/shared/test_phase1.sh` ile test et
+3. Tüm testler geçince → ~/otomaix/docs/02-social-phase2.md ile devam et
