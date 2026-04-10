@@ -42,7 +42,8 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - 250px sabit sidebar layout + SidebarNav (Türkçe route'lar)
   - Dashboard iskelet sayfası
   - Dockerfile (multi-stage, standalone output)
-  - middleware.ts (auth koruması)
+  - middleware.ts (auth koruması — sonradan kaldırıldı, layout'a taşındı)
+  - `app/auth/callback/page.tsx` — Google OAuth callback handler
 
 ### Phase 2
 - [x] Adım 1b — Marka Ayarları (`/marka-ayarlari`)
@@ -103,7 +104,7 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - Adım 5: Sosyal medya hedefleri (çoklu seçim)
     - Adım 6: Platform seçimi (bağlantı daha sonra)
     - Adım 7: Özet + `POST /brands` + `PATCH /brands/{id}/kit` → `/dashboard`
-  - middleware.ts → `/onboarding/*` auth koruması eklendi
+  - middleware.ts → artık no-op (sadece `NextResponse.next()` döner)
   - `StepIndicator` bileşeni (nokta + çizgi + label)
 
 ## Tamamlanan Deploy Adımları
@@ -181,4 +182,8 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 - Türkçe varsayılan dil
 - next-intl kurulmadı (tr.json manuel yönetiliyor — basit tutmak için)
 - Supabase client SSR'da no-op, yalnızca client-side çalışıyor
+- Supabase session **localStorage**'da tutulur (cookie değil) → middleware'den okunamaz
+  - Auth koruması `app/(dashboard)/layout.tsx`'te client-side `getSession()` ile yapılır
+  - Google OAuth sonrası `/auth/callback` sayfası `onAuthStateChange` ile session'ı bekler, sonra `/dashboard`'a yönlendirir
+  - `login/page.tsx`'te `redirectTo: window.location.origin + '/auth/callback'` kullanılır
 - Tiptap yerine Textarea kullanıldı (caption editörü) — daha az bağımlılık
