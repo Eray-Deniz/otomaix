@@ -10,22 +10,21 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const supabase = createSupabaseClient()
 
-    // Supabase hash fragment'taki token'ı işler ve session kurar
+    // Hash fragment işlenince SIGNED_IN eventi tetiklenir
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) {
+        router.replace('/dashboard')
+      }
+    })
+
+    // Zaten oturum açıksa direkt yönlendir
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         router.replace('/dashboard')
-      } else {
-        // Biraz bekleyip tekrar dene (hash işlenmesi zaman alabilir)
-        setTimeout(async () => {
-          const { data: retryData } = await supabase.auth.getSession()
-          if (retryData.session) {
-            router.replace('/dashboard')
-          } else {
-            router.replace('/login')
-          }
-        }, 500)
       }
     })
+
+    return () => subscription.unsubscribe()
   }, [router])
 
   return (
