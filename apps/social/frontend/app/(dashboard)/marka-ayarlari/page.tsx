@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
@@ -377,7 +377,7 @@ function onSelect(v: string | null, fn: (val: string) => void) {
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
-export default function MarkaAyarlariPage() {
+function MarkaAyarlariContent() {
   const currentBrand = useAppStore((s) => s.currentBrand)
   const searchParams = useSearchParams()
 
@@ -1221,5 +1221,13 @@ export default function MarkaAyarlariPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+export default function MarkaAyarlariPage() {
+  return (
+    <Suspense>
+      <MarkaAyarlariContent />
+    </Suspense>
   )
 }
