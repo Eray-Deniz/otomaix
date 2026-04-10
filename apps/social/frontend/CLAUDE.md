@@ -145,13 +145,22 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - `StockAvatar`, `ActiveAvatar` interface'leri eklendi
   - `BrandKit.avatar` alanı eklendi
 
-#### Bir Sonraki Adım — Phase 3 Adım 4b
-**Rakip analizi frontend:**
-- `app/(dashboard)/rakip-analizi/page.tsx` oluştur
-  - "Rakip Ekle" modal (isim, Instagram handle, website URL)
-  - Rakip kartları listesi + "Analizi Gör" butonu
-  - Analiz detay sayfası: posting frequency chart (recharts), engagement rate, hashtag listesi
-  - "Bu Analizden İçerik Üret" butonu
+- [x] Adım 4b — Rakip analizi frontend
+  - `app/(dashboard)/rakip-analizi/page.tsx` oluşturuldu
+    - Sol kolon: rakip kartları listesi (yenile + sil butonları)
+    - Sağ kolon: analiz detay paneli (Instagram metrikleri, PieChart, web analizi)
+    - "Rakip Ekle" modal → `POST /competitors`
+    - "Özet Rapor" butonu → `GET /competitors/report/summary`
+    - AI rapor kartı (fırsatlar + öneriler)
+    - recharts PieChart (içerik dağılımı)
+  - `recharts` paketi eklendi (`package.json`)
+
+#### Bir Sonraki Adım — Phase 3 Adım 5 (frontend)
+**Trend analizi:**
+- Dashboard sayfasına "Bu Hafta Sektörünüzde Trendler" widget'ı ekle
+- `app/(dashboard)/trendler/page.tsx` oluştur
+  - Haftalık trend kartları
+  - "Bu Trende Göre İçerik Üret" butonları
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

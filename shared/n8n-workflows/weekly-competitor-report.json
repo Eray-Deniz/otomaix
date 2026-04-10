@@ -1,0 +1,163 @@
+{
+  "name": "Haftalık Rakip Raporu",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        },
+        "timezone": "Europe/Istanbul"
+      },
+      "id": "schedule-trigger",
+      "name": "Her Pazartesi 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.otomaix.com/internal/competitors/due",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-due-competitors",
+      "name": "Analiz Bekleyen Rakipler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Otomaix Internal API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "split-competitors",
+      "name": "Her Rakip İçin",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.otomaix.com/competitors/{{ $json.id }}/refresh",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "refresh-analysis",
+      "name": "Analizi Yenile",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Otomaix Internal API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $node['Her Rakip İçin'].context['noItemsLeft'] }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-done",
+      "name": "Tüm Rakipler Bitti?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.otomaix.com/competitors/report/summary?brand_id={{ $('Analiz Bekleyen Rakipler').item.json.data[0].brand_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "get-report",
+      "name": "Özet Raporu Al",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Otomaix Internal API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Analiz Bekleyen Rakipler').item.json.data[0].telegram_chat_id }}",
+        "text": "=📊 *Haftalık Rakip Raporu Hazır!*\n\n{{ $json.data.summary }}\n\n*Fırsatlar:*\n{{ $json.data.opportunities.map((o, i) => `${i+1}. ${o}`).join('\\n') }}\n\nDetaylar için app\\.otomaix\\.com/rakip\\-analizi",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2"
+        }
+      },
+      "id": "telegram-notify",
+      "name": "Telegram Bildirim",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1560, 200]
+    }
+  ],
+  "connections": {
+    "Her Pazartesi 09:00": {
+      "main": [
+        [{ "node": "Analiz Bekleyen Rakipler", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analiz Bekleyen Rakipler": {
+      "main": [
+        [{ "node": "Her Rakip İçin", "type": "main", "index": 0 }]
+      ]
+    },
+    "Her Rakip İçin": {
+      "main": [
+        [{ "node": "Analizi Yenile", "type": "main", "index": 0 }],
+        [{ "node": "Tüm Rakipler Bitti?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Analizi Yenile": {
+      "main": [
+        [{ "node": "Her Rakip İçin", "type": "main", "index": 0 }]
+      ]
+    },
+    "Tüm Rakipler Bitti?": {
+      "main": [
+        [{ "node": "Özet Raporu Al", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Özet Raporu Al": {
+      "main": [
+        [{ "node": "Telegram Bildirim", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "Europe/Istanbul"
+  },
+  "meta": {
+    "description": "Her Pazartesi 09:00'da tüm rakiplerin analizini yeniler, Claude ile özet rapor üretir ve Telegram'a gönderir."
+  }
+}

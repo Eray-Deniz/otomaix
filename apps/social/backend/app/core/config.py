@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     AZURE_TTS_KEY: str = ""     # Opsiyonel — Faceless video TTS için
     AZURE_TTS_REGION: str = "westeurope"  # Azure TTS bölgesi
     HEYGEN_API_KEY: str = ""    # Opsiyonel — AI Avatar için
+    APIFY_API_KEY: str = ""     # Opsiyonel — Instagram rakip analizi için
 
 
 settings = Settings()

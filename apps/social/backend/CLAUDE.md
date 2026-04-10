@@ -131,6 +131,7 @@ Her müşteri kendi bot token'ını Otomatik Yayın wizard'ına girer →
 - `004_telegram_chat_id.sql` — autoposting_configs.telegram_chat_id ✅
 - `005_telegram_bot_token.sql` — autoposting_configs.telegram_bot_token ✅
 - `006_document_rag.sql` — brand_documents.raw_text + brand_document_chunks (pgvector) ✅
+- `007_competitor_analysis.sql` — competitor_analyses tablosu ✅
 
 ## Router Kayıt Sırası (main.py)
 ```python
@@ -141,6 +142,7 @@ app.include_router(autoposting.router)
 app.include_router(avatar.router)      # Phase 3 — eklendi
 app.include_router(brands.router)
 app.include_router(calendar.router)
+app.include_router(competitors.router) # Phase 3 — eklendi
 app.include_router(documents.router)   # Phase 3 — eklendi
 app.include_router(posts.router)
 app.include_router(storage.router)
@@ -203,15 +205,29 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
     - `GET  /avatar/video-status/{video_id}` → HeyGen durum sorgulama
   - `config.py`: HEYGEN_API_KEY eklendi (opsiyonel)
 
-### Bir Sonraki Adım — Phase 3 Adım 4a
-**Rakip analizi backend:**
-- `app/services/competitor_analyzer.py` oluştur
-  - `analyze_instagram(handle)` → Apify/RapidAPI ile Instagram analizi
-  - `analyze_website(url)` → httpx + Claude ile rakip site analizi
-  - `generate_competitor_report()` → Claude ile sentez raporu
-- `app/routers/competitors.py`
-  - `POST /competitors` → rakip ekle + analiz tetikle
-  - `GET  /competitors?brand_id` → liste + son analiz
-  - `GET  /competitors/{id}/analysis` → detaylı analiz
-  - `POST /competitors/{id}/refresh` → analizi yenile
-- Migration: `007_competitor_analysis.sql` → competitor_analyses tablosu
+- [x] Adım 4a — Rakip analizi backend
+  - `app/services/competitor_analyzer.py`
+    - `analyze_website(url)` → httpx + Claude Haiku ile rakip site analizi
+    - `analyze_instagram(handle)` → APIFY_API_KEY varsa gerçek, yoksa placeholder
+    - `generate_competitor_report()` → Claude ile fırsat + öneri sentezi
+    - `run_full_analysis()` → website + instagram birleşik pipeline
+  - `app/routers/competitors.py`
+    - `POST /competitors` → rakip ekle + hemen analiz et
+    - `GET  /competitors?brand_id` → liste
+    - `GET  /competitors/{id}/analysis` → detaylı analiz
+    - `POST /competitors/{id}/refresh` → analizi yenile
+    - `DELETE /competitors/{id}` → rakip sil
+    - `GET  /competitors/report/summary?brand_id` → Claude sentez raporu
+  - Migration: `007_competitor_analysis.sql` ✅
+  - config.py: APIFY_API_KEY eklendi (opsiyonel)
+  - n8n: `shared/n8n-workflows/weekly-competitor-report.json` oluşturuldu
+
+### Bir Sonraki Adım — Phase 3 Adım 5 (Trend Analizi)
+**Trend analizi backend:**
+- `app/services/trend_analyzer.py` oluştur
+  - Google Trends (pytrends) → sektöre göre TR trendleri
+  - Türk haber RSS feed'leri (hurriyet, milliyet)
+  - Claude ile sektör relevance sıralaması
+- `GET /trends?brand_id` → mevcut trendler
+- `POST /trends/{id}/create-post` → trend'e göre içerik üret
+- Migration: `008_trend_cache.sql`
