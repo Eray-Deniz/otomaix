@@ -22,9 +22,23 @@ import Image from 'next/image'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { Loader2, X, Upload, Check } from 'lucide-react'
+import { Loader2, X, Upload, Check, FileText, Trash2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface BrandDocument {
+  id: string
+  brand_id: string
+  name: string
+  file_url: string
+  file_type: string | null
+  category: string | null
+  description: string | null
+  file_size_kb: number | null
+  has_raw_text: boolean
+  chunk_count: number
+  created_at: string
+}
 
 interface FontEntry {
   family: string
@@ -358,6 +372,11 @@ export default function MarkaAyarlariPage() {
   const [uploadingLogo, setUploadingLogo] = useState<'light' | 'dark' | null>(null)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'bilgiler')
+  const [documents, setDocuments] = useState<BrandDocument[]>([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
+  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [deletingDocId, setDeletingDocId] = useState<string | null>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -476,6 +495,49 @@ export default function MarkaAyarlariPage() {
       toast.error('Video yüklenemedi')
     }
     setUploadingVideo(false)
+  }
+
+  async function loadDocuments(brandId: string) {
+    setLoadingDocs(true)
+    const res = await api.get<BrandDocument[]>(`/documents?brand_id=${brandId}`)
+    if (res.success && res.data) setDocuments(res.data)
+    setLoadingDocs(false)
+  }
+
+  useEffect(() => {
+    if (activeTab === 'dokumanlar' && brand?.id) {
+      loadDocuments(brand.id)
+    }
+  }, [activeTab, brand?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDocumentUpload(file: File) {
+    if (!brand?.id) return
+    setUploadingDoc(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('brand_id', brand.id)
+    fd.append('name', file.name)
+    const res = await api.upload<BrandDocument>('/documents', fd)
+    if (res.success && res.data) {
+      setDocuments((prev) => [res.data!, ...prev])
+      toast.success(`"${file.name}" yüklendi ve işlendi`)
+    } else {
+      toast.error('Doküman yüklenemedi')
+    }
+    setUploadingDoc(false)
+  }
+
+  async function handleDocumentDelete(docId: string, docName: string) {
+    if (!confirm(`"${docName}" dokümanını silmek istediğinize emin misiniz?`)) return
+    setDeletingDocId(docId)
+    const res = await api.delete(`/documents/${docId}`)
+    if (res.success) {
+      setDocuments((prev) => prev.filter((d) => d.id !== docId))
+      toast.success('Doküman silindi')
+    } else {
+      toast.error('Doküman silinemedi')
+    }
+    setDeletingDocId(null)
   }
 
   async function connectSocialAccount(platform: string) {
@@ -865,19 +927,83 @@ export default function MarkaAyarlariPage() {
         {/* ── Tab 5: Dokümanlar ─────────────────────────────────────────────── */}
         <TabsContent value="dokumanlar" className="space-y-4">
           <p className="text-sm text-gray-500">
-            Yüklediğiniz dokümanlar içerik üretiminde bağlam olarak kullanılır.
+            Yüklediğiniz dokümanlar (PDF, Word, Excel) içerik üretiminde bağlam olarak kullanılır.
+            Küçük dosyalar doğrudan, büyük dosyalar parçalanarak (RAG) AI&apos;a aktarılır.
           </p>
+
+          {/* Upload area */}
           <div
-            className="border-2 border-dashed border-gray-200 rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
-            onClick={() => toast.info('Doküman yükleme yakında aktif olacak')}
+            className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+            onClick={() => !uploadingDoc && docInputRef.current?.click()}
           >
-            <Upload className="w-8 h-8 text-gray-400" />
-            <p className="text-sm text-gray-500">PDF, Word, Excel veya görsel yükleyin</p>
-            <p className="text-xs text-gray-400">Maks. 50 MB</p>
+            {uploadingDoc ? (
+              <>
+                <Loader2 className="w-7 h-7 animate-spin text-blue-500" />
+                <p className="text-sm text-blue-600">Yükleniyor ve işleniyor...</p>
+              </>
+            ) : (
+              <>
+                <Upload className="w-7 h-7 text-gray-400" />
+                <p className="text-sm text-gray-500">PDF, Word veya Excel yükleyin</p>
+                <p className="text-xs text-gray-400">Maks. 50 MB</p>
+              </>
+            )}
+            <input
+              ref={docInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) { handleDocumentUpload(file); e.target.value = '' }
+              }}
+            />
           </div>
-          <div className="text-center text-sm text-gray-400 py-8">
-            Henüz doküman yüklenmedi.
-          </div>
+
+          {/* Document list */}
+          {loadingDocs ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="text-center text-sm text-gray-400 py-8">
+              Henüz doküman yüklenmedi.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {documents.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between p-4 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-4 h-4 text-blue-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{doc.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {doc.file_size_kb ? `${doc.file_size_kb} KB` : '—'}
+                        {doc.has_raw_text && ' · Tam metin'}
+                        {doc.chunk_count > 0 && ` · ${doc.chunk_count} parça (RAG)`}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDocumentDelete(doc.id, doc.name)}
+                    className="ml-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0"
+                    disabled={deletingDocId === doc.id}
+                    title="Sil"
+                  >
+                    {deletingDocId === doc.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Trash2 className="w-4 h-4" />
+                    }
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

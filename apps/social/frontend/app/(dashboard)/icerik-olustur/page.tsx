@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -11,11 +11,18 @@ import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb } from 'lucide-react'
+import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb, FileText } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface BrandDocument {
+  id: string
+  name: string
+  file_type: string | null
+  file_size_kb: number | null
+}
 
 type ContentType = 'image' | 'carousel'
 type ContentCategory = 'product' | 'service' | 'corporate'
@@ -117,6 +124,8 @@ export default function IcerikOlusturPage() {
   const [ownText, setOwnText] = useState('')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [platforms, setPlatforms] = useState<string[]>(['instagram'])
+  const [availableDocs, setAvailableDocs] = useState<BrandDocument[]>([])
+  const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
 
   // Step 3
   const [generating, setGenerating] = useState(false)
@@ -124,6 +133,23 @@ export default function IcerikOlusturPage() {
   const [caption, setCaption] = useState('')
   const [hashtags, setHashtags] = useState<string[]>([])
   const [newHashtag, setNewHashtag] = useState('')
+
+  // ── Fetch brand documents ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    async function fetchDocs() {
+      if (!currentBrand?.id) return
+      const res = await api.get<BrandDocument[]>(`/documents?brand_id=${currentBrand.id}`)
+      if (res.success && res.data) setAvailableDocs(res.data)
+    }
+    fetchDocs()
+  }, [currentBrand?.id])
+
+  function toggleDoc(id: string) {
+    setSelectedDocIds((prev) =>
+      prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
+    )
+  }
 
   // ── Step 2 helpers ──────────────────────────────────────────────────────────
 
@@ -164,6 +190,7 @@ export default function IcerikOlusturPage() {
       content_category: category,
       prompt: prompt.trim(),
       user_text: useOwnText ? ownText.trim() || null : null,
+      document_ids: selectedDocIds,
       aspect_ratio: aspectRatio,
       platforms,
     })
@@ -209,6 +236,7 @@ export default function IcerikOlusturPage() {
     setHashtags([])
     setUseOwnText(false)
     setOwnText('')
+    setSelectedDocIds([])
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -404,6 +432,41 @@ export default function IcerikOlusturPage() {
               ))}
             </div>
           </div>
+
+          {/* Documents */}
+          {availableDocs.length > 0 && (
+            <div className="space-y-2">
+              <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
+              <div className="flex flex-col gap-1.5">
+                {availableDocs.map((doc) => (
+                  <button
+                    key={doc.id}
+                    onClick={() => toggleDoc(doc.id)}
+                    className={cn(
+                      'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
+                      selectedDocIds.includes(doc.id)
+                        ? 'border-blue-500 bg-blue-50 text-blue-800'
+                        : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                    )}
+                  >
+                    <FileText className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{doc.name}</span>
+                    {doc.file_size_kb && (
+                      <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{doc.file_size_kb} KB</span>
+                    )}
+                    {selectedDocIds.includes(doc.id) && (
+                      <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {selectedDocIds.length > 0 && (
+                <p className="text-xs text-blue-600">
+                  {selectedDocIds.length} doküman seçildi — AI içerik üretirken bu belgeleri referans alacak
+                </p>
+              )}
+            </div>
+          )}
 
           <Button
             onClick={handleGenerate}

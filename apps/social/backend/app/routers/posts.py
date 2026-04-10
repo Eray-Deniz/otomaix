@@ -7,9 +7,61 @@ from app.core.database import get_db
 from fastapi import Header
 from app.core.security import get_current_user, get_current_user_optional, get_service_auth
 from app.models.schemas import OkResponse, PostCreate, PostGenerate
+from app.services.document_processor import get_document_context
 from app.services.fal_ai import generate_image
 
 router = APIRouter(prefix="/posts", tags=["posts"])
+
+
+async def _build_prompt_with_rag(
+    payload: PostGenerate,
+    brand: object,
+    brand_kit: dict,
+    db,
+) -> str:
+    """Build an enriched image/content prompt by injecting document context."""
+    base_prompt = payload.prompt or ""
+
+    if not payload.document_ids:
+        return base_prompt
+
+    doc_context = await get_document_context(payload.document_ids, base_prompt, db)
+    if not doc_context:
+        return base_prompt
+
+    brand_name = brand["name"] if brand["name"] else ""
+    sector = brand["sector"] if brand["sector"] else ""
+    tonality = brand_kit.get("tonality", "")
+    colors = ", ".join(brand_kit.get("colors", []))
+    hashtags = ", ".join(brand_kit.get("hashtags", []))
+
+    enriched = f"""Sen Türk KOBİ'lerine sosyal medya içeriği üreten bir uzmansın.
+
+Marka Bilgileri:
+- İsim: {brand_name}
+- Sektör: {sector}
+- Ton: {tonality}
+- Renkler: {colors}
+- Hashtag'ler: {hashtags}
+
+Referans Doküman İçeriği:
+{doc_context}
+
+{f"Mutlaka kullanılacak metin: {payload.user_text}" if payload.user_text else ""}
+
+Görev: {base_prompt}
+
+Platform: {", ".join(payload.platforms)}
+Boyut: {payload.aspect_ratio}
+
+Lütfen üret:
+1. Görsel için kısa tasarım açıklaması (İngilizce, fal.ai için)
+2. Caption (Türkçe, {tonality} tonda)
+3. Hashtag önerileri
+
+Yanıt olarak sadece JSON döndür: {{"image_prompt": "...", "caption": "...", "hashtags": [...]}}"""
+
+    return enriched
 
 
 @router.post("/generate", response_model=OkResponse, status_code=status.HTTP_201_CREATED)
@@ -19,18 +71,23 @@ async def generate_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Create a post record and trigger fal.ai image generation."""
-    brand = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", payload.brand_id)
+    brand = await db.fetchrow(
+        "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
+    )
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 
     brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
 
+    # Build enriched prompt with document context (RAG)
+    enriched_prompt = await _build_prompt_with_rag(payload, brand, brand_kit, db)
+
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
             (brand_id, content_type, content_category, prompt, user_text,
-             aspect_ratio, platforms, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'generating')
+             document_ids, aspect_ratio, platforms, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating')
         RETURNING *
         """,
         payload.brand_id,
@@ -38,13 +95,14 @@ async def generate_post(
         payload.content_category,
         payload.prompt,
         payload.user_text,
+        [str(d) for d in payload.document_ids] if payload.document_ids else None,
         payload.aspect_ratio,
         payload.platforms,
     )
     post = dict(row)
 
     try:
-        fal_job_id = await generate_image(payload.prompt or "", payload.aspect_ratio, brand_kit)
+        fal_job_id = await generate_image(enriched_prompt, payload.aspect_ratio, brand_kit)
         await db.execute(
             "UPDATE social.posts SET fal_job_id = $2 WHERE id = $1",
             post["id"],

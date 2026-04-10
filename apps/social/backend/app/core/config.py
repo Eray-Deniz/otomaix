@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     UPLOAD_POST_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     INTERNAL_API_KEY: str = ""  # n8n → backend servis kimlik doğrulaması
+    OPENAI_API_KEY: str = ""    # Opsiyonel — RAG chunk embedding için
 
 
 settings = Settings()
