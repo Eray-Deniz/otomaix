@@ -1,0 +1,13 @@
+{
+  "id": "Nz4651wCfBHP4G9l",
+  "name": "Auto Posting Scheduler",
+  "nodes": "see n8n UI",
+  "description": "Her 30 dakikada zamanı gelen autoposting configlerini kontrol eder, post üretir, gerekirse Telegram onayına gönderir.",
+  "trigger": "Schedule - every 30 minutes",
+  "endpoints_used": [
+    "GET /internal/autoposting/due",
+    "POST /internal/autoposting/trigger",
+    "POST /webhook/telegram-content-approval (Telegram Onay workflow webhook)"
+  ],
+  "auth": "X-Internal-Key header"
+}

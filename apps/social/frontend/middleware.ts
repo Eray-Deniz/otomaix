@@ -14,8 +14,9 @@ export async function middleware(req: NextRequest) {
 
   const isAuthPage = req.nextUrl.pathname.startsWith('/login')
   const isDashboard = req.nextUrl.pathname.startsWith('/dashboard')
+  const isOnboarding = req.nextUrl.pathname.startsWith('/onboarding')
 
-  if (!session && isDashboard) {
+  if (!session && (isDashboard || isOnboarding)) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
@@ -27,5 +28,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/onboarding/:path*', '/login'],
 }

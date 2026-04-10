@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     R2_PUBLIC_URL: str = ""
     UPLOAD_POST_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    INTERNAL_API_KEY: str = ""  # n8n → backend servis kimlik doğrulaması
 
 
 settings = Settings()

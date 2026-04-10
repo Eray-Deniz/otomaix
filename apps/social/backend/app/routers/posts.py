@@ -4,7 +4,8 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from fastapi import Header
+from app.core.security import get_current_user, get_current_user_optional, get_service_auth
 from app.models.schemas import OkResponse, PostCreate, PostGenerate
 from app.services.fal_ai import generate_image
 
@@ -59,10 +60,15 @@ async def generate_post(
 @router.post("/{post_id}/regenerate", response_model=OkResponse)
 async def regenerate_post(
     post_id: UUID,
-    user: dict = Depends(get_current_user),
+    x_internal_key: str | None = Header(default=None),
+    user: dict | None = Depends(get_current_user_optional),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Trigger a new fal.ai generation for an existing post."""
+    """Trigger a new fal.ai generation for an existing post. Accepts JWT or X-Internal-Key."""
+    from app.core.config import settings as _settings
+    if not user and x_internal_key != _settings.INTERNAL_API_KEY:
+        from fastapi import HTTPException as _HTTPException
+        raise _HTTPException(status_code=401, detail="Not authenticated")
     post = await db.fetchrow(
         "SELECT p.*, b.brand_kit FROM social.posts p JOIN social.brands b ON b.id = p.brand_id WHERE p.id = $1",
         post_id,
@@ -179,6 +185,19 @@ async def publish_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Trigger publishing a post to its configured platforms."""
+    from app.services.upload_post import publish_post as svc_publish
+
+    result = await svc_publish(post_id, db)
+    return OkResponse(data=result)
+
+
+@router.post("/{post_id}/publish-now", response_model=OkResponse)
+async def publish_post_now(
+    post_id: UUID,
+    _: None = Depends(get_service_auth),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Publish a post immediately — called by n8n with X-Internal-Key header."""
     from app.services.upload_post import publish_post as svc_publish
 
     result = await svc_publish(post_id, db)

@@ -8,25 +8,40 @@ import httpx
 from app.core.config import settings
 
 BASE_URL = "https://api.upload-post.com/v1"
+CALLBACK_URL = "https://api.otomaix.com/social/callback"
 
 
 def get_oauth_link(brand_id: UUID, platform: str) -> str:
     """
     Generate a JWT-authenticated OAuth link for connecting a social account.
-    The client opens this URL to grant Upload-Post access to their platform account.
+
+    The link includes:
+    - `token` — HS256 JWT with API key (Upload-Post auth)
+    - `redirect_uri` — our callback endpoint
+    - `state` — HS256 JWT encoding brand_id + platform for CSRF protection
     """
     import time
 
     from jose import jwt
 
-    payload = {
-        "iat": int(time.time()),
-        "exp": int(time.time()) + 3600,
-        "brand_id": str(brand_id),
-        "platform": platform,
-    }
-    token = jwt.encode(payload, settings.UPLOAD_POST_API_KEY, algorithm="HS256")
-    return f"{BASE_URL}/oauth/{platform}?token={token}"
+    now = int(time.time())
+
+    # Auth token for Upload-Post
+    auth_token = jwt.encode(
+        {"iat": now, "exp": now + 3600},
+        settings.UPLOAD_POST_API_KEY,
+        algorithm="HS256",
+    )
+
+    # State JWT — decoded in /social/callback to verify origin and retrieve brand_id
+    state = jwt.encode(
+        {"iat": now, "exp": now + 3600, "brand_id": str(brand_id), "platform": platform},
+        settings.UPLOAD_POST_API_KEY,
+        algorithm="HS256",
+    )
+
+    params = f"token={auth_token}&redirect_uri={CALLBACK_URL}&state={state}"
+    return f"{BASE_URL}/oauth/{platform}?{params}"
 
 
 async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:

@@ -3,6 +3,18 @@
 ## Proje Amacı
 Otomaix Social uygulamasının FastAPI backend'i. api.otomaix.com'da çalışır.
 
+## Proje Kılavuzları (DEĞİŞTİRME)
+
+Genel mimari: ~/otomaix/docs/00-platform-mimari.md
+Phase 1: ~/otomaix/docs/01-social-phase1.md
+Phase 2: ~/otomaix/docs/02-social-phase2.md  ← AKTİF
+Phase 3: ~/otomaix/docs/03-social-phase3.md
+Phase 4: ~/otomaix/docs/04-social-phase4.md
+CRM: ~/otomaix/docs/05-crm-admin.md
+
+Her session başında 00-platform-mimari.md ve ← AKTİF olan dosyayı oku.
+Phase tamamlanınca sadece ← AKTİF etiketini bir sonraki satıra taşı.
+
 ## VPS Bilgileri
 - IP: 178.104.7.200
 - Deploy: Coolify (servis adı: otomaix-social-backend)
@@ -18,26 +30,120 @@ Otomaix Social uygulamasının FastAPI backend'i. api.otomaix.com'da çalışır
 - PostgreSQL: 127.0.0.1:5433
 - Redis: internal
 - n8n: https://n8n.otomaix.com
-- fal.ai, Cloudflare R2, Upload-Post.com, Supabase Auth
+- fal.ai, Cloudflare R2, Upload-Post.com, Supabase Auth, Anthropic Claude
+
+## Gerekli .env Değişkenleri
+```
+DATABASE_URL=
+REDIS_URL=redis://localhost:6379
+SUPABASE_URL=https://sqplkkivtkfyozrvnybe.supabase.co
+SUPABASE_SERVICE_KEY=
+FAL_KEY=
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_PUBLIC_URL=https://assets.otomaix.com
+UPLOAD_POST_API_KEY=
+ANTHROPIC_API_KEY=   ✅ Coolify'a eklendi
+INTERNAL_API_KEY=    ← Coolify'a ekle! (bkz. .env)
+```
 
 ## Tamamlanan İşler
-- [x] Phase 1 Step 3 — FastAPI proje yapısı kuruldu
+
+### Phase 1
+- [x] FastAPI proje yapısı kuruldu
   - app/main.py, core/, routers/, models/, services/ oluşturuldu
   - Supabase JWT middleware (JWKS tabanlı)
   - Cloudflare R2 storage abstraction
   - fal.ai async generation + webhook
   - Upload-Post.com OAuth + publish
   - Dockerfile + .dockerignore
-- [x] Phase 1 Step 5 — Coolify deploy yapılandırması
-  - 5a: Backend Dockerfile ✅ (zaten mevcut)
-  - 5c: Coolify UI'da servis oluşturma (MANUEL — yapılması gerekiyor)
-- [x] Phase 1 Step 6 — Test scripti oluşturuldu
-  - ~/otomaix/shared/test_phase1.sh
+- [x] Coolify deploy yapılandırması (5a: Dockerfile ✅, 5c: MANUEL)
+- [x] Test scripti: `~/otomaix/shared/test_phase1.sh`
 
-## Devam Eden İş
-Phase 1 Step 5c — Coolify UI'da manuel servis kurulumu (MANUEL)
+### Phase 2
+- [x] Adım 1a — Brand Kit endpoint'leri (`app/routers/brands.py`)
+  - `PATCH /brands/{brand_id}/kit` → brand_kit JSONB deep merge
+  - `POST /brands/{brand_id}/logo` → light/dark logo upload → R2
+  - `POST /brands/{brand_id}/intro-video` → video upload → R2
+  - `BrandKitUpdate` schema eklendi
+
+- [x] Adım 2a — İçerik üretim endpoint'leri (`app/routers/posts.py`)
+  - `POST /posts/generate` → post oluştur + fal.ai tetikle
+  - `POST /posts/{post_id}/regenerate` → yeniden üretim
+  - `GET /posts` → sayfalama + filtre (content_type, status, platform, page, limit)
+  - `PostGenerate` schema eklendi
+
+- [x] AI endpoint'leri (`app/routers/ai.py`)
+  - `POST /ai/suggest-ideas` → Claude Haiku ile içerik fikir önerileri
+  - `POST /ai/analyze-website` → URL al, httpx ile fetch et, Claude Haiku ile marka bilgilerini çıkar
+    - Döner: `{name, description, sector, colors, tonality}`
+    - Onboarding wizard Step 2'de kullanılıyor
+  - API key yoksa fallback öneriler döner
+
+- [x] Takvim endpoint'leri (`app/routers/calendar.py`)
+  - `GET /calendar/posts?brand_id&start&end` → tarih aralığı postları
+  - `PATCH /calendar/schedule/{post_id}` → zamanlama güncelle
+  - `GET /calendar/holidays?year` → Türk resmi tatilleri
+
+- [x] Otomatik yayın endpoint'leri (`app/routers/autoposting.py`)
+  - `GET /autoposting/config?brand_id` → mevcut config
+  - `POST /autoposting/config` → upsert (ON CONFLICT brand_id)
+  - `POST /autoposting/toggle?brand_id` → aktif/pasif toggle
+  - `GET /autoposting/upcoming?brand_id` → sonraki 5 zamanlanmış post
+
+## Migrations
+- `001_initial_social.sql` — temel şema (brands, posts, workspaces, vb.)
+- `002_autoposting.sql` — autoposting_configs + public_holidays ✅ Çalıştırıldı
+- `003_social_account_unique.sql` — brand_social_accounts UNIQUE(brand_id,platform) ✅ Çalıştırıldı
+- `004_telegram_chat_id.sql` — autoposting_configs.telegram_chat_id ✅ Çalıştırıldı
+
+## Router Kayıt Sırası (main.py)
+```python
+app.include_router(auth.router)
+app.include_router(ai.router)
+app.include_router(internal.router)   # ← YENİ: n8n için X-Internal-Key korumalı
+app.include_router(autoposting.router)
+app.include_router(brands.router)
+app.include_router(calendar.router)
+app.include_router(posts.router)
+app.include_router(storage.router)
+app.include_router(social.router)
+app.include_router(webhooks.router)
+```
+
+## Internal Endpoints (n8n → X-Internal-Key header)
+- `GET  /internal/autoposting/due` — zamanı gelen config listesi (timezone-aware, duplicate guard)
+- `POST /internal/autoposting/trigger` — post üret + fal.ai tetikle
+- `GET  /internal/posts/{id}` — post detayı (JWT'siz)
+- `PATCH /internal/posts/{id}/status` — durum güncelle (rejected vb.)
+- `POST /posts/{id}/publish-now` — yayınla (X-Internal-Key kabul eder)
+- `POST /posts/{id}/regenerate` — yeniden üret (X-Internal-Key kabul eder)
+
+## n8n Workflow'ları
+- **Auto Posting Scheduler** — ID: `Nz4651wCfBHP4G9l` | her 30dk | `shared/n8n-workflows/auto-posting-scheduler.json`
+- **Telegram İçerik Onay** — ID: `D49KNE35cONz2APb` | webhook tetikli | `shared/n8n-workflows/telegram-content-approval.json`
+
+## OAuth Callback (Sosyal Hesap Bağlama)
+- `GET /social/callback?state=JWT&access_token=X&account_name=Y`
+- State JWT: UPLOAD_POST_API_KEY ile imzalı, brand_id + platform içerir
+- brand_social_accounts tablosuna upsert yapar
+
+## requirements.txt (önemli eklemeler)
+- `anthropic==0.40.0`
+- `python-multipart==0.0.12`
+
+## Tamamlanan Deploy Adımları
+- [x] Migration 002–004 çalıştırıldı
+- [x] Coolify deploy yapıldı (frontend + backend)
+- [x] `ANTHROPIC_API_KEY` Coolify ortam değişkenlerine eklendi
+- [x] n8n Auto Posting Scheduler workflow'u oluşturuldu
+- [x] n8n Telegram İçerik Onay workflow'u oluşturuldu
 
 ## Bir Sonraki Adım
-1. Coolify UI'da `otomaix-social-backend` ve `otomaix-social-frontend` servislerini oluştur
-2. Deploy sonrası: `bash ~/otomaix/shared/test_phase1.sh` ile test et
-3. Tüm testler geçince → ~/otomaix/docs/02-social-phase2.md ile devam et
+1. **Coolify'a** `INTERNAL_API_KEY` ekle → backend redeploy et
+2. **Telegram Bot Token** al (`@BotFather`) → n8n'de `telegramApi` credential oluştur → workflow'lardaki Telegram node'larına bağla → workflow'ları aktif et
+3. **Otomatik Yayın UI'ına** `telegram_chat_id` input alanı ekle (frontend `otomatik-yayin/page.tsx`)
+4. **Phase 2 kontrol listesini tamamla** → `~/otomaix/docs/02-social-phase2.md`
+5. **Phase 3'e geç** — Rakip analizi, raporlama, fatura/abonelik

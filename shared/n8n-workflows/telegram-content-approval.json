@@ -1,0 +1,19 @@
+{
+  "id": "D49KNE35cONz2APb",
+  "name": "Telegram İçerik Onay",
+  "description": "Webhook ile tetiklenir. Post detayını alır, Telegram botundan onay ister (inline keyboard). Onayla→yayınla, Reddet→rejected, Yeniden Üret→regenerate.",
+  "trigger": "Webhook POST /webhook/telegram-content-approval",
+  "webhook_payload": {
+    "post_id": "uuid",
+    "brand_id": "uuid",
+    "telegram_chat_id": "string"
+  },
+  "endpoints_used": [
+    "GET /internal/posts/{post_id}",
+    "POST /posts/{post_id}/publish-now",
+    "PATCH /internal/posts/{post_id}/status",
+    "POST /posts/{post_id}/regenerate"
+  ],
+  "auth": "X-Internal-Key header",
+  "requires_credential": "telegramApi (bot token)"
+}

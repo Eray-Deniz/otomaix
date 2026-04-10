@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -348,6 +349,7 @@ function onSelect(v: string | null, fn: (val: string) => void) {
 
 export default function MarkaAyarlariPage() {
   const currentBrand = useAppStore((s) => s.currentBrand)
+  const searchParams = useSearchParams()
 
   const [brand, setBrand] = useState<Brand | null>(null)
   const [loading, setLoading] = useState(true)
@@ -355,8 +357,29 @@ export default function MarkaAyarlariPage() {
   const [saved, setSaved] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState<'light' | 'dark' | null>(null)
   const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'bilgiler')
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Handle OAuth callback result (?connected=platform or ?error=...)
+  useEffect(() => {
+    const connected = searchParams.get('connected')
+    const error = searchParams.get('error')
+    if (connected) {
+      toast.success(`${connected} hesabı başarıyla bağlandı!`)
+      setActiveTab('sosyal')
+      // Clean up URL without reload
+      window.history.replaceState({}, '', '/marka-ayarlari')
+    } else if (error) {
+      const msgs: Record<string, string> = {
+        invalid_state: 'Güvenlik doğrulaması başarısız. Lütfen tekrar deneyin.',
+        missing_params: 'Bağlantı parametreleri eksik. Lütfen tekrar deneyin.',
+      }
+      toast.error(msgs[error] ?? 'Hesap bağlantısı başarısız.')
+      setActiveTab('sosyal')
+      window.history.replaceState({}, '', '/marka-ayarlari')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load brand
   useEffect(() => {
@@ -493,7 +516,7 @@ export default function MarkaAyarlariPage() {
         <SaveIndicator saving={saving} saved={saved} />
       </div>
 
-      <Tabs defaultValue="bilgiler">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">
           <TabsTrigger value="bilgiler">Marka Bilgileri</TabsTrigger>
           <TabsTrigger value="kimlik">Marka Kimliği</TabsTrigger>

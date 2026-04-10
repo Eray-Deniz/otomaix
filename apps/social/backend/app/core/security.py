@@ -1,5 +1,5 @@
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 
@@ -65,3 +65,11 @@ async def get_current_user_optional(
         return await _decode_token(credentials.credentials)
     except HTTPException:
         return None
+
+
+def get_service_auth(x_internal_key: str | None = Header(default=None)) -> None:
+    """Validate X-Internal-Key header for n8n → backend service calls."""
+    if not settings.INTERNAL_API_KEY:
+        raise HTTPException(status_code=503, detail="Internal API key not configured")
+    if x_internal_key != settings.INTERNAL_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid internal API key")

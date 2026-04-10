@@ -26,6 +26,8 @@ interface AutopostingConfig {
   topics: string[]
   platforms: string[]
   telegram_approval: boolean
+  telegram_bot_token: string | null
+  telegram_chat_id: string | null
 }
 
 interface UpcomingPost {
@@ -310,6 +312,8 @@ export default function OtomatikYayinPage() {
   const [timeSlots, setTimeSlots] = useState(TIME_SLOTS_BY_FREQ['3x_weekly'])
   const [contentTypes, setContentTypes] = useState<string[]>(['image'])
   const [telegramApproval, setTelegramApproval] = useState(false)
+  const [telegramBotToken, setTelegramBotToken] = useState('')
+  const [telegramChatId, setTelegramChatId] = useState('')
 
   // ── Load config ──────────────────────────────────────────────────────────────
 
@@ -336,6 +340,8 @@ export default function OtomatikYayinPage() {
       setTimeSlots(config.time_slots)
       setContentTypes(config.content_types)
       setTelegramApproval(config.telegram_approval)
+      setTelegramBotToken(config.telegram_bot_token ?? '')
+      setTelegramChatId(config.telegram_chat_id ?? '')
     }
     setStep(1)
     setSuggestedTopics([])
@@ -385,6 +391,8 @@ export default function OtomatikYayinPage() {
       topics,
       platforms,
       telegram_approval: telegramApproval,
+      telegram_bot_token: telegramBotToken,
+      telegram_chat_id: telegramChatId,
     })
 
     if (res.success && res.data) {
@@ -675,13 +683,38 @@ export default function OtomatikYayinPage() {
               <Switch checked={telegramApproval} onCheckedChange={setTelegramApproval} />
             </div>
             {telegramApproval && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1">
-                <p className="text-xs font-medium text-blue-800">Telegram botu nasıl bağlanır:</p>
-                <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-                  <li>Telegram&apos;da <strong>@OtomaixBot</strong>&apos;u açın</li>
-                  <li>/start komutunu gönderin</li>
-                  <li>Markanızı seçin ve bağlayın</li>
-                </ol>
+              <div className="space-y-3">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5">
+                  <p className="text-xs font-medium text-blue-800">Kendi Telegram botunuzu kullanın:</p>
+                  <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                    <li>Telegram&apos;da <strong>@BotFather</strong>&apos;a yazın</li>
+                    <li><strong>/newbot</strong> komutunu gönderin ve bot adını belirleyin</li>
+                    <li>Aldığınız token&apos;ı aşağıya yapıştırın</li>
+                    <li>Bota mesaj atın, ardından <strong>@userinfobot</strong>&apos;a yazarak Chat ID&apos;nizi öğrenin</li>
+                  </ol>
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">Bot Token</label>
+                    <input
+                      type="text"
+                      value={telegramBotToken}
+                      onChange={(e) => setTelegramBotToken(e.target.value)}
+                      placeholder="1234567890:AABBCCDDEEFFaabbccddeeff"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">Chat ID</label>
+                    <input
+                      type="text"
+                      value={telegramChatId}
+                      onChange={(e) => setTelegramChatId(e.target.value)}
+                      placeholder="@userinfobot'tan aldığınız ID (örn: 1634464595)"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
