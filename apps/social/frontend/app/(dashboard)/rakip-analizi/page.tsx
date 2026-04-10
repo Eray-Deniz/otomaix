@@ -26,7 +26,7 @@ function InstagramIcon({ className }: { className?: string }) {
 }
 import { cn } from '@/lib/utils'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from 'recharts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
