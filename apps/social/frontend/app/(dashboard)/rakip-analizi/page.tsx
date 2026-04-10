@@ -12,8 +12,18 @@ import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import {
   Loader2, Plus, RefreshCw, Trash2, BarChart2,
-  Globe, Instagram, TrendingUp, Lightbulb, Lock,
+  Globe, TrendingUp, Lightbulb,
 } from 'lucide-react'
+
+function InstagramIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  )
+}
 import { cn } from '@/lib/utils'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
@@ -38,6 +48,7 @@ interface CompetitorAnalysis {
   competitor_name: string
   analysis_data: {
     website?: {
+      error?: string
       company_name?: string
       main_services?: string[]
       target_audience?: string
@@ -173,7 +184,7 @@ function AnalysisPanel({ competitor }: { competitor: CompetitorAnalysis }) {
       {ig && (
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-            <Instagram className="w-4 h-4 text-pink-500" /> Instagram
+            <InstagramIcon className="w-4 h-4 text-pink-500" /> Instagram
             {ig.source === 'placeholder' && (
               <Badge variant="secondary" className="text-xs font-normal">Önizleme — Apify API gerekli</Badge>
             )}
@@ -466,7 +477,7 @@ export default function RakipAnaliziPage() {
                     <div className="flex flex-wrap gap-1 mt-1">
                       {c.instagram_handle && (
                         <span className="text-[10px] text-pink-500 flex items-center gap-0.5">
-                          <Instagram className="w-2.5 h-2.5" /> {c.instagram_handle}
+                          <InstagramIcon className="w-2.5 h-2.5" /> {c.instagram_handle}
                         </span>
                       )}
                       {c.website_url && (
