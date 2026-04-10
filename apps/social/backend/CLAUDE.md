@@ -138,6 +138,7 @@ app.include_router(auth.router)
 app.include_router(ai.router)
 app.include_router(internal.router)
 app.include_router(autoposting.router)
+app.include_router(avatar.router)      # Phase 3 — eklendi
 app.include_router(brands.router)
 app.include_router(calendar.router)
 app.include_router(documents.router)   # Phase 3 — eklendi
@@ -187,10 +188,30 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
   - `POST /ai/generate-script` → sadece script üretimi (frontend'den çağrılır)
   - `config.py`: AZURE_TTS_KEY + AZURE_TTS_REGION eklendi
 
-### Bir Sonraki Adım — Phase 3 Adım 3a
-**AI Avatar backend (HeyGen entegrasyonu):**
-- `app/services/avatar.py` oluştur
-- `POST /avatar/create` → kullanıcı fotoğrafından HeyGen avatar
-- `GET /avatar/stock` → hazır HeyGen avatar listesi
-- `POST /posts/generate-ugc` → avatar + script → UGC video
-- Yeni .env: `HEYGEN_API_KEY`
+- [x] Adım 3a — AI Avatar backend (HeyGen entegrasyonu)
+  - `app/services/avatar.py`
+    - `list_stock_avatars()` → HeyGen avatarları (API yoksa fallback liste)
+    - `create_avatar_from_photo()` → fotoğraf → R2 → HeyGen photo_avatar
+    - `set_stock_avatar()` → brand_kit.avatar JSONB güncelle
+    - `generate_ugc_video()` → HeyGen v2/video/generate (async)
+    - `get_video_status()` → video üretim durumu sorgula
+  - `app/routers/avatar.py`
+    - `GET  /avatar/stock` → stok avatarlar
+    - `POST /avatar/create` → fotoğraftan avatar (multipart)
+    - `POST /avatar/select-stock` → stok avatar seç
+    - `POST /avatar/generate-ugc` → UGC video üret + post kaydı oluştur
+    - `GET  /avatar/video-status/{video_id}` → HeyGen durum sorgulama
+  - `config.py`: HEYGEN_API_KEY eklendi (opsiyonel)
+
+### Bir Sonraki Adım — Phase 3 Adım 4a
+**Rakip analizi backend:**
+- `app/services/competitor_analyzer.py` oluştur
+  - `analyze_instagram(handle)` → Apify/RapidAPI ile Instagram analizi
+  - `analyze_website(url)` → httpx + Claude ile rakip site analizi
+  - `generate_competitor_report()` → Claude ile sentez raporu
+- `app/routers/competitors.py`
+  - `POST /competitors` → rakip ekle + analiz tetikle
+  - `GET  /competitors?brand_id` → liste + son analiz
+  - `GET  /competitors/{id}/analysis` → detaylı analiz
+  - `POST /competitors/{id}/refresh` → analizi yenile
+- Migration: `007_competitor_analysis.sql` → competitor_analyses tablosu

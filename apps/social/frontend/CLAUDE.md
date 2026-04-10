@@ -136,12 +136,22 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - `TurkishVoice`, `GeneratedPost` interface'leri genişletildi
   - Video generate → `POST /posts/generate-faceless-video`
 
-#### Bir Sonraki Adım — Phase 3 Adım 3b
-**AI Avatar frontend (Marka Ayarları → AI Avatar sekmesi):**
-- Marka Ayarları sayfasına yeni "AI Avatar" sekmesi ekle
-- Fotoğraf yükleme + "Avatar Oluştur" → `POST /avatar/create`
-- Hazır avatar grid → `GET /avatar/stock`
-- Aktif avatar gösterimi + "Avatar ile Video Oluştur" butonu
+- [x] Adım 3b — AI Avatar frontend
+  - `app/(dashboard)/marka-ayarlari/page.tsx` → yeni "AI Avatar" sekmesi (6. sekme)
+    - Aktif avatar özet kartı (isim, tip, preview + "Video Üret" butonu)
+    - Kendi avatarı: dashed upload area → `POST /avatar/create` (multipart)
+    - Hazır avatarlar grid (2×4): `GET /avatar/stock` → kart tıkla → `POST /avatar/select-stock`
+    - Seçili avatar üzerinde violet check işareti
+  - `StockAvatar`, `ActiveAvatar` interface'leri eklendi
+  - `BrandKit.avatar` alanı eklendi
+
+#### Bir Sonraki Adım — Phase 3 Adım 4b
+**Rakip analizi frontend:**
+- `app/(dashboard)/rakip-analizi/page.tsx` oluştur
+  - "Rakip Ekle" modal (isim, Instagram handle, website URL)
+  - Rakip kartları listesi + "Analizi Gör" butonu
+  - Analiz detay sayfası: posting frequency chart (recharts), engagement rate, hashtag listesi
+  - "Bu Analizden İçerik Üret" butonu
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

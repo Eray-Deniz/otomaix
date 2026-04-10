@@ -22,9 +22,24 @@ import Image from 'next/image'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { Loader2, X, Upload, Check, FileText, Trash2 } from 'lucide-react'
+import { Loader2, X, Upload, Check, FileText, Trash2, User, Video } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+interface StockAvatar {
+  avatar_id: string
+  avatar_name: string
+  gender: string
+  preview_url: string
+  preview_image_url: string
+}
+
+interface ActiveAvatar {
+  type: 'custom' | 'stock'
+  avatar_id: string
+  preview_url: string
+  name: string
+}
 
 interface BrandDocument {
   id: string
@@ -59,6 +74,7 @@ interface BrandKit {
   voiceover: string
   logo_overlay: { enabled: boolean; position: string; opacity: number }
   intro_video: { position: string }
+  avatar?: ActiveAvatar
 }
 
 interface Brand {
@@ -378,6 +394,13 @@ export default function MarkaAyarlariPage() {
   const [deletingDocId, setDeletingDocId] = useState<string | null>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
 
+  // Avatar state
+  const [stockAvatars, setStockAvatars] = useState<StockAvatar[]>([])
+  const [loadingAvatars, setLoadingAvatars] = useState(false)
+  const [creatingAvatar, setCreatingAvatar] = useState(false)
+  const [selectingAvatarId, setSelectingAvatarId] = useState<string | null>(null)
+  const avatarPhotoRef = useRef<HTMLInputElement>(null)
+
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Handle OAuth callback result (?connected=platform or ?error=...)
@@ -540,6 +563,58 @@ export default function MarkaAyarlariPage() {
     setDeletingDocId(null)
   }
 
+  // Avatar sekmesi açıldığında stok avatarları yükle
+  useEffect(() => {
+    if (activeTab === 'avatar') {
+      setLoadingAvatars(true)
+      api.get<StockAvatar[]>('/avatar/stock').then((res) => {
+        if (res.success && res.data) setStockAvatars(res.data)
+        setLoadingAvatars(false)
+      })
+    }
+  }, [activeTab])
+
+  async function handleAvatarPhotoUpload(file: File) {
+    if (!brand?.id) return
+    setCreatingAvatar(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('brand_id', brand.id)
+    fd.append('name', file.name.replace(/\.[^.]+$/, ''))
+    const res = await api.upload<ActiveAvatar>('/avatar/create', fd)
+    if (res.success && res.data) {
+      setBrand((prev) => prev ? {
+        ...prev,
+        brand_kit: { ...prev.brand_kit, avatar: res.data as unknown as ActiveAvatar }
+      } : prev)
+      toast.success('Avatar oluşturuldu! HeyGen işlemi tamamlandığında kullanıma hazır olacak.')
+    } else {
+      toast.error((res.error as string) || 'Avatar oluşturulamadı')
+    }
+    setCreatingAvatar(false)
+  }
+
+  async function handleSelectStockAvatar(av: StockAvatar) {
+    if (!brand?.id) return
+    setSelectingAvatarId(av.avatar_id)
+    const res = await api.post<ActiveAvatar>('/avatar/select-stock', {
+      brand_id: brand.id,
+      avatar_id: av.avatar_id,
+      avatar_name: av.avatar_name,
+      preview_url: av.preview_url || av.preview_image_url,
+    })
+    if (res.success && res.data) {
+      setBrand((prev) => prev ? {
+        ...prev,
+        brand_kit: { ...prev.brand_kit, avatar: res.data as unknown as ActiveAvatar }
+      } : prev)
+      toast.success(`"${av.avatar_name}" avatarı seçildi`)
+    } else {
+      toast.error('Avatar seçilemedi')
+    }
+    setSelectingAvatarId(null)
+  }
+
   async function connectSocialAccount(platform: string) {
     const res = await api.get<{ url: string }>(`/social/oauth-link?platform=${platform}`)
     if (res.success && res.data?.url) {
@@ -579,12 +654,13 @@ export default function MarkaAyarlariPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6">
+        <TabsList className="mb-6 flex-wrap">
           <TabsTrigger value="bilgiler">Marka Bilgileri</TabsTrigger>
           <TabsTrigger value="kimlik">Marka Kimliği</TabsTrigger>
           <TabsTrigger value="gorseller">Görseller</TabsTrigger>
           <TabsTrigger value="sosyal">Sosyal Hesaplar</TabsTrigger>
           <TabsTrigger value="dokumanlar">Dokümanlar</TabsTrigger>
+          <TabsTrigger value="avatar">AI Avatar</TabsTrigger>
         </TabsList>
 
         {/* ── Tab 1: Marka Bilgileri ─────────────────────────────────────────── */}
@@ -1004,6 +1080,144 @@ export default function MarkaAyarlariPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        {/* ── Tab 6: AI Avatar ──────────────────────────────────────────────── */}
+        <TabsContent value="avatar" className="space-y-6">
+          <p className="text-sm text-gray-500">
+            AI avatar ile video içeriklerinizde gerçekçi bir konuşmacı kullanın.
+            Kendi fotoğrafınızdan avatar oluşturun veya hazır avatarlardan seçin.
+          </p>
+
+          {/* Aktif avatar gösterimi */}
+          {kit.avatar && (
+            <div className="p-4 border border-violet-200 bg-violet-50 rounded-xl flex items-center gap-4">
+              <div className="w-14 h-14 rounded-xl bg-violet-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {kit.avatar.preview_url ? (
+                  <Image
+                    src={kit.avatar.preview_url}
+                    alt={kit.avatar.name}
+                    width={56}
+                    height={56}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="w-6 h-6 text-violet-600" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-violet-800">{kit.avatar.name}</p>
+                <p className="text-xs text-violet-500">
+                  {kit.avatar.type === 'custom' ? 'Kişisel avatar' : 'Hazır avatar'} · Aktif
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-violet-300 text-violet-700 hover:bg-violet-100 gap-1.5 flex-shrink-0"
+                onClick={() => toast.info('İçerik Oluştur → Video sekmesinden avatar ile video üretebilirsiniz')}
+              >
+                <Video className="w-3.5 h-3.5" />
+                Video Üret
+              </Button>
+            </div>
+          )}
+
+          {/* Kendi avatarını oluştur */}
+          <div className="space-y-3">
+            <div>
+              <Label className="text-base">Kendi Avatarınız</Label>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Yüz net görünen, düz arka planlı bir fotoğraf yükleyin. HeyGen ile işlenir (~1-2 dk).
+              </p>
+            </div>
+            <div
+              className="border-2 border-dashed border-violet-200 rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-violet-400 hover:bg-violet-50/50 transition-colors"
+              onClick={() => !creatingAvatar && avatarPhotoRef.current?.click()}
+            >
+              {creatingAvatar ? (
+                <>
+                  <Loader2 className="w-7 h-7 animate-spin text-violet-500" />
+                  <p className="text-sm text-violet-600">Avatar oluşturuluyor...</p>
+                </>
+              ) : (
+                <>
+                  <User className="w-7 h-7 text-gray-400" />
+                  <p className="text-sm text-gray-500">Fotoğraf yükle</p>
+                  <p className="text-xs text-gray-400">JPG, PNG veya WebP · Maks. 10 MB</p>
+                </>
+              )}
+              <input
+                ref={avatarPhotoRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) { handleAvatarPhotoUpload(file); e.target.value = '' }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Hazır avatarlar */}
+          <div className="space-y-3">
+            <Label className="text-base">Hazır Avatarlar</Label>
+            {loadingAvatars ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              </div>
+            ) : stockAvatars.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">
+                Avatar listesi yüklenemedi. HEYGEN_API_KEY gerekli.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {stockAvatars.map((av) => {
+                  const isActive = kit.avatar?.avatar_id === av.avatar_id
+                  return (
+                    <button
+                      key={av.avatar_id}
+                      onClick={() => !isActive && handleSelectStockAvatar(av)}
+                      disabled={selectingAvatarId === av.avatar_id}
+                      className={`relative rounded-xl overflow-hidden border-2 transition-all aspect-square flex flex-col items-center justify-center gap-1 p-3 ${
+                        isActive
+                          ? 'border-violet-500 bg-violet-50'
+                          : 'border-gray-200 hover:border-violet-300 hover:bg-violet-50/30'
+                      }`}
+                    >
+                      {selectingAvatarId === av.avatar_id ? (
+                        <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+                      ) : av.preview_image_url ? (
+                        <Image
+                          src={av.preview_image_url}
+                          alt={av.avatar_name}
+                          width={80}
+                          height={80}
+                          className="w-14 h-14 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center">
+                          <User className="w-6 h-6 text-gray-400" />
+                        </div>
+                      )}
+                      <span className="text-xs font-medium text-gray-700 text-center leading-tight">
+                        {av.avatar_name}
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        {av.gender === 'female' ? 'Kadın' : 'Erkek'}
+                      </span>
+                      {isActive && (
+                        <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-violet-500 rounded-full flex items-center justify-center">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>
