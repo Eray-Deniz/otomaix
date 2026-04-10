@@ -24,7 +24,13 @@ interface BrandDocument {
   file_size_kb: number | null
 }
 
-type ContentType = 'image' | 'carousel'
+interface TurkishVoice {
+  id: string
+  name: string
+  gender: string
+}
+
+type ContentType = 'image' | 'carousel' | 'video'
 type ContentCategory = 'product' | 'service' | 'corporate'
 type AspectRatio = '1:1' | '9:16' | '4:5' | '2:3'
 type Step = 1 | 2 | 3
@@ -35,6 +41,10 @@ interface GeneratedPost {
   output_url?: string
   caption?: string
   hashtags?: string[]
+  // Faceless video
+  script?: string
+  audio_url?: string
+  duration_estimate?: number
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -42,8 +52,8 @@ interface GeneratedPost {
 const CONTENT_TYPES = [
   { id: 'image' as ContentType, label: 'Görsel', icon: '🖼️', active: true },
   { id: 'carousel' as ContentType, label: 'Carousel', icon: '📱', active: true },
-  { id: 'video' as ContentType & string, label: 'Video (Faceless)', icon: '🎬', active: false },
-  { id: 'special' as ContentType & string, label: 'Özel Gün', icon: '🎉', active: false },
+  { id: 'video' as ContentType, label: 'Video (Faceless)', icon: '🎬', active: true },
+  { id: 'special' as string, label: 'Özel Gün', icon: '🎉', active: false },
   { id: 'quote' as ContentType & string, label: 'Alıntı', icon: '💬', active: false },
 ]
 
@@ -127,6 +137,13 @@ export default function IcerikOlusturPage() {
   const [availableDocs, setAvailableDocs] = useState<BrandDocument[]>([])
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
 
+  // Faceless video — Step 2
+  const [script, setScript] = useState('')
+  const [loadingScript, setLoadingScript] = useState(false)
+  const [voices, setVoices] = useState<TurkishVoice[]>([])
+  const [selectedVoice, setSelectedVoice] = useState('tr-TR-EmelNeural')
+  const [durationEstimate, setDurationEstimate] = useState<number | null>(null)
+
   // Step 3
   const [generating, setGenerating] = useState(false)
   const [generatedPost, setGeneratedPost] = useState<GeneratedPost | null>(null)
@@ -134,7 +151,7 @@ export default function IcerikOlusturPage() {
   const [hashtags, setHashtags] = useState<string[]>([])
   const [newHashtag, setNewHashtag] = useState('')
 
-  // ── Fetch brand documents ────────────────────────────────────────────────────
+  // ── Fetch brand documents & voices ──────────────────────────────────────────
 
   useEffect(() => {
     async function fetchDocs() {
@@ -145,10 +162,37 @@ export default function IcerikOlusturPage() {
     fetchDocs()
   }, [currentBrand?.id])
 
+  useEffect(() => {
+    async function fetchVoices() {
+      const res = await api.get<TurkishVoice[]>('/posts/voices/turkish')
+      if (res.success && res.data) setVoices(res.data)
+    }
+    fetchVoices()
+  }, [])
+
   function toggleDoc(id: string) {
     setSelectedDocIds((prev) =>
       prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]
     )
+  }
+
+  async function handleGenerateScript() {
+    if (!currentBrand?.id || !prompt.trim()) {
+      toast.error('Önce bir konu girin')
+      return
+    }
+    setLoadingScript(true)
+    const res = await api.post<{ script: string; duration_estimate: number }>('/ai/generate-script', {
+      brand_id: currentBrand.id,
+      prompt: prompt.trim(),
+    })
+    if (res.success && res.data) {
+      setScript(res.data.script)
+      setDurationEstimate(res.data.duration_estimate)
+    } else {
+      toast.error('Script üretilemedi')
+    }
+    setLoadingScript(false)
   }
 
   // ── Step 2 helpers ──────────────────────────────────────────────────────────
@@ -184,26 +228,46 @@ export default function IcerikOlusturPage() {
     setGenerating(true)
     setStep(3)
 
-    const res = await api.post<GeneratedPost>('/posts/generate', {
-      brand_id: currentBrand.id,
-      content_type: contentType,
-      content_category: category,
-      prompt: prompt.trim(),
-      user_text: useOwnText ? ownText.trim() || null : null,
-      document_ids: selectedDocIds,
-      aspect_ratio: aspectRatio,
-      platforms,
-    })
-
-    setGenerating(false)
-
-    if (res.success && res.data) {
-      setGeneratedPost(res.data)
-      setCaption(res.data.caption ?? '')
-      setHashtags(res.data.hashtags ?? [])
-      toast.success('İçerik üretimi başlatıldı!')
+    if (contentType === 'video') {
+      // Faceless video pipeline
+      const res = await api.post<GeneratedPost>('/posts/generate-faceless-video', {
+        brand_id: currentBrand.id,
+        prompt: prompt.trim(),
+        voice: selectedVoice,
+        document_ids: selectedDocIds,
+        aspect_ratio: aspectRatio,
+        platforms,
+      })
+      setGenerating(false)
+      if (res.success && res.data) {
+        setGeneratedPost(res.data)
+        setScript(res.data.script ?? '')
+        setDurationEstimate(res.data.duration_estimate ?? null)
+        toast.success('Video üretimi başlatıldı!')
+      } else {
+        toast.error('Video üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      }
     } else {
-      toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      // Image / Carousel pipeline
+      const res = await api.post<GeneratedPost>('/posts/generate', {
+        brand_id: currentBrand.id,
+        content_type: contentType,
+        content_category: category,
+        prompt: prompt.trim(),
+        user_text: useOwnText ? ownText.trim() || null : null,
+        document_ids: selectedDocIds,
+        aspect_ratio: aspectRatio,
+        platforms,
+      })
+      setGenerating(false)
+      if (res.success && res.data) {
+        setGeneratedPost(res.data)
+        setCaption(res.data.caption ?? '')
+        setHashtags(res.data.hashtags ?? [])
+        toast.success('İçerik üretimi başlatıldı!')
+      } else {
+        toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      }
     }
   }
 
@@ -237,6 +301,8 @@ export default function IcerikOlusturPage() {
     setUseOwnText(false)
     setOwnText('')
     setSelectedDocIds([])
+    setScript('')
+    setDurationEstimate(null)
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -372,7 +438,73 @@ export default function IcerikOlusturPage() {
             )}
           </div>
 
-          {/* Optional: own text */}
+          {/* Faceless video — script editörü ve ses seçimi */}
+          {contentType === 'video' && (
+            <div className="space-y-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-purple-800">Video Script</Label>
+                  <p className="text-xs text-purple-500 mt-0.5">AI Türkçe script üretir, düzenleyebilirsiniz</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateScript}
+                  disabled={loadingScript || !prompt.trim()}
+                  className="gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-100"
+                >
+                  {loadingScript
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Wand2 className="w-3.5 h-3.5" />
+                  }
+                  Script Üret
+                </Button>
+              </div>
+
+              <Textarea
+                value={script}
+                onChange={(e) => setScript(e.target.value)}
+                placeholder="Önce 'Script Üret' butonuna tıklayın ya da doğrudan yazın..."
+                rows={5}
+                className="resize-none bg-white text-sm"
+              />
+
+              {durationEstimate && (
+                <p className="text-xs text-purple-600">
+                  Tahmini süre: ~{durationEstimate} saniye
+                </p>
+              )}
+
+              <div className="space-y-1.5">
+                <Label className="text-sm text-purple-800">Ses Seçimi</Label>
+                <div className="flex flex-wrap gap-2">
+                  {(voices.length > 0
+                    ? voices
+                    : [
+                        { id: 'tr-TR-EmelNeural', name: 'Emel (Kadın)', gender: 'female' },
+                        { id: 'tr-TR-AhmetNeural', name: 'Ahmet (Erkek)', gender: 'male' },
+                      ]
+                  ).map((v) => (
+                    <button
+                      key={v.id}
+                      onClick={() => setSelectedVoice(v.id)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                        selectedVoice === v.id
+                          ? 'bg-purple-600 text-white border-purple-600'
+                          : 'border-purple-200 text-purple-700 hover:border-purple-400'
+                      )}
+                    >
+                      {v.gender === 'female' ? '👩' : '👨'} {v.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Optional: own text (sadece görsel/carousel için) */}
+          {contentType !== 'video' && (
           <div className="space-y-2 p-3 bg-gray-50 rounded-xl">
             <div className="flex items-center justify-between">
               <Label className="font-normal text-sm">Kendi metnini ekle</Label>
@@ -388,6 +520,7 @@ export default function IcerikOlusturPage() {
               />
             )}
           </div>
+          )}
 
           {/* Aspect ratio */}
           <div className="space-y-2">
@@ -495,40 +628,92 @@ export default function IcerikOlusturPage() {
           {generating && (
             <div className="flex flex-col items-center justify-center py-16 gap-4">
               <div className="relative">
-                <div className="w-16 h-16 rounded-2xl bg-blue-100 flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                <div className={cn(
+                  'w-16 h-16 rounded-2xl flex items-center justify-center',
+                  contentType === 'video' ? 'bg-purple-100' : 'bg-blue-100'
+                )}>
+                  <Loader2 className={cn(
+                    'w-8 h-8 animate-spin',
+                    contentType === 'video' ? 'text-purple-600' : 'text-blue-600'
+                  )} />
                 </div>
               </div>
-              <p className="text-gray-700 font-medium">İçeriğiniz üretiliyor...</p>
-              <p className="text-sm text-gray-400">Bu birkaç saniye sürebilir</p>
+              <p className="text-gray-700 font-medium">
+                {contentType === 'video' ? 'Video üretiliyor...' : 'İçeriğiniz üretiliyor...'}
+              </p>
+              <p className="text-sm text-gray-400">
+                {contentType === 'video'
+                  ? 'Script ve ses oluşturuluyor, arka plan videosu hazırlanıyor...'
+                  : 'Bu birkaç saniye sürebilir'
+                }
+              </p>
             </div>
           )}
 
           {/* Result */}
           {!generating && generatedPost && (
             <div className="space-y-5">
-              {/* Image preview placeholder */}
-              <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200">
-                {generatedPost.output_url ? (
-                  <Image
-                    src={generatedPost.output_url}
-                    alt="Üretilen içerik"
-                    width={800}
-                    height={800}
-                    className="w-full object-contain max-h-80"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3">
-                    <div className="w-14 h-14 rounded-xl bg-blue-200 flex items-center justify-center">
-                      <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+              {/* Video önizleme */}
+              {contentType === 'video' ? (
+                <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-purple-50 to-violet-100 border border-purple-200">
+                  {generatedPost.output_url ? (
+                    <video
+                      src={generatedPost.output_url}
+                      controls
+                      className="w-full max-h-80 object-contain"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-12 gap-3">
+                      <div className="w-14 h-14 rounded-xl bg-purple-200 flex items-center justify-center">
+                        <Loader2 className="w-7 h-7 text-purple-600 animate-spin" />
+                      </div>
+                      <p className="text-sm text-purple-700 font-medium">Video render ediliyor...</p>
+                      <p className="text-xs text-purple-500">Bu 1-3 dakika sürebilir</p>
+                      <p className="text-xs text-purple-400">Post ID: {generatedPost.post_id.slice(0, 8)}...</p>
                     </div>
-                    <p className="text-sm text-blue-700 font-medium">Görsel hazırlanıyor...</p>
-                    <p className="text-xs text-blue-500">
-                      Post ID: {generatedPost.post_id.slice(0, 8)}...
-                    </p>
-                  </div>
-                )}
-              </div>
+                  )}
+                  {/* Script gösterimi */}
+                  {script && (
+                    <div className="p-4 border-t border-purple-200 bg-white/60">
+                      <p className="text-xs font-medium text-purple-700 mb-1">Script</p>
+                      <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{script}</p>
+                      {durationEstimate && (
+                        <p className="text-xs text-purple-500 mt-2">Tahmini süre: ~{durationEstimate} saniye</p>
+                      )}
+                    </div>
+                  )}
+                  {/* Ses dosyası */}
+                  {generatedPost.audio_url && (
+                    <div className="p-4 border-t border-purple-200 bg-white/60">
+                      <p className="text-xs font-medium text-purple-700 mb-2">Ses Dosyası</p>
+                      <audio src={generatedPost.audio_url} controls className="w-full h-10" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Görsel / Carousel önizleme */
+                <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200">
+                  {generatedPost.output_url ? (
+                    <Image
+                      src={generatedPost.output_url}
+                      alt="Üretilen içerik"
+                      width={800}
+                      height={800}
+                      className="w-full object-contain max-h-80"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3">
+                      <div className="w-14 h-14 rounded-xl bg-blue-200 flex items-center justify-center">
+                        <Loader2 className="w-7 h-7 text-blue-600 animate-spin" />
+                      </div>
+                      <p className="text-sm text-blue-700 font-medium">Görsel hazırlanıyor...</p>
+                      <p className="text-xs text-blue-500">
+                        Post ID: {generatedPost.post_id.slice(0, 8)}...
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Caption editor */}
               <div className="space-y-1.5">

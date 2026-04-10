@@ -86,6 +86,20 @@ class PostGenerate(BaseModel):
     platforms: list[str] = []
 
 
+class FacelessVideoGenerate(BaseModel):
+    brand_id: UUID
+    prompt: str
+    voice: str = "tr-TR-EmelNeural"
+    document_ids: list[UUID] = []
+    aspect_ratio: str = "9:16"
+    platforms: list[str] = []
+
+
+class GenerateScriptRequest(BaseModel):
+    brand_id: UUID
+    prompt: str
+
+
 class PostCreate(BaseModel):
     brand_id: UUID
     content_type: str

@@ -170,3 +170,30 @@ async def suggest_ideas(
         ][: payload.count]
 
     return OkResponse(data={"ideas": ideas})
+
+
+class GenerateScriptRequest(BaseModel):
+    brand_id: UUID
+    prompt: str
+
+
+@router.post("/generate-script", response_model=OkResponse)
+async def generate_script_endpoint(
+    payload: GenerateScriptRequest,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Claude ile Türkçe video scripti üret."""
+    from app.services.faceless_video import generate_script
+
+    brand = await db.fetchrow(
+        "SELECT name, sector, brand_kit FROM social.brands WHERE id = $1", payload.brand_id
+    )
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
+    brand_kit["sector"] = brand["sector"] or ""
+
+    result = await generate_script(payload.prompt, brand_kit, brand["name"])
+    return OkResponse(data=result)

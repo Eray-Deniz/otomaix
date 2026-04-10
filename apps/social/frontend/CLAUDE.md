@@ -112,14 +112,36 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 
 ### Phase 3
 
-- [x] Adım 1 (frontend) — Doküman yönetimi UI
-  - Marka Ayarları → Dokümanlar sekmesi artık tamamen işlevsel
-  - Upload (drag/click), liste görünümü, silme + RAG bilgi gösterimi
-  - İçerik Oluştur wizard → Step 2'de doküman seçim bölümü eklendi
-  - `BrandDocument` tipi eklendi
+#### Tamamlanan
+- [x] Adım 1 — Doküman yönetimi UI
+  - `app/(dashboard)/marka-ayarlari/page.tsx` → Dokümanlar sekmesi tamamen işlevsel
+    - Upload (drag/click), dosya tipi kısıtı (.pdf,.doc,.docx,.xls,.xlsx,.txt)
+    - Yüklenen doküman listesi (isim, boyut, RAG mod gösterimi)
+    - Silme butonu + confirm dialog
+  - `app/(dashboard)/icerik-olustur/page.tsx` → Step 2'de "Dokümanlardan Bağlam Ekle" bölümü
+    - Markanın dokümanları listelenir, çoklu seçim mümkün
+    - `selectedDocIds` → `document_ids` olarak API'ye gönderilir
+  - `BrandDocument` interface eklendi (her iki sayfada)
 
-## Bir Sonraki Adım
-- **Phase 3 Adım 2b** — Faceless Video frontend sekmesi (İçerik Oluştur wizard'a Video ekle)
+- [x] Adım 2b — Faceless Video frontend
+  - `app/(dashboard)/icerik-olustur/page.tsx` içinde "Video (Faceless)" kartı aktif edildi
+  - Step 2'de video kartı seçildiğinde mor tema ile script editörü + ses seçici gösteriliyor
+    - "Script Üret" butonu → `POST /ai/generate-script`
+    - Script textarea (düzenlenebilir)
+    - Ses seçici (`GET /posts/voices/turkish`) — default Emel (Kadın)
+    - Süre tahmini göstergesi
+  - Step 3'te video için ayrı önizleme:
+    - Video player (output_url hazırsa) veya render-loading state
+    - Script gösterimi + ses dosyası `<audio>` player
+  - `TurkishVoice`, `GeneratedPost` interface'leri genişletildi
+  - Video generate → `POST /posts/generate-faceless-video`
+
+#### Bir Sonraki Adım — Phase 3 Adım 3b
+**AI Avatar frontend (Marka Ayarları → AI Avatar sekmesi):**
+- Marka Ayarları sayfasına yeni "AI Avatar" sekmesi ekle
+- Fotoğraf yükleme + "Avatar Oluştur" → `POST /avatar/create`
+- Hazır avatar grid → `GET /avatar/stock`
+- Aktif avatar gösterimi + "Avatar ile Video Oluştur" butonu
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

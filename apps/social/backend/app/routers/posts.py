@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.database import get_db
 from fastapi import Header
 from app.core.security import get_current_user, get_current_user_optional, get_service_auth
-from app.models.schemas import OkResponse, PostCreate, PostGenerate
+from app.models.schemas import FacelessVideoGenerate, OkResponse, PostCreate, PostGenerate
 from app.services.document_processor import get_document_context
 from app.services.fal_ai import generate_image
+from app.services.faceless_video import TURKISH_VOICES, run_faceless_video_pipeline
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -260,3 +261,45 @@ async def publish_post_now(
 
     result = await svc_publish(post_id, db)
     return OkResponse(data=result)
+
+
+@router.post("/generate-faceless-video", response_model=OkResponse, status_code=status.HTTP_201_CREATED)
+async def generate_faceless_video(
+    payload: FacelessVideoGenerate,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Faceless video pipeline: script üret → TTS → fal.ai arka plan videosu."""
+    brand = await db.fetchrow(
+        "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
+    )
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
+    brand_kit["sector"] = brand["sector"] or ""
+
+    post = await run_faceless_video_pipeline(
+        brand_id=payload.brand_id,
+        prompt=payload.prompt,
+        voice=payload.voice,
+        aspect_ratio=payload.aspect_ratio,
+        brand_kit=brand_kit,
+        brand_name=brand["name"],
+        db=db,
+    )
+    return OkResponse(data={
+        "post_id": str(post["id"]),
+        "script": post["script"],
+        "audio_url": post["audio_url"],
+        "duration_estimate": post["duration_estimate"],
+        "status": "generating",
+    })
+
+
+@router.get("/voices/turkish", response_model=OkResponse)
+async def list_turkish_voices(
+    user: dict = Depends(get_current_user),
+):
+    """Mevcut Türkçe TTS ses seçeneklerini döndür."""
+    return OkResponse(data=TURKISH_VOICES)

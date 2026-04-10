@@ -130,6 +130,7 @@ Her müşteri kendi bot token'ını Otomatik Yayın wizard'ına girer →
 - `003_social_account_unique.sql` — brand_social_accounts UNIQUE(brand_id, platform) ✅
 - `004_telegram_chat_id.sql` — autoposting_configs.telegram_chat_id ✅
 - `005_telegram_bot_token.sql` — autoposting_configs.telegram_bot_token ✅
+- `006_document_rag.sql` — brand_documents.raw_text + brand_document_chunks (pgvector) ✅
 
 ## Router Kayıt Sırası (main.py)
 ```python
@@ -139,6 +140,7 @@ app.include_router(internal.router)
 app.include_router(autoposting.router)
 app.include_router(brands.router)
 app.include_router(calendar.router)
+app.include_router(documents.router)   # Phase 3 — eklendi
 app.include_router(posts.router)
 app.include_router(storage.router)
 app.include_router(social.router)
@@ -151,23 +153,44 @@ app.include_router(webhooks.router)
 - Her ikisi de n8n'de mevcut ama **inactive** — aktif etmek için aşağıya bak.
 
 ## requirements.txt (önemli eklemeler)
-- `anthropic==0.40.0`
-- `python-multipart==0.0.12`
+```
+anthropic==0.40.0
+python-multipart==0.0.12
+pypdf==4.3.1           # Phase 3 — PDF metin çıkarma
+python-docx==1.1.2     # Phase 3 — Word metin çıkarma
+openpyxl==3.1.5        # Phase 3 — Excel metin çıkarma
+openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_KEY gerekli)
+```
 
 ## Phase 3
 
+### Tamamlanan
 - [x] Adım 1a — Doküman RAG Backend
   - `app/services/document_processor.py` → PDF/Word/Excel metin çıkarma + chunking
   - `app/routers/documents.py` → POST /documents, GET /documents, DELETE /documents/{id}
   - `shared/db/migrations/006_document_rag.sql` → brand_document_chunks + raw_text kolonu
-  - requirements.txt: pypdf, python-docx, openpyxl, openai (opsiyonel embedding)
-  - config: OPENAI_API_KEY opsiyonel eklendi
+  - config.py: OPENAI_API_KEY opsiyonel eklendi (varsa vektör embedding aktif olur)
 
 - [x] Adım 1b — RAG entegrasyonu (posts.py)
   - `_build_prompt_with_rag()` helper → doküman bağlamını prompt'a enjekte eder
   - `get_document_context()` → küçük dokümanlar raw_text, büyükler chunk retrieval
   - document_ids artık posts tablosuna kaydediliyor
 
-## Bir Sonraki Adım
-- **Phase 3 Adım 2** — Türkçe Faceless Video pipeline (script → TTS → fal.ai video)
-- Coolify'a OPENAI_API_KEY eklenirse → vektör benzerlik araması otomatik aktif olur
+- [x] Adım 2a — Türkçe Faceless Video backend pipeline
+  - `app/services/faceless_video.py`
+    - `generate_script()` → Claude Haiku ile Türkçe script (30-60 sn, ~75-150 kelime)
+    - `text_to_speech()` → Azure TTS REST API → R2'ye mp3 (AZURE_TTS_KEY yoksa atlanır)
+    - `generate_background_video()` → fal-ai/hunyuan-video (async, webhook)
+    - `run_faceless_video_pipeline()` → tam pipeline, post kaydı oluşturur
+  - `POST /posts/generate-faceless-video` → brand_id, prompt, voice, aspect_ratio
+  - `GET /posts/voices/turkish` → sabit Türkçe ses listesi
+  - `POST /ai/generate-script` → sadece script üretimi (frontend'den çağrılır)
+  - `config.py`: AZURE_TTS_KEY + AZURE_TTS_REGION eklendi
+
+### Bir Sonraki Adım — Phase 3 Adım 3a
+**AI Avatar backend (HeyGen entegrasyonu):**
+- `app/services/avatar.py` oluştur
+- `POST /avatar/create` → kullanıcı fotoğrafından HeyGen avatar
+- `GET /avatar/stock` → hazır HeyGen avatar listesi
+- `POST /posts/generate-ugc` → avatar + script → UGC video
+- Yeni .env: `HEYGEN_API_KEY`

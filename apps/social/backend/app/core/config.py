@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     INTERNAL_API_KEY: str = ""  # n8n → backend servis kimlik doğrulaması
     OPENAI_API_KEY: str = ""    # Opsiyonel — RAG chunk embedding için
+    AZURE_TTS_KEY: str = ""     # Opsiyonel — Faceless video TTS için
+    AZURE_TTS_REGION: str = "westeurope"  # Azure TTS bölgesi
 
 
 settings = Settings()
