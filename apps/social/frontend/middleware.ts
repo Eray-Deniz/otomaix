@@ -1,26 +1,24 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs'
 
-export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
-
-  const supabase = createMiddlewareClient({ req, res })
-  const { data: { session } } = await supabase.auth.getSession()
+export function middleware(req: NextRequest) {
+  // Supabase auth token cookie kontrolü (sb-<project>-auth-token)
+  const hasCookie = req.cookies.getAll().some((c) => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'))
 
   const isAuthPage = req.nextUrl.pathname.startsWith('/login')
-  const isDashboard = req.nextUrl.pathname.startsWith('/dashboard')
-  const isOnboarding = req.nextUrl.pathname.startsWith('/onboarding')
+  const isProtected =
+    req.nextUrl.pathname.startsWith('/dashboard') ||
+    req.nextUrl.pathname.startsWith('/onboarding')
 
-  if (!session && (isDashboard || isOnboarding)) {
+  if (!hasCookie && isProtected) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  if (session && isAuthPage) {
+  if (hasCookie && isAuthPage) {
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
-  return res
+  return NextResponse.next()
 }
 
 export const config = {
