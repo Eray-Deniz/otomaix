@@ -4,7 +4,6 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
 import { useAppStore, Brand, Workspace, User } from '@/lib/store'
-import { api } from '@/lib/api'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { analytics } from '@/lib/analytics'
 
@@ -27,12 +26,20 @@ export default function DashboardLayout({
 
     async function checkAuth() {
       const { data } = await supabase.auth.getSession()
-      if (!data.session) {
+      if (!data.session?.access_token) {
         router.push('/login')
         return
       }
 
-      const res = await api.get<InitData>('/auth/init')
+      // Token'ı direkt kullan — getAuthHeader'a güvenme (timing sorunu olabilir)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.otomaix.com'
+      const raw = await fetch(`${apiUrl}/auth/init`, {
+        headers: {
+          Authorization: `Bearer ${data.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      })
+      const res: { success: boolean; data?: InitData } = await raw.json()
       if (res.success && res.data) {
         const { user, workspace, brands } = res.data
         setUser(user)
