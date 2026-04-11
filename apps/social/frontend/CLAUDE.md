@@ -265,7 +265,11 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 - next-intl kurulmadı (tr.json manuel yönetiliyor — basit tutmak için)
 - Supabase client SSR'da no-op, yalnızca client-side çalışıyor
 - Supabase session **localStorage**'da tutulur (cookie değil) → middleware'den okunamaz
-  - Auth koruması `app/(dashboard)/layout.tsx`'te client-side `getSession()` ile yapılır
+  - Auth koruması `app/(dashboard)/layout.tsx`'te `onAuthStateChange` ile yapılır
+    - `getSession()` **kullanılmıyor** — Google OAuth hash fragment işlenmeden önce null dönebilir (race condition)
+    - `onAuthStateChange` mount anında `INITIAL_SESSION` event'ı ile hemen tetiklenir; session varsa `/auth/init` çağrılır, yoksa `/login`'e yönlendirir
   - Google OAuth sonrası `/auth/callback` sayfası `onAuthStateChange` ile session'ı bekler, sonra `/dashboard`'a yönlendirir
   - `login/page.tsx`'te `redirectTo: window.location.origin + '/auth/callback'` kullanılır
+- SSR hydration: `new Date()` / `Date.now()` komponent body'sinde kullanılmaz, `useEffect` içinde `useState` ile alınır
+  - `getGreeting()` (dashboard/page.tsx) ve `TrialBanner` (Sidebar.tsx) bu kurala göre düzenlendi
 - Tiptap yerine Textarea kullanıldı (caption editörü) — daha az bağımlılık

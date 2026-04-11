@@ -109,6 +109,10 @@ Her müşteri kendi bot token'ını Otomatik Yayın wizard'ına girer →
 - [x] Servis kimlik doğrulaması (`app/core/security.py`)
   - `get_service_auth` dependency → X-Internal-Key header kontrolü
   - INTERNAL_API_KEY config'de tanımlı
+  - **KRITIK:** JWT doğrulama `python-jose` yerine `PyJWT[crypto]==2.8.0` kullanıyor
+    - Supabase ES256 (ECDSA) imzalı token'lar için `ECAlgorithm.from_jwk()` ile JWK→key dönüşümü
+    - python-jose 3.3.0 EC JWK key formatını desteklemiyordu → "alg not allowed" hatası veriyordu
+    - JWKS önbelleği 1 saatlik TTL ile (`_jwks_fetched_at` + `_JWKS_TTL`)
 
 - [x] n8n Auto Posting Scheduler (ID: `Nz4651wCfBHP4G9l`)
   - Her 30dk schedule trigger
@@ -163,6 +167,7 @@ pypdf==4.3.1           # Phase 3 — PDF metin çıkarma
 python-docx==1.1.2     # Phase 3 — Word metin çıkarma
 openpyxl==3.1.5        # Phase 3 — Excel metin çıkarma
 openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_KEY gerekli)
+PyJWT[crypto]==2.8.0   # ES256 JWK desteği — python-jose yerine kullanılıyor
 ```
 
 ## Phase 3
