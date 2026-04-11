@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.schemas import OkResponse
+from app.services import analytics
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
@@ -392,6 +393,7 @@ async def paddle_webhook(
                 account_id,
                 plan_id,
             )
+            analytics.subscription_created(str(account_id), plan_id)
 
     elif event_type == "subscription.cancelled":
         sub_id = data.get("id")
@@ -413,6 +415,7 @@ async def paddle_webhook(
                     "UPDATE social.accounts SET plan_id = 'starter' WHERE id = $1",
                     row["account_id"],
                 )
+                analytics.subscription_cancelled(str(row["account_id"]), data.get("items", [{}])[0].get("price", {}).get("product_id", "unknown"))
 
     return OkResponse(data={"received": True, "event_type": event_type})
 

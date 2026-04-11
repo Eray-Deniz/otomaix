@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
+import { analytics } from '@/lib/analytics'
 import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb, FileText } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
@@ -199,6 +200,7 @@ export default function IcerikOlusturPage() {
 
   const fetchIdeas = useCallback(async () => {
     if (!currentBrand?.id) { toast.error('Önce bir marka seçin'); return }
+    analytics.ideaSuggestionUsed()
     setLoadingIdeas(true)
     const res = await api.post<{ ideas: string[] }>('/ai/suggest-ideas', {
       brand_id: currentBrand.id,
@@ -225,6 +227,9 @@ export default function IcerikOlusturPage() {
     if (!currentBrand?.id) { toast.error('Önce bir marka seçin'); return }
     if (!prompt.trim()) { toast.error('Lütfen bir prompt girin'); return }
 
+    analytics.contentCreationStarted(contentType)
+    if (selectedDocIds.length > 0) analytics.documentReferenceUsed(selectedDocIds.length)
+    const genStart = Date.now()
     setGenerating(true)
     setStep(3)
 
@@ -240,6 +245,7 @@ export default function IcerikOlusturPage() {
       })
       setGenerating(false)
       if (res.success && res.data) {
+        analytics.contentGenerated(contentType, Math.round((Date.now() - genStart) / 1000))
         setGeneratedPost(res.data)
         setScript(res.data.script ?? '')
         setDurationEstimate(res.data.duration_estimate ?? null)
@@ -261,6 +267,7 @@ export default function IcerikOlusturPage() {
       })
       setGenerating(false)
       if (res.success && res.data) {
+        analytics.contentGenerated(contentType, Math.round((Date.now() - genStart) / 1000))
         setGeneratedPost(res.data)
         setCaption(res.data.caption ?? '')
         setHashtags(res.data.hashtags ?? [])

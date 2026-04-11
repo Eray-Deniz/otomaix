@@ -6,6 +6,7 @@ import { createSupabaseClient } from '@/lib/supabase'
 import { useAppStore, Brand, Workspace, User } from '@/lib/store'
 import { api } from '@/lib/api'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { analytics } from '@/lib/analytics'
 
 interface InitData {
   user: User & { plan_id: string }
@@ -37,6 +38,11 @@ export default function DashboardLayout({
         setUser(user)
         setCurrentWorkspace(workspace)
         setBrands(brands)
+        analytics.identify(user.id, {
+          email: user.email,
+          name: user.name,
+          plan: user.plan_id || 'starter',
+        })
         // currentBrand yoksa veya artık listede yoksa ilkini seç
         const current = useAppStore.getState().currentBrand
         const stillValid = current && brands.some((b) => b.id === current.id)

@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAppStore } from '@/lib/store'
 import { LogOut } from 'lucide-react'
 import Link from 'next/link'
+import { analytics } from '@/lib/analytics'
 
 function TrialBanner({ trialEndsAt }: { trialEndsAt: string }) {
   const daysLeft = Math.max(
@@ -36,6 +37,7 @@ export function Sidebar() {
   const user = useAppStore((s) => s.user)
 
   async function handleLogout() {
+    analytics.reset()
     const supabase = createSupabaseClient()
     await supabase.auth.signOut()
     router.push('/login')

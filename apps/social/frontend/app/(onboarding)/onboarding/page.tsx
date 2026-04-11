@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
+import { analytics } from '@/lib/analytics'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,8 @@ export default function OnboardingPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [creating, setCreating] = useState(false)
 
+  useEffect(() => { analytics.onboardingStarted() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [state, setState] = useState<OnboardingState>({
     websiteUrl: '',
     brand: {
@@ -137,6 +140,7 @@ export default function OnboardingPage() {
   })
 
   function next() {
+    analytics.onboardingStepCompleted(step)
     setStep((s) => Math.min(s + 1, 7) as Step)
   }
 
@@ -224,6 +228,7 @@ export default function OnboardingPage() {
           colors: state.brand.colors,
           tonality: state.brand.tonality,
         })
+        analytics.onboardingCompleted()
         toast.success('Markanız oluşturuldu!')
         router.push('/dashboard')
       } else {

@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     PADDLE_API_KEY: str = ""    # Opsiyonel — Paddle ödeme entegrasyonu
     PADDLE_WEBHOOK_SECRET: str = ""  # Paddle webhook imza doğrulama
     APP_URL: str = "https://app.otomaix.com"
+    POSTHOG_API_KEY: str = ""   # Opsiyonel — PostHog server-side analytics
+    POSTHOG_HOST: str = "https://eu.posthog.com"
 
 
 settings = Settings()

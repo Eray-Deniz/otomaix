@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -18,6 +18,7 @@ import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { Send, Calendar, RefreshCw, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { analytics } from '@/lib/analytics'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -193,6 +194,8 @@ function NewContentDialog({
 export default function TakvimPage() {
   const currentBrand = useAppStore((s) => s.currentBrand)
   const calendarRef = useRef<InstanceType<typeof FullCalendar>>(null)
+
+  useEffect(() => { analytics.calendarOpened() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [view, setView] = useState<'dayGridMonth' | 'timeGridWeek'>('dayGridMonth')
   const [events, setEvents] = useState<EventInput[]>([])

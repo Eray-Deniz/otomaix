@@ -18,6 +18,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { analytics } from '@/lib/analytics'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -113,6 +114,7 @@ export default function TrendlerPage() {
         }
       )
       if (res.success && res.data?.post_id) {
+        analytics.trendPostCreated()
         toast.success('İçerik oluşturuluyor...')
         router.push('/icerik-kutuphanesi')
       } else {

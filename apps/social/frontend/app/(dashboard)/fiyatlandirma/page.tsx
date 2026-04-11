@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Check, Loader2, Zap } from 'lucide-react'
+import { analytics } from '@/lib/analytics'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,14 +47,17 @@ export default function FiyatlandirmaPage() {
       if (plansRes.success && plansRes.data) setPlans(plansRes.data)
       if (billingRes.success && billingRes.data) setCurrentPlanId(billingRes.data.plan_id)
       setLoading(false)
+      analytics.pricingPageViewed()
     }
     load()
   }, [])
 
   async function handleSelectPlan(planId: string) {
     if (planId === currentPlanId) return
+    analytics.planSelected(planId)
     setLoadingPlan(planId)
     try {
+      analytics.checkoutStarted(planId)
       const res = await api.post<{ checkout_url: string }>('/billing/checkout', { plan_id: planId })
       if (res.success && res.data?.checkout_url) {
         window.location.href = res.data.checkout_url
