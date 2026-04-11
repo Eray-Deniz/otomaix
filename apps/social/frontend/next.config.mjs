@@ -18,11 +18,14 @@ const nextConfig = {
 }
 
 export default withSentryConfig(nextConfig, {
-  // Source map yükleme devre dışı (Coolify build — SENTRY_AUTH_TOKEN gerekmez)
   silent: true,
   disableLogger: true,
   hideSourceMaps: true,
-  // Sentry DSN yoksa Sentry devre dışı
   autoInstrumentServerFunctions: true,
   autoInstrumentAppDirectory: true,
+  sourcemaps: {
+    // Build sonrası source map dosyalarını sil — kullanıcıya servis edilmez
+    deleteSourcemapsAfterUpload: true,
+    disable: true, // SENTRY_AUTH_TOKEN olmadığı için upload'u tamamen devre dışı bırak
+  },
 })
