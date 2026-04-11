@@ -10,6 +10,7 @@ import {
   Send,
   Settings,
   BarChart2,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +22,7 @@ const navItems = [
   { href: '/otomatik-yayin', label: 'Otomatik Yayın', icon: Send },
   { href: '/marka-ayarlari', label: 'Marka Ayarları', icon: Settings },
   { href: '/rakip-analizi', label: 'Rakip Analizi', icon: BarChart2 },
+  { href: '/trendler', label: 'Trendler', icon: TrendingUp },
 ]
 
 export function SidebarNav() {

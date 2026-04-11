@@ -222,12 +222,22 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
   - config.py: APIFY_API_KEY eklendi (opsiyonel)
   - n8n: `shared/n8n-workflows/weekly-competitor-report.json` oluşturuldu
 
-### Bir Sonraki Adım — Phase 3 Adım 5 (Trend Analizi)
-**Trend analizi backend:**
-- `app/services/trend_analyzer.py` oluştur
-  - Google Trends (pytrends) → sektöre göre TR trendleri
-  - Türk haber RSS feed'leri (hurriyet, milliyet)
-  - Claude ile sektör relevance sıralaması
-- `GET /trends?brand_id` → mevcut trendler
-- `POST /trends/{id}/create-post` → trend'e göre içerik üret
-- Migration: `008_trend_cache.sql`
+- [x] Adım 5a — Trend Analizi Backend
+  - `app/services/trend_analyzer.py`
+    - Google Trends (pytrends, opsiyonel) → TR trendleri
+    - Türk haber RSS feed'leri (Hürriyet, Milliyet, Sabah)
+    - Claude Haiku ile sektör relevance sıralaması
+    - 6 saatlik önbellekleme (`social.trend_cache`)
+  - `app/routers/trends.py`
+    - `GET  /trends?brand_id` → mevcut/önbellekli trendler
+    - `POST /trends/refresh?brand_id` → önbelleği atlayarak taze veri
+    - `POST /trends/{index}/create-post` → trend prompt'u ile fal.ai tetikle
+  - Migration: `008_trend_cache.sql` ✅
+  - requirements.txt: `pytrends==4.9.2` eklendi
+
+### Bir Sonraki Adım — Phase 3 Adım 6 (Logo Overlay + Intro Video)
+**Medya işleme backend:**
+- `app/services/media_processor.py` oluştur
+  - `add_logo_overlay()` → Pillow ile logo bindirme
+  - `add_intro_video()` → FFmpeg ile video birleştirme
+- Fal.ai webhook callback'ine entegre et

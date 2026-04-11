@@ -156,12 +156,23 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - recharts PieChart (içerik dağılımı)
   - `recharts` paketi eklendi (`package.json`)
 
-#### Bir Sonraki Adım — Phase 3 Adım 5 (frontend)
-**Trend analizi:**
-- Dashboard sayfasına "Bu Hafta Sektörünüzde Trendler" widget'ı ekle
-- `app/(dashboard)/trendler/page.tsx` oluştur
-  - Haftalık trend kartları
-  - "Bu Trende Göre İçerik Üret" butonları
+- [x] Adım 5b — Trend Analizi Frontend
+  - `app/(dashboard)/trendler/page.tsx` — tam trendler sayfası
+    - Kaynak filtresi (Tümü / Haber / Google Trends / Genel)
+    - Trend kartları (başlık, kaynak, uyum skoru, içerik fırsatı, öneri prompt)
+    - "İçerik Üret" butonu → `/trends/{index}/create-post` → kütüphaneye yönlendir
+    - "Yenile" butonu → `/trends/refresh`
+  - Dashboard'a "Bu Hafta Sektörünüzde Trendler" widget eklendi
+    - Top 5 trend listesi, hover'da "İçerik Üret" butonu
+    - "Tüm Trendler →" linki
+  - SidebarNav'a "Trendler" linki eklendi (TrendingUp ikonu)
+
+#### Bir Sonraki Adım — Phase 3 Adım 6 (Logo Overlay + Intro Video UI)
+**Marka Kit güncelleme:**
+- Marka Ayarları → Logo Overlay sekmesi/bölümü
+  - Logo bindirme konumu seçici (köşeler)
+  - Opaklık slider
+- Video içeriklerinde intro video ekleme toggle'ı
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

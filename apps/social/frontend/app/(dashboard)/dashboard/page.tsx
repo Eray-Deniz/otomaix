@@ -2,9 +2,15 @@
 
 export const dynamic = 'force-dynamic'
 
+import { useEffect, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { api } from '@/lib/api'
+import Link from 'next/link'
+import { TrendingUp, ArrowRight, Loader2, Wand2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 function getGreeting(name: string) {
   const hour = new Date().getHours()
@@ -39,6 +45,114 @@ const PLATFORMS = [
 ]
 
 const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
+
+interface Trend {
+  title: string
+  source: string
+  relevance_score: number
+  content_opportunity: string
+  suggested_prompt: string
+}
+
+function TrendWidget() {
+  const currentBrand = useAppStore((s) => s.currentBrand)
+  const router = useRouter()
+  const [trends, setTrends] = useState<Trend[]>([])
+  const [loading, setLoading] = useState(false)
+  const [creatingIndex, setCreatingIndex] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!currentBrand?.id) return
+    setLoading(true)
+    api.get<{ sector: string; trends: Trend[] }>(`/trends?brand_id=${currentBrand.id}`)
+      .then((res) => {
+        if (res.success && res.data) setTrends((res.data.trends || []).slice(0, 5))
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [currentBrand?.id])
+
+  async function handleCreate(trend: Trend, index: number) {
+    if (!currentBrand?.id) return
+    setCreatingIndex(index)
+    try {
+      const res = await api.post<{ post_id: string }>(
+        `/trends/${index}/create-post`,
+        {
+          brand_id: currentBrand.id,
+          suggested_prompt: trend.suggested_prompt,
+          content_type: 'image',
+          aspect_ratio: '1:1',
+          platforms: [],
+        }
+      )
+      if (res.success) {
+        toast.success('İçerik oluşturuluyor...')
+        router.push('/icerik-kutuphanesi')
+      }
+    } catch {
+      toast.error('Bir hata oluştu')
+    } finally {
+      setCreatingIndex(null)
+    }
+  }
+
+  if (!currentBrand) return null
+
+  return (
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-blue-600" />
+            Bu Hafta Sektörünüzde Trendler
+          </CardTitle>
+          <Link
+            href="/trendler"
+            className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+          >
+            Tüm Trendler <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center justify-center py-6">
+            <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+          </div>
+        ) : trends.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">Trend verisi yükleniyor...</p>
+        ) : (
+          <div className="space-y-2">
+            {trends.map((trend, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-3 p-2.5 rounded-lg hover:bg-gray-50 group transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">{trend.title}</p>
+                  <p className="text-xs text-gray-400 truncate">{trend.content_opportunity}</p>
+                </div>
+                <button
+                  onClick={() => handleCreate(trend, i)}
+                  disabled={creatingIndex === i}
+                  className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  {creatingIndex === i ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3.5 h-3.5" />
+                  )}
+                  İçerik Üret
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function DashboardPage() {
   const user = useAppStore((s) => s.user)
@@ -111,6 +225,9 @@ export default function DashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Trend Widget */}
+      <TrendWidget />
 
       {/* Connect Accounts */}
       <div>
