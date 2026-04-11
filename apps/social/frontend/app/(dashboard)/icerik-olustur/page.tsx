@@ -209,6 +209,8 @@ export default function IcerikOlusturPage() {
     })
     if (res.success && res.data?.ideas) {
       setIdeas(res.data.ideas)
+    } else if (!res.success && res.error === 'rate_limit') {
+      toast.error(`Çok fazla istek. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
     } else {
       toast.error('Fikirler alınamadı')
     }
@@ -250,6 +252,9 @@ export default function IcerikOlusturPage() {
         setScript(res.data.script ?? '')
         setDurationEstimate(res.data.duration_estimate ?? null)
         toast.success('Video üretimi başlatıldı!')
+      } else if (!res.success && res.error === 'rate_limit') {
+        setStep(2)
+        toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
       } else {
         toast.error('Video üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
@@ -272,6 +277,9 @@ export default function IcerikOlusturPage() {
         setCaption(res.data.caption ?? '')
         setHashtags(res.data.hashtags ?? [])
         toast.success('İçerik üretimi başlatıldı!')
+      } else if (!res.success && res.error === 'rate_limit') {
+        setStep(2)
+        toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
       } else {
         toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }

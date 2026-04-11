@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.models.schemas import OkResponse
 from app.services.competitor_analyzer import (
@@ -29,7 +30,12 @@ class CompetitorCreate(BaseModel):
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
 
-@router.post("", response_model=OkResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=OkResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limiter(10, 3600))],  # 10/saat
+)
 async def add_competitor(
     payload: CompetitorCreate,
     user: dict = Depends(get_current_user),

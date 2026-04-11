@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.models.schemas import OkResponse
 
@@ -106,7 +107,11 @@ CATEGORY_TR = {
 }
 
 
-@router.post("/suggest-ideas", response_model=OkResponse)
+@router.post(
+    "/suggest-ideas",
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(30, 3600))],  # 30/saat
+)
 async def suggest_ideas(
     payload: SuggestIdeasRequest,
     user: dict = Depends(get_current_user),

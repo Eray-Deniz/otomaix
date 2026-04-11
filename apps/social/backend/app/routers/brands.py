@@ -4,10 +4,13 @@ from uuid import UUID
 import asyncpg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
+from app.core.cache import get_cached, invalidate_pattern, set_cached
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.services.storage import r2
+
+_BRANDS_TTL = 300  # 5 dakika
 
 router = APIRouter(prefix="/brands", tags=["brands"])
 
@@ -34,6 +37,7 @@ async def create_brand(
         payload.website_url,
         payload.sector,
     )
+    await invalidate_pattern(f"otomaix:social:brands:{payload.workspace_id}")
     return OkResponse(data=dict(row))
 
 
@@ -44,11 +48,18 @@ async def list_brands(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """List all brands in a workspace."""
+    cache_key = f"otomaix:social:brands:{workspace_id}"
+    cached = await get_cached(cache_key)
+    if cached is not None:
+        return OkResponse(data=cached)
+
     rows = await db.fetch(
         "SELECT * FROM social.brands WHERE workspace_id = $1 ORDER BY created_at",
         workspace_id,
     )
-    return OkResponse(data=[dict(r) for r in rows])
+    data = [dict(r) for r in rows]
+    await set_cached(cache_key, data, _BRANDS_TTL)
+    return OkResponse(data=data)
 
 
 @router.get("/{brand_id}", response_model=OkResponse)
@@ -85,6 +96,7 @@ async def update_brand(
     )
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
+    await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")
     return OkResponse(data=dict(row))
 
 
@@ -95,9 +107,12 @@ async def delete_brand(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Delete a brand."""
+    row = await db.fetchrow("SELECT workspace_id FROM social.brands WHERE id = $1", brand_id)
     result = await db.execute("DELETE FROM social.brands WHERE id = $1", brand_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
+    if row:
+        await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")
     return OkResponse(data={"deleted": True})
 
 
@@ -123,6 +138,7 @@ async def update_brand_kit(
         brand_id,
         json.dumps(merged),
     )
+    await invalidate_pattern(f"otomaix:social:brands:{updated['workspace_id']}")
     return OkResponse(data=dict(updated))
 
 
@@ -153,6 +169,7 @@ async def upload_logo(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Brand not found")
+    await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")
     return OkResponse(data={"url": public_url})
 
 
@@ -179,4 +196,5 @@ async def upload_intro_video(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Brand not found")
+    await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")
     return OkResponse(data={"url": public_url})

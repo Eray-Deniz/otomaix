@@ -1,10 +1,10 @@
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from app.core.database import get_db
-from fastapi import Header
+from app.core.rate_limit import limiter
 from app.core.security import get_current_user, get_current_user_optional, get_service_auth
 from app.models.schemas import FacelessVideoGenerate, OkResponse, PostCreate, PostGenerate
 from app.services.document_processor import get_document_context
@@ -65,7 +65,12 @@ Yanıt olarak sadece JSON döndür: {{"image_prompt": "...", "caption": "...", "
     return enriched
 
 
-@router.post("/generate", response_model=OkResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/generate",
+    response_model=OkResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limiter(20, 3600))],  # 20/saat
+)
 async def generate_post(
     payload: PostGenerate,
     user: dict = Depends(get_current_user),
@@ -263,7 +268,12 @@ async def publish_post_now(
     return OkResponse(data=result)
 
 
-@router.post("/generate-faceless-video", response_model=OkResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/generate-faceless-video",
+    response_model=OkResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limiter(20, 3600))],  # 20/saat (image + video birlikte sayılır)
+)
 async def generate_faceless_video(
     payload: FacelessVideoGenerate,
     user: dict = Depends(get_current_user),

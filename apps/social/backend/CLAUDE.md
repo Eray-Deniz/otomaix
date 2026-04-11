@@ -293,7 +293,21 @@ PyJWT[crypto]==2.8.0   # ES256 JWK desteği — python-jose yerine kullanılıyo
   - `services/upload_post.py`: Upload-Post.com HTTP hata kodlarında `capture_message`
   - `routers/billing.py`: Paddle checkout/portal `httpx.RequestError` + webhook JSON parse hatalarında `capture_exception`
 
-### Bir Sonraki Adım — Phase 4 Adım 4
-- [ ] Adım 4a — Redis Cache ve Rate Limiting
-  - `redis[hiredis]` + `fastapi-limiter` kurulumu
+- [x] Adım 4a — Redis Cache ve Rate Limiting (backend)
+  - `redis[hiredis]==5.0.8` requirements.txt'e güncellendi
+  - `app/core/cache.py` → `get_cached / set_cached / invalidate / invalidate_pattern` yardımcıları
+  - `app/core/rate_limit.py` → `limiter(max_req, window_sec)` dependency factory (fail-open)
+  - `app/core/security.py` → JWT decode 300s Redis cache (`otomaix:social:user:{token_hash}`)
+  - Rate limit uygulamaları:
+    - `POST /posts/generate` → 20/saat
+    - `POST /posts/generate-faceless-video` → 20/saat
+    - `POST /ai/suggest-ideas` → 30/saat
+    - `POST /competitors` → 10/saat
+  - Cache uygulamaları (invalidation dahil):
+    - `GET /brands` → 300s (`otomaix:social:brands:{workspace_id}`)
+    - `GET /calendar/holidays` → 86400s (`otomaix:social:holidays:{year}`)
+    - `GET /avatar/stock` → 3600s (`otomaix:social:avatar:stock`)
+
+### Bir Sonraki Adım — Phase 4 Adım 5
+- [ ] Adım 5 — Docker Compose local deployment paketi
   - Phase 4 dokümantasyonu: `04-social-phase4.md`

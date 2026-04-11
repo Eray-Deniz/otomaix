@@ -7,6 +7,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from app.core.cache import get_cached, set_cached
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.schemas import OkResponse
@@ -31,7 +32,13 @@ async def get_stock_avatars(
     user: dict = Depends(get_current_user),
 ):
     """HeyGen stok avatar listesini döndür."""
+    cache_key = "otomaix:social:avatar:stock"
+    cached = await get_cached(cache_key)
+    if cached is not None:
+        return OkResponse(data=cached)
+
     avatars = await list_stock_avatars()
+    await set_cached(cache_key, avatars, 3600)  # 1 saat
     return OkResponse(data=avatars)
 
 

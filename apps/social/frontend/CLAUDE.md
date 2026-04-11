@@ -249,9 +249,13 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - `app/(dashboard)/layout.tsx` — `/auth/init` sonrası `Sentry.setUser({id, email})`
   - Env değişkeni: `NEXT_PUBLIC_SENTRY_DSN`
 
-#### Bir Sonraki Adım — Phase 4 Adım 4
-- [ ] Adım 4b — Redis Cache ve Rate Limiting (frontend tarafı)
-  - API rate limit hatalarında (HTTP 429) kullanıcıya toast gösterimi
+- [x] Adım 4b — Redis Cache ve Rate Limiting (frontend)
+  - `lib/api.ts` → HTTP 429 yakalanıyor: `{ success: false, error: 'rate_limit', retry_after: N }`
+  - `ApiResponse<T>` discriminated union tipi export edildi
+  - `icerik-olustur/page.tsx` → rate_limit hatasında adım 2'ye geri döner + kaç saniye bekleyeceğini söyleyen toast
+
+#### Bir Sonraki Adım — Phase 4 Adım 5
+- [ ] Adım 5 — Docker Compose local deployment paketi
   - Phase 4 dokümantasyonu: `04-social-phase4.md`
 
 ## Paket Listesi (önemli)

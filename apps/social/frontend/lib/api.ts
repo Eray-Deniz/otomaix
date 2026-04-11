@@ -13,10 +13,14 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   }
 }
 
+export type ApiResponse<T> =
+  | { success: true; data: T; error?: never; retry_after?: never }
+  | { success: false; data?: never; error: string; retry_after?: number }
+
 async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
-): Promise<{ success: boolean; data?: T; error?: string }> {
+): Promise<ApiResponse<T>> {
   const authHeader = await getAuthHeader()
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -26,19 +30,41 @@ async function apiFetch<T>(
       ...options.headers,
     },
   })
+
+  if (res.status === 429) {
+    const body = await res.json().catch(() => ({}))
+    const detail = body.detail || {}
+    return {
+      success: false,
+      error: 'rate_limit',
+      retry_after: detail.retry_after ?? 60,
+    }
+  }
+
   return res.json()
 }
 
 async function apiUpload<T>(
   path: string,
   formData: FormData
-): Promise<{ success: boolean; data?: T; error?: string }> {
+): Promise<ApiResponse<T>> {
   const authHeader = await getAuthHeader()
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: authHeader,
     body: formData,
   })
+
+  if (res.status === 429) {
+    const body = await res.json().catch(() => ({}))
+    const detail = body.detail || {}
+    return {
+      success: false,
+      error: 'rate_limit',
+      retry_after: detail.retry_after ?? 60,
+    }
+  }
+
   return res.json()
 }
 

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 
@@ -67,13 +68,39 @@ async def _decode_token(token: str) -> dict:
     return payload
 
 
+async def _decode_token_cached(token: str) -> dict:
+    """Decode JWT with a 300s Redis cache to avoid repeated JWKS lookups."""
+    from app.core.redis import get_redis
+
+    token_hash = hashlib.sha256(token.encode()).hexdigest()[:32]
+    cache_key = f"otomaix:social:user:{token_hash}"
+
+    try:
+        redis = await get_redis()
+        cached = await redis.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except Exception:
+        pass  # Redis unavailable — fall through to normal decode
+
+    payload = await _decode_token(token)
+
+    try:
+        redis = await get_redis()
+        await redis.setex(cache_key, 300, json.dumps(payload))
+    except Exception:
+        pass
+
+    return payload
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict:
     """Require a valid Supabase JWT. Returns decoded payload with 'sub' and 'email'."""
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-    return await _decode_token(credentials.credentials)
+    return await _decode_token_cached(credentials.credentials)
 
 
 async def get_current_user_optional(
@@ -83,7 +110,7 @@ async def get_current_user_optional(
     if not credentials:
         return None
     try:
-        return await _decode_token(credentials.credentials)
+        return await _decode_token_cached(credentials.credentials)
     except HTTPException:
         return None
 

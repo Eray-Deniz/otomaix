@@ -7,6 +7,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.core.cache import get_cached, set_cached
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.schemas import OkResponse
@@ -98,12 +99,19 @@ async def get_holidays(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Return Turkish public holidays for the given year."""
+    cache_key = f"otomaix:social:holidays:{year}"
+    cached = await get_cached(cache_key)
+    if cached is not None:
+        return OkResponse(data=cached)
+
     try:
         rows = await db.fetch(
             "SELECT date, name_tr, name_en, category FROM social.public_holidays WHERE year = $1 ORDER BY date",
             year,
         )
-        return OkResponse(data=[dict(r) for r in rows])
+        data = [dict(r) for r in rows]
+        await set_cached(cache_key, data, 86400)  # 24 saat
+        return OkResponse(data=data)
     except Exception:
         # Table may not exist yet — return empty list
         return OkResponse(data=[])
