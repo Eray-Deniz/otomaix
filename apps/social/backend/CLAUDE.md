@@ -244,6 +244,18 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
   - `Dockerfile` güncellendi → ffmpeg apt paketi eklendi
   - `requirements.txt`: `Pillow==11.2.1` eklendi
 
-### Bir Sonraki Adım — Phase 3 Adım 7 (Paddle Ödeme)
-- `app/routers/billing.py` → checkout, webhook, current subscription
-- Migration: `009_subscriptions.sql`
+- [x] Adım 7a — Paddle Ödeme Backend
+  - `app/routers/billing.py`
+    - `GET  /billing/plans` → tüm planlar (auth gerekmez)
+    - `GET  /billing/current` → abonelik + kullanım istatistikleri
+    - `POST /billing/checkout` → Paddle checkout URL
+    - `POST /billing/portal` → Paddle müşteri portal URL
+    - `POST /webhooks/paddle` → subscription.created/updated/cancelled
+    - `check_plan_limit()` → post/brand/video/avatar limit kontrolü (HTTP 402)
+  - `config.py`: PADDLE_API_KEY + PADDLE_WEBHOOK_SECRET + APP_URL eklendi
+  - Migration: `009_subscriptions.sql` ✅
+
+### Bir Sonraki Adım — Phase 3 Adım 8 (Çoklu Marka Brand Switcher)
+- Sidebar'da marka değiştirici dropdown
+- `app/(dashboard)/markalar/page.tsx`
+- Zustand store'a `brands[]` + `switchBrand()` ekle

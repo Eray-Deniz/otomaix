@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     AZURE_TTS_REGION: str = "westeurope"  # Azure TTS bölgesi
     HEYGEN_API_KEY: str = ""    # Opsiyonel — AI Avatar için
     APIFY_API_KEY: str = ""     # Opsiyonel — Instagram rakip analizi için
+    PADDLE_API_KEY: str = ""    # Opsiyonel — Paddle ödeme entegrasyonu
+    PADDLE_WEBHOOK_SECRET: str = ""  # Paddle webhook imza doğrulama
+    APP_URL: str = "https://app.otomaix.com"
 
 
 settings = Settings()

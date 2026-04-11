@@ -173,10 +173,22 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - Intro/Outro video yükleme + pozisyon seçici (Başında/Sonunda/Her İkisi)
   - Backend işleme otomatik (fal.ai webhook'ta)
 
-#### Bir Sonraki Adım — Phase 3 Adım 7 (Paddle Ödeme)
-- `app/(dashboard)/fiyatlandirma/page.tsx` — 4 plan kartı
-- `app/(dashboard)/faturalandirma/page.tsx` — mevcut plan + kullanım
-- Plan limit aşımında upgrade modal
+- [x] Adım 7b — Paddle Ödeme Frontend
+  - `app/(dashboard)/fiyatlandirma/page.tsx` — 4 plan kartı (Starter/Pro/Business/Agency)
+    - Mevcut plan vurgusu, "En Popüler" badge
+    - "Planı Seç" → `/billing/checkout` → Paddle'a yönlendir
+  - `app/(dashboard)/faturalandirma/page.tsx`
+    - Mevcut plan + durum + yenileme tarihi
+    - Kullanım progress bar'ları (içerik + marka)
+    - "Faturalar & Yönetim" → Paddle customer portal
+    - Plan özellikleri (video/avatar aktif mi)
+  - `components/billing/UpgradeModal.tsx` — 402 hatalarında gösterilecek modal
+  - SidebarNav'a "Faturalandırma" linki eklendi (CreditCard ikonu)
+
+#### Bir Sonraki Adım — Phase 3 Adım 8 (Çoklu Marka Brand Switcher)
+- Sidebar'da marka değiştirici dropdown (Zustand + Popover)
+- `app/(dashboard)/markalar/page.tsx` — marka yönetim sayfası
+- Zustand store'a `brands[]` + `switchBrand()` ekle
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

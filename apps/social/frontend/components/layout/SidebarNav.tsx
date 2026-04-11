@@ -11,6 +11,7 @@ import {
   Settings,
   BarChart2,
   TrendingUp,
+  CreditCard,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +24,7 @@ const navItems = [
   { href: '/marka-ayarlari', label: 'Marka Ayarları', icon: Settings },
   { href: '/rakip-analizi', label: 'Rakip Analizi', icon: BarChart2 },
   { href: '/trendler', label: 'Trendler', icon: TrendingUp },
+  { href: '/faturalandirma', label: 'Faturalandırma', icon: CreditCard },
 ]
 
 export function SidebarNav() {
