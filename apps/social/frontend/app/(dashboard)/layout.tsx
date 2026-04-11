@@ -23,26 +23,19 @@ export default function DashboardLayout({
 
   useEffect(() => {
     const supabase = createSupabaseClient()
+    let initDone = false
 
-    async function checkAuth() {
-      const { data } = await supabase.auth.getSession()
-      if (!data.session?.access_token) {
-        console.warn('[auth] No session found, redirecting to login')
-        router.push('/login')
-        return
-      }
+    async function doInit(token: string) {
+      if (initDone) return
+      initDone = true
 
-      console.log('[auth] Session found, token starts with:', data.session.access_token.slice(0, 20))
-
-      // Token'ı direkt kullan — getAuthHeader'a güvenme (timing sorunu olabilir)
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.otomaix.com'
       const raw = await fetch(`${apiUrl}/auth/init`, {
         headers: {
-          Authorization: `Bearer ${data.session.access_token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
       })
-      console.log('[auth] /auth/init status:', raw.status)
       const res: { success: boolean; data?: InitData } = await raw.json()
       if (res.success && res.data) {
         const { user, workspace, brands } = res.data
@@ -54,7 +47,6 @@ export default function DashboardLayout({
           name: user.name,
           plan: user.plan_id || 'starter',
         })
-        // currentBrand yoksa veya artık listede yoksa ilkini seç
         const current = useAppStore.getState().currentBrand
         const stillValid = current && brands.some((b) => b.id === current.id)
         if (!stillValid && brands.length > 0) {
@@ -63,10 +55,14 @@ export default function DashboardLayout({
       }
     }
 
-    checkAuth()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: unknown, session: unknown) => {
-      if (!session) router.push('/login')  // eslint-disable-line
+    // onAuthStateChange mevcut session varsa mount anında INITIAL_SESSION ile ateşlenir,
+    // Google OAuth sonrası için de SIGNED_IN ile çalışır — getSession() race condition'ı olmaz.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.push('/login')
+      } else {
+        doInit(session.access_token)
+      }
     })
 
     return () => subscription.unsubscribe()
