@@ -16,10 +16,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_posts_brand_published
     ON social.posts (brand_id, published_at DESC)
     WHERE published_at IS NOT NULL;
 
--- RAG chunk erişimi: brand bazlı chunk listesi
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_doc_chunks_brand
-    ON social.brand_document_chunks (brand_id);
+-- RAG chunk erişimi: brand bazlı chunk listesi (tablo mevcutsa)
+-- CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_doc_chunks_brand
+--     ON social.brand_document_chunks (brand_id);
 
--- Trend cache: son güncelleme zamanı
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trend_cache_updated
-    ON social.trend_cache (updated_at DESC);
+-- Trend cache: son getirme zamanı (fetched_at)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trend_cache_fetched
+    ON social.trend_cache (fetched_at DESC);
