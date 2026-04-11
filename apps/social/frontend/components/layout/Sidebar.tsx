@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { SidebarNav } from './SidebarNav'
 import { BrandSwitcher } from './BrandSwitcher'
 import { createSupabaseClient } from '@/lib/supabase'
@@ -11,11 +12,15 @@ import Link from 'next/link'
 import { analytics } from '@/lib/analytics'
 
 function TrialBanner({ trialEndsAt }: { trialEndsAt: string }) {
-  const daysLeft = Math.max(
-    0,
-    Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-  )
-  if (daysLeft <= 0) return null
+  // Date.now() must run client-side only — avoid SSR/hydration mismatch
+  const [daysLeft, setDaysLeft] = useState<number | null>(null)
+  useEffect(() => {
+    setDaysLeft(Math.max(
+      0,
+      Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    ))
+  }, [trialEndsAt])
+  if (daysLeft === null || daysLeft <= 0) return null
   return (
     <Link
       href="/fiyatlandirma"

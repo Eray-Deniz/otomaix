@@ -157,12 +157,15 @@ function TrendWidget() {
 export default function DashboardPage() {
   const user = useAppStore((s) => s.user)
   const displayName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Kullanıcı'
+  // getGreeting uses new Date() — must run client-side only to avoid SSR/hydration mismatch
+  const [greeting, setGreeting] = useState('')
+  useEffect(() => { setGreeting(getGreeting(displayName)) }, [displayName])
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
       {/* Greeting */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">{getGreeting(displayName)}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{greeting || `Merhaba, ${displayName}!`}</h1>
         <p className="text-gray-500 text-sm mt-1">Bugün ne yayınlamak istersiniz?</p>
       </div>
 
