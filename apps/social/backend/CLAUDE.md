@@ -285,8 +285,15 @@ PyJWT[crypto]==2.8.0   # ES256 JWK desteği — python-jose yerine kullanılıyo
   - `billing.py` → Paddle webhook'a `subscription_created/cancelled` çağrıları eklendi
   - `config.py`: `POSTHOG_API_KEY` + `POSTHOG_HOST` eklendi
 
-### Bir Sonraki Adım — Phase 4 Adım 3
-- [ ] Adım 3a — Sentry Error Monitoring (backend)
-  - `sentry-sdk[fastapi]` kurulumu
-  - `app/main.py`: `sentry_sdk.init()` + `FastApiIntegration`
+- [x] Adım 3a — Sentry Error Monitoring (backend)
+  - `sentry-sdk[fastapi]==2.19.2` requirements.txt'e eklendi
+  - `app/main.py`: `sentry_sdk.init()` + `FastApiIntegration` + `StarletteIntegration` (SENTRY_DSN varsa aktif)
+  - `config.py`: `SENTRY_DSN` + `ENVIRONMENT` eklendi
+  - `routers/webhooks.py`: fal.ai pipeline hatalarında `capture_exception` + post `failed` durumuna alınır
+  - `services/upload_post.py`: Upload-Post.com HTTP hata kodlarında `capture_message`
+  - `routers/billing.py`: Paddle checkout/portal `httpx.RequestError` + webhook JSON parse hatalarında `capture_exception`
+
+### Bir Sonraki Adım — Phase 4 Adım 4
+- [ ] Adım 4a — Redis Cache ve Rate Limiting
+  - `redis[hiredis]` + `fastapi-limiter` kurulumu
   - Phase 4 dokümantasyonu: `04-social-phase4.md`

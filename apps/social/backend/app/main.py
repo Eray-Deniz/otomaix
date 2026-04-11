@@ -1,11 +1,27 @@
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 
+from app.core.config import settings
 from app.core.database import close_pool, get_pool
 from app.core.redis import close_redis
 from app.routers import ai, auth, autoposting, avatar, billing, brands, calendar, competitors, documents, internal, posts, social, storage, trends, webhooks
+
+if settings.SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        traces_sample_rate=0.1,
+        environment=settings.ENVIRONMENT,
+        integrations=[
+            StarletteIntegration(),
+            FastApiIntegration(),
+        ],
+        send_default_pii=False,
+    )
 
 
 @asynccontextmanager

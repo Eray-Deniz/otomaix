@@ -4,6 +4,7 @@ from uuid import UUID
 
 import asyncpg
 import httpx
+import sentry_sdk
 
 from app.core.config import settings
 
@@ -89,6 +90,15 @@ async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:
             if resp.status_code == 200:
                 results.append({"platform": platform, "success": True, "data": resp.json()})
             else:
+                sentry_sdk.set_context("upload_post_publish", {
+                    "post_id": str(post_id),
+                    "platform": platform,
+                    "status_code": resp.status_code,
+                })
+                sentry_sdk.capture_message(
+                    f"Upload-Post publish failed: {platform} → HTTP {resp.status_code}",
+                    level="error",
+                )
                 results.append({"platform": platform, "success": False, "error": resp.text})
 
     all_ok = all(r["success"] for r in results)

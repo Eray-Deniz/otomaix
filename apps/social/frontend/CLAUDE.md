@@ -239,10 +239,19 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - `onboarding/page.tsx`: `onboarding_started`, `onboarding_step_completed`, `onboarding_completed`
   - Env değişkeni: `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`
 
-#### Bir Sonraki Adım — Phase 4 Adım 3
-- [ ] Adım 3b — Sentry Error Monitoring (frontend)
-  - `@sentry/nextjs` kurulumu
-  - DSN env değişkeni: `SENTRY_DSN`
+- [x] Adım 3b — Sentry Error Monitoring (frontend)
+  - `@sentry/nextjs@8.55.1` kuruldu
+  - `sentry.client.config.ts` — client init (replay entegrasyonu dahil, %5 session / %100 error)
+  - `sentry.server.config.ts` — server-side init
+  - `sentry.edge.config.ts` — edge runtime init
+  - `instrumentation.ts` — Next.js 14 register() hook → server/edge init
+  - `next.config.mjs` — `withSentryConfig` wrapper (source map upload kapalı)
+  - `app/(dashboard)/layout.tsx` — `/auth/init` sonrası `Sentry.setUser({id, email})`
+  - Env değişkeni: `NEXT_PUBLIC_SENTRY_DSN`
+
+#### Bir Sonraki Adım — Phase 4 Adım 4
+- [ ] Adım 4b — Redis Cache ve Rate Limiting (frontend tarafı)
+  - API rate limit hatalarında (HTTP 429) kullanıcıya toast gösterimi
   - Phase 4 dokümantasyonu: `04-social-phase4.md`
 
 ## Paket Listesi (önemli)

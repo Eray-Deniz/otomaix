@@ -1,3 +1,5 @@
+import { withSentryConfig } from '@sentry/nextjs'
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -15,4 +17,12 @@ const nextConfig = {
   },
 }
 
-export default nextConfig
+export default withSentryConfig(nextConfig, {
+  // Source map yükleme devre dışı (Coolify build — SENTRY_AUTH_TOKEN gerekmez)
+  silent: true,
+  disableLogger: true,
+  hideSourceMaps: true,
+  // Sentry DSN yoksa Sentry devre dışı
+  autoInstrumentServerFunctions: true,
+  autoInstrumentAppDirectory: true,
+})

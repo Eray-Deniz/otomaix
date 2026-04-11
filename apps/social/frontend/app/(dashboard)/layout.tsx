@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import * as Sentry from '@sentry/nextjs'
 import { createSupabaseClient } from '@/lib/supabase'
 import { useAppStore, Brand, Workspace, User } from '@/lib/store'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -47,6 +48,7 @@ export default function DashboardLayout({
           name: user.name,
           plan: user.plan_id || 'starter',
         })
+        Sentry.setUser({ id: user.id, email: user.email })
         const current = useAppStore.getState().currentBrand
         const stillValid = current && brands.some((b) => b.id === current.id)
         if (!stillValid && brands.length > 0) {

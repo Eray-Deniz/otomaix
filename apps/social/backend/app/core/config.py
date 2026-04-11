@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     APP_URL: str = "https://app.otomaix.com"
     POSTHOG_API_KEY: str = ""   # Opsiyonel — PostHog server-side analytics
     POSTHOG_HOST: str = "https://eu.posthog.com"
+    SENTRY_DSN: str = ""        # Opsiyonel — Sentry error monitoring
+    ENVIRONMENT: str = "production"  # development | production
 
 
 settings = Settings()

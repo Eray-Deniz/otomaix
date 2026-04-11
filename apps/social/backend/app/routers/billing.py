@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 import asyncpg
 import httpx
+import sentry_sdk
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
@@ -265,7 +266,8 @@ async def create_checkout(
             checkout_url = data.get("data", {}).get("checkout", {}).get("url")
             if not checkout_url:
                 raise HTTPException(status_code=502, detail="Paddle checkout URL alınamadı")
-    except httpx.RequestError:
+    except httpx.RequestError as exc:
+        sentry_sdk.capture_exception(exc)
         raise HTTPException(status_code=502, detail="Ödeme servisi ile bağlantı kurulamadı")
 
     return OkResponse(data={"checkout_url": checkout_url})
@@ -297,7 +299,8 @@ async def get_customer_portal(
             token = data.get("data", {}).get("customer_auth_token")
             if not token:
                 raise HTTPException(status_code=502, detail="Portal token alınamadı")
-    except httpx.RequestError:
+    except httpx.RequestError as exc:
+        sentry_sdk.capture_exception(exc)
         raise HTTPException(status_code=502, detail="Ödeme servisi ile bağlantı kurulamadı")
 
     portal_url = f"https://customer.paddle.com?customerAuthToken={token}"
@@ -341,7 +344,12 @@ async def paddle_webhook(
     if not _verify_paddle_signature(body, paddle_signature):
         raise HTTPException(status_code=401, detail="Geçersiz webhook imzası")
 
-    event = json.loads(body)
+    try:
+        event = json.loads(body)
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
+        raise HTTPException(status_code=400, detail="Geçersiz JSON payload")
+
     event_type: str = event.get("event_type", "")
     data: dict = event.get("data", {})
 
