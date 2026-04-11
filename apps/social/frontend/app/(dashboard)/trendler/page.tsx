@@ -7,8 +7,7 @@ import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   TrendingUp,
   RefreshCw,
@@ -127,7 +126,7 @@ export default function TrendlerPage() {
   }
 
   useEffect(() => {
-    loadTrends()
+    loadTrends() // eslint-disable-line react-hooks/exhaustive-deps
   }, [currentBrand?.id])
 
   const FILTERS: SourceFilter[] = ['Tümü', 'Haber', 'Google Trends', 'Genel']
@@ -274,7 +273,7 @@ export default function TrendlerPage() {
       {/* Bilgi notu */}
       {!loading && trends.length > 0 && (
         <p className="text-xs text-gray-400 text-center mt-6">
-          Trendler 6 saatte bir güncellenir. Son güncelleme için "Yenile" butonunu kullanın.
+          Trendler 6 saatte bir güncellenir. Son güncelleme için &quot;Yenile&quot; butonunu kullanın.
         </p>
       )}
     </div>

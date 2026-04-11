@@ -19,7 +19,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const { setUser, setCurrentWorkspace, setBrands, setCurrentBrand, currentBrand } = useAppStore()
+  const { setUser, setCurrentWorkspace, setBrands, setCurrentBrand } = useAppStore()
 
   useEffect(() => {
     const supabase = createSupabaseClient()

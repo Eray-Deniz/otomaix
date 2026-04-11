@@ -9,7 +9,6 @@ import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import {
   CreditCard,
   Loader2,
@@ -102,7 +101,7 @@ function FaturalandirmaInner() {
     if (searchParams.get('success') === '1') {
       toast.success('Aboneliğiniz başarıyla oluşturuldu!')
     }
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
     api.get<BillingData>('/billing/current').then((res) => {

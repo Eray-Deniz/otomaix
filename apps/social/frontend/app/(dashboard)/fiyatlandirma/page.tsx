@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

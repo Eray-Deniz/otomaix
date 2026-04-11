@@ -16,8 +16,6 @@ import {
   Pencil,
   Trash2,
   Loader2,
-  ImageIcon,
-  LayoutDashboard,
   Check,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -59,7 +57,7 @@ export default function MarkalarlPage() {
   }
 
   useEffect(() => {
-    loadBrands()
+    loadBrands() // eslint-disable-line react-hooks/exhaustive-deps
   }, [currentWorkspace?.id])
 
   async function handleCreate() {
@@ -91,8 +89,6 @@ export default function MarkalarlPage() {
 
   async function handleDelete(brandId: string) {
     try {
-      const res = await api.post(`/brands/${brandId}`, {}) // DELETE
-      // api'de delete yok, direkt fetch kullan
       const { data: session } = await (await import('@/lib/supabase')).createSupabaseClient().auth.getSession()
       const token = session?.session?.access_token
       const delRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/brands/${brandId}`, {
@@ -106,7 +102,7 @@ export default function MarkalarlPage() {
         // Silinen marka aktifse başkasına geç
         if (currentBrand?.id === brandId) {
           const remaining = brands.filter((b) => b.id !== brandId)
-          switchBrand(remaining[0] ?? null as any)
+          if (remaining.length > 0) switchBrand(remaining[0])
         }
       } else {
         toast.error('Silinemedi')
