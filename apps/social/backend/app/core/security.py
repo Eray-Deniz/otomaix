@@ -7,16 +7,21 @@ from app.core.config import settings
 
 _bearer = HTTPBearer(auto_error=False)
 _jwks_cache: dict | None = None
+_jwks_fetched_at: float = 0.0
+_JWKS_TTL = 3600.0  # re-fetch JWKS every hour
 
 
 async def _get_jwks() -> dict:
-    global _jwks_cache
-    if _jwks_cache is None:
+    import time
+    global _jwks_cache, _jwks_fetched_at
+    now = time.monotonic()
+    if _jwks_cache is None or (now - _jwks_fetched_at) > _JWKS_TTL:
         url = f"{settings.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
         async with httpx.AsyncClient() as client:
             resp = await client.get(url)
             resp.raise_for_status()
             _jwks_cache = resp.json()
+            _jwks_fetched_at = now
     return _jwks_cache
 
 
@@ -37,7 +42,7 @@ async def _decode_token(token: str) -> dict:
         payload = jwt.decode(
             token,
             key,
-            algorithms=["RS256"],
+            algorithms=["RS256", "ES256"],
             audience="authenticated",
             options={"verify_exp": True},
         )
