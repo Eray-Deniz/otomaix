@@ -133,7 +133,12 @@ export default function MarkalarlPage() {
           </h1>
           <p className="text-gray-500 text-sm mt-1">{brands.length} aktif marka</p>
         </div>
-        <Button onClick={() => setShowAdd(true)} className="gap-2">
+        <Button
+          onClick={() => setShowAdd(true)}
+          disabled={!currentWorkspace?.id}
+          title={!currentWorkspace?.id ? 'Çalışma alanı yükleniyor...' : undefined}
+          className="gap-2"
+        >
           <Plus className="w-4 h-4" />
           Yeni Marka
         </Button>
@@ -265,7 +270,7 @@ export default function MarkalarlPage() {
               <Button
                 className="flex-1"
                 onClick={handleCreate}
-                disabled={!form.name.trim() || saving}
+                disabled={!form.name.trim() || saving || !currentWorkspace?.id}
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Oluştur'}
               </Button>

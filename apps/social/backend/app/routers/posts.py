@@ -298,8 +298,6 @@ async def generate_faceless_video(
 
 
 @router.get("/voices/turkish", response_model=OkResponse)
-async def list_turkish_voices(
-    user: dict = Depends(get_current_user),
-):
-    """Mevcut Türkçe TTS ses seçeneklerini döndür."""
+async def list_turkish_voices():
+    """Mevcut Türkçe TTS ses seçeneklerini döndür. (public endpoint — statik liste)"""
     return OkResponse(data=TURKISH_VOICES)
