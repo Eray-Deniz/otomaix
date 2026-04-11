@@ -2,13 +2,13 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --only=production
+RUN npm install --legacy-peer-deps --omit=dev
 
 # Stage 2: builder
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
