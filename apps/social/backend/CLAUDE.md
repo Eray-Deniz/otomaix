@@ -308,6 +308,13 @@ PyJWT[crypto]==2.8.0   # ES256 JWK desteği — python-jose yerine kullanılıyo
     - `GET /calendar/holidays` → 86400s (`otomaix:social:holidays:{year}`)
     - `GET /avatar/stock` → 3600s (`otomaix:social:avatar:stock`)
 
-### Bir Sonraki Adım — Phase 4 Adım 5
-- [ ] Adım 5 — Docker Compose local deployment paketi
+- [x] Adım 5 — Docker Compose local deployment paketi
+  - `shared/local-deployment/docker-compose.yml` → frontend + backend + postgres(pgvector) + redis + n8n
+  - `shared/local-deployment/.env.example` → tüm değişkenler açıklamalı
+  - `shared/local-deployment/setup.sh` → Docker kontrol + .env hazırlama + migration + servis başlatma
+  - `shared/local-deployment/migrations/` → 010 migration SQL + run-migrations.sh
+  - `shared/local-deployment/README-local.md` → Türkçe kurulum + sorun giderme kılavuzu
+
+### Bir Sonraki Adım — Phase 4 Adım 6
+- [ ] Adım 6 — Crisp Chat Entegrasyonu (frontend)
   - Phase 4 dokümantasyonu: `04-social-phase4.md`
