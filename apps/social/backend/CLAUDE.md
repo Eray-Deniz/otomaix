@@ -270,8 +270,18 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
   - Migration: `010_trial_period.sql` ✅ (çalıştırıldı)
     - `social.accounts.trial_ends_at TIMESTAMPTZ` eklendi (default: `now() + 14 days`)
 
-### Bir Sonraki Adım — Phase 4 Adım 2
-- [ ] Adım 2a — PostHog Analytics (backend)
-  - `posthog-python` kurulumu
-  - `app/services/analytics.py` → server-side event tracking
+- [x] Adım 2a — PostHog Analytics Backend
+  - `posthog==3.7.0` requirements.txt'e eklendi
+  - `app/services/analytics.py` — server-side servis (no-op key yoksa, sessiz hata yakalama)
+    - `capture(distinct_id, event, properties)` — genel event
+    - `content_generation_failed`, `fal_api_latency`, `publishing_failed`
+    - `document_processed`, `competitor_analysis_completed`
+    - `subscription_created`, `subscription_cancelled`
+  - `billing.py` → Paddle webhook'a `subscription_created/cancelled` çağrıları eklendi
+  - `config.py`: `POSTHOG_API_KEY` + `POSTHOG_HOST` eklendi
+
+### Bir Sonraki Adım — Phase 4 Adım 3
+- [ ] Adım 3a — Sentry Error Monitoring (backend)
+  - `sentry-sdk[fastapi]` kurulumu
+  - `app/main.py`: `sentry_sdk.init()` + `FastApiIntegration`
   - Phase 4 dokümantasyonu: `04-social-phase4.md`

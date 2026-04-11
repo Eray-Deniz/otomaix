@@ -224,11 +224,25 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - Kullanıcı tipi seçilmediyse "Daha Sonra Atla →" butonu gösteriliyor
     - Seçim yapılınca normal "Devam →" butonu çıkıyor
 
-#### Bir Sonraki Adım — Phase 4 Adım 2
-- [ ] Adım 2b — PostHog Analytics (frontend)
-  - `posthog-js` kurulumu
-  - `app/providers/Providers.tsx` → PostHog init + identify
-  - Onboarding funnel, içerik üretim, feature adoption, conversion eventleri
+- [x] Adım 2b — PostHog Analytics Frontend
+  - `posthog-js` paketi kuruldu
+  - `lib/analytics.ts` — typed event wrapper (identify/reset + 20+ typed helper, no-op key yoksa)
+  - `components/providers/PostHogProvider.tsx` — PostHog init + `usePathname` pageview tracking
+  - `components/providers/Providers.tsx` — PostHogProvider ile sarmalandı
+  - `app/(dashboard)/layout.tsx` — `/auth/init` sonrası `posthog.identify(userId, {email, plan})`
+  - `components/layout/Sidebar.tsx` — logout'ta `posthog.reset()`
+  - Eventler eklenen sayfalar:
+    - `fiyatlandirma/page.tsx`: `pricing_page_viewed`, `plan_selected`, `checkout_started`
+    - `takvim/page.tsx`: `calendar_opened`
+    - `trendler/page.tsx`: `trend_post_created`
+    - `icerik-olustur/page.tsx`: `content_creation_started`, `idea_suggestion_used`, `document_reference_used`, `content_generated`
+    - `onboarding/page.tsx`: `onboarding_started`, `onboarding_step_completed`, `onboarding_completed`
+  - Env değişkeni: `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`
+
+#### Bir Sonraki Adım — Phase 4 Adım 3
+- [ ] Adım 3b — Sentry Error Monitoring (frontend)
+  - `@sentry/nextjs` kurulumu
+  - DSN env değişkeni: `SENTRY_DSN`
   - Phase 4 dokümantasyonu: `04-social-phase4.md`
 
 ## Paket Listesi (önemli)
