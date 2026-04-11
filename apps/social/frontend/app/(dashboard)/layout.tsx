@@ -27,9 +27,12 @@ export default function DashboardLayout({
     async function checkAuth() {
       const { data } = await supabase.auth.getSession()
       if (!data.session?.access_token) {
+        console.warn('[auth] No session found, redirecting to login')
         router.push('/login')
         return
       }
+
+      console.log('[auth] Session found, token starts with:', data.session.access_token.slice(0, 20))
 
       // Token'ı direkt kullan — getAuthHeader'a güvenme (timing sorunu olabilir)
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.otomaix.com'
@@ -39,6 +42,7 @@ export default function DashboardLayout({
           'Content-Type': 'application/json',
         },
       })
+      console.log('[auth] /auth/init status:', raw.status)
       const res: { success: boolean; data?: InitData } = await raw.json()
       if (res.success && res.data) {
         const { user, workspace, brands } = res.data
