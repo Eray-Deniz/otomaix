@@ -1,7 +1,10 @@
+import json
+import time
+
 import httpx
+import jwt as pyjwt
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 
 from app.core.config import settings
 
@@ -12,7 +15,6 @@ _JWKS_TTL = 3600.0  # re-fetch JWKS every hour
 
 
 async def _get_jwks() -> dict:
-    import time
     global _jwks_cache, _jwks_fetched_at
     now = time.monotonic()
     if _jwks_cache is None or (now - _jwks_fetched_at) > _JWKS_TTL:
@@ -32,21 +34,35 @@ def _find_key(jwks: dict, kid: str) -> dict | None:
     return None
 
 
+def _jwk_to_public_key(jwk: dict):
+    """Convert a JWK dict to a PyJWT-compatible public key object."""
+    kty = jwk.get("kty")
+    jwk_json = json.dumps(jwk)
+    if kty == "EC":
+        return pyjwt.algorithms.ECAlgorithm.from_jwk(jwk_json)
+    if kty == "RSA":
+        return pyjwt.algorithms.RSAAlgorithm.from_jwk(jwk_json)
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unsupported key type")
+
+
 async def _decode_token(token: str) -> dict:
     jwks = await _get_jwks()
-    headers = jwt.get_unverified_header(token)
-    key = _find_key(jwks, headers.get("kid", ""))
-    if not key:
+    headers = pyjwt.get_unverified_header(token)
+    jwk = _find_key(jwks, headers.get("kid", ""))
+    if not jwk:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token key")
     try:
-        payload = jwt.decode(
+        public_key = _jwk_to_public_key(jwk)
+        payload = pyjwt.decode(
             token,
-            key,
+            public_key,
             algorithms=["RS256", "ES256"],
             audience="authenticated",
             options={"verify_exp": True},
         )
-    except JWTError as e:
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    except pyjwt.PyJWTError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
     return payload
 
