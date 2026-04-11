@@ -261,5 +261,17 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
     - Workspace yoksa oluşturur + workspace_members'a ekler
     - Aktif markalar listesi döner
 
-### Bir Sonraki Adım — Phase 4
-Phase 4 dokümantasyonu: `04-social-phase4.md`
+## Phase 4
+
+### Tamamlanan
+- [x] Adım 1a — Self-Serve Onboarding Backend
+  - `GET /auth/init` güncellendi → `trial_ends_at` alanı da döndürüyor
+    - `account["trial_ends_at"].isoformat()` ile ISO string olarak frontend'e gönderilir
+  - Migration: `010_trial_period.sql` ✅ (çalıştırıldı)
+    - `social.accounts.trial_ends_at TIMESTAMPTZ` eklendi (default: `now() + 14 days`)
+
+### Bir Sonraki Adım — Phase 4 Adım 2
+- [ ] Adım 2a — PostHog Analytics (backend)
+  - `posthog-python` kurulumu
+  - `app/services/analytics.py` → server-side event tracking
+  - Phase 4 dokümantasyonu: `04-social-phase4.md`

@@ -200,8 +200,36 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - "Düzenle" → marka ayarlarına; "Sil" → confirm modal
   - SidebarNav'a "Markalar" (Building2) linki eklendi
 
-#### Bir Sonraki Adım — Phase 4
-Phase 4 dokümantasyonu: `04-social-phase4.md`
+### Phase 4
+
+#### Tamamlanan
+- [x] Adım 1b — Self-Serve Onboarding Frontend
+  - `app/page.tsx` — Tam public landing page (unauthenticated)
+    - Sticky header: logo + nav + "Giriş Yap" + "Ücretsiz Dene" CTA'ları
+    - Hero: "Türk KOBİ'ler için AI Sosyal Medya Otomasyonu" + 14 gün ücretsiz badge
+    - 6 özellik kartı (AI Görsel, Faceless Video, AI Avatar, Otomatik Yayın, Rakip Analizi, Trend Takibi)
+    - İstatistik bandı (10K+ içerik, 500+ marka, 4.9★, 6 saat tasarruf)
+    - 4 plan kartı (Starter/Pro/Business/Agency), "En Popüler" badge
+    - Footer + final CTA bölümü
+  - `app/(auth)/kayit/page.tsx` — Kayıt sayfası
+    - Google OAuth (primary) + email/şifre formu
+    - Email doğrulama bekle ekranı (success state)
+    - "Zaten hesabınız var mı? Giriş yapın" linki
+  - `components/layout/Sidebar.tsx` — Trial banner eklendi
+    - `trial_ends_at` varsa "🎁 Deneme: X gün kaldı" banner gösteriliyor
+    - Tıklanınca `/fiyatlandirma`'ya yönlendiriyor
+    - `TrialBanner` bileşeni: kalan gün hesaplama + 0'a düşünce gizlenme
+  - `lib/store.ts` — `User.trial_ends_at?: string | null` eklendi
+  - `app/(onboarding)/onboarding/page.tsx` — Adım 4'e "Daha Sonra Atla" eklendi
+    - Kullanıcı tipi seçilmediyse "Daha Sonra Atla →" butonu gösteriliyor
+    - Seçim yapılınca normal "Devam →" butonu çıkıyor
+
+#### Bir Sonraki Adım — Phase 4 Adım 2
+- [ ] Adım 2b — PostHog Analytics (frontend)
+  - `posthog-js` kurulumu
+  - `app/providers/Providers.tsx` → PostHog init + identify
+  - Onboarding funnel, içerik üretim, feature adoption, conversion eventleri
+  - Phase 4 dokümantasyonu: `04-social-phase4.md`
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core
