@@ -7,6 +7,29 @@ import { useRouter } from 'next/navigation'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAppStore } from '@/lib/store'
 import { LogOut } from 'lucide-react'
+import Link from 'next/link'
+
+function TrialBanner({ trialEndsAt }: { trialEndsAt: string }) {
+  const daysLeft = Math.max(
+    0,
+    Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+  )
+  if (daysLeft <= 0) return null
+  return (
+    <Link
+      href="/fiyatlandirma"
+      className="mx-3 mb-2 flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 hover:bg-amber-100 transition-colors"
+    >
+      <span className="text-base">🎁</span>
+      <div className="min-w-0">
+        <p className="text-xs font-semibold text-amber-800 leading-tight">
+          Deneme: {daysLeft} gün kaldı
+        </p>
+        <p className="text-xs text-amber-600 leading-tight">Plan seç →</p>
+      </div>
+    </Link>
+  )
+}
 
 export function Sidebar() {
   const router = useRouter()
@@ -35,6 +58,9 @@ export function Sidebar() {
 
       {/* Brand Switcher */}
       <BrandSwitcher />
+
+      {/* Trial Banner */}
+      {user?.trial_ends_at && <TrialBanner trialEndsAt={user.trial_ends_at} />}
 
       {/* Nav */}
       <SidebarNav />

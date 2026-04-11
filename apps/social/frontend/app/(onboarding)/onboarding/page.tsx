@@ -462,13 +462,21 @@ export default function OnboardingPage() {
           >
             ← Geri
           </button>
-          <button
-            onClick={next}
-            disabled={!state.userType}
-            className="flex-1 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-colors"
-          >
-            Devam →
-          </button>
+          {state.userType ? (
+            <button
+              onClick={next}
+              className="flex-1 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold py-3 rounded-xl transition-colors"
+            >
+              Devam →
+            </button>
+          ) : (
+            <button
+              onClick={next}
+              className="flex-1 text-slate-400 hover:text-white text-sm py-3 rounded-xl transition-colors"
+            >
+              Daha Sonra Atla →
+            </button>
+          )}
         </div>
       </Card>
     )

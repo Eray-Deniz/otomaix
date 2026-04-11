@@ -5,6 +5,7 @@ export interface User {
   email: string
   name: string
   plan_id?: string
+  trial_ends_at?: string | null
 }
 
 export interface Workspace {

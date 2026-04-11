@@ -81,6 +81,8 @@ async def init(
         workspace["id"],
     )
 
+    trial_ends_at = account.get("trial_ends_at")
+
     return OkResponse(
         data={
             "user": {
@@ -88,6 +90,7 @@ async def init(
                 "email": account["email"],
                 "name": account["name"] or email.split("@")[0],
                 "plan_id": account.get("plan_id", "starter"),
+                "trial_ends_at": trial_ends_at.isoformat() if trial_ends_at else None,
             },
             "workspace": {
                 "id": str(workspace["id"]),
