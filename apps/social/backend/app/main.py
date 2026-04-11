@@ -68,5 +68,32 @@ app.include_router(webhooks.router)
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
-    return {"success": True, "data": {"status": "ok"}}
+    """Health check — DB ve Redis bağlantısını doğrular. Coolify monitoring için."""
+    from datetime import datetime, timezone
+
+    db_status = "ok"
+    redis_status = "ok"
+
+    try:
+        pool = await get_pool()
+        await pool.fetchval("SELECT 1")
+    except Exception:
+        db_status = "error"
+
+    try:
+        from app.core.redis import get_redis
+        r = await get_redis()
+        await r.ping()
+    except Exception:
+        redis_status = "error"
+
+    overall = "ok" if db_status == "ok" and redis_status == "ok" else "degraded"
+    return {
+        "success": overall == "ok",
+        "data": {
+            "status": overall,
+            "db": db_status,
+            "redis": redis_status,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+    }

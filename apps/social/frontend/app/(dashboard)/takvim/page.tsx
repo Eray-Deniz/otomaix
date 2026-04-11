@@ -3,13 +3,23 @@
 export const dynamic = 'force-dynamic'
 
 import { useRef, useState, useCallback, useEffect } from 'react'
-import FullCalendar from '@fullcalendar/react'
+import nextDynamic from 'next/dynamic'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import trLocale from '@fullcalendar/core/locales/tr'
-import type { EventClickArg, EventDropArg, EventInput } from '@fullcalendar/core'
+import type { CalendarApi, EventClickArg, EventDropArg, EventInput, DatesSetArg } from '@fullcalendar/core'
 import type { DateClickArg } from '@fullcalendar/interaction'
+
+// FullCalendar sadece /takvim sayfasında yüklensin — ayrı chunk
+const FullCalendar = nextDynamic(() => import('@fullcalendar/react'), {
+  ssr: false,
+  loading: () => (
+    <div className="animate-pulse bg-gray-100 rounded-xl h-[600px] flex items-center justify-center text-gray-400 text-sm">
+      Takvim yükleniyor...
+    </div>
+  ),
+})
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import Image from 'next/image'
@@ -193,7 +203,7 @@ function NewContentDialog({
 
 export default function TakvimPage() {
   const currentBrand = useAppStore((s) => s.currentBrand)
-  const calendarRef = useRef<InstanceType<typeof FullCalendar>>(null)
+  const calendarApiRef = useRef<CalendarApi | null>(null)
 
   useEffect(() => { analytics.calendarOpened() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -309,7 +319,7 @@ export default function TakvimPage() {
 
   function switchView(v: 'dayGridMonth' | 'timeGridWeek') {
     setView(v)
-    calendarRef.current?.getApi().changeView(v)
+    calendarApiRef.current?.changeView(v)
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -362,7 +372,6 @@ export default function TakvimPage() {
       <div className="flex-1 p-6 overflow-auto">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 calendar-wrapper">
           <FullCalendar
-            ref={calendarRef}
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView={view}
             locale={trLocale}
@@ -380,7 +389,10 @@ export default function TakvimPage() {
             dateClick={handleDateClick}
             eventClick={handleEventClick}
             eventDrop={handleEventDrop}
-            datesSet={(info) => fetchEvents(info.start, info.end)}
+            datesSet={(info: DatesSetArg) => {
+              calendarApiRef.current = info.view.calendar
+              fetchEvents(info.start, info.end)
+            }}
             height="auto"
             eventDisplay="block"
             dayMaxEvents={3}

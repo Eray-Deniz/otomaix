@@ -25,9 +25,13 @@ function InstagramIcon({ className }: { className?: string }) {
   )
 }
 import { cn } from '@/lib/utils'
-import {
-  Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
-} from 'recharts'
+import nextDynamic from 'next/dynamic'
+
+// recharts sadece rakip-analizi sayfasında yüklensin — ayrı chunk
+const CompetitorChart = nextDynamic(
+  () => import('@/components/competitors/CompetitorChart').then((m) => ({ default: m.CompetitorChart })),
+  { ssr: false, loading: () => <div className="h-[160px] animate-pulse bg-gray-100 rounded-lg" /> }
+)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,9 +82,6 @@ interface CompetitorReport {
   recommendations: string[]
 }
 
-// ─── Renk paleti ─────────────────────────────────────────────────────────────
-
-const PIE_COLORS = ['#6366f1', '#8b5cf6', '#a78bfa']
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 
@@ -203,29 +204,7 @@ function AnalysisPanel({ competitor }: { competitor: CompetitorAnalysis }) {
             ))}
           </div>
 
-          {contentTypesData.length > 0 && (
-            <div>
-              <p className="text-xs text-gray-500 mb-2">İçerik Dağılımı</p>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie
-                    data={contentTypesData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={60}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${Math.round((percent ?? 0) * 100)}%`}
-                    labelLine={false}
-                  >
-                    {contentTypesData.map((_, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
+          <CompetitorChart data={contentTypesData} />
 
           {ig.top_hashtags && ig.top_hashtags.length > 0 && (
             <div>

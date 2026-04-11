@@ -27,6 +27,7 @@ MIGRATIONS=(
     "008_trend_cache.sql"
     "009_subscriptions.sql"
     "010_trial_period.sql"
+    "011_performance_indexes.sql"
 )
 
 for MIGRATION in "${MIGRATIONS[@]}"; do
