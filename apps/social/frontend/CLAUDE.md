@@ -265,10 +265,18 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - `app/globals.css` — mobilde (< 768px) Crisp widget gizlendi
   - Env değişkeni: `NEXT_PUBLIC_CRISP_WEBSITE_ID`
 
-#### Bir Sonraki Adım — Phase 4 Adım 7
-- [ ] Adım 7 — Performance Optimizasyonu
-  - next/image optimizasyonu, code splitting, bundle analizi
-  - Phase 4 dokümantasyonu: `04-social-phase4.md`
+- [x] Adım 7 — Performance Optimizasyonu
+  - DB pool min_size=5 / max_size=20
+  - /health endpoint DB + Redis kontrol
+  - 011_performance_indexes.sql — posts/chunks/trend_cache CONCURRENTLY index'ler
+  - FullCalendar + recharts → next/dynamic lazy loading (ayrı chunk)
+  - FullCalendar ref: CalendarApi ref (dynamic component compat)
+
+- [x] Adım 8 — Load Testing
+  - `shared/load-tests/locustfile.py` — 6 senaryo, JWT/HealthOnly modları
+  - Smoke test geçti: /health 5ms, /billing/plans 5ms, 0 hata
+
+### Phase 4 Tamamlandı ✅ — Sıradaki: 05-crm-admin.md
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

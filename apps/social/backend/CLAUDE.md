@@ -315,6 +315,16 @@ PyJWT[crypto]==2.8.0   # ES256 JWK desteği — python-jose yerine kullanılıyo
   - `shared/local-deployment/migrations/` → 010 migration SQL + run-migrations.sh
   - `shared/local-deployment/README-local.md` → Türkçe kurulum + sorun giderme kılavuzu
 
-### Bir Sonraki Adım — Phase 4 Adım 6
-- [ ] Adım 6 — Crisp Chat Entegrasyonu (frontend)
-  - Phase 4 dokümantasyonu: `04-social-phase4.md`
+- [x] Adım 6 — Crisp Chat Entegrasyonu (frontend — backend değişiklik yok)
+
+- [x] Adım 7 — Performance Optimizasyonu
+  - DB pool min_size=5 / max_size=20 (`database.py`)
+  - /health endpoint DB + Redis kontrol (`main.py`)
+  - 011_performance_indexes.sql — posts/trend_cache CONCURRENTLY index'ler
+
+- [x] Adım 8 — Load Testing
+  - `shared/load-tests/locustfile.py` — 6 senaryo, ağırlıklı görevler
+  - `shared/load-tests/run-load-test.sh` — interactive/headless/local mod
+  - Smoke test: /health 5ms, /billing/plans 5ms, 0 hata
+
+### Phase 4 Tamamlandı ✅ — Sıradaki: 05-crm-admin.md
