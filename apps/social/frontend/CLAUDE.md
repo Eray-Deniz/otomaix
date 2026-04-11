@@ -185,10 +185,23 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - `components/billing/UpgradeModal.tsx` — 402 hatalarında gösterilecek modal
   - SidebarNav'a "Faturalandırma" linki eklendi (CreditCard ikonu)
 
-#### Bir Sonraki Adım — Phase 3 Adım 8 (Çoklu Marka Brand Switcher)
-- Sidebar'da marka değiştirici dropdown (Zustand + Popover)
-- `app/(dashboard)/markalar/page.tsx` — marka yönetim sayfası
-- Zustand store'a `brands[]` + `switchBrand()` ekle
+- [x] Adım 8b — Çoklu Marka Brand Switcher
+  - `lib/store.ts` → `brands[]`, `setBrands()`, `switchBrand()` eklendi; tipler export edildi
+  - `app/(dashboard)/layout.tsx` → `/auth/init` ile tek çağrıda user+workspace+brands yüklendi
+    - `currentBrand` otomatik olarak ilk markaya set edilir
+  - `components/layout/BrandSwitcher.tsx` — sidebar dropdown bileşeni
+    - Logo/avatar + marka adı + sektör gösterimi
+    - Tüm markaları listeler, aktif olanı işaretler
+    - "Yeni Marka Ekle" → `/markalar` sayfasına yönlendirir
+  - `components/layout/Sidebar.tsx` → BrandSwitcher logo ile nav arasına eklendi
+  - `app/(dashboard)/markalar/page.tsx` — marka yönetim sayfası
+    - Grid görünüm, aktif marka vurgusu
+    - "Yeni Marka Ekle" modal (isim, sektör, açıklama)
+    - "Düzenle" → marka ayarlarına; "Sil" → confirm modal
+  - SidebarNav'a "Markalar" (Building2) linki eklendi
+
+#### Bir Sonraki Adım — Phase 4
+Phase 4 dokümantasyonu: `04-social-phase4.md`
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

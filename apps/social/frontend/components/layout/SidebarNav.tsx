@@ -12,6 +12,7 @@ import {
   BarChart2,
   TrendingUp,
   CreditCard,
+  Building2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,6 +25,7 @@ const navItems = [
   { href: '/marka-ayarlari', label: 'Marka Ayarları', icon: Settings },
   { href: '/rakip-analizi', label: 'Rakip Analizi', icon: BarChart2 },
   { href: '/trendler', label: 'Trendler', icon: TrendingUp },
+  { href: '/markalar', label: 'Markalar', icon: Building2 },
   { href: '/faturalandirma', label: 'Faturalandırma', icon: CreditCard },
 ]
 

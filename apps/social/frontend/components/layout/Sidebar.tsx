@@ -1,6 +1,7 @@
 'use client'
 
 import { SidebarNav } from './SidebarNav'
+import { BrandSwitcher } from './BrandSwitcher'
 import { createSupabaseClient } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -20,7 +21,7 @@ export function Sidebar() {
   return (
     <aside className="w-[250px] flex-shrink-0 h-screen flex flex-col bg-white border-r border-gray-100 shadow-sm fixed left-0 top-0">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100">
+      <div className="px-5 py-4 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">O</span>
@@ -31,6 +32,9 @@ export function Sidebar() {
           </div>
         </div>
       </div>
+
+      {/* Brand Switcher */}
+      <BrandSwitcher />
 
       {/* Nav */}
       <SidebarNav />

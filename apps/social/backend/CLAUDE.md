@@ -255,7 +255,11 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
   - `config.py`: PADDLE_API_KEY + PADDLE_WEBHOOK_SECRET + APP_URL eklendi
   - Migration: `009_subscriptions.sql` ✅
 
-### Bir Sonraki Adım — Phase 3 Adım 8 (Çoklu Marka Brand Switcher)
-- Sidebar'da marka değiştirici dropdown
-- `app/(dashboard)/markalar/page.tsx`
-- Zustand store'a `brands[]` + `switchBrand()` ekle
+- [x] Adım 8a — Auth Init Endpoint
+  - `GET /auth/init` → tek çağrıda user + workspace + brands döndürür
+    - Account yoksa oluşturur (ON CONFLICT)
+    - Workspace yoksa oluşturur + workspace_members'a ekler
+    - Aktif markalar listesi döner
+
+### Bir Sonraki Adım — Phase 4
+Phase 4 dokümantasyonu: `04-social-phase4.md`

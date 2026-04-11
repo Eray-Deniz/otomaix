@@ -3,9 +3,15 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseClient } from '@/lib/supabase'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, Brand, Workspace, User } from '@/lib/store'
 import { api } from '@/lib/api'
 import { Sidebar } from '@/components/layout/Sidebar'
+
+interface InitData {
+  user: User & { plan_id: string }
+  workspace: Workspace
+  brands: Brand[]
+}
 
 export default function DashboardLayout({
   children,
@@ -13,7 +19,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const setUser = useAppStore((s) => s.setUser)
+  const { setUser, setCurrentWorkspace, setBrands, setCurrentBrand, currentBrand } = useAppStore()
 
   useEffect(() => {
     const supabase = createSupabaseClient()
@@ -24,9 +30,19 @@ export default function DashboardLayout({
         router.push('/login')
         return
       }
-      const res = await api.get<{ id: string; email: string; name: string }>('/auth/me')
+
+      const res = await api.get<InitData>('/auth/init')
       if (res.success && res.data) {
-        setUser(res.data)
+        const { user, workspace, brands } = res.data
+        setUser(user)
+        setCurrentWorkspace(workspace)
+        setBrands(brands)
+        // currentBrand yoksa veya artık listede yoksa ilkini seç
+        const current = useAppStore.getState().currentBrand
+        const stillValid = current && brands.some((b) => b.id === current.id)
+        if (!stillValid && brands.length > 0) {
+          setCurrentBrand(brands[0])
+        }
       }
     }
 
@@ -37,7 +53,7 @@ export default function DashboardLayout({
     })
 
     return () => subscription.unsubscribe()
-  }, [router, setUser])
+  }, []) // eslint-disable-line
 
   return (
     <div className="flex min-h-screen bg-[#F6F7F9]">
