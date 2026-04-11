@@ -167,12 +167,16 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - "Tüm Trendler →" linki
   - SidebarNav'a "Trendler" linki eklendi (TrendingUp ikonu)
 
-#### Bir Sonraki Adım — Phase 3 Adım 6 (Logo Overlay + Intro Video UI)
-**Marka Kit güncelleme:**
-- Marka Ayarları → Logo Overlay sekmesi/bölümü
-  - Logo bindirme konumu seçici (köşeler)
-  - Opaklık slider
-- Video içeriklerinde intro video ekleme toggle'ı
+- [x] Adım 6b — Logo Overlay + Intro Video UI
+  - Marka Ayarları → Görseller sekmesi zaten tamamdı:
+    - Logo Filigran toggle + konum seçici + opaklık slider
+    - Intro/Outro video yükleme + pozisyon seçici (Başında/Sonunda/Her İkisi)
+  - Backend işleme otomatik (fal.ai webhook'ta)
+
+#### Bir Sonraki Adım — Phase 3 Adım 7 (Paddle Ödeme)
+- `app/(dashboard)/fiyatlandirma/page.tsx` — 4 plan kartı
+- `app/(dashboard)/faturalandirma/page.tsx` — mevcut plan + kullanım
+- Plan limit aşımında upgrade modal
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core

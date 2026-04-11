@@ -235,9 +235,15 @@ openai==1.57.0         # Phase 3 — RAG chunk embedding (opsiyonel, OPENAI_API_
   - Migration: `008_trend_cache.sql` ✅
   - requirements.txt: `pytrends==4.9.2` eklendi
 
-### Bir Sonraki Adım — Phase 3 Adım 6 (Logo Overlay + Intro Video)
-**Medya işleme backend:**
-- `app/services/media_processor.py` oluştur
-  - `add_logo_overlay()` → Pillow ile logo bindirme
-  - `add_intro_video()` → FFmpeg ile video birleştirme
-- Fal.ai webhook callback'ine entegre et
+- [x] Adım 6a — Logo Overlay + Intro Video Backend
+  - `app/services/media_processor.py`
+    - `add_logo_overlay()` → Pillow ile logo bindirme (konum + opaklık)
+    - `add_intro_video()` → FFmpeg ile video birleştirme (start/end/both)
+    - `apply_brand_processing()` → fal.ai callback'ten çağrılan ana pipeline
+  - `app/routers/webhooks.py` güncellendi → üretim sonrası marka işleme
+  - `Dockerfile` güncellendi → ffmpeg apt paketi eklendi
+  - `requirements.txt`: `Pillow==11.2.1` eklendi
+
+### Bir Sonraki Adım — Phase 3 Adım 7 (Paddle Ödeme)
+- `app/routers/billing.py` → checkout, webhook, current subscription
+- Migration: `009_subscriptions.sql`
