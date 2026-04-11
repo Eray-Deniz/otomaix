@@ -10,6 +10,7 @@ import { useAppStore } from '@/lib/store'
 import { LogOut } from 'lucide-react'
 import Link from 'next/link'
 import { analytics } from '@/lib/analytics'
+import { crispReset } from '@/components/providers/CrispProvider'
 
 function TrialBanner({ trialEndsAt }: { trialEndsAt: string }) {
   // Date.now() must run client-side only — avoid SSR/hydration mismatch
@@ -43,6 +44,7 @@ export function Sidebar() {
 
   async function handleLogout() {
     analytics.reset()
+    crispReset()
     const supabase = createSupabaseClient()
     await supabase.auth.signOut()
     router.push('/login')

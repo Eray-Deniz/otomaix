@@ -18,6 +18,11 @@
 .fc td { border-color: #f3f4f6; }
 .fc .fc-scrollgrid { border-color: #f3f4f6; }
 
+/* Crisp Chat — mobilde gizle */
+@media (max-width: 767px) {
+  #crisp-chatbox { display: none !important; }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;

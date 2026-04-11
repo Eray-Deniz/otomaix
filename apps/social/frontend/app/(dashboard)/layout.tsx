@@ -7,6 +7,7 @@ import { createSupabaseClient } from '@/lib/supabase'
 import { useAppStore, Brand, Workspace, User } from '@/lib/store'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { analytics } from '@/lib/analytics'
+import { crispIdentify } from '@/components/providers/CrispProvider'
 
 interface InitData {
   user: User & { plan_id: string }
@@ -49,6 +50,13 @@ export default function DashboardLayout({
           plan: user.plan_id || 'starter',
         })
         Sentry.setUser({ id: user.id, email: user.email })
+        crispIdentify({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          plan_id: user.plan_id,
+          brands_count: brands.length,
+        })
         const current = useAppStore.getState().currentBrand
         const stillValid = current && brands.some((b) => b.id === current.id)
         if (!stillValid && brands.length > 0) {

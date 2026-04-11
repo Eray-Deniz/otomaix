@@ -254,8 +254,20 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - `ApiResponse<T>` discriminated union tipi export edildi
   - `icerik-olustur/page.tsx` → rate_limit hatasında adım 2'ye geri döner + kaç saniye bekleyeceğini söyleyen toast
 
-#### Bir Sonraki Adım — Phase 4 Adım 5
-- [ ] Adım 5 — Docker Compose local deployment paketi
+- [x] Adım 6 — Crisp Chat Entegrasyonu
+  - `components/providers/CrispProvider.tsx` — Crisp script yükleme (vanilla JS, ekstra paket yok)
+    - Türkçe locale, violet tema rengi, sağ alt köşe
+    - `crispIdentify(user)` — login sonrası kimlik gönderir (email, nickname, plan, brands_count)
+    - `crispReset()` — logout'ta oturum sıfırlar
+  - `components/providers/Providers.tsx` — CrispProvider eklendi
+  - `app/(dashboard)/layout.tsx` — `/auth/init` sonrası `crispIdentify()` çağrısı
+  - `components/layout/Sidebar.tsx` — logout'ta `crispReset()` çağrısı
+  - `app/globals.css` — mobilde (< 768px) Crisp widget gizlendi
+  - Env değişkeni: `NEXT_PUBLIC_CRISP_WEBSITE_ID`
+
+#### Bir Sonraki Adım — Phase 4 Adım 7
+- [ ] Adım 7 — Performance Optimizasyonu
+  - next/image optimizasyonu, code splitting, bundle analizi
   - Phase 4 dokümantasyonu: `04-social-phase4.md`
 
 ## Paket Listesi (önemli)
