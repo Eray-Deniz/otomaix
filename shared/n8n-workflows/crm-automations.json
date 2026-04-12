@@ -31,7 +31,7 @@
               {
                 "id": "a1",
                 "name": "text",
-                "value": "={{ '🎉 <b>Yeni Müşteri!</b>\\n\\n👤 ' + $json.name + '\\n📧 ' + $json.email + '\\n📦 Plan: ' + $json.plan.toUpperCase() + '\\n\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.account_id + '\">CRM\\'de Görüntüle</a>' }}",
+                "value": "={{ '🎉 <b>Yeni Müşteri!</b>\\n\\n👤 ' + $json.body.name + '\\n📧 ' + $json.body.email + '\\n📦 Plan: ' + $json.body.plan.toUpperCase() + '\\n\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
                 "type": "string"
               }
             ]
@@ -104,7 +104,7 @@
               {
                 "id": "b1",
                 "name": "text",
-                "value": "={{ '⬆️ <b>Plan Yükseltme!</b>\\n\\n👤 ' + $json.name + '\\n📧 ' + $json.email + '\\n📦 ' + $json.old_plan.toUpperCase() + ' → ' + $json.new_plan.toUpperCase() + '\\n\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.account_id + '\">CRM\\'de Görüntüle</a>' }}",
+                "value": "={{ '⬆️ <b>Plan Yükseltme!</b>\\n\\n👤 ' + $json.body.name + '\\n📧 ' + $json.body.email + '\\n📦 ' + $json.body.old_plan.toUpperCase() + ' → ' + $json.body.new_plan.toUpperCase() + '\\n\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
                 "type": "string"
               }
             ]
@@ -174,7 +174,7 @@
         },
         "parameters": {
           "operation": "executeQuery",
-          "query": "INSERT INTO crm.account_tags (account_id, tag, added_by) VALUES ('{{ $json.account_id }}', 'Ödeme Sorunu', 'n8n-otomatik') ON CONFLICT (account_id, tag) DO NOTHING",
+          "query": "INSERT INTO crm.account_tags (account_id, tag, added_by) VALUES ('{{ $json.body.account_id }}', 'Ödeme Sorunu', 'n8n-otomatik') ON CONFLICT (account_id, tag) DO NOTHING",
           "options": {}
         }
       },
@@ -265,7 +265,7 @@
               {
                 "id": "c5",
                 "name": "text",
-                "value": "={{ '🔔 <b>Ödeme Hatırlatması (2. gün)</b>\\n\\n👤 ' + $json.name + '\\n📧 ' + $json.email + '\\n\\nÖdeme sorunu hâlâ çözülmedi. Müşteri ile iletişime geçilmesi önerilir.\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.account_id + '\">CRM\\'de Görüntüle</a>' }}",
+                "value": "={{ '🔔 <b>Ödeme Hatırlatması (2. gün)</b>\\n\\n👤 ' + $json.body.name + '\\n📧 ' + $json.body.email + '\\n\\nÖdeme sorunu hâlâ çözülmedi. Müşteri ile iletişime geçilmesi önerilir.\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
                 "type": "string"
               }
             ]
