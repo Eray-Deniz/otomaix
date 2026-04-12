@@ -276,7 +276,13 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - `shared/load-tests/locustfile.py` — 6 senaryo, JWT/HealthOnly modları
   - Smoke test geçti: /health 5ms, /billing/plans 5ms, 0 hata
 
-### Phase 4 Tamamlandı ✅ — Sıradaki: 05-crm-admin.md
+### Phase 4 Tamamlandı ✅
+
+## Mevcut Durum
+- Social Frontend: **Tüm fazlar tamamlandı** (Phase 1–4)
+- CRM Admin Paneli: Adım 1–7 tamamlandı, **Adım 8 (Coolify Deploy) devam ediyor**
+  - CRM ayrı bir Next.js uygulaması: `apps/crm/`
+  - Social frontend'de yapılacak iş yok
 
 ## Paket Listesi (önemli)
 - `@fullcalendar/react` + daygrid + timegrid + interaction + core
