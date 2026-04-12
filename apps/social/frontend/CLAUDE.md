@@ -279,9 +279,9 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 ### Phase 4 Tamamlandı ✅
 
 ## Mevcut Durum
-- Social Frontend: **Tüm fazlar tamamlandı** (Phase 1–4)
-- CRM Admin Paneli: Adım 1–7 tamamlandı, **Adım 8 (Coolify Deploy) devam ediyor**
-  - CRM ayrı bir Next.js uygulaması: `apps/crm/`
+- Social Frontend: **Tüm fazlar tamamlandı** (Phase 1–4) ✅
+- CRM Admin Paneli: **Tüm adımlar tamamlandı** (Adım 1–8) ✅
+  - https://crm.otomaix.com canlıda
   - Social frontend'de yapılacak iş yok
 
 ## Paket Listesi (önemli)

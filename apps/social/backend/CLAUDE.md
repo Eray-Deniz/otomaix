@@ -331,7 +331,8 @@ PyJWT[crypto]==2.8.0   # ES256 JWK desteği — python-jose yerine kullanılıyo
 
 ## Mevcut Durum
 - Social Backend: **Tüm fazlar tamamlandı** (Phase 1–4)
-- CRM Adım 8 için yapılacak: Coolify'da `N8N_BASE_URL=https://n8n.otomaix.com` ekle → redeploy
+- CRM entegrasyonu tamamlandı ✅
+- Coolify'da `N8N_BASE_URL=https://n8n.otomaix.com` eklendi → redeploy edildi ✅
 
 ## CRM Entegrasyonu (billing.py güncellemeleri)
 - [x] `_notify_crm_n8n(path, payload)` — fire-and-forget n8n CRM webhook yardımcısı

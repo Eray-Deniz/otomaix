@@ -172,24 +172,22 @@ apps/crm/
   - CRM-5: `KOsqeGIkrnKIX6rl`
   - CRM-6: `9esToZdZIeevp0UF`
 
-### Adım 8 — Coolify Deploy
-- [ ] Henüz yapılmadı
-- Coolify'da `otomaix-crm` servisi oluşturulacak
-- Domain: crm.otomaix.com
-- .env değişkenleri Coolify'a eklenecek:
-  ```
-  DATABASE_URL=postgresql://otomaix:Otomaix541851!@127.0.0.1:5433/otomaix
-  CRM_PASSWORD=Otomaix541851!
-  NEXT_PUBLIC_API_URL=https://api.otomaix.com
-  ```
-- Social backend Coolify'da `N8N_BASE_URL=https://n8n.otomaix.com` eklenmeli → redeploy
+### Adım 8 — Coolify Deploy ✅
+- Coolify'da `otomaix-crm` servisi oluşturuldu
+  - GitHub repo: Eray-Deniz/otomaix, Base directory: `apps/crm`
+  - Domain: crm.otomaix.com
+  - Port: 3000
+- Environment Variables Coolify'a eklendi:
+  - `DATABASE_URL=postgresql://otomaix:Otomaix541851!@127.0.0.1:5433/otomaix`
+  - `CRM_PASSWORD=Otomaix541851!`
+  - `NEXT_PUBLIC_API_URL=https://api.otomaix.com`
+- Social backend Coolify'da `N8N_BASE_URL=https://n8n.otomaix.com` eklendi → redeploy edildi
+- GoDaddy'de `crm.otomaix.com → 178.104.7.200` A kaydı eklendi
+- Dockerfile fix: `public/` klasörü oluşturuldu (COPY hatası giderildi)
 
 ## Bir Sonraki Adım
-**Adım 8: Coolify Deploy**
-- Coolify'da `otomaix-crm` servisi oluştur (GitHub repo, apps/crm klasörü)
-- Domain: crm.otomaix.com
-- .env değişkenlerini Coolify'a ekle
-- Social backend'i redeploy et (N8N_BASE_URL için)
+**CRM Adım 1-8 tamamlandı ✅**
+Tüm fazlar tamamlandı. Yeni bir geliştirme başlatılacaksa `00-platform-mimari.md`'ye bak.
 
 ## Önemli Kararlar ve Teknik Notlar
 - CRM direkt PostgreSQL'e bağlanır — API katmanı yok (sosyal backend bypass)
