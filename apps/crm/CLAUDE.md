@@ -158,21 +158,38 @@ apps/crm/
   - `subscription.updated` (plan yükseltme) → `crm/plan-upgrade` webhook
   - `subscription.payment_failed` / `transaction.payment_failed` → DB'de past_due + `crm/payment-failed` webhook
 - `social/backend/app/core/config.py` güncellendi: `N8N_BASE_URL` eklendi
-- **Manuel yapılacak:** n8n'de "PostgreSQL Otomaix" credential oluştur, sonra 6 workflow'u import et
+- n8n'de 6 workflow API ile import edildi ve aktif edildi ✅
+- Webhook body path: `$json.body.*` (n8n webhook node v2 body'yi $json.body altında döndürür)
+- Telegram Bot Token: `8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY`
+- Telegram Chat ID: `1634464595`
+- n8n API Key: `apps/social/backend/.env` → `N8N_API_KEY`
+- n8n PostgreSQL credential ID: `LRCmorU07F9lRpjV` (ad: "Postgres account")
+- n8n Workflow ID'leri:
+  - CRM-1: `UzNjZDghyfJq2vYA`
+  - CRM-2: `VoYuC8AGwtT0NpZR`
+  - CRM-3: `tDnbM6NNy3a3xHdD`
+  - CRM-4: `os5XonE1TtptDPBC`
+  - CRM-5: `KOsqeGIkrnKIX6rl`
+  - CRM-6: `9esToZdZIeevp0UF`
 
 ### Adım 8 — Coolify Deploy
 - [ ] Henüz yapılmadı
 - Coolify'da `otomaix-crm` servisi oluşturulacak
 - Domain: crm.otomaix.com
-- .env değişkenleri Coolify'a eklenecek
+- .env değişkenleri Coolify'a eklenecek:
+  ```
+  DATABASE_URL=postgresql://otomaix:Otomaix541851!@127.0.0.1:5433/otomaix
+  CRM_PASSWORD=Otomaix541851!
+  NEXT_PUBLIC_API_URL=https://api.otomaix.com
+  ```
+- Social backend Coolify'da `N8N_BASE_URL=https://n8n.otomaix.com` eklenmeli → redeploy
 
 ## Bir Sonraki Adım
 **Adım 8: Coolify Deploy**
 - Coolify'da `otomaix-crm` servisi oluştur (GitHub repo, apps/crm klasörü)
 - Domain: crm.otomaix.com
-- .env değişkenlerini Coolify'a ekle (DATABASE_URL, CRM_PASSWORD, vb.)
-- n8n'de PostgreSQL Otomaix credential oluştur
-- crm-automations.json'u n8n'e import et (6 workflow)
+- .env değişkenlerini Coolify'a ekle
+- Social backend'i redeploy et (N8N_BASE_URL için)
 
 ## Önemli Kararlar ve Teknik Notlar
 - CRM direkt PostgreSQL'e bağlanır — API katmanı yok (sosyal backend bypass)
