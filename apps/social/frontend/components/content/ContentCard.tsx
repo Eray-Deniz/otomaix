@@ -51,10 +51,11 @@ const PLATFORM_ICONS: Record<string, string> = {
 interface ContentCardProps {
   post: Post
   onClick: (post: Post) => void
+  onPublish?: (post: Post) => void
   showWatermark?: boolean
 }
 
-export function ContentCard({ post, onClick, showWatermark = false }: ContentCardProps) {
+export function ContentCard({ post, onClick, onPublish, showWatermark = false }: ContentCardProps) {
   const [hovered, setHovered] = useState(false)
   const status = STATUS_CONFIG[post.status] ?? { label: post.status, className: 'bg-gray-100 text-gray-600' }
   const imageUrl = post.thumbnail_url ?? post.output_url
@@ -115,6 +116,7 @@ export function ContentCard({ post, onClick, showWatermark = false }: ContentCar
             <button
               title="Yayınla"
               className="flex-1 flex items-center justify-center gap-1 text-white text-xs bg-white/20 hover:bg-white/30 rounded-lg py-1.5 transition-colors"
+              onClick={() => onPublish?.(post)}
             >
               <Send className="w-3 h-3" /> Yayınla
             </button>

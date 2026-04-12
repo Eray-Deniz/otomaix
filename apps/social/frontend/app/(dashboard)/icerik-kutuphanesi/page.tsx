@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ContentCard, type Post } from '@/components/content/ContentCard'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
-import { Loader2, SlidersHorizontal, X, Send, Calendar, RefreshCw } from 'lucide-react'
+import { toast } from 'sonner'
+import { Loader2, SlidersHorizontal, X, Send, Calendar, RefreshCw, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
@@ -49,10 +50,58 @@ const PLATFORM_OPTIONS = [
 
 // ─── Post detail modal ─────────────────────────────────────────────────────────
 
-function PostDetailModal({ post, open, onClose }: { post: Post | null; open: boolean; onClose: () => void }) {
+const STATUS_LABEL: Record<string, string> = {
+  draft: 'Taslak', generating: 'Üretiliyor', ready: 'Hazır',
+  scheduled: 'Zamanlandı', published: 'Yayınlandı', failed: 'Başarısız',
+  reviewing: 'İncelemede', rejected: 'Reddedildi',
+}
+
+function PostDetailModal({
+  post,
+  open,
+  onClose,
+  onPublished,
+  onApprovalRequested,
+}: {
+  post: Post | null
+  open: boolean
+  onClose: () => void
+  onPublished: (postId: string) => void
+  onApprovalRequested: (postId: string) => void
+}) {
+  const [publishing, setPublishing] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+
   if (!post) return null
 
   const imageUrl = post.output_url ?? post.thumbnail_url
+  const canAct = ['ready', 'failed', 'rejected'].includes(post.status)
+
+  async function handlePublish() {
+    setPublishing(true)
+    const res = await api.post(`/posts/${post!.id}/publish`, {})
+    setPublishing(false)
+    if (res.success) {
+      toast.success('İçerik yayınlanıyor')
+      onPublished(post!.id)
+      onClose()
+    } else {
+      toast.error(res.error ?? 'Yayınlama başarısız')
+    }
+  }
+
+  async function handleRequestApproval() {
+    setRequesting(true)
+    const res = await api.post(`/posts/${post!.id}/request-approval`, {})
+    setRequesting(false)
+    if (res.success) {
+      toast.success('Telegram\'a onay isteği gönderildi')
+      onApprovalRequested(post!.id)
+      onClose()
+    } else {
+      toast.error(res.error ?? 'Onay isteği gönderilemedi')
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -87,7 +136,7 @@ function PostDetailModal({ post, open, onClose }: { post: Post | null; open: boo
           <div className="space-y-3">
             <div>
               <p className="text-xs text-gray-400 mb-1">Durum</p>
-              <Badge variant="secondary">{post.status}</Badge>
+              <Badge variant="secondary">{STATUS_LABEL[post.status] ?? post.status}</Badge>
             </div>
 
             <div>
@@ -137,9 +186,27 @@ function PostDetailModal({ post, open, onClose }: { post: Post | null; open: boo
           <Button variant="outline" size="sm" className="gap-1.5">
             <Calendar className="w-3.5 h-3.5" /> Zamanla
           </Button>
-          <Button size="sm" className="gap-1.5 ml-auto">
-            <Send className="w-3.5 h-3.5" /> Şimdi Yayınla
-          </Button>
+          <div className="ml-auto flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={!canAct || requesting}
+              onClick={handleRequestApproval}
+            >
+              {requesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5" />}
+              Onay İste
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              disabled={!canAct || publishing}
+              onClick={handlePublish}
+            >
+              {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Şimdi Yayınla
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -342,6 +409,24 @@ export default function IcerikKutuphanesPage() {
     setFilters(f)
   }
 
+  function handlePublished(postId: string) {
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'published' } : p))
+  }
+
+  function handleApprovalRequested(postId: string) {
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'reviewing' } : p))
+  }
+
+  async function handlePublishFromCard(post: Post) {
+    const res = await api.post(`/posts/${post.id}/publish`, {})
+    if (res.success) {
+      toast.success('İçerik yayınlanıyor')
+      handlePublished(post.id)
+    } else {
+      toast.error(res.error ?? 'Yayınlama başarısız')
+    }
+  }
+
   const activeFilterCount = [filters.status, filters.platform].filter(Boolean).length
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -401,6 +486,7 @@ export default function IcerikKutuphanesPage() {
                   <ContentCard
                     post={post}
                     onClick={handleCardClick}
+                    onPublish={handlePublishFromCard}
                     showWatermark={false}
                   />
                 </div>
@@ -425,6 +511,8 @@ export default function IcerikKutuphanesPage() {
         post={selectedPost}
         open={modalOpen}
         onClose={() => { setModalOpen(false); setSelectedPost(null) }}
+        onPublished={handlePublished}
+        onApprovalRequested={handleApprovalRequested}
       />
     </div>
   )

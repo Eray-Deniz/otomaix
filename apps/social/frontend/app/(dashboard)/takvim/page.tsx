@@ -26,7 +26,7 @@ import Image from 'next/image'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { Send, Calendar, RefreshCw, Loader2 } from 'lucide-react'
+import { Send, Calendar, RefreshCw, Loader2, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { analytics } from '@/lib/analytics'
 
@@ -79,15 +79,47 @@ function PostEventModal({
   post,
   open,
   onClose,
+  onStatusChange,
 }: {
   post: CalendarPost | null
   open: boolean
   onClose: () => void
+  onStatusChange: (postId: string, status: string) => void
 }) {
+  const [publishing, setPublishing] = useState(false)
+  const [requesting, setRequesting] = useState(false)
+
   if (!post) return null
 
   const statusLabel = STATUS_LABEL[post.status] ?? post.status
   const statusColor = STATUS_COLOR[post.status] ?? '#9CA3AF'
+  const canAct = ['ready', 'failed', 'rejected', 'scheduled'].includes(post.status)
+
+  async function handlePublish() {
+    setPublishing(true)
+    const res = await api.post(`/posts/${post!.id}/publish`, {})
+    setPublishing(false)
+    if (res.success) {
+      toast.success('İçerik yayınlanıyor')
+      onStatusChange(post!.id, 'published')
+      onClose()
+    } else {
+      toast.error(res.error ?? 'Yayınlama başarısız')
+    }
+  }
+
+  async function handleRequestApproval() {
+    setRequesting(true)
+    const res = await api.post(`/posts/${post!.id}/request-approval`, {})
+    setRequesting(false)
+    if (res.success) {
+      toast.success('Telegram\'a onay isteği gönderildi')
+      onStatusChange(post!.id, 'reviewing')
+      onClose()
+    } else {
+      toast.error(res.error ?? 'Onay isteği gönderilemedi')
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -150,8 +182,24 @@ function PostEventModal({
           <Button variant="outline" size="sm" className="gap-1.5 text-xs">
             <Calendar className="w-3.5 h-3.5" /> Yeniden Zamanla
           </Button>
-          <Button size="sm" className="gap-1.5 text-xs col-span-2">
-            <Send className="w-3.5 h-3.5" /> Şimdi Yayınla
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            disabled={!canAct || requesting}
+            onClick={handleRequestApproval}
+          >
+            {requesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5" />}
+            Onay İste
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1.5 text-xs"
+            disabled={!canAct || publishing}
+            onClick={handlePublish}
+          >
+            {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            Şimdi Yayınla
           </Button>
         </div>
       </DialogContent>
@@ -213,6 +261,15 @@ export default function TakvimPage() {
 
   const [selectedPost, setSelectedPost] = useState<CalendarPost | null>(null)
   const [postModalOpen, setPostModalOpen] = useState(false)
+
+  function handlePostStatusChange(postId: string, newStatus: string) {
+    setEvents((prev) => prev.map((e) => {
+      if (e.id === postId) {
+        return { ...e, backgroundColor: STATUS_COLOR[newStatus] ?? '#9CA3AF' }
+      }
+      return e
+    }))
+  }
 
   const [newContentDate, setNewContentDate] = useState<string | null>(null)
   const [newContentOpen, setNewContentOpen] = useState(false)
@@ -420,6 +477,7 @@ export default function TakvimPage() {
         post={selectedPost}
         open={postModalOpen}
         onClose={() => { setPostModalOpen(false); setSelectedPost(null) }}
+        onStatusChange={handlePostStatusChange}
       />
 
       {/* New content dialog */}

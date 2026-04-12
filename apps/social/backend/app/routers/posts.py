@@ -268,6 +268,68 @@ async def publish_post_now(
     return OkResponse(data=result)
 
 
+@router.post("/{post_id}/request-approval", response_model=OkResponse)
+async def request_approval(
+    post_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Telegram onay akışını başlatır — n8n telegram-content-approval webhook'unu tetikler."""
+    import httpx
+    from app.core.config import settings
+
+    # Post'u al ve kullanıcıya ait olduğunu doğrula
+    post = await db.fetchrow(
+        """
+        SELECT p.id, p.brand_id, p.status
+        FROM social.posts p
+        JOIN social.brands b ON b.id = p.brand_id
+        JOIN social.workspaces w ON w.id = b.workspace_id
+        WHERE p.id = $1 AND w.account_id = $2
+        """,
+        post_id, user["sub"],
+    )
+    if not post:
+        raise HTTPException(status_code=404, detail="Post bulunamadı")
+
+    if post["status"] not in ("ready", "failed", "rejected"):
+        raise HTTPException(
+            status_code=400,
+            detail="Sadece 'Hazır', 'Başarısız' veya 'Reddedildi' durumundaki içerikler onaya gönderilebilir",
+        )
+
+    # Telegram bilgilerini autoposting_configs'ten al
+    config = await db.fetchrow(
+        "SELECT telegram_chat_id FROM social.autoposting_configs WHERE brand_id = $1",
+        post["brand_id"],
+    )
+    if not config or not config["telegram_chat_id"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Bu marka için Telegram konfigürasyonu bulunamadı. Otomatik Yayın ayarlarından Telegram bilgilerini girin.",
+        )
+
+    # Post durumunu 'reviewing' yap
+    await db.execute(
+        "UPDATE social.posts SET status = 'reviewing' WHERE id = $1",
+        post_id,
+    )
+
+    # n8n webhook'unu tetikle (fire-and-forget)
+    n8n_url = f"{settings.N8N_BASE_URL}/webhook/telegram-content-approval"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(n8n_url, json={
+                "post_id": str(post_id),
+                "brand_id": str(post["brand_id"]),
+                "telegram_chat_id": config["telegram_chat_id"],
+            })
+    except Exception:
+        pass  # fire-and-forget — n8n ulaşılamasa bile devam et
+
+    return OkResponse(data={"status": "reviewing"})
+
+
 @router.post(
     "/generate-faceless-video",
     response_model=OkResponse,
