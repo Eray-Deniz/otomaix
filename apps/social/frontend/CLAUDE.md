@@ -66,10 +66,14 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 
 - [x] Adım 3 — İçerik Kütüphanesi (`/icerik-kutuphanesi`)
   - ContentCard bileşeni (`components/content/ContentCard.tsx`)
+    - `onPublish` prop: hover "Yayınla" butonunu bağlar → `POST /posts/{id}/publish`
   - CSS columns masonry grid (3 sütun)
   - IntersectionObserver ile infinite scroll
   - Filter Sheet (sağdan, tip/durum/platform)
   - Post detail Dialog
+    - "Şimdi Yayınla" → `POST /posts/{id}/publish` (loading state, toast, status güncelleme)
+    - "Onay İste" → `POST /posts/{id}/request-approval` (loading state, toast, status → 'reviewing')
+    - Butonlar sadece ready/failed/rejected durumlarında aktif
   - Freemium watermark + "Filigranı Kaldır" CTA
 
 - [x] Adım 4 — İçerik Takvimi (`/takvim`)
@@ -80,6 +84,8 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
   - Drag & drop → PATCH /calendar/schedule
   - Geçmiş tarih koruması + yeni içerik dialog
   - Post detay modal
+    - "Şimdi Yayınla" → `POST /posts/{id}/publish` (loading, toast, event rengi güncelleme)
+    - "Onay İste" → `POST /posts/{id}/request-approval` (loading, toast)
 
 - [x] Adım 5b — Otomatik Yayın Wizard (`/otomatik-yayin`)
   - Config yoksa setup CTA, varsa Summary Dashboard

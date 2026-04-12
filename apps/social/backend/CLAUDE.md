@@ -76,6 +76,11 @@ Her müşteri kendi bot token'ını Otomatik Yayın wizard'ına girer →
   - `POST /posts/{post_id}/regenerate` → yeniden üretim (JWT veya X-Internal-Key)
   - `POST /posts/{post_id}/publish` → yayınla (JWT)
   - `POST /posts/{post_id}/publish-now` → yayınla (X-Internal-Key, n8n için)
+  - `POST /posts/{post_id}/request-approval` → Telegram onay akışı (JWT)
+    - Autoposting config'den `telegram_chat_id` alır
+    - Post status → 'reviewing'
+    - n8n `/webhook/telegram-content-approval` tetikler (fire-and-forget)
+    - Sadece ready/failed/rejected durumlar geçerli; config yoksa 400
   - `GET /posts` → sayfalama + filtre
 
 - [x] AI endpoint'leri (`app/routers/ai.py`)
