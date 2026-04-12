@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/(dashboard)/bildirimler/page": "app/(dashboard)/bildirimler/page.js",
+  "/(dashboard)/operasyon/page": "app/(dashboard)/operasyon/page.js",
+  "/(dashboard)/musteriler/[id]/page": "app/(dashboard)/musteriler/[id]/page.js",
+  "/(dashboard)/page": "app/(dashboard)/page.js",
+  "/(dashboard)/raporlar/page": "app/(dashboard)/raporlar/page.js",
+  "/(dashboard)/musteriler/page": "app/(dashboard)/musteriler/page.js"
+}
