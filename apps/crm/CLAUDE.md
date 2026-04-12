@@ -178,15 +178,17 @@ apps/crm/
   - Domain: crm.otomaix.com
   - Port: 3000
 - Environment Variables Coolify'a eklendi:
-  - `DATABASE_URL=postgresql://otomaix:Otomaix541851!@127.0.0.1:5433/otomaix`
+  - `DATABASE_URL=postgresql://otomaix:Otomaix541851!@10.0.1.8:5432/otomaix` ← Docker network IP (127.0.0.1 container içinden çalışmaz)
   - `CRM_PASSWORD=Otomaix541851!`
   - `NEXT_PUBLIC_API_URL=https://api.otomaix.com`
 - Social backend Coolify'da `N8N_BASE_URL=https://n8n.otomaix.com` eklendi → redeploy edildi
 - GoDaddy'de `crm.otomaix.com → 178.104.7.200` A kaydı eklendi
 - Dockerfile fix: `public/` klasörü oluşturuldu (COPY hatası giderildi)
+- Production DB'ye `012_crm_tables.sql` migration çalıştırıldı (`psql ... -f shared/db/migrations/012_crm_tables.sql`)
+- Bug fix: `musteriler/[id]` sayfasında `social.posts LEFT JOIN` eksikti → düzeltildi
 
 ## Bir Sonraki Adım
-**CRM Adım 1-8 tamamlandı ✅**
+**CRM Adım 1-8 tamamlandı ✅ — crm.otomaix.com canlıda**
 Tüm fazlar tamamlandı. Yeni bir geliştirme başlatılacaksa `00-platform-mimari.md`'ye bak.
 
 ## Önemli Kararlar ve Teknik Notlar
