@@ -327,4 +327,12 @@ PyJWT[crypto]==2.8.0   # ES256 JWK desteği — python-jose yerine kullanılıyo
   - `shared/load-tests/run-load-test.sh` — interactive/headless/local mod
   - Smoke test: /health 5ms, /billing/plans 5ms, 0 hata
 
-### Phase 4 Tamamlandı ✅ — Sıradaki: 05-crm-admin.md
+### Phase 4 Tamamlandı ✅
+
+## CRM Entegrasyonu (billing.py güncellemeleri)
+- [x] `_notify_crm_n8n(path, payload)` — fire-and-forget n8n CRM webhook yardımcısı
+- [x] `PLAN_ORDER` dict — plan yükseltme tespiti (starter=0, pro=1, business=2, agency=3)
+- [x] `subscription.created` → `crm/new-customer` bildirimi
+- [x] `subscription.updated` (yükseltme) → `crm/plan-upgrade` bildirimi
+- [x] `subscription.payment_failed` + `transaction.payment_failed` → DB past_due + `crm/payment-failed`
+- [x] `N8N_BASE_URL` config.py'e eklendi (default: https://n8n.otomaix.com)

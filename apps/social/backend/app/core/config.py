@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     POSTHOG_HOST: str = "https://eu.posthog.com"
     SENTRY_DSN: str = ""        # Opsiyonel — Sentry error monitoring
     ENVIRONMENT: str = "production"  # development | production
+    N8N_BASE_URL: str = "https://n8n.otomaix.com"  # n8n CRM webhook base URL
 
 
 settings = Settings()

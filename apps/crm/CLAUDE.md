@@ -143,9 +143,22 @@ apps/crm/
   - Top 10 en aktif müşteriler (bu ay)
 - `components/reports/MonthSelector.tsx` — client component
 
-### Adım 7 — n8n CRM Otomasyonları
-- [ ] Henüz yapılmadı
-- Telegram bildirimleri: yeni müşteri, plan yükseltme, ödeme başarısız, churn taraması, deneme bitiyor, aylık rapor
+### Adım 7 — n8n CRM Otomasyonları ✅
+- `shared/n8n-workflows/crm-automations.json` — 6 workflow JSON (n8n'e import edilecek)
+  - CRM-1: Yeni Müşteri Bildirimi (webhook: `crm/new-customer`)
+  - CRM-2: Plan Yükseltme Bildirimi (webhook: `crm/plan-upgrade`)
+  - CRM-3: Ödeme Başarısız + 2 gün sonra hatırlatma (webhook: `crm/payment-failed`)
+  - CRM-4: Churn Riski Taraması — her gün 09:00, 14+ gün giriş yok → etiket ekle + Telegram
+  - CRM-5: Deneme Süresi Bitiyor — her gün 10:00, 2 gün kalan trial'lar → Telegram
+  - CRM-6: Aylık Gelir Raporu — her ayın 1'i 09:00, MRR + büyüme → Telegram
+- `social/backend/app/routers/billing.py` güncellendi:
+  - `_notify_crm_n8n()` helper — fire-and-forget n8n webhook çağrısı
+  - `PLAN_ORDER` dict — plan yükseltme tespiti için (starter < pro < business < agency)
+  - `subscription.created` → `crm/new-customer` webhook
+  - `subscription.updated` (plan yükseltme) → `crm/plan-upgrade` webhook
+  - `subscription.payment_failed` / `transaction.payment_failed` → DB'de past_due + `crm/payment-failed` webhook
+- `social/backend/app/core/config.py` güncellendi: `N8N_BASE_URL` eklendi
+- **Manuel yapılacak:** n8n'de "PostgreSQL Otomaix" credential oluştur, sonra 6 workflow'u import et
 
 ### Adım 8 — Coolify Deploy
 - [ ] Henüz yapılmadı
@@ -154,8 +167,12 @@ apps/crm/
 - .env değişkenleri Coolify'a eklenecek
 
 ## Bir Sonraki Adım
-**Adım 7: n8n CRM Otomasyonları**
-~/otomaix/docs/05-crm-admin.md → Adım 7 bölümünü oku
+**Adım 8: Coolify Deploy**
+- Coolify'da `otomaix-crm` servisi oluştur (GitHub repo, apps/crm klasörü)
+- Domain: crm.otomaix.com
+- .env değişkenlerini Coolify'a ekle (DATABASE_URL, CRM_PASSWORD, vb.)
+- n8n'de PostgreSQL Otomaix credential oluştur
+- crm-automations.json'u n8n'e import et (6 workflow)
 
 ## Önemli Kararlar ve Teknik Notlar
 - CRM direkt PostgreSQL'e bağlanır — API katmanı yok (sosyal backend bypass)

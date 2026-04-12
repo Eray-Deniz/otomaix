@@ -100,6 +100,13 @@ PLANS = [
     },
 ]
 
+PLAN_ORDER: dict[str, int] = {
+    "starter": 0,
+    "pro": 1,
+    "business": 2,
+    "agency": 3,
+}
+
 PADDLE_PRICE_IDS: dict[str, str] = {
     # Coolify env'e eklenecek: PADDLE_PRICE_STARTER, PADDLE_PRICE_PRO vb.
     "starter":  getattr(settings, "PADDLE_PRICE_STARTER", ""),
@@ -107,6 +114,18 @@ PADDLE_PRICE_IDS: dict[str, str] = {
     "business": getattr(settings, "PADDLE_PRICE_BUSINESS", ""),
     "agency":   getattr(settings, "PADDLE_PRICE_AGENCY", ""),
 }
+
+
+# ─── n8n CRM Bildirim Yardımcısı ─────────────────────────────────────────────
+
+async def _notify_crm_n8n(path: str, payload: dict) -> None:
+    """n8n CRM webhook'una fire-and-forget bildirim gönder."""
+    try:
+        url = f"{settings.N8N_BASE_URL}/webhook/{path}"
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(url, json=payload)
+    except Exception:
+        pass  # CRM bildirimleri kritik değil — hata durumunda sessizce devam et
 
 
 # ─── Yardımcı fonksiyonlar ────────────────────────────────────────────────────
@@ -368,6 +387,13 @@ async def paddle_webhook(
             account_id = str(row["account_id"]) if row else None
 
         if account_id:
+            # Plan yükseltme tespiti için eski planı al
+            old_account = await db.fetchrow(
+                "SELECT plan_id, email, name FROM social.accounts WHERE id = $1",
+                account_id,
+            )
+            old_plan = old_account["plan_id"] if old_account else "starter"
+
             period_end = None
             current_period = data.get("current_billing_period", {})
             if current_period.get("ends_at"):
@@ -402,6 +428,62 @@ async def paddle_webhook(
                 plan_id,
             )
             analytics.subscription_created(str(account_id), plan_id)
+
+            # n8n CRM bildirimleri
+            account_name = old_account["name"] if old_account else ""
+            account_email = old_account["email"] if old_account else ""
+
+            if event_type == "subscription.created":
+                await _notify_crm_n8n("crm/new-customer", {
+                    "account_id": account_id,
+                    "name": account_name,
+                    "email": account_email,
+                    "plan": plan_id,
+                })
+            elif event_type == "subscription.updated":
+                # Yalnızca plan yükseltmesinde bildirim gönder
+                if PLAN_ORDER.get(plan_id, 0) > PLAN_ORDER.get(old_plan, 0):
+                    await _notify_crm_n8n("crm/plan-upgrade", {
+                        "account_id": account_id,
+                        "name": account_name,
+                        "email": account_email,
+                        "old_plan": old_plan,
+                        "new_plan": plan_id,
+                    })
+
+    elif event_type in ("subscription.payment_failed", "transaction.payment_failed"):
+        # Ödeme başarısız — subscription_id veya customer_id ile account bul
+        sub_id = data.get("subscription_id") or data.get("id")
+        customer_id = data.get("customer_id")
+        row = None
+        if sub_id:
+            row = await db.fetchrow(
+                "SELECT s.account_id, a.email, a.name, a.plan_id "
+                "FROM social.subscriptions s JOIN social.accounts a ON a.id = s.account_id "
+                "WHERE s.paddle_subscription_id = $1",
+                sub_id,
+            )
+        if not row and customer_id:
+            row = await db.fetchrow(
+                "SELECT s.account_id, a.email, a.name, a.plan_id "
+                "FROM social.subscriptions s JOIN social.accounts a ON a.id = s.account_id "
+                "WHERE s.paddle_customer_id = $1 ORDER BY s.created_at DESC LIMIT 1",
+                customer_id,
+            )
+        if row:
+            # Abonelik durumunu past_due yap
+            if sub_id:
+                await db.execute(
+                    "UPDATE social.subscriptions SET status = 'past_due', updated_at = now() "
+                    "WHERE paddle_subscription_id = $1",
+                    sub_id,
+                )
+            await _notify_crm_n8n("crm/payment-failed", {
+                "account_id": str(row["account_id"]),
+                "name": row["name"] or "",
+                "email": row["email"] or "",
+                "plan": row["plan_id"] or "starter",
+            })
 
     elif event_type == "subscription.cancelled":
         sub_id = data.get("id")
