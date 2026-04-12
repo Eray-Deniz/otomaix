@@ -71,6 +71,7 @@ async function getCustomerDetail(id: string) {
              COUNT(p.id)::text as post_count
       FROM social.brands b
       JOIN social.workspaces w ON w.id = b.workspace_id
+      LEFT JOIN social.posts p ON p.brand_id = b.id
       WHERE w.account_id = $1 AND b.is_active = true
       GROUP BY b.id, b.name, b.sector, b.created_at
       ORDER BY b.created_at DESC
