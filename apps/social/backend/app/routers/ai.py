@@ -15,6 +15,16 @@ from app.models.schemas import OkResponse
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+def _parse_brand_kit(raw) -> dict:
+    """asyncpg bazen JSONB kolonunu string olarak döndürür — her ikisini de handle et."""
+    if not raw:
+        return {}
+    if isinstance(raw, str):
+        import json
+        return json.loads(raw)
+    return dict(raw)
+
+
 class AnalyzeWebsiteRequest(BaseModel):
     url: str
 
@@ -124,7 +134,7 @@ async def suggest_ideas(
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 
-    brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
+    brand_kit = _parse_brand_kit(brand["brand_kit"])
     tonality = brand_kit.get("tonality", "professional")
     hashtags = brand_kit.get("hashtags", [])
     category_tr = CATEGORY_TR.get(payload.content_category, payload.content_category)
@@ -197,7 +207,7 @@ async def generate_script_endpoint(
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 
-    brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
+    brand_kit = _parse_brand_kit(brand["brand_kit"])
     brand_kit["sector"] = brand["sector"] or ""
 
     result = await generate_script(payload.prompt, brand_kit, brand["name"])
