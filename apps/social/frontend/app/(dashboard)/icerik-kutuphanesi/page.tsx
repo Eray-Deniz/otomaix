@@ -528,7 +528,7 @@ export default function IcerikKutuphanesPage() {
   }
 
   function handleRegenerated(postId: string) {
-    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'generating', output_url: undefined } : p))
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'generating', output_url: null } : p))
   }
 
   function handleScheduled(postId: string) {
