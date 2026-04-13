@@ -312,7 +312,7 @@ export default function TakvimPage() {
           title: h.name_tr,
           date: h.date,
           display: 'background',
-          backgroundColor: h.category === 'religious' ? '#FEF3C7' : '#EDE9FE',
+          backgroundColor: h.category === 'religious' ? '#F59E0B' : '#7C3AED',
           classNames: ['holiday-event'],
         })
       }
@@ -420,8 +420,12 @@ export default function TakvimPage() {
           </div>
         ))}
         <div className="flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-amber-100 border border-amber-300" />
-          <span className="text-xs text-gray-500">Resmi Tatil</span>
+          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#7C3AED', opacity: 0.5 }} />
+          <span className="text-xs text-gray-500">Milli Tatil</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#F59E0B', opacity: 0.5 }} />
+          <span className="text-xs text-gray-500">Dini Bayram</span>
         </div>
       </div>
 
