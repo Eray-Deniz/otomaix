@@ -31,7 +31,7 @@ interface TurkishVoice {
   gender: string
 }
 
-type ContentType = 'image' | 'carousel' | 'video'
+type ContentType = 'image' | 'carousel' | 'video' | 'special_day' | 'quote'
 type ContentCategory = 'product' | 'service' | 'corporate'
 type AspectRatio = '1:1' | '9:16' | '4:5' | '2:3'
 type Step = 1 | 2 | 3
@@ -48,14 +48,20 @@ interface GeneratedPost {
   duration_estimate?: number
 }
 
+interface Holiday {
+  date: string
+  name_tr: string
+  category: string
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CONTENT_TYPES = [
   { id: 'image' as ContentType, label: 'Görsel', icon: '🖼️', active: true },
   { id: 'carousel' as ContentType, label: 'Carousel', icon: '📱', active: true },
   { id: 'video' as ContentType, label: 'Video (Faceless)', icon: '🎬', active: true },
-  { id: 'special' as string, label: 'Özel Gün', icon: '🎉', active: false },
-  { id: 'quote' as ContentType & string, label: 'Alıntı', icon: '💬', active: false },
+  { id: 'special_day' as ContentType, label: 'Özel Gün', icon: '🎉', active: true },
+  { id: 'quote' as ContentType, label: 'Alıntı', icon: '💬', active: true },
 ]
 
 const CONTENT_CATEGORIES: { id: ContentCategory; label: string }[] = [
@@ -145,6 +151,14 @@ export default function IcerikOlusturPage() {
   const [selectedVoice, setSelectedVoice] = useState('tr-TR-EmelNeural')
   const [durationEstimate, setDurationEstimate] = useState<number | null>(null)
 
+  // Özel Gün — Step 2
+  const [holidays, setHolidays] = useState<Holiday[]>([])
+  const [selectedHoliday, setSelectedHoliday] = useState<Holiday | null>(null)
+
+  // Alıntı — Step 2
+  const [quoteText, setQuoteText] = useState('')
+  const [quoteAuthor, setQuoteAuthor] = useState('')
+
   // Step 3
   const [generating, setGenerating] = useState(false)
   const [generatedPost, setGeneratedPost] = useState<GeneratedPost | null>(null)
@@ -169,6 +183,15 @@ export default function IcerikOlusturPage() {
       if (res.success && res.data) setVoices(res.data)
     }
     fetchVoices()
+  }, [])
+
+  useEffect(() => {
+    async function fetchHolidays() {
+      const year = new Date().getFullYear()
+      const res = await api.get<Holiday[]>(`/calendar/holidays?year=${year}`)
+      if (res.success && res.data) setHolidays(res.data)
+    }
+    fetchHolidays()
   }, [])
 
   function toggleDoc(id: string) {
@@ -227,7 +250,19 @@ export default function IcerikOlusturPage() {
 
   async function handleGenerate() {
     if (!currentBrand?.id) { toast.error('Önce bir marka seçin'); return }
-    if (!prompt.trim()) { toast.error('Lütfen bir prompt girin'); return }
+
+    if (contentType === 'special_day' && !selectedHoliday) {
+      toast.error('Lütfen bir özel gün seçin')
+      return
+    }
+    if (contentType === 'quote' && !quoteText.trim()) {
+      toast.error('Lütfen alıntı metnini girin')
+      return
+    }
+    if (!['special_day', 'quote'].includes(contentType) && !prompt.trim()) {
+      toast.error('Lütfen bir prompt girin')
+      return
+    }
 
     analytics.contentCreationStarted(contentType)
     if (selectedDocIds.length > 0) analytics.documentReferenceUsed(selectedDocIds.length)
@@ -257,6 +292,51 @@ export default function IcerikOlusturPage() {
         toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
       } else {
         toast.error('Video üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      }
+    } else if (contentType === 'special_day') {
+      const res = await api.post<GeneratedPost>('/posts/generate', {
+        brand_id: currentBrand.id,
+        content_type: 'special_day',
+        special_day_name: selectedHoliday!.name_tr,
+        special_day_category: selectedHoliday!.category,
+        prompt: prompt.trim() || null,
+        aspect_ratio: aspectRatio,
+        platforms,
+      })
+      setGenerating(false)
+      if (res.success && res.data) {
+        analytics.contentGenerated(contentType, Math.round((Date.now() - genStart) / 1000))
+        setGeneratedPost(res.data)
+        setCaption(res.data.caption ?? '')
+        setHashtags(res.data.hashtags ?? [])
+        toast.success('Özel gün içeriği üretiliyor!')
+      } else if (!res.success && res.error === 'rate_limit') {
+        setStep(2)
+        toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
+      } else {
+        toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      }
+    } else if (contentType === 'quote') {
+      const res = await api.post<GeneratedPost>('/posts/generate', {
+        brand_id: currentBrand.id,
+        content_type: 'quote',
+        quote_text: quoteText.trim(),
+        quote_author: quoteAuthor.trim() || null,
+        aspect_ratio: aspectRatio,
+        platforms,
+      })
+      setGenerating(false)
+      if (res.success && res.data) {
+        analytics.contentGenerated(contentType, Math.round((Date.now() - genStart) / 1000))
+        setGeneratedPost(res.data)
+        setCaption(res.data.caption ?? '')
+        setHashtags(res.data.hashtags ?? [])
+        toast.success('Alıntı görseli üretiliyor!')
+      } else if (!res.success && res.error === 'rate_limit') {
+        setStep(2)
+        toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
+      } else {
+        toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
     } else {
       // Image / Carousel pipeline
@@ -318,6 +398,9 @@ export default function IcerikOlusturPage() {
     setSelectedDocIds([])
     setScript('')
     setDurationEstimate(null)
+    setSelectedHoliday(null)
+    setQuoteText('')
+    setQuoteAuthor('')
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -367,7 +450,8 @@ export default function IcerikOlusturPage() {
             </div>
           </div>
 
-          {/* Category tabs */}
+          {/* Category tabs — special_day ve quote için gösterilmez */}
+          {!['special_day', 'quote'].includes(contentType) && (
           <div>
             <p className="text-sm font-medium text-gray-700 mb-3">İçerik Kategorisi</p>
             <div className="flex gap-2">
@@ -387,6 +471,7 @@ export default function IcerikOlusturPage() {
               ))}
             </div>
           </div>
+          )}
 
           <Button
             onClick={() => setStep(2)}
@@ -414,19 +499,100 @@ export default function IcerikOlusturPage() {
             </button>
           </div>
 
-          {/* Prompt */}
+          {/* Özel Gün — tatil seçici */}
+          {contentType === 'special_day' && (
+            <div className="space-y-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+              <div>
+                <Label className="text-amber-800">Özel Gün Seçin</Label>
+                <p className="text-xs text-amber-600 mt-0.5">Bu yıla ait milli, dini ve ticari özel günler</p>
+              </div>
+              <div className="flex flex-col gap-1.5 max-h-52 overflow-y-auto pr-1">
+                {holidays.length === 0 && (
+                  <p className="text-sm text-amber-600">Tatil listesi yükleniyor...</p>
+                )}
+                {holidays.map((h) => {
+                  const dateStr = new Date(h.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
+                  const categoryLabel = h.category === 'national' ? '🇹🇷' : h.category === 'religious' ? '🌙' : '🎊'
+                  const isPast = new Date(h.date) < new Date()
+                  return (
+                    <button
+                      key={h.date}
+                      onClick={() => setSelectedHoliday(h)}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
+                        selectedHoliday?.date === h.date
+                          ? 'border-amber-500 bg-amber-100 text-amber-900'
+                          : isPast
+                          ? 'border-gray-100 bg-gray-50 text-gray-400 opacity-60'
+                          : 'border-amber-200 text-amber-800 hover:border-amber-400 hover:bg-amber-50'
+                      )}
+                    >
+                      <span className="text-base">{categoryLabel}</span>
+                      <span className="flex-1 font-medium">{h.name_tr}</span>
+                      <span className="text-xs opacity-70 flex-shrink-0">{dateStr}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              {selectedHoliday && (
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs font-medium text-amber-800">Seçildi:</span>
+                  <span className="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">{selectedHoliday.name_tr}</span>
+                  <button onClick={() => setSelectedHoliday(null)} className="ml-auto text-xs text-amber-600 hover:underline">Temizle</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Alıntı — quote input */}
+          {contentType === 'quote' && (
+            <div className="space-y-3 p-4 bg-violet-50 border border-violet-200 rounded-xl">
+              <div>
+                <Label className="text-violet-800">Alıntı Metni</Label>
+                <p className="text-xs text-violet-500 mt-0.5">Görselde yer almasını istediğiniz söz veya cümle</p>
+              </div>
+              <Textarea
+                value={quoteText}
+                onChange={(e) => setQuoteText(e.target.value)}
+                placeholder="Başarı, hazırlık ile fırsatın buluştuğu andır..."
+                rows={3}
+                className="resize-none bg-white text-sm"
+              />
+              <div className="space-y-1.5">
+                <Label className="text-sm text-violet-700">Kaynak / Yazar <span className="font-normal text-violet-400">(opsiyonel)</span></Label>
+                <input
+                  type="text"
+                  value={quoteAuthor}
+                  onChange={(e) => setQuoteAuthor(e.target.value)}
+                  placeholder="Atatürk, Einstein, anonim..."
+                  className="w-full text-sm px-3 py-2 border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 bg-white"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Prompt — görsel/carousel/special_day için */}
+          {contentType !== 'quote' && (
           <div className="space-y-1.5">
-            <Label>İçerik Açıklaması</Label>
+            <Label>
+              {contentType === 'special_day' ? 'Ek Not (opsiyonel)' : 'İçerik Açıklaması'}
+            </Label>
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Ürününüzü, hedef kitlenizi veya iletmek istediğiniz mesajı açıklayın..."
-              rows={4}
+              placeholder={
+                contentType === 'special_day'
+                  ? 'Özel günle ilgili eklemek istediğiniz bir mesaj veya not...'
+                  : 'Ürününüzü, hedef kitlenizi veya iletmek istediğiniz mesajı açıklayın...'
+              }
+              rows={contentType === 'special_day' ? 2 : 4}
               className="resize-none"
             />
           </div>
+          )}
 
-          {/* Idea suggestions */}
+          {/* Idea suggestions — sadece image/carousel için */}
+          {!['video', 'special_day', 'quote'].includes(contentType) && (
           <div className="space-y-2">
             <Button
               variant="outline"
@@ -452,6 +618,7 @@ export default function IcerikOlusturPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Faceless video — script editörü ve ses seçimi */}
           {contentType === 'video' && (
@@ -519,7 +686,7 @@ export default function IcerikOlusturPage() {
           )}
 
           {/* Optional: own text (sadece görsel/carousel için) */}
-          {contentType !== 'video' && (
+          {!['video', 'special_day', 'quote'].includes(contentType) && (
           <div className="space-y-2 p-3 bg-gray-50 rounded-xl">
             <div className="flex items-center justify-between">
               <Label className="font-normal text-sm">Kendi metnini ekle</Label>
@@ -581,8 +748,8 @@ export default function IcerikOlusturPage() {
             </div>
           </div>
 
-          {/* Documents */}
-          {availableDocs.length > 0 && (
+          {/* Documents — special_day ve quote için gereksiz */}
+          {availableDocs.length > 0 && !['special_day', 'quote'].includes(contentType) && (
             <div className="space-y-2">
               <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
               <div className="flex flex-col gap-1.5">
@@ -619,7 +786,11 @@ export default function IcerikOlusturPage() {
           <Button
             onClick={handleGenerate}
             className="w-full gap-2"
-            disabled={!prompt.trim()}
+            disabled={
+              (contentType === 'special_day' && !selectedHoliday) ||
+              (contentType === 'quote' && !quoteText.trim()) ||
+              (!['special_day', 'quote'].includes(contentType) && !prompt.trim())
+            }
           >
             <Wand2 className="w-4 h-4" />
             İçerik Üret
@@ -654,7 +825,10 @@ export default function IcerikOlusturPage() {
                 </div>
               </div>
               <p className="text-gray-700 font-medium">
-                {contentType === 'video' ? 'Video üretiliyor...' : 'İçeriğiniz üretiliyor...'}
+                {contentType === 'video' ? 'Video üretiliyor...' :
+                 contentType === 'special_day' ? `${selectedHoliday?.name_tr} içeriği üretiliyor...` :
+                 contentType === 'quote' ? 'Alıntı kartı üretiliyor...' :
+                 'İçeriğiniz üretiliyor...'}
               </p>
               <p className="text-sm text-gray-400">
                 {contentType === 'video'

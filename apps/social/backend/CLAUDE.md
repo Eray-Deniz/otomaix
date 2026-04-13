@@ -73,6 +73,10 @@ Her müşteri kendi bot token'ını Otomatik Yayın wizard'ına girer →
 
 - [x] Adım 2a — İçerik üretim endpoint'leri (`app/routers/posts.py`)
   - `POST /posts/generate` → post oluştur + fal.ai tetikle
+    - Desteklenen `content_type`: `image` | `carousel` | `special_day` | `quote`
+    - `special_day`: `special_day_name` + `special_day_category` alanları → `_build_special_day_prompt()` ile fal.ai prompt'u oluşturulur
+    - `quote`: `quote_text` + `quote_author` (opsiyonel) alanları → `_build_quote_prompt()` ile prompt oluşturulur; `caption` response'da döner
+    - `image`/`carousel`: RAG destekli `_build_prompt_with_rag()` (doküman context'i)
   - `POST /posts/{post_id}/regenerate` → yeniden üretim (JWT veya X-Internal-Key)
   - `POST /posts/{post_id}/publish` → yayınla (JWT)
   - `POST /posts/{post_id}/publish-now` → yayınla (X-Internal-Key, n8n için)
@@ -82,6 +86,10 @@ Her müşteri kendi bot token'ını Otomatik Yayın wizard'ına girer →
     - n8n `/webhook/telegram-content-approval` tetikler (fire-and-forget)
     - Sadece ready/failed/rejected durumlar geçerli; config yoksa 400
   - `GET /posts` → sayfalama + filtre
+  - **`PostGenerate` şeması** (`models/schemas.py`):
+    - Temel: `brand_id`, `content_type`, `content_category`, `prompt`, `user_text`, `document_ids`, `aspect_ratio`, `platforms`
+    - Özel Gün: `special_day_name: str | None`, `special_day_category: str | None`
+    - Alıntı: `quote_text: str | None`, `quote_author: str | None`
 
 - [x] AI endpoint'leri (`app/routers/ai.py`)
   - `POST /ai/suggest-ideas` → Claude Haiku ile içerik fikir önerileri

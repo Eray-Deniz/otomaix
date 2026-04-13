@@ -65,6 +65,50 @@ Yanıt olarak sadece JSON döndür: {{"image_prompt": "...", "caption": "...", "
     return enriched
 
 
+def _build_special_day_prompt(payload: PostGenerate, brand: object, brand_kit: dict) -> str:
+    """Build an fal.ai image prompt for special day / holiday content."""
+    holiday = payload.special_day_name or "Özel Gün"
+    brand_name = brand["name"] or ""
+    sector = brand["sector"] or ""
+    colors = ", ".join(brand_kit.get("colors", []))
+    style = brand_kit.get("style", "modern, professional")
+    extra = f" Additional context: {payload.prompt}" if payload.prompt else ""
+
+    category_hints = {
+        "religious": "warm, festive, respectful, traditional Turkish aesthetic",
+        "national": "patriotic, proud, celebratory, Turkish colors red and white",
+        "commercial": "vibrant, promotional, eye-catching, commercial photography style",
+    }
+    mood = category_hints.get(payload.special_day_category or "", "festive, celebratory, warm")
+
+    return (
+        f"Social media post image for {holiday}. "
+        f"Brand: {brand_name}, sector: {sector}. "
+        f"Visual mood: {mood}. "
+        f"Brand colors: {colors}. Style: {style}. "
+        f"Professional, high quality, suitable for {', '.join(payload.platforms) or 'social media'}."
+        f"{extra}"
+    )
+
+
+def _build_quote_prompt(payload: PostGenerate, brand: dict, brand_kit: dict) -> str:
+    """Build an fal.ai image prompt for quote card content."""
+    quote = payload.quote_text or ""
+    author = payload.quote_author or ""
+    brand_name = brand["name"] or ""
+    colors = ", ".join(brand_kit.get("colors", []))
+    style = brand_kit.get("style", "minimalist, modern")
+
+    return (
+        f"Elegant quote card for social media. "
+        f"Quote text prominently displayed: \"{quote}\""
+        + (f" — {author}" if author else "") +
+        f". Brand: {brand_name}. Brand colors: {colors}. "
+        f"Style: {style}, clean typography, strong visual hierarchy. "
+        f"The quote is the hero element. Minimal background, professional design."
+    )
+
+
 @router.post(
     "/generate",
     response_model=OkResponse,
@@ -85,8 +129,19 @@ async def generate_post(
 
     brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
 
-    # Build enriched prompt with document context (RAG)
-    enriched_prompt = await _build_prompt_with_rag(payload, brand, brand_kit, db)
+    # Build prompt based on content type
+    if payload.content_type == "special_day":
+        enriched_prompt = _build_special_day_prompt(payload, brand, brand_kit)
+    elif payload.content_type == "quote":
+        enriched_prompt = _build_quote_prompt(payload, dict(brand), brand_kit)
+    else:
+        enriched_prompt = await _build_prompt_with_rag(payload, brand, brand_kit, db)
+
+    # Default caption for quote posts (the quote text itself)
+    default_caption: str | None = None
+    if payload.content_type == "quote" and payload.quote_text:
+        author_part = f"\n\n— {payload.quote_author}" if payload.quote_author else ""
+        default_caption = f'"{payload.quote_text}"{author_part}'
 
     row = await db.fetchrow(
         """
@@ -99,7 +154,7 @@ async def generate_post(
         payload.brand_id,
         payload.content_type,
         payload.content_category,
-        payload.prompt,
+        payload.prompt or payload.special_day_name or payload.quote_text,
         payload.user_text,
         [str(d) for d in payload.document_ids] if payload.document_ids else None,
         payload.aspect_ratio,
@@ -118,7 +173,11 @@ async def generate_post(
     except Exception:
         pass  # Generation failure handled via webhook; status stays 'generating'
 
-    return OkResponse(data={"post_id": str(post["id"]), "status": "generating"})
+    return OkResponse(data={
+        "post_id": str(post["id"]),
+        "status": "generating",
+        "caption": default_caption,
+    })
 
 
 @router.post("/{post_id}/regenerate", response_model=OkResponse)

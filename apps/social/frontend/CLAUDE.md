@@ -60,9 +60,19 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 
 - [x] Adım 2b — İçerik Oluşturma Wizard (`/icerik-olustur`)
   - 3 adımlı React state machine (URL değişmez)
-  - Adım 1: 5 içerik tipi kartı (Görsel/Carousel aktif, 3 "Yakında"), kategori seçimi
-  - Adım 2: Prompt, "Bana fikir öner" AI butonu, aspect ratio, platform seçimi
+  - Adım 1: 5 içerik tipi kartı (tümü aktif), kategori seçimi (special_day/quote için gizlenir)
+    - `image`, `carousel`, `video` → mevcut pipeline
+    - `special_day` → `/calendar/holidays` API'den tatil listesi, kullanıcı seçer
+    - `quote` → alıntı metni + opsiyonel yazar alanı
+  - Adım 2 (type'a göre farklı UI):
+    - `image`/`carousel`: Prompt + "Bana fikir öner" + kendi metin toggle + doküman seçici
+    - `video`: Script editörü + ses seçimi (mor tema)
+    - `special_day`: Tatil grid (scrollable, geçmiş tatiller soluk) + opsiyonel not alanı (sarı tema)
+    - `quote`: Alıntı textarea + yazar inputu (mor tema)
   - Adım 3: Üretim animasyonu, görsel önizleme, caption + hashtag editörü, eylem butonları
+  - **Validasyon**: `special_day` → selectedHoliday zorunlu; `quote` → quoteText zorunlu; diğerleri → prompt zorunlu
+  - **State**: `holidays[]`, `selectedHoliday`, `quoteText`, `quoteAuthor` eklendi
+  - **Backend**: `POST /posts/generate` → `content_type: 'special_day' | 'quote'` ile çağrılır
 
 - [x] Adım 3 — İçerik Kütüphanesi (`/icerik-kutuphanesi`)
   - ContentCard bileşeni (`components/content/ContentCard.tsx`)
