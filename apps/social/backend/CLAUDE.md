@@ -179,7 +179,9 @@ app.include_router(webhooks.router)
 
 ## n8n Workflow'ları
 - **Auto Posting Scheduler** — ID: `Nz4651wCfBHP4G9l` | `shared/n8n-workflows/auto-posting-scheduler.json`
-- **Telegram İçerik Onay** — ID: `D49KNE35cONz2APb` | `shared/n8n-workflows/telegram-content-approval.json`
+- **Telegram İçerik Onay** — ID: `D49KNE35cONz2APb` | webhook: `POST /webhook/telegram-content-approval`
+- **Telegram Onayla** — ID: `aQ8neGzs3PQp8DMl` | webhook: `GET /webhook/tg-approve?post_id=&bot_token=&chat_id=`
+- **Telegram Reddet** — ID: `9kp6bCFl0ys6TbVu` | webhook: `GET /webhook/tg-reject?post_id=&bot_token=&chat_id=`
 - **Türkiye Takvimi Güncelleme** — ID: `tTk1VroTh4AS8lxI` | `shared/n8n-workflows/turkey-calendar-update.json`
   - Her yıl 1 Ocak 00:00'da çalışır (cron: `0 0 1 1 *`)
   - Kaynaklar: date.nager.at (milli tatiller) + api.aladhan.com (dini bayramlar — API key gereksiz)

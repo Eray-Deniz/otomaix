@@ -64,11 +64,17 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
     - `image`, `carousel`, `video` → mevcut pipeline
     - `special_day` → `/calendar/holidays` API'den tatil listesi, kullanıcı seçer
     - `quote` → alıntı metni + opsiyonel yazar alanı
+  - Adım 2 sıralaması: En-Boy Oranı → Platformlar → Dokümanlar → İçerik Açıklaması → Bana Fikir Öner → İçerik Üret
   - Adım 2 (type'a göre farklı UI):
-    - `image`/`carousel`: Prompt + "Bana fikir öner" + kendi metin toggle + doküman seçici
-    - `video`: Script editörü + ses seçimi (mor tema)
+    - `image`/`carousel`: En-Boy Oranı + Platformlar + Dokümanlar + İçerik Açıklaması + "Bana fikir öner" (3 öneri)
+    - `video`: İçerik Açıklaması + Script editörü + ses seçimi (mor tema)
     - `special_day`: Tatil grid (scrollable, geçmiş tatiller soluk) + opsiyonel not alanı (sarı tema)
     - `quote`: Alıntı textarea + yazar inputu (mor tema)
+  - "Kendi metnini ekle" toggle kaldırıldı — tek alan: İçerik Açıklaması
+  - **"Bana fikir öner"**: `POST /ai/suggest-ideas` → sabit **3 öneri** döner
+    - Gönderilen bağlam: `content_type`, `content_category`, `prompt`, `document_ids`, `platforms`
+    - Backend RAG ile seçili doküman içeriğini de prompt'a dahil eder
+    - İçerik tipine özel talimat: video için senaryo fikirleri, görsel için tasarım fikirleri vb.
   - Adım 3: Üretim animasyonu, görsel önizleme, caption + hashtag editörü, eylem butonları
   - **Validasyon**: `special_day` → selectedHoliday zorunlu; `quote` → quoteText zorunlu; diğerleri → prompt zorunlu
   - **State**: `holidays[]`, `selectedHoliday`, `quoteText`, `quoteAuthor` eklendi
