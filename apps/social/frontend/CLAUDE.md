@@ -271,8 +271,11 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 
 - [x] Adım 4b — Redis Cache ve Rate Limiting (frontend)
   - `lib/api.ts` → HTTP 429 yakalanıyor: `{ success: false, error: 'rate_limit', retry_after: N }`
+  - `lib/api.ts` → `apiFetch` ve `apiUpload` try-catch ile sarmalandı — `TypeError: Failed to fetch` artık `{ success: false, error: message }` döndürür (sayfa donmaz)
+  - `lib/api.ts` → `!res.ok` kontrolü eklendi — 401/403/500 vb. HTTP hataları da `success: false` olarak döner
   - `ApiResponse<T>` discriminated union tipi export edildi
   - `icerik-olustur/page.tsx` → rate_limit hatasında adım 2'ye geri döner + kaç saniye bekleyeceğini söyleyen toast
+  - `icerik-olustur/page.tsx` → doküman bölümü her zaman gösterilir; yüklü belge yoksa Marka Ayarları → Dokümanlar linkine yönlendiren mesaj gösterilir
 
 - [x] Adım 6 — Crisp Chat Entegrasyonu
   - `components/providers/CrispProvider.tsx` — Crisp script yükleme (vanilla JS, ekstra paket yok)

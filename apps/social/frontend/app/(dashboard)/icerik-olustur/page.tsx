@@ -235,7 +235,7 @@ export default function IcerikOlusturPage() {
     } else if (!res.success && res.error === 'rate_limit') {
       toast.error(`Çok fazla istek. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
     } else {
-      toast.error('Fikirler alınamadı')
+      toast.error('Fikirler alınamadı — lütfen tekrar deneyin')
     }
     setLoadingIdeas(false)
   }, [currentBrand?.id, category])
@@ -749,36 +749,46 @@ export default function IcerikOlusturPage() {
           </div>
 
           {/* Documents — special_day ve quote için gereksiz */}
-          {availableDocs.length > 0 && !['special_day', 'quote'].includes(contentType) && (
+          {!['special_day', 'quote'].includes(contentType) && (
             <div className="space-y-2">
               <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
-              <div className="flex flex-col gap-1.5">
-                {availableDocs.map((doc) => (
-                  <button
-                    key={doc.id}
-                    onClick={() => toggleDoc(doc.id)}
-                    className={cn(
-                      'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
-                      selectedDocIds.includes(doc.id)
-                        ? 'border-blue-500 bg-blue-50 text-blue-800'
-                        : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                    )}
-                  >
-                    <FileText className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate">{doc.name}</span>
-                    {doc.file_size_kb && (
-                      <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{doc.file_size_kb} KB</span>
-                    )}
-                    {selectedDocIds.includes(doc.id) && (
-                      <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-              {selectedDocIds.length > 0 && (
-                <p className="text-xs text-blue-600">
-                  {selectedDocIds.length} doküman seçildi — AI içerik üretirken bu belgeleri referans alacak
+              {availableDocs.length === 0 ? (
+                <p className="text-xs text-gray-400 px-1">
+                  Henüz yüklü doküman yok.{' '}
+                  <a href="/marka-ayarlari?tab=belgeler" className="text-blue-500 hover:underline">
+                    Marka Ayarları → Dokümanlar
+                  </a>
+                  {' '}bölümünden ürün kataloğu, fiyat listesi vb. yükleyebilirsiniz.
                 </p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {availableDocs.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => toggleDoc(doc.id)}
+                      className={cn(
+                        'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
+                        selectedDocIds.includes(doc.id)
+                          ? 'border-blue-500 bg-blue-50 text-blue-800'
+                          : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                      )}
+                    >
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate">{doc.name}</span>
+                      {doc.file_size_kb && (
+                        <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{doc.file_size_kb} KB</span>
+                      )}
+                      {selectedDocIds.includes(doc.id) && (
+                        <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
+                      )}
+                    </button>
+                  ))}
+                  {selectedDocIds.length > 0 && (
+                    <p className="text-xs text-blue-600">
+                      {selectedDocIds.length} doküman seçildi — AI içerik üretirken bu belgeleri referans alacak
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}

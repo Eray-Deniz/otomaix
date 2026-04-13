@@ -21,51 +21,71 @@ async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<ApiResponse<T>> {
-  const authHeader = await getAuthHeader()
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeader,
-      ...options.headers,
-    },
-  })
+  try {
+    const authHeader = await getAuthHeader()
+    const res = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeader,
+        ...options.headers,
+      },
+    })
 
-  if (res.status === 429) {
-    const body = await res.json().catch(() => ({}))
-    const detail = body.detail || {}
-    return {
-      success: false,
-      error: 'rate_limit',
-      retry_after: detail.retry_after ?? 60,
+    if (res.status === 429) {
+      const body = await res.json().catch(() => ({}))
+      const detail = body.detail || {}
+      return {
+        success: false,
+        error: 'rate_limit',
+        retry_after: detail.retry_after ?? 60,
+      }
     }
-  }
 
-  return res.json()
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      return { success: false, error: body.detail || `HTTP ${res.status}` }
+    }
+
+    return res.json()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Bağlantı hatası'
+    return { success: false, error: msg }
+  }
 }
 
 async function apiUpload<T>(
   path: string,
   formData: FormData
 ): Promise<ApiResponse<T>> {
-  const authHeader = await getAuthHeader()
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: authHeader,
-    body: formData,
-  })
+  try {
+    const authHeader = await getAuthHeader()
+    const res = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: authHeader,
+      body: formData,
+    })
 
-  if (res.status === 429) {
-    const body = await res.json().catch(() => ({}))
-    const detail = body.detail || {}
-    return {
-      success: false,
-      error: 'rate_limit',
-      retry_after: detail.retry_after ?? 60,
+    if (res.status === 429) {
+      const body = await res.json().catch(() => ({}))
+      const detail = body.detail || {}
+      return {
+        success: false,
+        error: 'rate_limit',
+        retry_after: detail.retry_after ?? 60,
+      }
     }
-  }
 
-  return res.json()
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      return { success: false, error: body.detail || `HTTP ${res.status}` }
+    }
+
+    return res.json()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Bağlantı hatası'
+    return { success: false, error: msg }
+  }
 }
 
 export const api = {
