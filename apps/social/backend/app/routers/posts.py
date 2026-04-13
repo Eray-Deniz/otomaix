@@ -14,6 +14,16 @@ from app.services.faceless_video import TURKISH_VOICES, run_faceless_video_pipel
 router = APIRouter(prefix="/posts", tags=["posts"])
 
 
+def _parse_brand_kit(raw) -> dict:
+    """asyncpg bazen JSONB kolonunu string olarak döndürür — her ikisini de handle et."""
+    if not raw:
+        return {}
+    if isinstance(raw, str):
+        import json
+        return json.loads(raw)
+    return dict(raw)
+
+
 async def _build_prompt_with_rag(
     payload: PostGenerate,
     brand: object,
@@ -127,7 +137,7 @@ async def generate_post(
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 
-    brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
+    brand_kit = _parse_brand_kit(brand["brand_kit"])
 
     # Build prompt based on content type
     if payload.content_type == "special_day":
@@ -407,7 +417,7 @@ async def generate_faceless_video(
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
 
-    brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
+    brand_kit = _parse_brand_kit(brand["brand_kit"])
     brand_kit["sector"] = brand["sector"] or ""
 
     post = await run_faceless_video_pipeline(

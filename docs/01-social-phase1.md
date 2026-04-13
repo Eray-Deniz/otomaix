@@ -354,16 +354,33 @@ Implement fal.ai integration in app/services/fal_ai.py
 
 Requirements:
 - Use fal-client Python SDK
-- Support async image generation with webhook callback
+- Support async generation with webhook callback
 - Webhook URL: https://api.otomaix.com/webhooks/fal
+
+## fal.ai Model Seçimleri
+
+| Tip | Model ID | Açıklama |
+|-----|----------|----------|
+| Görsel (image) | `fal-ai/flux-2-pro` | FLUX.2 [pro] — yüksek kalite görsel üretimi |
+| Video (text-to-video) | `fal-ai/kling-video/v3/pro/text-to-video` | Kling 3.0 Pro — metinden video üretimi |
+| Görsel→Video (image-to-video) | `fal-ai/kling-video/v2.5-turbo/pro/image-to-video` | Kling 2.5 Turbo Pro — fotoğraftan video üretimi |
 
 Implement:
 1. generate_image(prompt, aspect_ratio, brand_kit) → fal_job_id
-   - Use model: fal-ai/flux/schnell for fast generation
+   - Model: fal-ai/flux-2-pro
    - Include brand colors and style from brand_kit in the prompt
    - Return the fal job ID immediately (don't wait for result)
 
-2. A webhook router at POST /webhooks/fal
+2. generate_video(prompt, aspect_ratio, brand_kit) → fal_job_id
+   - Model: fal-ai/kling-video/v3/pro/text-to-video
+   - Metinden video üretimi
+
+3. generate_video_from_image(prompt, image_url, brand_kit) → fal_job_id
+   - Model: fal-ai/kling-video/v2.5-turbo/pro/image-to-video
+   - Kullanıcının yüklediği ürün görseli + prompt → video
+   - image_url: R2'ye yüklenen geçici görsel URL'i
+
+4. A webhook router at POST /webhooks/fal
    - Receives fal.ai callback when generation is complete
    - Downloads the file from fal's temporary URL
    - Uploads to R2 using storage service: brands/{brand_id}/posts/generated/{post_id}.jpg
