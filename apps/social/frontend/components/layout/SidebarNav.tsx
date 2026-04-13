@@ -13,6 +13,7 @@ import {
   TrendingUp,
   CreditCard,
   Building2,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/trendler', label: 'Trendler', icon: TrendingUp },
   { href: '/markalar', label: 'Markalar', icon: Building2 },
   { href: '/faturalandirma', label: 'Faturalandırma', icon: CreditCard },
+  { href: '/ayarlar', label: 'Ayarlar', icon: SlidersHorizontal },
 ]
 
 export function SidebarNav() {

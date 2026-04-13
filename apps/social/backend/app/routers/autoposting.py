@@ -22,9 +22,6 @@ class AutopostingConfigRequest(BaseModel):
     content_categories: list[str]  # product | service | corporate
     topics: list[str]
     platforms: list[str]
-    telegram_approval: bool = False
-    telegram_bot_token: str = ""   # müşteriye özel bot token
-    telegram_chat_id: str = ""     # müşterinin Telegram chat ID'si
 
 
 @router.get("/config", response_model=OkResponse)
@@ -52,8 +49,8 @@ async def upsert_config(
         """
         INSERT INTO social.autoposting_configs
             (brand_id, frequency, time_slots, content_types, content_categories,
-             topics, platforms, telegram_approval, telegram_bot_token, telegram_chat_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             topics, platforms)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (brand_id) DO UPDATE SET
             frequency           = EXCLUDED.frequency,
             time_slots          = EXCLUDED.time_slots,
@@ -61,9 +58,6 @@ async def upsert_config(
             content_categories  = EXCLUDED.content_categories,
             topics              = EXCLUDED.topics,
             platforms           = EXCLUDED.platforms,
-            telegram_approval   = EXCLUDED.telegram_approval,
-            telegram_bot_token  = EXCLUDED.telegram_bot_token,
-            telegram_chat_id    = EXCLUDED.telegram_chat_id,
             updated_at          = now()
         RETURNING *
         """,
@@ -74,9 +68,6 @@ async def upsert_config(
         payload.content_categories,
         payload.topics,
         payload.platforms,
-        payload.telegram_approval,
-        payload.telegram_bot_token or None,
-        payload.telegram_chat_id or None,
     )
     return OkResponse(data=dict(row))
 

@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { Loader2, Zap, ChevronRight, Check, Lightbulb } from 'lucide-react'
+import { Loader2, Zap, ChevronRight, Check, Lightbulb, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,9 +25,6 @@ interface AutopostingConfig {
   content_categories: string[]
   topics: string[]
   platforms: string[]
-  telegram_approval: boolean
-  telegram_bot_token: string | null
-  telegram_chat_id: string | null
 }
 
 interface UpcomingPost {
@@ -311,9 +308,6 @@ export default function OtomatikYayinPage() {
   const [frequency, setFrequency] = useState('3x_weekly')
   const [timeSlots, setTimeSlots] = useState(TIME_SLOTS_BY_FREQ['3x_weekly'])
   const [contentTypes, setContentTypes] = useState<string[]>(['image'])
-  const [telegramApproval, setTelegramApproval] = useState(false)
-  const [telegramBotToken, setTelegramBotToken] = useState('')
-  const [telegramChatId, setTelegramChatId] = useState('')
 
   // ── Load config ──────────────────────────────────────────────────────────────
 
@@ -339,9 +333,6 @@ export default function OtomatikYayinPage() {
       setFrequency(config.frequency)
       setTimeSlots(config.time_slots)
       setContentTypes(config.content_types)
-      setTelegramApproval(config.telegram_approval)
-      setTelegramBotToken(config.telegram_bot_token ?? '')
-      setTelegramChatId(config.telegram_chat_id ?? '')
     }
     setStep(1)
     setSuggestedTopics([])
@@ -390,9 +381,6 @@ export default function OtomatikYayinPage() {
       content_categories: ['product', 'service', 'corporate'],
       topics,
       platforms,
-      telegram_approval: telegramApproval,
-      telegram_bot_token: telegramBotToken,
-      telegram_chat_id: telegramChatId,
     })
 
     if (res.success && res.data) {
@@ -673,50 +661,13 @@ export default function OtomatikYayinPage() {
             </div>
           </div>
 
-          {/* Telegram approval */}
-          <div className="space-y-3 p-4 bg-gray-50 rounded-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="font-medium">Telegram Onayı</Label>
-                <p className="text-xs text-gray-500 mt-0.5">Yayından önce Telegram&apos;dan onay al</p>
-              </div>
-              <Switch checked={telegramApproval} onCheckedChange={setTelegramApproval} />
-            </div>
-            {telegramApproval && (
-              <div className="space-y-3">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5">
-                  <p className="text-xs font-medium text-blue-800">Kendi Telegram botunuzu kullanın:</p>
-                  <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
-                    <li>Telegram&apos;da <strong>@BotFather</strong>&apos;a yazın</li>
-                    <li><strong>/newbot</strong> komutunu gönderin ve bot adını belirleyin</li>
-                    <li>Aldığınız token&apos;ı aşağıya yapıştırın</li>
-                    <li>Bota mesaj atın, ardından <strong>@userinfobot</strong>&apos;a yazarak Chat ID&apos;nizi öğrenin</li>
-                  </ol>
-                </div>
-                <div className="space-y-2">
-                  <div>
-                    <label className="text-xs font-medium text-gray-700">Bot Token</label>
-                    <input
-                      type="text"
-                      value={telegramBotToken}
-                      onChange={(e) => setTelegramBotToken(e.target.value)}
-                      placeholder="1234567890:AABBCCDDEEFFaabbccddeeff"
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-gray-700">Chat ID</label>
-                    <input
-                      type="text"
-                      value={telegramChatId}
-                      onChange={(e) => setTelegramChatId(e.target.value)}
-                      placeholder="@userinfobot'tan aldığınız ID (örn: 1634464595)"
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* Telegram bilgisi */}
+          <div className="flex items-start gap-3 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+            <MessageCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-blue-700">
+              İçerik onayı için Telegram bildirimleri{' '}
+              <a href="/ayarlar" className="font-semibold underline">Ayarlar</a> sayfasından yapılandırılır.
+            </p>
           </div>
 
           <div className="flex gap-3">
@@ -767,13 +718,6 @@ export default function OtomatikYayinPage() {
               </p>
             </div>
 
-            {/* Telegram */}
-            <div className="p-4 bg-white border border-gray-100 rounded-xl flex items-center justify-between">
-              <p className="text-xs text-gray-400 uppercase tracking-wide">Telegram Onayı</p>
-              <Badge variant={telegramApproval ? 'default' : 'secondary'} className="text-xs">
-                {telegramApproval ? 'Aktif' : 'Kapalı'}
-              </Badge>
-            </div>
           </div>
 
           <div className="flex gap-3">

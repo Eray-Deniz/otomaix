@@ -40,9 +40,11 @@ async def get_due_configs(
 
     rows = await db.fetch(
         """
-        SELECT ac.*, b.brand_kit, b.name AS brand_name
+        SELECT ac.*, b.brand_kit, b.name AS brand_name,
+               w.telegram_bot_token, w.telegram_chat_id
         FROM social.autoposting_configs ac
         JOIN social.brands b ON b.id = ac.brand_id
+        JOIN social.workspaces w ON w.id = b.workspace_id
         WHERE ac.is_enabled = true
         """
     )
@@ -100,6 +102,7 @@ async def get_due_configs(
         if existing and existing > 0:
             continue
 
+        telegram_chat_id = config.get("telegram_chat_id") or ""
         due.append({
             "brand_id": str(config["brand_id"]),
             "brand_name": config["brand_name"],
@@ -109,9 +112,9 @@ async def get_due_configs(
             "content_categories": config["content_categories"] or ["product"],
             "topics": config["topics"] or [],
             "platforms": config["platforms"] or [],
-            "telegram_approval": config["telegram_approval"],
+            "telegram_approval": bool(telegram_chat_id),
             "telegram_bot_token": config.get("telegram_bot_token") or "",
-            "telegram_chat_id": config.get("telegram_chat_id") or "",
+            "telegram_chat_id": telegram_chat_id,
         })
 
     return OkResponse(data=due)

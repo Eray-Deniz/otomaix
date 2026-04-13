@@ -384,15 +384,19 @@ async def request_approval(
             detail="Sadece 'Hazır', 'Başarısız' veya 'Reddedildi' durumundaki içerikler onaya gönderilebilir",
         )
 
-    # Telegram bilgilerini autoposting_configs'ten al
-    config = await db.fetchrow(
-        "SELECT telegram_chat_id FROM social.autoposting_configs WHERE brand_id = $1",
-        post["brand_id"],
+    # Telegram bilgilerini workspace ayarlarından al
+    workspace = await db.fetchrow(
+        """
+        SELECT w.telegram_chat_id
+        FROM social.workspaces w
+        WHERE w.account_id = $1
+        """,
+        user["sub"],
     )
-    if not config or not config["telegram_chat_id"]:
+    if not workspace or not workspace["telegram_chat_id"]:
         raise HTTPException(
             status_code=400,
-            detail="Bu marka için Telegram konfigürasyonu bulunamadı. Otomatik Yayın ayarlarından Telegram bilgilerini girin.",
+            detail="Telegram konfigürasyonu bulunamadı. Ayarlar sayfasından Telegram bilgilerini girin.",
         )
 
     # Post durumunu 'reviewing' yap
@@ -408,7 +412,7 @@ async def request_approval(
             await client.post(n8n_url, json={
                 "post_id": str(post_id),
                 "brand_id": str(post["brand_id"]),
-                "telegram_chat_id": config["telegram_chat_id"],
+                "telegram_chat_id": workspace["telegram_chat_id"],
             })
     except Exception:
         pass  # fire-and-forget — n8n ulaşılamasa bile devam et
