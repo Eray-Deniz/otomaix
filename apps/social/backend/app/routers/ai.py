@@ -111,7 +111,7 @@ class SuggestIdeasRequest(BaseModel):
     prompt: str | None = None          # kullanıcının yazdığı açıklama (varsa)
     document_ids: list[UUID] | None = None
     platforms: list[str] | None = None
-    count: int = 3
+    count: int = 5
 
 
 CATEGORY_TR = {

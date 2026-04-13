@@ -229,7 +229,7 @@ export default function IcerikOlusturPage() {
       prompt: prompt.trim() || null,
       document_ids: selectedDocIds.length > 0 ? selectedDocIds : null,
       platforms: platforms.length > 0 ? platforms : null,
-      count: 3,
+      count: 5,
     })
     if (res.success && res.data?.ideas) {
       setIdeas(res.data.ideas)
@@ -661,27 +661,7 @@ export default function IcerikOlusturPage() {
             </div>
           )}
 
-          {/* 4. İçerik Açıklaması — görsel/carousel/special_day/video için */}
-          {contentType !== 'quote' && (
-          <div className="space-y-1.5">
-            <Label>
-              {contentType === 'special_day' ? 'Ek Not (opsiyonel)' : 'İçerik Açıklaması'}
-            </Label>
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                contentType === 'special_day'
-                  ? 'Özel günle ilgili eklemek istediğiniz bir mesaj veya not...'
-                  : 'İçerik hakkında iletmek istediğiniz detayları buraya yazabilirsiniz...'
-              }
-              rows={contentType === 'special_day' ? 2 : 4}
-              className="resize-none"
-            />
-          </div>
-          )}
-
-          {/* 5. Bana fikir öner — sadece image/carousel için */}
+          {/* 4. Bana fikir öner — sadece image/carousel için */}
           {!['video', 'special_day', 'quote'].includes(contentType) && (
           <div className="space-y-2">
             <Button
@@ -707,6 +687,26 @@ export default function IcerikOlusturPage() {
                 ))}
               </div>
             )}
+          </div>
+          )}
+
+          {/* 5 & 6. İçerik Açıklaması & Tasarım Tercihleri — görsel/carousel/special_day/video için */}
+          {contentType !== 'quote' && (
+          <div className="space-y-1.5">
+            <Label>
+              {contentType === 'special_day' ? 'Ek Not (opsiyonel)' : 'İçerik Açıklaması & Tasarım Tercihleri'}
+            </Label>
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder={
+                contentType === 'special_day'
+                  ? 'Özel günle ilgili eklemek istediğiniz bir mesaj veya not...'
+                  : 'İçerik hakkında iletmek istediğiniz detayları buraya yazabilirsiniz...'
+              }
+              rows={contentType === 'special_day' ? 2 : 4}
+              className="resize-none"
+            />
           </div>
           )}
 
