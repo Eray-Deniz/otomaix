@@ -81,7 +81,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
         return OkResponse(data={"post_id": str(post_id), "error": str(exc)})
 
     await db.execute(
-        "UPDATE social.posts SET status = 'generated', output_url = $1, updated_at = now() WHERE id = $2",
+        "UPDATE social.posts SET status = 'ready', output_url = $1, updated_at = now() WHERE id = $2",
         final_url,
         post_id,
     )

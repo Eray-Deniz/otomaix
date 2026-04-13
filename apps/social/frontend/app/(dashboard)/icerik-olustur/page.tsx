@@ -163,6 +163,24 @@ export default function IcerikOlusturPage() {
   const [hashtags, setHashtags] = useState<string[]>([])
   const [newHashtag, setNewHashtag] = useState('')
 
+  // Görsel hazır olana kadar polling
+  useEffect(() => {
+    if (!generatedPost?.post_id || generatedPost.output_url) return
+    let cancelled = false
+    const poll = async () => {
+      if (cancelled) return
+      const res = await api.get<GeneratedPost>(`/posts/${generatedPost.post_id}`)
+      if (cancelled) return
+      if (res.success && res.data?.output_url) {
+        setGeneratedPost(prev => prev ? { ...prev, output_url: res.data!.output_url, status: 'ready' } : prev)
+      } else if (!cancelled) {
+        setTimeout(poll, 3000)
+      }
+    }
+    const timer = setTimeout(poll, 3000)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [generatedPost?.post_id, generatedPost?.output_url])
+
   // ── Fetch brand documents & voices ──────────────────────────────────────────
 
   useEffect(() => {
@@ -620,6 +638,7 @@ export default function IcerikOlusturPage() {
           {!['special_day', 'quote'].includes(contentType) && (
             <div className="space-y-2">
               <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
+              <p className="text-xs text-gray-400">Ürün kataloğu, hizmet listesi veya referans belgesi yükleyin — AI içerik üretirken bu belgeleri baz alır.</p>
               {availableDocs.length === 0 ? (
                 <p className="text-xs text-gray-400 px-1">
                   Henüz yüklü doküman yok.{' '}

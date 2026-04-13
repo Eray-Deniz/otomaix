@@ -90,7 +90,7 @@ async def get_due_configs(
             """
             SELECT COUNT(*) FROM social.posts
             WHERE brand_id = $1
-              AND status IN ('generating', 'generated', 'scheduled', 'publishing', 'published')
+              AND status IN ('generating', 'ready', 'scheduled', 'publishing', 'published')
               AND created_at >= $2
             """,
             config["brand_id"],
@@ -205,6 +205,41 @@ async def get_post_internal(
     if not row:
         return OkResponse(data=None)
     return OkResponse(data=dict(row))
+
+
+@router.get("/posts/scheduled-due", response_model=OkResponse)
+async def get_scheduled_due_posts(
+    _: None = Depends(get_service_auth),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """
+    Return posts whose scheduled_at has passed and are still in 'scheduled' status.
+    Called by n8n Scheduled Post Publisher every 5 minutes.
+    """
+    rows = await db.fetch(
+        """
+        SELECT p.id, p.brand_id, p.platforms, p.scheduled_at,
+               b.name AS brand_name
+        FROM social.posts p
+        JOIN social.brands b ON b.id = p.brand_id
+        WHERE p.status = 'scheduled'
+          AND p.scheduled_at IS NOT NULL
+          AND p.scheduled_at <= NOW()
+        ORDER BY p.scheduled_at ASC
+        LIMIT 50
+        """
+    )
+    due = [
+        {
+            "post_id": str(row["id"]),
+            "brand_id": str(row["brand_id"]),
+            "brand_name": row["brand_name"],
+            "platforms": row["platforms"] or [],
+            "scheduled_at": row["scheduled_at"].isoformat(),
+        }
+        for row in rows
+    ]
+    return OkResponse(data=due)
 
 
 @router.patch("/posts/{post_id}/status", response_model=OkResponse)

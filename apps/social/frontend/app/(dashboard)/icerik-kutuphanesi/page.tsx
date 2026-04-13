@@ -62,20 +62,33 @@ function PostDetailModal({
   onClose,
   onPublished,
   onApprovalRequested,
+  onRegenerated,
+  onScheduled,
 }: {
   post: Post | null
   open: boolean
   onClose: () => void
   onPublished: (postId: string) => void
   onApprovalRequested: (postId: string) => void
+  onRegenerated: (postId: string) => void
+  onScheduled: (postId: string) => void
 }) {
   const [publishing, setPublishing] = useState(false)
   const [requesting, setRequesting] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  const [scheduling, setScheduling] = useState(false)
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false)
+  const [scheduledAt, setScheduledAt] = useState('')
 
   if (!post) return null
 
   const imageUrl = post.output_url ?? post.thumbnail_url
   const canAct = ['ready', 'failed', 'rejected'].includes(post.status)
+
+  // datetime-local min: now + 5 minutes
+  const minDateTime = new Date(Date.now() + 5 * 60 * 1000)
+    .toISOString()
+    .slice(0, 16)
 
   async function handlePublish() {
     setPublishing(true)
@@ -100,6 +113,35 @@ function PostDetailModal({
       onClose()
     } else {
       toast.error(res.error ?? 'Onay isteği gönderilemedi')
+    }
+  }
+
+  async function handleRegenerate() {
+    setRegenerating(true)
+    const res = await api.post(`/posts/${post!.id}/regenerate`, {})
+    setRegenerating(false)
+    if (res.success) {
+      toast.success('Yeniden üretim başlatıldı')
+      onRegenerated(post!.id)
+      onClose()
+    } else {
+      toast.error(res.error ?? 'Yeniden üretim başlatılamadı')
+    }
+  }
+
+  async function handleSchedule() {
+    if (!scheduledAt) return
+    setScheduling(true)
+    const res = await api.patch(`/calendar/schedule/${post!.id}`, {
+      scheduled_at: new Date(scheduledAt).toISOString(),
+    })
+    setScheduling(false)
+    if (res.success) {
+      toast.success('İçerik zamanlandı')
+      onScheduled(post!.id)
+      onClose()
+    } else {
+      toast.error(res.error ?? 'Zamanlama başarısız')
     }
   }
 
@@ -178,19 +220,61 @@ function PostDetailModal({
           </div>
         </div>
 
+        {/* Schedule picker */}
+        {showSchedulePicker && (
+          <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            <input
+              type="datetime-local"
+              min={minDateTime}
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+              className="flex-1 text-sm border border-gray-200 rounded-md px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <Button
+              size="sm"
+              disabled={!scheduledAt || scheduling}
+              onClick={handleSchedule}
+            >
+              {scheduling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Zamanla'}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowSchedulePicker(false)}
+            >
+              <X className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        )}
+
         {/* Actions */}
-        <div className="flex gap-2 pt-2 border-t border-gray-100">
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <RefreshCw className="w-3.5 h-3.5" /> Yeniden Üret
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <Calendar className="w-3.5 h-3.5" /> Zamanla
-          </Button>
-          <div className="ml-auto flex gap-2">
+        <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="gap-1.5"
+              className="flex-1 gap-1.5"
+              disabled={!canAct || regenerating}
+              onClick={handleRegenerate}
+            >
+              {regenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              Yeniden Üret
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5"
+              disabled={!canAct}
+              onClick={() => setShowSchedulePicker((v) => !v)}
+            >
+              <Calendar className="w-3.5 h-3.5" /> Zamanla
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5"
               disabled={!canAct || requesting}
               onClick={handleRequestApproval}
             >
@@ -199,7 +283,7 @@ function PostDetailModal({
             </Button>
             <Button
               size="sm"
-              className="gap-1.5"
+              className="flex-1 gap-1.5"
               disabled={!canAct || publishing}
               onClick={handlePublish}
             >
@@ -384,6 +468,32 @@ export default function IcerikKutuphanesPage() {
     fetchPosts(1, true)
   }, [currentBrand?.id, activeTab, filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Generating olan postlar için polling — output_url gelince otomatik güncelle
+  useEffect(() => {
+    const generatingIds = posts
+      .filter((p) => p.status === 'generating' && !p.output_url)
+      .map((p) => p.id)
+    if (generatingIds.length === 0) return
+
+    const interval = setInterval(async () => {
+      const updates = await Promise.all(
+        generatingIds.map((id) => api.get<Post>(`/posts/${id}`))
+      )
+      let changed = false
+      updates.forEach((res) => {
+        if (res.success && res.data?.output_url) {
+          setPosts((prev) =>
+            prev.map((p) => (p.id === res.data!.id ? { ...p, ...res.data } : p))
+          )
+          changed = true
+        }
+      })
+      if (changed) clearInterval(interval)
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [posts])
+
   // Infinite scroll with IntersectionObserver
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect()
@@ -415,6 +525,14 @@ export default function IcerikKutuphanesPage() {
 
   function handleApprovalRequested(postId: string) {
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'reviewing' } : p))
+  }
+
+  function handleRegenerated(postId: string) {
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'generating', output_url: undefined } : p))
+  }
+
+  function handleScheduled(postId: string) {
+    setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'scheduled' } : p))
   }
 
   async function handlePublishFromCard(post: Post) {
@@ -513,6 +631,8 @@ export default function IcerikKutuphanesPage() {
         onClose={() => { setModalOpen(false); setSelectedPost(null) }}
         onPublished={handlePublished}
         onApprovalRequested={handleApprovalRequested}
+        onRegenerated={handleRegenerated}
+        onScheduled={handleScheduled}
       />
     </div>
   )
