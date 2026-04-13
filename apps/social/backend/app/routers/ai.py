@@ -106,7 +106,11 @@ from pydantic import BaseModel
 
 class SuggestIdeasRequest(BaseModel):
     brand_id: UUID
+    content_type: str = "image"        # image | carousel | video | special_day | quote
     content_category: str = "product"  # product | service | corporate
+    prompt: str | None = None          # kullanıcının yazdığı açıklama (varsa)
+    document_ids: list[UUID] | None = None
+    platforms: list[str] | None = None
     count: int = 3
 
 
@@ -114,6 +118,14 @@ CATEGORY_TR = {
     "product": "ürün tanıtımı",
     "service": "hizmet tanıtımı",
     "corporate": "firma tanıtımı",
+}
+
+CONTENT_TYPE_TR = {
+    "image": "görsel (statik fotoğraf / illüstrasyon)",
+    "carousel": "carousel (birden fazla kayan görsel)",
+    "video": "kısa video / reel",
+    "special_day": "özel gün / bayram kutlaması görseli",
+    "quote": "alıntı kartı (metin ağırlıklı)",
 }
 
 
@@ -127,7 +139,9 @@ async def suggest_ideas(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Generate content idea suggestions using Claude based on brand kit."""
+    """Generate content idea suggestions using Claude based on full context."""
+    from app.services.document_processor import get_document_context
+
     brand = await db.fetchrow(
         "SELECT name, sector, brand_kit FROM social.brands WHERE id = $1", payload.brand_id
     )
@@ -138,19 +152,47 @@ async def suggest_ideas(
     tonality = brand_kit.get("tonality", "professional")
     hashtags = brand_kit.get("hashtags", [])
     category_tr = CATEGORY_TR.get(payload.content_category, payload.content_category)
+    content_type_tr = CONTENT_TYPE_TR.get(payload.content_type, payload.content_type)
+    platforms_str = ", ".join(payload.platforms) if payload.platforms else "belirtilmemiş"
+
+    # Doküman bağlamı (varsa)
+    doc_context = ""
+    if payload.document_ids:
+        base_query = payload.prompt or f"{brand['name']} sosyal medya içerik fikirleri"
+        doc_context = await get_document_context(payload.document_ids, base_query, db) or ""
 
     system_prompt = (
-        f"Sen bir sosyal medya içerik uzmanısın. Türkçe ve {tonality} bir üslupla "
-        f"fikir önerileri üretiyorsun. Her fikir tek cümle, net ve uygulanabilir olmalı."
+        f"Sen Türk KOBİ'lerine sosyal medya içeriği üreten bir uzmansın. "
+        f"Türkçe ve {tonality} bir üslupla, verilen tüm bağlamı dikkate alarak "
+        f"içerik fikri önerileri üretiyorsun. "
+        f"Her fikir tek cümle, net, uygulanabilir ve seçilen içerik tipine uygun olmalı."
     )
-    user_prompt = (
-        f"Marka adı: {brand['name']}\n"
-        f"Sektör: {brand['sector'] or 'Belirtilmemiş'}\n"
-        f"İçerik kategorisi: {category_tr}\n"
-        f"Popüler hashtagler: {', '.join(hashtags[:5]) if hashtags else 'Yok'}\n\n"
-        f"Bu marka için {payload.count} farklı sosyal medya içerik fikri öner. "
+
+    user_prompt_parts = [
+        f"Marka adı: {brand['name']}",
+        f"Sektör: {brand['sector'] or 'Belirtilmemiş'}",
+        f"İçerik tipi: {content_type_tr}",
+        f"İçerik kategorisi: {category_tr}",
+        f"Hedef platformlar: {platforms_str}",
+        f"Marka tonu: {tonality}",
+        f"Popüler hashtagler: {', '.join(hashtags[:5]) if hashtags else 'Yok'}",
+    ]
+
+    if payload.prompt and payload.prompt.strip():
+        user_prompt_parts.append(f"\nKullanıcının belirttiği konu/yön: {payload.prompt.strip()}")
+
+    if doc_context:
+        user_prompt_parts.append(f"\nReferans doküman içeriği:\n{doc_context}")
+
+    user_prompt_parts.append(
+        f"\nYukarıdaki tüm bilgileri göz önüne alarak bu marka için "
+        f"{payload.count} farklı sosyal medya içerik fikri öner. "
+        f"Öneriler '{content_type_tr}' formatına uygun olmalı — "
+        f"örneğin video tipiyse görsel tasarım değil video senaryosu/konu fikirleri öner. "
         f"Sadece numaralı liste olarak yaz, başka açıklama ekleme."
     )
+
+    user_prompt = "\n".join(user_prompt_parts)
 
     try:
         import anthropic
@@ -168,16 +210,13 @@ async def suggest_ideas(
             line = line.strip()
             if not line:
                 continue
-            # Strip leading "1. " / "1) " / "- "
-            for prefix in ("1. ", "2. ", "3. ", "4. ", "5. ", "1) ", "2) ", "3) ", "- "):
-                if line.startswith(prefix):
-                    line = line[len(prefix):]
-                    break
+            import re
+            line = re.sub(r"^\d+[\.\)]\s*", "", line)  # "1. " / "1) " gibi önekleri kaldır
+            line = re.sub(r"^[-•]\s*", "", line)        # "- " / "• " öneklerini kaldır
             if line:
                 ideas.append(line)
         ideas = ideas[: payload.count]
     except Exception:
-        # Fallback ideas if API unavailable
         ideas = [
             f"{brand['name']} ile fark yaratın — yeni ürünlerimizi keşfedin!",
             f"Müşterilerimizin deneyimlerini sizinle paylaşıyoruz.",

@@ -6,7 +6,6 @@ import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
@@ -137,8 +136,6 @@ export default function IcerikOlusturPage() {
   const [prompt, setPrompt] = useState('')
   const [ideas, setIdeas] = useState<string[]>([])
   const [loadingIdeas, setLoadingIdeas] = useState(false)
-  const [useOwnText, setUseOwnText] = useState(false)
-  const [ownText, setOwnText] = useState('')
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
   const [platforms, setPlatforms] = useState<string[]>(['instagram'])
   const [availableDocs, setAvailableDocs] = useState<BrandDocument[]>([])
@@ -227,7 +224,11 @@ export default function IcerikOlusturPage() {
     setLoadingIdeas(true)
     const res = await api.post<{ ideas: string[] }>('/ai/suggest-ideas', {
       brand_id: currentBrand.id,
+      content_type: contentType,
       content_category: category,
+      prompt: prompt.trim() || null,
+      document_ids: selectedDocIds.length > 0 ? selectedDocIds : null,
+      platforms: platforms.length > 0 ? platforms : null,
       count: 3,
     })
     if (res.success && res.data?.ideas) {
@@ -345,7 +346,7 @@ export default function IcerikOlusturPage() {
         content_type: contentType,
         content_category: category,
         prompt: prompt.trim(),
-        user_text: useOwnText ? ownText.trim() || null : null,
+        user_text: null,
         document_ids: selectedDocIds,
         aspect_ratio: aspectRatio,
         platforms,
@@ -571,7 +572,98 @@ export default function IcerikOlusturPage() {
             </div>
           )}
 
-          {/* Prompt — görsel/carousel/special_day için */}
+          {/* 1. En-Boy Oranı — video/special_day/quote için gösterilmez */}
+          {!['video', 'special_day', 'quote'].includes(contentType) && (
+          <div className="space-y-2">
+            <Label>En-Boy Oranı</Label>
+            <div className="grid grid-cols-4 gap-2">
+              {ASPECT_RATIOS.map((ar) => (
+                <button
+                  key={ar.id}
+                  onClick={() => setAspectRatio(ar.id)}
+                  className={cn(
+                    'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
+                    aspectRatio === ar.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                  )}
+                >
+                  <span className="text-xl">{ar.icon}</span>
+                  <span className="text-xs font-bold text-gray-800">{ar.label}</span>
+                  <span className="text-[10px] text-gray-400">{ar.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          )}
+
+          {/* 2. Platformlar */}
+          <div className="space-y-2">
+            <Label>Platformlar</Label>
+            <div className="flex flex-wrap gap-2">
+              {PLATFORMS.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => togglePlatform(p.id)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                    platforms.includes(p.id)
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Dokümanlar — special_day ve quote için gereksiz */}
+          {!['special_day', 'quote'].includes(contentType) && (
+            <div className="space-y-2">
+              <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
+              {availableDocs.length === 0 ? (
+                <p className="text-xs text-gray-400 px-1">
+                  Henüz yüklü doküman yok.{' '}
+                  <a href="/marka-ayarlari?tab=belgeler" className="text-blue-500 hover:underline">
+                    Marka Ayarları → Dokümanlar
+                  </a>
+                  {' '}bölümünden ürün kataloğu, fiyat listesi vb. yükleyebilirsiniz.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {availableDocs.map((doc) => (
+                    <button
+                      key={doc.id}
+                      onClick={() => toggleDoc(doc.id)}
+                      className={cn(
+                        'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
+                        selectedDocIds.includes(doc.id)
+                          ? 'border-blue-500 bg-blue-50 text-blue-800'
+                          : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                      )}
+                    >
+                      <FileText className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate">{doc.name}</span>
+                      {doc.file_size_kb && (
+                        <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{doc.file_size_kb} KB</span>
+                      )}
+                      {selectedDocIds.includes(doc.id) && (
+                        <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
+                      )}
+                    </button>
+                  ))}
+                  {selectedDocIds.length > 0 && (
+                    <p className="text-xs text-blue-600">
+                      {selectedDocIds.length} doküman seçildi — AI içerik üretirken bu belgeleri referans alacak
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 4. İçerik Açıklaması — görsel/carousel/special_day/video için */}
           {contentType !== 'quote' && (
           <div className="space-y-1.5">
             <Label>
@@ -583,7 +675,7 @@ export default function IcerikOlusturPage() {
               placeholder={
                 contentType === 'special_day'
                   ? 'Özel günle ilgili eklemek istediğiniz bir mesaj veya not...'
-                  : 'Ürününüzü, hedef kitlenizi veya iletmek istediğiniz mesajı açıklayın...'
+                  : 'İçerik hakkında iletmek istediğiniz detayları buraya yazabilirsiniz...'
               }
               rows={contentType === 'special_day' ? 2 : 4}
               className="resize-none"
@@ -591,7 +683,7 @@ export default function IcerikOlusturPage() {
           </div>
           )}
 
-          {/* Idea suggestions — sadece image/carousel için */}
+          {/* 5. Bana fikir öner — sadece image/carousel için */}
           {!['video', 'special_day', 'quote'].includes(contentType) && (
           <div className="space-y-2">
             <Button
@@ -685,114 +777,7 @@ export default function IcerikOlusturPage() {
             </div>
           )}
 
-          {/* Optional: own text (sadece görsel/carousel için) */}
-          {!['video', 'special_day', 'quote'].includes(contentType) && (
-          <div className="space-y-2 p-3 bg-gray-50 rounded-xl">
-            <div className="flex items-center justify-between">
-              <Label className="font-normal text-sm">Kendi metnini ekle</Label>
-              <Switch checked={useOwnText} onCheckedChange={setUseOwnText} />
-            </div>
-            {useOwnText && (
-              <Textarea
-                value={ownText}
-                onChange={(e) => setOwnText(e.target.value)}
-                placeholder="Görselde yer almasını istediğiniz sabit metin..."
-                rows={2}
-                className="resize-none bg-white"
-              />
-            )}
-          </div>
-          )}
-
-          {/* Aspect ratio */}
-          <div className="space-y-2">
-            <Label>En-Boy Oranı</Label>
-            <div className="grid grid-cols-4 gap-2">
-              {ASPECT_RATIOS.map((ar) => (
-                <button
-                  key={ar.id}
-                  onClick={() => setAspectRatio(ar.id)}
-                  className={cn(
-                    'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
-                    aspectRatio === ar.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-300'
-                  )}
-                >
-                  <span className="text-xl">{ar.icon}</span>
-                  <span className="text-xs font-bold text-gray-800">{ar.label}</span>
-                  <span className="text-[10px] text-gray-400">{ar.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Platforms */}
-          <div className="space-y-2">
-            <Label>Platformlar</Label>
-            <div className="flex flex-wrap gap-2">
-              {PLATFORMS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => togglePlatform(p.id)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                    platforms.includes(p.id)
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                  )}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Documents — special_day ve quote için gereksiz */}
-          {!['special_day', 'quote'].includes(contentType) && (
-            <div className="space-y-2">
-              <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
-              {availableDocs.length === 0 ? (
-                <p className="text-xs text-gray-400 px-1">
-                  Henüz yüklü doküman yok.{' '}
-                  <a href="/marka-ayarlari?tab=belgeler" className="text-blue-500 hover:underline">
-                    Marka Ayarları → Dokümanlar
-                  </a>
-                  {' '}bölümünden ürün kataloğu, fiyat listesi vb. yükleyebilirsiniz.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {availableDocs.map((doc) => (
-                    <button
-                      key={doc.id}
-                      onClick={() => toggleDoc(doc.id)}
-                      className={cn(
-                        'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
-                        selectedDocIds.includes(doc.id)
-                          ? 'border-blue-500 bg-blue-50 text-blue-800'
-                          : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                      )}
-                    >
-                      <FileText className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{doc.name}</span>
-                      {doc.file_size_kb && (
-                        <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{doc.file_size_kb} KB</span>
-                      )}
-                      {selectedDocIds.includes(doc.id) && (
-                        <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
-                      )}
-                    </button>
-                  ))}
-                  {selectedDocIds.length > 0 && (
-                    <p className="text-xs text-blue-600">
-                      {selectedDocIds.length} doküman seçildi — AI içerik üretirken bu belgeleri referans alacak
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
+          {/* 6. İçerik Üret butonu */}
           <Button
             onClick={handleGenerate}
             className="w-full gap-2"
