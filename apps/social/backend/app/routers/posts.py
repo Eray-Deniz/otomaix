@@ -226,7 +226,7 @@ async def regenerate_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
-    brand_kit = dict(post["brand_kit"]) if post["brand_kit"] else {}
+    brand_kit = _parse_brand_kit(post["brand_kit"])
     await db.execute(
         "UPDATE social.posts SET status = 'generating', output_url = NULL, thumbnail_url = NULL WHERE id = $1",
         post_id,

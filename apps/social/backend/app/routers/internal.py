@@ -150,7 +150,11 @@ async def trigger_autopost(
     if not brand:
         return OkResponse(data={"error": f"Brand {brand_id} not found"})
 
-    brand_kit = dict(brand["brand_kit"]) if brand["brand_kit"] else {}
+    raw_kit = brand["brand_kit"]
+    if raw_kit and isinstance(raw_kit, str):
+        import json as _json
+        raw_kit = _json.loads(raw_kit)
+    brand_kit = dict(raw_kit) if raw_kit else {}
 
     row = await db.fetchrow(
         """

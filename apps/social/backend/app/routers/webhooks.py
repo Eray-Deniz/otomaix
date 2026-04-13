@@ -53,7 +53,11 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             "SELECT brand_kit, logo_light_url, intro_video_url FROM social.brands WHERE id = $1",
             brand_id,
         )
-        brand_kit = dict(brand["brand_kit"]) if brand and brand["brand_kit"] else {}
+        raw_kit = brand["brand_kit"] if brand else None
+        if raw_kit and isinstance(raw_kit, str):
+            import json as _json
+            raw_kit = _json.loads(raw_kit)
+        brand_kit = dict(raw_kit) if raw_kit else {}
         logo_url = brand["logo_light_url"] if brand else None
         intro_video_url = brand["intro_video_url"] if brand else None
 
