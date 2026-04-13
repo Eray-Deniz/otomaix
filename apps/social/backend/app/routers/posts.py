@@ -387,16 +387,16 @@ async def request_approval(
     # Telegram bilgilerini workspace ayarlarından al
     workspace = await db.fetchrow(
         """
-        SELECT w.telegram_chat_id
+        SELECT w.telegram_bot_token, w.telegram_chat_id
         FROM social.workspaces w
         WHERE w.account_id = $1
         """,
         user["sub"],
     )
-    if not workspace or not workspace["telegram_chat_id"]:
+    if not workspace or not workspace["telegram_chat_id"] or not workspace["telegram_bot_token"]:
         raise HTTPException(
             status_code=400,
-            detail="Telegram konfigürasyonu bulunamadı. Ayarlar sayfasından Telegram bilgilerini girin.",
+            detail="Telegram konfigürasyonu bulunamadı. Ayarlar sayfasından Bot Token ve Chat ID girin.",
         )
 
     # Post durumunu 'reviewing' yap
@@ -412,6 +412,7 @@ async def request_approval(
             await client.post(n8n_url, json={
                 "post_id": str(post_id),
                 "brand_id": str(post["brand_id"]),
+                "telegram_bot_token": workspace["telegram_bot_token"],
                 "telegram_chat_id": workspace["telegram_chat_id"],
             })
     except Exception:
