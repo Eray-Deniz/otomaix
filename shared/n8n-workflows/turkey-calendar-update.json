@@ -1,0 +1,95 @@
+{
+  "id": "tTk1VroTh4AS8lxI",
+  "name": "Türkiye Takvimi Güncelleme",
+  "active": false,
+  "nodes": [
+    {
+      "id": "node1",
+      "name": "Her Yıl 1 Ocak",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 1 1 *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "node2",
+      "name": "Tatilleri Topla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Mevcut yılı al\nconst year = new Date().getFullYear();\n\n// Hicri yıl hesapla (yaklaşık formül + fallback loop)\nconst hijriYear = Math.floor((year - 622) / 0.97);\n\n// --- 1. Milli tatiller: date.nager.at ---\nlet nationalHolidays = [];\ntry {\n  const res = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/TR`);\n  nationalHolidays = await res.json();\n  console.log('Nager.at:', nationalHolidays.length, 'tatil bulundu');\n} catch(e) {\n  console.log('Nager.at hatası:', e.message);\n}\n\n// --- 2. Ramazan Bayramı: 1 Şevval ---\nlet eidFitrDate = null;\nfor (const hy of [hijriYear, hijriYear + 1]) {\n  try {\n    const res = await fetch(`https://api.aladhan.com/v1/hToG/01-10-${hy}`);\n    const data = await res.json();\n    const parts = data.data.gregorian.date.split('-'); // DD-MM-YYYY\n    const dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD\n    console.log(`Ramazan Bayramı hicri ${hy}:`, dateStr);\n    if (dateStr.startsWith(String(year))) {\n      eidFitrDate = dateStr;\n      break;\n    }\n  } catch(e) {\n    console.log('Aladhan Ramazan hatası:', e.message);\n  }\n}\n\n// --- 3. Kurban Bayramı: 10 Zilhicce ---\nlet eidAdhaDate = null;\nfor (const hy of [hijriYear, hijriYear + 1]) {\n  try {\n    const res = await fetch(`https://api.aladhan.com/v1/hToG/10-12-${hy}`);\n    const data = await res.json();\n    const parts = data.data.gregorian.date.split('-'); // DD-MM-YYYY\n    const dateStr = `${parts[2]}-${parts[1]}-${parts[0]}`; // YYYY-MM-DD\n    console.log(`Kurban Bayramı hicri ${hy}:`, dateStr);\n    if (dateStr.startsWith(String(year))) {\n      eidAdhaDate = dateStr;\n      break;\n    }\n  } catch(e) {\n    console.log('Aladhan Kurban hatası:', e.message);\n  }\n}\n\n// --- Türkçe isim eşleştirme ---\nconst nameMap = {\n  \"New Year's Day\": 'Yılbaşı',\n  \"National Independence & Children's Day\": 'Ulusal Egemenlik ve Çocuk Bayramı',\n  'Labour Day': 'İşçi Bayramı',\n  \"Atatürk Commemoration & Youth Day\": \"Atatürk'ü Anma, Gençlik ve Spor Bayramı\",\n  'Democracy and National Unity Day': 'Demokrasi ve Millî Birlik Günü',\n  'Victory Day': 'Zafer Bayramı',\n  'Republic Day': 'Cumhuriyet Bayramı',\n};\n\n// --- Tatil listesini oluştur ---\nconst holidays = [];\n\n// 1. Milli tatiller (nager.at)\nfor (const h of nationalHolidays) {\n  holidays.push({\n    year,\n    date: h.date,\n    name_tr: nameMap[h.name] || h.name,\n    name_en: h.name,\n    category: 'national'\n  });\n}\n\n// 2. 18 Mart Çanakkale (nager.at'ta yok)\nholidays.push({\n  year,\n  date: `${year}-03-18`,\n  name_tr: 'Çanakkale Şehitlerini Anma Günü',\n  name_en: 'Canakkale Martyrs Commemoration Day',\n  category: 'national'\n});\n\n// 3. Ramazan Bayramı (dini)\nif (eidFitrDate) {\n  const eidDate = new Date(eidFitrDate);\n  const arife = new Date(eidDate);\n  arife.setDate(arife.getDate() - 1);\n  if (arife.getFullYear() === year) {\n    holidays.push({ year, date: arife.toISOString().split('T')[0], name_tr: 'Ramazan Bayramı Arife', name_en: 'Eid al-Fitr Eve', category: 'religious' });\n  }\n  for (let i = 0; i < 3; i++) {\n    const d = new Date(eidDate);\n    d.setDate(d.getDate() + i);\n    if (d.getFullYear() === year) {\n      holidays.push({ year, date: d.toISOString().split('T')[0], name_tr: `Ramazan Bayramı ${i+1}. Gün`, name_en: `Eid al-Fitr Day ${i+1}`, category: 'religious' });\n    }\n  }\n} else {\n  console.log('UYARI: Ramazan Bayramı tarihi bulunamadı!');\n}\n\n// 4. Kurban Bayramı (dini)\nif (eidAdhaDate) {\n  const eidDate = new Date(eidAdhaDate);\n  const arife = new Date(eidDate);\n  arife.setDate(arife.getDate() - 1);\n  if (arife.getFullYear() === year) {\n    holidays.push({ year, date: arife.toISOString().split('T')[0], name_tr: 'Kurban Bayramı Arife', name_en: 'Eid al-Adha Eve', category: 'religious' });\n  }\n  for (let i = 0; i < 4; i++) {\n    const d = new Date(eidDate);\n    d.setDate(d.getDate() + i);\n    if (d.getFullYear() === year) {\n      holidays.push({ year, date: d.toISOString().split('T')[0], name_tr: `Kurban Bayramı ${i+1}. Gün`, name_en: `Eid al-Adha Day ${i+1}`, category: 'religious' });\n    }\n  }\n} else {\n  console.log('UYARI: Kurban Bayramı tarihi bulunamadı!');\n}\n\n// 5. Ticari günler\nfunction getNthWeekday(yr, month, weekday, n) {\n  const d = new Date(yr, month, 1);\n  const firstDay = d.getDay();\n  let offset = weekday - firstDay;\n  if (offset < 0) offset += 7;\n  const firstDate = 1 + offset;\n  const targetDate = firstDate + (n - 1) * 7;\n  return new Date(yr, month, targetDate).toISOString().split('T')[0];\n}\n\nholidays.push({ year, date: `${year}-02-14`, name_tr: 'Sevgililer Günü', name_en: \"Valentine's Day\", category: 'commercial' });\nholidays.push({ year, date: getNthWeekday(year, 4, 0, 2), name_tr: 'Anneler Günü', name_en: \"Mother's Day\", category: 'commercial' });\nholidays.push({ year, date: getNthWeekday(year, 5, 0, 3), name_tr: 'Babalar Günü', name_en: \"Father's Day\", category: 'commercial' });\nholidays.push({ year, date: getNthWeekday(year, 10, 5, 4), name_tr: 'Black Friday', name_en: 'Black Friday', category: 'commercial' });\n\nconsole.log('Toplam tatil sayısı:', holidays.length);\nreturn holidays.map(h => ({ json: h }));"
+      }
+    },
+    {
+      "id": "node3",
+      "name": "SQL Oluştur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nif (items.length === 0) {\n  return [{ json: { sql: 'SELECT 1', count: 0, year: new Date().getFullYear() } }];\n}\n\nconst escape = (s) => String(s || '').replace(/'/g, \"''\");\n\nconst values = items.map(item => {\n  const h = item.json;\n  return `(${h.year}, '${h.date}'::date, '${escape(h.name_tr)}', '${escape(h.name_en)}', '${escape(h.category)}')`;\n}).join(',\\n');\n\nconst sql = `INSERT INTO social.public_holidays (year, date, name_tr, name_en, category)\\nVALUES ${values}\\nON CONFLICT (year, date) DO UPDATE SET\\n  name_tr = EXCLUDED.name_tr,\\n  name_en = EXCLUDED.name_en,\\n  category = EXCLUDED.category`;\n\nconst year = items[0].json.year;\nreturn [{ json: { sql, count: items.length, year } }];"
+      }
+    },
+    {
+      "id": "node4",
+      "name": "Tatilleri Kaydet",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [960, 300],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}"
+      },
+      "credentials": {
+        "postgres": {
+          "id": "LRCmorU07F9lRpjV",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "node5",
+      "name": "Telegram Bildirimi",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"1634464595\",\n  \"text\": \"✅ {{ $('SQL Oluştur').item.json.year }} yılı Türkiye takvimi güncellendi. {{ $('SQL Oluştur').item.json.count }} özel gün eklendi.\",\n  \"parse_mode\": \"HTML\"\n}"
+      }
+    }
+  ],
+  "connections": {
+    "Her Yıl 1 Ocak": {
+      "main": [[{"node": "Tatilleri Topla", "type": "main", "index": 0}]]
+    },
+    "Tatilleri Topla": {
+      "main": [[{"node": "SQL Oluştur", "type": "main", "index": 0}]]
+    },
+    "SQL Oluştur": {
+      "main": [[{"node": "Tatilleri Kaydet", "type": "main", "index": 0}]]
+    },
+    "Tatilleri Kaydet": {
+      "main": [[{"node": "Telegram Bildirimi", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul"
+  }
+}

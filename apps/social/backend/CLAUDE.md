@@ -162,6 +162,13 @@ app.include_router(webhooks.router)
 ## n8n Workflow'ları
 - **Auto Posting Scheduler** — ID: `Nz4651wCfBHP4G9l` | `shared/n8n-workflows/auto-posting-scheduler.json`
 - **Telegram İçerik Onay** — ID: `D49KNE35cONz2APb` | `shared/n8n-workflows/telegram-content-approval.json`
+- **Türkiye Takvimi Güncelleme** — ID: `tTk1VroTh4AS8lxI` | `shared/n8n-workflows/turkey-calendar-update.json`
+  - Her yıl 1 Ocak 00:00'da çalışır (cron: `0 0 1 1 *`)
+  - Kaynaklar: date.nager.at (milli tatiller) + api.aladhan.com (dini bayramlar — API key gereksiz)
+  - Kapsar: 7 milli tatil + 18 Mart Çanakkale + Ramazan/Kurban (arife dahil) + Sevgililer/Anneler/Babalar/Black Friday
+  - social.public_holidays tablosuna upsert yapar
+  - ⚠️ n8n'de **inactive** — aktif etmek için n8n UI'dan "Activate" yap
+  - ⚠️ İlk çalıştırma için n8n UI'dan "Test workflow" ile 2026 verilerini yükle
 - Her ikisi de n8n'de mevcut ama **inactive** — aktif etmek için aşağıya bak.
 
 ## requirements.txt (önemli eklemeler)
