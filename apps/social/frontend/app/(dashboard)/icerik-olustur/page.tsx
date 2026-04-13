@@ -239,7 +239,7 @@ export default function IcerikOlusturPage() {
       toast.error('Fikirler alınamadı — lütfen tekrar deneyin')
     }
     setLoadingIdeas(false)
-  }, [currentBrand?.id, category])
+  }, [currentBrand?.id, category, contentType, platforms, prompt, selectedDocIds])
 
   function togglePlatform(id: string) {
     setPlatforms((prev) =>
@@ -394,8 +394,6 @@ export default function IcerikOlusturPage() {
     setGeneratedPost(null)
     setCaption('')
     setHashtags([])
-    setUseOwnText(false)
-    setOwnText('')
     setSelectedDocIds([])
     setScript('')
     setDurationEstimate(null)
