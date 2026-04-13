@@ -79,8 +79,12 @@ NEXT_PUBLIC_ASSETS_URL=https://assets.otomaix.com
 - [x] Adım 4 — İçerik Takvimi (`/takvim`)
   - FullCalendar (dayGrid + timeGrid + interaction, Türkçe locale)
   - Aylık / Haftalık toggle
-  - Durum renkleri + legend
-  - Resmi tatil background events
+  - Durum renkleri + legend (milli tatil mor, dini bayram amber)
+  - Tatil gösterimi: **her tatil için 2 event** ekleniyor
+    - `holiday-bg-{date}`: `display:'background'` → renkli arka plan (milli: #7C3AED, dini: #F59E0B)
+    - `holiday-label-{date}`: transparent event → `extendedProps.isHolidayLabel: true` → isim yazısı
+    - ⚠️ `display:'background'` event başlık gösteremiyor — bu yüzden ayrı label event şart
+    - `globals.css` → `.fc-bg-event { opacity: 0.5 }` (0.25 çok düşüktü, görünmüyordu)
   - Drag & drop → PATCH /calendar/schedule
   - Geçmiş tarih koruması + yeni içerik dialog
   - Post detay modal
