@@ -307,13 +307,23 @@ export default function TakvimPage() {
 
     if (holidaysRes.success && holidaysRes.data) {
       for (const h of holidaysRes.data) {
+        // Arka plan rengi
         postEvents.push({
-          id: `holiday-${h.date}`,
-          title: h.name_tr,
+          id: `holiday-bg-${h.date}`,
+          title: '',
           date: h.date,
           display: 'background',
           backgroundColor: h.category === 'religious' ? '#F59E0B' : '#7C3AED',
-          classNames: ['holiday-event'],
+        })
+        // İsim etiketi
+        postEvents.push({
+          id: `holiday-label-${h.date}`,
+          title: h.name_tr,
+          date: h.date,
+          backgroundColor: 'transparent',
+          borderColor: 'transparent',
+          textColor: h.category === 'religious' ? '#92400E' : '#4C1D95',
+          extendedProps: { isHolidayLabel: true, category: h.category },
         })
       }
     }
@@ -460,6 +470,19 @@ export default function TakvimPage() {
             moreLinkText={(n) => `+${n} daha`}
             eventContent={(arg) => {
               if (arg.event.display === 'background') return null
+              if (arg.event.extendedProps?.isHolidayLabel) {
+                const isReligious = arg.event.extendedProps.category === 'religious'
+                return (
+                  <div className="px-1 overflow-hidden w-full" style={{ pointerEvents: 'none' }}>
+                    <span
+                      className="text-[10px] font-semibold truncate leading-tight block"
+                      style={{ color: isReligious ? '#92400E' : '#4C1D95' }}
+                    >
+                      {arg.event.title}
+                    </span>
+                  </div>
+                )
+              }
               return (
                 <div className="flex items-center gap-1 px-1.5 py-0.5 overflow-hidden">
                   <div
