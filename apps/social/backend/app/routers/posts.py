@@ -24,6 +24,13 @@ def _parse_brand_kit(raw) -> dict:
     return dict(raw)
 
 
+CATEGORY_TR = {
+    "product": "ürün tanıtımı",
+    "service": "hizmet tanıtımı",
+    "corporate": "firma tanıtımı",
+}
+
+
 async def _build_prompt_with_rag(
     payload: PostGenerate,
     brand: object,
@@ -32,12 +39,20 @@ async def _build_prompt_with_rag(
 ) -> str:
     """Build an enriched image/content prompt by injecting document context."""
     base_prompt = payload.prompt or ""
+    category_tr = CATEGORY_TR.get(payload.content_category or "", "")
 
+    # Doküman seçilmemişse bile kategoriyi prompt'a ekle
     if not payload.document_ids:
+        if category_tr and base_prompt:
+            return f"{category_tr} odaklı görsel: {base_prompt}"
+        elif category_tr:
+            return f"{category_tr} odaklı sosyal medya görseli"
         return base_prompt
 
     doc_context = await get_document_context(payload.document_ids, base_prompt, db)
     if not doc_context:
+        if category_tr and base_prompt:
+            return f"{category_tr} odaklı görsel: {base_prompt}"
         return base_prompt
 
     brand_name = brand["name"] if brand["name"] else ""
@@ -51,6 +66,7 @@ async def _build_prompt_with_rag(
 Marka Bilgileri:
 - İsim: {brand_name}
 - Sektör: {sector}
+- İçerik Kategorisi: {category_tr}
 - Ton: {tonality}
 - Renkler: {colors}
 - Hashtag'ler: {hashtags}
@@ -180,8 +196,9 @@ async def generate_post(
             fal_job_id,
         )
         post["fal_job_id"] = fal_job_id
-    except Exception:
-        pass  # Generation failure handled via webhook; status stays 'generating'
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"fal.ai generate_image failed for post {post['id']}: {e}", exc_info=True)
 
     return OkResponse(data={
         "post_id": str(post["id"]),
