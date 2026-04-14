@@ -57,19 +57,8 @@ async def add_competitor(
     )
     competitor = dict(row)
 
-    # Analizi arka planda çalıştır
+    # Analizi çalıştır ve sonucu kaydet
     analysis_data = await run_full_analysis(competitor)
-    updated = await db.fetchrow(
-        """
-        UPDATE social.competitor_analyses
-        SET analysis_data = $2, last_analyzed_at = now()
-        WHERE id = $1
-        RETURNING *
-        """,
-        competitor["id"],
-        str(analysis_data).replace("'", '"'),  # JSON string olarak kaydet
-    )
-    # asyncpg JSONB için düzgün update
     import json
     await db.execute(
         """

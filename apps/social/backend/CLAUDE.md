@@ -1,5 +1,13 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — Teknik Analiz Raporu Fix'leri (rev-1)
+
+### [B-4] competitors.py — ölü UPDATE bloğu silindi
+- `app/routers/competitors.py:add_competitor` içindeki ilk UPDATE (satır 62-71) tamamen kaldırıldı.
+- `str(dict).replace("'", '"')` ile JSONB'ye yazmaya çalışan bu blok valid JSON üretmediği için tip hatası fırlatabiliyor ve ardından gelen doğru `json.dumps() + ::jsonb` UPDATE'ini engelliyordu.
+- `import json` fonksiyon başına taşındı (tek doğru UPDATE kullanılıyor).
+- Risk: yok — tamamen ölü kod silme.
+
 ## Proje Amacı
 Otomaix Social uygulamasının FastAPI backend'i. api.otomaix.com'da çalışır.
 
