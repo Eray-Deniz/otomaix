@@ -1,5 +1,11 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — N8N-9: Türkiye Takvimi workflow aktive
+
+Analiz raporundaki P2 bulgusu N8N-9. Workflow (`tTk1VroTh4AS8lxI`) daha önce kurulmuş, 2026 tatilleri `social.public_holidays` tablosunda zaten 22 satır olarak mevcut (manuel seed veya önceki test çalıştırması). Tek eksik: workflow `active: false` durumundaydı — cron `0 0 1 1 *` (her yıl 1 Ocak 00:00 Europe/Istanbul) inactive olduğu için 2027 1 Ocak'ta tetiklenmeyecek, 2027 tatilleri DB'ye hiç yüklenmeyecekti.
+
+**Fix:** n8n public API `POST /workflows/{id}/activate` → `active: true`. Kod değişikliği yok, local JSON zaten güncel. `workflowPublishHistory` event `activated`. Kritik kontrol noktası: 2027-01-01 00:00 Istanbul tick'inde execution log'unda Telegram bildirimi "✅ 2027 yılı Türkiye takvimi güncellendi. N özel gün eklendi."
+
 ## 2026-04-14 — B-3: autoposting_configs telegram kolonları temizlik
 
 Analiz raporundaki P2 bulgusu B-3. Telegram ayarları commit `58af268` ile workspace seviyesine taşınmış, eski `social.autoposting_configs.telegram_bot_token` / `telegram_chat_id` kolonları kod seviyesinde zaten kullanılmıyordu:
