@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ContentCard, type Post } from '@/components/content/ContentCard'
+import { ContentCard, type Post, type PostPublication } from '@/components/content/ContentCard'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
@@ -53,7 +53,13 @@ const PLATFORM_OPTIONS = [
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Taslak', generating: 'Üretiliyor', ready: 'Hazır',
   scheduled: 'Zamanlandı', publishing: 'Yayınlanıyor', published: 'Yayınlandı',
+  partially_published: 'Kısmen Yayınlandı',
   failed: 'Başarısız', reviewing: 'İncelemede', rejected: 'Reddedildi',
+}
+
+const PLATFORM_LABEL: Record<string, string> = {
+  instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn',
+  facebook: 'Facebook', youtube: 'YouTube', twitter: 'Twitter / X',
 }
 
 function PostDetailModal({
@@ -79,7 +85,21 @@ function PostDetailModal({
   const [scheduling, setScheduling] = useState(false)
   const [showSchedulePicker, setShowSchedulePicker] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
+  const [publications, setPublications] = useState<PostPublication[]>([])
+  const [retryingPlatform, setRetryingPlatform] = useState<string | null>(null)
   const publishingRef = useRef(false)
+
+  // Modal açıldığında /posts/{id} ile güncel publications'ı çek
+  useEffect(() => {
+    if (!open || !post) { setPublications([]); return }
+    let cancelled = false
+    api.get<Post>(`/posts/${post.id}`).then((res) => {
+      if (!cancelled && res.success && res.data?.publications) {
+        setPublications(res.data.publications)
+      }
+    })
+    return () => { cancelled = true }
+  }, [open, post])
 
   if (!post) return null
 
@@ -133,6 +153,23 @@ function PostDetailModal({
       onClose()
     } else {
       toast.error(res.error ?? 'Yeniden üretim başlatılamadı')
+    }
+  }
+
+  async function handleRetryPlatform(platform: string) {
+    if (retryingPlatform) return
+    setRetryingPlatform(platform)
+    const res = await api.post(`/posts/${post!.id}/retry?platform=${platform}`, {})
+    setRetryingPlatform(null)
+    if (res.success) {
+      toast.success(`${PLATFORM_LABEL[platform] ?? platform} için yeniden denendi`)
+      // Publications'ı tekrar çek
+      const fresh = await api.get<Post>(`/posts/${post!.id}`)
+      if (fresh.success && fresh.data?.publications) {
+        setPublications(fresh.data.publications)
+      }
+    } else {
+      toast.error(res.error ?? 'Yeniden deneme başarısız')
     }
   }
 
@@ -214,7 +251,42 @@ function PostDetailModal({
             {post.platforms && post.platforms.length > 0 && (
               <div>
                 <p className="text-xs text-gray-400 mb-1">Platformlar</p>
-                <p className="text-sm text-gray-700">{post.platforms.join(', ')}</p>
+                <div className="space-y-1.5">
+                  {post.platforms.map((p) => {
+                    const pub = publications.find((pb) => pb.platform === p)
+                    const pubStatus = pub?.status ?? 'pending'
+                    const color =
+                      pubStatus === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                      pubStatus === 'failed'    ? 'bg-red-50 text-red-700 border-red-200' :
+                      pubStatus === 'publishing' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                      'bg-gray-50 text-gray-600 border-gray-200'
+                    const icon =
+                      pubStatus === 'published' ? '✓' :
+                      pubStatus === 'failed'    ? '✗' :
+                      pubStatus === 'publishing' ? '⟳' : '○'
+                    return (
+                      <div
+                        key={p}
+                        className={cn('flex items-center justify-between gap-2 px-2 py-1 rounded-md border text-xs', color)}
+                        title={pub?.error_message ?? ''}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span>{icon}</span>
+                          {PLATFORM_LABEL[p] ?? p}
+                        </span>
+                        {pubStatus === 'failed' && (
+                          <button
+                            onClick={() => handleRetryPlatform(p)}
+                            disabled={retryingPlatform === p}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 hover:bg-red-200 text-red-700 disabled:opacity-50"
+                          >
+                            {retryingPlatform === p ? '...' : 'Yeniden Dene'}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
 

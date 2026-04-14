@@ -8,6 +8,15 @@ import { Download, Send, Calendar, MoreHorizontal, Loader2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface PostPublication {
+  platform: string
+  status: 'pending' | 'publishing' | 'published' | 'failed'
+  external_id: string | null
+  error_message: string | null
+  published_at: string | null
+  updated_at: string | null
+}
+
 export interface Post {
   id: string
   content_type: string
@@ -23,6 +32,7 @@ export interface Post {
   scheduled_at: string | null
   published_at: string | null
   created_at: string
+  publications?: PostPublication[]
 }
 
 // ─── Status config ─────────────────────────────────────────────────────────────
@@ -33,7 +43,11 @@ const STATUS_CONFIG: Record<string, { label: string; className: string; pulse?: 
   ready:      { label: 'Hazır',       className: 'bg-green-100 text-green-700' },
   scheduled:  { label: 'Zamanlandı', className: 'bg-blue-100 text-blue-700' },
   published:  { label: 'Yayınlandı', className: 'bg-emerald-100 text-emerald-700' },
+  partially_published: { label: 'Kısmen Yayınlandı', className: 'bg-amber-100 text-amber-700' },
+  publishing: { label: 'Yayınlanıyor', className: 'bg-blue-100 text-blue-700', pulse: true },
   failed:     { label: 'Başarısız',   className: 'bg-red-100 text-red-700' },
+  reviewing:  { label: 'İncelemede',  className: 'bg-purple-100 text-purple-700' },
+  rejected:   { label: 'Reddedildi',  className: 'bg-gray-100 text-gray-600' },
 }
 
 const PLATFORM_ICONS: Record<string, string> = {

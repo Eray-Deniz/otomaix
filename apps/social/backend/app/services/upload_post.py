@@ -217,14 +217,137 @@ def _filename_from_url(url: str, default: str) -> str:
     return name or default
 
 
-async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:
-    """
-    Publish a post to all configured platforms via Upload-Post.
+async def _publish_single_platform(
+    *,
+    db: asyncpg.Connection,
+    post_id: UUID,
+    platform: str,
+    username: str,
+    is_video: bool,
+    media_bytes: bytes,
+    media_mime: str,
+    filename: str,
+    title_text: str,
+) -> dict:
+    """Upload-Post'a TEK platform için yayın çağrısı yapar ve
+    `post_publications` satırını sonuca göre günceller. Her platform'un
+    başarı/başarısızlık durumu bağımsız kayıt tutulur."""
+    import datetime
+    import json as _json
 
-    Idempotent: uses SELECT ... FOR UPDATE + intermediate status='publishing'
-    to serialize concurrent calls for the same post_id. Double-clicks and
-    accidental retries are absorbed at the DB level.
+    form_data = [
+        ("user", (None, username)),
+        ("title", (None, title_text[:2200])),
+        ("platform[]", (None, platform)),
+    ]
+    if is_video:
+        form_data.append(("video", (filename, media_bytes, media_mime)))
+        endpoint = f"{BASE_URL}/upload"
+    else:
+        form_data.append(("photos[]", (filename, media_bytes, media_mime)))
+        endpoint = f"{BASE_URL}/upload_photos"
+
+    await db.execute(
+        """
+        INSERT INTO social.post_publications (post_id, platform, status)
+        VALUES ($1, $2, 'publishing')
+        ON CONFLICT (post_id, platform) DO UPDATE SET
+            status = 'publishing',
+            error_message = NULL,
+            updated_at = now()
+        """,
+        post_id,
+        platform,
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(endpoint, headers=_headers(), files=form_data)
+    except Exception as exc:  # noqa: BLE001
+        err = str(exc)[:500]
+        await db.execute(
+            """
+            UPDATE social.post_publications
+            SET status = 'failed', error_message = $3, updated_at = now()
+            WHERE post_id = $1 AND platform = $2
+            """,
+            post_id,
+            platform,
+            err,
+        )
+        return {"platform": platform, "status": "failed", "error": err}
+
+    if resp.status_code == 200:
+        body = resp.json() if resp.content else {}
+        external_id = None
+        if isinstance(body, dict):
+            results = body.get("results") or {}
+            platform_data = results.get(platform) if isinstance(results, dict) else None
+            if isinstance(platform_data, dict):
+                external_id = platform_data.get("id") or platform_data.get("post_id")
+        await db.execute(
+            """
+            UPDATE social.post_publications
+            SET status = 'published',
+                external_id = $3,
+                upload_post_response = $4::jsonb,
+                published_at = $5,
+                error_message = NULL,
+                updated_at = now()
+            WHERE post_id = $1 AND platform = $2
+            """,
+            post_id,
+            platform,
+            external_id,
+            _json.dumps(body),
+            datetime.datetime.utcnow(),
+        )
+        return {"platform": platform, "status": "published", "external_id": external_id}
+
+    err = f"HTTP {resp.status_code}: {resp.text[:300]}"
+    sentry_sdk.set_context(
+        "upload_post_publish",
+        {"post_id": str(post_id), "platform": platform, "status_code": resp.status_code, "body": resp.text[:500]},
+    )
+    sentry_sdk.capture_message(
+        f"Upload-Post publish failed for {platform}: HTTP {resp.status_code}",
+        level="error",
+    )
+    await db.execute(
+        """
+        UPDATE social.post_publications
+        SET status = 'failed', error_message = $3, updated_at = now()
+        WHERE post_id = $1 AND platform = $2
+        """,
+        post_id,
+        platform,
+        err,
+    )
+    return {"platform": platform, "status": "failed", "error": err}
+
+
+async def publish_post(
+    post_id: UUID,
+    db: asyncpg.Connection,
+    only_platforms: list[str] | None = None,
+) -> dict:
     """
+    Publish a post to its configured platforms via Upload-Post. Her platform
+    için ayrı API çağrısı yapılır ve sonuç `post_publications` tablosunda
+    platform-bazında saklanır.
+
+    `only_platforms`: verilirse yalnızca bu platformlar için yayın (retry için).
+
+    Idempotent: SELECT ... FOR UPDATE + `posts.status='publishing'` ile
+    eşzamanlı çağrılar serileştirilir.
+
+    Üst seviye `posts.status` sonuçları:
+      - hepsi başarılı        → 'published'
+      - en az biri başarılı   → 'partially_published'
+      - hiçbiri başarılı değil → 'failed'
+    """
+    import datetime
+
     async with db.transaction():
         post = await db.fetchrow(
             "SELECT * FROM social.posts WHERE id = $1 FOR UPDATE",
@@ -233,47 +356,52 @@ async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:
         if not post:
             raise ValueError(f"Post {post_id} not found")
 
-        # Idempotency: if already published or in-flight, short-circuit
-        if post["status"] == "published":
-            return {
-                "post_id": str(post_id),
-                "status": "published",
-                "note": "already_published",
-                "published_at": post["published_at"].isoformat() if post["published_at"] else None,
-            }
-        if post["status"] == "publishing":
-            return {
-                "post_id": str(post_id),
-                "status": "publishing",
-                "note": "already_in_progress",
-            }
+        # Retry değilse idempotency kontrolü — tam published veya in-flight ise kısa devre
+        if only_platforms is None:
+            if post["status"] == "published":
+                return {
+                    "post_id": str(post_id),
+                    "status": "published",
+                    "note": "already_published",
+                    "published_at": post["published_at"].isoformat() if post["published_at"] else None,
+                }
+            if post["status"] == "publishing":
+                return {
+                    "post_id": str(post_id),
+                    "status": "publishing",
+                    "note": "already_in_progress",
+                }
 
         if not post["output_url"]:
             raise ValueError("Post has no output_url — generate content first")
 
-        # Mark as publishing inside the transaction so concurrent callers see it
         await db.execute(
             "UPDATE social.posts SET status = 'publishing' WHERE id = $1",
             post_id,
         )
 
     brand_id = post["brand_id"]
-    platforms = post["platforms"] or []
-    if not platforms:
+    all_platforms = post["platforms"] or []
+    if not all_platforms:
         await db.execute(
             "UPDATE social.posts SET status = 'failed' WHERE id = $1",
             post_id,
         )
         return {"post_id": str(post_id), "status": "failed", "error": "No platforms configured"}
 
-    # Ensure profile exists
-    username = await ensure_profile(brand_id, db)
+    # Retry: yalnızca istenen platformlar; yoksa hepsi
+    platforms_to_publish = (
+        [p for p in only_platforms if p in all_platforms]
+        if only_platforms
+        else list(all_platforms)
+    )
+    if not platforms_to_publish:
+        return {"post_id": str(post_id), "status": "failed", "error": "No matching platforms"}
 
-    # Determine endpoint based on content type
+    username = await ensure_profile(brand_id, db)
     content_type = post["content_type"]
     is_video = content_type in ("video", "video_ugc")
 
-    # Download media
     media_bytes, media_mime = await _download_media(post["output_url"])
     filename = _filename_from_url(post["output_url"], "media.mp4" if is_video else "media.jpg")
 
@@ -281,66 +409,54 @@ async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:
     hashtags = post["hashtags"] or []
     title_text = caption + (" " + " ".join(f"#{h.lstrip('#')}" for h in hashtags) if hashtags else "")
 
-    # Build multipart form
-    form_data = [
-        ("user", (None, username)),
-        ("title", (None, title_text[:2200])),
-    ]
-    for p in platforms:
-        form_data.append(("platform[]", (None, p)))
-
-    if is_video:
-        form_data.append(("video", (filename, media_bytes, media_mime)))
-        endpoint = f"{BASE_URL}/upload"
-    else:
-        form_data.append(("photos[]", (filename, media_bytes, media_mime)))
-        endpoint = f"{BASE_URL}/upload_photos"
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            endpoint,
-            headers=_headers(),
-            files=form_data,
+    results = []
+    for platform in platforms_to_publish:
+        res = await _publish_single_platform(
+            db=db,
+            post_id=post_id,
+            platform=platform,
+            username=username,
+            is_video=is_video,
+            media_bytes=media_bytes,
+            media_mime=media_mime,
+            filename=filename,
+            title_text=title_text,
         )
+        results.append(res)
 
-    import datetime
-
-    if resp.status_code == 200:
-        body = resp.json()
-        # Upload-Post returns per-platform results; mark as published if request accepted
-        await db.execute(
-            "UPDATE social.posts SET status = 'published', published_at = $1 WHERE id = $2",
-            datetime.datetime.utcnow(),
-            post_id,
-        )
-        return {
-            "post_id": str(post_id),
-            "status": "published",
-            "platforms": platforms,
-            "upload_post_response": body,
-        }
-
-    sentry_sdk.set_context(
-        "upload_post_publish",
-        {
-            "post_id": str(post_id),
-            "status_code": resp.status_code,
-            "body": resp.text[:500],
-            "platforms": platforms,
-        },
-    )
-    sentry_sdk.capture_message(
-        f"Upload-Post publish failed: HTTP {resp.status_code}",
-        level="error",
-    )
-
-    await db.execute(
-        "UPDATE social.posts SET status = 'failed' WHERE id = $1",
+    # Üst seviye durum: TÜM platformlara bak (retry edilmeyenler dahil)
+    all_rows = await db.fetch(
+        "SELECT platform, status FROM social.post_publications WHERE post_id = $1",
         post_id,
     )
+    status_by_platform = {r["platform"]: r["status"] for r in all_rows}
+    total = len(all_platforms)
+    published_count = sum(1 for p in all_platforms if status_by_platform.get(p) == "published")
+
+    if published_count == total:
+        overall = "published"
+    elif published_count == 0:
+        overall = "failed"
+    else:
+        overall = "partially_published"
+
+    published_at = datetime.datetime.utcnow() if published_count > 0 else None
+    await db.execute(
+        """
+        UPDATE social.posts
+        SET status = $2,
+            published_at = COALESCE(published_at, $3)
+        WHERE id = $1
+        """,
+        post_id,
+        overall,
+        published_at,
+    )
+
     return {
         "post_id": str(post_id),
-        "status": "failed",
-        "error": resp.text[:500],
-        "status_code": resp.status_code,
+        "status": overall,
+        "published_count": published_count,
+        "total": total,
+        "results": results,
     }

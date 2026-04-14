@@ -365,9 +365,20 @@ async def get_post(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Get a single post by id."""
+    """Get a single post by id with per-platform publication rows."""
     row = await assert_post_owned(db, user, post_id)
-    return OkResponse(data=row)
+    pub_rows = await db.fetch(
+        """
+        SELECT platform, status, external_id, error_message, published_at, updated_at
+        FROM social.post_publications
+        WHERE post_id = $1
+        ORDER BY platform
+        """,
+        post_id,
+    )
+    data = dict(row) if not isinstance(row, dict) else row
+    data["publications"] = [dict(r) for r in pub_rows]
+    return OkResponse(data=data)
 
 
 @router.patch("/{post_id}", response_model=OkResponse)
@@ -404,6 +415,21 @@ async def publish_post(
     from app.services.upload_post import publish_post as svc_publish
 
     result = await svc_publish(post_id, db)
+    return OkResponse(data=result)
+
+
+@router.post("/{post_id}/retry", response_model=OkResponse)
+async def retry_publish(
+    post_id: UUID,
+    platform: str,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Başarısız olan tek bir platform yayınını yeniden dene."""
+    await assert_post_owned(db, user, post_id)
+    from app.services.upload_post import publish_post as svc_publish
+
+    result = await svc_publish(post_id, db, only_platforms=[platform])
     return OkResponse(data=result)
 
 
