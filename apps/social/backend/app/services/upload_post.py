@@ -233,7 +233,6 @@ async def _publish_single_platform(
     `post_publications` satırını sonuca göre günceller. Her platform'un
     başarı/başarısızlık durumu bağımsız kayıt tutulur."""
     import datetime
-    import json as _json
 
     form_data = [
         ("user", (None, username)),
@@ -280,29 +279,56 @@ async def _publish_single_platform(
     if resp.status_code == 200:
         body = resp.json() if resp.content else {}
         external_id = None
+        platform_success = True  # Default varsayım: HTTP 200 + parse edilemeyen body → başarılı
+        platform_error: str | None = None
+
         if isinstance(body, dict):
             results = body.get("results") or {}
             platform_data = results.get(platform) if isinstance(results, dict) else None
             if isinstance(platform_data, dict):
+                # Upload-Post per-platform success field'ini açıkça döner
+                ps = platform_data.get("success")
+                if ps is False:
+                    platform_success = False
+                    platform_error = platform_data.get("error") or platform_data.get("status") or "Platform yayını başarısız"
                 external_id = platform_data.get("id") or platform_data.get("post_id")
+
+        if platform_success:
+            await db.execute(
+                """
+                UPDATE social.post_publications
+                SET status = 'published',
+                    external_id = $3,
+                    upload_post_response = $4,
+                    published_at = $5,
+                    error_message = NULL,
+                    updated_at = now()
+                WHERE post_id = $1 AND platform = $2
+                """,
+                post_id,
+                platform,
+                external_id,
+                body if isinstance(body, dict) else {},
+                datetime.datetime.utcnow(),
+            )
+            return {"platform": platform, "status": "published", "external_id": external_id}
+
+        # HTTP 200 ama platform-level failure — failed olarak işaretle
         await db.execute(
             """
             UPDATE social.post_publications
-            SET status = 'published',
-                external_id = $3,
-                upload_post_response = $4::jsonb,
-                published_at = $5,
-                error_message = NULL,
+            SET status = 'failed',
+                error_message = $3,
+                upload_post_response = $4,
                 updated_at = now()
             WHERE post_id = $1 AND platform = $2
             """,
             post_id,
             platform,
-            external_id,
-            _json.dumps(body),
-            datetime.datetime.utcnow(),
+            platform_error or "Platform yayını başarısız",
+            body if isinstance(body, dict) else {},
         )
-        return {"platform": platform, "status": "published", "external_id": external_id}
+        return {"platform": platform, "status": "failed", "error": platform_error}
 
     err = f"HTTP {resp.status_code}: {resp.text[:300]}"
     # 4xx = kullanıcı hatası (platform bağlı değil, geçersiz medya vb.) — Sentry'ye gönderme
