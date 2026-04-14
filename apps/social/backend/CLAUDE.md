@@ -2,6 +2,12 @@
 
 ## 2026-04-14 — Teknik Analiz Raporu Fix'leri (rev-1)
 
+### [F-2 backend] /social router — sahiplik + hesap listeleme
+- `app/routers/social.py:oauth_link` artık `db: asyncpg.Connection` dependency'si alır ve `assert_brand_owned(db, user, brand_id)` ile sahiplik kontrolü yapar (önceki halinde IDOR riski vardı: token sahibi başkasının `brand_id`'sini gönderip OAuth state JWT üretebiliyordu).
+- Yeni endpoint: `GET /social/accounts?brand_id=...` → markaya bağlı **aktif** sosyal medya hesaplarını döner (`platform`, `account_name`, `connected_at`). `assert_brand_owned` ile korunur.
+- Frontend dashboard "Bağla" butonları ve marka-ayarlari "Sosyal Hesaplar" sekmesi bu iki endpoint'i kullanır.
+- `social.brand_social_accounts` tablosunda zaten `(brand_id, platform)` UNIQUE kısıtı var (migration 003), tekrar bağlamada upsert oluyor.
+
 ### [B-4] competitors.py — ölü UPDATE bloğu silindi
 - `app/routers/competitors.py:add_competitor` içindeki ilk UPDATE (satır 62-71) tamamen kaldırıldı.
 - `str(dict).replace("'", '"')` ile JSONB'ye yazmaya çalışan bu blok valid JSON üretmediği için tip hatası fırlatabiliyor ve ardından gelen doğru `json.dumps() + ::jsonb` UPDATE'ini engelliyordu.

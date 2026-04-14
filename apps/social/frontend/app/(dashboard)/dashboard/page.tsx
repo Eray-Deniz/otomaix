@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import Link from 'next/link'
-import { TrendingUp, ArrowRight, Loader2, Wand2 } from 'lucide-react'
+import { TrendingUp, ArrowRight, Loader2, Wand2, Check } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -30,13 +30,13 @@ function InstagramIcon() {
 }
 
 const PLATFORMS = [
-  { name: 'Instagram', icon: InstagramIcon, color: 'text-pink-500', bg: 'bg-pink-50' },
-  { name: 'TikTok', icon: () => (
+  { key: 'instagram', name: 'Instagram', icon: InstagramIcon, color: 'text-pink-500', bg: 'bg-pink-50' },
+  { key: 'tiktok', name: 'TikTok', icon: () => (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
       <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V9.05a8.19 8.19 0 004.79 1.53V7.14a4.85 4.85 0 01-1.02-.45z" />
     </svg>
   ), color: 'text-gray-900', bg: 'bg-gray-100' },
-  { name: 'LinkedIn', icon: () => (
+  { key: 'linkedin', name: 'LinkedIn', icon: () => (
     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
       <path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z"/>
       <circle cx="4" cy="4" r="2"/>
@@ -160,10 +160,40 @@ function TrendWidget() {
 
 export default function DashboardPage() {
   const user = useAppStore((s) => s.user)
+  const currentBrand = useAppStore((s) => s.currentBrand)
   const displayName = user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'Kullanıcı'
   // getGreeting uses new Date() — must run client-side only to avoid SSR/hydration mismatch
   const [greeting, setGreeting] = useState('')
   useEffect(() => { setGreeting(getGreeting(displayName)) }, [displayName])
+
+  const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([])
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!currentBrand?.id) return
+    api.get<{ platform: string }[]>(`/social/accounts?brand_id=${currentBrand.id}`).then((res) => {
+      if (res.success && res.data) {
+        setConnectedPlatforms(res.data.map((a) => a.platform))
+      }
+    })
+  }, [currentBrand?.id])
+
+  async function handleConnectPlatform(platformKey: string) {
+    if (!currentBrand?.id) {
+      toast.error('Önce bir marka seçin')
+      return
+    }
+    setConnectingPlatform(platformKey)
+    const res = await api.get<{ url: string }>(
+      `/social/oauth-link?brand_id=${currentBrand.id}&platform=${platformKey}`
+    )
+    if (res.success && res.data?.url) {
+      window.open(res.data.url, '_blank', 'noopener')
+    } else {
+      toast.error('OAuth bağlantısı alınamadı')
+    }
+    setConnectingPlatform(null)
+  }
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -204,7 +234,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-gray-900">0</p>
+            <p className="text-3xl font-bold text-gray-900">{connectedPlatforms.length}</p>
             <p className="text-xs text-gray-400 mt-1">platform</p>
           </CardContent>
         </Card>
@@ -245,8 +275,10 @@ export default function DashboardPage() {
         <div className="grid grid-cols-3 gap-4">
           {PLATFORMS.map((platform) => {
             const Icon = platform.icon
+            const isConnected = connectedPlatforms.includes(platform.key)
+            const isConnecting = connectingPlatform === platform.key
             return (
-              <Card key={platform.name} className="hover:shadow-md transition-shadow">
+              <Card key={platform.key} className="hover:shadow-md transition-shadow">
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center gap-3">
                     <div className={`w-12 h-12 ${platform.bg} rounded-xl flex items-center justify-center`}>
@@ -255,8 +287,22 @@ export default function DashboardPage() {
                       </span>
                     </div>
                     <p className="text-sm font-medium text-gray-800">{platform.name}</p>
-                    <Button size="sm" variant="outline" className="w-full text-xs">
-                      Bağla
+                    <Button
+                      size="sm"
+                      variant={isConnected ? 'secondary' : 'outline'}
+                      className="w-full text-xs"
+                      onClick={() => handleConnectPlatform(platform.key)}
+                      disabled={isConnecting || !currentBrand?.id}
+                    >
+                      {isConnecting ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : isConnected ? (
+                        <span className="flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Bağlı
+                        </span>
+                      ) : (
+                        'Bağla'
+                      )}
                     </Button>
                   </div>
                 </CardContent>

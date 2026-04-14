@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
 from app.services.upload_post import get_oauth_link
 
@@ -23,10 +23,32 @@ async def oauth_link(
     brand_id: UUID,
     platform: str,
     user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
 ):
     """Return a JWT-authenticated OAuth link for connecting a social platform account."""
+    await assert_brand_owned(db, user, brand_id)
     url = get_oauth_link(brand_id, platform)
     return OkResponse(data={"url": url, "platform": platform})
+
+
+@router.get("/accounts", response_model=OkResponse)
+async def list_connected_accounts(
+    brand_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """List active social media accounts connected to a brand."""
+    await assert_brand_owned(db, user, brand_id)
+    rows = await db.fetch(
+        """
+        SELECT platform, account_name, connected_at, is_active
+        FROM social.brand_social_accounts
+        WHERE brand_id = $1 AND is_active = true
+        ORDER BY connected_at DESC
+        """,
+        brand_id,
+    )
+    return OkResponse(data=[dict(r) for r in rows])
 
 
 @router.get("/callback")

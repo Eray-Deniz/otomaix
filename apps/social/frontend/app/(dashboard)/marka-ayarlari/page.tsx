@@ -401,6 +401,8 @@ function MarkaAyarlariContent() {
   const [creatingAvatar, setCreatingAvatar] = useState(false)
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null)
   const [selectingAvatarId, setSelectingAvatarId] = useState<string | null>(null)
+  const [connectedAccounts, setConnectedAccounts] = useState<{ platform: string; account_name: string }[]>([])
+  const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -565,6 +567,19 @@ function MarkaAyarlariContent() {
     setDeletingDocId(null)
   }
 
+  async function loadConnectedAccounts(brandId: string) {
+    const res = await api.get<{ platform: string; account_name: string }[]>(
+      `/social/accounts?brand_id=${brandId}`
+    )
+    if (res.success && res.data) setConnectedAccounts(res.data)
+  }
+
+  useEffect(() => {
+    if (activeTab === 'sosyal' && brand?.id) {
+      loadConnectedAccounts(brand.id)
+    }
+  }, [activeTab, brand?.id])
+
   // Avatar sekmesi açıldığında stok avatarları yükle
   useEffect(() => {
     if (activeTab === 'avatar') {
@@ -620,12 +635,20 @@ function MarkaAyarlariContent() {
   }
 
   async function connectSocialAccount(platform: string) {
-    const res = await api.get<{ url: string }>(`/social/oauth-link?platform=${platform}`)
+    if (!brand?.id) {
+      toast.error('Önce bir marka seçin')
+      return
+    }
+    setConnectingPlatform(platform)
+    const res = await api.get<{ url: string }>(
+      `/social/oauth-link?brand_id=${brand.id}&platform=${platform}`
+    )
     if (res.success && res.data?.url) {
-      window.open(res.data.url, '_blank')
+      window.open(res.data.url, '_blank', 'noopener')
     } else {
       toast.error('OAuth bağlantısı alınamadı')
     }
+    setConnectingPlatform(null)
   }
 
   if (loading) {
@@ -983,31 +1006,49 @@ function MarkaAyarlariContent() {
           <p className="text-sm text-gray-500">
             Sosyal medya hesaplarınızı bağlayarak içerik otomatik olarak yayınlanabilir.
           </p>
-          {PLATFORMS.map((platform) => (
-            <div
-              key={platform.key}
-              className="flex items-center justify-between p-4 border border-gray-200 rounded-xl"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <span className="text-sm font-bold text-gray-600">
-                    {platform.label[0]}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{platform.label}</p>
-                  <p className="text-xs text-gray-400">Bağlı değil</p>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => connectSocialAccount(platform.key)}
+          {PLATFORMS.map((platform) => {
+            const connected = connectedAccounts.find((a) => a.platform === platform.key)
+            const isConnecting = connectingPlatform === platform.key
+            return (
+              <div
+                key={platform.key}
+                className="flex items-center justify-between p-4 border border-gray-200 rounded-xl"
               >
-                Hesabı Bağla
-              </Button>
-            </div>
-          ))}
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <span className="text-sm font-bold text-gray-600">
+                      {platform.label[0]}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{platform.label}</p>
+                    {connected ? (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        {connected.account_name || 'Bağlı'}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-gray-400">Bağlı değil</p>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => connectSocialAccount(platform.key)}
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : connected ? (
+                    'Yeniden Bağla'
+                  ) : (
+                    'Hesabı Bağla'
+                  )}
+                </Button>
+              </div>
+            )
+          })}
         </TabsContent>
 
         {/* ── Tab 5: Dokümanlar ─────────────────────────────────────────────── */}

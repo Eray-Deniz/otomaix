@@ -3,6 +3,22 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — F-2: Dashboard "Bağla" butonları + marka-ayarlari OAuth fix
+
+### dashboard/page.tsx
+- `PLATFORMS` dizisine `key` alanı eklendi (`instagram`, `tiktok`, `linkedin`).
+- `connectedPlatforms: string[]` state + `useEffect` ile `GET /social/accounts?brand_id=...` çağrılıyor — aktif marka değişince yeniden yüklenir.
+- "Bağla" butonu artık `handleConnectPlatform()` çağırır → `GET /social/oauth-link?brand_id=...&platform=...` → `window.open(url, '_blank', 'noopener')`.
+- Bağlı platformlar için buton "Bağlı ✓" (secondary variant); değilse "Bağla" (outline). Loading'de spinner.
+- "Bağlı Platform" stat kartı artık `connectedPlatforms.length` gösterir (önceden hardcoded 0).
+
+### marka-ayarlari/page.tsx
+- **KRİTİK FIX**: `connectSocialAccount()` `brand_id` parametresini gönderiyordu — backend `oauth_link` endpoint'i `brand_id`'yi zorunlu UUID query param olarak istediği için her çağrı 422 dönüyordu (özellik tamamen kırıktı).
+- Şimdi `?brand_id=${brand.id}&platform=${platform}` formatında gönderiliyor; `noopener` flag eklendi.
+- Yeni state: `connectedAccounts`, `connectingPlatform`. Sosyal sekmesi açıldığında `GET /social/accounts` çağrılır.
+- Bağlı platformlar için yeşil ✓ + `account_name` gösterilir; buton "Hesabı Bağla" yerine "Yeniden Bağla" yazar.
+- Loading state'i butonda spinner ile gösterilir.
+
 ## 2026-04-14 — F-3: İçerik Oluştur Step 3 butonları aktive edildi
 
 `icerik-olustur/page.tsx` Step 3'te daha önce stub olan iki buton artık çalışıyor:
