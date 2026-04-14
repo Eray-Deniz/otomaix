@@ -77,6 +77,16 @@ async def analyze_website(url: str) -> dict:
 
 # ─── Instagram analizi ──────────────────────────────────────────────────────
 
+def _normalize_instagram_handle(handle: str) -> str:
+    """`@user`, `user`, `instagram.com/user/`, `https://www.instagram.com/user/?hl=tr`
+    gibi varyantları saf `user` username'ine indirger."""
+    h = handle.strip()
+    m = re.search(r"instagram\.com/([^/?#]+)", h, re.IGNORECASE)
+    if m:
+        h = m.group(1)
+    return h.lstrip("@").rstrip("/")
+
+
 async def analyze_instagram(handle: str) -> dict:
     """Instagram hesabını analiz et.
 
@@ -86,7 +96,7 @@ async def analyze_instagram(handle: str) -> dict:
     if not handle:
         return {}
 
-    clean_handle = handle.lstrip("@")
+    clean_handle = _normalize_instagram_handle(handle)
 
     if getattr(settings, "APIFY_API_KEY", ""):
         return await _analyze_instagram_apify(clean_handle)
@@ -111,61 +121,57 @@ async def analyze_instagram(handle: str) -> dict:
 
 
 async def _analyze_instagram_apify(handle: str) -> dict:
-    """Apify Instagram Scraper ile gerçek hesap verisi çek."""
-    run_url = "https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items"
-    params = {
-        "token": settings.APIFY_API_KEY,
-        "usernames": handle,
-        "resultsLimit": 20,
-    }
+    """Apify Instagram Profile Scraper ile profil bilgilerini çek.
+
+    Bu actor sadece profil meta-verisini döndürür (takipçi, bio, verified, kategori).
+    Post-level metrikler (avg_likes, engagement) için ayrı instagram-post-scraper
+    gerekir — ek kredi maliyeti olduğu için şu an kapsam dışı.
+    """
+    run_url = (
+        "https://api.apify.com/v2/acts/apify~instagram-profile-scraper/"
+        f"run-sync-get-dataset-items?token={settings.APIFY_API_KEY}"
+    )
+    body = {"usernames": [handle]}
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(run_url, json=params)
+        async with httpx.AsyncClient(timeout=90) as client:
+            resp = await client.post(run_url, json=body)
+            if resp.status_code >= 400:
+                return {
+                    "handle": handle,
+                    "source": "apify_error",
+                    "error": f"Apify HTTP {resp.status_code}: {resp.text[:200]}",
+                }
             data = resp.json()
-            if not data or not isinstance(data, list):
-                return {"handle": handle, "error": "Apify veri döndürmedi"}
+            if not data or not isinstance(data, list) or not data:
+                return {
+                    "handle": handle,
+                    "source": "apify_error",
+                    "error": "Apify veri döndürmedi (hesap bulunamadı veya kredi yok)",
+                }
 
-            profile = data[0] if data else {}
-            posts = profile.get("latestPosts", [])
-
-            total_likes = sum(p.get("likesCount", 0) for p in posts)
-            total_comments = sum(p.get("commentsCount", 0) for p in posts)
-            post_count = len(posts) or 1
-            followers = profile.get("followersCount", 0) or 1
-
-            content_types: dict = {"image": 0, "video": 0, "carousel": 0}
-            for p in posts:
-                t = p.get("type", "image").lower()
-                if t in content_types:
-                    content_types[t] += 1
-
-            hashtag_freq: dict = {}
-            for p in posts:
-                for tag in (p.get("hashtags") or []):
-                    tag = tag.lower().lstrip("#")
-                    hashtag_freq[tag] = hashtag_freq.get(tag, 0) + 1
-            top_hashtags = sorted(hashtag_freq, key=lambda k: -hashtag_freq[k])[:10]
-
+            profile = data[0]
             return {
                 "handle": handle,
                 "source": "apify",
+                "full_name": profile.get("fullName"),
+                "biography": profile.get("biography"),
                 "followers": profile.get("followersCount"),
-                "following": profile.get("followingCount"),
+                "following": profile.get("followsCount"),
                 "post_count": profile.get("postsCount"),
-                "avg_likes": round(total_likes / post_count),
-                "avg_comments": round(total_comments / post_count),
-                "engagement_rate": round((total_likes + total_comments) / followers * 100, 2),
-                "posting_frequency_per_week": None,
-                "content_types": content_types,
-                "top_hashtags": top_hashtags,
-                "best_posting_times": [],
-                "top_posts": [
-                    {"url": p.get("url"), "likes": p.get("likesCount"), "type": p.get("type")}
-                    for p in sorted(posts, key=lambda x: x.get("likesCount", 0), reverse=True)[:3]
-                ],
+                "is_verified": profile.get("verified"),
+                "is_business": profile.get("isBusinessAccount"),
+                "business_category": profile.get("businessCategoryName"),
+                "profile_pic_url": profile.get("profilePicUrlHD") or profile.get("profilePicUrl"),
+                "external_url": profile.get("externalUrl"),
+                # Post-level metrikler bu actor'dan gelmiyor:
+                "avg_likes": None,
+                "avg_comments": None,
+                "engagement_rate": None,
+                "content_types": None,
+                "top_hashtags": [],
             }
     except Exception as e:
-        return {"handle": handle, "error": str(e)}
+        return {"handle": handle, "source": "apify_error", "error": str(e)}
 
 
 # ─── Rakip raporu sentezi ───────────────────────────────────────────────────

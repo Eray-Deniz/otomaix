@@ -25,13 +25,6 @@ function InstagramIcon({ className }: { className?: string }) {
   )
 }
 import { cn } from '@/lib/utils'
-import nextDynamic from 'next/dynamic'
-
-// recharts sadece rakip-analizi sayfasında yüklensin — ayrı chunk
-const CompetitorChart = nextDynamic(
-  () => import('@/components/competitors/CompetitorChart').then((m) => ({ default: m.CompetitorChart })),
-  { ssr: false, loading: () => <div className="h-[160px] animate-pulse bg-gray-100 rounded-lg" /> }
-)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,11 +62,20 @@ interface CompetitorAnalysis {
       handle?: string
       source?: string
       note?: string
+      error?: string
+      full_name?: string | null
+      biography?: string | null
       followers?: number | null
+      following?: number | null
+      post_count?: number | null
+      is_verified?: boolean | null
+      is_business?: boolean | null
+      business_category?: string | null
+      profile_pic_url?: string | null
+      external_url?: string | null
       avg_likes?: number | null
       engagement_rate?: number | null
-      posting_frequency_per_week?: number | null
-      content_types?: { image?: number; video?: number; carousel?: number }
+      content_types?: { image?: number; video?: number; carousel?: number } | null
       top_hashtags?: string[]
     }
   } | null
@@ -175,17 +177,9 @@ function AnalysisPanel({ competitor }: { competitor: CompetitorAnalysis }) {
   const web = data?.website
   const ig = data?.instagram
 
-  const contentTypesData = ig?.content_types
-    ? [
-        { name: 'Görsel', value: ig.content_types.image ?? 0 },
-        { name: 'Video', value: ig.content_types.video ?? 0 },
-        { name: 'Carousel', value: ig.content_types.carousel ?? 0 },
-      ].filter((d) => d.value > 0)
-    : []
-
   return (
     <div className="space-y-6">
-      {/* Instagram metrikleri */}
+      {/* Instagram profil bilgileri */}
       {ig && (
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
@@ -193,13 +187,34 @@ function AnalysisPanel({ competitor }: { competitor: CompetitorAnalysis }) {
             {ig.source === 'placeholder' && (
               <Badge variant="secondary" className="text-xs font-normal">Önizleme — Apify API gerekli</Badge>
             )}
+            {ig.source === 'apify_error' && (
+              <Badge variant="destructive" className="text-xs font-normal" title={ig.error ?? ''}>Apify hatası</Badge>
+            )}
+            {ig.is_verified && (
+              <Badge variant="secondary" className="text-xs font-normal bg-blue-50 text-blue-600">✓ Doğrulanmış</Badge>
+            )}
           </h3>
+
+          {ig.full_name && (
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{ig.full_name}</p>
+              {ig.business_category && (
+                <p className="text-xs text-gray-500">{ig.business_category}</p>
+              )}
+            </div>
+          )}
+
+          {ig.biography && (
+            <p className="text-xs text-gray-600 whitespace-pre-line bg-gray-50 rounded-lg p-3">
+              {ig.biography}
+            </p>
+          )}
 
           <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Takipçi', value: ig.followers?.toLocaleString('tr-TR') ?? '—' },
-              { label: 'Ort. Beğeni', value: ig.avg_likes?.toLocaleString('tr-TR') ?? '—' },
-              { label: 'Etkileşim', value: ig.engagement_rate ? `%${ig.engagement_rate}` : '—' },
+              { label: 'Takip', value: ig.following?.toLocaleString('tr-TR') ?? '—' },
+              { label: 'Post', value: ig.post_count?.toLocaleString('tr-TR') ?? '—' },
             ].map((m) => (
               <div key={m.label} className="bg-pink-50 rounded-xl p-3 text-center">
                 <p className="text-lg font-bold text-pink-700">{m.value}</p>
@@ -208,17 +223,15 @@ function AnalysisPanel({ competitor }: { competitor: CompetitorAnalysis }) {
             ))}
           </div>
 
-          <CompetitorChart data={contentTypesData} />
-
-          {ig.top_hashtags && ig.top_hashtags.length > 0 && (
-            <div>
-              <p className="text-xs text-gray-500 mb-2">Popüler Hashtagler</p>
-              <div className="flex flex-wrap gap-1.5">
-                {ig.top_hashtags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-xs">#{tag}</Badge>
-                ))}
-              </div>
-            </div>
+          {ig.external_url && (
+            <a
+              href={ig.external_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+            >
+              <Globe className="w-3 h-3" /> {ig.external_url}
+            </a>
           )}
         </div>
       )}
