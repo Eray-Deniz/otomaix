@@ -368,6 +368,9 @@ export default function RakipAnaliziPage() {
       setCompetitors((prev) =>
         prev.map((c) => (c.id === id ? { ...c, status: 'analyzing', error_message: null } : c))
       )
+      // Otomatik seç → polling tamamlanınca sağ panel kendiliğinden dolacak
+      setSelectedId(id)
+      setSelectedAnalysis(null)
     } else {
       toast.error('Analiz yenilenemedi')
     }
@@ -570,16 +573,43 @@ export default function RakipAnaliziPage() {
 
           {/* Sağ — analiz detayı */}
           <div className="col-span-2">
-            {!selectedId ? (
-              <div className="flex flex-col items-center justify-center h-64 text-center gap-3 border-2 border-dashed border-gray-200 rounded-2xl">
-                <BarChart2 className="w-8 h-8 text-gray-300" />
-                <p className="text-sm text-gray-400">Sol taraftan bir rakip seçin</p>
-              </div>
-            ) : loadingAnalysis ? (
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-              </div>
-            ) : selectedAnalysis ? (
+            {(() => {
+              const selectedCompetitor = competitors.find((c) => c.id === selectedId)
+              if (!selectedId) {
+                return (
+                  <div className="flex flex-col items-center justify-center h-64 text-center gap-3 border-2 border-dashed border-gray-200 rounded-2xl">
+                    <BarChart2 className="w-8 h-8 text-gray-300" />
+                    <p className="text-sm text-gray-400">Sol taraftan bir rakip seçin</p>
+                  </div>
+                )
+              }
+              if (selectedCompetitor?.status === 'analyzing') {
+                return (
+                  <div className="flex flex-col items-center justify-center h-64 text-center gap-3 border-2 border-dashed border-blue-200 rounded-2xl bg-blue-50/30">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                    <p className="text-sm text-blue-600 font-medium">Analiz yapılıyor...</p>
+                    <p className="text-xs text-gray-500">Bu işlem 30-60 saniye sürebilir</p>
+                  </div>
+                )
+              }
+              if (selectedCompetitor?.status === 'failed') {
+                return (
+                  <div className="flex flex-col items-center justify-center h-64 text-center gap-3 border-2 border-dashed border-red-200 rounded-2xl bg-red-50/30">
+                    <p className="text-sm text-red-600 font-medium">Analiz başarısız</p>
+                    <p className="text-xs text-gray-500 max-w-md">{selectedCompetitor.error_message ?? 'Bilinmeyen hata'}</p>
+                    <Button size="sm" variant="outline" onClick={() => handleRefresh(selectedId)}>Tekrar Dene</Button>
+                  </div>
+                )
+              }
+              if (loadingAnalysis) {
+                return (
+                  <div className="flex items-center justify-center h-64">
+                    <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                  </div>
+                )
+              }
+              if (selectedAnalysis) {
+                return (
               <div className="bg-white border border-gray-200 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-5">
                   <h2 className="font-bold text-gray-900">{selectedAnalysis.competitor_name}</h2>
@@ -599,11 +629,14 @@ export default function RakipAnaliziPage() {
                 </div>
                 <AnalysisPanel competitor={selectedAnalysis} />
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-64 text-center gap-3">
-                <p className="text-sm text-gray-400">Analiz verisi yüklenemedi</p>
-              </div>
-            )}
+                )
+              }
+              return (
+                <div className="flex flex-col items-center justify-center h-64 text-center gap-3">
+                  <p className="text-sm text-gray-400">Analiz verisi yüklenemedi</p>
+                </div>
+              )
+            })()}
           </div>
         </div>
       )}
