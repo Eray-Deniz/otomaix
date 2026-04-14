@@ -8,6 +8,26 @@
 - `import json` fonksiyon başına taşındı (tek doğru UPDATE kullanılıyor).
 - Risk: yok — tamamen ölü kod silme.
 
+### [B-2] Brand/Post/Workspace ownership dependency
+- Daha önce çoğu endpoint sadece `get_current_user` ile token doğruluyor; başka bir hesabın `brand_id`/`post_id`/`workspace_id`'sini parametre olarak gönderen herkes erişebiliyordu (IDOR riski).
+- `app/core/security.py` içine üç async helper eklendi:
+  - `assert_workspace_owned(db, user, workspace_id)` → `social.workspace_members` üzerinden kontrol
+  - `assert_brand_owned(db, user, brand_id)` → `brands ⨝ workspace_members`
+  - `assert_post_owned(db, user, post_id)` → `posts ⨝ brands ⨝ workspace_members`, post dict döndürür
+- Sahiplik zinciri: `JWT.sub == accounts.id → workspace_members.account_id → workspaces → brands → posts`.
+- Uygulanan router'lar:
+  - `brands.py` — create/list/get/update/delete/kit/logo/intro-video
+  - `posts.py` — generate/create/list/regenerate/get/publish/generate-faceless-video (publish-now ve request-approval hariç; ilki X-Internal-Key, ikincisi zaten kontrollü)
+  - `calendar.py` — get_calendar_posts, schedule_post
+  - `trends.py` — get_trends, refresh_trends, create_post_from_trend
+  - `competitors.py` — add/list/get_analysis/refresh/delete/report (competitor_id endpoint'leri için inline JOIN ile sahiplik kontrolü)
+  - `autoposting.py` — get/upsert/toggle/upcoming
+  - `documents.py` — upload/list/delete (delete inline JOIN)
+  - `avatar.py` — create/select-stock/generate-ugc
+- `internal.py` ve X-Internal-Key korumalı endpoint'ler değiştirilmedi (n8n için).
+- Hata politikası: yetkisiz erişim 401 yerine 404 döner — varlık ifşası önlenir.
+- Risk: orta — eski client'lar yanlış brand_id gönderiyorsa 404 alır. Live test ile doğrulanacak.
+
 ## Proje Amacı
 Otomaix Social uygulamasının FastAPI backend'i. api.otomaix.com'da çalışır.
 

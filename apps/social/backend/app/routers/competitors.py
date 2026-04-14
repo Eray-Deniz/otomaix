@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
 from app.services.competitor_analyzer import (
     generate_competitor_report,
@@ -42,6 +42,7 @@ async def add_competitor(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Yeni rakip ekle ve hemen analiz başlat."""
+    await assert_brand_owned(db, user, payload.brand_id)
     row = await db.fetchrow(
         """
         INSERT INTO social.competitor_analyses
@@ -82,6 +83,7 @@ async def list_competitors(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Bir markanın rakip listesini döndür."""
+    await assert_brand_owned(db, user, brand_id)
     rows = await db.fetch(
         """
         SELECT id, brand_id, competitor_name, instagram_handle, tiktok_handle,
@@ -103,9 +105,17 @@ async def get_analysis(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Rakibin detaylı analiz verisini döndür."""
+    account_id = user.get("sub")
     row = await db.fetchrow(
-        "SELECT * FROM social.competitor_analyses WHERE id = $1",
+        """
+        SELECT c.*
+        FROM social.competitor_analyses c
+        JOIN social.brands b ON b.id = c.brand_id
+        JOIN social.workspace_members m ON m.workspace_id = b.workspace_id
+        WHERE c.id = $1 AND m.account_id = $2
+        """,
         competitor_id,
+        account_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Rakip bulunamadı")
@@ -119,9 +129,17 @@ async def refresh_analysis(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Rakip analizini yeniden çalıştır."""
+    account_id = user.get("sub")
     row = await db.fetchrow(
-        "SELECT * FROM social.competitor_analyses WHERE id = $1",
+        """
+        SELECT c.*
+        FROM social.competitor_analyses c
+        JOIN social.brands b ON b.id = c.brand_id
+        JOIN social.workspace_members m ON m.workspace_id = b.workspace_id
+        WHERE c.id = $1 AND m.account_id = $2
+        """,
         competitor_id,
+        account_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Rakip bulunamadı")
@@ -150,9 +168,18 @@ async def delete_competitor(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Rakibi sil."""
+    account_id = user.get("sub")
     result = await db.execute(
-        "DELETE FROM social.competitor_analyses WHERE id = $1",
+        """
+        DELETE FROM social.competitor_analyses c
+        USING social.brands b, social.workspace_members m
+        WHERE c.id = $1
+          AND b.id = c.brand_id
+          AND m.workspace_id = b.workspace_id
+          AND m.account_id = $2
+        """,
         competitor_id,
+        account_id,
     )
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Rakip bulunamadı")
@@ -166,6 +193,7 @@ async def get_report(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Tüm rakiplerin Claude sentez raporunu döndür."""
+    await assert_brand_owned(db, user, brand_id)
     brand = await db.fetchrow(
         "SELECT name, sector FROM social.brands WHERE id = $1", brand_id
     )

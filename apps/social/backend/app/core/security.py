@@ -121,3 +121,71 @@ def get_service_auth(x_internal_key: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=503, detail="Internal API key not configured")
     if x_internal_key != settings.INTERNAL_API_KEY:
         raise HTTPException(status_code=401, detail="Invalid internal API key")
+
+
+async def assert_workspace_owned(db, user: dict, workspace_id) -> None:
+    """Raise 404 if the given workspace isn't a member-of by the current user."""
+    account_id = user.get("sub")
+    if not account_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz oturum")
+    row = await db.fetchrow(
+        """
+        SELECT 1 FROM social.workspace_members
+        WHERE workspace_id = $1 AND account_id = $2
+        LIMIT 1
+        """,
+        workspace_id,
+        account_id,
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace bulunamadı")
+
+
+async def assert_brand_owned(db, user: dict, brand_id) -> None:
+    """Raise 404 if the given brand doesn't belong to the current user's workspaces.
+
+    Ownership zinciri: accounts.id == JWT.sub → workspace_members.account_id →
+    workspaces.id → brands.workspace_id.
+    404 (not 403) döndürüyoruz ki başkasının kaynağının varlığı sızmasın.
+    """
+    account_id = user.get("sub")
+    if not account_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz oturum")
+    row = await db.fetchrow(
+        """
+        SELECT 1
+        FROM social.brands b
+        JOIN social.workspace_members m ON m.workspace_id = b.workspace_id
+        WHERE b.id = $1 AND m.account_id = $2
+        LIMIT 1
+        """,
+        brand_id,
+        account_id,
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Marka bulunamadı")
+
+
+async def assert_post_owned(db, user: dict, post_id) -> dict:
+    """Raise 404 if the given post doesn't belong to the current user's workspaces.
+
+    Returns the post row as dict (so callers don't need to re-fetch).
+    """
+    account_id = user.get("sub")
+    if not account_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz oturum")
+    row = await db.fetchrow(
+        """
+        SELECT p.*
+        FROM social.posts p
+        JOIN social.brands b ON b.id = p.brand_id
+        JOIN social.workspace_members m ON m.workspace_id = b.workspace_id
+        WHERE p.id = $1 AND m.account_id = $2
+        LIMIT 1
+        """,
+        post_id,
+        account_id,
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post bulunamadı")
+    return dict(row)

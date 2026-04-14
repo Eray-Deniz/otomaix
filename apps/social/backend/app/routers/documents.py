@@ -4,7 +4,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
 from app.services.document_processor import ALLOWED_MIME_TYPES, process_document
 from app.services.storage import r2
@@ -25,6 +25,7 @@ async def upload_document(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Upload a document and trigger text extraction + RAG processing."""
+    await assert_brand_owned(db, user, brand_id)
     if file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=400,
@@ -82,6 +83,7 @@ async def list_documents(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """List all documents for a brand."""
+    await assert_brand_owned(db, user, brand_id)
     rows = await db.fetch(
         """
         SELECT id, brand_id, name, file_url, file_type, category, description,
@@ -104,9 +106,17 @@ async def delete_document(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Delete a document, its R2 file, and all associated chunks."""
+    account_id = user.get("sub")
     row = await db.fetchrow(
-        "SELECT file_url FROM social.brand_documents WHERE id = $1",
+        """
+        SELECT d.file_url
+        FROM social.brand_documents d
+        JOIN social.brands b ON b.id = d.brand_id
+        JOIN social.workspace_members m ON m.workspace_id = b.workspace_id
+        WHERE d.id = $1 AND m.account_id = $2
+        """,
         doc_id,
+        account_id,
     )
     if not row:
         raise HTTPException(status_code=404, detail="Doküman bulunamadı")

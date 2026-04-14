@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 
 from app.core.cache import get_cached, invalidate_pattern, set_cached
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, assert_workspace_owned, get_current_user
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.services.storage import r2
 
@@ -25,6 +25,7 @@ async def create_brand(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Create a new brand inside a workspace."""
+    await assert_workspace_owned(db, user, payload.workspace_id)
     row = await db.fetchrow(
         """
         INSERT INTO social.brands (workspace_id, name, description, website_url, sector)
@@ -48,6 +49,7 @@ async def list_brands(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """List all brands in a workspace."""
+    await assert_workspace_owned(db, user, workspace_id)
     cache_key = f"otomaix:social:brands:{workspace_id}"
     cached = await get_cached(cache_key)
     if cached is not None:
@@ -69,6 +71,7 @@ async def get_brand(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Get a single brand by id."""
+    await assert_brand_owned(db, user, brand_id)
     row = await db.fetchrow("SELECT * FROM social.brands WHERE id = $1", brand_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
@@ -83,6 +86,7 @@ async def update_brand(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Partially update a brand."""
+    await assert_brand_owned(db, user, brand_id)
     updates = payload.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
@@ -107,6 +111,7 @@ async def delete_brand(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Delete a brand."""
+    await assert_brand_owned(db, user, brand_id)
     row = await db.fetchrow("SELECT workspace_id FROM social.brands WHERE id = $1", brand_id)
     result = await db.execute("DELETE FROM social.brands WHERE id = $1", brand_id)
     if result == "DELETE 0":
@@ -124,6 +129,7 @@ async def update_brand_kit(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Update the brand_kit JSONB field for a brand."""
+    await assert_brand_owned(db, user, brand_id)
     row = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
@@ -151,6 +157,7 @@ async def upload_logo(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Upload a brand logo (light or dark variant) to R2."""
+    await assert_brand_owned(db, user, brand_id)
     if variant not in ("light", "dark"):
         raise HTTPException(status_code=400, detail="variant must be 'light' or 'dark'")
     if file.content_type not in ALLOWED_IMAGE_TYPES:
@@ -181,6 +188,7 @@ async def upload_intro_video(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Upload a brand intro video to R2."""
+    await assert_brand_owned(db, user, brand_id)
     if file.content_type not in ALLOWED_VIDEO_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported video type")
 

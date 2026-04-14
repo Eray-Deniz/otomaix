@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.cache import get_cached, set_cached
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
 from app.services.avatar import (
     create_avatar_from_photo,
@@ -53,6 +53,7 @@ async def create_avatar(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Kullanıcı fotoğrafından HeyGen avatar oluştur."""
+    await assert_brand_owned(db, user, brand_id)
     from app.core.config import settings as _settings
     if not _settings.HEYGEN_API_KEY:
         raise HTTPException(
@@ -92,6 +93,7 @@ async def select_stock_avatar(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Seçilen stok avatarı brand_kit'e kaydet."""
+    await assert_brand_owned(db, user, payload.brand_id)
     result = await set_stock_avatar(
         payload.avatar_id,
         payload.avatar_name,
@@ -118,6 +120,7 @@ async def generate_ugc(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Markanın aktif avatarı ile UGC video üret."""
+    await assert_brand_owned(db, user, payload.brand_id)
     from app.core.config import settings as _settings
     if not _settings.HEYGEN_API_KEY:
         raise HTTPException(

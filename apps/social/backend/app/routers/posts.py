@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.core.security import get_current_user, get_current_user_optional, get_service_auth
+from app.core.security import (
+    assert_brand_owned,
+    assert_post_owned,
+    get_current_user,
+    get_current_user_optional,
+    get_service_auth,
+)
 from app.models.schemas import FacelessVideoGenerate, OkResponse, PostCreate, PostGenerate
 from app.services.document_processor import get_document_context
 from app.services.fal_ai import generate_image
@@ -147,6 +153,7 @@ async def generate_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Create a post record and trigger fal.ai image generation."""
+    await assert_brand_owned(db, user, payload.brand_id)
     brand = await db.fetchrow(
         "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
     )
@@ -219,6 +226,8 @@ async def regenerate_post(
     if not user and x_internal_key != _settings.INTERNAL_API_KEY:
         from fastapi import HTTPException as _HTTPException
         raise _HTTPException(status_code=401, detail="Not authenticated")
+    if user:
+        await assert_post_owned(db, user, post_id)
     post = await db.fetchrow(
         "SELECT p.*, b.brand_kit FROM social.posts p JOIN social.brands b ON b.id = p.brand_id WHERE p.id = $1",
         post_id,
@@ -248,6 +257,7 @@ async def create_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Create a new post (status=draft). Trigger generation separately."""
+    await assert_brand_owned(db, user, payload.brand_id)
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
@@ -280,6 +290,7 @@ async def list_posts(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """List posts for a brand with optional filters and pagination."""
+    await assert_brand_owned(db, user, brand_id)
     conditions = ["brand_id = $1"]
     params: list = [brand_id]
     idx = 2
@@ -322,10 +333,8 @@ async def get_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Get a single post by id."""
-    row = await db.fetchrow("SELECT * FROM social.posts WHERE id = $1", post_id)
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
-    return OkResponse(data=dict(row))
+    row = await assert_post_owned(db, user, post_id)
+    return OkResponse(data=row)
 
 
 @router.post("/{post_id}/publish", response_model=OkResponse)
@@ -335,6 +344,7 @@ async def publish_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Trigger publishing a post to its configured platforms."""
+    await assert_post_owned(db, user, post_id)
     from app.services.upload_post import publish_post as svc_publish
 
     result = await svc_publish(post_id, db)
@@ -433,6 +443,7 @@ async def generate_faceless_video(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Faceless video pipeline: script üret → TTS → fal.ai arka plan videosu."""
+    await assert_brand_owned(db, user, payload.brand_id)
     brand = await db.fetchrow(
         "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
     )

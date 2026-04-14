@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.cache import get_cached, set_cached
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, assert_post_owned, get_current_user
 from app.models.schemas import OkResponse
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -26,6 +26,7 @@ async def get_calendar_posts(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Return posts in date range for calendar display."""
+    await assert_brand_owned(db, user, brand_id)
     rows = await db.fetch(
         """
         SELECT id, content_type, status, thumbnail_url, output_url,
@@ -76,6 +77,7 @@ async def schedule_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Set or update a post's scheduled_at datetime."""
+    await assert_post_owned(db, user, post_id)
     row = await db.fetchrow(
         "UPDATE social.posts SET scheduled_at = $2, status = 'scheduled', updated_at = now() WHERE id = $1 RETURNING id, status, scheduled_at",
         post_id,

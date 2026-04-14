@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
 
 router = APIRouter(prefix="/autoposting", tags=["autoposting"])
@@ -31,6 +31,7 @@ async def get_config(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Get auto posting config for a brand."""
+    await assert_brand_owned(db, user, brand_id)
     row = await db.fetchrow(
         "SELECT * FROM social.autoposting_configs WHERE brand_id = $1",
         brand_id,
@@ -45,6 +46,7 @@ async def upsert_config(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Create or update auto posting config."""
+    await assert_brand_owned(db, user, payload.brand_id)
     row = await db.fetchrow(
         """
         INSERT INTO social.autoposting_configs
@@ -79,6 +81,7 @@ async def toggle_config(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Toggle is_enabled for a brand's auto posting config."""
+    await assert_brand_owned(db, user, brand_id)
     row = await db.fetchrow(
         """
         UPDATE social.autoposting_configs
@@ -100,6 +103,7 @@ async def get_upcoming(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Return next 5 scheduled posts for a brand."""
+    await assert_brand_owned(db, user, brand_id)
     rows = await db.fetch(
         """
         SELECT id, content_type, status, thumbnail_url, caption, scheduled_at
