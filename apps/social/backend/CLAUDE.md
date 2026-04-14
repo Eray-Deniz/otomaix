@@ -1,5 +1,27 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — N8N-2 + N8N-3: Auto Posting Scheduler fix + aktifleştirme
+
+Analiz raporundaki P0 bulguları N8N-2 (workflow inaktif) ve N8N-3 (yanlış URL + hardcoded X-Internal-Key) çözüldü.
+
+**Bulunan gerçek sebep:** Workflow'un mevcut URL'leri `http://178.104.7.200:8000/internal/...` ile **Coolify panel login sayfasını** hedefliyordu (Coolify UI 8000 portundan servis ediliyor, backend değil). Yani workflow hiçbir zaman çalışmamıştı. Önceden `api.otomaix.com` denendiğinde 401 alındığı için IP'ye döndürüldüğü kaydedilmiş, ancak 401'in gerçek nedeni Coolify'da `INTERNAL_API_KEY` env var'ının **7 karakter eksik** (truncated) paste edilmiş olmasıydı.
+
+**Yapılan değişiklikler:**
+1. Coolify `otomaix-social-backend` → `INTERNAL_API_KEY` tam 64 char değer ile güncellendi (kullanıcı tarafından), redeploy edildi.
+2. Yeni n8n credential oluşturuldu: **`Otomaix Internal API Key`** (id: `nFP1FbcwkIw8n9SS`, type: `httpHeaderAuth`, name: `X-Internal-Key`).
+3. Auto Posting Scheduler (`Nz4651wCfBHP4G9l`) workflow'unda iki HTTP Request node:
+   - `Zamanı Gelen Configler` → `http://178.104.7.200:8000/...` → `https://api.otomaix.com/internal/autoposting/due`
+   - `Post Üret` → `https://api.otomaix.com/internal/autoposting/trigger`
+   - Her ikisinde de `headerParameters.X-Internal-Key` kaldırıldı; `authentication: genericCredentialType` + yeni credential referansı eklendi.
+4. `Telegram Onay Tetikle` node URL'i `http://178.104.7.200:5678/webhook/...` → `https://n8n.otomaix.com/webhook/telegram-content-approval` (aynı n8n'e self-ref public URL üzerinden).
+5. Workflow `active: true` yapıldı.
+6. Lokal version-control kopyası güncellendi: `shared/n8n-workflows/auto-posting-scheduler.json`.
+
+**Doğrulama:** `curl -H "X-Internal-Key: ..." https://api.otomaix.com/internal/autoposting/due` → `{"success":true,"data":[]}` HTTP 200.
+
+**⏳ Hâlâ açık (aynı workflow'da bir sonraki adım):**
+- **N8N-5** (P1) — `splitInBatches` loop kablolaması eksik. Şu an `Her Config İçin` → `Rastgele Seçim` var ama done branch'ı ve loop-back bağlantısı yok. Çoklu config aynı cycle'da işlenmez; sadece ilki. Otomatik yayın tek markalı müşteriler için bu halde çalışır, çok markalılar için **ayrı bir fix** gerekiyor.
+
 ## 2026-04-14 — Dashboard stats endpoint
 
 Yeni endpoint: `GET /posts/stats/summary?brand_id=<uuid>` (`routers/posts.py`).

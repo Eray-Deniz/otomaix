@@ -1,13 +1,345 @@
 {
-  "id": "Nz4651wCfBHP4G9l",
   "name": "Auto Posting Scheduler",
-  "nodes": "see n8n UI",
-  "description": "Her 30 dakikada zamanı gelen autoposting configlerini kontrol eder, post üretir, gerekirse Telegram onayına gönderir.",
-  "trigger": "Schedule - every 30 minutes",
-  "endpoints_used": [
-    "GET /internal/autoposting/due",
-    "POST /internal/autoposting/trigger",
-    "POST /webhook/telegram-content-approval (Telegram Onay workflow webhook)"
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Her 30 Dakika",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "get-due-configs",
+      "name": "Zamanı Gelen Configler",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.otomaix.com/internal/autoposting/due",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nFP1FbcwkIw8n9SS",
+          "name": "Otomaix Internal API Key"
+        }
+      }
+    },
+    {
+      "id": "check-has-due",
+      "name": "Config Var mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond1",
+              "leftValue": "={{ $json.data.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "split-configs",
+      "name": "Her Config İçin",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        660,
+        -80
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "pick-random",
+      "name": "Rastgele Seçim",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const config = $input.first().json;\nconst topics = config.topics && config.topics.length ? config.topics : ['Genel içerik'];\nconst contentTypes = config.content_types && config.content_types.length ? config.content_types : ['image'];\nconst categories = config.content_categories && config.content_categories.length ? config.content_categories : ['product'];\n\nconst topic = topics[Math.floor(Math.random() * topics.length)];\nconst contentType = contentTypes[Math.floor(Math.random() * contentTypes.length)];\nconst category = categories[Math.floor(Math.random() * categories.length)];\n\nreturn [{\n  json: {\n    brand_id: config.brand_id,\n    brand_name: config.brand_name,\n    topic,\n    content_type: contentType,\n    content_category: category,\n    platforms: config.platforms || [],\n    telegram_approval: config.telegram_approval || false,\n    telegram_bot_token: config.telegram_bot_token || '',\n    telegram_chat_id: config.telegram_chat_id || ''\n  }\n}];}"
+      }
+    },
+    {
+      "id": "trigger-post",
+      "name": "Post Üret",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -80
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.otomaix.com/internal/autoposting/trigger",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ brand_id: $('Rastgele Seçim').item.json.brand_id, topic: $('Rastgele Seçim').item.json.topic, content_type: $('Rastgele Seçim').item.json.content_type, content_category: $('Rastgele Seçim').item.json.content_category, platforms: $('Rastgele Seçim').item.json.platforms, telegram_approval: $('Rastgele Seçim').item.json.telegram_approval, telegram_bot_token: $('Rastgele Seçim').item.json.telegram_bot_token, telegram_chat_id: $('Rastgele Seçim').item.json.telegram_chat_id }) }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nFP1FbcwkIw8n9SS",
+          "name": "Otomaix Internal API Key"
+        }
+      }
+    },
+    {
+      "id": "check-telegram",
+      "name": "Telegram Onayı Gerekli mi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond2",
+              "leftValue": "={{ $('Rastgele Seçim').item.json.telegram_approval }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "wait-generation",
+      "name": "Üretim Bekle (3dk)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        -160
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "unit": "minutes",
+        "amount": 3
+      }
+    },
+    {
+      "id": "trigger-telegram-approval",
+      "name": "Telegram Onay Tetikle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        -160
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.otomaix.com/webhook/telegram-content-approval",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ post_id: $('Post Üret').item.json.data.post_id, brand_id: $('Rastgele Seçim').item.json.brand_id, telegram_bot_token: $('Rastgele Seçim').item.json.telegram_bot_token, telegram_chat_id: $('Rastgele Seçim').item.json.telegram_chat_id }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "VMbwUuFB8BzVhxEz",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "id": "no-telegram",
+      "name": "Otomatik Yayın",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "no-configs",
+      "name": "Config Yok",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        440,
+        120
+      ],
+      "parameters": {}
+    }
   ],
-  "auth": "X-Internal-Key header"
+  "connections": {
+    "Her 30 Dakika": {
+      "main": [
+        [
+          {
+            "node": "Zamanı Gelen Configler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zamanı Gelen Configler": {
+      "main": [
+        [
+          {
+            "node": "Config Var mı?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Var mı?": {
+      "main": [
+        [
+          {
+            "node": "Her Config İçin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Config Yok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Her Config İçin": {
+      "main": [
+        [
+          {
+            "node": "Rastgele Seçim",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rastgele Seçim": {
+      "main": [
+        [
+          {
+            "node": "Post Üret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Üret": {
+      "main": [
+        [
+          {
+            "node": "Telegram Onayı Gerekli mi?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Onayı Gerekli mi?": {
+      "main": [
+        [
+          {
+            "node": "Üretim Bekle (3dk)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Otomatik Yayın",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Üretim Bekle (3dk)": {
+      "main": [
+        [
+          {
+            "node": "Telegram Onay Tetikle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
 }
