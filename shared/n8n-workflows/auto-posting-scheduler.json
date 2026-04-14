@@ -89,28 +89,14 @@
     {
       "id": "split-configs",
       "name": "Her Config İçin",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         660,
         -80
       ],
       "parameters": {
-        "batchSize": 1,
-        "options": {}
-      }
-    },
-    {
-      "id": "pick-random",
-      "name": "Rastgele Seçim",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        880,
-        -80
-      ],
-      "parameters": {
-        "jsCode": "const config = $input.first().json;\nconst topics = config.topics && config.topics.length ? config.topics : ['Genel içerik'];\nconst contentTypes = config.content_types && config.content_types.length ? config.content_types : ['image'];\nconst categories = config.content_categories && config.content_categories.length ? config.content_categories : ['product'];\n\nconst topic = topics[Math.floor(Math.random() * topics.length)];\nconst contentType = contentTypes[Math.floor(Math.random() * contentTypes.length)];\nconst category = categories[Math.floor(Math.random() * categories.length)];\n\nreturn [{\n  json: {\n    brand_id: config.brand_id,\n    brand_name: config.brand_name,\n    topic,\n    content_type: contentType,\n    content_category: category,\n    platforms: config.platforms || [],\n    telegram_approval: config.telegram_approval || false,\n    telegram_bot_token: config.telegram_bot_token || '',\n    telegram_chat_id: config.telegram_chat_id || ''\n  }\n}];}"
+        "jsCode": "const configs = $input.first().json.data || [];\nreturn configs.map(config => {\n  const topics = config.topics && config.topics.length ? config.topics : ['Genel içerik'];\n  const contentTypes = config.content_types && config.content_types.length ? config.content_types : ['image'];\n  const categories = config.content_categories && config.content_categories.length ? config.content_categories : ['product'];\n  const topic = topics[Math.floor(Math.random() * topics.length)];\n  const contentType = contentTypes[Math.floor(Math.random() * contentTypes.length)];\n  const category = categories[Math.floor(Math.random() * categories.length)];\n  return {\n    json: {\n      brand_id: config.brand_id,\n      brand_name: config.brand_name,\n      topic,\n      content_type: contentType,\n      content_category: category,\n      platforms: config.platforms || [],\n      telegram_approval: config.telegram_approval || false,\n      telegram_bot_token: config.telegram_bot_token || '',\n      telegram_chat_id: config.telegram_chat_id || ''\n    }\n  };\n});"
       }
     },
     {
@@ -119,7 +105,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        880,
         -80
       ],
       "continueOnFail": true,
@@ -132,7 +118,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ brand_id: $('Rastgele Seçim').item.json.brand_id, topic: $('Rastgele Seçim').item.json.topic, content_type: $('Rastgele Seçim').item.json.content_type, content_category: $('Rastgele Seçim').item.json.content_category, platforms: $('Rastgele Seçim').item.json.platforms, telegram_approval: $('Rastgele Seçim').item.json.telegram_approval, telegram_bot_token: $('Rastgele Seçim').item.json.telegram_bot_token, telegram_chat_id: $('Rastgele Seçim').item.json.telegram_chat_id }) }}",
+        "jsonBody": "={{ JSON.stringify({ brand_id: $('Her Config İçin').item.json.brand_id, topic: $('Her Config İçin').item.json.topic, content_type: $('Her Config İçin').item.json.content_type, content_category: $('Her Config İçin').item.json.content_category, platforms: $('Her Config İçin').item.json.platforms, telegram_approval: $('Her Config İçin').item.json.telegram_approval, telegram_bot_token: $('Her Config İçin').item.json.telegram_bot_token, telegram_chat_id: $('Her Config İçin').item.json.telegram_chat_id }) }}",
         "options": {},
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth"
@@ -150,7 +136,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1320,
+        1100,
         -80
       ],
       "parameters": {
@@ -163,7 +149,7 @@
           "conditions": [
             {
               "id": "cond2",
-              "leftValue": "={{ $('Rastgele Seçim').item.json.telegram_approval }}",
+              "leftValue": "={{ $('Her Config İçin').item.json.telegram_approval }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -181,7 +167,7 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        1540,
+        1320,
         -160
       ],
       "parameters": {
@@ -196,7 +182,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1760,
+        1540,
         -160
       ],
       "continueOnFail": true,
@@ -205,14 +191,8 @@
         "url": "https://n8n.otomaix.com/webhook/telegram-content-approval",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ post_id: $('Post Üret').item.json.data.post_id, brand_id: $('Rastgele Seçim').item.json.brand_id, telegram_bot_token: $('Rastgele Seçim').item.json.telegram_bot_token, telegram_chat_id: $('Rastgele Seçim').item.json.telegram_chat_id }) }}",
+        "jsonBody": "={{ JSON.stringify({ post_id: $('Post Üret').item.json.data.post_id, brand_id: $('Her Config İçin').item.json.brand_id, telegram_bot_token: $('Her Config İçin').item.json.telegram_bot_token, telegram_chat_id: $('Her Config İçin').item.json.telegram_chat_id }) }}",
         "options": {}
-      },
-      "credentials": {
-        "telegramApi": {
-          "id": "VMbwUuFB8BzVhxEz",
-          "name": "Telegram account"
-        }
       }
     },
     {
@@ -221,7 +201,7 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1540,
+        1320,
         0
       ],
       "parameters": {}
@@ -280,17 +260,6 @@
       ]
     },
     "Her Config İçin": {
-      "main": [
-        [
-          {
-            "node": "Rastgele Seçim",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Rastgele Seçim": {
       "main": [
         [
           {

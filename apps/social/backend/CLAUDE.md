@@ -1,5 +1,23 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — N8N-5: Auto Posting Scheduler splitInBatches → Code map
+
+Analiz raporundaki P0 bulgusu N8N-5 (Auto Posting Scheduler `Her Config İçin` splitInBatches loop kablolaması eksik — tek cycle'da sadece ilk config işleniyordu) çözüldü.
+
+**Çözüm yaklaşımı:** N8N-7 (Scheduled Post Publisher) fix'inde öğrenilen Code map pattern'i uygulandı. splitInBatches v3'ün done/loop output indeks belirsizliğinden kaçınmak için, `splitInBatches` + `Rastgele Seçim` iki ayrı node'u tek bir Code node'da birleştirdik. Yeni `Her Config İçin` (code) node'u `$input.first().json.data.map(config => ({json: {...rastgele seçim}}))` ile her config'i ayrı item olarak açıyor, sonraki HTTP Request (`Post Üret`) ve IF (`Telegram Onayı Gerekli mi?`) n8n'in native item iteration'ı ile her item için sırayla çalışıyor.
+
+**Değişiklikler** (n8n REST API PUT `/workflows/Nz4651wCfBHP4G9l`, lokal kopya `shared/n8n-workflows/auto-posting-scheduler.json`):
+1. `split-configs` (type `n8n-nodes-base.splitInBatches`) → type `n8n-nodes-base.code` olarak değiştirildi, adı "Her Config İçin" korundu
+2. `pick-random` (eski "Rastgele Seçim" Code node) tamamen kaldırıldı — mantığı yeni node'a taşındı
+3. `Post Üret` ve `Telegram Onay Tetikle` body expression'larındaki `$('Rastgele Seçim').item.json.*` referansları `$('Her Config İçin').item.json.*` olarak güncellendi
+4. `Telegram Onayı Gerekli mi?` IF node'unun leftValue'u aynı şekilde `$('Her Config İçin').item.json.telegram_approval`
+5. Connections: `Config Var mı? true → Her Config İçin → Post Üret → ...` — doğrudan, splitInBatches loop-back yok
+6. Workflow `active: true` korundu
+
+**Doğrulama:** Update PUT 200 döndü, aktif state bozulmadı. Çoklu konfig testi için bir sonraki 30dk tick'te (veya n8n UI "Execute Workflow") execution log'unda `Her Config İçin` output'unda config sayısı kadar item görünmelidir. Due config yoksa `Config Yok` noOp branch'ine düşer (normal).
+
+**Öğrenilen ders (tekrar):** n8n v1+ splitInBatches node'unu mümkünse tercih etme — Code node `$input.all().map()` veya `$input.first().json.data.map()` + native item iteration hem daha basit hem daha debuggable. N8N-7'de buna karar verilmişti, N8N-5 aynı pattern'i benimsedi.
+
 ## 2026-04-14 — asyncpg jsonb codec fix (uzun süredir var olan bug)
 
 **Bulunan bug:** asyncpg default olarak jsonb kolonlarını **str** (JSON-encoded string) olarak döndürüyordu. Sonuç: `dict(row)["analysis_data"]` bir string'di, frontend'de `analysis_data?.website` her zaman undefined dönüyordu. Rakip analiz paneli sayfada hiç veri göstermiyordu (B-5 fix'i öncesinde de böyleydi — senkron path'te `competitor["analysis_data"] = analysis_data` doğrudan dict ile override edildiği için ilk ekleme anında fark edilmemişti).
