@@ -510,18 +510,25 @@ function MarkaAyarlariContent() {
       }>('/ai/analyze-website', { url })
 
       if (res.success && res.data) {
+        const filled: string[] = []
         const brandFields: Partial<Brand> = {}
-        if (res.data.name) brandFields.name = res.data.name
-        if (res.data.description) brandFields.description = res.data.description
-        if (res.data.sector) brandFields.sector = res.data.sector
+        if (res.data.name) { brandFields.name = res.data.name; filled.push('ad') }
+        if (res.data.description) { brandFields.description = res.data.description; filled.push('açıklama') }
+        if (res.data.sector) { brandFields.sector = res.data.sector; filled.push('sektör') }
         if (Object.keys(brandFields).length > 0) updateBrand(brandFields)
 
         const kitFields: Partial<BrandKit> = {}
-        if (res.data.colors?.length) kitFields.colors = res.data.colors
-        if (res.data.tonality) kitFields.tonality = res.data.tonality
+        if (res.data.colors?.length) { kitFields.colors = res.data.colors; filled.push('renkler') }
+        if (res.data.tonality) { kitFields.tonality = res.data.tonality; filled.push('ton') }
         if (Object.keys(kitFields).length > 0) updateKit(kitFields)
 
-        toast.success('Marka bilgileri otomatik dolduruldu')
+        if (filled.length > 0) {
+          toast.success(
+            `${filled.length} alan dolduruldu: ${filled.join(', ')}. Marka Kimliği sekmesini kontrol et.`
+          )
+        } else {
+          toast.error('Web sitesinden marka bilgisi çıkarılamadı')
+        }
       } else {
         toast.error(res.error || 'Web sitesi analizi başarısız')
       }
@@ -738,26 +745,7 @@ function MarkaAyarlariContent() {
 
         {/* ── Tab 1: Marka Bilgileri ─────────────────────────────────────────── */}
         <TabsContent value="bilgiler" className="space-y-5">
-          <div className="space-y-1.5">
-            <Label>Marka Adı</Label>
-            <Input
-              value={brand.name}
-              onChange={(e) => updateBrand({ name: e.target.value })}
-              placeholder="Marka adı"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Açıklama</Label>
-            <Textarea
-              value={brand.description ?? ''}
-              onChange={(e) => updateBrand({ description: e.target.value })}
-              placeholder="Markanızı kısaca açıklayın..."
-              rows={3}
-            />
-          </div>
-
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 rounded-lg border border-violet-200 bg-violet-50/50 p-4">
             <Label>Web Sitesi</Label>
             <div className="flex gap-2">
               <Input
@@ -775,6 +763,28 @@ function MarkaAyarlariContent() {
                 {analyzingWebsite ? 'Analiz ediliyor...' : 'Otomatik Doldur'}
               </Button>
             </div>
+            <p className="text-xs text-gray-500">
+              Web sitesi adresinden marka adı, açıklama, sektör, renkler ve ton otomatik doldurulur. Marka Kimliği sekmesindeki alanlar da güncellenir.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Marka Adı</Label>
+            <Input
+              value={brand.name}
+              onChange={(e) => updateBrand({ name: e.target.value })}
+              placeholder="Marka adı"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Açıklama</Label>
+            <Textarea
+              value={brand.description ?? ''}
+              onChange={(e) => updateBrand({ description: e.target.value })}
+              placeholder="Markanızı kısaca açıklayın..."
+              rows={3}
+            />
           </div>
 
           <div className="space-y-1.5">
