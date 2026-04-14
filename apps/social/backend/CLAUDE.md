@@ -2,6 +2,34 @@
 
 ## 2026-04-14 — Teknik Analiz Raporu Fix'leri (rev-1)
 
+### [F-2 rev-2] Upload-Post.com entegrasyonu tamamen yeniden yazıldı
+Test sırasında mevcut `upload_post.py` servisinin **hayal edilmiş** bir API şeması kullandığı fark edildi (`/v1/oauth/{platform}?token=...&state=...`) — Upload-Post.com'da böyle bir endpoint yok, tüm OAuth çağrıları 404 dönüyordu. Gerçek API (OpenAPI spec'ten doğrulandı):
+
+- **Base URL**: `https://api.upload-post.com/api` (önceden yanlış: `/v1`)
+- **Auth**: `Authorization: Apikey <key>` (önceden yanlış: HS256 JWT üretip Bearer)
+- **Akış**: 1 marka = 1 Upload-Post profile
+  1. `POST /uploadposts/users` → profile oluştur (idempotent, 409 = zaten var)
+  2. `POST /uploadposts/users/generate-jwt` → `{username, redirect_url, platforms}` → `access_url` döner (48h, tek kullanımlık)
+  3. Kullanıcı `access_url`'yi ziyaret → Upload-Post kendi arayüzünde OAuth'u halleder → `redirect_url`'ye yönlendirir (bizim `/social/callback` endpoint'ine artık gerek yok)
+  4. `GET /uploadposts/users/{username}` → `social_accounts: { platform: {handle, display_name, ...} }`
+  5. Yayın: `POST /upload` (video) veya `/upload_photos` (görsel) — multipart form, `user=profile_username`, `platform[]=...`
+
+**Değişen dosyalar**:
+- `app/services/upload_post.py` — tamamen yeniden yazıldı: `ensure_profile`, `generate_connect_url`, `fetch_social_accounts`, `sync_social_accounts`, `publish_post`. Yayın akışında R2'den medya indirilir ve multipart olarak Upload-Post'a yüklenir.
+- `app/routers/social.py`:
+  - `oauth_link` → `generate_connect_url()` çağırır, access_url döner
+  - `GET /social/accounts` → Upload-Post'tan sync eder, `brand_social_accounts` cache'ine yazar, güncel listeyi döner
+  - `/social/callback` → no-op redirect (eski bağlantılar 404 almasın diye bırakıldı)
+- `app/routers/posts.py` — değişmedi, `publish_post(post_id, db)` imzası korundu → n8n `/posts/{id}/publish-now` ve frontend `/posts/{id}/publish` akışları şeffaf.
+
+**DB**:
+- Migration 014: `social.brands.upload_post_username TEXT` kolonu eklendi (1 marka = 1 profile eşleşmesi). Index: `idx_brands_upload_post_username`.
+- `social.brand_social_accounts` artık sadece **cache** olarak kullanılıyor — `sync_social_accounts()` her çağrıda Upload-Post'tan taze veri çeker ve tabloya upsert yapar. `upload_post_token` kolonu ölü (kaldırılmadı, ilerideki cleanup için bırakıldı).
+
+**Profile username formatı**: `brand_<uuid'nin tire silinmiş ilk 16 karakteri>` (örn. `brand_89e7d9666fcb4da1`). Upload-Post plan limitinde 10 profile = 10 markaya kadar destekler; büyürken plan upgrade gerekebilir (kod etkisi yok).
+
+**Canlı smoke test yapıldı**: gerçek API key ile `POST /users`, `POST /users/generate-jwt`, `DELETE /users` 200 döndü, profile dönen JSON şeması beklenene uyuyor.
+
 ### [F-2 backend] /social router — sahiplik + hesap listeleme
 - `app/routers/social.py:oauth_link` artık `db: asyncpg.Connection` dependency'si alır ve `assert_brand_owned(db, user, brand_id)` ile sahiplik kontrolü yapar (önceki halinde IDOR riski vardı: token sahibi başkasının `brand_id`'sini gönderip OAuth state JWT üretebiliyordu).
 - Yeni endpoint: `GET /social/accounts?brand_id=...` → markaya bağlı **aktif** sosyal medya hesaplarını döner (`platform`, `account_name`, `connected_at`). `assert_brand_owned` ile korunur.

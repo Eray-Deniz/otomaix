@@ -3,6 +3,12 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — F-2 rev-2: Upload-Post backend refactor (frontend değişmedi)
+
+Mevcut F-2 frontend'i (dashboard + marka-ayarlari) hiçbir değişiklik gerektirmedi — aynı API sözleşmesi (`GET /social/oauth-link`, `GET /social/accounts`) korundu. Semantik değişiklik sadece backend'de:
+- `oauth-link` response'u artık Upload-Post'un kendi `access_url`'sini içeriyor (`https://app.upload-post.com/connect?token=...`). Bu URL `window.open()` ile popup olarak açılıyor, kullanıcı bağlama işlemini Upload-Post arayüzünde tamamlıyor, işlem bitince `redirect_url` ile `marka-ayarlari?tab=sosyal&connected=1`'e geri dönüyor.
+- `accounts` endpoint'i her çağrıda Upload-Post'tan sync yapıyor — dashboard açılınca veya sosyal sekmesi açılınca güncel durum görünüyor (cache gecikmesi yok).
+
 ## 2026-04-14 — F-2: Dashboard "Bağla" butonları + marka-ayarlari OAuth fix
 
 ### dashboard/page.tsx

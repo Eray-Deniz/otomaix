@@ -1,4 +1,18 @@
-"""Upload-Post.com integration for social media publishing."""
+"""
+Upload-Post.com integration.
+
+Real API (https://docs.upload-post.com/openapi.json):
+- Base URL: https://api.upload-post.com/api
+- Auth: `Authorization: Apikey <key>`
+- One Upload-Post user profile per Otomaix brand (profile_username: "brand_<uuid8>")
+- Flow:
+    1. POST /uploadposts/users                → create profile (idempotent, 409 = already exists)
+    2. POST /uploadposts/users/generate-jwt   → returns access_url (48h, single use) for user to connect accounts
+    3. GET  /uploadposts/users/{username}     → returns social_accounts dict
+    4. POST /upload / /upload_photos          → publish content (user=profile_username, platform[]=...)
+"""
+
+from __future__ import annotations
 
 from uuid import UUID
 
@@ -8,47 +22,205 @@ import sentry_sdk
 
 from app.core.config import settings
 
-BASE_URL = "https://api.upload-post.com/v1"
-CALLBACK_URL = "https://api.otomaix.com/social/callback"
+BASE_URL = "https://api.upload-post.com/api"
+FRONTEND_REDIRECT = "https://app.otomaix.com/marka-ayarlari?tab=sosyal&connected=1"
+HTTP_TIMEOUT = 30
 
 
-def get_oauth_link(brand_id: UUID, platform: str) -> str:
+def _headers() -> dict:
+    return {"Authorization": f"Apikey {settings.UPLOAD_POST_API_KEY}"}
+
+
+def profile_username_for_brand(brand_id: UUID) -> str:
+    """Stable Upload-Post profile identifier for an Otomaix brand."""
+    return f"brand_{str(brand_id).replace('-', '')[:16]}"
+
+
+# ─── Profile management ────────────────────────────────────────────────────
+
+async def ensure_profile(brand_id: UUID, db: asyncpg.Connection) -> str:
     """
-    Generate a JWT-authenticated OAuth link for connecting a social account.
-
-    The link includes:
-    - `token` — HS256 JWT with API key (Upload-Post auth)
-    - `redirect_uri` — our callback endpoint
-    - `state` — HS256 JWT encoding brand_id + platform for CSRF protection
+    Ensure an Upload-Post profile exists for this brand.
+    Returns the profile_username. Idempotent.
     """
-    import time
-
-    from jose import jwt
-
-    now = int(time.time())
-
-    # Auth token for Upload-Post
-    auth_token = jwt.encode(
-        {"iat": now, "exp": now + 3600},
-        settings.UPLOAD_POST_API_KEY,
-        algorithm="HS256",
+    # Check DB cache first
+    row = await db.fetchrow(
+        "SELECT upload_post_username FROM social.brands WHERE id = $1",
+        brand_id,
     )
+    if row and row["upload_post_username"]:
+        return row["upload_post_username"]
 
-    # State JWT — decoded in /social/callback to verify origin and retrieve brand_id
-    state = jwt.encode(
-        {"iat": now, "exp": now + 3600, "brand_id": str(brand_id), "platform": platform},
-        settings.UPLOAD_POST_API_KEY,
-        algorithm="HS256",
+    username = profile_username_for_brand(brand_id)
+
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        resp = await client.post(
+            f"{BASE_URL}/uploadposts/users",
+            headers={**_headers(), "Content-Type": "application/json"},
+            json={"username": username},
+        )
+
+    # 201 = created, 409 = already exists (both fine)
+    if resp.status_code not in (200, 201, 409):
+        sentry_sdk.set_context(
+            "upload_post_create_profile",
+            {"brand_id": str(brand_id), "username": username, "status": resp.status_code, "body": resp.text[:500]},
+        )
+        sentry_sdk.capture_message(
+            f"Upload-Post create profile failed: HTTP {resp.status_code}",
+            level="error",
+        )
+        raise RuntimeError(f"Upload-Post profile creation failed ({resp.status_code})")
+
+    await db.execute(
+        "UPDATE social.brands SET upload_post_username = $1 WHERE id = $2",
+        username,
+        brand_id,
     )
+    return username
 
-    params = f"token={auth_token}&redirect_uri={CALLBACK_URL}&state={state}"
-    return f"{BASE_URL}/oauth/{platform}?{params}"
+
+async def generate_connect_url(brand_id: UUID, platform: str, db: asyncpg.Connection) -> str:
+    """
+    Generate a single-use URL (48h) the user visits to link their social account.
+    Creates the profile on Upload-Post if it doesn't exist yet.
+    """
+    username = await ensure_profile(brand_id, db)
+
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        resp = await client.post(
+            f"{BASE_URL}/uploadposts/users/generate-jwt",
+            headers={**_headers(), "Content-Type": "application/json"},
+            json={
+                "username": username,
+                "redirect_url": FRONTEND_REDIRECT,
+                "platforms": [platform],
+            },
+        )
+
+    if resp.status_code != 200:
+        sentry_sdk.set_context(
+            "upload_post_generate_jwt",
+            {"brand_id": str(brand_id), "platform": platform, "status": resp.status_code, "body": resp.text[:500]},
+        )
+        sentry_sdk.capture_message(
+            f"Upload-Post generate-jwt failed: HTTP {resp.status_code}",
+            level="error",
+        )
+        raise RuntimeError(f"Upload-Post JWT generation failed ({resp.status_code})")
+
+    body = resp.json()
+    url = body.get("access_url")
+    if not url:
+        raise RuntimeError("Upload-Post response missing access_url")
+    return url
+
+
+async def fetch_social_accounts(brand_id: UUID, db: asyncpg.Connection) -> list[dict]:
+    """
+    Fetch currently connected social accounts from Upload-Post for this brand.
+    Returns a normalized list: [{platform, account_name, handle, display_name}, ...]
+    """
+    row = await db.fetchrow(
+        "SELECT upload_post_username FROM social.brands WHERE id = $1",
+        brand_id,
+    )
+    username = row["upload_post_username"] if row else None
+    if not username:
+        return []
+
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        resp = await client.get(
+            f"{BASE_URL}/uploadposts/users/{username}",
+            headers=_headers(),
+        )
+
+    if resp.status_code == 404:
+        return []
+    if resp.status_code != 200:
+        sentry_sdk.capture_message(
+            f"Upload-Post get user failed: HTTP {resp.status_code}",
+            level="warning",
+        )
+        return []
+
+    body = resp.json()
+    profile = body.get("profile") or body
+    social_accounts = profile.get("social_accounts") or {}
+
+    result = []
+    for platform, info in social_accounts.items():
+        if not info:
+            continue
+        if isinstance(info, dict):
+            result.append({
+                "platform": platform,
+                "account_name": info.get("handle") or info.get("username") or info.get("display_name") or platform,
+                "display_name": info.get("display_name"),
+                "reauth_required": info.get("reauth_required", False),
+            })
+        else:
+            result.append({
+                "platform": platform,
+                "account_name": str(info),
+                "display_name": None,
+                "reauth_required": False,
+            })
+    return result
+
+
+async def sync_social_accounts(brand_id: UUID, db: asyncpg.Connection) -> list[dict]:
+    """
+    Sync connected accounts from Upload-Post into local brand_social_accounts cache.
+    Returns the fresh list.
+    """
+    accounts = await fetch_social_accounts(brand_id, db)
+
+    # Cache in DB: deactivate all, then upsert active ones
+    await db.execute(
+        "UPDATE social.brand_social_accounts SET is_active = false WHERE brand_id = $1",
+        brand_id,
+    )
+    for acc in accounts:
+        await db.execute(
+            """
+            INSERT INTO social.brand_social_accounts
+                (brand_id, platform, account_name, is_active, connected_at)
+            VALUES ($1, $2, $3, true, now())
+            ON CONFLICT (brand_id, platform) DO UPDATE SET
+                account_name = EXCLUDED.account_name,
+                is_active = true,
+                connected_at = now()
+            """,
+            brand_id,
+            acc["platform"],
+            acc["account_name"],
+        )
+    return accounts
+
+
+# ─── Publishing ────────────────────────────────────────────────────────────
+
+async def _download_media(url: str) -> tuple[bytes, str]:
+    """Download media from R2 (or any URL) and return (bytes, content-type)."""
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "application/octet-stream")
+        return resp.content, content_type
+
+
+def _filename_from_url(url: str, default: str) -> str:
+    from urllib.parse import urlparse
+    path = urlparse(url).path
+    name = path.rsplit("/", 1)[-1]
+    return name or default
 
 
 async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:
     """
-    Publish a post to all configured platforms.
-    Fetches post + brand social accounts from DB, calls Upload-Post API, updates status.
+    Publish a post to all configured platforms via Upload-Post.
+    Fetches post + brand profile, downloads media from R2, calls appropriate Upload-Post endpoint.
     """
     post = await db.fetchrow("SELECT * FROM social.posts WHERE id = $1", post_id)
     if not post:
@@ -59,57 +231,84 @@ async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:
 
     brand_id = post["brand_id"]
     platforms = post["platforms"] or []
-    results = []
+    if not platforms:
+        return {"post_id": str(post_id), "status": "failed", "error": "No platforms configured"}
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        for platform in platforms:
-            account = await db.fetchrow(
-                """
-                SELECT * FROM social.brand_social_accounts
-                WHERE brand_id = $1 AND platform = $2 AND is_active = true
-                """,
-                brand_id,
-                platform,
-            )
-            if not account:
-                results.append({"platform": platform, "success": False, "error": "No active account"})
-                continue
+    # Ensure profile exists
+    username = await ensure_profile(brand_id, db)
 
-            resp = await client.post(
-                f"{BASE_URL}/publish",
-                headers={"Authorization": f"Bearer {settings.UPLOAD_POST_API_KEY}"},
-                json={
-                    "platform": platform,
-                    "token": account["upload_post_token"],
-                    "media_url": post["output_url"],
-                    "caption": post["caption"] or "",
-                    "hashtags": post["hashtags"] or [],
-                },
-            )
+    # Determine endpoint based on content type
+    content_type = post["content_type"]
+    is_video = content_type in ("video", "video_ugc")
 
-            if resp.status_code == 200:
-                results.append({"platform": platform, "success": True, "data": resp.json()})
-            else:
-                sentry_sdk.set_context("upload_post_publish", {
-                    "post_id": str(post_id),
-                    "platform": platform,
-                    "status_code": resp.status_code,
-                })
-                sentry_sdk.capture_message(
-                    f"Upload-Post publish failed: {platform} → HTTP {resp.status_code}",
-                    level="error",
-                )
-                results.append({"platform": platform, "success": False, "error": resp.text})
+    # Download media
+    media_bytes, media_mime = await _download_media(post["output_url"])
+    filename = _filename_from_url(post["output_url"], "media.mp4" if is_video else "media.jpg")
 
-    all_ok = all(r["success"] for r in results)
-    new_status = "published" if all_ok else "failed"
+    caption = post["caption"] or ""
+    hashtags = post["hashtags"] or []
+    title_text = caption + (" " + " ".join(f"#{h.lstrip('#')}" for h in hashtags) if hashtags else "")
+
+    # Build multipart form
+    form_data = [
+        ("user", (None, username)),
+        ("title", (None, title_text[:2200])),
+    ]
+    for p in platforms:
+        form_data.append(("platform[]", (None, p)))
+
+    if is_video:
+        form_data.append(("video", (filename, media_bytes, media_mime)))
+        endpoint = f"{BASE_URL}/upload"
+    else:
+        form_data.append(("photos[]", (filename, media_bytes, media_mime)))
+        endpoint = f"{BASE_URL}/upload_photos"
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            endpoint,
+            headers=_headers(),
+            files=form_data,
+        )
+
     import datetime
 
-    await db.execute(
-        "UPDATE social.posts SET status = $1, published_at = $2 WHERE id = $3",
-        new_status,
-        datetime.datetime.utcnow() if all_ok else None,
-        post_id,
+    if resp.status_code == 200:
+        body = resp.json()
+        # Upload-Post returns per-platform results; mark as published if request accepted
+        await db.execute(
+            "UPDATE social.posts SET status = 'published', published_at = $1 WHERE id = $2",
+            datetime.datetime.utcnow(),
+            post_id,
+        )
+        return {
+            "post_id": str(post_id),
+            "status": "published",
+            "platforms": platforms,
+            "upload_post_response": body,
+        }
+
+    sentry_sdk.set_context(
+        "upload_post_publish",
+        {
+            "post_id": str(post_id),
+            "status_code": resp.status_code,
+            "body": resp.text[:500],
+            "platforms": platforms,
+        },
+    )
+    sentry_sdk.capture_message(
+        f"Upload-Post publish failed: HTTP {resp.status_code}",
+        level="error",
     )
 
-    return {"post_id": str(post_id), "status": new_status, "platforms": results}
+    await db.execute(
+        "UPDATE social.posts SET status = 'failed' WHERE id = $1",
+        post_id,
+    )
+    return {
+        "post_id": str(post_id),
+        "status": "failed",
+        "error": resp.text[:500],
+        "status_code": resp.status_code,
+    }
