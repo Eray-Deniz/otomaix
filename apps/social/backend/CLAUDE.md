@@ -8,6 +8,11 @@
 - `import json` fonksiyon başına taşındı (tek doğru UPDATE kullanılıyor).
 - Risk: yok — tamamen ölü kod silme.
 
+### [F-3 backend] PATCH /posts/{post_id} eklendi
+- Caption ve hashtags güncellemek için yeni endpoint (`app/routers/posts.py:update_post`).
+- `assert_post_owned` ile sahiplik kontrolü; sadece `caption` ve `hashtags` alanlarını günceller (`PostUpdate` schema).
+- İçerik Oluştur Step 3 butonları (Şimdi Yayınla / Takvime Ekle) yayınlamadan önce caption'ı bu endpoint ile DB'ye yazıyor.
+
 ### [B-1] Plan limit kontrolleri devreye alındı
 - `app/routers/billing.py` içinde tanımlı olan `check_plan_limit(account_id, feature, db)` daha önce hiçbir endpoint'ten çağrılmıyordu — Starter müşteri sınırsız içerik/marka üretebiliyordu.
 - Devreye alınan endpoint'ler:

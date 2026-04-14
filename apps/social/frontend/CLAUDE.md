@@ -3,6 +3,16 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — F-3: İçerik Oluştur Step 3 butonları aktive edildi
+
+`icerik-olustur/page.tsx` Step 3'te daha önce stub olan iki buton artık çalışıyor:
+- **Şimdi Yayınla** → `persistCaption()` (PATCH /posts/{id}) → `POST /posts/{id}/publish` → `/icerik-kutuphanesi`'ne yönlendir
+- **Takvime Ekle** → custom date dialog (datetime-local input) → caption kaydet → `PATCH /calendar/schedule/{id}` → `/takvim`'e yönlendir
+- Buton state'leri: `publishing`, `scheduling`, `showScheduleDialog`, `scheduleAt`. Hepsi loading spinner ile disable olur. `output_url` yokken her iki buton disable.
+- Plan limit dönerse `UpgradeModal` gösterilir (publish endpoint'i de check_plan_limit'e tabi değil ama yine de güvenlik için).
+- Geçmiş tarih validasyonu client-side yapılıyor; backend zaten `assert_post_owned` ile sahiplik kontrolü yapıyor.
+- `useRouter` import'u eklendi (`next/navigation`).
+
 ## 2026-04-14 — Plan limit (HTTP 402) handling
 
 `lib/api.ts` HTTP 402 yanıtlarını artık özel olarak yakalıyor:

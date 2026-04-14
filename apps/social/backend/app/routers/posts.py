@@ -12,7 +12,13 @@ from app.core.security import (
     get_current_user_optional,
     get_service_auth,
 )
-from app.models.schemas import FacelessVideoGenerate, OkResponse, PostCreate, PostGenerate
+from app.models.schemas import (
+    FacelessVideoGenerate,
+    OkResponse,
+    PostCreate,
+    PostGenerate,
+    PostUpdate,
+)
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context
 from app.services.fal_ai import generate_image
@@ -338,6 +344,29 @@ async def get_post(
     """Get a single post by id."""
     row = await assert_post_owned(db, user, post_id)
     return OkResponse(data=row)
+
+
+@router.patch("/{post_id}", response_model=OkResponse)
+async def update_post(
+    post_id: UUID,
+    payload: PostUpdate,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Update editable post fields (caption, hashtags)."""
+    await assert_post_owned(db, user, post_id)
+    updates = payload.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    fields = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(updates))
+    values = list(updates.values())
+    row = await db.fetchrow(
+        f"UPDATE social.posts SET {fields}, updated_at = now() WHERE id = $1 RETURNING *",
+        post_id,
+        *values,
+    )
+    return OkResponse(data=dict(row))
 
 
 @router.post("/{post_id}/publish", response_model=OkResponse)

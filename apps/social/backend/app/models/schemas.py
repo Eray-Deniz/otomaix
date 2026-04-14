@@ -117,6 +117,11 @@ class PostCreate(BaseModel):
     scheduled_at: datetime | None = None
 
 
+class PostUpdate(BaseModel):
+    caption: str | None = None
+    hashtags: list[str] | None = None
+
+
 class PostOut(BaseModel):
     id: UUID
     brand_id: UUID

@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -125,6 +126,7 @@ function StepIndicator({ step }: { step: Step }) {
 
 export default function IcerikOlusturPage() {
   const currentBrand = useAppStore((s) => s.currentBrand)
+  const router = useRouter()
 
   // Step state
   const [step, setStep] = useState<Step>(1)
@@ -164,6 +166,10 @@ export default function IcerikOlusturPage() {
   const [caption, setCaption] = useState('')
   const [hashtags, setHashtags] = useState<string[]>([])
   const [newHashtag, setNewHashtag] = useState('')
+  const [publishing, setPublishing] = useState(false)
+  const [scheduling, setScheduling] = useState(false)
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false)
+  const [scheduleAt, setScheduleAt] = useState('')
 
   // Görsel hazır olana kadar polling
   useEffect(() => {
@@ -411,6 +417,86 @@ export default function IcerikOlusturPage() {
     }
   }
 
+  async function persistCaption(): Promise<boolean> {
+    if (!generatedPost?.post_id) return false
+    const res = await api.patch(`/posts/${generatedPost.post_id}`, {
+      caption: caption || null,
+      hashtags,
+    })
+    if (!res.success) {
+      toast.error('Caption kaydedilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      return false
+    }
+    return true
+  }
+
+  async function handlePublish() {
+    if (!generatedPost?.post_id || publishing) return
+    if (!generatedPost.output_url) {
+      toast.error('İçerik henüz hazır değil')
+      return
+    }
+    setPublishing(true)
+    try {
+      const ok = await persistCaption()
+      if (!ok) return
+      const res = await api.post(`/posts/${generatedPost.post_id}/publish`, {})
+      if (res.success) {
+        toast.success('İçerik yayınlandı!')
+        router.push('/icerik-kutuphanesi')
+      } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
+        setUpgradeMessage(res.plan_limit.message)
+      } else {
+        toast.error('Yayınlanamadı: ' + (res.error ?? 'Bilinmeyen hata'))
+      }
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  function openScheduleDialog() {
+    if (!generatedPost?.output_url) {
+      toast.error('İçerik henüz hazır değil')
+      return
+    }
+    // Default: 1 saat sonrası, datetime-local formatı (YYYY-MM-DDTHH:mm, lokal saat)
+    const d = new Date(Date.now() + 60 * 60 * 1000)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    setScheduleAt(local)
+    setShowScheduleDialog(true)
+  }
+
+  async function handleSchedule() {
+    if (!generatedPost?.post_id || scheduling) return
+    if (!scheduleAt) {
+      toast.error('Lütfen bir tarih seçin')
+      return
+    }
+    const when = new Date(scheduleAt)
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+      toast.error('Geçmiş bir tarih seçemezsiniz')
+      return
+    }
+    setScheduling(true)
+    try {
+      const ok = await persistCaption()
+      if (!ok) return
+      const res = await api.patch(`/calendar/schedule/${generatedPost.post_id}`, {
+        scheduled_at: when.toISOString(),
+      })
+      if (res.success) {
+        toast.success('İçerik takvime eklendi')
+        setShowScheduleDialog(false)
+        router.push('/takvim')
+      } else {
+        toast.error('Takvime eklenemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      }
+    } finally {
+      setScheduling(false)
+    }
+  }
+
   function addHashtag() {
     const tag = newHashtag.trim()
     if (!tag) return
@@ -443,6 +529,52 @@ export default function IcerikOlusturPage() {
           message={upgradeMessage}
           onClose={() => setUpgradeMessage(null)}
         />
+      )}
+      {showScheduleDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6 relative">
+            <button
+              onClick={() => setShowScheduleDialog(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              aria-label="Kapat"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="flex items-center justify-center w-12 h-12 bg-blue-50 rounded-xl mb-4 mx-auto">
+              <Calendar className="w-6 h-6 text-blue-600" />
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 text-center mb-2">
+              Takvime Ekle
+            </h2>
+            <p className="text-sm text-gray-500 text-center mb-4">
+              İçeriğin yayınlanacağı tarih ve saati seçin.
+            </p>
+            <Label className="text-xs text-gray-600">Yayın Tarihi</Label>
+            <input
+              type="datetime-local"
+              value={scheduleAt}
+              onChange={(e) => setScheduleAt(e.target.value)}
+              className="w-full mt-1 mb-4 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={() => setShowScheduleDialog(false)}
+              >
+                İptal
+              </Button>
+              <Button
+                className="flex-1 gap-2"
+                onClick={handleSchedule}
+                disabled={scheduling}
+              >
+                {scheduling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
+                Planla
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">İçerik Oluştur</h1>
@@ -983,6 +1115,7 @@ export default function IcerikOlusturPage() {
                   variant="outline"
                   className="flex-1 gap-2"
                   onClick={handleRegenerate}
+                  disabled={generating || publishing || scheduling}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Yeniden Üret
@@ -990,16 +1123,18 @@ export default function IcerikOlusturPage() {
                 <Button
                   variant="outline"
                   className="flex-1 gap-2"
-                  onClick={() => toast.info('Takvim özelliği yakında')}
+                  onClick={openScheduleDialog}
+                  disabled={generating || publishing || scheduling || !generatedPost.output_url}
                 >
                   <Calendar className="w-4 h-4" />
                   Takvime Ekle
                 </Button>
                 <Button
                   className="flex-1 gap-2"
-                  onClick={() => toast.info('Yayınlama özelliği yakında')}
+                  onClick={handlePublish}
+                  disabled={generating || publishing || scheduling || !generatedPost.output_url}
                 >
-                  <Send className="w-4 h-4" />
+                  {publishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   Şimdi Yayınla
                 </Button>
               </div>
