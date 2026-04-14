@@ -1,5 +1,27 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — asyncpg jsonb codec fix (uzun süredir var olan bug)
+
+**Bulunan bug:** asyncpg default olarak jsonb kolonlarını **str** (JSON-encoded string) olarak döndürüyordu. Sonuç: `dict(row)["analysis_data"]` bir string'di, frontend'de `analysis_data?.website` her zaman undefined dönüyordu. Rakip analiz paneli sayfada hiç veri göstermiyordu (B-5 fix'i öncesinde de böyleydi — senkron path'te `competitor["analysis_data"] = analysis_data` doğrudan dict ile override edildiği için ilk ekleme anında fark edilmemişti).
+
+**Fix (`app/core/database.py`):**
+```python
+async def _init_connection(conn):
+    await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+    await conn.set_type_codec("json",  encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+
+_pool = await asyncpg.create_pool(..., init=_init_connection)
+```
+
+**Geriye uyumluluk:** Mevcut INSERT/UPDATE kodları `$N::jsonb` text cast ile çalıştığı için codec encoder tetiklenmez — text parametre olarak geçer, postgres server-side cast eder. Lokal test (backward compat + forward dict decode) ile doğrulandı:
+- `fetchrow` sonrası `row['analysis_data']` → `dict` (önceden: str)
+- `json.dumps(dict)` + `$1::jsonb` insert → hala çalışır
+
+**Etkilenen endpoint'ler (hepsi artık dict dönecek):**
+- `GET /competitors/{id}/analysis` — analiz paneli artık dolu dönecek
+- `GET /competitors/report/summary` — `generate_competitor_report` artık hata vermeden çalışır (`(a.get("analysis_data") or {}).get("website", {})` dict üzerinde)
+- `brand_kit` okuyan tüm router'lar (brands, posts, ai, webhooks, internal, trends) — mevcut `isinstance(raw, str)` guard'ları nedeniyle zaten dict/str ikisini de handle ediyordu, codec sonrası sadece dict branch'ı çalışacak (değişiklik yok)
+
 ## 2026-04-14 — B-5: Rakip analizi asenkron BackgroundTasks'a taşındı
 
 Analiz raporundaki P1 bulgusu B-5 (`POST /competitors` 30+ sn senkron blokluyor, Cloudflare 504 + uvicorn worker tükenmesi riski) çözüldü.
