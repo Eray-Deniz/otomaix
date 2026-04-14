@@ -538,12 +538,12 @@
             "options": {
               "caseSensitive": true,
               "leftValue": "",
-              "typeValidation": "strict"
+              "typeValidation": "loose"
             },
             "conditions": [
               {
                 "id": "d1",
-                "leftValue": "={{ $json.count }}",
+                "leftValue": "={{ Number($json.count) }}",
                 "rightValue": 0,
                 "operator": {
                   "type": "number",

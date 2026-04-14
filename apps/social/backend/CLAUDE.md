@@ -1,5 +1,19 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — N8N-4: CRM-4 "Has Churn Risk?" IF tip hatası fix
+
+Analiz raporundaki P0 bulgusu N8N-4'ün iki parçası vardı:
+
+**Parça 1 — Postgres credential host (`::1` → `host.docker.internal`):** Doğrulama sırasında en son CRM-4 (execution #80, 15:09) ve CRM-5 (execution #56, 10:00) çalıştırmalarının **success** olduğu görüldü. Credential bu oturum öncesinde bir noktada düzeltilmiş (muhtemelen Coolify iç network DNS ayarı veya n8n UI'dan manuel) — ek eylem gerekmedi.
+
+**Parça 2 — CRM-4 IF node tip hatası:** Execution #55'in hata mesajı `Wrong type: '0' is a string but was expecting a number [condition 0, item 0]`. Kök neden: Postgres `COUNT(*)` sonucu string olarak dönüyor (`{count: '0'}`), IF v2.2 node strict type validation ile number operator'a string besleyince fırlatıyor.
+
+**Fix** (n8n REST API PUT `/workflows/os5XonE1TtptDPBC`, lokal kopya `shared/n8n-workflows/crm-automations.json` → CRM-4):
+- `Has Churn Risk?` IF node'unda `conditions.options.typeValidation: "strict"` → `"loose"` (belt-and-suspenders)
+- `conditions[0].leftValue`: `={{ $json.count }}` → `={{ Number($json.count) }}` (açık tip dönüşümü)
+
+**Doğrulama:** Canlı PUT 200 döndü. Execution #80'de "Has Churn Risk?" node'u 0 item ile true branch'e hiç düşmediği için asıl test koşulu yarın 09:00 schedule trigger'da gerçek churn-risk kaydı varsa doğrulanacak.
+
 ## 2026-04-14 — N8N-5: Auto Posting Scheduler splitInBatches → Code map
 
 Analiz raporundaki P0 bulgusu N8N-5 (Auto Posting Scheduler `Her Config İçin` splitInBatches loop kablolaması eksik — tek cycle'da sadece ilk config işleniyordu) çözüldü.
