@@ -3,6 +3,18 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — Tabs bileşeni layout bug fix (marka-ayarlari görünüm sorunu)
+
+Kullanıcı screenshot'la raporladı: `/marka-ayarlari` sayfasında sekmeler (Marka Bilgileri, Marka Kimliği, Görseller…) dikey olarak ortada, içerik sağda dar bir şeritte render oluyordu.
+
+**Kök neden:** `components/ui/tabs.tsx` Tailwind data-attribute variant'larını köşeli parantez syntax'ı olmadan yazıyordu:
+- `data-horizontal:flex-col` (yanlış) → `data-[orientation=horizontal]:flex-col` (doğru)
+- `group-data-horizontal/tabs:*` / `group-data-vertical/tabs:*` → `group-data-[orientation=horizontal]/tabs:*` / `group-data-[orientation=vertical]/tabs:*`
+
+Tailwind bu invalid class'ları hiçbir şeye eşleştirmediği için Tabs root'u varsayılan `flex-row`'da kalıp TabsList sola, TabsContent sağa yerleşiyordu.
+
+**Fix:** 4 konumda (Tabs root, tabsListVariants, TabsTrigger ana class, TabsTrigger `after:` bloğu) bracketed syntax'a çevrildi. Tabs yalnızca `marka-ayarlari`'nde kullanılıyor — başka sayfayı etkilemedi. Typecheck temiz.
+
 ## 2026-04-14 — F-4 + F-5: Marka Ayarları web analizi + İçerik Oluştur ölü kod temizliği
 
 Analiz raporundaki P1 maddeleri:
