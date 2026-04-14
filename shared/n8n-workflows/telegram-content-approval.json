@@ -1,19 +1,219 @@
 {
-  "id": "D49KNE35cONz2APb",
   "name": "Telegram İçerik Onay",
-  "description": "Webhook ile tetiklenir. Post detayını alır, Telegram botundan onay ister (inline keyboard). Onayla→yayınla, Reddet→rejected, Yeniden Üret→regenerate.",
-  "trigger": "Webhook POST /webhook/telegram-content-approval",
-  "webhook_payload": {
-    "post_id": "uuid",
-    "brand_id": "uuid",
-    "telegram_chat_id": "string"
-  },
-  "endpoints_used": [
-    "GET /internal/posts/{post_id}",
-    "POST /posts/{post_id}/publish-now",
-    "PATCH /internal/posts/{post_id}/status",
-    "POST /posts/{post_id}/regenerate"
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Onay İsteği Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "telegram-content-approval",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "b57df16b-5092-48fe-8b8e-9a4cc4d6ee8f"
+    },
+    {
+      "id": "get-post",
+      "name": "Post Detayı Al",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.otomaix.com/internal/posts/{{ $('Onay İsteği Webhook').item.json.body.post_id }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nFP1FbcwkIw8n9SS",
+          "name": "Otomaix Internal API Key"
+        }
+      }
+    },
+    {
+      "id": "build-message",
+      "name": "Mesaj Hazırla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const post = $input.first().json.data || {};\nconst caption = post.caption || 'Henüz caption üretilmedi';\nconst platforms = (post.platforms || []).join(', ') || 'Belirtilmemiş';\nconst outputUrl = post.output_url || post.thumbnail_url || null;\nconst contentType = post.content_type || 'image';\nconst isVideo = contentType === 'video';\n\nconst messageText = `📱 *Yeni İçerik Onayı*\\n\\n${caption.substring(0,200)}\\n\\nPlatformlar: ${platforms}\\nTip: ${isVideo ? 'Video' : 'Görsel'}${outputUrl && isVideo ? '\\n\\n🎬 [Videoyu İzle](' + outputUrl + ')' : ''}\\n\\nOnaylıyor musunuz?`;\n\nreturn [{\n  json: {\n    post_id: $('Onay İsteği Webhook').item.json.body.post_id,\n    caption: caption.substring(0, 200),\n    platforms,\n    image_url: outputUrl,\n    content_type: contentType,\n    is_video: isVideo,\n    message: messageText\n  }\n}];"
+      }
+    },
+    {
+      "id": "http-send-tg",
+      "name": "Telegram Mesaj Gönder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Onay İsteği Webhook').item.json.body.telegram_bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Onay İsteği Webhook').item.json.body.telegram_chat_id, text: $('Mesaj Hazırla').item.json.message, parse_mode: 'Markdown', reply_markup: JSON.stringify({inline_keyboard: [[{text: '✅ Onayla', url: 'https://n8n.otomaix.com/webhook/tg-approve?post_id=' + $('Mesaj Hazırla').item.json.post_id + '&bot_token=' + $('Onay İsteği Webhook').item.json.body.telegram_bot_token + '&chat_id=' + $('Onay İsteği Webhook').item.json.body.telegram_chat_id},{text: '❌ Reddet', url: 'https://n8n.otomaix.com/webhook/tg-reject?post_id=' + $('Mesaj Hazırla').item.json.post_id + '&bot_token=' + $('Onay İsteği Webhook').item.json.body.telegram_bot_token + '&chat_id=' + $('Onay İsteği Webhook').item.json.body.telegram_chat_id}]]}) }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "switch-content-type",
+      "name": "İçerik Tipi?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "mode": "rules",
+        "options": {},
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "ct1",
+                    "leftValue": "={{ $json.content_type }}",
+                    "rightValue": "video",
+                    "operator": {
+                      "type": "string",
+                      "operation": "notEquals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "Resim"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "id": "ct2",
+                    "leftValue": "={{ $json.content_type }}",
+                    "rightValue": "video",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "Video"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "send-photo",
+      "name": "Fotoğraf Gönder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        -120
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Onay İsteği Webhook').item.json.body.telegram_bot_token }}/sendPhoto",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Onay İsteği Webhook').item.json.body.telegram_chat_id, photo: $('Mesaj Hazırla').item.json.image_url, caption: $('Mesaj Hazırla').item.json.message, parse_mode: 'Markdown', reply_markup: JSON.stringify({inline_keyboard: [[{text: '✅ Onayla', url: 'https://n8n.otomaix.com/webhook/tg-approve?post_id=' + $('Mesaj Hazırla').item.json.post_id + '&bot_token=' + $('Onay İsteği Webhook').item.json.body.telegram_bot_token + '&chat_id=' + $('Onay İsteği Webhook').item.json.body.telegram_chat_id},{text: '❌ Reddet', url: 'https://n8n.otomaix.com/webhook/tg-reject?post_id=' + $('Mesaj Hazırla').item.json.post_id + '&bot_token=' + $('Onay İsteği Webhook').item.json.body.telegram_bot_token + '&chat_id=' + $('Onay İsteği Webhook').item.json.body.telegram_chat_id}]]}) }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    }
   ],
-  "auth": "X-Internal-Key header",
-  "requires_credential": "telegramApi (bot token)"
+  "connections": {
+    "Post Detayı Al": {
+      "main": [
+        [
+          {
+            "node": "Mesaj Hazırla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mesaj Hazırla": {
+      "main": [
+        [
+          {
+            "node": "İçerik Tipi?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "İçerik Tipi?": {
+      "main": [
+        [
+          {
+            "node": "Fotoğraf Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Mesaj Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Onay İsteği Webhook": {
+      "main": [
+        [
+          {
+            "node": "Post Detayı Al",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
 }

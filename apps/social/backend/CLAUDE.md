@@ -23,6 +23,13 @@ Analiz raporundaki P0 bulgusu N8N-1 (Telegram Onayla/Reddet runtime error) çöz
 
 **Not:** Telegram bildirim node'larındaki `continueOnFail: true` korundu — bot token yanlışsa ana iş (yayın/reddet) yine de tamamlanmalı, sadece kullanıcıya Telegram mesajı gitmesin.
 
+### N8N-1 rev-2: Telegram İçerik Onay workflow'u da aynı bug
+İlk fix commit'inden sonra canlı testte kullanıcı "Onay iste" butonuna bastı, post `reviewing` oldu ama Telegram mesajı gelmedi. Execution #70 incelendiğinde **Telegram İçerik Onay** (`D49KNE35cONz2APb`) workflow'unda `Post Detayı Al` node'unun da **aynı truncated X-Internal-Key**'i hardcoded taşıdığı, backend'den 401 alıp `continueOnFail` ile fallback değerlere düştüğü bulundu (`image_url: null`, `caption: "Henüz caption üretilmedi"`). Ardından `Fotoğraf Gönder` Telegram API'sine null image_url yollayıp 400 "wrong remote file identifier" alıyordu — yine continueOnFail ile maskelenmişti ve üst seviye execution status `success` görünüyordu.
+
+**Fix:** `Post Detayı Al` node'u aynı credential migration'ına tabi tutuldu (`Otomaix Internal API Key`), `continueOnFail` kaldırıldı. Local kopya: `shared/n8n-workflows/telegram-content-approval.json` güncellendi.
+
+**Öğrenilen ders:** Bu workflow grubundaki (`aQ8neGzs3PQp8DMl`, `9kp6bCFl0ys6TbVu`, `D49KNE35cONz2APb`) TÜM HTTP Request node'larını tarayıp `/internal/*` çağrısı yapan her birini credential'a migrate etmek gerekir. İlk fix'te yalnızca 2 workflow tarandığı için 3.sü atlandı. İleride başka internal endpoint çağırıyor olursa aynı kontrol yapılmalı.
+
 ## 2026-04-14 — N8N-7: Scheduled Post Publisher workflow + internal route order fix
 
 Analiz raporundaki P0 bulgusu N8N-7 (scheduled post publisher eksik) çözüldü.
