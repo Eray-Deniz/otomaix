@@ -77,30 +77,16 @@
       }
     },
     {
-      "id": "split-posts",
-      "name": "Her Post İçin",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
+      "id": "fanout",
+      "name": "Her Post İçin Item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         660,
         -80
       ],
       "parameters": {
-        "batchSize": 1,
-        "options": {}
-      }
-    },
-    {
-      "id": "extract-post",
-      "name": "Post ID Çıkar",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        880,
-        -80
-      ],
-      "parameters": {
-        "jsCode": "const item = $input.first().json;\nreturn [{ json: { post_id: item.post_id, brand_id: item.brand_id, brand_name: item.brand_name, platforms: item.platforms, scheduled_at: item.scheduled_at } }];"
+        "jsCode": "const posts = $input.first().json.data || [];\nreturn posts.map(p => ({ json: p }));"
       }
     },
     {
@@ -109,7 +95,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1100,
+        880,
         -80
       ],
       "continueOnFail": true,
@@ -131,23 +117,12 @@
       }
     },
     {
-      "id": "loop-back",
-      "name": "Sonraki Post",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        1320,
-        -80
-      ],
-      "parameters": {}
-    },
-    {
       "id": "no-posts",
       "name": "Post Yok",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        440,
+        660,
         120
       ],
       "parameters": {}
@@ -180,7 +155,7 @@
       "main": [
         [
           {
-            "node": "Her Post İçin",
+            "node": "Her Post İçin Item",
             "type": "main",
             "index": 0
           }
@@ -194,45 +169,11 @@
         ]
       ]
     },
-    "Her Post İçin": {
-      "main": [
-        [],
-        [
-          {
-            "node": "Post ID Çıkar",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Post ID Çıkar": {
+    "Her Post İçin Item": {
       "main": [
         [
           {
             "node": "Yayınla",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Yayınla": {
-      "main": [
-        [
-          {
-            "node": "Sonraki Post",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Sonraki Post": {
-      "main": [
-        [
-          {
-            "node": "Her Post İçin",
             "type": "main",
             "index": 0
           }

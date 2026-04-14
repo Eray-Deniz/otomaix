@@ -15,10 +15,10 @@ Analiz raporundaki P0 bulgusu N8N-7 (scheduled post publisher eksik) çözüldü
 - **Trigger:** her 5 dakikada bir `scheduleTrigger`
 - **Akış:**
   1. `Zamanı Gelen Postlar` → `GET https://api.otomaix.com/internal/posts/scheduled-due` (httpHeaderAuth credential `Otomaix Internal API Key`)
-  2. `Post Var mı?` (IF: `data.length > 0`) → doluysa `Her Post İçin` splitInBatches'e, boşsa `Post Yok` no-op'a
-  3. `Her Post İçin` (batchSize=1) → done branch → `Post ID Çıkar` code node → `Yayınla` → `Sonraki Post` → geri `Her Post İçin`
-  4. `Yayınla` → `POST https://api.otomaix.com/posts/{{ $json.post_id }}/publish-now` (aynı credential, boş JSON body)
-- **splitInBatches doğru kablolandı** (N8N-5'teki autoposting-scheduler hatası burada tekrar edilmedi): `main[0]` boş (done), `main[1]` done-branch işleme gider, sonra loopback ile `Her Post İçin`'e döner.
+  2. `Post Var mı?` (IF: `data.length > 0`) → doluysa `Her Post İçin Item` Code node'una, boşsa `Post Yok` no-op'a
+  3. `Her Post İçin Item` (Code node): `$input.first().json.data.map(p => ({json: p}))` → n8n native item iteration için array'i tek tek item'lara açar
+  4. `Yayınla` → `POST https://api.otomaix.com/posts/{{ $json.post_id }}/publish-now` (aynı credential, boş JSON body) — n8n HTTP node her item için ayrı çağrı yapar
+- **splitInBatches kullanılmıyor**: İlk denemede splitInBatches typeVersion 3'ün `done`/`loop` output indekslerini yanlış kabloladık → Code node `{}` boş output üretti → `Yayınla` URL'si `/posts//publish-now` oldu → 405. Çözüm: splitInBatches'i kaldırıp Code map + native item iteration kullandık. N8N-5'teki auto-posting-scheduler'da da aynı patterni uygulayacağız ilerleyen adımlarda.
 - **Idempotency:** Backend `publish_post` servisi F-2 rev-3'te zaten `SELECT FOR UPDATE` + intermediate `status='publishing'` koruması ekledi. 5 dakikalık tick'ler sırasında aynı post birden fazla kez "due" listesinde çıkarsa bile tek bir gerçek Upload-Post çağrısı yapılır.
 
 **Doğrulama (push sonrası Coolify redeploy bittikten sonra):**
