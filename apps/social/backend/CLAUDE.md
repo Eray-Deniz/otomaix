@@ -1,5 +1,30 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — N8N-7: Scheduled Post Publisher workflow + internal route order fix
+
+Analiz raporundaki P0 bulgusu N8N-7 (scheduled post publisher eksik) çözüldü.
+
+### Backend fix: `internal.py` route sıralaması
+`GET /internal/posts/{post_id}` rotası `GET /internal/posts/scheduled-due`'den önce tanımlıydı — FastAPI deklarasyon sırasına göre eşleştiği için `/internal/posts/scheduled-due` çağrısı `{post_id}` route'una düşüp `UUID("scheduled-due")` → ValueError → HTTP 500 veriyordu. Canlı test sırasında `curl` ile yakalandı.
+
+**Fix:** İki rota swap edildi — `scheduled-due` artık `{post_id}` route'undan önce deklare. Docstring'e not eklendi ki gelecekte kimse yeniden taşımasın. Dashboard stats endpoint'inde (`posts.py:/stats/summary`) aynı tuzağa daha önce dikkat edilmişti, tutarlılık için internal router da aynı şekilde.
+
+### Yeni n8n workflow: `Scheduled Post Publisher`
+- **ID:** `u650xJO6TLoh1Wcb`
+- **Dosya:** `shared/n8n-workflows/scheduled-post-publisher.json`
+- **Trigger:** her 5 dakikada bir `scheduleTrigger`
+- **Akış:**
+  1. `Zamanı Gelen Postlar` → `GET https://api.otomaix.com/internal/posts/scheduled-due` (httpHeaderAuth credential `Otomaix Internal API Key`)
+  2. `Post Var mı?` (IF: `data.length > 0`) → doluysa `Her Post İçin` splitInBatches'e, boşsa `Post Yok` no-op'a
+  3. `Her Post İçin` (batchSize=1) → done branch → `Post ID Çıkar` code node → `Yayınla` → `Sonraki Post` → geri `Her Post İçin`
+  4. `Yayınla` → `POST https://api.otomaix.com/posts/{{ $json.post_id }}/publish-now` (aynı credential, boş JSON body)
+- **splitInBatches doğru kablolandı** (N8N-5'teki autoposting-scheduler hatası burada tekrar edilmedi): `main[0]` boş (done), `main[1]` done-branch işleme gider, sonra loopback ile `Her Post İçin`'e döner.
+- **Idempotency:** Backend `publish_post` servisi F-2 rev-3'te zaten `SELECT FOR UPDATE` + intermediate `status='publishing'` koruması ekledi. 5 dakikalık tick'ler sırasında aynı post birden fazla kez "due" listesinde çıkarsa bile tek bir gerçek Upload-Post çağrısı yapılır.
+
+**Doğrulama (push sonrası Coolify redeploy bittikten sonra):**
+- `curl -H "X-Internal-Key: ..." https://api.otomaix.com/internal/posts/scheduled-due` → HTTP 200 dönmeli (önceden 500)
+- Workflow aktive edilmeli + manuel execution yeşil olmalı
+
 ## 2026-04-14 — N8N-2 + N8N-3: Auto Posting Scheduler fix + aktifleştirme
 
 Analiz raporundaki P0 bulguları N8N-2 (workflow inaktif) ve N8N-3 (yanlış URL + hardcoded X-Internal-Key) çözüldü.

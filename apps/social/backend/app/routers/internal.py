@@ -196,20 +196,6 @@ class StatusUpdate(BaseModel):
     status: str
 
 
-@router.get("/posts/{post_id}", response_model=OkResponse)
-async def get_post_internal(
-    post_id: str,
-    _: None = Depends(get_service_auth),
-    db: asyncpg.Connection = Depends(get_db),
-):
-    """Get post details — called by n8n without user JWT."""
-    from uuid import UUID as UUIDType
-    row = await db.fetchrow("SELECT * FROM social.posts WHERE id = $1", UUIDType(post_id))
-    if not row:
-        return OkResponse(data=None)
-    return OkResponse(data=dict(row))
-
-
 @router.get("/posts/scheduled-due", response_model=OkResponse)
 async def get_scheduled_due_posts(
     _: None = Depends(get_service_auth),
@@ -218,6 +204,9 @@ async def get_scheduled_due_posts(
     """
     Return posts whose scheduled_at has passed and are still in 'scheduled' status.
     Called by n8n Scheduled Post Publisher every 5 minutes.
+
+    NOTE: Must be declared BEFORE `/posts/{post_id}` — FastAPI matches routes in
+    declaration order and would otherwise treat "scheduled-due" as a post_id.
     """
     rows = await db.fetch(
         """
@@ -243,6 +232,20 @@ async def get_scheduled_due_posts(
         for row in rows
     ]
     return OkResponse(data=due)
+
+
+@router.get("/posts/{post_id}", response_model=OkResponse)
+async def get_post_internal(
+    post_id: str,
+    _: None = Depends(get_service_auth),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Get post details — called by n8n without user JWT."""
+    from uuid import UUID as UUIDType
+    row = await db.fetchrow("SELECT * FROM social.posts WHERE id = $1", UUIDType(post_id))
+    if not row:
+        return OkResponse(data=None)
+    return OkResponse(data=dict(row))
 
 
 @router.patch("/posts/{post_id}/status", response_model=OkResponse)
