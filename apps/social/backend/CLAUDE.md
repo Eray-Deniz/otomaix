@@ -1,5 +1,31 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — P2 temizlik bloğu: B-6, B-7, B-8
+
+Analiz raporundaki P2 temizlik maddelerinden üçü tek blokta halledildi. Hepsi düşük risk.
+
+### B-7 — `_parse_brand_kit` helper ortaklaştırma
+`routers/posts.py:30` ve `routers/ai.py:18` aynı `_parse_brand_kit(raw)` helper'ını satır satır aynı şekilde duplicate ediyordu. Yeni dosya `app/core/utils.py` oluşturuldu ve `parse_brand_kit()` buraya taşındı; her iki router `from app.core.utils import parse_brand_kit as _parse_brand_kit` ile import ediyor (mevcut underscore-prefixed çağrı noktalarını değiştirmemek için alias). 5 call site (posts.py'de 3, ai.py'de 2) değişmeden çalışıyor. Risk: sıfır — pure refactor.
+
+### B-8 — `publish_post` router pre-check
+`POST /posts/{id}/publish` endpoint'i doğrudan servise düşüyordu; `output_url` None veya status `draft`/`generating` durumunda servis ya ValueError fırlatıyor (FastAPI 500) ya da yanlış bir işleme girişiyordu. Router'a iki satır pre-check eklendi:
+- `output_url` yoksa → 409 "Post içeriği henüz üretilmemiş"
+- `status in ('draft','generating')` → 409 "Post henüz hazır değil"
+
+`failed`, `ready`, `partially_published`, `rejected` izin verilen state'ler (retry use-case'i için). `published` ve `publishing` durumları servis içinde zaten idempotent şekilde ele alınıyor (F-2 rev-3'teki `SELECT FOR UPDATE` + short-circuit). `assert_post_owned` zaten post row'u dict döndüğü için ek DB query yapılmadı.
+
+### B-6 — `trend_cache` UPSERT
+İki call site (`routers/trends.py:refresh_trends` + `services/trend_analyzer.py:get_or_fetch_trends`) her çağrıda yeni INSERT yapıyordu, tabloda `UNIQUE(sector)` yoktu → her sector için duplicate satırlar birikiyordu. Okuma mantığı `ORDER BY fetched_at DESC LIMIT 1` ile en yenisini alıyordu, yani functionally çalışıyor ama tablo sonsuza kadar büyüyordu.
+
+**Migration 017_trend_cache_unique.sql** (prod'da çalıştırıldı — 5 duplicate silindi, constraint eklendi ✅):
+```sql
+DELETE FROM social.trend_cache a USING social.trend_cache b
+WHERE a.sector = b.sector AND a.fetched_at < b.fetched_at;
+ALTER TABLE social.trend_cache ADD CONSTRAINT trend_cache_sector_unique UNIQUE (sector);
+```
+
+Her iki INSERT artık `ON CONFLICT (sector) DO UPDATE SET trends=EXCLUDED.trends, fetched_at=now()`. Okuma query'si değişmeden çalışıyor (artık her sector için tek row, `ORDER BY ... LIMIT 1` hâlâ doğru sonuç veriyor).
+
 ## 2026-04-14 — N8N-4: CRM-4 "Has Churn Risk?" IF tip hatası fix
 
 Analiz raporundaki P0 bulgusu N8N-4'ün iki parçası vardı:

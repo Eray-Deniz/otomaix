@@ -15,14 +15,7 @@ from app.models.schemas import OkResponse
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
-def _parse_brand_kit(raw) -> dict:
-    """asyncpg bazen JSONB kolonunu string olarak döndürür — her ikisini de handle et."""
-    if not raw:
-        return {}
-    if isinstance(raw, str):
-        import json
-        return json.loads(raw)
-    return dict(raw)
+from app.core.utils import parse_brand_kit as _parse_brand_kit
 
 
 class AnalyzeWebsiteRequest(BaseModel):

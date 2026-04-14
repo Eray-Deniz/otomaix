@@ -86,8 +86,11 @@ async def refresh_trends(
     import json
     await db.execute(
         """
-        INSERT INTO social.trend_cache (sector, trends)
-        VALUES ($1, $2::jsonb)
+        INSERT INTO social.trend_cache (sector, trends, fetched_at)
+        VALUES ($1, $2::jsonb, now())
+        ON CONFLICT (sector) DO UPDATE SET
+            trends = EXCLUDED.trends,
+            fetched_at = now()
         """,
         sector,
         json.dumps(trends),

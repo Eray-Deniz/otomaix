@@ -27,14 +27,7 @@ from app.services.faceless_video import TURKISH_VOICES, run_faceless_video_pipel
 router = APIRouter(prefix="/posts", tags=["posts"])
 
 
-def _parse_brand_kit(raw) -> dict:
-    """asyncpg bazen JSONB kolonunu string olarak döndürür — her ikisini de handle et."""
-    if not raw:
-        return {}
-    if isinstance(raw, str):
-        import json
-        return json.loads(raw)
-    return dict(raw)
+from app.core.utils import parse_brand_kit as _parse_brand_kit
 
 
 CATEGORY_TR = {
@@ -411,7 +404,11 @@ async def publish_post(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Trigger publishing a post to its configured platforms."""
-    await assert_post_owned(db, user, post_id)
+    post = await assert_post_owned(db, user, post_id)
+    if not post.get("output_url"):
+        raise HTTPException(status_code=409, detail="Post içeriği henüz üretilmemiş")
+    if post.get("status") in ("draft", "generating"):
+        raise HTTPException(status_code=409, detail="Post henüz hazır değil")
     from app.services.upload_post import publish_post as svc_publish
 
     result = await svc_publish(post_id, db)
