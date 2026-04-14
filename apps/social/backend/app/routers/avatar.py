@@ -11,6 +11,7 @@ from app.core.cache import get_cached, set_cached
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
+from app.routers.billing import check_plan_limit
 from app.services.avatar import (
     create_avatar_from_photo,
     generate_ugc_video,
@@ -54,6 +55,7 @@ async def create_avatar(
 ):
     """Kullanıcı fotoğrafından HeyGen avatar oluştur."""
     await assert_brand_owned(db, user, brand_id)
+    await check_plan_limit(user["sub"], "avatar", db)
     from app.core.config import settings as _settings
     if not _settings.HEYGEN_API_KEY:
         raise HTTPException(
@@ -121,6 +123,8 @@ async def generate_ugc(
 ):
     """Markanın aktif avatarı ile UGC video üret."""
     await assert_brand_owned(db, user, payload.brand_id)
+    await check_plan_limit(user["sub"], "avatar", db)
+    await check_plan_limit(user["sub"], "post", db)
     from app.core.config import settings as _settings
     if not _settings.HEYGEN_API_KEY:
         raise HTTPException(

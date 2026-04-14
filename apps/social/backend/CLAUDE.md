@@ -8,6 +8,21 @@
 - `import json` fonksiyon başına taşındı (tek doğru UPDATE kullanılıyor).
 - Risk: yok — tamamen ölü kod silme.
 
+### [B-1] Plan limit kontrolleri devreye alındı
+- `app/routers/billing.py` içinde tanımlı olan `check_plan_limit(account_id, feature, db)` daha önce hiçbir endpoint'ten çağrılmıyordu — Starter müşteri sınırsız içerik/marka üretebiliyordu.
+- Devreye alınan endpoint'ler:
+  - `posts.py:generate_post` → `feature="post"` (aylık içerik limiti)
+  - `posts.py:create_post` → `feature="post"`
+  - `posts.py:generate_faceless_video` → `feature="video"` + `feature="post"`
+  - `brands.py:create_brand` → `feature="brand"` (max marka)
+  - `avatar.py:create_avatar` → `feature="avatar"`
+  - `avatar.py:generate_ugc` → `feature="avatar"` + `feature="post"`
+  - `trends.py:create_post_from_trend` → `feature="post"`
+- Limit aşıldığında HTTP 402 + `{ error: "plan_limit_reached", message, upgrade_url, current_plan }` döner. Frontend'in mevcut paywall modalı bu detay yapısını bekliyor.
+- `assert_brand_owned`/`assert_workspace_owned` çağrılarından **sonra** çalıştırıldı — yetkisiz kullanıcının başkasının limit sayısını artırması engellendi.
+- `regenerate_post` ve `publish_*` limit kontrolünden muaf — yeniden üretim ve yayınlama yeni "post" sayılmıyor.
+- Risk: orta — aktif ücretli aboneliği olmayan tüm Starter müşteriler 50 post/ay sınırına çarpacak; canlı testte mevcut kullanıcının `accounts.plan_id` değeri ve aylık post sayısı kontrol edilmeli.
+
 ### [B-2] Brand/Post/Workspace ownership dependency
 - Daha önce çoğu endpoint sadece `get_current_user` ile token doğruluyor; başka bir hesabın `brand_id`/`post_id`/`workspace_id`'sini parametre olarak gönderen herkes erişebiliyordu (IDOR riski).
 - `app/core/security.py` içine üç async helper eklendi:

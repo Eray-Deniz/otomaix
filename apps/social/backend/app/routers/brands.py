@@ -8,6 +8,7 @@ from app.core.cache import get_cached, invalidate_pattern, set_cached
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, assert_workspace_owned, get_current_user
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
+from app.routers.billing import check_plan_limit
 from app.services.storage import r2
 
 _BRANDS_TTL = 300  # 5 dakika
@@ -26,6 +27,7 @@ async def create_brand(
 ):
     """Create a new brand inside a workspace."""
     await assert_workspace_owned(db, user, payload.workspace_id)
+    await check_plan_limit(user["sub"], "brand", db)
     row = await db.fetchrow(
         """
         INSERT INTO social.brands (workspace_id, name, description, website_url, sector)

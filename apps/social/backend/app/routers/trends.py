@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
+from app.routers.billing import check_plan_limit
 from app.services.fal_ai import generate_image
 from app.services.trend_analyzer import get_cached_or_fresh_trends, get_trends_for_sector
 
@@ -110,6 +111,7 @@ async def create_post_from_trend(
 ):
     """Trend prompt'u kullanarak içerik oluştur ve fal.ai tetikle."""
     await assert_brand_owned(db, user, payload.brand_id)
+    await check_plan_limit(user["sub"], "post", db)
     brand = await db.fetchrow(
         "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1",
         payload.brand_id,

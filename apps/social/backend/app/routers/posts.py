@@ -13,6 +13,7 @@ from app.core.security import (
     get_service_auth,
 )
 from app.models.schemas import FacelessVideoGenerate, OkResponse, PostCreate, PostGenerate
+from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context
 from app.services.fal_ai import generate_image
 from app.services.faceless_video import TURKISH_VOICES, run_faceless_video_pipeline
@@ -154,6 +155,7 @@ async def generate_post(
 ):
     """Create a post record and trigger fal.ai image generation."""
     await assert_brand_owned(db, user, payload.brand_id)
+    await check_plan_limit(user["sub"], "post", db)
     brand = await db.fetchrow(
         "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
     )
@@ -258,6 +260,7 @@ async def create_post(
 ):
     """Create a new post (status=draft). Trigger generation separately."""
     await assert_brand_owned(db, user, payload.brand_id)
+    await check_plan_limit(user["sub"], "post", db)
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
@@ -444,6 +447,8 @@ async def generate_faceless_video(
 ):
     """Faceless video pipeline: script üret → TTS → fal.ai arka plan videosu."""
     await assert_brand_owned(db, user, payload.brand_id)
+    await check_plan_limit(user["sub"], "video", db)
+    await check_plan_limit(user["sub"], "post", db)
     brand = await db.fetchrow(
         "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
     )
