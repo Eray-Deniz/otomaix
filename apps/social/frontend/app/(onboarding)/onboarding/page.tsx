@@ -231,8 +231,10 @@ export default function OnboardingPage() {
         analytics.onboardingCompleted()
         toast.success('Markanız oluşturuldu!')
         router.push('/dashboard')
+      } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
+        toast.error(res.plan_limit.message)
       } else {
-        toast.error('Marka oluşturulamadı')
+        toast.error(res.error || 'Marka oluşturulamadı')
       }
     } catch {
       toast.error('Bir hata oluştu')

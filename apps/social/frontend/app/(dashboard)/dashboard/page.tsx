@@ -89,6 +89,10 @@ function TrendWidget() {
       if (res.success) {
         toast.success('İçerik oluşturuluyor...')
         router.push('/icerik-kutuphanesi')
+      } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
+        toast.error(res.plan_limit.message)
+      } else if (res.error) {
+        toast.error(res.error)
       }
     } catch {
       toast.error('Bir hata oluştu')

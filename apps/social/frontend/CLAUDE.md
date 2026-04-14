@@ -3,6 +3,22 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — Plan limit (HTTP 402) handling
+
+`lib/api.ts` HTTP 402 yanıtlarını artık özel olarak yakalıyor:
+- Backend'in `detail: { error, message, upgrade_url, current_plan }` objesi `ApiResponse.plan_limit` alanına mapleniyor.
+- `ApiResponse<T>` discriminated union'a `plan_limit?: PlanLimitInfo` eklendi.
+- Daha önce `body.detail` bir obje olduğunda string concat → `"[object Object]"` yazıyordu. Yeni `extractErrorMessage()` helper'ı obje detail'lerden `message` alanını çıkarır.
+
+Paywall modal entegrasyonu yapılan sayfalar:
+- `markalar/page.tsx` — yeni marka oluştururken brand limit aşımında `UpgradeModal`
+- `marka-ayarlari/page.tsx` — avatar oluştururken avatar limit aşımında `UpgradeModal`
+- `icerik-olustur/page.tsx` — image/video/special_day/quote üretirken post/video limit aşımında `UpgradeModal` (4 dalın hepsi)
+- `trendler/page.tsx`, `dashboard/page.tsx` — trend kartından içerik üretirken plan_limit toast mesajı
+- `onboarding/page.tsx` — first brand create için plan_limit toast (genelde isabet etmez)
+
+`UpgradeModal` zaten mevcuttu (`components/billing/UpgradeModal.tsx`).
+
 ## Proje Kılavuzları (DEĞİŞTİRME)
 
 Genel mimari: ~/otomaix/docs/00-platform-mimari.md

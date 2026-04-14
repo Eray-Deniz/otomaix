@@ -117,8 +117,10 @@ export default function TrendlerPage() {
         analytics.trendPostCreated()
         toast.success('İçerik oluşturuluyor...')
         router.push('/icerik-kutuphanesi')
+      } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
+        toast.error(res.plan_limit.message)
       } else {
-        toast.error('İçerik oluşturulamadı')
+        toast.error(res.error || 'İçerik oluşturulamadı')
       }
     } catch {
       toast.error('Bir hata oluştu')

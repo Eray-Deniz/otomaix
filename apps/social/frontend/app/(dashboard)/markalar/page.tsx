@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { UpgradeModal } from '@/components/billing/UpgradeModal'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ export default function MarkalarlPage() {
   const [saving, setSaving] = useState(false)
 
   const [form, setForm] = useState({ name: '', sector: '', description: '' })
+  const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null)
 
   async function loadBrands() {
     if (!currentWorkspace?.id) return
@@ -77,8 +79,11 @@ export default function MarkalarlPage() {
         await loadBrands()
         // Yeni markayı aktif yap
         switchBrand(res.data)
+      } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
+        setShowAdd(false)
+        setUpgradeMessage(res.plan_limit.message)
       } else {
-        toast.error('Marka oluşturulamadı')
+        toast.error(res.error || 'Marka oluşturulamadı')
       }
     } catch {
       toast.error('Bir hata oluştu')
@@ -125,6 +130,12 @@ export default function MarkalarlPage() {
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
+      {upgradeMessage && (
+        <UpgradeModal
+          message={upgradeMessage}
+          onClose={() => setUpgradeMessage(null)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">

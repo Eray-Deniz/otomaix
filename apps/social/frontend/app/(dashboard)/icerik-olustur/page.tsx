@@ -14,6 +14,7 @@ import { analytics } from '@/lib/analytics'
 import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb, FileText } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { UpgradeModal } from '@/components/billing/UpgradeModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,7 @@ export default function IcerikOlusturPage() {
 
   // Step 3
   const [generating, setGenerating] = useState(false)
+  const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null)
   const [generatedPost, setGeneratedPost] = useState<GeneratedPost | null>(null)
   const [caption, setCaption] = useState('')
   const [hashtags, setHashtags] = useState<string[]>([])
@@ -309,6 +311,9 @@ export default function IcerikOlusturPage() {
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
         toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
+      } else if (!res.success && res.error === 'plan_limit_reached' && res.plan_limit) {
+        setStep(2)
+        setUpgradeMessage(res.plan_limit.message)
       } else {
         toast.error('Video üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
@@ -332,6 +337,9 @@ export default function IcerikOlusturPage() {
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
         toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
+      } else if (!res.success && res.error === 'plan_limit_reached' && res.plan_limit) {
+        setStep(2)
+        setUpgradeMessage(res.plan_limit.message)
       } else {
         toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
@@ -354,6 +362,9 @@ export default function IcerikOlusturPage() {
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
         toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
+      } else if (!res.success && res.error === 'plan_limit_reached' && res.plan_limit) {
+        setStep(2)
+        setUpgradeMessage(res.plan_limit.message)
       } else {
         toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
@@ -379,6 +390,9 @@ export default function IcerikOlusturPage() {
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
         toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
+      } else if (!res.success && res.error === 'plan_limit_reached' && res.plan_limit) {
+        setStep(2)
+        setUpgradeMessage(res.plan_limit.message)
       } else {
         toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
@@ -424,6 +438,12 @@ export default function IcerikOlusturPage() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
+      {upgradeMessage && (
+        <UpgradeModal
+          message={upgradeMessage}
+          onClose={() => setUpgradeMessage(null)}
+        />
+      )}
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">İçerik Oluştur</h1>
         <p className="text-sm text-gray-500 mt-0.5">AI ile sosyal medya içeriği üretin</p>

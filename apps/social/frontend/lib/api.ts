@@ -13,9 +13,32 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   }
 }
 
+export interface PlanLimitInfo {
+  message: string
+  upgrade_url: string
+  current_plan: string
+}
+
 export type ApiResponse<T> =
-  | { success: true; data: T; error?: never; retry_after?: never }
-  | { success: false; data?: never; error: string; retry_after?: number }
+  | { success: true; data: T; error?: never; retry_after?: never; plan_limit?: never }
+  | {
+      success: false
+      data?: never
+      error: string
+      retry_after?: number
+      plan_limit?: PlanLimitInfo
+    }
+
+function extractErrorMessage(detail: unknown, fallback: string): string {
+  if (!detail) return fallback
+  if (typeof detail === 'string') return detail
+  if (typeof detail === 'object' && detail !== null) {
+    const obj = detail as Record<string, unknown>
+    if (typeof obj.message === 'string') return obj.message
+    if (typeof obj.detail === 'string') return obj.detail
+  }
+  return fallback
+}
 
 async function apiFetch<T>(
   path: string,
@@ -42,9 +65,30 @@ async function apiFetch<T>(
       }
     }
 
+    if (res.status === 402) {
+      const body = await res.json().catch(() => ({}))
+      const detail = body.detail || {}
+      const message =
+        typeof detail === 'object' && detail.message
+          ? detail.message
+          : 'Plan limitine ulaştınız.'
+      return {
+        success: false,
+        error: 'plan_limit_reached',
+        plan_limit: {
+          message,
+          upgrade_url: detail.upgrade_url || '/fiyatlandirma',
+          current_plan: detail.current_plan || 'starter',
+        },
+      }
+    }
+
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      return { success: false, error: body.detail || `HTTP ${res.status}` }
+      return {
+        success: false,
+        error: extractErrorMessage(body.detail, `HTTP ${res.status}`),
+      }
     }
 
     return res.json()
@@ -76,9 +120,30 @@ async function apiUpload<T>(
       }
     }
 
+    if (res.status === 402) {
+      const body = await res.json().catch(() => ({}))
+      const detail = body.detail || {}
+      const message =
+        typeof detail === 'object' && detail.message
+          ? detail.message
+          : 'Plan limitine ulaştınız.'
+      return {
+        success: false,
+        error: 'plan_limit_reached',
+        plan_limit: {
+          message,
+          upgrade_url: detail.upgrade_url || '/fiyatlandirma',
+          current_plan: detail.current_plan || 'starter',
+        },
+      }
+    }
+
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      return { success: false, error: body.detail || `HTTP ${res.status}` }
+      return {
+        success: false,
+        error: extractErrorMessage(body.detail, `HTTP ${res.status}`),
+      }
     }
 
     return res.json()

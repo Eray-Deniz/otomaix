@@ -23,6 +23,7 @@ import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { Loader2, X, Upload, Check, FileText, Trash2, User, Video } from 'lucide-react'
+import { UpgradeModal } from '@/components/billing/UpgradeModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -398,6 +399,7 @@ function MarkaAyarlariContent() {
   const [stockAvatars, setStockAvatars] = useState<StockAvatar[]>([])
   const [loadingAvatars, setLoadingAvatars] = useState(false)
   const [creatingAvatar, setCreatingAvatar] = useState(false)
+  const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null)
   const [selectingAvatarId, setSelectingAvatarId] = useState<string | null>(null)
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
 
@@ -588,6 +590,8 @@ function MarkaAyarlariContent() {
         brand_kit: { ...prev.brand_kit, avatar: res.data as unknown as ActiveAvatar }
       } : prev)
       toast.success('Avatar oluşturuldu! HeyGen işlemi tamamlandığında kullanıma hazır olacak.')
+    } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
+      setUpgradeMessage(res.plan_limit.message)
     } else {
       toast.error((res.error as string) || 'Avatar oluşturulamadı')
     }
@@ -644,6 +648,12 @@ function MarkaAyarlariContent() {
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
+      {upgradeMessage && (
+        <UpgradeModal
+          message={upgradeMessage}
+          onClose={() => setUpgradeMessage(null)}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
