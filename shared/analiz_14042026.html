@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Otomaix Social — Teknik Analiz Raporu</title>
+<style>
+  @page { size: A4; margin: 2cm 1.8cm; }
+  body { font-family: "DejaVu Sans", sans-serif; font-size: 10.5pt; color: #1a1a1a; line-height: 1.5; }
+  h1 { color: #2563eb; font-size: 26pt; margin: 0 0 4pt 0; }
+  h2 { color: #2563eb; font-size: 16pt; margin-top: 22pt; border-bottom: 1px solid #e5e7eb; padding-bottom: 4pt; }
+  h3 { color: #111827; font-size: 12pt; margin-top: 16pt; }
+  h4 { color: #dc2626; font-size: 11pt; margin-top: 12pt; margin-bottom: 4pt; }
+  h4.ok { color: #059669; }
+  p, li { font-size: 10.5pt; }
+  code, tt { font-family: "DejaVu Sans Mono", monospace; font-size: 9.5pt; background: #f3f4f6; padding: 1px 3px; border-radius: 2px; }
+  pre { font-family: "DejaVu Sans Mono", monospace; font-size: 9pt; background: #f3f4f6; padding: 6pt; border-radius: 3px; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; margin: 8pt 0; font-size: 9.5pt; }
+  th { background: #2563eb; color: white; text-align: left; padding: 5pt 6pt; font-weight: bold; }
+  td { border-bottom: 1px solid #e5e7eb; padding: 4pt 6pt; vertical-align: top; }
+  .meta { color: #6b7280; font-size: 10pt; }
+  .sub { color: #6b7280; font-size: 9.5pt; }
+  .update-note { background: #fef3c7; border-left: 4px solid #d97706; padding: 8pt 10pt; margin: 10pt 0; font-size: 10pt; }
+  ul { margin: 4pt 0 8pt 0; padding-left: 18pt; }
+  li { margin-bottom: 3pt; }
+</style>
+</head>
+<body>
+
+<h1>Otomaix Social — Teknik Analiz Raporu</h1>
+<p class="meta"><b>Tarih:</b> 14 Nisan 2026 &nbsp; <b>Sürüm:</b> Phase 1–4 Tamamlandı &nbsp; <b>Hazırlayan:</b> Claude Opus 4.6 &nbsp; <b>Revizyon:</b> 14 Nisan 2026 (rev-1)</p>
+
+<div class="update-note">
+<b>Rev-1 notu:</b> N8N-3 bulgusunun "X-Internal-Key uyuşmazlığı" alt iddiası canlı doğrulama sonucu <b>geri çekilmiştir</b> — workflow ve backend <code>INTERNAL_API_KEY</code> değerleri birebir aynıdır. URL hardcoding sorunu geçerliliğini korumaktadır. Ayrıca N8N-4 (CRM-4) için yeni gözlem eklenmiştir: execution #55 (2026-04-14) Postgres'e ulaşıyor ancak bir downstream tip hatası veriyor.
+</div>
+
+<p>Bu rapor, <code>/root/otomaix/apps/social</code> dizinindeki FastAPI backend ve Next.js 14 frontend uygulamasının teknik analizidir. Amaç: şu ana kadar yapılan mimari çalışmaları özetlemek, çalışmayan / eksik / mantık hatası içeren bileşenleri tespit etmek ve öncelikli bir yapılacaklar listesi çıkarmaktır.</p>
+
+<h2>1. Genel Mimari Özeti</h2>
+<p>Platform; Türk KOBİ ve orta ölçekli şirketlere yönelik, AI destekli sosyal medya içerik üretim ve yayın otomasyonu sunan bir SaaS ürünüdür. Üç ana katman mevcuttur:</p>
+<ul>
+  <li><b>Frontend</b> (app.otomaix.com) — Next.js 14 App Router, shadcn/ui, Tailwind, Zustand store, Supabase Auth, FullCalendar, recharts, PostHog, Sentry, Crisp.</li>
+  <li><b>Backend</b> (api.otomaix.com) — FastAPI + asyncpg (PostgreSQL 5433, pgvector), Redis cache &amp; rate-limit, Cloudflare R2 (assets.otomaix.com), fal.ai (FLUX.2 Pro + Kling), Anthropic Claude, Upload-Post.com (sosyal yayın), Paddle (ödeme), Apify (rakip analizi).</li>
+  <li><b>Otomasyon</b> (n8n.otomaix.com) — Auto-posting scheduler, Telegram onay akışı, Türkiye takvim güncelleme, haftalık rakip raporu gibi workflow'lar.</li>
+</ul>
+<p class="sub">Backend kod tabanı 17 router + 10 servis, ~4.900 satır Python. Frontend 12 dashboard sayfası, ~6.130 satır TSX.</p>
+
+<h3>1.1 Faz Haritası (CLAUDE.md'den)</h3>
+<table>
+<tr><th>Faz</th><th>Kapsam</th><th>Durum</th></tr>
+<tr><td>Phase 1</td><td>Temel altyapı, FastAPI iskeleti, Supabase JWT, R2, fal.ai, Upload-Post</td><td>Tamam</td></tr>
+<tr><td>Phase 2</td><td>Brand Kit, Post üretimi, AI idea/script, Takvim, Auto-posting, OAuth</td><td>Tamam</td></tr>
+<tr><td>Phase 3</td><td>Doküman RAG, Faceless video, AI Avatar, Rakip analizi, Trendler, Logo overlay, Paddle</td><td>Tamam</td></tr>
+<tr><td>Phase 4</td><td>Self-serve onboarding, PostHog, Sentry, Redis cache/ratelimit, Docker Compose, Load test, Crisp</td><td>Tamam</td></tr>
+</table>
+
+<h2>2. Backend Analizi (apps/social/backend)</h2>
+<h3>2.1 Router Haritası</h3>
+<table>
+<tr><th>Router</th><th>Amaç</th><th>Durum Notu</th></tr>
+<tr><td>auth.py</td><td>/auth/me, /auth/init (account+workspace+brands)</td><td>Çalışıyor</td></tr>
+<tr><td>ai.py</td><td>/ai/suggest-ideas, /ai/analyze-website, /ai/generate-script</td><td>Çalışıyor</td></tr>
+<tr><td>posts.py</td><td>generate / regenerate / publish / request-approval / faceless-video</td><td>Çoğu OK — yetki eksik</td></tr>
+<tr><td>brands.py</td><td>CRUD + brand_kit + logo/intro video upload</td><td>Yetki kontrolü yok</td></tr>
+<tr><td>calendar.py</td><td>/calendar/posts, /calendar/schedule, /calendar/holidays</td><td>Çalışıyor</td></tr>
+<tr><td>autoposting.py</td><td>config CRUD, toggle, upcoming</td><td>Şema eksik (aşağıda)</td></tr>
+<tr><td>internal.py</td><td>n8n için X-Internal-Key korumalı endpoint'ler</td><td>Çalışıyor</td></tr>
+<tr><td>documents.py</td><td>Doküman yükleme + RAG metin çıkarma</td><td>Çalışıyor</td></tr>
+<tr><td>competitors.py</td><td>Rakip analiz ekle/sil/refresh/report</td><td>Mantık hatası + senkron blok</td></tr>
+<tr><td>trends.py</td><td>Trend listele/refresh/create-post</td><td>Cache upsert yok</td></tr>
+<tr><td>avatar.py</td><td>HeyGen avatar + UGC video</td><td>HEYGEN_API_KEY yoksa fallback</td></tr>
+<tr><td>billing.py</td><td>Paddle checkout/portal/webhook, plan limits</td><td>check_plan_limit hiç çağrılmıyor</td></tr>
+<tr><td>settings.py</td><td>Workspace Telegram token/chat_id</td><td>Çalışıyor</td></tr>
+<tr><td>social.py</td><td>Upload-Post OAuth link/callback</td><td>Çalışıyor</td></tr>
+<tr><td>storage.py</td><td>R2 presigned upload</td><td>17 satır — basit</td></tr>
+<tr><td>webhooks.py</td><td>fal.ai callback → R2 → logo/intro overlay</td><td>Çalışıyor</td></tr>
+</table>
+
+<h3>2.2 Kritik Bulgular (Backend)</h3>
+
+<h4>[B-1] Plan limit kontrolü hiçbir yerde çağrılmıyor.</h4>
+<p><code>billing.py:515</code> içindeki <code>check_plan_limit()</code> fonksiyonu tanımlanmış fakat <code>posts.py</code>, <code>brands.py</code>, <code>trends.py</code> ve <code>avatar.py</code> içindeki hiçbir endpoint'te bu fonksiyon çağrılmıyor. Sonuç: Starter planındaki bir kullanıcı aylık 50 içerik limitini aşabilir, 1 marka limitinin üzerinde marka açabilir, Pro'ya özel video üretimini Starter'da kullanabilir. Ödeme modelinin finansal etkisi var.</p>
+<p><b>Yapılması gereken:</b> <code>/posts/generate</code>, <code>/posts/generate-faceless-video</code>, <code>/brands</code> (POST), <code>/avatar/generate-ugc</code> endpoint'lerine <code>await check_plan_limit(...)</code> eklenmeli.</p>
+
+<h4>[B-2] Yetkilendirme (ownership) kontrolü çoğu endpoint'te yok.</h4>
+<p>Supabase JWT doğrulaması yapılıyor, ancak kullanıcının istek yaptığı kaynağın sahibi olup olmadığı kontrol edilmiyor. Örnekler:</p>
+<ul>
+  <li><code>GET /brands/{brand_id}</code> — herhangi bir JWT ile herhangi bir markanın brand_kit'ine, logo URL'sine, sektör bilgisine erişilebilir.</li>
+  <li><code>PATCH /brands/{brand_id}</code>, <code>DELETE /brands/{brand_id}</code>, <code>PATCH /brands/{brand_id}/kit</code> — başkasının markasını silebilir / değiştirebilir.</li>
+  <li><code>POST /posts/{id}/publish</code>, <code>POST /posts/{id}/regenerate</code>, <code>GET /posts/{id}</code> — başkasının içerikleri üzerinde işlem yapılabilir. (Sadece <code>/posts/{id}/request-approval</code> kullanıcı–workspace–brand join'i yapıyor.)</li>
+  <li><code>/calendar/posts</code>, <code>/trends</code>, <code>/competitors</code>, <code>/autoposting/config</code> — brand_id parametresi sahiplik üzerinden doğrulanmıyor.</li>
+  <li><code>GET /posts?brand_id</code> — başka markaların içerik listesi okunabilir.</li>
+</ul>
+<p><b>Yapılması gereken:</b> Ortak bir <code>assert_brand_owned(user_id, brand_id, db)</code> yardımcısı yazılıp kaynak bazlı endpoint'lerde dependency olarak kullanılmalı.</p>
+
+<h4>[B-3] autoposting.py şeması Telegram alanlarını yazmıyor — CLAUDE.md ile tutarsız.</h4>
+<p><b>CLAUDE.md:</b> "Her müşteri kendi bot token'ını Otomatik Yayın wizard'ına girer → <code>social.autoposting_configs.telegram_bot_token</code> / <code>telegram_chat_id</code> kolonlarında saklanır."</p>
+<p><b>Gerçek kod</b> (<code>autoposting.py:17–72</code>): <code>AutopostingConfigRequest</code> şemasında bu alanlar yok, INSERT cümlesi de bu kolonlara değer yazmıyor. Frontend <code>otomatik-yayin/page.tsx</code> de artık bu alanları göndermiyor ve kullanıcıyı <code>/ayarlar</code>'a (workspace Telegram ayarı) yönlendiriyor.</p>
+<p><b>Durum:</b> Telegram artık workspace seviyesinde saklanıyor (<code>social.workspaces.telegram_bot_token</code> / <code>telegram_chat_id</code>). <code>internal.py:get_due_configs</code> ve <code>posts.py:request_approval</code> bu kolonları workspaces tablosundan okuyor (doğru). CLAUDE.md güncellenmeli — ayrıca <code>autoposting_configs</code>'daki eski kolonlar kullanılmıyor, migration 004/005 sonrası temizlik gerekiyor.</p>
+
+<h4>[B-4] competitors.py add_competitor — ölü kod + potansiyel JSONB hatası.</h4>
+<p><code>competitors.py:62-71</code> aralığında, <code>run_full_analysis()</code> sonrası önce yanlış bir UPDATE yapılıyor:</p>
+<pre>UPDATE ... SET analysis_data = $2 ... VALUES (str(analysis_data).replace("'", '"'))</pre>
+<p>Python <code>str(dict)</code> çıktısı valid JSON değildir (True/False/None olarak kalır), üstelik <code>::jsonb</code> cast'i yok. asyncpg'nin bu sütunu (JSONB) ham string olarak kabul etmesi tip hatasına yol açar. Hemen ardından (73-82) doğru <code>json.dumps()</code> + <code>::jsonb</code> UPDATE yapılıyor — yani ilk UPDATE ölü koddur ve potansiyel olarak exception fırlatıp ikinci UPDATE'i engeller. İlk UPDATE bloğu tamamen silinmeli.</p>
+
+<h4>[B-5] competitors.py ve trends.py senkron bloklama.</h4>
+<p><code>POST /competitors</code> istek boyunca <code>run_full_analysis()</code> çağrısı yapıyor: website HTTP fetch + Claude Haiku + (varsa) Apify Instagram — tamamı tek istek içinde senkron. Bu istek kolayca 30+ saniye bloklayabilir, uvicorn worker'ı tüketir. Ayrıca Cloudflare/Coolify default timeout'u (genelde 60sn) aşılabilir.</p>
+<p><b>Yapılması gereken:</b> FastAPI <code>BackgroundTasks</code> veya arka plan kuyruğu (Celery/RQ) ile asenkron işleme; 202 Accepted dönülüp frontend polling yapmalı.</p>
+
+<h4>[B-6] trends.py:refresh_trends UPSERT değil INSERT yapıyor.</h4>
+<p><code>trends.py:84</code> her refresh'te aynı sektör için yeni bir satır ekliyor. <code>trend_cache</code> tablosu zamanla şişecek. <code>ON CONFLICT (sector) DO UPDATE</code> ya da periyodik temizlik gerekli.</p>
+
+<h4>[B-7] brands.py:update_brand_kit — brand_kit JSONB string/dict ayrımı yok.</h4>
+<p><code>posts.py</code> yardımcı <code>_parse_brand_kit()</code> fonksiyonu ile asyncpg'nin bazen JSONB'yi string döndürdüğü durumu handle ediyor. <code>brands.py:132</code> ise doğrudan <code>dict(row['brand_kit'])</code> yapıyor — değer string geldiğinde <code>TypeError</code> atacak. Aynı parse helper brands.py'de de kullanılmalı.</p>
+
+<h4>[B-8] posts.py:publish_post — durum kontrolü yok.</h4>
+<p><code>POST /posts/{id}/publish</code> çağrısı post'un <code>ready</code> durumunda olup olmadığını kontrol etmiyor. <code>generating</code>, <code>failed</code>, <code>published</code> bir post tekrar publish edilmeye çalışılır ve servis tarafında <code>output_url</code> kontrolünde <code>ValueError</code> fırlar → 500 döner. Frontend butonu disabled yapıyor ama backend idempotency / durum validasyonu yapmalı.</p>
+
+<h4>[B-9] upload_post.py — plan features ignore ediliyor.</h4>
+<p>Servis tüm platformlara sırayla POST <code>/publish</code> çağrıları yapıyor; <code>all_ok</code> True değilse post 'failed' oluyor ve başarılı yayınlar da sıfırlanmış gibi görünüyor. Kısmi başarı (3 platformdan 2'si OK) kaybediliyor. Önerilen: <code>social.post_publications</code> tablosu (post_id, platform, status, external_id, error) oluşturup platform bazlı durum tutmak.</p>
+
+<h4>[B-10] /internal/posts/scheduled-due uç noktası var — ancak eşlenmiş n8n workflow belgelenmemiş.</h4>
+<p><code>internal.py:213</code>'te Scheduled Post Publisher için endpoint hazır (scheduled_at geçmiş 'scheduled' post'ları döndürür). Ancak CLAUDE.md'deki n8n workflow listesinde bu endpoint'i 5 dakikada bir çağıran bir workflow yok. Sonuç: Takvime zamanlanan içerikler otomatik yayınlanmıyor olabilir. Doğrulanmalı + eksikse n8n workflow oluşturulmalı.</p>
+
+<h2>3. Frontend Analizi (apps/social/frontend)</h2>
+<h3>3.1 Sayfa Haritası</h3>
+<table>
+<tr><th>Route</th><th>Satır</th><th>Durum</th></tr>
+<tr><td>/dashboard</td><td>266</td><td>Stats &amp; streak fake, "Bağla" butonları boş</td></tr>
+<tr><td>/icerik-olustur</td><td>992</td><td>Step 3 Yayınla/Takvime Ekle → toast.info</td></tr>
+<tr><td>/icerik-kutuphanesi</td><td>639</td><td>Tam işlevsel</td></tr>
+<tr><td>/takvim</td><td>518</td><td>Tam işlevsel (FullCalendar)</td></tr>
+<tr><td>/otomatik-yayin</td><td>734</td><td>Tam işlevsel</td></tr>
+<tr><td>/marka-ayarlari</td><td>1233</td><td>"Web sitesi analizi yakında" butonu boş</td></tr>
+<tr><td>/markalar</td><td>318</td><td>Tam işlevsel</td></tr>
+<tr><td>/rakip-analizi</td><td>556</td><td>Tam işlevsel</td></tr>
+<tr><td>/trendler</td><td>283</td><td>Tam işlevsel</td></tr>
+<tr><td>/faturalandirma</td><td>302</td><td>Tam işlevsel</td></tr>
+<tr><td>/fiyatlandirma</td><td>168</td><td>Tam işlevsel</td></tr>
+<tr><td>/ayarlar</td><td>121</td><td>Workspace Telegram ayarları</td></tr>
+</table>
+
+<h3>3.2 Kritik Bulgular (Frontend)</h3>
+
+<h4>[F-1] Dashboard istatistikleri sabit (mock).</h4>
+<p><code>dashboard/page.tsx:181-207</code> üç kart — "Bu Ay Üretilen", "Yayınlanan", "Bağlı Platform" — sabit <code>0</code> değeri gösteriyor. Backend'den veri çekilmiyor. Ayrıca (219) "Yayın Serisi" (streak) bölümü sabit "3 gün serisi" metni ve ilk 3 gün mavi kutu ile hard-coded.</p>
+<p><b>Yapılması gereken:</b> <code>GET /billing/current</code> zaten <code>usage.posts_this_month</code> ve <code>brands</code> döndürüyor — bu çağrı yapılıp değerler bağlanmalı. Published count için yeni bir endpoint veya <code>/posts?status=published</code> count kullanılabilir. "Bağlı platform" için <code>brand_social_accounts</code> sayımı gerekli. Streak için yeni backend alanı ya da görsel olarak kaldırılması önerilir.</p>
+
+<h4>[F-2] Dashboard "Hesabınızı Bağlayın" kartları — Bağla butonları dead link.</h4>
+<p><code>dashboard/page.tsx:254</code> — Instagram/TikTok/LinkedIn kartlarındaki <code>&lt;Button&gt;Bağla&lt;/Button&gt;</code> elementlerinde <code>onClick</code> handler yok, href yok. Tıklayınca hiçbir şey olmuyor. Oysa backend'de <code>GET /social/oauth-link?brand_id&amp;platform</code> hazır ve marka-ayarlari içinde doğru kullanılıyor.</p>
+<p><b>Yapılması gereken:</b> <code>api.get('/social/oauth-link?brand_id=...&amp;platform=instagram')</code> çağrısı yapılıp dönen URL'e <code>window.location</code> yönlendirilmeli, ya da kullanıcı <code>/marka-ayarlari?tab=sosyal</code> sayfasına gönderilmeli.</p>
+
+<h4>[F-3] İçerik Oluştur — Step 3 "Şimdi Yayınla" ve "Takvime Ekle" butonları çalışmıyor.</h4>
+<p><code>icerik-olustur/page.tsx:973</code> ve <code>:980</code> — sadece <code>toast.info('Takvim özelliği yakında')</code> / <code>toast.info('Yayınlama özelliği yakında')</code> gösteriyor. Backend ve icerik-kutuphanesi sayfasında bu akış tam çalışıyor — aynı handler'lar buraya bağlanabilir. Kullanıcı üretim sonrası içeriği ancak kütüphaneye gidip orada yayınlayabiliyor.</p>
+<p><b>Yapılması gereken:</b> <code>POST /posts/{id}/publish</code> ve <code>PATCH /calendar/schedule/{id}</code> çağrıları (Library sayfasındaki modal'dan kopyalanabilir).</p>
+
+<h4>[F-4] Marka Ayarları — "Web sitesi analizi yakında" butonu eksik.</h4>
+<p><code>marka-ayarlari/page.tsx:699</code> website input'unun yanındaki analiz butonu <code>toast.info</code> döndürüyor. Oysa backend'de <code>POST /ai/analyze-website</code> hazır ve onboarding sayfası aynı çağrıyı kullanıyor. Basit bir kopyalama ile çözülebilir.</p>
+
+<h4>[F-5] CONTENT_TYPES dizisinde "Yakında" rozet kodu ölü.</h4>
+<p><code>icerik-olustur/page.tsx:58-63</code> tüm içerik tipleri <code>active: true</code> olarak işaretli, ama <code>:456-460</code> arasındaki <code>!type.active</code> koluna göre "Yakında" badge render eden kod hâlâ duruyor. Ölü kod — temizlenmeli.</p>
+
+<h4>[F-6] posts list ownership — /calendar/posts brand_id sahipliği doğrulamıyor.</h4>
+<p class="sub">Bu backend hatası ama frontend sonucunu etkiliyor: çoklu marka sahibi kullanıcılar, URL parametresini değiştirip başka bir workspace'in markasının takvimini görebilir (teorik risk).</p>
+
+<h2>4. Dış Entegrasyonlar ve n8n Akışları</h2>
+<h3>4.1 n8n Workflow Envanteri</h3>
+<table>
+<tr><th>Workflow</th><th>ID</th><th>Amaç</th></tr>
+<tr><td>Auto Posting Scheduler</td><td>Nz4651wCfBHP4G9l</td><td>30 dakikada bir /internal/autoposting/due sorgular, gelen config'ler için post üretir.</td></tr>
+<tr><td>Telegram İçerik Onay</td><td>D49KNE35cONz2APb</td><td>Post detayını alır, müşterinin botuyla onay mesajı gönderir.</td></tr>
+<tr><td>Telegram Onayla</td><td>aQ8neGzs3PQp8DMl</td><td>GET /tg-approve → publish-now + Telegram bildirim + TR onay sayfası</td></tr>
+<tr><td>Telegram Reddet</td><td>9kp6bCFl0ys6TbVu</td><td>GET /tg-reject → status=rejected + Telegram bildirim + TR iptal sayfası</td></tr>
+<tr><td>Türkiye Takvim Güncelleme</td><td>tTk1VroTh4AS8lxI</td><td>1 Ocak'ta yıllık resmi tatilleri public_holidays'e yazar. Şu an INACTIVE.</td></tr>
+<tr><td>Haftalık Rakip Raporu</td><td colspan="2">shared/n8n-workflows/weekly-competitor-report.json — n8n'e deploy durumu doğrulanmalı.</td></tr>
+</table>
+
+<p><b>Eksik / Şüpheli:</b></p>
+<ul>
+  <li><b>Scheduled Post Publisher</b> — <code>/internal/posts/scheduled-due</code> hazır ama onu çağıracak n8n workflow yok. Kullanıcıların takvimden planladığı içerikler şu an otomatik yayınlanmıyor olabilir.</li>
+  <li><b>Türkiye Takvim Güncelleme</b> n8n'de INACTIVE — 1 Ocak 2027'de çalışmayacak. Manuel aktivasyon gerekli.</li>
+  <li><b>Weekly Competitor Report</b> — JSON repo'da var ancak n8n'e deploy edilip edilmediği CLAUDE.md'de belirsiz.</li>
+</ul>
+
+<h3>4.2 Üçüncü Taraf Servisler</h3>
+<table>
+<tr><th>Servis</th><th>Kullanım</th><th>Konfigürasyon</th></tr>
+<tr><td>Supabase Auth</td><td>JWT (ES256), JWKS, onAuthStateChange, Google OAuth</td><td>SUPABASE_URL / SERVICE_KEY</td></tr>
+<tr><td>fal.ai</td><td>FLUX.2 Pro (image), Kling 2.5/3.0 (video), Hunyuan (faceless arkaplan)</td><td>FAL_KEY</td></tr>
+<tr><td>Anthropic Claude</td><td>Haiku — idea suggest, script, rakip analiz, trend relevance, CRM senaryo</td><td>ANTHROPIC_API_KEY</td></tr>
+<tr><td>HeyGen</td><td>AI Avatar + UGC video</td><td>HEYGEN_API_KEY (opsiyonel)</td></tr>
+<tr><td>Azure Cognitive TTS</td><td>Türkçe seslendirme (faceless video)</td><td>AZURE_TTS_KEY / REGION (opsiyonel)</td></tr>
+<tr><td>Apify</td><td>Instagram scrape (rakip analizi)</td><td>APIFY_API_KEY (opsiyonel — placeholder fallback)</td></tr>
+<tr><td>Cloudflare R2</td><td>Görsel / video / logo storage → assets.otomaix.com</td><td>R2_ACCOUNT_ID, KEY, SECRET, BUCKET</td></tr>
+<tr><td>Upload-Post.com</td><td>Instagram/TikTok/LinkedIn/FB/YT/X yayın</td><td>UPLOAD_POST_API_KEY</td></tr>
+<tr><td>Paddle</td><td>Checkout + subscription + webhook</td><td>PADDLE_API_KEY / WEBHOOK_SECRET / PRICE_*</td></tr>
+<tr><td>Sentry</td><td>Error monitoring (FE + BE)</td><td>SENTRY_DSN / NEXT_PUBLIC_SENTRY_DSN</td></tr>
+<tr><td>PostHog</td><td>Ürün analitiği</td><td>POSTHOG_API_KEY / NEXT_PUBLIC_POSTHOG_KEY</td></tr>
+<tr><td>Crisp Chat</td><td>Canlı destek</td><td>NEXT_PUBLIC_CRISP_WEBSITE_ID</td></tr>
+</table>
+
+<h2>5. Öncelikli Yapılacaklar (Impact × Effort)</h2>
+<h3>5.1 P0 — Acil (Kullanıcı veya Finansal Risk)</h3>
+<ul>
+  <li><b>[B-1]</b> Plan limit kontrollerini post üretim, marka oluşturma, video ve avatar endpoint'lerine bağla.</li>
+  <li><b>[B-2]</b> Brand ownership dependency'si yazılıp bütün brand_id alan endpoint'lere eklenmeli. (Şu an teorik veri sızıntısı / manipülasyon riski var.)</li>
+  <li><b>[F-3]</b> İçerik Oluştur Step 3'te "Şimdi Yayınla" ve "Takvime Ekle" butonlarının işlevini library modal'ından kopyala — kullanıcı üretim sonrası hemen aksiyon alamıyor.</li>
+  <li><b>[F-2]</b> Dashboard "Bağla" butonlarını OAuth link'e bağla veya marka ayarlarına yönlendir.</li>
+  <li><b>[B-4]</b> <code>competitors.py</code>'deki ölü UPDATE bloğunu sil (satır 62-71). İlk isteklerin sessiz hata üretme riski var.</li>
+</ul>
+
+<h3>5.2 P1 — Kısa Vadede (Kullanıcı Deneyimi)</h3>
+<ul>
+  <li><b>[F-1]</b> Dashboard stats kartlarını <code>/billing/current</code> + <code>/posts?status=published</code> sayımına bağla; "Yayın Serisi" ya gerçek veriye bağlansın ya da kaldırılsın.</li>
+  <li><b>[F-4]</b> Marka Ayarları'nda "Web sitesi analizi" butonunu <code>POST /ai/analyze-website</code>'e bağla (onboarding'deki kodu kopyala).</li>
+  <li><b>[B-5]</b> Rakip ve trend analizini BackgroundTasks ile arka plana al, 202 + polling.</li>
+  <li><b>[B-9]</b> <code>upload_post.publish_post()</code>'te platform bazlı başarı izlenmesi için ayrı tablo.</li>
+  <li><b>[B-10]</b> Scheduled Post Publisher için n8n workflow oluştur (5 dk'da bir <code>/internal/posts/scheduled-due</code>).</li>
+</ul>
+
+<h3>5.3 P2 — Temizlik / İyileştirme</h3>
+<ul>
+  <li><b>[B-3]</b> CLAUDE.md'deki <code>autoposting_configs</code> Telegram açıklamasını güncelle; kullanılmayan kolonları migration ile temizle.</li>
+  <li><b>[B-6]</b> <code>trends.py:refresh</code> INSERT → UPSERT'e dönüştür (veya retention job).</li>
+  <li><b>[B-7]</b> <code>_parse_brand_kit</code> yardımcısını brands.py'de de kullan.</li>
+  <li><b>[B-8]</b> <code>publish_post</code>'te status kontrolü (ready/failed/rejected).</li>
+  <li><b>[F-5]</b> icerik-olustur'daki "Yakında" badge'i ve inactive dallı kodu sil.</li>
+  <li>Türkiye Takvim Güncelleme n8n workflow'unu aktive et.</li>
+</ul>
+
+<h2>6. Sonuç ve Tavsiyeler</h2>
+<p><b>Genel tablo:</b> Dört fazın tamamı tamamlanmış, mimari sağlam ve modüler. Backend router ayrımı temiz, fal.ai + R2 + Upload-Post zinciri webhook tabanlı ve doğru kurulmuş, Paddle/CRM webhook'ları hazır, Redis cache/rate-limit uygulanmış, Sentry + PostHog gözlenebilirlik aktif. Frontend App Router + Zustand + shadcn temeli oturmuş; Marka Ayarları, Kütüphane, Takvim, Otomatik Yayın, Trendler, Rakip Analizi, Faturalandırma gibi sayfaların hepsi tam işlevsel.</p>
+<p>Ancak ürünü bugün canlıya açtığınız an dört kategori problem ortaya çıkar:</p>
+<ul>
+  <li><b>Finansal risk:</b> Plan limitleri uygulanmıyor — kullanıcılar Pro özellikleri Starter'da sınırsız kullanabilir (B-1).</li>
+  <li><b>Güvenlik:</b> Ownership kontrolü yok; workspace/marka kaynakları JWT sahibi herkes için okunabilir (B-2).</li>
+  <li><b>Kullanıcı akışı:</b> İçerik Oluştur wizard'ından üretilen içerik için tek çıkış "kütüphaneye git → tekrar tıkla" — Step 3'teki yayınla/zamanla butonları bilerek toast gösteriyor (F-3, F-2, F-1).</li>
+  <li><b>Otomasyon katmanı ölü:</b> Auto Posting Scheduler inaktif ve yanlış URL ile yapılandırılmış (N8N-2/3), Telegram onay butonları runtime'da patlıyor (N8N-1), scheduled post publisher hiç yok (N8N-7), CRM-4/5 Postgres'e ulaşamıyor (N8N-4). Otomatik yayın özelliğini müşteri "açsa bile" hiçbir şey çalışmıyor.</li>
+</ul>
+<p><b>İlk sprint (1 hafta) önerisi:</b> P0 maddeleri. Bu beş maddeden sonra ürün ticari anlamda sağlam, ikinci sprint P1 ile UX'i cilalarsınız.</p>
+
+<h2>7. n8n Workflow Derin Analizi (Kod ile Tutarlılık)</h2>
+<p>Bu bölüm, <code>n8n.otomaix.com</code> üzerinde canlı çalışan workflow'ların gerçek JSON tanımlarının backend kodu ile karşılaştırılması sonucu ortaya çıkarılmıştır. n8n Public API ile workflow içerikleri ve execution geçmişleri çekilmiştir.</p>
+
+<h3>7.1 Workflow Envanteri (canlı liste)</h3>
+<table>
+<tr><th>Workflow</th><th>ID</th><th>Aktif</th><th>Node</th><th>Not</th></tr>
+<tr><td>Auto Posting Scheduler</td><td>Nz4651wCfBHP4G9l</td><td>HAYIR</td><td>11</td><td>Kritik — inaktif</td></tr>
+<tr><td>Telegram İçerik Onay</td><td>D49KNE35cONz2APb</td><td>EVET</td><td>6</td><td>Carousel desteklenmiyor</td></tr>
+<tr><td>Telegram Onayla</td><td>aQ8neGzs3PQp8DMl</td><td>EVET</td><td>4</td><td>Aralıklı runtime hatası</td></tr>
+<tr><td>Telegram Reddet</td><td>9kp6bCFl0ys6TbVu</td><td>EVET</td><td>4</td><td>Aynı runtime riski</td></tr>
+<tr><td>Türkiye Takvimi Güncelleme</td><td>tTk1VroTh4AS8lxI</td><td>HAYIR</td><td>5</td><td>Henüz çalıştırılmadı</td></tr>
+<tr><td>CRM-1 Yeni Müşteri</td><td>UzNjZDghyfJq2vYA</td><td>EVET</td><td>3</td><td>Path eşleşiyor</td></tr>
+<tr><td>CRM-2 Plan Yükseltme</td><td>VoYuC8AGwtT0NpZR</td><td>EVET</td><td>3</td><td>Path eşleşiyor</td></tr>
+<tr><td>CRM-3 Ödeme Başarısız</td><td>tDnbM6NNy3a3xHdD</td><td>EVET</td><td>7</td><td>Path eşleşiyor</td></tr>
+<tr><td>CRM-4 Churn Riski</td><td>os5XonE1TtptDPBC</td><td>EVET</td><td>7</td><td>Postgres + downstream tip hatası</td></tr>
+<tr><td>CRM-5 Deneme Bitiyor</td><td>KOsqeGIkrnKIX6rl</td><td>EVET</td><td>6</td><td>Postgres reddediliyor</td></tr>
+<tr><td>CRM-6 Aylık Gelir</td><td>9esToZdZIeevp0UF</td><td>EVET</td><td>4</td><td>Henüz tetiklenmedi</td></tr>
+</table>
+
+<h3>7.2 Tespit Edilen Kritik Sorunlar</h3>
+
+<h4>[N8N-1] KRİTİK — Telegram Onayla/Reddet workflow'ları runtime'da patlıyor</h4>
+<p>Canlı execution #51 (2026-04-13 20:30) <code>aQ8neGzs3PQp8DMl</code> için hata üretti: <i>"Unused Respond to Webhook node found in the workflow"</i>. Aynı yapılandırma <code>9kp6bCFl0ys6TbVu</code> (Reddet) workflow'unda da mevcut. Webhook node'unun <code>responseMode: responseNode</code> moduna geçirilmiş olmasına rağmen ilk HTTP Request node'u <code>continueOnFail: true</code> + hata yolu olmadığı için n8n validator Respond to Webhook'u "unused" kabul ediyor. Sonuç: müşteri Telegram'da Onayla'ya basınca işlem çalışmıyor, publish-now asla tetiklenmiyor.</p>
+<p><span class="sub">Not: execution #53 (2026-04-13 20:33) başarıyla tamamlandı — hata aralıklı görünüyor. Yine de kök neden (HTTP Request hata yolu eksikliği) kalıcı düzeltilmeli.</span></p>
+<p><b>Çözüm:</b> HTTP Request düğümlerinde <code>onError: continueRegularOutput</code> aktive edilmeli veya <code>responseMode</code> <code>onReceived</code>'e alınıp statik bir HTML yanıt dönülmeli.</p>
+
+<h4>[N8N-2] KRİTİK — Auto Posting Scheduler inaktif (üretim ölü)</h4>
+<p><code>Nz4651wCfBHP4G9l</code> workflow'u <code>active=false</code>. Otomatik yayın özelliği canlıda hiçbir zaman tetiklenmiyor. Frontend <code>/otomatik-yayin</code> üzerinden config kaydetmek kullanıcı için hiçbir etki üretmiyor.</p>
+
+<h4>[N8N-3] KRİTİK — Auto Posting Scheduler yanlış URL kullanıyor</h4>
+<p>Workflow JSON'unda tüm HTTP Request düğümleri <code>http://178.104.7.200:8000/internal/…</code> ve <code>http://178.104.7.200:5678/webhook/…</code> adreslerini hard-code etmiş. Coolify üzerinden yapılan reverse-proxy + HTTPS katmanı devre dışı kalıyor; workflow public domain'leri kullanmıyor.</p>
+<div class="update-note">
+<b>Rev-1 düzeltmesi:</b> İlk raporda yer alan "X-Internal-Key değeri Telegram workflow'larından farklı" iddiası <b>yanlıştı</b>. Canlı doğrulamada workflow'daki <code>X-Internal-Key</code> (<code>…9075ab19d7e0ab</code>) ile backend <code>settings.INTERNAL_API_KEY</code> birebir aynıdır; Telegram workflow'larında zaten X-Internal-Key gönderilmiyor (Telegram bot token kullanıyor). Key uyumsuzluğu diye bir sorun bulunmamaktadır.
+</div>
+<p><b>Çözüm:</b> URL'leri <code>https://api.otomaix.com</code> + <code>https://n8n.otomaix.com</code>'a çevir; secret'ları (X-Internal-Key) n8n credential'a taşı — hard-code edilmesinler.</p>
+
+<h4>[N8N-4] KRİTİK — CRM-4 ve CRM-5 Postgres bağlantısı reddediliyor</h4>
+<p>CRM-5 execution #30 (2026-04-13) ve CRM-4 execution #29 (2026-04-13): <code>Connection refused ::1:5433</code>. Workflow'lar IPv6 localhost üzerinden <code>social.accounts</code> sorguluyor; n8n Docker container'ından host 5433'e ulaşılamıyor. Sonuç: churn taraması (günlük) ve deneme bitiyor uyarıları (günlük) hiçbir zaman düzgün çalışmıyor.</p>
+<div class="update-note">
+<b>Rev-1 ek gözlem:</b> CRM-4 execution #55 (2026-04-14) artık <code>Connection refused</code> vermiyor — yeni hata <code>"Has Churn Risk?"</code> IF node'unda <code>"Wrong type: '0' is a string but was expecting a number"</code>. Postgres erişimi bu çalışmada (muhtemelen değiştirilen credential sebebiyle) başarılı olmuş ancak IF node'unun tip dönüştürmesi sorunlu. CRM-5 #30'da Postgres hatası hâlâ aktif. Her iki workflow da düzeltilmeli: (1) Postgres credential host'u <code>host.docker.internal</code>, (2) CRM-4 IF node'una <code>.toNumber()</code> veya "Convert types where required" ayarı.
+</div>
+<p><b>Çözüm:</b> Postgres credential'ında host'u <code>host.docker.internal</code> (veya Coolify iç network DNS'i) olarak ayarla; CRM-4'te IF node'unun karşılaştırma tipini number'a çevir.</p>
+
+<h4>[N8N-5] UYARI — Auto Posting Scheduler splitInBatches kablolaması yanlış</h4>
+<p>Validator uyarısı: "Rastgele Seçim" düğümü splitInBatches'in <code>done</code> çıkışına bağlı, <code>loop</code> çıkışına değil. Canlı workflow JSON'unda "Her Config İçin" splitInBatches node'unun sadece <code>main:0</code> çıkışı bağlı, <code>main:1</code> boşta — loop/done ikili wiring yapılmamış. Bu şekilde config listesindeki sadece ilk item işlenir, kalan config'ler döngüye girmez. Tek müşterilik demolarda fark edilmez; üretimde ciddi kayba yol açar.</p>
+
+<h4>[N8N-6] UYARI — Telegram İçerik Onay carousel desteklemiyor</h4>
+<p>Workflow tek bir <code>sendPhoto</code> çağrısı yapıyor; "İçerik Tipi?" switch node'u sadece <code>video</code> vs <code>!video</code> ayrımı yapıyor, carousel için ayrı dal yok. <code>content_type=carousel</code> olduğunda backend birden fazla <code>output_url</code> üretmiş olsa bile Telegram'a yalnızca ilki gönderiliyor. Onay akışında müşteri tüm görselleri göremeden karar veriyor. Çözüm: carousel için <code>sendMediaGroup</code> dalı ekle.</p>
+
+<h4>[N8N-7] EKSİK — Scheduled Post Publisher workflow'u yok</h4>
+<p>Backend'de <code>/internal/posts/scheduled-due</code> endpoint'i mevcut, fakat onu periyodik çağıran bir n8n workflow tanımı deploy edilmemiş. Canlı workflow listesinde bu isimde bir akış yok. Sonuç: Takvim üzerinden zamanlanan post'lar <code>scheduled_at</code> zamanı gelse bile yayımlanmıyor.</p>
+
+<h4>[N8N-8] EKSİK — Weekly Competitor Report deploy edilmemiş</h4>
+<p><code>shared/n8n-workflows/weekly-competitor-report.json</code> repoda mevcut ama n8n.otomaix.com envanterinde yok. Rakip analizi haftalık otomatik yenileme özelliği hiç çalışmıyor.</p>
+
+<h4>[N8N-9] UYARI — Türkiye Takvimi Güncelleme inaktif</h4>
+<p><code>tTk1VroTh4AS8lxI</code> <code>active=false</code>; 2026 için <code>social.public_holidays</code> henüz doldurulmadı; Takvim sayfasında özel günler eksik görünecek. Manuel aktivasyon + bir kere "Test workflow" ile 2026 verilerini yükleme gerekli.</p>
+
+<h3>7.3 Tutarlılık Matrisi (Backend ↔ n8n)</h3>
+<table>
+<tr><th>Backend Çağrısı</th><th>n8n Path</th><th>Sonuç</th></tr>
+<tr><td>posts.py → /webhook/telegram-content-approval</td><td>D49KNE35cONz2APb</td><td>OK (carousel hariç)</td></tr>
+<tr><td>Telegram button → /webhook/tg-approve</td><td>aQ8neGzs3PQp8DMl</td><td>Aralıklı runtime hatası</td></tr>
+<tr><td>Telegram button → /webhook/tg-reject</td><td>9kp6bCFl0ys6TbVu</td><td>Aralıklı runtime hatası</td></tr>
+<tr><td>billing.py _notify_crm_n8n(crm/new-customer)</td><td>UzNjZDghyfJq2vYA</td><td>OK</td></tr>
+<tr><td>billing.py _notify_crm_n8n(crm/plan-upgrade)</td><td>VoYuC8AGwtT0NpZR</td><td>OK</td></tr>
+<tr><td>billing.py _notify_crm_n8n(crm/payment-failed)</td><td>tDnbM6NNy3a3xHdD</td><td>OK</td></tr>
+<tr><td>internal.py /autoposting/due + /autoposting/trigger</td><td>Nz4651wCfBHP4G9l</td><td>Inaktif + yanlış URL</td></tr>
+<tr><td>internal.py /posts/scheduled-due</td><td>(yok)</td><td>Workflow eksik</td></tr>
+<tr><td>competitors refresh (haftalık)</td><td>(yok)</td><td>Workflow eksik</td></tr>
+<tr><td>trend_analyzer cron</td><td>(yok)</td><td>Zaten backend cache 6 saat — sorun yok</td></tr>
+</table>
+
+<h3>7.4 Güncellenmiş P0 Kritik Liste (n8n dahil)</h3>
+<ul>
+  <li><b>[N8N-1]</b> Telegram Onayla/Reddet — HTTP Request node'larında <code>onError</code> yolu tanımla, onay butonlarındaki aralıklı hata kök nedeni çözülsün.</li>
+  <li><b>[N8N-2]</b> Auto Posting Scheduler workflow'unu aktifleştir.</li>
+  <li><b>[N8N-3]</b> Auto Posting Scheduler URL'lerini public domain'e çevir; X-Internal-Key'i n8n credential'a taşı (şu an hard-code).</li>
+  <li><b>[N8N-4]</b> CRM-5 Postgres credential host'unu <code>host.docker.internal</code> yap; CRM-4'te IF node tip dönüşümünü düzelt.</li>
+  <li><b>[N8N-7]</b> Scheduled Post Publisher workflow'unu yaz ve deploy et.</li>
+  <li><b>[N8N-5]</b> splitInBatches loop/done kablolamasını düzelt.</li>
+</ul>
+
+<h2>8. Uygulama Durumu (2026-04-14 sonu)</h2>
+<p class="meta">Bu bölüm, rapor yayınlandıktan sonra aynı gün içinde gerçekleştirilen düzeltmelerin özetini, ertelenen maddeleri ve referans uygulama planını içerir. Kaynak: git geçmişi <code>main</code> dalı (commit'ler <code>b7da13f</code> → <code>bdfe692</code>).</p>
+
+<h3>8.1 Tamamlanan Maddeler</h3>
+
+<h4 class="ok">Backend — P0 / P1</h4>
+<ul>
+  <li><b>[B-1]</b> Plan limit kontrolleri (<code>check_plan_limit</code>) <code>posts.generate</code>, <code>create</code>, <code>generate_faceless_video</code>, <code>brands.create</code>, <code>avatar.create</code>/<code>generate_ugc</code>, <code>trends.create_post_from_trend</code> endpoint'lerine bağlandı. Limit aşımı 402 + <code>plan_limit_reached</code>.</li>
+  <li><b>[B-2]</b> <code>assert_workspace_owned</code> / <code>assert_brand_owned</code> / <code>assert_post_owned</code> helper'ları <code>core/security.py</code>'ye eklendi; brands, posts, calendar, trends, competitors, autoposting, documents, avatar router'larının tüm kullanıcı-facing endpoint'lerine uygulandı. Yetkisiz erişim → 404.</li>
+  <li><b>[B-4]</b> <code>competitors.py</code> içindeki ölü <code>str(dict).replace()</code> UPDATE bloğu silindi; tek doğru <code>json.dumps() + ::jsonb</code> UPDATE bırakıldı.</li>
+  <li><b>[B-5]</b> Rakip analizi <code>BackgroundTasks</code>'a taşındı. Migration <code>015_competitor_status</code> ile <code>status</code> + <code>error_message</code> kolonları eklendi. POST 202 döner, frontend 4 sn polling ile durumu takip eder.</li>
+  <li><b>[B-6]</b> <code>trend_cache</code> INSERT → UPSERT. Migration <code>017_trend_cache_unique</code> ile duplicate satırlar silindi, <code>UNIQUE(sector)</code> constraint eklendi.</li>
+  <li><b>[B-7]</b> <code>_parse_brand_kit</code> helper'ı <code>app/core/utils.py</code>'ye taşındı; <code>posts.py</code> ve <code>ai.py</code> oradan import ediyor.</li>
+  <li><b>[B-8]</b> <code>POST /posts/{id}/publish</code> pre-check: <code>output_url</code> yoksa veya status <code>draft</code>/<code>generating</code> ise 409 döner.</li>
+  <li><b>[B-9]</b> <code>post_publications</code> tablosu migration <code>016</code> ile oluşturuldu; <code>upload_post.publish_post</code> her platform için ayrı satır yazar, post status <code>published</code> / <code>partially_published</code> / <code>failed</code> olarak otomatik güncellenir.</li>
+  <li><b>[B-3]</b> <code>autoposting_configs.telegram_bot_token</code> / <code>telegram_chat_id</code> kolonları migration <code>018</code> ile drop edildi (Telegram ayarları workspace seviyesine taşındı — commit <code>58af268</code>).</li>
+  <li><b>asyncpg jsonb codec fix</b> — <code>database.py</code> pool init'ine <code>set_type_codec("jsonb", decoder=json.loads)</code> eklendi; rakip analizi paneli artık veri gösteriyor.</li>
+  <li><b>F-2 rev-2/rev-3</b> — Upload-Post.com entegrasyonu gerçek API şemasına göre yeniden yazıldı (apikey auth, multipart upload). Çift yayın yarış koşulu <code>SELECT FOR UPDATE</code> + intermediate <code>publishing</code> status ile giderildi.</li>
+  <li><b>F-3 backend</b> — <code>PATCH /posts/{id}</code> endpoint'i eklendi (caption + hashtags).</li>
+  <li><b>Dashboard stats</b> — <code>GET /posts/stats/summary?brand_id</code> endpoint'i eklendi (aylık üretilen + toplam yayınlanan).</li>
+</ul>
+
+<h4 class="ok">Frontend — P0 / P1 / P2</h4>
+<ul>
+  <li><b>[F-1]</b> Dashboard stats kartları (Bu Ay Üretilen, Yayınlanan, Bağlı Platform) canlı API verisine bağlandı. Sahte "Yayın Serisi" kartı tamamen kaldırıldı (backend'de streak servisi olmadığı için yanıltıcıydı).</li>
+  <li><b>[F-2]</b> Dashboard "Bağla" butonları <code>/marka-ayarlari?tab=sosyal</code>'a yönlendiriyor.</li>
+  <li><b>[F-3]</b> İçerik Oluştur wizard Step 3 "Şimdi Yayınla" / "Takvime Ekle" butonları canlı — caption PATCH sonrası ilgili endpoint'leri çağırıyor, kütüphane sayfasına yönlendiriyor.</li>
+  <li><b>[F-4]</b> Marka Ayarları sayfasındaki "Otomatik Doldur" butonu <code>POST /ai/analyze-website</code> çağırıyor; brand + kit alanlarını otomatik dolduruyor.</li>
+  <li><b>[F-5]</b> İçerik Oluştur sayfasındaki "Yakında" badge + <code>!type.active</code> ölü kodu silindi.</li>
+  <li>Rakip analizi sayfası asenkron akışa (polling + spinner rozet + failed tooltip) uyarlandı.</li>
+</ul>
+
+<h4 class="ok">n8n — P0</h4>
+<ul>
+  <li><b>[N8N-1]</b> Telegram Onayla / Reddet / İçerik Onay workflow'larında hardcoded truncated <code>X-Internal-Key</code> header'ları kaldırıldı; <code>Otomaix Internal API Key</code> credential'ına migrate edildi. <code>continueOnFail</code> kaldırıldı — hatalar artık maskelenmiyor.</li>
+  <li><b>[N8N-2]</b> Auto Posting Scheduler <code>active: true</code>.</li>
+  <li><b>[N8N-3]</b> Auto Posting Scheduler URL'leri <code>178.104.7.200:8000</code> → <code>api.otomaix.com</code>, <code>178.104.7.200:5678</code> → <code>n8n.otomaix.com</code>. Internal key credential'a taşındı. Coolify'daki truncated <code>INTERNAL_API_KEY</code> env var'ı tam değerle güncellendi.</li>
+  <li><b>[N8N-4]</b> CRM Postgres credential host'u daha önceki bir oturumda düzeltilmiş (execution'lar success). CRM-4 "Has Churn Risk?" IF node'unda <code>leftValue</code> <code>Number($json.count)</code> olarak sarıldı ve <code>typeValidation: loose</code> yapıldı.</li>
+  <li><b>[N8N-5]</b> <code>splitInBatches</code> v3 kaldırıldı; <code>Her Config İçin</code> Code node'u <code>$input.first().json.data.map(...)</code> ile config array'ini item'lara açıyor. HTTP Request ve IF node'ları native item iteration ile çalışıyor.</li>
+  <li><b>[N8N-7]</b> <code>Scheduled Post Publisher</code> workflow'u (<code>u650xJO6TLoh1Wcb</code>) sıfırdan oluşturuldu. Her 5 dk <code>GET /internal/posts/scheduled-due</code> → Code map → <code>POST /posts/{id}/publish-now</code>. Backend <code>internal.py</code>'de route sıralama bug'ı (<code>{post_id}</code> rotası <code>scheduled-due</code>'dan önceydi) düzeltildi.</li>
+  <li><b>[N8N-9]</b> Türkiye Takvimi Güncelleme workflow'u (<code>tTk1VroTh4AS8lxI</code>) <code>active: true</code>. 1 Ocak 2027 00:00 Europe/Istanbul'da otomatik tetiklenip 2027 tatillerini yükleyecek.</li>
+</ul>
+
+<h3>8.2 Ertelenen Maddeler</h3>
+<ul>
+  <li><b>[N8N-6]</b> Telegram <code>sendMediaGroup</code> carousel desteği — <code>posts.output_url</code> şu an tek kolon; çoklu görselli carousel henüz backend tarafında üretilmiyor. Backend feature (multi-image carousel generation) tamamlanınca açılacak.</li>
+  <li><b>[N8N-8]</b> Weekly Competitor Report workflow deploy — <code>/internal/competitors/due</code> endpoint'i henüz yok, Telegram mimarisi çakışıyor. Müşteri talebi gelince revize edilip aktive edilecek.</li>
+</ul>
+
+<h3>8.3 Özet Metrikler</h3>
+<table>
+<tr><th>Kategori</th><th>Toplam Bulgu</th><th>Tamamlandı</th><th>Ertelendi</th><th>Bekliyor</th></tr>
+<tr><td>Backend (B-*)</td><td>10</td><td>10</td><td>0</td><td>0</td></tr>
+<tr><td>Frontend (F-*)</td><td>5</td><td>5</td><td>0</td><td>0</td></tr>
+<tr><td>n8n (N8N-*)</td><td>9</td><td>7</td><td>2</td><td>0</td></tr>
+<tr><td><b>Toplam</b></td><td><b>24</b></td><td><b>22</b></td><td><b>2</b></td><td><b>0</b></td></tr>
+</table>
+
+<h3>8.4 Uygulama Planı (Referans)</h3>
+<p class="meta">Raporun başında önerilen detaylı plan — yukarıdaki durum tablosu bu plan üzerinden güncellenir. Bekleyen 4 madde için orijinal adımlar hâlâ geçerlidir.</p>
+
+<h4>Sprint 1 (Tamamlandı)</h4>
+<p><b>Backend:</b> B-1, B-2, B-4. <b>Frontend:</b> F-2, F-3. <b>n8n:</b> N8N-1, N8N-2, N8N-3, N8N-4, N8N-5, N8N-7.</p>
+
+<h4>Sprint 2 (Tamamlandı)</h4>
+<p><b>Tamamlanan:</b> B-5, B-9, F-1, F-4.</p>
+
+<h4>Sprint 3 (Temizlik — Tamamlandı)</h4>
+<p><b>Tamamlanan:</b> B-3, B-6, B-7, B-8, F-5, N8N-9. <b>Ertelenen:</b> N8N-6, N8N-8.</p>
+
+<h3>8.5 Sıradaki Öncelik</h3>
+<p>Analiz raporundaki tüm uygulanabilir P0/P1/P2 maddeleri kapandı. Kalan iki madde backend feature veya müşteri talebi gerektirdiği için ileri sprint'lere bırakıldı:</p>
+<ol>
+  <li>Multi-image carousel backend feature geldikten sonra <b>N8N-6</b> (Telegram <code>sendMediaGroup</code>).</li>
+  <li>İlk müşteri talebiyle <b>N8N-8</b> (Weekly Competitor Report workflow).</li>
+</ol>
+
+<p style="margin-top: 30pt; text-align: center; color: #6b7280;">— Rapor sonu (Rev-3, 2026-04-14) —</p>
+
+</body>
+</html>

@@ -44,8 +44,6 @@ const PLATFORMS = [
   ), color: 'text-blue-700', bg: 'bg-blue-50' },
 ]
 
-const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
-
 interface Trend {
   title: string
   source: string
@@ -248,29 +246,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Posting Streak */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold text-gray-800">Yayın Serisi</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-3">
-            <div className="flex gap-2">
-              {DAYS.map((day, i) => (
-                <div key={day} className="flex flex-col items-center gap-1">
-                  <div className={`w-8 h-8 rounded-lg ${i < 3 ? 'bg-blue-600' : 'bg-gray-100'}`} />
-                  <span className="text-xs text-gray-400">{day}</span>
-                </div>
-              ))}
-            </div>
-            <div className="ml-4">
-              <p className="text-2xl font-bold text-blue-600">3</p>
-              <p className="text-xs text-gray-400">gün serisi</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Trend Widget */}
       <TrendWidget />

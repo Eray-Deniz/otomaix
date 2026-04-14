@@ -1,5 +1,13 @@
 # Social Frontend — CLAUDE.md
 
+## 2026-04-14 — F-1: Dashboard "Yayın Serisi" kartı kaldırıldı
+
+Analiz raporundaki F-1'in son parçası. Stats kartları (Bu Ay Üretilen, Yayınlanan, Bağlı Platform) zaten canlı API verisine bağlıydı (önceki oturum); tek kalan hardcoded blok "Yayın Serisi" (Posting Streak) kartıydı. 7 günlük grid'in ilk 3'ü sabit mavi, kalanı gri, "3 gün serisi" yazısı da sabit — backend'de streak hesaplayan hiçbir servis/endpoint yok. Tüm kullanıcılara aynı yanıltıcı görünüm.
+
+**Fix:** `dashboard/page.tsx` içinden Posting Streak Card JSX bloğu (27 satır) + kullanılmayan `DAYS` sabiti silindi. İleride gerçek streak servisi yazılırsa (örn. `/posts/stats/summary` endpoint'ine `current_streak` + `last_7_days[]` eklenerek) yeniden eklenebilir.
+
+Bu commit ile analiz raporundaki tüm uygulanabilir F-* maddeleri (F-1 → F-5) kapandı.
+
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
