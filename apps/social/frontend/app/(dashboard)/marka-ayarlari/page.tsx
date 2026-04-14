@@ -403,6 +403,7 @@ function MarkaAyarlariContent() {
   const [selectingAvatarId, setSelectingAvatarId] = useState<string | null>(null)
   const [connectedAccounts, setConnectedAccounts] = useState<{ platform: string; account_name: string }[]>([])
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
+  const [analyzingWebsite, setAnalyzingWebsite] = useState(false)
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -490,6 +491,45 @@ function MarkaAyarlariContent() {
       scheduleKitSave(updated.brand_kit, prev.id)
       return updated
     })
+  }
+
+  async function analyzeWebsite() {
+    const url = (brand?.website_url ?? '').trim()
+    if (!url) {
+      toast.error('Önce web sitesi adresini gir')
+      return
+    }
+    setAnalyzingWebsite(true)
+    try {
+      const res = await api.post<{
+        name: string
+        description: string
+        sector: string
+        colors: string[]
+        tonality: string
+      }>('/ai/analyze-website', { url })
+
+      if (res.success && res.data) {
+        const brandFields: Partial<Brand> = {}
+        if (res.data.name) brandFields.name = res.data.name
+        if (res.data.description) brandFields.description = res.data.description
+        if (res.data.sector) brandFields.sector = res.data.sector
+        if (Object.keys(brandFields).length > 0) updateBrand(brandFields)
+
+        const kitFields: Partial<BrandKit> = {}
+        if (res.data.colors?.length) kitFields.colors = res.data.colors
+        if (res.data.tonality) kitFields.tonality = res.data.tonality
+        if (Object.keys(kitFields).length > 0) updateKit(kitFields)
+
+        toast.success('Marka bilgileri otomatik dolduruldu')
+      } else {
+        toast.error(res.error || 'Web sitesi analizi başarısız')
+      }
+    } catch {
+      toast.error('Web sitesi analizi başarısız')
+    } finally {
+      setAnalyzingWebsite(false)
+    }
   }
 
   async function handleLogoUpload(file: File, variant: 'light' | 'dark') {
@@ -729,9 +769,10 @@ function MarkaAyarlariContent() {
               <Button
                 variant="outline"
                 className="whitespace-nowrap text-sm"
-                onClick={() => toast.info('Web sitesi analizi yakında')}
+                onClick={analyzeWebsite}
+                disabled={analyzingWebsite}
               >
-                Otomatik Doldur
+                {analyzingWebsite ? 'Analiz ediliyor...' : 'Otomatik Doldur'}
               </Button>
             </div>
           </div>

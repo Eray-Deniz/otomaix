@@ -58,11 +58,11 @@ interface Holiday {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CONTENT_TYPES = [
-  { id: 'image' as ContentType, label: 'Görsel', icon: '🖼️', active: true },
-  { id: 'carousel' as ContentType, label: 'Carousel', icon: '📱', active: true },
-  { id: 'video' as ContentType, label: 'Video (Faceless)', icon: '🎬', active: true },
-  { id: 'special_day' as ContentType, label: 'Özel Gün', icon: '🎉', active: true },
-  { id: 'quote' as ContentType, label: 'Alıntı', icon: '💬', active: true },
+  { id: 'image' as ContentType, label: 'Görsel', icon: '🖼️' },
+  { id: 'carousel' as ContentType, label: 'Carousel', icon: '📱' },
+  { id: 'video' as ContentType, label: 'Video (Faceless)', icon: '🎬' },
+  { id: 'special_day' as ContentType, label: 'Özel Gün', icon: '🎉' },
+  { id: 'quote' as ContentType, label: 'Alıntı', icon: '💬' },
 ]
 
 const CONTENT_CATEGORIES: { id: ContentCategory; label: string }[] = [
@@ -597,23 +597,14 @@ export default function IcerikOlusturPage() {
               {CONTENT_TYPES.map((type) => (
                 <button
                   key={type.id}
-                  disabled={!type.active}
-                  onClick={() => type.active && setContentType(type.id as ContentType)}
+                  onClick={() => setContentType(type.id as ContentType)}
                   className={cn(
-                    'relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all',
-                    !type.active && 'opacity-50 cursor-not-allowed bg-gray-50',
-                    type.active && contentType === type.id
+                    'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all cursor-pointer',
+                    contentType === type.id
                       ? 'border-blue-500 bg-blue-50'
-                      : type.active
-                      ? 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30 cursor-pointer'
-                      : 'border-gray-100'
+                      : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
                   )}
                 >
-                  {!type.active && (
-                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 text-[10px] bg-gray-400 text-white px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                      Yakında
-                    </span>
-                  )}
                   <span className="text-2xl">{type.icon}</span>
                   <span className="text-xs font-medium text-gray-700 text-center leading-tight">
                     {type.label}

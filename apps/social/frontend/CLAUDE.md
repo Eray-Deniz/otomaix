@@ -3,6 +3,24 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — F-4 + F-5: Marka Ayarları web analizi + İçerik Oluştur ölü kod temizliği
+
+Analiz raporundaki P1 maddeleri:
+
+### F-5 — `icerik-olustur/page.tsx` "Yakında" rozet ölü kodu
+`CONTENT_TYPES` dizisindeki tüm tipler `active: true` idi ama Step 1 render'da hala `!type.active` dalı ("Yakında" badge + disabled styling) duruyordu. Hiçbir yerde tetiklenmeyen ölü kod.
+- `CONTENT_TYPES` üzerinden `active: true` alanı kaldırıldı
+- `<button>` render'ı sadeleştirildi: `disabled={!type.active}`, "Yakında" span'i, `!type.active && opacity-50` class dalı, `type.active ? ... : ...` ternary'leri silindi
+- Davranışsal değişiklik yok — sadece ölü kod temizliği
+
+### F-4 — Marka Ayarları "Otomatik Doldur" butonu işlevselleştirildi
+`marka-ayarlari/page.tsx` Web Sitesi input'unun yanındaki buton daha önce `toast.info('Web sitesi analizi yakında')` döndürüyordu. Onboarding (`(onboarding)/onboarding/page.tsx`) aynı `POST /ai/analyze-website` çağrısını yapıyordu — kod kopyalandı ve adapt edildi.
+
+- `analyzingWebsite` state eklendi
+- `analyzeWebsite()` handler'ı: `brand.website_url` alanını `POST /ai/analyze-website`'e gönderir; response'tan gelen `name/description/sector`'ı `updateBrand()` ile, `colors/tonality`'yi `updateKit()` ile deep-merge'ler. Mevcut `scheduleSave` debounce'u otomatik kaydetmeyi halleder.
+- Buton `onClick={analyzeWebsite}` + `disabled={analyzingWebsite}`, loading state'inde "Analiz ediliyor..." gösterir
+- Yalnızca response'ta dolu gelen alanları update eder (boş string'le mevcut veriyi silmez)
+
 ## 2026-04-14 — Dashboard stats + ContentCard hover butonları fix
 
 Kullanıcı raporladı: (1) `icerik-kutuphanesi` kartlarındaki hover butonları çalışmıyor, (2) dashboard "Bu Ay Üretilen" ve "Yayınlanan" kartları 1 içerik yayınlanmış olmasına rağmen 0 gösteriyor.
