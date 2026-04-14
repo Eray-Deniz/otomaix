@@ -276,7 +276,7 @@ async def get_report(
         """,
         brand_id,
     )
-    analyses = [dict(r) for r in rows]
+    analyses = [_row_to_competitor(r) for r in rows]
     report = await generate_competitor_report(
         brand["name"],
         brand["sector"] or "",
