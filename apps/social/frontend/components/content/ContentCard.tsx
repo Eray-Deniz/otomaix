@@ -123,12 +123,14 @@ export function ContentCard({ post, onClick, onPublish, showWatermark = false }:
             <button
               title="Zamanla"
               className="flex-1 flex items-center justify-center gap-1 text-white text-xs bg-white/20 hover:bg-white/30 rounded-lg py-1.5 transition-colors"
+              onClick={() => onClick(post)}
             >
               <Calendar className="w-3 h-3" /> Zamanla
             </button>
             <button
               title="Daha Fazla"
               className="flex items-center justify-center text-white bg-white/20 hover:bg-white/30 rounded-lg px-2 py-1.5 transition-colors"
+              onClick={() => onClick(post)}
             >
               <MoreHorizontal className="w-3 h-3" />
             </button>

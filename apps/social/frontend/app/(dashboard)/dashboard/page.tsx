@@ -168,6 +168,10 @@ export default function DashboardPage() {
 
   const [connectedPlatforms, setConnectedPlatforms] = useState<string[]>([])
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
+  const [stats, setStats] = useState<{ generated_this_month: number; published_total: number }>({
+    generated_this_month: 0,
+    published_total: 0,
+  })
 
   useEffect(() => {
     if (!currentBrand?.id) return
@@ -175,6 +179,11 @@ export default function DashboardPage() {
       if (res.success && res.data) {
         setConnectedPlatforms(res.data.map((a) => a.platform))
       }
+    })
+    api.get<{ generated_this_month: number; published_total: number }>(
+      `/posts/stats/summary?brand_id=${currentBrand.id}`
+    ).then((res) => {
+      if (res.success && res.data) setStats(res.data)
     })
   }, [currentBrand?.id])
 
@@ -212,7 +221,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-gray-900">0</p>
+            <p className="text-3xl font-bold text-gray-900">{stats.generated_this_month}</p>
             <p className="text-xs text-gray-400 mt-1">içerik</p>
           </CardContent>
         </Card>
@@ -223,7 +232,7 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-gray-900">0</p>
+            <p className="text-3xl font-bold text-gray-900">{stats.published_total}</p>
             <p className="text-xs text-gray-400 mt-1">içerik</p>
           </CardContent>
         </Card>

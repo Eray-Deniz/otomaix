@@ -1,5 +1,15 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — Dashboard stats endpoint
+
+Yeni endpoint: `GET /posts/stats/summary?brand_id=<uuid>` (`routers/posts.py`).
+
+- `assert_brand_owned` ile korunur.
+- Tek query: `COUNT(*) FILTER (WHERE created_at >= date_trunc('month', now()))` + `COUNT(*) FILTER (WHERE status='published')`.
+- Response: `{ generated_this_month: int, published_total: int }`.
+- Rota dynamic `/{post_id}` rotasından **önce** yerleştirildi, aksi halde `stats` string'i UUID parser'a düşerdi.
+- Frontend dashboard'ın hardcoded `0` stat kartları için eklendi.
+
 ## 2026-04-14 — Teknik Analiz Raporu Fix'leri (rev-1)
 
 ### [F-2 rev-3] publish_post idempotency — çift yayın fix

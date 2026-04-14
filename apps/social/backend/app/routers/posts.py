@@ -335,6 +335,30 @@ async def list_posts(
     })
 
 
+@router.get("/stats/summary", response_model=OkResponse)
+async def posts_stats_summary(
+    brand_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Lightweight counts for dashboard stat cards."""
+    await assert_brand_owned(db, user, brand_id)
+    row = await db.fetchrow(
+        """
+        SELECT
+          COUNT(*) FILTER (WHERE created_at >= date_trunc('month', now())) AS generated_this_month,
+          COUNT(*) FILTER (WHERE status = 'published') AS published_total
+        FROM social.posts
+        WHERE brand_id = $1
+        """,
+        brand_id,
+    )
+    return OkResponse(data={
+        "generated_this_month": int(row["generated_this_month"] or 0),
+        "published_total": int(row["published_total"] or 0),
+    })
+
+
 @router.get("/{post_id}", response_model=OkResponse)
 async def get_post(
     post_id: UUID,

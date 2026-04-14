@@ -3,6 +3,20 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — Dashboard stats + ContentCard hover butonları fix
+
+Kullanıcı raporladı: (1) `icerik-kutuphanesi` kartlarındaki hover butonları çalışmıyor, (2) dashboard "Bu Ay Üretilen" ve "Yayınlanan" kartları 1 içerik yayınlanmış olmasına rağmen 0 gösteriyor.
+
+**Dashboard stats** (`dashboard/page.tsx`):
+- `stats` state eklendi: `{ generated_this_month, published_total }`
+- `useEffect` `/posts/stats/summary?brand_id=...` çağırıyor, kart başlıklarındaki hardcoded `0`'lar gerçek değerlerle değişti.
+- Backend tarafında yeni endpoint: `GET /posts/stats/summary` — `date_trunc('month', now())` ile ay başı filtresi + `status='published'` count.
+
+**ContentCard hover butonları** (`components/content/ContentCard.tsx`):
+- "Zamanla" ve "Daha Fazla" butonları daha önce `onClick` handler'ı olmayan stub'lardı.
+- Her ikisi de artık `onClick(post)` çağırıyor → kartın detay modalı açılıyor (modal'da zamanlama picker'ı ve tüm aksiyonlar mevcut).
+- "İndir" ve "Yayınla" zaten çalışıyordu — onlara dokunulmadı.
+
 ## 2026-04-14 — F-2 rev-3: Publish butonları yarış koşulu fix
 
 Canlı test: tek "Şimdi Yayınla" tıklamasına Instagram 4 post yayınladı. Sebep: `useState` tabanlı `publishing` guard'ı async — React state update tamamlanmadan önce gelen ikinci click geçip yeni HTTP isteği fırlatıyor. Hızlı birkaç tıklama (veya kullanıcı mashlaması) birden çok publish çağrısına dönüşüyor.
