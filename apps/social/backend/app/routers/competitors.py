@@ -1,12 +1,14 @@
 """Rakip analizi endpoint'leri."""
 
+import json
+import logging
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.core.database import get_db
+from app.core.database import get_db, get_pool
 from app.core.rate_limit import limiter
 from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
@@ -14,6 +16,8 @@ from app.services.competitor_analyzer import (
     generate_competitor_report,
     run_full_analysis,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/competitors", tags=["competitors"])
 
@@ -28,26 +32,84 @@ class CompetitorCreate(BaseModel):
     website_url: str | None = None
 
 
+# ─── Background task helper ─────────────────────────────────────────────────
+
+async def _run_analysis_task(competitor_id: UUID) -> None:
+    """Background task: fetch competitor row, run analysis, persist result.
+
+    Request-scoped DB connection closes after the response is sent, so this
+    task acquires its own connection from the global pool. Errors are
+    captured into the `status='failed'` + `error_message` state.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as db:
+        row = await db.fetchrow(
+            "SELECT * FROM social.competitor_analyses WHERE id = $1",
+            competitor_id,
+        )
+        if not row:
+            return
+        competitor = dict(row)
+
+    try:
+        analysis_data = await run_full_analysis(competitor)
+        async with pool.acquire() as db:
+            await db.execute(
+                """
+                UPDATE social.competitor_analyses
+                SET analysis_data = $2::jsonb,
+                    status = 'ready',
+                    error_message = NULL,
+                    last_analyzed_at = now()
+                WHERE id = $1
+                """,
+                competitor_id,
+                json.dumps(analysis_data),
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("competitor analysis failed for %s", competitor_id)
+        async with pool.acquire() as db:
+            await db.execute(
+                """
+                UPDATE social.competitor_analyses
+                SET status = 'failed',
+                    error_message = $2
+                WHERE id = $1
+                """,
+                competitor_id,
+                str(exc)[:500],
+            )
+
+
 # ─── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.post(
     "",
     response_model=OkResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(limiter(10, 3600))],  # 10/saat
 )
 async def add_competitor(
     payload: CompetitorCreate,
+    background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Yeni rakip ekle ve hemen analiz başlat."""
+    """Yeni rakip ekle; analiz arka planda çalışır, 202 Accepted döner.
+
+    Önceden bu endpoint run_full_analysis()'i senkron çağırıyordu ve 30+ saniye
+    bloklu kalıyordu (Cloudflare 504 / uvicorn worker tükenmesi riski).
+    Artık kaydı `status='analyzing'` ile INSERT eder, BackgroundTasks ile
+    analizi planlar ve hemen döner. Frontend `GET /competitors/{id}/analysis`
+    ile polling yaparak sonucu alır.
+    """
     await assert_brand_owned(db, user, payload.brand_id)
     row = await db.fetchrow(
         """
         INSERT INTO social.competitor_analyses
-            (brand_id, competitor_name, instagram_handle, tiktok_handle, website_url)
-        VALUES ($1, $2, $3, $4, $5)
+            (brand_id, competitor_name, instagram_handle, tiktok_handle,
+             website_url, status)
+        VALUES ($1, $2, $3, $4, $5, 'analyzing')
         RETURNING *
         """,
         payload.brand_id,
@@ -57,22 +119,7 @@ async def add_competitor(
         payload.website_url,
     )
     competitor = dict(row)
-
-    # Analizi çalıştır ve sonucu kaydet
-    analysis_data = await run_full_analysis(competitor)
-    import json
-    await db.execute(
-        """
-        UPDATE social.competitor_analyses
-        SET analysis_data = $2::jsonb, last_analyzed_at = now()
-        WHERE id = $1
-        """,
-        competitor["id"],
-        json.dumps(analysis_data),
-    )
-
-    competitor["analysis_data"] = analysis_data
-    competitor["last_analyzed_at"] = "just_now"
+    background_tasks.add_task(_run_analysis_task, competitor["id"])
     return OkResponse(data=competitor)
 
 
@@ -87,7 +134,7 @@ async def list_competitors(
     rows = await db.fetch(
         """
         SELECT id, brand_id, competitor_name, instagram_handle, tiktok_handle,
-               website_url, last_analyzed_at, created_at,
+               website_url, last_analyzed_at, created_at, status, error_message,
                analysis_data IS NOT NULL AS has_analysis
         FROM social.competitor_analyses
         WHERE brand_id = $1
@@ -104,7 +151,7 @@ async def get_analysis(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Rakibin detaylı analiz verisini döndür."""
+    """Rakibin detaylı analiz verisini döndür (polling için kullanılır)."""
     account_id = user.get("sub")
     row = await db.fetchrow(
         """
@@ -122,13 +169,18 @@ async def get_analysis(
     return OkResponse(data=dict(row))
 
 
-@router.post("/{competitor_id}/refresh", response_model=OkResponse)
+@router.post(
+    "/{competitor_id}/refresh",
+    response_model=OkResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def refresh_analysis(
     competitor_id: UUID,
+    background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Rakip analizini yeniden çalıştır."""
+    """Rakip analizini yeniden çalıştır (background task, 202 Accepted)."""
     account_id = user.get("sub")
     row = await db.fetchrow(
         """
@@ -144,21 +196,19 @@ async def refresh_analysis(
     if not row:
         raise HTTPException(status_code=404, detail="Rakip bulunamadı")
 
-    competitor = dict(row)
-    analysis_data = await run_full_analysis(competitor)
+    if row["status"] == "analyzing":
+        raise HTTPException(status_code=409, detail="Analiz zaten devam ediyor")
 
-    import json
     await db.execute(
         """
         UPDATE social.competitor_analyses
-        SET analysis_data = $2::jsonb, last_analyzed_at = now()
+        SET status = 'analyzing', error_message = NULL
         WHERE id = $1
         """,
         competitor_id,
-        json.dumps(analysis_data),
     )
-
-    return OkResponse(data={"id": str(competitor_id), "analysis_data": analysis_data, "refreshed": True})
+    background_tasks.add_task(_run_analysis_task, competitor_id)
+    return OkResponse(data={"id": str(competitor_id), "status": "analyzing"})
 
 
 @router.delete("/{competitor_id}", response_model=OkResponse)

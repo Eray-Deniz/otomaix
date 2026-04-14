@@ -35,6 +35,8 @@ const CompetitorChart = nextDynamic(
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type CompetitorStatus = 'analyzing' | 'ready' | 'failed'
+
 interface Competitor {
   id: string
   brand_id: string
@@ -44,6 +46,8 @@ interface Competitor {
   website_url: string | null
   last_analyzed_at: string | null
   has_analysis: boolean
+  status: CompetitorStatus
+  error_message: string | null
   created_at: string
 }
 
@@ -111,7 +115,7 @@ function AddCompetitorModal({
     setSaving(false)
     if (res.success && res.data) {
       onAdded(res.data)
-      toast.success(`"${name}" eklendi ve analiz başlatıldı`)
+      toast.info(`"${name}" eklendi, analiz arka planda çalışıyor...`)
       onClose()
     } else {
       toast.error('Rakip eklenemedi')
@@ -287,6 +291,57 @@ export default function RakipAnaliziPage() {
     loadCompetitors()
   }, [currentBrand?.id]) // eslint-disable-line
 
+  // Analiz tamamlanana kadar status='analyzing' olanları 4sn'de bir yokla
+  useEffect(() => {
+    const analyzingIds = competitors.filter((c) => c.status === 'analyzing').map((c) => c.id)
+    if (analyzingIds.length === 0) return
+
+    const intervalId = setInterval(async () => {
+      await Promise.all(
+        analyzingIds.map(async (id) => {
+          const res = await api.get<CompetitorAnalysis & {
+            status: CompetitorStatus
+            error_message: string | null
+            last_analyzed_at: string | null
+          }>(`/competitors/${id}/analysis`)
+          if (!res.success || !res.data) return
+          const updated = res.data
+          if (updated.status === 'analyzing') return
+
+          setCompetitors((prev) =>
+            prev.map((c) =>
+              c.id === id
+                ? {
+                    ...c,
+                    status: updated.status,
+                    error_message: updated.error_message,
+                    has_analysis: !!updated.analysis_data,
+                    last_analyzed_at: updated.last_analyzed_at,
+                  }
+                : c
+            )
+          )
+          if (updated.status === 'ready') {
+            toast.success(`"${updated.competitor_name}" analizi tamamlandı`)
+            if (selectedId === id) {
+              setSelectedAnalysis({
+                id: updated.id,
+                competitor_name: updated.competitor_name,
+                analysis_data: updated.analysis_data,
+              })
+            }
+          } else if (updated.status === 'failed') {
+            toast.error(
+              `"${updated.competitor_name}" analizi başarısız: ${updated.error_message ?? 'bilinmeyen hata'}`
+            )
+          }
+        })
+      )
+    }, 4000)
+
+    return () => clearInterval(intervalId)
+  }, [competitors, selectedId])
+
   async function loadCompetitors() {
     if (!currentBrand?.id) return
     setLoading(true)
@@ -309,8 +364,10 @@ export default function RakipAnaliziPage() {
     const res = await api.post(`/competitors/${id}/refresh`, {})
     setRefreshingId(null)
     if (res.success) {
-      toast.success('Analiz güncellendi')
-      if (selectedId === id) handleViewAnalysis(id)
+      toast.info('Analiz arka planda başlatıldı...')
+      setCompetitors((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: 'analyzing', error_message: null } : c))
+      )
     } else {
       toast.error('Analiz yenilenemedi')
     }
@@ -496,8 +553,16 @@ export default function RakipAnaliziPage() {
                     Son analiz: {new Date(c.last_analyzed_at).toLocaleDateString('tr-TR')}
                   </p>
                 )}
-                {!c.has_analysis && (
-                  <Badge variant="secondary" className="text-[10px] mt-2">Analiz bekleniyor</Badge>
+                {c.status === 'analyzing' && (
+                  <Badge variant="secondary" className="text-[10px] mt-2 gap-1">
+                    <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    Analiz ediliyor...
+                  </Badge>
+                )}
+                {c.status === 'failed' && (
+                  <Badge variant="destructive" className="text-[10px] mt-2" title={c.error_message ?? ''}>
+                    Analiz başarısız
+                  </Badge>
                 )}
               </div>
             ))}

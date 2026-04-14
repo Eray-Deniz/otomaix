@@ -1,5 +1,33 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — B-5: Rakip analizi asenkron BackgroundTasks'a taşındı
+
+Analiz raporundaki P1 bulgusu B-5 (`POST /competitors` 30+ sn senkron blokluyor, Cloudflare 504 + uvicorn worker tükenmesi riski) çözüldü.
+
+**Migration 015_competitor_status.sql** (prod DB'de çalıştırıldı ✅):
+- `social.competitor_analyses.status TEXT NOT NULL DEFAULT 'ready'` — `analyzing | ready | failed`
+- `social.competitor_analyses.error_message TEXT` — hata mesajı (failed durumu için)
+- `idx_competitor_analyses_status` partial index (WHERE status='analyzing') — bekleyen işler sorgusu için
+- Mevcut satırlar default ile 'ready' kabul edilir (geriye uyumluluk)
+
+**`competitors.py` refactor:**
+- `_run_analysis_task(competitor_id)` modül seviyesinde async helper. Kendi pool bağlantısını `get_pool()` ile alır (request-scoped `db` yield bittiği için kullanılamaz). `run_full_analysis` başarıysa analysis_data+status='ready' UPDATE'i, exception durumunda status='failed'+error_message UPDATE'i.
+- `POST /competitors` → status_code=202, `BackgroundTasks` dependency, INSERT status='analyzing', `background_tasks.add_task(_run_analysis_task, row_id)`, hemen row döner.
+- `POST /{id}/refresh` → aynı pattern, eğer halihazırda 'analyzing' ise 409 Conflict.
+- `GET /competitors` ve `GET /{id}/analysis` responselarına `status` ve `error_message` eklendi.
+
+**Frontend (`rakip-analizi/page.tsx`):**
+- `Competitor` tipine `status: CompetitorStatus` + `error_message` eklendi.
+- Polling useEffect: `status='analyzing'` olan rakipler için 4sn'de bir `GET /{id}/analysis` çağrısı, sonuç gelince state update + seçili ise `selectedAnalysis` de güncellenir, toast (success/error) gösterilir.
+- `handleRefresh` 202 sonrası lokalde status='analyzing' işaretler, polling effect devreye girer.
+- Modal toast: "eklendi ve analiz başlatıldı" → "eklendi, analiz arka planda çalışıyor..."
+- Kart rozetleri: `analyzing` → spinner + "Analiz ediliyor...", `failed` → destructive badge + error tooltip.
+
+**Neden BackgroundTasks + polling, Celery/RQ değil:**
+- Mevcut stack'te ayrı worker yok, Redis sadece cache/rate-limit için. FastAPI `BackgroundTasks` aynı event loop'ta request sonrası çalışır — tek uvicorn worker'da sorun yok.
+- Uzun analiz (30-60 sn) worker'ı bloklamaz çünkü `run_full_analysis` zaten async (httpx + Anthropic SDK). Diğer istekler engelsiz akar.
+- Eğer ilerde çok sayıda eşzamanlı analiz yapılırsa (şu an 10/saat rate limit var) Celery'ye geçiş düşünülür.
+
 ## 2026-04-14 — N8N-1: Telegram Onayla/Reddet credential migration
 
 Analiz raporundaki P0 bulgusu N8N-1 (Telegram Onayla/Reddet runtime error) çözüldü.
