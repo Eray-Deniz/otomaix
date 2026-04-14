@@ -52,8 +52,8 @@ const PLATFORM_OPTIONS = [
 
 const STATUS_LABEL: Record<string, string> = {
   draft: 'Taslak', generating: 'Üretiliyor', ready: 'Hazır',
-  scheduled: 'Zamanlandı', published: 'Yayınlandı', failed: 'Başarısız',
-  reviewing: 'İncelemede', rejected: 'Reddedildi',
+  scheduled: 'Zamanlandı', publishing: 'Yayınlanıyor', published: 'Yayınlandı',
+  failed: 'Başarısız', reviewing: 'İncelemede', rejected: 'Reddedildi',
 }
 
 function PostDetailModal({
@@ -79,6 +79,7 @@ function PostDetailModal({
   const [scheduling, setScheduling] = useState(false)
   const [showSchedulePicker, setShowSchedulePicker] = useState(false)
   const [scheduledAt, setScheduledAt] = useState('')
+  const publishingRef = useRef(false)
 
   if (!post) return null
 
@@ -91,15 +92,21 @@ function PostDetailModal({
     .slice(0, 16)
 
   async function handlePublish() {
+    if (publishingRef.current) return
+    publishingRef.current = true
     setPublishing(true)
-    const res = await api.post(`/posts/${post!.id}/publish`, {})
-    setPublishing(false)
-    if (res.success) {
-      toast.success('İçerik yayınlanıyor')
-      onPublished(post!.id)
-      onClose()
-    } else {
-      toast.error(res.error ?? 'Yayınlama başarısız')
+    try {
+      const res = await api.post(`/posts/${post!.id}/publish`, {})
+      if (res.success) {
+        toast.success('İçerik yayınlanıyor')
+        onPublished(post!.id)
+        onClose()
+      } else {
+        toast.error(res.error ?? 'Yayınlama başarısız')
+      }
+    } finally {
+      setPublishing(false)
+      publishingRef.current = false
     }
   }
 
@@ -535,13 +542,21 @@ export default function IcerikKutuphanesPage() {
     setPosts((prev) => prev.map((p) => p.id === postId ? { ...p, status: 'scheduled' } : p))
   }
 
+  const publishInFlightRef = useRef<Set<string>>(new Set())
+
   async function handlePublishFromCard(post: Post) {
-    const res = await api.post(`/posts/${post.id}/publish`, {})
-    if (res.success) {
-      toast.success('İçerik yayınlanıyor')
-      handlePublished(post.id)
-    } else {
-      toast.error(res.error ?? 'Yayınlama başarısız')
+    if (publishInFlightRef.current.has(post.id)) return
+    publishInFlightRef.current.add(post.id)
+    try {
+      const res = await api.post(`/posts/${post.id}/publish`, {})
+      if (res.success) {
+        toast.success('İçerik yayınlanıyor')
+        handlePublished(post.id)
+      } else {
+        toast.error(res.error ?? 'Yayınlama başarısız')
+      }
+    } finally {
+      publishInFlightRef.current.delete(post.id)
     }
   }
 

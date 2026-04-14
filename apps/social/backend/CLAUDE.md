@@ -2,6 +2,17 @@
 
 ## 2026-04-14 — Teknik Analiz Raporu Fix'leri (rev-1)
 
+### [F-2 rev-3] publish_post idempotency — çift yayın fix
+Canlı test sırasında tek bir "Şimdi Yayınla" tıklamasında Instagram'a 4 post gittiği raporlandı. Kök neden: hem frontend hem backend tarafında yarış koşulu — `useState` tabanlı guard async olduğu için hızlı arka arkaya tıklamalar birden çok HTTP isteği geçiriyor, backend'de de aynı `post_id` için concurrency koruması yoktu.
+
+**Backend fix** (`services/upload_post.py:publish_post`):
+- `async with db.transaction()` + `SELECT ... FOR UPDATE` → aynı post_id için paralel çağrılar row-level lock ile serileştiriliyor
+- Transaction içinde status kontrolü: `published` ise `{note: "already_published"}` döner, `publishing` ise `{note: "already_in_progress"}` döner
+- Transaction içinde intermediate status: `UPDATE ... SET status = 'publishing'` — ikinci istek bu flag'i görünce kısa devre yapar
+- Bu sayede backend artık tek kaynak olarak Upload-Post'a yalnızca 1 istek gönderiyor, diğerleri idempotent şekilde dönüyor
+
+**Yeni post status**: `'publishing'` (transient). Yayın sırasında görünür, başarı sonrası `published`'a, hata durumunda `failed`'a geçer.
+
 ### [F-2 rev-2] Upload-Post.com entegrasyonu tamamen yeniden yazıldı
 Test sırasında mevcut `upload_post.py` servisinin **hayal edilmiş** bir API şeması kullandığı fark edildi (`/v1/oauth/{platform}?token=...&state=...`) — Upload-Post.com'da böyle bir endpoint yok, tüm OAuth çağrıları 404 dönüyordu. Gerçek API (OpenAPI spec'ten doğrulandı):
 

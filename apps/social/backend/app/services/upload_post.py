@@ -220,18 +220,50 @@ def _filename_from_url(url: str, default: str) -> str:
 async def publish_post(post_id: UUID, db: asyncpg.Connection) -> dict:
     """
     Publish a post to all configured platforms via Upload-Post.
-    Fetches post + brand profile, downloads media from R2, calls appropriate Upload-Post endpoint.
-    """
-    post = await db.fetchrow("SELECT * FROM social.posts WHERE id = $1", post_id)
-    if not post:
-        raise ValueError(f"Post {post_id} not found")
 
-    if not post["output_url"]:
-        raise ValueError("Post has no output_url — generate content first")
+    Idempotent: uses SELECT ... FOR UPDATE + intermediate status='publishing'
+    to serialize concurrent calls for the same post_id. Double-clicks and
+    accidental retries are absorbed at the DB level.
+    """
+    async with db.transaction():
+        post = await db.fetchrow(
+            "SELECT * FROM social.posts WHERE id = $1 FOR UPDATE",
+            post_id,
+        )
+        if not post:
+            raise ValueError(f"Post {post_id} not found")
+
+        # Idempotency: if already published or in-flight, short-circuit
+        if post["status"] == "published":
+            return {
+                "post_id": str(post_id),
+                "status": "published",
+                "note": "already_published",
+                "published_at": post["published_at"].isoformat() if post["published_at"] else None,
+            }
+        if post["status"] == "publishing":
+            return {
+                "post_id": str(post_id),
+                "status": "publishing",
+                "note": "already_in_progress",
+            }
+
+        if not post["output_url"]:
+            raise ValueError("Post has no output_url — generate content first")
+
+        # Mark as publishing inside the transaction so concurrent callers see it
+        await db.execute(
+            "UPDATE social.posts SET status = 'publishing' WHERE id = $1",
+            post_id,
+        )
 
     brand_id = post["brand_id"]
     platforms = post["platforms"] or []
     if not platforms:
+        await db.execute(
+            "UPDATE social.posts SET status = 'failed' WHERE id = $1",
+            post_id,
+        )
         return {"post_id": str(post_id), "status": "failed", "error": "No platforms configured"}
 
     # Ensure profile exists

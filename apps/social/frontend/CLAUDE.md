@@ -3,6 +3,18 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — F-2 rev-3: Publish butonları yarış koşulu fix
+
+Canlı test: tek "Şimdi Yayınla" tıklamasına Instagram 4 post yayınladı. Sebep: `useState` tabanlı `publishing` guard'ı async — React state update tamamlanmadan önce gelen ikinci click geçip yeni HTTP isteği fırlatıyor. Hızlı birkaç tıklama (veya kullanıcı mashlaması) birden çok publish çağrısına dönüşüyor.
+
+Fix: tüm publish handler'larına `useRef` tabanlı **senkron** guard eklendi:
+- `icerik-kutuphanesi/page.tsx` — `publishingRef` (modal), `publishInFlightRef: Set<string>` (kart hover butonu için per-post kilit)
+- `icerik-olustur/page.tsx` — `publishingRef`
+- `takvim/page.tsx` — `publishingRef`
+- `STATUS_LABEL` sözlüklerine yeni `'publishing'` durumu eklendi → "Yayınlanıyor"
+
+Backend tarafında asıl düzeltme `publish_post` içinde `SELECT FOR UPDATE` + intermediate `status='publishing'` ile idempotency. Frontend guard'ları UX (spinner görünsün, buton disabled olsun) için, backend guard ise veri bütünlüğü için.
+
 ## 2026-04-14 — F-2 rev-2: Upload-Post backend refactor (frontend değişmedi)
 
 Mevcut F-2 frontend'i (dashboard + marka-ayarlari) hiçbir değişiklik gerektirmedi — aynı API sözleşmesi (`GET /social/oauth-link`, `GET /social/accounts`) korundu. Semantik değişiklik sadece backend'de:

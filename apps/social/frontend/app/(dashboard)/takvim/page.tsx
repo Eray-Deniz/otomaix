@@ -65,6 +65,7 @@ const STATUS_COLOR: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = {
   scheduled:  'Zamanlandı',
   failed:     'Başarısız',
+  publishing: 'Yayınlanıyor',
   published:  'Yayınlandı',
   rejected:   'Reddedildi',
   reviewing:  'İncelemede',
@@ -88,6 +89,7 @@ function PostEventModal({
 }) {
   const [publishing, setPublishing] = useState(false)
   const [requesting, setRequesting] = useState(false)
+  const publishingRef = useRef(false)
 
   if (!post) return null
 
@@ -96,15 +98,21 @@ function PostEventModal({
   const canAct = ['ready', 'failed', 'rejected', 'scheduled'].includes(post.status)
 
   async function handlePublish() {
+    if (publishingRef.current) return
+    publishingRef.current = true
     setPublishing(true)
-    const res = await api.post(`/posts/${post!.id}/publish`, {})
-    setPublishing(false)
-    if (res.success) {
-      toast.success('İçerik yayınlanıyor')
-      onStatusChange(post!.id, 'published')
-      onClose()
-    } else {
-      toast.error(res.error ?? 'Yayınlama başarısız')
+    try {
+      const res = await api.post(`/posts/${post!.id}/publish`, {})
+      if (res.success) {
+        toast.success('İçerik yayınlanıyor')
+        onStatusChange(post!.id, 'published')
+        onClose()
+      } else {
+        toast.error(res.error ?? 'Yayınlama başarısız')
+      }
+    } finally {
+      setPublishing(false)
+      publishingRef.current = false
     }
   }
 

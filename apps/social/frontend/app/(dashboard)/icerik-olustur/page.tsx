@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -167,6 +167,7 @@ export default function IcerikOlusturPage() {
   const [hashtags, setHashtags] = useState<string[]>([])
   const [newHashtag, setNewHashtag] = useState('')
   const [publishing, setPublishing] = useState(false)
+  const publishingRef = useRef(false)
   const [scheduling, setScheduling] = useState(false)
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [scheduleAt, setScheduleAt] = useState('')
@@ -431,11 +432,13 @@ export default function IcerikOlusturPage() {
   }
 
   async function handlePublish() {
-    if (!generatedPost?.post_id || publishing) return
+    if (!generatedPost?.post_id) return
+    if (publishingRef.current) return
     if (!generatedPost.output_url) {
       toast.error('İçerik henüz hazır değil')
       return
     }
+    publishingRef.current = true
     setPublishing(true)
     try {
       const ok = await persistCaption()
@@ -451,6 +454,7 @@ export default function IcerikOlusturPage() {
       }
     } finally {
       setPublishing(false)
+      publishingRef.current = false
     }
   }
 
