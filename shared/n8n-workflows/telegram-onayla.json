@@ -1,0 +1,130 @@
+{
+  "name": "Telegram Onayla",
+  "nodes": [
+    {
+      "id": "wh-approve",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "path": "tg-approve",
+        "httpMethod": "GET",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "68b97dd9-9029-408b-9f4f-eccb5d112c1c"
+    },
+    {
+      "id": "do-publish",
+      "name": "Yayınla",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.otomaix.com/posts/{{ $json.query.post_id }}/publish-now",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nFP1FbcwkIw8n9SS",
+          "name": "Otomaix Internal API Key"
+        }
+      }
+    },
+    {
+      "id": "notify-tg",
+      "name": "Telegram Bildir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $('Webhook').item.json.query.bot_token }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $('Webhook').item.json.query.chat_id, text: '✅ İçerik onaylandı ve yayınlanıyor.' }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Yanıt",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Otomaix</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;background:#f0fdf4;display:flex;align-items:center;justify-content:center;min-height:100vh}.card{background:#fff;border-radius:16px;padding:32px 24px;text-align:center;max-width:320px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.1)}.icon{font-size:52px;margin-bottom:16px}.title{font-size:18px;font-weight:600;color:#111;margin-bottom:8px}.sub{font-size:14px;color:#666}</style></head><body><div class=\"card\"><div class=\"icon\">✅</div><p class=\"title\">Onaylama işlemi başlatıldı</p><p class=\"sub\">İçerik yayınlanıyor, pencereyi kapatabilirsiniz.</p></div></body></html>",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Yayınla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yayınla": {
+      "main": [
+        [
+          {
+            "node": "Telegram Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Bildir": {
+      "main": [
+        [
+          {
+            "node": "Yanıt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
+}

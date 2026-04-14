@@ -1,5 +1,28 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — N8N-1: Telegram Onayla/Reddet credential migration
+
+Analiz raporundaki P0 bulgusu N8N-1 (Telegram Onayla/Reddet runtime error) çözüldü.
+
+**Bulunan kök neden:** Her iki workflow'daki HTTP Request node'ları (`Yayınla` ve `Reddet`) `X-Internal-Key` header'ını **hardcoded** tutuyordu ve bu değer N8N-2 fix'inden önceki dönemden kalan **truncated** (57 char, son 7 char eksik) versiyondu — tam olarak Coolify env truncation bug'ının kopyası. Üstüne `continueOnFail: true` her iki node'da da aktifti, böylece çağrılar 401 döndüğünde hata yutulup Telegram bildirimi + success HTML yanıtı yine de kullanıcıya gösteriliyordu. Net etki: Onayla butonuna basan kullanıcı "✅ İçerik onaylandı" mesajı alıyor ama post gerçekte hiç yayınlanmıyordu.
+
+**Yapılan değişiklikler** (n8n REST API üzerinden, `/tmp/fix-telegram-wf.py`):
+1. **Telegram Onayla** (`aQ8neGzs3PQp8DMl`) → `Yayınla` node:
+   - `headerParameters.X-Internal-Key` silindi
+   - `authentication: genericCredentialType`, `genericAuthType: httpHeaderAuth`, credential `Otomaix Internal API Key` (id `nFP1FbcwkIw8n9SS`)
+   - `continueOnFail` kaldırıldı → backend hataları artık execution'da visible
+2. **Telegram Reddet** (`9kp6bCFl0ys6TbVu`) → `Reddet` node: aynı migration (PATCH `/internal/posts/{id}/status`)
+3. Local JSON kopyaları oluşturuldu:
+   - `shared/n8n-workflows/telegram-onayla.json`
+   - `shared/n8n-workflows/telegram-reddet.json`
+
+**Doğrulama:**
+- Reddet webhook'u gerçek `post_id` ile test edildi → execution #65 `success`, backend status PATCH 200 döndü, kullanıcıya ❌ HTML yanıtı gösterildi.
+- Onayla webhook'u geçersiz UUID ile test edildi → execution #66 `error` (beklenen — continueOnFail kaldırıldığı için hata artık gizlenmiyor). Backend 500 dönüyor (publish-now endpoint'i non-existent post için 404 yerine 500 atıyor — bu ayrı bir backend iyileştirme konusu, N8N-1 scope'u dışında).
+- Credential doğru çalışıyor: 500 dönmesi auth'un geçtiğini gösteriyor (yoksa 401 olurdu).
+
+**Not:** Telegram bildirim node'larındaki `continueOnFail: true` korundu — bot token yanlışsa ana iş (yayın/reddet) yine de tamamlanmalı, sadece kullanıcıya Telegram mesajı gitmesin.
+
 ## 2026-04-14 — N8N-7: Scheduled Post Publisher workflow + internal route order fix
 
 Analiz raporundaki P0 bulgusu N8N-7 (scheduled post publisher eksik) çözüldü.
