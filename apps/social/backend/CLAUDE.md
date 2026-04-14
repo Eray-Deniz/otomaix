@@ -1,5 +1,15 @@
 # Social Backend — CLAUDE.md
 
+## 2026-04-14 — B-3: autoposting_configs telegram kolonları temizlik
+
+Analiz raporundaki P2 bulgusu B-3. Telegram ayarları commit `58af268` ile workspace seviyesine taşınmış, eski `social.autoposting_configs.telegram_bot_token` / `telegram_chat_id` kolonları kod seviyesinde zaten kullanılmıyordu:
+
+- `routers/internal.py:44` — `SELECT ac.*, ..., w.telegram_bot_token, w.telegram_chat_id` JOIN ile **workspaces** tablosundan okuyor (alias `w`), autoposting_configs değil.
+- `routers/autoposting.py` — INSERT/UPDATE'lerde telegram alanları yok.
+- Frontend — `ayarlar/page.tsx` `/settings` endpoint'ini (workspace) kullanıyor, `otomatik-yayin/page.tsx` hiç telegram referansı taşımıyor.
+
+Migration 018 (`018_drop_autoposting_telegram_cols.sql`) prod'da çalıştırıldığında her iki kolon `DROP COLUMN IF EXISTS` NOTICE'ı ile "does not exist, skipping" döndü — yani kullanıcı workspace taşıma sırasında kolonları da düşürmüş. Migration yine de idempotent kayıt olarak repo'ya girdi (versiyon geçmişi).
+
 ## 2026-04-14 — P2 temizlik bloğu: B-6, B-7, B-8
 
 Analiz raporundaki P2 temizlik maddelerinden üçü tek blokta halledildi. Hepsi düşük risk.
