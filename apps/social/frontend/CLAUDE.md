@@ -3,6 +3,18 @@
 ## Proje Amacı
 Otomaix Social uygulamasının Next.js 14 frontend'i. app.otomaix.com'da çalışır.
 
+## 2026-04-14 — Marka Kimliği "Başlık/Alt Başlık Fontu" alanları kaldırıldı (ölü kod)
+
+Backend audit: `fal_ai._build_image_prompt()`, `media_processor.apply_brand_processing()`, `faceless_video.generate_script()` ve diğer tüm görsel/video pipeline'ları `brand_kit.colors`, `brand_kit.tonality`, `brand_kit.logo_overlay`, `brand_kit.intro_video`'yu okuyor ama `brand_kit.fonts.*` alanları **hiçbir yerde kullanılmıyor**. Kullanıcı font seçiminin içeriğe hiçbir etkisi yoktu — yanıltıcı UX.
+
+`marka-ayarlari/page.tsx`'den kaldırıldı:
+- `BrandKit.fonts` tipi + `FontEntry` interface
+- `FONT_FAMILIES` sabiti + `makeFontEntry` helper + `FontPatch` tipi
+- `DEFAULT_BRAND_KIT.fonts`, `deepMergeKit` içindeki fonts merge
+- UI'daki "Başlık Fontu" ve "Alt Başlık Fontu" 3'lü Select grid blokları
+
+DB'deki mevcut `brand_kit.fonts` JSONB anahtarları olduğu gibi kalır (backend okumuyor, bir sonraki save'de `fonts` alanı içermeyen yeni kit yazılacağı için kaybolabilir — sorun değil, ölü veri).
+
 ## 2026-04-14 — Tabs bileşeni layout bug fix (marka-ayarlari görünüm sorunu)
 
 Kullanıcı screenshot'la raporladı: `/marka-ayarlari` sayfasında sekmeler (Marka Bilgileri, Marka Kimliği, Görseller…) dikey olarak ortada, içerik sağda dar bir şeritte render oluyordu.

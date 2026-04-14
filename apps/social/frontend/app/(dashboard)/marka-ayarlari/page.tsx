@@ -56,18 +56,8 @@ interface BrandDocument {
   created_at: string
 }
 
-interface FontEntry {
-  family: string
-  weight: string
-  letterCase: string
-}
-
 interface BrandKit {
   colors: string[]
-  fonts: {
-    title: FontEntry
-    subtitle: FontEntry
-  }
   social_handle: string
   hashtags: string[]
   tonality: string
@@ -104,8 +94,6 @@ const TONALITIES = [
   { value: 'informative', label: 'Bilgilendirici' },
 ]
 
-const FONT_FAMILIES = ['Inter', 'Roboto', 'Poppins', 'Montserrat', 'Open Sans', 'Lato']
-
 const PLATFORMS = [
   { key: 'instagram', label: 'Instagram' },
   { key: 'tiktok', label: 'TikTok' },
@@ -125,10 +113,6 @@ const OVERLAY_POSITIONS = [
 
 const DEFAULT_BRAND_KIT: BrandKit = {
   colors: ['#1D4ED8', '#3B82F6', '#BFDBFE'],
-  fonts: {
-    title: { family: 'Inter', weight: '700', letterCase: 'none' },
-    subtitle: { family: 'Inter', weight: '400', letterCase: 'none' },
-  },
   social_handle: '',
   hashtags: [],
   tonality: 'professional',
@@ -333,18 +317,6 @@ function FileUploadArea({
 function deepMergeKit(defaults: BrandKit, incoming: any): BrandKit {
   return {
     colors: incoming?.colors ?? defaults.colors,
-    fonts: {
-      title: {
-        family: incoming?.fonts?.title?.family ?? defaults.fonts.title.family,
-        weight: incoming?.fonts?.title?.weight ?? defaults.fonts.title.weight,
-        letterCase: incoming?.fonts?.title?.letterCase ?? incoming?.fonts?.title?.case ?? defaults.fonts.title.letterCase,
-      },
-      subtitle: {
-        family: incoming?.fonts?.subtitle?.family ?? defaults.fonts.subtitle.family,
-        weight: incoming?.fonts?.subtitle?.weight ?? defaults.fonts.subtitle.weight,
-        letterCase: incoming?.fonts?.subtitle?.letterCase ?? incoming?.fonts?.subtitle?.case ?? defaults.fonts.subtitle.letterCase,
-      },
-    },
     social_handle: incoming?.social_handle ?? defaults.social_handle,
     hashtags: incoming?.hashtags ?? defaults.hashtags,
     tonality: incoming?.tonality ?? defaults.tonality,
@@ -358,16 +330,6 @@ function deepMergeKit(defaults: BrandKit, incoming: any): BrandKit {
     intro_video: {
       position: incoming?.intro_video?.position ?? defaults.intro_video.position,
     },
-  }
-}
-
-type FontPatch = { family?: string | null; weight?: string | null; letterCase?: string | null }
-
-function makeFontEntry(existing: FontEntry, patch: FontPatch): FontEntry {
-  return {
-    family: patch.family ?? existing.family,
-    weight: patch.weight ?? existing.weight,
-    letterCase: patch.letterCase ?? existing.letterCase,
   }
 }
 
@@ -814,111 +776,6 @@ function MarkaAyarlariContent() {
               colors={kit.colors ?? []}
               onChange={(colors) => updateKit({ colors })}
             />
-          </div>
-
-          <div className="space-y-3">
-            <Label>Başlık Fontu</Label>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <p className="text-xs text-gray-500">Yazı Tipi</p>
-                <Select
-                  value={kit.fonts.title.family}
-                  onValueChange={(v) => updateKit({ fonts: { ...kit.fonts, title: makeFontEntry(kit.fonts.title, { family: v }) } })}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FONT_FAMILIES.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-gray-500">Kalınlık</p>
-                <Select
-                  value={kit.fonts.title.weight}
-                  onValueChange={(v) => updateKit({ fonts: { ...kit.fonts, title: makeFontEntry(kit.fonts.title, { weight: v }) } })}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="400">Normal</SelectItem>
-                    <SelectItem value="600">Semibold</SelectItem>
-                    <SelectItem value="700">Bold</SelectItem>
-                    <SelectItem value="800">Extrabold</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-gray-500">Büyük Harf</p>
-                <Select
-                  value={kit.fonts.title.letterCase}
-                  onValueChange={(v) => updateKit({ fonts: { ...kit.fonts, title: makeFontEntry(kit.fonts.title, { letterCase: v }) } })}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Normal</SelectItem>
-                    <SelectItem value="uppercase">BÜYÜK</SelectItem>
-                    <SelectItem value="lowercase">küçük</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <Label>Alt Başlık Fontu</Label>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <p className="text-xs text-gray-500">Yazı Tipi</p>
-                <Select
-                  value={kit.fonts.subtitle.family}
-                  onValueChange={(v) => updateKit({ fonts: { ...kit.fonts, subtitle: makeFontEntry(kit.fonts.subtitle, { family: v }) } })}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FONT_FAMILIES.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-gray-500">Kalınlık</p>
-                <Select
-                  value={kit.fonts.subtitle.weight}
-                  onValueChange={(v) => updateKit({ fonts: { ...kit.fonts, subtitle: makeFontEntry(kit.fonts.subtitle, { weight: v }) } })}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="300">Light</SelectItem>
-                    <SelectItem value="400">Normal</SelectItem>
-                    <SelectItem value="600">Semibold</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <p className="text-xs text-gray-500">Büyük Harf</p>
-                <Select
-                  value={kit.fonts.subtitle.letterCase}
-                  onValueChange={(v) => updateKit({ fonts: { ...kit.fonts, subtitle: makeFontEntry(kit.fonts.subtitle, { letterCase: v }) } })}
-                >
-                  <SelectTrigger className="text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Normal</SelectItem>
-                    <SelectItem value="uppercase">BÜYÜK</SelectItem>
-                    <SelectItem value="lowercase">küçük</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
           </div>
 
           <div className="space-y-1.5">
