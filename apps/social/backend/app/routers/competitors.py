@@ -145,6 +145,23 @@ async def list_competitors(
     return OkResponse(data=[dict(r) for r in rows])
 
 
+def _row_to_competitor(row: asyncpg.Record) -> dict:
+    """Row → dict, `analysis_data` jsonb alanını güvenli şekilde parse et.
+
+    asyncpg jsonb codec register edilmiş olsa bile (bkz. database.py), bu
+    helper belt-and-suspenders olarak str/dict ikisini de handle eder —
+    böylece codec başarısız olsa bile frontend her zaman dict alır.
+    """
+    data = dict(row)
+    raw = data.get("analysis_data")
+    if isinstance(raw, str):
+        try:
+            data["analysis_data"] = json.loads(raw)
+        except (ValueError, TypeError):
+            data["analysis_data"] = None
+    return data
+
+
 @router.get("/{competitor_id}/analysis", response_model=OkResponse)
 async def get_analysis(
     competitor_id: UUID,
@@ -166,7 +183,7 @@ async def get_analysis(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Rakip bulunamadı")
-    return OkResponse(data=dict(row))
+    return OkResponse(data=_row_to_competitor(row))
 
 
 @router.post(
