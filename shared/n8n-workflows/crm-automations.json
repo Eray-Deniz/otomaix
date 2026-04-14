@@ -8,7 +8,10 @@
         "name": "Webhook",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 2,
-        "position": [250, 300],
+        "position": [
+          250,
+          300
+        ],
         "webhookId": "crm-new-customer-v1",
         "parameters": {
           "httpMethod": "POST",
@@ -22,7 +25,10 @@
         "name": "Build Message",
         "type": "n8n-nodes-base.set",
         "typeVersion": 3.4,
-        "position": [450, 300],
+        "position": [
+          450,
+          300
+        ],
         "parameters": {
           "mode": "manual",
           "duplicateItem": false,
@@ -44,7 +50,10 @@
         "name": "Send Telegram",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [650, 300],
+        "position": [
+          650,
+          300
+        ],
         "parameters": {
           "method": "POST",
           "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
@@ -52,9 +61,18 @@
           "specifyBody": "keypair",
           "bodyParameters": {
             "parameters": [
-              { "name": "chat_id", "value": "1634464595" },
-              { "name": "text", "value": "={{ $json.text }}" },
-              { "name": "parse_mode", "value": "HTML" }
+              {
+                "name": "chat_id",
+                "value": "1634464595"
+              },
+              {
+                "name": "text",
+                "value": "={{ $json.text }}"
+              },
+              {
+                "name": "parse_mode",
+                "value": "HTML"
+              }
             ]
           },
           "options": {}
@@ -63,15 +81,32 @@
     ],
     "connections": {
       "Webhook": {
-        "main": [[{ "node": "Build Message", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Build Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Build Message": {
-        "main": [[{ "node": "Send Telegram", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Send Telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    "settings": { "executionOrder": "v1" }
+    "settings": {
+      "executionOrder": "v1"
+    }
   },
-
   {
     "name": "CRM-2: Plan Yükseltme Bildirimi",
     "active": true,
@@ -81,7 +116,10 @@
         "name": "Webhook",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 2,
-        "position": [250, 300],
+        "position": [
+          250,
+          300
+        ],
         "webhookId": "crm-plan-upgrade-v1",
         "parameters": {
           "httpMethod": "POST",
@@ -95,7 +133,10 @@
         "name": "Build Message",
         "type": "n8n-nodes-base.set",
         "typeVersion": 3.4,
-        "position": [450, 300],
+        "position": [
+          450,
+          300
+        ],
         "parameters": {
           "mode": "manual",
           "duplicateItem": false,
@@ -117,7 +158,10 @@
         "name": "Send Telegram",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [650, 300],
+        "position": [
+          650,
+          300
+        ],
         "parameters": {
           "method": "POST",
           "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
@@ -125,9 +169,18 @@
           "specifyBody": "keypair",
           "bodyParameters": {
             "parameters": [
-              { "name": "chat_id", "value": "1634464595" },
-              { "name": "text", "value": "={{ $json.text }}" },
-              { "name": "parse_mode", "value": "HTML" }
+              {
+                "name": "chat_id",
+                "value": "1634464595"
+              },
+              {
+                "name": "text",
+                "value": "={{ $json.text }}"
+              },
+              {
+                "name": "parse_mode",
+                "value": "HTML"
+              }
             ]
           },
           "options": {}
@@ -136,15 +189,32 @@
     ],
     "connections": {
       "Webhook": {
-        "main": [[{ "node": "Build Message", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Build Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Build Message": {
-        "main": [[{ "node": "Send Telegram", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Send Telegram",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    "settings": { "executionOrder": "v1" }
+    "settings": {
+      "executionOrder": "v1"
+    }
   },
-
   {
     "name": "CRM-3: Ödeme Başarısız",
     "active": true,
@@ -154,7 +224,10 @@
         "name": "Webhook",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 2,
-        "position": [250, 300],
+        "position": [
+          250,
+          300
+        ],
         "webhookId": "crm-payment-failed-v1",
         "parameters": {
           "httpMethod": "POST",
@@ -168,9 +241,15 @@
         "name": "Add Payment Tag",
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.5,
-        "position": [450, 300],
+        "position": [
+          450,
+          300
+        ],
         "credentials": {
-          "postgres": { "id": "1", "name": "PostgreSQL Otomaix" }
+          "postgres": {
+            "id": "1",
+            "name": "PostgreSQL Otomaix"
+          }
         },
         "parameters": {
           "operation": "executeQuery",
@@ -183,7 +262,10 @@
         "name": "Build Alert Message",
         "type": "n8n-nodes-base.set",
         "typeVersion": 3.4,
-        "position": [650, 300],
+        "position": [
+          650,
+          300
+        ],
         "parameters": {
           "mode": "manual",
           "duplicateItem": false,
@@ -223,7 +305,10 @@
         "name": "Send Alert",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [850, 300],
+        "position": [
+          850,
+          300
+        ],
         "parameters": {
           "method": "POST",
           "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
@@ -231,9 +316,18 @@
           "specifyBody": "keypair",
           "bodyParameters": {
             "parameters": [
-              { "name": "chat_id", "value": "1634464595" },
-              { "name": "text", "value": "={{ $json.text }}" },
-              { "name": "parse_mode", "value": "HTML" }
+              {
+                "name": "chat_id",
+                "value": "1634464595"
+              },
+              {
+                "name": "text",
+                "value": "={{ $json.text }}"
+              },
+              {
+                "name": "parse_mode",
+                "value": "HTML"
+              }
             ]
           },
           "options": {}
@@ -244,7 +338,10 @@
         "name": "Wait 2 Days",
         "type": "n8n-nodes-base.wait",
         "typeVersion": 1.1,
-        "position": [1050, 300],
+        "position": [
+          1050,
+          300
+        ],
         "parameters": {
           "resume": "timeInterval",
           "amount": 2,
@@ -256,7 +353,10 @@
         "name": "Build Reminder Message",
         "type": "n8n-nodes-base.set",
         "typeVersion": 3.4,
-        "position": [1250, 300],
+        "position": [
+          1250,
+          300
+        ],
         "parameters": {
           "mode": "manual",
           "duplicateItem": false,
@@ -278,7 +378,10 @@
         "name": "Send Reminder",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1450, 300],
+        "position": [
+          1450,
+          300
+        ],
         "parameters": {
           "method": "POST",
           "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
@@ -286,9 +389,18 @@
           "specifyBody": "keypair",
           "bodyParameters": {
             "parameters": [
-              { "name": "chat_id", "value": "1634464595" },
-              { "name": "text", "value": "={{ $json.text }}" },
-              { "name": "parse_mode", "value": "HTML" }
+              {
+                "name": "chat_id",
+                "value": "1634464595"
+              },
+              {
+                "name": "text",
+                "value": "={{ $json.text }}"
+              },
+              {
+                "name": "parse_mode",
+                "value": "HTML"
+              }
             ]
           },
           "options": {}
@@ -297,27 +409,76 @@
     ],
     "connections": {
       "Webhook": {
-        "main": [[{ "node": "Add Payment Tag", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Add Payment Tag",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Add Payment Tag": {
-        "main": [[{ "node": "Build Alert Message", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Build Alert Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Build Alert Message": {
-        "main": [[{ "node": "Send Alert", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Send Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Send Alert": {
-        "main": [[{ "node": "Wait 2 Days", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Wait 2 Days",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Wait 2 Days": {
-        "main": [[{ "node": "Build Reminder Message", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Build Reminder Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Build Reminder Message": {
-        "main": [[{ "node": "Send Reminder", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Send Reminder",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    "settings": { "executionOrder": "v1" }
+    "settings": {
+      "executionOrder": "v1"
+    }
   },
-
   {
     "name": "CRM-4: Churn Riski Taraması (Günlük)",
     "active": true,
@@ -327,7 +488,10 @@
         "name": "Schedule Trigger",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
-        "position": [250, 300],
+        "position": [
+          250,
+          300
+        ],
         "parameters": {
           "rule": {
             "interval": [
@@ -344,13 +508,19 @@
         "name": "Count Churn Risk",
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.5,
-        "position": [450, 300],
+        "position": [
+          450,
+          300
+        ],
         "credentials": {
-          "postgres": { "id": "1", "name": "PostgreSQL Otomaix" }
+          "postgres": {
+            "id": "1",
+            "name": "PostgreSQL Otomaix"
+          }
         },
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT COUNT(*) AS count FROM social.accounts a WHERE a.last_login_at < now() - interval '14 days' AND EXISTS (SELECT 1 FROM social.subscriptions s WHERE s.account_id = a.id AND s.status = 'active') AND NOT EXISTS (SELECT 1 FROM crm.account_tags t WHERE t.account_id = a.id AND t.tag = 'Churn Riski')",
+          "query": "SELECT COUNT(*)::int AS count FROM social.accounts a WHERE a.last_login_at < now() - interval '14 days' AND EXISTS (SELECT 1 FROM social.subscriptions s WHERE s.account_id = a.id AND s.status = 'active') AND NOT EXISTS (SELECT 1 FROM crm.account_tags t WHERE t.account_id = a.id AND t.tag = 'Churn Riski')",
           "options": {}
         }
       },
@@ -359,16 +529,26 @@
         "name": "Has Churn Risk?",
         "type": "n8n-nodes-base.if",
         "typeVersion": 2.2,
-        "position": [650, 300],
+        "position": [
+          650,
+          300
+        ],
         "parameters": {
           "conditions": {
-            "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
             "conditions": [
               {
                 "id": "d1",
                 "leftValue": "={{ $json.count }}",
                 "rightValue": 0,
-                "operator": { "type": "number", "operation": "gt" }
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
               }
             ],
             "combinator": "and"
@@ -380,9 +560,15 @@
         "name": "Get & Tag Churn Accounts",
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.5,
-        "position": [850, 200],
+        "position": [
+          850,
+          200
+        ],
         "credentials": {
-          "postgres": { "id": "1", "name": "PostgreSQL Otomaix" }
+          "postgres": {
+            "id": "1",
+            "name": "PostgreSQL Otomaix"
+          }
         },
         "parameters": {
           "operation": "executeQuery",
@@ -395,7 +581,10 @@
         "name": "Aggregate Accounts",
         "type": "n8n-nodes-base.aggregate",
         "typeVersion": 1,
-        "position": [1050, 200],
+        "position": [
+          1050,
+          200
+        ],
         "parameters": {
           "aggregate": "aggregateAllItemData",
           "destinationFieldName": "accounts",
@@ -407,7 +596,10 @@
         "name": "Build Churn Message",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1250, 200],
+        "position": [
+          1250,
+          200
+        ],
         "parameters": {
           "jsCode": "const accounts = $json.accounts;\nconst count = accounts.length;\n\nlet lines = accounts.slice(0, 10).map((a, i) => {\n  const days = Math.floor((Date.now() - new Date(a.last_login_at).getTime()) / 86400000);\n  return `${i+1}. ${a.name || a.email} — ${days} gündür giriş yok`;\n});\n\nif (count > 10) lines.push(`... ve ${count - 10} kişi daha`);\n\nconst text = `⚠️ <b>Churn Riski Taraması</b>\\n\\n` +\n  `${count} müşteri 14+ gündür giriş yapmadı ve <b>Churn Riski</b> etiketi eklendi.\\n\\n` +\n  lines.join('\\n') +\n  `\\n\\n🔗 <a href=\"https://crm.otomaix.com/musteriler?etiket=Churn+Riski\">CRM'de Görüntüle</a>`;\n\nreturn [{ json: { text } }];"
         }
@@ -417,7 +609,10 @@
         "name": "Send Churn Alert",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1450, 200],
+        "position": [
+          1450,
+          200
+        ],
         "parameters": {
           "method": "POST",
           "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
@@ -425,9 +620,18 @@
           "specifyBody": "keypair",
           "bodyParameters": {
             "parameters": [
-              { "name": "chat_id", "value": "1634464595" },
-              { "name": "text", "value": "={{ $json.text }}" },
-              { "name": "parse_mode", "value": "HTML" }
+              {
+                "name": "chat_id",
+                "value": "1634464595"
+              },
+              {
+                "name": "text",
+                "value": "={{ $json.text }}"
+              },
+              {
+                "name": "parse_mode",
+                "value": "HTML"
+              }
             ]
           },
           "options": {}
@@ -436,30 +640,77 @@
     ],
     "connections": {
       "Schedule Trigger": {
-        "main": [[{ "node": "Count Churn Risk", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Count Churn Risk",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Count Churn Risk": {
-        "main": [[{ "node": "Has Churn Risk?", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Has Churn Risk?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Has Churn Risk?": {
         "main": [
-          [{ "node": "Get & Tag Churn Accounts", "type": "main", "index": 0 }],
+          [
+            {
+              "node": "Get & Tag Churn Accounts",
+              "type": "main",
+              "index": 0
+            }
+          ],
           []
         ]
       },
       "Get & Tag Churn Accounts": {
-        "main": [[{ "node": "Aggregate Accounts", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Aggregate Accounts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Aggregate Accounts": {
-        "main": [[{ "node": "Build Churn Message", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Build Churn Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Build Churn Message": {
-        "main": [[{ "node": "Send Churn Alert", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Send Churn Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    "settings": { "executionOrder": "v1" }
+    "settings": {
+      "executionOrder": "v1"
+    }
   },
-
   {
     "name": "CRM-5: Deneme Süresi Bitiyor (Günlük)",
     "active": true,
@@ -469,7 +720,10 @@
         "name": "Schedule Trigger",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
-        "position": [250, 300],
+        "position": [
+          250,
+          300
+        ],
         "parameters": {
           "rule": {
             "interval": [
@@ -486,9 +740,15 @@
         "name": "Get Expiring Trials",
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.5,
-        "position": [450, 300],
+        "position": [
+          450,
+          300
+        ],
         "credentials": {
-          "postgres": { "id": "1", "name": "PostgreSQL Otomaix" }
+          "postgres": {
+            "id": "1",
+            "name": "PostgreSQL Otomaix"
+          }
         },
         "parameters": {
           "operation": "executeQuery",
@@ -501,16 +761,26 @@
         "name": "Has Expiring Trials?",
         "type": "n8n-nodes-base.if",
         "typeVersion": 2.2,
-        "position": [650, 300],
+        "position": [
+          650,
+          300
+        ],
         "parameters": {
           "conditions": {
-            "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
             "conditions": [
               {
                 "id": "e1",
                 "leftValue": "={{ $items().length }}",
                 "rightValue": 0,
-                "operator": { "type": "number", "operation": "gt" }
+                "operator": {
+                  "type": "number",
+                  "operation": "gt"
+                }
               }
             ],
             "combinator": "and"
@@ -522,7 +792,10 @@
         "name": "Aggregate Trials",
         "type": "n8n-nodes-base.aggregate",
         "typeVersion": 1,
-        "position": [850, 200],
+        "position": [
+          850,
+          200
+        ],
         "parameters": {
           "aggregate": "aggregateAllItemData",
           "destinationFieldName": "trials",
@@ -534,7 +807,10 @@
         "name": "Build Trial Message",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1050, 200],
+        "position": [
+          1050,
+          200
+        ],
         "parameters": {
           "jsCode": "const trials = $json.trials;\nconst count = trials.length;\n\nlet lines = trials.map((t, i) => {\n  const endDate = new Date(t.trial_ends_at).toLocaleDateString('tr-TR');\n  return `${i+1}. ${t.name || t.email} — bitiş: ${endDate}`;\n});\n\nconst text = `📅 <b>Deneme Süresi Bitiyor</b>\\n\\n` +\n  `${count} hesabın deneme süresi <b>2 gün içinde</b> sona eriyor.\\n\\n` +\n  lines.join('\\n') +\n  `\\n\\n💡 Upgrade e-postası gönderilmesi önerilir.\\n🔗 <a href=\"https://crm.otomaix.com/musteriler\">CRM Müşteri Listesi</a>`;\n\nreturn [{ json: { text } }];"
         }
@@ -544,7 +820,10 @@
         "name": "Send Trial Alert",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1250, 200],
+        "position": [
+          1250,
+          200
+        ],
         "parameters": {
           "method": "POST",
           "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
@@ -552,9 +831,18 @@
           "specifyBody": "keypair",
           "bodyParameters": {
             "parameters": [
-              { "name": "chat_id", "value": "1634464595" },
-              { "name": "text", "value": "={{ $json.text }}" },
-              { "name": "parse_mode", "value": "HTML" }
+              {
+                "name": "chat_id",
+                "value": "1634464595"
+              },
+              {
+                "name": "text",
+                "value": "={{ $json.text }}"
+              },
+              {
+                "name": "parse_mode",
+                "value": "HTML"
+              }
             ]
           },
           "options": {}
@@ -563,27 +851,66 @@
     ],
     "connections": {
       "Schedule Trigger": {
-        "main": [[{ "node": "Get Expiring Trials", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Get Expiring Trials",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Get Expiring Trials": {
-        "main": [[{ "node": "Has Expiring Trials?", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Has Expiring Trials?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Has Expiring Trials?": {
         "main": [
-          [{ "node": "Aggregate Trials", "type": "main", "index": 0 }],
+          [
+            {
+              "node": "Aggregate Trials",
+              "type": "main",
+              "index": 0
+            }
+          ],
           []
         ]
       },
       "Aggregate Trials": {
-        "main": [[{ "node": "Build Trial Message", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Build Trial Message",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Build Trial Message": {
-        "main": [[{ "node": "Send Trial Alert", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Send Trial Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    "settings": { "executionOrder": "v1" }
+    "settings": {
+      "executionOrder": "v1"
+    }
   },
-
   {
     "name": "CRM-6: Aylık Gelir Raporu",
     "active": true,
@@ -593,7 +920,10 @@
         "name": "Schedule Trigger",
         "type": "n8n-nodes-base.scheduleTrigger",
         "typeVersion": 1.2,
-        "position": [250, 300],
+        "position": [
+          250,
+          300
+        ],
         "parameters": {
           "rule": {
             "interval": [
@@ -610,9 +940,15 @@
         "name": "Get Monthly Metrics",
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.5,
-        "position": [450, 300],
+        "position": [
+          450,
+          300
+        ],
         "credentials": {
-          "postgres": { "id": "1", "name": "PostgreSQL Otomaix" }
+          "postgres": {
+            "id": "1",
+            "name": "PostgreSQL Otomaix"
+          }
         },
         "parameters": {
           "operation": "executeQuery",
@@ -625,7 +961,10 @@
         "name": "Build Monthly Report",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [650, 300],
+        "position": [
+          650,
+          300
+        ],
         "parameters": {
           "jsCode": "const d = $json;\nconst mrr = parseInt(d.mrr) || 0;\nconst arpu = d.active_customers > 0 ? Math.round(mrr / parseInt(d.active_customers)) : 0;\nconst churnRate = d.active_customers > 0 ? ((parseInt(d.churned) / parseInt(d.active_customers)) * 100).toFixed(1) : '0';\n\nconst lastMonth = new Date();\nlastMonth.setMonth(lastMonth.getMonth() - 1);\nconst monthName = lastMonth.toLocaleDateString('tr-TR', { year: 'numeric', month: 'long' });\n\nconst text = `📊 <b>${monthName} Aylık Raporu</b>\\n\\n` +\n  `👥 Aktif Müşteri: ${d.active_customers}\\n` +\n  `🆕 Yeni Müşteri: ${d.new_customers}\\n` +\n  `📉 Churn: ${d.churned} (${churnRate}%)\\n\\n` +\n  `💰 MRR: ₺${mrr.toLocaleString('tr-TR')}\\n` +\n  `📈 ARPU: ₺${arpu.toLocaleString('tr-TR')}\\n\\n` +\n  `📝 Üretilen İçerik: ${d.posts_last_month}\\n` +\n  `🏷️ Toplam Kayıt: ${d.total_accounts}\\n\\n` +\n  `🔗 <a href=\"https://crm.otomaix.com/raporlar\">Detaylı Rapor</a>`;\n\nreturn [{ json: { text } }];"
         }
@@ -635,7 +974,10 @@
         "name": "Send Monthly Report",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [850, 300],
+        "position": [
+          850,
+          300
+        ],
         "parameters": {
           "method": "POST",
           "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
@@ -643,9 +985,18 @@
           "specifyBody": "keypair",
           "bodyParameters": {
             "parameters": [
-              { "name": "chat_id", "value": "1634464595" },
-              { "name": "text", "value": "={{ $json.text }}" },
-              { "name": "parse_mode", "value": "HTML" }
+              {
+                "name": "chat_id",
+                "value": "1634464595"
+              },
+              {
+                "name": "text",
+                "value": "={{ $json.text }}"
+              },
+              {
+                "name": "parse_mode",
+                "value": "HTML"
+              }
             ]
           },
           "options": {}
@@ -654,15 +1005,41 @@
     ],
     "connections": {
       "Schedule Trigger": {
-        "main": [[{ "node": "Get Monthly Metrics", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Get Monthly Metrics",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Get Monthly Metrics": {
-        "main": [[{ "node": "Build Monthly Report", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Build Monthly Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "Build Monthly Report": {
-        "main": [[{ "node": "Send Monthly Report", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "Send Monthly Report",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     },
-    "settings": { "executionOrder": "v1" }
+    "settings": {
+      "executionOrder": "v1"
+    }
   }
 ]

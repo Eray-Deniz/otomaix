@@ -1,5 +1,26 @@
 # CRM Admin Paneli — CLAUDE.md
 
+## 2026-04-14 — N8N-4: CRM-4 Churn Tarama `COUNT(*)` type mismatch fix
+
+Analiz raporundaki P0 bulgusu N8N-4 (CRM Postgres connection / execution hatası) çözüldü.
+
+**Bulunan kök neden:** CRM-4 "Churn Riski Taraması" workflow'u her gün 09:00 UTC'de fail ediyordu. Execution #55 incelendi:
+- `Count Churn Risk` node'u: `SELECT COUNT(*) AS count FROM ...` çalıştırıyor. PostgreSQL `COUNT(*)` → BIGINT döndürür; n8n Postgres node'u BIGINT'i JavaScript number precision kaybı riskine karşı **string** olarak serialize eder (`'0'`).
+- `Has Churn Risk?` IF node'u: `{{ $json.count }} > 0` kontrolü yapıyor, `typeValidation: strict` + `operator.type: number`. String `'0'`'ı reddediyor → "Wrong type: '0' is a string but was expecting a number".
+- Sonuç: Workflow asla "Send Churn Alert" branch'ına ulaşamıyor, ekip uyarısı gitmiyor.
+
+**Fix:** SQL'de `COUNT(*)::int AS count` — int4 küçük sayılar için n8n tarafında native number olarak serialize edilir. Analiz raporu bunu "Postgres connection" olarak isimlendirmişti ama gerçek sebep type serialization idi. CRM-5 "Get Expiring Trials" execution'ı dünkü gerçek "Connection refused" network glitch'iydi ve bugün kendiliğinden çalıştı (#56 success) — aksiyon gerektirmiyor.
+
+**Değişiklikler:**
+- n8n workflow `os5XonE1TtptDPBC` → `Count Churn Risk` node SQL'e `::int` cast eklendi
+- Local kopya: `shared/n8n-workflows/crm-automations.json` senkronize edildi (bundle içinde CRM-4 entry)
+
+**Doğrulama:** Direkt DB'de `SELECT COUNT(*)::int, pg_typeof(...)` → `count=0, pg_typeof=integer`. n8n public API manuel execute desteklemediği için canlı doğrulama yarın 09:00 UTC schedule tetiğinde yapılacak.
+
+**Not:** CRM-1/2/3/6 workflow'ları incelendi; benzer bir bug yok (CRM-5 IF'i `$items().length` kullandığı için native number, sorun yok).
+
+
+
 ## Proje Amacı
 Otomaix ekibinin müşterileri yönettiği dahili admin paneli.
 crm.otomaix.com'da çalışır. Dışarıya açık değil, şifre korumalı.
