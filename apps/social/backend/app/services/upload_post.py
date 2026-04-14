@@ -305,14 +305,17 @@ async def _publish_single_platform(
         return {"platform": platform, "status": "published", "external_id": external_id}
 
     err = f"HTTP {resp.status_code}: {resp.text[:300]}"
-    sentry_sdk.set_context(
-        "upload_post_publish",
-        {"post_id": str(post_id), "platform": platform, "status_code": resp.status_code, "body": resp.text[:500]},
-    )
-    sentry_sdk.capture_message(
-        f"Upload-Post publish failed for {platform}: HTTP {resp.status_code}",
-        level="error",
-    )
+    # 4xx = kullanıcı hatası (platform bağlı değil, geçersiz medya vb.) — Sentry'ye gönderme
+    # 5xx = Upload-Post tarafında sorun — Sentry'de görelim
+    if resp.status_code >= 500:
+        sentry_sdk.set_context(
+            "upload_post_publish",
+            {"post_id": str(post_id), "platform": platform, "status_code": resp.status_code, "body": resp.text[:500]},
+        )
+        sentry_sdk.capture_message(
+            f"Upload-Post publish failed for {platform}: HTTP {resp.status_code}",
+            level="error",
+        )
     await db.execute(
         """
         UPDATE social.post_publications
