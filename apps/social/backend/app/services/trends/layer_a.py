@@ -110,15 +110,24 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
     )
     user_msg = (
         f"Sektör: {sector_name}\n\n"
-        f"Bu hafta toplanan ham başlıklar/trendler:\n{bulk}\n\n"
+        f"Bu hafta toplanan ham başlıklar/trendler (her satırın başındaki "
+        f"köşeli parantez içi KAYNAK etiketidir):\n{bulk}\n\n"
         f"Görev: {sector_name} sektöründeki KOBİ'lerin sosyal medya için "
-        "kullanabileceği EN GÜÇLÜ 8 trendi seç. Tekrarları birleştir, alakasızları "
-        "ele. Her biri için içerik fırsatı ve prompt öner.\n\n"
+        "kullanabileceği EN GÜÇLÜ 8 trendi seç. FARKLI kaynaklardan dengeli "
+        "bir dağılım olmalı — tek bir kaynağa yığılma. Tekrarları birleştir, "
+        "alakasızları ele. Her biri için içerik fırsatı ve prompt öner.\n\n"
+        "KRİTİK KAYNAK KURALI:\n"
+        "- Her trendin 'source' alanı, o trendin geldiği ham satırın başındaki "
+        "[KAYNAK] etiketinden BİREBİR kopyalanmalı.\n"
+        "- Birden fazla kaynaktan gelen tekrarı birleştirirsen source='Karma' yaz.\n"
+        "- Tüm 8 trende aynı source'u yazma — çeşitlilik zorunlu.\n\n"
+        "Olası source değerleri: Google News, Google Trends, Reddit, YouTube, "
+        "Twitter Trends, Pinterest Trends, TCMB EVDS, Karma.\n\n"
         "JSON formatı (yalnızca dizi):\n"
         "[\n"
         "  {\n"
         '    "title": "trend başlığı (kısa, Türkçe)",\n'
-        '    "source": "Google News / Twitter / Reddit vs.",\n'
+        '    "source": "ham satırdaki [KAYNAK] etiketinden kopyala",\n'
         '    "relevance_score": 85,\n'
         '    "summary": "1 cümle bağlam",\n'
         '    "content_opportunity": "Bu trendi nasıl içeriğe dönüştürürsün (1 cümle)",\n'
