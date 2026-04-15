@@ -202,6 +202,17 @@ async def run_nightly_sweep(db: asyncpg.Connection) -> dict[str, Any]:
             errors.append(msg)
             logger.exception("layer_a nightly sweep failed for %s", sector.get("slug"))
 
+    if errors:
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_message(
+                f"Layer A nightly sweep errors ({len(errors)}/{len(sectors)}): "
+                + "; ".join(errors[:10]),
+                level="warning",
+            )
+        except Exception:
+            pass
+
     return {
         "processed": processed,
         "total_sectors": len(sectors),
