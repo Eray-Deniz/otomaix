@@ -447,7 +447,7 @@ export default function TrendlerPage() {
                   <h3 className="font-semibold text-gray-900 mb-1">Aylık Sektör Trend Raporu</h3>
                   <p className="text-sm text-gray-600 mb-3">
                     TikTok, Instagram ve sektöre özel kaynaklardan toplanan ham veriler Claude AI ile
-                    sentezlenir. 12 trend, içerik fırsatı önerileri ve prompt'lar dahil PDF olarak üretilir.
+                    sentezlenir. 12 trend, içerik fırsatı önerileri ve prompt önerileri dahil PDF olarak üretilir.
                     Pro ve üzeri planlara özeldir.
                   </p>
                   <Button
