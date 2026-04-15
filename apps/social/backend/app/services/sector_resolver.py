@@ -16,7 +16,7 @@ import asyncpg
 from app.core.cache import get_cached, set_cached
 
 _SECTOR_MAP_TTL = 3600  # 1 saat — sektörler neredeyse hiç değişmez
-_CACHE_KEY = "otomaix:social:sector_slug_map"
+_CACHE_KEY = "otomaix:social:sector_slug_map_v2"
 
 
 def _normalize_slug(text: str | None) -> str:
@@ -35,36 +35,43 @@ def _normalize_slug(text: str | None) -> str:
     return slug or "genel"
 
 
-async def _load_slug_to_id_map(db: asyncpg.Connection) -> dict[str, str]:
-    """Tüm sektör slug→id eşleşmesini Redis cache üzerinden getir."""
-    cached = await get_cached(_CACHE_KEY)
-    if cached:
-        return cached
-
-    rows = await db.fetch("SELECT id::text, slug FROM social.sectors")
-    mapping = {r["slug"]: r["id"] for r in rows}
-    await set_cached(_CACHE_KEY, mapping, _SECTOR_MAP_TTL)
-    return mapping
-
-
 async def resolve_sector_id(db: asyncpg.Connection, sector_text: str | None) -> UUID | None:
-    """Serbest metin sektör adından sector_id döndür.
+    """Serbest metin sektör adından sector_id döndür."""
+    resolved = await resolve_sector(db, sector_text)
+    return resolved[0] if resolved else None
+
+
+async def resolve_sector(
+    db: asyncpg.Connection, sector_text: str | None
+) -> tuple[UUID, str] | None:
+    """Slug veya serbest metinden (sector_id, display_name) tuple'ı döndür.
+
+    brands.py dual-write için: TEXT kolona human-readable display_name yazılır,
+    sector_id UUID kanonik referans olur. AI/trend/competitors kodu hala
+    `brand['sector']` TEXT okur — Türkçe ad korunur, prompt kalitesi bozulmaz.
 
     - Boşsa veya eşleşme yoksa 'genel' sektörüne düşer
-    - 'Teknoloji' → 'teknoloji' slug → UUID
-    - 'E-Ticaret' → 'e-ticaret' slug → UUID
+    - 'teknoloji' (slug) veya 'Teknoloji' (display) → ('Teknoloji', UUID)
+    - 'e-ticaret-perakende' → ('E-Ticaret & Perakende', UUID)
     """
-    mapping = await _load_slug_to_id_map(db)
+    cached = await get_cached(_CACHE_KEY)
+    if not cached:
+        rows = await db.fetch("SELECT id::text, slug, display_name FROM social.sectors")
+        cached = {r["slug"]: {"id": r["id"], "display_name": r["display_name"]} for r in rows}
+        await set_cached(_CACHE_KEY, cached, _SECTOR_MAP_TTL)
+
     slug = _normalize_slug(sector_text)
 
-    # Doğrudan eşleşme
-    if slug in mapping:
-        return UUID(mapping[slug])
+    if slug in cached:
+        entry = cached[slug]
+        return UUID(entry["id"]), entry["display_name"]
 
-    # Kısmi eşleşme (kullanıcı "teknoloji ve yazılım" yazdıysa "teknoloji"yi bul)
-    for known_slug, sector_id in mapping.items():
+    # Kısmi eşleşme
+    for known_slug, entry in cached.items():
         if known_slug != "genel" and known_slug in slug:
-            return UUID(sector_id)
+            return UUID(entry["id"]), entry["display_name"]
 
-    # Son çare: genel
-    return UUID(mapping["genel"]) if "genel" in mapping else None
+    if "genel" in cached:
+        entry = cached["genel"]
+        return UUID(entry["id"]), entry["display_name"]
+    return None
