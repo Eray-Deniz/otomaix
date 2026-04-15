@@ -55,7 +55,6 @@ interface SectorReport {
 }
 
 type TabKey = 'sector' | 'personal' | 'monthly'
-type SourceFilter = 'Tümü' | 'Haber' | 'Google Trends' | 'Genel'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -100,7 +99,6 @@ export default function TrendlerPage() {
   const [sector, setSector] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [filter, setFilter] = useState<SourceFilter>('Tümü')
   const [creatingIndex, setCreatingIndex] = useState<number | null>(null)
 
   // Personal (Layer B)
@@ -264,12 +262,6 @@ export default function TrendlerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBrand?.id, activeTab])
 
-  const FILTERS: SourceFilter[] = ['Tümü', 'Haber', 'Google Trends', 'Genel']
-  const filtered =
-    filter === 'Tümü'
-      ? trends
-      : trends.filter((t) => t.source === filter || t.source.includes(filter))
-
   if (!currentBrand) {
     return (
       <div className="p-8 flex items-center justify-center min-h-[400px]">
@@ -343,35 +335,19 @@ export default function TrendlerPage() {
             </Button>
           </div>
 
-          <div className="flex gap-2 mb-6">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                  filter === f
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
             </div>
-          ) : filtered.length === 0 ? (
+          ) : trends.length === 0 ? (
             <Card>
               <CardContent className="py-16 text-center">
                 <TrendingUp className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">Bu filtre için trend bulunamadı.</p>
+                <p className="text-gray-500">Henüz trend yok. &quot;Yenile&quot; ile taze veri çek.</p>
               </CardContent>
             </Card>
           ) : (
-            <TrendGrid trends={filtered} onCreate={handleCreatePost} creatingIndex={creatingIndex} />
+            <TrendGrid trends={trends} onCreate={handleCreatePost} creatingIndex={creatingIndex} />
           )}
         </div>
       )}
