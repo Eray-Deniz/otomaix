@@ -27,50 +27,39 @@ from app.services.storage import r2
 
 logger = logging.getLogger(__name__)
 
-# Aktör ID'leri — Apify marketplace'teki kanonik isimler
+# Aktör ID'leri — yalnızca Apify marketplace'te doğrulanmış olanlar.
+# epctex/* ve dtrungtin/* aktörleri 404 (silinmiş/taşınmış) → listeden çıkarıldı.
+# Yeni aktör eklerken önce `GET /v2/acts/{id}` ile varlık kontrolü yap,
+# ondan sonra SECTOR_ACTOR_MAP'e ekle. Aktör yoksa pipeline sessizce yutar
+# ama raporda "kaynak yok" kartı görünür.
 _ACTOR_IDS: dict[str, str] = {
-    "tiktok":       "clockworks/free-tiktok-scraper",
-    "instagram":    "apify/instagram-scraper",
-    "twitter":      "dtrungtin/twitter-trends-scraper",
-    "trendyol":     "epctex/trendyol-scraper",
-    "hepsiburada":  "epctex/hepsiburada-scraper",
-    "n11":          "epctex/n11-scraper",
-    "ciceksepeti":  "epctex/ciceksepeti-scraper",
-    "sahibinden":   "epctex/sahibinden-scraper",
-    "yemeksepeti":  "epctex/yemeksepeti-scraper",
-    "booking":      "voyager/booking-scraper",
-    "dolap":        "epctex/dolap-scraper",
+    "tiktok":    "clockworks/free-tiktok-scraper",  # doğrulandı — 20 kayıt/çağrı
+    "instagram": "apify/instagram-scraper",         # Apify resmi
 }
 
 # Aktör başına ortalama maliyet (Apify fiyatlandırma tablosu, USD)
 _ACTOR_COST_USD: dict[str, float] = {
-    "tiktok":      0.05,
-    "instagram":   0.10,
-    "twitter":     0.05,
-    "trendyol":    0.10,
-    "hepsiburada": 0.10,
-    "n11":         0.08,
-    "ciceksepeti": 0.05,
-    "sahibinden":  0.10,
-    "yemeksepeti": 0.08,
-    "booking":     0.08,
-    "dolap":       0.05,
+    "tiktok":    0.05,
+    "instagram": 0.10,
 }
 
-# Sektör slug → aktör anahtar listesi
+# Sektör slug → aktör anahtar listesi. Şu an sadece tiktok + instagram
+# doğrulanmış durumda; sektör-spesifik e-ticaret aktörleri (trendyol,
+# hepsiburada, dolap, ciceksepeti, sahibinden, yemeksepeti, booking, n11,
+# twitter) eklendikçe bu harita genişleyecek.
 SECTOR_ACTOR_MAP: dict[str, list[str]] = {
-    "e-ticaret-perakende": ["tiktok", "instagram", "twitter", "trendyol", "hepsiburada", "n11"],
-    "moda-tekstil":        ["tiktok", "instagram", "trendyol", "hepsiburada", "dolap"],
-    "yemek-gida":          ["tiktok", "instagram", "yemeksepeti"],
-    "turizm":              ["tiktok", "instagram", "booking"],
-    "insaat-gayrimenkul":  ["twitter", "sahibinden"],
-    "otomotiv":            ["tiktok", "instagram", "twitter", "sahibinden"],
-    "teknoloji":           ["tiktok", "twitter", "hepsiburada", "trendyol"],
-    "saglik":              ["tiktok", "instagram", "twitter"],
-    "egitim":              ["tiktok", "instagram", "twitter"],
-    "finans":              ["twitter"],
-    "hizmet":              ["tiktok", "instagram", "twitter"],
-    "genel":               ["tiktok", "instagram", "twitter"],
+    "e-ticaret-perakende": ["tiktok", "instagram"],
+    "moda-tekstil":        ["tiktok", "instagram"],
+    "yemek-gida":          ["tiktok", "instagram"],
+    "turizm":              ["tiktok", "instagram"],
+    "insaat-gayrimenkul":  ["tiktok", "instagram"],
+    "otomotiv":            ["tiktok", "instagram"],
+    "teknoloji":           ["tiktok", "instagram"],
+    "saglik":              ["tiktok", "instagram"],
+    "egitim":              ["tiktok", "instagram"],
+    "finans":              ["tiktok", "instagram"],
+    "hizmet":              ["tiktok", "instagram"],
+    "genel":               ["tiktok", "instagram"],
 }
 
 
