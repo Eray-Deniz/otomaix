@@ -1,55 +1,67 @@
-"""Google Trends (pytrends) — sektör keyword'leri için rising queries."""
+"""Google Trends — TR Daily Search Trends RSS feed.
 
-import asyncio
+pytrends `related_queries` endpoint'i Google tarafından çok sık 429/302
+döndürüyor ve kararsız. Bu yüzden resmi Daily Search Trends RSS'ine geçtik:
+auth gerektirmez, her sektör için aynı havuzu döner, Claude synthesis aşaması
+sektör alakasını filtreler.
+"""
+
+import re
+import xml.etree.ElementTree as ET
+
+import httpx
 
 NAME = "Google Trends"
+_URL = "https://trends.google.com/trending/rss?geo=TR"
+_TIMEOUT = 12
+_NS = {"ht": "https://trends.google.com/trending/rss"}
 
 
-def _sync_fetch(keywords: list[str]) -> list[dict]:
+def _parse_traffic(raw: str) -> float:
+    if not raw:
+        return 0.0
+    digits = re.sub(r"[^\d]", "", raw)
     try:
-        from pytrends.request import TrendReq  # type: ignore
-    except ImportError:
-        return []
-    try:
-        pt = TrendReq(hl="tr-TR", tz=180, timeout=(10, 25))
-        pt.build_payload(keywords[:5], cat=0, timeframe="now 7-d", geo="TR")
-        related = pt.related_queries()
-    except Exception:
-        return []
-
-    items: list[dict] = []
-    for kw, data in (related or {}).items():
-        if not data:
-            continue
-        rising = data.get("rising")
-        if rising is None:
-            continue
-        try:
-            for _, row in rising.head(5).iterrows():
-                title = str(row.get("query") or "").strip()
-                if not title:
-                    continue
-                items.append({
-                    "title": title,
-                    "source": NAME,
-                    "url": f"https://trends.google.com/trends/explore?q={title}&geo=TR",
-                    "score": float(row.get("value") or 0),
-                    "summary": f"'{kw}' sorgusu üzerinden yükselen arama",
-                })
-        except Exception:
-            continue
-    return items
+        return float(digits) if digits else 0.0
+    except ValueError:
+        return 0.0
 
 
 async def fetch(sector: dict) -> list[dict]:
-    keywords: list[str] = list(sector.get("keywords") or [])
-    if not keywords:
-        return []
-    loop = asyncio.get_event_loop()
     try:
-        return await asyncio.wait_for(
-            loop.run_in_executor(None, _sync_fetch, keywords),
-            timeout=35,
-        )
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.get(_URL, headers={"User-Agent": "Mozilla/5.0"})
+            if resp.status_code != 200:
+                return []
+            xml_text = resp.text
     except Exception:
         return []
+
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+
+    channel = root.find("channel")
+    if channel is None:
+        return []
+
+    results: list[dict] = []
+    for item in channel.findall("item")[:20]:
+        title = (item.findtext("title") or "").strip()
+        if not title:
+            continue
+        traffic = _parse_traffic(item.findtext("ht:approx_traffic", default="", namespaces=_NS))
+        # İlk haber başlığını özet olarak kullan
+        news = item.find("ht:news_item", _NS)
+        summary = None
+        if news is not None:
+            summary = (news.findtext("ht:news_item_title", default="", namespaces=_NS) or "").strip() or None
+        results.append({
+            "title": title,
+            "source": NAME,
+            "url": f"https://trends.google.com/trends/explore?q={title}&geo=TR",
+            "score": traffic,
+            "summary": summary,
+        })
+    return results
