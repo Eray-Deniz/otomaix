@@ -31,10 +31,11 @@ interface BrandDetail extends Brand {
   created_at: string
 }
 
-const SECTORS = [
-  'Tekstil', 'Gıda', 'İnşaat', 'Turizm', 'Perakende',
-  'Teknoloji', 'Sağlık', 'Eğitim', 'Finans', 'Hizmet', 'Diğer',
-]
+interface Sector {
+  id: string
+  slug: string
+  display_name: string
+}
 
 // ─── Page ───���────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,13 @@ export default function MarkalarlPage() {
 
   const [form, setForm] = useState({ name: '', sector: '', description: '' })
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null)
+  const [sectors, setSectors] = useState<Sector[]>([])
+
+  useEffect(() => {
+    api.get<Sector[]>('/sectors').then((res) => {
+      if (res.success && res.data) setSectors(res.data)
+    })
+  }, [])
 
   async function loadBrands() {
     if (!currentWorkspace?.id) return
@@ -204,7 +212,9 @@ export default function MarkalarlPage() {
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 truncate">{brand.name}</p>
                       {brand.sector && (
-                        <p className="text-xs text-gray-400 capitalize">{brand.sector}</p>
+                        <p className="text-xs text-gray-400">
+                          {sectors.find((s) => s.slug === brand.sector)?.display_name || brand.sector}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -263,8 +273,8 @@ export default function MarkalarlPage() {
                   onChange={(e) => setForm((p) => ({ ...p, sector: e.target.value }))}
                 >
                   <option value="">Seçin (opsiyonel)</option>
-                  {SECTORS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                  {sectors.map((s) => (
+                    <option key={s.slug} value={s.slug}>{s.display_name}</option>
                   ))}
                 </select>
               </div>

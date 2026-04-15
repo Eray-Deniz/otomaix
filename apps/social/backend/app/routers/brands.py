@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.security import assert_brand_owned, assert_workspace_owned, get_current_user
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
+from app.services.sector_resolver import resolve_sector_id
 from app.services.storage import r2
 
 _BRANDS_TTL = 300  # 5 dakika
@@ -28,10 +29,11 @@ async def create_brand(
     """Create a new brand inside a workspace."""
     await assert_workspace_owned(db, user, payload.workspace_id)
     await check_plan_limit(user["sub"], "brand", db)
+    sector_id = await resolve_sector_id(db, payload.sector)
     row = await db.fetchrow(
         """
-        INSERT INTO social.brands (workspace_id, name, description, website_url, sector)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO social.brands (workspace_id, name, description, website_url, sector, sector_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING *
         """,
         payload.workspace_id,
@@ -39,6 +41,7 @@ async def create_brand(
         payload.description,
         payload.website_url,
         payload.sector,
+        sector_id,
     )
     await invalidate_pattern(f"otomaix:social:brands:{payload.workspace_id}")
     return OkResponse(data=dict(row))
@@ -92,6 +95,10 @@ async def update_brand(
     updates = payload.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+
+    # Phase 6 dual-write: sector TEXT güncellendiğinde sector_id de senkronize edilir
+    if "sector" in updates:
+        updates["sector_id"] = await resolve_sector_id(db, updates["sector"])
 
     fields = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(updates))
     values = list(updates.values())

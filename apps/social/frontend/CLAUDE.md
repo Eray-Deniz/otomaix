@@ -1,5 +1,9 @@
 # Social Frontend — CLAUDE.md
 
+> **🚧 Phase 6 — Trend Sistemi Yenileme (backend implementation devam ediyor, 2026-04-15).**
+> `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazılacak (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md` (Sprint 5 frontend bölümü). Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
+> **İlerleme:** Sprint 1 (backend DB şeması) ✅ tamamlandı — frontend etkilenmedi. Sprint 5 (frontend yeniden yazım) sıradaki frontend çalışması olacak.
+
 ## 2026-04-14 — F-1: Dashboard "Yayın Serisi" kartı kaldırıldı
 
 Analiz raporundaki F-1'in son parçası. Stats kartları (Bu Ay Üretilen, Yayınlanan, Bağlı Platform) zaten canlı API verisine bağlıydı (önceki oturum); tek kalan hardcoded blok "Yayın Serisi" (Posting Streak) kartıydı. 7 günlük grid'in ilk 3'ü sabit mavi, kalanı gri, "3 gün serisi" yazısı da sabit — backend'de streak hesaplayan hiçbir servis/endpoint yok. Tüm kullanıcılara aynı yanıltıcı görünüm.

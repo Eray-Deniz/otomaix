@@ -82,10 +82,11 @@ interface Brand {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SECTORS = [
-  'Tekstil', 'Gıda', 'İnşaat', 'Turizm', 'Perakende',
-  'Teknoloji', 'Sağlık', 'Eğitim', 'Finans', 'Hizmet', 'Diğer',
-]
+interface Sector {
+  id: string
+  slug: string
+  display_name: string
+}
 
 const TONALITIES = [
   { value: 'professional', label: 'Profesyonel' },
@@ -366,7 +367,14 @@ function MarkaAyarlariContent() {
   const [connectedAccounts, setConnectedAccounts] = useState<{ platform: string; account_name: string }[]>([])
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
   const [analyzingWebsite, setAnalyzingWebsite] = useState(false)
+  const [sectors, setSectors] = useState<Sector[]>([])
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    api.get<Sector[]>('/sectors').then((res) => {
+      if (res.success && res.data) setSectors(res.data)
+    })
+  }, [])
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -759,8 +767,8 @@ function MarkaAyarlariContent() {
                 <SelectValue placeholder="Sektör seç" />
               </SelectTrigger>
               <SelectContent>
-                {SECTORS.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                {sectors.map((s) => (
+                  <SelectItem key={s.slug} value={s.slug}>{s.display_name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

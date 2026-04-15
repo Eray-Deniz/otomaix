@@ -1,5 +1,34 @@
 # Social Backend — CLAUDE.md
 
+> **🚧 Phase 6 — Trend Sistemi Yenileme (implementation devam ediyor, 2026-04-15).**
+> Üç katmanlı yeni trend mimarisi. Detaylı plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
+> **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
+> **İlerleme:** Sprint 1 ✅ tamamlandı · Sprint 2 ⏳ bekliyor
+
+## 2026-04-15 — Phase 6 Sprint 1: Şema + Sektör Modeli ✅
+
+**Kapsam:** Hiyerarşik sektör tablosu, üç katmanlı trend mimarisi için veri tabanı iskeleti, brands dual-write.
+
+**Migration'lar (prod'da çalıştırıldı):**
+- `019_sectors_hierarchy.sql` — `social.sectors` tablosu + 11 ana sektör seed (teknoloji, e-ticaret, yemek, saglik, egitim, moda, turizm, finans, gayrimenkul, otomotiv, genel). `social.brands.sector_id UUID` kolonu eklendi, mevcut 1 brand (`Otomaix`) text sector değerinden `teknoloji` slug'ına map edildi. `parent_sector_id` kolonu ile ileride alt sektör eklemek migration ile mümkün, kod değişmez.
+- `020_trend_layers.sql` — 4 yeni tablo: `sector_trend_cache` (layer A/C paylaşımlı, PK sector_id+layer), `brand_trend_cache` (Layer B marka-bazlı), `trend_usage` (aylık kullanım sayaçları, account_id+year_month PK), `sector_reports` (Layer C PDF metadata + status/generating/ready/failed). Eski `social.trend_cache` tablosuna DEPRECATED yorumu eklendi — rollback için silinmedi.
+
+**Yeni Python dosyaları:**
+- `app/services/sector_resolver.py` — `resolve_sector_id(db, text)` helper. Türkçe karakter ASCII dönüşümü, boşluk → tire, cache (Redis 1 saat TTL). Eşleşme yoksa 'genel' sektörüne düşer. Kısmi eşleşme destekler ("Teknoloji ve Yazılım" → teknoloji).
+
+**Değişen Python dosyaları (dual-write):**
+- `app/routers/brands.py` — `create_brand` ve `update_brand` endpoint'leri artık `sector` TEXT yazarken `sector_id` UUID'yi de `resolve_sector_id` üzerinden set eder. Eski TEXT kolonu korunuyor — mevcut `ai.py`, `posts.py`, `trends.py`, `competitors.py` router'ları değişmeden çalışır (hepsi `brand["sector"]` TEXT okur).
+- `app/models/schemas.py` — `BrandOut`'a `sector_id` opsiyonel alan eklendi. Phase 6 trend modelleri eklendi: `SectorOut`, `TrendItem`, `TrendUsageOut`, `SectorReportOut`.
+
+**Etki analizi doğrulaması:**
+- Mevcut kodun hiçbir yerinde `sector_id` okunmuyor → yalnızca yeni Layer A/B/C kodu kullanacak
+- `sector` TEXT kolonu değişmedi, frontend/backend mevcut akışları etkilenmez
+- Risk: sıfır (yeni kolon + idempotent migration)
+
+**Doğrulama:** `SELECT slug, display_name FROM social.sectors` → 11 satır; mevcut `Otomaix` brand'i `sector='Teknoloji'` → `sector_id=310ee1b9-...` olarak map edildi.
+
+## 2026-04-14 — N8N-9: Türkiye Takvimi workflow aktive
+
 ## 2026-04-14 — N8N-9: Türkiye Takvimi workflow aktive
 
 Analiz raporundaki P2 bulgusu N8N-9. Workflow (`tTk1VroTh4AS8lxI`) daha önce kurulmuş, 2026 tatilleri `social.public_holidays` tablosunda zaten 22 satır olarak mevcut (manuel seed veya önceki test çalıştırması). Tek eksik: workflow `active: false` durumundaydı — cron `0 0 1 1 *` (her yıl 1 Ocak 00:00 Europe/Istanbul) inactive olduğu için 2027 1 Ocak'ta tetiklenmeyecek, 2027 tatilleri DB'ye hiç yüklenmeyecekti.

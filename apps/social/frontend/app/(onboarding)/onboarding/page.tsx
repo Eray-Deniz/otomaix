@@ -31,10 +31,11 @@ interface OnboardingState {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const SECTORS = [
-  'Tekstil', 'Gıda', 'İnşaat', 'Turizm', 'Perakende',
-  'Teknoloji', 'Sağlık', 'Eğitim', 'Finans', 'Hizmet', 'Diğer',
-]
+interface Sector {
+  id: string
+  slug: string
+  display_name: string
+}
 
 const USER_TYPES = [
   { key: 'small_business', label: 'Küçük İşletme', icon: '🏪', desc: '1-10 çalışan' },
@@ -120,8 +121,15 @@ export default function OnboardingPage() {
   const [step, setStep] = useState<Step>(1)
   const [analyzing, setAnalyzing] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [sectors, setSectors] = useState<Sector[]>([])
 
   useEffect(() => { analytics.onboardingStarted() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    api.get<Sector[]>('/sectors').then((res) => {
+      if (res.success && res.data) setSectors(res.data)
+    })
+  }, [])
 
   const [state, setState] = useState<OnboardingState>({
     websiteUrl: '',
@@ -383,17 +391,17 @@ export default function OnboardingPage() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1.5">Sektör</label>
             <div className="grid grid-cols-3 gap-2">
-              {SECTORS.map((s) => (
+              {sectors.map((s) => (
                 <button
-                  key={s}
-                  onClick={() => updateBrand({ sector: s })}
+                  key={s.slug}
+                  onClick={() => updateBrand({ sector: s.slug })}
                   className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    state.brand.sector === s
+                    state.brand.sector === s.slug
                       ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
                       : 'bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600'
                   }`}
                 >
-                  {s}
+                  {s.display_name}
                 </button>
               ))}
             </div>
@@ -630,7 +638,9 @@ export default function OnboardingPage() {
         {state.brand.sector && (
           <div className="flex items-center justify-between text-sm">
             <span className="text-slate-400">Sektör</span>
-            <span className="text-white font-medium">{state.brand.sector}</span>
+            <span className="text-white font-medium">
+              {sectors.find((s) => s.slug === state.brand.sector)?.display_name || state.brand.sector}
+            </span>
           </div>
         )}
         {USER_TYPES.find((t) => t.key === state.userType) && (

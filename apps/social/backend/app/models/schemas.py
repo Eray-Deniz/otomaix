@@ -65,12 +65,51 @@ class BrandOut(BaseModel):
     description: str | None
     website_url: str | None
     sector: str | None
+    sector_id: UUID | None = None
     brand_kit: dict
     logo_light_url: str | None
     logo_dark_url: str | None
     intro_video_url: str | None
     is_active: bool
     created_at: datetime
+
+
+# ─── Phase 6 — Trend Sistemi ────────────────────────────────────────────────
+
+class SectorOut(BaseModel):
+    id: UUID
+    slug: str
+    display_name: str
+    parent_sector_id: UUID | None = None
+    keywords: list[str]
+
+
+class TrendItem(BaseModel):
+    title: str
+    source: str
+    relevance_score: int
+    summary: str | None = None
+    content_opportunity: str | None = None
+    suggested_prompt: str | None = None
+    url: str | None = None
+
+
+class TrendUsageOut(BaseModel):
+    year_month: str
+    layer_b_count: int
+    layer_b_limit: int
+    layer_c_count: int
+    layer_c_limit: int
+
+
+class SectorReportOut(BaseModel):
+    id: UUID
+    sector_id: UUID
+    brand_id: UUID | None
+    pdf_url: str | None
+    status: str
+    error_message: str | None
+    generated_at: datetime
 
 
 # ─── Post ───────────────────────────────────────────────────────────────────
