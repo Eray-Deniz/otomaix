@@ -176,10 +176,10 @@ async def _synthesize_with_claude(items: list[dict], brand: dict) -> list[dict]:
     )
 
     def _call() -> tuple[str, int, int]:
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=2000,
+            max_tokens=4000,
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )
@@ -188,31 +188,46 @@ async def _synthesize_with_claude(items: list[dict], brand: dict) -> list[dict]:
         ct = getattr(msg.usage, "output_tokens", 0) if msg.usage else 0
         return text, pt, ct
 
-    try:
-        loop = asyncio.get_event_loop()
-        raw, pt, ct = await loop.run_in_executor(None, _call)
-        if "```" in raw:
-            for part in raw.split("```"):
-                s = part.strip()
-                if s.startswith("json"):
-                    s = s[4:].strip()
-                if s.startswith("["):
-                    raw = s
-                    break
-        parsed = json.loads(raw)
-        if not isinstance(parsed, list):
-            return []
-        for it in parsed:
-            it.setdefault("source", "Karma")
-            it.setdefault("relevance_score", 70)
-        # stash token counts on first item for caller
-        if parsed:
+    raw = ""
+    last_err: Exception | None = None
+    loop = asyncio.get_event_loop()
+    for attempt in range(2):
+        try:
+            raw, pt, ct = await loop.run_in_executor(None, _call)
+            if "```" in raw:
+                for part in raw.split("```"):
+                    s = part.strip()
+                    if s.startswith("json"):
+                        s = s[4:].strip()
+                    if s.startswith("["):
+                        raw = s
+                        break
+            start = raw.find("[")
+            end = raw.rfind("]")
+            if start >= 0 and end > start:
+                raw = raw[start : end + 1]
+            parsed = json.loads(raw)
+            if not isinstance(parsed, list) or not parsed:
+                raise ValueError("parsed is not a non-empty list")
+            for it in parsed:
+                it.setdefault("source", "Karma")
+                it.setdefault("relevance_score", 70)
             parsed[0]["_prompt_tokens"] = pt
             parsed[0]["_completion_tokens"] = ct
-        return parsed[:8]
-    except Exception as e:
-        logger.warning("layer_b claude synthesis failed: %s", e)
-        return []
+            logger.info(
+                "layer_b claude synthesis ok: brand=%s trends=%d attempt=%d",
+                brand.get("name"), len(parsed), attempt + 1,
+            )
+            return parsed[:8]
+        except Exception as e:
+            last_err = e
+            logger.warning(
+                "layer_b synthesis failed (attempt %d) brand=%s err=%s raw_head=%s",
+                attempt + 1, brand.get("name"), e, (raw or "")[:200],
+            )
+            await asyncio.sleep(1.5)
+    logger.error("layer_b synthesis gave up brand=%s last_err=%s", brand.get("name"), last_err)
+    return []
 
 
 async def fetch_personal_trends(
