@@ -57,7 +57,6 @@ function TrendWidget() {
   const router = useRouter()
   const [trends, setTrends] = useState<Trend[]>([])
   const [loading, setLoading] = useState(false)
-  const [creatingIndex, setCreatingIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!currentBrand?.id) return
@@ -70,33 +69,14 @@ function TrendWidget() {
       .finally(() => setLoading(false))
   }, [currentBrand?.id])
 
-  async function handleCreate(trend: Trend, index: number) {
+  function handleCreate(trend: Trend) {
     if (!currentBrand?.id) return
-    setCreatingIndex(index)
-    try {
-      const res = await api.post<{ post_id: string }>(
-        `/trends/${index}/create-post`,
-        {
-          brand_id: currentBrand.id,
-          suggested_prompt: trend.suggested_prompt,
-          content_type: 'image',
-          aspect_ratio: '1:1',
-          platforms: [],
-        }
-      )
-      if (res.success) {
-        toast.success('İçerik oluşturuluyor...')
-        router.push('/icerik-kutuphanesi')
-      } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
-        toast.error(res.plan_limit.message)
-      } else if (res.error) {
-        toast.error(res.error)
-      }
-    } catch {
-      toast.error('Bir hata oluştu')
-    } finally {
-      setCreatingIndex(null)
-    }
+    const params = new URLSearchParams({
+      prompt: trend.suggested_prompt,
+      type: 'image',
+      aspect: '1:1',
+    })
+    router.push(`/icerik-olustur?${params.toString()}`)
   }
 
   if (!currentBrand) return null
@@ -136,15 +116,10 @@ function TrendWidget() {
                   <p className="text-xs text-gray-400 truncate">{trend.content_opportunity}</p>
                 </div>
                 <button
-                  onClick={() => handleCreate(trend, i)}
-                  disabled={creatingIndex === i}
-                  className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => handleCreate(trend)}
+                  className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  {creatingIndex === i ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Wand2 className="w-3.5 h-3.5" />
-                  )}
+                  <Wand2 className="w-3.5 h-3.5" />
                   İçerik Üret
                 </button>
               </div>
