@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -125,6 +125,14 @@ function StepIndicator({ step }: { step: Step }) {
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function IcerikOlusturPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-gray-400 text-sm">Yükleniyor...</div>}>
+      <IcerikOlusturInner />
+    </Suspense>
+  )
+}
+
+function IcerikOlusturInner() {
   const currentBrand = useAppStore((s) => s.currentBrand)
   const router = useRouter()
   const searchParams = useSearchParams()
