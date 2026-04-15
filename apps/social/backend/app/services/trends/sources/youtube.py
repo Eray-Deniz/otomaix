@@ -41,12 +41,17 @@ async def fetch(sector: dict) -> list[dict]:
     if category_id != "0":
         params["videoCategoryId"] = category_id
 
+    url = "https://www.googleapis.com/youtube/v3/videos"
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get("https://www.googleapis.com/youtube/v3/videos", params=params)
-            if resp.status_code != 200:
-                return []
-            data = resp.json()
+            resp = await client.get(url, params=params)
+            data = resp.json() if resp.status_code == 200 else {}
+            # TR'de bazı kategoriler (Education=27, Travel=19) popüler feed döndürmez
+            # → fallback olarak kategorisiz TR most popular çek
+            if category_id != "0" and not data.get("items"):
+                params.pop("videoCategoryId", None)
+                resp = await client.get(url, params=params)
+                data = resp.json() if resp.status_code == 200 else {}
     except Exception:
         return []
 

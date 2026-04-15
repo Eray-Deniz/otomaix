@@ -128,36 +128,54 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
     )
 
     def _call_claude() -> str:
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=2000,
+            max_tokens=4000,
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )
         return msg.content[0].text.strip()
 
-    try:
-        loop = asyncio.get_event_loop()
-        raw = await loop.run_in_executor(None, _call_claude)
-        if "```" in raw:
-            for part in raw.split("```"):
-                stripped = part.strip()
-                if stripped.startswith("json"):
-                    stripped = stripped[4:].strip()
-                if stripped.startswith("["):
-                    raw = stripped
-                    break
-        parsed = json.loads(raw)
-        if not isinstance(parsed, list):
-            return _fallback_trends(sector)
-        for item in parsed:
-            item.setdefault("source", "Karma")
-            item.setdefault("relevance_score", 70)
-        return parsed[:8]
-    except Exception as e:
-        logger.warning("claude synthesis failed: %s", e)
-        return _fallback_trends(sector)
+    raw = ""
+    last_err: Exception | None = None
+    loop = asyncio.get_event_loop()
+    for attempt in range(2):
+        try:
+            raw = await loop.run_in_executor(None, _call_claude)
+            # Kod bloğunu soy, ilk '[' ile son ']' arasını çek
+            if "```" in raw:
+                for part in raw.split("```"):
+                    stripped = part.strip()
+                    if stripped.startswith("json"):
+                        stripped = stripped[4:].strip()
+                    if stripped.startswith("["):
+                        raw = stripped
+                        break
+            start = raw.find("[")
+            end = raw.rfind("]")
+            if start >= 0 and end > start:
+                raw = raw[start : end + 1]
+            parsed = json.loads(raw)
+            if not isinstance(parsed, list) or not parsed:
+                raise ValueError("parsed is not a non-empty list")
+            for item in parsed:
+                item.setdefault("source", "Karma")
+                item.setdefault("relevance_score", 70)
+            logger.info(
+                "claude synthesis ok: sector=%s trends=%d attempt=%d",
+                sector.get("slug"), len(parsed), attempt + 1,
+            )
+            return parsed[:8]
+        except Exception as e:
+            last_err = e
+            logger.warning(
+                "claude synthesis failed (attempt %d) sector=%s err=%s raw_head=%s",
+                attempt + 1, sector.get("slug"), e, (raw or "")[:200],
+            )
+            await asyncio.sleep(1.5)
+    logger.error("claude synthesis gave up sector=%s last_err=%s", sector.get("slug"), last_err)
+    return _fallback_trends(sector)
 
 
 async def run_nightly_sweep(db: asyncpg.Connection) -> dict[str, Any]:
