@@ -61,7 +61,7 @@
 {% for a in actor_summary %}
   <div class="actor-row">
     <span>{{ a.name }}</span>
-    <span class="{% if a.items > 0 %}actor-ok{% else %}actor-fail{% endif %}">{{ a.items }} kayıt</span>
+    <span class="{% if a.count > 0 %}actor-ok{% else %}actor-fail{% endif %}">{{ a.count }} kayıt</span>
   </div>
 {% endfor %}
 </div>

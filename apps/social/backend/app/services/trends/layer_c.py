@@ -303,7 +303,7 @@ async def generate_monthly_report(
         for key, items, cost in actor_results:
             all_items.extend(items)
             apify_cost += cost
-            actor_summary.append({"name": key, "items": len(items)})
+            actor_summary.append({"name": key, "count": len(items)})
 
         # Dedupe
         seen: set[str] = set()
