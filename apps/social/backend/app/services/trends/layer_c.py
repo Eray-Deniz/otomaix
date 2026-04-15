@@ -35,12 +35,15 @@ logger = logging.getLogger(__name__)
 _ACTOR_IDS: dict[str, str] = {
     "tiktok":    "clockworks/free-tiktok-scraper",  # doğrulandı — 20 kayıt/çağrı
     "instagram": "apify/instagram-scraper",         # Apify resmi
+    "trendyol":  "tyegen/trendyol-product-scraper", # pay-per-result $5/1k
 }
 
 # Aktör başına ortalama maliyet (Apify fiyatlandırma tablosu, USD)
+# 20 item/run varsayımıyla tahmini ücret.
 _ACTOR_COST_USD: dict[str, float] = {
     "tiktok":    0.05,
     "instagram": 0.10,
+    "trendyol":  0.10,  # $5/1000 × 20 item
 }
 
 # Sektör slug → aktör anahtar listesi. Şu an sadece tiktok + instagram
@@ -48,13 +51,13 @@ _ACTOR_COST_USD: dict[str, float] = {
 # hepsiburada, dolap, ciceksepeti, sahibinden, yemeksepeti, booking, n11,
 # twitter) eklendikçe bu harita genişleyecek.
 SECTOR_ACTOR_MAP: dict[str, list[str]] = {
-    "e-ticaret-perakende": ["tiktok", "instagram"],
-    "moda-tekstil":        ["tiktok", "instagram"],
+    "e-ticaret-perakende": ["tiktok", "instagram", "trendyol"],
+    "moda-tekstil":        ["tiktok", "instagram", "trendyol"],
     "yemek-gida":          ["tiktok", "instagram"],
     "turizm":              ["tiktok", "instagram"],
     "insaat-gayrimenkul":  ["tiktok", "instagram"],
     "otomotiv":            ["tiktok", "instagram"],
-    "teknoloji":           ["tiktok", "instagram"],
+    "teknoloji":           ["tiktok", "instagram", "trendyol"],
     "saglik":              ["tiktok", "instagram"],
     "egitim":              ["tiktok", "instagram"],
     "finans":              ["tiktok", "instagram"],
