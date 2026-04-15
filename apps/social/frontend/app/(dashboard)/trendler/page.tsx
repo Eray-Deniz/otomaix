@@ -99,7 +99,6 @@ export default function TrendlerPage() {
   const [sector, setSector] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [creatingIndex, setCreatingIndex] = useState<number | null>(null)
 
   // Personal (Layer B)
   const [personalTrends, setPersonalTrends] = useState<Trend[]>([])
@@ -225,35 +224,16 @@ export default function TrendlerPage() {
     }
   }
 
-  // ─── Create post (tüm tab'lar ortak) ────────────────────────────────────
-  async function handleCreatePost(trend: Trend, index: number) {
+  // ─── Create post (trend → icerik-olustur wizard prefill) ───────────────
+  function handleCreatePost(trend: Trend, _index: number) {
     if (!currentBrand?.id) return
-    setCreatingIndex(index)
-    try {
-      const res = await api.post<{ post_id: string }>(
-        `/trends/${index}/create-post`,
-        {
-          brand_id: currentBrand.id,
-          suggested_prompt: trend.suggested_prompt,
-          content_type: 'image',
-          aspect_ratio: '1:1',
-          platforms: [],
-        }
-      )
-      if (res.success && res.data?.post_id) {
-        analytics.trendPostCreated()
-        toast.success('İçerik oluşturuluyor...')
-        router.push('/icerik-kutuphanesi')
-      } else if (res.error === 'plan_limit_reached' && res.plan_limit) {
-        toast.error(res.plan_limit.message)
-      } else {
-        toast.error(res.error || 'İçerik oluşturulamadı')
-      }
-    } catch {
-      toast.error('Bir hata oluştu')
-    } finally {
-      setCreatingIndex(null)
-    }
+    analytics.trendPostCreated()
+    const params = new URLSearchParams({
+      prompt: trend.suggested_prompt,
+      type: 'image',
+      aspect: '1:1',
+    })
+    router.push(`/icerik-olustur?${params.toString()}`)
   }
 
   useEffect(() => {
@@ -347,7 +327,7 @@ export default function TrendlerPage() {
               </CardContent>
             </Card>
           ) : (
-            <TrendGrid trends={trends} onCreate={handleCreatePost} creatingIndex={creatingIndex} />
+            <TrendGrid trends={trends} onCreate={handleCreatePost} />
           )}
         </div>
       )}
@@ -401,11 +381,7 @@ export default function TrendlerPage() {
               </CardContent>
             </Card>
           ) : personalTrends.length > 0 ? (
-            <TrendGrid
-              trends={personalTrends}
-              onCreate={handleCreatePost}
-              creatingIndex={creatingIndex}
-            />
+            <TrendGrid trends={personalTrends} onCreate={handleCreatePost} />
           ) : null}
         </div>
       )}
@@ -422,8 +398,8 @@ export default function TrendlerPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900 mb-1">Aylık Sektör Trend Raporu</h3>
                   <p className="text-sm text-gray-600 mb-3">
-                    TikTok, Instagram ve sektöre özel kaynaklardan toplanan ham veriler Claude AI ile
-                    sentezlenir. 12 trend, içerik fırsatı önerileri ve prompt önerileri dahil PDF olarak üretilir.
+                    Sektöre özel kaynaklardan toplanan ham veriler Claude AI ile sentezlenir.
+                    12 trend, içerik fırsatı önerileri ve prompt önerileri dahil PDF olarak üretilir.
                     Pro ve üzeri planlara özeldir.
                   </p>
                   <Button
@@ -532,11 +508,9 @@ export default function TrendlerPage() {
 function TrendGrid({
   trends,
   onCreate,
-  creatingIndex,
 }: {
   trends: Trend[]
   onCreate: (t: Trend, i: number) => void
-  creatingIndex: number | null
 }) {
   return (
     <div className="grid gap-4">
@@ -573,14 +547,9 @@ function TrendGrid({
               <Button
                 size="sm"
                 onClick={() => onCreate(trend, i)}
-                disabled={creatingIndex === i}
                 className="shrink-0 gap-1.5"
               >
-                {creatingIndex === i ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Wand2 className="w-3.5 h-3.5" />
-                )}
+                <Wand2 className="w-3.5 h-3.5" />
                 İçerik Üret
               </Button>
             </div>

@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -127,6 +127,7 @@ function StepIndicator({ step }: { step: Step }) {
 export default function IcerikOlusturPage() {
   const currentBrand = useAppStore((s) => s.currentBrand)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // Step state
   const [step, setStep] = useState<Step>(1)
@@ -171,6 +172,19 @@ export default function IcerikOlusturPage() {
   const [scheduling, setScheduling] = useState(false)
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [scheduleAt, setScheduleAt] = useState('')
+
+  // Query-param prefill (ör. trendler sayfasından "İçerik Üret" butonu)
+  useEffect(() => {
+    const qPrompt = searchParams?.get('prompt')
+    const qType = searchParams?.get('type') as ContentType | null
+    const qAspect = searchParams?.get('aspect') as AspectRatio | null
+    if (!qPrompt && !qType) return
+    if (qPrompt) setPrompt(qPrompt)
+    if (qType && CONTENT_TYPES.some((t) => t.id === qType)) setContentType(qType)
+    if (qAspect && ASPECT_RATIOS.some((r) => r.id === qAspect)) setAspectRatio(qAspect)
+    setStep(2)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Görsel hazır olana kadar polling
   useEffect(() => {
