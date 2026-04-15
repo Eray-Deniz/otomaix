@@ -186,7 +186,16 @@ async def suggest_ideas(
         f"Sen Türk KOBİ'lerine sosyal medya içeriği üreten bir uzmansın. "
         f"Türkçe ve {tonality} bir üslupla, verilen tüm bağlamı dikkate alarak "
         f"içerik fikri önerileri üretiyorsun. "
-        f"Her fikir tek cümle, net, uygulanabilir ve seçilen içerik tipine uygun olmalı."
+        f"Her fikir tek cümle, net, uygulanabilir ve seçilen içerik tipine uygun olmalı.\n\n"
+        "DİL KURALI (çok önemli): Yanıtın tamamen Türkçe olmalı. "
+        "İngilizce veya yabancı kökenli terimler kullanma. "
+        "Yaygın Türkçe karşılıkları kullan: 'content creator' yerine 'içerik üretici', "
+        "'split-screen' yerine 'ikiye bölünmüş ekran', 'infografik' yerine 'bilgi görseli', "
+        "'screenshot' yerine 'ekran görüntüsü', 'caption' yerine 'başlık', "
+        "'engagement' yerine 'etkileşim', 'feed' yerine 'akış', 'story' yerine 'hikaye', "
+        "'reel' yerine 'kısa video'. Marka adları ve platform isimleri (Instagram, TikTok vb.) "
+        "orijinal kalabilir. Gerçekliği olmayan sayısal iddialar ('%300 artış', '30 saatten 2 saate' "
+        "gibi) uydurma — sadece somut özellik ve faydalardan bahset."
     )
 
     user_prompt_parts = [
