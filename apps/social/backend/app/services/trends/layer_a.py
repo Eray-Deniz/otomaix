@@ -92,9 +92,29 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
 
     sector_name = sector.get("display_name") or sector.get("slug", "Genel")
 
-    # Her item'ı kısa satıra çevir
+    # Deterministik denge: source'lara göre bucket + round-robin interleave.
+    # Böylece Claude'a giden input tek kaynağa yığılmaz, her source eşit
+    # temsil edilir (per-source cap=8).
+    from collections import defaultdict
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for it in items:
+        src = it.get("source") or "Bilinmeyen"
+        if len(buckets[src]) < 8:
+            buckets[src].append(it)
+    interleaved: list[dict] = []
+    idx = 0
+    while True:
+        added = False
+        for src in list(buckets.keys()):
+            if idx < len(buckets[src]):
+                interleaved.append(buckets[src][idx])
+                added = True
+        if not added:
+            break
+        idx += 1
+
     lines: list[str] = []
-    for i, it in enumerate(items[:60]):
+    for it in interleaved[:60]:
         src = it.get("source", "")
         title = it.get("title", "")
         summary = it.get("summary") or ""
@@ -177,9 +197,19 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
             for item in parsed:
                 item.setdefault("source", "Karma")
                 item.setdefault("relevance_score", 70)
+            # Deterministik post-process: tek source'a 3'ten fazla trend
+            # atanmışsa fazlalıkları 'Karma' olarak relabel et. Claude Haiku
+            # quota kuralını yoksayınca güvenlik ağı görevi görür.
+            source_counts: dict[str, int] = {}
+            for item in parsed:
+                src = item.get("source") or "Karma"
+                source_counts[src] = source_counts.get(src, 0) + 1
+                if source_counts[src] > 3:
+                    item["source"] = "Karma"
             logger.info(
-                "claude synthesis ok: sector=%s trends=%d attempt=%d",
+                "claude synthesis ok: sector=%s trends=%d attempt=%d sources=%s",
                 sector.get("slug"), len(parsed), attempt + 1,
+                {(i.get("source") or "?"): 1 for i in parsed[:8]},
             )
             return parsed[:8]
         except Exception as e:

@@ -145,8 +145,27 @@ async def _synthesize_with_claude(items: list[dict], brand: dict) -> list[dict]:
     except ImportError:
         return []
 
+    # Deterministik denge: domain'lere göre bucket + round-robin interleave.
+    from collections import defaultdict
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for it in items:
+        src = it.get("source") or "Bilinmeyen"
+        if len(buckets[src]) < 6:
+            buckets[src].append(it)
+    interleaved: list[dict] = []
+    idx = 0
+    while True:
+        added = False
+        for src in list(buckets.keys()):
+            if idx < len(buckets[src]):
+                interleaved.append(buckets[src][idx])
+                added = True
+        if not added:
+            break
+        idx += 1
+
     lines: list[str] = []
-    for i, it in enumerate(items[:40]):
+    for it in interleaved[:40]:
         src = it.get("source", "")
         title = it.get("title", "")
         snippet = (it.get("snippet") or "")[:180]
@@ -222,6 +241,14 @@ async def _synthesize_with_claude(items: list[dict], brand: dict) -> list[dict]:
             for it in parsed:
                 it.setdefault("source", "Karma")
                 it.setdefault("relevance_score", 70)
+            # Deterministik cap: tek domain'e 3'ten fazla trend atanmışsa
+            # fazlalıkları 'Karma' olarak relabel et.
+            source_counts: dict[str, int] = {}
+            for it in parsed:
+                src = it.get("source") or "Karma"
+                source_counts[src] = source_counts.get(src, 0) + 1
+                if source_counts[src] > 3:
+                    it["source"] = "Karma"
             parsed[0]["_prompt_tokens"] = pt
             parsed[0]["_completion_tokens"] = ct
             logger.info(

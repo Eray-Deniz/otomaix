@@ -163,8 +163,27 @@ async def _synthesize_with_claude(
     except ImportError:
         return [], 0, 0
 
+    # Deterministik denge: Apify actor'larına göre bucket + round-robin.
+    from collections import defaultdict
+    buckets: dict[str, list[dict]] = defaultdict(list)
+    for it in items:
+        src = it.get("source") or "Bilinmeyen"
+        if len(buckets[src]) < 20:
+            buckets[src].append(it)
+    interleaved: list[dict] = []
+    idx = 0
+    while True:
+        added = False
+        for src in list(buckets.keys()):
+            if idx < len(buckets[src]):
+                interleaved.append(buckets[src][idx])
+                added = True
+        if not added:
+            break
+        idx += 1
+
     lines: list[str] = []
-    for it in items[:60]:
+    for it in interleaved[:60]:
         line = f"[{it.get('source','')}] {it.get('title','')}"
         sn = it.get("snippet") or ""
         if sn:
@@ -242,6 +261,14 @@ async def _synthesize_with_claude(
             for it in parsed:
                 it.setdefault("source", "Apify")
                 it.setdefault("relevance_score", 70)
+            # Deterministik cap: tek source'a 5'ten fazla trend atanmışsa
+            # fazlalıkları 'Karma' olarak relabel et (12 trend / 3 source).
+            source_counts: dict[str, int] = {}
+            for it in parsed:
+                src = it.get("source") or "Karma"
+                source_counts[src] = source_counts.get(src, 0) + 1
+                if source_counts[src] > 5:
+                    it["source"] = "Karma"
             logger.info(
                 "layer_c synthesis ok sector=%s trends=%d attempt=%d",
                 sector_name, len(parsed), attempt + 1,
