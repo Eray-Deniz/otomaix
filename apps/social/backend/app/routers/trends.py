@@ -16,7 +16,7 @@ from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
 from app.routers.billing import check_plan_limit, check_trend_quota, increment_trend_usage
 from app.services.fal_ai import generate_image
-from app.services.trend_analyzer import get_cached_or_fresh_trends, get_trends_for_sector
+from app.services.trends.layer_a import fetch_sector_layer_a
 from app.services.trends.layer_b import fetch_personal_trends
 from app.services.trends.layer_c import generate_monthly_report
 
@@ -35,29 +35,55 @@ class TrendCreatePost(BaseModel):
 
 # ─── Endpoints ──────────────────────────────────────────────────────────────
 
+async def _resolve_brand_sector(db: asyncpg.Connection, brand_id: UUID) -> dict:
+    """Brand + sector (yeni sectors tablosu) metadata döndür."""
+    row = await db.fetchrow(
+        """
+        SELECT b.id, b.name, b.sector AS sector_text, b.sector_id,
+               s.slug AS sector_slug, s.display_name AS sector_name, s.keywords
+        FROM social.brands b
+        LEFT JOIN social.sectors s ON s.id = b.sector_id
+        WHERE b.id = $1
+        """,
+        brand_id,
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Brand bulunamadı")
+    return dict(row)
+
+
 @router.get("", response_model=OkResponse)
 async def get_trends(
     brand_id: UUID,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Markanın sektörüne göre güncel trendleri döndür (6 saatlik önbellekle)."""
+    """Markanın sektörüne ait Layer A trendleri (nightly sweep cache)."""
     await assert_brand_owned(db, user, brand_id)
-    brand = await db.fetchrow(
-        "SELECT name, sector FROM social.brands WHERE id = $1",
-        brand_id,
-    )
-    if not brand:
-        raise HTTPException(status_code=404, detail="Brand bulunamadı")
+    brand = await _resolve_brand_sector(db, brand_id)
 
-    sector = brand["sector"] or "genel"
-    brand_name = brand["name"] or ""
+    sector_id = brand.get("sector_id")
+    sector_slug = brand.get("sector_slug") or "genel"
+    sector_name = brand.get("sector_name") or sector_slug
 
-    trends = await get_cached_or_fresh_trends(sector, brand_name, db, max_age_hours=6)
+    trends: list = []
+    if sector_id:
+        row = await db.fetchrow(
+            """
+            SELECT trends, fetched_at
+            FROM social.sector_trend_cache
+            WHERE sector_id = $1::uuid AND layer = 'A'
+            """,
+            sector_id,
+        )
+        if row and row["trends"]:
+            raw = row["trends"]
+            trends = raw if isinstance(raw, list) else []
 
     return OkResponse(
         data={
-            "sector": sector,
+            "sector": sector_name,
+            "sector_slug": sector_slug,
             "trends": trends,
             "count": len(trends),
         }
@@ -70,39 +96,49 @@ async def refresh_trends(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Önbelleği atlayarak taze trend verisi çek ve kaydet."""
+    """Layer A pipeline'ı sadece bu markanın sektörü için çalıştır ve cache'i güncelle."""
     await assert_brand_owned(db, user, brand_id)
-    brand = await db.fetchrow(
-        "SELECT name, sector FROM social.brands WHERE id = $1",
-        brand_id,
-    )
-    if not brand:
-        raise HTTPException(status_code=404, detail="Brand bulunamadı")
+    brand = await _resolve_brand_sector(db, brand_id)
 
-    sector = brand["sector"] or "genel"
-    brand_name = brand["name"] or ""
+    sector_id = brand.get("sector_id")
+    sector_slug = brand.get("sector_slug") or "genel"
+    sector_name = brand.get("sector_name") or sector_slug
+    if not sector_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Markanın sektörü atanmamış, önce Marka Ayarları'ndan seçin.",
+        )
 
-    # Taze veri çek (önbelleği atla)
-    trends = await get_trends_for_sector(sector, brand_name)
+    sector_dict = {
+        "id": str(sector_id),
+        "slug": sector_slug,
+        "display_name": sector_name,
+        "keywords": list(brand.get("keywords") or []),
+    }
 
-    import json
+    result = await fetch_sector_layer_a(sector_dict)
     await db.execute(
         """
-        INSERT INTO social.trend_cache (sector, trends, fetched_at)
-        VALUES ($1, $2::jsonb, now())
-        ON CONFLICT (sector) DO UPDATE SET
+        INSERT INTO social.sector_trend_cache
+            (sector_id, layer, trends, source_summary, fetched_at)
+        VALUES ($1::uuid, 'A', $2, $3, now())
+        ON CONFLICT (sector_id, layer) DO UPDATE SET
             trends = EXCLUDED.trends,
+            source_summary = EXCLUDED.source_summary,
             fetched_at = now()
         """,
-        sector,
-        json.dumps(trends),
+        sector_id,
+        result["trends"],
+        result["source_summary"],
     )
 
     return OkResponse(
         data={
-            "sector": sector,
-            "trends": trends,
+            "sector": sector_name,
+            "sector_slug": sector_slug,
+            "trends": result["trends"],
             "refreshed": True,
+            "raw_count": result.get("raw_count", 0),
         }
     )
 
