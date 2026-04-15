@@ -225,7 +225,7 @@ export default function TrendlerPage() {
   }
 
   // ─── Create post (trend → icerik-olustur wizard prefill) ───────────────
-  function handleCreatePost(trend: Trend, _index: number) {
+  function handleCreatePost(trend: Trend) {
     if (!currentBrand?.id) return
     analytics.trendPostCreated()
     const params = new URLSearchParams({
