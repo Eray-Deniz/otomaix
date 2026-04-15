@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>{{ sector_name }} Aylık Trend Raporu</title>
+<style>
+  @page { size: A4; margin: 2cm 1.8cm; }
+  body { font-family: "DejaVu Sans", sans-serif; color: #1f2937; font-size: 11pt; line-height: 1.5; }
+  h1 { color: #0f172a; font-size: 22pt; margin: 0 0 4px; }
+  h2 { color: #0f172a; font-size: 14pt; margin: 24px 0 12px; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; }
+  .subtitle { color: #64748b; font-size: 10pt; margin-bottom: 20px; }
+  .meta-row { display: flex; gap: 16px; font-size: 9pt; color: #64748b; margin-bottom: 16px; }
+  .meta-row span b { color: #0f172a; }
+  .trend { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-bottom: 12px; page-break-inside: avoid; }
+  .trend-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .trend-title { font-size: 12pt; font-weight: 700; color: #0f172a; }
+  .trend-score { background: #ede9fe; color: #6d28d9; font-weight: 600; padding: 2px 8px; border-radius: 12px; font-size: 9pt; }
+  .trend-source { color: #64748b; font-size: 9pt; margin-bottom: 6px; }
+  .trend-summary { margin: 0 0 6px; }
+  .trend-label { font-weight: 600; color: #334155; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.5px; }
+  .opp { background: #f0fdf4; border-left: 3px solid #16a34a; padding: 8px 10px; margin: 6px 0; font-size: 10pt; }
+  .prompt { background: #f8fafc; border-left: 3px solid #6366f1; padding: 8px 10px; font-size: 9pt; color: #475569; font-family: "DejaVu Sans Mono", monospace; }
+  .actor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 9pt; }
+  .actor-row { display: flex; justify-content: space-between; border-bottom: 1px dashed #e5e7eb; padding: 3px 0; }
+  .actor-ok { color: #16a34a; font-weight: 600; }
+  .actor-fail { color: #dc2626; font-weight: 600; }
+  .cost-summary { background: #fef3c7; border-radius: 6px; padding: 10px 14px; margin-top: 12px; font-size: 10pt; }
+  footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 8pt; color: #94a3b8; text-align: center; }
+</style>
+</head>
+<body>
+<h1>{{ sector_name }} Aylık Trend Raporu</h1>
+<div class="subtitle">{{ brand_name }} · {{ generated_at_tr }}</div>
+
+<div class="meta-row">
+  <span><b>Rapor ID:</b> {{ report_id_short }}</span>
+  <span><b>Ham veri:</b> {{ raw_count }} kayıt</span>
+  <span><b>Trend:</b> {{ trends|length }}</span>
+</div>
+
+<h2>Öne Çıkan Trendler</h2>
+{% for t in trends %}
+<div class="trend">
+  <div class="trend-head">
+    <div class="trend-title">{{ loop.index }}. {{ t.title }}</div>
+    <div class="trend-score">{{ t.relevance_score }}/100</div>
+  </div>
+  <div class="trend-source">Kaynak: {{ t.source }}</div>
+  {% if t.summary %}<p class="trend-summary">{{ t.summary }}</p>{% endif %}
+  {% if t.content_opportunity %}
+  <div class="opp"><span class="trend-label">İçerik Fırsatı</span><br>{{ t.content_opportunity }}</div>
+  {% endif %}
+  {% if t.suggested_prompt %}
+  <div class="prompt"><span class="trend-label">Önerilen Prompt</span><br>{{ t.suggested_prompt }}</div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<h2>Veri Kaynakları</h2>
+<div class="actor-grid">
+{% for a in actor_summary %}
+  <div class="actor-row">
+    <span>{{ a.name }}</span>
+    <span class="{% if a.items > 0 %}actor-ok{% else %}actor-fail{% endif %}">{{ a.items }} kayıt</span>
+  </div>
+{% endfor %}
+</div>
+
+<div class="cost-summary">
+  <b>Bu rapor maliyeti:</b>
+  Apify ${{ "%.4f"|format(apify_cost) }}
+  + Claude ${{ "%.4f"|format(claude_cost) }}
+  = <b>${{ "%.4f"|format(apify_cost + claude_cost) }}</b>
+</div>
+
+<footer>Otomaix Social · Layer C Sektör Raporu · otomaix.com</footer>
+</body>
+</html>
