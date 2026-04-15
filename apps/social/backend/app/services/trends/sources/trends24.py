@@ -23,8 +23,13 @@ async def fetch(sector: dict) -> list[dict]:
     except Exception:
         return []
 
-    # İlk <ol class="trend-card__list"> bloğundan <a> metinlerini topla.
-    block_match = re.search(r'<ol class="trend-card__list">(.*?)</ol>', html, flags=re.DOTALL)
+    # İlk <ol ... trend-card__list ...> bloğundan <a> metinlerini topla.
+    # trends24 HTML bazen class'ı tırnak olmadan yazıyor (`class=trend-card__list`).
+    block_match = re.search(
+        r"<ol[^>]*trend-card__list[^>]*>(.*?)</ol>",
+        html,
+        flags=re.DOTALL,
+    )
     if not block_match:
         return []
     items_html = block_match.group(1)

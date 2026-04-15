@@ -3,7 +3,7 @@
   "nodes": [
     {
       "id": "trigger",
-      "name": "Her Gece 03:00 TR",
+      "name": "Her Gece 06:00 TR",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -15,7 +15,7 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 3 * * *"
+              "expression": "0 6 * * *"
             }
           ]
         }
@@ -112,7 +112,7 @@
     }
   ],
   "connections": {
-    "Her Gece 03:00 TR": {
+    "Her Gece 06:00 TR": {
       "main": [
         [
           {

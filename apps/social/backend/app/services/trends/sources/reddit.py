@@ -1,6 +1,11 @@
-"""Reddit — TR subreddit'leri ve sektörel subreddit'ler."""
+"""Reddit — TR subreddit'leri ve sektörel subreddit'ler.
+
+Not: Reddit Haziran 2024'ten sonra unauthenticated `.json` endpoint'lerini
+büyük ölçüde 403'ledi. RSS (`.rss`) feed'i hâlâ public — onu kullanıyoruz.
+"""
 
 import asyncio
+import re
 
 import httpx
 
@@ -9,7 +14,7 @@ from app.core.config import settings
 NAME = "Reddit"
 _TIMEOUT = 10
 
-# Sektör slug → ek subreddit listesi
+# Sektör slug → subreddit listesi
 _SECTOR_SUBS: dict[str, list[str]] = {
     "teknoloji": ["turkey", "tech", "programming", "artificial"],
     "finans": ["turkey", "borsaistanbul", "personalfinance"],
@@ -22,31 +27,38 @@ _SECTOR_SUBS: dict[str, list[str]] = {
     "otomotiv": ["turkey", "cars", "ElectricVehicles"],
     "insaat-gayrimenkul": ["turkey", "RealEstate"],
     "hizmet": ["turkey", "smallbusiness"],
-    "genel": ["turkey", "Turkey_ekonomi"],
+    "genel": ["turkey"],
 }
 
 
+def _parse_atom(xml: str, sub: str, limit: int = 10) -> list[dict]:
+    items: list[dict] = []
+    entries = re.findall(r"<entry>(.*?)</entry>", xml, flags=re.DOTALL)
+    for entry in entries[:limit]:
+        title_m = re.search(r"<title>(.*?)</title>", entry, flags=re.DOTALL)
+        link_m = re.search(r'<link[^>]*href="([^"]+)"', entry)
+        if not title_m:
+            continue
+        title = re.sub(r"\s+", " ", title_m.group(1)).strip()
+        if not title or len(title) < 8:
+            continue
+        items.append({
+            "title": title,
+            "source": f"{NAME}/r/{sub}",
+            "url": link_m.group(1) if link_m else None,
+            "score": None,
+            "summary": None,
+        })
+    return items
+
+
 async def _fetch_sub(client: httpx.AsyncClient, sub: str) -> list[dict]:
-    url = f"https://www.reddit.com/r/{sub}/top.json?t=day&limit=10"
+    url = f"https://www.reddit.com/r/{sub}/top.rss?t=day"
     try:
         resp = await client.get(url)
         if resp.status_code != 200:
             return []
-        data = resp.json()
-        items: list[dict] = []
-        for child in (data.get("data") or {}).get("children", [])[:10]:
-            d = child.get("data") or {}
-            title = (d.get("title") or "").strip()
-            if not title or len(title) < 8:
-                continue
-            items.append({
-                "title": title,
-                "source": f"{NAME}/r/{sub}",
-                "url": f"https://reddit.com{d.get('permalink', '')}",
-                "score": float(d.get("score") or 0),
-                "summary": (d.get("selftext") or "")[:240] or None,
-            })
-        return items
+        return _parse_atom(resp.text, sub, limit=10)
     except Exception:
         return []
 
@@ -61,5 +73,4 @@ async def fetch(sector: dict) -> list[dict]:
     for r in results:
         if isinstance(r, list):
             flat.extend(r)
-    flat.sort(key=lambda x: x.get("score") or 0, reverse=True)
     return flat[:20]

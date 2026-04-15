@@ -131,7 +131,7 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
         "]"
     )
 
-    try:
+    def _call_claude() -> str:
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -139,7 +139,11 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )
-        raw = msg.content[0].text.strip()
+        return msg.content[0].text.strip()
+
+    try:
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, _call_claude)
         if "```" in raw:
             for part in raw.split("```"):
                 stripped = part.strip()
@@ -178,15 +182,15 @@ async def run_nightly_sweep(db: asyncpg.Connection) -> dict[str, Any]:
                 """
                 INSERT INTO social.sector_trend_cache
                     (sector_id, layer, trends, source_summary, fetched_at)
-                VALUES ($1::uuid, 'A', $2::jsonb, $3::jsonb, now())
+                VALUES ($1::uuid, 'A', $2, $3, now())
                 ON CONFLICT (sector_id, layer) DO UPDATE SET
                     trends = EXCLUDED.trends,
                     source_summary = EXCLUDED.source_summary,
                     fetched_at = now()
                 """,
                 sector["id"],
-                json.dumps(result["trends"]),
-                json.dumps(result["source_summary"]),
+                result["trends"],
+                result["source_summary"],
             )
             processed += 1
             logger.info(
