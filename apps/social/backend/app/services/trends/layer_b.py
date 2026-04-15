@@ -159,14 +159,21 @@ async def _synthesize_with_claude(items: list[dict], brand: dict) -> list[dict]:
     )
     user_msg = (
         f"Marka: {name}\nSektör: {sector}\n\n"
-        f"Canlı Google aramalarından dönen sonuçlar:\n{bulk}\n\n"
+        f"Canlı Google aramalarından dönen sonuçlar (her satırın başındaki "
+        f"köşeli parantez içi KAYNAK domain'idir):\n{bulk}\n\n"
         f"Görev: {name} markasının bu hafta konuşabileceği EN GÜÇLÜ 8 trendi seç. "
+        "FARKLI kaynaklardan dengeli bir dağılım olmalı — tek bir domain'e yığılma. "
         "Her biri için markanın bakış açısıyla içerik fırsatı ve prompt öner.\n\n"
+        "KRİTİK KAYNAK KURALI:\n"
+        "- Her trendin 'source' alanı, o trendin geldiği ham satırın başındaki "
+        "[KAYNAK] etiketinden (domain adı) BİREBİR kopyalanmalı.\n"
+        "- Birden fazla kaynaktan gelen tekrarı birleştirirsen source='Karma' yaz.\n"
+        "- Tüm 8 trende aynı source'u yazma — çeşitlilik zorunlu.\n\n"
         "JSON formatı (yalnızca dizi):\n"
         "[\n"
         '  {\n'
         '    "title": "trend başlığı (kısa, Türkçe)",\n'
-        '    "source": "kaynak",\n'
+        '    "source": "ham satırdaki [KAYNAK] etiketinden kopyala",\n'
         '    "relevance_score": 85,\n'
         '    "summary": "1 cümle bağlam",\n'
         '    "content_opportunity": "Bu trendi nasıl içeriğe dönüştürürsün (1 cümle)",\n'

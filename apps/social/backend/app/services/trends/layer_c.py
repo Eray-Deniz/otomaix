@@ -177,14 +177,22 @@ async def _synthesize_with_claude(
         f"Sektör: {sector_name}. Yanıtını SADECE geçerli JSON dizisi olarak döndür."
     )
     user_msg = (
-        f"Bu ay toplanan {sector_name} sektörü ham sinyalleri (Apify aktörleri):\n{bulk}\n\n"
+        f"Bu ay toplanan {sector_name} sektörü ham sinyalleri (her satırın başındaki "
+        f"köşeli parantez içi KAYNAK etiketidir):\n{bulk}\n\n"
         f"Görev: {brand_name} markasının bu ay konuşabileceği EN GÜÇLÜ 12 trendi seç. "
+        "FARKLI kaynaklardan dengeli bir dağılım olmalı — tek bir kaynağa yığılma. "
         "Tekrarları birleştir, alakasızları ele. Her biri için içerik fırsatı ve prompt öner.\n\n"
+        "KRİTİK KAYNAK KURALI:\n"
+        "- Her trendin 'source' alanı, o trendin geldiği ham satırın başındaki "
+        "[KAYNAK] etiketinden BİREBİR kopyalanmalı (örn. 'Apify/tiktok', "
+        "'Apify/instagram', 'Apify/trendyol').\n"
+        "- Birden fazla kaynaktan gelen tekrarı birleştirirsen source='Karma' yaz.\n"
+        "- Tüm 12 trende aynı source'u yazma — çeşitlilik zorunlu.\n\n"
         "JSON formatı (yalnızca dizi):\n"
         "[\n"
         '  {\n'
         '    "title": "trend başlığı (kısa, Türkçe)",\n'
-        '    "source": "TikTok / Instagram / Trendyol vs.",\n'
+        '    "source": "ham satırdaki [KAYNAK] etiketinden kopyala",\n'
         '    "relevance_score": 85,\n'
         '    "summary": "1 cümle bağlam",\n'
         '    "content_opportunity": "Bu trendi nasıl içeriğe dönüştürürsün (1 cümle)",\n'
