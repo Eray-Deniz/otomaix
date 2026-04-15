@@ -598,3 +598,87 @@ async def check_plan_limit(
                 "current_plan": plan_id,
             },
         )
+
+
+# ─── Phase 6 Trend Quota (Layer B / C aylık limitler, ADR-4) ─────────────────
+
+TREND_QUOTAS: dict[str, dict[str, int]] = {
+    "starter":  {"layer_b": 5,  "layer_c": 0},
+    "pro":      {"layer_b": 10, "layer_c": 1},
+    "business": {"layer_b": 20, "layer_c": 3},
+    "agency":   {"layer_b": 50, "layer_c": 10},
+}
+
+
+async def check_trend_quota(
+    account_id: str,
+    layer: str,  # "layer_b" | "layer_c"
+    db: asyncpg.Connection,
+) -> dict:
+    """Layer B/C aylık kota kontrolü. Aşımda 402 fırlatır, aksi halde
+    `{used, limit, remaining, plan_id}` döner."""
+    account = await db.fetchrow(
+        "SELECT plan_id FROM social.accounts WHERE id = $1", account_id
+    )
+    plan_id = (account["plan_id"] if account else "starter") or "starter"
+    quotas = TREND_QUOTAS.get(plan_id, TREND_QUOTAS["starter"])
+    limit = quotas.get(layer, 0)
+
+    year_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    row = await db.fetchrow(
+        "SELECT layer_b_count, layer_c_count FROM social.trend_usage "
+        "WHERE account_id = $1::uuid AND year_month = $2",
+        account_id,
+        year_month,
+    )
+    used = int(row[f"{layer}_count"]) if row else 0
+
+    if limit <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "trend_quota_not_available",
+                "message": f"{layer.replace('_',' ').title()} mevcut planınızda yok.",
+                "upgrade_url": f"{settings.APP_URL}/fiyatlandirma",
+                "current_plan": plan_id,
+            },
+        )
+    if used >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "trend_quota_reached",
+                "message": f"Bu ay {limit} trend tetik hakkınızı kullandınız.",
+                "upgrade_url": f"{settings.APP_URL}/fiyatlandirma",
+                "current_plan": plan_id,
+                "used": used,
+                "limit": limit,
+            },
+        )
+
+    return {"used": used, "limit": limit, "remaining": limit - used, "plan_id": plan_id}
+
+
+async def increment_trend_usage(
+    account_id: str,
+    layer: str,  # "layer_b" | "layer_c"
+    cost_usd: float,
+    db: asyncpg.Connection,
+) -> None:
+    """Tetik sonrası kullanım sayacını ve maliyeti artır."""
+    year_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    count_col = f"{layer}_count"
+    cost_col = f"{layer}_cost_usd"
+    await db.execute(
+        f"""
+        INSERT INTO social.trend_usage
+            (account_id, year_month, {count_col}, {cost_col})
+        VALUES ($1::uuid, $2, 1, $3)
+        ON CONFLICT (account_id, year_month) DO UPDATE SET
+            {count_col} = social.trend_usage.{count_col} + 1,
+            {cost_col}  = social.trend_usage.{cost_col} + EXCLUDED.{cost_col}
+        """,
+        account_id,
+        year_month,
+        cost_usd,
+    )

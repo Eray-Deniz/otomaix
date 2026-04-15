@@ -11,7 +11,7 @@ Mevcut `app/services/trend_analyzer.py` dosyası 3 gazete RSS'i + pytrends + sek
 
 Phase 6 sonunda elimizde şunlar olacak:
 
-- **Katman A** — her gece 06:00 Europe/Istanbul'da n8n tetiklemeli ücretsiz kaynak taraması (Google News, YouTube, Reddit, Spotify, Product Hunt, trends24.in, TCMB EVDS) → sektör başına paylaşılan cache.
+- **Katman A** — her gece 06:00 Europe/Istanbul'da n8n tetiklemeli ücretsiz kaynak taraması (Google News, Google Trends, YouTube, Reddit, trends24.in, Pinterest Trends, TCMB EVDS) → sektör başına paylaşılan cache.
 - **Katman B** — kullanıcı tetiklemeli, marka belgelerini (RAG) ve geçmiş postları girdi olarak alan **Serper.dev canlı Google araması + Claude Haiku sentezi** ile kişiselleştirilmiş trend araması. Aylık plana göre rate-limited.
 - **Katman C** — yalnızca Pro ve üstü için **Apify** scraper'ları (TikTok Creative Center, Trendyol, Twitter trends) + Claude sentezi → R2'ye kaydedilen PDF aylık sektör raporu.
 - **Hiyerarşik sektör tablosu** — `parent_sector_id` ile gelecekte alt sektör eklemek migration ile mümkün, kod değişikliği gerekmez.
@@ -171,14 +171,12 @@ COMMENT ON TABLE social.trend_cache IS 'DEPRECATED — Phase 6 öncesi. Yeni kod
 - `google_news.py` — `https://news.google.com/rss?hl=tr&gl=TR&ceid=TR:tr` ve sektör keyword query'leri
 - `google_trends.py` — pytrends `interest_over_time` + `related_queries` (TR geo); pytrends 429'larına karşı SerpApi trial fallback
 - `youtube.py` — YouTube Data API v3, `videos?chart=mostPopular&regionCode=TR&videoCategoryId=...` (kategori → sektör mapping)
-- `reddit.py` — `r/Turkey`, `r/Turkey_econ`, sektörel subreddit'ler `top.json?t=day`
-- `spotify.py` — Spotify Charts CSV (TR daily top 200)
-- `product_hunt.py` — Product Hunt GraphQL `posts(order: VOTES, postedAfter: ...)` (teknoloji sektörü için)
-- `trends24.py` — `https://trends24.in/turkey/` HTML scrape (Twitter trends, ücretsiz)
+- `reddit.py` — `r/Turkey` + sektörel subreddit'ler, Atom RSS feed (`top.rss?t=day`)
+- `trends24.py` — `https://trends24.in/turkey/` HTML scrape (Twitter/X trends, ücretsiz)
 - `pinterest_trends.py` — `https://trends.pinterest.com/tr-tr/` HTML scrape (moda, yemek, hediye, ev dekor için kritik)
 - `tcmb_evds.py` — `https://evds2.tcmb.gov.tr/service/evds/series=...` (USD/TL, faiz, enflasyon — finans sektörü)
 
-**Toplam 9 Layer A kaynağı.** Her kaynak kendi sektör filtresiyle çalışır (örn. Pinterest Trends yemek/moda/hediye'de devrede, finansta değil).
+**Toplam 7 Layer A kaynağı.** (Spotify ve Product Hunt 2026-04-15'te listeden kaldırıldı — Türk KOBİ sosyal medya trendleri için yeterli sinyal vermiyorlardı; maliyet/karmaşıklık mantıklı değildi.) Her kaynak kendi sektör filtresiyle çalışır (örn. Pinterest Trends yemek/moda/hediye'de devrede, finansta değil).
 
 **Akış:**
 ```python
@@ -433,10 +431,8 @@ YOUTUBE_API_KEY=             # Layer A YouTube Data API v3
 REDDIT_CLIENT_ID=            # Layer A Reddit OAuth
 REDDIT_CLIENT_SECRET=
 REDDIT_USER_AGENT=otomaix/1.0 by /u/otomaix
-SPOTIFY_CLIENT_ID=           # Layer A Spotify Charts
-SPOTIFY_CLIENT_SECRET=
-PRODUCT_HUNT_TOKEN=          # Layer A Product Hunt GraphQL
-SERPAPI_KEY=                 # Layer A Google Trends fallback (pytrends 429 için)
+SERPAPI_KEY=                 # Layer A Google Trends fallback (pytrends 429 için, opsiyonel)
+EVDS_API_KEY=                # Layer A TCMB EVDS (finans/insaat sektörleri)
 SERPER_API_KEY=              # Layer B Serper.dev canlı Google araması ($50/50k = ~$0.001/arama)
 APIFY_API_KEY=               # ZATEN VAR (Phase 3 rakip analizi)
 TRENDS_LAYER_A_ENABLED=true  # kill switch
@@ -453,7 +449,7 @@ Her sektörün hangi Layer A ve Layer C kaynaklarından beslendiği:
 
 | Sektör | Layer A (ücretsiz, her gün) | Layer C (Apify, aylık rapor) |
 |--------|------------------------------|-------------------------------|
-| Teknoloji | Google News, Google Trends, YouTube, Reddit, Product Hunt, trends24 | TikTok, Twitter, Hepsiburada, Trendyol |
+| Teknoloji | Google News, Google Trends, YouTube, Reddit, trends24 | TikTok, Twitter, Hepsiburada, Trendyol |
 | E-ticaret | Google News, Google Trends, YouTube, Reddit, trends24 | TikTok, Instagram, Twitter, Trendyol, Hepsiburada, N11 |
 | Yemek | Google News, YouTube, Reddit, Pinterest Trends, trends24 | TikTok, Instagram, Pinterest (scrape), Yemeksepeti |
 | Sağlık | Google News, YouTube, Reddit, trends24 | TikTok, Instagram, Twitter |
@@ -463,7 +459,7 @@ Her sektörün hangi Layer A ve Layer C kaynaklarından beslendiği:
 | Finans | Google News, Reddit, TCMB EVDS, trends24 | Twitter |
 | Gayrimenkul | Google News, TCMB EVDS, trends24 | Twitter, Sahibinden |
 | Otomotiv | Google News, YouTube, Reddit, trends24 | TikTok, Instagram, Twitter, Sahibinden |
-| Genel | Google News, YouTube, Reddit, trends24, Spotify | TikTok, Instagram, Twitter |
+| Genel | Google News, YouTube, Reddit, trends24 | TikTok, Instagram, Twitter |
 
 Routing mantığı `layer_a.py:SECTOR_SOURCE_MAP` ve `layer_c.py:SECTOR_ACTOR_MAP` sabitlerinde tutulur. Kaynak ekleme/çıkarma sadece bu iki dict'i düzenlemeyi gerektirir.
 
@@ -488,7 +484,7 @@ Layer B artık **toplam maliyetin en küçük kalemi**. Maliyetlerin ~%85'i Apif
 - [ ] Migration 019 + 020 prod'da çalıştırıldı
 - [ ] `social.sectors` 11 satır seed'lendi
 - [ ] Brands tablosu `sector_id` migration'la map edildi
-- [ ] Layer A 9 kaynak modülü yazıldı + birim test (Google News, Google Trends, YouTube, Reddit, Spotify, Product Hunt, trends24, Pinterest Trends, TCMB EVDS)
+- [ ] Layer A 7 kaynak modülü yazıldı + birim test (Google News, Google Trends, YouTube, Reddit, trends24, Pinterest Trends, TCMB EVDS)
 - [ ] Layer C 11 Apify aktörü entegre edildi + `SECTOR_ACTOR_MAP` routing doğrulandı
 - [ ] `POST /internal/trends/nightly-sweep` çalışır, n8n workflow aktif
 - [ ] Layer B `POST /trends/personal` + quota guard
@@ -498,7 +494,7 @@ Layer B artık **toplam maliyetin en küçük kalemi**. Maliyetlerin ~%85'i Apif
 - [ ] PostHog event'leri eklendi
 - [ ] CRM raporlar sayfasında trend maliyet kolonu
 - [ ] Eski `trend_analyzer.py` deprecation yorumu
-- [ ] Coolify env değişkenleri (YOUTUBE/REDDIT/SPOTIFY/PRODUCT_HUNT) eklendi
+- [ ] Coolify env değişkenleri (YOUTUBE_API_KEY, EVDS_API_KEY, SERPER_API_KEY) eklendi
 - [ ] Load test 50 eşzamanlı Layer B isteği yeşil
 - [ ] Canlı smoke: her katmandan 1 başarılı çağrı log'lanmış
 

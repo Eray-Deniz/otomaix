@@ -3,7 +3,53 @@
 > **🚧 Phase 6 — Trend Sistemi Yenileme (implementation devam ediyor, 2026-04-15).**
 > Üç katmanlı yeni trend mimarisi. Detaylı plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
-> **İlerleme:** Sprint 1 ✅ tamamlandı · Sprint 2 ⏳ bekliyor
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ⏳ scaffold atıldı (SERPER_API_KEY bekliyor)
+
+## 2026-04-15 — Phase 6 Sprint 3: Layer B scaffold (devam ediyor)
+
+**Yeni dosyalar:**
+- `app/services/trends/serper_client.py` — Serper.dev Google Search wrapper. `search(query, gl, hl, num)` + `extract_items(result)` helper'ı. SERPER_API_KEY yoksa ValueError.
+- `app/services/trends/layer_b.py` — Kullanıcı tetiklemeli kişisel trend pipeline.
+  - `_build_search_queries(brand, recent_posts)` — Claude Haiku ile 3-4 sorgu önerisi (fallback: sektör adı + son postlar)
+  - Paralel Serper çağrıları → dedupe → Claude Haiku sentez (8 trend)
+  - Token sayıları iade edilir (`_prompt_tokens`, `_completion_tokens` geçici olarak ilk item'a stash'lenir, endpoint'te okunup pop edilir)
+  - `brand_trend_cache` upsert (`serper_queries` int + token kolonları)
+
+**billing.py** — iki yeni helper:
+- `TREND_QUOTAS` dict (ADR-4): Starter 5 / Pro 10 / Business 20 / Agency 50 Layer B; Pro+'ya Layer C kota eklendi (1/3/10)
+- `check_trend_quota(account_id, layer, db)` → aylık sayaç kontrol, 402 `trend_quota_reached` veya `trend_quota_not_available`
+- `increment_trend_usage(account_id, layer, cost_usd, db)` → `trend_usage` upsert (`layer_b_count` + `layer_b_cost_usd` toplama)
+
+**trends.py** — yeni endpoint:
+- `POST /trends/personal?brand_id=` → Layer B tetik. Akış: `assert_brand_owned` → `check_trend_quota('layer_b')` → `fetch_personal_trends` → maliyet hesapla (Serper $0.001 × çağrı + Haiku ($1/M input + $5/M output)) → `increment_trend_usage`
+- `/personal` route'u `/{trend_index}/create-post`'tan ÖNCE deklare edildi (trend_index int parser'a düşmesin diye).
+
+**Eksik / pending:**
+- [ ] SERPER_API_KEY Coolify env'e eklenmeli — yoksa endpoint 503 "serper_not_configured" döner
+- [ ] Canlı smoke test: bir brand_id ile `/trends/personal` çağrısı, quota doğrulama, brand_trend_cache satırı
+- [ ] Frontend `/trendler` sekmeli rewrite (Sprint 5)
+- [ ] Sprint 2 backlog: pytrends 429 debug, Pinterest selector, Claude synthesis timeout/rate-limit (9/12 sektörde fallback'e düşüyor)
+
+## 2026-04-15 — Phase 6 Sprint 2: Layer A nightly sweep ✅
+
+**Özet:** 9 ücretsiz kaynak + Claude Haiku orchestrator + n8n cron 06:00 TR. Canlı doğrulama (3. sweep sonrası):
+- ✅ `jsonb_typeof(trends) = 'array'` — codec double-encode fix (codec + `::jsonb` cast çakışması) `database.py` jsonb codec sayesinde çözüldü. Kritik: `json.dumps()` + `$N::jsonb` cast KULLANMA, dict/list'i doğrudan parametre olarak geç.
+- ✅ Reddit RSS (`top.rss?t=day`) — `.json` 403'lendiği için Atom feed parser'ı yazıldı. Sektör başına 10-20 başlık.
+- ✅ trends24.in HTML scrape — regex esnetildi (`<ol[^>]*trend-card__list[^>]*>`, class attribute tırnaksız da eşleşir). Sektör başına 20 başlık.
+- ✅ Google News RSS — 25 başlık/sektör, sabit çalışıyor.
+- ⚠️ Claude synthesis — 12 sektörden yalnızca 3'ünde (egitim, moda-tekstil, yemek-gida) 8 trend döndü; geri kalan 9'unda fallback (n=1). Nedeni muhtemelen rate-limit / timeout. `run_in_executor` ile blocking çağrı loop'u bloklamasın diye taşındı ama sorun devam ediyor. **BACKLOG**.
+- ❌ Google Trends (pytrends) — tüm sektörlerde 0. TR region'da 429 yiyor olabilir. **BACKLOG**.
+- ❌ Pinterest Trends — target 6 sektörde bile 0. Selector kırık. **BACKLOG**.
+
+**n8n workflow:** `Trends Nightly Sweep` (ID: `jnjxwCmu7OMVRvwn`), 2 node (schedule + HTTP sweep), cron `0 6 * * *` Europe/Istanbul, active. Hata bildirimi: Telegram yerine Sentry (`sentry_sdk.capture_message(level="warning")` — `layer_a.run_nightly_sweep` sonunda errors boş değilse tetiklenir).
+
+**Internal endpoint:** `POST /internal/trends/nightly-sweep` (X-Internal-Key), `run_nightly_sweep(db)` çağırır.
+
+**Backlog (Sprint 2 polish):**
+- Layer A Claude synthesis timeout fix (9/12 fallback'e düşüyor)
+- pytrends 429 — SerpAPI fallback düşünülebilir veya retry + backoff
+- Pinterest Trends selector güncelleme
+- YOUTUBE_API_KEY / PRODUCT_HUNT_TOKEN / EVDS_API_KEY / SPOTIFY env'e eklenmeli (opsiyonel — şu an 0 döndürüyorlar ama crash yok)
 
 ## 2026-04-15 — Phase 6 Sprint 1: Şema + Sektör Modeli ✅
 

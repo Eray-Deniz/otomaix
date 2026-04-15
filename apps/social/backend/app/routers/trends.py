@@ -14,9 +14,10 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, get_current_user
 from app.models.schemas import OkResponse
-from app.routers.billing import check_plan_limit
+from app.routers.billing import check_plan_limit, check_trend_quota, increment_trend_usage
 from app.services.fal_ai import generate_image
 from app.services.trend_analyzer import get_cached_or_fresh_trends, get_trends_for_sector
+from app.services.trends.layer_b import fetch_personal_trends
 
 router = APIRouter(prefix="/trends", tags=["trends"])
 
@@ -101,6 +102,53 @@ async def refresh_trends(
             "sector": sector,
             "trends": trends,
             "refreshed": True,
+        }
+    )
+
+
+@router.post("/personal", response_model=OkResponse)
+async def personal_trends(
+    brand_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Layer B — Serper.dev + Claude Haiku ile kişisel trend araması.
+
+    Aylık kota kontrolüne tabi. ADR-4: Starter 5, Pro 10, Business 20, Agency 50.
+    Tetik başı maliyet ~$0.005. Sonuç `brand_trend_cache`'e yazılır.
+    """
+    await assert_brand_owned(db, user, brand_id)
+    quota = await check_trend_quota(user["sub"], "layer_b", db)
+
+    try:
+        result = await fetch_personal_trends(db, brand_id)
+    except ValueError as e:
+        if "SERPER_API_KEY" in str(e):
+            raise HTTPException(
+                status_code=503,
+                detail={"error": "serper_not_configured", "message": "Canlı arama servisi yapılandırılmamış."},
+            )
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # Maliyet: Serper ~$0.001/arama + Haiku (~$1/M input, $5/M output)
+    serper_cost = 0.001 * result["serper_calls"]
+    haiku_cost = (result["prompt_tokens"] * 1.0 + result["completion_tokens"] * 5.0) / 1_000_000
+    total_cost = round(serper_cost + haiku_cost, 4)
+
+    await increment_trend_usage(user["sub"], "layer_b", total_cost, db)
+
+    return OkResponse(
+        data={
+            "trends": result["trends"],
+            "queries": result["queries"],
+            "raw_count": result["raw_count"],
+            "quota": {
+                "used": quota["used"] + 1,
+                "limit": quota["limit"],
+                "remaining": quota["remaining"] - 1,
+                "plan_id": quota["plan_id"],
+            },
+            "cost_usd": total_cost,
         }
     )
 

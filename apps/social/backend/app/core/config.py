@@ -33,11 +33,8 @@ class Settings(BaseSettings):
     # Phase 6 — Trend sistemi
     YOUTUBE_API_KEY: str = ""        # Opsiyonel — YouTube Data API v3 (Layer A)
     REDDIT_USER_AGENT: str = "otomaix-social/1.0 (+https://otomaix.com)"
-    PRODUCT_HUNT_TOKEN: str = ""     # Opsiyonel — Product Hunt GraphQL bearer (Layer A)
     EVDS_API_KEY: str = ""           # Opsiyonel — TCMB EVDS (Layer A, finans)
     SERPER_API_KEY: str = ""         # Opsiyonel — Serper.dev Google Search (Layer B)
-    SPOTIFY_CLIENT_ID: str = ""      # Opsiyonel — Spotify Web API (Layer A)
-    SPOTIFY_CLIENT_SECRET: str = ""
 
 
 settings = Settings()
