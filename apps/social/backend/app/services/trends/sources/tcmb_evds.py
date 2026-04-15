@@ -8,16 +8,14 @@ from app.core.config import settings
 
 NAME = "TCMB EVDS"
 _TIMEOUT = 12
-_URL = "https://evds2.tcmb.gov.tr/service/evds/series="
+_URL = "https://evds3.tcmb.gov.tr/igmevdsms-dis/series="
 
 _ACTIVE_SECTORS = {"finans", "e-ticaret-perakende", "insaat-gayrimenkul", "genel"}
 
-# Seri kodları
+# Seri kodları — günlük frekansta yayınlananlar seçildi
 _SERIES = {
-    "USD/TL": "TP.DK.USD.A.YTL",
-    "EUR/TL": "TP.DK.EUR.A.YTL",
-    "TÜFE Yıllık": "TP.FG.J0",
-    "Politika Faizi": "TP.APIFON4",
+    "USD/TL (Satış)": "TP.DK.USD.S.YTL",
+    "EUR/TL (Satış)": "TP.DK.EUR.S.YTL",
 }
 
 
@@ -29,10 +27,10 @@ async def fetch(sector: dict) -> list[dict]:
         return []
 
     today = datetime.now()
-    start = (today - timedelta(days=7)).strftime("%d-%m-%Y")
+    start = (today - timedelta(days=14)).strftime("%d-%m-%Y")
     end = today.strftime("%d-%m-%Y")
     series_codes = "-".join(_SERIES.values())
-    url = f"{_URL}{series_codes}&startDate={start}&endDate={end}&type=json&aggregationTypes=last&formulas=0"
+    url = f"{_URL}{series_codes}&startDate={start}&endDate={end}&type=json"
     headers = {"key": settings.EVDS_API_KEY}
 
     try:
@@ -47,18 +45,29 @@ async def fetch(sector: dict) -> list[dict]:
     items = data.get("items") or []
     if not items:
         return []
-    last = items[-1]  # en güncel satır
+
     results: list[dict] = []
     for name, code in _SERIES.items():
-        key = code.replace(".", "_")
-        value = last.get(key)
-        if value in (None, ""):
+        col = code.replace(".", "_")
+        latest_value = None
+        latest_date = None
+        for row in reversed(items):
+            v = row.get(col)
+            if v not in (None, "", "null"):
+                latest_value = v
+                latest_date = row.get("Tarih")
+                break
+        if latest_value is None:
             continue
+        try:
+            formatted = f"{float(latest_value):.4f}"
+        except (TypeError, ValueError):
+            formatted = str(latest_value)
         results.append({
-            "title": f"{name}: {value}",
+            "title": f"{name}: {formatted} ({latest_date})",
             "source": NAME,
-            "url": "https://evds2.tcmb.gov.tr/",
+            "url": "https://evds3.tcmb.gov.tr/",
             "score": None,
-            "summary": f"TCMB güncel değer ({last.get('Tarih')})",
+            "summary": f"TCMB güncel değer: {formatted}",
         })
     return results
