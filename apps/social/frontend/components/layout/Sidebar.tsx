@@ -68,8 +68,10 @@ export function Sidebar() {
       {/* Brand Switcher */}
       <BrandSwitcher />
 
-      {/* Trial Banner */}
-      {user?.trial_ends_at && <TrialBanner trialEndsAt={user.trial_ends_at} />}
+      {/* Trial Banner — sadece starter plan için göster */}
+      {user?.trial_ends_at && (!user.plan_id || user.plan_id === 'starter') && (
+        <TrialBanner trialEndsAt={user.trial_ends_at} />
+      )}
 
       {/* Nav */}
       <SidebarNav />
