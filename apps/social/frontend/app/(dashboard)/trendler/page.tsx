@@ -514,7 +514,7 @@ export default function TrendlerPage() {
                       )}
                       {r.status === 'ready' && (r.apify_cost_usd || r.claude_cost_usd) && (
                         <p className="text-xs text-gray-400">
-                          Maliyet: ${((r.apify_cost_usd || 0) + (r.claude_cost_usd || 0)).toFixed(4)}
+                          Maliyet: ${(Number(r.apify_cost_usd || 0) + Number(r.claude_cost_usd || 0)).toFixed(4)}
                         </p>
                       )}
                     </div>
