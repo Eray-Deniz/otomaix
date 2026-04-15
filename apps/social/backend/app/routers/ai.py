@@ -113,6 +113,24 @@ CATEGORY_TR = {
     "corporate": "firma tanıtımı",
 }
 
+CATEGORY_GUIDANCE = {
+    "product": (
+        "Ürün tanıtımı: somut bir ürünün özelliklerine, faydasına, kullanım "
+        "senaryosuna veya müşteri yorumuna odaklan. 'Şu ürün şu sorunu çözer' "
+        "formatında fikirler öner. Soyut marka mesajlarından kaçın."
+    ),
+    "service": (
+        "Hizmet tanıtımı: bir hizmetin süreci, sonucu, öncesi/sonrası "
+        "karşılaştırması veya uzmanlık göstergesi üzerine kurgula. "
+        "'Nasıl çalışıyoruz' ve 'ne kazandırıyoruz' sorularını yanıtla."
+    ),
+    "corporate": (
+        "Firma tanıtımı: marka hikayesi, ekip, değerler, kilometre taşları, "
+        "kültür veya kurumsal sosyal sorumluluk odaklı fikirler öner. "
+        "Doğrudan satış dili kullanma."
+    ),
+}
+
 CONTENT_TYPE_TR = {
     "image": "görsel (statik fotoğraf / illüstrasyon)",
     "carousel": "carousel (birden fazla kayan görsel)",
@@ -136,7 +154,8 @@ async def suggest_ideas(
     from app.services.document_processor import get_document_context
 
     brand = await db.fetchrow(
-        "SELECT name, sector, brand_kit FROM social.brands WHERE id = $1", payload.brand_id
+        "SELECT name, sector, description, brand_kit FROM social.brands WHERE id = $1",
+        payload.brand_id,
     )
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
@@ -144,9 +163,18 @@ async def suggest_ideas(
     brand_kit = _parse_brand_kit(brand["brand_kit"])
     tonality = brand_kit.get("tonality", "professional")
     hashtags = brand_kit.get("hashtags", [])
+    colors = brand_kit.get("colors") or {}
     category_tr = CATEGORY_TR.get(payload.content_category, payload.content_category)
+    category_guidance = CATEGORY_GUIDANCE.get(payload.content_category, "")
     content_type_tr = CONTENT_TYPE_TR.get(payload.content_type, payload.content_type)
     platforms_str = ", ".join(payload.platforms) if payload.platforms else "belirtilmemiş"
+
+    color_parts: list[str] = []
+    for key in ("primary", "secondary", "accent"):
+        val = colors.get(key)
+        if val:
+            color_parts.append(f"{key}: {val}")
+    colors_str = ", ".join(color_parts) if color_parts else "belirtilmemiş"
 
     # Doküman bağlamı (varsa)
     doc_context = ""
@@ -164,12 +192,16 @@ async def suggest_ideas(
     user_prompt_parts = [
         f"Marka adı: {brand['name']}",
         f"Sektör: {brand['sector'] or 'Belirtilmemiş'}",
+        f"Marka açıklaması: {brand['description'] or 'Belirtilmemiş'}",
+        f"Marka renkleri: {colors_str}",
         f"İçerik tipi: {content_type_tr}",
         f"İçerik kategorisi: {category_tr}",
+        f"Kategori talimatı: {category_guidance}" if category_guidance else "",
         f"Hedef platformlar: {platforms_str}",
         f"Marka tonu: {tonality}",
         f"Popüler hashtagler: {', '.join(hashtags[:5]) if hashtags else 'Yok'}",
     ]
+    user_prompt_parts = [p for p in user_prompt_parts if p]
 
     if payload.prompt and payload.prompt.strip():
         user_prompt_parts.append(f"\nKullanıcının belirttiği konu/yön: {payload.prompt.strip()}")

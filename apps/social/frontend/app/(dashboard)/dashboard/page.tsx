@@ -87,7 +87,7 @@ function TrendWidget() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold text-gray-800 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-blue-600" />
-            Bu Hafta Sektörünüzde Trendler
+            Günün Sektör Trendleri
           </CardTitle>
           <Link
             href="/trendler"
