@@ -212,9 +212,7 @@ export default function MarkalarlPage() {
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 truncate">{brand.name}</p>
                       {brand.sector && (
-                        <p className="text-xs text-gray-400">
-                          {sectors.find((s) => s.slug === brand.sector)?.display_name || brand.sector}
-                        </p>
+                        <p className="text-xs text-gray-400">{brand.sector}</p>
                       )}
                     </div>
                   </div>

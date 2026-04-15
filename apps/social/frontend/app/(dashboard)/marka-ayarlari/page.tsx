@@ -760,8 +760,13 @@ function MarkaAyarlariContent() {
           <div className="space-y-1.5">
             <Label>Sektör</Label>
             <Select
-              value={brand.sector ?? ''}
-              onValueChange={(v) => onSelect(v, (val) => updateBrand({ sector: val }))}
+              value={sectors.find((s) => s.display_name === brand.sector)?.slug ?? ''}
+              onValueChange={(v) =>
+                onSelect(v, (slug) => {
+                  const display = sectors.find((s) => s.slug === slug)?.display_name ?? slug
+                  updateBrand({ sector: display })
+                })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Sektör seç" />

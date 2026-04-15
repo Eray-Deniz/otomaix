@@ -391,19 +391,23 @@ export default function OnboardingPage() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1.5">Sektör</label>
             <div className="grid grid-cols-3 gap-2">
-              {sectors.map((s) => (
-                <button
-                  key={s.slug}
-                  onClick={() => updateBrand({ sector: s.slug })}
-                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    state.brand.sector === s.slug
-                      ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
-                      : 'bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600'
-                  }`}
-                >
-                  {s.display_name}
-                </button>
-              ))}
+              {sectors.map((s) => {
+                const selected =
+                  state.brand.sector === s.slug || state.brand.sector === s.display_name
+                return (
+                  <button
+                    key={s.slug}
+                    onClick={() => updateBrand({ sector: s.display_name })}
+                    className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                      selected
+                        ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
+                        : 'bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    {s.display_name}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -639,7 +643,7 @@ export default function OnboardingPage() {
           <div className="flex items-center justify-between text-sm">
             <span className="text-slate-400">Sektör</span>
             <span className="text-white font-medium">
-              {sectors.find((s) => s.slug === state.brand.sector)?.display_name || state.brand.sector}
+              {sectors.find((s) => s.slug === state.brand.sector || s.display_name === state.brand.sector)?.display_name || state.brand.sector}
             </span>
           </div>
         )}
