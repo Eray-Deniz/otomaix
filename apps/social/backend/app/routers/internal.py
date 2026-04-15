@@ -263,3 +263,20 @@ async def update_post_status(
         payload.status,
     )
     return OkResponse(data={"post_id": post_id, "status": payload.status})
+
+
+@router.post("/trends/nightly-sweep", response_model=OkResponse)
+async def trends_nightly_sweep(
+    _: None = Depends(get_service_auth),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Phase 6 Layer A — tüm sektörler için ücretsiz kaynak tarama.
+
+    Called by n8n `trends-nightly-sweep` workflow (daily cron).
+    Her sektör için 9 kaynak paralel toplanır, Claude ile sentezlenir ve
+    `sector_trend_cache` tablosuna (layer='A') yazılır.
+    """
+    from app.services.trends.layer_a import run_nightly_sweep
+
+    result = await run_nightly_sweep(db)
+    return OkResponse(data=result)

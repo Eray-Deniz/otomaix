@@ -769,7 +769,11 @@ function MarkaAyarlariContent() {
               }
             >
               <SelectTrigger>
-                <SelectValue placeholder="Sektör seç" />
+                <SelectValue placeholder="Sektör seç">
+                  {(value: string) =>
+                    sectors.find((s) => s.slug === value)?.display_name ?? 'Sektör seç'
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {sectors.map((s) => (
