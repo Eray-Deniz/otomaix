@@ -216,15 +216,25 @@ async def suggest_ideas(
         user_prompt_parts.append(f"\nKullanıcının belirttiği konu/yön: {payload.prompt.strip()}")
 
     if doc_context:
-        user_prompt_parts.append(f"\nReferans doküman içeriği:\n{doc_context}")
+        user_prompt_parts.append(
+            f"\n=== REFERANS DOKÜMAN İÇERİĞİ (MUTLAKA KULLAN) ===\n{doc_context}\n=== DOKÜMAN SONU ==="
+        )
 
-    user_prompt_parts.append(
+    final_instruction = (
         f"\nYukarıdaki tüm bilgileri göz önüne alarak bu marka için "
         f"{payload.count} farklı sosyal medya içerik fikri öner. "
         f"Öneriler '{content_type_tr}' formatına uygun olmalı — "
         f"örneğin video tipiyse görsel tasarım değil video senaryosu/konu fikirleri öner. "
-        f"Sadece numaralı liste olarak yaz, başka açıklama ekleme."
     )
+    if doc_context:
+        final_instruction += (
+            "ÖNEMLİ: Referans dokümanda geçen spesifik ürün adları, hizmet başlıkları, "
+            "rakamlar, özellikler ve örnekler fikirlerde açıkça yer almalı. "
+            "Genel marka mesajları yerine dokümandaki somut içeriklere dayan. "
+            "Her fikir, dokümandan aldığın bir veri/başlık/örneğe referans vermeli. "
+        )
+    final_instruction += "Sadece numaralı liste olarak yaz, başka açıklama ekleme."
+    user_prompt_parts.append(final_instruction)
 
     user_prompt = "\n".join(user_prompt_parts)
 
@@ -234,7 +244,7 @@ async def suggest_ideas(
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=512,
+            max_tokens=1024,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
