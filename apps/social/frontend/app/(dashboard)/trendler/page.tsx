@@ -197,10 +197,10 @@ export default function TrendlerPage() {
         analytics.trendQuotaExhausted('layer_b')
         analytics.trendPaywallShown('layer_b', res.plan_limit.current_plan)
       } else {
-        toast.error(res.error || 'Kişisel trend aranamadı')
+        toast.error(res.error || 'Marka trendi aranamadı')
       }
     } catch {
-      toast.error('Kişisel trend hatası')
+      toast.error('Marka trendi hatası')
     } finally {
       setPersonalLoading(false)
     }
@@ -312,7 +312,7 @@ export default function TrendlerPage() {
 
   const TABS: { key: TabKey; label: string; icon: typeof TrendingUp; desc: string }[] = [
     { key: 'sector', label: 'Sektör Trendleri', icon: TrendingUp, desc: '6 saatte bir güncellenir · ücretsiz' },
-    { key: 'personal', label: 'Kişisel Arama', icon: Sparkles, desc: 'Markanıza özel canlı arama · aylık kota' },
+    { key: 'personal', label: 'Marka Trendleri', icon: Sparkles, desc: 'Markanıza özel canlı arama · aylık kota' },
     { key: 'monthly', label: 'Aylık Rapor', icon: FileText, desc: 'Pro+ · detaylı PDF rapor' },
   ]
 
@@ -399,10 +399,10 @@ export default function TrendlerPage() {
                   <Sparkles className="w-5 h-5 text-purple-600" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 mb-1">Markanıza Özel Kişisel Arama</h3>
+                  <h3 className="font-semibold text-gray-900 mb-1">Marka Trendleri</h3>
                   <p className="text-sm text-gray-600 mb-3">
                     Google araması + AI sentezi ile markanızın anahtar kelimelerine özel canlı trendler.
-                    Sektör trendlerinin aksine, bu arama sadece sizin markanıza çalışır.
+                    Sektör trendlerinden farklı olarak, bu arama sadece sizin markanıza özel çalışır.
                   </p>
                   {personalQuota && (
                     <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
@@ -419,7 +419,7 @@ export default function TrendlerPage() {
                     ) : (
                       <Search className="w-4 h-4" />
                     )}
-                    {personalRan ? 'Yeniden Ara' : 'Kişisel Trendleri Ara'}
+                    {personalRan ? 'Yeniden Ara' : 'Marka Trendlerini Ara'}
                   </Button>
                 </div>
               </div>
@@ -440,7 +440,7 @@ export default function TrendlerPage() {
             <Card>
               <CardContent className="py-16 text-center">
                 <Sparkles className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">Kişisel trend bulunamadı.</p>
+                <p className="text-gray-500">Marka trendi bulunamadı.</p>
               </CardContent>
             </Card>
           ) : personalTrends.length > 0 ? (
