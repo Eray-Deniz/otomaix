@@ -61,7 +61,7 @@ async def fetch(sector: dict) -> list[dict]:
         return []
 
     results: list[dict] = []
-    for item in channel.findall("item")[:20]:
+    for item in channel.findall("item")[:30]:
         title = (item.findtext("title") or "").strip()
         if not title:
             continue

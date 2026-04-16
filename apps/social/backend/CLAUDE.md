@@ -5,6 +5,15 @@
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — Trends: Layer A Karma etiketi kaldırma + Google Trends artırma ✅
+
+**Sorun:** Claude Haiku diversity kuralını tam uygulamadığında backend post-process fazlalık trendleri "Karma" olarak relabel ediyordu. Bu etiket kullanıcıya hiçbir bilgi vermiyordu. Ayrıca Google Trends RSS'den 20 item çekiliyordu.
+
+**Değişiklikler:**
+1. **`layer_a.py` prompt** — "Karma source yazma" kuralı eklendi, birleştirme durumunda en güçlü kaynağın etiketi kullanılacak. Olası source listesinden "Karma" çıkarıldı.
+2. **`layer_a.py` post-process** — 3 limit aşımında Karma relabel yerine, o kaynaktaki en düşük `relevance_score`'lu trendler listeden çıkarılıyor. Orijinal kaynak etiketi korunuyor.
+3. **`google_trends.py`** — RSS fetch limiti 20→30'a çıkarıldı. Claude'un seçebileceği Google Trends havuzu büyüdü.
+
 ## 2026-04-16 — Trends: Layer A kaynak çeşitlilik iyileştirmesi ✅
 
 **Sorun:** Layer A trendlerinde Google News domine ediyordu (4 keyword x 10 haber = max 25 sonuç), Google Trends sektöre irrelevant genel TR trendleri döndüğü için Claude tarafından eleniyordu, Reddit source etiketi sub-spesifik (`Reddit/r/tech`) geldiği için Claude diversity kuralında parçalanıyordu.

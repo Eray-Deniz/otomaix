@@ -149,11 +149,12 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
         "'Pinterest Trends', 'Twitter Trends').\n"
         "3. Ham verilerde hangi kaynaklar varsa bu kaynaklardan DENGELI seç — "
         "Google News'e yığılma yapma, diğer kaynakları görmezden gelme.\n"
-        "4. Birden fazla kaynaktan gelen tekrarı birleştirirsen source='Karma' yaz.\n"
+        "4. ASLA 'Karma' source yazma. Birden fazla kaynaktan gelen benzer "
+        "trendleri birleştirirsen, en güçlü kaynağın etiketini kullan.\n"
         "5. Trend seçerken önce 'en az 4 farklı kaynak' kuralını garanti et, "
         "sonra her kaynaktan en güçlüsünü seç.\n\n"
         "Olası source değerleri: Google News, Google Trends, Reddit, YouTube, "
-        "Twitter Trends, Pinterest Trends, TCMB EVDS, Karma.\n\n"
+        "Twitter Trends, Pinterest Trends, TCMB EVDS.\n\n"
         "JSON formatı (yalnızca dizi):\n"
         "[\n"
         "  {\n"
@@ -200,17 +201,23 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
             if not isinstance(parsed, list) or not parsed:
                 raise ValueError("parsed is not a non-empty list")
             for item in parsed:
-                item.setdefault("source", "Karma")
+                item.setdefault("source", "Bilinmeyen")
                 item.setdefault("relevance_score", 70)
             # Deterministik post-process: tek source'a 3'ten fazla trend
-            # atanmışsa fazlalıkları 'Karma' olarak relabel et. Claude Haiku
-            # quota kuralını yoksayınca güvenlik ağı görevi görür.
-            source_counts: dict[str, int] = {}
+            # atanmışsa, o kaynaktaki en düşük relevance_score'lu trendleri
+            # listeden çıkar. Orijinal kaynak etiketi korunur.
+            source_items: dict[str, list[dict]] = {}
             for item in parsed:
-                src = item.get("source") or "Karma"
-                source_counts[src] = source_counts.get(src, 0) + 1
-                if source_counts[src] > 3:
-                    item["source"] = "Karma"
+                src = item.get("source") or "Bilinmeyen"
+                source_items.setdefault(src, []).append(item)
+            drop_set: set[int] = set()
+            for src, items in source_items.items():
+                if len(items) > 3:
+                    # Score'a göre sırala, en düşükleri çıkar
+                    ranked = sorted(items, key=lambda x: x.get("relevance_score", 0))
+                    for excess in ranked[: len(items) - 3]:
+                        drop_set.add(id(excess))
+            parsed = [item for item in parsed if id(item) not in drop_set]
             logger.info(
                 "claude synthesis ok: sector=%s trends=%d attempt=%d sources=%s",
                 sector.get("slug"), len(parsed), attempt + 1,
