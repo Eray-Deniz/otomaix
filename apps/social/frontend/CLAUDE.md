@@ -4,6 +4,17 @@
 > `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazıldı (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — İçerik Oluştur: 5 UX iyileştirmesi ✅
+
+**Dosya:** `app/(dashboard)/icerik-olustur/page.tsx`
+
+**Değişiklikler:**
+1. **Video en-boy oranı seçici** — `!['video', 'special_day', 'quote']` filtresinden `video` çıkarıldı. Backend `generate-faceless-video` zaten `aspect_ratio` parametresi alıyordu, varsayılan 1:1 yerine kullanıcı seçebilir.
+2. **Video "Bana fikir öner"** — Aynı filtreden `video` çıkarıldı. `fetchIdeas()` zaten `content_type: contentType` gönderiyor, backend video tipini destekliyor.
+3. **Geçmiş özel günler disabled** — `isPast` olan tatil butonlarına `disabled` prop + `cursor-not-allowed` eklendi, `onClick` guard'ı eklendi.
+4. **"Yeniden Üret" guard** — `disabled` koşuluna `|| !generatedPost?.output_url` eklendi. Output hazır olmadan regenerate tetiklenemez.
+5. **Step 3→2 state temizliği** — Geri butonuna `setGeneratedPost(null)`, `setCaption('')`, `setHashtags([])` resetleri eklendi. Eski üretim state'i ile karışma riski ortadan kalktı.
+
 ## 2026-04-16 — Trends: Layer B son arama sonuçları cache'den yüklenme ✅
 
 **Dosya:** `app/(dashboard)/trendler/page.tsx`

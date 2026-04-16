@@ -56,8 +56,9 @@ async def analyze_website(url: str) -> dict:
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=600,
+            cache_control={"type": "ephemeral"},
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )
@@ -219,8 +220,9 @@ async def generate_competitor_report(
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=700,
+            cache_control={"type": "ephemeral"},
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )

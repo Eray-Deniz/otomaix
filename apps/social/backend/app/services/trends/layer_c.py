@@ -191,16 +191,10 @@ async def _synthesize_with_claude(
         lines.append(line[:260])
     bulk = "\n".join(lines)
 
-    system = (
-        f"Sen {brand_name} markası için kıdemli sosyal medya stratejistisin. "
-        f"Sektör: {sector_name}. Yanıtını SADECE geçerli JSON dizisi olarak döndür."
-    )
-    user_msg = (
-        f"Bu ay toplanan {sector_name} sektörü ham sinyalleri (her satırın başındaki "
-        f"köşeli parantez içi KAYNAK etiketidir):\n{bulk}\n\n"
-        f"Görev: {brand_name} markasının bu ay konuşabileceği EN GÜÇLÜ 12 trendi seç. "
-        "FARKLI kaynaklardan dengeli bir dağılım olmalı — tek bir kaynağa yığılma. "
-        "Tekrarları birleştir, alakasızları ele. Her biri için içerik fırsatı ve prompt öner.\n\n"
+    # System: sabit kurallar (cache'lenir) + marka/sektör bağlamı
+    _SYSTEM_RULES = (
+        "Sen kıdemli bir sosyal medya stratejistisin. "
+        "Yanıtını SADECE geçerli JSON dizisi olarak döndür.\n\n"
         "KRİTİK KAYNAK ÇEŞİTLİLİĞİ KURALI (mutlak uyulmalı):\n"
         "1. Ham verilerde kaç farklı [KAYNAK] varsa HEPSİNDEN trend seç. "
         "Tek bir source'a 5'ten fazla trend atayamazsın (12 trend / 3 source "
@@ -224,17 +218,47 @@ async def _synthesize_with_claude(
         "]"
     )
 
+    system = [
+        {"type": "text", "text": _SYSTEM_RULES, "cache_control": {"type": "ephemeral"}},
+    ]
+
+    # User: marka/sektör bağlamı (cache'lenir) + dinamik veri
+    user_content = [
+        {
+            "type": "text",
+            "text": f"Marka: {brand_name}\nSektör: {sector_name}",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": (
+                f"Bu ay toplanan {sector_name} sektörü ham sinyalleri (her satırın başındaki "
+                f"köşeli parantez içi KAYNAK etiketidir):\n{bulk}\n\n"
+                f"Görev: {brand_name} markasının bu ay konuşabileceği EN GÜÇLÜ 12 trendi seç. "
+                "FARKLI kaynaklardan dengeli bir dağılım olmalı — tek bir kaynağa yığılma. "
+                "Tekrarları birleştir, alakasızları ele. Her biri için içerik fırsatı ve prompt öner."
+            ),
+        },
+    ]
+
     def _call() -> tuple[str, int, int]:
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=90.0)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=6000,
             system=system,
-            messages=[{"role": "user", "content": user_msg}],
+            messages=[{"role": "user", "content": user_content}],
         )
         text = msg.content[0].text.strip()
         pt = getattr(msg.usage, "input_tokens", 0) if msg.usage else 0
         ct = getattr(msg.usage, "output_tokens", 0) if msg.usage else 0
+        logger.info(
+            "layer_c cache: brand=%s read=%d write=%d input=%d",
+            brand_name,
+            getattr(msg.usage, "cache_read_input_tokens", 0),
+            getattr(msg.usage, "cache_creation_input_tokens", 0),
+            pt,
+        )
         return text, pt, ct
 
     raw = ""

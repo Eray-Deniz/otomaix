@@ -67,8 +67,9 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "") ->
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=400,
+            cache_control={"type": "ephemeral"},
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )

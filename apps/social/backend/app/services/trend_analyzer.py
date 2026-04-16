@@ -179,8 +179,9 @@ async def _rank_trends_with_claude(
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=1000,
+            cache_control={"type": "ephemeral"},
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )

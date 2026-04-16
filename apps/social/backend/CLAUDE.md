@@ -5,6 +5,29 @@
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — LLM model yükseltme + Prompt Caching ✅
+
+**Model değişikliği:** Tüm Anthropic çağrıları `claude-haiku-4-5-20251001` → `claude-opus-4-7` olarak güncellendi (10 çağrı noktası, 7 dosya).
+
+**SDK yükseltme:** `anthropic==0.40.0` → `anthropic>=0.90.0,<1.0.0` (prompt caching GA desteği için).
+
+**Prompt Caching uygulaması (3 katmanlı):**
+- **Katman 1 — Sabit talimatlar (system):** Kurallar, JSON format şablonu, DİL KURALI, kaynak çeşitlilik kuralları `cache_control: {"type": "ephemeral"}` ile cache breakpoint. Tüm çağrılarda aynı prefix → cache hit.
+- **Katman 2 — Marka/sektör bağlamı (user blok 1):** Marka ad��, sektör, açıklama, tonalite, renkler, hashtagler `cache_control: {"type": "ephemeral"}` ile cache breakpoint. Aynı marka için tekrarlanan çağrılarda hit.
+- **Katman 3 — Dinamik veri (user blok 2):** Ham trend verileri, arama sonuçları, kullanıcı prompt'u. Cache'lenmez.
+
+**Explicit breakpoint uygulanan dosyalar:**
+- `layer_a.py` — Kurallar+JSON format system'e taşındı, `_SYSTEM_RULES` modül sabiti
+- `layer_b.py` — `_SYSTEM_QUERY_BUILDER` + `_SYSTEM_SYNTHESIZER` modül sabitleri, her iki fonksiyonda system+marka breakpoint
+- `layer_c.py` — Kurallar system'e taşındı, system+marka breakpoint
+- `ai.py:suggest_ideas` — DİL KURALI system'e taşındı `_STATIC_RULES`, marka bağlamı user blok 1'e
+
+**Top-level cache (küçük prompt'lar):** `ai.py:analyze_website`, `faceless_video.py`, `competitor_analyzer.py` (2 çağrı), `trend_analyzer.py` — `cache_control={"type": "ephemeral"}` top-level. 4096 token eşiği altındaysa SDK sessizce ignore eder.
+
+**Cache loglama:** Layer A/B/C'de `cache_read_input_tokens` ve `cache_creation_input_tokens` loglanıyor.
+
+**Opus 4.7 minimum cache token: 4096.** Kısa system prompt'lar tek başına cache'lenemez. Bu yüzden kurallar+format talimatları system'e taşınarak blok büyütüldü.
+
 ## 2026-04-16 — Trends: Layer A Karma etiketi kaldırma + Google Trends artırma ✅
 
 **Sorun:** Claude Haiku diversity kuralını tam uygulamadığında backend post-process fazlalık trendleri "Karma" olarak relabel ediyordu. Bu etiket kullanıcıya hiçbir bilgi vermiyordu. Google Trends `cat=t` filtresi TR'de az/hiç sonuç döndürüyordu.

@@ -1,5 +1,5 @@
 """Layer A orchestrator — sektör başına ücretsiz kaynakları paralel topla,
-Claude Haiku ile sentezle ve `sector_trend_cache` tablosuna yaz.
+Claude ile sentezle ve `sector_trend_cache` tablosuna yaz.
 """
 
 import asyncio
@@ -31,6 +31,37 @@ _SOURCES = [
     pinterest_trends,
     tcmb_evds,
 ]
+
+# ── Prompt caching: sabit system talimatları (tüm sektörler için aynı) ─────
+_SYSTEM_RULES = (
+    "Sen Türk KOBİ'lere sosyal medya trend analizi sunan kıdemli bir uzmansın. "
+    "Yanıtını SADECE geçerli JSON dizisi olarak döndür, başka hiçbir şey yazma.\n\n"
+    "KRİTİK KAYNAK ÇEŞİTLİLİĞİ KURALI (mutlak uyulmalı):\n"
+    "1. 8 trend içinde EN AZ 4 FARKLI source olmalı. Tek bir source'a "
+    "3'ten fazla trend atayamazsın.\n"
+    "2. Her trendin 'source' alanı, o trendin geldiği ham satırın başındaki "
+    "[KAYNAK] etiketinden BİREBİR kopyalanmalı (ör. 'Reddit', 'YouTube', "
+    "'Pinterest Trends', 'Twitter Trends').\n"
+    "3. Ham verilerde hangi kaynaklar varsa bu kaynaklardan DENGELI seç — "
+    "Google News'e yığılma yapma, diğer kaynakları görmezden gelme.\n"
+    "4. ASLA 'Karma' source yazma. Birden fazla kaynaktan gelen benzer "
+    "trendleri birleştirirsen, en güçlü kaynağın etiketini kullan.\n"
+    "5. Trend seçerken önce 'en az 4 farklı kaynak' kuralını garanti et, "
+    "sonra her kaynaktan en güçlüsünü seç.\n\n"
+    "Olası source değerleri: Google News, Google Trends, Reddit, YouTube, "
+    "Twitter Trends, Pinterest Trends, TCMB EVDS.\n\n"
+    "JSON formatı (yalnızca dizi):\n"
+    "[\n"
+    "  {\n"
+    '    "title": "trend başlığı (kısa, Türkçe)",\n'
+    '    "source": "ham satırdaki [KAYNAK] etiketinden kopyala",\n'
+    '    "relevance_score": 85,\n'
+    '    "summary": "1 cümle bağlam",\n'
+    '    "content_opportunity": "Bu trendi nasıl içeriğe dönüştürürsün (1 cümle)",\n'
+    '    "suggested_prompt": "İçerik üretim prompt önerisi"\n'
+    "  }\n"
+    "]"
+)
 
 
 async def _run_source(mod, sector: dict) -> tuple[str, list[dict]]:
@@ -129,10 +160,11 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
         lines.append(line[:260])
     bulk = "\n".join(lines)
 
-    system = (
-        "Sen Türk KOBİ'lere sosyal medya trend analizi sunan kıdemli bir uzmansın. "
-        "Yanıtını SADECE geçerli JSON dizisi olarak döndür, başka hiçbir şey yazma."
-    )
+    # System: sabit kurallar (cache'lenir), User: dinamik veri
+    system = [
+        {"type": "text", "text": _SYSTEM_RULES, "cache_control": {"type": "ephemeral"}},
+    ]
+
     user_msg = (
         f"Sektör: {sector_name}\n\n"
         f"Bu hafta toplanan ham başlıklar/trendler (her satırın başındaki "
@@ -140,41 +172,23 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
         f"Görev: {sector_name} sektöründeki KOBİ'lerin sosyal medya için "
         "kullanabileceği EN GÜÇLÜ 8 trendi seç. FARKLI kaynaklardan dengeli "
         "bir dağılım olmalı — tek bir kaynağa yığılma. Tekrarları birleştir, "
-        "alakasızları ele. Her biri için içerik fırsatı ve prompt öner.\n\n"
-        "KRİTİK KAYNAK ÇEŞİTLİLİĞİ KURALI (mutlak uyulmalı):\n"
-        "1. 8 trend içinde EN AZ 4 FARKLI source olmalı. Tek bir source'a "
-        "3'ten fazla trend atayamazsın.\n"
-        "2. Her trendin 'source' alanı, o trendin geldiği ham satırın başındaki "
-        "[KAYNAK] etiketinden BİREBİR kopyalanmalı (ör. 'Reddit', 'YouTube', "
-        "'Pinterest Trends', 'Twitter Trends').\n"
-        "3. Ham verilerde hangi kaynaklar varsa bu kaynaklardan DENGELI seç — "
-        "Google News'e yığılma yapma, diğer kaynakları görmezden gelme.\n"
-        "4. ASLA 'Karma' source yazma. Birden fazla kaynaktan gelen benzer "
-        "trendleri birleştirirsen, en güçlü kaynağın etiketini kullan.\n"
-        "5. Trend seçerken önce 'en az 4 farklı kaynak' kuralını garanti et, "
-        "sonra her kaynaktan en güçlüsünü seç.\n\n"
-        "Olası source değerleri: Google News, Google Trends, Reddit, YouTube, "
-        "Twitter Trends, Pinterest Trends, TCMB EVDS.\n\n"
-        "JSON formatı (yalnızca dizi):\n"
-        "[\n"
-        "  {\n"
-        '    "title": "trend başlığı (kısa, Türkçe)",\n'
-        '    "source": "ham satırdaki [KAYNAK] etiketinden kopyala",\n'
-        '    "relevance_score": 85,\n'
-        '    "summary": "1 cümle bağlam",\n'
-        '    "content_opportunity": "Bu trendi nasıl içeriğe dönüştürürsün (1 cümle)",\n'
-        '    "suggested_prompt": "İçerik üretim prompt önerisi"\n'
-        "  }\n"
-        "]"
+        "alakasızları ele. Her biri için içerik fırsatı ve prompt öner."
     )
 
     def _call_claude() -> str:
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=4000,
             system=system,
             messages=[{"role": "user", "content": user_msg}],
+        )
+        logger.info(
+            "layer_a cache: sector=%s read=%d write=%d input=%d",
+            sector.get("slug"),
+            getattr(msg.usage, "cache_read_input_tokens", 0),
+            getattr(msg.usage, "cache_creation_input_tokens", 0),
+            getattr(msg.usage, "input_tokens", 0),
         )
         return msg.content[0].text.strip()
 

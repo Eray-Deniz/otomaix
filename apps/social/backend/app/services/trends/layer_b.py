@@ -1,10 +1,10 @@
 """Layer B orchestrator — kullanıcı tetiklemeli kişisel trend araması.
 
 Akış:
-  1. Marka + RAG + geçmiş postlardan arama sorguları üret (Claude Haiku)
+  1. Marka + RAG + geçmiş postlardan arama sorguları üret (Claude)
   2. Serper.dev ile paralel Google TR araması
   3. Sonuçları birleştir + dedupe
-  4. Claude Haiku ile sentez → 8 trend
+  4. Claude ile sentez → 8 trend
   5. brand_trend_cache'e yaz, trend_usage sayacını artır
 """
 
@@ -24,9 +24,41 @@ logger = logging.getLogger(__name__)
 _MAX_QUERIES = 4
 _FALLBACK_QUERIES_LIMIT = 3
 
+# ── Prompt caching: sabit system talimatları ────────────────────────────────
+
+_SYSTEM_QUERY_BUILDER = (
+    "Sen sosyal medya trend araştırmacısısın. Verilen markanın bu hafta "
+    "konuşabileceği canlı konuları bulmak için Google'da arayacağın 3-4 "
+    "somut arama sorgusu üret. Yanıtı SADECE JSON dizisi olarak ver."
+)
+
+_SYSTEM_SYNTHESIZER = (
+    "Sen kıdemli bir sosyal medya stratejistisin. "
+    "Yanıtını SADECE geçerli JSON dizisi olarak döndür.\n\n"
+    "KRİTİK KAYNAK ÇEŞİTLİLİĞİ KURALI (mutlak uyulmalı):\n"
+    "1. 8 trend içinde EN AZ 4 FARKLI domain olmalı. Tek bir domain'e "
+    "3'ten fazla trend atayamazsın.\n"
+    "2. Her trendin 'source' alanı, o trendin geldiği ham satırın başındaki "
+    "[KAYNAK] etiketinden (domain adı) BİREBİR kopyalanmalı.\n"
+    "3. Birden fazla kaynaktan gelen tekrarı birleştirirsen source='Karma' yaz.\n"
+    "4. Önce 'en az 4 farklı domain' kuralını garanti et, sonra her "
+    "domain'den en güçlüsünü seç.\n\n"
+    "JSON formatı (yalnızca dizi):\n"
+    "[\n"
+    '  {\n'
+    '    "title": "trend başlığı (kısa, Türkçe)",\n'
+    '    "source": "ham satırdaki [KAYNAK] etiketinden kopyala",\n'
+    '    "relevance_score": 85,\n'
+    '    "summary": "1 cümle bağlam",\n'
+    '    "content_opportunity": "Bu trendi nasıl içeriğe dönüştürürsün (1 cümle)",\n'
+    '    "suggested_prompt": "İçerik üretim prompt önerisi"\n'
+    '  }\n'
+    "]"
+)
+
 
 async def _build_search_queries(brand: dict, recent_posts: list[dict]) -> list[str]:
-    """Claude Haiku ile 3-4 canlı arama sorgusu öner."""
+    """Claude ile 3-4 canlı arama sorgusu öner."""
     name = brand.get("name") or "marka"
     sector = brand.get("sector") or "genel"
     kit = brand.get("brand_kit") or {}
@@ -54,27 +86,44 @@ async def _build_search_queries(brand: dict, recent_posts: list[dict]) -> list[s
     except ImportError:
         return [f"{sector} güncel haberler Türkiye"]
 
-    system = (
-        "Sen sosyal medya trend araştırmacısısın. Verilen markanın bu hafta "
-        "konuşabileceği canlı konuları bulmak için Google'da arayacağın 3-4 "
-        "somut arama sorgusu üret. Yanıtı SADECE JSON dizisi olarak ver."
-    )
-    user_msg = (
-        f"Marka: {name}\nSektör: {sector}\nTonalite: {tone}\nHedef kitle: {audience}\n\n"
-        f"Son içerikler:\n{recent_block or '(yok)'}\n\n"
-        "Görev: Bu markayı ilgilendirecek güncel/canlı konular için Google'da "
-        "arayacağın 3-4 arama sorgusu öner. Türkçe, Türkiye odaklı, güncellik öne "
-        "çıksın. Sadece JSON dizisi:\n"
-        '["sorgu 1", "sorgu 2", "sorgu 3"]'
-    )
+    # System: sabit kurallar (cache'lenir)
+    system = [
+        {"type": "text", "text": _SYSTEM_QUERY_BUILDER, "cache_control": {"type": "ephemeral"}},
+    ]
+
+    # User: marka bağlamı (cache'lenir) + dinamik veri
+    user_content = [
+        {
+            "type": "text",
+            "text": f"Marka: {name}\nSektör: {sector}\nTonalite: {tone}\nHedef kitle: {audience}",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": (
+                f"Son içerikler:\n{recent_block or '(yok)'}\n\n"
+                "Görev: Bu markayı ilgilendirecek güncel/canlı konular için Google'da "
+                "arayacağın 3-4 arama sorgusu öner. Türkçe, Türkiye odaklı, güncellik öne "
+                "çıksın. Sadece JSON dizisi:\n"
+                '["sorgu 1", "sorgu 2", "sorgu 3"]'
+            ),
+        },
+    ]
 
     def _call() -> str:
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=400,
             system=system,
-            messages=[{"role": "user", "content": user_msg}],
+            messages=[{"role": "user", "content": user_content}],
+        )
+        logger.info(
+            "layer_b queries cache: brand=%s read=%d write=%d input=%d",
+            brand.get("name"),
+            getattr(msg.usage, "cache_read_input_tokens", 0),
+            getattr(msg.usage, "cache_creation_input_tokens", 0),
+            getattr(msg.usage, "input_tokens", 0),
         )
         return msg.content[0].text.strip()
 
@@ -172,49 +221,48 @@ async def _synthesize_with_claude(items: list[dict], brand: dict) -> list[dict]:
         lines.append(f"[{src}] {title} — {snippet}"[:300])
     bulk = "\n".join(lines)
 
-    system = (
-        f"Sen {name} markası için kıdemli sosyal medya stratejistisin. "
-        "Yanıtını SADECE geçerli JSON dizisi olarak döndür."
-    )
-    user_msg = (
-        f"Marka: {name}\nSektör: {sector}\n\n"
-        f"Canlı Google aramalarından dönen sonuçlar (her satırın başındaki "
-        f"köşeli parantez içi KAYNAK domain'idir):\n{bulk}\n\n"
-        f"Görev: {name} markasının bu hafta konuşabileceği EN GÜÇLÜ 8 trendi seç. "
-        "FARKLI kaynaklardan dengeli bir dağılım olmalı — tek bir domain'e yığılma. "
-        "Her biri için markanın bakış açısıyla içerik fırsatı ve prompt öner.\n\n"
-        "KRİTİK KAYNAK ÇEŞİTLİLİĞİ KURALI (mutlak uyulmalı):\n"
-        "1. 8 trend içinde EN AZ 4 FARKLI domain olmalı. Tek bir domain'e "
-        "3'ten fazla trend atayamazsın.\n"
-        "2. Her trendin 'source' alanı, o trendin geldiği ham satırın başındaki "
-        "[KAYNAK] etiketinden (domain adı) BİREBİR kopyalanmalı.\n"
-        "3. Birden fazla kaynaktan gelen tekrarı birleştirirsen source='Karma' yaz.\n"
-        "4. Önce 'en az 4 farklı domain' kuralını garanti et, sonra her "
-        "domain'den en güçlüsünü seç.\n\n"
-        "JSON formatı (yalnızca dizi):\n"
-        "[\n"
-        '  {\n'
-        '    "title": "trend başlığı (kısa, Türkçe)",\n'
-        '    "source": "ham satırdaki [KAYNAK] etiketinden kopyala",\n'
-        '    "relevance_score": 85,\n'
-        '    "summary": "1 cümle bağlam",\n'
-        '    "content_opportunity": "Bu trendi nasıl içeriğe dönüştürürsün (1 cümle)",\n'
-        '    "suggested_prompt": "İçerik üretim prompt önerisi"\n'
-        '  }\n'
-        "]"
-    )
+    # System: sabit kurallar (cache'lenir)
+    system = [
+        {"type": "text", "text": _SYSTEM_SYNTHESIZER, "cache_control": {"type": "ephemeral"}},
+    ]
+
+    # User: marka bağlamı (cache'lenir) + dinamik arama sonuçları
+    user_content = [
+        {
+            "type": "text",
+            "text": f"Marka: {name}\nSektör: {sector}",
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": (
+                f"Canlı Google aramalarından dönen sonuçlar (her satırın başındaki "
+                f"köşeli parantez içi KAYNAK domain'idir):\n{bulk}\n\n"
+                f"Görev: {name} markasının bu hafta konuşabileceği EN GÜÇLÜ 8 trendi seç. "
+                "FARKLI kaynaklardan dengeli bir dağılım olmalı — tek bir domain'e yığılma. "
+                "Her biri için markanın bakış açısıyla içerik fırsatı ve prompt öner."
+            ),
+        },
+    ]
 
     def _call() -> tuple[str, int, int]:
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=4000,
             system=system,
-            messages=[{"role": "user", "content": user_msg}],
+            messages=[{"role": "user", "content": user_content}],
         )
         text = msg.content[0].text.strip()
         pt = getattr(msg.usage, "input_tokens", 0) if msg.usage else 0
         ct = getattr(msg.usage, "output_tokens", 0) if msg.usage else 0
+        logger.info(
+            "layer_b synth cache: brand=%s read=%d write=%d input=%d",
+            brand.get("name"),
+            getattr(msg.usage, "cache_read_input_tokens", 0),
+            getattr(msg.usage, "cache_creation_input_tokens", 0),
+            pt,
+        )
         return text, pt, ct
 
     raw = ""

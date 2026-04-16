@@ -67,8 +67,9 @@ async def analyze_website(
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=512,
+            cache_control={"type": "ephemeral"},
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -182,11 +183,10 @@ async def suggest_ideas(
         base_query = payload.prompt or f"{brand['name']} sosyal medya içerik fikirleri"
         doc_context = await get_document_context(payload.document_ids, base_query, db) or ""
 
-    system_prompt = (
-        f"Sen Türk KOBİ'lerine sosyal medya içeriği üreten bir uzmansın. "
-        f"Türkçe ve {tonality} bir üslupla, verilen tüm bağlamı dikkate alarak "
-        f"içerik fikri önerileri üretiyorsun. "
-        f"Her fikir tek cümle, net, uygulanabilir ve seçilen içerik tipine uygun olmalı.\n\n"
+    # System prompt: sabit talimatlar (prompt caching için ayrı blok)
+    _STATIC_RULES = (
+        "Sen Türk KOBİ'lerine sosyal medya içeriği üreten bir uzmansın. "
+        "Her fikir tek cümle, net, uygulanabilir ve seçilen içerik tipine uygun olmalı.\n\n"
         "DİL KURALI (çok önemli): Yanıtın tamamen Türkçe olmalı. "
         "İngilizce veya yabancı kökenli terimler kullanma. "
         "Yaygın Türkçe karşılıkları kullan: 'content creator' yerine 'içerik üretici', "
@@ -197,6 +197,10 @@ async def suggest_ideas(
         "orijinal kalabilir. Gerçekliği olmayan sayısal iddialar ('%300 artış', '30 saatten 2 saate' "
         "gibi) uydurma — sadece somut özellik ve faydalardan bahset."
     )
+    system_prompt = [
+        {"type": "text", "text": _STATIC_RULES, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": f"Türkçe ve {tonality} bir üslupla, verilen tüm bağlamı dikkate alarak içerik fikri önerileri üretiyorsun."},
+    ]
 
     user_prompt_parts = [
         f"Marka adı: {brand['name']}",
@@ -238,15 +242,30 @@ async def suggest_ideas(
 
     user_prompt = "\n".join(user_prompt_parts)
 
+    # User mesajını marka bağlamı (cache) + dinamik kısım olarak ayır
+    brand_context = "\n".join([
+        f"Marka adı: {brand['name']}",
+        f"Sektör: {brand['sector'] or 'Belirtilmemiş'}",
+        f"Marka açıklaması: {brand['description'] or 'Belirtilmemiş'}",
+        f"Marka renkleri: {colors_str}",
+        f"Marka tonu: {tonality}",
+        f"Popüler hashtagler: {', '.join(hashtags[:5]) if hashtags else 'Yok'}",
+    ])
+
+    user_content = [
+        {"type": "text", "text": brand_context, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": user_prompt},
+    ]
+
     try:
         import anthropic
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         message = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-7",
             max_tokens=1024,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
+            messages=[{"role": "user", "content": user_content}],
         )
         raw = message.content[0].text.strip()
         ideas = []
