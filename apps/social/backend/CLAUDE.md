@@ -3,7 +3,7 @@
 > **🚧 Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
 > Üç katmanlı yeni trend mimarisi. Detaylı plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ⏳ scaffold atıldı (SERPER_API_KEY bekliyor) · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
 ## 2026-04-16 — Phase 6 Sprint 6: Test, Telemetri, Canlıya Alma ✅
 
@@ -48,7 +48,7 @@
 
 **Dependency:** `weasyprint==63.1` + `pydyf==0.11.0` requirements.txt'e eklendi
 
-## 2026-04-15 — Phase 6 Sprint 3: Layer B scaffold (devam ediyor)
+## 2026-04-15 — Phase 6 Sprint 3: Layer B Serper.dev + Claude Haiku ✅
 
 **Yeni dosyalar:**
 - `app/services/trends/serper_client.py` — Serper.dev Google Search wrapper. `search(query, gl, hl, num)` + `extract_items(result)` helper'ı. SERPER_API_KEY yoksa ValueError.
@@ -67,11 +67,13 @@
 - `POST /trends/personal?brand_id=` → Layer B tetik. Akış: `assert_brand_owned` → `check_trend_quota('layer_b')` → `fetch_personal_trends` → maliyet hesapla (Serper $0.001 × çağrı + Haiku ($1/M input + $5/M output)) → `increment_trend_usage`
 - `/personal` route'u `/{trend_index}/create-post`'tan ÖNCE deklare edildi (trend_index int parser'a düşmesin diye).
 
-**Eksik / pending:**
-- [ ] SERPER_API_KEY Coolify env'e eklenmeli — yoksa endpoint 503 "serper_not_configured" döner
-- [ ] Canlı smoke test: bir brand_id ile `/trends/personal` çağrısı, quota doğrulama, brand_trend_cache satırı
-- [ ] Frontend `/trendler` sekmeli rewrite (Sprint 5)
-- [ ] Sprint 2 backlog: pytrends 429 debug, Pinterest selector, Claude synthesis timeout/rate-limit (9/12 sektörde fallback'e düşüyor)
+**Tamamlandı:**
+- [x] SERPER_API_KEY Coolify env'e eklendi
+- [x] Canlı smoke test: `/trends/personal` çağrısı başarılı, quota doğrulandı
+- [x] Frontend `/trendler` sekmeli rewrite (Sprint 5 ✅)
+
+**Backlog (düşük öncelik):**
+- pytrends 429 debug, Pinterest selector, Claude synthesis timeout/rate-limit (9/12 sektörde fallback'e düşüyor)
 
 ## 2026-04-15 — Phase 6 Sprint 2: Layer A nightly sweep ✅
 

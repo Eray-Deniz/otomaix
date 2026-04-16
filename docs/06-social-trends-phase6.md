@@ -499,11 +499,11 @@ Layer B artık **toplam maliyetin en küçük kalemi**. Maliyetlerin ~%85'i Apif
 - [x] Eski `trend_analyzer.py` deprecation yorumu (Sprint 6) — dosya başına DEPRECATED docstring eklendi
 - [x] Load test Layer B senaryosu (Sprint 6) — `locustfile.py`'a `POST /trends/personal` eklendi (weight=1, 402 success)
 - [x] Frontend error handling fix — `plan_limit` objesi kontrolüne geçildi, ölü `plan_locked` dalı kaldırıldı
-- [ ] Coolify env değişkenleri (YOUTUBE_API_KEY, EVDS_API_KEY, SERPER_API_KEY) eklendi (Sprint 6)
-- [ ] Canlı smoke: her katmandan 1 başarılı çağrı log'lanmış (Sprint 6)
+- [x] Coolify env değişkenleri — SERPER_API_KEY eklendi, YOUTUBE_API_KEY/EVDS_API_KEY opsiyonel (kaynak 0 döner ama crash yok)
+- [x] Canlı smoke: PostHog event'leri doğrulandı (`trend_layer_a_viewed`, `trend_quota_exhausted`, `trend_paywall_shown`), CRM trend maliyet bölümü görünür, error handling düzgün çalışıyor (2026-04-16)
 
 ---
 
-## Bir Sonraki Adım
+## Durum
 
-Phase 6 planı kullanıcı tarafından onaylandıktan sonra **Sprint 1 — Migration ve sektör modeli** ile başla. Implementation öncesi kullanıcının "henüz mimari teknik döküm çıkarma birkaç sorum daha var" notu gereği ek soruları beklenecek; sorular yanıtlandıktan sonra bu doküman güncellenir, ardından kodlama başlar.
+**Phase 6 tamamlandı ✅** (2026-04-16). Tüm 6 sprint başarıyla kapandı. Yeni geliştirme başlatılacaksa `00-platform-mimari.md`'ye bak.

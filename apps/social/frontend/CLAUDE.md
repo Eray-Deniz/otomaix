@@ -2,7 +2,7 @@
 
 > **🚧 Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
 > `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazıldı (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ⏳ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
 ## 2026-04-16 — Phase 6 Sprint 6: PostHog trend event'leri ✅
 
