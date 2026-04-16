@@ -5,6 +5,17 @@
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — Trends: Layer A kaynak çeşitlilik iyileştirmesi ✅
+
+**Sorun:** Layer A trendlerinde Google News domine ediyordu (4 keyword x 10 haber = max 25 sonuç), Google Trends sektöre irrelevant genel TR trendleri döndüğü için Claude tarafından eleniyordu, Reddit source etiketi sub-spesifik (`Reddit/r/tech`) geldiği için Claude diversity kuralında parçalanıyordu.
+
+**Değişiklikler:**
+1. **`google_trends.py`** — Sektöre göre RSS kategori filtresi eklendi (`_SECTOR_CATEGORY` mapping: teknoloji→`t` Sci/Tech, finans→`b` Business, saglik→`m` Health). Kategori eşleşmeyen sektörler genel feed'i alır.
+2. **`google_news.py`** — Per-keyword sonuç cap'i 10→6'ya düşürüldü. Toplam max 25→~18. Diğer kaynakların ağırlığı artar.
+3. **`reddit.py`** — Source etiketi `Reddit/r/{sub}` → `Reddit` olarak sadeleştirildi. Claude diversity kuralı (max 3 per source) artık tüm Reddit sonuçlarını tek kaynak olarak sayar.
+
+**Etki:** layer_a.py ve diğer kodlar değişmedi — source modüllerin `fetch(sector)` imzası ve çıktı formatı korundu.
+
 ## 2026-04-16 — Trends: Layer B son arama sonuçlarını cache'den oku ✅
 
 **Dosya:** `app/routers/trends.py` — yeni `GET /trends/personal?brand_id=` endpoint'i

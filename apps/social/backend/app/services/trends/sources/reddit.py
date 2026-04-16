@@ -44,7 +44,7 @@ def _parse_atom(xml: str, sub: str, limit: int = 10) -> list[dict]:
             continue
         items.append({
             "title": title,
-            "source": f"{NAME}/r/{sub}",
+            "source": NAME,
             "url": link_m.group(1) if link_m else None,
             "score": None,
             "summary": None,

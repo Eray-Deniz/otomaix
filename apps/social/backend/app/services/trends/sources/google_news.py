@@ -37,7 +37,7 @@ async def _fetch_one(client: httpx.AsyncClient, query: str) -> list[dict]:
         resp = await client.get(url)
         if resp.status_code != 200:
             return []
-        return _parse_rss(resp.text, limit=10)
+        return _parse_rss(resp.text, limit=6)
     except Exception:
         return []
 

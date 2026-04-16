@@ -12,9 +12,20 @@ import xml.etree.ElementTree as ET
 import httpx
 
 NAME = "Google Trends"
-_URL = "https://trends.google.com/trending/rss?geo=TR"
+_BASE_URL = "https://trends.google.com/trending/rss?geo=TR"
 _TIMEOUT = 12
 _NS = {"ht": "https://trends.google.com/trending/rss"}
+
+# Google Trends RSS kategori kodları (geo=TR ile birlikte kullanılır)
+# Ref: https://trends.google.com/trending/rss?geo=TR&cat=t
+_SECTOR_CATEGORY: dict[str, str] = {
+    "teknoloji": "t",               # Sci/Tech
+    "finans": "b",                   # Business
+    "e-ticaret-perakende": "b",      # Business
+    "saglik": "m",                   # Health
+    "egitim": "t",                   # Sci/Tech (en yakın)
+    "otomotiv": "t",                 # Sci/Tech (en yakın)
+}
 
 
 def _parse_traffic(raw: str) -> float:
@@ -28,9 +39,12 @@ def _parse_traffic(raw: str) -> float:
 
 
 async def fetch(sector: dict) -> list[dict]:
+    slug = sector.get("slug") or "genel"
+    cat = _SECTOR_CATEGORY.get(slug)
+    url = f"{_BASE_URL}&cat={cat}" if cat else _BASE_URL
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get(_URL, headers={"User-Agent": "Mozilla/5.0"})
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
             if resp.status_code != 200:
                 return []
             xml_text = resp.text
