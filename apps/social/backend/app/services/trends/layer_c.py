@@ -411,3 +411,29 @@ async def generate_monthly_report(
             report_id, str(e)[:500],
         )
         raise
+
+
+async def cleanup_old_reports(db: asyncpg.Connection) -> dict[str, Any]:
+    """3 aydan eski Layer C raporlarını DB + R2'den sil."""
+    rows = await db.fetch(
+        """
+        DELETE FROM social.sector_reports
+        WHERE generated_at < now() - interval '3 months'
+        RETURNING id::text, account_id::text, pdf_url
+        """
+    )
+
+    deleted = 0
+    r2_errors: list[str] = []
+    for row in rows:
+        if row["pdf_url"]:
+            # R2 path: pdf_url'den public prefix'i çıkar
+            path = row["pdf_url"].replace(f"{settings.R2_PUBLIC_URL}/", "")
+            if path and not r2.delete(path):
+                r2_errors.append(f"{row['id']}: {path}")
+        deleted += 1
+
+    if deleted:
+        logger.info("cleanup_old_reports: deleted %d reports, r2_errors=%d", deleted, len(r2_errors))
+
+    return {"deleted": deleted, "r2_errors": r2_errors}

@@ -277,6 +277,9 @@ async def trends_nightly_sweep(
     `sector_trend_cache` tablosuna (layer='A') yazılır.
     """
     from app.services.trends.layer_a import run_nightly_sweep
+    from app.services.trends.layer_c import cleanup_old_reports
 
     result = await run_nightly_sweep(db)
+    cleanup = await cleanup_old_reports(db)
+    result["report_cleanup"] = cleanup
     return OkResponse(data=result)

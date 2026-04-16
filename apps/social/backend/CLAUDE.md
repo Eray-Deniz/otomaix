@@ -5,6 +5,19 @@
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — Trends: Layer C eski rapor temizleme (3 ay retention) ✅
+
+**Dosyalar:**
+- `app/services/trends/layer_c.py` — `cleanup_old_reports(db)` fonksiyonu eklendi
+- `app/routers/internal.py` — `POST /internal/trends/nightly-sweep` endpoint'ine cleanup çağrısı eklendi
+
+**Çözüm:**
+- `cleanup_old_reports()`: `generated_at < now() - 3 months` olan `sector_reports` satırlarını DELETE eder, her birinin `pdf_url`'sinden R2 path çıkarıp R2'den de siler
+- Nightly sweep (her gün 06:00 TR) sonunda otomatik çalışır — ayrı cron/workflow gerekmez
+- Response'a `report_cleanup: { deleted, r2_errors }` eklenir
+
+**Retention politikası:** 3 ay — trend raporları güncelliğini kaybettiği için daha eski raporlar gereksiz DB + R2 yükü oluşturur.
+
 ## 2026-04-16 — Phase 6 Sprint 6: Test, Telemetri, Canlıya Alma ✅
 
 **Sentry tekil kaynak hataları:**
