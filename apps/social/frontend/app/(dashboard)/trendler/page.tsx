@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
@@ -110,6 +110,7 @@ export default function TrendlerPage() {
   const [reports, setReports] = useState<SectorReport[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
+  const prevGeneratingIdsRef = useRef<Set<string>>(new Set())
 
   // ─── Layer A — Sektör ───────────────────────────────────────────────────
   async function loadTrends() {
@@ -212,8 +213,7 @@ export default function TrendlerPage() {
       if (res.success && res.data) {
         toast.success(res.data.message || 'Rapor üretiliyor')
         analytics.trendLayerCGenerated(sector)
-        // 2 saniye sonra listeyi yenile
-        setTimeout(() => loadReports(), 2000)
+        loadReports()
       } else if (res.plan_limit) {
         toast.error(res.plan_limit.message)
         analytics.trendQuotaExhausted('layer_c')
@@ -246,6 +246,35 @@ export default function TrendlerPage() {
     if (activeTab === 'monthly') loadReports()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBrand?.id, activeTab])
+
+  // Layer C polling: "generating" rapor varsa 5sn'de bir kontrol et
+  useEffect(() => {
+    const generatingIds = new Set(
+      reports.filter((r) => r.status === 'generating').map((r) => r.id)
+    )
+
+    // Durum geçişi: generating → ready/failed olan raporlar için toast göster
+    for (const prevId of Array.from(prevGeneratingIdsRef.current)) {
+      if (!generatingIds.has(prevId)) {
+        const report = reports.find((r) => r.id === prevId)
+        if (report?.status === 'ready') {
+          toast.success('Rapor hazır! PDF indirilebilir.')
+        } else if (report?.status === 'failed') {
+          toast.error(report.error_message || 'Rapor üretimi başarısız oldu.')
+        }
+      }
+    }
+    prevGeneratingIdsRef.current = generatingIds
+
+    if (generatingIds.size === 0 || activeTab !== 'monthly') return
+
+    const interval = setInterval(() => {
+      loadReports()
+    }, 5000)
+
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reports, activeTab])
 
   if (!currentBrand) {
     return (
@@ -487,15 +516,10 @@ export default function TrendlerPage() {
                       </a>
                     )}
                     {r.status === 'generating' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={loadReports}
-                        className="gap-1.5 shrink-0"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Yenile
-                      </Button>
+                      <span className="flex items-center gap-1.5 shrink-0 text-xs text-amber-600">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Otomatik kontrol ediliyor...
+                      </span>
                     )}
                   </CardContent>
                 </Card>

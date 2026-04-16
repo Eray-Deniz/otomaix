@@ -4,6 +4,22 @@
 > `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazıldı (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — Trends: Layer C rapor polling ✅
+
+**Dosya:** `app/(dashboard)/trendler/page.tsx`
+
+**Sorun:** `POST /trends/monthly-report` 202 döndükten sonra rapor durumu otomatik kontrol edilmiyordu. Kullanıcı raporun hazır olup olmadığını görmek için manuel "Yenile" butonuna basmak zorundaydı.
+
+**Çözüm:**
+- `useEffect` polling: `reports` içinde `status === 'generating'` olan rapor varsa 5sn'de bir `GET /trends/reports` çağrısı yapılır, `monthly` sekmesinden çıkınca interval temizlenir
+- Durum geçişi toast: `generating` → `ready` olduğunda "Rapor hazır! PDF indirilebilir.", `failed` olduğunda hata mesajı toast ile gösterilir
+- `prevGeneratingIdsRef` (useRef) ile önceki generating ID'leri takip edilir, yeni fetch sonucunda artık generating olmayan ID'ler için toast tetiklenir
+- `generateReport()` içindeki `setTimeout(() => loadReports(), 2000)` kaldırıldı, yerine direkt `loadReports()` çağrısı — polling effect zaten devreye girer
+- "Üretiliyor" satırındaki manuel "Yenile" butonu kaldırıldı, yerine "Otomatik kontrol ediliyor..." spinner göstergesi eklendi
+- Aynı pattern: rakip analizi (B-5) polling ile tutarlı
+
+**Backend değişiklik:** Yok — `GET /trends/reports` zaten `status` alanını döndürüyordu.
+
 ## 2026-04-16 — Phase 6 Sprint 6: PostHog trend event'leri ✅
 
 **analytics.ts** — 5 yeni helper eklendi:
