@@ -7,12 +7,12 @@
 
 ## 2026-04-16 — Trends: Layer A Karma etiketi kaldırma + Google Trends artırma ✅
 
-**Sorun:** Claude Haiku diversity kuralını tam uygulamadığında backend post-process fazlalık trendleri "Karma" olarak relabel ediyordu. Bu etiket kullanıcıya hiçbir bilgi vermiyordu. Ayrıca Google Trends RSS'den 20 item çekiliyordu.
+**Sorun:** Claude Haiku diversity kuralını tam uygulamadığında backend post-process fazlalık trendleri "Karma" olarak relabel ediyordu. Bu etiket kullanıcıya hiçbir bilgi vermiyordu. Google Trends `cat=t` filtresi TR'de az/hiç sonuç döndürüyordu.
 
 **Değişiklikler:**
 1. **`layer_a.py` prompt** — "Karma source yazma" kuralı eklendi, birleştirme durumunda en güçlü kaynağın etiketi kullanılacak. Olası source listesinden "Karma" çıkarıldı.
-2. **`layer_a.py` post-process** — 3 limit aşımında Karma relabel yerine, o kaynaktaki en düşük `relevance_score`'lu trendler listeden çıkarılıyor. Orijinal kaynak etiketi korunuyor.
-3. **`google_trends.py`** — RSS fetch limiti 20→30'a çıkarıldı. Claude'un seçebileceği Google Trends havuzu büyüdü.
+2. **`layer_a.py` post-process** — Karma relabel yerine: her kaynaktan score'a göre en iyi 3'ü al, sonra 8'e tamamlamak için overflow'dan yüksek score'luları ekle. Toplam 8 trend garanti.
+3. **`google_trends.py`** — Kategori filtreli feed + fallback: önce sektöre özel `cat=` ile çek, 5'ten az gelirse genel TR feed'ini de ekle (dedupe ile). Toplam max 30.
 
 ## 2026-04-16 — Trends: Layer A kaynak çeşitlilik iyileştirmesi ✅
 

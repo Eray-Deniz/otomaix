@@ -203,21 +203,28 @@ async def _synthesize_with_claude(items: list[dict], sector: dict) -> list[dict]
             for item in parsed:
                 item.setdefault("source", "Bilinmeyen")
                 item.setdefault("relevance_score", 70)
-            # Deterministik post-process: tek source'a 3'ten fazla trend
-            # atanmışsa, o kaynaktaki en düşük relevance_score'lu trendleri
-            # listeden çıkar. Orijinal kaynak etiketi korunur.
-            source_items: dict[str, list[dict]] = {}
+            # Deterministik post-process: her kaynaktan max 3 trend al,
+            # sonra relevance_score'a göre sıralayıp toplam 8'e tamamla.
+            # Orijinal kaynak etiketi korunur, Karma kullanılmaz.
+            from collections import defaultdict
+            source_buckets: dict[str, list[dict]] = defaultdict(list)
             for item in parsed:
                 src = item.get("source") or "Bilinmeyen"
-                source_items.setdefault(src, []).append(item)
-            drop_set: set[int] = set()
-            for src, items in source_items.items():
-                if len(items) > 3:
-                    # Score'a göre sırala, en düşükleri çıkar
-                    ranked = sorted(items, key=lambda x: x.get("relevance_score", 0))
-                    for excess in ranked[: len(items) - 3]:
-                        drop_set.add(id(excess))
-            parsed = [item for item in parsed if id(item) not in drop_set]
+                source_buckets[src].append(item)
+            # Her kaynaktan en iyi 3'ü al
+            balanced: list[dict] = []
+            overflow: list[dict] = []
+            for src, items in source_buckets.items():
+                ranked = sorted(items, key=lambda x: x.get("relevance_score", 0), reverse=True)
+                balanced.extend(ranked[:3])
+                overflow.extend(ranked[3:])
+            # 8'e tamamla: balanced yeterli değilse overflow'dan ekle
+            if len(balanced) < 8 and overflow:
+                overflow.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+                balanced.extend(overflow[: 8 - len(balanced)])
+            # Orijinal sırayı koru (Claude'un verdiği sıra)
+            id_set = {id(item) for item in balanced}
+            parsed = [item for item in parsed if id(item) in id_set]
             logger.info(
                 "claude synthesis ok: sector=%s trends=%d attempt=%d sources=%s",
                 sector.get("slug"), len(parsed), attempt + 1,

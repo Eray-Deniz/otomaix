@@ -17,7 +17,6 @@ _TIMEOUT = 12
 _NS = {"ht": "https://trends.google.com/trending/rss"}
 
 # Google Trends RSS kategori kodları (geo=TR ile birlikte kullanılır)
-# Ref: https://trends.google.com/trending/rss?geo=TR&cat=t
 _SECTOR_CATEGORY: dict[str, str] = {
     "teknoloji": "t",               # Sci/Tech
     "finans": "b",                   # Business
@@ -38,19 +37,7 @@ def _parse_traffic(raw: str) -> float:
         return 0.0
 
 
-async def fetch(sector: dict) -> list[dict]:
-    slug = sector.get("slug") or "genel"
-    cat = _SECTOR_CATEGORY.get(slug)
-    url = f"{_BASE_URL}&cat={cat}" if cat else _BASE_URL
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            if resp.status_code != 200:
-                return []
-            xml_text = resp.text
-    except Exception:
-        return []
-
+def _parse_feed(xml_text: str, limit: int = 30) -> list[dict]:
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
@@ -61,12 +48,11 @@ async def fetch(sector: dict) -> list[dict]:
         return []
 
     results: list[dict] = []
-    for item in channel.findall("item")[:30]:
+    for item in channel.findall("item")[:limit]:
         title = (item.findtext("title") or "").strip()
         if not title:
             continue
         traffic = _parse_traffic(item.findtext("ht:approx_traffic", default="", namespaces=_NS))
-        # İlk haber başlığını özet olarak kullan
         news = item.find("ht:news_item", _NS)
         summary = None
         if news is not None:
@@ -79,3 +65,42 @@ async def fetch(sector: dict) -> list[dict]:
             "summary": summary,
         })
     return results
+
+
+async def fetch(sector: dict) -> list[dict]:
+    slug = sector.get("slug") or "genel"
+    cat = _SECTOR_CATEGORY.get(slug)
+
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+        results: list[dict] = []
+
+        # Kategori filtreli feed (sektöre özel)
+        if cat:
+            try:
+                resp = await client.get(
+                    f"{_BASE_URL}&cat={cat}",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                if resp.status_code == 200:
+                    results = _parse_feed(resp.text, limit=20)
+            except Exception:
+                pass
+
+        # Az sonuç geldiyse genel feed'i de ekle (dedupe ile)
+        if len(results) < 5:
+            try:
+                resp = await client.get(
+                    _BASE_URL,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                if resp.status_code == 200:
+                    general = _parse_feed(resp.text, limit=15)
+                    seen = {r["title"].lower() for r in results}
+                    for item in general:
+                        if item["title"].lower() not in seen:
+                            results.append(item)
+                            seen.add(item["title"].lower())
+            except Exception:
+                pass
+
+    return results[:30]
