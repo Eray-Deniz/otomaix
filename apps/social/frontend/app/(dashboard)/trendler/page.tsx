@@ -461,9 +461,8 @@ export default function TrendlerPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900 mb-1">Aylık Sektör Trend Raporu</h3>
                   <p className="text-sm text-gray-600 mb-3">
-                    Sektöre özel kaynaklardan toplanan ham veriler Claude AI ile sentezlenir.
+                    Sektöre özel kaynaklardan toplanan ham veriler AI ile sentezlenir.
                     12 trend, içerik fırsatı önerileri ve prompt önerileri dahil PDF olarak üretilir.
-                    Pro ve üzeri planlara özeldir.
                   </p>
                   <Button
                     onClick={generateReport}
