@@ -703,13 +703,14 @@ function IcerikOlusturInner() {
                   return (
                     <button
                       key={h.date}
-                      onClick={() => setSelectedHoliday(h)}
+                      disabled={isPast}
+                      onClick={() => { if (!isPast) setSelectedHoliday(h) }}
                       className={cn(
                         'flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
                         selectedHoliday?.date === h.date
                           ? 'border-amber-500 bg-amber-100 text-amber-900'
                           : isPast
-                          ? 'border-gray-100 bg-gray-50 text-gray-400 opacity-60'
+                          ? 'border-gray-100 bg-gray-50 text-gray-400 opacity-60 cursor-not-allowed'
                           : 'border-amber-200 text-amber-800 hover:border-amber-400 hover:bg-amber-50'
                       )}
                     >
@@ -757,8 +758,8 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* 1. En-Boy Oranı — video/special_day/quote için gösterilmez */}
-          {!['video', 'special_day', 'quote'].includes(contentType) && (
+          {/* 1. En-Boy Oranı — special_day/quote için gösterilmez */}
+          {!['special_day', 'quote'].includes(contentType) && (
           <div className="space-y-2">
             <Label>En-Boy Oranı</Label>
             <div className="grid grid-cols-4 gap-2">
@@ -849,8 +850,8 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* 4. Bana fikir öner — sadece image/carousel için */}
-          {!['video', 'special_day', 'quote'].includes(contentType) && (
+          {/* 4. Bana fikir öner — special_day/quote hariç tüm tipler */}
+          {!['special_day', 'quote'].includes(contentType) && (
           <div className="space-y-2">
             <Button
               variant="outline"
@@ -983,7 +984,7 @@ function IcerikOlusturInner() {
       {step === 3 && (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
-            <button onClick={() => setStep(2)} className="text-xs text-blue-500 hover:underline">
+            <button onClick={() => { setStep(2); setGeneratedPost(null); setCaption(''); setHashtags([]) }} className="text-xs text-blue-500 hover:underline">
               ← Geri
             </button>
             <button onClick={resetWizard} className="text-xs text-gray-400 hover:text-gray-600">
@@ -1132,7 +1133,7 @@ function IcerikOlusturInner() {
                   variant="outline"
                   className="flex-1 gap-2"
                   onClick={handleRegenerate}
-                  disabled={generating || publishing || scheduling}
+                  disabled={generating || publishing || scheduling || !generatedPost?.output_url}
                 >
                   <RefreshCw className="w-4 h-4" />
                   Yeniden Üret
