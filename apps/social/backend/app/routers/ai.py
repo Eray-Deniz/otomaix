@@ -229,6 +229,8 @@ async def suggest_ideas(
         f"{payload.count} farklı sosyal medya içerik fikri öner. "
         f"Öneriler '{content_type_tr}' formatına uygun olmalı — "
         f"örneğin video tipiyse görsel tasarım değil video senaryosu/konu fikirleri öner. "
+        "Her seferinde farklı açılardan, yaratıcı ve çeşitli fikirler üret — "
+        "genel kalıpları tekrarlama, özgün ve sürpriz öneriler sun. "
     )
     if doc_context:
         final_instruction += (
@@ -264,6 +266,7 @@ async def suggest_ideas(
         message = client.messages.create(
             model="claude-opus-4-7",
             max_tokens=1024,
+            temperature=1.0,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}],
         )

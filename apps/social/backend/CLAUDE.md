@@ -28,6 +28,10 @@
 
 **Opus 4.7 minimum cache token: 4096.** Kısa system prompt'lar tek başına cache'lenemez. Bu yüzden kurallar+format talimatları system'e taşınarak blok büyütüldü.
 
+**Temperature kuralı (yaratıcı vs analitik çağrılar):**
+- **Yaratıcı içerik üretimi → `temperature=1.0` + çeşitlilik prompt talimatı:** `ai.py:suggest_ideas`, `faceless_video.py:generate_script`. Kullanıcı her tıklamada farklı sonuç bekler.
+- **Analitik/yapısal çıktı → temperature eklenmez (varsayılan):** `ai.py:analyze_website`, `competitor_analyzer.py` (2 çağrı), `layer_a/b/c.py`, `trend_analyzer.py`. Tutarlılık gerekir — aynı girdi her zaman aynı analiz sonucunu üretmeli.
+
 ## 2026-04-16 — Trends: Layer A Karma etiketi kaldırma + Google Trends artırma ✅
 
 **Sorun:** Claude Haiku diversity kuralını tam uygulamadığında backend post-process fazlalık trendleri "Karma" olarak relabel ediyordu. Bu etiket kullanıcıya hiçbir bilgi vermiyordu. Google Trends `cat=t` filtresi TR'de az/hiç sonuç döndürüyordu.

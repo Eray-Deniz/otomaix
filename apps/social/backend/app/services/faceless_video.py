@@ -59,6 +59,7 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "") ->
         f"Üslup: {tone_tr}\n\n"
         f"Konu: {prompt}\n\n"
         "Bu konuda bir sosyal medya videosu için Türkçe script yaz. "
+        "Her seferinde farklı bir anlatım açısı ve yaratıcı bir giriş kullan. "
         "Sadece script metnini yaz, başka açıklama ekleme."
     )
 
@@ -69,6 +70,7 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "") ->
         msg = client.messages.create(
             model="claude-opus-4-7",
             max_tokens=400,
+            temperature=1.0,
             cache_control={"type": "ephemeral"},
             system=system,
             messages=[{"role": "user", "content": user_msg}],
