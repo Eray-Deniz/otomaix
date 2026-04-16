@@ -1,5 +1,9 @@
 # CRM Admin Paneli — CLAUDE.md
 
+## 2026-04-16 — Phase 6 Sprint 6: Trend maliyet kolonu (raporlar sayfası)
+
+`app/(dashboard)/raporlar/page.tsx` → `social.trend_usage` tablosundan aylık Layer B/C kullanım ve maliyet verileri çekilip yeni "Trend Kullanımı & Maliyet" bölümüne eklendi. 4 MetricCard: Layer B tetik sayısı, Layer C rapor sayısı, Layer B maliyet ($), Layer C maliyet ($) + toplam trend maliyeti satırı.
+
 ## 2026-04-14 — N8N-4: CRM-4 Churn Tarama `COUNT(*)` type mismatch fix
 
 Analiz raporundaki P0 bulgusu N8N-4 (CRM Postgres connection / execution hatası) çözüldü.

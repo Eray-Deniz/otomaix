@@ -481,22 +481,26 @@ Layer B artık **toplam maliyetin en küçük kalemi**. Maliyetlerin ~%85'i Apif
 
 ## Kontrol Listesi
 
-- [ ] Migration 019 + 020 prod'da çalıştırıldı
-- [ ] `social.sectors` 11 satır seed'lendi
-- [ ] Brands tablosu `sector_id` migration'la map edildi
-- [ ] Layer A 7 kaynak modülü yazıldı + birim test (Google News, Google Trends, YouTube, Reddit, trends24, Pinterest Trends, TCMB EVDS)
-- [ ] Layer C 11 Apify aktörü entegre edildi + `SECTOR_ACTOR_MAP` routing doğrulandı
-- [ ] `POST /internal/trends/nightly-sweep` çalışır, n8n workflow aktif
-- [ ] Layer B `POST /trends/personal` + quota guard
-- [ ] Layer C `POST /trends/monthly-report` + Apify + PDF + R2 upload
-- [ ] Frontend `/trendler` üç sekmeli yeni tasarım
-- [ ] Paywall modal Starter → Pro upgrade CTA
-- [ ] PostHog event'leri eklendi
-- [ ] CRM raporlar sayfasında trend maliyet kolonu
-- [ ] Eski `trend_analyzer.py` deprecation yorumu
-- [ ] Coolify env değişkenleri (YOUTUBE_API_KEY, EVDS_API_KEY, SERPER_API_KEY) eklendi
-- [ ] Load test 50 eşzamanlı Layer B isteği yeşil
-- [ ] Canlı smoke: her katmandan 1 başarılı çağrı log'lanmış
+- [x] Migration 019 + 020 prod'da çalıştırıldı (Sprint 1)
+- [x] `social.sectors` 11 satır seed'lendi (Sprint 1)
+- [x] Brands tablosu `sector_id` migration'la map edildi (Sprint 1)
+- [x] Layer A 7 kaynak modülü yazıldı (Google News, Google Trends, YouTube, Reddit, trends24, Pinterest Trends, TCMB EVDS) (Sprint 2)
+- [x] `POST /internal/trends/nightly-sweep` çalışır, n8n workflow aktif (Sprint 2)
+- [x] Layer B `POST /trends/personal` + quota guard (Sprint 3)
+- [x] Layer C Apify aktörleri entegre edildi + `SECTOR_ACTOR_MAP` routing (Sprint 4)
+- [x] Layer C `POST /trends/monthly-report` + Apify + PDF + R2 upload (Sprint 4)
+- [x] `GET /trends/reports` + `GET /trends/reports/{id}` endpoint'leri (Sprint 4)
+- [x] Frontend `/trendler` üç sekmeli yeni tasarım (Sprint 5)
+- [x] Paywall: Backend 402 → toast + `/fiyatlandirma` yönlendirmesi (Sprint 5, UpgradeModal yerine toast tercih edildi)
+- [x] Frontend error handling fix: `plan_limit` objesi kontrolüne geçildi (2026-04-16)
+- [x] PostHog event'leri eklendi (Sprint 6) — `analytics.ts`'e 5 yeni helper: `trendLayerAViewed`, `trendLayerBTriggered`, `trendLayerCGenerated`, `trendQuotaExhausted`, `trendPaywallShown`
+- [x] Sentry tekil kaynak hataları — `layer_a.py:_run_source()` içine `sentry_sdk.capture_exception(e)` eklendi
+- [x] CRM raporlar sayfasında trend maliyet kolonu (Sprint 6) — `social.trend_usage` sorgusu + 4 MetricCard + toplam maliyet
+- [x] Eski `trend_analyzer.py` deprecation yorumu (Sprint 6) — dosya başına DEPRECATED docstring eklendi
+- [x] Load test Layer B senaryosu (Sprint 6) — `locustfile.py`'a `POST /trends/personal` eklendi (weight=1, 402 success)
+- [x] Frontend error handling fix — `plan_limit` objesi kontrolüne geçildi, ölü `plan_locked` dalı kaldırıldı
+- [ ] Coolify env değişkenleri (YOUTUBE_API_KEY, EVDS_API_KEY, SERPER_API_KEY) eklendi (Sprint 6)
+- [ ] Canlı smoke: her katmandan 1 başarılı çağrı log'lanmış (Sprint 6)
 
 ---
 

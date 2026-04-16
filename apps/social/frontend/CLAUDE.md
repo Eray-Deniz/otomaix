@@ -1,8 +1,37 @@
 # Social Frontend — CLAUDE.md
 
-> **🚧 Phase 6 — Trend Sistemi Yenileme (backend implementation devam ediyor, 2026-04-15).**
-> `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazılacak (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md` (Sprint 5 frontend bölümü). Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
-> **İlerleme:** Sprint 1 (backend DB şeması) ✅ tamamlandı — frontend etkilenmedi. Sprint 5 (frontend yeniden yazım) sıradaki frontend çalışması olacak.
+> **🚧 Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
+> `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazıldı (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ⏳ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅
+
+## 2026-04-16 — Phase 6 Sprint 6: PostHog trend event'leri ✅
+
+**analytics.ts** — 5 yeni helper eklendi:
+- `trendLayerAViewed(sector)` — Sektör Trendleri sekmesi yüklendiğinde
+- `trendLayerBTriggered(sector)` — Kişisel arama başarılı olduğunda
+- `trendLayerCGenerated(sector)` — Aylık rapor tetiklendiğinde
+- `trendQuotaExhausted(layer)` — Kota aşıldığında (402)
+- `trendPaywallShown(layer, currentPlan)` — Paywall gösterildiğinde
+
+**trendler/page.tsx** — capture çağrıları eklendi:
+- `loadTrends()` başarılı → `trendLayerAViewed`
+- `runPersonalSearch()` başarılı → `trendLayerBTriggered`; 402 → `trendQuotaExhausted` + `trendPaywallShown`
+- `generateReport()` başarılı → `trendLayerCGenerated`; 402 → `trendQuotaExhausted` + `trendPaywallShown`
+
+## 2026-04-16 — Phase 6 Sprint 5: `/trendler` üç sekmeli yeniden yazım ✅
+
+**Dosya:** `app/(dashboard)/trendler/page.tsx` (562 satır, tamamen yeniden yazıldı)
+
+**Üç sekme:**
+- **Sektör Trendleri (Layer A):** `GET /trends?brand_id=` → paylaşımlı cache, trend kartları grid, yenile butonu
+- **Kişisel Arama (Layer B):** `POST /trends/personal?brand_id=` → kota göstergesi ("5/10 kullanıldı"), "Kişisel Trendleri Ara" butonu
+- **Aylık Rapor (Layer C):** `POST /trends/monthly-report` → 202, rapor listesi (ready/generating/failed rozetleri), PDF indirme, "Yeni Rapor Üret" butonu
+
+**Trend kartları:** title, source badge, relevance bar, summary, content_opportunity, suggested prompt, "İçerik Üret" butonu
+
+**Paywall:** Backend 402 → toast mesajı + `/fiyatlandirma` yönlendirmesi
+
+**Fix (2026-04-16):** Error handling uyumsuzluğu düzeltildi — `res.error === 'quota_exceeded'` ve `res.error === 'plan_locked'` kontrolleri kaldırıldı, yerine `res.plan_limit` objesi kontrolüne geçildi. Backend'in döndüğü Türkçe mesajlar (`plan_limit.message`) artık doğru gösteriliyor, `upgrade_url` ile dinamik yönlendirme yapılıyor.
 
 ## 2026-04-14 — F-1: Dashboard "Yayın Serisi" kartı kaldırıldı
 

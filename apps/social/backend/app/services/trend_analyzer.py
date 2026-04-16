@@ -1,11 +1,16 @@
-"""Trend analizi servisi.
+"""DEPRECATED — Phase 6 öncesi trend analizi servisi (Phase 3-5).
 
-Veri kaynakları:
+Phase 6'dan itibaren üç katmanlı yeni sistem kullanılmaktadır:
+  - app/services/trends/layer_a.py  → Nightly ücretsiz kaynak taraması (7 kaynak)
+  - app/services/trends/layer_b.py  → Serper.dev + Claude Haiku kişisel trend
+  - app/services/trends/layer_c.py  → Apify + PDF aylık sektör raporu
+
+Bu dosya geriye uyumluluk için korunmaktadır. Yeni geliştirmelerde kullanmayın.
+
+Eski veri kaynakları:
 1. Google Trends (pytrends) — sektöre göre TR trendleri (pytrends kuruluysa)
 2. Türk haber RSS feed'leri — hurriyet, milliyet, sabah
 3. Claude API — sektör relevance sıralaması ve özet üretimi
-
-Tüm kaynaklar opsiyoneldir; hepsi başarısız olsa bile yapısal bir sonuç döner.
 """
 
 import asyncio

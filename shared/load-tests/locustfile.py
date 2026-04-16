@@ -147,6 +147,21 @@ class OtomaixUser(HttpUser):
         )
 
     @task(1)
+    def trigger_personal_trends(self):
+        """Layer B kişisel trend araması — Serper.dev + Claude Haiku."""
+        if not self.brand_id:
+            return
+        with self.client.post(
+            f"/trends/personal?brand_id={self.brand_id}",
+            json={},
+            headers=AUTH_HEADERS,
+            name="/trends/personal (Layer B)",
+            catch_response=True,
+        ) as response:
+            if response.status_code in (200, 402):
+                response.success()
+
+    @task(1)
     def view_calendar_holidays(self):
         """Resmi tatiller — yıllık cache (86400s TTL)."""
         from datetime import date

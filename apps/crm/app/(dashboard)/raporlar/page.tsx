@@ -24,6 +24,7 @@ async function getReportData(yearMonth: string) {
     topByPosts,
     contentByType,
     contentByPlatform,
+    trendUsage,
   ] = await Promise.all([
     query<{ count: string }>(`
       SELECT COUNT(*)::text as count FROM social.accounts
@@ -101,6 +102,16 @@ async function getReportData(yearMonth: string) {
       WHERE created_at >= $1 AND created_at <= $2
       GROUP BY UNNEST(platforms) ORDER BY COUNT(*) DESC LIMIT 5
     `, [start, end]),
+
+    query<{ layer_b_count: string; layer_c_count: string; layer_b_cost: string; layer_c_cost: string }>(`
+      SELECT
+        COALESCE(SUM(layer_b_count), 0)::text as layer_b_count,
+        COALESCE(SUM(layer_c_count), 0)::text as layer_c_count,
+        COALESCE(SUM(layer_b_cost_usd), 0)::text as layer_b_cost,
+        COALESCE(SUM(layer_c_cost_usd), 0)::text as layer_c_cost
+      FROM social.trend_usage
+      WHERE year_month = $1
+    `, [yearMonth]),
   ])
 
   const nc = parseInt(newCustomers[0]?.count ?? '0')
@@ -116,9 +127,15 @@ async function getReportData(yearMonth: string) {
   const churnRate = ac > 0 ? ((cc / ac) * 100).toFixed(1) : '0.0'
   const mrrGrowth = prevMrr > 0 ? Math.round(((mrr - prevMrr) / prevMrr) * 100) : 0
 
+  const tLayerB = parseInt(trendUsage[0]?.layer_b_count ?? '0')
+  const tLayerC = parseInt(trendUsage[0]?.layer_c_count ?? '0')
+  const tCostB = parseFloat(trendUsage[0]?.layer_b_cost ?? '0')
+  const tCostC = parseFloat(trendUsage[0]?.layer_c_cost ?? '0')
+
   return {
     nc, pnc, cc, ac, mrr, prevMrr, mrrGrowth, pg, pp, publishRate, arpu, churnRate,
     planDist, topByPosts, contentByType, contentByPlatform,
+    tLayerB, tLayerC, tCostB, tCostC,
   }
 }
 
@@ -200,6 +217,19 @@ export default async function RaporlarPage({
               </div>
             ))}
           </div>
+        </div>
+      </ReportSection>
+
+      {/* Trend Kullanımı & Maliyet */}
+      <ReportSection title="🔍 Trend Kullanımı & Maliyet">
+        <div className="grid grid-cols-4 gap-3">
+          <MetricCard label="Layer B Tetik" value={data.tLayerB} sub="Kişisel arama" />
+          <MetricCard label="Layer C Rapor" value={data.tLayerC} sub="Aylık PDF" />
+          <MetricCard label="Layer B Maliyet" value={`$${data.tCostB.toFixed(2)}`} sub="Serper + Haiku" />
+          <MetricCard label="Layer C Maliyet" value={`$${data.tCostC.toFixed(2)}`} sub="Apify + Claude" />
+        </div>
+        <div className="mt-3 text-xs text-gray-400">
+          Toplam trend maliyeti: ${(data.tCostB + data.tCostC).toFixed(2)}
         </div>
       </ReportSection>
 

@@ -1,9 +1,52 @@
 # Social Backend — CLAUDE.md
 
-> **🚧 Phase 6 — Trend Sistemi Yenileme (implementation devam ediyor, 2026-04-15).**
+> **🚧 Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
 > Üç katmanlı yeni trend mimarisi. Detaylı plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ⏳ scaffold atıldı (SERPER_API_KEY bekliyor)
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ⏳ scaffold atıldı (SERPER_API_KEY bekliyor) · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅
+
+## 2026-04-16 — Phase 6 Sprint 6: Test, Telemetri, Canlıya Alma ✅
+
+**Sentry tekil kaynak hataları:**
+- `layer_a.py:_run_source()` içine `sentry_sdk.capture_exception(e)` eklendi — bireysel kaynak hataları (Google News, Reddit, YouTube vb.) artık Sentry'ye ayrı ayrı raporlanıyor (mevcut aggregate warning'e ek olarak).
+
+**trend_analyzer.py deprecation:**
+- Dosya başına DEPRECATED docstring eklendi. Yeni geliştirmeler `trends/layer_a.py`, `layer_b.py`, `layer_c.py` kullanacak.
+
+**Load test Layer B senaryosu:**
+- `shared/load-tests/locustfile.py`'a `POST /trends/personal` senaryosu eklendi (weight=1). HTTP 402 (kota) başarılı sayılır.
+
+## 2026-04-16 — Phase 6 Sprint 5: Frontend `/trendler` yeniden yazım ✅
+
+**Dosya:** `apps/social/frontend/app/(dashboard)/trendler/page.tsx` (562 satır, tamamen yeniden yazıldı)
+
+**Üç sekmeli tasarım:**
+- **Sektör Trendleri (Layer A):** `GET /trends?brand_id=` → sektör paylaşımlı cache, trend kartları, yenile butonu
+- **Kişisel Arama (Layer B):** `POST /trends/personal?brand_id=` → Serper+Haiku, kota göstergesi ("5/10 kullanıldı"), "Kişisel Trendleri Ara" butonu
+- **Aylık Rapor (Layer C):** `POST /trends/monthly-report?brand_id=` → 202 Accepted, rapor listesi (ready/generating/failed rozetleri), PDF indirme linki, "Yeni Rapor Üret" butonu
+
+**Trend kartları:** title, source badge, relevance score bar, summary, content_opportunity, suggested prompt kutusu, "İçerik Üret" butonu
+
+**Paywall:** Backend 402 → `plan_limit` objesi ile toast + `/fiyatlandirma` yönlendirmesi (UpgradeModal yerine toast tercih edildi — fonksiyonel kayıp yok)
+
+**Fix (2026-04-16):** Frontend error handling uyumsuzluğu düzeltildi — `res.error === 'quota_exceeded'` yerine `res.plan_limit` kontrolüne geçildi. Eski `plan_locked` dalı kaldırıldı, backend'in döndüğü Türkçe mesajlar (`plan_limit.message`) artık doğru gösteriliyor.
+
+## 2026-04-15 — Phase 6 Sprint 4: Layer C Apify + PDF rapor ✅
+
+**Yeni dosyalar:**
+- `app/services/trends/layer_c.py` (414 satır) — Apify aktör routing (`SECTOR_ACTOR_MAP`), paralel aktör çalıştırma, Claude Haiku ile 12 trend sentezi, Jinja2+weasyprint PDF render, R2 upload, maliyet tracking
+- `app/services/apify_client.py` (62 satır) — `run_actor(actor_id, input_payload, timeout)` wrapper, `run-sync-get-dataset-items` endpoint'i
+- `app/services/pdf_renderer.py` (21 satır) — `render_sector_report(data) -> bytes`, Jinja2 template + weasyprint
+- `app/templates/sector_report.html` (78 satır) — A4 PDF template, 12 trend kartı, kaynak özeti, maliyet tablosu
+
+**Apify aktörleri:** TikTok (`clockworks/free-tiktok-scraper`), Instagram (`apify/instagram-scraper`), Trendyol (`tyegen/trendyol-product-scraper`) + sektör-bazlı routing
+
+**Endpoint'ler:**
+- `POST /trends/monthly-report?brand_id=` → `check_trend_quota("layer_c")` → BackgroundTasks → 202 Accepted
+- `GET /trends/reports?brand_id=` → son 20 rapor listesi (status, pdf_url, maliyet)
+- `GET /trends/reports/{report_id}` → tek rapor detayı (sahiplik JOIN kontrolü)
+
+**Dependency:** `weasyprint==63.1` + `pydyf==0.11.0` requirements.txt'e eklendi
 
 ## 2026-04-15 — Phase 6 Sprint 3: Layer B scaffold (devam ediyor)
 

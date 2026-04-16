@@ -40,6 +40,11 @@ async def _run_source(mod, sector: dict) -> tuple[str, list[dict]]:
         return name, items or []
     except Exception as e:
         logger.warning("trend source %s failed for %s: %s", name, sector.get("slug"), e)
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(e)
+        except Exception:
+            pass
         return name, []
 
 

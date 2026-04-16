@@ -122,6 +122,7 @@ export default function TrendlerPage() {
       if (res.success && res.data) {
         setTrends(res.data.trends || [])
         setSector(res.data.sector || '')
+        analytics.trendLayerAViewed(res.data.sector)
       }
     } catch {
       toast.error('Trendler yüklenemedi')
@@ -167,8 +168,11 @@ export default function TrendlerPage() {
         setPersonalQuota(res.data.quota)
         setPersonalRan(true)
         toast.success(`${res.data.trends.length} kişisel trend bulundu`)
-      } else if (res.error === 'quota_exceeded' && res.plan_limit) {
+        analytics.trendLayerBTriggered(sector)
+      } else if (res.plan_limit) {
         toast.error(res.plan_limit.message)
+        analytics.trendQuotaExhausted('layer_b')
+        analytics.trendPaywallShown('layer_b', res.plan_limit.current_plan)
       } else {
         toast.error(res.error || 'Kişisel trend aranamadı')
       }
@@ -207,13 +211,14 @@ export default function TrendlerPage() {
       )
       if (res.success && res.data) {
         toast.success(res.data.message || 'Rapor üretiliyor')
+        analytics.trendLayerCGenerated(sector)
         // 2 saniye sonra listeyi yenile
         setTimeout(() => loadReports(), 2000)
-      } else if (res.error === 'quota_exceeded' && res.plan_limit) {
+      } else if (res.plan_limit) {
         toast.error(res.plan_limit.message)
-      } else if (res.error === 'plan_locked') {
-        toast.error('Bu özellik Pro ve üzeri planlara özeldir.')
-        router.push('/fiyatlandirma')
+        analytics.trendQuotaExhausted('layer_c')
+        analytics.trendPaywallShown('layer_c', res.plan_limit.current_plan)
+        router.push(res.plan_limit.upgrade_url || '/fiyatlandirma')
       } else {
         toast.error(res.error || 'Rapor üretilemedi')
       }

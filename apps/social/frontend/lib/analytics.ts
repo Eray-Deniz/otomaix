@@ -79,6 +79,21 @@ export const analytics = {
   trendPostCreated() {
     safe(() => posthog.capture('trend_post_created'))
   },
+  trendLayerAViewed(sector?: string) {
+    safe(() => posthog.capture('trend_layer_a_viewed', { sector }))
+  },
+  trendLayerBTriggered(sector?: string) {
+    safe(() => posthog.capture('trend_layer_b_triggered', { sector }))
+  },
+  trendLayerCGenerated(sector?: string) {
+    safe(() => posthog.capture('trend_layer_c_generated', { sector }))
+  },
+  trendQuotaExhausted(layer: string) {
+    safe(() => posthog.capture('trend_quota_exhausted', { layer }))
+  },
+  trendPaywallShown(layer: string, currentPlan?: string) {
+    safe(() => posthog.capture('trend_paywall_shown', { layer, current_plan: currentPlan }))
+  },
   avatarCreated() {
     safe(() => posthog.capture('avatar_created'))
   },
