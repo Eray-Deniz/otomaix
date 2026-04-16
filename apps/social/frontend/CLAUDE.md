@@ -4,6 +4,19 @@
 > `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazıldı (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — Trends: Layer B son arama sonuçları cache'den yüklenme ✅
+
+**Dosya:** `app/(dashboard)/trendler/page.tsx`
+
+**Sorun:** "Kişisel Arama" sekmesi açıldığında her zaman boş state gösteriliyordu. Backend `brand_trend_cache`'e son aramayı kaydediyordu ama frontend bunu hiç okumuyordu.
+
+**Çözüm:**
+- `loadPersonalCache()` fonksiyonu eklendi — `GET /trends/personal?brand_id=` ile son cache'i okur
+- `useEffect` tab geçişinde `personal` sekmesi için `loadPersonalCache()` çağrılır
+- `personalFetchedAt` state: son arama tarihi gösterimi ("Son arama: 16.04.2026 14:30")
+- `personalCacheLoading` state: cache yüklenirken spinner gösterimi
+- Yeni arama yapıldığında `personalFetchedAt` güncellenir
+
 ## 2026-04-16 — Trends: Layer C rapor polling ✅
 
 **Dosya:** `app/(dashboard)/trendler/page.tsx`

@@ -143,6 +143,39 @@ async def refresh_trends(
     )
 
 
+@router.get("/personal", response_model=OkResponse)
+async def get_personal_trends(
+    brand_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Layer B — son kişisel trend arama sonuçlarını cache'den oku."""
+    await assert_brand_owned(db, user, brand_id)
+    row = await db.fetchrow(
+        """
+        SELECT trends, fetched_at
+        FROM social.brand_trend_cache
+        WHERE brand_id = $1::uuid
+        """,
+        brand_id,
+    )
+    trends: list = []
+    fetched_at: str | None = None
+    if row and row["trends"]:
+        raw = row["trends"]
+        trends = raw if isinstance(raw, list) else []
+        if row["fetched_at"]:
+            fetched_at = row["fetched_at"].isoformat()
+
+    return OkResponse(
+        data={
+            "trends": trends,
+            "count": len(trends),
+            "fetched_at": fetched_at,
+        }
+    )
+
+
 @router.post("/personal", response_model=OkResponse)
 async def personal_trends(
     brand_id: UUID,

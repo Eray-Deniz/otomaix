@@ -105,6 +105,8 @@ export default function TrendlerPage() {
   const [personalQuota, setPersonalQuota] = useState<Quota | null>(null)
   const [personalLoading, setPersonalLoading] = useState(false)
   const [personalRan, setPersonalRan] = useState(false)
+  const [personalFetchedAt, setPersonalFetchedAt] = useState<string | null>(null)
+  const [personalCacheLoading, setPersonalCacheLoading] = useState(false)
 
   // Monthly Report (Layer C)
   const [reports, setReports] = useState<SectorReport[]>([])
@@ -153,6 +155,25 @@ export default function TrendlerPage() {
   }
 
   // ─── Layer B — Kişisel ─────────────────────────────────────────────────
+  async function loadPersonalCache() {
+    if (!currentBrand?.id) return
+    setPersonalCacheLoading(true)
+    try {
+      const res = await api.get<{ trends: Trend[]; fetched_at: string | null }>(
+        `/trends/personal?brand_id=${currentBrand.id}`
+      )
+      if (res.success && res.data && res.data.trends.length > 0) {
+        setPersonalTrends(res.data.trends)
+        setPersonalFetchedAt(res.data.fetched_at)
+        setPersonalRan(true)
+      }
+    } catch {
+      // sessiz — cache yoksa boş state gösterilir
+    } finally {
+      setPersonalCacheLoading(false)
+    }
+  }
+
   async function runPersonalSearch() {
     if (!currentBrand?.id) return
     setPersonalLoading(true)
@@ -168,6 +189,7 @@ export default function TrendlerPage() {
         setPersonalTrends(res.data.trends || [])
         setPersonalQuota(res.data.quota)
         setPersonalRan(true)
+        setPersonalFetchedAt(new Date().toISOString())
         toast.success(`${res.data.trends.length} kişisel trend bulundu`)
         analytics.trendLayerBTriggered(sector)
       } else if (res.plan_limit) {
@@ -243,6 +265,7 @@ export default function TrendlerPage() {
 
   useEffect(() => {
     if (activeTab === 'sector') loadTrends()
+    if (activeTab === 'personal') loadPersonalCache()
     if (activeTab === 'monthly') loadReports()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBrand?.id, activeTab])
@@ -403,7 +426,13 @@ export default function TrendlerPage() {
             </CardContent>
           </Card>
 
-          {personalLoading ? (
+          {personalFetchedAt && personalTrends.length > 0 && !personalLoading && (
+            <p className="text-xs text-gray-400 mb-3">
+              Son arama: {formatDateTR(personalFetchedAt)}
+            </p>
+          )}
+
+          {personalLoading || personalCacheLoading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
             </div>

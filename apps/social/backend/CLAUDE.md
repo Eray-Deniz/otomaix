@@ -5,6 +5,14 @@
 > **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
 
+## 2026-04-16 — Trends: Layer B son arama sonuçlarını cache'den oku ✅
+
+**Dosya:** `app/routers/trends.py` — yeni `GET /trends/personal?brand_id=` endpoint'i
+
+**Çözüm:** `brand_trend_cache` tablosundan son kişisel arama sonuçlarını okur. Response: `{ trends, count, fetched_at }`. Frontend "Kişisel Arama" sekmesi açıldığında bu endpoint çağrılır, son arama sonuçları + tarih gösterilir. Kullanıcı "Yeniden Ara" ile yeni arama tetikleyebilir.
+
+**Not:** `GET /personal` route'u `POST /personal`'dan önce deklare edildi (aynı path, farklı method).
+
 ## 2026-04-16 — Trends: Layer C eski rapor temizleme (3 ay retention) ✅
 
 **Dosyalar:**
