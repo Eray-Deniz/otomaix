@@ -117,7 +117,7 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
             <div className="space-y-1.5">
               <Label className="text-sm">İlk Yorum (hashtag bloğu)</Label>
               <p className="text-xs text-gray-400">
-                Caption'dan ayrı olarak yayınlanacak ilk yorum metni.
+                Caption&apos;dan ayrı olarak yayınlanacak ilk yorum metni.
               </p>
               <Textarea
                 value={data.platform_captions[activeTab].first_comment ?? ''}
@@ -135,7 +135,7 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
 
       {/* Hashtag editor */}
       <div className="space-y-2">
-        <Label className="text-sm">Hashtag'ler</Label>
+        <Label className="text-sm">Hashtag&apos;ler</Label>
         <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-md bg-gray-50 min-h-[36px]">
           {data.hashtags.map((tag) => (
             <Badge key={tag} variant="secondary" className="gap-1 text-xs">
