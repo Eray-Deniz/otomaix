@@ -25,8 +25,34 @@ if settings.SENTRY_DSN:
     )
 
 
+def _validate_templates() -> None:
+    """Phase 7 — startup validation for template catalog.
+
+    Raises on misconfiguration: wrong count, ID mismatch, missing fields.
+    """
+    import logging
+
+    from app.core.templates_data import SECTOR_GUIDANCE, TEMPLATES
+
+    logger = logging.getLogger(__name__)
+    assert len(TEMPLATES) == 22, f"Expected 22 templates, got {len(TEMPLATES)}"
+
+    for template_id, template in TEMPLATES.items():
+        assert template.id == template_id, f"ID mismatch: {template.id} vs {template_id}"
+        assert template.status == "active", f"{template_id} not active"
+        assert len(template.sectors) > 0, f"{template_id} has no sectors"
+        assert len(template.formFields) > 0, f"{template_id} has no form fields"
+
+    logger.info(
+        "Phase 7 templates loaded: %d templates, %d sector guidance entries",
+        len(TEMPLATES),
+        len(SECTOR_GUIDANCE),
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _validate_templates()
     await get_pool()
     yield
     await close_pool()

@@ -3,7 +3,51 @@
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 🚧 · Sprint 3–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 2: Şablon Kataloğu + SECTOR_GUIDANCE ✅
+
+**Kapsam:** Sprint 1'in boş iskelet `TEMPLATES` + `SECTOR_GUIDANCE` dict'leri **spec §2.1/§2.3** doğrultusunda dolduruldu. Tüm değişiklikler additive (ilk defa veri ekleniyor) → `/templates` endpoint'i artık 22 şablon döndürüyor (daha önce boş array).
+
+**KRİTİK fix — `app/models/templates.py` camelCase rewrite:**
+- Sprint 1 modeli snake_case alanlar kullanıyordu (`content_types`, `form_fields`, `help_text`, `max_length`, `suggested_ctas`…).
+- Spec §3.2 **camelCase** zorunluluğu: `contentTypes`, `formFields`, `helpText`, `defaultValue`, `validation`, `captionStyle`, `maxHashtags`, `toneAdjustment`, `useFirstComment`, `additionalGuidance`, `aspectRatioSuggestion`, `slideCount`, `suggestedCTAs`, `suggestedHashtags`, `platformOverrides`.
+- Breaking change yok (TEMPLATES boştu → endpoint response değişmedi). Frontend TypeScript interface (`lib/templates.types.ts`) camelCase'in birebir eşi.
+- `TemplateFormField.type` enum'u `Literal["text", "textarea", "number", "select", "multi-select", "url"]` — spec §2.3 ile uyumlu.
+- `PlatformOverride` 8 platform destekler (instagram, linkedin, twitter, facebook, tiktok, threads, pinterest, bluesky).
+
+**`app/core/templates_data.py` doldurma:**
+- **22 şablon** eklendi (spec §2.1 listesi birebir):
+  - E-Ticaret (4): `eticaret-urun-karti`, `eticaret-kampanya-banner`, `eticaret-musteri-yorumu`, `eticaret-stok-sayaci`
+  - Yemek/Gıda (3): `yemek-gunun-menusu`, `yemek-yeni-lezzet`, `yemek-tarif-karti`
+  - Sağlık (3): `saglik-biliyor-muydunuz`, `saglik-tedavi-sureci`, `saglik-sss`
+  - Hizmet (4): `hizmet-mevzuat-degisikligi`, `hizmet-son-tarih-hatirlatma`, `hizmet-karsilastirma-tablosu`, `hizmet-musavirlik-paketi`
+  - Genel (`sectors=["*"]`, 8): `genel-hakkimizda`, `genel-ekip-tanitimi`, `genel-musteri-yorumu`, `genel-motivasyon`, `genel-is-ilani`, `genel-basari-hikayesi`, `genel-sektor-insight`, `genel-sss`
+- **12 SECTOR_GUIDANCE entry** eklendi (spec §2.3): 4 detaylı (`e-ticaret-perakende`, `yemek-gida`, `saglik`, `hizmet` — 150-250 kelime) + 8 generic (`teknoloji`, `egitim`, `moda-tekstil`, `turizm`, `finans`, `insaat-gayrimenkul`, `otomotiv`, `genel` — ~50 kelime).
+- Sağlık şablonları paylaşılan disclaimer sabitleri kullanır: `_SAGLIK_DISCLAIMER_LONG` / `_SAGLIK_DISCLAIMER_SHORT` → tek kaynaklı uyarı metni.
+- `get_all_templates()` sıralaması: `(template.order or 999, template.name)` → frontend'de stabil gösterim.
+
+**`app/main.py` startup validation:**
+- `_validate_templates()` fonksiyonu eklendi, `lifespan()` context manager başında çalışır. Assertion'lar: `len(TEMPLATES) == 22`, her şablonun `id` dict key'iyle eşleşiyor, `status == "active"`, `sectors` ve `formFields` boş değil.
+- Herhangi bir validation kırılırsa uygulama **başlamaz** (fail-fast) — prod'a bozuk şablon gitmesi imkânsız.
+- Loglar: `"Phase 7 templates loaded: 22 templates, 12 sector guidance entries"`.
+
+**Etki analizi:**
+- Risk: düşük (API response şeması aynı, sadece content zenginleşti)
+- Mevcut `/posts/generate` çağrıları `template_id=null` ile çalışmaya devam eder (Sprint 3'te prompt refactor)
+- Backward compat: autoposting, special_day, quote, video akışları değişmedi
+- Frontend etkileri: `GET /templates?sector=...` artık gerçek şablonlar döndürür — Sprint 3'te frontend wizard entegre edecek
+
+**Doğrulama:**
+- ✅ AST parse: `templates.py`, `templates_data.py`, `main.py` sözdizimi temiz
+- ✅ Count doğrulaması: 22 TEMPLATES + 12 SECTOR_GUIDANCE keys (regex parse)
+- ⏳ Canlı smoke test (deploy sonrası):
+  - `curl https://api.otomaix.com/templates | jq '.data.count'` → Expected: 22
+  - `curl 'https://api.otomaix.com/templates?sector=saglik' | jq '.data.count'` → Expected: 11 (3 sağlık + 8 genel)
+  - `curl 'https://api.otomaix.com/templates?sector=e-ticaret-perakende' | jq '.data.count'` → Expected: 12 (4 e-ticaret + 8 genel)
+  - `curl 'https://api.otomaix.com/templates?sector=teknoloji' | jq '.data.count'` → Expected: 8 (0 teknoloji + 8 genel wildcard)
+
+**Sonraki:** Sprint 3 — `posts.py._build_prompt_with_rag()` refactor: `template_id` varsa `TEMPLATE_PROMPTS`'dan guidance çek + `template_fields` yapısal veriyi prompt'a enjekte et + disclaimer auto-inject. `ai.py.suggest_ideas` template-aware.
 
 > **Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
 > Üç katmanlı trend mimarisi. Detaylı plan: `~/otomaix/docs/06-social-trends-phase6.md`.

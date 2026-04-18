@@ -1,8 +1,45 @@
 # Social Frontend — CLAUDE.md
 
-> **🚧 Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
+> **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
+> `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüşüyor. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3–7 ⏳
+
+> **Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
 > `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazıldı (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
+
+## 2026-04-18 — Phase 7 Sprint 2: TypeScript Interface + Templates API Client ✅
+
+**Kapsam:** Backend Sprint 2 ile senkron frontend artifact'leri — tip tanımları + API client. UI entegrasyonu Sprint 3'te (wizard refactor).
+
+**Yeni dosyalar:**
+- `lib/templates.types.ts` — **spec §3.1 birebir camelCase** interface'leri:
+  - `Template`, `TemplateFormField`, `PlatformOverride`, `TemplateOutput`, `TemplatePromptExample`, `TemplatePrompt`, `TemplateDefaults`
+  - Backend Pydantic `app/models/templates.py` ile birebir eşleşir (JSON transport düzeyinde hiç dönüştürme yok)
+  - `TemplateFormField.type` union: `"text" | "textarea" | "number" | "select" | "multi-select" | "url"`
+  - `platformOverrides`: 8 platform (instagram, linkedin, twitter, facebook, tiktok, threads, pinterest, bluesky)
+- `lib/api/templates.ts` — API client helper'ları:
+  - `fetchTemplates({ sector?, contentType? }): Promise<Template[]>` — `GET /templates?sector=X&content_type=Y`
+  - `fetchTemplateById(id): Promise<Template | null>` — `GET /templates/{id}`
+  - Mevcut `api.get()` wrapper kullanılır → otomatik auth header + error handling
+  - Backend'in 1 saatlik HTTP cache'i (`Cache-Control: public, max-age=3600`) browser seviyesinde etkin
+
+**Kullanım (Sprint 3'te aktif olacak):**
+```typescript
+import { fetchTemplates } from '@/lib/api/templates'
+const templates = await fetchTemplates({
+  sector: brand.sector_slug,      // "e-ticaret-perakende" vb.
+  contentType: selectedType,       // "image" | "carousel"
+})
+// templates artık sektöre özel + genel (sectors=["*"]) şablonların birleşimi
+```
+
+**Etki analizi:**
+- Risk: sıfır (yeni dosyalar, hiçbir mevcut sayfayı değiştirmedi)
+- Eski `/icerik-olustur/page.tsx` hâlâ kategori bazlı akışla çalışır — Sprint 3'te refactor edilecek
+- `lib/store.ts` `Brand.sector_slug` zaten Sprint 1'de eklenmişti (auth/init response'undan geliyor)
+
+**Sonraki:** Sprint 3 — `icerik-olustur/page.tsx` Step 1/2 wizard refactor: 3 kategori butonu → şablon grid + dinamik form. `page.tsx` mount'ta `fetchTemplates()` çağırır, içerik tipi + marka sektörüyle filtreler.
 
 ## 2026-04-16 — İçerik Oluştur: 5 UX iyileştirmesi ✅
 

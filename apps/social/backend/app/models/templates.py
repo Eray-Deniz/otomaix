@@ -1,79 +1,73 @@
 """Phase 7 — Sektör-Spesifik Şablon Sistemi Pydantic modelleri.
 
-Şablonlar backend'de `app/core/templates_data.py` içinde tanımlıdır.
-`GET /templates` bu modelleri JSON olarak frontend'e döndürür.
+Alan isimleri **camelCase** (frontend TypeScript ile birebir eşleşir).
+Şablon tanımları `app/core/templates_data.py` içinde, frontend'e `GET /templates`
+endpoint'i üzerinden JSON olarak sunulur.
 """
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
-
-
-FieldType = Literal["text", "number", "textarea", "select", "date", "boolean"]
-ContentType = Literal["image", "carousel", "video", "special_day", "quote"]
 
 
 class TemplateFormField(BaseModel):
     id: str
     label: str
-    type: FieldType
-    placeholder: str | None = None
+    type: Literal["text", "textarea", "number", "select", "multi-select", "url"]
+    placeholder: Optional[str] = None
+    helpText: Optional[str] = None
     required: bool = False
-    options: list[dict] | None = None
-    suffix: str | None = None
-    help_text: str | None = None
-    max_length: int | None = None
+    defaultValue: Optional[str | int | float] = None
+    validation: Optional[dict] = None
+    options: Optional[list[dict]] = None
+    suffix: Optional[str] = None
+    group: Optional[str] = None
 
 
 class PlatformOverride(BaseModel):
-    """Platform-özel caption/hashtag override (ör. LinkedIn daha uzun)."""
-    platform: str
-    max_chars: int | None = None
-    tone_hint: str | None = None
-    hashtag_count: int | None = None
+    captionStyle: Optional[Literal["long", "medium", "short"]] = None
+    maxHashtags: Optional[int] = None
+    toneAdjustment: Optional[str] = None
+    useFirstComment: Optional[bool] = None
+    additionalGuidance: Optional[str] = None
 
 
 class TemplateOutput(BaseModel):
-    """Şablonun ürettiği çıktı yapısı (caption/image formatı)."""
-    caption_max_chars: int = 2200
-    hashtag_count_min: int = 3
-    hashtag_count_max: int = 8
-    platform_overrides: list[PlatformOverride] = Field(default_factory=list)
+    aspectRatioSuggestion: Optional[Literal["1:1", "4:5", "9:16", "2:3"]] = None
+    slideCount: Optional[dict] = None  # {min, max, default}
 
 
 class TemplatePromptExample(BaseModel):
-    """Few-shot örneği — Claude'a gösterilecek örnek çıktı."""
-    input_summary: str
-    caption: str
-    hashtags: list[str]
+    input: dict
+    output: dict
 
 
 class TemplatePrompt(BaseModel):
-    """Şablonun prompt mühendisliği verisi."""
     guidance: str
-    tone_rules: list[str] = Field(default_factory=list)
-    must_include: list[str] = Field(default_factory=list)
-    must_avoid: list[str] = Field(default_factory=list)
-    examples: list[TemplatePromptExample] = Field(default_factory=list)
+    examples: Optional[list[TemplatePromptExample]] = None
+    priority: list[str] = Field(
+        default_factory=lambda: ["form_fields", "brand_kit", "rag_docs"]
+    )
 
 
 class TemplateDefaults(BaseModel):
-    """Şablon seçildiğinde önerilen varsayılan değerler."""
-    ctas: list[str] = Field(default_factory=list)
-    hashtags: list[str] = Field(default_factory=list)
-    aspect_ratio: str = "1:1"
-    platforms: list[str] = Field(default_factory=list)
-    disclaimer: str | None = None
+    suggestedCTAs: list[str] = Field(default_factory=list)
+    suggestedHashtags: list[str] = Field(default_factory=list)
+    disclaimer: Optional[str] = None
 
 
 class Template(BaseModel):
     id: str
+    version: int = 1
     name: str
     description: str
     icon: str
-    sectors: list[str]           # ["e-ticaret-perakende"] veya ["*"] = tüm sektörler
-    content_types: list[ContentType]
-    form_fields: list[TemplateFormField]
-    prompt: TemplatePrompt
-    defaults: TemplateDefaults
+    sectors: list[str]
+    contentTypes: list[str]
+    status: Literal["active", "deprecated"] = "active"
+    formFields: list[TemplateFormField] = Field(default_factory=list)
     output: TemplateOutput = Field(default_factory=TemplateOutput)
-    version: str = "1.0"
+    prompt: TemplatePrompt
+    defaults: TemplateDefaults = Field(default_factory=TemplateDefaults)
+    platformOverrides: Optional[dict[str, PlatformOverride]] = None
+    tags: Optional[list[str]] = None
+    order: Optional[int] = None
