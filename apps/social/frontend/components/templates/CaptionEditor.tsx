@@ -85,15 +85,15 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
         </div>
       )}
 
-      {/* Caption area */}
+      {/* Gönderi metni alanı */}
       {activeTab === 'default' ? (
         <div className="space-y-1.5">
-          <Label className="text-sm">Varsayılan Caption</Label>
-          <p className="text-xs text-gray-400">Platform-özel caption yoksa kullanılır.</p>
+          <Label className="text-sm">Varsayılan Gönderi Metni</Label>
+          <p className="text-xs text-gray-400">Platform-özel gönderi metni yoksa kullanılır.</p>
           <Textarea
             value={data.default_caption}
             onChange={(e) => updateDefault(e.target.value)}
-            placeholder="Caption metni..."
+            placeholder="Gönderi metni..."
             rows={5}
             className="resize-none text-sm"
           />
@@ -102,12 +102,12 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label className="text-sm">
-              {PLATFORM_LABELS[activeTab] || activeTab} Caption
+              {PLATFORM_LABELS[activeTab] || activeTab} Gönderi Metni
             </Label>
             <Textarea
               value={data.platform_captions[activeTab]?.caption ?? ''}
               onChange={(e) => updatePlatform(activeTab, { caption: e.target.value })}
-              placeholder="Platform-özel caption..."
+              placeholder="Platform-özel gönderi metni..."
               rows={5}
               className="resize-none text-sm"
             />
@@ -117,7 +117,7 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
             <div className="space-y-1.5">
               <Label className="text-sm">İlk Yorum (hashtag bloğu)</Label>
               <p className="text-xs text-gray-400">
-                Caption&apos;dan ayrı olarak yayınlanacak ilk yorum metni.
+                Gönderi metninden ayrı olarak yayınlanacak ilk yorum metni.
               </p>
               <Textarea
                 value={data.platform_captions[activeTab].first_comment ?? ''}

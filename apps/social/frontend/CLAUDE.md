@@ -2,7 +2,65 @@
 
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüşüyor. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish (Option B + Gönderi Metni rename + Step 3 cleanup) ✅ · Sprint 6–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 5 polish — "Gönderi Metni" rename + Step 3 cleanup ✅
+
+**Sorunlar:**
+1. Kullanıcı-yönelik "Caption" terimi Türkçe KOBİ kitlesi için anlaşılır değildi ("Başlık" da yanıltıcı — caption başlık değil, gönderi açıklamasıdır)
+2. Step 2 (`phase='caption'`, `CaptionEditor`) platform-spesifik `platform_captions` JSONB'yi düzenliyor; Step 3 ise flat `caption` TEXT kolonunu ayrı düzenletiyordu — kullanıcı Step 3'te edit yapsa platform_captions güncellenmiyor, iki ayrı doğrulama yeri = tutarsızlık + kullanıcı kafa karışıklığı
+
+**Çözüm 1 — "Gönderi Metni" rename:** Tüm kullanıcı-yönelik "Caption" stringleri (buton, label, toast, placeholder) `Gönderi Metni`'ne çevrildi. İnternal state/type/API field adları (caption, captionData, CaptionEditor, CaptionData, handleGenerateCaption vb.) korundu — sadece UI terminolojisi.
+
+**Çözüm 2 — Step 3 read-only preview (captionData varsa):**
+- `captionData` null değilse (image/carousel Akış C akışı): Step 3'te gönderi metni textarea + hashtag editör yerine **read-only preview kartı** + **← Metni düzenle** linki gösterilir → link `setStep(2); setPhase('caption')` ile CaptionEditor'a geri götürür
+- `captionData` null ise (video/special_day/quote): eski editable caption + hashtag editör UI korunur
+
+**Değişen dosyalar:**
+- `components/templates/CaptionEditor.tsx`: tüm label/placeholder'lar "Caption" → "Gönderi Metni"
+- `app/(dashboard)/icerik-olustur/page.tsx`:
+  - Toast: "Önce caption üretin" → "Önce gönderi metnini üretin"
+  - Toast: "Caption hazır..." → "Gönderi metni hazır..."
+  - Toast: "Caption üretilemedi..." → "Gönderi metni üretilemedi..."
+  - Toast: "Caption kaydedilemedi..." → "Gönderi metni kaydedilemedi..."
+  - Buton: "Caption Üret" → "Gönderi Metni Üret" (hem şablon hem serbest mod form'u)
+  - Link: "Caption'ı yeniden üret" → "Metni yeniden üret"
+  - Step 3: caption editor conditional — `{captionData ? <ReadOnlyPreview/> : <EditableCaption/>}` (read-only'de `setStep(2); setPhase('caption')` ile geri dönüş)
+
+**UX etkisi:** Image/carousel akışında kullanıcı metni yalnızca Step 2'de düzenliyor; Step 3 sadece görsel preview + metin özeti (read-only) + aksiyon butonları. Video/özel gün/alıntı için Step 3 editör davranışı değişmedi.
+
+## 2026-04-18 — Phase 7 Sprint 5 polish — Akış C unified (Option B) ✅
+
+**Sorun:** Sprint 5 sonrası canlı testte fark edildi — "Şablonsuz devam et" (serbest mod) tıklanınca kullanıcı tek-tıkta görsel üretiyordu, caption yalnızca Step 3'te görünüyordu. Bu, şablon modundaki caption-first UX ile tutarsızdı (şablon modu: form → Caption Üret → düzenle → Görsel Üret).
+
+**Çözüm (Option B — unified caption-first):** Serbest mod da Akış C'yi kullansın — `/posts/generate-caption` endpoint'i `template_id=null` ile çağrılır, caption önce gösterilir, sonra görsel üretilir.
+
+**Değişen dosyalar:**
+- `app/(dashboard)/icerik-olustur/page.tsx`:
+  - `handleFreeFormMode()` artık `phase='form'`'a geçiyor (önceden 'pick'te kalıyordu)
+  - `handleGenerateCaption()` her iki modu destekliyor — şablon modunda required field kontrolü, serbest modda prompt zorunlu, her iki durumda da `/posts/generate-caption` çağrısı
+  - `handleGenerate()` image/carousel dalı: `captionData` artık her iki modda zorunlu, `image_prompt` + `platform_captions` her zaman captionData'dan alınır
+  - Yeni JSX bloğu: `mode === 'free' && phase === 'form'` — prompt textarea + fikir öner + aspect + platforms + docs + "Caption Üret" butonu
+  - `phase === 'caption'` bloğu artık template+free ortak — "Formu düzenle"/"Açıklamayı düzenle" etiketi mode'a göre
+  - Klasik akış condition'ı daraltıldı: artık sadece `!['image', 'carousel'].includes(contentType)` (video/special_day/quote) — image/carousel her zaman caption-first'e zorlanır
+- `apps/social/backend/app/routers/posts.py`:
+  - `generate_post()` içindeki `elif payload.template_id and payload.image_prompt:` → `elif payload.image_prompt:` olarak gevşetildi — `image_prompt` varsa (şablon olsun olmasın) legacy `_build_image_prompt()` bypass edilir
+
+**UX etkisi:**
+- Serbest mod akışı: Tip seç → Şablonsuz devam et → **prompt yaz + Caption Üret** → **düzenle** → **Görseli Üret** → Step 3
+- Şablon modu akışı (değişmedi): Tip seç → Şablon seç → form doldur + Caption Üret → düzenle → Görseli Üret → Step 3
+- Video/özel gün/alıntı: eski tek-tık akış korundu (caption bunlar için anlamlı değil)
+
+**Backward compat:**
+- Autoposting n8n workflow (`/internal/autoposting/trigger`) `image_prompt` göndermez → legacy `_build_image_prompt()` devrede kalır
+- Trends → "İçerik Üret" query param prefill (`prompt`, `type`, `aspect`) — serbest mod+`phase='form'`'a düşer, kullanıcı prompt'u görür + "Caption Üret" ile ilerler
+
+**Test planı (deploy sonrası):**
+1. Serbest mod (image): Şablonsuz devam → prompt yaz → Caption Üret → platform sekmelerinde caption'lar → image_prompt düzenle → Görseli Üret → Step 3 önizleme
+2. Serbest mod (carousel): aynı akış
+3. Şablon modu: regresyon yok (Sprint 5'te test edilen tüm akış korunmalı)
+4. Video: Script Üret → İçerik Üret tek-tık (değişmedi)
+5. Özel Gün/Alıntı: tek-tık akış (değişmedi)
 
 ## 2026-04-18 — Phase 7 Sprint 5 — /icerik-olustur wizard refactor (Akış C UI) ✅
 

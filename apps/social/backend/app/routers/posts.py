@@ -278,8 +278,9 @@ async def generate_post(
         enriched_prompt = _build_special_day_prompt(payload, brand, brand_kit)
     elif payload.content_type == "quote":
         enriched_prompt = _build_quote_prompt(payload, dict(brand), brand_kit)
-    elif payload.template_id and payload.image_prompt:
-        # Phase 7 Sprint 4 — Akış C: caption endpoint üretti, kullanıcı edit edebildi
+    elif payload.image_prompt:
+        # Phase 7 Sprint 4/5 — Akış C (unified): caption endpoint'ten image_prompt geldiyse
+        # template_id olsun olmasın bypass et (free mode da caption-first akışı kullanır)
         enriched_prompt = payload.image_prompt
     else:
         enriched_prompt = await _build_image_prompt(payload, brand, brand_kit, db)

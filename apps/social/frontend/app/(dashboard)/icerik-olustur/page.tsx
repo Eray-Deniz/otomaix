@@ -316,14 +316,10 @@ function IcerikOlusturInner() {
       toast.error('Lütfen alıntı metnini girin')
       return
     }
-    // Template modunda caption üretilmiş olmalı; free modda prompt zorunlu
+    // Image/carousel: her iki modda da caption üretilmiş olmalı (Akış C unified)
     if (['image', 'carousel'].includes(contentType)) {
-      if (mode === 'template' && !captionData) {
-        toast.error('Önce caption üretin')
-        return
-      }
-      if (mode === 'free' && !prompt.trim()) {
-        toast.error('Lütfen bir prompt girin')
+      if (!captionData) {
+        toast.error('Önce gönderi metnini üretin')
         return
       }
     } else if (contentType === 'video' && !prompt.trim()) {
@@ -415,21 +411,21 @@ function IcerikOlusturInner() {
         toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
     } else {
-      // Image / Carousel pipeline — Phase 7 template veya free mod
-      const isTemplateMode = mode === 'template' && captionData && selectedTemplate
+      // Image / Carousel pipeline — Phase 7 unified Akış C (template veya free mod)
+      const isTemplateMode = mode === 'template' && selectedTemplate
       const res = await api.post<GeneratedPost>('/posts/generate', {
         brand_id: currentBrand.id,
         content_type: contentType,
         content_category: null,
-        prompt: isTemplateMode ? null : prompt.trim(),
+        prompt: null,
         user_text: null,
         document_ids: selectedDocIds,
         aspect_ratio: aspectRatio,
         platforms,
         template_id: isTemplateMode ? selectedTemplate.id : null,
         template_fields: isTemplateMode ? templateFields : null,
-        platform_captions: isTemplateMode ? captionData.platform_captions : null,
-        image_prompt: isTemplateMode ? captionData.image_prompt : null,
+        platform_captions: captionData!.platform_captions,
+        image_prompt: captionData!.image_prompt,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -441,14 +437,9 @@ function IcerikOlusturInner() {
           )
         }
         setGeneratedPost(res.data)
-        // Template modda captionData'dan backward-fill, değilse backend response'u
-        if (isTemplateMode && captionData) {
-          setCaption(captionData.default_caption || res.data.caption || '')
-          setHashtags(captionData.hashtags.length ? captionData.hashtags : res.data.hashtags ?? [])
-        } else {
-          setCaption(res.data.caption ?? '')
-          setHashtags(res.data.hashtags ?? [])
-        }
+        // captionData'dan backward-fill (her iki mod da)
+        setCaption(captionData!.default_caption || res.data.caption || '')
+        setHashtags(captionData!.hashtags.length ? captionData!.hashtags : res.data.hashtags ?? [])
         toast.success('İçerik üretimi başlatıldı!')
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
@@ -462,39 +453,49 @@ function IcerikOlusturInner() {
     }
   }
 
-  // Phase 7 — Caption üret (Akış C, şablon modu)
+  // Phase 7 — Caption üret (Akış C, hem şablon hem serbest mod)
   async function handleGenerateCaption() {
-    if (!currentBrand?.id || !selectedTemplate) return
+    if (!currentBrand?.id) return
 
-    // Required field kontrolü
-    const missing = selectedTemplate.formFields
-      .filter((f) => f.required)
-      .filter((f) => {
-        const v = templateFields[f.id]
-        return v == null || v === '' || (Array.isArray(v) && v.length === 0)
-      })
-    if (missing.length > 0) {
-      toast.error(`Zorunlu alan: ${missing.map((f) => f.label).join(', ')}`)
+    // Şablon modunda required field kontrolü
+    if (mode === 'template' && selectedTemplate) {
+      const missing = selectedTemplate.formFields
+        .filter((f) => f.required)
+        .filter((f) => {
+          const v = templateFields[f.id]
+          return v == null || v === '' || (Array.isArray(v) && v.length === 0)
+        })
+      if (missing.length > 0) {
+        toast.error(`Zorunlu alan: ${missing.map((f) => f.label).join(', ')}`)
+        return
+      }
+      analytics.templateFormSubmitted(selectedTemplate.id, Object.keys(templateFields).length)
+    }
+
+    // Serbest modda prompt zorunlu
+    if (mode === 'free' && !prompt.trim()) {
+      toast.error('Lütfen bir içerik açıklaması girin')
       return
     }
 
-    analytics.templateFormSubmitted(selectedTemplate.id, Object.keys(templateFields).length)
     setLoadingCaption(true)
     const genStart = Date.now()
     const res = await api.post<CaptionData>('/posts/generate-caption', {
       brand_id: currentBrand.id,
-      template_id: selectedTemplate.id,
-      template_fields: templateFields,
+      template_id: selectedTemplate?.id ?? null,
+      template_fields: selectedTemplate ? templateFields : null,
       user_prompt: prompt.trim() || null,
       document_ids: selectedDocIds,
       platforms,
     })
     setLoadingCaption(false)
     if (res.success && res.data) {
-      analytics.templateCaptionGenerated(
-        selectedTemplate.id,
-        Math.round((Date.now() - genStart) / 1000)
-      )
+      if (selectedTemplate) {
+        analytics.templateCaptionGenerated(
+          selectedTemplate.id,
+          Math.round((Date.now() - genStart) / 1000)
+        )
+      }
       setCaptionData({
         default_caption: res.data.default_caption ?? '',
         platform_captions: res.data.platform_captions ?? {},
@@ -502,13 +503,13 @@ function IcerikOlusturInner() {
         hashtags: res.data.hashtags ?? [],
       })
       setPhase('caption')
-      toast.success('Caption hazır — düzenleyip görseli üretin')
+      toast.success('Gönderi metni hazır — düzenleyip görseli üretin')
     } else if (!res.success && res.error === 'rate_limit') {
       toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
     } else if (!res.success && res.error === 'plan_limit_reached' && res.plan_limit) {
       setUpgradeMessage(res.plan_limit.message)
     } else {
-      toast.error('Caption üretilemedi: ' + ((!res.success && res.error) || 'Bilinmeyen hata'))
+      toast.error('Gönderi metni üretilemedi: ' + ((!res.success && res.error) || 'Bilinmeyen hata'))
     }
   }
 
@@ -531,7 +532,7 @@ function IcerikOlusturInner() {
       hashtags,
     })
     if (!res.success) {
-      toast.error('Caption kaydedilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+      toast.error('Gönderi metni kaydedilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       return false
     }
     return true
@@ -653,6 +654,7 @@ function IcerikOlusturInner() {
     setSelectedTemplate(null)
     setTemplateFields({})
     setCaptionData(null)
+    setPhase('form')
   }
 
   function handleBackToPick() {
@@ -920,20 +922,20 @@ function IcerikOlusturInner() {
                 disabled={loadingCaption}
               >
                 {loadingCaption ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                Caption Üret
+                Gönderi Metni Üret
               </Button>
             </div>
           )}
 
-          {/* Phase 7: phase=caption — caption düzenle + "Görseli Üret" */}
-          {['image', 'carousel'].includes(contentType) && mode === 'template' && phase === 'caption' && captionData && selectedTemplate && (
+          {/* Phase 7: phase=caption — caption düzenle + "Görseli Üret" (template veya free) */}
+          {['image', 'carousel'].includes(contentType) && phase === 'caption' && captionData && (
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setPhase('form')}
                   className="text-xs text-blue-500 hover:underline"
                 >
-                  ← Formu düzenle
+                  ← {mode === 'template' ? 'Formu düzenle' : 'Açıklamayı düzenle'}
                 </button>
                 <button
                   onClick={handleGenerateCaption}
@@ -941,7 +943,7 @@ function IcerikOlusturInner() {
                   className="text-xs text-gray-500 hover:text-gray-700 gap-1 flex items-center"
                 >
                   {loadingCaption ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  Caption&apos;ı yeniden üret
+                  Metni yeniden üret
                 </button>
               </div>
 
@@ -965,17 +967,135 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* Klasik akış — video/special_day/quote + image/carousel'de "Serbest İçerik" modu */}
-          {(!['image', 'carousel'].includes(contentType) || mode === 'free') && (
-          <>
-          {mode === 'free' && ['image', 'carousel'].includes(contentType) && (
-            <button
-              onClick={handleBackToPick}
-              className="text-xs text-blue-500 hover:underline"
-            >
-              ← Şablon seçimine dön
-            </button>
+          {/* Serbest mod + phase=form: prompt + aspect/platforms/docs + "Caption Üret" */}
+          {['image', 'carousel'].includes(contentType) && mode === 'free' && phase === 'form' && (
+            <div className="space-y-5">
+              <button
+                onClick={handleBackToPick}
+                className="text-xs text-blue-500 hover:underline"
+              >
+                ← Şablon seçimine dön
+              </button>
+
+              <div className="space-y-1.5">
+                <Label>İçerik Açıklaması & Tasarım Tercihleri</Label>
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="İçerik hakkında iletmek istediğiniz detayları buraya yazabilirsiniz..."
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchIdeas}
+                  disabled={loadingIdeas}
+                  className="gap-2"
+                >
+                  {loadingIdeas ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lightbulb className="w-4 h-4" />}
+                  Bana fikir öner
+                </Button>
+                {ideas.length > 0 && (
+                  <div className="flex flex-col gap-2 mt-2">
+                    {ideas.map((idea, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setPrompt(idea)}
+                        className="text-left text-sm px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-800 transition-colors"
+                      >
+                        💡 {idea}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>En-Boy Oranı</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {ASPECT_RATIOS.map((ar) => (
+                    <button
+                      key={ar.id}
+                      onClick={() => setAspectRatio(ar.id)}
+                      className={cn(
+                        'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
+                        aspectRatio === ar.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300'
+                      )}
+                    >
+                      <span className="text-xl">{ar.icon}</span>
+                      <span className="text-xs font-bold text-gray-800">{ar.label}</span>
+                      <span className="text-[10px] text-gray-400">{ar.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Platformlar</Label>
+                <div className="flex flex-wrap gap-2">
+                  {PLATFORMS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => togglePlatform(p.id)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                        platforms.includes(p.id)
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                      )}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {availableDocs.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
+                  <div className="flex flex-col gap-1.5">
+                    {availableDocs.map((doc) => (
+                      <button
+                        key={doc.id}
+                        onClick={() => toggleDoc(doc.id)}
+                        className={cn(
+                          'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
+                          selectedDocIds.includes(doc.id)
+                            ? 'border-blue-500 bg-blue-50 text-blue-800'
+                            : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                        )}
+                      >
+                        <FileText className="w-4 h-4 flex-shrink-0" />
+                        <span className="truncate">{doc.name}</span>
+                        {selectedDocIds.includes(doc.id) && (
+                          <span className="ml-auto text-blue-600 text-xs">✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={handleGenerateCaption}
+                className="w-full gap-2"
+                disabled={loadingCaption || !prompt.trim()}
+              >
+                {loadingCaption ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                Gönderi Metni Üret
+              </Button>
+            </div>
           )}
+
+          {/* Klasik akış — sadece video/special_day/quote */}
+          {!['image', 'carousel'].includes(contentType) && (
+          <>
           {/* Özel Gün — tatil seçici */}
           {contentType === 'special_day' && (
             <div className="space-y-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
@@ -1379,46 +1499,73 @@ function IcerikOlusturInner() {
                 </div>
               )}
 
-              {/* Caption editor */}
-              <div className="space-y-1.5">
-                <Label>Açıklama Metni</Label>
-                <Textarea
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="İçerik açıklamasını buraya yazın veya AI tarafından üretilmiş metni düzenleyin..."
-                  rows={4}
-                  className="resize-none"
-                />
-              </div>
-
-              {/* Hashtags */}
-              <div className="space-y-2">
-                <Label>Hashtagler</Label>
-                <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 border border-gray-200 rounded-md bg-gray-50">
-                  {hashtags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="gap-1 text-xs">
-                      {tag}
-                      <button onClick={() => setHashtags(hashtags.filter((h) => h !== tag))}>
-                        <X className="w-3 h-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                  {hashtags.length === 0 && (
-                    <span className="text-xs text-gray-400 px-1">Henüz hashtag yok</span>
+              {/* Gönderi metni + hashtag — captionData varsa read-only preview, yoksa editör */}
+              {captionData ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Gönderi Metni</Label>
+                    <button
+                      onClick={() => { setStep(2); setPhase('caption') }}
+                      className="text-xs text-blue-500 hover:underline"
+                    >
+                      ← Metni düzenle
+                    </button>
+                  </div>
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {caption || captionData.default_caption || '(boş)'}
+                    </p>
+                  </div>
+                  {hashtags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {hashtags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newHashtag}
-                    onChange={(e) => setNewHashtag(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHashtag() } }}
-                    placeholder="#hashtag ekle"
-                    className="flex-1 text-sm px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
-                  />
-                  <Button variant="outline" size="sm" onClick={addHashtag}>Ekle</Button>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Gönderi Metni</Label>
+                    <Textarea
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                      placeholder="Gönderi metnini buraya yazın veya AI tarafından üretilmiş metni düzenleyin..."
+                      rows={4}
+                      className="resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Hashtagler</Label>
+                    <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 border border-gray-200 rounded-md bg-gray-50">
+                      {hashtags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="gap-1 text-xs">
+                          {tag}
+                          <button onClick={() => setHashtags(hashtags.filter((h) => h !== tag))}>
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      {hashtags.length === 0 && (
+                        <span className="text-xs text-gray-400 px-1">Henüz hashtag yok</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newHashtag}
+                        onChange={(e) => setNewHashtag(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHashtag() } }}
+                        placeholder="#hashtag ekle"
+                        className="flex-1 text-sm px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400"
+                      />
+                      <Button variant="outline" size="sm" onClick={addHashtag}>Ekle</Button>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Action buttons */}
               <div className="flex gap-3 pt-2">

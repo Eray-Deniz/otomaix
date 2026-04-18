@@ -3,7 +3,22 @@
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 5 polish — Akış C unified (Option B) ✅
+
+**Tek backend değişikliği:** `app/routers/posts.py:generate_post()` içindeki Akış C bypass koşulu gevşetildi.
+
+**Önce:** `elif payload.template_id and payload.image_prompt:` — caption endpoint üretilen `image_prompt` yalnızca `template_id` da set edilmişse bypass ediyordu.
+
+**Sonra:** `elif payload.image_prompt:` — `image_prompt` varsa template olsun olmasın legacy `_build_image_prompt()` bypass edilir.
+
+**Neden:** Frontend serbest modu (şablonsuz) da artık caption-first (Akış C) kullanıyor — `/posts/generate-caption` çağrısı `template_id=null` ile yapılıp `image_prompt` üretiliyor, sonra `/posts/generate` çağrısı yine `template_id=null` ama `image_prompt` dolu gidiyor. Eski koşul bu akışı yakalayamıyordu, legacy prompt builder devreye giriyordu.
+
+**Etki analizi:**
+- Risk: düşük — `image_prompt` opsiyonel alan, mevcut tek-tık akışlar (autoposting n8n, `special_day`, `quote`, legacy frontend) göndermiyor → eski path aynen çalışır
+- `special_day`/`quote` branch'leri daha önce değerlendirildiği için o akışlar etkilenmez
+- Caption endpoint zaten `template_id=None` durumunu destekliyor (Sprint 4'te `caption_generator.py` template=None'a `if template:` guard'larıyla graceful)
 
 ## 2026-04-18 — Phase 7 Sprint 4: Caption endpoint + Akış C ✅
 
