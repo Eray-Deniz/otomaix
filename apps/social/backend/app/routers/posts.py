@@ -2,7 +2,9 @@ from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, Field
 
+from app.core.caption_generator import generate_captions
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.security import (
@@ -182,6 +184,73 @@ def _build_quote_prompt(payload: PostGenerate, brand: dict, brand_kit: dict) -> 
     )
 
 
+class GenerateCaptionRequest(BaseModel):
+    """Phase 7 Sprint 4 — POST /posts/generate-caption body."""
+
+    brand_id: UUID
+    template_id: str | None = None
+    template_fields: dict | None = None
+    user_prompt: str | None = None
+    document_ids: list[UUID] = Field(default_factory=list)
+    platforms: list[str] = Field(default_factory=list)
+
+
+@router.post(
+    "/generate-caption",
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(30, 3600))],  # 30/saat
+)
+async def generate_caption(
+    payload: GenerateCaptionRequest,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Claude ile caption + image_prompt + hashtag üret (Akış C parçası)."""
+    await assert_brand_owned(db, user, payload.brand_id)
+
+    brand = await db.fetchrow(
+        """
+        SELECT b.*, s.slug AS sector_slug
+        FROM social.brands b
+        LEFT JOIN social.sectors s ON b.sector_id = s.id
+        WHERE b.id = $1
+        """,
+        payload.brand_id,
+    )
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    brand_kit = _parse_brand_kit(brand["brand_kit"])
+
+    template = None
+    if payload.template_id:
+        template = get_template_by_id(payload.template_id)
+        if not template:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Template {payload.template_id} not found",
+            )
+
+    rag_context = None
+    if payload.document_ids:
+        base_query = payload.user_prompt or (
+            template.name if template else "social media caption"
+        )
+        rag_context = await get_document_context(payload.document_ids, base_query, db)
+
+    result = await generate_captions(
+        brand=dict(brand),
+        brand_kit=brand_kit,
+        template=template,
+        template_fields=payload.template_fields,
+        user_prompt=payload.user_prompt,
+        rag_context=rag_context,
+        platforms=payload.platforms,
+    )
+
+    return OkResponse(data=result)
+
+
 @router.post(
     "/generate",
     response_model=OkResponse,
@@ -209,6 +278,9 @@ async def generate_post(
         enriched_prompt = _build_special_day_prompt(payload, brand, brand_kit)
     elif payload.content_type == "quote":
         enriched_prompt = _build_quote_prompt(payload, dict(brand), brand_kit)
+    elif payload.template_id and payload.image_prompt:
+        # Phase 7 Sprint 4 — Akış C: caption endpoint üretti, kullanıcı edit edebildi
+        enriched_prompt = payload.image_prompt
     else:
         enriched_prompt = await _build_image_prompt(payload, brand, brand_kit, db)
 
@@ -218,6 +290,27 @@ async def generate_post(
         author_part = f"\n\n— {payload.quote_author}" if payload.quote_author else ""
         default_caption = f'"{payload.quote_text}"{author_part}'
 
+    # Phase 7 Sprint 4 — platform_captions'dan caption/hashtags backward-fill
+    # Beklenen şekil: {"default": "...", "platforms": {"instagram": {"caption":"...", "hashtags":[...]}}}
+    caption_value: str | None = default_caption
+    hashtags_value: list[str] | None = None
+    if payload.platform_captions:
+        pc = payload.platform_captions
+        caption_value = pc.get("default") or default_caption
+        platforms_map = pc.get("platforms") or {}
+        if not caption_value and platforms_map:
+            first_platform = next(iter(platforms_map.values()), None)
+            if isinstance(first_platform, dict):
+                caption_value = first_platform.get("caption")
+
+        hashtag_set: set[str] = set()
+        for platform_data in platforms_map.values():
+            if isinstance(platform_data, dict):
+                for h in platform_data.get("hashtags", []) or []:
+                    hashtag_set.add(h)
+        if hashtag_set:
+            hashtags_value = list(hashtag_set)
+
     # Phase 7 — template_id varsa content_category'yi boşalt (yeni akış legacy ile karışmasın)
     effective_category = None if payload.template_id else payload.content_category
 
@@ -226,8 +319,10 @@ async def generate_post(
         INSERT INTO social.posts
             (brand_id, content_type, content_category, prompt, user_text,
              document_ids, aspect_ratio, platforms, status,
-             template_id, template_fields, platform_captions)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating', $9, $10, $11)
+             template_id, template_fields, platform_captions,
+             caption, hashtags)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
+                $9, $10, $11, $12, $13)
         RETURNING *
         """,
         payload.brand_id,
@@ -241,6 +336,8 @@ async def generate_post(
         payload.template_id,
         payload.template_fields,
         payload.platform_captions,
+        caption_value,
+        hashtags_value,
     )
     post = dict(row)
 
@@ -259,7 +356,7 @@ async def generate_post(
     return OkResponse(data={
         "post_id": str(post["id"]),
         "status": "generating",
-        "caption": default_caption,
+        "caption": caption_value,
     })
 
 

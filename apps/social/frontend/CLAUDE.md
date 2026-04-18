@@ -2,7 +2,17 @@
 
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüşüyor. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 4 (Backend) — Caption endpoint + Akış C ✅
+
+**Sprint 4 tamamen backend çalışması** (frontend dokunulmadı). Backend detayları: `apps/social/backend/CLAUDE.md` → "2026-04-18 — Phase 7 Sprint 4".
+
+**Özet:** Yeni `POST /posts/generate-caption` endpoint'i Claude Opus 4.7 ile platform-spesifik caption + image_prompt + hashtag üretir. `POST /posts/generate` Akış C için güncellendi — caption endpoint'in ürettiği `image_prompt` + `platform_captions` payload'a gelirse legacy prompt inşası bypass edilir, caption/hashtags kolonlarına backward-fill yapılır.
+
+**Frontend etkisi:** Henüz yok — Sprint 5'te `/icerik-olustur` wizard Akış C'ye geçecek (Önce caption önizle → sonra görsel üret). Şu an mevcut frontend akışı eski `POST /posts/generate` tek-çağrı şeklinde çalışmaya devam eder.
+
+**Sonraki (frontend):** Sprint 5 — wizard refactor (şablon grid + dinamik form + caption preview ekranı).
 
 ## 2026-04-18 — Phase 7 Sprint 3 (Backend) — Prompt building refactor ✅
 

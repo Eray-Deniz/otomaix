@@ -3,7 +3,62 @@
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 4: Caption endpoint + Akış C ✅
+
+**Kapsam:** Platform-spesifik caption + image_prompt + hashtag üreten yeni endpoint eklendi. `POST /posts/generate-caption` Claude Opus 4.7'ye 3-katman cache ile istek yapar (spec §4). `POST /posts/generate` Akış C için güncellendi — caption endpoint'in ürettiği `image_prompt` payload'a gelirse legacy `_build_image_prompt()` bypass edilir.
+
+**Yeni dosyalar:**
+- `app/core/caption_generator.py` — `generate_captions(brand, brand_kit, template, template_fields, user_prompt, rag_context, platforms)` Claude çağrısı:
+  - `build_system_prompt()` Tier 1 + `build_brand_context()` Tier 2 (cache_control ephemeral) + `build_dynamic_content()` + `_build_output_format_instruction()` Tier 3
+  - Model: `claude-opus-4-7`, `max_tokens=2048`, `temperature=1.0` (yaratıcı içerik → çeşitlilik)
+  - Response parse: markdown code block strip + JSON load + default field doldurma (`default_caption`, `platform_captions`, `image_prompt`, `hashtags`)
+  - **Disclaimer auto-append:** `template.defaults.disclaimer` varsa hem `default_caption` hem her platform caption'ının sonuna eklenir (idempotent — endswith kontrolü)
+  - Cache loglama: `cache_read_input_tokens` + `cache_creation_input_tokens` + template.id
+  - Fallback: `ANTHROPIC_API_KEY` yoksa veya Claude hatası → `_fallback_response(user_prompt, platforms)` döner (hata durumunda `error` field eklenir)
+- `_build_output_format_instruction(template, platforms)` → platformOverrides varsa `useFirstComment` opsiyonunu da şemaya dahil eder
+
+**Değişen dosyalar:**
+- `app/routers/posts.py`:
+  - Yeni `GenerateCaptionRequest` BaseModel (inline): `brand_id`, `template_id`, `template_fields`, `user_prompt`, `document_ids`, `platforms`
+  - Yeni endpoint `POST /posts/generate-caption` (30/saat rate limit):
+    - `assert_brand_owned` + sector JOIN'lü brand fetch + template lookup
+    - `document_ids` varsa `get_document_context()` ile RAG
+    - `generate_captions()` çağırır → `OkResponse(data=result)`
+    - Invalid template_id → 400
+  - `generate_post()` Akış C desteği:
+    - `payload.template_id and payload.image_prompt` → enriched_prompt = payload.image_prompt (bypass)
+    - `payload.platform_captions` varsa `caption` (TEXT) + `hashtags` (TEXT[]) kolonlarına backward-fill:
+      - Beklenen şekil: `{"default": "...", "platforms": {"instagram": {"caption":"...", "hashtags":[...]}, "linkedin": {...}}}`
+      - Fallback öncelik: `pc.default` → `platforms[ilk].caption` → `default_caption`
+      - Hashtags: tüm platformlardaki hashtag'lerin unique union'ı
+    - INSERT'e `caption` + `hashtags` kolonları eklendi (kolonlar zaten migration 001'den beri vardı)
+
+**3-katman cache stratejisi (spec §4.1):**
+- Tier 1 (system) → `cache_control: ephemeral` → DİL KURALI + JSON format + YASAK listesi
+- Tier 2 (brand_context) → `cache_control: ephemeral` → marka + sektör + şablon guidance + disclaimer
+- Tier 3 (dynamic) → cache yok → template_fields + user_prompt + RAG + output format
+
+Aynı marka + aynı şablon için ardışık çağrılarda Tier 1 + 2 cache hit — Sentry log'larında `cache_read_input_tokens > 0` görünmeli.
+
+**Etki analizi:**
+- Risk: düşük — yeni endpoint additive, `generate_post` değişiklikleri backward-compat (frontend `platform_captions` göndermediği sürece yeni path tetiklenmez)
+- Akış C frontend entegrasyonu Sprint 5'e kadar devrede değil (şu an mevcut frontend caption endpoint'i çağırmıyor)
+- `special_day` / `quote` / autoposting n8n / legacy `content_category` akışları birebir korundu
+- Migration gerekmez — `caption TEXT`, `hashtags TEXT[]` kolonları migration 001'den, `platform_captions JSONB` migration 022'den beri mevcut
+
+**Doğrulama:**
+- ✅ AST parse: `caption_generator.py`, `posts.py` sözdizimi temiz
+- ✅ `prompt_builder` import'ları çalışır durumda (caption_generator doğrudan import ediyor)
+- ✅ `posts.py` endpoint listesi: `generate_caption` + mevcut endpoint'ler
+- ⏳ Canlı smoke test (deploy sonrası):
+  - `POST /posts/generate-caption` Swagger UI'dan — eticaret-urun-karti + instagram/linkedin → 2 farklı caption şekli
+  - Sağlık şablonu → caption sonunda disclaimer görünmeli
+  - Invalid template_id → 400
+  - İkinci çağrıda backend log'unda `cache_read_input_tokens > 0`
+
+**Sonraki:** Sprint 5 — `/icerik-olustur` wizard refactor (template grid + dinamik form + Akış C UI).
 
 ## 2026-04-18 — Phase 7 Sprint 3: Prompt building refactor (template-aware + 3-tier caching) ✅
 
