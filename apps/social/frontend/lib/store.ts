@@ -17,6 +17,8 @@ export interface Brand {
   id: string
   name: string
   sector?: string | null
+  sector_slug?: string | null
+  sector_display_name?: string | null
   logo_light_url?: string | null
   logo_dark_url?: string | null
   is_active?: boolean

@@ -66,6 +66,52 @@ export const analytics = {
     safe(() => posthog.capture('content_scheduled'))
   },
 
+  // ─── Phase 7: Template system ───────────────────────────────────────────────
+  templateSelected(templateId: string, sectorSlug?: string | null, contentType?: string) {
+    safe(() =>
+      posthog.capture('template_selected', {
+        template_id: templateId,
+        sector_slug: sectorSlug,
+        content_type: contentType,
+      })
+    )
+  },
+  templateFormSubmitted(templateId: string, fieldCount: number) {
+    safe(() =>
+      posthog.capture('template_form_submitted', {
+        template_id: templateId,
+        field_count: fieldCount,
+      })
+    )
+  },
+  templateCaptionGenerated(templateId: string, generationTimeSeconds?: number) {
+    safe(() =>
+      posthog.capture('template_caption_generated', {
+        template_id: templateId,
+        generation_time_seconds: generationTimeSeconds,
+      })
+    )
+  },
+  templateCaptionEdited(templateId: string) {
+    safe(() => posthog.capture('template_caption_edited', { template_id: templateId }))
+  },
+  templateImageGenerated(templateId: string, generationTimeSeconds?: number) {
+    safe(() =>
+      posthog.capture('template_image_generated', {
+        template_id: templateId,
+        generation_time_seconds: generationTimeSeconds,
+      })
+    )
+  },
+  templateAbandoned(templateId: string, phase: 'pick' | 'form' | 'caption' | 'image') {
+    safe(() =>
+      posthog.capture('template_abandoned', {
+        template_id: templateId,
+        phase,
+      })
+    )
+  },
+
   // ─── Feature adoption ───────────────────────────────────────────────────────
   calendarOpened() {
     safe(() => posthog.capture('calendar_opened'))

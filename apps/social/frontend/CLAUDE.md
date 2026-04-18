@@ -2,7 +2,55 @@
 
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüşüyor. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 5 — /icerik-olustur wizard refactor (Akış C UI) ✅
+
+**Kapsam:** `/icerik-olustur` wizard 3-fazlı Akış C UI'ına geçti. Step 1'deki 3 genel kategori (ürün/hizmet/kurumsal) kaldırıldı. Image/carousel için yeni akış: `phase=pick` (şablon grid) → `phase=form` (dinamik form) → `phase=caption` (caption+image_prompt düzenle) → Görsel üret → Step 3 preview. Video/special_day/quote akışları **aynen korundu**. Serbest içerik escape hatch'i var (`mode='free'`).
+
+**Yeni bileşenler (4):**
+- `components/templates/TemplateCard.tsx` — tek kart: icon + name + description + disclaimer rozeti + selected state
+- `components/templates/TemplateGrid.tsx` — `fetchTemplates()` ile sektör+contentType filtresi, "Sektörünüze Özel" + "Genel Şablonlar" ayrı grid, "Şablonsuz devam et" escape butonu
+- `components/templates/DynamicForm.tsx` — 6 field tipi (text/textarea/number/select/multi-select/url) + `field.group` bazlı gruplandırma + `validation` (min/max/minLength/maxLength) + disclaimer banner (template.defaults.disclaimer varsa)
+- `components/templates/CaptionEditor.tsx` — platform sekmeli caption editörü ("Varsayılan" tab + platform tab'ları), `first_comment` alanı (useFirstComment varsa), hashtag editor, image_prompt edit textarea (İngilizce)
+
+**Modifiye dosyalar (3):**
+- `lib/store.ts` — `Brand` interface'ine `sector_slug`, `sector_display_name` eklendi (auth/init zaten dönüyordu)
+- `lib/analytics.ts` — 6 yeni event: `templateSelected`, `templateFormSubmitted`, `templateCaptionGenerated`, `templateCaptionEdited`, `templateImageGenerated`, `templateAbandoned(phase)`
+- `app/(dashboard)/icerik-olustur/page.tsx` — major refactor:
+  - `CONTENT_CATEGORIES` + `ContentCategory` tipi + `category` state kaldırıldı
+  - Yeni state: `mode: 'template'|'free'`, `phase: 'pick'|'form'|'caption'`, `selectedTemplate`, `templateFields`, `captionData`, `loadingCaption`
+  - `handleGenerateCaption()` → `POST /posts/generate-caption` → `captionData` set edip `phase='caption'`'a geçer; required field kontrolü var, rate_limit/plan_limit error handling var
+  - `handleGenerate()` template modda `template_id + template_fields + platform_captions + image_prompt` payload; legacy modda prompt-based
+  - `handleSelectTemplate()` template seçiminde aspect ratio önerisini otomatik uygular (`template.output.aspectRatioSuggestion`)
+  - `handleBackToPick()` + `handleFreeFormMode()` navigation helper'ları
+  - Content type değişince template state (`selectedTemplate`, `templateFields`, `captionData`, `phase`, `mode`) sıfırlanır
+  - `resetWizard()` template state'leri de temizler
+  - `/ai/suggest-ideas` çağrısı artık `template_id` + `template_fields` gönderiyor (backend Sprint 3'te bunu destekliyordu)
+
+**Preserved (backward compat):**
+- Video (`contentType='video'`): script editor + voice seçimi + `/posts/generate-faceless-video` çağrısı aynen çalışıyor
+- Özel Gün (`contentType='special_day'`): tatil seçici aynen; template'siz
+- Alıntı (`contentType='quote'`): quote text + author; template'siz
+- Image/carousel + `mode='free'`: mevcut prompt textarea akışı (kategori seçimsiz, template'siz)
+- Trends → "İçerik Üret" query-param prefill akışı etkilenmedi (prompt+type+aspect param'ları hâlâ çalışıyor)
+
+**Edge case'ler:**
+- Zorunlu form alanı boşsa `handleGenerateCaption` toast ile uyarır
+- `image_prompt` boşsa "Görseli Üret" butonu disabled
+- Disclaimer banner `DynamicForm`'da şablon seçildikten sonra görünür; backend zaten caption sonuna otomatik ekliyor
+
+**Risk & rollback:** Eski `POST /posts/generate` sözleşmesi geriye dönük çalışıyor (`template_id=null` legacy path). Frontend Tip Seçimi ekranında template kullanmak isteyen de istemeyen de devam edebilir. Rollback: tek dosya revert (icerik-olustur/page.tsx + 4 yeni bileşen delete) yeterli.
+
+**Test planı (deploy sonrası canlı):**
+1. E-Ticaret brand + image → "Sektörünüze Özel" altında MyGoodShoes şablonları (Ürün Kartı vs.) görünmeli
+2. Ürün Kartı seç → form alanları çıkmalı → form doldur → "Caption Üret" → platform sekmelerinde Instagram/LinkedIn captions → image_prompt düzenle → "Görseli Üret" → Step 3
+3. Sağlık brand + image → Biliyor Muydunuz? seç → form altında "⚠ Otomatik Disclaimer" banner → caption sonunda disclaimer otomatik eklenmiş olmalı
+4. Serbest İçerik escape → şablonsuz prompt akışı çalışmalı
+5. Video/special_day/quote → regresyon yok
+6. Trends → "İçerik Üret" → query-param prefill hâlâ çalışmalı
+
+**Sonraki:** Sprint 6 — Platform-spesifik publishing (per-platform caption'ları Upload-Post'a gönderirken doğru platform'a doğru caption yollanmalı).
 
 ## 2026-04-18 — Phase 7 Sprint 4 (Backend) — Caption endpoint + Akış C ✅
 
