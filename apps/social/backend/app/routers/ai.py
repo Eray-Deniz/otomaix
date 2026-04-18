@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user
+from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
 from app.models.schemas import OkResponse
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -106,6 +107,9 @@ class SuggestIdeasRequest(BaseModel):
     document_ids: list[UUID] | None = None
     platforms: list[str] | None = None
     count: int = 5
+    # Phase 7 — template-aware fikir önerileri
+    template_id: str | None = None
+    template_fields: dict | None = None
 
 
 CATEGORY_TR = {
@@ -155,7 +159,12 @@ async def suggest_ideas(
     from app.services.document_processor import get_document_context
 
     brand = await db.fetchrow(
-        "SELECT name, sector, description, brand_kit FROM social.brands WHERE id = $1",
+        """
+        SELECT b.name, b.sector, b.description, b.brand_kit, s.slug AS sector_slug
+        FROM social.brands b
+        LEFT JOIN social.sectors s ON s.id = b.sector_id
+        WHERE b.id = $1
+        """,
         payload.brand_id,
     )
     if not brand:
@@ -165,10 +174,17 @@ async def suggest_ideas(
     tonality = brand_kit.get("tonality", "professional")
     hashtags = brand_kit.get("hashtags", [])
     colors = brand_kit.get("colors") or {}
-    category_tr = CATEGORY_TR.get(payload.content_category, payload.content_category)
-    category_guidance = CATEGORY_GUIDANCE.get(payload.content_category, "")
     content_type_tr = CONTENT_TYPE_TR.get(payload.content_type, payload.content_type)
     platforms_str = ", ".join(payload.platforms) if payload.platforms else "belirtilmemiş"
+
+    # Phase 7 — template varsa yükle; kategori guidance yalnızca template yoksa kullanılır
+    template = get_template_by_id(payload.template_id) if payload.template_id else None
+    if template:
+        category_tr = template.name
+        category_guidance = ""  # template guidance Tier 2'de enjekte edilecek
+    else:
+        category_tr = CATEGORY_TR.get(payload.content_category, payload.content_category)
+        category_guidance = CATEGORY_GUIDANCE.get(payload.content_category, "")
 
     color_parts: list[str] = []
     for key in ("primary", "secondary", "accent"):
@@ -245,18 +261,51 @@ async def suggest_ideas(
     user_prompt = "\n".join(user_prompt_parts)
 
     # User mesajını marka bağlamı (cache) + dinamik kısım olarak ayır
-    brand_context = "\n".join([
+    brand_context_parts = [
         f"Marka adı: {brand['name']}",
         f"Sektör: {brand['sector'] or 'Belirtilmemiş'}",
         f"Marka açıklaması: {brand['description'] or 'Belirtilmemiş'}",
         f"Marka renkleri: {colors_str}",
         f"Marka tonu: {tonality}",
         f"Popüler hashtagler: {', '.join(hashtags[:5]) if hashtags else 'Yok'}",
-    ])
+    ]
+
+    # Phase 7 — sektör rehberi + şablon guidance Tier 2'de (cache hit için)
+    sector_slug = brand["sector_slug"]
+    if sector_slug and sector_slug in SECTOR_GUIDANCE:
+        brand_context_parts.append(f"\n--- SEKTÖR REHBERİ ({sector_slug}) ---")
+        brand_context_parts.append(SECTOR_GUIDANCE[sector_slug])
+
+    if template:
+        brand_context_parts.append(f"\n--- ŞABLON TALİMATI ({template.name}) ---")
+        brand_context_parts.append(template.prompt.guidance)
+        if template.defaults.suggestedCTAs:
+            brand_context_parts.append(
+                f"Önerilen CTA'lar: {', '.join(template.defaults.suggestedCTAs)}"
+            )
+        if template.defaults.suggestedHashtags:
+            brand_context_parts.append(
+                f"Önerilen hashtagler: {', '.join(template.defaults.suggestedHashtags)}"
+            )
+
+    brand_context = "\n".join(brand_context_parts)
+
+    # Phase 7 — template_fields Tier 3 dinamik bloğa eklenir
+    dynamic_prefix_parts: list[str] = []
+    if template and payload.template_fields:
+        dynamic_prefix_parts.append("=== YAPISAL VERİLER (EN YÜKSEK ÖNCELİK) ===")
+        for field in template.formFields:
+            value = payload.template_fields.get(field.id)
+            if value is not None and value != "":
+                suffix = f" {field.suffix}" if field.suffix else ""
+                dynamic_prefix_parts.append(f"{field.label}: {value}{suffix}")
+        dynamic_prefix_parts.append("=== VERİ SONU ===\n")
+
+    dynamic_text = "\n".join(dynamic_prefix_parts) + user_prompt if dynamic_prefix_parts else user_prompt
 
     user_content = [
         {"type": "text", "text": brand_context, "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": user_prompt},
+        {"type": "text", "text": dynamic_text},
     ]
 
     try:

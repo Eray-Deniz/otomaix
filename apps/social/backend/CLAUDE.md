@@ -3,7 +3,58 @@
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 3: Prompt building refactor (template-aware + 3-tier caching) ✅
+
+**Kapsam:** Prompt inşa mantığı tek bir ortak modüle (`prompt_builder.py`) taşındı. Posts (`_build_image_prompt`) ve AI suggest_ideas akışları `template_id` varsa şablon-aware Tier 2 (brand + sektör + şablon) / Tier 3 (yapısal form verileri + user prompt + RAG) üretir. Disclaimer auto-inject (sağlık şablonları), platform override instruction hazırlığı (Sprint 4 caption endpoint için) ve backward compat (`_build_prompt_with_rag_legacy`) korundu.
+
+**Yeni dosyalar:**
+- `app/core/prompt_builder.py` — spec §1478-1498 + §4 doğrultusunda 3-katman prompt builder:
+  - `build_system_prompt()` → Tier 1: sabit kurallar (DİL, YASAK, JSON format), `cache_control: ephemeral`
+  - `build_brand_context(brand, brand_kit, template)` → Tier 2: marka + sektör rehberi + şablon talimatı + önerilen CTA/hashtag + **ZORUNLU DISCLAIMER** (`template.defaults.disclaimer` varsa caption sonuna aynen eklenecek talimat)
+  - `build_dynamic_content(template, template_fields, user_prompt, rag_context, platforms)` → Tier 3: yapısal form verileri (EN YÜKSEK ÖNCELİK), user prompt, RAG doküman, öncelik sırası (template.prompt.priority), platform-spesifik caption talimatları
+  - `build_platform_instructions(overrides, platforms)` → spec §3.2 `PlatformOverride` alanlarını Claude'a talimat olarak çevirir (captionStyle → long/medium/short, maxHashtags, useFirstComment, toneAdjustment, additionalGuidance)
+
+**Değişen dosyalar:**
+- `app/routers/posts.py`:
+  - `_build_prompt_with_rag` → `_build_prompt_with_rag_legacy` olarak yeniden adlandırıldı (birebir mantık korundu)
+  - Yeni `_build_image_prompt(payload, brand, brand_kit, db)`: `template_id` varsa `get_template_by_id()` çeker; `image_prompt` override edilmişse aynen kullanır, yoksa `template.name + formFields değerleri` ile kısa bir fal.ai image prompt inşa eder. `template_id` yoksa legacy akış devreye girer (special_day, quote, serbest prompt).
+  - `generate_post()`: `enriched_prompt = await _build_image_prompt(...)` — eski çağrı noktası değişmedi
+  - **Not:** Caption üretimi (tam 3-tier prompt ile Claude çağrısı) Sprint 4'te eklenecek — Sprint 3'te sadece fal.ai image prompt template-aware oldu, caption hâlâ legacy fallback kullanıyor.
+- `app/routers/ai.py`:
+  - `SuggestIdeasRequest` → `template_id: str | None`, `template_fields: dict | None` alanları eklendi
+  - `suggest_ideas()` brand query'si `social.sectors` JOIN ile `sector_slug` döndürür (Tier 2'ye SECTOR_GUIDANCE enjekte etmek için)
+  - Template set ise: `category_guidance = ""` (legacy skip), Tier 2 brand_context'e SECTOR_GUIDANCE + `template.prompt.guidance` + `template.defaults.suggestedCTAs/Hashtags` eklenir
+  - Template fields Tier 3 dynamic_text'e `=== YAPISAL VERİLER ===` bloğu olarak enjekte edilir
+  - Template yoksa: mevcut `CATEGORY_GUIDANCE`/`CATEGORY_TR` akışı birebir korundu
+
+**3-katman cache stratejisi (spec §4.1):**
+| Katman | İçerik | Cache |
+|--------|--------|-------|
+| **Tier 1 — System** | Sabit kurallar + DİL KURALI + JSON format | `ephemeral` ✓ |
+| **Tier 2 — Brand** | Marka + tonalite + renkler + SECTOR_GUIDANCE + şablon guidance + disclaimer | `ephemeral` ✓ |
+| **Tier 3 — Dynamic** | Template fields + user prompt + RAG + platform rules | cache yok |
+
+Aynı marka + şablon kombinasyonu için tekrarlı çağrılarda Tier 1 + Tier 2 cache hit → latency + token maliyeti düşüşü.
+
+**Etki analizi:**
+- Risk: düşük — `template_id=None` tüm akışları legacy path'e yönlendirir (posts, suggest_ideas)
+- `special_day` / `quote` / video akışları değişmedi (sadece `image`/`carousel` + `template_id` aktifse yeni path)
+- Autoposting (n8n `/internal/autoposting/trigger`) template_id gönderilmediği için etkilenmez
+- `content_category` field tam geriye uyumlu — eski frontend hâlâ çalışır
+
+**Doğrulama:**
+- ✅ AST parse: `prompt_builder.py`, `posts.py`, `ai.py` sözdizimi temiz
+- ✅ `SuggestIdeasRequest` template alanları pydantic şemasına eklendi (AST kontrol)
+- ✅ `posts.py` fonksiyonları: `_build_image_prompt`, `_build_prompt_with_rag_legacy`, `_build_special_day_prompt`, `_build_quote_prompt` — dördü de mevcut
+- ⏳ Canlı smoke test (deploy sonrası):
+  - Image + template_id + template_fields → fal.ai prompt'unda şablon adı + form field değerleri görünmeli
+  - AI suggest-ideas template_id ile → Claude'a giden prompt'ta SECTOR_GUIDANCE + template.prompt.guidance görünmeli
+  - special_day/quote → eski akış birebir çalışmalı
+  - template_id=null → legacy path (content_category dahil) aynen çalışmalı
+
+**Sonraki:** Sprint 4 — Platform-spesifik caption endpoint (`POST /posts/{id}/captions/generate`) + Akış C (caption + görsel aynı anda). `prompt_builder.build_platform_instructions()` kullanılacak.
 
 ## 2026-04-18 — Phase 7 Sprint 2: Şablon Kataloğu + SECTOR_GUIDANCE ✅
 

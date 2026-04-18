@@ -12,6 +12,7 @@ from app.core.security import (
     get_current_user_optional,
     get_service_auth,
 )
+from app.core.templates_data import get_template_by_id
 from app.models.schemas import (
     FacelessVideoGenerate,
     OkResponse,
@@ -37,13 +38,53 @@ CATEGORY_TR = {
 }
 
 
-async def _build_prompt_with_rag(
+async def _build_image_prompt(
     payload: PostGenerate,
     brand: object,
     brand_kit: dict,
     db,
 ) -> str:
-    """Build an enriched image/content prompt by injecting document context."""
+    """Build fal.ai image prompt.
+
+    Template varsa: payload.image_prompt (Sprint 4 caption endpoint'inden gelen)
+    kullanılır; yoksa form_fields'ten basit image prompt inşa edilir.
+    Template yoksa: legacy path (special_day/quote hariç tüm mevcut akışlar).
+    """
+    if payload.template_id:
+        template = get_template_by_id(payload.template_id)
+        if not template:
+            return payload.prompt or ""
+
+        # Akış C'de caption endpoint image_prompt üretir, payload'a gelir
+        if payload.image_prompt:
+            return payload.image_prompt
+
+        # Fallback: form_fields'tan basit image prompt inşa et
+        parts = [f"{template.name} — sosyal medya görseli"]
+        if payload.template_fields:
+            for field in template.formFields:
+                value = payload.template_fields.get(field.id)
+                if value is not None and value != "":
+                    parts.append(f"{field.label}: {value}")
+        return " ".join(parts)
+
+    # Legacy path (no template)
+    return await _build_prompt_with_rag_legacy(payload, brand, brand_kit, db)
+
+
+async def _build_prompt_with_rag_legacy(
+    payload: PostGenerate,
+    brand: object,
+    brand_kit: dict,
+    db,
+) -> str:
+    """Legacy prompt builder (Sprint 3 öncesi `_build_prompt_with_rag`'ın birebir kopyası).
+
+    Template olmayan akışlar için çalışmaya devam eder:
+    - Serbest içerik (template_id=None, prompt var)
+    - special_day, quote (zaten kendi fonksiyonlarını kullanıyor, buraya düşmez)
+    - /internal/autoposting/trigger n8n akışı
+    """
     base_prompt = payload.prompt or ""
     category_tr = CATEGORY_TR.get(payload.content_category or "", "")
 
@@ -169,7 +210,7 @@ async def generate_post(
     elif payload.content_type == "quote":
         enriched_prompt = _build_quote_prompt(payload, dict(brand), brand_kit)
     else:
-        enriched_prompt = await _build_prompt_with_rag(payload, brand, brand_kit, db)
+        enriched_prompt = await _build_image_prompt(payload, brand, brand_kit, db)
 
     # Default caption for quote posts (the quote text itself)
     default_caption: str | None = None

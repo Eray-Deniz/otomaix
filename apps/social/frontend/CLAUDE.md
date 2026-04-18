@@ -2,7 +2,18 @@
 
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüşüyor. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4–7 ⏳
+
+## 2026-04-18 — Phase 7 Sprint 3 (Backend) — Prompt building refactor ✅
+
+**Sprint 3 tamamen backend çalışması** (frontend dokunulmadı). Backend detayları: `apps/social/backend/CLAUDE.md` → "2026-04-18 — Phase 7 Sprint 3".
+
+**Özet:** Prompt inşa mantığı `app/core/prompt_builder.py`'ye taşındı — 3-katman (system/brand/dynamic) + cache stratejisi. `posts.py` fal.ai image prompt akışı ve `ai.py` suggest-ideas akışı artık `template_id` varsa SECTOR_GUIDANCE + şablon guidance + yapısal form verileri enjekte ediyor.
+
+**Frontend etkisi:** Hâlâ yok — `/icerik-olustur` wizard Sprint 4 (caption endpoint) ve Sprint 5 (wizard refactor)'a kadar legacy `content_category` akışıyla çalışmaya devam eder.
+
+**Sonraki (frontend):** Sprint 5 — `/icerik-olustur` Step 2 şablon grid + dinamik form, sector filtering, template auto-prompt build.
+
 
 > **Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
 > `/trendler` sayfası üç katmanlı yeni mimari için yeniden yazıldı (Layer A sektör paylaşımlı / Layer B Serper.dev+Haiku kişisel / Layer C Pro+ PDF rapor). Detaylı teknik plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
