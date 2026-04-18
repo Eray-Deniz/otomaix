@@ -66,6 +66,8 @@ class BrandOut(BaseModel):
     website_url: str | None
     sector: str | None
     sector_id: UUID | None = None
+    sector_slug: str | None = None
+    sector_display_name: str | None = None
     brand_kit: dict
     logo_light_url: str | None
     logo_dark_url: str | None
@@ -117,7 +119,7 @@ class SectorReportOut(BaseModel):
 class PostGenerate(BaseModel):
     brand_id: UUID
     content_type: str  # image | carousel | special_day | quote
-    content_category: str | None = None  # product | service | corporate
+    content_category: str | None = None  # product | service | corporate (legacy, template_id yoksa kullanılır)
     prompt: str | None = None
     user_text: str | None = None
     document_ids: list[UUID] = []
@@ -129,6 +131,11 @@ class PostGenerate(BaseModel):
     # quote
     quote_text: str | None = None
     quote_author: str | None = None
+    # Phase 7 — Sektör-Spesifik Şablon Sistemi
+    template_id: str | None = None                       # templates_data.py'de tanımlı
+    template_fields: dict | None = None                  # yapısal form verisi
+    platform_captions: dict | None = None                # caption-gen endpoint çıktısı
+    image_prompt: str | None = None                      # Akış C'de kullanıcı-editlenmiş görsel prompt'u
 
 
 class FacelessVideoGenerate(BaseModel):

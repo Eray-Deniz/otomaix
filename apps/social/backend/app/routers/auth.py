@@ -70,13 +70,16 @@ async def init(
             user_id,
         )
 
-    # Markalar
+    # Markalar (Phase 7 — sector_slug eklendi, frontend şablon filtresi için)
     brands = await db.fetch(
         """
-        SELECT id, name, sector, logo_light_url, logo_dark_url, is_active
-        FROM social.brands
-        WHERE workspace_id = $1 AND is_active = true
-        ORDER BY created_at
+        SELECT b.id, b.name, b.sector, b.sector_id,
+               s.slug AS sector_slug, s.display_name AS sector_display_name,
+               b.logo_light_url, b.logo_dark_url, b.is_active
+        FROM social.brands b
+        LEFT JOIN social.sectors s ON s.id = b.sector_id
+        WHERE b.workspace_id = $1 AND b.is_active = true
+        ORDER BY b.created_at
         """,
         workspace["id"],
     )

@@ -1,9 +1,51 @@
 # Social Backend — CLAUDE.md
 
-> **🚧 Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
-> Üç katmanlı yeni trend mimarisi. Detaylı plan: `~/otomaix/docs/06-social-trends-phase6.md`. Genel özet PDF: `~/otomaix/docs/otomaix_trends_update.pdf`.
-> **ADR-2 güncel karar:** Layer B için Serper.dev + Claude Haiku kullanılacak (Claude web_search yerine, 10x ucuz).
+> **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
+> `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
+> Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 🚧 · Sprint 3–7 ⏳
+
+> **Phase 6 — Trend Sistemi Yenileme (2026-04-16).**
+> Üç katmanlı trend mimarisi. Detaylı plan: `~/otomaix/docs/06-social-trends-phase6.md`.
+> **ADR-2:** Layer B için Serper.dev + Claude Haiku kullanılıyor.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ — **Phase 6 tamamlandı**
+
+## 2026-04-18 — Phase 7 Sprint 1: Backend Şablon Altyapısı ✅
+
+**Kapsam:** Şablon sistemi backend iskeleti — migration, modeller, endpoint, auth/init güncelleme. Tüm değişiklikler additive (NULL'lanabilir kolonlar, opsiyonel alanlar) → mevcut akışlar (special_day, quote, video, autoposting, serbest içerik) aynen çalışır.
+
+**Migration 022_posts_template_fields.sql** (prod'a uygulandı ✅):
+- `social.posts.template_id TEXT` — templates_data.py şablon ID'si; NULL = serbest/özel akış
+- `social.posts.template_fields JSONB` — yapısal form verisi (ör. `{product_name, price}`)
+- `social.posts.platform_captions JSONB` — platform-özel caption'lar (Sprint 4 caption-gen endpoint için)
+- `social.posts.slides JSONB` — Sprint 6 v2 carousel scaffold (v1'de her zaman NULL)
+- `idx_posts_template_id` partial index (WHERE template_id IS NOT NULL) — şablon bazlı analytics/filter için
+
+**Yeni dosyalar:**
+- `app/models/templates.py` — Pydantic modelleri: `Template`, `TemplateFormField`, `PlatformOverride`, `TemplateOutput`, `TemplatePromptExample`, `TemplatePrompt`, `TemplateDefaults`. FieldType union (text|number|textarea|select|date|boolean).
+- `app/core/templates_data.py` — Tek doğruluk kaynağı. `TEMPLATES: dict[str, Template] = {}` ve `SECTOR_GUIDANCE: dict[str, str] = {}` Sprint 1'de boş iskelet, Sprint 2'de doldurulacak. Helper'lar: `get_all_templates(sector, content_type)` (sektör filtresi `"*"` genel şablonları otomatik dahil eder), `get_template_by_id()`, `get_sector_guidance()`.
+- `app/routers/templates.py` — `GET /templates` + `GET /templates/{template_id}` endpoint'leri. Public (JWT gerekmez — hassas veri yok), 1 saat HTTP cache (`Cache-Control: public, max-age=3600`), query filtreleri: `?sector=...&content_type=...`.
+
+**Değişen dosyalar:**
+- `app/main.py` — `templates_router` kayıt eklendi (alphabetical: social ← templates → trends).
+- `app/routers/auth.py` — `/auth/init` brands query'sine `LEFT JOIN social.sectors` eklendi. Response artık `sector_slug` ve `sector_display_name` döndürüyor → frontend şablon filtresi için. Eski `sector` TEXT kolonu korundu (backward compat).
+- `app/models/schemas.py`:
+  - `BrandOut` → `sector_slug: str | None`, `sector_display_name: str | None` opsiyonel alanlar eklendi.
+  - `PostGenerate` → `template_id`, `template_fields`, `platform_captions`, `image_prompt` opsiyonel alanlar eklendi. `content_category` korundu (backward compat — autoposting n8n ve legacy akışlar için).
+- `app/routers/posts.py` → `generate_post()` INSERT'ü yeni kolonları kabul ediyor. `template_id` set edilmişse `content_category` otomatik `NULL` atılıyor (legacy mantık karışmasın). Tam prompt refactor Sprint 3'te.
+
+**Etki analizi:**
+- Risk: düşük (sıfır breaking change)
+- Mevcut `/posts/generate` çağrıları template alanları göndermeden çalışmaya devam eder
+- Autoposting n8n workflow'u (`/internal/autoposting/trigger`) değişmedi → template_id=NULL yolunda normal akış
+- `special_day` ve `quote` content_type'ları için template sistemi henüz devrede değil (Sprint 3'te karar)
+
+**Doğrulama:**
+- ✅ Migration uygulandı (`\d social.posts` → 4 yeni kolon + index görünür)
+- ✅ AST parse: tüm değişen dosyalar sözdizimi doğru
+- ⏳ Canlı smoke test: `GET /templates` → `{templates: [], version: "1.0", count: 0}`, `GET /auth/init` → brand'lerde `sector_slug` alanı
+
+**Sonraki:** Sprint 2 — 22 şablon + 11 sektör rehberi `templates_data.py`'ye yazılacak.
 
 ## 2026-04-16 — LLM model yükseltme + Prompt Caching ✅
 

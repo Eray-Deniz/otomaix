@@ -177,22 +177,29 @@ async def generate_post(
         author_part = f"\n\n— {payload.quote_author}" if payload.quote_author else ""
         default_caption = f'"{payload.quote_text}"{author_part}'
 
+    # Phase 7 — template_id varsa content_category'yi boşalt (yeni akış legacy ile karışmasın)
+    effective_category = None if payload.template_id else payload.content_category
+
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
             (brand_id, content_type, content_category, prompt, user_text,
-             document_ids, aspect_ratio, platforms, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating')
+             document_ids, aspect_ratio, platforms, status,
+             template_id, template_fields, platform_captions)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating', $9, $10, $11)
         RETURNING *
         """,
         payload.brand_id,
         payload.content_type,
-        payload.content_category,
+        effective_category,
         payload.prompt or payload.special_day_name or payload.quote_text,
         payload.user_text,
         [str(d) for d in payload.document_ids] if payload.document_ids else None,
         payload.aspect_ratio,
         payload.platforms,
+        payload.template_id,
+        payload.template_fields,
+        payload.platform_captions,
     )
     post = dict(row)
 
