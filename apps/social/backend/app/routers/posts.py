@@ -31,13 +31,7 @@ router = APIRouter(prefix="/posts", tags=["posts"])
 
 
 from app.core.utils import parse_brand_kit as _parse_brand_kit
-
-
-CATEGORY_TR = {
-    "product": "ürün tanıtımı",
-    "service": "hizmet tanıtımı",
-    "corporate": "firma tanıtımı",
-}
+from app.routers.ai import CATEGORY_TR
 
 
 async def _build_image_prompt(

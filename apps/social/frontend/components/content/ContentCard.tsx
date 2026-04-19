@@ -21,6 +21,7 @@ export interface Post {
   id: string
   content_type: string
   content_category: string | null
+  template_id: string | null
   status: string
   prompt: string | null
   output_url: string | null
