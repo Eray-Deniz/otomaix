@@ -837,7 +837,9 @@ function MarkaAyarlariContent() {
               onValueChange={(v) => onSelect(v, (val) => updateKit({ tonality: val }))}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue>
+                  {(value: string) => TONALITIES.find((t) => t.value === value)?.label ?? value}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {TONALITIES.map((t) => (
@@ -923,7 +925,9 @@ function MarkaAyarlariContent() {
                     onValueChange={(v) => onSelect(v, (val) => updateKit({ logo_overlay: { ...kit.logo_overlay, position: val } }))}
                   >
                     <SelectTrigger className="text-sm">
-                      <SelectValue />
+                      <SelectValue>
+                        {(value: string) => OVERLAY_POSITIONS.find((p) => p.value === value)?.label ?? value}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {OVERLAY_POSITIONS.map((p) => (
@@ -965,7 +969,9 @@ function MarkaAyarlariContent() {
                 onValueChange={(v) => onSelect(v, (val) => updateKit({ intro_video: { position: val } }))}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>
+                    {(value: string) => ({ start: 'Başında', end: 'Sonunda', both: 'Her İkisi' } as Record<string, string>)[value] ?? value}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="start">Başında</SelectItem>

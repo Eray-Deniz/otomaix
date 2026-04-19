@@ -4,6 +4,48 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-19 — Marka Ayarları UX polish + Select.Value slug fix ✅
+
+**Kapsam:** `/marka-ayarlari` sayfasındaki 6 UX sorunu giderildi. Tek dosya değişiklik: `app/(dashboard)/marka-ayarlari/page.tsx`. Backend Migration 023 + jsonb double-encode fix'i ile birlikte canlı testte karşılaşılan problemler kapandı.
+
+**Değişiklikler:**
+
+1. **TagInput refactor (Marka Kimliği → Hashtagler + Serbest Etiketler):**
+   - Layout ters çevrildi: Input + "Ekle" butonu artık etiket listesinin ÜSTÜNDE, etiket container'ı altta (min-h 64px + boş state mesajı)
+   - `add()` → `input.split(/[,;\n\t]+/)` ile çoklu değer parse, her parça ayrı badge
+   - `normalize()` helper'ı: trim, whitespace sıkıştırma, prefix (`#`) idempotent normalizasyon (`##tag` → `#tag`)
+   - Case-insensitive dedup (`lower()` karşılaştırma)
+   - `onPaste` handler: virgül/newline/tab içeren paste otomatik split
+   - `onBlur`: input'ta açık kalmış metin varsa auto-commit
+   - `onKeyDown`: Enter + virgül + noktalı virgül hepsi trigger
+
+2. **"Sosyal Medya Hesabı" → "Instagram Kullanıcı Adı":**
+   - Label değişti, placeholder `@mygoodshoes`
+   - `onBlur` handler: boşluk temizleme + `@` prefix idempotent (`@@user` → `@user`)
+   - Altında yardım metni: "Başına @ işareti otomatik eklenir."
+
+3. **Dokümanlar tab açıklama cleanup:**
+   - "Küçük dosyalar doğrudan, büyük dosyalar parçalanarak (RAG) AI'a aktarılır." teknik cümlesi kaldırıldı (son kullanıcı için gürültü). İlk cümle korundu.
+
+4. **Logo Filigran hardening:**
+   - Açıklama zenginleştirildi: "AI görsel üretildikten sonra, köşeye marka logonu otomatik yerleştirir (watermark). Konum ve opaklık aşağıdan ayarlanır."
+   - Logo yoksa (`!brand.logo_light_url && !brand.logo_dark_url`) → Switch `disabled` + amber uyarı metni
+   - Toggle `checked` prop'u logo zorunluluğunu da kontrol ediyor (logo silinirse otomatik kapanır)
+
+5. **Select.Value slug gösterimi bug fix (3 yer):**
+   - `@base-ui/react` Select primitive'i `SelectValue` children olmadan raw `value` (slug) render ediyor
+   - Sector Select'indeki mevcut pattern (`{(value: string) => labels[value]}`) üç diğer Select'e de uygulandı:
+     - **Ton / Üslup** (TONALITIES lookup): `professional` → `Profesyonel`, `friendly` → `Samimi`, vb.
+     - **Logo Filigran Konum** (OVERLAY_POSITIONS): `top-left` → `Sol Üst`, vb.
+     - **Video Pozisyonu** (inline map): `start` → `Başında`, `end` → `Sonunda`, `both` → `Her İkisi`
+   - **Not:** Video Pozisyonu backend tarafında aktif kullanılıyor — `media_processor.apply_brand_processing()` → `add_intro_video(position=...)` FFmpeg merging için. Sayfadan kaldırılmadı, sadece görünüm düzeltildi.
+
+**Etki analizi:**
+- Risk: sıfır — UI refactor + görünüm düzeltmesi, API sözleşmesi veya state değişmedi
+- TagInput değişiklikleri mevcut hashtag/serbest etiket verilerini etkilemez (dedup+normalize yeni paste/edit sırasında devreye girer, mevcut saklı etiketler aynı kalır)
+
+**Sonraki:** Canlı test (tarayıcı hard refresh gerekli). Phase 8 planlaması kullanıcı yönlendirecek.
+
 ## 2026-04-19 — Phase 7 Sprint 7 Faz 2g: Dynamic aspect selector (media-models) ✅
 
 **Kapsam:** `/icerik-olustur` aspect ratio seçici artık backend'ten gelen model registry'ye göre dinamik filtrelenir. Backend'de env var ile model değişirse (Sprint 7 Faz 1-2f adapter refactor'u, detay: backend/CLAUDE.md) frontend otomatik uyumlanır — yeni deploy gerekmez, 1 saatlik HTTP cache sonrası güncel liste gelir.
