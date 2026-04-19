@@ -15,6 +15,7 @@ import asyncpg
 import httpx
 
 from app.core.config import settings
+from app.services.media_adapters import get_active_faceless_background_adapter
 
 # Sabit Türkçe ses listesi
 TURKISH_VOICES = [
@@ -25,8 +26,12 @@ TURKISH_VOICES = [
 
 DEFAULT_VOICE = "tr-TR-EmelNeural"
 
-# fal.ai video model
-FAL_VIDEO_MODEL = "fal-ai/hunyuan-video"
+# Aktif faceless background adapter — modül import'unda bir kez çözülür.
+_faceless_bg_adapter = get_active_faceless_background_adapter()
+
+# Backward-compat module-level exports
+FAL_VIDEO_MODEL: str = _faceless_bg_adapter.model_id
+SUPPORTED_FACELESS_RATIOS: tuple[str, ...] = tuple(sorted(_faceless_bg_adapter.supported_ratios))
 WEBHOOK_URL = "https://api.otomaix.com/webhooks/fal"
 
 
@@ -138,28 +143,19 @@ async def generate_background_video(
     aspect_ratio: str,
     duration: int = 5,
 ) -> str:
-    """fal.ai HunyuanVideo ile arka plan videosu üret. Returns fal job ID."""
+    """fal.ai arka plan videosu üret — aktif FacelessBackgroundAdapter üzerinden.
+
+    Returns fal job ID. Desteklenmeyen aspect_ratio için ValueError; endpoint
+    katmanı submit öncesi validasyon yapmalı (SUPPORTED_FACELESS_RATIOS).
+    """
     import fal_client
 
     os.environ["FAL_KEY"] = settings.FAL_KEY
-
-    # Aspect ratio → resolution mapping
-    res_map = {
-        "9:16": "720x1280",
-        "1:1": "720x720",
-        "16:9": "1280x720",
-        "4:5": "720x900",
-    }
-    resolution = res_map.get(aspect_ratio, "720x1280")
+    args = _faceless_bg_adapter.build_args(image_prompt, aspect_ratio, duration)
 
     handler = await fal_client.submit_async(
-        FAL_VIDEO_MODEL,
-        arguments={
-            "prompt": image_prompt,
-            "resolution": resolution,
-            "video_length": "5s",
-            "num_inference_steps": 30,
-        },
+        _faceless_bg_adapter.model_id,
+        arguments=args,
         webhook_url=WEBHOOK_URL,
     )
     return handler.request_id

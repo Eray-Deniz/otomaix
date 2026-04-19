@@ -163,3 +163,69 @@ def get_active_image_to_video_adapter() -> ImageToVideoModelAdapter:
             f"Registered: {sorted(IMAGE_TO_VIDEO_ADAPTERS.keys())}"
         )
     return adapter
+
+
+# ─── Faceless Video Background modality ─────────────────────────────────────
+
+
+class FacelessBackgroundAdapter(Protocol):
+    """Faceless video arka plan üretim modelleri için soyutlama.
+
+    Imza text-to-video'dan farklı: (prompt, aspect_ratio, duration) → arguments.
+    Hunyuan gibi modeller resolution literal bekler (aspect_ratio → "720x1280"
+    mapping adapter içinde).
+    """
+
+    model_id: str
+    supported_ratios: frozenset[str]
+
+    def build_args(self, prompt: str, aspect_ratio: str, duration: int = 5) -> dict[str, Any]: ...
+
+
+class HunyuanVideoAdapter:
+    """Hunyuan Video faceless background adapter.
+
+    video_length şu an hardcoded "5s" (Hunyuan kısa format optimize);
+    duration parametresi farklı modeller için esneklik bırakır.
+    num_inference_steps=30 — kalite/hız dengesi, model-spesifik.
+    """
+
+    model_id = "fal-ai/hunyuan-video"
+
+    _RESOLUTION_MAP: dict[str, str] = {
+        "9:16": "720x1280",
+        "1:1":  "720x720",
+        "16:9": "1280x720",
+        "4:5":  "720x900",
+    }
+
+    supported_ratios = frozenset(_RESOLUTION_MAP.keys())
+
+    def build_args(self, prompt: str, aspect_ratio: str, duration: int = 5) -> dict[str, Any]:
+        if aspect_ratio not in self._RESOLUTION_MAP:
+            raise ValueError(
+                f"Unsupported aspect_ratio for {self.model_id}: {aspect_ratio!r}. "
+                f"Supported: {', '.join(sorted(self.supported_ratios))}"
+            )
+        return {
+            "prompt": prompt,
+            "resolution": self._RESOLUTION_MAP[aspect_ratio],
+            "video_length": "5s",
+            "num_inference_steps": 30,
+        }
+
+
+FACELESS_BACKGROUND_ADAPTERS: dict[str, FacelessBackgroundAdapter] = {
+    "hunyuan-video": HunyuanVideoAdapter(),
+}
+
+
+def get_active_faceless_background_adapter() -> FacelessBackgroundAdapter:
+    key = (settings.FACELESS_BACKGROUND_MODEL or "hunyuan-video").strip()
+    adapter = FACELESS_BACKGROUND_ADAPTERS.get(key)
+    if not adapter:
+        raise ValueError(
+            f"Unknown FACELESS_BACKGROUND_MODEL: {key!r}. "
+            f"Registered: {sorted(FACELESS_BACKGROUND_ADAPTERS.keys())}"
+        )
+    return adapter

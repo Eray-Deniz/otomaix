@@ -25,7 +25,11 @@ from app.models.schemas import (
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image
-from app.services.faceless_video import TURKISH_VOICES, run_faceless_video_pipeline
+from app.services.faceless_video import (
+    SUPPORTED_FACELESS_RATIOS,
+    TURKISH_VOICES,
+    run_faceless_video_pipeline,
+)
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -680,6 +684,14 @@ async def generate_faceless_video(
 ):
     """Faceless video pipeline: script üret → TTS → fal.ai arka plan videosu."""
     await assert_brand_owned(db, user, payload.brand_id)
+    if payload.aspect_ratio not in SUPPORTED_FACELESS_RATIOS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Desteklenmeyen en-boy oranı: '{payload.aspect_ratio}'. "
+                f"Geçerli değerler: {', '.join(SUPPORTED_FACELESS_RATIOS)}"
+            ),
+        )
     await check_plan_limit(user["sub"], "video", db)
     await check_plan_limit(user["sub"], "post", db)
     brand = await db.fetchrow(
