@@ -4,6 +4,24 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-19 — Markalar "Düzenle" butonu yanlış markayı yüklüyordu (kritik bug fix) ✅
+
+**Sorun (kullanıcı raporu):** `/markalar` sayfasında MyGoodShoes kartındaki "Düzenle" butonuna basılınca sidebar'daki aktif marka otomatik Otomaix'e geri dönüyor; marka-ayarlari sayfası yanlış markayı (Otomaix'i) düzenliyor. Bu yüzden kullanıcının daha önce "iki marka için birden update etti" dediği olayın gerçek nedeni ortaya çıktı — MyGoodShoes'a yüklediğini sandığı medyalar aslında Otomaix'e gidiyordu.
+
+**Kök neden (`app/(dashboard)/markalar/page.tsx:222-232`):** İki iç içe `onClick` handler'ı çakışıyordu:
+- `<Link onClick={() => switchBrand(brand)}>` — marka değiştirmek için (parent)
+- `<Button onClick={(e) => e.stopPropagation()}>` — parent `<Card onClick={switchBrand}>`'a düşmesin diye (child)
+
+React event sırası: Button'un `onClick` önce çalışır, `stopPropagation()` ile bubbling durdurulur → Link'in `onClick`'i **hiç tetiklenmez**. Link'in `<a>` tag'i default navigation yapar → `/marka-ayarlari`'na gidilir ama `currentBrand` store'da eski değerde kalır (layout'un `auth/init` sonrası default olarak atadığı ilk marka — genelde Otomaix).
+
+**Fix:** `switchBrand(brand)` çağrısı Link'in `onClick`'inden kaldırıldı, Button'un `onClick`'ine taşındı (stopPropagation + switchBrand aynı callback'te). Zustand state update sync olduğu için Link navigasyonundan önce currentBrand doğru markaya set olur; marka-ayarlari mount'unda doğru brand yüklenir.
+
+**Etki:** 
+- Logo/intro video upload bug'ı açıklandı — kullanıcı MyGoodShoes'a yüklediğini sanıyordu, aslında Otomaix'e yüklüyordu. DB'deki iki brand'in aynı dosyaları barındırması bunun sonucu (fiziken ayrı path'ler ama aynı içerik, çünkü kullanıcı ikinci seferinde sidebar'dan direkt MyGoodShoes seçip yeniden yükledi).
+- Bu bug'ın diğer sayfalarda tekrar etmediği doğrulandı: `BrandSwitcher.tsx` tek onClick kullanıyor, layout `auth/init`'te `stillValid` guard'ı ile mevcut currentBrand'ı koruyor.
+
+**Temizlik önerisi (yapılmadı, kullanıcı karar verecek):** Kullanıcı isterse Otomaix'e yanlışlıkla yüklenen logolar/intro video kaldırılabilir; yeni eklenen DELETE endpoint'leri + UI butonları ile bu mümkün.
+
 ## 2026-04-19 — Marka Ayarları medya kaldırma butonu (logo + intro video) ✅
 
 **Sorun:** `/marka-ayarlari` → Görseller sekmesinde logo veya intro video yüklenince **kaldırma seçeneği yoktu**. Kullanıcı sadece üzerine yeni dosya yükleyerek değiştirebiliyordu; mevcut medyayı tamamen kaldırma imkanı yoktu.

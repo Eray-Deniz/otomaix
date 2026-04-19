@@ -219,12 +219,15 @@ export default function MarkalarlPage() {
 
                   {/* Aksiyon butonları */}
                   <div className="flex gap-2">
-                    <Link href="/marka-ayarlari" className="flex-1" onClick={() => switchBrand(brand)}>
+                    <Link href="/marka-ayarlari" className="flex-1">
                       <Button
                         size="sm"
                         variant="outline"
                         className="w-full gap-1.5 text-xs"
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          switchBrand(brand)
+                        }}
                       >
                         <Pencil className="w-3 h-3" />
                         Düzenle
