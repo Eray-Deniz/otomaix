@@ -223,35 +223,70 @@ function TagInput({
 }) {
   const [input, setInput] = useState('')
 
+  function normalize(raw: string): string | null {
+    let val = raw.trim().replace(/\s+/g, '')
+    if (!val) return null
+    if (prefix) {
+      val = val.replace(new RegExp(`^[${prefix}]+`), '')
+      if (!val) return null
+      val = prefix + val
+    }
+    return val
+  }
+
+  function addMany(raws: string[]) {
+    const lowerExisting = new Set(tags.map((t) => t.toLowerCase()))
+    const next: string[] = []
+    for (const raw of raws) {
+      const tag = normalize(raw)
+      if (!tag) continue
+      const key = tag.toLowerCase()
+      if (lowerExisting.has(key)) continue
+      lowerExisting.add(key)
+      next.push(tag)
+    }
+    if (next.length) onChange([...tags, ...next])
+  }
+
   function add() {
-    const val = input.trim()
-    if (!val) return
-    const tag = prefix ? (val.startsWith(prefix) ? val : prefix + val) : val
-    if (!tags.includes(tag)) onChange([...tags, tag])
+    const parts = input.split(/[,;\n\t]+/)
+    addMany(parts)
     setInput('')
   }
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5 min-h-[36px] p-2 border border-gray-200 rounded-md bg-white">
-        {tags.map((t) => (
-          <Badge key={t} variant="secondary" className="gap-1 text-xs">
-            {t}
-            <button onClick={() => onChange(tags.filter((x) => x !== t))}>
-              <X className="w-3 h-3" />
-            </button>
-          </Badge>
-        ))}
-      </div>
       <div className="flex gap-2">
         <Input
           placeholder={placeholder}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           className="text-sm"
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add() } }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',' || e.key === ';') { e.preventDefault(); add() } }}
+          onPaste={(e) => {
+            const pasted = e.clipboardData.getData('text')
+            if (/[,;\n\t]/.test(pasted)) {
+              e.preventDefault()
+              addMany(pasted.split(/[,;\n\t]+/))
+            }
+          }}
+          onBlur={() => { if (input.trim()) add() }}
         />
         <Button variant="outline" size="sm" onClick={add}>Ekle</Button>
+      </div>
+      <div className="flex flex-wrap gap-1.5 min-h-[64px] p-2 border border-gray-200 rounded-md bg-white">
+        {tags.length === 0 ? (
+          <span className="text-xs text-gray-400 self-center">Henüz etiket eklenmedi</span>
+        ) : (
+          tags.map((t) => (
+            <Badge key={t} variant="secondary" className="gap-1 text-xs">
+              {t}
+              <button onClick={() => onChange(tags.filter((x) => x !== t))}>
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))
+        )}
       </div>
     </div>
   )
@@ -813,12 +848,22 @@ function MarkaAyarlariContent() {
           </div>
 
           <div className="space-y-1.5">
-            <Label>Sosyal Medya Hesabı</Label>
+            <Label>Instagram Kullanıcı Adı</Label>
             <Input
               value={kit.social_handle ?? ''}
               onChange={(e) => updateKit({ social_handle: e.target.value })}
-              placeholder="@kullanici_adi"
+              onBlur={(e) => {
+                const raw = e.target.value.trim().replace(/\s+/g, '')
+                if (!raw) {
+                  if (kit.social_handle) updateKit({ social_handle: '' })
+                  return
+                }
+                const normalized = raw.startsWith('@') ? raw : '@' + raw.replace(/^@+/, '')
+                if (normalized !== kit.social_handle) updateKit({ social_handle: normalized })
+              }}
+              placeholder="@mygoodshoes"
             />
+            <p className="text-xs text-gray-500">Başına @ işareti otomatik eklenir.</p>
           </div>
 
           <div className="space-y-1.5">
@@ -853,13 +898,19 @@ function MarkaAyarlariContent() {
           </div>
 
           <div className="space-y-3 p-4 border border-gray-200 rounded-xl">
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
                 <Label>Logo Filigran</Label>
-                <p className="text-xs text-gray-500 mt-0.5">Üretilen içeriklere logo ekle</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  AI görsel üretildikten sonra, köşeye marka logonu otomatik yerleştirir (watermark). Konum ve opaklık aşağıdan ayarlanır.
+                </p>
+                {!brand.logo_light_url && !brand.logo_dark_url && (
+                  <p className="text-xs text-amber-600 mt-1">Filigran için önce bir logo yüklemelisin.</p>
+                )}
               </div>
               <Switch
-                checked={kit.logo_overlay?.enabled ?? false}
+                checked={(kit.logo_overlay?.enabled ?? false) && !!(brand.logo_light_url || brand.logo_dark_url)}
+                disabled={!brand.logo_light_url && !brand.logo_dark_url}
                 onCheckedChange={(v) => updateKit({ logo_overlay: { ...kit.logo_overlay, enabled: v } })}
               />
             </div>
@@ -980,7 +1031,6 @@ function MarkaAyarlariContent() {
         <TabsContent value="dokumanlar" className="space-y-4">
           <p className="text-sm text-gray-500">
             Yüklediğiniz dokümanlar (PDF, Word, Excel) içerik üretiminde bağlam olarak kullanılır.
-            Küçük dosyalar doğrudan, büyük dosyalar parçalanarak (RAG) AI&apos;a aktarılır.
           </p>
 
           {/* Upload area */}
