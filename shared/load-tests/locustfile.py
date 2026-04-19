@@ -69,6 +69,16 @@ class HealthOnlyUser(HttpUser):
     def billing_plans(self):
         self.client.get("/billing/plans")
 
+    @task
+    def media_models_active(self):
+        """Phase 7 Sprint 7 — aktif fal.ai model registry (public, 1hr cache)."""
+        self.client.get("/media-models/active", name="/media-models/active")
+
+    @task
+    def templates_catalog(self):
+        """Phase 7 — şablon kataloğu (public, 1hr cache)."""
+        self.client.get("/templates", name="/templates")
+
 
 # ── Authenticated kullanıcı ────────────────────────────────────────────────────
 
@@ -182,6 +192,45 @@ class OtomaixUser(HttpUser):
             headers=AUTH_HEADERS,
             name="/competitors",
         )
+
+    @task(2)
+    def view_media_models(self):
+        """Phase 7 Sprint 7 — /media-models/active public endpoint (1hr cache)."""
+        self.client.get("/media-models/active", name="/media-models/active")
+
+    @task(2)
+    def view_templates(self):
+        """Phase 7 — /templates sector filtreli (public, 1hr cache)."""
+        self.client.get("/templates", name="/templates")
+
+    @task(1)
+    def generate_caption(self):
+        """Phase 7 Sprint 4 — Claude caption endpoint (rate limit: 30/saat).
+
+        Template'siz (serbest mod) çağrı — 3-tier cache Tier 1+2 hit beklenir.
+        """
+        if not self.brand_id or MOCK_GENERATE:
+            return
+
+        payload = {
+            "brand_id": self.brand_id,
+            "template_id": None,
+            "template_fields": None,
+            "user_prompt": random.choice(SAMPLE_PROMPTS),
+            "platforms": ["instagram", "linkedin"],
+        }
+
+        with self.client.post(
+            "/posts/generate-caption",
+            json=payload,
+            headers=AUTH_HEADERS,
+            catch_response=True,
+            name="/posts/generate-caption",
+        ) as resp:
+            if resp.status_code in (200, 201, 429):
+                resp.success()
+            else:
+                resp.failure(f"HTTP {resp.status_code}: {resp.text[:200]}")
 
     @task(1)
     def generate_content(self):
