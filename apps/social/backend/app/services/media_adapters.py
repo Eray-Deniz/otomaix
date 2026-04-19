@@ -76,3 +76,50 @@ def get_active_image_adapter() -> ImageModelAdapter:
             f"Registered: {sorted(IMAGE_ADAPTERS.keys())}"
         )
     return adapter
+
+
+# ─── Text-to-Video modality ─────────────────────────────────────────────────
+
+
+class VideoModelAdapter(Protocol):
+    """Text-to-video üretim modelleri için soyutlama."""
+
+    model_id: str
+    supported_ratios: frozenset[str]
+
+    def build_args(self, prompt: str, aspect_ratio: str) -> dict[str, Any]: ...
+
+
+class KlingV3ProAdapter:
+    """Kling 3.0 Pro text-to-video adapter.
+
+    aspect_ratio: "9:16" | "16:9" | "1:1" — Kling API'si literal string kabul eder.
+    """
+
+    model_id = "fal-ai/kling-video/v3/pro/text-to-video"
+
+    supported_ratios = frozenset({"9:16", "16:9", "1:1"})
+
+    def build_args(self, prompt: str, aspect_ratio: str) -> dict[str, Any]:
+        if aspect_ratio not in self.supported_ratios:
+            raise ValueError(
+                f"Unsupported aspect_ratio for {self.model_id}: {aspect_ratio!r}. "
+                f"Supported: {', '.join(sorted(self.supported_ratios))}"
+            )
+        return {"prompt": prompt, "aspect_ratio": aspect_ratio}
+
+
+VIDEO_ADAPTERS: dict[str, VideoModelAdapter] = {
+    "kling-v3-pro": KlingV3ProAdapter(),
+}
+
+
+def get_active_video_adapter() -> VideoModelAdapter:
+    key = (settings.VIDEO_MODEL or "kling-v3-pro").strip()
+    adapter = VIDEO_ADAPTERS.get(key)
+    if not adapter:
+        raise ValueError(
+            f"Unknown VIDEO_MODEL: {key!r}. "
+            f"Registered: {sorted(VIDEO_ADAPTERS.keys())}"
+        )
+    return adapter
