@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useCallback, useEffect, useRef, Suspense } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -19,6 +19,7 @@ import { UpgradeModal } from '@/components/billing/UpgradeModal'
 import { TemplateGrid } from '@/components/templates/TemplateGrid'
 import { DynamicForm } from '@/components/templates/DynamicForm'
 import { CaptionEditor, type CaptionData } from '@/components/templates/CaptionEditor'
+import { fetchActiveMediaModels, type ActiveMediaModels } from '@/lib/api/media-models'
 import type { Template } from '@/lib/templates.types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ interface TurkishVoice {
 }
 
 type ContentType = 'image' | 'carousel' | 'video' | 'special_day' | 'quote'
-type AspectRatio = '1:1' | '9:16' | '4:5' | '2:3'
+type AspectRatio = string
 type Step = 1 | 2 | 3
 type TemplateMode = 'template' | 'free'
 type TemplatePhase = 'pick' | 'form' | 'caption'
@@ -155,6 +156,7 @@ function IcerikOlusturInner() {
   const [ideas, setIdeas] = useState<string[]>([])
   const [loadingIdeas, setLoadingIdeas] = useState(false)
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1')
+  const [mediaModels, setMediaModels] = useState<ActiveMediaModels | null>(null)
   const [platforms, setPlatforms] = useState<string[]>(['instagram'])
   const [availableDocs, setAvailableDocs] = useState<BrandDocument[]>([])
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
@@ -248,6 +250,26 @@ function IcerikOlusturInner() {
     }
     fetchHolidays()
   }, [])
+
+  useEffect(() => {
+    fetchActiveMediaModels().then((m) => { if (m) setMediaModels(m) })
+  }, [])
+
+  const availableAspectRatios = useMemo(() => {
+    const supported = contentType === 'video'
+      ? mediaModels?.faceless_background.supported_ratios
+      : mediaModels?.image.supported_ratios
+    if (!supported) return ASPECT_RATIOS
+    const supportedSet = new Set(supported)
+    return ASPECT_RATIOS.filter((ar) => supportedSet.has(ar.id))
+  }, [contentType, mediaModels])
+
+  useEffect(() => {
+    if (availableAspectRatios.length === 0) return
+    if (!availableAspectRatios.some((ar) => ar.id === aspectRatio)) {
+      setAspectRatio(availableAspectRatios[0].id)
+    }
+  }, [availableAspectRatios, aspectRatio])
 
   function toggleDoc(id: string) {
     setSelectedDocIds((prev) =>
@@ -840,7 +862,7 @@ function IcerikOlusturInner() {
               <div className="space-y-2">
                 <Label>En-Boy Oranı</Label>
                 <div className="grid grid-cols-4 gap-2">
-                  {ASPECT_RATIOS.map((ar) => (
+                  {availableAspectRatios.map((ar) => (
                     <button
                       key={ar.id}
                       onClick={() => setAspectRatio(ar.id)}
@@ -1020,7 +1042,7 @@ function IcerikOlusturInner() {
               <div className="space-y-2">
                 <Label>En-Boy Oranı</Label>
                 <div className="grid grid-cols-4 gap-2">
-                  {ASPECT_RATIOS.map((ar) => (
+                  {availableAspectRatios.map((ar) => (
                     <button
                       key={ar.id}
                       onClick={() => setAspectRatio(ar.id)}
@@ -1177,7 +1199,7 @@ function IcerikOlusturInner() {
           <div className="space-y-2">
             <Label>En-Boy Oranı</Label>
             <div className="grid grid-cols-4 gap-2">
-              {ASPECT_RATIOS.map((ar) => (
+              {availableAspectRatios.map((ar) => (
                 <button
                   key={ar.id}
                   onClick={() => setAspectRatio(ar.id)}
