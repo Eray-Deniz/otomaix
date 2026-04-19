@@ -299,14 +299,18 @@ function FileUploadArea({
   accept,
   previewUrl,
   onUpload,
+  onRemove,
   loading,
+  removing,
   isVideo,
 }: {
   label: string
   accept: string
   previewUrl: string | null
   onUpload: (file: File) => void
+  onRemove?: () => void
   loading: boolean
+  removing?: boolean
   isVideo?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -315,17 +319,34 @@ function FileUploadArea({
     <div className="space-y-2">
       <Label className="text-sm text-gray-700">{label}</Label>
       <div
-        className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+        className="relative border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
         onClick={() => inputRef.current?.click()}
       >
         {loading ? (
           <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
         ) : previewUrl ? (
-          isVideo ? (
-            <video src={previewUrl} className="max-h-32 rounded-lg" controls />
-          ) : (
-            <Image src={previewUrl} alt={label} width={200} height={128} className="max-h-32 rounded-lg object-contain" />
-          )
+          <>
+            {isVideo ? (
+              <video src={previewUrl} className="max-h-32 rounded-lg" controls onClick={(e) => e.stopPropagation()} />
+            ) : (
+              <Image src={previewUrl} alt={label} width={200} height={128} className="max-h-32 rounded-lg object-contain" />
+            )}
+            {onRemove && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRemove()
+                }}
+                disabled={removing}
+                className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-600 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors disabled:opacity-50"
+                aria-label="Kaldır"
+                title="Kaldır"
+              >
+                {removing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-4 h-4" />}
+              </button>
+            )}
+          </>
         ) : (
           <>
             <Upload className="w-6 h-6 text-gray-400" />
@@ -386,6 +407,8 @@ function MarkaAyarlariContent() {
   const [saved, setSaved] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState<'light' | 'dark' | null>(null)
   const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [removingLogo, setRemovingLogo] = useState<'light' | 'dark' | null>(null)
+  const [removingVideo, setRemovingVideo] = useState(false)
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'bilgiler')
   const [documents, setDocuments] = useState<BrandDocument[]>([])
   const [loadingDocs, setLoadingDocs] = useState(false)
@@ -574,6 +597,35 @@ function MarkaAyarlariContent() {
       toast.error('Video yüklenemedi')
     }
     setUploadingVideo(false)
+  }
+
+  async function handleLogoRemove(variant: 'light' | 'dark') {
+    if (!brand?.id) return
+    if (!confirm(`${variant === 'light' ? 'Açık' : 'Koyu'} tema logosunu kaldırmak istediğine emin misin?`)) return
+    setRemovingLogo(variant)
+    const res = await api.delete(`/brands/${brand.id}/logo?variant=${variant}`)
+    if (res.success) {
+      const urlField = variant === 'light' ? 'logo_light_url' : 'logo_dark_url'
+      setBrand((prev) => prev ? { ...prev, [urlField]: null } : prev)
+      toast.success('Logo kaldırıldı')
+    } else {
+      toast.error('Logo kaldırılamadı')
+    }
+    setRemovingLogo(null)
+  }
+
+  async function handleVideoRemove() {
+    if (!brand?.id) return
+    if (!confirm('Intro videoyu kaldırmak istediğine emin misin?')) return
+    setRemovingVideo(true)
+    const res = await api.delete(`/brands/${brand.id}/intro-video`)
+    if (res.success) {
+      setBrand((prev) => prev ? { ...prev, intro_video_url: null } : prev)
+      toast.success('Intro video kaldırıldı')
+    } else {
+      toast.error('Video kaldırılamadı')
+    }
+    setRemovingVideo(false)
   }
 
   async function loadDocuments(brandId: string) {
@@ -888,14 +940,18 @@ function MarkaAyarlariContent() {
               accept="image/*"
               previewUrl={brand.logo_light_url}
               onUpload={(file) => handleLogoUpload(file, 'light')}
+              onRemove={() => handleLogoRemove('light')}
               loading={uploadingLogo === 'light'}
+              removing={removingLogo === 'light'}
             />
             <FileUploadArea
               label="Logo (Koyu Arka Plan)"
               accept="image/*"
               previewUrl={brand.logo_dark_url}
               onUpload={(file) => handleLogoUpload(file, 'dark')}
+              onRemove={() => handleLogoRemove('dark')}
               loading={uploadingLogo === 'dark'}
+              removing={removingLogo === 'dark'}
             />
           </div>
 
@@ -957,7 +1013,9 @@ function MarkaAyarlariContent() {
             accept="video/*"
             previewUrl={brand.intro_video_url}
             onUpload={handleVideoUpload}
+            onRemove={handleVideoRemove}
             loading={uploadingVideo}
+            removing={removingVideo}
             isVideo
           />
 

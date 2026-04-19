@@ -221,3 +221,74 @@ async def upload_intro_video(
         raise HTTPException(status_code=404, detail="Brand not found")
     await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")
     return OkResponse(data={"url": public_url})
+
+
+def _r2_path_from_url(url: str) -> str | None:
+    """Extract R2 object key from a public URL (strips R2_PUBLIC_URL prefix)."""
+    from app.core.config import settings
+
+    prefix = settings.R2_PUBLIC_URL.rstrip("/") + "/"
+    if url and url.startswith(prefix):
+        return url[len(prefix):]
+    return None
+
+
+@router.delete("/{brand_id}/logo", response_model=OkResponse)
+async def delete_logo(
+    brand_id: UUID,
+    variant: str,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Remove a brand logo (light or dark variant) from R2 and clear the DB column."""
+    await assert_brand_owned(db, user, brand_id)
+    if variant not in ("light", "dark"):
+        raise HTTPException(status_code=400, detail="variant must be 'light' or 'dark'")
+
+    col = "logo_light_url" if variant == "light" else "logo_dark_url"
+    current = await db.fetchrow(
+        f"SELECT {col} AS url, workspace_id FROM social.brands WHERE id = $1",
+        brand_id,
+    )
+    if not current:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    if current["url"]:
+        path = _r2_path_from_url(current["url"])
+        if path:
+            r2.delete(path)
+
+    await db.execute(
+        f"UPDATE social.brands SET {col} = NULL, updated_at = now() WHERE id = $1",
+        brand_id,
+    )
+    await invalidate_pattern(f"otomaix:social:brands:{current['workspace_id']}")
+    return OkResponse(data={"deleted": True})
+
+
+@router.delete("/{brand_id}/intro-video", response_model=OkResponse)
+async def delete_intro_video(
+    brand_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Remove the brand intro video from R2 and clear the DB column."""
+    await assert_brand_owned(db, user, brand_id)
+    current = await db.fetchrow(
+        "SELECT intro_video_url AS url, workspace_id FROM social.brands WHERE id = $1",
+        brand_id,
+    )
+    if not current:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    if current["url"]:
+        path = _r2_path_from_url(current["url"])
+        if path:
+            r2.delete(path)
+
+    await db.execute(
+        "UPDATE social.brands SET intro_video_url = NULL, updated_at = now() WHERE id = $1",
+        brand_id,
+    )
+    await invalidate_pattern(f"otomaix:social:brands:{current['workspace_id']}")
+    return OkResponse(data={"deleted": True})

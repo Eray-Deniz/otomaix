@@ -4,6 +4,24 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-19 — Marka Ayarları medya kaldırma butonu (logo + intro video) ✅
+
+**Sorun:** `/marka-ayarlari` → Görseller sekmesinde logo veya intro video yüklenince **kaldırma seçeneği yoktu**. Kullanıcı sadece üzerine yeni dosya yükleyerek değiştirebiliyordu; mevcut medyayı tamamen kaldırma imkanı yoktu.
+
+**Çözüm:** `FileUploadArea` bileşenine `onRemove` (opsiyonel) + `removing` prop'ları eklendi. Preview durumunda sağ üst köşede küçük ✕ butonu gösterilir; tıklandığında `confirm()` + `DELETE` endpoint çağrısı + optimistic state update (ilgili URL field'ı `null`).
+
+**Değişen dosya:** `app/(dashboard)/marka-ayarlari/page.tsx`
+- `FileUploadArea` bileşeni: `onRemove?: () => void` + `removing?: boolean` prop'ları. Preview varsa (önce video/image, sonra) absolute sağ üstte 7x7 rounded ✕ butonu. `e.stopPropagation()` ile upload click'ine düşmesi engellendi.
+- Yeni state: `removingLogo: 'light' | 'dark' | null`, `removingVideo: boolean`
+- `handleLogoRemove(variant)`: `confirm()` → `api.delete('/brands/{id}/logo?variant=...')` → başarılıysa ilgili `logo_*_url` field'ını NULL yap
+- `handleVideoRemove()`: aynı pattern, `intro_video_url` NULL
+- Logo Filigran switch'i zaten `disabled={!brand.logo_light_url && !brand.logo_dark_url}` — logo silinince otomatik kapanır (state senkron)
+- Video Pozisyonu Select'i `{brand.intro_video_url && ...}` conditional — video silinince otomatik gizlenir
+
+**Backward compat:** Eski `handleLogoUpload` / `handleVideoUpload` imzaları değişmedi, sadece yeni handler'lar eklendi.
+
+**Not (kullanıcı endişesi):** "İki marka için birden update etti mi?" — DB check'te iki marka (Otomaix + MyGoodShoes) ayrı `brand_id`, ayrı R2 path'ler, ayrı `updated_at` timestamp'leri (18:39:24 vs 18:53:33). Backend doğru — iki ayrı upload. Aynı içerik yüklendiyse UI'da aynı görünür ama fiziken ayrılar.
+
 ## 2026-04-19 — Marka Ayarları UX polish + Select.Value slug fix ✅
 
 **Kapsam:** `/marka-ayarlari` sayfasındaki 6 UX sorunu giderildi. Tek dosya değişiklik: `app/(dashboard)/marka-ayarlari/page.tsx`. Backend Migration 023 + jsonb double-encode fix'i ile birlikte canlı testte karşılaşılan problemler kapandı.

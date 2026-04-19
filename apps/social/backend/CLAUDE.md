@@ -5,6 +5,22 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-19 — Brand kit medya kaldırma endpoint'leri (logo + intro video DELETE) ✅
+
+Canlı testte kullanıcı logoları/intro videoyu yükledi ama **kaldırma seçeneği yoktu** — yalnızca üzerine yeni dosya yükleyerek değiştirebiliyordu. İki yeni endpoint eklendi:
+
+- `DELETE /brands/{id}/logo?variant=light|dark` — R2'den siler + ilgili DB kolonunu NULL yapar (`logo_light_url` veya `logo_dark_url`)
+- `DELETE /brands/{id}/intro-video` — R2'den siler + `intro_video_url` NULL yapar
+
+**Uygulama notları** (`app/routers/brands.py`):
+- `assert_brand_owned` sahiplik kontrolü + 404 guard (brand yoksa)
+- `_r2_path_from_url(url)` helper'ı public URL'den R2 object key çıkarır (R2_PUBLIC_URL prefix strip)
+- R2 path çözülemezse silme atlanır ve sadece DB kolonu NULL yapılır (legacy/external URL edge case)
+- `invalidate_pattern(f"otomaix:social:brands:{workspace_id}")` brand list cache'ini temizler
+- `updated_at = now()` setlenir → brand list ve frontend state senkron kalır
+
+**Risk:** düşük — salt additive, R2 delete zaten idempotent (`ClientError` yutuluyordu), DB UPDATE tek kolon.
+
 ## 2026-04-19 — Post-Phase 7 hotfix: brands.updated_at + jsonb double-encode fix ✅
 
 Canlı testte iki ayrı Sentry hatası patladı:
