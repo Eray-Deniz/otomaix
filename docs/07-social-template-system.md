@@ -1,5 +1,19 @@
 # Phase 7 — Sektör-Spesifik Şablon Sistemi
 
+> ## ✅ PHASE 7 COMPLETE (2026-04-19)
+>
+> **Durum:** 7/7 sprint tamamlandı. Tüm hedefler karşılandı.
+>
+> **Teslim edilenler:**
+> - Sprint 1–2: Sektör katmanı + 22 şablon (saglik×3, hukuk×3, emlak×3, egitim×2, otomotiv×2, genel×8)
+> - Sprint 3: Prompt building refactor (template-aware, 3-tier cache)
+> - Sprint 4: `/posts/generate-caption` endpoint (Claude caption + image_prompt + hashtags)
+> - Sprint 5: `/icerik-olustur` wizard refactor (Akış C UI) + Option B polish
+> - Sprint 6: Platform-spesifik publishing hardening (stale-post sweeper dahil)
+> - Sprint 7: Media model adapter refactor + dynamic model registry (`/media-models/active`)
+>
+> **Bu doküman arşivlenmiştir** — ileriki değişiklikler için `apps/social/{backend,frontend}/CLAUDE.md` changelog girdilerine bakın.
+
 **Doküman sürümü:** v1.1
 **Kapsam:** Otomaix Social `/icerik-olustur` — sektör-spesifik şablon sistemi ile yeniden yapılandırma
 **Hedef dosya konumu:** `~/otomaix/docs/07-social-template-system.md`

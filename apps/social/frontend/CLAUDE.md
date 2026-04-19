@@ -1,8 +1,39 @@
 # Social Frontend — CLAUDE.md
 
-> **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
-> `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüşüyor. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish (Option B + Gönderi Metni rename + Step 3 cleanup) ✅ · Sprint 6–7 ⏳
+> **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
+> `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-19 — Phase 7 Sprint 7 Faz 2g: Dynamic aspect selector (media-models) ✅
+
+**Kapsam:** `/icerik-olustur` aspect ratio seçici artık backend'ten gelen model registry'ye göre dinamik filtrelenir. Backend'de env var ile model değişirse (Sprint 7 Faz 1-2f adapter refactor'u, detay: backend/CLAUDE.md) frontend otomatik uyumlanır — yeni deploy gerekmez, 1 saatlik HTTP cache sonrası güncel liste gelir.
+
+**Yeni dosya:** `lib/api/media-models.ts`
+- `fetchActiveMediaModels()` → `GET /media-models/active` (public, JWT'siz, 1hr Cache-Control)
+- `ActiveMediaModels` interface: 4 modalite (`image`, `video`, `image_to_video`, `faceless_background`), her biri `{key, model_id, supported_ratios}`
+- `image_to_video.supported_ratios` daima `null` — çıktı oranı input image'den türer, aspect yok
+
+**Modifiye dosya:** `app/(dashboard)/icerik-olustur/page.tsx`
+- `useMemo` import'u eklendi
+- `AspectRatio` tipi: literal union → `string` (curated `ASPECT_RATIOS` hâlâ label+icon kaynağı, sadece tip sınırı gevşetildi)
+- Yeni state: `mediaModels: ActiveMediaModels | null`, mount'ta fetch
+- Yeni memoized `availableAspectRatios`: contentType'a göre modaliteyi seçer (image/carousel → `image.supported_ratios`, video → `faceless_background.supported_ratios`), curated `ASPECT_RATIOS` listesini bu set'e göre filtreler. `mediaModels` henüz yüklenmemişse tüm curated list gösterilir (graceful fallback).
+- Yeni reset effect: `contentType` değişince mevcut seçili `aspectRatio` artık desteklenmiyorsa `availableAspectRatios[0].id`'ye otomatik sıfırlanır
+- 3 render bloğu (şablon form, serbest mod form, legacy video/special_day/quote) `ASPECT_RATIOS.map` → `availableAspectRatios.map`
+
+**UX etkisi:**
+- Image/carousel contentType: FLUX.2 Pro destekli 7 ratio ile curated listenin intersection'ı → 4 buton (1:1, 9:16, 4:5, 2:3)
+- Video contentType: Hunyuan Video destekli 4 ratio ile intersection → 3 buton (1:1, 9:16, 4:5). 16:9 backend destekliyor ama curated listede yok (polish backlog — memory kaydı var).
+- contentType geçişinde (ör. image seçili + aspect `2:3` → sonra video seç) aspect otomatik desteklenen ilk değere sıfırlanır, kullanıcı deneyim engellenmez
+
+**Faz 3 (load test):** Locust senaryolarına `/media-models/active`, `/templates`, `/posts/generate-caption` eklendi — detay: backend/CLAUDE.md.
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ✅ Canlı `GET /media-models/active` → HTTP 200 + Cache-Control header (2026-04-19 curl testi)
+- ⏳ Tarayıcı testi: `/icerik-olustur` video ↔ image geçişinde aspect butonları dinamik değişmeli (hard refresh — Ctrl+Shift+R)
+
+**Sonraki:** Phase 7 kapandı. Minör polish backlog: `ASPECT_RATIOS` curated listesine `16:9` eklemek (Hunyuan video için YouTube oranı). Sonraki büyük iş kalemi text-to-video / image-to-video UI entegrasyonu (Sprint 7 backend adapter altyapısını kullanacak yeni faz).
 
 ## 2026-04-18 — Phase 7 Sprint 5 polish — "Gönderi Metni" rename + Step 3 cleanup ✅
 

@@ -1,9 +1,58 @@
 # Social Backend — CLAUDE.md
 
-> **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
-> `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
+> **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
+> `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening (fal.ai error visibility + aspect validation + stale sweep) ✅ · Sprint 7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-19 — Phase 7 Sprint 7: Media adapter refactor + dynamic model registry ✅
+
+**Kapsam:** fal.ai model-spesifik mantık `media_adapters.py`'ye taşındı — 4 modalite için Protocol tabanlı adapter pattern (image / video / image_to_video / faceless_background). Her modalite env var ile konfigüre edilir (`IMAGE_MODEL`, `VIDEO_MODEL`, `IMAGE_TO_VIDEO_MODEL`, `FACELESS_BACKGROUND_MODEL`), aktif adapter modül import'unda bir kez resolve edilir. Yeni model eklemek artık tek adapter sınıfı + registry'e tek satır kayıt — business kod değişmez.
+
+**Yeni dosyalar:**
+- `app/services/media_adapters.py` — 4 Protocol (`ImageModelAdapter`, `VideoModelAdapter`, `ImageToVideoModelAdapter`, `FacelessBackgroundAdapter`) + 4 adapter sınıfı (FluxV2ProAdapter, KlingV3ProAdapter, KlingV25TurboProAdapter, HunyuanVideoAdapter) + registry dict'leri + `get_active_*_adapter()` resolver'ları. Adapter `build_args(prompt, aspect_ratio, ...)` metoduyla fal.ai submit argümanlarını döndürür; geçersiz aspect'te ValueError fırlatır. Faceless için `_RESOLUTION_MAP` aspect → resolution literal ("720x1280") dönüşümü yapar.
+- `app/routers/media_models.py` — `GET /media-models/active` public endpoint (JWT'siz, 1hr HTTP cache). 4 modalite için `{key, model_id, supported_ratios}` döndürür. `image_to_video.supported_ratios` her zaman None (çıktı oranı input image'den türer).
+
+**Değişen dosyalar:**
+- `app/core/config.py` — 4 model env var (default değerleri ile). Docstring: env değişince process restart gerekir, adapter resolve'ları modül import'unda cache'lenir.
+- `app/services/fal_ai.py` — `generate_image` artık `_image_adapter.build_args()` çağırır, silent `.get(ratio, "square")` fallback kaldırıldı. `generate_video` + `generate_video_from_image` scaffold olarak korundu (aktif VideoModelAdapter ve ImageToVideoModelAdapter üzerinden — UI caller sonraki faz'da eklenecek). `_SIZE_MAP` artık adapter'ın içinde; `SUPPORTED_ASPECT_RATIOS` public sabit adapter'dan okunur.
+- `app/services/faceless_video.py` — `FAL_VIDEO_MODEL` + `SUPPORTED_FACELESS_RATIOS` artık `_faceless_bg_adapter.model_id` ve `_faceless_bg_adapter.supported_ratios`'tan türer. `generate_background_video` adapter'ın `build_args`'ını kullanır.
+- `app/routers/posts.py` — Faceless video endpoint'ine submit öncesi aspect validation eklendi: `payload.aspect_ratio not in SUPPORTED_FACELESS_RATIOS` → HTTP 400 + Türkçe mesaj (pipeline'a düşmeden). Aynı koruma image akışında Sprint 6 hardening'de eklenmişti.
+- `app/main.py` — `media_models` router alphabetical sırada kaydedildi (documents ← media_models → posts).
+
+**Adapter registry ve env akışı:**
+
+| Env var | Default | Adapter sınıfı | Model ID |
+|---------|---------|----------------|----------|
+| `IMAGE_MODEL` | `flux-2-pro` | FluxV2ProAdapter | fal-ai/flux-2-pro |
+| `VIDEO_MODEL` | `kling-v3-pro` | KlingV3ProAdapter | fal-ai/kling-video/v3/pro/text-to-video |
+| `IMAGE_TO_VIDEO_MODEL` | `kling-v25-turbo-pro` | KlingV25TurboProAdapter | fal-ai/kling-video/v2.5-turbo/pro/image-to-video |
+| `FACELESS_BACKGROUND_MODEL` | `hunyuan-video` | HunyuanVideoAdapter | fal-ai/hunyuan-video |
+
+**Faz breakdown (her biri ayrı commit+push):**
+- **Faz 1:** IMAGE_MODEL env + FluxV2ProAdapter — fal_ai.py image path'i adapter'a taşındı
+- **Faz 2a:** `get_active_image_adapter()` + registry dict — text-to-video ve image-to-video için altyapı hazırlandı
+- **Faz 2b:** VideoModelAdapter Protocol + KlingV3ProAdapter + VIDEO_ADAPTERS registry
+- **Faz 2c:** ImageToVideoModelAdapter Protocol + KlingV25TurboProAdapter (imza farklı — aspect yok, image_url var)
+- **Faz 2d:** FacelessBackgroundAdapter Protocol + HunyuanVideoAdapter — faceless_video.py refactor edildi
+- **Faz 2e:** Submit-time aspect validation `posts.py:generate_faceless_video`'ya eklendi
+- **Faz 2f:** `GET /media-models/active` endpoint + router kayıt
+- **Faz 2g:** Frontend `lib/api/media-models.ts` + `/icerik-olustur` dynamic aspect selector (detay: frontend/CLAUDE.md)
+- **Faz 3:** Locust senaryolarına `/media-models/active`, `/templates`, `/posts/generate-caption` eklendi — public endpoint cache hit validation ve caption rate limit (30/saat) testi için
+- **Faz 4:** Bu docs güncellemesi
+
+**Etki analizi:**
+- Risk: düşük — adapter resolve modül import'unda yapılır, fallback default değerlerle ilk çağrı çalışır. Env geçerli registry key'i içermiyorsa ValueError fırlatır → uygulama başlamaz (fail-fast). Mevcut iş kodunun hiçbir çağrı noktası değişmedi; yalnızca dahili implementation adapter'a delege edildi.
+- Backward compat: API sözleşmeleri değişmedi. Eski frontend client'ları `GET /media-models/active`'i kullanmadan da çalışmaya devam eder (aspect ratio'ları hardcoded olur ama geçersiz bir oran seçerse backend 400 döner — Sprint 6 hardening davranışı).
+- Adapter scaffolding (`generate_video`, `generate_video_from_image`) kasıtlı olarak korundu — UI caller'ları ileriki text-to-video ve image-to-video faz'larında eklenecek. Silme, aktif kullanımı olmasa bile altyapı hazır tutuldu.
+
+**Doğrulama (2026-04-19 canlı):**
+- ✅ `curl https://api.otomaix.com/media-models/active` → HTTP 200, `Cache-Control: public, max-age=3600`, 4 modalite JSON (image/video/i2v/faceless)
+- ✅ `curl https://api.otomaix.com/templates` → 22 şablon (Phase 7 Sprint 1/2 regresyon yok)
+- ✅ `curl 'https://api.otomaix.com/templates?sector=saglik'` → 11 şablon (3 sağlık + 8 genel)
+- ⏳ Frontend canlı test: `/icerik-olustur` aspect selector video/image contentType'larına göre farklı buton seti göstermeli (kullanıcı tarayıcıda doğrulayacak)
+
+**Sonraki:** Phase 7 kapandı. Olası sonraki iş kalemi: text-to-video / image-to-video UI entegrasyonu (Sprint 7 adapter altyapısını kullanacak yeni UI faz'ı). 16:9 aspect ratio'nun frontend curated `ASPECT_RATIOS` listesine eklenmesi minör polish olarak beklemede.
 
 ## 2026-04-19 — Phase 7 Sprint 6 hardening: fal.ai error visibility + aspect ratio fix + stale-job sweeper ✅
 
