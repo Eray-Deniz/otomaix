@@ -76,6 +76,7 @@ const ASPECT_RATIOS: { id: AspectRatio; label: string; desc: string; icon: strin
   { id: '9:16', label: '9:16', desc: 'Reels / TikTok', icon: '📱' },
   { id: '4:5', label: '4:5', desc: 'Instagram Dikey', icon: '🖼️' },
   { id: '2:3', label: '2:3', desc: 'Pinterest', icon: '📌' },
+  { id: '16:9', label: '16:9', desc: 'YouTube', icon: '📺' },
 ]
 
 const PLATFORMS = [
@@ -861,7 +862,7 @@ function IcerikOlusturInner() {
               {/* Aspect ratio */}
               <div className="space-y-2">
                 <Label>En-Boy Oranı</Label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-2">
                   {availableAspectRatios.map((ar) => (
                     <button
                       key={ar.id}
@@ -1041,7 +1042,7 @@ function IcerikOlusturInner() {
 
               <div className="space-y-2">
                 <Label>En-Boy Oranı</Label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-2">
                   {availableAspectRatios.map((ar) => (
                     <button
                       key={ar.id}
@@ -1198,7 +1199,7 @@ function IcerikOlusturInner() {
           {!['special_day', 'quote'].includes(contentType) && (
           <div className="space-y-2">
             <Label>En-Boy Oranı</Label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               {availableAspectRatios.map((ar) => (
                 <button
                   key={ar.id}
