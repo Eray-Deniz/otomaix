@@ -15,6 +15,7 @@ import asyncpg
 import httpx
 
 from app.core.config import settings
+from app.core.utils import parse_brand_kit
 
 HEYGEN_BASE = "https://api.heygen.com"
 
@@ -128,8 +129,7 @@ async def create_avatar_from_photo(
     # brand_kit.avatar alanını güncelle
     row = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
     if row:
-        import json
-        existing_kit = dict(row["brand_kit"]) if row["brand_kit"] else {}
+        existing_kit = parse_brand_kit(row["brand_kit"])
         existing_kit["avatar"] = {
             "type": "custom",
             "avatar_id": avatar_id,
@@ -139,7 +139,7 @@ async def create_avatar_from_photo(
         await db.execute(
             "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1",
             brand_id,
-            json.dumps(existing_kit),
+            existing_kit,
         )
 
     return {
@@ -158,10 +158,8 @@ async def set_stock_avatar(
     db: asyncpg.Connection,
 ) -> dict:
     """Stok avatar seç ve brand_kit'e kaydet."""
-    import json
-
     row = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
-    existing_kit = dict(row["brand_kit"]) if row and row["brand_kit"] else {}
+    existing_kit = parse_brand_kit(row["brand_kit"]) if row else {}
     existing_kit["avatar"] = {
         "type": "stock",
         "avatar_id": avatar_id,
@@ -171,7 +169,7 @@ async def set_stock_avatar(
     await db.execute(
         "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1",
         brand_id,
-        json.dumps(existing_kit),
+        existing_kit,
     )
     return existing_kit["avatar"]
 

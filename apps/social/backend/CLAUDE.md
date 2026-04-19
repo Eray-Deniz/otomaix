@@ -5,6 +5,53 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-19 — Post-Phase 7 hotfix: brands.updated_at + jsonb double-encode fix ✅
+
+Canlı testte iki ayrı Sentry hatası patladı:
+
+### A) Migration 023 — `social.brands.updated_at` eksikti
+`brands.py:187` (logo upload), `brands.py:215` (intro video upload) ve `brands.py:157` (kit update) üç UPDATE query'si `updated_at = now()` atıyor ama `social.brands` tablosu migration `001_initial_social.sql`'de **updated_at kolonu hiç oluşturulmamış**. Canlıda logo yükleme 500 veriyordu: `column "updated_at" of relation "brands" does not exist`.
+
+**Fix** (`shared/db/migrations/023_brands_updated_at.sql`, prod'a uygulandı):
+```sql
+ALTER TABLE social.brands ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+DROP TRIGGER IF EXISTS brands_updated_at ON social.brands;
+CREATE TRIGGER brands_updated_at BEFORE UPDATE ON social.brands FOR EACH ROW EXECUTE FUNCTION social.set_updated_at();
+```
+`posts` tablosundaki mevcut `set_updated_at()` fonksiyonu yeniden kullanıldı.
+
+### B) jsonb double-encode bug — `dict()` sequence ValueError
+Kit update hatasından hemen sonra ikinci Sentry: `ValueError: dictionary update sequence element #0 has length 1; 2 is required` at `brands.py:153` → `existing = dict(row["brand_kit"]) if row["brand_kit"] else {}`. Sorun CLAUDE.md'deki **2026-04-14 asyncpg jsonb codec fix**'in uyarısının ihlali — *"Kritik: `json.dumps()` + `$N::jsonb` cast KULLANMA, dict/list'i doğrudan parametre olarak geç."*
+
+**Kök neden:** `database.py`'de kayıtlı codec (`set_type_codec('jsonb', encoder=json.dumps, decoder=json.loads)`) asyncpg otomatik olarak çalıştırır. Üç callsite hâlâ elle `json.dumps()` ile parametre geçiyordu:
+- `brands.py:160` — `update_brand_kit` UPDATE
+- `avatar.py:142` — `create_avatar_from_photo` UPDATE
+- `avatar.py:174` — `set_stock_avatar` UPDATE
+
+`json.dumps(dict)` → codec tekrar `json.dumps(str)` → DB'de JSON-string olarak saklanıyor (`jsonb_typeof='string'`). Okumada decoder iç string'i döndürüyor, `dict(str)` → tek karakteri tuple beklediği için patlıyor.
+
+**Fix (3 dosya):**
+- `brands.py`: `import json` kaldırıldı (artık kullanılmıyor), satır 160 `json.dumps(merged)` → `merged` (dict direkt). Satır 153 `dict(row["brand_kit"])` → `parse_brand_kit(row["brand_kit"])` defansif okuma (legacy str satırları için).
+- `avatar.py`: iki inline `import json` kaldırıldı, `json.dumps(existing_kit)` → `existing_kit`, `dict(row["brand_kit"])` → `parse_brand_kit(row["brand_kit"])`.
+- `app/core/utils.py:parse_brand_kit` zaten str+dict ikisini de handle ediyor (B-7 refactor'ünden beri).
+
+**Prod data repair** (tek seferlik):
+```sql
+UPDATE social.brands
+   SET brand_kit = (brand_kit #>> '{}')::jsonb
+ WHERE jsonb_typeof(brand_kit) = 'string';
+-- 1 row affected, sonra tüm satırlar jsonb_typeof='object'
+```
+
+**Neden diğer jsonb kolonları etkilenmedi:** Auth/webhooks/trends router'ları `$N::jsonb` text cast kullandığı için codec encoder tetiklenmiyor (text parametresi server-side cast). Yalnızca bu üç callsite hem codec tetikliyor hem `json.dumps` yapıyordu — çift encoding çakışması.
+
+**Etki analizi:**
+- Risk: düşük — değişiklik yalnızca write path'te, read path'te savunmacı `parse_brand_kit` helper'ı mevcut str değerleri de handle eder.
+- Backward compat: kit content değişmiyor, yalnızca saklama formatı düzeliyor.
+- Önleme: ileride `brand_kit` dışı jsonb kolonlarına yazan yeni kod `json.dumps()` KULLANMAMALI — codec otomatik çalışır.
+
+**Sonraki:** Doğrulama → kullanıcının `/marka-ayarlari` sayfasındaki kit patch'leri artık 500 yerine 200 dönmeli; Sentry'de bu iki issue tekrar etmemeli.
+
 ## 2026-04-19 — Phase 7 Sprint 7: Media adapter refactor + dynamic model registry ✅
 
 **Kapsam:** fal.ai model-spesifik mantık `media_adapters.py`'ye taşındı — 4 modalite için Protocol tabanlı adapter pattern (image / video / image_to_video / faceless_background). Her modalite env var ile konfigüre edilir (`IMAGE_MODEL`, `VIDEO_MODEL`, `IMAGE_TO_VIDEO_MODEL`, `FACELESS_BACKGROUND_MODEL`), aktif adapter modül import'unda bir kez resolve edilir. Yeni model eklemek artık tek adapter sınıfı + registry'e tek satır kayıt — business kod değişmez.

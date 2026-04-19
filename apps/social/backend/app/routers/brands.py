@@ -1,4 +1,3 @@
-import json
 from uuid import UUID
 
 import asyncpg
@@ -7,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from app.core.cache import get_cached, invalidate_pattern, set_cached
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, assert_workspace_owned, get_current_user
+from app.core.utils import parse_brand_kit
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
 from app.services.sector_resolver import resolve_sector
@@ -150,14 +150,14 @@ async def update_brand_kit(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
 
     # Merge incoming fields into existing brand_kit
-    existing = dict(row["brand_kit"]) if row["brand_kit"] else {}
+    existing = parse_brand_kit(row["brand_kit"])
     updates = payload.model_dump(exclude_none=True)
     merged = {**existing, **updates}
 
     updated = await db.fetchrow(
         "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1 RETURNING *",
         brand_id,
-        json.dumps(merged),
+        merged,
     )
     await invalidate_pattern(f"otomaix:social:brands:{updated['workspace_id']}")
     return OkResponse(data=dict(updated))
