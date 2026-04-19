@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     REDDIT_USER_AGENT: str = "otomaix-social/1.0 (+https://otomaix.com)"
     EVDS_API_KEY: str = ""           # Opsiyonel — TCMB EVDS (Layer A, finans)
     SERPER_API_KEY: str = ""         # Opsiyonel — Serper.dev Google Search (Layer B)
+    # Phase 7 — Media model adapter registry keys
+    IMAGE_MODEL: str = "flux-2-pro"  # app.services.media_adapters.IMAGE_ADAPTERS key
 
 
 settings = Settings()
