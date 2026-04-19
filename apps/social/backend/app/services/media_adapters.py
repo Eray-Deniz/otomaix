@@ -123,3 +123,43 @@ def get_active_video_adapter() -> VideoModelAdapter:
             f"Registered: {sorted(VIDEO_ADAPTERS.keys())}"
         )
     return adapter
+
+
+# ─── Image-to-Video modality ────────────────────────────────────────────────
+
+
+class ImageToVideoModelAdapter(Protocol):
+    """Image-to-video üretim modelleri için soyutlama.
+
+    Text-to-video'dan farklı olarak aspect_ratio yok — çıktı oranı input
+    image'den türer. Arayüz: (prompt, image_url) → arguments dict.
+    """
+
+    model_id: str
+
+    def build_args(self, prompt: str, image_url: str) -> dict[str, Any]: ...
+
+
+class KlingV25TurboProAdapter:
+    """Kling 2.5 Turbo Pro image-to-video adapter."""
+
+    model_id = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
+
+    def build_args(self, prompt: str, image_url: str) -> dict[str, Any]:
+        return {"prompt": prompt, "image_url": image_url}
+
+
+IMAGE_TO_VIDEO_ADAPTERS: dict[str, ImageToVideoModelAdapter] = {
+    "kling-v25-turbo-pro": KlingV25TurboProAdapter(),
+}
+
+
+def get_active_image_to_video_adapter() -> ImageToVideoModelAdapter:
+    key = (settings.IMAGE_TO_VIDEO_MODEL or "kling-v25-turbo-pro").strip()
+    adapter = IMAGE_TO_VIDEO_ADAPTERS.get(key)
+    if not adapter:
+        raise ValueError(
+            f"Unknown IMAGE_TO_VIDEO_MODEL: {key!r}. "
+            f"Registered: {sorted(IMAGE_TO_VIDEO_ADAPTERS.keys())}"
+        )
+    return adapter

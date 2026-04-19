@@ -11,6 +11,7 @@ import fal_client
 from app.core.config import settings
 from app.services.media_adapters import (
     get_active_image_adapter,
+    get_active_image_to_video_adapter,
     get_active_video_adapter,
 )
 
@@ -20,14 +21,13 @@ WEBHOOK_URL = "https://api.otomaix.com/webhooks/fal"
 # process restart gerekir; Coolify zaten redeploy'da bunu yapar).
 _image_adapter = get_active_image_adapter()
 _video_adapter = get_active_video_adapter()
+_image_to_video_adapter = get_active_image_to_video_adapter()
 
 # Backward-compat module-level exports (posts.py, trends.py, internal.py için)
 IMAGE_MODEL: str = _image_adapter.model_id
 SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = tuple(sorted(_image_adapter.supported_ratios))
 VIDEO_MODEL: str = _video_adapter.model_id
-
-# Dead-code hazır model ID (henüz adapter'ı yok, Faz 2c'de eklenecek)
-IMAGE_TO_VIDEO_MODEL = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
+IMAGE_TO_VIDEO_MODEL: str = _image_to_video_adapter.model_id
 
 
 def _build_image_prompt(prompt: str, brand_kit: dict) -> str:
@@ -71,7 +71,8 @@ async def generate_image(prompt: str, aspect_ratio: str, brand_kit: dict) -> str
 async def generate_video(prompt: str, aspect_ratio: str, brand_kit: dict) -> str:
     """Text-to-video üretimi — aktif VideoModelAdapter üzerinden. fal job ID'sini döndürür.
 
-    NOT: Şu an hiçbir caller yok (dead code); adapter pattern gelecek caller'lar için hazır.
+    NOT: UI caller sonraki faz'da eklenecek (text-to-video wizard entegrasyonu planlı).
+    Adapter altyapısı önceden hazırlanıyor; silme — ileriki video özelliği için şart.
     """
     _setup_fal()
     full_prompt = _build_image_prompt(prompt, brand_kit)
@@ -86,16 +87,18 @@ async def generate_video(prompt: str, aspect_ratio: str, brand_kit: dict) -> str
 
 
 async def generate_video_from_image(prompt: str, image_url: str, brand_kit: dict) -> str:
-    """Image-to-video üretimi — Kling 2.5 Turbo Pro. fal job ID'sini döndürür.
+    """Image-to-video üretimi — aktif ImageToVideoModelAdapter üzerinden. fal job ID'sini döndürür.
 
-    NOT: Şu an hiçbir caller yok (dead code); Faz 2c'de ImageToVideoModelAdapter'a taşınacak.
+    NOT: UI caller sonraki faz'da eklenecek (image-to-video wizard entegrasyonu planlı).
+    Adapter altyapısı önceden hazırlanıyor; silme — ileriki video özelliği için şart.
     """
     _setup_fal()
     full_prompt = _build_image_prompt(prompt, brand_kit)
+    args = _image_to_video_adapter.build_args(full_prompt, image_url)
 
     handler = await fal_client.submit_async(
-        IMAGE_TO_VIDEO_MODEL,
-        arguments={"prompt": full_prompt, "image_url": image_url},
+        _image_to_video_adapter.model_id,
+        arguments=args,
         webhook_url=WEBHOOK_URL,
     )
     return handler.request_id

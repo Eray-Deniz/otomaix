@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # Phase 7 — Media model adapter registry keys
     IMAGE_MODEL: str = "flux-2-pro"  # app.services.media_adapters.IMAGE_ADAPTERS key
     VIDEO_MODEL: str = "kling-v3-pro"  # app.services.media_adapters.VIDEO_ADAPTERS key
+    IMAGE_TO_VIDEO_MODEL: str = "kling-v25-turbo-pro"  # app.services.media_adapters.IMAGE_TO_VIDEO_ADAPTERS key
 
 
 settings = Settings()
