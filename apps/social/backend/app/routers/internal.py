@@ -7,6 +7,7 @@ Never expose these routes to the public API without the service auth dependency.
 from datetime import datetime, timezone
 
 import asyncpg
+import sentry_sdk
 from fastapi import APIRouter, Depends
 
 from app.core.database import get_db
@@ -232,6 +233,47 @@ async def get_scheduled_due_posts(
         for row in rows
     ]
     return OkResponse(data=due)
+
+
+@router.post("/posts/fail-stale", response_model=OkResponse)
+async def fail_stale_posts(
+    _: None = Depends(get_service_auth),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Fail posts stuck in 'generating' > 10 minutes.
+
+    Safety net for cases where fal.ai webhook is lost / delayed / silently dropped.
+    Should be called on a periodic n8n cron (recommended: every 10 min).
+
+    NOTE: Must be declared BEFORE `/posts/{post_id}` — same rationale as scheduled-due.
+    """
+    rows = await db.fetch(
+        """
+        UPDATE social.posts
+        SET status = 'failed', updated_at = now()
+        WHERE status = 'generating'
+          AND created_at < now() - interval '10 minutes'
+        RETURNING id, brand_id, fal_job_id, created_at
+        """
+    )
+    stale_ids: list[str] = []
+    for row in rows:
+        post_id = str(row["id"])
+        stale_ids.append(post_id)
+        sentry_sdk.set_context(
+            "stale_post_sweep",
+            {
+                "post_id": post_id,
+                "brand_id": str(row["brand_id"]),
+                "fal_job_id": row["fal_job_id"],
+                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+            },
+        )
+        sentry_sdk.capture_message(
+            f"Stale post auto-failed: {post_id}",
+            level="warning",
+        )
+    return OkResponse(data={"failed_count": len(stale_ids), "post_ids": stale_ids})
 
 
 @router.get("/posts/{post_id}", response_model=OkResponse)

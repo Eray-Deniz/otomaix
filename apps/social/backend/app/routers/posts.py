@@ -24,7 +24,7 @@ from app.models.schemas import (
 )
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context
-from app.services.fal_ai import generate_image
+from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image
 from app.services.faceless_video import TURKISH_VOICES, run_faceless_video_pipeline
 
 router = APIRouter(prefix="/posts", tags=["posts"])
@@ -265,6 +265,14 @@ async def generate_post(
     """Create a post record and trigger fal.ai image generation."""
     await assert_brand_owned(db, user, payload.brand_id)
     await check_plan_limit(user["sub"], "post", db)
+    if payload.aspect_ratio not in SUPPORTED_ASPECT_RATIOS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Desteklenmeyen en-boy oranı: {payload.aspect_ratio!r}. "
+                f"Geçerli değerler: {', '.join(SUPPORTED_ASPECT_RATIOS)}"
+            ),
+        )
     brand = await db.fetchrow(
         "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
     )
@@ -383,13 +391,22 @@ async def regenerate_post(
         raise HTTPException(status_code=404, detail="Post not found")
 
     brand_kit = _parse_brand_kit(post["brand_kit"])
+    aspect_ratio = post["aspect_ratio"] or "1:1"
+    if aspect_ratio not in SUPPORTED_ASPECT_RATIOS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Desteklenmeyen en-boy oranı: {aspect_ratio!r}. "
+                f"Geçerli değerler: {', '.join(SUPPORTED_ASPECT_RATIOS)}"
+            ),
+        )
     await db.execute(
         "UPDATE social.posts SET status = 'generating', output_url = NULL, thumbnail_url = NULL WHERE id = $1",
         post_id,
     )
 
     try:
-        fal_job_id = await generate_image(post["prompt"] or "", post["aspect_ratio"] or "1:1", brand_kit)
+        fal_job_id = await generate_image(post["prompt"] or "", aspect_ratio, brand_kit)
         await db.execute("UPDATE social.posts SET fal_job_id = $2 WHERE id = $1", post_id, fal_job_id)
     except Exception:
         pass

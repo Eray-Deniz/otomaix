@@ -3,7 +3,71 @@
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening (fal.ai error visibility + aspect validation + stale sweep) ✅ · Sprint 7 ⏳
+
+## 2026-04-19 — Phase 7 Sprint 6 hardening: fal.ai error visibility + aspect ratio fix + stale-job sweeper ✅
+
+**Sorun:** PLATFORM_DEFAULTS hotfix sonrası yapılan canlı testte `/icerik-olustur` Ürün Kartı akışında post 13+ dakika `generating` durumunda asılı kaldı (post id `33a83bce-233e-4d51-ae1d-94aff4864f9c`). Ne kullanıcıya hata gösterildi, ne Sentry'ye sinyal gitti, ne DB'de `failed` işaretlendi. Üç ayrı gap bir arada çalıştı:
+
+1. **Yanlış aspect ratio literal'leri** (`fal_ai.py:_SIZE_MAP`): FLUX.2 Pro'nun desteklediği preset listesi `square_hd, square, portrait_4_3, portrait_16_9, landscape_4_3, landscape_16_9` ile sınırlı. `_SIZE_MAP` 3 geçersiz değer içeriyordu (`portrait_9_16`, `portrait_4_5`, `portrait_2_3`) → fal.ai queue API submit sırasında 422 validation error döndü, webhook yolu bu hatayı ayrı payload olarak ~13 ms içinde callback ediyor.
+2. **Webhook error payload gözardı ediliyordu** (`webhooks.py:fal_webhook`): Error callback'inde `payload.images == []` olduğu için handler `{skipped: true, reason: "no images in payload"}` ile sessizce 200 OK dönüp çıkıyordu. Post `generating` durumunda kaldı, Sentry'ye hiçbir şey gitmedi.
+3. **Stale-job güvenlik ağı yok:** fal.ai webhook tamamen kaybolursa / ulaşmazsa, post sonsuza dek `generating` kalıyor. Kullanıcı loader görüyor, terk ediyor.
+
+**Çözüm (3 dosya):**
+
+### A) `app/services/fal_ai.py` — FLUX.2 Pro presets + dict fallback
+- `_SIZE_MAP` yeniden yazıldı: preset desteklenen oranlar için string literal, preset olmayan (`4:5`, `2:3`) için `{"width": W, "height": H}` dict formatı. FLUX.2 Pro `image_size: Union[ImageSize_dict, Literal]` kabul ediyor.
+- `SUPPORTED_ASPECT_RATIOS: tuple[str, ...]` public sabit eklendi.
+- `resolve_image_size(aspect_ratio)` fonksiyonu — bilinmeyen oranda `ValueError` fırlatır, `generate_image()` içinde silent `.get(ratio, "square")` fallback'i kaldırıldı (yanlış oranı belirsiz bir preset'e eşliyordu).
+
+| En-boy oranı | FLUX.2 Pro image_size |
+|--------------|----------------------|
+| 1:1          | `square_hd`          |
+| 9:16         | `portrait_16_9`      |
+| 4:5          | `{width:1024, height:1280}` |
+| 2:3          | `{width:1024, height:1536}` |
+| 16:9         | `landscape_16_9`     |
+| 4:3          | `landscape_4_3`      |
+| 3:4          | `portrait_4_3`       |
+
+### B) `app/routers/webhooks.py` — Error payload detection + Sentry
+- Webhook artık `body.status == "ERROR"`, `payload.detail`, `payload.error` veya `images == []` durumlarında **error path**'e düşer.
+- Error durumunda: `UPDATE social.posts SET status='failed'`, `sentry_sdk.set_context('fal_webhook_error', {...})` + `capture_message(level='error')`.
+- Post bulunamayan (`fal_job_id` eşleşmiyor) webhook'lar artık Sentry'ye `warning` seviyesinde raporlanır (önceden sessizce skipped dönüyordu).
+
+### C) `app/routers/posts.py` — Submit-time aspect ratio validation
+- `SUPPORTED_ASPECT_RATIOS` import edildi.
+- `POST /posts/generate` ve `POST /posts/{id}/regenerate` endpoint'lerine **submit öncesi** validation eklendi — geçersiz oranda HTTP 400 + Türkçe mesaj (`Desteklenmeyen en-boy oranı: 'xx'. Geçerli değerler: 1:1, 9:16, ...`).
+- Böylece kullanıcı anında hata alır, fal.ai'ye submit bile edilmez, post DB'ye `generating` durumunda hiç girmez.
+
+### D) `app/routers/internal.py` — Stale-job sweeper
+- Yeni endpoint: `POST /internal/posts/fail-stale` (X-Internal-Key korumalı).
+- `UPDATE ... WHERE status='generating' AND created_at < now() - interval '10 minutes' RETURNING *` — tek atomik UPDATE, her etkilenen satır için Sentry `capture_message(level='warning')` ve set_context (post_id, brand_id, fal_job_id, created_at).
+- Response: `{failed_count, post_ids[]}`.
+- Route sırası: `/posts/scheduled-due` ve `/posts/fail-stale` **daima** `/posts/{post_id}` dinamik route'undan önce deklare — aksi halde `"fail-stale"` string'i UUID parser'a düşer.
+
+**Öneri (opsiyonel n8n cron, bu PR'de yok):** Her 10 dakikada bir `POST /internal/posts/fail-stale` çağıran yeni workflow. Sweeper idempotent ve asıl path'ten tamamen bağımsız — webhook kaybı senaryosunda devreye girer. İlk canlı doğrulamadan sonra eklenmesi düşünülebilir.
+
+**Etki analizi:**
+- Risk: düşük
+  - Aspect `_SIZE_MAP` değişikliği: eski geçersiz literal'ler zaten fal.ai tarafından reddedildiği için bir şey kırılmıyor (production'da 4:5/2:3/9:16 seçen her kullanıcı zaten stuck post yaşıyordu).
+  - Webhook error path: başarılı callback'ler aynı akışta devam ediyor (is_error=False durumu birebir eski mantık).
+  - Submit validation: aspect_ratio `PostGenerate` şemasında zaten required TEXT field, default değer yok; frontend UI de geçerli preset'lerden seçim yaptırıyor. Production trafiği etkilenmez.
+  - Stale sweeper: salt UPDATE, yalnızca webhook kaybolan senaryoda tetiklenir; normal akışta 0 satır.
+- Backward compat: submit-time aspect validation legacy content_type akışları (special_day/quote/serbest) için de geçerli — bu akışlar zaten `1:1` gönderiyor, etkilenmez.
+- Migration gerekmez — yalnızca kod değişikliği.
+
+**Stuck post temizliği:** `33a83bce-...` DB'de manuel olarak `status='failed'` olarak işaretlendi. Post kütüphanede asılı kalmadı.
+
+**Doğrulama:**
+- ✅ AST parse: `fal_ai.py`, `webhooks.py`, `posts.py`, `internal.py` sözdizimi temiz
+- ⏳ Canlı test (deploy sonrası):
+  - `/icerik-olustur` Ürün Kartı + 4:5 aspect → post başarıyla üretilmeli, webhook `ready`'ye çekmeli
+  - Geçersiz aspect (ör. direkt API'den `"5:4"` gönder) → HTTP 400 dönmeli
+  - Fal.ai rate-limit / quota error simulasyonu (mümkünse) → post `failed`, Sentry'de error event görünmeli
+  - `POST /internal/posts/fail-stale` manuel çağrı (X-Internal-Key ile) → stale post yoksa `{failed_count:0, post_ids:[]}` dönmeli
+
+**Sonraki:** Sprint 7 — Test, cleanup, Phase 7 final dokümantasyon. Opsiyonel: 10 dakikada bir `fail-stale` çağıran n8n workflow'u.
 
 ## 2026-04-19 — Phase 7 Sprint 6 hotfix: PLATFORM_DEFAULTS ✅
 

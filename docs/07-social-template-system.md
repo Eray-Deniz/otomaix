@@ -2850,7 +2850,48 @@ const categoryLabel = post.template_id
 | 9 | Video (faceless) | Eski akış bozulmadı |
 | 10 | Autoposting (n8n trigger) | Template'siz eski yol |
 
-**7.6** Son dokümantasyon güncellemeleri:
+**7.6** fal.ai model adapter pattern refactor (model-agnostic hale getirme):
+
+**Sorun:** Şu anda 4 fal.ai entegrasyonu da (görsel, text-to-video, image-to-video, faceless video arka planı) belirli modellere sıkı bağlı. FLUX.2 Pro aspect ratio API'si (`image_size: preset|dict`) ile Kling'in aspect API'si (`aspect_ratio: "9:16"` ratio string) farklı — model değiştirmek şu an her birinde ayrı ayrı kod değişikliği gerektirir. 2026-04-19 Sprint 6 hardening sonrası ortaya çıktı (4:5/2:3 oranlarında FLUX.2 Pro dict formatı zorunluluğu farkedildi).
+
+**Kapsanan entegrasyonlar (4 modalite):**
+- **Görsel** — `fal_ai.py:generate_image` → FLUX.2 Pro (`image_size: preset|dict`)
+- **Text-to-Video** — `fal_ai.py:generate_video` → Kling 3.0 Pro (`aspect_ratio: "9:16"|"16:9"|"1:1"`)
+- **Image-to-Video** — `fal_ai.py:generate_video_from_image` → Kling 2.5 Turbo Pro (`image_url` + aspect yok)
+- **Faceless Video (arka plan)** — `faceless_video.py:generate_background_video` → Hunyuan Video veya Kling (aspect API'si farklı olabilir)
+
+**Yapılacaklar:**
+
+1. `app/services/fal_ai.py` içine `ImageModelAdapter` base sınıfı + per-model adapter'lar (FluxProV2, Ideogram v2, Imagen 3 hazır — opsiyonel 2.si ileride eklenecek):
+   ```python
+   class ImageModelAdapter:
+       model_id: str
+       supported_ratios: frozenset[str]
+       def build_args(self, prompt: str, aspect_ratio: str) -> dict: ...
+   
+   IMAGE_ADAPTERS = {"flux-2-pro": FluxProV2Adapter(), ...}
+   ```
+
+2. Aynı pattern 3 video akışı için (`VideoModelAdapter`, `ImageToVideoModelAdapter`, `FacelessVideoBackgroundAdapter`) — her birinin kendi `supported_ratios` ve `build_args()` imzası.
+
+3. `config.py`'e 4 env var: `IMAGE_MODEL`, `VIDEO_MODEL`, `IMAGE_TO_VIDEO_MODEL`, `FACELESS_VIDEO_BACKGROUND_MODEL` (default'lar mevcut model ID'leri).
+
+4. `posts.py` + `faceless_video.py`'de hardcoded `SUPPORTED_ASPECT_RATIOS` kullanımı → `get_active_image_adapter().supported_ratios` (sprint 6 hardening'deki submit-time validation her modelin kendi listesini görür).
+
+5. Yeni endpoint: `GET /media-models/active` → frontend'in aspect seçici UI'ını dinamik doldurması için her 4 modalitenin aktif adapter'ının `supported_ratios`'unu döner. `/icerik-olustur` wizard'ı ve `/faceless-video` sayfası bu endpoint'ten oranları çeker.
+
+**Model değiştirme iş akışı (Sprint 7 sonrası):**
+- Yeni adapter sınıfı yaz (~15 satır) → `IMAGE_ADAPTERS` dict'ine ekle → Coolify env var'ını güncelle → redeploy. **Backend tarafında bu kadar.**
+- Frontend otomatik yeni oran listesini `GET /media-models/active`'ten alır.
+- Manuel kontrol: caption generator'ın `image_prompt`'u yeni modelin tercih ettiği stile uyuyor mu? (FLUX: sanatsal, Ideogram: kısa+literal, Imagen: sahne açıklaması) — gerekirse `prompt_builder.py`'e model bazlı hint eklenebilir.
+- Maliyet farkı → `billing.py` plan limitleri gözden geçirilir (image/video adet bazında zaten, ama pahalı modelde limit düşürülebilir).
+
+**Etki analizi:**
+- Risk: orta — 4 akış da değişiyor, her biri canlıda çalışan ücret üreten kod. Canlı öncesi her modalite için smoke test şart (image + text-to-video + image-to-video + faceless).
+- Backward compat: env var default'ları mevcut model ID'leri olduğu için davranış birebir korunur (sadece code path soyutlanır).
+- Migration gerekmez.
+
+**7.7** Son dokümantasyon güncellemeleri:
 
 - `~/otomaix/docs/07-social-template-system.md` → Phase 7 COMPLETE olarak işaretle (bu dosyaya ekle)
 - `~/otomaix/docs/00-platform-mimari.md` → Phase 7 referansı ekle
@@ -2874,6 +2915,11 @@ const categoryLabel = post.template_id
 - backend/app/routers/posts.py (temizlik — CATEGORY_TR local kopya kaldırıldı)
 - apps/social/frontend/components/ContentCard.tsx (minor — template_id gösterimi)
 - shared/load-tests/locustfile.py (güncelleme — template load test)
+- backend/app/services/fal_ai.py (adapter pattern — 4 modalite: image/text-to-video/image-to-video)
+- backend/app/services/faceless_video.py (adapter pattern — faceless arka plan video modeli)
+- backend/app/core/config.py (4 yeni env var: IMAGE_MODEL, VIDEO_MODEL, IMAGE_TO_VIDEO_MODEL, FACELESS_VIDEO_BACKGROUND_MODEL)
+- backend/app/routers/media_models.py (yeni — GET /media-models/active endpoint'i)
+- frontend: aspect ratio seçicisi /media-models/active'ten dinamik doldurulur
 
 **Cleanup:**
 - Test postları silindi (soft launch öncesi temiz slate)

@@ -28,21 +28,38 @@ def _setup_fal():
     os.environ["FAL_KEY"] = settings.FAL_KEY
 
 
-# Aspect ratio → fal.ai image_size mapping
-_SIZE_MAP = {
-    "1:1": "square",
-    "9:16": "portrait_9_16",
-    "4:5": "portrait_4_5",
-    "2:3": "portrait_2_3",
+# Aspect ratio → FLUX.2 Pro image_size mapping.
+# FLUX.2 Pro preset literal'leri: square_hd, square, portrait_4_3, portrait_16_9,
+# landscape_4_3, landscape_16_9. Preset'te olmayan oranlar için `{width, height}`
+# dict formatı kullanılır (FLUX.2 Pro image_size Union[ImageSize, Literal] kabul eder).
+_SIZE_MAP: dict[str, object] = {
+    "1:1":  "square_hd",
+    "9:16": "portrait_16_9",               # FLUX naming: 9:16 display oranı
+    "4:5":  {"width": 1024, "height": 1280},
+    "2:3":  {"width": 1024, "height": 1536},
     "16:9": "landscape_16_9",
+    "4:3":  "landscape_4_3",
+    "3:4":  "portrait_4_3",
 }
+
+SUPPORTED_ASPECT_RATIOS: tuple[str, ...] = tuple(_SIZE_MAP.keys())
+
+
+def resolve_image_size(aspect_ratio: str) -> object:
+    """Return fal.ai image_size value for aspect ratio, or raise ValueError."""
+    if aspect_ratio not in _SIZE_MAP:
+        raise ValueError(
+            f"Unsupported aspect_ratio: {aspect_ratio!r}. "
+            f"Supported: {', '.join(SUPPORTED_ASPECT_RATIOS)}"
+        )
+    return _SIZE_MAP[aspect_ratio]
 
 
 async def generate_image(prompt: str, aspect_ratio: str, brand_kit: dict) -> str:
     """Görsel üretimi — FLUX.2 [pro]. fal job ID'sini döndürür."""
     _setup_fal()
     full_prompt = _build_image_prompt(prompt, brand_kit)
-    image_size = _SIZE_MAP.get(aspect_ratio, "square")
+    image_size = resolve_image_size(aspect_ratio)
 
     handler = await fal_client.submit_async(
         IMAGE_MODEL,
