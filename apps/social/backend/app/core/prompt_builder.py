@@ -18,6 +18,23 @@ from app.models.templates import Template
 
 
 # Tier 1 — Static system prompt (cached, same for all calls)
+# Platform-level default caption rules.
+# Template-level platformOverrides (if any) are merged on top field-by-field;
+# missing template fields fall back to these defaults so EVERY selected platform
+# receives explicit rules in the Claude prompt.
+PLATFORM_DEFAULTS: dict[str, dict] = {
+    "instagram": {"captionStyle": "medium", "maxHashtags": 15, "useFirstComment": True},
+    "linkedin":  {"captionStyle": "long",   "maxHashtags": 5,  "useFirstComment": False},
+    "twitter":   {"captionStyle": "short",  "maxHashtags": 2,  "useFirstComment": False},
+    "facebook":  {"captionStyle": "medium", "maxHashtags": 5,  "useFirstComment": True},
+    "tiktok":    {"captionStyle": "short",  "maxHashtags": 5,  "useFirstComment": False},
+    "youtube":   {"captionStyle": "medium", "maxHashtags": 8,  "useFirstComment": False},
+    "threads":   {"captionStyle": "short",  "maxHashtags": 5,  "useFirstComment": True},
+    "pinterest": {"captionStyle": "medium", "maxHashtags": 10, "useFirstComment": False},
+    "bluesky":   {"captionStyle": "short",  "maxHashtags": 3,  "useFirstComment": False},
+}
+
+
 _SYSTEM_RULES = """Sen Türk KOBİ'lerine sosyal medya içeriği üreten bir uzmansın.
 
 DİL KURALI (çok önemli): Yanıtın tamamen Türkçe olmalı.
@@ -136,22 +153,47 @@ def build_dynamic_content(
         priority = template.prompt.priority
         parts.append(f"ÖNCELİK SIRASI (çatışma durumunda): {' > '.join(priority)}\n")
 
-    if template and template.platformOverrides and platforms:
-        parts.append(build_platform_instructions(template.platformOverrides, platforms))
+    if platforms:
+        overrides = template.platformOverrides if template else None
+        parts.append(build_platform_instructions(overrides, platforms))
 
     return "\n".join(parts)
 
 
+def _resolve_platform_rules(platform: str, override) -> dict:
+    """Merge PLATFORM_DEFAULTS[platform] with optional template-level override.
+
+    Template override fields that are None fall back to defaults.
+    Platforms not in PLATFORM_DEFAULTS return an empty dict (caller should skip).
+    """
+    defaults = PLATFORM_DEFAULTS.get(platform, {})
+    rules = dict(defaults)
+    if override is None:
+        return rules
+
+    for key in ("captionStyle", "maxHashtags", "useFirstComment", "toneAdjustment", "additionalGuidance"):
+        value = getattr(override, key, None)
+        if value is not None:
+            rules[key] = value
+    return rules
+
+
 def build_platform_instructions(
-    overrides: dict,
+    overrides: dict | None,
     platforms: list[str],
 ) -> str:
-    """Build per-platform caption rules for Claude."""
+    """Build per-platform caption rules for Claude.
+
+    PLATFORM_DEFAULTS covers every supported platform; template-level overrides
+    (if any) override specific fields. Emits rules for EVERY platform so Claude
+    fills all `platform_captions` keys.
+    """
     style_map = {
         "long": "200-500 kelime, profesyonel, detaylı",
         "medium": "50-150 kelime, emoji kullanılabilir",
         "short": "40-100 karakter, vurucu, hook'lu",
     }
+    overrides = overrides or {}
 
     parts = ["=== PLATFORM-SPESİFİK CAPTION'LAR ==="]
     parts.append(
@@ -161,26 +203,30 @@ def build_platform_instructions(
     )
 
     for platform in platforms:
-        override = overrides.get(platform)
-        if not override:
+        rules_dict = _resolve_platform_rules(platform, overrides.get(platform))
+        if not rules_dict:
             continue
 
-        rules = [f"\n{platform}:"]
-        if override.captionStyle:
-            rules.append(f"  Uzunluk: {style_map.get(override.captionStyle, 'medium')}")
-        if override.maxHashtags:
-            rules.append(f"  Max hashtag: {override.maxHashtags}")
-        if override.useFirstComment:
-            rules.append(
+        lines = [f"\n{platform}:"]
+        caption_style = rules_dict.get("captionStyle")
+        if caption_style:
+            lines.append(f"  Uzunluk: {style_map.get(caption_style, caption_style)}")
+        max_hashtags = rules_dict.get("maxHashtags")
+        if max_hashtags:
+            lines.append(f"  Max hashtag: {max_hashtags}")
+        if rules_dict.get("useFirstComment"):
+            lines.append(
                 f"  Hashtag'leri CAPTION'DAN AYIR, response'da "
                 f"`{platform}.first_comment` key'inde dön"
             )
-        if override.toneAdjustment:
-            rules.append(f"  Ton ayarlama: {override.toneAdjustment}")
-        if override.additionalGuidance:
-            rules.append(f"  Ek talimat: {override.additionalGuidance}")
+        tone = rules_dict.get("toneAdjustment")
+        if tone:
+            lines.append(f"  Ton ayarlama: {tone}")
+        extra = rules_dict.get("additionalGuidance")
+        if extra:
+            lines.append(f"  Ek talimat: {extra}")
 
-        parts.append("\n".join(rules))
+        parts.append("\n".join(lines))
 
     parts.append("\n=== PLATFORM BİTİŞ ===")
     return "\n".join(parts)

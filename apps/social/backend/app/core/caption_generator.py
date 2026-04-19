@@ -22,6 +22,7 @@ import anthropic
 
 from app.core.config import settings
 from app.core.prompt_builder import (
+    _resolve_platform_rules,
     build_brand_context,
     build_dynamic_content,
     build_system_prompt,
@@ -133,21 +134,20 @@ def _build_output_format_instruction(
 ) -> str:
     """Instruct Claude on exact JSON output format."""
 
-    has_platform_overrides = (
-        template is not None
-        and template.platformOverrides is not None
-        and len(platforms) > 0
-    )
+    overrides = template.platformOverrides if template else None
+    overrides = overrides or {}
 
-    if has_platform_overrides:
-        platform_schema = ", ".join([
-            f'"{p}": {{"caption": "...", "first_comment": "..." (only if useFirstComment)}}'
-            for p in platforms
-        ])
-    elif platforms:
-        platform_schema = ", ".join([
-            f'"{p}": {{"caption": "..."}}' for p in platforms
-        ])
+    if platforms:
+        schema_parts: list[str] = []
+        for p in platforms:
+            rules = _resolve_platform_rules(p, overrides.get(p))
+            if rules.get("useFirstComment"):
+                schema_parts.append(
+                    f'"{p}": {{"caption": "...", "first_comment": "..."}}'
+                )
+            else:
+                schema_parts.append(f'"{p}": {{"caption": "..."}}')
+        platform_schema = ", ".join(schema_parts)
     else:
         platform_schema = '"default": {"caption": "..."}'
 

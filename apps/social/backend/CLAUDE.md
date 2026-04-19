@@ -3,7 +3,52 @@
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 7 ⏳
+
+## 2026-04-19 — Phase 7 Sprint 6 hotfix: PLATFORM_DEFAULTS ✅
+
+**Sorun:** Canlı test (Ürün Kartı şablonu + 6 platform: IG, TikTok, LinkedIn, Twitter, Facebook, YouTube) sonrası TikTok/Facebook/YouTube sekmelerinde caption'lar boş geldi. Claude yalnızca şablonun `platformOverrides` dict'inde geçen platformlar için caption üretti (IG/LI/TW). Kök neden: 22 şablonun büyük çoğunluğu çoğu platform için `platformOverrides` tanımlamıyordu — özellikle TikTok/Threads/Bluesky hiçbir şablonda kural içermiyordu. `build_platform_instructions()` `if not override: continue` ile eksik platformlar için Claude'a kural göndermiyor, o yüzden de caption üretmiyordu.
+
+**Çözüm (Seçenek D):** `prompt_builder.py`'ye merkezi **`PLATFORM_DEFAULTS`** dict eklendi — 9 platform için `captionStyle`, `maxHashtags`, `useFirstComment` varsayılanları. Template-level `platformOverrides` bu default'ların üzerine alan bazında merge edilir (sadece None olmayan alanlar override eder). Böylece şablonda hiç `platformOverrides` yoksa bile her seçili platform Claude'a gönderilen prompt'ta explicit kural olarak görünür.
+
+**Platform varsayılanları** (`prompt_builder.py:PLATFORM_DEFAULTS`):
+| Platform  | Style  | Max Hashtag | First Comment |
+|-----------|--------|-------------|---------------|
+| instagram | medium | 15          | ✓             |
+| linkedin  | long   | 5           | ✗             |
+| twitter   | short  | 2           | ✗             |
+| facebook  | medium | 5           | ✓             |
+| tiktok    | short  | 5           | ✗             |
+| youtube   | medium | 8           | ✗             |
+| threads   | short  | 5           | ✓             |
+| pinterest | medium | 10          | ✗             |
+| bluesky   | short  | 3           | ✗             |
+
+**Değişen dosyalar (2):**
+- `app/core/prompt_builder.py`:
+  - `PLATFORM_DEFAULTS: dict[str, dict]` sabiti eklendi
+  - `_resolve_platform_rules(platform, override)` yardımcı fonksiyonu eklendi — default + override merge
+  - `build_dynamic_content()` içinde `if template and template.platformOverrides and platforms:` → `if platforms:` — şablon olsun olmasın her zaman platform talimatı üretilir (`overrides = template.platformOverrides if template else None`)
+  - `build_platform_instructions(overrides, platforms)` yeniden yazıldı — `overrides` artık opsiyonel (`dict | None`), merged `rules_dict` üzerinden loop, `continue` sadece PLATFORM_DEFAULTS'ta olmayan bilinmeyen platformlar için
+- `app/core/caption_generator.py`:
+  - `_build_output_format_instruction()` → `has_platform_overrides` flag kaldırıldı; her platform için `useFirstComment` merge edilmiş rules'tan okunur → `first_comment` alanı sadece gerçekten kullanan platformların şemasına eklenir
+  - `_resolve_platform_rules` import edildi
+
+**Etki analizi:**
+- Risk: düşük — template-level override varsa davranış aynen korunur (field bazlı merge, override fields win). Default'lar yalnızca şablonda override olmayan platformlar için devreye girer.
+- Backward compat: `build_platform_instructions()` imzası `overrides: dict` → `overrides: dict | None`; caller'lardan sadece `build_dynamic_content` çağırıyor (dış kod etkilenmez).
+- Caption endpoint 3-tier cache'i bozulmaz — PLATFORM_DEFAULTS tamamen Tier 3 (dynamic) içinde değerlendirilir, Tier 1/2 cache hit etkilenmez.
+
+**Doğrulama:**
+- ✅ AST parse: `prompt_builder.py`, `caption_generator.py` sözdizimi temiz
+- ⏳ Canlı test (deploy sonrası):
+  - Ürün Kartı (`eticaret-urun-karti`) + 6 platform (IG/TikTok/LI/TW/FB/YT) ile caption üret → **tüm 6 platform sekmesi dolu gelmeli**
+  - IG first_comment alanı mevcut olmalı (default useFirstComment=True)
+  - TikTok caption short formatta, ≤5 hashtag
+  - LinkedIn long format, ≤5 hashtag
+  - Sağlık şablonu (Biliyor Muydunuz?) → disclaimer hâlâ caption sonunda
+
+**Sonraki:** Sprint 7 — Test, cleanup, duplicate temizlik, load test güncellemesi, Phase 7 final dokümantasyon.
 
 ## 2026-04-19 — Phase 7 Sprint 6: Platform-spesifik publishing ✅
 
