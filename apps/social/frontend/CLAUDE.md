@@ -6,15 +6,23 @@
 
 ## 2026-04-19 — Markalar "Düzenle" butonu yanlış markayı yüklüyordu (kritik bug fix) ✅
 
-**Sorun (kullanıcı raporu):** `/markalar` sayfasında MyGoodShoes kartındaki "Düzenle" butonuna basılınca sidebar'daki aktif marka otomatik Otomaix'e geri dönüyor; marka-ayarlari sayfası yanlış markayı (Otomaix'i) düzenliyor. Bu yüzden kullanıcının daha önce "iki marka için birden update etti" dediği olayın gerçek nedeni ortaya çıktı — MyGoodShoes'a yüklediğini sandığı medyalar aslında Otomaix'e gidiyordu.
+**Sorun (kullanıcı raporu):** `/markalar` sayfasında MyGoodShoes kartına tıklayıp aktif hale getirdikten sonra "Düzenle" butonuna basılınca sidebar'daki aktif marka otomatik Otomaix'e geri dönüyor; marka-ayarlari sayfası yanlış markayı (Otomaix'i) düzenliyor. Bu yüzden kullanıcının daha önce "iki marka için birden update etti" dediği olayın gerçek nedeni ortaya çıktı — MyGoodShoes'a yüklediğini sandığı medyalar aslında Otomaix'e gidiyordu.
 
-**Kök neden (`app/(dashboard)/markalar/page.tsx:222-232`):** İki iç içe `onClick` handler'ı çakışıyordu:
-- `<Link onClick={() => switchBrand(brand)}>` — marka değiştirmek için (parent)
-- `<Button onClick={(e) => e.stopPropagation()}>` — parent `<Card onClick={switchBrand}>`'a düşmesin diye (child)
+**İlk fix denemesi (başarısız — commit 7ae1a43):** `switchBrand(brand)` çağrısı `<Link onClick>`'ten `<Button onClick>`'e taşındı (stopPropagation + switchBrand aynı callback'te). Teori: Zustand state update sync olduğu için Link navigasyonundan önce currentBrand doğru markaya set olur. **Çalışmadı.** Kullanıcı yine Otomaix'e dönüyordu.
 
-React event sırası: Button'un `onClick` önce çalışır, `stopPropagation()` ile bubbling durdurulur → Link'in `onClick`'i **hiç tetiklenmez**. Link'in `<a>` tag'i default navigation yapar → `/marka-ayarlari`'na gidilir ama `currentBrand` store'da eski değerde kalır (layout'un `auth/init` sonrası default olarak atadığı ilk marka — genelde Otomaix).
+**Gerçek kök neden:** `stopPropagation()` React synthetic event bubbling'ini durdurur ama `<a>` tag'inin **browser-level default navigation**'ını engellemez. Button onClick'inde `switchBrand(brand)` çağrılıyordu ama Link'in `<a>` tag'i tarayıcı seviyesinde navigation'ı tetikliyordu — sıralama belirsizdi. Bazı durumlarda Link navigation önce tamamlanıyor, sonra state güncelleniyor → ama layout `auth/init` çağrısı ve/veya component mount sırası nedeniyle currentBrand eski değere dönüyordu.
 
-**Fix:** `switchBrand(brand)` çağrısı Link'in `onClick`'inden kaldırıldı, Button'un `onClick`'ine taşındı (stopPropagation + switchBrand aynı callback'te). Zustand state update sync olduğu için Link navigasyonundan önce currentBrand doğru markaya set olur; marka-ayarlari mount'unda doğru brand yüklenir.
+**İkinci fix (çalışan — uncommitted'dan committed):** `<Link>` wrapper tamamen kaldırıldı, yerine `useRouter().push()` kullanıldı. Tek bir onClick callback:
+```tsx
+onClick={(e) => {
+  e.stopPropagation()
+  switchBrand(brand)
+  router.push('/marka-ayarlari')
+}}
+```
+Böylece `switchBrand` sync çalışır → `currentBrand` store'da doğru markaya set olur → hemen ardından `router.push()` programatik navigation → yeni sayfa doğru `currentBrand` ile mount olur. Event ordering ambiguity yok.
+
+**Öğrenilen ders:** `<Link>` içine `<Button>` koyup stopPropagation ile parent `<Card onClick>` çakışmasını çözmek yerine, navigation'ı **tamamen explicit** (router.push) yapmak daha güvenli. Özellikle tıklama öncesi global state update şart ise.
 
 **Etki:** 
 - Logo/intro video upload bug'ı açıklandı — kullanıcı MyGoodShoes'a yüklediğini sanıyordu, aslında Otomaix'e yüklüyordu. DB'deki iki brand'in aynı dosyaları barındırması bunun sonucu (fiziken ayrı path'ler ama aynı içerik, çünkü kullanıcı ikinci seferinde sidebar'dan direkt MyGoodShoes seçip yeniden yükledi).

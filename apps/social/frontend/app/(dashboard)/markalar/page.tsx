@@ -18,7 +18,7 @@ import {
   Loader2,
   Check,
 } from 'lucide-react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { UpgradeModal } from '@/components/billing/UpgradeModal'
 
@@ -40,6 +40,7 @@ interface Sector {
 // ─── Page ───���────────────────────────────────────────────────────────────────
 
 export default function MarkalarlPage() {
+  const router = useRouter()
   const { currentWorkspace, currentBrand, setBrands, switchBrand, brands } = useAppStore()
 
   const [loading, setLoading] = useState(true)
@@ -219,20 +220,19 @@ export default function MarkalarlPage() {
 
                   {/* Aksiyon butonları */}
                   <div className="flex gap-2">
-                    <Link href="/marka-ayarlari" className="flex-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full gap-1.5 text-xs"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          switchBrand(brand)
-                        }}
-                      >
-                        <Pencil className="w-3 h-3" />
-                        Düzenle
-                      </Button>
-                    </Link>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 gap-1.5 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        switchBrand(brand)
+                        router.push('/marka-ayarlari')
+                      }}
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Düzenle
+                    </Button>
                     <Button
                       size="sm"
                       variant="outline"
