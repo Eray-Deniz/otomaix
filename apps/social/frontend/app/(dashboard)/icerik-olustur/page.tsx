@@ -202,7 +202,7 @@ function IcerikOlusturInner() {
 
   // Görsel hazır olana kadar polling
   useEffect(() => {
-    if (!generatedPost?.post_id || generatedPost.output_url) return
+    if (!generatedPost?.post_id || generatedPost.output_url || generatedPost.status === 'failed') return
     let cancelled = false
     const poll = async () => {
       if (cancelled) return
@@ -210,13 +210,16 @@ function IcerikOlusturInner() {
       if (cancelled) return
       if (res.success && res.data?.output_url) {
         setGeneratedPost(prev => prev ? { ...prev, output_url: res.data!.output_url, status: 'ready' } : prev)
+      } else if (res.success && res.data?.status === 'failed') {
+        toast.error('Görsel üretilemedi — farklı bir en-boy oranı veya açıklama ile tekrar dene')
+        setGeneratedPost(prev => prev ? { ...prev, status: 'failed' } : prev)
       } else if (!cancelled) {
         setTimeout(poll, 3000)
       }
     }
     const timer = setTimeout(poll, 3000)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [generatedPost?.post_id, generatedPost?.output_url])
+  }, [generatedPost?.post_id, generatedPost?.output_url, generatedPost?.status])
 
   // ── Fetch brand documents & voices ──────────────────────────────────────────
 
@@ -1446,6 +1449,14 @@ function IcerikOlusturInner() {
                       controls
                       className="w-full max-h-80 object-contain"
                     />
+                  ) : generatedPost.status === 'failed' ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-3">
+                      <div className="w-14 h-14 rounded-xl bg-red-100 flex items-center justify-center">
+                        <X className="w-7 h-7 text-red-600" />
+                      </div>
+                      <p className="text-sm text-red-700 font-medium">Video üretilemedi</p>
+                      <p className="text-xs text-red-500 text-center px-4">Farklı bir açıklama veya ayarla tekrar deneyin</p>
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 gap-3">
                       <div className="w-14 h-14 rounded-xl bg-purple-200 flex items-center justify-center">
@@ -1485,6 +1496,14 @@ function IcerikOlusturInner() {
                       height={800}
                       className="w-full object-contain max-h-80"
                     />
+                  ) : generatedPost.status === 'failed' ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3">
+                      <div className="w-14 h-14 rounded-xl bg-red-100 flex items-center justify-center">
+                        <X className="w-7 h-7 text-red-600" />
+                      </div>
+                      <p className="text-sm text-red-700 font-medium">Görsel üretilemedi</p>
+                      <p className="text-xs text-red-500 text-center px-4">Farklı bir en-boy oranı veya açıklama ile tekrar deneyin</p>
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-16 gap-3">
                       <div className="w-14 h-14 rounded-xl bg-blue-200 flex items-center justify-center">

@@ -1,5 +1,8 @@
 """Webhook endpoints — currently fal.ai generation callbacks."""
 
+import json
+import logging
+
 import sentry_sdk
 from fastapi import APIRouter, Depends, Request
 
@@ -8,6 +11,8 @@ from app.core.database import get_db
 from app.models.schemas import OkResponse
 from app.services.media_processor import apply_brand_processing
 from app.services.storage import r2
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -55,10 +60,19 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
         return OkResponse(data={"skipped": True, "reason": "post not found for request_id"})
 
     if is_error:
-        reason = str(error_detail)[:500] if error_detail else "no images in payload"
+        reason_short = (str(error_detail)[:200] if error_detail else "no images in payload")
+        try:
+            raw_payload_str = json.dumps(payload, ensure_ascii=False)[:8000]
+        except (TypeError, ValueError):
+            raw_payload_str = str(payload)[:8000]
+
         await db.execute(
             "UPDATE social.posts SET status = 'failed', updated_at = now() WHERE id = $1",
             post["id"],
+        )
+        logger.error(
+            "fal.ai error for post %s (request_id=%s, status=%s): %s",
+            post["id"], request_id, status_field, raw_payload_str,
         )
         sentry_sdk.set_context(
             "fal_webhook_error",
@@ -67,14 +81,16 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
                 "brand_id": str(post["brand_id"]),
                 "request_id": request_id,
                 "status": status_field,
-                "reason": reason[:200],
+                "reason_short": reason_short,
+                "error_detail": error_detail,
+                "raw_payload": raw_payload_str,
             },
         )
         sentry_sdk.capture_message(
-            f"fal.ai generation failed: {reason[:200]}",
+            f"fal.ai generation failed: {reason_short}",
             level="error",
         )
-        return OkResponse(data={"post_id": str(post["id"]), "status": "failed", "reason": reason[:200]})
+        return OkResponse(data={"post_id": str(post["id"]), "status": "failed", "reason": reason_short})
 
     post_id = post["id"]
     brand_id = post["brand_id"]
