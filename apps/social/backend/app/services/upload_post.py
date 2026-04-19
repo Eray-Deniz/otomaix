@@ -228,10 +228,15 @@ async def _publish_single_platform(
     media_mime: str,
     filename: str,
     title_text: str,
+    first_comment: str | None = None,
 ) -> dict:
     """Upload-Post'a TEK platform için yayın çağrısı yapar ve
     `post_publications` satırını sonuca göre günceller. Her platform'un
-    başarı/başarısızlık durumu bağımsız kayıt tutulur."""
+    başarı/başarısızlık durumu bağımsız kayıt tutulur.
+
+    Phase 7: `first_comment` sadece IG / FB / Threads için desteklenir —
+    Upload-Post `{platform}_first_comment` form parametresi olarak gönderilir.
+    Diğer platformlarda yok sayılır."""
     import datetime
 
     form_data = [
@@ -239,6 +244,8 @@ async def _publish_single_platform(
         ("title", (None, title_text[:2200])),
         ("platform[]", (None, platform)),
     ]
+    if first_comment and platform in ("instagram", "facebook", "threads"):
+        form_data.append((f"{platform}_first_comment", (None, first_comment[:500])))
     if is_video:
         form_data.append(("video", (filename, media_bytes, media_mime)))
         endpoint = f"{BASE_URL}/upload"
@@ -434,12 +441,41 @@ async def publish_post(
     media_bytes, media_mime = await _download_media(post["output_url"])
     filename = _filename_from_url(post["output_url"], "media.mp4" if is_video else "media.jpg")
 
-    caption = post["caption"] or ""
-    hashtags = post["hashtags"] or []
-    title_text = caption + (" " + " ".join(f"#{h.lstrip('#')}" for h in hashtags) if hashtags else "")
+    # Legacy fallback: caption + hashtags birleşik title (template'siz postlar için)
+    legacy_caption = post["caption"] or ""
+    legacy_hashtags = post["hashtags"] or []
+    legacy_title = legacy_caption + (
+        " " + " ".join(f"#{h.lstrip('#')}" for h in legacy_hashtags)
+        if legacy_hashtags
+        else ""
+    )
+
+    # Phase 7: platform-spesifik caption'ları JSONB'den oku (şema §Sprint 4'te tanımlı:
+    # {"default": "...", "platforms": {"instagram": {"caption": "...", "first_comment": "...", "hashtags": [...]}}})
+    platform_captions_raw = post["platform_captions"]
+    if isinstance(platform_captions_raw, str):
+        import json as _json
+
+        try:
+            platform_captions_raw = _json.loads(platform_captions_raw)
+        except (ValueError, TypeError):
+            platform_captions_raw = None
+    platform_captions = (
+        platform_captions_raw if isinstance(platform_captions_raw, dict) else {}
+    )
+    per_platform_map = platform_captions.get("platforms") or {}
 
     results = []
     for platform in platforms_to_publish:
+        # Phase 7 — platform-spesifik caption varsa onu kullan, yoksa legacy
+        platform_data = per_platform_map.get(platform) if isinstance(per_platform_map, dict) else None
+        if isinstance(platform_data, dict) and platform_data.get("caption"):
+            title_text = platform_data["caption"]
+            first_comment = platform_data.get("first_comment") or None
+        else:
+            title_text = legacy_title
+            first_comment = None
+
         res = await _publish_single_platform(
             db=db,
             post_id=post_id,
@@ -450,6 +486,7 @@ async def publish_post(
             media_mime=media_mime,
             filename=filename,
             title_text=title_text,
+            first_comment=first_comment,
         )
         results.append(res)
 

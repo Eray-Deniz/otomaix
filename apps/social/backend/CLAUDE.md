@@ -3,7 +3,54 @@
 > **🚧 Phase 7 — Sektör-Spesifik Şablon Sistemi (2026-04-18).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüşüyor.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6–7 ⏳
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 ⏳
+
+## 2026-04-19 — Phase 7 Sprint 6: Platform-spesifik publishing ✅
+
+**Kapsam:** Upload-Post entegrasyonu artık `posts.platform_captions` JSONB kolonunu okuyup her platforma kendi caption'ını gönderir. `first_comment` alanı destekleyen platformlar (Instagram, Facebook, Threads) için `{platform}_first_comment` form parametresi gönderilir. `platform_captions` NULL ise legacy `caption + hashtags` birleşik title mantığı aynen çalışır (backward compat).
+
+**Değişen dosya (tek):** `app/services/upload_post.py`
+
+- **`_publish_single_platform()` imzası:**
+  - `first_comment: str | None = None` parametresi eklendi
+  - `first_comment` varsa ve platform `instagram` / `facebook` / `threads` ise `{platform}_first_comment` form alanı olarak gönderilir (500 karakter truncate)
+  - Diğer platformlarda (linkedin, twitter, tiktok, pinterest, bluesky) `first_comment` yok sayılır — Upload-Post desteklemiyor
+
+- **`publish_post()` içinde per-platform caption routing:**
+  - `post["platform_captions"]` JSONB okunuyor (asyncpg str döndürebilir → `json.loads` + `try/except`; dict'e değilse `{}`)
+  - Beklenen şekil (Sprint 4'te `generate_post` tarafından yazılır):
+    ```json
+    {
+      "default": "...",
+      "platforms": {
+        "instagram": {"caption": "...", "first_comment": "...", "hashtags": [...]},
+        "linkedin": {"caption": "...", "hashtags": [...]}
+      }
+    }
+    ```
+  - Her platform için:
+    - `platforms[<platform>].caption` varsa → `title_text` + `first_comment` oraya yazılır
+    - Yoksa → `legacy_title = caption + " #h1 #h2 …"` (eski davranış)
+
+**Etki analizi:**
+- Risk: düşük — `platform_captions` NULL olan tüm eski ve template'siz postlar için legacy path birebir korundu (autoposting n8n, `special_day`, `quote`, serbest mod + image_prompt varsa bile caption/hashtags kolonlarına backward-fill var → `platform_captions` yine NULL kalabilir)
+- JSONB parse hem `dict` hem `str` (asyncpg default) durumunu kapsıyor → codec ayarından bağımsız çalışır
+- `first_comment` 500 karakter truncate — Instagram'ın ilk yorum limiti ~2200 ama güvenli tarafta kalındı; bu Sprint 7 load testinde yeniden değerlendirilebilir
+
+**Upload-Post API notu:**
+- `{platform}_first_comment` parametresi Upload-Post docs'ta destekleniyor ama canlıda henüz test edilmedi
+- İlk canlı yayın sonrası Instagram hesabında ilk yorum olarak hashtag'lerin otomatik eklenip eklenmediği doğrulanmalı
+- Çalışmazsa fallback plan (Sprint 7'de): `first_comment`'ı `title_text` sonuna `\n\n` ile ekle, `{platform}_first_comment` parametresini kaldır
+
+**Doğrulama:**
+- ✅ AST parse: `upload_post.py` sözdizimi temiz
+- ⏳ Canlı test (deploy sonrası):
+  - Template'li post (E-Ticaret Ürün Kartı, IG+LinkedIn seçili) yayınla → IG'de medium caption + first comment'te hashtag'ler, LinkedIn'de long caption, farklı ton
+  - Sağlık şablonu (Biliyor Muydunuz?) yayınla → IG + LinkedIn caption'larının sonunda disclaimer var mı?
+  - Template'siz legacy post (autoposting n8n trigger veya mevcut test postu) yayınla → eski `caption + hashtags` birleşik title aynen gitmeli
+  - Retry (yalnızca başarısız platform) → `only_platforms` parametresiyle tek platform publish çalışmalı
+
+**Sonraki:** Sprint 7 — Test, cleanup, duplicate temizlik (CATEGORY_TR vs.), load test güncellemesi, Phase 7 final dokümantasyon.
 
 ## 2026-04-18 — Phase 7 Sprint 5 polish — Akış C unified (Option B) ✅
 
