@@ -879,7 +879,7 @@ function IcerikOlusturInner() {
               {CONTENT_TYPES.find((t) => t.id === contentType)?.icon}{' '}
               {CONTENT_TYPES.find((t) => t.id === contentType)?.label}
             </Badge>
-            {selectedTemplate && ['image', 'carousel'].includes(contentType) && (
+            {selectedTemplate && ['image', 'carousel'].includes(contentType) && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && (
               <Badge variant="secondary">
                 {selectedTemplate.icon} {selectedTemplate.name}
               </Badge>
@@ -914,12 +914,14 @@ function IcerikOlusturInner() {
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret" */}
           {['image', 'carousel'].includes(contentType) && mode === 'template' && phase === 'form' && selectedTemplate && (
             <div className="space-y-5">
-              <button
-                onClick={handleBackToPick}
-                className="text-xs text-blue-500 hover:underline"
-              >
-                ← Başka şablon seç
-              </button>
+              {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && (
+                <button
+                  onClick={handleBackToPick}
+                  className="text-xs text-blue-500 hover:underline"
+                >
+                  ← Başka şablon seç
+                </button>
+              )}
 
               <DynamicForm
                 template={selectedTemplate}

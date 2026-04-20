@@ -4,6 +4,30 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Phase 8 Sprint 2 polish: default template UI cleanup (canlı test feedback) ✅
+
+**Canlı test feedback (4 madde):**
+1. İçerik detayları sekmesinde görünen "← Başka şablon seç" linki default template için mantıksız (tek şablon varsa geri dönülecek grid yok)
+2. "Görsel" tip rozeti ile "Görsel Şablonu" template rozeti iki ayrı label, duplikasyon
+3. Hashtag kaynağı belirsiz (kullanıcı sordu — bkz. "Hashtag kaynağı" açıklaması aşağıda)
+4. Logo sağ alt köşede çok küçük, zar zor görünüyor (screenshot `/root/otomaix/screenshots/ai-gorsel.jpg`)
+
+**Çözüm 1 & 2 (frontend, tek dosya):** `app/(dashboard)/icerik-olustur/page.tsx`:
+- "🖼️ Görsel Şablonu" badge'i render koşuluna `&& selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID` eklendi — default template'te gizli.
+- "← Başka şablon seç" butonu `{selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && (...)}` conditional ile sarmalandı — default template'te gizli.
+
+**Çözüm 4 (backend, bkz. backend/CLAUDE.md):** `media_processor.add_logo_overlay` `Image.thumbnail` → active `Image.resize` — küçük logoları %20'ye **büyütür**.
+
+**Hashtag kaynağı açıklaması (kullanıcıya):** Hashtag'ler Claude Opus 4.7 caption generator tarafından üretiliyor. Kaynak verisi:
+- `brand_kit.hashtags` — Marka Ayarları → Marka Kimliği sekmesinde tanımladığın sabit marka hashtag'leri
+- Sektör bağlamı (brand.sector_slug → SECTOR_GUIDANCE)
+- Konu bağlamı (şablon form field'ları + user_prompt)
+Claude bu üçünü harmanlayıp Instagram için ≤15, LinkedIn için ≤5, Twitter için ≤2 hashtag öneriyor (PLATFORM_DEFAULTS). Önizlemedeki hashtag badge'leri bu kaynaktan geliyor.
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ⏳ Canlı test: `/icerik-olustur` → Görsel → Devam Et → "Görsel Şablonu" badge'i ve "Başka şablon seç" linki görünmemeli; üretim sonrası logo belirgin boyutta olmalı
+
 ## 2026-04-20 — Phase 8 Sprint 2: Görsel için varsayılan şablon auto-select ✅
 
 **Sorun:** Kullanıcı "Görsel → Devam et" akışında her seferinde sektör + genel şablon grid'ine düşüyordu. 22 şablonun çoğu sektör-spesifik olduğundan çoğu brand sadece 8 genel şablon görüyor, seçim yorucu. Aynı zamanda serbest mod'a gitmek caption-first + overlay + CTA yönlendirme disiplinini kaybettiriyordu. Karar: görsel için tek bir genel amaçlı varsayılan şablon (`genel-gorsel-sablon`) otomatik açılsın, grid atlansın.

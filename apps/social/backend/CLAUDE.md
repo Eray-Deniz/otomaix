@@ -5,6 +5,49 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Text overlay auto-shrink (taşma koruması) ✅
+
+**Sorun:** `add_text_overlay` sabit font size (`bw * 0.055`) + word-wrap yok. Uzun metinler (ör. 33-char ürün adı) 1024px görsele taşıyordu; sağ hizalı modda `x` negatife bile gidebiliyordu. `product_name` maxLength=50, `price` maxLength=12 → worst case ciddi taşma.
+
+**Çözüm:** `add_text_overlay` içine **auto-shrink döngüsü** eklendi. Başlangıç `max_body_size = max(24, int(bw * 0.055))`; en geniş satır `usable_w = bw - 2*margin` alanını aşıyorsa font %10 küçültülüp yeniden ölçülür. Alt sınır `min_body_size = max(20, int(bw * 0.03))` — okunabilirlik eşiği. Title (satır 0) her zaman body'nin %25 üstünde → hiyerarşi korunur. Rendering loop'u değişmedi, sadece ölçüm fazı iteratif oldu.
+
+**Örnek (1024px, margin 40):** 33-char title → başlangıç 56px'te ~1180px, usable 944px aşılıyor → 50px → 45px → 42px → sığar. Kullanıcı için şeffaf, görsel taşmadan üretiliyor.
+
+**Edge case:** Tek kelime 40+ char (ör. yapıştırılmış URL) → min 20px'te bile taşabilir. Şimdilik "kalır" (taşan kenar crop'lanır değil, overlay'in kendisi görsel sınırları içinde çizildiği için silik görünüm). Ellipsis truncate canlı testte sorun çıkarsa eklenir.
+
+**Etki analizi:**
+- Risk: düşük — iteratif ölçüm, ek bir PIL draw yok (her iteration'da sadece `textbbox` çağrısı, gerçek `draw.text` tek kez çalışır)
+- Performance: worst case 4-5 iteration × O(n) textbbox = <50ms; yine webhook post-process içinde, kullanıcı deneyimi etkilenmez
+- Backward compat: kısa metinler (mevcut test case'i "SporXL" + "79 TL") ilk iteration'da exit → davranış aynı
+
+**Doğrulama:**
+- ✅ AST parse temiz
+- ⏳ Canlı test: 30+ char ürün adı ile test → görselin sol alt köşesindeki metin görsel sınırları içinde tutulmalı, taşmamalı; fontlar mevcut kısa case'den biraz daha küçük ama net olmalı
+
+## 2026-04-20 — Logo overlay boyutu düzeltmesi (canlı test feedback) ✅
+
+**Sorun:** Canlı test (MyGoodShoes + Ürün Kartı) sonucunda sağ alt köşedeki logo çok küçük çıktı, zar zor görünüyor. Kök neden `app/services/media_processor.py:add_logo_overlay` fonksiyonunda `logo.thumbnail((max_w, max_h), Image.LANCZOS)` kullanılıyordu. PIL `thumbnail()` **sadece küçültür, büyütmez** — kullanıcının logo PNG'si zaten küçükse (ör. 200×50 px) olduğu gibi kalıyor, ana görselin %20'sine scale edilmiyordu.
+
+**Çözüm:** `thumbnail` yerine aktif `Image.resize` — hedef genişlik `base.width * 0.20`, aspect ratio korunarak hem küçültür hem büyütür. Yüksek logo için `base.height * 0.20` üst sınırı ayrıca kontrol ediliyor (çok uzun dikdörtgen logo senaryosu için güvenlik).
+
+```python
+target_w = int(base.width * 0.20)
+max_h = int(base.height * 0.20)
+ratio = target_w / logo.width
+target_h = int(logo.height * ratio)
+if target_h > max_h:
+    ratio = max_h / logo.height
+    target_w = int(logo.width * ratio)
+    target_h = max_h
+logo = logo.resize((max(1, target_w), max(1, target_h)), Image.LANCZOS)
+```
+
+**Etki analizi:** Risk düşük — tek fonksiyon, tek caller (`apply_brand_processing`), imza değişmedi. Büyük logolar zaten küçültülüyordu (behavior korundu), küçük logolar artık büyütülüyor (bug fix).
+
+**Doğrulama:**
+- ✅ AST parse temiz
+- ⏳ Canlı test: AI görsel üretiminden sonra logo sağ alt köşede belirgin boyutta (≈%20 görsel genişliği) olmalı, önceki testteki gibi zar zor görünmemeli
+
 ## 2026-04-20 — Phase 8 Sprint 2: Varsayılan görsel şablonu (`genel-gorsel-sablon`) ✅
 
 **Kapsam:** `/icerik-olustur` "Görsel → Devam et" akışında şablon grid'i atlanıp tek bir genel amaçlı varsayılan şablon otomatik açılacak şekilde backend scaffolding. Kullanıcının uzun şablon listesine bakma zorunluluğu kalkıyor, serbest mod'a yakın ama caption-first pipeline + overlay + CTA yönlendirme disiplini korunuyor. Carousel/Video/ÖzelGün/Alıntı tipleri bu sprint'te dokunulmadı (kullanıcı kararı — test edilmemiş ekosistem).

@@ -107,10 +107,16 @@ async def add_logo_overlay(
         base = Image.open(io.BytesIO(img_resp.content)).convert("RGBA")
         logo = Image.open(io.BytesIO(logo_resp.content)).convert("RGBA")
 
-        # Logo boyutunu görselin %20'si ile sınırla
-        max_logo_w = int(base.width * 0.20)
-        max_logo_h = int(base.height * 0.20)
-        logo.thumbnail((max_logo_w, max_logo_h), Image.LANCZOS)
+        # Logo'yu görselin %20'sine aktif scale et (küçük logoyu da büyütür)
+        target_w = int(base.width * 0.20)
+        max_h = int(base.height * 0.20)
+        ratio = target_w / logo.width
+        target_h = int(logo.height * ratio)
+        if target_h > max_h:
+            ratio = max_h / logo.height
+            target_w = int(logo.width * ratio)
+            target_h = max_h
+        logo = logo.resize((max(1, target_w), max(1, target_h)), Image.LANCZOS)
 
         # Opaklık uygula
         if opacity < 1.0:
@@ -202,29 +208,47 @@ async def add_text_overlay(
         base = Image.open(io.BytesIO(img_resp.content)).convert("RGBA")
         bw, bh = base.size
 
-        base_font_size = max(24, int(bw * 0.055))
-        title_font_size = int(base_font_size * 1.25)
+        max_body_size = max(24, int(bw * 0.055))
+        min_body_size = max(20, int(bw * 0.03))
         margin = max(24, int(bw * 0.04))
-
-        title_font = _load_overlay_font(title_font_size)
-        body_font = _load_overlay_font(base_font_size)
-        if title_font is None or body_font is None:
-            return None
+        usable_w = bw - 2 * margin
 
         overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(overlay)
 
+        # Auto-shrink: en geniş satır usable alana sığana kadar fontu %10 küçült
+        body_font_size = max_body_size
+        title_font = None
+        body_font = None
         rendered: list[tuple[str, int, int]] = []
         total_h = 0
-        line_gap = int(base_font_size * 0.25)
+        line_gap = 0
 
-        for idx, line in enumerate(text_lines):
-            font = title_font if idx == 0 else body_font
-            bbox = draw.textbbox((0, 0), line, font=font, stroke_width=3)
-            w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
-            rendered.append((line, w, h))
-            total_h += h + (line_gap if idx < len(text_lines) - 1 else 0)
+        while True:
+            title_font_size = int(body_font_size * 1.25)
+            title_font = _load_overlay_font(title_font_size)
+            body_font = _load_overlay_font(body_font_size)
+            if title_font is None or body_font is None:
+                return None
+
+            line_gap = int(body_font_size * 0.25)
+            rendered = []
+            total_h = 0
+            max_w = 0
+
+            for idx, line in enumerate(text_lines):
+                font = title_font if idx == 0 else body_font
+                bbox = draw.textbbox((0, 0), line, font=font, stroke_width=3)
+                w = bbox[2] - bbox[0]
+                h = bbox[3] - bbox[1]
+                rendered.append((line, w, h))
+                if w > max_w:
+                    max_w = w
+                total_h += h + (line_gap if idx < len(text_lines) - 1 else 0)
+
+            if max_w <= usable_w or body_font_size <= min_body_size:
+                break
+            body_font_size = max(min_body_size, int(body_font_size * 0.9))
 
         is_bottom = position.startswith("bottom")
         is_right = position.endswith("right")
