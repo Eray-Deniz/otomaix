@@ -177,7 +177,7 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
 
       {showHashtagEditor && (
         <div className="space-y-1.5">
-          <Label className="text-sm">Hashtag'ler</Label>
+          <Label className="text-sm">Hashtag&apos;ler</Label>
           <p className="text-xs text-gray-400">
             {activeTab === 'default'
               ? 'Tüm platformlar için önerilen hashtag listesi.'
