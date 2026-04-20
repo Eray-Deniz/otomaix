@@ -29,11 +29,7 @@ export function DynamicForm({
   }
 
   const overlaySpec = template.imageTextOverlay
-  const overlayFields = overlaySpec
-    ? overlaySpec.fields
-        .map((fid) => template.formFields.find((f) => f.id === fid))
-        .filter((f): f is TemplateFormField => Boolean(f))
-    : []
+  const overlayCandidateIds = new Set(overlaySpec?.fields ?? [])
   const activeOverlayFields = imageTextFields ?? overlaySpec?.fields ?? []
 
   function toggleOverlayField(fid: string) {
@@ -65,55 +61,23 @@ export function DynamicForm({
               {group.name}
             </h3>
           )}
-          {group.fields.map((field) => (
-            <FormField
-              key={field.id}
-              field={field}
-              value={values[field.id]}
-              onChange={(v) => onChange(field.id, v)}
-            />
-          ))}
+          {group.fields.map((field) => {
+            const isOverlayCandidate =
+              overlayCandidateIds.has(field.id) && !!onImageTextFieldsChange
+            return (
+              <FormField
+                key={field.id}
+                field={field}
+                value={values[field.id]}
+                onChange={(v) => onChange(field.id, v)}
+                isOverlayCandidate={isOverlayCandidate}
+                overlayActive={isOverlayCandidate && activeOverlayFields.includes(field.id)}
+                onToggleOverlay={() => toggleOverlayField(field.id)}
+              />
+            )
+          })}
         </div>
       ))}
-
-      {overlaySpec && overlayFields.length > 0 && onImageTextFieldsChange && (
-        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-          <div>
-            <p className="text-xs font-semibold text-blue-800">
-              Görselde vurgulanacak alanlar (opsiyonel)
-            </p>
-            <p className="text-[11px] text-blue-700/80 mt-0.5">
-              İşaretli alanlar AI görselin üzerine yazı olarak basılır. Tümünü kapatırsanız
-              görselde ek metin olmaz.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 pt-1">
-            {overlayFields.map((f) => {
-              const checked = activeOverlayFields.includes(f.id)
-              return (
-                <label
-                  key={f.id}
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-colors',
-                    checked
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white border-blue-200 text-blue-700 hover:border-blue-400'
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleOverlayField(f.id)}
-                    className="sr-only"
-                  />
-                  <span>{checked ? '✓' : '+'}</span>
-                  <span>{f.label}</span>
-                </label>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -122,22 +86,46 @@ function FormField({
   field,
   value,
   onChange,
+  isOverlayCandidate,
+  overlayActive,
+  onToggleOverlay,
 }: {
   field: TemplateFormField
   value: unknown
   onChange: (v: unknown) => void
+  isOverlayCandidate: boolean
+  overlayActive: boolean
+  onToggleOverlay: () => void
 }) {
   const stringValue = value == null ? '' : String(value)
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-sm text-gray-700">
-        {field.label}
-        {field.required && <span className="text-red-500 ml-0.5">*</span>}
-        {!field.required && (
-          <span className="font-normal text-gray-400"> (opsiyonel)</span>
+      <div className="flex items-center justify-between gap-3">
+        <Label className="text-sm text-gray-700">
+          {field.label}
+          {field.required && <span className="text-red-500 ml-0.5">*</span>}
+          {!field.required && (
+            <span className="font-normal text-gray-400"> (opsiyonel)</span>
+          )}
+        </Label>
+        {isOverlayCandidate && (
+          <button
+            type="button"
+            onClick={onToggleOverlay}
+            className={cn(
+              'flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors shrink-0',
+              overlayActive
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300'
+            )}
+            title="Bu alan görselin üzerine yazı olarak basılsın mı?"
+          >
+            <span>{overlayActive ? '✓' : '+'}</span>
+            <span>Görselde görünsün</span>
+          </button>
         )}
-      </Label>
+      </div>
 
       {field.type === 'textarea' && (
         <Textarea
