@@ -4,6 +4,48 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Phase 8 Sprint 2: Görsel için varsayılan şablon auto-select ✅
+
+**Sorun:** Kullanıcı "Görsel → Devam et" akışında her seferinde sektör + genel şablon grid'ine düşüyordu. 22 şablonun çoğu sektör-spesifik olduğundan çoğu brand sadece 8 genel şablon görüyor, seçim yorucu. Aynı zamanda serbest mod'a gitmek caption-first + overlay + CTA yönlendirme disiplinini kaybettiriyordu. Karar: görsel için tek bir genel amaçlı varsayılan şablon (`genel-gorsel-sablon`) otomatik açılsın, grid atlansın.
+
+**Çözüm (tek dosya):** `app/(dashboard)/icerik-olustur/page.tsx`:
+
+- Yeni sabit: `const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'`
+- Yeni state: `loadingDefaultTemplate: boolean` — async template fetch sırasında "Devam Et" butonunu disable edip spinner gösterir.
+- Import: `fetchTemplateById` from `@/lib/api/templates`
+- "Devam Et" butonu image type için yeniden yazıldı — async handler:
+  1. `setStep(2)` + `setMode('template')` + `setLoadingDefaultTemplate(true)`
+  2. `await fetchTemplateById(DEFAULT_IMAGE_TEMPLATE_ID)`
+  3. Başarılıysa `handleSelectTemplate(tpl)` (state: selectedTemplate + imageTextFields + phase='form' + aspect uygulanır)
+  4. Şablon null dönerse → `setPhase('pick')` + toast "Varsayılan şablon yüklenemedi, şablon listesi gösteriliyor." (graceful fallback — TemplateGrid devreye girer)
+  5. `finally` → `setLoadingDefaultTemplate(false)`
+- Carousel type için eski davranış korundu: `setPhase('pick')` + `setMode('template')` → TemplateGrid render edilir.
+- Video/ÖzelGün/Alıntı akışları değişmedi (bu tipler `mode`/`phase` state'i kullanmaz).
+- Step 2 render'da yeni loader bloğu eklendi (`contentType === 'image' && loadingDefaultTemplate`): merkezi spinner + "Varsayılan görsel şablonu yükleniyor..." metni.
+- TemplateGrid render condition'u `&& !loadingDefaultTemplate` ile gate edildi (fetch sırasında grid flicker yaşanmasın).
+
+**UX akışı:**
+- **Eski:** Görsel seç → Devam Et → (şablon grid) → Şablon seç → Form + CTA + Gönderi Metni Üret
+- **Yeni:** Görsel seç → Devam Et → (kısa yükleme spinner) → doğrudan Form (ana konu + öne çıkan özellik + URL + CTA metni) + Gönderi Metni Üret
+
+**Mevcut UI elemanları birebir korundu** (kullanıcı isterdi "altyapıyı değiştirmeden aynı altyapıda tıpkı ürün kartı gibi"):
+- "Tasarım ve içerik için istekleriniz" textarea (prompt state)
+- Aspect ratio seçici
+- Platform chip'leri
+- Logo filigran switch
+- Dokümanlar picker
+- Görselde vurgulanacak alanlar kartı (imageTextOverlay switch)
+- "Gönderi Metni Üret" butonu
+
+**Etki analizi:**
+- Risk: düşük — sadece "Devam Et" davranışı değişti, mevcut state akışı (handleSelectTemplate → phase='form') birebir kullanılıyor.
+- Backward compat: carousel hâlâ grid'e düşer; image için şablon fetch başarısız olursa (404/500) otomatik fallback TemplateGrid (toast uyarısı ile).
+- Backend assertion 22 → 23 bump gerektirir (detay: backend/CLAUDE.md).
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ⏳ Canlı test: Görsel seç → Devam Et → spinner (kısa) → form açılmalı; carousel seçildiğinde eski grid davranışı, video/özel gün/alıntı eski akış.
+
 ## 2026-04-20 — Phase 8 Sprint 1 Part 3: Template image text overlay (frontend) ✅
 
 **Sorun:** AI görsel üretimi Türkçe karakterleri doğru render edemiyor — FLUX'a "SporXL 79 TL" yazdırmak risk. Ama ürün kartı / alıntı gibi şablonlarda "görselin üstünde fiyat/ürün adı metni" kullanıcı beklentisi. Backend Pillow ile post-process text overlay çözümü geliştiriliyor (detay: backend/CLAUDE.md), frontend bunu kullanıcıya expose etmeli.

@@ -5,6 +5,40 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Phase 8 Sprint 2: Varsayılan görsel şablonu (`genel-gorsel-sablon`) ✅
+
+**Kapsam:** `/icerik-olustur` "Görsel → Devam et" akışında şablon grid'i atlanıp tek bir genel amaçlı varsayılan şablon otomatik açılacak şekilde backend scaffolding. Kullanıcının uzun şablon listesine bakma zorunluluğu kalkıyor, serbest mod'a yakın ama caption-first pipeline + overlay + CTA yönlendirme disiplini korunuyor. Carousel/Video/ÖzelGün/Alıntı tipleri bu sprint'te dokunulmadı (kullanıcı kararı — test edilmemiş ekosistem).
+
+**Değişen dosyalar (2):**
+
+- `app/core/templates_data.py` — `TEMPLATES["genel-gorsel-sablon"]` entry (Genel section'da, `genel-hakkimizda`'dan önce, `order=1`):
+  - `sectors=["*"]`, `contentTypes=["image"]`
+  - Form alanları (4):
+    - `ana_konu` (text, required, maxLength 120, group "Konu")
+    - `one_cikan_ozellik` (text, optional, maxLength 200, group "Konu")
+    - `cta_url` (url, optional, group "Yönlendirme")
+    - `cta_label` (text, optional, defaultValue "Şimdi Keşfet", maxLength 40, group "Yönlendirme")
+  - `imageTextOverlay=ImageTextOverlaySpec(fields=["ana_konu","one_cikan_ozellik"], position="bottom-left")` — Phase 8 Part 3 overlay pipeline'ı devrede
+  - `output.aspectRatioSuggestion="1:1"`
+  - `prompt.guidance` — görsel yönergesi (marka renkleri HEX, logo/rozet/metin yasak), caption formülü (Hook → Özellik → CTA), CTA kuralı platform'a göre (IG/TikTok → "profilimizdeki link" + first_comment URL, LinkedIn/FB/TW → direkt URL caption'a)
+  - `prompt.priority=["form_fields", "brand_kit", "rag_docs"]`
+  - `platformOverrides` yok — `PLATFORM_DEFAULTS` (prompt_builder.py) otomatik merge eder
+- `app/main.py` — `_validate_templates()` assertion 22 → 23 (yoksa uygulama fail-fast boot etmez)
+
+**Frontend etkisi:** `lib/api/templates.ts::fetchTemplateById` kullanılıyor; "Devam Et" butonu image type için async fetch + `handleSelectTemplate` ile direkt form'a düşüyor. Detay: frontend/CLAUDE.md.
+
+**Etki analizi:**
+- Risk: düşük — sadece additive template + assertion bump.
+- Backward compat: carousel hâlâ `TemplateGrid`'e düşüyor (multi-template), legacy video/special_day/quote akışları değişmedi.
+- `PLATFORM_DEFAULTS` her platform için varsayılan caption kuralı sağladığından, `platformOverrides` olmayan yeni şablon için de TikTok/LinkedIn/Twitter/Facebook/YouTube sekmelerinde dolu caption gelir.
+
+**Doğrulama:**
+- ✅ AST parse: `templates_data.py`, `main.py` sözdizimi temiz
+- ✅ Regex count: `TEMPLATES[...]=Template(` → 23 entry
+- ⏳ Canlı test: `/icerik-olustur` "Görsel" seç → "Devam Et" → şablon grid'i görünmeden doğrudan "Ana Konu + Öne Çıkan Özellik + Yönlendirme Linki + Çağrı Metni" form'u açılmalı. Caption-first pipeline (Gönderi Metni Üret → düzenle → Görseli Üret) çalışmalı, logo overlay + text overlay + brand kit uygulanmalı.
+
+**Sonraki (kullanıcı onayıyla):** Canlı doğrulama → carousel/video/special_day/quote için default şablon genişletmesi (her biri için ayrı ID, aynı pattern).
+
 ## 2026-04-20 — Phase 8 Sprint 1 Part 3: Template image text overlay (PIL post-process) ✅
 
 **Sorun:** FLUX Türkçe karakterleri güvenilir render edemiyor — image_prompt'a "SporXL 79 TL" yazdırmak risk (rastgele seçilen glyph'ler, bozuk harfler). E-ticaret ürün kartı, alıntı, infografik gibi "görselin üstünde metin olmalı" şablonları için caption'a bırakmak yetmiyor — insan görsel posta bakınca fiyatı/ürün adını direkt görsin istiyor.

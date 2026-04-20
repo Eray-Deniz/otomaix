@@ -26,7 +26,7 @@ TEMPLATES: dict[str, Template] = {}
 TEMPLATES["eticaret-urun-karti"] = Template(
     id="eticaret-urun-karti",
     name="Ürün Kartı",
-    description="Tek ürün için fiyat, indirim ve özellik vurgusu",
+    description="Tek ürün için özellik vurgulu tanıtım",
     icon="🛒",
     sectors=["e-ticaret-perakende"],
     contentTypes=["image"],
@@ -34,22 +34,18 @@ TEMPLATES["eticaret-urun-karti"] = Template(
     formFields=[
         TemplateFormField(id="product_name", label="Ürün Adı", type="text", required=True,
             placeholder="örn. Apple iPhone 15 128GB", validation={"maxLength": 120}, group="Ürün Bilgisi"),
-        TemplateFormField(id="price", label="Fiyat", type="number", required=False,
-            suffix="TL", validation={"min": 0},
-            helpText="Opsiyonel — fiyat girmezseniz caption 'link bio'da', 'Detaylar için DM' gibi yumuşak yönlendirme kullanır.",
-            group="Fiyat"),
-        TemplateFormField(id="old_price", label="Eski Fiyat", type="number", required=False,
-            suffix="TL", helpText="Opsiyonel — indirim yüzdesi otomatik hesaplanır", group="Fiyat"),
         TemplateFormField(id="key_feature", label="Öne Çıkan Özellik", type="text", required=False,
             placeholder="örn. A17 Pro çip, 48MP kamera", validation={"maxLength": 200}, group="Ürün Bilgisi"),
-        TemplateFormField(id="cta", label="Çağrı (CTA)", type="select", required=True,
-            defaultValue="Sepete ekle",
-            options=[
-                {"value": "Sepete ekle", "label": "Sepete ekle"},
-                {"value": "Hemen al", "label": "Hemen al"},
-                {"value": "Link bio'da", "label": "Link bio'da"},
-                {"value": "Şimdi keşfet", "label": "Şimdi keşfet"},
-            ], group="Yayın"),
+        TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
+            placeholder="https://... (ürün, kampanya veya site linki)",
+            helpText="Gönderiyi gören kişiyi bir yere yönlendirmek isterseniz linki buraya yapıştırın. Boş bırakırsanız caption yönlendirme yapmaz.",
+            group="Yönlendirme"),
+        TemplateFormField(id="cta_label", label="Çağrı Metni", type="text", required=False,
+            defaultValue="Şimdi Keşfet",
+            placeholder="Şimdi Keşfet",
+            validation={"maxLength": 40},
+            helpText="Linkin üzerine yazılacak kısa çağrı metni. Örn: 'Şimdi Keşfet', 'İncele', 'Sipariş Ver'.",
+            group="Yönlendirme"),
     ],
     output=TemplateOutput(aspectRatioSuggestion="4:5"),
     prompt=TemplatePrompt(
@@ -59,18 +55,26 @@ TEMPLATES["eticaret-urun-karti"] = Template(
             "en az %60'ı olmalı. Stüdyo çekimi, temiz arka plan (marka renklerinin HEX kodlarıyla), "
             "yumuşak ışık, yüksek detay. İnsan modeli, lifestyle sahnesi, elbise/kıyafet vurgusu KULLANMA — "
             "ürün küçükse (ayakkabı, takı, telefon vb.) yakın plan/hero angle kullan. "
-            "image_prompt'ta logo, marka rozeti, fiyat rozeti, özellik rozeti, metin katmanı veya yazı "
+            "image_prompt'ta logo, marka rozeti, özellik rozeti, metin katmanı veya yazı "
             "TARIF ETME — gerçek logo ve caption'lar post-process/platform tarafında ekleniyor.\n\n"
-            "Caption formülü: Hook (ürün adı + faydası) → Özellik vurgusu → Fiyat/indirim → CTA. "
-            "Abartılı iddia kullanma.\n\n"
-            "Fiyat yoksa: Caption'da fiyat kısmını atla. CTA 'Sepete ekle' yerine 'Link bio'da', "
-            "'Detaylar için DM', 'Şimdi keşfet' gibi yumuşak yönlendirme kullan."
+            "Caption formülü: Hook (ürün adı + faydası) → Özellik vurgusu → CTA. "
+            "Abartılı iddia kullanma. Fiyat ve indirim bilgisi bu şablonda kullanılmaz.\n\n"
+            "CTA (yönlendirme) kuralı:\n"
+            "- Kullanıcı 'Yönlendirme Linki' doldurduysa: caption'ın son satırında çağrı metnini "
+            "(cta_label) kullan ve platforma göre davran:\n"
+            "  • Instagram/TikTok/Threads gibi caption-link'in tıklanmadığı platformlarda: "
+            "caption son satırı '👉 {cta_label} — profilimizdeki linkten ulaşabilirsiniz' "
+            "şeklinde olsun. useFirstComment aktifse URL'yi first_comment bloğuna düz metin "
+            "olarak koy (kopyalanabilsin).\n"
+            "  • LinkedIn/Facebook/Twitter/Pinterest gibi linkin tıklandığı platformlarda: "
+            "caption son satırı '👉 {cta_label}: {cta_url}' şeklinde, URL'yi direkt caption'a yaz.\n"
+            "- Kullanıcı link doldurmadıysa: yönlendirme satırı ekleme, caption ürün özellik "
+            "vurgusu ile bitsin. Sahte bir 'link bio'da' satırı uydurma."
         ),
         priority=["form_fields", "brand_kit", "rag_docs"],
     ),
     defaults=TemplateDefaults(
-        suggestedCTAs=["Sepete ekle", "Hemen al", "Link bio'da", "Şimdi keşfet"],
-        suggestedHashtags=["indirim", "kampanya", "fırsat", "alışveriş"],
+        suggestedHashtags=["yenilik", "ürün", "keşfet", "alışveriş"],
     ),
     platformOverrides={
         "instagram": PlatformOverride(captionStyle="medium", maxHashtags=15, useFirstComment=True),
@@ -79,10 +83,10 @@ TEMPLATES["eticaret-urun-karti"] = Template(
         "twitter": PlatformOverride(captionStyle="short", maxHashtags=2),
     },
     imageTextOverlay=ImageTextOverlaySpec(
-        fields=["product_name", "price"],
+        fields=["product_name", "key_feature"],
         position="bottom-left",
     ),
-    tags=["ürün", "fiyat", "indirim"],
+    tags=["ürün", "tanıtım", "keşfet"],
 )
 
 
@@ -623,7 +627,72 @@ TEMPLATES["hizmet-ekip-uzmanligi"] = Template(
 )
 
 
-# ─── 6.5 Genel (8) — tüm sektörler için ─────────────────────────────────────
+# ─── 6.5 Genel (9) — tüm sektörler için ─────────────────────────────────────
+
+# Varsayılan görsel şablonu — `/icerik-olustur` "Görsel → Devam et" akışında
+# otomatik seçilir. Şablon grid'i gösterilmez; kullanıcı doğrudan form'a düşer.
+TEMPLATES["genel-gorsel-sablon"] = Template(
+    id="genel-gorsel-sablon",
+    name="Görsel Şablonu",
+    description="Tek konu/ürün/hizmet için statik sosyal medya görseli",
+    icon="🖼️",
+    sectors=["*"],
+    contentTypes=["image"],
+    order=1,
+    formFields=[
+        TemplateFormField(id="ana_konu", label="Ana Konu / Ürün / Hizmet Adı", type="text", required=True,
+            placeholder="örn. Yeni koleksiyon, sunduğunuz hizmet, kampanya konusu",
+            validation={"maxLength": 120},
+            group="Konu"),
+        TemplateFormField(id="one_cikan_ozellik", label="Öne Çıkan Özellik", type="text", required=False,
+            placeholder="örn. Temel fayda, ayırt edici özellik, müşteri için değer",
+            validation={"maxLength": 200},
+            group="Konu"),
+        TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
+            placeholder="https://... (ürün, kampanya veya site linki)",
+            helpText="Gönderiyi gören kişiyi bir yere yönlendirmek isterseniz linki buraya yapıştırın. Boş bırakırsanız caption yönlendirme yapmaz.",
+            group="Yönlendirme"),
+        TemplateFormField(id="cta_label", label="Çağrı Metni", type="text", required=False,
+            defaultValue="Şimdi Keşfet",
+            placeholder="Şimdi Keşfet",
+            validation={"maxLength": 40},
+            helpText="Linkin üzerine yazılacak kısa çağrı metni. Örn: 'Şimdi Keşfet', 'İncele', 'Sipariş Ver'.",
+            group="Yönlendirme"),
+    ],
+    output=TemplateOutput(aspectRatioSuggestion="1:1"),
+    prompt=TemplatePrompt(
+        guidance=(
+            "Genel amaçlı görsel şablonu. Tek bir konuyu/ürünü/hizmeti öne çıkaran "
+            "statik sosyal medya görseli üretir.\n\n"
+            "Görsel yönergesi (image_prompt için): Ana konu görselin merkezinde ve en "
+            "belirgin öznesi olmalı. Marka renklerini (HEX kodlarıyla) arka plan ve "
+            "aksan olarak kullan. Profesyonel kompozisyon, yumuşak ışık, temiz arka plan. "
+            "image_prompt'ta logo, marka rozeti, özellik rozeti, metin katmanı veya yazı "
+            "TARIF ETME — gerçek logo ve caption'lar post-process/platform tarafında ekleniyor.\n\n"
+            "Caption formülü: Hook (ana konu + faydası) → Öne çıkan özellik vurgusu → CTA. "
+            "Abartılı iddia kullanma.\n\n"
+            "CTA (yönlendirme) kuralı:\n"
+            "- Kullanıcı 'Yönlendirme Linki' doldurduysa: caption'ın son satırında çağrı metnini "
+            "(cta_label) kullan ve platforma göre davran:\n"
+            "  • Instagram/TikTok/Threads gibi caption-link'in tıklanmadığı platformlarda: "
+            "caption son satırı '👉 {cta_label} — profilimizdeki linkten ulaşabilirsiniz' "
+            "şeklinde olsun. useFirstComment aktifse URL'yi first_comment bloğuna düz metin "
+            "olarak koy (kopyalanabilsin).\n"
+            "  • LinkedIn/Facebook/Twitter/Pinterest gibi linkin tıklandığı platformlarda: "
+            "caption son satırı '👉 {cta_label}: {cta_url}' şeklinde, URL'yi direkt caption'a yaz.\n"
+            "- Kullanıcı link doldurmadıysa: yönlendirme satırı ekleme, caption ana konu "
+            "vurgusu ile bitsin. Sahte bir 'link bio'da' satırı uydurma."
+        ),
+        priority=["form_fields", "brand_kit", "rag_docs"],
+    ),
+    defaults=TemplateDefaults(),
+    imageTextOverlay=ImageTextOverlaySpec(
+        fields=["ana_konu", "one_cikan_ozellik"],
+        position="bottom-left",
+    ),
+    tags=["genel", "görsel"],
+)
+
 
 TEMPLATES["genel-hakkimizda"] = Template(
     id="genel-hakkimizda",

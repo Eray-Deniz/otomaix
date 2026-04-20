@@ -22,6 +22,7 @@ import { DynamicForm } from '@/components/templates/DynamicForm'
 import { CaptionEditor, type CaptionData } from '@/components/templates/CaptionEditor'
 import { CaptionPreview } from '@/components/templates/CaptionPreview'
 import { fetchActiveMediaModels, type ActiveMediaModels } from '@/lib/api/media-models'
+import { fetchTemplateById } from '@/lib/api/templates'
 import type { Template } from '@/lib/templates.types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -44,6 +45,10 @@ type AspectRatio = string
 type Step = 1 | 2 | 3
 type TemplateMode = 'template' | 'free'
 type TemplatePhase = 'pick' | 'form' | 'caption'
+
+// Phase 8 Sprint 2 — Görsel tipi için varsayılan şablon.
+// `contentType='image'` + "Devam Et" tıklanınca otomatik seçilir; şablon grid'i gösterilmez.
+const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'
 
 interface GeneratedPost {
   post_id: string
@@ -156,6 +161,7 @@ function IcerikOlusturInner() {
   const [imageTextFields, setImageTextFields] = useState<string[] | null>(null)
   const [captionData, setCaptionData] = useState<CaptionData | null>(null)
   const [loadingCaption, setLoadingCaption] = useState(false)
+  const [loadingDefaultTemplate, setLoadingDefaultTemplate] = useState(false)
 
   // Step 2
   const [prompt, setPrompt] = useState('')
@@ -825,16 +831,41 @@ function IcerikOlusturInner() {
           </div>
 
           <Button
-            onClick={() => {
+            onClick={async () => {
+              if (contentType === 'image') {
+                setStep(2)
+                setMode('template')
+                setLoadingDefaultTemplate(true)
+                try {
+                  const tpl = await fetchTemplateById(DEFAULT_IMAGE_TEMPLATE_ID)
+                  if (tpl) {
+                    handleSelectTemplate(tpl)
+                  } else {
+                    setPhase('pick')
+                    toast.error('Varsayılan şablon yüklenemedi, şablon listesi gösteriliyor.')
+                  }
+                } finally {
+                  setLoadingDefaultTemplate(false)
+                }
+                return
+              }
               setStep(2)
-              if (['image', 'carousel'].includes(contentType)) {
+              if (contentType === 'carousel') {
                 setPhase('pick')
                 setMode('template')
               }
             }}
+            disabled={loadingDefaultTemplate}
             className="w-full"
           >
-            Devam Et →
+            {loadingDefaultTemplate ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Şablon yükleniyor...
+              </>
+            ) : (
+              <>Devam Et →</>
+            )}
           </Button>
         </div>
       )}
@@ -861,8 +892,16 @@ function IcerikOlusturInner() {
             </button>
           </div>
 
-          {/* ── Phase 7: Template phase=pick — image/carousel için şablon grid ── */}
-          {['image', 'carousel'].includes(contentType) && mode === 'template' && phase === 'pick' && (
+          {/* Phase 8 Sprint 2 — image için varsayılan şablon fetch edilirken loader */}
+          {contentType === 'image' && loadingDefaultTemplate && (
+            <div className="flex items-center justify-center py-12 text-gray-500 gap-3">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Varsayılan görsel şablonu yükleniyor...</span>
+            </div>
+          )}
+
+          {/* ── Phase 7: Template phase=pick — carousel için şablon grid, image fallback ── */}
+          {['image', 'carousel'].includes(contentType) && mode === 'template' && phase === 'pick' && !loadingDefaultTemplate && (
             <TemplateGrid
               sectorSlug={currentBrand?.sector_slug}
               contentType={contentType}
@@ -891,6 +930,25 @@ function IcerikOlusturInner() {
                 imageTextFields={imageTextFields ?? undefined}
                 onImageTextFieldsChange={setImageTextFields}
               />
+
+              {/* Tasarım ve içerik için istekleriniz — CTA'dan (şablon sonu) hemen sonra */}
+              <div className="space-y-1.5">
+                <Label>
+                  Tasarım ve içerik için istekleriniz{' '}
+                  <span className="font-normal text-gray-400">(opsiyonel)</span>
+                </Label>
+                <Textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder={'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "caption\'da %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'}
+                  rows={3}
+                  className="resize-none"
+                />
+                <p className="text-xs text-gray-500">
+                  Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel
+                  hem metin buradaki isteklere göre şekillenir.
+                </p>
+              </div>
 
               {/* Aspect ratio */}
               <div className="space-y-2">
@@ -981,25 +1039,6 @@ function IcerikOlusturInner() {
                   </div>
                 </div>
               )}
-
-              {/* Tasarım ve içerik için istekleriniz */}
-              <div className="space-y-1.5">
-                <Label>
-                  Tasarım ve içerik için istekleriniz{' '}
-                  <span className="font-normal text-gray-400">(opsiyonel)</span>
-                </Label>
-                <Textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "caption\'da %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'}
-                  rows={3}
-                  className="resize-none"
-                />
-                <p className="text-xs text-gray-500">
-                  Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel
-                  hem metin buradaki isteklere göre şekillenir.
-                </p>
-              </div>
 
               <Button
                 onClick={handleGenerateCaption}
