@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
@@ -161,6 +162,9 @@ function IcerikOlusturInner() {
   const [platforms, setPlatforms] = useState<string[]>(['instagram'])
   const [availableDocs, setAvailableDocs] = useState<BrandDocument[]>([])
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([])
+  // Phase 8 Sprint 1 — per-post logo overlay override. null = marka varsayılanına uy,
+  // true/false = bu post için açıkça override et.
+  const [useLogoOverlay, setUseLogoOverlay] = useState<boolean | null>(null)
 
   // Faceless video — Step 2
   const [script, setScript] = useState('')
@@ -233,6 +237,21 @@ function IcerikOlusturInner() {
       if (res.success && res.data) setAvailableDocs(res.data)
     }
     fetchDocs()
+  }, [currentBrand?.id])
+
+  // Marka değişince logo filigran varsayılanını çek (brand_kit.logo_overlay.enabled).
+  // useLogoOverlay null ise marka default'u kullanılır, switch UI bu değere göre başlangıç alır.
+  useEffect(() => {
+    async function fetchBrandKit() {
+      if (!currentBrand?.id) return
+      const res = await api.get<{ brand_kit?: Record<string, unknown> | null }>(`/brands/${currentBrand.id}`)
+      if (res.success && res.data) {
+        const kit = res.data.brand_kit || {}
+        const overlay = (kit as any).logo_overlay || {}
+        setUseLogoOverlay(Boolean(overlay.enabled))
+      }
+    }
+    fetchBrandKit()
   }, [currentBrand?.id])
 
   useEffect(() => {
@@ -452,6 +471,7 @@ function IcerikOlusturInner() {
         template_fields: isTemplateMode ? templateFields : null,
         platform_captions: captionData!.platform_captions,
         image_prompt: captionData!.image_prompt,
+        use_logo_overlay: useLogoOverlay,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -882,6 +902,20 @@ function IcerikOlusturInner() {
                 </div>
               </div>
 
+              {/* Logo filigran override — Phase 8 Sprint 1 */}
+              {(currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
+                <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                  <div className="flex flex-col gap-0.5">
+                    <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
+                    <span className="text-xs text-gray-500">Bu içerikte marka logosu köşeye yerleştirilsin mi?</span>
+                  </div>
+                  <Switch
+                    checked={Boolean(useLogoOverlay)}
+                    onCheckedChange={(v) => setUseLogoOverlay(v)}
+                  />
+                </div>
+              )}
+
               {/* Platformlar */}
               <div className="space-y-2">
                 <Label>Platformlar</Label>
@@ -1061,6 +1095,20 @@ function IcerikOlusturInner() {
                   ))}
                 </div>
               </div>
+
+              {/* Logo filigran override — Phase 8 Sprint 1 */}
+              {(currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
+                <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                  <div className="flex flex-col gap-0.5">
+                    <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
+                    <span className="text-xs text-gray-500">Bu içerikte marka logosu köşeye yerleştirilsin mi?</span>
+                  </div>
+                  <Switch
+                    checked={Boolean(useLogoOverlay)}
+                    onCheckedChange={(v) => setUseLogoOverlay(v)}
+                  />
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label>Platformlar</Label>

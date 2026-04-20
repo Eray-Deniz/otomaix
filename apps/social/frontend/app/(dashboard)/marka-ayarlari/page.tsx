@@ -934,25 +934,30 @@ function MarkaAyarlariContent() {
 
         {/* ── Tab 3: Görseller ──────────────────────────────────────────────── */}
         <TabsContent value="gorseller" className="space-y-6">
-          <div className="grid grid-cols-2 gap-6">
-            <FileUploadArea
-              label="Logo (Açık Arka Plan)"
-              accept="image/*"
-              previewUrl={brand.logo_light_url}
-              onUpload={(file) => handleLogoUpload(file, 'light')}
-              onRemove={() => handleLogoRemove('light')}
-              loading={uploadingLogo === 'light'}
-              removing={removingLogo === 'light'}
-            />
-            <FileUploadArea
-              label="Logo (Koyu Arka Plan)"
-              accept="image/*"
-              previewUrl={brand.logo_dark_url}
-              onUpload={(file) => handleLogoUpload(file, 'dark')}
-              onRemove={() => handleLogoRemove('dark')}
-              loading={uploadingLogo === 'dark'}
-              removing={removingLogo === 'dark'}
-            />
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-6">
+              <FileUploadArea
+                label="Logo (Açık Arka Plan)"
+                accept="image/*"
+                previewUrl={brand.logo_light_url}
+                onUpload={(file) => handleLogoUpload(file, 'light')}
+                onRemove={() => handleLogoRemove('light')}
+                loading={uploadingLogo === 'light'}
+                removing={removingLogo === 'light'}
+              />
+              <FileUploadArea
+                label="Logo (Koyu Arka Plan)"
+                accept="image/*"
+                previewUrl={brand.logo_dark_url}
+                onUpload={(file) => handleLogoUpload(file, 'dark')}
+                onRemove={() => handleLogoRemove('dark')}
+                loading={uploadingLogo === 'dark'}
+                removing={removingLogo === 'dark'}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Transparan arka planlı PNG yükleyin.
+            </p>
           </div>
 
           <div className="space-y-3 p-4 border border-gray-200 rounded-xl">

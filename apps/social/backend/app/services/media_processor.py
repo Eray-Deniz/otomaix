@@ -23,6 +23,57 @@ import httpx
 from app.services.storage import r2
 
 
+# ─── Logo variant selection (luminosity-based) ───────────────────────────────
+
+def _compute_luminosity(image_bytes: bytes) -> float | None:
+    """
+    Görselin ortalama parlaklığını 0.0–1.0 aralığında döndürür.
+
+    PIL ile grayscale moduna çevrilen **bellekte ayrı bir kopya** üzerinde
+    ImageStat.mean hesaplanır; orijinal bytes asla değiştirilmez.
+    Pillow yoksa veya bozuk görselse None döner.
+    """
+    try:
+        from PIL import Image, ImageStat  # type: ignore
+    except ImportError:
+        return None
+
+    try:
+        img = Image.open(io.BytesIO(image_bytes)).convert("L")
+        mean = ImageStat.Stat(img).mean[0]
+        return mean / 255.0
+    except Exception:
+        return None
+
+
+def _pick_logo_variant(
+    background_bytes: bytes,
+    logo_light_url: str | None,
+    logo_dark_url: str | None,
+) -> str | None:
+    """
+    Arka plan parlaklığına göre kontrast sağlayan logo varyantını seçer.
+
+    Koyu arka plan (luminosity <= 0.5)  → logo_light_url
+    Açık arka plan (luminosity >  0.5) → logo_dark_url
+
+    Yalnızca bir varyant varsa o dönülür (fallback).
+    Luminosity hesaplanamazsa light (varsa) veya dark (varsa) kullanılır.
+    """
+    if not logo_light_url and not logo_dark_url:
+        return None
+    if logo_light_url and not logo_dark_url:
+        return logo_light_url
+    if logo_dark_url and not logo_light_url:
+        return logo_dark_url
+
+    lum = _compute_luminosity(background_bytes)
+    if lum is None:
+        return logo_light_url
+
+    return logo_dark_url if lum > 0.5 else logo_light_url
+
+
 # ─── Logo Overlay ────────────────────────────────────────────────────────────
 
 async def add_logo_overlay(
@@ -179,13 +230,15 @@ async def apply_brand_processing(
     output_url: str,
     content_type: str,
     brand_kit: dict,
-    logo_url: str | None,
+    logo_light_url: str | None,
+    logo_dark_url: str | None,
     intro_video_url: str | None,
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
 
-    1. Görsel ise + logo_overlay aktifse → logo ekle
+    1. Görsel ise + logo_overlay aktifse → arka plan parlaklığına göre
+       uygun logo varyantını seçip ekle
     2. Video ise + intro_video_url varsa → intro/outro ekle
 
     İşlenen URL döner; herhangi bir adım başarısız olursa orijinal URL korunur.
@@ -198,17 +251,29 @@ async def apply_brand_processing(
     is_video = content_type in ("video", "faceless_video", "ugc_video")
 
     # Logo overlay — sadece görseller için
-    if is_image and logo_overlay.get("enabled") and logo_url:
-        processed = await add_logo_overlay(
-            image_url=output_url,
-            logo_url=logo_url,
-            post_id=post_id,
-            brand_id=brand_id,
-            position=logo_overlay.get("position", "bottom-right"),
-            opacity=float(logo_overlay.get("opacity", 0.8)),
-        )
-        if processed:
-            final_url = processed
+    if is_image and logo_overlay.get("enabled") and (logo_light_url or logo_dark_url):
+        chosen_logo_url: str | None = None
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                bg_resp = await client.get(output_url)
+                bg_resp.raise_for_status()
+                chosen_logo_url = _pick_logo_variant(
+                    bg_resp.content, logo_light_url, logo_dark_url
+                )
+        except Exception:
+            chosen_logo_url = logo_light_url or logo_dark_url
+
+        if chosen_logo_url:
+            processed = await add_logo_overlay(
+                image_url=output_url,
+                logo_url=chosen_logo_url,
+                post_id=post_id,
+                brand_id=brand_id,
+                position=logo_overlay.get("position", "bottom-right"),
+                opacity=float(logo_overlay.get("opacity", 0.8)),
+            )
+            if processed:
+                final_url = processed
 
     # Intro video — sadece videolar için
     if is_video and intro_video_url:

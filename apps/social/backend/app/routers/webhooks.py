@@ -104,7 +104,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
 
         # Marka bilgilerini çek (brand_kit, logo, intro_video)
         brand = await db.fetchrow(
-            "SELECT brand_kit, logo_light_url, intro_video_url FROM social.brands WHERE id = $1",
+            "SELECT brand_kit, logo_light_url, logo_dark_url, intro_video_url FROM social.brands WHERE id = $1",
             brand_id,
         )
         raw_kit = brand["brand_kit"] if brand else None
@@ -112,8 +112,18 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             import json as _json
             raw_kit = _json.loads(raw_kit)
         brand_kit = dict(raw_kit) if raw_kit else {}
-        logo_url = brand["logo_light_url"] if brand else None
+        logo_light_url = brand["logo_light_url"] if brand else None
+        logo_dark_url = brand["logo_dark_url"] if brand else None
         intro_video_url = brand["intro_video_url"] if brand else None
+
+        # Phase 8 Sprint 1 — Per-post logo overlay override.
+        # post.use_logo_overlay NULL ise brand_kit defaultu kullanılır;
+        # true/false ise brand_kit.logo_overlay.enabled override edilir.
+        # Kopya üzerinde çalışıyoruz — orijinal brand_kit dict mutate edilmez.
+        post_use_logo = post["use_logo_overlay"]
+        if post_use_logo is not None:
+            existing_overlay = brand_kit.get("logo_overlay") or {}
+            brand_kit["logo_overlay"] = {**existing_overlay, "enabled": bool(post_use_logo)}
 
         # Marka işlemlerini uygula (logo overlay / intro video)
         final_url = await apply_brand_processing(
@@ -122,7 +132,8 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             output_url=raw_url,
             content_type=content_type,
             brand_kit=brand_kit,
-            logo_url=logo_url,
+            logo_light_url=logo_light_url,
+            logo_dark_url=logo_dark_url,
             intro_video_url=intro_video_url,
         )
     except Exception as exc:

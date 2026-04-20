@@ -136,6 +136,9 @@ class PostGenerate(BaseModel):
     template_fields: dict | None = None                  # yapısal form verisi
     platform_captions: dict | None = None                # caption-gen endpoint çıktısı
     image_prompt: str | None = None                      # Akış C'de kullanıcı-editlenmiş görsel prompt'u
+    # Phase 8 Sprint 1 — Per-post logo overlay override
+    # NULL = brand_kit.logo_overlay.enabled'a uy, true/false = override
+    use_logo_overlay: bool | None = None
 
 
 class FacelessVideoGenerate(BaseModel):

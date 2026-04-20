@@ -5,6 +5,109 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Phase 8 Sprint 1 Part 2: Per-post logo filigran override ✅
+
+**Sorun:** Marka-seviyesi `brand_kit.logo_overlay.enabled` tek doğru var — kullanıcı bir içerik için istisna yapmak isterse (örn. temiz mockup görseli, logosuz ürün fotoğrafı tarzı sonuç) önce marka ayarlarından filigranı kapatıp sonra geri açmak zorunda kalıyordu. Kullanıcı "görsel üretimlerinde logo kullan veya kullanma tercihini kullanıcıya sorduk mu?" diye haklı olarak sordu — cevap hayırdı.
+
+**Çözüm:** `social.posts` tablosuna `use_logo_overlay BOOLEAN NULL` kolonu eklendi. NULL = marka default'una uy, true/false = bu post için açıkça override. `/icerik-olustur` sayfasında image/carousel akışlarında aspect ratio'nun altında "Logo filigranı bas" switch'i — marka default'unu değiştirmeden sadece o post için tercihi değiştirir.
+
+**Backend değişiklikler:**
+
+- **Migration 024** (`shared/db/migrations/024_posts_use_logo_overlay.sql`, prod'a uygulandı ✅):
+  ```sql
+  ALTER TABLE social.posts
+    ADD COLUMN IF NOT EXISTS use_logo_overlay BOOLEAN DEFAULT NULL;
+  ```
+
+- `app/models/schemas.py` → `PostGenerate` modeline `use_logo_overlay: bool | None = None` eklendi.
+
+- `app/routers/posts.py` → `generate_post()` INSERT'üne kolon eklendi ($14 parametresi).
+
+- `app/routers/webhooks.py` → fal webhook brand_kit uygulama aşamasında post'un `use_logo_overlay` değeri okunuyor; NULL değilse `brand_kit` kopyası üzerinde `logo_overlay.enabled` alanı override ediliyor (orijinal brand_kit dict asla mutate edilmez — shallow copy + `{**existing_overlay, "enabled": ...}` ile nested dict de ayrı copy):
+  ```python
+  post_use_logo = post["use_logo_overlay"]
+  if post_use_logo is not None:
+      existing_overlay = brand_kit.get("logo_overlay") or {}
+      brand_kit["logo_overlay"] = {**existing_overlay, "enabled": bool(post_use_logo)}
+  ```
+
+**Frontend değişiklikler (`/icerik-olustur/page.tsx`):**
+
+- Yeni state: `useLogoOverlay: boolean | null` — null = marka varsayılanına uy.
+- `currentBrand?.id` değişince `GET /brands/{id}` çağrısı ile `brand_kit.logo_overlay.enabled` okunur ve switch başlangıç değeri olarak set edilir.
+- Switch UI iki yerde (aspect ratio'nun altında): template mode (`phase='form' + selectedTemplate`) ve free-form mode (`mode='free' + phase='form'`). Yalnızca `currentBrand?.logo_light_url || logo_dark_url` durumunda görünür (logo yoksa filigran anlamsız).
+- Video/özel gün/alıntı akışlarında switch YOK (bu tipler için logo overlay pipeline'ı devreye girmez).
+- `handleGenerate` image/carousel payload'ına `use_logo_overlay: useLogoOverlay` eklendi.
+
+**Etki analizi:**
+- Risk: düşük — kolon NULL default'lu, eski client'lar payload'da `use_logo_overlay` göndermezse veya null gönderirse marka default'u uygulanır (mevcut davranış korunur).
+- Backward compat: `content_type='video' | 'special_day' | 'quote'` akışları değişmedi; legacy autoposting n8n trigger `use_logo_overlay` göndermiyor → NULL → marka default.
+- `PATCH /brands/{id}/kit` ile marka-seviyesi `logo_overlay.enabled` değiştirildiğinde yalnızca sonraki default fetch'te görünür; mevcut üretilmiş post'lar zaten `use_logo_overlay` NULL kaydedildiği için yeni default'a uyarlar.
+
+**Doğrulama:**
+- ✅ AST parse (`schemas.py`, `posts.py`, `webhooks.py`) temiz
+- ✅ TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ✅ Migration prod'da çalıştırıldı, kolon görünür (`\d social.posts`)
+- ⏳ Canlı test (Sprint 1 Part 1 ile birlikte yapılacak):
+  - Marka default = false → `/icerik-olustur` açıldığında switch kapalı başlar, üretim logosuz
+  - Switch açıp üret → sadece o post'a logo basılır, marka ayarları değişmez
+  - Tersi: marka default = true, switch kapatıp üret → o post logosuz, marka ayarı true kalır
+  - Logo olmayan marka → switch hiç görünmez
+
+## 2026-04-20 — Phase 8 Sprint 1: Logo varyant auto-selection + prompt improvements ✅
+
+**Kapsam:** İki paralel problemi tek sprint'te çözdük — (a) fal.ai webhook'ta `logo_light_url` hardcoded kullanılıyor, koyu logo hiç devreye girmiyor (MyGoodShoes testinde açık arka planda beyaz logo üzerine beyaz logo basılıyordu); (b) `build_brand_context()` Tier 2'de `website_url` eksik ve image_prompt brand color enforcement yok (Claude marka renklerini yok sayıp beige/off-white studio renkleri kullanıyordu).
+
+### A) Luminosity-based logo variant selection
+
+**Değişen dosyalar (2):**
+
+- `app/services/media_processor.py`:
+  - `_compute_luminosity(bytes) -> float | None` — PIL ile `Image.convert("L")` (grayscale **kopya**) + `ImageStat.mean` → 0.0-1.0 arası ortalama parlaklık. **Orijinal bytes asla değiştirilmez** (grayscale sadece ölçüm için memory'de ayrı obje).
+  - `_pick_logo_variant(bg_bytes, light_url, dark_url) -> str | None`:
+    - Tek varyant varsa o döner (fallback)
+    - Luminosity > 0.5 (açık arka plan) → `logo_dark_url`
+    - Luminosity ≤ 0.5 (koyu arka plan) → `logo_light_url`
+    - Hesaplama başarısızsa light fallback
+  - `apply_brand_processing()` imzası değişti: `logo_url` param'ı → `logo_light_url` + `logo_dark_url` (iki ayrı param). Fonksiyon içinde arka plan httpx ile fetch edilir, `_pick_logo_variant()` ile varyant seçilir, sonra `add_logo_overlay()`'e chosen URL iletilir. Fetch başarısızsa `light or dark` fallback.
+
+- `app/routers/webhooks.py`:
+  - Brand SELECT query'sine `logo_dark_url` eklendi (önceden yalnızca `logo_light_url`)
+  - `apply_brand_processing()` çağrısı iki URL'i de geçiyor
+
+**Etki analizi:**
+- Risk: düşük — tek caller (`webhooks.py`) imza değişikliğine uyumlu. Luminosity hesaplaması ek bir HTTP fetch (R2'den background image) gerektirir ama bu zaten `add_logo_overlay` içinde de yapılıyordu — net +1 fetch per post (R2 cache'li olduğu için marjinal maliyet).
+- Backward compat: markanın tek bir logosu varsa (sadece light veya sadece dark) fallback devreye girer — davranış önceki state ile aynı.
+
+### B) Prompt improvements — Tier 2 brand context
+
+**Değişen dosya:** `app/core/prompt_builder.py` → `build_brand_context()`:
+
+1. **website_url eklendi** (`brand.get("website_url")` varsa): "Marka web sitesi: {url}" satırı Tier 2'ye girer.
+
+2. **GÖRSEL ÜRETİM KURALI bloğu** (colors set edilmişse): Claude'a image_prompt üretirken marka renklerini HEX kodları ile **zorunlu** kullanması söyleniyor. Beige / off-white / pastel / genel stüdyo tonları yasak. Örnek kalıp verildi ("background in {marka mor tonu #HEX}, accent lighting with {ikincil renk #HEX}").
+
+**Caller analizi:**
+- `generate-caption` endpoint (`posts.py:211`) zaten `SELECT b.*` kullanıyor → `website_url` otomatik available
+- `_build_image_prompt` (posts.py) + `suggest_ideas` (ai.py) + `generate_script` (ai.py) `build_brand_context()` çağırmıyor → etkilenmedi
+- Yalnızca `caption_generator.py:generate_captions` → `build_brand_context` akışı Tier 2 değişikliğinden faydalanır
+
+**Not — `letterCase` atlandı:** Önceki analizde `letterCase` (eski `case`) eksik gibi görünüyordu; fakat 2026-04-14 commit'inde "Başlık/Alt Başlık Fontu ölü kod" temizliğinde `BrandKit.fonts` ile birlikte zaten silinmişti. Prompt'a ekleyecek alan yok.
+
+### C) Frontend helper text (`marka-ayarlari/page.tsx`)
+
+Görseller tab'ındaki iki logo upload alanının altına "Transparan arka planlı PNG yükleyin." açıklaması eklendi. Kullanıcıya logo yüklerken etrafında kutu olmayan bir PNG kullanması söyleniyor (luminosity detection transparent background'la birlikte en temiz sonucu verir, ama iki varyant yine gerekli — logo'nun **kendi** rengi arka planla çelişebilir).
+
+**Doğrulama:**
+- ✅ AST parse: `media_processor.py`, `webhooks.py`, `prompt_builder.py` sözdizimi temiz
+- ⏳ Canlı test:
+  - Açık arka planlı AI görsel üret → `logo_dark_url` seçilmeli (koyu logo basılmalı)
+  - Koyu arka planlı AI görsel üret → `logo_light_url` seçilmeli (açık logo basılmalı)
+  - Tek varyantlı marka (sadece light yüklü) → fallback davranışı (light her zaman seçilir)
+  - Caption endpoint image_prompt'unda marka HEX kodları görünmeli (MyGoodShoes → mor tonlar, beige yerine)
+
+**Sonraki:** Canlı testler sonrası intro/outro FFmpeg pipeline (FEATURE_SPEC_intro_outro.md → deferred Sprint 2) ve 16:9 curated aspect ratio polish.
+
 ## 2026-04-19 — Brand kit medya kaldırma endpoint'leri (logo + intro video DELETE) ✅
 
 Canlı testte kullanıcı logoları/intro videoyu yükledi ama **kaldırma seçeneği yoktu** — yalnızca üzerine yeni dosya yükleyerek değiştirebiliyordu. İki yeni endpoint eklendi:

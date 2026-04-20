@@ -79,6 +79,8 @@ def build_brand_context(
     parts.append(f"Marka: {brand_name}")
     if brand.get("description"):
         parts.append(f"Marka açıklaması: {brand['description']}")
+    if brand.get("website_url"):
+        parts.append(f"Marka web sitesi: {brand['website_url']}")
 
     tonality = brand_kit.get("tonality") or "professional"
     parts.append(f"Marka tonu: {tonality}")
@@ -92,6 +94,15 @@ def build_brand_context(
         colors_str = str(colors)
     if colors_str:
         parts.append(f"Marka renkleri: {colors_str}")
+        parts.append(
+            "\n⚠️ GÖRSEL ÜRETİM KURALI (image_prompt için ZORUNLU): "
+            "Üreteceğin image_prompt mutlaka yukarıdaki marka renklerini "
+            "(HEX kodları ile) içermeli. Arka plan, yüzey, ışık tonları veya "
+            "vurgu renkleri bu paletten seçilmeli. Beige, off-white, pastel "
+            "veya genel stüdyo tonları kullanma — marka renklerini net şekilde "
+            "belirt. Örnek kalıp: 'background in {marka mor tonu #HEX}, "
+            "accent lighting with {ikincil renk #HEX}'."
+        )
 
     hashtags = brand_kit.get("hashtags") or []
     if hashtags:

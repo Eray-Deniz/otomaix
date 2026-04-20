@@ -4,6 +4,35 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Phase 8 Sprint 1 Part 2: Per-post logo filigran switch (icerik-olustur) ✅
+
+**Sorun:** Kullanıcı haklı olarak "görsel üretimlerinde logo kullan veya kullanma tercihini kullanıcıya sorduk mu?" diye sordu. `/icerik-olustur`'da logo filigranı tercihi yoktu — kullanıcı istisna yapmak için önce `/marka-ayarlari`'ne gidip marka default'unu değiştirmek zorundaydı.
+
+**Çözüm:** `/icerik-olustur` sayfasında aspect ratio'nun altında "Logo filigranı bas" switch'i. Marka default'u `brand_kit.logo_overlay.enabled`'tan okunur, kullanıcı bu post için override edebilir. Backend `social.posts.use_logo_overlay` tri-state kolonu ile saklar (NULL = marka default'una uy, true/false = override). Detay backend/CLAUDE.md'de.
+
+**Değişen dosya:** `app/(dashboard)/icerik-olustur/page.tsx`
+
+- Yeni state: `useLogoOverlay: boolean | null` — null default (marka default'u yüklenmeden switch görünmez).
+- `currentBrand?.id` değiştiğinde `GET /brands/{id}` çağrısıyla `brand_kit.logo_overlay.enabled` okunur → switch başlangıç değeri.
+- Switch UI iki yerde (aspect ratio bloğunun hemen altında): template mode (`phase='form' + selectedTemplate`) ve free-form mode (`mode='free' + phase='form'`).
+- Koşullu render: yalnızca `currentBrand.logo_light_url || logo_dark_url` varsa gösterilir (logo yoksa filigran anlamsız).
+- Video/özel gün/alıntı akışlarında switch YOK — bu tipler için logo overlay pipeline'ı devreye girmez.
+- `handleGenerate` payload'ına `use_logo_overlay: useLogoOverlay` eklendi (image/carousel akışları).
+
+**Import eklendi:** `import { Switch } from '@/components/ui/switch'`.
+
+**Etki analizi:**
+- Risk: düşük — switch sadece logo'su olan markalarda görünür, payload alanı opsiyonel (backward compat).
+- UX: kullanıcı artık marka ayarlarına gitmeden tek bir post için filigranı açıp kapatabilir. Marka default'u değişmez.
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ⏳ Canlı test (backend Part 1 + Part 2 birlikte):
+  - Marka default = false → switch kapalı başlar, üretim logosuz
+  - Switch açıp üret → o post'a logo basılır, marka ayarı değişmez
+  - Tersi senaryo: default true, switch kapat → o post logosuz
+  - Logo olmayan marka → switch hiç görünmez
+
 ## 2026-04-19 — Markalar "Düzenle" butonu yanlış markayı yüklüyordu (kritik bug fix) ✅
 
 **Sorun (kullanıcı raporu):** `/markalar` sayfasında MyGoodShoes kartına tıklayıp aktif hale getirdikten sonra "Düzenle" butonuna basılınca sidebar'daki aktif marka otomatik Otomaix'e geri dönüyor; marka-ayarlari sayfası yanlış markayı (Otomaix'i) düzenliyor. Bu yüzden kullanıcının daha önce "iki marka için birden update etti" dediği olayın gerçek nedeni ortaya çıktı — MyGoodShoes'a yüklediğini sandığı medyalar aslında Otomaix'e gidiyordu.
