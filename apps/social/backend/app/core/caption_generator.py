@@ -16,9 +16,11 @@ Returns structured response:
 """
 import json
 import logging
+import re
 from typing import Any
 
 import anthropic
+import json_repair
 
 from app.core.config import settings
 from app.core.prompt_builder import (
@@ -30,6 +32,54 @@ from app.core.prompt_builder import (
 from app.models.templates import Template
 
 logger = logging.getLogger(__name__)
+
+_HASHTAG_RE = re.compile(r"#[\wÇĞİÖŞÜçğıöşü]+", re.UNICODE)
+
+
+def _split_caption_hashtags(caption: str) -> tuple[str, str]:
+    """Caption'dan hashtag'leri ayır. Returns (clean_caption, hashtag_block)."""
+    if not caption:
+        return caption, ""
+    tags = _HASHTAG_RE.findall(caption)
+    if not tags:
+        return caption, ""
+    clean = _HASHTAG_RE.sub("", caption).rstrip()
+    clean = re.sub(r"\s+\n", "\n", clean).rstrip()
+    return clean, " ".join(tags)
+
+
+def _ensure_first_comment(
+    data: dict[str, Any],
+    template: Template | None,
+    platforms: list[str],
+) -> None:
+    """useFirstComment platformlar için first_comment alanını garanti et.
+
+    Claude response'ta first_comment yoksa/boşsa, caption'daki hashtag'leri
+    oraya taşır. Frontend textarea'sı görünmez kalmasın diye en azından "" set edilir.
+    """
+    overrides = (template.platformOverrides if template else None) or {}
+    pcaptions = data.get("platform_captions") or {}
+    for platform in platforms:
+        rules = _resolve_platform_rules(platform, overrides.get(platform))
+        if not rules.get("useFirstComment"):
+            continue
+        entry = pcaptions.get(platform)
+        if not isinstance(entry, dict):
+            entry = {"caption": "", "first_comment": ""}
+            pcaptions[platform] = entry
+        existing_fc = (entry.get("first_comment") or "").strip()
+        caption_text = entry.get("caption") or ""
+        if not existing_fc:
+            clean, tags = _split_caption_hashtags(caption_text)
+            if tags:
+                entry["caption"] = clean
+                entry["first_comment"] = tags
+            else:
+                entry["first_comment"] = ""
+        else:
+            entry["first_comment"] = existing_fc
+    data["platform_captions"] = pcaptions
 
 
 async def generate_captions(
@@ -94,12 +144,24 @@ async def generate_captions(
                 raw = raw[4:]
             raw = raw.strip()
 
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as decode_err:
+            logger.warning(
+                f"Caption JSON decode failed ({decode_err}); trying json-repair. "
+                f"Raw length={len(raw)}, preview={raw[:200]!r}"
+            )
+            repaired = json_repair.loads(raw)
+            if not isinstance(repaired, dict):
+                raise ValueError(f"json-repair returned non-dict: {type(repaired)}")
+            data = repaired
 
         data.setdefault("default_caption", "")
         data.setdefault("platform_captions", {})
         data.setdefault("image_prompt", "")
         data.setdefault("hashtags", [])
+
+        _ensure_first_comment(data, template, platforms)
 
         if template and template.defaults.disclaimer:
             disclaimer = template.defaults.disclaimer
@@ -114,15 +176,27 @@ async def generate_captions(
 
     except Exception as e:
         logger.error(f"Caption generation failed: {e}", exc_info=True)
-        fallback = _fallback_response(user_prompt, platforms)
+        fallback = _fallback_response(user_prompt, platforms, template)
         fallback["error"] = str(e)
         return fallback
 
 
-def _fallback_response(user_prompt: str | None, platforms: list[str]) -> dict[str, Any]:
+def _fallback_response(
+    user_prompt: str | None,
+    platforms: list[str],
+    template: Template | None = None,
+) -> dict[str, Any]:
+    overrides = (template.platformOverrides if template else None) or {}
+    pcaptions: dict[str, dict[str, str]] = {}
+    for p in platforms:
+        entry: dict[str, str] = {"caption": user_prompt or ""}
+        rules = _resolve_platform_rules(p, overrides.get(p))
+        if rules.get("useFirstComment"):
+            entry["first_comment"] = ""
+        pcaptions[p] = entry
     return {
         "default_caption": user_prompt or "",
-        "platform_captions": {p: {"caption": user_prompt or ""} for p in platforms},
+        "platform_captions": pcaptions,
         "image_prompt": user_prompt or "social media post image",
         "hashtags": [],
     }
