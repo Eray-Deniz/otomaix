@@ -26,6 +26,6 @@ export async function fetchTemplates(params?: {
 }
 
 export async function fetchTemplateById(templateId: string): Promise<Template | null> {
-  const res = await api.get<{ template: Template }>(`/templates/${templateId}`)
-  return res.success ? res.data.template : null
+  const res = await api.get<Template>(`/templates/${templateId}`)
+  return res.success ? res.data : null
 }
