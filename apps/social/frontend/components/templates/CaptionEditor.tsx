@@ -55,10 +55,6 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
     })
   }
 
-  function updateImagePrompt(prompt: string) {
-    onChange({ ...data, image_prompt: prompt })
-  }
-
   function updateHashtags(hashtags: string[]) {
     onChange({ ...data, hashtags })
   }
