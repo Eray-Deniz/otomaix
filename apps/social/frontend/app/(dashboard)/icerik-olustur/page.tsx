@@ -247,7 +247,8 @@ function IcerikOlusturInner() {
       const res = await api.get<{ brand_kit?: Record<string, unknown> | null }>(`/brands/${currentBrand.id}`)
       if (res.success && res.data) {
         const kit = res.data.brand_kit || {}
-        const overlay = (kit as any).logo_overlay || {}
+        const rawOverlay = kit['logo_overlay']
+        const overlay = (rawOverlay && typeof rawOverlay === 'object') ? (rawOverlay as Record<string, unknown>) : {}
         setUseLogoOverlay(Boolean(overlay.enabled))
       }
     }
