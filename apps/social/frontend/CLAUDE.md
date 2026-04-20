@@ -4,6 +4,29 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — `/icerik-olustur` Step 3'te platform-sekmeli metin önizlemesi ✅
+
+**Sorun:** Step 3'te görselin altında sadece "Varsayılan" gönderi metni görünüyordu. Kullanıcı 3 platform seçmişse (IG + LinkedIn + Twitter) her platforma özel metinlerin gerçekten gidip gitmediğini göremiyor, Varsayılan'ın tüm platformlara aynen gittiğini sanıyordu. Oysa backend her platforma `platform_captions[platform].caption` ve (IG/FB/Threads için) `first_comment` alanını ayrı gönderiyor.
+
+**Çözüm:** Yeni `components/templates/CaptionPreview.tsx` bileşeni — Step 2'deki `CaptionEditor`'un read-only ikizi. Aynı tab stripi (Varsayılan + platform sekmeleri), her sekmede o platforma yayınlanacak gerçek caption, IG/FB/Threads sekmelerinde "İlk Yorum (hashtag bloğu)" bloğu (mavi background — kullanıcı hashtag'lerin ayrı bir yorum olarak gideceğini görsün). Varsayılan sekmesinde hashtag badge listesi.
+
+**Değişen dosyalar (2):**
+- `components/templates/CaptionPreview.tsx` (yeni, ~100 satır): `CaptionData` + `platforms[]` + opsiyonel `onEdit` callback alır; tab state lokal; tüm alanlar read-only (Textarea yerine `<p>` ile display).
+- `app/(dashboard)/icerik-olustur/page.tsx`: Step 3'teki `captionData ? (<read-only card>) : (<editor>)` bloğundaki read-only kart `<CaptionPreview data={captionData} platforms={platforms} onEdit={() => { setStep(2); setPhase('caption') }} />` ile değiştirildi. Video/special_day/quote akışları için (`captionData` null) eski editable kısım aynen korundu.
+
+**UX:**
+- Kullanıcı Step 3'te görselin altındaki sekmelere tıklayarak "Instagram sekmesinde ne gidecek? LinkedIn'de ne gidecek?" görebiliyor
+- Instagram sekmesinde caption gövdesi + "İlk Yorum" kutucuğu ayrı ayrı — hashtag'lerin neden caption'dan ayrı olduğu net
+- "← Metni düzenle" linki hala var, Step 2 CaptionEditor'a geri dönüyor
+
+**Etki analizi:**
+- Risk: sıfır — salt görünüm eklemesi, state/payload/API çağrısı değişmedi
+- Backward compat: video/special_day/quote için `captionData === null` branch'i değişmedi, eski editable UI korundu
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ⏳ Canlı test: 3 platform seçip şablon mode'da içerik üret → Step 3'te görselin altında 4 sekme (Varsayılan + 3 platform); IG sekmesinde İlk Yorum kutusu görünmeli
+
 ## 2026-04-20 — `/icerik-olustur` "Ek Talimat" → "Tasarım ve içerik için istekleriniz" rename ✅
 
 **Sorun:** Şablon mode'unda formun altında yer alan "Ek Talimat (opsiyonel)" alanı iki soruna yol açıyordu: (1) isim belirsizdi — kullanıcı buraya kısa not mu, brief mi, stil mi yazacağını bilemiyordu; (2) placeholder "şablonun ürettiği metne eklemek istediğiniz..." diyordu, bu yüzden kullanıcılar buranın sadece caption'a küçük ek yapıldığını sanıyordu. Oysa backend bu metni hem caption hem image_prompt için kullanıyordu, ayrıca şablon default'larıyla çatışırsa user_prompt geride kalıyordu (canlı test: "Tenis elbiseli bir kadın üzerinde spor ayakkabı göster" yazıldı, Claude prompt'a ekledi ama "focus on the sneakers" template default'u yüzünden FLUX tight crop yaptı).

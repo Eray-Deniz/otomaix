@@ -20,6 +20,7 @@ import { UpgradeModal } from '@/components/billing/UpgradeModal'
 import { TemplateGrid } from '@/components/templates/TemplateGrid'
 import { DynamicForm } from '@/components/templates/DynamicForm'
 import { CaptionEditor, type CaptionData } from '@/components/templates/CaptionEditor'
+import { CaptionPreview } from '@/components/templates/CaptionPreview'
 import { fetchActiveMediaModels, type ActiveMediaModels } from '@/lib/api/media-models'
 import type { Template } from '@/lib/templates.types'
 
@@ -1607,31 +1608,13 @@ function IcerikOlusturInner() {
                 </div>
               )}
 
-              {/* Gönderi metni + hashtag — captionData varsa read-only preview, yoksa editör */}
+              {/* Gönderi metni + hashtag — captionData varsa platform sekmeli preview, yoksa editör */}
               {captionData ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">Gönderi Metni</Label>
-                    <button
-                      onClick={() => { setStep(2); setPhase('caption') }}
-                      className="text-xs text-blue-500 hover:underline"
-                    >
-                      ← Metni düzenle
-                    </button>
-                  </div>
-                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {caption || captionData.default_caption || '(boş)'}
-                    </p>
-                  </div>
-                  {hashtags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {hashtags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <CaptionPreview
+                  data={captionData}
+                  platforms={platforms}
+                  onEdit={() => { setStep(2); setPhase('caption') }}
+                />
               ) : (
                 <>
                   <div className="space-y-1.5">
