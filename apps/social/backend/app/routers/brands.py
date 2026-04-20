@@ -62,7 +62,13 @@ async def list_brands(
         return OkResponse(data=cached)
 
     rows = await db.fetch(
-        "SELECT * FROM social.brands WHERE workspace_id = $1 ORDER BY created_at",
+        """
+        SELECT b.*, s.slug AS sector_slug, s.display_name AS sector_display_name
+        FROM social.brands b
+        LEFT JOIN social.sectors s ON s.id = b.sector_id
+        WHERE b.workspace_id = $1
+        ORDER BY b.created_at
+        """,
         workspace_id,
     )
     data = [dict(r) for r in rows]

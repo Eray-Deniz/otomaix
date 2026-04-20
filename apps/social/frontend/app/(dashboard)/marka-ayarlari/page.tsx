@@ -971,11 +971,20 @@ function MarkaAyarlariContent() {
                   <p className="text-xs text-amber-600 mt-1">Filigran için önce bir logo yüklemelisin.</p>
                 )}
               </div>
-              <Switch
-                checked={(kit.logo_overlay?.enabled ?? false) && !!(brand.logo_light_url || brand.logo_dark_url)}
-                disabled={!brand.logo_light_url && !brand.logo_dark_url}
-                onCheckedChange={(v) => updateKit({ logo_overlay: { ...kit.logo_overlay, enabled: v } })}
-              />
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-medium ${
+                  (kit.logo_overlay?.enabled ?? false) && !!(brand.logo_light_url || brand.logo_dark_url)
+                    ? 'text-purple-700'
+                    : 'text-gray-400'
+                }`}>
+                  {(kit.logo_overlay?.enabled ?? false) && !!(brand.logo_light_url || brand.logo_dark_url) ? 'Açık' : 'Kapalı'}
+                </span>
+                <Switch
+                  checked={(kit.logo_overlay?.enabled ?? false) && !!(brand.logo_light_url || brand.logo_dark_url)}
+                  disabled={!brand.logo_light_url && !brand.logo_dark_url}
+                  onCheckedChange={(v) => updateKit({ logo_overlay: { ...kit.logo_overlay, enabled: v } })}
+                />
+              </div>
             </div>
             {kit.logo_overlay?.enabled && (
               <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">

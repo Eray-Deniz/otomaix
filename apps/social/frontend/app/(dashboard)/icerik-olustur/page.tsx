@@ -910,10 +910,15 @@ function IcerikOlusturInner() {
                     <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
                     <span className="text-xs text-gray-500">Bu içerikte marka logosu köşeye yerleştirilsin mi?</span>
                   </div>
-                  <Switch
-                    checked={Boolean(useLogoOverlay)}
-                    onCheckedChange={(v) => setUseLogoOverlay(v)}
-                  />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-xs font-medium ${useLogoOverlay ? 'text-purple-700' : 'text-gray-400'}`}>
+                      {useLogoOverlay ? 'Açık' : 'Kapalı'}
+                    </span>
+                    <Switch
+                      checked={Boolean(useLogoOverlay)}
+                      onCheckedChange={(v) => setUseLogoOverlay(v)}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1104,10 +1109,15 @@ function IcerikOlusturInner() {
                     <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
                     <span className="text-xs text-gray-500">Bu içerikte marka logosu köşeye yerleştirilsin mi?</span>
                   </div>
-                  <Switch
-                    checked={Boolean(useLogoOverlay)}
-                    onCheckedChange={(v) => setUseLogoOverlay(v)}
-                  />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-xs font-medium ${useLogoOverlay ? 'text-purple-700' : 'text-gray-400'}`}>
+                      {useLogoOverlay ? 'Açık' : 'Kapalı'}
+                    </span>
+                    <Switch
+                      checked={Boolean(useLogoOverlay)}
+                      onCheckedChange={(v) => setUseLogoOverlay(v)}
+                    />
+                  </div>
                 </div>
               )}
 
