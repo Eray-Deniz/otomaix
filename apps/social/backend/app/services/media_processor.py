@@ -108,6 +108,12 @@ async def add_logo_overlay(
         base = Image.open(io.BytesIO(img_resp.content)).convert("RGBA")
         logo = Image.open(io.BytesIO(logo_resp.content)).convert("RGBA")
 
+        # Şeffaf kenar padding'i kırp — PNG'lerin içindeki alpha=0 boşluklar
+        # resize sonrası yanıltıcı genişlik üretip logoyu görsel dışına itiyor
+        trim_bbox = logo.getbbox()
+        if trim_bbox:
+            logo = logo.crop(trim_bbox)
+
         # Logo'yu görselin %20'sine aktif scale et (küçük logoyu da büyütür)
         target_w = int(base.width * 0.20)
         max_h = int(base.height * 0.20)
@@ -244,10 +250,28 @@ async def add_text_overlay(
         body_font_size = max_body_size
         title_font = None
         body_font = None
-        rendered: list[tuple[str, int, int]] = []
+        rendered: list[tuple[str, int, int, bool]] = []  # (text, w, h, is_title)
         total_h = 0
         line_gap = 0
         max_w = 0
+
+        def _wrap(text: str, font, max_width: int) -> list[str]:
+            """Kelime bazında satır kırma — tek kelime taşarsa olduğu gibi kalır."""
+            words = text.split()
+            if not words:
+                return [text]
+            segments: list[str] = []
+            current = words[0]
+            for word in words[1:]:
+                candidate = current + " " + word
+                bb = draw.textbbox((0, 0), candidate, font=font, stroke_width=3)
+                if bb[2] - bb[0] <= max_width:
+                    current = candidate
+                else:
+                    segments.append(current)
+                    current = word
+            segments.append(current)
+            return segments
 
         while True:
             title_font_size = int(body_font_size * 1.25)
@@ -263,13 +287,18 @@ async def add_text_overlay(
 
             for idx, line in enumerate(text_lines):
                 font = title_font if idx == 0 else body_font
-                bbox = draw.textbbox((0, 0), line, font=font, stroke_width=3)
-                w = bbox[2] - bbox[0]
-                h = bbox[3] - bbox[1]
-                rendered.append((line, w, h))
-                if w > max_w:
-                    max_w = w
-                total_h += h + (line_gap if idx < len(text_lines) - 1 else 0)
+                wrapped = _wrap(line, font, usable_w)
+                for seg in wrapped:
+                    bbox = draw.textbbox((0, 0), seg, font=font, stroke_width=3)
+                    w = bbox[2] - bbox[0]
+                    h = bbox[3] - bbox[1]
+                    rendered.append((seg, w, h, idx == 0))
+                    if w > max_w:
+                        max_w = w
+                    total_h += h + line_gap
+
+            if rendered:
+                total_h -= line_gap  # son line_gap fazladan eklendi
 
             if max_w <= usable_w or body_font_size <= min_body_size:
                 break
@@ -300,12 +329,12 @@ async def add_text_overlay(
             stroke_color = (0, 0, 0, 255)
 
         y = y_start
-        for idx, (line, w, h) in enumerate(rendered):
-            font = title_font if idx == 0 else body_font
+        for (seg, w, h, is_title) in rendered:
+            font = title_font if is_title else body_font
             x = (text_right - w) if is_right else text_left
             draw.text(
                 (x, y),
-                line,
+                seg,
                 font=font,
                 fill=fill_color,
                 stroke_width=3,
