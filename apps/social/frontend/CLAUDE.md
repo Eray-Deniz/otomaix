@@ -4,6 +4,30 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — CaptionEditor hashtag badge listesi kaldırıldı (UX asimetri fix) ✅
+
+**Sorun (canlı test):** Step 2 `CaptionEditor` Instagram sekmesinde hashtag'ler üç farklı yerde görünüyordu:
+1. Düzenlenebilir caption textarea (serbest edit)
+2. Düzenlenebilir "İlk Yorum (hashtag bloğu)" textarea (IG/FB/Threads'te first_comment)
+3. **Düzenlenemez rozetli hashtag listesi** (sadece ✕ ile tek tek silinebiliyor, ekleme yok)
+
+Üçüncü alan asimetrik ve kafa karıştırıcıydı — salt görünüm/silme aracı. Caption + first_comment textarea'larda aynı hashtag'ler zaten serbest düzenlenebiliyordu.
+
+**Çözüm (tek dosya):** `components/templates/CaptionEditor.tsx`:
+- `import { Badge } from '@/components/ui/badge'` kaldırıldı
+- `updateHashtags(hashtags)` helper kaldırıldı
+- Alt kısımdaki "Hashtag'ler" başlıklı badge list bloğu (ikon + ✕ butonu + boş state mesajı ~20 satır) tamamen silindi
+
+**Kalan yapı:** Platform tab stripi + caption textarea + (IG/FB/Threads için) first_comment textarea. `CaptionData.hashtags: string[]` tipi korundu — backend hâlâ bu alanı alıyor, değişmedi.
+
+**Etki analizi:**
+- Risk: sıfır — state/payload değişmedi, sadece salt-görünüm UI elemanı çıktı
+- Backward compat: `captionData.hashtags` alanı diğer komponentlerde (CaptionPreview, handleGenerate payload) kullanılmaya devam ediyor
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz
+- ⏳ Canlı test: Step 2 Instagram sekmesinde yalnızca caption + İlk Yorum textarea'ları görünmeli; hashtag rozetli satır olmamalı
+
 ## 2026-04-20 — Phase 8 Sprint 2 polish: default template UI cleanup (canlı test feedback) ✅
 
 **Canlı test feedback (4 madde):**

@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
 export interface PlatformCaption {
@@ -53,10 +52,6 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
         [platform]: { ...existing, ...partial },
       },
     })
-  }
-
-  function updateHashtags(hashtags: string[]) {
-    onChange({ ...data, hashtags })
   }
 
   return (
@@ -128,29 +123,6 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
           )}
         </div>
       )}
-
-      {/* Hashtag editor */}
-      <div className="space-y-2">
-        <Label className="text-sm">Hashtag&apos;ler</Label>
-        <div className="flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-md bg-gray-50 min-h-[36px]">
-          {data.hashtags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="gap-1 text-xs">
-              {tag}
-              <button
-                type="button"
-                onClick={() => updateHashtags(data.hashtags.filter((h) => h !== tag))}
-                className="text-gray-500 hover:text-gray-800"
-              >
-                ×
-              </button>
-            </Badge>
-          ))}
-          {data.hashtags.length === 0 && (
-            <span className="text-xs text-gray-400 px-1">Henüz hashtag yok</span>
-          )}
-        </div>
-      </div>
-
     </div>
   )
 }

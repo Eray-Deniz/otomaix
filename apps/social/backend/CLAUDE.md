@@ -5,6 +5,52 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Logo-text çakışma + luminance-aware text rengi ✅
+
+**Sorun (canlı test — `ai-gorsel.jpg`):** Mavi sneaker görselinin alt kısmında:
+1. Kullanıcı marka ayarında logo konumunu `bottom-right` seçmiş; text overlay de `bottom-left` bölgesinde — ikisi aynı yatay şeride düşüyor, metnin sağ kenarı logonun sol kenarına değiyor / üst üste biniyordu.
+2. Metin her durumda beyaz (`fill=(255,255,255)`, `stroke=(0,0,0)`). Açık arka plan (bej/beyaz sneaker, açık zemin) gelirse beyaz metin neredeyse görünmez.
+
+Kullanıcı logo pozisyonunu default-override etmeyi reddetti — "logo pozisyonu marka ayarından kullanıcının tercihi, oraya dokunma." Yani çakışma çözümü text overlay tarafında yapılmalı.
+
+**Çözüm:** İki bağımsız mekanik, ikisi de `media_processor.py` içinde:
+
+**A) Logo bbox'ı text overlay'e taşıma:**
+- `add_logo_overlay` dönüş tipi `str | None` → `tuple[str, tuple[int,int,int,int]] | None`. `(uploaded_url, (x, y, w, h))` döner.
+- `apply_brand_processing` logo stage sonucundan `logo_bbox` tuple'ını ayıklar, sonraki `add_text_overlay` çağrısına `excluded_bbox=logo_bbox` olarak geçer.
+- `add_text_overlay` yeni parametre `excluded_bbox: tuple[int,int,int,int] | None = None`. Logo ve text'in **aynı yatay şerit** (üst yarı vs alt yarı) olup olmadığını kontrol eder:
+  ```python
+  logo_in_bottom_half = (ey + eh/2) > (bh/2)
+  same_strip = logo_in_bottom_half == is_bottom
+  ```
+  Aynı şeritteyseler, text bölgesi logonun dik bandından çıkacak şekilde daraltılır:
+  - Text sağa hizalıysa (`is_right`) ve logo sol yarıdaysa → `text_left = max(text_left, ex+ew+pad)`
+  - Text sola hizalıysa ve logo sağ yarıdaysa → `text_right = min(text_right, ex-pad)`
+  - `usable_w = text_right - text_left` → auto-shrink loop'unun parametresi. Text daraltılmış bölgeye sığar, logo kesişmez.
+- Farklı şeritteyseler (ör. logo üst-sağ, text alt-sol) hiçbir daraltma yapılmaz — eski davranış.
+
+**B) Luminance-aware metin rengi:**
+- Ölçüm fazı (auto-shrink) bittikten sonra text'in gerçekte basılacağı bbox hesaplanır (`x_start..x_start+max_w`, `y_start..y_start+total_h` + `pad=4`).
+- `base.crop(sample_box).convert("L")` ile o bölgenin grayscale kopyası alınır, `ImageStat.Stat(...).mean[0] / 255.0` ile ortalama luminance bulunur.
+- Eşik: `mean_lum > 0.5` → koyu metin (siyah fill, beyaz stroke); aksi halde eski davranış (beyaz fill, siyah stroke).
+- `ImageStat` import'u `PIL` satırına eklendi.
+
+**MVP scope:** Her iki fix tüm image post'larda devrede (şablon ayrımı yok). Brand kit'teki text overlay + logo overlay birbirini bilmiyordu; artık biliyor.
+
+**Etki analizi:**
+- Risk: düşük — `add_logo_overlay` dönüş tipi değişti ama tek caller (`apply_brand_processing`) güncellendi. Başka import yok (grep: media_processor'ın dışından çağrılmıyor).
+- Logo None dönerse `logo_bbox` da None kalır, `add_text_overlay` eski davranışa fallback (bbox exclusion yok).
+- Auto-shrink min font size koruması zaten var → daraltılmış bölge çok küçükse text en fazla `min_body_size`'a iner, taşmaz.
+- Luminance sampling worst case 1024×~200px grayscale convert + ortalama = <20ms.
+
+**Doğrulama:**
+- ✅ AST parse temiz
+- ⏳ Canlı test:
+  - Logo bottom-right + text bottom-left → text sağa taşmayı kesmeli, logoya dokunmamalı
+  - Açık arka plan (ör. beyaz/bej) → metin **siyah + beyaz stroke** çıkmalı (mevcut beyaz-on-beyaz görünmezlik giderilmeli)
+  - Koyu arka plan (mevcut test — mavi sneaker) → metin **beyaz + siyah stroke** (mevcut davranış korunmalı)
+  - Logo top-right + text bottom-left (farklı şerit) → bbox exclusion devrede değil, metin tam genişlikte
+
 ## 2026-04-20 — Text overlay auto-shrink (taşma koruması) ✅
 
 **Sorun:** `add_text_overlay` sabit font size (`bw * 0.055`) + word-wrap yok. Uzun metinler (ör. 33-char ürün adı) 1024px görsele taşıyordu; sağ hizalı modda `x` negatife bile gidebiliyordu. `product_name` maxLength=50, `price` maxLength=12 → worst case ciddi taşma.
