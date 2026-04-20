@@ -5,6 +5,62 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — caption_generator json-repair + first_comment garantisi ✅
+
+**Sorun 1 (Sentry):** Claude Opus 4.7 bazen bozuk JSON üretiyor (unquoted key, trailing comma → `JSONDecodeError: Expecting property name enclosed in double quotes: line 10 column 5`). `caption_generator.py:97` tek shot `json.loads(raw)` fail olunca `_fallback_response` devreye giriyordu.
+
+**Sorun 2 (kullanıcı raporu):** IG/FB sekmelerinde "İlk Yorum (hashtag bloğu)" textarea tamamen kaybolmuştu. İki neden:
+- Fallback response'ta `first_comment` field'ı hiç oluşturulmuyordu → frontend `platform_captions[p].first_comment !== undefined` koşulu false → textarea gizli
+- Claude başarılı response'ta bile bazen `first_comment` atlıyor veya hashtag'leri caption gövdesine yazıyordu
+
+**Çözüm (`app/core/caption_generator.py` + `requirements.txt`):**
+
+1. **`json-repair==0.30.3`** kütüphanesi eklendi. `json.loads` fail olursa `json_repair.loads` recover eder. LLM çıktısı için yazılmış, unquoted key / trailing comma / smart quote / truncation hepsini temizler. Raw preview log'lanıyor (ilk 200 char) — gelecekteki tanı için.
+
+2. **`_ensure_first_comment(data, template, platforms)`** post-process safeguard. useFirstComment=True platformlar (IG/FB/Threads) için:
+   - `first_comment` yoksa/boşsa, caption'daki `#hashtag` regex'i (`re.compile(r'#[\wÇĞİÖŞÜçğıöşü]+', re.UNICODE)`) ile hashtag'ler çıkarılır, `first_comment`'e taşınır, caption body temizlenir
+   - Hashtag yoksa en azından `first_comment: ""` set edilir → frontend textarea'sı her zaman görünür
+
+3. **`_fallback_response(user_prompt, platforms, template=None)`** genişletildi. useFirstComment platformlar için `first_comment: ""` field'ı fallback'te de oluşturulur (template parametre opsiyonel, None gelirse PLATFORM_DEFAULTS'tan okuma yapılır).
+
+**Etki analizi:**
+- Risk: düşük — json-repair tek ek dependency, mevcut `json.loads` başarılı path'te çalışmaya devam eder (ilk deneme)
+- Backward compat: tam — API response şekli değişmedi, sadece eksik field'lar dolduruluyor
+- Performance: başarılı JSON'da json-repair çağrılmaz (ek maliyet yok); fail durumunda ~5-20ms recover
+
+**Doğrulama:**
+- ✅ AST parse temiz
+- ✅ Regex semantic test (Türkçe karakterli hashtag, inline/sonda, boş caption) — `python3 -c` inline doğrulama
+- ⏳ Canlı test: Claude bozuk JSON dönse bile caption gelmeli; IG/FB/Threads sekmelerinde first_comment textarea her zaman görünmeli (hashtag otomatik taşınmalı)
+
+## 2026-04-20 — media_processor logo şeffaf padding trim + text word-wrap ✅
+
+**Sorun (canlı test `ai-gorsel.jpg`):**
+1. Sağ üst köşedeki logo görsel sınırından taşıyordu — "MyGoodShoes" yerine "MyGood..." görünüyor, sağ ucu kesik. Sebep: logo PNG'sinin içinde alpha=0 (şeffaf) kenar padding'i var. PIL resize bu padding'i de "logo içeriği" olarak sayıyor → gerçek görünür kısım sınırın dışına itiliyor.
+2. Alt-sol text overlay auto-shrink min font'a inse bile tek satıra zorlanıp taşıyordu — "rahat, sade ve şık bir ayakkabı tercihiniz ise bu ayakkabıy..." son kelime kesik. Sebep: `add_text_overlay` auto-shrink sadece font size küçültüyor, **kelime bazında satır kırma yok**.
+
+**Çözüm (tek dosya — `app/services/media_processor.py`):**
+
+1. **`add_logo_overlay` — `logo.getbbox()` crop.** Logo açıldıktan ve RGBA'ya çevrildikten hemen sonra, resize öncesi:
+   ```python
+   trim_bbox = logo.getbbox()
+   if trim_bbox:
+       logo = logo.crop(trim_bbox)
+   ```
+   `getbbox()` alpha=0 kenarları (transparent padding) atar, logonun gerçek içerik bounding box'ını döner. Crop sonrası `logo.width/height` gerçek görünür boyutlardır; `target_w = bw * 0.20` scale'i doğru ölçüye uygulanır, köşe margin hesabı artık overflow yapmaz. Generic — her logoya uygulanır.
+
+2. **`add_text_overlay` — word-wrap.** `_wrap(text, font, max_width)` inner fonksiyonu eklendi — `text.split()` kelimelere ayırır, `draw.textbbox` ile "current + ' ' + word" denemelerini yapar, `max_width` aşılırsa yeni satıra geçer. Auto-shrink loop'unda her `text_lines` entry'si `_wrap(line, font, usable_w)` ile çoklu segmente bölünür, her segment ayrı `rendered` entry olur. `rendered` tuple yapısı `(text, w, h, is_title)` olarak genişletildi (is_title flag'i title font'unu rendering'de korur).
+
+**Etki analizi:**
+- Risk: düşük — tek dosya, API imzaları değişmedi, her iki fonksiyon generic
+- Performance: `getbbox()` ~1ms, `_wrap` worst case ~O(kelime sayısı × textbbox çağrısı) ~5-15ms
+- Backward compat: tam — eski kısa metinler (ör. "SporXL" + "79 TL") ilk wrap denemesinde tek segment döner, davranış değişmez
+- Ekstreme edge: tek kelime 40+ char (yapıştırılmış URL gibi) — wrap bölemez, auto-shrink min font'a iner, nihayetinde yine overlay sınırına sığmazsa en iyi efforttan sonra silik basılır
+
+**Doğrulama:**
+- ✅ AST parse temiz
+- ✅ Canlı test: `ai-gorsel.jpg` yeni versiyonu — logo sağ üst köşede tam, text alt-sol 3 satıra düzgün sarmış, luminance doğru karar vermiş (koyu sokak zemini → beyaz fill + siyah stroke)
+
 ## 2026-04-20 — Logo-text çakışma + luminance-aware text rengi ✅
 
 **Sorun (canlı test — `ai-gorsel.jpg`):** Mavi sneaker görselinin alt kısmında:

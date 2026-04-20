@@ -4,6 +4,45 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — 3 kalan "caption" stringi "gönderi metni"ne çevrildi ✅
+
+**Sorun:** 2026-04-18 Phase 7 Sprint 5 polish'inde tüm kullanıcı-yönelik "Caption" stringleri "Gönderi Metni"ne çevrilmişti, ancak canlı testte `/icerik-olustur` sayfasında hâlâ 3 yerde "caption" kelimesi görünüyordu. Kullanıcı "bu sayfadaki caption ne demek?" diye sordu — terim KOBİ kitlesi için net değil.
+
+**Çözüm (3 dosya, 3 satır):**
+- `app/(dashboard)/icerik-olustur/page.tsx:945` — "Tasarım ve içerik için istekleriniz" textarea placeholder: `"caption'da %20 indirim vurgusu olsun"` → `"gönderi metninde %20 indirim vurgusu olsun"`
+- `components/templates/DynamicForm.tsx:52` — disclaimer kartı altındaki yardım metni: `"Bu metin caption sonuna otomatik olarak eklenecek."` → `"Bu metin gönderi metninin sonuna otomatik olarak eklenecek."`
+- `components/templates/CaptionEditor.tsx:184` — hashtag editörü hint'i: `"... caption'ına eklenecek hashtag'ler."` → `"... gönderi metnine eklenecek hashtag'ler."`
+
+**Değişmeden kalanlar (bilinçli):** `captionData`, `setCaption`, `handleGenerateCaption`, `CaptionEditor`, `CaptionData`, `platform_captions`, `default_caption` — internal state/type/fonksiyon isimleri, kullanıcıya görünmez. Ayrıca component dosya adları (CaptionEditor.tsx, CaptionPreview.tsx) da kod seviyesi, kullanıcı terminolojisi değil.
+
+**Etki analizi:**
+- Risk: sıfır — yalnızca text rename, state/payload/API sözleşmesi etkilenmedi
+- TypeScript compile temiz
+
+## 2026-04-20 — CaptionEditor hashtag editörü geri getirildi (inline platformlar için) ✅
+
+**Sorun:** Önceki commit'te (badge listesi asimetriktir gerekçesiyle) CaptionEditor'dan tüm hashtag gösterimi kaldırılmıştı. Canlı testte kullanıcı fark etti: IG sekmesinde first_comment textarea olduğu için hashtag görünüyor, ama LinkedIn/Twitter/TikTok/YouTube/Pinterest/Bluesky sekmelerinde (`useFirstComment=false` — hashtag caption gövdesinde inline olmalı) hashtag HİÇ GÖRÜNMÜYORDU. Claude bu platformlar için caption'a hashtag her zaman eklemediği için kullanıcı manuel kontrol/düzenleme imkanı kaybetmişti.
+
+**Çözüm (`components/templates/CaptionEditor.tsx`):**
+- `Input`, `Button`, `Badge` import'ları geri eklendi
+- `INLINE_HASHTAG_PLATFORMS = Set(['linkedin','twitter','tiktok','youtube','pinterest','bluesky'])` sabiti
+- `normalizeTag(raw)` helper'ı: trim, whitespace sıkıştırma, prefix `#` idempotent normalizasyon
+- `commitHashtagInput()`: `split(/[,;\n\t\s]+/)` ile çoklu parse, case-insensitive dedup
+- `removeHashtag(tag)`: ✕ butonuyla silme
+- `showHashtagEditor = activeTab === 'default' || INLINE_HASHTAG_PLATFORMS.has(activeTab)` — koşullu render
+- IG/FB/Threads sekmelerinde editör GİZLİ (first_comment textarea zaten var, asimetri yok)
+
+**UX:**
+- Varsayılan sekmesinde: tüm platformlar için ortak hashtag listesi (her platforma kopyalanır)
+- LinkedIn/Twitter/TikTok/YouTube/Pinterest/Bluesky: caption gövdesine eklenecek hashtag listesi + Input + Ekle butonu
+- IG/FB/Threads: yalnızca first_comment textarea görünür — hashtag editörü yok
+
+**Ek fix (aynı commit sonrası hotfix):** `"Hashtag'ler"` JSX text node'u `react/no-unescaped-entities` ESLint hatası verdi, production build kırıldı. `Hashtag&apos;ler` olarak escape edildi.
+
+**Etki analizi:**
+- Risk: sıfır — `captionData.hashtags` array'i zaten mevcuttu, backend hâlâ okuyor
+- TypeScript + lint temiz
+
 ## 2026-04-20 — CaptionEditor hashtag badge listesi kaldırıldı (UX asimetri fix) ✅
 
 **Sorun (canlı test):** Step 2 `CaptionEditor` Instagram sekmesinde hashtag'ler üç farklı yerde görünüyordu:
