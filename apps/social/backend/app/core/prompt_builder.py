@@ -43,6 +43,13 @@ kullan: 'content creator' yerine 'içerik üretici', 'caption' yerine 'başlık'
 'engagement' yerine 'etkileşim', 'story' yerine 'hikaye', 'reel' yerine
 'kısa video'. Marka adları ve platform isimleri orijinal kalabilir.
 
+⚠️ KULLANICI İSTEĞİ HER ZAMAN ÖNCELİKLİDİR: Prompt'ta "KULLANICI İSTEĞİ" başlığı
+altında gelen metin, şablon varsayılanlarını, sektör rehberini ve priority
+sıralamasını GEÇERSİZ KILAR. Kullanıcı "tenis elbiseli kadın göster" diyorsa
+ürün odaklı şablon default'unu bırak ve kullanıcının istediği sahneyi (model,
+sahne, kompozisyon, arka plan) image_prompt'a AYNEN yansıt. Kullanıcı özellikle
+belirtmediği sürece şablon default'larına uy; belirttiğinde kullanıcı kazanır.
+
 YASAK: Gerçekliği olmayan sayısal iddialar ('%300 artış', '30 saatten 2 saate')
 uydurma — sadece somut özellik ve faydalardan bahset.
 
@@ -144,9 +151,15 @@ def build_dynamic_content(
     """Tier 3 — dynamic content (not cached)."""
     parts: list[str] = []
 
-    # Form fields (highest priority per template.prompt.priority)
+    if user_prompt:
+        parts.append(
+            "=== KULLANICI İSTEĞİ (EN YÜKSEK ÖNCELİK — ŞABLON DEFAULT'LARINI GEÇERSİZ KILAR) ==="
+        )
+        parts.append(user_prompt)
+        parts.append("=== KULLANICI İSTEĞİ SONU ===\n")
+
     if template and template_fields:
-        parts.append("=== YAPISAL VERİLER (EN YÜKSEK ÖNCELİK) ===")
+        parts.append("=== YAPISAL VERİLER ===")
         for field in template.formFields:
             value = template_fields.get(field.id)
             if value is not None and value != "":
@@ -154,15 +167,15 @@ def build_dynamic_content(
                 parts.append(f"{field.label}: {value}{suffix}")
         parts.append("=== VERİ SONU ===\n")
 
-    if user_prompt:
-        parts.append(f"KULLANICI EK TALİMATI:\n{user_prompt}\n")
-
     if rag_context:
         parts.append(f"=== REFERANS DOKÜMAN ===\n{rag_context}\n=== DOKÜMAN SONU ===\n")
 
     if template:
-        priority = template.prompt.priority
-        parts.append(f"ÖNCELİK SIRASI (çatışma durumunda): {' > '.join(priority)}\n")
+        priority = ["user_prompt", *[p for p in template.prompt.priority if p != "user_prompt"]]
+        parts.append(
+            f"ÖNCELİK SIRASI (çatışma durumunda — user_prompt her zaman en tepede): "
+            f"{' > '.join(priority)}\n"
+        )
 
     if platforms:
         overrides = template.platformOverrides if template else None

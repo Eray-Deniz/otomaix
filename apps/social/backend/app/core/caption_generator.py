@@ -164,4 +164,12 @@ def _build_output_format_instruction(
 
 ÖNEMLİ: image_prompt İngilizce yazılmalı (AI model İngilizce prompt anlıyor).
 Caption'lar ve hashtag'ler Türkçe olmalı.
+
+⚠️ image_prompt İÇİN KATIİ KURALLAR (görsel kalitesi için kritik):
+1. MARKA ADI YASAK: image_prompt'ta marka adını (örn. "MyGoodShoes") ASLA kullanma — text-to-image modeli bunu görsele metin olarak basıyor ("from MyGoodShoes" ❌).
+2. ÜRÜN ADI YASAK: spesifik ürün modeli/adı (örn. "SporXL", "iPhone 15") image_prompt'ta geçmesin — görseldeki şort/kutu üzerine yazı olarak basılıyor. Genel kategori kullan: "running sneakers", "smartphone", "leather handbag".
+3. TÜRKÇE METİN YASAK: image_prompt'ta hiçbir Türkçe kelime olmasın. "Rahat · Kaliteli · Şık" gibi özellik metinleri tarif etme — FLUX bunları aynen görsele yazıya döker. Özellikleri görsel olarak ima et (comfort → relaxed pose, quality → premium materials texture, style → modern composition).
+4. LOGO/ROZET/METİN KATMANI YASAK: "brand logo badge in corner", "feature badge", "text overlay", "watermark", "caption text" ASLA tarif etme. Gerçek marka logosu webhook pipeline'ında post-process olarak ekleniyor — FLUX'un logo çizmesine gerek YOK, hatta hayali logo uyduruyor.
+5. ÜRÜN ODAĞI: E-ticaret ürün kartlarında ana özne ürünün kendisi olmalı (shoe product shot, close-up, hero angle). İnsan modeli/lifestyle istenmiyorsa modeli tarif etme — sadece ürün. Şablon guidance'ı lifestyle istiyorsa bile ürün görselin en az %60'ını kaplamalı.
+6. FORMAT ÖNERİSİ: "Professional product photography of [generic product category], [composition], clean studio background in [brand color HEX], [lighting style], [material/texture detail]. No text, no logos, no overlays."
 """

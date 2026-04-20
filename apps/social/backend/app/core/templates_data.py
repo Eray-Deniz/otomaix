@@ -54,14 +54,16 @@ TEMPLATES["eticaret-urun-karti"] = Template(
     prompt=TemplatePrompt(
         guidance=(
             "E-ticaret ürün kartı şablonu. Tek ürünü öne çıkaran statik sosyal medya görseli üretir.\n\n"
-            "Görsel yönergesi: Stüdyo çekimi hissi, temiz arkaplan (marka renklerinden), "
-            "ürün merkezde, fiyat/indirim rozeti görünür konumda, marka logosu köşede. "
-            "Modern minimalist stil.\n\n"
+            "Görsel yönergesi (image_prompt için): Saf ürün fotoğrafçılığı — ürün görselin ana öznesi ve "
+            "en az %60'ı olmalı. Stüdyo çekimi, temiz arka plan (marka renklerinin HEX kodlarıyla), "
+            "yumuşak ışık, yüksek detay. İnsan modeli, lifestyle sahnesi, elbise/kıyafet vurgusu KULLANMA — "
+            "ürün küçükse (ayakkabı, takı, telefon vb.) yakın plan/hero angle kullan. "
+            "image_prompt'ta logo, marka rozeti, fiyat rozeti, özellik rozeti, metin katmanı veya yazı "
+            "TARIF ETME — gerçek logo ve caption'lar post-process/platform tarafında ekleniyor.\n\n"
             "Caption formülü: Hook (ürün adı + faydası) → Özellik vurgusu → Fiyat/indirim → CTA. "
             "Abartılı iddia kullanma.\n\n"
             "Fiyat yoksa: Caption'da fiyat kısmını atla. CTA 'Sepete ekle' yerine 'Link bio'da', "
-            "'Detaylar için DM', 'Şimdi keşfet' gibi yumuşak yönlendirme kullan. Image prompt'unda "
-            "fiyat rozeti isteme — yerine ürün logosu/özellik rozeti önerebilirsin."
+            "'Detaylar için DM', 'Şimdi keşfet' gibi yumuşak yönlendirme kullan."
         ),
         priority=["form_fields", "brand_kit", "rag_docs"],
     ),

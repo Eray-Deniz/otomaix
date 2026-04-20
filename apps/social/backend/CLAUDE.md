@@ -5,6 +5,56 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Görsel kalitesi + kullanıcı isteği önceliği (Phase 8 polish) ✅
+
+**Sorunlar (canlı test, MyGoodShoes e-ticaret brand):**
+1. AI görselde kendiliğinden "MyGoodShoes" logosu sağ üst köşeye basılıyor (biz zaten webhook post-process'inde gerçek logo ekliyoruz — FLUX hayal logo uydurmasın).
+2. Ürünün üstünde/etrafında "SportXL" / "SporXL" metni yazı olarak render ediliyor (product_name prompt'a sızıyor).
+3. "Rahat · Kaliteli · Şık" gibi Türkçe özellik metinleri görselde yazı olarak basılıyor (FLUX Türkçe kelime görürse yazıya döküyor).
+4. Kullanıcı "ek talimat" alanına "tenis elbiseli bir kadın spor ayakkabı giyerken göster" yazdı, Claude prompt'a ekledi ama template default'u "focus on the sneakers" yüzünden FLUX tight crop yaptı — model+elbise cropped out.
+
+**Çözüm (3 backend dosyası + 1 frontend dosyası):**
+
+### A) `app/core/caption_generator.py` — image_prompt için katı kurallar
+`_build_output_format_instruction()` çıktı formatı talimatına 6 maddelik kural bloğu eklendi:
+1. **Marka adı YASAK** — product marka adı image_prompt'ta geçmesin (text-to-image modeli marka adını görsele metin olarak basıyor)
+2. **Spesifik ürün adı YASAK** — "SporXL", "iPhone 15" gibi model adları yerine genel kategori kullan ("running sneakers", "smartphone")
+3. **Türkçe metin YASAK** — "Rahat · Kaliteli · Şık" gibi kelimeleri tarif etme, özellikleri görsel ima ile ver (comfort → relaxed pose, quality → premium materials texture)
+4. **Logo/rozet/metin katmanı YASAK** — "brand logo badge in corner", "feature badge", "text overlay" tarif etme; gerçek logo post-process'te ekleniyor
+5. **Ürün odağı** — e-ticaret ürün kartlarında ana özne ürün (shoe product shot, close-up); lifestyle istenmiyorsa model tarif etme
+6. **Format önerisi** — "Professional product photography of [generic category], [composition], clean studio background in [brand HEX], [lighting], [texture]. No text, no logos, no overlays."
+
+Kurallar Tier 3'te (cache'siz) → yeni kural eklendiğinde anında devreye giriyor, cache invalidation gerekmiyor.
+
+### B) `app/core/templates_data.py` — eticaret-urun-karti guidance cleanup
+- Silindi: "marka logosu köşede, fiyat/indirim rozeti görünür konumda" (FLUX'a logo/rozet çizdiren ifade)
+- Eklendi: "İnsan modeli, lifestyle sahnesi, elbise/kıyafet vurgusu KULLANMA — ürün küçükse (ayakkabı, takı, telefon vb.) yakın plan/hero angle kullan."
+- Eklendi: "logo, marka rozeti, fiyat rozeti, özellik rozeti, metin katmanı veya yazı TARIF ETME"
+
+### C) `app/core/prompt_builder.py` — kullanıcı isteği en yüksek öncelik
+**Sistem prompt'a eklenen kural** (`_SYSTEM_RULES`):
+> ⚠️ KULLANICI İSTEĞİ HER ZAMAN ÖNCELİKLİDİR: Prompt'ta "KULLANICI İSTEĞİ" başlığı altında gelen metin, şablon varsayılanlarını, sektör rehberini ve priority sıralamasını GEÇERSİZ KILAR. Kullanıcı "tenis elbiseli kadın göster" diyorsa ürün odaklı şablon default'unu bırak ve kullanıcının istediği sahneyi (model, sahne, kompozisyon, arka plan) image_prompt'a AYNEN yansıt.
+
+**`build_dynamic_content()` yeniden sıralandı** — Tier 3 artık şu sırayı izliyor:
+1. KULLANICI İSTEĞİ (EN YÜKSEK ÖNCELİK) — en tepede, belirgin header ile
+2. YAPISAL VERİLER — önceki "EN YÜKSEK ÖNCELİK" etiketi kaldırıldı, artık user_prompt'un altında
+3. REFERANS DOKÜMAN
+4. ÖNCELİK SIRASI — template.prompt.priority listesinin başına zorla `user_prompt` eklenir, dup'lanırsa dedupe edilir
+
+Önceden user_prompt alt sıradaydı ve "EK TALİMATI" gibi daha yumuşak bir etiketle geliyordu, bu yüzden Claude şablon default'larını ön plana çıkarıyordu. Yeni sıralama ve etiket user isteğini öncelikli zorluyor.
+
+### D) Frontend — `/icerik-olustur` "Ek Talimat" rename
+Detay: frontend/CLAUDE.md.
+
+**Etki analizi:**
+- Risk: düşük — sadece prompt üretimi etkilenir, API sözleşmesi değişmedi
+- Tier 1 sistem prompt değişikliği cache invalidation gerektirir (ilk çağrı cache miss, sonrakiler hit) — beklenen davranış
+- user_prompt zaten opsiyonel alan; boş olduğunda Tier 3 hiç user_prompt bloğu içermez (backward compat)
+
+**Doğrulama:**
+- ✅ AST parse: prompt_builder.py, caption_generator.py, templates_data.py sözdizimi temiz
+- ⏳ Canlı test: MyGoodShoes + Ürün Kartı + "tenis elbiseli kadın spor ayakkabı giysin" → görselde model + elbise + ayakkabı görünmeli (crop olmamalı), üzerinde hayal logo/Türkçe metin olmamalı
+
 ## 2026-04-20 — Phase 8 Sprint 1 Part 2: Per-post logo filigran override ✅
 
 **Sorun:** Marka-seviyesi `brand_kit.logo_overlay.enabled` tek doğru var — kullanıcı bir içerik için istisna yapmak isterse (örn. temiz mockup görseli, logosuz ürün fotoğrafı tarzı sonuç) önce marka ayarlarından filigranı kapatıp sonra geri açmak zorunda kalıyordu. Kullanıcı "görsel üretimlerinde logo kullan veya kullanma tercihini kullanıcıya sorduk mu?" diye haklı olarak sordu — cevap hayırdı.

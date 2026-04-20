@@ -970,16 +970,23 @@ function IcerikOlusturInner() {
                 </div>
               )}
 
-              {/* Ek talimat */}
+              {/* Tasarım ve içerik için istekleriniz */}
               <div className="space-y-1.5">
-                <Label>Ek Talimat <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
+                <Label>
+                  Tasarım ve içerik için istekleriniz{' '}
+                  <span className="font-normal text-gray-400">(opsiyonel)</span>
+                </Label>
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Şablonun ürettiği metne eklemek istediğiniz ekstra bir talimat..."
-                  rows={2}
+                  placeholder={'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "caption\'da %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'}
+                  rows={3}
                   className="resize-none"
                 />
+                <p className="text-xs text-gray-500">
+                  Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel
+                  hem metin buradaki isteklere göre şekillenir.
+                </p>
               </div>
 
               <Button

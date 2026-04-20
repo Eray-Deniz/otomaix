@@ -4,6 +4,28 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — `/icerik-olustur` "Ek Talimat" → "Tasarım ve içerik için istekleriniz" rename ✅
+
+**Sorun:** Şablon mode'unda formun altında yer alan "Ek Talimat (opsiyonel)" alanı iki soruna yol açıyordu: (1) isim belirsizdi — kullanıcı buraya kısa not mu, brief mi, stil mi yazacağını bilemiyordu; (2) placeholder "şablonun ürettiği metne eklemek istediğiniz..." diyordu, bu yüzden kullanıcılar buranın sadece caption'a küçük ek yapıldığını sanıyordu. Oysa backend bu metni hem caption hem image_prompt için kullanıyordu, ayrıca şablon default'larıyla çatışırsa user_prompt geride kalıyordu (canlı test: "Tenis elbiseli bir kadın üzerinde spor ayakkabı göster" yazıldı, Claude prompt'a ekledi ama "focus on the sneakers" template default'u yüzünden FLUX tight crop yaptı).
+
+**Çözüm (tek dosya):** `app/(dashboard)/icerik-olustur/page.tsx` (şablon mode formundaki alan):
+- Label: "Ek Talimat (opsiyonel)" → "Tasarım ve içerik için istekleriniz (opsiyonel)"
+- Placeholder güncellendi (görsel + caption hem örnekleri): `Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "caption'da %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"`
+- Rows 2 → 3 (daha fazla brief girilsin)
+- Altına yardım metni eklendi: "Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir."
+
+Serbest mod'daki "İçerik Açıklaması & Tasarım Tercihleri" alanı zaten açıktı, dokunulmadı.
+
+**Backend ile birlikte çalışan değişiklik:** `prompt_builder.py` sistem prompt'una "KULLANICI İSTEĞİ HER ZAMAN ÖNCELİKLİDİR" kuralı eklendi + Tier 3 dynamic content sıralaması user_prompt'u en tepeye aldı + template priority array'ine `user_prompt` zorla eklendi. Detay: backend/CLAUDE.md.
+
+**Etki analizi:**
+- Risk: sıfır — sadece UX metin değişikliği, state/payload adı (`prompt`) aynı kaldı, API sözleşmesi değişmedi
+- Backward compat: yok — tamamen rename, eski "Ek Talimat" stringi kullanıcıya hiçbir yerde görünmeyecek
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ⏳ Canlı test: şablon formunda alan yeni ismiyle görünmeli, kullanıcı "tenis elbiseli kadın göster" yazdığında AI görselde model+elbise+ayakkabı gelmeli (crop olmamalı)
+
 ## 2026-04-20 — Phase 8 Sprint 1 Part 2: Per-post logo filigran switch (icerik-olustur) ✅
 
 **Sorun:** Kullanıcı haklı olarak "görsel üretimlerinde logo kullan veya kullanma tercihini kullanıcıya sorduk mu?" diye sordu. `/icerik-olustur`'da logo filigranı tercihi yoktu — kullanıcı istisna yapmak için önce `/marka-ayarlari`'ne gidip marka default'unu değiştirmek zorundaydı.
