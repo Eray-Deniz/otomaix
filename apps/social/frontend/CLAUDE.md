@@ -4,6 +4,37 @@
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Phase 8 Sprint 1 Part 3: Template image text overlay (frontend) ✅
+
+**Sorun:** AI görsel üretimi Türkçe karakterleri doğru render edemiyor — FLUX'a "SporXL 79 TL" yazdırmak risk. Ama ürün kartı / alıntı gibi şablonlarda "görselin üstünde fiyat/ürün adı metni" kullanıcı beklentisi. Backend Pillow ile post-process text overlay çözümü geliştiriliyor (detay: backend/CLAUDE.md), frontend bunu kullanıcıya expose etmeli.
+
+**Çözüm (3 dosya):**
+
+- **`lib/templates.types.ts`** — `ImageTextOverlaySpec` interface eklendi (`fields: string[]`, `position?: "top-left"|"top-right"|"bottom-left"|"bottom-right"`). `Template.imageTextOverlay?: ImageTextOverlaySpec`.
+
+- **`components/templates/CaptionEditor.tsx`** — Step 2'deki "Görsel Prompt (İngilizce)" textarea tamamen kaldırıldı (AI'ın dinamik ürettiği İngilizce prompt son kullanıcı için yanıltıcıydı, düzenlendiğinde yanlış sonuçlara yol açıyordu). `CaptionData.image_prompt` tipi korundu (backend hâlâ bu alanı alıyor), `updateImagePrompt` fonksiyonu ileride advanced mode için dosyada bırakıldı.
+
+- **`components/templates/DynamicForm.tsx`** — Şablonun `imageTextOverlay` alanı tanımlıysa ve `onImageTextFieldsChange` prop'u geldiyse form altında mavi arka planlı "Görselde vurgulanacak alanlar (opsiyonel)" kartı render ediliyor. Her alan toggle-style button (checkbox-backed): `activeOverlayFields` state = `imageTextFields ?? overlaySpec.fields`. Kullanıcı tıklayınca `onImageTextFieldsChange(next)` çağrılır — parent component 3-state override pattern'i saklar (`null` = template default, `[]` = hepsi kapalı, `[...]` = açık subset).
+
+- **`app/(dashboard)/icerik-olustur/page.tsx`**:
+  - Yeni state: `imageTextFields: string[] | null` (null default = template default).
+  - `handleSelectTemplate(template)` → `setImageTextFields(template.imageTextOverlay?.fields ?? null)` (şablona göre başlangıç).
+  - `resetWizard()`, `handleFreeFormMode()`, `handleBackToPick()`, contentType değişim handler'ı → `setImageTextFields(null)` reset.
+  - `<DynamicForm>`'a `imageTextFields={imageTextFields ?? undefined}` + `onImageTextFieldsChange={setImageTextFields}` props geçildi.
+  - `handleGenerate()` image/carousel payload'a `image_text_fields: imageTextFields` eklendi.
+
+**UX:**
+- MyGoodShoes + Ürün Kartı seçilince: "product_name" + "price" alanları form'da normal input olarak doldurulur, en altta mavi kartta iki buton ✓ olarak işaretli — kullanıcı istemezse (`+` tıklayarak) kapatabilir.
+- Diğer şablonlarda (şu an 21 şablon) `imageTextOverlay` tanımlı olmadığından kart hiç görünmez — backward compat.
+
+**Etki analizi:**
+- Risk: sıfır — `imageTextOverlay` tanımlı olmayan template'lerde tüm UI+payload aynen eski davranış.
+- TypeScript compile temiz (`tsc --noEmit` exit 0).
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz
+- ⏳ Canlı test: MyGoodShoes + Ürün Kartı → form'un en altında mavi kart + 2 toggle buton (product_name, price) görünmeli; her biri kapatılabilmeli; üretim sonrası görselde sol alt köşede "SporXL" + "79 TL" basılmalı
+
 ## 2026-04-20 — `/icerik-olustur` Step 3'te platform-sekmeli metin önizlemesi ✅
 
 **Sorun:** Step 3'te görselin altında sadece "Varsayılan" gönderi metni görünüyordu. Kullanıcı 3 platform seçmişse (IG + LinkedIn + Twitter) her platforma özel metinlerin gerçekten gidip gitmediğini göremiyor, Varsayılan'ın tüm platformlara aynen gittiğini sanıyordu. Oysa backend her platforma `platform_captions[platform].caption` ve (IG/FB/Threads için) `first_comment` alanını ayrı gönderiyor.

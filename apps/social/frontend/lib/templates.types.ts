@@ -52,6 +52,11 @@ export interface TemplateDefaults {
   disclaimer?: string
 }
 
+export interface ImageTextOverlaySpec {
+  fields: string[]
+  position?: "top-left" | "top-right" | "bottom-left" | "bottom-right"
+}
+
 export interface Template {
   id: string
   version: number
@@ -75,6 +80,7 @@ export interface Template {
     pinterest?: PlatformOverride
     bluesky?: PlatformOverride
   }
+  imageTextOverlay?: ImageTextOverlaySpec
   tags?: string[]
   order?: number
 }

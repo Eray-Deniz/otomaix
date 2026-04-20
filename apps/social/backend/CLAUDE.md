@@ -5,6 +5,49 @@
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
 
+## 2026-04-20 — Phase 8 Sprint 1 Part 3: Template image text overlay (PIL post-process) ✅
+
+**Sorun:** FLUX Türkçe karakterleri güvenilir render edemiyor — image_prompt'a "SporXL 79 TL" yazdırmak risk (rastgele seçilen glyph'ler, bozuk harfler). E-ticaret ürün kartı, alıntı, infografik gibi "görselin üstünde metin olmalı" şablonları için caption'a bırakmak yetmiyor — insan görsel posta bakınca fiyatı/ürün adını direkt görsin istiyor.
+
+**Çözüm:** AI görsel üretiminden SONRA Pillow (PIL) ile metin overlay uygulanıyor. Şablon sahibi hangi form alanlarının overlay basılacağını belirler (`imageTextOverlay.fields`), kullanıcı tercihine göre subset seçebilir (per-post override).
+
+**MVP scope:** Sadece `eticaret-urun-karti` şablonu için aktif; `["product_name", "price"]` varsayılan, `bottom-left` pozisyon. Canlı doğrulamadan sonra diğer şablonlara genişletilir.
+
+**Backend değişiklikler:**
+
+- **Migration 025** (`shared/db/migrations/025_posts_image_text_fields.sql`, prod'a uygulandı ✅):
+  ```sql
+  ALTER TABLE social.posts
+    ADD COLUMN IF NOT EXISTS image_text_fields TEXT[] DEFAULT NULL;
+  ```
+  NULL = template default'u (`imageTextOverlay.fields`); `[]` = kullanıcı hepsini kapattı (basma); `[...]` = açık subset.
+
+- `app/models/templates.py` → `ImageTextOverlaySpec` Pydantic modeli + Template'e `imageTextOverlay: Optional[ImageTextOverlaySpec]`.
+- `app/models/schemas.py` → `PostGenerate.image_text_fields: list[str] | None`.
+- `app/core/templates_data.py` → `eticaret-urun-karti` Template'ine `ImageTextOverlaySpec(fields=["product_name", "price"], position="bottom-left")` eklendi.
+- `app/services/media_processor.py`:
+  - `_TEXT_OVERLAY_FONT_CANDIDATES` + `_load_overlay_font(size)` — DejaVu Sans Bold → Regular → PIL default fallback zinciri (`fonts-dejavu-core` Dockerfile'da kurulu).
+  - `add_text_overlay(image_url, text_lines, position, post_id, brand_id)` — beyaz fill + 3px siyah stroke, ilk satır title (1.25x), diğerleri body. Font size `max(24, int(bw * 0.055))`, margin `max(24, int(bw * 0.04))` — görselin genişliğine göre scale eder. R2 path: `brands/{brand_id}/posts/generated/{post_id}_text.jpg`.
+  - `apply_brand_processing()` imzası genişletildi: `text_overlay_lines: list[str] | None = None, text_overlay_position: str = "bottom-left"`. Logo overlay'den SONRA uygulanıyor (logo'lu görselin üzerine yazı basılır).
+- `app/routers/webhooks.py`:
+  - `post.template_id` ile template lookup → `imageTextOverlay` tanımlıysa effective fields belirle (`post.image_text_fields` NULL değilse override, değilse `spec.fields`).
+  - `template_fields` JSON'ı parse et (defansif: hem dict hem str case).
+  - `formFields`'ten suffix_map oluştur → her aktif field için `f"{val_str} {suffix}".strip()` ("79 TL") satırını derle.
+  - Satırları `apply_brand_processing(text_overlay_lines=lines, text_overlay_position=spec.position)` ile pipeline'a geçir.
+- `app/routers/posts.py` → `generate_post()` INSERT 14 → 15 kolon (`image_text_fields` + `$15` parametresi).
+
+**Frontend değişiklikler:** `lib/templates.types.ts` + `components/templates/DynamicForm.tsx` (overlay field seçim kartı) + `app/(dashboard)/icerik-olustur/page.tsx` (state + payload). Detay: frontend/CLAUDE.md.
+
+**Etki analizi:**
+- Risk: düşük — opt-in. Template'inde `imageTextOverlay` tanımlı değilse hiç çalışmaz. Kullanıcı checkbox'ları kapatırsa (`[]`) sessiz geçer.
+- Font fallback: DejaVu yoksa PIL default font devreye girer (çok küçük ve bitmap, Türkçe karakterler rendered olmayabilir). Prod Dockerfile `fonts-dejavu-core` kuruyor — problem olmaması bekleniyor.
+- Backward compat: migrasyon öncesi post'larda `image_text_fields IS NULL` + template'inde `imageTextOverlay=None` → hiçbir değişiklik gözlenmez.
+
+**Doğrulama:**
+- ✅ AST parse temiz (Python), TypeScript compile temiz (`tsc --noEmit` exit 0)
+- ✅ Migration 025 prod'a uygulandı (`social.posts.image_text_fields text[]`)
+- ⏳ Canlı test: MyGoodShoes + Ürün Kartı → `product_name=SporXL`, `price=79` → üret → görselin sol alt köşesinde "SporXL" (büyük, title) + "79 TL" (küçük) beyaz + siyah stroke ile okunabilir olmalı
+
 ## 2026-04-20 — Görsel kalitesi + kullanıcı isteği önceliği (Phase 8 polish) ✅
 
 **Sorunlar (canlı test, MyGoodShoes e-ticaret brand):**

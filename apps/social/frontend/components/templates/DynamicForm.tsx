@@ -9,15 +9,39 @@ interface DynamicFormProps {
   template: Template
   values: Record<string, unknown>
   onChange: (fieldId: string, value: unknown) => void
+  imageTextFields?: string[]
+  onImageTextFieldsChange?: (fields: string[]) => void
 }
 
-export function DynamicForm({ template, values, onChange }: DynamicFormProps) {
+export function DynamicForm({
+  template,
+  values,
+  onChange,
+  imageTextFields,
+  onImageTextFieldsChange,
+}: DynamicFormProps) {
   // Group fields by .group (keep order of first occurrence)
   const groups: { name: string | undefined; fields: TemplateFormField[] }[] = []
   for (const field of template.formFields) {
     const existing = groups.find((g) => g.name === field.group)
     if (existing) existing.fields.push(field)
     else groups.push({ name: field.group, fields: [field] })
+  }
+
+  const overlaySpec = template.imageTextOverlay
+  const overlayFields = overlaySpec
+    ? overlaySpec.fields
+        .map((fid) => template.formFields.find((f) => f.id === fid))
+        .filter((f): f is TemplateFormField => Boolean(f))
+    : []
+  const activeOverlayFields = imageTextFields ?? overlaySpec?.fields ?? []
+
+  function toggleOverlayField(fid: string) {
+    if (!onImageTextFieldsChange) return
+    const next = activeOverlayFields.includes(fid)
+      ? activeOverlayFields.filter((f) => f !== fid)
+      : [...activeOverlayFields, fid]
+    onImageTextFieldsChange(next)
   }
 
   return (
@@ -51,6 +75,45 @@ export function DynamicForm({ template, values, onChange }: DynamicFormProps) {
           ))}
         </div>
       ))}
+
+      {overlaySpec && overlayFields.length > 0 && onImageTextFieldsChange && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+          <div>
+            <p className="text-xs font-semibold text-blue-800">
+              Görselde vurgulanacak alanlar (opsiyonel)
+            </p>
+            <p className="text-[11px] text-blue-700/80 mt-0.5">
+              İşaretli alanlar AI görselin üzerine yazı olarak basılır. Tümünü kapatırsanız
+              görselde ek metin olmaz.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {overlayFields.map((f) => {
+              const checked = activeOverlayFields.includes(f.id)
+              return (
+                <label
+                  key={f.id}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border cursor-pointer transition-colors',
+                    checked
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white border-blue-200 text-blue-700 hover:border-blue-400'
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleOverlayField(f.id)}
+                    className="sr-only"
+                  />
+                  <span>{checked ? '✓' : '+'}</span>
+                  <span>{f.label}</span>
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -6,6 +6,7 @@
 Frontend bu veriyi `GET /templates` üzerinden çeker ve 1 saat cache eder.
 """
 from app.models.templates import (
+    ImageTextOverlaySpec,
     PlatformOverride,
     Template,
     TemplateDefaults,
@@ -77,6 +78,10 @@ TEMPLATES["eticaret-urun-karti"] = Template(
             toneAdjustment="Daha kurumsal, satış dili yumuşatılmış"),
         "twitter": PlatformOverride(captionStyle="short", maxHashtags=2),
     },
+    imageTextOverlay=ImageTextOverlaySpec(
+        fields=["product_name", "price"],
+        position="bottom-left",
+    ),
     tags=["ürün", "fiyat", "indirim"],
 )
 

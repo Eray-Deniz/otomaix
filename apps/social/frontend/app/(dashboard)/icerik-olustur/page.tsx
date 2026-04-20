@@ -151,6 +151,9 @@ function IcerikOlusturInner() {
   const [phase, setPhase] = useState<TemplatePhase>('pick')
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [templateFields, setTemplateFields] = useState<Record<string, unknown>>({})
+  // Phase 8 Sprint 1 Part 3 — Template image text overlay per-post override.
+  // null = template.imageTextOverlay default'u kullanılır; []/dolu liste ise override.
+  const [imageTextFields, setImageTextFields] = useState<string[] | null>(null)
   const [captionData, setCaptionData] = useState<CaptionData | null>(null)
   const [loadingCaption, setLoadingCaption] = useState(false)
 
@@ -474,6 +477,7 @@ function IcerikOlusturInner() {
         platform_captions: captionData!.platform_captions,
         image_prompt: captionData!.image_prompt,
         use_logo_overlay: useLogoOverlay,
+        image_text_fields: imageTextFields,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -681,6 +685,7 @@ function IcerikOlusturInner() {
     setPhase('pick')
     setSelectedTemplate(null)
     setTemplateFields({})
+    setImageTextFields(null)
     setCaptionData(null)
   }
 
@@ -688,6 +693,7 @@ function IcerikOlusturInner() {
   function handleSelectTemplate(template: Template) {
     setSelectedTemplate(template)
     setTemplateFields({})
+    setImageTextFields(template.imageTextOverlay?.fields ?? null)
     setCaptionData(null)
     setPhase('form')
     // Aspect ratio önerisini uygula
@@ -701,6 +707,7 @@ function IcerikOlusturInner() {
     setMode('free')
     setSelectedTemplate(null)
     setTemplateFields({})
+    setImageTextFields(null)
     setCaptionData(null)
     setPhase('form')
   }
@@ -712,6 +719,7 @@ function IcerikOlusturInner() {
     setPhase('pick')
     setSelectedTemplate(null)
     setTemplateFields({})
+    setImageTextFields(null)
     setCaptionData(null)
     setMode('template')
   }
@@ -795,6 +803,7 @@ function IcerikOlusturInner() {
                     // Tip değişince template state'i sıfırla
                     setSelectedTemplate(null)
                     setTemplateFields({})
+                    setImageTextFields(null)
                     setCaptionData(null)
                     setPhase('pick')
                     setMode('template')
@@ -879,6 +888,8 @@ function IcerikOlusturInner() {
                 onChange={(id, v) =>
                   setTemplateFields((prev) => ({ ...prev, [id]: v }))
                 }
+                imageTextFields={imageTextFields ?? undefined}
+                onImageTextFieldsChange={setImageTextFields}
               />
 
               {/* Aspect ratio */}

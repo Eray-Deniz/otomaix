@@ -139,6 +139,10 @@ class PostGenerate(BaseModel):
     # Phase 8 Sprint 1 — Per-post logo overlay override
     # NULL = brand_kit.logo_overlay.enabled'a uy, true/false = override
     use_logo_overlay: bool | None = None
+    # Phase 8 Sprint 1 Part 3 — Template image text overlay per-post override.
+    # NULL = template.imageTextOverlay.fields default'unu kullan; []/listte field yoksa
+    # overlay basılmaz; dolu listte yalnızca listte geçen field'lar basılır.
+    image_text_fields: list[str] | None = None
 
 
 class FacelessVideoGenerate(BaseModel):

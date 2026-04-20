@@ -155,20 +155,6 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
         </div>
       </div>
 
-      {/* Image prompt editor */}
-      <div className="space-y-1.5">
-        <Label className="text-sm">Görsel Prompt (İngilizce)</Label>
-        <p className="text-xs text-gray-400">
-          Görsel AI modeline gönderilecek İngilizce tarif. Düzenleyebilirsiniz.
-        </p>
-        <Textarea
-          value={data.image_prompt}
-          onChange={(e) => updateImagePrompt(e.target.value)}
-          placeholder="English visual description..."
-          rows={3}
-          className="resize-none text-sm font-mono"
-        />
-      </div>
     </div>
   )
 }

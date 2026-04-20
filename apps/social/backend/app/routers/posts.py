@@ -327,9 +327,9 @@ async def generate_post(
             (brand_id, content_type, content_category, prompt, user_text,
              document_ids, aspect_ratio, platforms, status,
              template_id, template_fields, platform_captions,
-             caption, hashtags, use_logo_overlay)
+             caption, hashtags, use_logo_overlay, image_text_fields)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
-                $9, $10, $11, $12, $13, $14)
+                $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
         """,
         payload.brand_id,
@@ -346,6 +346,7 @@ async def generate_post(
         caption_value,
         hashtags_value,
         payload.use_logo_overlay,
+        payload.image_text_fields,
     )
     post = dict(row)
 

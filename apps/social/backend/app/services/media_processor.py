@@ -148,6 +148,124 @@ async def add_logo_overlay(
         return None
 
 
+# ─── Text Overlay ────────────────────────────────────────────────────────────
+
+_TEXT_OVERLAY_FONT_CANDIDATES = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+]
+
+
+def _load_overlay_font(size: int):
+    try:
+        from PIL import ImageFont  # type: ignore
+    except ImportError:
+        return None
+    for path in _TEXT_OVERLAY_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size=size)
+        except (OSError, IOError):
+            continue
+    try:
+        return ImageFont.load_default()
+    except Exception:
+        return None
+
+
+async def add_text_overlay(
+    image_url: str,
+    text_lines: list[str],
+    position: str,
+    post_id: UUID,
+    brand_id: UUID,
+) -> str | None:
+    """
+    Görsel üzerine çok satırlı metin bindirme (template.imageTextOverlay için).
+
+    Beyaz yazı + koyu stroke (kontrast garantisi), DejaVu Sans Bold.
+    Font boyutu görsel genişliğinin ~%6'sı; margin genişliğin ~%4'ü.
+    İlk satır (başlık) diğerlerinden %25 daha büyük render edilir.
+    """
+    if not text_lines:
+        return None
+
+    try:
+        from PIL import Image, ImageDraw  # type: ignore
+    except ImportError:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            img_resp = await client.get(image_url)
+            img_resp.raise_for_status()
+
+        base = Image.open(io.BytesIO(img_resp.content)).convert("RGBA")
+        bw, bh = base.size
+
+        base_font_size = max(24, int(bw * 0.055))
+        title_font_size = int(base_font_size * 1.25)
+        margin = max(24, int(bw * 0.04))
+
+        title_font = _load_overlay_font(title_font_size)
+        body_font = _load_overlay_font(base_font_size)
+        if title_font is None or body_font is None:
+            return None
+
+        overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        rendered: list[tuple[str, int, int]] = []
+        total_h = 0
+        line_gap = int(base_font_size * 0.25)
+
+        for idx, line in enumerate(text_lines):
+            font = title_font if idx == 0 else body_font
+            bbox = draw.textbbox((0, 0), line, font=font, stroke_width=3)
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
+            rendered.append((line, w, h))
+            total_h += h + (line_gap if idx < len(text_lines) - 1 else 0)
+
+        is_bottom = position.startswith("bottom")
+        is_right = position.endswith("right")
+
+        if is_bottom:
+            y = bh - margin - total_h
+        else:
+            y = margin
+
+        stroke_color = (0, 0, 0, 255)
+        fill_color = (255, 255, 255, 255)
+
+        for idx, (line, w, h) in enumerate(rendered):
+            font = title_font if idx == 0 else body_font
+            if is_right:
+                x = bw - margin - w
+            else:
+                x = margin
+            draw.text(
+                (x, y),
+                line,
+                font=font,
+                fill=fill_color,
+                stroke_width=3,
+                stroke_fill=stroke_color,
+            )
+            y += h + line_gap
+
+        result = Image.alpha_composite(base, overlay).convert("RGB")
+
+        buf = io.BytesIO()
+        result.save(buf, format="JPEG", quality=92)
+        buf.seek(0)
+
+        dest_path = f"brands/{brand_id}/posts/generated/{post_id}_text.jpg"
+        return r2.upload(buf.read(), dest_path, "image/jpeg")
+
+    except Exception:
+        return None
+
+
 # ─── Intro Video ─────────────────────────────────────────────────────────────
 
 async def add_intro_video(
@@ -233,6 +351,8 @@ async def apply_brand_processing(
     logo_light_url: str | None,
     logo_dark_url: str | None,
     intro_video_url: str | None,
+    text_overlay_lines: list[str] | None = None,
+    text_overlay_position: str = "bottom-left",
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
@@ -274,6 +394,18 @@ async def apply_brand_processing(
             )
             if processed:
                 final_url = processed
+
+    # Template text overlay — sadece görseller için
+    if is_image and text_overlay_lines:
+        text_processed = await add_text_overlay(
+            image_url=final_url,
+            text_lines=text_overlay_lines,
+            position=text_overlay_position,
+            post_id=post_id,
+            brand_id=brand_id,
+        )
+        if text_processed:
+            final_url = text_processed
 
     # Intro video — sadece videolar için
     if is_video and intro_video_url:

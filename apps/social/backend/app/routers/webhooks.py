@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 import asyncpg
 from app.core.database import get_db
 from app.models.schemas import OkResponse
+from app.core.templates_data import get_template_by_id
 from app.services.media_processor import apply_brand_processing
 from app.services.storage import r2
 
@@ -125,7 +126,46 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             existing_overlay = brand_kit.get("logo_overlay") or {}
             brand_kit["logo_overlay"] = {**existing_overlay, "enabled": bool(post_use_logo)}
 
-        # Marka işlemlerini uygula (logo overlay / intro video)
+        # Phase 8 Sprint 1 Part 3 — Template-spesifik görsel üzeri metin overlay.
+        # Post'un template'ında imageTextOverlay tanımlıysa seçili field'ları görselin
+        # üzerine yazı olarak render et. post.image_text_fields NULL ise template
+        # default'u (template.imageTextOverlay.fields) kullanılır; boş liste ise hiç
+        # overlay basılmaz; dolu liste ise yalnızca listedeki field'lar basılır.
+        text_overlay_lines: list[str] | None = None
+        text_overlay_position = "bottom-left"
+        template_id = post.get("template_id") if isinstance(post, dict) else post["template_id"]
+        if template_id:
+            template = get_template_by_id(template_id)
+            if template and template.imageTextOverlay:
+                spec = template.imageTextOverlay
+                override = post["image_text_fields"]
+                effective_fields = override if override is not None else spec.fields
+                if effective_fields:
+                    raw_fields = post["template_fields"]
+                    if raw_fields and isinstance(raw_fields, str):
+                        try:
+                            raw_fields = json.loads(raw_fields)
+                        except (TypeError, ValueError):
+                            raw_fields = {}
+                    fields_map = dict(raw_fields) if raw_fields else {}
+
+                    suffix_map = {ff.id: (ff.suffix or "") for ff in template.formFields}
+                    lines: list[str] = []
+                    for fid in effective_fields:
+                        val = fields_map.get(fid)
+                        if val in (None, ""):
+                            continue
+                        val_str = str(val).strip()
+                        if not val_str:
+                            continue
+                        suffix = suffix_map.get(fid, "")
+                        line = f"{val_str} {suffix}".strip() if suffix else val_str
+                        lines.append(line)
+                    if lines:
+                        text_overlay_lines = lines
+                        text_overlay_position = spec.position
+
+        # Marka işlemlerini uygula (logo overlay / text overlay / intro video)
         final_url = await apply_brand_processing(
             post_id=post_id,
             brand_id=brand_id,
@@ -135,6 +175,8 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             logo_light_url=logo_light_url,
             logo_dark_url=logo_dark_url,
             intro_video_url=intro_video_url,
+            text_overlay_lines=text_overlay_lines,
+            text_overlay_position=text_overlay_position,
         )
     except Exception as exc:
         sentry_sdk.set_context("fal_webhook", {"post_id": str(post_id), "brand_id": str(brand_id), "request_id": request_id})
