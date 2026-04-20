@@ -49,7 +49,7 @@ export function DynamicForm({
             {template.defaults.disclaimer}
           </p>
           <p className="text-[11px] text-amber-600 mt-2">
-            Bu metin caption sonuna otomatik olarak eklenecek.
+            Bu metin gönderi metninin sonuna otomatik olarak eklenecek.
           </p>
         </div>
       )}

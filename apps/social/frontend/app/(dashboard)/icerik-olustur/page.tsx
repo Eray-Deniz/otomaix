@@ -942,7 +942,7 @@ function IcerikOlusturInner() {
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "caption\'da %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'}
+                  placeholder={'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'}
                   rows={3}
                   className="resize-none"
                 />
