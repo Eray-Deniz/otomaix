@@ -1,10 +1,11 @@
 """Media model adapters — fal.ai için model-agnostic soyutlama.
 
-4 modalite için ayrı adapter hiyerarşisi:
+5 modalite için ayrı adapter hiyerarşisi:
 - ImageModelAdapter        → görsel üretimi
 - VideoModelAdapter        → text-to-video
 - ImageToVideoModelAdapter → image-to-video
 - FacelessBackgroundAdapter → faceless video arka plan üretimi
+- ImageEditModelAdapter    → prompt + reference image(s) → düzenlenmiş görsel (Phase 9)
 
 Aktif model seçimi env var ile yapılır (`settings.IMAGE_MODEL` vb.); default'lar
 mevcut production model ID'leridir, davranış değişmeden adapter'lı yol kullanılır.
@@ -227,5 +228,47 @@ def get_active_faceless_background_adapter() -> FacelessBackgroundAdapter:
         raise ValueError(
             f"Unknown FACELESS_BACKGROUND_MODEL: {key!r}. "
             f"Registered: {sorted(FACELESS_BACKGROUND_ADAPTERS.keys())}"
+        )
+    return adapter
+
+
+# ─── Image-Edit modality (Phase 9) ──────────────────────────────────────────
+
+
+class ImageEditModelAdapter(Protocol):
+    """Prompt + referans görsel(ler) → düzenlenmiş görsel.
+
+    Image-to-video gibi aspect_ratio yok — çıktı oranı input image'den türer.
+    Arayüz: (prompt, image_urls) → arguments dict.
+    """
+
+    model_id: str
+
+    def build_args(self, prompt: str, image_urls: list[str]) -> dict[str, Any]: ...
+
+
+class NanoBananaV2EditAdapter:
+    """nano-banana-2 edit adapter — çoklu referans görsel destekli."""
+
+    model_id = "fal-ai/nano-banana-2/edit"
+
+    def build_args(self, prompt: str, image_urls: list[str]) -> dict[str, Any]:
+        if not image_urls:
+            raise ValueError("image_urls boş olamaz — en az bir referans görsel gerekli")
+        return {"prompt": prompt, "image_urls": image_urls}
+
+
+IMAGE_EDIT_ADAPTERS: dict[str, ImageEditModelAdapter] = {
+    "nano-banana-2-edit": NanoBananaV2EditAdapter(),
+}
+
+
+def get_active_image_edit_adapter() -> ImageEditModelAdapter:
+    key = (settings.IMAGE_EDIT_MODEL or "nano-banana-2-edit").strip()
+    adapter = IMAGE_EDIT_ADAPTERS.get(key)
+    if not adapter:
+        raise ValueError(
+            f"Unknown IMAGE_EDIT_MODEL: {key!r}. "
+            f"Registered: {sorted(IMAGE_EDIT_ADAPTERS.keys())}"
         )
     return adapter

@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     VIDEO_MODEL: str = "kling-v3-pro"  # app.services.media_adapters.VIDEO_ADAPTERS key
     IMAGE_TO_VIDEO_MODEL: str = "kling-v25-turbo-pro"  # app.services.media_adapters.IMAGE_TO_VIDEO_ADAPTERS key
     FACELESS_BACKGROUND_MODEL: str = "hunyuan-video"  # app.services.media_adapters.FACELESS_BACKGROUND_ADAPTERS key
+    # Phase 9 — Image-edit modality (ürün görseli + prompt → düzenlenmiş görsel)
+    IMAGE_EDIT_MODEL: str = "nano-banana-2-edit"  # app.services.media_adapters.IMAGE_EDIT_ADAPTERS key
 
 
 settings = Settings()

@@ -15,6 +15,7 @@ from app.models.schemas import OkResponse
 from app.services.media_adapters import (
     get_active_faceless_background_adapter,
     get_active_image_adapter,
+    get_active_image_edit_adapter,
     get_active_image_to_video_adapter,
     get_active_video_adapter,
 )
@@ -35,6 +36,7 @@ async def get_active_media_models(response: Response):
     video = get_active_video_adapter()
     i2v = get_active_image_to_video_adapter()
     faceless = get_active_faceless_background_adapter()
+    image_edit = get_active_image_edit_adapter()
 
     return OkResponse(
         data={
@@ -57,6 +59,11 @@ async def get_active_media_models(response: Response):
                 "key": settings.FACELESS_BACKGROUND_MODEL,
                 "model_id": faceless.model_id,
                 "supported_ratios": sorted(faceless.supported_ratios),
+            },
+            "image_edit": {
+                "key": settings.IMAGE_EDIT_MODEL,
+                "model_id": image_edit.model_id,
+                "supported_ratios": None,
             },
         }
     )
