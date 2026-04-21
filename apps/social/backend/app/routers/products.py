@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.core.security import assert_brand_owned, get_current_user
+from app.core.security import assert_brand_owned, assert_product_owned, get_current_user
 from app.models.schemas import OkResponse, ProductCreate, ProductUpdate
 from app.routers.billing import check_product_quota
 from app.services.storage import r2
@@ -28,32 +28,6 @@ router = APIRouter(prefix="/products", tags=["products"])
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_TYPES = {"product", "service"}
-
-
-async def _assert_product_owned(
-    db: asyncpg.Connection,
-    user: dict,
-    product_id: UUID,
-) -> dict:
-    """Sahiplik kontrolü + ürün row'unu dict olarak döner (re-fetch gerekmez)."""
-    account_id = user.get("sub")
-    if not account_id:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz oturum")
-    row = await db.fetchrow(
-        """
-        SELECT p.*
-        FROM social.brand_products p
-        JOIN social.brands b ON b.id = p.brand_id
-        JOIN social.workspace_members m ON m.workspace_id = b.workspace_id
-        WHERE p.id = $1 AND m.account_id = $2
-        LIMIT 1
-        """,
-        product_id,
-        account_id,
-    )
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ürün bulunamadı")
-    return dict(row)
 
 
 def _r2_path_from_url(url: str) -> str | None:
@@ -118,7 +92,7 @@ async def upload_product_image(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Ürün görseli yükle → R2. Mevcut görsel varsa onu siler."""
-    product = await _assert_product_owned(db, user, product_id)
+    product = await assert_product_owned(db, user, product_id)
 
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -210,7 +184,7 @@ async def get_product(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Tek ürün detayı + doküman sayısı."""
-    product = await _assert_product_owned(db, user, product_id)
+    product = await assert_product_owned(db, user, product_id)
     product["document_count"] = await db.fetchval(
         "SELECT COUNT(*) FROM social.product_documents WHERE product_id = $1",
         product_id,
@@ -226,7 +200,7 @@ async def update_product(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Ürün alanlarını güncelle. `type` immutable — değiştirmek için yeni kayıt oluşturun."""
-    await _assert_product_owned(db, user, product_id)
+    await assert_product_owned(db, user, product_id)
 
     updates: list[str] = []
     params: list = []
@@ -275,7 +249,7 @@ async def delete_product(
     Cascade: brand_products → product_documents → product_document_chunks (DB)
     R2 cleanup: product image + all document files (manuel).
     """
-    product = await _assert_product_owned(db, user, product_id)
+    product = await assert_product_owned(db, user, product_id)
 
     # Bağlı doküman R2 key'lerini topla (DELETE'ten önce)
     doc_rows = await db.fetch(

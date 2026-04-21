@@ -176,6 +176,10 @@ class PostGenerate(BaseModel):
     # NULL = template.imageTextOverlay.fields default'unu kullan; []/listte field yoksa
     # overlay basılmaz; dolu listte yalnızca listte geçen field'lar basılır.
     image_text_fields: list[str] | None = None
+    # Phase 9 Sprint 6 — Ürün/Hizmet image-edit routing.
+    # Set ise ve ürünün image_url'i varsa fal.ai nano-banana-2/edit tetiklenir.
+    # Ürünün image_url'i yoksa FLUX text-to-image fallback (S4 kararı).
+    product_id: UUID | None = None
 
 
 class FacelessVideoGenerate(BaseModel):

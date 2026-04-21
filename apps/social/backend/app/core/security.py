@@ -166,6 +166,33 @@ async def assert_brand_owned(db, user: dict, brand_id) -> None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Marka bulunamadı")
 
 
+async def assert_product_owned(db, user: dict, product_id) -> dict:
+    """Raise 404 if the given product doesn't belong to the current user's workspaces.
+
+    Ownership zinciri: accounts.id == JWT.sub → workspace_members.account_id →
+    workspaces → brands → brand_products.
+    Returns the product row as dict (so callers don't need to re-fetch).
+    """
+    account_id = user.get("sub")
+    if not account_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geçersiz oturum")
+    row = await db.fetchrow(
+        """
+        SELECT p.*
+        FROM social.brand_products p
+        JOIN social.brands b ON b.id = p.brand_id
+        JOIN social.workspace_members m ON m.workspace_id = b.workspace_id
+        WHERE p.id = $1 AND m.account_id = $2
+        LIMIT 1
+        """,
+        product_id,
+        account_id,
+    )
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ürün bulunamadı")
+    return dict(row)
+
+
 async def assert_post_owned(db, user: dict, post_id) -> dict:
     """Raise 404 if the given post doesn't belong to the current user's workspaces.
 

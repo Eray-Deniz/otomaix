@@ -24,7 +24,7 @@ from app.models.schemas import (
 )
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context
-from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image
+from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
 from app.services.faceless_video import (
     SUPPORTED_FACELESS_RATIOS,
     TURKISH_VOICES,
@@ -279,6 +279,19 @@ async def generate_post(
 
     brand_kit = _parse_brand_kit(brand["brand_kit"])
 
+    # Phase 9 Sprint 6 — Ürün/Hizmet image-edit routing
+    # product_id set ise ürünü markaya ait mi kontrol et; image_url varsa image-edit,
+    # yoksa FLUX text-to-image fallback (S4 kararı).
+    product_row = None
+    if payload.product_id:
+        product_row = await db.fetchrow(
+            "SELECT id, image_url FROM social.brand_products WHERE id = $1 AND brand_id = $2",
+            payload.product_id,
+            payload.brand_id,
+        )
+        if not product_row:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+
     # Build prompt based on content type
     if payload.content_type == "special_day":
         enriched_prompt = _build_special_day_prompt(payload, brand, brand_kit)
@@ -327,9 +340,10 @@ async def generate_post(
             (brand_id, content_type, content_category, prompt, user_text,
              document_ids, aspect_ratio, platforms, status,
              template_id, template_fields, platform_captions,
-             caption, hashtags, use_logo_overlay, image_text_fields)
+             caption, hashtags, use_logo_overlay, image_text_fields,
+             product_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
-                $9, $10, $11, $12, $13, $14, $15)
+                $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
         """,
         payload.brand_id,
@@ -347,11 +361,18 @@ async def generate_post(
         hashtags_value,
         payload.use_logo_overlay,
         payload.image_text_fields,
+        payload.product_id,
     )
     post = dict(row)
 
     try:
-        fal_job_id = await generate_image(enriched_prompt, payload.aspect_ratio, brand_kit)
+        # Phase 9 Sprint 6 — ürün görseli varsa image-edit, yoksa FLUX fallback (S4 kararı)
+        if product_row and product_row["image_url"]:
+            fal_job_id = await generate_image_edit(
+                enriched_prompt, [product_row["image_url"]], brand_kit
+            )
+        else:
+            fal_job_id = await generate_image(enriched_prompt, payload.aspect_ratio, brand_kit)
         await db.execute(
             "UPDATE social.posts SET fal_job_id = $2 WHERE id = $1",
             post["id"],
