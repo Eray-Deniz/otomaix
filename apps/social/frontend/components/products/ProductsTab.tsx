@@ -51,7 +51,7 @@ export function ProductsTab({ brandId }: { brandId: string }) {
     if (activeFilter !== 'all') filters.active = activeFilter === 'active'
     const res = await fetchProducts(brandId, filters)
     if (res.success && res.data) {
-      setProducts(res.data.products)
+      setProducts(res.data.products ?? [])
     } else {
       toast.error(res.error || 'Ürünler yüklenemedi')
     }
@@ -61,8 +61,9 @@ export function ProductsTab({ brandId }: { brandId: string }) {
   const loadQuota = useCallback(async () => {
     const res = await api.get<BillingCurrent>('/billing/current')
     if (res.success && res.data) {
-      const used = res.data.usage.products_per_brand?.[brandId] ?? 0
-      setQuota({ used, max: res.data.limits.max_products_per_brand })
+      const used = res.data.usage?.products_per_brand?.[brandId] ?? 0
+      const max = res.data.limits?.max_products_per_brand ?? null
+      setQuota({ used, max })
     }
   }, [brandId])
 
@@ -288,16 +289,16 @@ function ProductCard({
             <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{product.description}</p>
           )}
         </div>
-        {product.tags.length > 0 && (
+        {(product.tags ?? []).length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {product.tags.slice(0, 3).map((tag) => (
+            {(product.tags ?? []).slice(0, 3).map((tag) => (
               <Badge key={tag} variant="secondary" className="text-[10px]">
                 {tag}
               </Badge>
             ))}
-            {product.tags.length > 3 && (
+            {(product.tags ?? []).length > 3 && (
               <span className="text-[10px] text-gray-400 self-center">
-                +{product.tags.length - 3}
+                +{(product.tags ?? []).length - 3}
               </span>
             )}
           </div>

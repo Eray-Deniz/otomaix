@@ -61,7 +61,7 @@ export function ProductFormDialog({
       setType(product.type)
       setName(product.name)
       setDescription(product.description ?? '')
-      setTags(product.tags)
+      setTags(product.tags ?? [])
       setIsActive(product.is_active)
     } else {
       setType('product')
