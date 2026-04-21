@@ -136,12 +136,17 @@ async def _generate_embedding(text: str) -> list[float] | None:
 
 async def process_document(
     document_id: UUID,
-    brand_id: UUID,
+    brand_id: UUID | None,
     content: bytes,
     mime_type: str,
     db: asyncpg.Connection,
+    *,
+    kind: str = "brand",
 ) -> dict:
     """Extract text, classify size, store raw_text or chunks in DB.
+
+    kind="brand"  → social.brand_documents + brand_document_chunks (denorm brand_id).
+    kind="product" → social.product_documents + product_document_chunks (no brand_id col).
 
     Returns {"mode": "raw"|"chunks", "char_count": int, "chunk_count": int}
     """
@@ -151,44 +156,74 @@ async def process_document(
 
     char_count = len(text)
 
+    if kind == "product":
+        docs_table = "social.product_documents"
+        chunks_table = "social.product_document_chunks"
+    else:
+        docs_table = "social.brand_documents"
+        chunks_table = "social.brand_document_chunks"
+
     if char_count < SMALL_DOC_THRESHOLD:
-        # Small document — store full text
         await db.execute(
-            "UPDATE social.brand_documents SET raw_text = $2 WHERE id = $1",
+            f"UPDATE {docs_table} SET raw_text = $2 WHERE id = $1",
             document_id,
             text,
         )
         return {"mode": "raw", "char_count": char_count, "chunk_count": 0}
 
-    # Large document — split into chunks
     chunks = _split_into_chunks(text)
     for idx, chunk_text in enumerate(chunks):
         embedding = await _generate_embedding(chunk_text)
-        if embedding is not None:
-            await db.execute(
-                """
-                INSERT INTO social.brand_document_chunks
-                    (document_id, brand_id, chunk_index, content, embedding)
-                VALUES ($1, $2, $3, $4, $5::vector)
-                """,
-                document_id,
-                brand_id,
-                idx,
-                chunk_text,
-                str(embedding),
-            )
+        if kind == "product":
+            if embedding is not None:
+                await db.execute(
+                    f"""
+                    INSERT INTO {chunks_table}
+                        (document_id, chunk_index, content, embedding)
+                    VALUES ($1, $2, $3, $4::vector)
+                    """,
+                    document_id,
+                    idx,
+                    chunk_text,
+                    str(embedding),
+                )
+            else:
+                await db.execute(
+                    f"""
+                    INSERT INTO {chunks_table}
+                        (document_id, chunk_index, content)
+                    VALUES ($1, $2, $3)
+                    """,
+                    document_id,
+                    idx,
+                    chunk_text,
+                )
         else:
-            await db.execute(
-                """
-                INSERT INTO social.brand_document_chunks
-                    (document_id, brand_id, chunk_index, content)
-                VALUES ($1, $2, $3, $4)
-                """,
-                document_id,
-                brand_id,
-                idx,
-                chunk_text,
-            )
+            if embedding is not None:
+                await db.execute(
+                    f"""
+                    INSERT INTO {chunks_table}
+                        (document_id, brand_id, chunk_index, content, embedding)
+                    VALUES ($1, $2, $3, $4, $5::vector)
+                    """,
+                    document_id,
+                    brand_id,
+                    idx,
+                    chunk_text,
+                    str(embedding),
+                )
+            else:
+                await db.execute(
+                    f"""
+                    INSERT INTO {chunks_table}
+                        (document_id, brand_id, chunk_index, content)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    document_id,
+                    brand_id,
+                    idx,
+                    chunk_text,
+                )
 
     return {"mode": "chunks", "char_count": char_count, "chunk_count": len(chunks)}
 
@@ -200,8 +235,13 @@ async def get_document_context(
     prompt: str,
     db: asyncpg.Connection,
     max_chars: int = 6_000,
+    *,
+    kind: str = "brand",
 ) -> str:
     """Build document context string for injection into AI prompt.
+
+    kind="brand"  → reads brand_documents + brand_document_chunks.
+    kind="product" → reads product_documents + product_document_chunks (name col is `filename`).
 
     For small docs: include raw_text directly.
     For large docs (chunks): vector search if embeddings exist, otherwise first-N chunks.
@@ -210,9 +250,18 @@ async def get_document_context(
     if not document_ids:
         return ""
 
+    if kind == "product":
+        docs_table = "social.product_documents"
+        chunks_table = "social.product_document_chunks"
+        name_col = "filename"
+    else:
+        docs_table = "social.brand_documents"
+        chunks_table = "social.brand_document_chunks"
+        name_col = "name"
+
     placeholders = ", ".join(f"${i + 1}" for i in range(len(document_ids)))
     docs = await db.fetch(
-        f"SELECT id, name, raw_text FROM social.brand_documents WHERE id IN ({placeholders})",
+        f"SELECT id, {name_col} AS name, raw_text FROM {docs_table} WHERE id IN ({placeholders})",
         *document_ids,
     )
 
@@ -224,18 +273,16 @@ async def get_document_context(
         doc_name = doc["name"]
 
         if doc["raw_text"]:
-            # Small document — include full text (truncated if needed)
             text = doc["raw_text"][:remaining_chars]
             context_parts.append(f"[{doc_name}]\n{text}")
             remaining_chars -= len(text)
         else:
-            # Large document — try vector search first, fall back to first chunks
             query_embedding = await _generate_embedding(prompt)
             if query_embedding is not None:
                 chunks = await db.fetch(
-                    """
+                    f"""
                     SELECT content
-                    FROM social.brand_document_chunks
+                    FROM {chunks_table}
                     WHERE document_id = $1
                     ORDER BY embedding <=> $2::vector
                     LIMIT 5
@@ -245,9 +292,9 @@ async def get_document_context(
                 )
             else:
                 chunks = await db.fetch(
-                    """
+                    f"""
                     SELECT content
-                    FROM social.brand_document_chunks
+                    FROM {chunks_table}
                     WHERE document_id = $1
                     ORDER BY chunk_index
                     LIMIT 5
@@ -264,3 +311,27 @@ async def get_document_context(
             break
 
     return "\n\n---\n\n".join(context_parts)
+
+
+async def get_product_document_context(
+    product_ids: list[UUID],
+    prompt: str,
+    db: asyncpg.Connection,
+    max_chars: int = 6_000,
+) -> str:
+    """Ürün ID listesinden RAG context derle. Her ürüne bağlı tüm dokümanlar çekilir.
+
+    Sprint 7 caption-gen ürün doküman bağlamı için.
+    """
+    if not product_ids:
+        return ""
+
+    placeholders = ", ".join(f"${i + 1}" for i in range(len(product_ids)))
+    rows = await db.fetch(
+        f"SELECT id FROM social.product_documents WHERE product_id IN ({placeholders})",
+        *product_ids,
+    )
+    doc_ids = [r["id"] for r in rows]
+    if not doc_ids:
+        return ""
+    return await get_document_context(doc_ids, prompt, db, max_chars=max_chars, kind="product")
