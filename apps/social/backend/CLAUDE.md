@@ -2,13 +2,59 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 ✅ (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
+> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 ✅ (product docs CRUD) · Sprint 5 ✅ (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-21 — Phase 9 Sprint 5: Image-edit adapter altyapısı ✅
+
+**Kapsam:** Phase 7 Sprint 7 media adapter registry'sine 5. modalite olarak `image_edit` eklendi. Ürün görseli + text prompt → düzenlenmiş görsel üretimi için fal.ai `nano-banana-2/edit` model adapter'ı. Caller wiring yok — Sprint 6 (`urun-hizmet-sablon` template'i) ve Sprint 9 (`/icerik-olustur` ürün mod wizard) bu altyapıyı tüketir.
+
+**Değişen dosyalar (4):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/core/config.py` | `IMAGE_EDIT_MODEL: str = "nano-banana-2-edit"` (default) |
+| `app/services/media_adapters.py` | `ImageEditModelAdapter` Protocol + `NanoBananaV2EditAdapter` class + `IMAGE_EDIT_ADAPTERS` registry + `get_active_image_edit_adapter()` resolver |
+| `app/services/fal_ai.py` | `_image_edit_adapter` modül-seviyesi resolve + `IMAGE_EDIT_MODEL` public export + `generate_image_edit(prompt, image_urls, brand_kit)` async wrapper |
+| `app/routers/media_models.py` | `/media-models/active` response'a `image_edit: {key, model_id, supported_ratios: null}` eklendi |
+
+**Adapter imzası:**
+```python
+class ImageEditModelAdapter(Protocol):
+    model_id: str
+    def build_args(self, prompt: str, image_urls: list[str]) -> dict[str, Any]: ...
+
+class NanoBananaV2EditAdapter:
+    model_id = "fal-ai/nano-banana-2/edit"
+    def build_args(self, prompt, image_urls):
+        if not image_urls:
+            raise ValueError("image_urls boş olamaz — en az bir referans görsel gerekli")
+        return {"prompt": prompt, "image_urls": image_urls}
+```
+
+**Kararlar (mimari netleştirme):**
+- **i2v pattern'i (supported_ratios=None):** fal.ai `nano-banana-2/edit` snippet'inde `aspect_ratio` parametresi yok — çıktı input image'den türer (image-to-video ile aynı). Frontend aspect selector bu modalite için gizli kalacak (Sprint 9).
+- **Çoklu referans görsel (`image_urls: list[str]`):** fal.ai çoklu input kabul ediyor. Adapter seviyesinde boş liste guard'ı dışında kısıt yok; caller (Sprint 6/9) ürün görseli + opsiyonel ek referans kombinasyonunu kendi kararına göre yönlendirir.
+- **Brand prompt enrichment:** Mevcut `_build_image_prompt(prompt, brand_kit)` helper'ı (colors + style eklemesi) image_edit'te de kullanılır. Edit modelinde image_urls input dominant olduğu için marka renkleri prompt'ta pek etki etmeyebilir; tutarlılık adına paylaşım tercih edildi, sonradan Sprint 7/9 canlı testinde gözlem yapılabilir.
+- **Caller wiring yok:** Adapter altyapı-only — `generate_image_edit()` wrapper'ı mevcut çağırıcısı olmayan scaffold (i2v `generate_video_from_image` aynı pattern'de). Sprint 6 (`urun-hizmet-sablon` Template spec'i) ve Sprint 9 (wizard) entegre edecek.
+
+**Etki analizi:**
+- Risk: sıfır — tamamen additive, mevcut 4 modalite adapter'ı dokunulmadı
+- Backward compat: N/A (yeni modalite); `GET /media-models/active` response'a key eklenmesi frontend client'lar için opsiyonel (eski client key yoksa yokmuş gibi davranır)
+- Migration gerekmez
+- Env değiştiğinde (IMAGE_EDIT_MODEL) Coolify redeploy tetikler — adapter resolve modül import'unda yapılır (fail-fast)
+
+**Doğrulama:**
+- ✅ AST parse: 4 dosya temiz
+- ✅ Canlı: `GET https://api.otomaix.com/media-models/active` → `data.image_edit = {key: "nano-banana-2-edit", model_id: "fal-ai/nano-banana-2/edit", supported_ratios: null}` (commit `08a43b0` deploy sonrası)
+- ⏳ Gerçek edit çağrısı Sprint 6 (template `imageEditAdapter` alanı) + Sprint 9 (`/icerik-olustur` ürün mod) devreye girdiğinde test edilecek
+
+**Sonraki:** Sprint 6 — Yeni template `urun-hizmet-sablon` + `_validate_templates()` assertion 23 → 24. Ürün kütüphanesi + image-edit pipeline'ını birleştiren ilk şablon; form fields (ürün seçimi, ana mesaj, stil yönergesi) + `imageEditAdapter: true` flag'i (yoksa default akış) + `defaults` (suggested CTA/hashtag) ile.
 
 ## 2026-04-21 — Phase 9 Sprint 4: Product Documents CRUD + RAG pipeline ✅
 
