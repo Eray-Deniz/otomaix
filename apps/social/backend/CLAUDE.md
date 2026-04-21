@@ -1,9 +1,62 @@
 # Social Backend — CLAUDE.md
 
+> **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
+> `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
+> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 (quota) · Sprint 3 (products CRUD) · Sprint 4 (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
+> Otomatik yayın entegrasyonu Phase 10'a ertelendi.
+
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-21 — Phase 9 Sprint 1: brand_products DB migration (026) ✅
+
+**Kapsam:** Ürün/hizmet kütüphanesi için veri tabanı iskeleti. Tamamen additive — mevcut tablolar değişmedi. Prod PostgreSQL'e uygulandı.
+
+**Migration 026** (`shared/db/migrations/026_brand_products.sql`, prod'a uygulandı ✅):
+
+**`social.brand_products`** — marka ürün/hizmet kütüphanesi:
+- `id UUID PK`, `brand_id UUID FK → brands(id) ON DELETE CASCADE`
+- `type TEXT CHECK IN ('product', 'service')` — ürün ve hizmet tek tabloda
+- `name TEXT`, `description TEXT`, `tags TEXT[]`
+- `image_url TEXT` (nullable — hizmet için opsiyonel), `image_key TEXT` (R2 object key)
+- `is_active BOOLEAN DEFAULT true` — soft disable; quota sayımı sadece aktif ürünleri dahil eder
+- Index: `idx_brand_products_brand_active` partial (WHERE is_active=true) — quota sorgusu için; `idx_brand_products_brand` genel listeleme için
+- Trigger: `brand_products_updated_at` → `social.set_updated_at()` (migration 023 ile eklenen mevcut fonksiyon)
+
+**`social.product_documents`** — ürüne bağlı dokümanlar (cascade delete):
+- `id UUID PK`, `product_id UUID FK → brand_products(id) ON DELETE CASCADE`
+- `filename`, `file_url`, `file_key`, `file_type`, `file_size BIGINT`, `raw_text TEXT` — mevcut `brand_documents` deseni ile aynı
+- Tekil sahiplik (Seçenek A): bir doküman yalnızca bir ürüne bağlı; paylaşım için kullanıcı aynı dosyayı başka ürüne ayrıca yükler
+- Index: `idx_product_documents_product(product_id, created_at DESC)`
+
+**`social.product_document_chunks`** — RAG embedding chunks:
+- `id UUID PK`, `document_id UUID FK → product_documents(id) ON DELETE CASCADE`
+- `chunk_index INT`, `content TEXT`, `embedding vector(1536)` — `brand_document_chunks` ile tutarlı (OpenAI text-embedding-3-small)
+- Index: `idx_product_chunks_document` btree + `idx_product_chunks_embedding` ivfflat (vector_cosine_ops, lists=100)
+- ⚠️ ivfflat `lists=100` parametresi az data ile "low recall" uyarısı verir — üretim verisi arttıkça (>1000 satır) doğal şekilde iyileşir
+
+**Cascade zinciri:** `brand sil → products sil → documents sil (R2 cleanup CRUD endpoint'inde) → chunks sil`
+
+**Kararlar (mimari netleştirme — 2026-04-21 tartışma):**
+- Ürün/hizmet tek tabloda `type` discriminator ile — ayrı tablo karmaşıklığı yerine kolon farkı
+- Doküman sahipliği tekil (Seçenek A) — many-to-many yerine duplicate upload — cascade güvenli
+- `is_active` quota'ya dahil değil — pasif ürünler depo gibi saklanabilir
+- Plan quota (Sprint 2'de uygulanacak): Starter/Pro/Business = 10 ürün/marka, Agency = ∞
+- Autoposting rotation + Telegram/mail onay akışları Phase 10'a ertelendi
+
+**Etki analizi:**
+- Risk: sıfır — additive, kullanıcı kodu henüz yok
+- Rollback: `DROP TABLE ... CASCADE` zinciri güvenli (pilot veri yok)
+- Mevcut `brand_documents` / `brand_document_chunks` akışları değişmedi
+
+**Doğrulama:**
+- ✅ `\d social.brand_products` → 11 kolon, 3 index (pk + 2), CHECK constraint, FK cascade, trigger
+- ✅ `\d social.product_documents` → 9 kolon, 2 index, FK cascade
+- ✅ `\d social.product_document_chunks` → 6 kolon, 3 index (btree + ivfflat + pk), FK cascade
+
+**Sonraki:** Sprint 2 — `billing.py` `PLANS` listesine `max_products_per_brand` eklenmesi + `check_product_quota()` helper'ı + `GET /billing/current` ürün kullanım sayacı.
 
 ## 2026-04-20 — caption_generator json-repair + first_comment garantisi ✅
 
