@@ -114,6 +114,39 @@ class SectorReportOut(BaseModel):
     generated_at: datetime
 
 
+# ─── Phase 9 — Ürün/Hizmet Kütüphanesi ──────────────────────────────────────
+
+class ProductCreate(BaseModel):
+    brand_id: UUID
+    type: str  # "product" | "service"
+    name: str
+    description: str | None = None
+    tags: list[str] = []
+    is_active: bool = True
+
+
+class ProductUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    tags: list[str] | None = None
+    is_active: bool | None = None
+
+
+class ProductOut(BaseModel):
+    id: UUID
+    brand_id: UUID
+    type: str
+    name: str
+    description: str | None
+    tags: list[str]
+    image_url: str | None
+    image_key: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    document_count: int = 0
+
+
 # ─── Post ───────────────────────────────────────────────────────────────────
 
 class PostGenerate(BaseModel):

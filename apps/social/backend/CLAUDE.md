@@ -2,13 +2,60 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 (products CRUD) · Sprint 4 (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
+> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-21 — Phase 9 Sprint 3: Products CRUD API (products.py) ✅
+
+**Kapsam:** Marka ürün/hizmet kütüphanesi için CRUD endpoint'leri. `app/routers/products.py` (5 endpoint) + `schemas.py`'ye 3 Pydantic model + `main.py` router register. Sprint 2'de eklenen `check_product_quota` helper'ı ve migration 026 tabloları (`brand_products`, `product_documents`, `product_document_chunks`) kullanılıyor.
+
+**Yeni dosya:** `app/routers/products.py` (5 endpoint):
+
+| Method | Path | Guard | Rate limit |
+|--------|------|-------|-----------|
+| POST | `/products` | `assert_brand_owned` + `check_product_quota` | 30/saat |
+| POST | `/products/{id}/image` | `_assert_product_owned` (inline JOIN) | — |
+| GET | `/products?brand_id=&type=&active=` | `assert_brand_owned` | — |
+| GET | `/products/{id}` | `_assert_product_owned` | — |
+| PATCH | `/products/{id}` | `_assert_product_owned` | — |
+| DELETE | `/products/{id}` | `_assert_product_owned` | — |
+
+**Şemalar** (`app/models/schemas.py`):
+- `ProductCreate` — `brand_id`, `type` ('product'|'service'), `name`, `description?`, `tags?=[]`, `is_active?=true`
+- `ProductUpdate` — `name?`, `description?`, `tags?`, `is_active?` (**type immutable** — dönüşüm için yeni kayıt açılmalı)
+- `ProductOut` — tüm kolonlar + `document_count` (LEFT JOIN subquery count)
+
+**Kararlar (mimari netleştirme):**
+- **Resim upload ayrı endpoint** (`POST /products/{id}/image`): create sırasında opsiyonel, multipart + JSON karışmasın. Yeni görsel yüklendiğinde eski R2 objesi silinir (best effort).
+- **Hard delete**: DB cascade (products → documents → chunks) + R2 manuel cleanup (ürün görseli + tüm doküman dosyaları). Silme sırasında R2 hataları kaydı geri getirmez (log'a düşer, best effort).
+- **Inline JOIN sahiplik** (`_assert_product_owned`): `brand_products ⨝ brands ⨝ workspace_members` → JWT.sub ile eşleşmezse 404 (varlık sızması önlenir — `assert_post_owned` deseni).
+- **Rate limit yalnızca create'te**: PATCH/DELETE/GET/image upload sınırsız. Admin workload (toplu ürün güncellemesi) engellenmesin.
+- **Cache yok**: Ürün listesi küçük, sık değişir. Cache invalidation karmaşıklığı değmez. `GET /billing/current` `products_per_brand` dict döndüğü için frontend ürün ekle/sil sonrası re-fetch eder (Sprint 8).
+
+**R2 dosya yapısı:** `brands/{brand_id}/products/{product_id}.{ext}` (ext: jpg/png/webp). İzinli MIME: `image/jpeg|png|webp`, max 10MB.
+
+**Etki analizi:**
+- Risk: düşük — tamamen additive, mevcut endpoint/şema dokunulmadı
+- Backward compat: N/A (yeni özellik)
+- Migration gerekmez (026'da şema mevcut)
+- `check_product_quota` HTTP 402 `plan_limit_reached` → frontend paywall modal'ı zaten bu detail yapısını bekliyor (B-1 pattern'i)
+
+**Doğrulama:**
+- ✅ AST parse: `products.py`, `schemas.py`, `main.py` sözdizimi temiz
+- ⏳ Canlı smoke test (deploy sonrası):
+  - `POST /products {brand_id, type:'product', name:'Test'}` → 201 + ürün dict
+  - 11. ürün oluşturma denemesi → 402 `plan_limit_reached` (Pro plan 10 limit)
+  - `POST /products/{id}/image` + JPEG → `image_url` dolu dönmeli
+  - `GET /products?brand_id=...&type=service&active=true` → filtreli liste
+  - `PATCH /products/{id} {name:'Updated'}` → güncellenmiş kayıt + `updated_at` trigger ile yeni zaman
+  - `DELETE /products/{id}` → `{deleted:true, id}` + `GET` sonrasında 404
+
+**Sonraki:** Sprint 4 — Product Documents CRUD (`app/routers/product_documents.py`): POST/GET/DELETE dokümanlar + raw_text + chunk/embed pipeline (mevcut `brand_documents` deseni, cascade delete otomatik).
 
 ## 2026-04-21 — Phase 9 Sprint 2: Plan quota entegrasyonu (billing.py) ✅
 
