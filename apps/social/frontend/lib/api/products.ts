@@ -11,6 +11,7 @@
 //   GET    /product-documents/{id}            (detail)
 //   DELETE /product-documents/{id}            (cascade chunks + R2 cleanup)
 
+import * as Sentry from '@sentry/nextjs'
 import { api, type ApiResponse } from '@/lib/api'
 import type {
   Product,
@@ -37,7 +38,14 @@ export async function fetchProducts(
   const query = new URLSearchParams({ brand_id: brandId })
   if (filters?.type) query.set('type', filters.type)
   if (filters?.active !== undefined) query.set('active', String(filters.active))
-  return api.get<ProductsListResponse>(`/products?${query.toString()}`)
+  const res = await api.get<ProductsListResponse>(`/products?${query.toString()}`)
+  if (res.success && !Array.isArray((res.data as ProductsListResponse)?.products)) {
+    Sentry.captureMessage('products list response shape mismatch', {
+      level: 'error',
+      extra: { endpoint: '/products', data: res.data },
+    })
+  }
+  return res
 }
 
 export async function fetchProduct(productId: string): Promise<ApiResponse<Product>> {
@@ -76,9 +84,16 @@ export async function fetchProductDocuments(
   productId: string
 ): Promise<ApiResponse<ProductDocumentsListResponse>> {
   const query = new URLSearchParams({ product_id: productId })
-  return api.get<ProductDocumentsListResponse>(
+  const res = await api.get<ProductDocumentsListResponse>(
     `/product-documents?${query.toString()}`
   )
+  if (res.success && !Array.isArray((res.data as ProductDocumentsListResponse)?.documents)) {
+    Sentry.captureMessage('product-documents list response shape mismatch', {
+      level: 'error',
+      extra: { endpoint: '/product-documents', data: res.data },
+    })
+  }
+  return res
 }
 
 export async function uploadProductDocument(

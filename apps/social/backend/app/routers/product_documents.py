@@ -160,7 +160,8 @@ async def list_product_documents(
         """,
         product_id,
     )
-    return OkResponse(data=[dict(r) for r in rows])
+    documents = [dict(r) for r in rows]
+    return OkResponse(data={"documents": documents, "count": len(documents)})
 
 
 @router.get("/{doc_id}", response_model=OkResponse)
