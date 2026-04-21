@@ -37,11 +37,13 @@ PLANS = [
         "max_brands": 1,
         "max_posts_per_month": 50,
         "max_storage_gb": 1,
+        "max_products_per_brand": 10,
         "can_use_video": False,
         "can_use_avatar": False,
         "features": [
             "1 marka",
             "Aylık 50 içerik",
+            "10 ürün/hizmet",
             "2 platform",
             "Temel şablonlar",
         ],
@@ -53,11 +55,13 @@ PLANS = [
         "max_brands": 3,
         "max_posts_per_month": 200,
         "max_storage_gb": 5,
+        "max_products_per_brand": 10,
         "can_use_video": True,
         "can_use_avatar": False,
         "features": [
             "3 marka",
             "Aylık 200 içerik",
+            "Marka başına 10 ürün/hizmet",
             "5 platform",
             "Faceless Video",
             "Rakip analizi",
@@ -71,11 +75,13 @@ PLANS = [
         "max_brands": 10,
         "max_posts_per_month": None,
         "max_storage_gb": 20,
+        "max_products_per_brand": 10,
         "can_use_video": True,
         "can_use_avatar": True,
         "features": [
             "10 marka",
             "Sınırsız içerik",
+            "Marka başına 10 ürün/hizmet",
             "10 platform",
             "Faceless Video + AI Avatar",
             "Öncelikli destek",
@@ -88,11 +94,13 @@ PLANS = [
         "max_brands": None,
         "max_posts_per_month": None,
         "max_storage_gb": 50,
+        "max_products_per_brand": None,
         "can_use_video": True,
         "can_use_avatar": True,
         "features": [
             "Sınırsız marka",
             "Sınırsız içerik",
+            "Sınırsız ürün/hizmet",
             "Sınırsız platform",
             "White-label",
             "Dedicated destek",
@@ -203,6 +211,36 @@ async def _get_brand_count(account_id: str, db: asyncpg.Connection) -> int:
     return int(row["cnt"]) if row else 0
 
 
+async def _get_products_per_brand(
+    account_id: str, db: asyncpg.Connection
+) -> dict[str, int]:
+    """Hesaba bağlı tüm aktif markalar için aktif ürün sayısı.
+
+    Returns: {"<brand_id>": count, ...} — pasif ürünler sayılmaz.
+    """
+    rows = await db.fetch(
+        """
+        SELECT b.id AS brand_id,
+               COUNT(p.id) FILTER (WHERE p.is_active = true) AS cnt
+        FROM social.brands b
+        JOIN social.workspaces w ON w.id = b.workspace_id
+        LEFT JOIN social.brand_products p ON p.brand_id = b.id
+        WHERE w.account_id = $1 AND b.is_active = true
+        GROUP BY b.id
+        """,
+        account_id,
+    )
+    return {str(r["brand_id"]): int(r["cnt"]) for r in rows}
+
+
+def _get_plan_max_products(plan_id: str) -> int | None:
+    """PLANS listesinden max_products_per_brand değerini oku."""
+    for p in PLANS:
+        if p["id"] == plan_id:
+            return p.get("max_products_per_brand")
+    return 10  # fallback: starter
+
+
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("/plans", response_model=OkResponse)
@@ -222,9 +260,11 @@ async def get_current_subscription(
     plan_id = account.get("plan_id") or "starter"
 
     subscription = await _get_subscription(account_id, db)
-    limits = await _get_plan_limits(plan_id, db)
+    limits = dict(await _get_plan_limits(plan_id, db))
     post_count = await _get_this_month_post_count(account_id, db)
     brand_count = await _get_brand_count(account_id, db)
+    products_per_brand = await _get_products_per_brand(account_id, db)
+    limits["max_products_per_brand"] = _get_plan_max_products(plan_id)
 
     return OkResponse(
         data={
@@ -234,6 +274,7 @@ async def get_current_subscription(
             "usage": {
                 "posts_this_month": post_count,
                 "brands": brand_count,
+                "products_per_brand": products_per_brand,
             },
             "upgrade_url": f"{settings.APP_URL}/fiyatlandirma",
         }
@@ -595,6 +636,49 @@ async def check_plan_limit(
                 "error": "plan_limit_reached",
                 "message": "AI Avatar özelliği Business planında mevcut.",
                 "upgrade_url": upgrade_url,
+                "current_plan": plan_id,
+            },
+        )
+
+
+# ─── Phase 9 Product Quota (marka başına ürün/hizmet limiti) ─────────────────
+
+async def check_product_quota(
+    account_id: str,
+    brand_id: str,
+    db: asyncpg.Connection,
+) -> None:
+    """Marka başına aktif ürün/hizmet limiti kontrolü.
+
+    Plan başına max_products_per_brand değeri aşıldıysa HTTP 402 fırlatır.
+    Agency planı için max None → sınırsız (kontrol atlanır).
+    """
+    account = await db.fetchrow(
+        "SELECT plan_id FROM social.accounts WHERE id = $1", account_id
+    )
+    plan_id = (account["plan_id"] if account else "starter") or "starter"
+    max_products = _get_plan_max_products(plan_id)
+
+    if max_products is None:
+        return  # Agency: sınırsız
+
+    count_row = await db.fetchrow(
+        """
+        SELECT COUNT(*) AS cnt
+        FROM social.brand_products
+        WHERE brand_id = $1::uuid AND is_active = true
+        """,
+        brand_id,
+    )
+    used = int(count_row["cnt"]) if count_row else 0
+
+    if used >= max_products:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "plan_limit_reached",
+                "message": f"Bu marka için {max_products} ürün/hizmet limitine ulaştınız.",
+                "upgrade_url": f"{settings.APP_URL}/fiyatlandirma",
                 "current_plan": plan_id,
             },
         )

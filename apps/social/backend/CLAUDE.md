@@ -2,13 +2,52 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 (quota) · Sprint 3 (products CRUD) · Sprint 4 (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
+> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 (products CRUD) · Sprint 4 (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-21 — Phase 9 Sprint 2: Plan quota entegrasyonu (billing.py) ✅
+
+**Kapsam:** Marka başına ürün/hizmet kotası PLANS listesine işlendi, yeni `check_product_quota()` helper'ı eklendi, `GET /billing/current` response'una marka başına ürün sayacı ve maksimum limit eklendi. Tüm değişiklikler additive — mevcut kota akışları (`check_plan_limit`, `check_trend_quota`) değişmedi.
+
+**Değişen dosya (tek):** `app/routers/billing.py`
+
+**1. PLANS listesine `max_products_per_brand` alanı:**
+| Plan | max_products_per_brand | features satırı |
+|------|------------------------|-----------------|
+| starter  | 10   | "10 ürün/hizmet" |
+| pro      | 10   | "Marka başına 10 ürün/hizmet" |
+| business | 10   | "Marka başına 10 ürün/hizmet" |
+| agency   | None | "Sınırsız ürün/hizmet" |
+
+Kullanıcı kararı: her plan marka başına 10 ürün (Starter 1 marka × 10 = 10, Pro 3 × 10 = 30, Business 10 × 10 = 100, Agency sınırsız). `is_active=false` ürünler sayımdan hariç.
+
+**2. Yeni helper fonksiyonlar:**
+- `_get_products_per_brand(account_id, db) -> dict[str, int]` — hesaba bağlı tüm aktif markalar için aktif ürün sayısı. Tek query (`brands ⨝ workspaces` + `LEFT JOIN brand_products` + `COUNT FILTER (WHERE is_active=true)`). Response: `{"<brand_id>": count, ...}`.
+- `_get_plan_max_products(plan_id) -> int | None` — PLANS listesinden max'ı oku; bilinmeyen plan için fallback 10 (starter).
+- `check_product_quota(account_id, brand_id, db) -> None` — HTTP 402 `plan_limit_reached` fırlatır; Agency (None) için kontrol atlanır. `check_plan_limit` deseninde, Sprint 3 products router'ında `POST /products` için kullanılacak.
+
+**3. `GET /billing/current` response genişletildi:**
+- `limits["max_products_per_brand"]` — plan limitinin frontend'de gösterimi için
+- `usage["products_per_brand"]` — marka bazında sayaç dict (frontend marka ayarlarında "8/10 ürün kullanıldı" göstergesi için)
+
+**Etki analizi:**
+- Risk: düşük — PLANS değişikliği yalnızca field eklemesi (mevcut `id/name/price/...` okuyan kod etkilenmez)
+- Backward compat: `max_products_per_brand` bilinmeyen plan için None değil 10 (fail-safe — sınırsız kaza önlemi)
+- `plan_limits` DB tablosu yerine PLANS konstantı kullanıldı (TREND_QUOTAS pattern'i ile tutarlı, ayrı migration gereksiz)
+- `GET /billing/current` response'a eklenen iki alan opsiyonel — eski frontend client'ları okumasa bile kırılmaz
+
+**Doğrulama:**
+- ✅ AST parse: `billing.py` sözdizimi temiz
+- ⏳ Canlı smoke test (deploy sonrası):
+  - `curl https://api.otomaix.com/billing/current` (JWT ile) → response'ta `limits.max_products_per_brand: 10` ve `usage.products_per_brand: {}` (henüz ürün yok) görünmeli
+  - `GET /billing/plans` → tüm planlarda `max_products_per_brand` alanı görünmeli
+
+**Sonraki:** Sprint 3 — Products CRUD API (`app/routers/products.py`): `POST /products` (30/saat rate limit + `assert_brand_owned` + `check_product_quota`), `GET /products?brand_id=`, `PATCH /products/{id}`, `DELETE /products/{id}`.
 
 ## 2026-04-21 — Phase 9 Sprint 1: brand_products DB migration (026) ✅
 
