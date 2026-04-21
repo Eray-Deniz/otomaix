@@ -24,6 +24,7 @@ import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { Loader2, X, Upload, Check, FileText, Trash2, User, Video } from 'lucide-react'
 import { UpgradeModal } from '@/components/billing/UpgradeModal'
+import { ProductsTab } from '@/components/products/ProductsTab'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -797,6 +798,7 @@ function MarkaAyarlariContent() {
           <TabsTrigger value="gorseller">Görseller</TabsTrigger>
           <TabsTrigger value="sosyal">Sosyal Hesaplar</TabsTrigger>
           <TabsTrigger value="dokumanlar">Dokümanlar</TabsTrigger>
+          <TabsTrigger value="urun-hizmet">Ürün/Hizmet</TabsTrigger>
           <TabsTrigger value="avatar">AI Avatar</TabsTrigger>
         </TabsList>
 
@@ -1186,7 +1188,18 @@ function MarkaAyarlariContent() {
           )}
         </TabsContent>
 
-        {/* ── Tab 6: AI Avatar ──────────────────────────────────────────────── */}
+        {/* ── Tab 6: Ürün/Hizmet Kütüphanesi ───────────────────────────────── */}
+        <TabsContent value="urun-hizmet" className="space-y-5">
+          <div>
+            <p className="text-sm text-gray-500">
+              Bu markanın ürün/hizmetlerini burada yönetin. İçerik oluştururken seçilen ürün
+              görseli ve dokümanları AI&apos;a referans olarak iletilir.
+            </p>
+          </div>
+          <ProductsTab brandId={brand.id} />
+        </TabsContent>
+
+        {/* ── Tab 7: AI Avatar ──────────────────────────────────────────────── */}
         <TabsContent value="avatar" className="space-y-6">
           <p className="text-sm text-gray-500">
             AI avatar ile video içeriklerinizde gerçekçi bir konuşmacı kullanın.

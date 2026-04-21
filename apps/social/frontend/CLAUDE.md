@@ -1,8 +1,53 @@
 # Social Frontend — CLAUDE.md
 
+> **Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başlangıç 2026-04-20).**
+> Markaların ürün/hizmet envanterini UI'dan yönetmek + içerik üretiminde referans olarak kullanmak için. Backend Sprint 1-7 canlıda (`dfe7f0a`).
+> **İlerleme:** Sprint 8 (marka-ayarları Ürün/Hizmet Kütüphanesi UI) ✅
+
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-21 — Phase 9 Sprint 8: Marka Ayarları → Ürün/Hizmet Kütüphanesi UI ✅
+
+**Kapsam:** `/marka-ayarlari`'na 7. sekme "Ürün/Hizmet" eklendi. Phase 9 backend CRUD endpoint'leri (`/products`, `/product-documents`) UI üzerinden expose edildi. Kart grid, create/edit dialog, per-product dokümanlar dialog, plan kota rozeti + 402 paywall akışı mevcut pattern'lerle uyumlu.
+
+**Yeni dosyalar:**
+- `lib/products.types.ts` — `Product`, `ProductDocument`, `ProductCreatePayload`, `ProductUpdatePayload`, `ProductType` tipleri (backend şemasıyla birebir)
+- `lib/api/products.ts` — 9 API helper'ı: `fetchProducts`, `fetchProduct`, `createProduct`, `updateProduct`, `deleteProduct`, `uploadProductImage`, `fetchProductDocuments`, `uploadProductDocument`, `deleteProductDocument`. Hepsi `ApiResponse<T>` döndürür (402 `plan_limit` + 429 `retry_after` handling için).
+- `components/products/ProductsTab.tsx` — ana tab: 2 chip grubu (tür + aktif filtresi), kota rozeti ("8/10 ürün" — `GET /billing/current` → `usage.products_per_brand[brandId]` + `limits.max_products_per_brand`), "+ Yeni Ekle" butonu, 3-kolon kart grid. Her kart: görsel (yoksa Package/Wrench ikonu), ad, açıklama (2 satır), etiketler (ilk 3), doküman sayısı butonu (Dialog açar), Düzenle, Sil.
+- `components/products/ProductFormDialog.tsx` — create + edit ortak. Tür seçici (Package/Wrench iki buton, edit'te disabled), ad, açıklama, TagInput (`/[,;\n\t]+/` paste split + case-insensitive dedup), görsel yükleme (10MB / JPEG/PNG/WebP), aktif switch'i. Create başarılıysa ayrı `POST /products/{id}/image` çağrısı.
+- `components/products/ProductDocumentsDialog.tsx` — per-product doküman listesi (RAG chunk/raw/işleniyor rozetleri), upload (50MB / PDF/DOCX/XLSX/TXT), sil (confirm).
+
+**Modifiye dosya:**
+- `app/(dashboard)/marka-ayarlari/page.tsx` — `ProductsTab` import'u + 7. `TabsTrigger value="urun-hizmet"` (Dokümanlar ile AI Avatar arası) + `TabsContent` bloğu (kısa açıklama + `<ProductsTab brandId={brand.id} />`).
+
+**UX:**
+- Kota dolduğunda "+ Yeni Ekle" tıklanınca UpgradeModal açılır (ağa istek atmadan), backend yine de 402 döndürürse aynı modal fallback olarak çıkar
+- Tür oluşturulduktan sonra değiştirilemez (backend assertion) — edit dialog'unda tür seçici disabled
+- Doküman upload optimistic (UI listesi anında güncellenir) + RAG chunk sayısı badge'le gösterilir
+- Sil işlemleri `confirm()` ile guard edilir, backend cascade R2 cleanup yapar
+
+**Tasarım kararları:**
+- 3 komponent yapıldı (tab + form dialog + docs dialog) — marka-ayarları sayfası 1337 satırlık monolit olduğu için inline yerine ayrıştırıldı
+- Quota rozeti her create sonrası + silme sonrası re-fetch (`loadQuota()`) — ürün listesi zaten küçük
+- `fetchProducts` filter state değişince re-fetch (useCallback + useEffect), pagination yok (liste küçük)
+- `ApiResponse<T>` döndürmeyi koruduk — `UpgradeModal` için `res.plan_limit` gerekli
+
+**Etki analizi:**
+- Risk: düşük — yalnızca additive (yeni sekme + yeni komponentler), mevcut tab'lar değişmedi
+- TypeScript compile temiz (`tsc --noEmit` exit 0)
+
+**Doğrulama:**
+- ✅ TypeScript compile temiz
+- ⏳ Canlı test (deploy sonrası):
+  - Marka Ayarları → "Ürün/Hizmet" sekmesi görünmeli, boş state'te "+ Yeni Ekle" butonu ve "Henüz ürün eklenmedi" mesajı
+  - Yeni ürün ekle → form doldur + görsel yükle → kart grid'e eklenmeli, kota "1/10"a çıkmalı
+  - Ürüne doküman ekle → "1 doküman" sayacı güncellenmeli
+  - Kota tavan (Starter plan, 10 ürün) aşıldığında UpgradeModal
+  - Backend 30/hr rate limit tetiklenirse toast (`res.retry_after` saniye)
+
+**Sonraki:** Sprint 9 — `/icerik-olustur` wizard'ında ürün/hizmet seçici (mevcut template form'a ürün picker entegrasyonu, image-edit pipeline tetikleme). Bu sprint büyük ve user'ın bilinçli kickoff'u gerekiyor — memory'de hatırlatıcı mevcut.
 
 ## 2026-04-20 — 3 kalan "caption" stringi "gönderi metni"ne çevrildi ✅
 
