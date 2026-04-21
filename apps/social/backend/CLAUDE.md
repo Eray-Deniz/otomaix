@@ -2,13 +2,49 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 ✅ (product docs CRUD) · Sprint 5 ✅ (image-edit adapter) · Sprint 6 ✅ (image-edit routing) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
+> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 ✅ (product docs CRUD) · Sprint 5 ✅ (image-edit adapter) · Sprint 6 ✅ (image-edit routing) · Sprint 7 ✅ (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-21 — Phase 9 Sprint 7: Caption endpoint'e ürün bağlamı ✅
+
+**Kapsam:** `POST /posts/generate-caption` artık opsiyonel `product_id` kabul eder. Set edilmişse ürünün (1) adı/açıklaması/tag'leri Tier 3 prompt'una "ÜRÜN/HİZMET BAĞLAMI" bloğu olarak enjekte edilir, (2) ürüne bağlı RAG dokümanları (Sprint 4 `get_product_document_context`) mevcut `document_ids` context'i ile birleşir, (3) ürünün görseli varsa image_prompt'a özel talimat eklenir — ürünün kendisi tarif edilmez (fal.ai image-edit modeli referans görselden alacak), sadece sahne/kompozisyon/ışık tarif edilir.
+
+**Değişen dosyalar (3):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/routers/posts.py` | `GenerateCaptionRequest.product_id: UUID \| None`; `generate_caption`: ürün fetch (brand_id guard) + 404 guard + `get_product_document_context` merge; `generate_captions(..., product=product)` |
+| `app/core/caption_generator.py` | `generate_captions` opsiyonel `product` kwarg; `build_dynamic_content`'e geçirilir |
+| `app/core/prompt_builder.py` | `build_dynamic_content` opsiyonel `product` kwarg; Tier 3'e "=== ÜRÜN/HİZMET BAĞLAMI ===" bloğu (user_prompt'tan sonra, yapısal verilerden önce); `image_url` varsa image-edit özel kuralı |
+
+**Kararlar:**
+- **Sahiplik:** `WHERE id=$1 AND brand_id=$2` (Sprint 6 pattern'i). `assert_brand_owned` zaten çalıştı — ekstra JOIN gereksiz.
+- **RAG merge:** Brand docs ve product docs ayrı `get_*_document_context` çağrılarıyla çekilip `"\n\n---\n\n"` ile birleşir. İkisi de boşsa `rag_context=None` (mevcut davranış).
+- **image_edit notu:** Yalnızca ürünün `image_url`'i varsa emit edilir. Görselsiz üründe FLUX text-to-image devreye gireceği için ürün tanımı normal tarif edilebilir — bu durumda ek kural basılmaz.
+- **Caption içine ürün adı:** Prompt talimatı "doğal dille geçir, ezberci satış dili değil" — Claude'un tonaliteye uyumunu bozmasın.
+
+**Etki analizi:**
+- Risk: düşük — `product_id` opsiyonel, NULL'da akış birebir Sprint 4 davranışı
+- Backward compat: tam (mevcut caller'lar yeni alan göndermedikçe etkilenmez)
+- 3-tier cache: Tier 1 (system) + Tier 2 (brand_context) değişmedi → ürünlü/ürünsüz çağrılar Tier 1/2 cache hit'lerini paylaşır; yalnızca Tier 3 dynamic değişir (cache'siz zaten)
+- `build_dynamic_content` tek caller (caption_generator) — imza değişikliği güvenli
+- Migration gerekmez
+
+**Doğrulama:**
+- ✅ AST parse: `posts.py`, `caption_generator.py`, `prompt_builder.py` temiz
+- ✅ `build_dynamic_content` grep: tek çağrı noktası (caption_generator:99), yeni kwarg güvenle geçildi
+- ⏳ Canlı smoke test (deploy sonrası):
+  - Görselli ürün + caption-gen → caption'da ürün adı doğal geçer, image_prompt ürünün kendisini tarif etmez (sadece sahne)
+  - Görselsiz ürün + caption-gen → caption'da ürün adı geçer, image_prompt serbest tarif
+  - `product_id=null` (mevcut akış) → regresyon yok
+  - Farklı brand'in product_id → 404 "Ürün bulunamadı"
+
+**Sonraki:** Sprint 8 — `/marka-ayarlari` frontend'e Ürün/Hizmet Kütüphanesi sekmesi (products CRUD + döküman yönetimi UI'sı).
 
 ## 2026-04-21 — Phase 9 Sprint 6: Image-edit routing (backend) ✅
 

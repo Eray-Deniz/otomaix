@@ -147,6 +147,7 @@ def build_dynamic_content(
     user_prompt: str | None,
     rag_context: str | None,
     platforms: list[str] | None,
+    product: dict | None = None,
 ) -> str:
     """Tier 3 — dynamic content (not cached)."""
     parts: list[str] = []
@@ -157,6 +158,32 @@ def build_dynamic_content(
         )
         parts.append(user_prompt)
         parts.append("=== KULLANICI İSTEĞİ SONU ===\n")
+
+    if product:
+        product_lines = ["=== ÜRÜN/HİZMET BAĞLAMI ==="]
+        if product.get("name"):
+            product_lines.append(f"Ad: {product['name']}")
+        if product.get("description"):
+            product_lines.append(f"Açıklama: {product['description']}")
+        tags = product.get("tags") or []
+        if tags:
+            product_lines.append(f"Etiketler: {', '.join(tags)}")
+        product_lines.append(
+            "\nCaption'da bu ürün/hizmetin adını ve ayırt edici özelliklerini "
+            "doğal bir dille geçir (marka sesine uygun, ezberci satış dili değil)."
+        )
+        if product.get("image_url"):
+            product_lines.append(
+                "\n⚠️ image_prompt İÇİN ÖZEL KURAL: Bu içerikte ürünün mevcut "
+                "görseli fal.ai image-edit modeline referans olarak iletilecek. "
+                "Ürünün kendisini (şekil, renk, malzeme) image_prompt'ta YENİDEN "
+                "TARİF ETME — model referans görselden alacak. Sadece sahne, "
+                "kompozisyon, arka plan, ışık, atmosfer ve stil tarif et. "
+                "Örnek kalıp: 'Place the product on [surface] in [environment], "
+                "[lighting style], [mood/atmosphere], [composition notes].'"
+            )
+        product_lines.append("=== ÜRÜN BAĞLAMI SONU ===\n")
+        parts.append("\n".join(product_lines))
 
     if template and template_fields:
         parts.append("=== YAPISAL VERİLER ===")

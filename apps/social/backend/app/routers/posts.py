@@ -23,7 +23,7 @@ from app.models.schemas import (
     PostUpdate,
 )
 from app.routers.billing import check_plan_limit
-from app.services.document_processor import get_document_context
+from app.services.document_processor import get_document_context, get_product_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
 from app.services.faceless_video import (
     SUPPORTED_FACELESS_RATIOS,
@@ -191,6 +191,8 @@ class GenerateCaptionRequest(BaseModel):
     user_prompt: str | None = None
     document_ids: list[UUID] = Field(default_factory=list)
     platforms: list[str] = Field(default_factory=list)
+    # Phase 9 Sprint 7 — product/service context injection into caption + image_prompt.
+    product_id: UUID | None = None
 
 
 @router.post(
@@ -229,12 +231,37 @@ async def generate_caption(
                 detail=f"Template {payload.template_id} not found",
             )
 
-    rag_context = None
-    if payload.document_ids:
-        base_query = payload.user_prompt or (
-            template.name if template else "social media caption"
+    product = None
+    if payload.product_id:
+        product_row = await db.fetchrow(
+            """
+            SELECT id, name, description, tags, image_url
+            FROM social.brand_products
+            WHERE id = $1 AND brand_id = $2
+            """,
+            payload.product_id,
+            payload.brand_id,
         )
-        rag_context = await get_document_context(payload.document_ids, base_query, db)
+        if not product_row:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+        product = dict(product_row)
+
+    base_query = payload.user_prompt or (
+        template.name if template else "social media caption"
+    )
+
+    rag_parts: list[str] = []
+    if payload.document_ids:
+        doc_context = await get_document_context(payload.document_ids, base_query, db)
+        if doc_context:
+            rag_parts.append(doc_context)
+    if payload.product_id:
+        product_doc_context = await get_product_document_context(
+            [payload.product_id], base_query, db
+        )
+        if product_doc_context:
+            rag_parts.append(product_doc_context)
+    rag_context = "\n\n---\n\n".join(rag_parts) if rag_parts else None
 
     result = await generate_captions(
         brand=dict(brand),
@@ -244,6 +271,7 @@ async def generate_caption(
         user_prompt=payload.user_prompt,
         rag_context=rag_context,
         platforms=payload.platforms,
+        product=product,
     )
 
     return OkResponse(data=result)

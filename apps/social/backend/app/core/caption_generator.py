@@ -90,13 +90,14 @@ async def generate_captions(
     user_prompt: str | None,
     rag_context: str | None,
     platforms: list[str],
+    product: dict | None = None,
 ) -> dict[str, Any]:
     """Generate caption + image prompt + hashtags via Claude."""
 
     system_prompt = build_system_prompt()
     brand_context = build_brand_context(brand, brand_kit, template)
     dynamic_content = build_dynamic_content(
-        template, template_fields, user_prompt, rag_context, platforms
+        template, template_fields, user_prompt, rag_context, platforms, product
     )
 
     output_format = _build_output_format_instruction(template, platforms)
