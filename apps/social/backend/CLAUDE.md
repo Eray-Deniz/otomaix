@@ -2,13 +2,66 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
+> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 ✅ (product docs CRUD) · Sprint 5 (image-edit adapter) · Sprint 6 (urun-hizmet-sablon) · Sprint 7 (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-21 — Phase 9 Sprint 4: Product Documents CRUD + RAG pipeline ✅
+
+**Kapsam:** Ürüne bağlı doküman yükleme/listeleme/silme + mevcut RAG pipeline'ının (`document_processor.py`) ürün tablolarını da desteklemesi. Yeni dosya `app/routers/product_documents.py` (4 endpoint) + `document_processor.py` generalize (Seçenek A — `kind="brand"|"product"` kwarg). Sprint 7 caption entegrasyonu için hazır `get_product_document_context()` helper'ı şimdiden eklendi.
+
+**Yeni dosya:** `app/routers/product_documents.py` (4 endpoint, ~175 satır):
+
+| Method | Path | Guard |
+|--------|------|-------|
+| POST | `/product-documents` (multipart `product_id` + `file`) | `_assert_product_owned` (4-level JOIN) |
+| GET | `/product-documents?product_id=` | `_assert_product_owned` |
+| GET | `/product-documents/{doc_id}` | `_assert_doc_owned` (5-level JOIN) |
+| DELETE | `/product-documents/{doc_id}` | `_assert_doc_owned` |
+
+**`document_processor.py` generalization (Seçenek A):**
+- `process_document(doc_id, brand_id, content, mime, db, *, kind="brand")` — `kind="product"` branch'i `social.product_documents` + `social.product_document_chunks` kullanır. `brand_id` artık `UUID | None` (product için None).
+- `get_document_context(doc_ids, prompt, db, max_chars, *, kind="brand")` — `name_col` dallanması (`brand_documents.name` vs `product_documents.filename`), SELECT içinde `{name_col} AS name` ile alias.
+- **Schema divergence:** `brand_document_chunks` içinde `brand_id` denorm kolonu var, `product_document_chunks`'ta yok (document_id → product_documents zinciri yeterli). INSERT branch'leri bu farkı handle ediyor.
+- **Yeni helper** `get_product_document_context(product_ids, prompt, db)` — Sprint 7 caption-gen için: verilen product_id listesinden tüm doküman ID'lerini çeker, sonra `get_document_context(kind="product")` çağırır.
+
+**Sahiplik zinciri** (5-level JOIN):
+```
+product_documents ⨝ brand_products ⨝ brands ⨝ workspace_members ⨝ accounts(JWT.sub)
+```
+Eşleşmezse 404 (varlık sızması önlenir — `assert_post_owned` deseni).
+
+**R2 path:** `brands/{brand_id}/products/{product_id}/documents/{doc_id}_{filename}`. MAX 50MB (brand_documents ile aynı). Desteklenen MIME: PDF / Word / Excel / text (brand_documents ile aynı `ALLOWED_MIME_TYPES`).
+
+**Response sanitization:** GET detayında `brand_id` (ownership leak hint) ve `raw_text` (MB ölçeğinde olabilir) response'tan pop'lanır. `has_raw_text: bool` + `chunk_count: int` meta alanları eklenir.
+
+**Kararlar (mimari netleştirme):**
+- **Generalize vs duplicate:** İlk iki seçenek (1: file'ı kopyala, 2: sadece import et ve duplicate INSERT yaz) yerine **Seçenek A** (generalize `process_document` with `kind` kwarg). Backward compat: `documents.py` mevcut çağrısı `kind` göndermediği için default `"brand"` ile çalışır.
+- **Rate limit yok:** Upload/delete admin workload; Sprint 3 products CRUD'da da sadece create'e konuldu, docs akışında da hiç koymadık.
+- **Chunk cascade:** DB FK (`product_documents → product_document_chunks ON DELETE CASCADE`). 527 chunk'lık büyük doküman silindiğinde orphan chunk kalmadığı canlı doğrulandı.
+- **R2 cleanup best-effort:** DELETE sırasında `r2.delete(file_key)` try/except ile sarmalandı. R2 hatası DB kaydını geri getirmez.
+
+**Etki analizi:**
+- Risk: düşük — additive endpoint + mevcut `process_document` çağırıcısı değişmedi (default kwarg backward compat)
+- Backward compat: N/A (yeni özellik)
+- Migration gerekmez (026'da şema mevcut: `product_documents`, `product_document_chunks`)
+- Import sırası `main.py`'de alphabetical korundu (posts → product_documents → products)
+
+**Doğrulama (canlı smoke test, commit `cde8c85` prod deploy):**
+- ✅ S1 Küçük TXT (3400 byte): `{mode:"raw", char_count:3400, chunk_count:0}` → HTTP 201
+- ✅ S2 Büyük TXT (1.05MB, 972k char): `{mode:"chunks", chunk_count:527}` → HTTP 201
+- ✅ S3 GET list: 2 doc, doğru `has_raw_text` + `chunk_count`
+- ✅ S4 GET detay: `brand_id` + `raw_text` sanitize edildi
+- ✅ S5 IDOR: yabancı doc_id + yabancı product_id → 404
+- ✅ S6 DELETE cascade: 2 doc silindi, DB'de 0 orphan chunk doğrulandı (`SELECT COUNT(*) FROM product_document_chunks WHERE document_id IN (...)` → 0)
+- ✅ S7 GET silinmiş doc → 404
+- ✅ S8 List boş, product cleanup → DB'de 0 orphan product
+
+**Sonraki:** Sprint 5 — `ImageEditModelAdapter` Protocol + `NanoBananaProEditAdapter` (image-edit akışı için ürün görseli input'u alan fal.ai adapter'ı, mevcut media_adapters.py altyapısına oturur).
 
 ## 2026-04-21 — Phase 9 Sprint 3: Products CRUD API (products.py) ✅
 
