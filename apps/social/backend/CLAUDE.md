@@ -2,7 +2,7 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ · Sprint 7 ✅ · Sprint 7 polish ✅ · Sprint 10A ✅ (overlay akıllı konum)
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ · Sprint 7 ✅ · Sprint 7 polish ✅ · Sprint 10A ✅ · Sprint 10B ✅ — **Phase 9 tamamlandı**
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
 
 ## 2026-04-22 — Phase 9 Sprint 10A: Overlay Akıllı Konumlandırma ✅
@@ -32,7 +32,20 @@
 
 **Doğrulama:**
 - ✅ AST parse temiz (media_processor.py + webhooks.py)
-- ⏳ Canlı test (deploy sonrası)
+- ✅ Canlı test: yazı boş alana yerleşiyor, ürünü kapatmıyor
+
+## 2026-04-22 — Phase 9 Sprint 10B: Overlay küçük font + yarı saydam yazı ✅
+
+**Değişen dosya:** `app/services/media_processor.py`
+
+- **Font küçültüldü:** `max_body_size` `bw * 0.055 → bw * 0.038`, `min_body_size` `bw * 0.03 → bw * 0.025`
+- **Yarı saydam yazı:** fill/stroke alpha `255 → 180`
+- **Luminosity korundu:** zemin açıksa siyah yazı, koyu ise beyaz yazı (dinamik, değişmedi)
+- **Arka plan kutusu yok** — yazının kendisi şeffaf
+
+**Doğrulama:**
+- ✅ AST parse temiz
+- ✅ Canlı test: yazı daha küçük ve şeffaf, ürünü eskiye göre belirgin şekilde daha az kapatıyor
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
