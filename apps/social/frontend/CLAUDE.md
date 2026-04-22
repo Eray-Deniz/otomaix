@@ -49,6 +49,44 @@
 
 **Sonraki:** Sprint 9 — `/icerik-olustur` wizard'ında ürün/hizmet seçici (mevcut template form'a ürün picker entegrasyonu, image-edit pipeline tetikleme). Bu sprint büyük ve user'ın bilinçli kickoff'u gerekiyor — memory'de hatırlatıcı mevcut.
 
+## 2026-04-22 — Phase 9 Sprint 8 polish: marka seçimi kalıcılığı + form iyileştirmeleri ✅
+
+**Sorunlar (canlı test):**
+1. Sayfa refresh veya farklı sayfaya gidip dönüldüğünde seçili marka sıfırlanıyor, `auth/init` her zaman `brands[0]`'ı (ilk oluşturulan marka) seçiyordu. Kullanıcı MyGoodShoes seçiliyken ürün ekleyip refresh yapınca Otomaix'e düşüyor, eklediği ürünü bulamıyordu.
+2. `ProductFormDialog`'da doküman yükleme alanı yoktu — ürün oluşturduktan sonra ayrı bir dialog açmak gerekiyordu.
+3. Görsel önizlemede `next/image` blob URL'yi production'da sunucudan fetch etmeye çalışıp kırık önizleme üretiyordu.
+4. Aktif switch'in label'ı her zaman "Aktif" yazıyordu (pasif yapıldığında da).
+5. Tab isimleri netleştirilmedi: "Dokümanlar" → "Marka Dokümanları", "Ürün/Hizmet" → "Ürün/Hizmet Dokümanları".
+
+**Değişen dosyalar (3):**
+
+**`lib/store.ts`:**
+- `switchBrand(brand)` artık seçilen brand ID'yi `localStorage.setItem('otomaix_selected_brand_id', brand.id)` ile kaydediyor.
+
+**`app/(dashboard)/layout.tsx`:**
+- `doInit` içinde, brand listesi yüklenince `stillValid` false olduğunda önce `localStorage.getItem('otomaix_selected_brand_id')` okunuyor, brands listesinde varsa o marka seçiliyor, yoksa `brands[0]` fallback.
+
+**`components/products/ProductFormDialog.tsx`:**
+- `pendingDocs: File[]` state eklendi — birden fazla doküman kuyruğa alınabilir.
+- Görsel upload alanının altına **Ürün/Hizmet Dokümanları** upload bölümü eklendi (PDF/Word/Excel, maks 50MB). Seçilen dosyalar liste halinde gösterilir, × ile kaldırılabilir. Marka dokümanları sekmesindeki aynı pattern kullanıldı.
+- `handleSave` akışı: ürün oluştur → görsel yükle → dokümanları sırayla yükle (`uploadProductDocument`). Herhangi bir doküman yüklenemezse dosya adıyla ayrı toast, diğerleri devam eder.
+- Aktif/Pasif label dinamik: switch'in durumuna göre "Aktif" (siyah) veya "Pasif" (gri) yazıyor.
+- Blob URL önizlemesi `<Image>` → `<img>` tag'ine çevrildi (blob URL'ler Next.js image optimization'ı geçemez); kaydedilmiş R2 URL'ler hâlâ `<Image>` kullanıyor.
+- `pendingDocs` form açılışında sıfırlanıyor.
+
+**`app/(dashboard)/marka-ayarlari/page.tsx`:**
+- `TabsTrigger value="dokumanlar"` → "Marka Dokümanları"
+- `TabsTrigger value="urun-hizmet"` → "Ürün/Hizmet Dokümanları"
+
+**Etki analizi:**
+- Risk: düşük — localStorage key çakışması yok (`otomaix_selected_brand_id`); brand silinmişse fallback `brands[0]` devreye giriyor.
+- TypeScript compile temiz (`tsc --noEmit` exit 0).
+
+**Doğrulama:**
+- ✅ Canlı test: brand switching bug giderildi, daha önce görünmeyen ürünler artık doğru brand seçilince görünüyor.
+- ✅ TypeScript compile temiz.
+- ⏳ Doküman upload formdan test edilmeli: yeni ürün ekle + doküman seç → ürün oluşturulunca doküman da yüklenmeli.
+
 ## 2026-04-20 — 3 kalan "caption" stringi "gönderi metni"ne çevrildi ✅
 
 **Sorun:** 2026-04-18 Phase 7 Sprint 5 polish'inde tüm kullanıcı-yönelik "Caption" stringleri "Gönderi Metni"ne çevrilmişti, ancak canlı testte `/icerik-olustur` sayfasında hâlâ 3 yerde "caption" kelimesi görünüyordu. Kullanıcı "bu sayfadaki caption ne demek?" diye sordu — terim KOBİ kitlesi için net değil.

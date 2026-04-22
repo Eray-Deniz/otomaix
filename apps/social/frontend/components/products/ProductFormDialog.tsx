@@ -15,16 +15,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Loader2, X, Upload, Package, Wrench } from 'lucide-react'
+import { Loader2, X, Upload, Package, Wrench, FileText, Trash2 } from 'lucide-react'
 import {
   createProduct,
   updateProduct,
   uploadProductImage,
+  uploadProductDocument,
 } from '@/lib/api/products'
 import type { Product, ProductType } from '@/lib/products.types'
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const DOC_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.txt'
+const MAX_DOC_BYTES = 50 * 1024 * 1024
 
 interface Props {
   open: boolean
@@ -52,8 +55,10 @@ export function ProductFormDialog({
   const [isActive, setIsActive] = useState(true)
   const [pendingImage, setPendingImage] = useState<File | null>(null)
   const [pendingPreview, setPendingPreview] = useState<string | null>(null)
+  const [pendingDocs, setPendingDocs] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!open) return
@@ -73,6 +78,7 @@ export function ProductFormDialog({
     setTagInput('')
     setPendingImage(null)
     setPendingPreview(null)
+    setPendingDocs([])
   }, [open, product])
 
   useEffect(() => {
@@ -121,6 +127,18 @@ export function ProductFormDialog({
       return
     }
     setPendingImage(file)
+  }
+
+  function handleDocSelect(file: File) {
+    if (file.size > MAX_DOC_BYTES) {
+      toast.error('Doküman 50 MB sınırını aşıyor')
+      return
+    }
+    setPendingDocs((prev) => [...prev, file])
+  }
+
+  function removeDoc(index: number) {
+    setPendingDocs((prev) => prev.filter((_, i) => i !== index))
   }
 
   async function handleSave() {
@@ -172,6 +190,13 @@ export function ProductFormDialog({
         const imgRes = await uploadProductImage(productId, pendingImage)
         if (!imgRes.success) {
           toast.error(imgRes.error || 'Görsel yüklenemedi (ürün kaydedildi)')
+        }
+      }
+
+      for (const doc of pendingDocs) {
+        const docRes = await uploadProductDocument(productId, doc)
+        if (!docRes.success) {
+          toast.error(`"${doc.name}" yüklenemedi`)
         }
       }
 
@@ -289,13 +314,22 @@ export function ProductFormDialog({
             >
               {currentImage ? (
                 <>
-                  <Image
-                    src={currentImage}
-                    alt="Ürün görseli"
-                    width={200}
-                    height={128}
-                    className="max-h-32 rounded-lg object-contain"
-                  />
+                  {pendingPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={pendingPreview}
+                      alt="Ürün görseli önizleme"
+                      className="max-h-32 rounded-lg object-contain"
+                    />
+                  ) : (
+                    <Image
+                      src={currentImage}
+                      alt="Ürün görseli"
+                      width={200}
+                      height={128}
+                      className="max-h-32 rounded-lg object-contain"
+                    />
+                  )}
                   {pendingImage && (
                     <button
                       type="button"
@@ -333,9 +367,65 @@ export function ProductFormDialog({
             </div>
           </div>
 
+          {/* Document upload */}
+          <div className="space-y-1.5">
+            <Label>Ürün/Hizmet Dokümanları (opsiyonel)</Label>
+            <div
+              className="border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+              onClick={() => docInputRef.current?.click()}
+            >
+              <Upload className="w-5 h-5 text-gray-400" />
+              <p className="text-sm text-gray-500">PDF, Word veya Excel yükleyin</p>
+              <p className="text-xs text-gray-400">Maks. 50 MB · Birden fazla ekleyebilirsiniz</p>
+              <input
+                ref={docInputRef}
+                type="file"
+                accept={DOC_ACCEPT}
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleDocSelect(file)
+                    e.target.value = ''
+                  }
+                }}
+              />
+            </div>
+            {pendingDocs.length > 0 && (
+              <div className="space-y-1.5 mt-2">
+                {pendingDocs.map((doc, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-gray-50"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-4 h-4 text-blue-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{doc.name}</p>
+                        <p className="text-xs text-gray-400">{(doc.size / 1024).toFixed(0)} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeDoc(i)}
+                      className="ml-2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Active toggle */}
           <div className="flex items-center justify-between pt-1">
             <div>
-              <Label>Aktif</Label>
+              <Label className={isActive ? 'text-gray-900' : 'text-gray-400'}>
+                {isActive ? 'Aktif' : 'Pasif'}
+              </Label>
               <p className="text-xs text-gray-500">Pasif ürünler içerik üretiminde gösterilmez.</p>
             </div>
             <Switch checked={isActive} onCheckedChange={setIsActive} />
@@ -347,7 +437,7 @@ export function ProductFormDialog({
             İptal
           </Button>
           <Button onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
             {isEdit ? 'Kaydet' : 'Ekle'}
           </Button>
         </div>

@@ -60,7 +60,11 @@ export default function DashboardLayout({
         const current = useAppStore.getState().currentBrand
         const stillValid = current && brands.some((b) => b.id === current.id)
         if (!stillValid && brands.length > 0) {
-          setCurrentBrand(brands[0])
+          const savedId = typeof window !== 'undefined'
+            ? localStorage.getItem('otomaix_selected_brand_id')
+            : null
+          const saved = savedId ? brands.find((b) => b.id === savedId) : null
+          setCurrentBrand(saved ?? brands[0])
         }
       }
     }

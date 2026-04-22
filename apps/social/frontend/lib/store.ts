@@ -45,5 +45,10 @@ export const useAppStore = create<AppStore>((set) => ({
   setCurrentWorkspace: (workspace) => set({ currentWorkspace: workspace }),
   setCurrentBrand: (brand) => set({ currentBrand: brand }),
   setBrands: (brands) => set({ brands }),
-  switchBrand: (brand) => set({ currentBrand: brand }),
+  switchBrand: (brand) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('otomaix_selected_brand_id', brand.id)
+    }
+    set({ currentBrand: brand })
+  },
 }))

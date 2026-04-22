@@ -797,8 +797,8 @@ function MarkaAyarlariContent() {
           <TabsTrigger value="kimlik">Marka Kimliği</TabsTrigger>
           <TabsTrigger value="gorseller">Görseller</TabsTrigger>
           <TabsTrigger value="sosyal">Sosyal Hesaplar</TabsTrigger>
-          <TabsTrigger value="dokumanlar">Dokümanlar</TabsTrigger>
-          <TabsTrigger value="urun-hizmet">Ürün/Hizmet</TabsTrigger>
+          <TabsTrigger value="dokumanlar">Marka Dokümanları</TabsTrigger>
+          <TabsTrigger value="urun-hizmet">Ürün/Hizmet Dokümanları</TabsTrigger>
           <TabsTrigger value="avatar">AI Avatar</TabsTrigger>
         </TabsList>
 
