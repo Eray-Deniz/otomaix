@@ -792,7 +792,7 @@ function MarkaAyarlariContent() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6 flex-wrap">
+        <TabsList className="mb-6 flex-wrap w-full gap-y-1">
           <TabsTrigger value="bilgiler">Marka Bilgileri</TabsTrigger>
           <TabsTrigger value="kimlik">Marka Kimliği</TabsTrigger>
           <TabsTrigger value="gorseller">Görseller</TabsTrigger>
