@@ -150,6 +150,9 @@ function IcerikOlusturInner() {
 
   // Step 1
   const [contentType, setContentType] = useState<ContentType>('image')
+  // Phase 9 Sprint 9 — Görsel alt tipi: genel text-to-image veya ürün/hizmet image-to-image
+  type ImageSubType = 'general' | 'product'
+  const [imageSubType, setImageSubType] = useState<ImageSubType>('general')
 
   // Phase 7 — Template system (image/carousel)
   const [mode, setMode] = useState<TemplateMode>('template')
@@ -693,6 +696,7 @@ function IcerikOlusturInner() {
     setTemplateFields({})
     setImageTextFields(null)
     setCaptionData(null)
+    setImageSubType('general')
   }
 
   // Template seçim handler
@@ -813,6 +817,7 @@ function IcerikOlusturInner() {
                     setCaptionData(null)
                     setPhase('pick')
                     setMode('template')
+                    setImageSubType('general')
                   }}
                   className={cn(
                     'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all cursor-pointer',
@@ -829,6 +834,46 @@ function IcerikOlusturInner() {
               ))}
             </div>
           </div>
+
+          {/* Phase 9 Sprint 9A — Görsel alt tip seçici */}
+          {contentType === 'image' && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-gray-700">Görsel İçerik Türü</p>
+              <div className="grid grid-cols-2 gap-3">
+                {(
+                  [
+                    {
+                      id: 'general' as ImageSubType,
+                      label: 'Genel Görsel İçerik',
+                      desc: 'Herhangi bir konu için AI görsel üret',
+                      icon: '🖼️',
+                    },
+                    {
+                      id: 'product' as ImageSubType,
+                      label: 'Ürün / Hizmet İçeriği',
+                      desc: 'Ürün görseli üzerinden yeni görsel oluştur',
+                      icon: '📦',
+                    },
+                  ] as { id: ImageSubType; label: string; desc: string; icon: string }[]
+                ).map((sub) => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setImageSubType(sub.id)}
+                    className={cn(
+                      'flex flex-col items-start gap-1 p-4 rounded-xl border-2 text-left transition-all',
+                      imageSubType === sub.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
+                    )}
+                  >
+                    <span className="text-xl">{sub.icon}</span>
+                    <span className="text-sm font-medium text-gray-800">{sub.label}</span>
+                    <span className="text-xs text-gray-500 leading-snug">{sub.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <Button
             onClick={async () => {
