@@ -292,8 +292,8 @@ async def add_text_overlay(
         base = Image.open(io.BytesIO(img_resp.content)).convert("RGBA")
         bw, bh = base.size
 
-        max_body_size = max(24, int(bw * 0.055))
-        min_body_size = max(20, int(bw * 0.03))
+        max_body_size = max(18, int(bw * 0.038))
+        min_body_size = max(14, int(bw * 0.025))
         margin = max(24, int(bw * 0.04))
 
         is_bottom = position.startswith("bottom")
@@ -392,12 +392,13 @@ async def add_text_overlay(
         except Exception:
             mean_lum = 0.3  # fallback: koyu kabul → beyaz yazı
 
+        text_alpha = 180  # yarı saydam yazı
         if mean_lum > 0.5:
-            fill_color = (0, 0, 0, 255)
-            stroke_color = (255, 255, 255, 255)
+            fill_color = (0, 0, 0, text_alpha)
+            stroke_color = (255, 255, 255, text_alpha)
         else:
-            fill_color = (255, 255, 255, 255)
-            stroke_color = (0, 0, 0, 255)
+            fill_color = (255, 255, 255, text_alpha)
+            stroke_color = (0, 0, 0, text_alpha)
 
         y = y_start
         for (seg, w, h, is_title) in rendered:
