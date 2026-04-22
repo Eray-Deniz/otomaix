@@ -2,11 +2,47 @@
 
 > **Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başlangıç 2026-04-20).**
 > Markaların ürün/hizmet envanterini UI'dan yönetmek + içerik üretiminde referans olarak kullanmak için. Backend Sprint 1-7 canlıda (`dfe7f0a`).
-> **İlerleme:** Sprint 8 (marka-ayarları Ürün/Hizmet Kütüphanesi UI) ✅
+> **İlerleme:** Sprint 8 ✅ · Sprint 9A ✅ · Sprint 9B ✅
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-22 — Phase 9 Sprint 9A+9B: /icerik-olustur Ürün/Hizmet Entegrasyonu ✅
+
+**Kapsam:** `/icerik-olustur` wizard'ına Ürün/Hizmet İçeriği akışı eklendi. Backend (Sprint 6+7) zaten hazırdı; bu sprint saf frontend değişikliği.
+
+**Değişen dosya:** `app/(dashboard)/icerik-olustur/page.tsx`
+
+**Sprint 9A — Step 1 alt tip seçici:**
+- `imageSubType: 'general' | 'product'` state (default: `'general'`)
+- Görsel seçilince altında 2 kart: **Genel Görsel İçerik** (text-to-image) / **Ürün/Hizmet İçeriği** (image-to-image)
+- contentType değişince + `resetWizard`'da `imageSubType` → `'general'` sıfırlanır
+- "Devam Et" her iki yolda `genel-gorsel-sablon` yükler (değişmez)
+
+**Sprint 9B — Step 2 ürün seçici + otomatik doldurma + API:**
+- Yeni state: `availableProducts`, `selectedProduct`, `loadingProducts`
+- `imageSubType === 'product'` + `currentBrand.id` değişince `GET /products?brand_id=...&active=true` çekilir
+- `imageSubType` değişince `selectedProduct`, `selectedDocIds`, `captionData` sıfırlanır
+- Step 2 `phase=form` + `imageSubType=product` → `<DynamicForm>` üstüne **Ürün Seç** kart listesi (görsel thumbnail, ad, tür ikonu)
+- Ürün seçilince: `templateFields['ana_konu'] = product.name`, `templateFields['one_cikan_ozellik'] = product.description ?? ''` (override edilebilir pre-fill)
+- Aktif ürün yoksa "Marka Ayarları → Ürün/Hizmet" linkiyle yönlendirme
+- **Dokümanlardan Bağlam Ekle** bölümü `imageSubType === 'general'` iken görünür, `'product'`ta gizlenir
+- `handleGenerateCaption`: `product_id: selectedProduct?.id ?? null` eklendi
+- `handleGenerate` (image/carousel bloğu): `product_id: selectedProduct?.id ?? null` eklendi
+
+**Backend davranışı (değişmedi):**
+- `product_id` set + ürünün `image_url`'i var → fal.ai `nano-banana-2/edit` (image-to-image)
+- `product_id` set + `image_url` yok → FLUX text-to-image fallback
+- Ürün RAG dokümanları caption-gen'de otomatik merge edilir (Sprint 7)
+
+**Etki analizi:**
+- Risk: düşük — `imageSubType` default `'general'`, mevcut Genel Görsel akışı birebir aynı
+- TypeScript compile temiz
+
+**Doğrulama:**
+- ✅ Sprint 9A canlı test: alt tip seçici çalışıyor
+- ⏳ Sprint 9B canlı test (deploy sonrası)
 
 ## 2026-04-21 — Phase 9 Sprint 8: Marka Ayarları → Ürün/Hizmet Kütüphanesi UI ✅
 

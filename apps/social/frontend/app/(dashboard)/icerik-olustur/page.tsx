@@ -13,7 +13,7 @@ import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { analytics } from '@/lib/analytics'
-import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb, FileText } from 'lucide-react'
+import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb, FileText, Package, Wrench } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { UpgradeModal } from '@/components/billing/UpgradeModal'
@@ -24,6 +24,8 @@ import { CaptionPreview } from '@/components/templates/CaptionPreview'
 import { fetchActiveMediaModels, type ActiveMediaModels } from '@/lib/api/media-models'
 import { fetchTemplateById } from '@/lib/api/templates'
 import type { Template } from '@/lib/templates.types'
+import { fetchProducts } from '@/lib/api/products'
+import type { Product } from '@/lib/products.types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,6 +155,10 @@ function IcerikOlusturInner() {
   // Phase 9 Sprint 9 — Görsel alt tipi: genel text-to-image veya ürün/hizmet image-to-image
   type ImageSubType = 'general' | 'product'
   const [imageSubType, setImageSubType] = useState<ImageSubType>('general')
+  // Phase 9 Sprint 9B — Ürün/Hizmet seçici
+  const [availableProducts, setAvailableProducts] = useState<Product[]>([])
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [loadingProducts, setLoadingProducts] = useState(false)
 
   // Phase 7 — Template system (image/carousel)
   const [mode, setMode] = useState<TemplateMode>('template')
@@ -250,7 +256,28 @@ function IcerikOlusturInner() {
       if (res.success && res.data) setAvailableDocs(res.data)
     }
     fetchDocs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBrand?.id])
+
+  // Phase 9 Sprint 9B — Aktif ürünleri çek (ürün/hizmet modu seçilince)
+  useEffect(() => {
+    if (!currentBrand?.id || imageSubType !== 'product') return
+    let cancelled = false
+    setLoadingProducts(true)
+    fetchProducts(currentBrand.id, { active: true }).then((res) => {
+      if (cancelled) return
+      setAvailableProducts(res.success && res.data ? res.data.products : [])
+      setLoadingProducts(false)
+    })
+    return () => { cancelled = true }
+  }, [currentBrand?.id, imageSubType])
+
+  // imageSubType değişince ilgili state'leri sıfırla
+  useEffect(() => {
+    setSelectedProduct(null)
+    setSelectedDocIds([])
+    setCaptionData(null)
+  }, [imageSubType])
 
   // Marka değişince logo filigran varsayılanını çek (brand_kit.logo_overlay.enabled).
   // useLogoOverlay null ise marka default'u kullanılır, switch UI bu değere göre başlangıç alır.
@@ -487,6 +514,7 @@ function IcerikOlusturInner() {
         image_prompt: captionData!.image_prompt,
         use_logo_overlay: useLogoOverlay,
         image_text_fields: imageTextFields,
+        product_id: selectedProduct?.id ?? null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -548,6 +576,7 @@ function IcerikOlusturInner() {
       user_prompt: prompt.trim() || null,
       document_ids: selectedDocIds,
       platforms,
+      product_id: selectedProduct?.id ?? null,
     })
     setLoadingCaption(false)
     if (res.success && res.data) {
@@ -697,6 +726,8 @@ function IcerikOlusturInner() {
     setImageTextFields(null)
     setCaptionData(null)
     setImageSubType('general')
+    setSelectedProduct(null)
+    setAvailableProducts([])
   }
 
   // Template seçim handler
@@ -968,6 +999,77 @@ function IcerikOlusturInner() {
                 </button>
               )}
 
+              {/* Phase 9 Sprint 9B — Ürün/Hizmet seçici (imageSubType=product) */}
+              {imageSubType === 'product' && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-700">
+                    Ürün / Hizmet Seç
+                    <span className="ml-1 font-normal text-gray-400">(zorunlu)</span>
+                  </p>
+                  {loadingProducts ? (
+                    <div className="flex items-center gap-2 py-4 text-gray-400 text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Ürünler yükleniyor...
+                    </div>
+                  ) : availableProducts.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 p-4 text-center text-sm text-gray-500">
+                      Henüz aktif ürün/hizmet yok.{' '}
+                      <a href="/marka-ayarlari?tab=urun-hizmet" className="text-blue-500 hover:underline">
+                        Marka Ayarları → Ürün/Hizmet
+                      </a>{' '}
+                      sayfasından ekleyebilirsiniz.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {availableProducts.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProduct(p)
+                            setTemplateFields((prev) => ({
+                              ...prev,
+                              ana_konu: p.name,
+                              one_cikan_ozellik: p.description ?? '',
+                            }))
+                          }}
+                          className={cn(
+                            'flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+                            selectedProduct?.id === p.id
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
+                          )}
+                        >
+                          {p.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={p.image_url}
+                              alt={p.name}
+                              className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                              {p.type === 'service'
+                                ? <Wrench className="w-4 h-4 text-gray-400" />
+                                : <Package className="w-4 h-4 text-gray-400" />}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
+                            {p.description && (
+                              <p className="text-xs text-gray-500 truncate">{p.description}</p>
+                            )}
+                          </div>
+                          {selectedProduct?.id === p.id && (
+                            <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <DynamicForm
                 template={selectedTemplate}
                 values={templateFields}
@@ -1060,8 +1162,8 @@ function IcerikOlusturInner() {
                 </div>
               </div>
 
-              {/* Dokümanlar */}
-              {availableDocs.length > 0 && (
+              {/* Dokümanlar — sadece Genel Görsel modunda göster */}
+              {imageSubType === 'general' && availableDocs.length > 0 && (
                 <div className="space-y-2">
                   <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
                   <div className="flex flex-col gap-1.5">
