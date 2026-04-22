@@ -2,13 +2,25 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ (DB migration) · Sprint 2 ✅ (plan quota) · Sprint 3 ✅ (products CRUD) · Sprint 4 ✅ (product docs CRUD) · Sprint 5 ✅ (image-edit adapter) · Sprint 6 ✅ (image-edit routing) · Sprint 7 ✅ (caption integration) · Sprint 8 (marka-ayarlari UI) · Sprint 9 (icerik-olustur wizard) · Sprint 10 (E2E test + docs)
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ · Sprint 7 ✅ · Sprint 7 polish ✅ (prompt_builder sadeleştirme)
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
 > Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 6 hotfix (PLATFORM_DEFAULTS) ✅ · Sprint 6 hardening ✅ · Sprint 7 (media adapter refactor) ✅ — **Phase 7 tamamlandı**
+
+## 2026-04-22 — Phase 9 Sprint 7 polish: prompt_builder ürün bağlamı sadeleştirme ✅
+
+**Sorun:** Frontend Sprint 9B'de ürün seçilince `ana_konu = product.name` ve `one_cikan_ozellik = product.description` şablon alanlarına pre-fill yapılıyor. Bu alanlar `generate-caption` çağrısında "YAPISAL VERİLER" bloğu olarak Claude'a iletiliyor. Aynı zamanda Sprint 7'de eklenen "ÜRÜN/HİZMET BAĞLAMI" bloğu da ad/açıklama/etiketleri Claude'a yazıyordu — çifte tekrar.
+
+**Değişen dosya:** `app/core/prompt_builder.py`
+
+- **Kaldırıldı:** `build_dynamic_content` içindeki "=== ÜRÜN/HİZMET BAĞLAMI ===" bloğu (ad, açıklama, etiketler, "doğal dille geçir" talimatı)
+- **Korundu:** `product.image_url` varsa image_prompt özel kuralı (`⚠️ image_prompt İÇİN ÖZEL KURAL`) — bu kural Claude'a ürünü tarif etmemesini, sahne/kompozisyon/ışık tarif etmesini söyler; image-edit kalitesi için kritik
+- **Değişmedi:** RAG doküman fetch (`get_product_document_context`) — ürün dokümanları hâlâ bağlam olarak ekleniyor
+
+**Sonuç:** Prompt artık şablon alanlarını, image-edit kuralını (varsa) ve ürün dokümanlarını alıyor; ad/açıklama tekrarı yok.
 
 ## 2026-04-21 — Phase 9 Sprint 7: Caption endpoint'e ürün bağlamı ✅
 
