@@ -1020,7 +1020,7 @@ function IcerikOlusturInner() {
                       sayfasından ekleyebilirsiniz.
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
                       {availableProducts.map((p) => (
                         <button
                           key={p.id}
