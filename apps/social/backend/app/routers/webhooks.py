@@ -10,7 +10,7 @@ import asyncpg
 from app.core.database import get_db
 from app.models.schemas import OkResponse
 from app.core.templates_data import get_template_by_id
-from app.services.media_processor import apply_brand_processing
+from app.services.media_processor import apply_brand_processing, detect_optimal_text_position
 from app.services.storage import r2
 
 logger = logging.getLogger(__name__)
@@ -163,7 +163,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
                         lines.append(line)
                     if lines:
                         text_overlay_lines = lines
-                        text_overlay_position = spec.position
+                        text_overlay_position = await detect_optimal_text_position(raw_url)
 
         # Marka işlemlerini uygula (logo overlay / text overlay / intro video)
         final_url = await apply_brand_processing(

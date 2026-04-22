@@ -74,6 +74,77 @@ def _pick_logo_variant(
     return logo_dark_url if lum > 0.5 else logo_light_url
 
 
+# ─── Vision-based text position detection ───────────────────────────────────
+
+async def detect_optimal_text_position(image_url: str) -> str:
+    """
+    Claude Vision (Haiku) ile görseldeki en boş köşeyi tespit eder.
+
+    Ana içerik (ürün, kişi, nesne) ile çakışmayan, en sade alanı seçer.
+    Hata veya API yoksa "bottom-left" fallback döner.
+    """
+    import base64
+
+    try:
+        import anthropic  # type: ignore
+    except ImportError:
+        return "bottom-left"
+
+    try:
+        from app.core.config import settings
+        if not settings.ANTHROPIC_API_KEY:
+            return "bottom-left"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            img_resp = await client.get(image_url)
+            img_resp.raise_for_status()
+
+        content_type_header = img_resp.headers.get("content-type", "")
+        if "png" in content_type_header:
+            media_type = "image/png"
+        elif "webp" in content_type_header:
+            media_type = "image/webp"
+        else:
+            media_type = "image/jpeg"
+
+        img_b64 = base64.standard_b64encode(img_resp.content).decode()
+
+        ai_client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=20,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": media_type,
+                            "data": img_b64,
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "Bu görselde metin overlay için en uygun köşe hangisi? "
+                            "Ana içerik (ürün, kişi, nesne) ile çakışmayan, "
+                            "en sade/boş alanı seç. "
+                            "Yalnızca şu dört seçenekten birini yaz, başka hiçbir şey ekleme: "
+                            "top-left, top-right, bottom-left, bottom-right"
+                        ),
+                    },
+                ],
+            }],
+        )
+        position = response.content[0].text.strip().lower()
+        valid = {"top-left", "top-right", "bottom-left", "bottom-right"}
+        return position if position in valid else "bottom-left"
+
+    except Exception:
+        return "bottom-left"
+
+
 # ─── Logo Overlay ────────────────────────────────────────────────────────────
 
 async def add_logo_overlay(

@@ -3,6 +3,7 @@
 > **Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başlangıç 2026-04-20).**
 > Markaların ürün/hizmet envanterini UI'dan yönetmek + içerik üretiminde referans olarak kullanmak için. Backend Sprint 1-7 canlıda (`dfe7f0a`).
 > **İlerleme:** Sprint 8 ✅ · Sprint 9A ✅ · Sprint 9B ✅
+> **Sıradaki:** Sprint 10 — Overlay Akıllı Konumlandırma (**backend-only**, frontend değişmez)
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.

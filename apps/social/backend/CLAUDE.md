@@ -2,8 +2,37 @@
 
 > **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ · Sprint 7 ✅ · Sprint 7 polish ✅ (prompt_builder sadeleştirme)
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ · Sprint 7 ✅ · Sprint 7 polish ✅ · Sprint 10A ✅ (overlay akıllı konum)
 > Otomatik yayın entegrasyonu Phase 10'a ertelendi.
+
+## 2026-04-22 — Phase 9 Sprint 10A: Overlay Akıllı Konumlandırma ✅
+
+**Sorun:** PIL text overlay `position` template'da hardcoded `"bottom-left"`. Ürün görselde nerede olursa olsun yazı o köşeye gidiyordu.
+
+**Keşif:** `add_text_overlay()` zaten luminosity-aware yazı rengi ve word-wrap içeriyor. Eksik olan yalnızca akıllı konum seçimiydi.
+
+**Değişen dosyalar (2):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/services/media_processor.py` | `detect_optimal_text_position(image_url)` async fonksiyon eklendi |
+| `app/routers/webhooks.py` | `text_overlay_position = spec.position` → `await detect_optimal_text_position(raw_url)` |
+
+**`detect_optimal_text_position` davranışı:**
+- Model: `claude-haiku-4-5-20251001` (~$0.001/görsel)
+- Görseli base64 encode ederek Claude'a gönderir
+- Prompt: ana içerik ile çakışmayan en boş köşeyi seç → 4 seçenekten biri: `top-left`, `top-right`, `bottom-left`, `bottom-right`
+- Geçersiz yanıt veya herhangi bir hata → `"bottom-left"` fallback
+
+**Etki analizi:**
+- Frontend değişmez
+- Ek süre: ~1-2 sn (webhook async, kullanıcı beklemez)
+- `add_text_overlay` renk/font/wrap mantığı değişmedi
+- Fallback: Vision hatası → önceki davranışla aynı (bottom-left)
+
+**Doğrulama:**
+- ✅ AST parse temiz (media_processor.py + webhooks.py)
+- ⏳ Canlı test (deploy sonrası)
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 > `/icerik-olustur` sayfasının 3 genel kategorisi (Ürün/Hizmet/Kurumsal) → 22 sektör-spesifik şablona dönüştü.
