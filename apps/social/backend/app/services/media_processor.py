@@ -99,15 +99,15 @@ async def detect_optimal_text_position(image_url: str) -> str:
             img_resp = await client.get(image_url)
             img_resp.raise_for_status()
 
-        content_type_header = img_resp.headers.get("content-type", "")
-        if "png" in content_type_header:
+        img_bytes = img_resp.content
+        if img_bytes[:8] == b"\x89PNG\r\n\x1a\n":
             media_type = "image/png"
-        elif "webp" in content_type_header:
+        elif img_bytes[:4] == b"RIFF" and img_bytes[8:12] == b"WEBP":
             media_type = "image/webp"
         else:
             media_type = "image/jpeg"
 
-        img_b64 = base64.standard_b64encode(img_resp.content).decode()
+        img_b64 = base64.standard_b64encode(img_bytes).decode()
 
         ai_client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         response = ai_client.messages.create(
