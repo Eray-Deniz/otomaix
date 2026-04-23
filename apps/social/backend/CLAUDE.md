@@ -3,7 +3,18 @@
 > **🚧 Phase 11 — Marketing Skills Prompt Entegrasyonu (başladı: 2026-04-23).**
 > `/icerik-olustur` caption kalitesi iyileştirmesi. 4 yüksek öncelikli marketing skill'i `prompt_builder.py` ve `templates_data.py`'a entegre ediliyor.
 > Detaylı plan: `~/otomaix/docs/11-social-marketingskills.md`
-> **İlerleme:** Sprint 1 ✅
+> **İlerleme:** Sprint 1 ✅ · Sprint 1 hotfix ✅
+
+## 2026-04-23 — Phase 11 Sprint 1 hotfix: SOMUTLUK fabrication + image quality fix ✅
+
+**Sorun (canlı test):** Sprint 1 SOMUTLUK kuralı ürün bilgisi yetersizken Claude'un detay uydumasına neden oldu. Image_prompt kural #5 her durumda close-up zorlayıp görsel kalitesini düşürdü.
+
+**Değişen dosyalar (2):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/core/prompt_builder.py` | SOMUTLUK kuralına KAÇIŞ KLOZU + YASAK bloğuna 4 yeni madde (fabricated özellik/testimonial/sertifika yasağı) |
+| `app/core/caption_generator.py` | image_prompt kural #5: close-up zorunluluğu → şablona göre esnek kompozisyon (genel şablon=lifestyle/full-body, e-ticaret=close-up) |
 
 > **✅ Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (tamamlandı: 2026-04-22).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
