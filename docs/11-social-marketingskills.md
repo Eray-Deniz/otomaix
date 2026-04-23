@@ -103,7 +103,7 @@ Phase 11 **yalnızca B yolu**. A yolu (CRO, SEO, Satış skill'leri) ayrı bir i
 - **PLATFORM_DEFAULTS** — 9 platform × captionStyle/maxHashtags/useFirstComment — dokunulmuyor (Sprint 2'de ton eklentisi bu yapının üstüne Tier 1'den gelecek, override değil)
 - **`/ai/suggest-ideas`** — Phase 11 kapsamında değil
 - **`/ai/analyze-website`, `/ai/generate-script`** — hiç dokunulmaz
-- **Diğer 21 şablon** (`eticaret-urun-karti`, sağlık/hukuk/emlak şablonları vb.) — `guidance` metinleri dokunulmaz, yalnızca `genel-gorsel-sablon` Sprint 3'te güncellenir
+- **Diğer şablonlar** (şu an devre dışı; `eticaret-urun-karti`, sağlık/hukuk/emlak şablonları vb.) — `guidance` metinleri dokunulmaz, yalnızca aktif olan `genel-gorsel-sablon` Sprint 3'te güncellenir
 
 ### 1.6 Ölçüm Stratejisi
 
@@ -465,10 +465,9 @@ yapısına (hook süresi, paragraf uzunluğu, emoji kullanımı) uyarlar.
 
 **Girdi:**
 - Marka: MyGoodShoes
-- Şablon: `eticaret-urun-karti`
-- `product_name`: SporXL
-- `price`: 79 TL
-- `one_cikan_ozellik`: rahat taban, hafif
+- Şablon: `genel-gorsel-sablon`
+- `ana_konu`: SporXL spor ayakkabı
+- `one_cikan_ozellik`: rahat taban, hafif, 79 TL
 
 **Eski prompt beklenen çıktı (gözlemlenen tip):**
 ```
@@ -507,22 +506,50 @@ için yapıldı.
 
 Kullanıcı onayı sonrası deploy → 4 kontrol senaryosu:
 
-1. **MyGoodShoes + SporXL 79 TL** (Sprint 1 öncesi üretilmiş post varsa karşılaştır)
+1. **E-ticaret markası + ürün tanıtımı** — MyGoodShoes + `genel-gorsel-sablon` + ana_konu "SporXL spor ayakkabı" + one_cikan_ozellik "rahat taban, hafif, 79 TL"
    - Caption ilk cümlesi 4 hook kategorisinden birine uyuyor mu?
    - Caption gövdesinde "kalite/premium" vs somut detay oranı?
    - CTA `[Eylem]+[Ne Alacak]` formülüne uyuyor mu?
-2. **Hizmet markası** (ör. bir kuaför) + `genel-hakkimizda` şablonu
+2. **Hizmet markası + hizmet tanıtımı** — Bir kuaför/klinik markası + `genel-gorsel-sablon` + ana_konu "saç bakım hizmeti"
    - Hook hikaye/fayda kategorisinde mi?
    - Özellik sayma yerine fayda dili var mı?
-3. **Sağlık sektörü** (disclaimer'lı şablon, ör. `biliyor-muydunuz`)
-   - Disclaimer hâlâ caption sonunda mı? (Tier 2 değişmedi, korunmuş olmalı)
-   - Hook kategorisi sağlık için uygun mu (aykırı/sansasyon değil, eğitici ton)
-4. **Platform farklılaşması** — Aynı marka + aynı şablon + aynı user_prompt ile LinkedIn + Twitter + Instagram seçilerek tek üretim
+3. **Bilgi/eğitim içeriği** — Herhangi bir marka + `genel-gorsel-sablon` + ana_konu "diş fırçalamanın doğru tekniği" + user_prompt "eğitici içerik"
+   - Satış dili sızıntısı var mı? (bu içerik tipi için olmamalı)
+   - Hook kategorisi eğitici tona uygun mu (aykırı/sansasyon değil)
+4. **Platform farklılaşması** — Aynı marka + `genel-gorsel-sablon` + aynı user_prompt ile LinkedIn + Twitter + Instagram seçilerek tek üretim
    - Üç platform caption'ı aynı metnin kopyası mı, yoksa her biri ton/yapı olarak gerçekten farklı mı? (LinkedIn paragraflı/gözlem tonu, Twitter punch-first, Instagram görsel-destekleyici)
-   - Hook kategorisi platform'a göre uygun seçilmiş mi? (LinkedIn'de "aykırı gözlem", Twitter'da "merak/punch", Instagram'da "hikaye/fayda")
-   - Marka tonuyla çatışma var mı? Kurumsal marka TikTok/Instagram için samimiyet derecesi arttırıyor ama kurumsal kimlik korunuyor mu?
+   - Hook kategorisi platform'a göre uygun seçilmiş mi?
+   - Marka tonuyla çatışma var mı?
 
 Her senaryo için eski vs yeni çıktı kullanıcıya göster. **Somut fark yoksa** Sprint 1 sonuçsuz — Sprint 2'ye geçilmez, önce neden etkisiz olduğu araştırılır.
+
+#### 4.1.6b Canlı Test Sonuçları (2026-04-23)
+
+**Test ürünü:** MyGoodShoes / TrendShoe Topuklu Ayakkabı ("Şık, gösterişli, topuklu kadın ayakkabısı")
+
+**Sprint 1 ilk deploy (`e3aedca`) sorunları:**
+- Claude ürüne ait olmayan özellikler uydurdu: "ergonomik iç taban", "ortopedik dolgu", "8 saat ayakta", fabricated müşteri yorumu
+- Görsel kalitesi düştü: full-body fashion shot → diz altı crop, olası erkek anatomisi
+- **Kök neden:** SOMUTLUK kuralı "vague olma" dedi ama "bilgi yoksa uydur" demek istemedi; caption_generator kural #5 her durumda close-up zorladı
+
+**Hotfix iterasyonları (4 commit, `481f662`→`e46a351`):**
+1. SOMUTLUK kaçış klozu + YASAK fabrication maddeleri
+2. Dolaylı fayda iddiası da yasak kapsamına
+3. Ürün-bağımsız kurallar + LinkedIn ton sıkılaştırma + kurgusal otorite yasağı + hashtag kapsamı
+4. Tüm örnekler soyut kalıplara çevrildi (spesifik ürün örneği yok)
+
+**Hotfix sonrası durum:**
+- ✅ Görsel: full-body fashion shot, doğru cinsiyet, dengeli kompozisyon
+- ✅ Blatant fabrication kalktı (teknik özellik uydurma)
+- ✅ Twitter/Instagram: sade, dürüst, etkili
+- ⚠️ LinkedIn/YouTube: hâlâ dolaylı uydurma (konfor iddiası, tasarım süreci hikayesi, sektör gözlemi)
+- ⚠️ Hashtag: bilgide olmayan özellik sızdırıyor (#şıkverahat, #herAdımdaKonfor)
+
+**Açık sorun — Sprint 2'ye geçmeden çözülmeli:**
+YASAK kuralları negatif ("yapma") ama Claude bilgi azken ne yapacağını bilmiyor → uzun formatlarda (LinkedIn, YouTube) boşluğu dolgu cümlesiyle dolduruyor. Çözüm adayları:
+- (A) Tier 3 dynamic content'e YASAK tekrarı (son gördüğü talimat en etkili)
+- (B) Pozitif talimat: "bilgi azsa içerik kısa kalsın, dolgu yazma"
+- Her iki yaklaşım birlikte uygulanmalı
 
 #### 4.1.7 Rollback
 
@@ -613,7 +640,7 @@ Sprint 1 sonrası Tier 1 ~1050 token. Sprint 2 eklemesi ile ~1550 token. Fark: p
 
 **Somut karşılaştırma — Satış/promosyon postu (Loss Aversion + Hyperbolic Discounting devrede):**
 
-Marka: MyGoodShoes | Şablon: `eticaret-urun-karti` | Prompt: "Sezon sonu kampanyası, stoklar sınırlı" (kullanıcı gerçek stok bilgisi veriyor)
+Marka: MyGoodShoes | Şablon: `genel-gorsel-sablon` | ana_konu: "SporXL spor ayakkabı" | user_prompt: "Sezon sonu kampanyası, stoklar sınırlı" (kullanıcı gerçek stok bilgisi veriyor)
 
 **Sprint 1 sonrası çıktı (sadece hook + copywriting, psikoloji yok):**
 ```
@@ -647,7 +674,7 @@ mevcutken profilimizdeki linkten bak.
 
 **Kontra örnek — Bilgi/hikaye postu (psikoloji uygulama kuralı "sokma" branch'i):**
 
-Marka: Bir diş kliniği | Şablon: `biliyor-muydunuz` | Prompt: "Diş fırçalamanın doğru tekniği"
+Marka: Bir diş kliniği | Şablon: `genel-gorsel-sablon` | ana_konu: "Diş fırçalamanın doğru tekniği" | user_prompt: "eğitici içerik"
 
 **Sprint 2 sonrası çıktı (psikoloji bloğu var ama uygulama kuralı "bilgi postu → sokma" dedi):**
 ```
@@ -674,9 +701,9 @@ Dikkat: Bu caption'da Loss Aversion, Hyperbolic Discounting, Social Proof YOK. S
 Sprint 2 testi psikoloji katmanına odaklanır. Platform farklılaşması Sprint 1'de test edildi, burada tekrar edilmez (regresyon spot-check yeterli).
 
 1. **Satış/promosyon post — tam psikoloji kombinasyonu**
-   MyGoodShoes + `eticaret-urun-karti` + brief'te gerçek stok/süre verisi → caption'da Specificity + Loss Aversion + Hyperbolic Discounting doğal şekilde kullanılmış mı? Yapay dizilim (her prensibi mekanik olarak sokma) var mı?
+   MyGoodShoes + `genel-gorsel-sablon` + ana_konu "SporXL" + user_prompt "sezon sonu kampanyası, stoklar sınırlı" → caption'da Specificity + Loss Aversion + Hyperbolic Discounting doğal şekilde kullanılmış mı? Yapay dizilim (her prensibi mekanik olarak sokma) var mı?
 2. **Bilgi/hikaye post — psikoloji "sokma" branch kontrolü**
-   Diş kliniği / eğitim markası + `biliyor-muydunuz` veya `genel-hakkimizda` → caption'da "hemen al", "bu hafta başla", "son X kaldı" gibi satış dili SIZINTISI var mı? Varsa Psikoloji Uygulama Kuralı yetersiz — sıkılaştırılmalı.
+   Diş kliniği / eğitim markası + `genel-gorsel-sablon` + ana_konu "diş fırçalamanın doğru tekniği" + user_prompt "eğitici içerik" → caption'da "hemen al", "bu hafta başla", "son X kaldı" gibi satış dili SIZINTISI var mı? Varsa Psikoloji Uygulama Kuralı yetersiz — sıkılaştırılmalı.
 3. **Sahte scarcity kontrolü**
    Kullanıcı brief'inde zaman/stok/müşteri sayısı belirtmediği bir satış postu üret. Caption'da "son X kaldı", "bu hafta sonu son gün", "sadece N müşteri kaldı" gibi uydurma rakam/süre var mı? Varsa Tier 1 Loss Aversion bloğu sıkılaştırılmalı.
 4. **Psikoloji aşırı kullanım kontrolü**
@@ -694,7 +721,7 @@ Sprint 2 testi psikoloji katmanına odaklanır. Platform farklılaşması Sprint
 
 `genel-gorsel-sablon` şablonunun `prompt.guidance` metnine 7 görsel açı kategorisi + her açının sahne/kompozisyon karşılığı + açı seçim talimatı eklenir. Mevcut guidance'ın diğer kısımları (marka renkleri HEX zorunluluğu, logo/rozet yasağı, CTA kuralı) korunur.
 
-**Önemli:** Diğer 22 şablon (`eticaret-urun-karti`, sağlık/hukuk şablonları vb.) bu değişiklikten etkilenmez. Onların kendi sektör-özel guidance'ları var, ad-creative açıları tüm şablonlarda geçerli değil. `genel-gorsel-sablon` zaten "varsayılan genel görsel" olarak tasarlanmıştı (Phase 8 Sprint 2), 7 açı bu şablona en uygun yer.
+**Önemli:** Diğer şablonlar (şu an devre dışı) bu değişiklikten etkilenmez. Aktif olan tek şablon `genel-gorsel-sablon` — 7 açı bu şablona ekleniyor.
 
 #### 4.3.2 Eski Guidance (`templates_data.py`'daki mevcut metin — spot kontrol gerekir)
 
@@ -907,9 +934,9 @@ Phase kapanışı:
 - Cache eşiği: sınır değerde, cache hit gözlemlenmeli
 
 **Test sonuçları:**
-- [ ] MyGoodShoes + SporXL 79 TL karşılaştırma → <beklenen> ✅
-- [ ] Hizmet markası + genel-hakkimizda → <beklenen> ✅
-- [ ] Sağlık sektörü + disclaimer → disclaimer korunmuş ✅
+- [ ] E-ticaret markası + genel-gorsel-sablon + ürün tanıtımı → hook + fayda dili ✅
+- [ ] Hizmet markası + genel-gorsel-sablon + hizmet tanıtımı → hook + fayda dili ✅
+- [ ] Platform farklılaşması (LinkedIn/Twitter/Instagram) → farklı ton ✅
 
 **Commit:** <hash>
 

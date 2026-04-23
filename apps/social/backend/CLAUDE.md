@@ -5,16 +5,32 @@
 > Detaylı plan: `~/otomaix/docs/11-social-marketingskills.md`
 > **İlerleme:** Sprint 1 ✅ · Sprint 1 hotfix ✅
 
-## 2026-04-23 — Phase 11 Sprint 1 hotfix: SOMUTLUK fabrication + image quality fix ✅
+## 2026-04-23 — Phase 11 Sprint 1 hotfix: fabrication + image quality (4 commit) ✅
 
-**Sorun (canlı test):** Sprint 1 SOMUTLUK kuralı ürün bilgisi yetersizken Claude'un detay uydumasına neden oldu. Image_prompt kural #5 her durumda close-up zorlayıp görsel kalitesini düşürdü.
+**Sorun (canlı test):** Sprint 1 YAZIM KURALI Claude'un ürün bilgisi yetersizken detay/özellik/fayda uydumasına neden oldu. Image_prompt kural #5 her durumda close-up zorlayıp görsel kalitesini düşürdü (diz altı crop, erkek anatomisi).
 
 **Değişen dosyalar (2):**
 
 | Dosya | Değişiklik |
 |-------|-----------|
-| `app/core/prompt_builder.py` | SOMUTLUK kuralına KAÇIŞ KLOZU + YASAK bloğuna 4 yeni madde (fabricated özellik/testimonial/sertifika yasağı) |
-| `app/core/caption_generator.py` | image_prompt kural #5: close-up zorunluluğu → şablona göre esnek kompozisyon (genel şablon=lifestyle/full-body, e-ticaret=close-up) |
+| `app/core/prompt_builder.py` | 4 iterasyonda sıkılaştırıldı (aşağıda detay) |
+| `app/core/caption_generator.py` | image_prompt kural #5: close-up zorunluluğu → şablona göre esnek kompozisyon |
+
+**`prompt_builder.py` — iterasyonlar:**
+1. SOMUTLUK kuralına KAÇIŞ KLOZU + YASAK bloğuna fabricated özellik/testimonial/sertifika yasağı (`481f662`)
+2. YASAK dolaylı fayda iddiası da kapsama alındı ("konforlu yapı", "uzun saatler ayakta") (`74f4937`)
+3. YASAK ürün-bağımsız hale getirildi + LinkedIn ton "düşünce liderliği" → "profesyonel ton" + kurgusal otorite ("tasarladık/gözlemledik") yasağı + hashtag kapsam (`323f766`)
+4. Tüm örnekler soyut kalıplara çevrildi — spesifik ürün örneği yok (`e46a351`)
+
+**`caption_generator.py` — image_prompt kural #5 (KOMPOZİSYON):**
+Eski: "close-up, hero angle, %60 ürün odağı" → her durumda yakın plan zorlar
+Yeni: Genel şablonlarda tam vücut/lifestyle/geniş kadraj; giyilebilir ürünlerde model + ürün dengeli; yalnızca e-ticaret kartlarında close-up uygun
+
+**Canlı test sonuçları:**
+- ✅ Görsel kalitesi düzeldi — full-body fashion shot, doğru cinsiyet, dengeli kompozisyon
+- ✅ Blatant fabrication kalktı (ergonomik iç taban, ortopedik dolgu, fabricated testimonial)
+- ⚠️ LinkedIn/YouTube hâlâ dolaylı uydurma yapıyor (konfor iddiası, tasarım süreci hikayesi, kurgusal sektör gözlemi). Hashtag'lere de sızdırıyor (#şıkverahat, #herAdımdaKonfor)
+- **Açık sorun:** YASAK kuralları negatif ("yapma") ama Claude bilgi azken ne yapacağını bilmiyor → boşluğu dolgu cümleleriyle dolduruyor. Sonraki adım: pozitif talimat ("bilgi azsa içerik kısa kalsın") + Tier 3'e YASAK tekrarı gerekli
 
 > **✅ Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (tamamlandı: 2026-04-22).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
