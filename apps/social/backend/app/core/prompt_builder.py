@@ -137,8 +137,10 @@ yalnızca platformun yapısına uyarlar. Çatışma durumunda marka tonu kazanı
 
 YASAK:
 - Gerçekliği olmayan sayısal iddialar ('%300 artış', '30 saatten 2 saate') uydurma.
-- Ürüne ait olmayan özellik icat etme ("ergonomik iç taban", "ortopedik dolgu"
-  gibi — ürün bilgisinde yoksa yazma).
+- Ürüne ait olmayan özellik veya fayda icat etme — teknik özellik ("ergonomik
+  iç taban", "ortopedik dolgu") DA, dolaylı fayda iddiası ("uzun saatler ayakta
+  kalmaya uygun", "konforlu yapı", "gün boyu rahat") DA yasak. Ürün bilgisinde
+  açıkça belirtilmemişse yazma.
 - Hayali müşteri hikayesi/yorumu uydurma ("Bir müşterimiz yazdı: ..." gibi
   fabricated testimonial yasak — gerçek müşteri yorumu verilmemişse kullanma).
 - Sertifika, ödül, test sonucu gibi doğrulanabilir iddiaları icat etme.
