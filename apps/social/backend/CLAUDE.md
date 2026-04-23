@@ -1,9 +1,33 @@
 # Social Backend — CLAUDE.md
 
-> **🚧 Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başladı: 2026-04-21).**
+> **🚧 Phase 11 — Marketing Skills Prompt Entegrasyonu (başladı: 2026-04-23).**
+> `/icerik-olustur` caption kalitesi iyileştirmesi. 4 yüksek öncelikli marketing skill'i `prompt_builder.py` ve `templates_data.py`'a entegre ediliyor.
+> Detaylı plan: `~/otomaix/docs/11-social-marketingskills.md`
+> **İlerleme:** Sprint 1 ✅
+
+> **✅ Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (tamamlandı: 2026-04-22).**
 > `/icerik-olustur` manuel akışına ürün/hizmet görseli tabanlı içerik üretimi eklenmesi. Marka seviyesinde `brand_products` kütüphanesi + ürüne bağlı RAG dokümanları + `nano-banana-pro/edit` image-edit adapter.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 6 ✅ · Sprint 7 ✅ · Sprint 7 polish ✅ · Sprint 10A ✅ · Sprint 10B ✅ — **Phase 9 tamamlandı**
-> Otomatik yayın entegrasyonu Phase 10'a ertelendi.
+
+## 2026-04-23 — Phase 11 Sprint 1: Hook + Copywriting + Platform Ton → Tier 1 ✅
+
+**Dosya:** `app/core/prompt_builder.py` (tek dosya değişti — `_SYSTEM_RULES` sabiti genişletildi)
+
+**Değişiklikler:**
+- `_SYSTEM_RULES`'a CAPTION HOOK KURALI eklendi [ref:social-content — Hook Formulas] (4 kategori: Merak/Hikaye/Fayda/Aykırı + Türkçe örnek kalıplar)
+- `_SYSTEM_RULES`'a YAZIM KURALI eklendi [ref:copywriting — Core Principles + Writing Style + CTA Formula] (fayda>özellik, somutluk>soyutluk, aktif ses, müşteri dili, CTA formülü)
+- `_SYSTEM_RULES`'a PLATFORM TON REHBERİ eklendi [ref:social-content — Platform Quick Reference + references/platforms.md] (9 platform üslup/yapı farkı, PLATFORM_DEFAULTS hard kuralları üzerine soft katman)
+- Mevcut bölümler (DİL KURALI, KULLANICI İSTEĞİ, YASAK, ÇIKTI FORMATI) korundu
+
+**Prompt boyu değişimi:**
+- Tier 1: ~200 → ~1050 token
+- Cache eşiğini aşıyor, Tier 1 artık cache'lenecek
+
+**Etki:** Tier 2/3 dokunulmadı. API sözleşmesi değişmedi. İlk çağrıda cache miss (write cost 1.25x), sonrakiler cache hit.
+
+**Commit:** <hash>
+
+**Sonraki sprint:** Sprint 2 — Psikoloji prensipleri Tier 1'e
 
 ## 2026-04-22 — Phase 9 Sprint 10A: Overlay Akıllı Konumlandırma ✅
 

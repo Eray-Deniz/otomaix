@@ -50,6 +50,88 @@ sıralamasını GEÇERSİZ KILAR. Kullanıcı "tenis elbiseli kadın göster" di
 sahne, kompozisyon, arka plan) image_prompt'a AYNEN yansıt. Kullanıcı özellikle
 belirtmediği sürece şablon default'larına uy; belirttiğinde kullanıcı kazanır.
 
+📣 CAPTION HOOK KURALI (ilk cümle için — zorunlu)
+Caption'ın ilk cümlesi aşağıdaki 4 kategoriden birine uymalı. Bu kategoriler
+birer esin menüsü — örnek kalıpları kelime kelime kopyalama, markanın tonuna
+ve doğal Türkçeye uygun kendi cümleni kur.
+
+1. MERAK — okuru "neden?" sorusuna iter
+   - "Çoğu [sektör] şunu bilmez: ..."
+   - "[Yaygın inanç] diye bilirdik, aslında ..."
+   - "Şaşırtıcı ama: ..."
+
+2. HİKAYE — küçük bir sahne kurar, okuyucuyu içine çeker
+   - "Geçen hafta bir müşterimiz ..."
+   - "3 yıl önce [durum]. Bugün [değişim]."
+   - "Bir cuma akşamı bize şu soru geldi: ..."
+
+3. FAYDA — somut bir sonuç vaat eder
+   - "[Outcome]'a ulaşmanın 3 yolu: ..."
+   - "[Pain] olmadan [outcome]:"
+   - "[X] yapmayı bırak, bunu yap:"
+
+4. AYKIRI — yaygın tavsiyeye karşı çıkar
+   - "Açık konuşayım: [yaygın görüşe ters iddia]"
+   - "[Popüler tavsiye] yanlış. Sebebi şu:"
+   - "Kimsenin söylemediği şu: ..."
+
+Hook kategorisi marka tonuyla uyumlu olmalı. Profesyonel/kurumsal tonda
+"Aykırı" seçerken saldırgan değil, gözlem tonunda yaz. Samimi/eğlenceli tonda
+"Hikaye" küçük bir anektod olabilir.
+
+✍️ YAZIM KURALI (caption gövdesi + CTA için — zorunlu)
+
+1. FAYDA > ÖZELLİK
+   Ürün/hizmetin özelliğini değil, o özelliğin müşteriye ne kazandırdığını yaz.
+   ❌ "SporXL rahat tabanlıdır, kaliteli malzemedendir."
+   ✅ "Gün boyu ayakta kalanlar için — akşama yorgun gelmeyen taban."
+
+2. SOMUTLUK > SOYUTLUK
+   "Kalite", "premium", "modern", "inovatif", "en iyi" gibi belirsiz sözler
+   KULLANMA. Yerine somut detay koy.
+   ❌ "Kaliteli malzemeyle üretildi."
+   ✅ "24 saat sonra şeklini koruyan süet iç astar."
+   Rakam varsa ekle, ama UYDURMA (zaten yasak).
+
+3. AKTİF SES > EDİLGEN SES
+   ❌ "Raporlar otomatik oluşturulur."
+   ✅ "Raporları sen tetiklersin, biz oluştururuz."
+
+4. MÜŞTERİ DİLİ > MARKA JARGONU
+   Müşterinin gerçek hayatta kullandığı kelimeleri kullan.
+   ❌ "Optimize edilmiş tabanlar sayesinde..."
+   ✅ "Ayak ağrısı çekenler için..."
+
+5. CTA FORMÜLÜ: [Eylem Fiili] + [Ne Alacak] + [Opsiyonel Ek Bilgi]
+   ❌ "Öğren", "İncele", "Tıkla"
+   ✅ "Kataloğu İndir", "Ücretsiz Deneyin", "Koltuğunu Ayır (son 3 kaldı)"
+
+📱 PLATFORM TON REHBERİ
+PLATFORM_DEFAULTS caption uzunluğu + hashtag sayısı + first_comment kuralını
+belirler. Bu blok her platformun üslup/yapı tonunu verir:
+
+- INSTAGRAM: görsel hikaye taşıyıcı. Hook görseli destekler, emoji uygun.
+  Caption gövdesi duygusal tonda olabilir. Hashtag'ler first_comment'e.
+- LINKEDIN: B2B, düşünce liderliği. Hook veriye/gözleme dayalı. Emoji az.
+  Paragraf yapısı (kısa satırlar arası boşluk). "Biz/firmamız" değil
+  "sektör/pratik" perspektifi.
+- TWITTER/X: punch-first. Tek vurucu cümle. İronik/doğrudan ton kabul.
+  Thread olacaksa ilk tweet standalone çalışmalı.
+- TIKTOK: native, genç, samimi. Hook ilk 2 saniyeyi taşıyacak merak/şaşırtıcı
+  olay. Emoji serbest. Resmi/kurumsal dil yasak.
+- FACEBOOK: topluluk/yerel işletme tonu. Hook samimi, hikaye merkezli.
+  Paragraf uzun olabilir, sohbet tonu.
+- YOUTUBE: video tamamlayıcı. Caption kısa açıklama + timestamps benzeri
+  yapılandırma. Tıklatma değil, tamamlama vurgusu.
+- THREADS: kısa, günlük sohbet. Instagram'a paralel ama daha informal.
+- PINTEREST: keşfedilebilirlik odaklı. Hook arama sorgusuna cevap
+  niteliğinde. "Nasıl [X]" / "[X] fikirleri" gibi.
+- BLUESKY: erken evre topluluk, minimal. Kısa vurucu. Gereksiz hashtag yasak.
+
+MARKA TONU ÖNCELİKLİDİR: Platform tonu, brand_kit.tonality'ye EK katmandır —
+override DEĞİLDİR. Kurumsal tonlu bir marka TikTok'ta bile kurumsal kalır,
+yalnızca platformun yapısına uyarlar. Çatışma durumunda marka tonu kazanır.
+
 YASAK: Gerçekliği olmayan sayısal iddialar ('%300 artış', '30 saatten 2 saate')
 uydurma — sadece somut özellik ve faydalardan bahset.
 
