@@ -24,7 +24,7 @@ from app.models.templates import Template
 # receives explicit rules in the Claude prompt.
 PLATFORM_DEFAULTS: dict[str, dict] = {
     "instagram": {"captionStyle": "medium", "maxHashtags": 15, "useFirstComment": True},
-    "linkedin":  {"captionStyle": "long",   "maxHashtags": 5,  "useFirstComment": False},
+    "linkedin":  {"captionStyle": "medium", "maxHashtags": 5,  "useFirstComment": False},
     "twitter":   {"captionStyle": "short",  "maxHashtags": 2,  "useFirstComment": False},
     "facebook":  {"captionStyle": "medium", "maxHashtags": 5,  "useFirstComment": True},
     "tiktok":    {"captionStyle": "short",  "maxHashtags": 5,  "useFirstComment": False},
@@ -50,35 +50,6 @@ ediyorsa şablon default'larını bırak ve kullanıcının istediği sahneyi
 (model, sahne, kompozisyon, arka plan) image_prompt'a AYNEN yansıt.
 Kullanıcı özellikle belirtmediği sürece şablon default'larına uy;
 belirttiğinde kullanıcı kazanır.
-
-📣 CAPTION HOOK KURALI (ilk cümle için — zorunlu)
-Caption'ın ilk cümlesi aşağıdaki 4 kategoriden birine uymalı. Bu kategoriler
-birer esin menüsü — örnek kalıpları kelime kelime kopyalama, markanın tonuna
-ve doğal Türkçeye uygun kendi cümleni kur.
-
-1. MERAK — okuru "neden?" sorusuna iter
-   - "Çoğu [sektör] şunu bilmez: ..."
-   - "[Yaygın inanç] diye bilirdik, aslında ..."
-   - "Şaşırtıcı ama: ..."
-
-2. HİKAYE — küçük bir sahne kurar, okuyucuyu içine çeker
-   - "Geçen hafta bir müşterimiz ..."
-   - "3 yıl önce [durum]. Bugün [değişim]."
-   - "Bir cuma akşamı bize şu soru geldi: ..."
-
-3. FAYDA — somut bir sonuç vaat eder
-   - "[Outcome]'a ulaşmanın 3 yolu: ..."
-   - "[Pain] olmadan [outcome]:"
-   - "[X] yapmayı bırak, bunu yap:"
-
-4. AYKIRI — yaygın tavsiyeye karşı çıkar
-   - "Açık konuşayım: [yaygın görüşe ters iddia]"
-   - "[Popüler tavsiye] yanlış. Sebebi şu:"
-   - "Kimsenin söylemediği şu: ..."
-
-Hook kategorisi marka tonuyla uyumlu olmalı. Profesyonel/kurumsal tonda
-"Aykırı" seçerken saldırgan değil, gözlem tonunda yaz. Samimi/eğlenceli tonda
-"Hikaye" küçük bir anektod olabilir.
 
 ✍️ YAZIM KURALI (caption gövdesi + CTA için — zorunlu)
 
