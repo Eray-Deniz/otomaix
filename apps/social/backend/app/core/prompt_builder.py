@@ -117,31 +117,26 @@ yalnızca platformun yapısına uyarlar. Çatışma durumunda marka tonu kazanı
 Aşağıdaki prensipler caption'ın yapısına yön verir. Hepsini her post'ta
 kullanma — içerik türüne ve kullanıcı isteğine uygun olanları seç.
 
-1. JOBS TO BE DONE
-   Müşteri ürünü satın almıyor, bir "işi" yapması için kiralıyor.
-   Matkap alan kişi matkap değil, DELİK istiyor.
-   Uygulama: Ürünün ne olduğunu değil, hangi işi çözdüğünü yaz.
-
-2. SOMUTLUK (Specificity)
+1. SOMUTLUK (Specificity)
    Soyut iddia inandırıcı değil, somut detay inandırıcıdır.
    "İyi sonuç" değil, "ilk hafta 3 yeni sipariş".
    Uygulama: Her vaadin arkasında spesifik durum/rakam/zaman olmalı.
    Gerçek değilse kullanma (YASAK kuralı hatırlatması).
 
-3. LOSS AVERSION (kayıp duyarlılığı)
+2. LOSS AVERSION (kayıp duyarlılığı)
    İnsanlar 100 TL kazanmaktan çok, 100 TL kaybetmekten korkar.
    Uygulama: Kullanıcının "kaçırma" tarafını göster — ama SAHTE scarcity
    yaratma (gerçek stok/süre yoksa kullanma, YASAK).
    ✅ "Bu hafta sonu sipariş verenler pazartesi elinde." (gerçek kargo süresi)
    ❌ "Son 3 ürün!" (stoktan emin değilse)
 
-4. SOCIAL PROOF
+3. SOCIAL PROOF
    İnsanlar ne yapacağını, başkalarının ne yaptığına bakarak anlar.
    Uygulama: Sayı/topluluk/referans varsa caption'a doğal şekilde yerleştir.
    ✅ "300+ işletmenin tercih ettiği sistem"
    ❌ "Herkes bizi tercih ediyor" (soyut)
 
-5. HYPERBOLIC DISCOUNTING (anlık fayda önyargısı)
+4. HYPERBOLIC DISCOUNTING (anlık fayda önyargısı)
    İnsan "6 ay sonra ROI" yerine "bugün başla"yı tercih eder.
    Uygulama: Fayda zaman ufku kısa olsun — "hemen", "bu hafta", "ilk siparişte".
 
@@ -153,8 +148,6 @@ kullanma — içerik türüne ve kullanıcı isteğine uygun olanları seç.
   Sahte scarcity yaratma (veri yoksa bu prensipleri sokma).
 
 - BİLGİ/HİKAYE/KURUMSAL post (hakkımızda, ekip, biliyor muydunuz, alıntı):
-  JTBD çerçevesi uygula — "ürünümüz şu özelliklere sahip" değil, "müşterinin
-  çözdüğü iş şu" perspektifi.
   Satış dili ve scarcity kesinlikle sokma — içeriğin doğal tonunu bozar.
 
 - İçerik türünü kullanıcı isteği (user_prompt) + şablon adı + yapısal
