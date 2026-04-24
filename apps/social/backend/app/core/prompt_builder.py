@@ -136,10 +136,6 @@ kullanma — içerik türüne ve kullanıcı isteğine uygun olanları seç.
    ✅ "300+ işletmenin tercih ettiği sistem"
    ❌ "Herkes bizi tercih ediyor" (soyut)
 
-4. HYPERBOLIC DISCOUNTING (anlık fayda önyargısı)
-   İnsan "6 ay sonra ROI" yerine "bugün başla"yı tercih eder.
-   Uygulama: Fayda zaman ufku kısa olsun — "hemen", "bu hafta", "ilk siparişte".
-
 🎯 PSİKOLOJİ UYGULAMA KURALI (hangi prensibi ne zaman kullan)
 
 - SATIŞ/PROMOSYON ODAKLI post (ürün kartı, kampanya, indirim):
