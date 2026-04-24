@@ -1,10 +1,28 @@
-# Phase 11 — Marketing Skills Prompt Entegrasyonu
+# Phase 11 — Marketing Skills Prompt Entegrasyonu ✅ TAMAMLANDI (2026-04-24)
 
-**Doküman sürümü:** v1.0 (taslak — kullanıcıyla tartışılacak)
+**Doküman sürümü:** v2.0 (tamamlandı)
 **Kapsam:** Otomaix Social `/icerik-olustur` — Claude prompt'larına 4 yüksek öncelikli marketing skill entegrasyonu
 **Hedef dosya konumu:** `~/otomaix/docs/11-social-marketingskills.md`
 **Hazırlayan:** Claude (Anthropic) — `/root/marketingskills/skills/` altındaki SKILL.md dosyalarının analizi + mevcut `prompt_builder.py` ve `templates_data.py` yapısı baz alınarak
-**Tahmini süre:** 3 sprint × 0.5-1 gün = ~2-3 iş günü
+**Gerçekleşen süre:** 2 gün (2026-04-23 — 2026-04-24)
+
+### Tamamlanma Özeti
+
+| Sprint | İçerik | Commit | Durum |
+|--------|--------|--------|-------|
+| Sprint 1 | Hook + Copywriting + Platform ton → Tier 1 | `e3aedca` | ✅ |
+| Sprint 1 hotfix | SOMUTLUK/YASAK sıkılaştırma (4 iterasyon) | `481f662`→`e46a351` | ✅ |
+| Sprint 1 polish | Model Opus 4.6, hook kaldırma, LinkedIn medium | `ab3572e` | ✅ |
+| Sprint 2 | Psikoloji prensipleri (5→3) → Tier 1 | `eaaf47d`, `32979b8`, `702377a` | ✅ |
+| Sprint 3 | 7 görsel açı → genel-gorsel-sablon guidance | `d7296db` | ✅ |
+
+**Plandan sapmalar:**
+- **Model:** claude-opus-4-7 → claude-opus-4-6 (4.6 talimat izlemede daha disiplinli, fabrication riski düşük)
+- **HOOK KURALI kaldırıldı:** Zorunlu 4 kategori Claude'u formülsel açılışlara sıkıştırıyordu
+- **LinkedIn:** long → medium (200-500 kelime gereksiz uzundu)
+- **JTBD prensibi kaldırıldı:** Bilgi yokken "hangi işi çözdüğünü yaz" talimatı fabrication'a yol açtı ("doğrudan üreticiden sunuyoruz" uydurması)
+- **HYPERBOLIC DISCOUNTING kaldırıldı:** "hemen/bu hafta" anlık fayda vurgusu kargo/iade/garanti süresi uydurmasına yol açtı
+- **Kalan psikoloji prensipleri:** 3 (Somutluk, Loss Aversion, Social Proof)
 
 ---
 
@@ -549,6 +567,13 @@ Her senaryo için eski vs yeni çıktı kullanıcıya göster. **Somut fark yoks
 YASAK kuralları negatif ("yapma") ama Claude bilgi azken ne yapacağını bilmiyor → uzun formatlarda (LinkedIn, YouTube) boşluğu dolgu cümlesiyle dolduruyor. Çözüm adayları:
 - (A) Tier 3 dynamic content'e YASAK tekrarı (son gördüğü talimat en etkili)
 - (B) Pozitif talimat: "bilgi azsa içerik kısa kalsın, dolgu yazma"
+
+**Sprint 1 polish (2026-04-24) — 3 karar:**
+1. **Model:** claude-opus-4-7 → claude-opus-4-6. Opus 4.6 constraint-heavy görevlerde daha disiplinli, YASAK kurallarına daha literal uyuyor. Canlı test: fabrication riski belirgin şekilde düştü.
+2. **HOOK KURALI kaldırıldı:** Zorunlu 4 kategori (Merak/Hikaye/Fayda/Aykırı) Claude'u formülsel açılışlara sıkıştırıyordu. Kaldırılınca daha doğal, çeşitli açılışlar.
+3. **LinkedIn:** `long` (200-500 kelime) → `medium` (50-150 kelime). Profesyonel ton PLATFORM TON REHBERİ'nde korunuyor.
+
+Bu 3 değişiklik hotfix'teki açık sorunları (LinkedIn/YouTube dolgu) büyük ölçüde çözdü — model disiplini + kısa format = dolgu alanı daraldı.
 - Her iki yaklaşım birlikte uygulanmalı
 
 #### 4.1.7 Rollback

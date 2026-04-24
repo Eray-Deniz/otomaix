@@ -3,7 +3,75 @@
 > **🚧 Phase 11 — Marketing Skills Prompt Entegrasyonu (başladı: 2026-04-23).**
 > `/icerik-olustur` caption kalitesi iyileştirmesi. 4 yüksek öncelikli marketing skill'i `prompt_builder.py` ve `templates_data.py`'a entegre ediliyor.
 > Detaylı plan: `~/otomaix/docs/11-social-marketingskills.md`
-> **İlerleme:** Sprint 1 ✅ · Sprint 1 hotfix ✅
+> **İlerleme:** Sprint 1 ✅ · Sprint 1 hotfix ✅ · Sprint 1 polish ✅ · Sprint 2 ✅ · Sprint 3 ✅
+
+## 2026-04-24 — Phase 11 Sprint 3: 7 görsel açı kategorisi genel-gorsel-sablon'a ✅
+
+**Değişen dosya:** `app/core/templates_data.py` (`genel-gorsel-sablon.prompt.guidance` genişletildi)
+
+**Değişiklik (`d7296db`):**
+`genel-gorsel-sablon` guidance'ına 7 görsel açı kategorisi eklendi — Claude `image_prompt` yazmadan önce içeriğin açısına göre sahne seçiyor:
+1. Sorun vurgusu (pain point) — öncesi sahnesi
+2. Sonuç vurgusu (outcome) — dönüşüm anı
+3. Sosyal kanıt (social proof) — topluluk/grup
+4. Merak uyandırma (curiosity) — detay yakın plan
+5. Aciliyet (urgency) — zamana bağlı gösterge
+6. Kimlik vurgusu (identity) — hedef kitleye özel ortam
+7. Aykırı yaklaşım (contrarian) — beklenmedik sahne
+
+**Mevcut korunan kurallar:** Logo/rozet/metin yasağı guidance'ta + `caption_generator.py` kural #4'te çift katmanlı. Marka renkleri HEX zorunluluğu, CTA kuralı aynen korundu.
+
+**Canlı test sonuçları:**
+- ✅ Ardışık üretimlerde farklı açılar seçiliyor (stüdyo tekrarı yok)
+- ✅ Logo/yazı fabrication yok
+
+## 2026-04-24 — Phase 11 Sprint 2: Psikoloji prensipleri Tier 1'e ✅
+
+**Değişen dosya:** `app/core/prompt_builder.py` (`_SYSTEM_RULES` genişletildi)
+
+**Değişiklikler (2 commit):**
+
+1. **Psikoloji prensipleri eklendi** (`eaaf47d`): `_SYSTEM_RULES`'a 5 prensip + 2 dallı uygulama kuralı. Satış/promosyon vs bilgi/hikaye dallanması + "emin değilsen sokma" çıkışı.
+
+2. **JTBD prensibi kaldırıldı** (`32979b8`): Canlı testte JTBD "hangi işi çözdüğünü yaz" talimatı Claude'u bilgi yokken uydurma fayda/iddia üretmeye itiyordu ("doğrudan üreticiden sunuyoruz, aracı olmadan" — ürün bilgisinde yok). YAZIM KURALI madde 1 (fayda > özellik) zaten aynı yönlendirmeyi daha güvenli veriyor. 5 → 4 prensip.
+
+3. **HYPERBOLIC DISCOUNTING kaldırıldı** (`702377a`): "hemen/bu hafta/ilk siparişte" anlık fayda vurgusu Claude'u kargo/iade/garanti süresi uydurmaya itiyordu ("2-3 iş gününde kapına geliyor, 30 gün ücretsiz iade" — ürün bilgisinde yok). CTA formülü (YAZIM KURALI madde 5) zaten aksiyon odaklı yönlendirme veriyor. 4 → 3 prensip.
+
+**Kalan 3 prensip:** Somutluk (Specificity), Loss Aversion, Social Proof.
+
+**Canlı test sonuçları:**
+- ✅ Satış postu: somut detay var, sahte scarcity yok
+- ✅ Bilgi postu: satış dili sızıntısı yok
+- ✅ JTBD kaldırılınca fabrication ("aracısız", "doğrudan üretici") kalktı
+- ✅ Psikoloji prensipleri mekanik değil, doğal akışta uygulanıyor
+- ✅ HYPERBOLIC DISCOUNTING kaldırılınca kargo/iade/garanti fabrication kalktı
+
+## 2026-04-24 — Phase 11 Sprint 1 polish: model + hook + LinkedIn ayarları ✅
+
+**Değişen dosyalar (2):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/core/caption_generator.py` | Model `claude-opus-4-7` → `claude-opus-4-6` |
+| `app/core/prompt_builder.py` | CAPTION HOOK KURALI kaldırıldı (28 satır) + LinkedIn `captionStyle` `long` → `medium` |
+
+**1. Model değişikliği — Opus 4.7 → 4.6:**
+Opus 4.7 constraint-heavy caption görevinde "fazla yaratıcılık" gösteriyordu — bilgi boşluğunu doldurmak için fabrication riski yüksekti. Opus 4.6 talimat izlemede daha disiplinli, YASAK kurallarına daha literal uyuyor. Canlı test sonucu: 4.6 caption kalitesi 4.7'den daha iyi.
+
+**2. HOOK KURALI kaldırıldı:**
+Zorunlu 4 kategori (Merak/Hikaye/Fayda/Aykırı) Claude'u kalıplara sıkıştırıyordu — her caption benzer formüllerle başlıyordu. Kaldırılınca daha doğal, çeşitli açılışlar üretiyor. Platform ton rehberi zaten genel hook yönlendirmesi veriyor.
+
+**3. LinkedIn medium:**
+`long` (200-500 kelime) → `medium` (50-150 kelime). LinkedIn'de uzun captionlar okunmuyordu. Profesyonel ton PLATFORM TON REHBERİ'nde korunuyor.
+
+**Commit:** `ab3572e`
+
+**Canlı test sonuçları:**
+- ✅ Caption açılışları daha doğal, formülsel hook kalıpları kalktı
+- ✅ LinkedIn caption'ları kısa ve profesyonel
+- ✅ Opus 4.6 fabrication riski düşük, YASAK kurallarına uyum yüksek
+
+**Sonraki:** Sprint 2 — Psikoloji prensipleri Tier 1'e
 
 ## 2026-04-23 — Phase 11 Sprint 1 hotfix: fabrication + image quality (4 commit) ✅
 
