@@ -3,7 +3,44 @@
 > **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
 > `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
 > Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
-> **İlerleme:** Sprint 1 ✅
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅
+
+## 2026-04-27 — Phase 12 Sprint 2: Backend multi-image generation pipeline ✅
+
+**Değişen dosyalar (3):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/models/schemas.py` | `PostGenerate.image_prompts: list[str] \| None` eklendi |
+| `app/routers/posts.py` | `import asyncio` + `slides_data` JSONB construction + INSERT'e `slides` ($17) + carousel parallel fal.ai submission + response'a `slide_count` |
+| `app/routers/webhooks.py` | Carousel slide JSONB lookup + `_handle_carousel_slide` fonksiyonu |
+
+**`posts.py` carousel akışı:**
+- `content_type='carousel' AND image_prompts` koşulunda `slides_data` JSONB dizisi oluşturulur: `[{order, image_prompt, fal_job_id: null, image_url: null}, ...]`
+- INSERT'e `slides` kolonu ($17) eklendi
+- Paralel fal.ai submission: `asyncio.gather(*tasks, return_exceptions=True)` — her slide için ayrı `generate_image` veya `generate_image_edit` çağrısı
+- Herhangi bir slide submit başarısız olursa tüm post `failed` olur (fail-fast)
+- Başarılı submission sonrası `slides` JSONB'de her slide'ın `fal_job_id`'si güncellenir
+- Response'a `slide_count` eklendi (carousel değilse `null`)
+
+**`webhooks.py` carousel slide handling:**
+- Carousel post'larda üst düzey `fal_job_id` yok — her slide'ın kendi `fal_job_id`'si `slides` JSONB'de
+- İlk `fal_job_id` lookup başarısız olursa `jsonb_array_elements` EXISTS sorgusu ile carousel slide aranır
+- Error path: carousel slide hatası → tüm post `failed` (mevcut error handling aynen çalışır)
+- `_handle_carousel_slide` fonksiyonu:
+  - Slide index tespiti (JSONB'deki `fal_job_id` eşleşmesi)
+  - R2'ye slide-spesifik path ile download (`{post_id}_slide_{order}.jpg`)
+  - Logo overlay: TÜM slide'larda
+  - Text overlay: yalnızca ilk (order=1) ve son (order=max) slide'larda
+  - Intro video: carousel'de yok (`None`)
+  - `SELECT FOR UPDATE` ile atomik JSONB update — race condition koruması
+  - Completion detection: tüm slide'larda `image_url` doluysa → `status='ready'`, `output_url` = ilk slide URL'i
+
+**Etki analizi:**
+- Risk: düşük — carousel branch yalnızca `content_type='carousel' AND image_prompts` koşulunda tetiklenir
+- Tekli image/video/special_day/quote akışları birebir korundu
+- Webhook'ta mevcut `fal_job_id` eşleşmesi öncelikli — carousel lookup yalnızca fallback
+- Migration gerekmez — `slides` JSONB kolonu migration 022'de mevcut
 
 ## 2026-04-27 — Phase 12 Sprint 1: carousel-genel-sablon + caption generator carousel desteği ✅
 
