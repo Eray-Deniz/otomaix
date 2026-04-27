@@ -49,6 +49,23 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
         error_detail = "empty image url"
 
     post = await db.fetchrow("SELECT * FROM social.posts WHERE fal_job_id = $1", request_id)
+
+    is_carousel_slide = False
+    if not post:
+        post = await db.fetchrow(
+            """
+            SELECT * FROM social.posts
+            WHERE content_type = 'carousel' AND status = 'generating'
+              AND EXISTS (
+                SELECT 1 FROM jsonb_array_elements(slides) AS s
+                WHERE s->>'fal_job_id' = $1
+              )
+            """,
+            request_id,
+        )
+        if post:
+            is_carousel_slide = True
+
     if not post:
         sentry_sdk.set_context(
             "fal_webhook",
@@ -92,6 +109,9 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             level="error",
         )
         return OkResponse(data={"post_id": str(post["id"]), "status": "failed", "reason": reason_short})
+
+    if is_carousel_slide:
+        return await _handle_carousel_slide(post, request_id, image_url, db)
 
     post_id = post["id"]
     brand_id = post["brand_id"]
@@ -194,3 +214,154 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
     )
 
     return OkResponse(data={"post_id": str(post_id), "output_url": final_url})
+
+
+async def _handle_carousel_slide(
+    post: asyncpg.Record,
+    request_id: str,
+    image_url: str,
+    db: asyncpg.Connection,
+) -> OkResponse:
+    """Process a single carousel slide fal.ai callback."""
+    post_id = post["id"]
+    brand_id = post["brand_id"]
+
+    slides = post["slides"] or []
+    if isinstance(slides, str):
+        slides = json.loads(slides)
+
+    slide_index = next(
+        (i for i, s in enumerate(slides) if s.get("fal_job_id") == request_id),
+        None,
+    )
+    if slide_index is None:
+        return OkResponse(data={"skipped": True, "reason": "slide fal_job_id mismatch"})
+
+    slide = slides[slide_index]
+    slide_order = slide.get("order", slide_index + 1)
+    total_slides = len(slides)
+    is_first = slide_order == 1
+    is_last = slide_order == total_slides
+
+    dest_path = f"brands/{brand_id}/posts/generated/{post_id}_slide_{slide_order}.jpg"
+
+    try:
+        raw_url = await r2.download_and_upload(image_url, dest_path, "image/jpeg")
+
+        brand = await db.fetchrow(
+            "SELECT brand_kit, logo_light_url, logo_dark_url FROM social.brands WHERE id = $1",
+            brand_id,
+        )
+        raw_kit = brand["brand_kit"] if brand else None
+        if raw_kit and isinstance(raw_kit, str):
+            raw_kit = json.loads(raw_kit)
+        brand_kit = dict(raw_kit) if raw_kit else {}
+        logo_light_url = brand["logo_light_url"] if brand else None
+        logo_dark_url = brand["logo_dark_url"] if brand else None
+
+        post_use_logo = post["use_logo_overlay"]
+        if post_use_logo is not None:
+            existing_overlay = brand_kit.get("logo_overlay") or {}
+            brand_kit["logo_overlay"] = {**existing_overlay, "enabled": bool(post_use_logo)}
+
+        text_overlay_lines: list[str] | None = None
+        text_overlay_position = "bottom-left"
+        if is_first or is_last:
+            template_id = post.get("template_id") if isinstance(post, dict) else post["template_id"]
+            if template_id:
+                template = get_template_by_id(template_id)
+                if template and template.imageTextOverlay:
+                    spec = template.imageTextOverlay
+                    override = post["image_text_fields"]
+                    effective_fields = override if override is not None else spec.fields
+                    if effective_fields:
+                        raw_fields = post["template_fields"]
+                        if raw_fields and isinstance(raw_fields, str):
+                            try:
+                                raw_fields = json.loads(raw_fields)
+                            except (TypeError, ValueError):
+                                raw_fields = {}
+                        fields_map = dict(raw_fields) if raw_fields else {}
+                        suffix_map = {ff.id: (ff.suffix or "") for ff in template.formFields}
+                        lines: list[str] = []
+                        for fid in effective_fields:
+                            val = fields_map.get(fid)
+                            if val in (None, ""):
+                                continue
+                            val_str = str(val).strip()
+                            if not val_str:
+                                continue
+                            suffix = suffix_map.get(fid, "")
+                            line = f"{val_str} {suffix}".strip() if suffix else val_str
+                            lines.append(line)
+                        if lines:
+                            text_overlay_lines = lines
+                            text_overlay_position = await detect_optimal_text_position(raw_url)
+
+        final_url = await apply_brand_processing(
+            post_id=post_id,
+            brand_id=brand_id,
+            output_url=raw_url,
+            content_type="image",
+            brand_kit=brand_kit,
+            logo_light_url=logo_light_url,
+            logo_dark_url=logo_dark_url,
+            intro_video_url=None,
+            text_overlay_lines=text_overlay_lines,
+            text_overlay_position=text_overlay_position,
+        )
+    except Exception as exc:
+        sentry_sdk.set_context("fal_webhook_carousel", {
+            "post_id": str(post_id),
+            "brand_id": str(brand_id),
+            "slide_order": slide_order,
+            "request_id": request_id,
+        })
+        sentry_sdk.capture_exception(exc)
+        await db.execute(
+            "UPDATE social.posts SET status = 'failed', updated_at = now() WHERE id = $1",
+            post_id,
+        )
+        return OkResponse(data={"post_id": str(post_id), "slide_order": slide_order, "error": str(exc)})
+
+    async with db.transaction():
+        locked = await db.fetchrow(
+            "SELECT slides FROM social.posts WHERE id = $1 FOR UPDATE",
+            post_id,
+        )
+        current_slides = locked["slides"] or []
+        if isinstance(current_slides, str):
+            current_slides = json.loads(current_slides)
+
+        current_slides[slide_index]["image_url"] = final_url
+
+        all_done = all(s.get("image_url") for s in current_slides)
+
+        if all_done:
+            first_url = current_slides[0]["image_url"]
+            await db.execute(
+                "UPDATE social.posts SET slides = $2, status = 'ready', output_url = $3, updated_at = now() WHERE id = $1",
+                post_id,
+                current_slides,
+                first_url,
+            )
+        else:
+            await db.execute(
+                "UPDATE social.posts SET slides = $2, updated_at = now() WHERE id = $1",
+                post_id,
+                current_slides,
+            )
+
+    completed = sum(1 for s in current_slides if s.get("image_url"))
+    logger.info(
+        "Carousel slide %d/%d processed for post %s (all_done=%s)",
+        slide_order, total_slides, post_id, all_done,
+    )
+
+    return OkResponse(data={
+        "post_id": str(post_id),
+        "slide_order": slide_order,
+        "completed": completed,
+        "total": total_slides,
+        "all_done": all_done,
+    })

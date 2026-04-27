@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 import asyncpg
@@ -332,6 +333,14 @@ async def generate_post(
     else:
         enriched_prompt = await _build_image_prompt(payload, brand, brand_kit, db)
 
+    # Carousel — çoklu slide prompt dizisi
+    slides_data: list[dict] | None = None
+    if payload.content_type == "carousel" and payload.image_prompts:
+        slides_data = [
+            {"order": i + 1, "image_prompt": p, "fal_job_id": None, "image_url": None}
+            for i, p in enumerate(payload.image_prompts)
+        ]
+
     # Default caption for quote posts (the quote text itself)
     default_caption: str | None = None
     if payload.content_type == "quote" and payload.quote_text:
@@ -369,9 +378,9 @@ async def generate_post(
              document_ids, aspect_ratio, platforms, status,
              template_id, template_fields, platform_captions,
              caption, hashtags, use_logo_overlay, image_text_fields,
-             product_id)
+             product_id, slides)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
-                $9, $10, $11, $12, $13, $14, $15, $16)
+                $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING *
         """,
         payload.brand_id,
@@ -390,31 +399,66 @@ async def generate_post(
         payload.use_logo_overlay,
         payload.image_text_fields,
         payload.product_id,
+        slides_data,
     )
     post = dict(row)
 
-    try:
-        # Phase 9 Sprint 6 — ürün görseli varsa image-edit, yoksa FLUX fallback (S4 kararı)
-        if product_row and product_row["image_url"]:
-            fal_job_id = await generate_image_edit(
-                enriched_prompt, [product_row["image_url"]], brand_kit
+    import logging
+    _logger = logging.getLogger(__name__)
+
+    if slides_data:
+        # Phase 12 — Carousel: parallel fal.ai submissions for each slide
+        try:
+            tasks = []
+            for slide in slides_data:
+                sp = slide["image_prompt"]
+                if product_row and product_row["image_url"]:
+                    tasks.append(generate_image_edit(sp, [product_row["image_url"]], brand_kit))
+                else:
+                    tasks.append(generate_image(sp, payload.aspect_ratio, brand_kit))
+            job_ids = await asyncio.gather(*tasks, return_exceptions=True)
+            has_failure = any(isinstance(jid, Exception) for jid in job_ids)
+            if has_failure:
+                for i, jid in enumerate(job_ids):
+                    if isinstance(jid, Exception):
+                        _logger.error(f"Carousel slide {i+1} fal.ai submit failed: {jid}", exc_info=jid)
+                await db.execute(
+                    "UPDATE social.posts SET status = 'failed', updated_at = now() WHERE id = $1",
+                    post["id"],
+                )
+            else:
+                for i, jid in enumerate(job_ids):
+                    slides_data[i]["fal_job_id"] = str(jid)
+                await db.execute(
+                    "UPDATE social.posts SET slides = $2 WHERE id = $1",
+                    post["id"],
+                    slides_data,
+                )
+        except Exception as e:
+            _logger.error(f"Carousel fal.ai submission failed for post {post['id']}: {e}", exc_info=True)
+    else:
+        # Single image flow
+        try:
+            if product_row and product_row["image_url"]:
+                fal_job_id = await generate_image_edit(
+                    enriched_prompt, [product_row["image_url"]], brand_kit
+                )
+            else:
+                fal_job_id = await generate_image(enriched_prompt, payload.aspect_ratio, brand_kit)
+            await db.execute(
+                "UPDATE social.posts SET fal_job_id = $2 WHERE id = $1",
+                post["id"],
+                fal_job_id,
             )
-        else:
-            fal_job_id = await generate_image(enriched_prompt, payload.aspect_ratio, brand_kit)
-        await db.execute(
-            "UPDATE social.posts SET fal_job_id = $2 WHERE id = $1",
-            post["id"],
-            fal_job_id,
-        )
-        post["fal_job_id"] = fal_job_id
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"fal.ai generate_image failed for post {post['id']}: {e}", exc_info=True)
+            post["fal_job_id"] = fal_job_id
+        except Exception as e:
+            _logger.error(f"fal.ai generate_image failed for post {post['id']}: {e}", exc_info=True)
 
     return OkResponse(data={
         "post_id": str(post["id"]),
         "status": "generating",
         "caption": caption_value,
+        "slide_count": len(slides_data) if slides_data else None,
     })
 
 
