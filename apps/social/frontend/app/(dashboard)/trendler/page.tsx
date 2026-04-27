@@ -366,9 +366,9 @@ export default function TrendlerPage() {
                   <h3 className="font-semibold text-gray-900 mb-1">Sektör Trendleri</h3>
                   <p className="text-sm text-gray-600 mb-3">
                     {sector ? (
-                      <><span className="font-medium capitalize">{sector}</span> sektörüne özel trend analizi. Ücretsiz kaynaklar + AI sentezi ile sektörünüzdeki güncel trendleri keşfedin.</>
+                      <><span className="font-medium capitalize">{sector}</span> sektöründe öne çıkan trendleri analiz edin ve trend olan konularda içerik üretin.</>
                     ) : (
-                      <>Sektörünüze özel trend analizi. Ücretsiz kaynaklar + AI sentezi ile güncel trendleri keşfedin.</>
+                      <>Sektörünüzde öne çıkan trendleri analiz edin ve trend olan konularda içerik üretin.</>
                     )}
                   </p>
                   <Button onClick={handleRefresh} disabled={refreshing} className="gap-2">
