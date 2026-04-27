@@ -1,9 +1,35 @@
 # Social Backend — CLAUDE.md
 
-> **✅ Phase 11 — Marketing Skills Prompt Entegrasyonu (tamamlandı: 2026-04-24).**
-> `/icerik-olustur` caption kalitesi iyileştirmesi. Model Opus 4.6 geçişi, hook kaldırma, LinkedIn medium, 3 psikoloji prensibi, 7 görsel açı kategorisi.
-> Detaylı plan: `~/otomaix/docs/11-social-marketingskills.md`
-> **İlerleme:** Sprint 1 ✅ · Sprint 1 hotfix ✅ · Sprint 1 polish ✅ · Sprint 2 ✅ · Sprint 3 ✅ — **Phase 11 tamamlandı**
+> **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
+> `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
+> Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
+> **İlerleme:** Sprint 1 ✅
+
+## 2026-04-27 — Phase 12 Sprint 1: carousel-genel-sablon + caption generator carousel desteği ✅
+
+**Değişen dosyalar (3):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/core/templates_data.py` | `carousel-genel-sablon` template eklendi (24. şablon) |
+| `app/core/caption_generator.py` | Carousel çıktı formatı desteği — `image_prompts` dizisi |
+| `app/main.py` | `_validate_templates()` assertion 23 → 24 |
+
+**`carousel-genel-sablon` template:**
+- `contentTypes: ["carousel"]`, `sectors: ["*"]`, `order: 2`
+- Form alanları: `ana_konu` (text, required), `one_cikan_ozellik` (text), `slide_count` (select 2-10, default 5), `cta_url` (url), `cta_label` (text, default "Şimdi Keşfet")
+- Guidance: 7 görsel açı kategorisi ile HOOK → VALUE → CTA slide dizisi kuralı
+- `imageTextOverlay`: `["ana_konu", "one_cikan_ozellik"]`, bottom-left
+
+**`caption_generator.py` carousel desteği:**
+- `_build_output_format_instruction()`: `template_fields` parametresi eklendi. Template `contentTypes`'ta `"carousel"` varsa JSON şemasında `image_prompt` (tekil) → `image_prompts` (dizi, `slide_count` kadar). 6 katı kural her dizi elemanına uygulanır.
+- `generate_captions()`: carousel → `data.setdefault("image_prompts", [])`, normal → `data.setdefault("image_prompt", "")`
+- `_fallback_response()`: carousel → `image_prompts: []`, normal → `image_prompt: "..."`
+
+**Etki analizi:**
+- Risk: düşük — carousel template seçilmedikçe `is_carousel=False` → mevcut akış birebir korunur
+- `_build_output_format_instruction` ek parametresi `template_fields=None` default ile backward compat
+- Sprint 2'de backend multi-image generation `image_prompts` dizisini tüketecek
 
 ## 2026-04-27 — Trendler Sektör sekmesi: fetched_at response eklendi + n8n sweep deaktive ✅
 
