@@ -704,6 +704,97 @@ TEMPLATES["genel-gorsel-sablon"] = Template(
 )
 
 
+TEMPLATES["carousel-genel-sablon"] = Template(
+    id="carousel-genel-sablon",
+    name="Carousel Şablonu",
+    description="Çoklu slide ile hikaye anlatan sosyal medya carousel içeriği",
+    icon="🎠",
+    sectors=["*"],
+    contentTypes=["carousel"],
+    order=2,
+    formFields=[
+        TemplateFormField(id="ana_konu", label="Ana Konu / Ürün / Hizmet Adı", type="text", required=True,
+            placeholder="örn. Yeni koleksiyon, sunduğunuz hizmet, kampanya konusu",
+            validation={"maxLength": 120},
+            group="Konu"),
+        TemplateFormField(id="one_cikan_ozellik", label="Öne Çıkan Özellik", type="text", required=False,
+            placeholder="örn. Temel fayda, ayırt edici özellik, müşteri için değer",
+            validation={"maxLength": 200},
+            group="Konu"),
+        TemplateFormField(id="slide_count", label="Slide Sayısı", type="select", required=True,
+            defaultValue="5",
+            options=[
+                {"value": "2", "label": "2 Slide"},
+                {"value": "3", "label": "3 Slide"},
+                {"value": "4", "label": "4 Slide"},
+                {"value": "5", "label": "5 Slide"},
+                {"value": "6", "label": "6 Slide"},
+                {"value": "7", "label": "7 Slide"},
+                {"value": "8", "label": "8 Slide"},
+                {"value": "9", "label": "9 Slide"},
+                {"value": "10", "label": "10 Slide"},
+            ],
+            group="Carousel"),
+        TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
+            placeholder="https://... (ürün, kampanya veya site linki)",
+            helpText="Gönderiyi gören kişiyi bir yere yönlendirmek isterseniz linki buraya yapıştırın. Boş bırakırsanız caption yönlendirme yapmaz.",
+            group="Yönlendirme"),
+        TemplateFormField(id="cta_label", label="Çağrı Metni", type="text", required=False,
+            defaultValue="Şimdi Keşfet",
+            placeholder="Şimdi Keşfet",
+            validation={"maxLength": 40},
+            helpText="Linkin üzerine yazılacak kısa çağrı metni. Örn: 'Şimdi Keşfet', 'İncele', 'Sipariş Ver'.",
+            group="Yönlendirme"),
+    ],
+    output=TemplateOutput(aspectRatioSuggestion="1:1"),
+    prompt=TemplatePrompt(
+        guidance=(
+            "Carousel (çoklu slide) sosyal medya içeriği. Her slide farklı bir açıdan konuyu işler, "
+            "birlikte tutarlı bir hikaye anlatır.\n\n"
+            "🎠 CAROUSEL SLIDE DİZİSİ KURALI:\n"
+            "- Slide 1 (HOOK): Dikkat çekici açılış. 7 görsel açı kategorisinden MERAK UYANDIRMA "
+            "veya AYKIRI YAKLAŞIM tercih et. Kullanıcıyı kaydırmaya teşvik eden sahne.\n"
+            "- Slide 2 — Slide N-1 (DEĞER): Her slide farklı açıdan konuyu işle. "
+            "Tekrar etme — her slide'da farklı bir görsel açı kategorisi kullan. "
+            "Slide dizisi boyunca bir anlatı oluştur (sorun → çözüm → sonuç gibi).\n"
+            "- Slide N (CTA/KAPANIŞ): Aksiyon çağrısı. Marka renkleri ağırlıklı, "
+            "temiz kompozisyon, karar anı sahnesi.\n\n"
+            "🎨 GÖRSEL AÇI KATEGORİSİ (her slide için ayrı ayrı seç):\n"
+            "1. SORUN VURGUSU — problemi görselleştir, öncesi sahnesi\n"
+            "2. SONUÇ VURGUSU — dönüşüm/başarı anı, sonrası sahnesi\n"
+            "3. SOSYAL KANIT — topluluk/grup, ortak kullanım sahnesi\n"
+            "4. MERAK UYANDIRMA — örtük/kısmi gösterim, detay yakın plan\n"
+            "5. ACİLİYET — zamana bağlı gösterge, sınırlı sunum sahnesi\n"
+            "6. KİMLİK VURGUSU — hedef kitleye özel ortam\n"
+            "7. AYKIRI YAKLAŞIM — beklenmedik/ters sahne kurgusu\n\n"
+            "⚠️ ÇEŞİTLİLİK ZORUNLU: Aynı açıyı birden fazla slide'da kullanma. "
+            "Özellikle 'SONUÇ VURGUSU' ve 'SOSYAL KANIT' stüdyo estetiğine iter — "
+            "diğer açıları da kullan.\n\n"
+            "Görsel yönergesi (tüm slide'lar için): Marka renklerini (HEX kodlarıyla) "
+            "arka plan ve aksan olarak kullan. image_prompt'ta logo, marka rozeti, "
+            "özellik rozeti, metin katmanı veya yazı TARIF ETME — gerçek logo ve "
+            "caption'lar post-process/platform tarafında ekleniyor.\n\n"
+            "Caption formülü: Hook (ana konu + faydası) → Öne çıkan özellik vurgusu → CTA. "
+            "Caption TEK bir metin — slide bazlı ayrı caption yok, tüm carousel için "
+            "bir caption yazılır.\n\n"
+            "CTA (yönlendirme) kuralı:\n"
+            "- Kullanıcı 'Yönlendirme Linki' doldurduysa: caption'ın son satırında çağrı metnini "
+            "(cta_label) kullan ve platforma göre davran:\n"
+            "  • Instagram/TikTok/Threads: '👉 {cta_label} — profilimizdeki linkten ulaşabilirsiniz'\n"
+            "  • LinkedIn/Facebook/Twitter/Pinterest: '👉 {cta_label}: {cta_url}'\n"
+            "- Kullanıcı link doldurmadıysa: yönlendirme satırı ekleme."
+        ),
+        priority=["form_fields", "brand_kit", "rag_docs"],
+    ),
+    defaults=TemplateDefaults(),
+    imageTextOverlay=ImageTextOverlaySpec(
+        fields=["ana_konu", "one_cikan_ozellik"],
+        position="bottom-left",
+    ),
+    tags=["genel", "carousel"],
+)
+
+
 TEMPLATES["genel-hakkimizda"] = Template(
     id="genel-hakkimizda",
     name="Hakkımızda",

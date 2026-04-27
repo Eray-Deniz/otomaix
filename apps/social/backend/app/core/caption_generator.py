@@ -100,7 +100,7 @@ async def generate_captions(
         template, template_fields, user_prompt, rag_context, platforms, product
     )
 
-    output_format = _build_output_format_instruction(template, platforms)
+    output_format = _build_output_format_instruction(template, platforms, template_fields)
 
     user_content = [
         {
@@ -159,7 +159,11 @@ async def generate_captions(
 
         data.setdefault("default_caption", "")
         data.setdefault("platform_captions", {})
-        data.setdefault("image_prompt", "")
+        is_carousel = template is not None and "carousel" in (template.contentTypes or [])
+        if is_carousel:
+            data.setdefault("image_prompts", [])
+        else:
+            data.setdefault("image_prompt", "")
         data.setdefault("hashtags", [])
 
         _ensure_first_comment(data, template, platforms)
@@ -195,17 +199,23 @@ def _fallback_response(
         if rules.get("useFirstComment"):
             entry["first_comment"] = ""
         pcaptions[p] = entry
-    return {
+    is_carousel = template is not None and "carousel" in (template.contentTypes or [])
+    result: dict[str, Any] = {
         "default_caption": user_prompt or "",
         "platform_captions": pcaptions,
-        "image_prompt": user_prompt or "social media post image",
         "hashtags": [],
     }
+    if is_carousel:
+        result["image_prompts"] = []
+    else:
+        result["image_prompt"] = user_prompt or "social media post image"
+    return result
 
 
 def _build_output_format_instruction(
     template: Template | None,
     platforms: list[str],
+    template_fields: dict | None = None,
 ) -> str:
     """Instruct Claude on exact JSON output format."""
 
@@ -226,6 +236,33 @@ def _build_output_format_instruction(
     else:
         platform_schema = '"default": {"caption": "..."}'
 
+    is_carousel = template is not None and "carousel" in (template.contentTypes or [])
+    slide_count = int((template_fields or {}).get("slide_count", 5)) if is_carousel else 0
+
+    if is_carousel:
+        image_schema = (
+            '"image_prompts": [\n'
+            '    "Slide 1 (HOOK): English visual description for fal.ai FLUX.2 Pro",\n'
+            '    "Slide 2 (VALUE): English visual description...",\n'
+            f'    "... tam olarak {slide_count} adet İngilizce prompt"\n'
+            '  ]'
+        )
+        image_note = (
+            f"ÖNEMLİ: image_prompts dizisinde TAM OLARAK {slide_count} adet İngilizce prompt olmalı.\n"
+            "Her slide farklı bir görsel açı kategorisi kullanmalı — aynı açıyı iki slide'da tekrarlama.\n"
+            "Caption'lar ve hashtag'ler Türkçe olmalı."
+        )
+        field_ref = "her image_prompts elemanında"
+        rules_title = "⚠️ HER image_prompts ELEMANI İÇİN KATIİ KURALLAR"
+    else:
+        image_schema = '"image_prompt": "English visual description for image AI (fal.ai FLUX.2 Pro)"'
+        image_note = (
+            "ÖNEMLİ: image_prompt İngilizce yazılmalı (AI model İngilizce prompt anlıyor).\n"
+            "Caption'lar ve hashtag'ler Türkçe olmalı."
+        )
+        field_ref = "image_prompt'ta"
+        rules_title = "⚠️ image_prompt İÇİN KATIİ KURALLAR"
+
     return f"""ÇIKTI FORMATI (SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):
 
 {{
@@ -233,17 +270,16 @@ def _build_output_format_instruction(
   "platform_captions": {{
     {platform_schema}
   }},
-  "image_prompt": "English visual description for image AI (fal.ai FLUX.2 Pro)",
+  {image_schema},
   "hashtags": ["hashtag1", "hashtag2"]
 }}
 
-ÖNEMLİ: image_prompt İngilizce yazılmalı (AI model İngilizce prompt anlıyor).
-Caption'lar ve hashtag'ler Türkçe olmalı.
+{image_note}
 
-⚠️ image_prompt İÇİN KATIİ KURALLAR (görsel kalitesi için kritik):
-1. MARKA ADI YASAK: image_prompt'ta marka adını (örn. "MyGoodShoes") ASLA kullanma — text-to-image modeli bunu görsele metin olarak basıyor ("from MyGoodShoes" ❌).
-2. ÜRÜN ADI YASAK: spesifik ürün modeli/adı (örn. "SporXL", "iPhone 15") image_prompt'ta geçmesin — görseldeki şort/kutu üzerine yazı olarak basılıyor. Genel kategori kullan: "running sneakers", "smartphone", "leather handbag".
-3. TÜRKÇE METİN YASAK: image_prompt'ta hiçbir Türkçe kelime olmasın. "Rahat · Kaliteli · Şık" gibi özellik metinleri tarif etme — FLUX bunları aynen görsele yazıya döker. Özellikleri görsel olarak ima et (comfort → relaxed pose, quality → premium materials texture, style → modern composition).
+{rules_title} (görsel kalitesi için kritik):
+1. MARKA ADI YASAK: {field_ref} marka adını (örn. "MyGoodShoes") ASLA kullanma — text-to-image modeli bunu görsele metin olarak basıyor ("from MyGoodShoes" ❌).
+2. ÜRÜN ADI YASAK: spesifik ürün modeli/adı (örn. "SporXL", "iPhone 15") {field_ref} geçmesin — görseldeki şort/kutu üzerine yazı olarak basılıyor. Genel kategori kullan: "running sneakers", "smartphone", "leather handbag".
+3. TÜRKÇE METİN YASAK: {field_ref} hiçbir Türkçe kelime olmasın. "Rahat · Kaliteli · Şık" gibi özellik metinleri tarif etme — FLUX bunları aynen görsele yazıya döker. Özellikleri görsel olarak ima et (comfort → relaxed pose, quality → premium materials texture, style → modern composition).
 4. LOGO/ROZET/METİN KATMANI YASAK: "brand logo badge in corner", "feature badge", "text overlay", "watermark", "caption text" ASLA tarif etme. Gerçek marka logosu webhook pipeline'ında post-process olarak ekleniyor — FLUX'un logo çizmesine gerek YOK, hatta hayali logo uyduruyor.
 5. KOMPOZİSYON: Genel şablonlarda (genel-gorsel-sablon vb.) tam vücut, lifestyle, moda çekimi, sahne kompozisyonu gibi geniş kadrajlar tercih et — ürünü SADECE close-up'a sıkıştırma. Giyilebilir ürünler (ayakkabı, kıyafet, aksesuar) için tam vücut model + ürün dengeli görünmeli. E-ticaret ürün kartı şablonlarında ise ürün odaklı close-up/hero angle uygun.
 6. FORMAT ÖNERİSİ: "Professional [photography style] of [generic product category], [full scene composition], [background description] in [brand color HEX], [lighting style], [material/texture detail]. No text, no logos, no overlays."
