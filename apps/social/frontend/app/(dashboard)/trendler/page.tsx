@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   TrendingUp,
-  RefreshCw,
   Wand2,
   Loader2,
   Newspaper,
