@@ -5,6 +5,18 @@
 > Detaylı plan: `~/otomaix/docs/11-social-marketingskills.md`
 > **İlerleme:** Sprint 1 ✅ · Sprint 1 hotfix ✅ · Sprint 1 polish ✅ · Sprint 2 ✅ · Sprint 3 ✅ — **Phase 11 tamamlandı**
 
+## 2026-04-27 — Trendler Sektör sekmesi: fetched_at response eklendi + n8n sweep deaktive ✅
+
+**Değişen dosya:** `app/routers/trends.py`
+
+**Değişiklik:** `GET /trends` endpoint'i `fetched_at` alanını `sector_trend_cache` tablosundan okuyordu ama response'a dahil etmiyordu. Artık response'a `fetched_at: str | None` olarak eklendi. Frontend bu alanı "Son arama: tarih" göstergesi için kullanıyor.
+
+**n8n nightly sweep deaktive:** Workflow `jnjxwCmu7OMVRvwn` (Trends Nightly Sweep, 06:00 TR cron) n8n REST API ile `active: false` yapıldı. Uygulama geliştirme aşamasında olduğu için her gece gereksiz API kredisi harcaması durduruldu. Canlıya geçildiğinde yeniden aktif edilecek.
+
+**Etki analizi:**
+- Risk: sıfır — additive response alanı, mevcut consumer'lar etkilenmez
+- n8n sweep kapatıldığı için sector_trend_cache yeni veri almayacak — kullanıcı manuel "Yeniden Ara" butonuyla refresh yapacak
+
 ## 2026-04-24 — Phase 11 Sprint 3: 7 görsel açı kategorisi genel-gorsel-sablon'a ✅
 
 **Değişen dosya:** `app/core/templates_data.py` (`genel-gorsel-sablon.prompt.guidance` genişletildi)

@@ -99,6 +99,7 @@ export default function TrendlerPage() {
   const [sector, setSector] = useState('')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [sectorFetchedAt, setSectorFetchedAt] = useState<string | null>(null)
 
   // Personal (Layer B)
   const [personalTrends, setPersonalTrends] = useState<Trend[]>([])
@@ -119,12 +120,13 @@ export default function TrendlerPage() {
     if (!currentBrand?.id) return
     setLoading(true)
     try {
-      const res = await api.get<{ sector: string; trends: Trend[] }>(
+      const res = await api.get<{ sector: string; trends: Trend[]; fetched_at: string | null }>(
         `/trends?brand_id=${currentBrand.id}`
       )
       if (res.success && res.data) {
         setTrends(res.data.trends || [])
         setSector(res.data.sector || '')
+        setSectorFetchedAt(res.data.fetched_at || null)
         analytics.trendLayerAViewed(res.data.sector)
       }
     } catch {
@@ -145,6 +147,7 @@ export default function TrendlerPage() {
       if (res.success && res.data) {
         setTrends(res.data.trends || [])
         setSector(res.data.sector || '')
+        setSectorFetchedAt(new Date().toISOString())
         toast.success('Trendler güncellendi')
       }
     } catch {
@@ -311,7 +314,7 @@ export default function TrendlerPage() {
   }
 
   const TABS: { key: TabKey; label: string; icon: typeof TrendingUp; desc: string }[] = [
-    { key: 'sector', label: 'Sektör Trendleri', icon: TrendingUp, desc: '6 saatte bir güncellenir · ücretsiz' },
+    { key: 'sector', label: 'Sektör Trendleri', icon: TrendingUp, desc: 'Sektörünüze özel trend analizi · ücretsiz' },
     { key: 'personal', label: 'Marka Trendleri', icon: Sparkles, desc: 'Markanıza özel canlı arama · aylık kota' },
     { key: 'monthly', label: 'Aylık Rapor', icon: FileText, desc: 'Pro+ · detaylı PDF rapor' },
   ]
@@ -354,33 +357,52 @@ export default function TrendlerPage() {
       {/* ─── Tab: Sektör ──────────────────────────────────────────────── */}
       {activeTab === 'sector' && (
         <div>
-          <div className="flex items-center justify-between mb-4">
-            {sector && (
-              <p className="text-gray-500 text-sm">
-                <span className="font-medium capitalize">{sector}</span> sektörü · 6 saatlik önbellek
-              </p>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="gap-2"
-            >
-              {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Yenile
-            </Button>
-          </div>
+          <Card className="mb-6 border-blue-100 bg-gradient-to-br from-blue-50 to-white">
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-gray-900 mb-1">Sektör Trendleri</h3>
+                  <p className="text-sm text-gray-600 mb-3">
+                    {sector ? (
+                      <><span className="font-medium capitalize">{sector}</span> sektörüne özel trend analizi. Ücretsiz kaynaklar + AI sentezi ile sektörünüzdeki güncel trendleri keşfedin.</>
+                    ) : (
+                      <>Sektörünüze özel trend analizi. Ücretsiz kaynaklar + AI sentezi ile güncel trendleri keşfedin.</>
+                    )}
+                  </p>
+                  <Button onClick={handleRefresh} disabled={refreshing} className="gap-2">
+                    {refreshing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                    {trends.length > 0 ? 'Yeniden Ara' : 'Sektör Trendlerini Ara'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-20">
+          {sectorFetchedAt && trends.length > 0 && !refreshing && (
+            <p className="text-xs text-gray-400 mb-3">
+              Son arama: {formatDateTR(sectorFetchedAt)}
+            </p>
+          )}
+
+          {loading || refreshing ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+              {refreshing && (
+                <p className="text-sm text-gray-500">Trendler analiz ediliyor, lütfen bekleyin...</p>
+              )}
             </div>
           ) : trends.length === 0 ? (
             <Card>
               <CardContent className="py-16 text-center">
                 <TrendingUp className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">Henüz trend yok. &quot;Yenile&quot; ile taze veri çek.</p>
+                <p className="text-gray-500">Henüz trend araması yapılmadı. Yukarıdaki butona tıklayarak sektör trendlerini keşfedin.</p>
               </CardContent>
             </Card>
           ) : (

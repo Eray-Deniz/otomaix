@@ -6,6 +6,28 @@
 > Sprint 10A ✅ · Sprint 10B ✅ — **Phase 9 tamamlandı**
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
+
+## 2026-04-27 — Trendler Sektör sekmesi UI yeniden yazımı ✅
+
+**Dosya:** `app/(dashboard)/trendler/page.tsx`
+
+**Sorun:** Sektör Trendleri sekmesi basit bir "Yenile" butonuyla sayfa yüklendiğinde otomatik API çağrısı yapıyordu. Uygulama geliştirme aşamasında olduğu için her yüklemede gereksiz API kredisi harcanıyordu. Ayrıca Marka Trendleri sekmesindeki pattern'den (kart + "Son arama" tarihi + loading state) farklıydı.
+
+**Değişiklikler:**
+- n8n nightly sweep cron (`jnjxwCmu7OMVRvwn`) deaktive edildi (günlük API israfı durduruldu)
+- Backend `GET /trends` response'una `fetched_at` alanı eklendi (zaten DB'den okunuyordu ama response'a dahil edilmiyordu)
+- Sektör sekmesi Marka Trendleri pattern'ine göre yeniden yazıldı:
+  - Mavi gradient kart (`border-blue-100 bg-gradient-to-br from-blue-50 to-white`) + TrendingUp ikonu + sektör açıklaması
+  - Buton: `trends.length > 0 ? 'Yeniden Ara' : 'Sektör Trendlerini Ara'`
+  - "Son arama: {formatDateTR(sectorFetchedAt)}" tarihi gösterimi
+  - Refresh sırasında: spinner + "Trendler analiz ediliyor, lütfen bekleyin..." loading mesajı
+  - Boş state: "Henüz trend araması yapılmadı" mesajı
+- Tab açıklaması güncellendi: "6 saatte bir güncellenir · ücretsiz" → "Sektörünüze özel trend analizi · ücretsiz"
+
+**Etki analizi:**
+- Risk: düşük — API sözleşmesi değişmedi, sadece UI pattern değişti
+- Sayfa yüklendiğinde `loadTrends()` hâlâ cache'den okur (ucuz), pahalı `handleRefresh()` yalnızca kullanıcı butonuna tıklayınca çalışır
+- TypeScript compile temiz
 > `/icerik-olustur` sayfasının 3 genel kategorisi → 22 sektör-spesifik şablona dönüştü. Detaylı plan: `~/otomaix/docs/07-social-template-system.md`.
 > **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ · Sprint 4 ✅ · Sprint 5 ✅ · Sprint 5 polish ✅ · Sprint 6 ✅ · Sprint 7 (dynamic aspect selector) ✅ — **Phase 7 tamamlandı**
 

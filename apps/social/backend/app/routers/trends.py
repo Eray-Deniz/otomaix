@@ -67,6 +67,7 @@ async def get_trends(
     sector_name = brand.get("sector_name") or sector_slug
 
     trends: list = []
+    fetched_at: str | None = None
     if sector_id:
         row = await db.fetchrow(
             """
@@ -79,6 +80,8 @@ async def get_trends(
         if row and row["trends"]:
             raw = row["trends"]
             trends = raw if isinstance(raw, list) else []
+        if row and row["fetched_at"]:
+            fetched_at = row["fetched_at"].isoformat()
 
     return OkResponse(
         data={
@@ -86,6 +89,7 @@ async def get_trends(
             "sector_slug": sector_slug,
             "trends": trends,
             "count": len(trends),
+            "fetched_at": fetched_at,
         }
     )
 
