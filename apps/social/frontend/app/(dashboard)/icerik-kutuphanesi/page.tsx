@@ -11,7 +11,7 @@ import { ContentCard, type Post, type PostPublication, type CarouselSlide } from
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
-import { Loader2, SlidersHorizontal, X, Send, Calendar, RefreshCw, Bell } from 'lucide-react'
+import { Loader2, SlidersHorizontal, X, Send, Calendar, RefreshCw, Bell, ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
 
@@ -87,11 +87,12 @@ function PostDetailModal({
   const [scheduledAt, setScheduledAt] = useState('')
   const [publications, setPublications] = useState<PostPublication[]>([])
   const [retryingPlatform, setRetryingPlatform] = useState<string | null>(null)
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0)
   const publishingRef = useRef(false)
 
   // Modal açıldığında /posts/{id} ile güncel publications'ı çek
   useEffect(() => {
-    if (!open || !post) { setPublications([]); return }
+    if (!open || !post) { setPublications([]); setActiveSlideIndex(0); return }
     let cancelled = false
     api.get<Post>(`/posts/${post.id}`).then((res) => {
       if (!cancelled && res.success && res.data?.publications) {
@@ -199,32 +200,85 @@ function PostDetailModal({
         <div className="grid grid-cols-2 gap-4">
           {/* Preview */}
           <div className="rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
-            {post.content_type === 'carousel' && post.slides && post.slides.length > 0 ? (
-              <div className="grid grid-cols-2 gap-1 p-1">
-                {post.slides
-                  .sort((a: CarouselSlide, b: CarouselSlide) => a.order - b.order)
-                  .map((slide: CarouselSlide) => (
-                    <div key={slide.order} className="relative rounded overflow-hidden bg-gray-100">
-                      {slide.image_url ? (
-                        <Image
-                          src={slide.image_url}
-                          alt={`Slide ${slide.order}`}
-                          width={200}
-                          height={200}
-                          className="w-full object-cover aspect-square"
-                        />
-                      ) : (
-                        <div className="w-full aspect-square flex items-center justify-center">
-                          <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-                        </div>
-                      )}
-                      <span className="absolute top-1 left-1 bg-black/60 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                        {slide.order}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            ) : imageUrl ? (
+            {post.content_type === 'carousel' && post.slides && post.slides.length > 0 ? (() => {
+              const sorted = [...post.slides].sort((a, b) => a.order - b.order)
+              const current = sorted[activeSlideIndex] ?? sorted[0]
+              return (
+                <div className="flex flex-col">
+                  {/* Big preview */}
+                  <div className="relative bg-gray-100">
+                    {current?.image_url ? (
+                      <Image
+                        src={current.image_url}
+                        alt={`Slide ${current.order}`}
+                        width={400}
+                        height={400}
+                        className="w-full object-contain aspect-square"
+                      />
+                    ) : (
+                      <div className="w-full aspect-square flex items-center justify-center">
+                        <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+                      </div>
+                    )}
+                    {/* Slide counter */}
+                    <span className="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-semibold px-2 py-0.5 rounded">
+                      {activeSlideIndex + 1} / {sorted.length}
+                    </span>
+                    {/* Download current slide */}
+                    {current?.image_url && (
+                      <button
+                        title="Bu slide'ı indir"
+                        className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-1.5 rounded transition-colors"
+                        onClick={(e) => { e.stopPropagation(); window.open(current.image_url!, '_blank') }}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {/* Nav arrows */}
+                    {sorted.length > 1 && (
+                      <>
+                        <button
+                          className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); setActiveSlideIndex((i) => (i - 1 + sorted.length) % sorted.length) }}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button
+                          className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
+                          onClick={(e) => { e.stopPropagation(); setActiveSlideIndex((i) => (i + 1) % sorted.length) }}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {/* Thumbnail strip */}
+                  <div className="flex gap-1 p-1.5 overflow-x-auto">
+                    {sorted.map((slide, idx) => (
+                      <button
+                        key={slide.order}
+                        className={cn(
+                          'relative flex-shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition-colors',
+                          idx === activeSlideIndex ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
+                        )}
+                        onClick={(e) => { e.stopPropagation(); setActiveSlideIndex(idx) }}
+                      >
+                        {slide.image_url ? (
+                          <Image src={slide.image_url} alt={`Slide ${slide.order}`} width={48} height={48} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                            <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
+                          </div>
+                        )}
+                        <span className="absolute bottom-0 right-0 bg-black/60 text-white text-[8px] font-bold px-1 rounded-tl">
+                          {slide.order}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })() : imageUrl ? (
               <Image
                 src={imageUrl}
                 alt="İçerik önizleme"
