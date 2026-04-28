@@ -91,7 +91,7 @@ const CONTENT_TYPES = [
 ]
 
 const ASPECT_RATIOS: { id: AspectRatio; label: string; desc: string; icon: string }[] = [
-  { id: '1:1', label: '1:1', desc: 'Kare (Instagram/Facebook/LinkedIn)', icon: '⬜' },
+  { id: '1:1', label: '1:1', desc: 'Kare (Tüm Platformlar)', icon: '⬜' },
   { id: '9:16', label: '9:16', desc: 'Dikey (Reels/Stories/TikTok)', icon: '📱' },
   { id: '4:5', label: '4:5', desc: 'Portre (Instagram/Facebook Feed)', icon: '🖼️' },
   { id: '2:3', label: '2:3', desc: 'Uzun Dikey (Pinterest)', icon: '📌' },
