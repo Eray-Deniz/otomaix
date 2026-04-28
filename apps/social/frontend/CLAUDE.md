@@ -1,11 +1,47 @@
 # Social Frontend — CLAUDE.md
 
-> **Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (başlangıç 2026-04-20).**
-> Markaların ürün/hizmet envanterini UI'dan yönetmek + içerik üretiminde referans olarak kullanmak için. Backend Sprint 1-7 canlıda (`dfe7f0a`).
-> **İlerleme:** Sprint 8 ✅ · Sprint 9A ✅ · Sprint 9B ✅
-> Sprint 10A ✅ · Sprint 10B ✅ — **Phase 9 tamamlandı**
+> **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
+> `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
+> Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
+> **İlerleme:** Sprint 1 ✅ (backend) · Sprint 2 ✅ (backend) · Sprint 3 ✅ (frontend)
+
+> **✅ Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (tamamlandı: 2026-04-22).**
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
+
+## 2026-04-28 — Phase 12 Sprint 3: Carousel UI (frontend) ✅
+
+**Değişen dosyalar (2):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `components/templates/CaptionEditor.tsx` | `CaptionData` interface'ine `image_prompts?: string[]` eklendi |
+| `app/(dashboard)/icerik-olustur/page.tsx` | Carousel UI akışı (aşağıda detay) |
+
+**Step 1 — İçerik tipi + alt tip seçici:**
+- `contentType === 'carousel'` seçildiğinde image ile aynı `imageSubType` seçici gösterilir: "Genel Görsel İçerik" / "Ürün/Hizmet İçeriği"
+- "Devam Et" → `carousel-genel-sablon` auto-load (`DEFAULT_CAROUSEL_TEMPLATE_ID` sabiti, image pattern'i ile aynı)
+
+**Step 2 — Form + caption:**
+- `carousel-genel-sablon` template'inin `slide_count` select field'ı (2-10) `DynamicForm` tarafından otomatik render — ek form kodu yok
+- Ürün/Hizmet seçici carousel modunda da çalışır (mevcut `imageSubType === 'product'` guard'ı `['image', 'carousel']` bloğu içinde)
+- `handleGenerateCaption` response'undan `image_prompts` dizisi `captionData`'ya alınır
+- "Slide Görsellerini Üret" butonu: carousel'de `image_prompts` dizi kontrolü, image'da mevcut `image_prompt.trim()` kontrolü
+- `handleGenerate` payload: carousel ise `image_prompts` dizisi gönderilir, `image_prompt` null olur
+
+**Step 3 — Slide grid preview:**
+- `CarouselSlide` interface: `{order, image_url, image_prompt, fal_job_id}`
+- `GeneratedPost`'a `slides?: CarouselSlide[]` + `slide_count?: number` eklendi
+- Carousel post'larda 3 sütunlu slide grid: her slide numara badge + spinner (bekleyen) / görsel (hazır)
+- Progress bar: "X/Y hazır" rozeti + yüzde çubuğu (tüm slide'lar tamamlanınca yeşil)
+- Polling: her 3s'de `slides` JSONB okunur, slide bazlı progress güncellenir
+- Generating mesajı: "Carousel slide görselleri üretiliyor..." + "X slide paralel üretiliyor, bu biraz sürebilir"
+
+**Etki analizi:**
+- Risk: düşük — carousel branch yalnızca `contentType === 'carousel'` koşulunda devreye giriyor
+- Tekli görsel (image) akışı birebir korundu, video/özel gün/alıntı akışları değişmedi
+- TypeScript compile temiz (`tsc --noEmit` exit 0)
+- Migration gerekmez
 
 ## 2026-04-27 — Trendler Sektör sekmesi UI yeniden yazımı ✅
 

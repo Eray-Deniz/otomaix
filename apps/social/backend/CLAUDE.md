@@ -3,7 +3,7 @@
 > **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
 > `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
 > Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ (frontend)
 
 ## 2026-04-27 — Phase 12 Sprint 2: Backend multi-image generation pipeline ✅
 

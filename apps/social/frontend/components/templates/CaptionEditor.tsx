@@ -17,6 +17,7 @@ export interface CaptionData {
   default_caption: string
   platform_captions: Record<string, PlatformCaption>
   image_prompt: string
+  image_prompts?: string[]
   hashtags: string[]
 }
 

@@ -51,6 +51,14 @@ type TemplatePhase = 'pick' | 'form' | 'caption'
 // Phase 8 Sprint 2 — Görsel tipi için varsayılan şablon.
 // `contentType='image'` + "Devam Et" tıklanınca otomatik seçilir; şablon grid'i gösterilmez.
 const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'
+const DEFAULT_CAROUSEL_TEMPLATE_ID = 'carousel-genel-sablon'
+
+interface CarouselSlide {
+  order: number
+  image_url: string | null
+  image_prompt: string
+  fal_job_id: string | null
+}
 
 interface GeneratedPost {
   post_id: string
@@ -58,6 +66,8 @@ interface GeneratedPost {
   output_url?: string
   caption?: string
   hashtags?: string[]
+  slides?: CarouselSlide[]
+  slide_count?: number
   // Faceless video
   script?: string
   audio_url?: string
@@ -226,7 +236,7 @@ function IcerikOlusturInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Görsel hazır olana kadar polling
+  // Görsel/Carousel hazır olana kadar polling
   useEffect(() => {
     if (!generatedPost?.post_id || generatedPost.output_url || generatedPost.status === 'failed') return
     let cancelled = false
@@ -235,11 +245,19 @@ function IcerikOlusturInner() {
       const res = await api.get<GeneratedPost>(`/posts/${generatedPost.post_id}`)
       if (cancelled) return
       if (res.success && res.data?.output_url) {
-        setGeneratedPost(prev => prev ? { ...prev, output_url: res.data!.output_url, status: 'ready' } : prev)
+        setGeneratedPost(prev => prev ? {
+          ...prev,
+          output_url: res.data!.output_url,
+          status: 'ready',
+          slides: res.data!.slides ?? prev.slides,
+        } : prev)
       } else if (res.success && res.data?.status === 'failed') {
         toast.error('Görsel üretilemedi — farklı bir en-boy oranı veya açıklama ile tekrar dene')
         setGeneratedPost(prev => prev ? { ...prev, status: 'failed' } : prev)
       } else if (!cancelled) {
+        if (res.success && res.data?.slides) {
+          setGeneratedPost(prev => prev ? { ...prev, slides: res.data!.slides } : prev)
+        }
         setTimeout(poll, 3000)
       }
     }
@@ -499,6 +517,7 @@ function IcerikOlusturInner() {
     } else {
       // Image / Carousel pipeline — Phase 7 unified Akış C (template veya free mod)
       const isTemplateMode = mode === 'template' && selectedTemplate
+      const isCarousel = contentType === 'carousel' && captionData!.image_prompts && captionData!.image_prompts.length > 0
       const res = await api.post<GeneratedPost>('/posts/generate', {
         brand_id: currentBrand.id,
         content_type: contentType,
@@ -511,7 +530,8 @@ function IcerikOlusturInner() {
         template_id: isTemplateMode ? selectedTemplate.id : null,
         template_fields: isTemplateMode ? templateFields : null,
         platform_captions: captionData!.platform_captions,
-        image_prompt: captionData!.image_prompt,
+        image_prompt: isCarousel ? null : captionData!.image_prompt,
+        image_prompts: isCarousel ? captionData!.image_prompts : null,
         use_logo_overlay: useLogoOverlay,
         image_text_fields: imageTextFields,
         product_id: selectedProduct?.id ?? null,
@@ -526,10 +546,12 @@ function IcerikOlusturInner() {
           )
         }
         setGeneratedPost(res.data)
-        // captionData'dan backward-fill (her iki mod da)
         setCaption(captionData!.default_caption || res.data.caption || '')
         setHashtags(captionData!.hashtags.length ? captionData!.hashtags : res.data.hashtags ?? [])
-        toast.success('İçerik üretimi başlatıldı!')
+        toast.success(isCarousel
+          ? `${res.data.slide_count ?? captionData!.image_prompts?.length ?? 0} slide üretimi başlatıldı!`
+          : 'İçerik üretimi başlatıldı!'
+        )
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
         toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
@@ -590,6 +612,7 @@ function IcerikOlusturInner() {
         default_caption: res.data.default_caption ?? '',
         platform_captions: res.data.platform_captions ?? {},
         image_prompt: res.data.image_prompt ?? '',
+        image_prompts: res.data.image_prompts,
         hashtags: res.data.hashtags ?? [],
       })
       setPhase('caption')
@@ -866,8 +889,8 @@ function IcerikOlusturInner() {
             </div>
           </div>
 
-          {/* Phase 9 Sprint 9A — Görsel alt tip seçici */}
-          {contentType === 'image' && (
+          {/* Phase 9 Sprint 9A — Görsel/Carousel alt tip seçici */}
+          {(contentType === 'image' || contentType === 'carousel') && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-gray-700">Görsel İçerik Türü</p>
               <div className="grid grid-cols-2 gap-3">
@@ -908,12 +931,15 @@ function IcerikOlusturInner() {
 
           <Button
             onClick={async () => {
-              if (contentType === 'image') {
+              if (contentType === 'image' || contentType === 'carousel') {
+                const templateId = contentType === 'carousel'
+                  ? DEFAULT_CAROUSEL_TEMPLATE_ID
+                  : DEFAULT_IMAGE_TEMPLATE_ID
                 setStep(2)
                 setMode('template')
                 setLoadingDefaultTemplate(true)
                 try {
-                  const tpl = await fetchTemplateById(DEFAULT_IMAGE_TEMPLATE_ID)
+                  const tpl = await fetchTemplateById(templateId)
                   if (tpl) {
                     handleSelectTemplate(tpl)
                   } else {
@@ -926,10 +952,6 @@ function IcerikOlusturInner() {
                 return
               }
               setStep(2)
-              if (contentType === 'carousel') {
-                setPhase('pick')
-                setMode('template')
-              }
             }}
             disabled={loadingDefaultTemplate}
             className="w-full"
@@ -955,7 +977,7 @@ function IcerikOlusturInner() {
               {CONTENT_TYPES.find((t) => t.id === contentType)?.icon}{' '}
               {CONTENT_TYPES.find((t) => t.id === contentType)?.label}
             </Badge>
-            {selectedTemplate && ['image', 'carousel'].includes(contentType) && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && (
+            {selectedTemplate && ['image', 'carousel'].includes(contentType) && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && (
               <Badge variant="secondary">
                 {selectedTemplate.icon} {selectedTemplate.name}
               </Badge>
@@ -968,11 +990,13 @@ function IcerikOlusturInner() {
             </button>
           </div>
 
-          {/* Phase 8 Sprint 2 — image için varsayılan şablon fetch edilirken loader */}
-          {contentType === 'image' && loadingDefaultTemplate && (
+          {/* Phase 8 Sprint 2 — image/carousel için varsayılan şablon fetch edilirken loader */}
+          {(contentType === 'image' || contentType === 'carousel') && loadingDefaultTemplate && (
             <div className="flex items-center justify-center py-12 text-gray-500 gap-3">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm">Varsayılan görsel şablonu yükleniyor...</span>
+              <span className="text-sm">
+                {contentType === 'carousel' ? 'Carousel şablonu yükleniyor...' : 'Varsayılan görsel şablonu yükleniyor...'}
+              </span>
             </div>
           )}
 
@@ -990,7 +1014,7 @@ function IcerikOlusturInner() {
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret" */}
           {['image', 'carousel'].includes(contentType) && mode === 'template' && phase === 'form' && selectedTemplate && (
             <div className="space-y-5">
-              {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && (
+              {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && (
                 <button
                   onClick={handleBackToPick}
                   className="text-xs text-blue-500 hover:underline"
@@ -1232,10 +1256,14 @@ function IcerikOlusturInner() {
               <Button
                 onClick={handleGenerate}
                 className="w-full gap-2"
-                disabled={generating || !captionData.image_prompt.trim()}
+                disabled={generating || (
+                  contentType === 'carousel'
+                    ? !(captionData.image_prompts && captionData.image_prompts.length > 0)
+                    : !captionData.image_prompt.trim()
+                )}
               >
                 <Wand2 className="w-4 h-4" />
-                Görseli Üret
+                {contentType === 'carousel' ? 'Slide Görsellerini Üret' : 'Görseli Üret'}
               </Button>
             </div>
           )}
@@ -1715,11 +1743,14 @@ function IcerikOlusturInner() {
                 {contentType === 'video' ? 'Video üretiliyor...' :
                  contentType === 'special_day' ? `${selectedHoliday?.name_tr} içeriği üretiliyor...` :
                  contentType === 'quote' ? 'Alıntı kartı üretiliyor...' :
+                 contentType === 'carousel' ? 'Carousel slide görselleri üretiliyor...' :
                  'İçeriğiniz üretiliyor...'}
               </p>
               <p className="text-sm text-gray-400">
                 {contentType === 'video'
                   ? 'Script ve ses oluşturuluyor, arka plan videosu hazırlanıyor...'
+                  : contentType === 'carousel'
+                  ? `${captionData?.image_prompts?.length ?? 0} slide paralel üretiliyor, bu biraz sürebilir`
                   : 'Bu birkaç saniye sürebilir'
                 }
               </p>
@@ -1774,8 +1805,69 @@ function IcerikOlusturInner() {
                     </div>
                   )}
                 </div>
+              ) : contentType === 'carousel' && generatedPost.slides && generatedPost.slides.length > 0 ? (
+                /* Carousel slide grid önizleme */
+                <div className="space-y-3">
+                  {(() => {
+                    const slides = generatedPost.slides!
+                    const completedCount = slides.filter(s => s.image_url).length
+                    const totalCount = slides.length
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-gray-700">
+                            Slide Görselleri
+                          </p>
+                          <span className={cn(
+                            'text-xs font-medium px-2 py-0.5 rounded-full',
+                            completedCount === totalCount
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-blue-100 text-blue-700'
+                          )}>
+                            {completedCount}/{totalCount} hazır
+                          </span>
+                        </div>
+                        {completedCount < totalCount && (
+                          <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div
+                              className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${(completedCount / totalCount) * 100}%` }}
+                            />
+                          </div>
+                        )}
+                        <div className="grid grid-cols-3 gap-2">
+                          {slides
+                            .sort((a, b) => a.order - b.order)
+                            .map((slide) => (
+                            <div
+                              key={slide.order}
+                              className="relative rounded-xl overflow-hidden border border-gray-200 bg-gradient-to-br from-blue-50 to-indigo-50 aspect-square"
+                            >
+                              {slide.image_url ? (
+                                <Image
+                                  src={slide.image_url}
+                                  alt={`Slide ${slide.order}`}
+                                  width={400}
+                                  height={400}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                                </div>
+                              )}
+                              <div className="absolute top-1.5 left-1.5 bg-black/60 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                                {slide.order}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )
+                  })()}
+                </div>
               ) : (
-                /* Görsel / Carousel önizleme */
+                /* Tekli görsel önizleme */
                 <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200">
                   {generatedPost.output_url ? (
                     <Image
