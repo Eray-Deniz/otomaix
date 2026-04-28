@@ -21,9 +21,9 @@
 | `app/(dashboard)/dashboard/page.tsx` | `PLATFORMS` listesine Pinterest eklendi (SVG ikon + `text-red-600` / `bg-red-50`) |
 
 **Aspect ratio etiket değişikliği (`icerik-olustur`):**
-- 1:1 → "Kare" (eski: "Instagram")
+- 1:1 → "Kare (Instagram/Facebook/LinkedIn)" (eski: "Instagram")
 - 9:16 → "Dikey (Reels/Stories/TikTok)" (eski: "Reels / TikTok")
-- 4:5 → "Portre (IG/FB Feed)" (eski: "Instagram Dikey")
+- 4:5 → "Portre (Instagram/Facebook Feed)" (eski: "Instagram Dikey")
 - 2:3 → "Uzun Dikey (Pinterest)" (eski: "Pinterest")
 - 16:9 → "Yatay (YouTube/LinkedIn)" (eski: "YouTube")
 
