@@ -61,6 +61,7 @@ const STATUS_LABEL: Record<string, string> = {
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: 'Instagram', tiktok: 'TikTok', linkedin: 'LinkedIn',
   facebook: 'Facebook', youtube: 'YouTube', twitter: 'Twitter / X',
+  pinterest: 'Pinterest',
 }
 
 function PostDetailModal({

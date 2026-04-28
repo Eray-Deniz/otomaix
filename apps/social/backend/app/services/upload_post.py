@@ -14,6 +14,7 @@ Real API (https://docs.upload-post.com/openapi.json):
 
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID
 
 import asyncpg
@@ -229,6 +230,7 @@ async def _publish_single_platform(
     filename: str,
     title_text: str,
     first_comment: str | None = None,
+    carousel_media: list[tuple[bytes, str, str]] | None = None,
 ) -> dict:
     """Upload-Post'a TEK platform için yayın çağrısı yapar ve
     `post_publications` satırını sonuca göre günceller. Her platform'un
@@ -236,7 +238,10 @@ async def _publish_single_platform(
 
     Phase 7: `first_comment` sadece IG / FB / Threads için desteklenir —
     Upload-Post `{platform}_first_comment` form parametresi olarak gönderilir.
-    Diğer platformlarda yok sayılır."""
+    Diğer platformlarda yok sayılır.
+
+    Phase 12: `carousel_media` dolu gelirse çoklu `photos[]` gönderilir —
+    Instagram carousel, Facebook album, LinkedIn carousel olarak yayınlanır."""
     import datetime
 
     form_data = [
@@ -246,7 +251,11 @@ async def _publish_single_platform(
     ]
     if first_comment and platform in ("instagram", "facebook", "threads"):
         form_data.append((f"{platform}_first_comment", (None, first_comment[:500])))
-    if is_video:
+    if carousel_media:
+        for m_bytes, m_mime, m_name in carousel_media:
+            form_data.append(("photos[]", (m_name, m_bytes, m_mime)))
+        endpoint = f"{BASE_URL}/upload_photos"
+    elif is_video:
         form_data.append(("video", (filename, media_bytes, media_mime)))
         endpoint = f"{BASE_URL}/upload"
     else:
@@ -438,8 +447,32 @@ async def publish_post(
     content_type = post["content_type"]
     is_video = content_type in ("video", "video_ugc")
 
-    media_bytes, media_mime = await _download_media(post["output_url"])
-    filename = _filename_from_url(post["output_url"], "media.mp4" if is_video else "media.jpg")
+    # Carousel: download all slide images in parallel
+    carousel_media: list[tuple[bytes, str, str]] | None = None
+    if content_type == "carousel":
+        slides_raw = post["slides"]
+        if isinstance(slides_raw, str):
+            import json as _json2
+            try:
+                slides_raw = _json2.loads(slides_raw)
+            except (ValueError, TypeError):
+                slides_raw = []
+        slides_raw = slides_raw or []
+        if slides_raw:
+            sorted_slides = sorted(slides_raw, key=lambda s: s.get("order", 0))
+            slide_entries = [(s.get("image_url"), s.get("order", 0)) for s in sorted_slides if s.get("image_url")]
+            if slide_entries:
+                downloads = await asyncio.gather(*[_download_media(url) for url, _ in slide_entries])
+                carousel_media = [
+                    (dl[0], dl[1], _filename_from_url(url, f"slide_{order}.jpg"))
+                    for (url, order), dl in zip(slide_entries, downloads)
+                ]
+
+    if carousel_media:
+        media_bytes, media_mime, filename = carousel_media[0]
+    else:
+        media_bytes, media_mime = await _download_media(post["output_url"])
+        filename = _filename_from_url(post["output_url"], "media.mp4" if is_video else "media.jpg")
 
     # Legacy fallback: caption + hashtags birleşik title (template'siz postlar için)
     legacy_caption = post["caption"] or ""
@@ -487,6 +520,7 @@ async def publish_post(
             filename=filename,
             title_text=title_text,
             first_comment=first_comment,
+            carousel_media=carousel_media,
         )
         results.append(res)
 

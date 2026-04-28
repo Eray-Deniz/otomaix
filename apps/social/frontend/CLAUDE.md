@@ -1,9 +1,9 @@
 # Social Frontend — CLAUDE.md
 
-> **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
-> `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
+> **✅ Phase 12 — Carousel İçerik Üretimi (tamamlandı: 2026-04-28).**
+> `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI, çoklu görsel yayınlama.
 > Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
-> **İlerleme:** Sprint 1 ✅ (backend) · Sprint 2 ✅ (backend) · Sprint 3 ✅ (frontend) · Sprint 3 bugfix ✅ · Sprint 3 carousel slider ✅ · Sprint 3 carousel sizing ✅
+> Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ (+ bugfix + slider + sizing) · Sprint 4 ✅
 
 > **✅ Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (tamamlandı: 2026-04-22).**
 

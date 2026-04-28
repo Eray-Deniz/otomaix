@@ -1,3 +1,10 @@
+# ✅ PHASE 12 COMPLETE (2026-04-28)
+
+Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ (+ bugfix + slider + sizing) · Sprint 4 ✅
+Sprint 4 P2 (polish: drag & drop sıralama, tek slide yeniden üretme, slide silme/ekleme) ileride yapılabilir.
+
+---
+
 # Phase 12 — Carousel İçerik Üretimi (başlangıç 2026-04-27)
 
 **Doküman sürümü:** v1.0 (taslak, kullanıcı onayı bekliyor)

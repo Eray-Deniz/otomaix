@@ -1,9 +1,36 @@
 # Social Backend — CLAUDE.md
 
-> **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
-> `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
+> **✅ Phase 12 — Carousel İçerik Üretimi (tamamlandı: 2026-04-28).**
+> `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI, çoklu görsel yayınlama.
 > Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ (frontend) · Sprint 3 bugfix ✅
+> Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ (+ bugfix + slider + sizing) · Sprint 4 ✅
+
+## 2026-04-28 — Phase 12 Sprint 4: Carousel yayınlama (Upload-Post çoklu görsel) ✅
+
+**Değişen dosya:** `app/services/upload_post.py`
+
+**Değişiklikler:**
+- `import asyncio` eklendi (paralel slide download için)
+- `_publish_single_platform` → yeni `carousel_media: list[tuple[bytes, str, str]] | None = None` parametresi
+  - `carousel_media` doluysa: her slide için ayrı `photos[]` form field'ı → Upload-Post `POST /upload_photos` endpoint'ine çoklu dosya
+  - Boşsa: mevcut tekli `photos[]` veya `video` davranışı aynen korunur
+- `publish_post` → `content_type == 'carousel'` tespit mantığı:
+  - `post["slides"]` JSONB okunur (double-encode guard: string ise JSON parse)
+  - `order`'a göre sıralanır, `image_url`'i olan slide'lar filtrelenir
+  - `asyncio.gather` ile tüm slide görselleri paralel indirilir
+  - `carousel_media` listesi oluşturulup her platform çağrısına geçirilir
+  - Carousel slide'lar boşsa veya `slides` JSONB yoksa fallback: `output_url`'den tekli görsel (mevcut davranış)
+
+**Platform desteği (Upload-Post tarafı):**
+- Instagram: carousel (çoklu görsel post)
+- Facebook: album
+- LinkedIn: carousel
+- Diğer platformlar: Upload-Post'un kendi adapter'ı belirler
+
+**Etki analizi:**
+- Risk: düşük — `carousel_media` default `None`, tekli image/video akışları birebir korundu
+- `_publish_single_platform` mevcut caller'ları (`carousel_media` geçmeyen) etkilenmez
+- Migration gerekmez
 
 ## 2026-04-28 — Phase 12 Sprint 3 bugfix: Carousel R2 path collision (Bug 1) ✅
 
