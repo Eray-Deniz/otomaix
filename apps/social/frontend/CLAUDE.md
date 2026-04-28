@@ -9,6 +9,35 @@
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
 
+## 2026-04-28 — Aspect ratio etiketleri + Pinterest platform eklenmesi ✅
+
+**Değişen dosyalar (4):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/(dashboard)/icerik-olustur/page.tsx` | `ASPECT_RATIOS` desc alanları format-bazlı etiketlere güncellendi + `PLATFORMS`'a Pinterest eklendi |
+| `app/(dashboard)/icerik-kutuphanesi/page.tsx` | `PLATFORM_OPTIONS` filtre listesine Pinterest eklendi |
+| `app/(dashboard)/otomatik-yayin/page.tsx` | `PLATFORMS` listesine Pinterest eklendi |
+| `app/(dashboard)/dashboard/page.tsx` | `PLATFORMS` listesine Pinterest eklendi (SVG ikon + `text-red-600` / `bg-red-50`) |
+
+**Aspect ratio etiket değişikliği (`icerik-olustur`):**
+- 1:1 → "Kare" (eski: "Instagram")
+- 9:16 → "Dikey (Reels/Stories/TikTok)" (eski: "Reels / TikTok")
+- 4:5 → "Portre (IG/FB Feed)" (eski: "Instagram Dikey")
+- 2:3 → "Uzun Dikey (Pinterest)" (eski: "Pinterest")
+- 16:9 → "Yatay (YouTube/LinkedIn)" (eski: "YouTube")
+
+**Pinterest platform desteği:**
+- 4 sayfadaki platform seçim listelerine Pinterest eklendi
+- Backend `PLATFORM_DEFAULTS` zaten Pinterest destekliyordu (`captionStyle: "medium", maxHashtags: 10, useFirstComment: false`)
+- `ContentCard.tsx` `PLATFORM_ICONS` zaten `pinterest: 'PT'` içeriyordu
+- `CaptionEditor.tsx` ve `CaptionPreview.tsx` zaten Pinterest label ve inline hashtag desteği içeriyordu
+- **Kısıt:** `upload_post.py`'de Pinterest yayınlama desteği yok — içerik üretilebilir ama otomatik yayınlanamaz
+
+**Etki analizi:**
+- Risk: sıfır — additive değişiklikler, mevcut akışlar etkilenmedi
+- TypeScript compile temiz
+
 ## 2026-04-28 — Phase 12 Sprint 3: Carousel önizleme boyutu büyütme ✅
 
 **Sorun (canlı test):** Detay modal'da carousel önizleme görseli tekli image post'lara kıyasla çok küçük görünüyordu. `aspect-square` constraint + küçük thumbnail'ler sorunun kaynağıydı.

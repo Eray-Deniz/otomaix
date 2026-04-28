@@ -46,6 +46,7 @@ const PLATFORM_OPTIONS = [
   { id: 'facebook', label: 'Facebook' },
   { id: 'youtube', label: 'YouTube' },
   { id: 'twitter', label: 'Twitter / X' },
+  { id: 'pinterest', label: 'Pinterest' },
 ]
 
 // ─── Post detail modal ─────────────────────────────────────────────────────────

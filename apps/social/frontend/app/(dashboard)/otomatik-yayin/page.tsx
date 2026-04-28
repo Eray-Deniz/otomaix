@@ -83,6 +83,7 @@ const PLATFORMS = [
   { id: 'facebook',  label: 'Facebook' },
   { id: 'youtube',   label: 'YouTube' },
   { id: 'twitter',   label: 'Twitter / X' },
+  { id: 'pinterest', label: 'Pinterest' },
 ]
 
 const HOURS = Array.from({ length: 18 }, (_, i) => {
