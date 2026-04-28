@@ -309,6 +309,7 @@ async def _handle_carousel_slide(
             intro_video_url=None,
             text_overlay_lines=text_overlay_lines,
             text_overlay_position=text_overlay_position,
+            slide_order=slide_order,
         )
     except Exception as exc:
         sentry_sdk.set_context("fal_webhook_carousel", {

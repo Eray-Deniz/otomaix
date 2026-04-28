@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { ContentCard, type Post, type PostPublication } from '@/components/content/ContentCard'
+import { ContentCard, type Post, type PostPublication, type CarouselSlide } from '@/components/content/ContentCard'
 import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
@@ -199,7 +199,32 @@ function PostDetailModal({
         <div className="grid grid-cols-2 gap-4">
           {/* Preview */}
           <div className="rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
-            {imageUrl ? (
+            {post.content_type === 'carousel' && post.slides && post.slides.length > 0 ? (
+              <div className="grid grid-cols-2 gap-1 p-1">
+                {post.slides
+                  .sort((a: CarouselSlide, b: CarouselSlide) => a.order - b.order)
+                  .map((slide: CarouselSlide) => (
+                    <div key={slide.order} className="relative rounded overflow-hidden bg-gray-100">
+                      {slide.image_url ? (
+                        <Image
+                          src={slide.image_url}
+                          alt={`Slide ${slide.order}`}
+                          width={200}
+                          height={200}
+                          className="w-full object-cover aspect-square"
+                        />
+                      ) : (
+                        <div className="w-full aspect-square flex items-center justify-center">
+                          <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+                        </div>
+                      )}
+                      <span className="absolute top-1 left-1 bg-black/60 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                        {slide.order}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            ) : imageUrl ? (
               <Image
                 src={imageUrl}
                 alt="İçerik önizleme"

@@ -3,11 +3,50 @@
 > **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
 > `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
 > Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
-> **İlerleme:** Sprint 1 ✅ (backend) · Sprint 2 ✅ (backend) · Sprint 3 ✅ (frontend)
+> **İlerleme:** Sprint 1 ✅ (backend) · Sprint 2 ✅ (backend) · Sprint 3 ✅ (frontend) · Sprint 3 bugfix ✅
 
 > **✅ Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (tamamlandı: 2026-04-22).**
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
+
+## 2026-04-28 — Phase 12 Sprint 3 bugfix: Carousel görsel bug'ları (3 bug) ✅
+
+**Sorunlar (canlı test):**
+1. Tüm carousel slide'ları aynı görseli gösteriyor (R2 path collision)
+2. İçerik Kütüphanesi carousel'i tek görsel olarak gösteriyor (carousel-aware UI eksik)
+3. İndirme butonu önizlemeden farklı görsel gösteriyor (Bug 1'in sonucu)
+
+**Değişen dosyalar (3):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `components/content/ContentCard.tsx` | `CarouselSlide` interface + `Post.slides` alanı + `Layers` ikon import + carousel badge (slide sayısı) |
+| `app/(dashboard)/icerik-kutuphanesi/page.tsx` | `CarouselSlide` import + PostDetailModal'da carousel slide grid (2 sütun, sıralı, numara badge + spinner/görsel) |
+| Backend: `media_processor.py` + `webhooks.py` | `slide_order` parametresi eklendi — R2 path collision fix (detay: backend/CLAUDE.md) |
+
+**Bug 1 — R2 path collision (backend):**
+- `add_logo_overlay` ve `add_text_overlay` sabit R2 path kullanıyordu → slide'lar birbirini eziyordu
+- Fix: `slide_order: int | None = None` parametresi → `{post_id}_slide_{N}_logo.jpg` / `{post_id}_slide_{N}_text.jpg`
+- `_handle_carousel_slide` → `apply_brand_processing(slide_order=slide_order)` geçildi
+- Tekli image post'lar `slide_order=None` default ile eski path'i korur (backward compat)
+
+**Bug 2 — Carousel-aware kütüphane UI (frontend):**
+- `ContentCard.tsx`: `CarouselSlide` interface eklendi, `Post` tipine `slides?: CarouselSlide[]` eklendi
+- `ContentCard.tsx`: Carousel badge — sağ üst köşede `Layers` ikon + slide sayısı (siyah yarı-saydam arka plan)
+- `icerik-kutuphanesi/page.tsx`: PostDetailModal önizleme alanı carousel-aware:
+  - `content_type === 'carousel' && slides.length > 0` → 2 sütunlu grid, her slide sıralı
+  - Her slide: numara badge (sol üst, siyah daire) + görsel veya spinner (bekleyen)
+  - Tekli image/video önizleme aynen korundu (else branch)
+
+**Bug 3 — İndirme farklı görsel (Bug 1'in sonucu):**
+- Kök neden Bug 1 ile aynı: R2 path collision nedeniyle `output_url` (ilk slide) yanlış görseli gösteriyordu
+- Bug 1 fix sonrası her slide benzersiz R2 URL'ine sahip → `output_url` doğru slide 1 görseline işaret ediyor
+
+**Etki analizi:**
+- Risk: düşük — carousel branch yalnızca `content_type === 'carousel'` koşulunda devreye giriyor
+- Tekli görsel, video, özel gün, alıntı akışları değişmedi
+- TypeScript compile temiz (`tsc --noEmit` exit 0)
+- Migration gerekmez
 
 ## 2026-04-28 — Phase 12 Sprint 3: Carousel UI (frontend) ✅
 

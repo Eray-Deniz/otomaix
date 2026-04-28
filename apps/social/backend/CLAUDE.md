@@ -3,7 +3,29 @@
 > **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
 > `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
 > Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
-> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ (frontend)
+> **İlerleme:** Sprint 1 ✅ · Sprint 2 ✅ · Sprint 3 ✅ (frontend) · Sprint 3 bugfix ✅
+
+## 2026-04-28 — Phase 12 Sprint 3 bugfix: Carousel R2 path collision (Bug 1) ✅
+
+**Sorun:** Carousel slide'ları aynı görseli gösteriyordu. Kök neden: `add_logo_overlay()` ve `add_text_overlay()` sabit R2 path'leri kullanıyordu (`{post_id}_logo.jpg`, `{post_id}_text.jpg`). Slide 1 ve 3'e text overlay uygulandığında her ikisi de aynı dosyaya yazılıyor, son işlenen slide öncekini eziyordu.
+
+**Değişen dosyalar (2):**
+
+| Dosya | Değişiklik |
+|-------|-----------|
+| `app/services/media_processor.py` | `add_logo_overlay`, `add_text_overlay`, `apply_brand_processing` fonksiyonlarına `slide_order: int \| None = None` parametresi eklendi; R2 path'lere `_slide_{N}` tag'i |
+| `app/routers/webhooks.py` | `_handle_carousel_slide` → `apply_brand_processing(slide_order=slide_order)` geçildi |
+
+**R2 path değişimi:**
+- Logo: `{post_id}_logo.jpg` → `{post_id}_slide_{N}_logo.jpg` (carousel), `{post_id}_logo.jpg` (tekli — backward compat)
+- Text: `{post_id}_text.jpg` → `{post_id}_slide_{N}_text.jpg` (carousel), `{post_id}_text.jpg` (tekli — backward compat)
+
+**Backward compat:** `slide_order` default `None` → tekli image post'lar eski path formatını kullanmaya devam eder. Normal webhook handler (`fal_webhook`) `slide_order` geçmez.
+
+**Etki analizi:**
+- Risk: düşük — yalnızca carousel slide brand processing path'leri değişti
+- Tekli image/video akışları birebir korundu (`slide_order=None` default)
+- Migration gerekmez
 
 ## 2026-04-27 — Phase 12 Sprint 2: Backend multi-image generation pipeline ✅
 

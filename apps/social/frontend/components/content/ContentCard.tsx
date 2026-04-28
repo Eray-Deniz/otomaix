@@ -4,7 +4,7 @@ import Image from 'next/image'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Download, Send, Calendar, MoreHorizontal, Loader2 } from 'lucide-react'
+import { Download, Send, Calendar, MoreHorizontal, Loader2, Layers } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,13 @@ export interface PostPublication {
   error_message: string | null
   published_at: string | null
   updated_at: string | null
+}
+
+export interface CarouselSlide {
+  order: number
+  image_url: string | null
+  image_prompt: string
+  fal_job_id: string | null
 }
 
 export interface Post {
@@ -34,6 +41,7 @@ export interface Post {
   published_at: string | null
   created_at: string
   publications?: PostPublication[]
+  slides?: CarouselSlide[]
 }
 
 // ─── Status config ─────────────────────────────────────────────────────────────
@@ -103,6 +111,14 @@ export function ContentCard({ post, onClick, onPublish, showWatermark = false }:
             ) : (
               <span className="text-3xl">🖼️</span>
             )}
+          </div>
+        )}
+
+        {/* Carousel badge */}
+        {post.content_type === 'carousel' && post.slides && post.slides.length > 0 && (
+          <div className="absolute top-2 right-2 flex items-center gap-1 bg-black/60 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+            <Layers className="w-3 h-3" />
+            {post.slides.length}
           </div>
         )}
 

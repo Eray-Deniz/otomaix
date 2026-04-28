@@ -154,6 +154,7 @@ async def add_logo_overlay(
     brand_id: UUID,
     position: str = "bottom-right",
     opacity: float = 0.8,
+    slide_order: int | None = None,
 ) -> tuple[str, tuple[int, int, int, int]] | None:
     """
     Görsel üzerine logo bindirme.
@@ -225,7 +226,8 @@ async def add_logo_overlay(
         result.save(buf, format="JPEG", quality=92)
         buf.seek(0)
 
-        dest_path = f"brands/{brand_id}/posts/generated/{post_id}_logo.jpg"
+        slide_tag = f"_slide_{slide_order}" if slide_order is not None else ""
+        dest_path = f"brands/{brand_id}/posts/generated/{post_id}{slide_tag}_logo.jpg"
         uploaded_url = r2.upload(buf.read(), dest_path, "image/jpeg")
         return uploaded_url, (paste_x, paste_y, lw, lh)
 
@@ -264,6 +266,7 @@ async def add_text_overlay(
     post_id: UUID,
     brand_id: UUID,
     excluded_bbox: tuple[int, int, int, int] | None = None,
+    slide_order: int | None = None,
 ) -> str | None:
     """
     Görsel üzerine çok satırlı metin bindirme (template.imageTextOverlay için).
@@ -420,7 +423,8 @@ async def add_text_overlay(
         result.save(buf, format="JPEG", quality=92)
         buf.seek(0)
 
-        dest_path = f"brands/{brand_id}/posts/generated/{post_id}_text.jpg"
+        slide_tag = f"_slide_{slide_order}" if slide_order is not None else ""
+        dest_path = f"brands/{brand_id}/posts/generated/{post_id}{slide_tag}_text.jpg"
         return r2.upload(buf.read(), dest_path, "image/jpeg")
 
     except Exception:
@@ -514,6 +518,7 @@ async def apply_brand_processing(
     intro_video_url: str | None,
     text_overlay_lines: list[str] | None = None,
     text_overlay_position: str = "bottom-left",
+    slide_order: int | None = None,
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
@@ -553,6 +558,7 @@ async def apply_brand_processing(
                 brand_id=brand_id,
                 position=logo_overlay.get("position", "bottom-right"),
                 opacity=float(logo_overlay.get("opacity", 0.8)),
+                slide_order=slide_order,
             )
             if logo_result:
                 final_url, logo_bbox = logo_result
@@ -566,6 +572,7 @@ async def apply_brand_processing(
             post_id=post_id,
             brand_id=brand_id,
             excluded_bbox=logo_bbox,
+            slide_order=slide_order,
         )
         if text_processed:
             final_url = text_processed
