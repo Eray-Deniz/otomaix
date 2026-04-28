@@ -3,11 +3,51 @@
 > **🚧 Phase 12 — Carousel İçerik Üretimi (başladı: 2026-04-27).**
 > `/icerik-olustur` carousel (çoklu slide) içerik üretimi. Slide bazlı image_prompts dizisi, multi-image fal.ai pipeline, carousel UI.
 > Detaylı plan: `~/otomaix/docs/12-social-carousel.md`
-> **İlerleme:** Sprint 1 ✅ (backend) · Sprint 2 ✅ (backend) · Sprint 3 ✅ (frontend) · Sprint 3 bugfix ✅
+> **İlerleme:** Sprint 1 ✅ (backend) · Sprint 2 ✅ (backend) · Sprint 3 ✅ (frontend) · Sprint 3 bugfix ✅ · Sprint 3 carousel slider ✅ · Sprint 3 carousel sizing ✅
 
 > **✅ Phase 9 — Ürün/Hizmet Kütüphanesi + Image-Edit Pipeline (tamamlandı: 2026-04-22).**
 
 > **✅ Phase 7 — Sektör-Spesifik Şablon Sistemi TAMAMLANDI (2026-04-19).**
+
+## 2026-04-28 — Phase 12 Sprint 3: Carousel önizleme boyutu büyütme ✅
+
+**Sorun (canlı test):** Detay modal'da carousel önizleme görseli tekli image post'lara kıyasla çok küçük görünüyordu. `aspect-square` constraint + küçük thumbnail'ler sorunun kaynağıydı.
+
+**Değişen dosya:** `app/(dashboard)/icerik-kutuphanesi/page.tsx` (PostDetailModal carousel slider bölümü)
+
+**Değişiklikler:**
+- Büyük önizleme: `width={400} height={400}` → `width={500} height={500}`, `aspect-square` sınıfı kaldırıldı, `object-contain` korundu (tekli image ile aynı davranış)
+- Loader placeholder: `aspect-square` → `aspect-[4/5]` (daha uzun oran, carousel'e uygun)
+- Nav okları: `p-1` → `p-1.5`, ikon boyutu `w-4 h-4` → `w-5 h-5`
+- Thumbnail'ler: `w-12 h-12` → `w-14 h-14`, gap `gap-1 p-1.5` → `gap-1.5 p-2`, border radius `rounded` → `rounded-md`, Image boyutları `width={48} height={48}` → `width={56} height={56}`
+
+**Etki analizi:**
+- Risk: sıfır — sadece boyut/spacing CSS değişiklikleri
+- Tekli image/video önizleme etkilenmedi (ayrı branch)
+- TypeScript compile temiz (`tsc --noEmit` exit 0)
+
+## 2026-04-28 — Phase 12 Sprint 3: Carousel slider preview (detay modal) ✅
+
+**Sorun (canlı test):** Detay modal'da carousel görselleri sadece küçük 2×2 grid olarak görünüyordu, kaydırarak büyük önizleme yapılamıyordu. Kullanıcı hangi slide'ın nasıl göründüğünü net göremiyordu.
+
+**Değişen dosya:** `app/(dashboard)/icerik-kutuphanesi/page.tsx` (PostDetailModal)
+
+**Değişiklikler:**
+- Yeni state: `activeSlideIndex` — seçili slide indeksi, modal açıldığında 0'a reset
+- 2×2 grid kaldırıldı, yerine tam carousel slider eklendi:
+  - **Büyük önizleme**: aktif slide'ın görseli (veya generating spinner'ı)
+  - **Sol/sağ ok navigasyonu**: `ChevronLeft`/`ChevronRight` ikonları, ilk/son slide'da disabled
+  - **Slide counter**: "2 / 5" formatında gösterge
+  - **Per-slide download butonu**: aktif slide'ın `image_url`'ini yeni sekmede açar
+  - **Thumbnail strip**: tüm slide'lar yatay sırada, aktif slide `ring-2 ring-blue-500` ile vurgulu, tıklanınca `activeSlideIndex` güncellenir
+- IIFE pattern: JSX içinde `(() => { ... })()` ile `sorted` slides ve `current` slide hesaplanır
+- Import eklendi: `ChevronLeft`, `ChevronRight`, `Download` (lucide-react)
+- ESLint fix: `CarouselSlide` type import kaldırıldı (IIFE içinde TypeScript infer ediyor, Coolify build'de `no-unused-vars` hatası veriyordu)
+
+**Etki analizi:**
+- Risk: düşük — carousel branch yalnızca `content_type === 'carousel' && slides.length > 0` koşulunda devreye giriyor
+- Tekli image/video önizleme aynen korundu (else branch)
+- TypeScript compile temiz (`tsc --noEmit` exit 0)
 
 ## 2026-04-28 — Phase 12 Sprint 3 bugfix: Carousel görsel bug'ları (3 bug) ✅
 

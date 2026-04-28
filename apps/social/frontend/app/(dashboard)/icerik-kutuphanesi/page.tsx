@@ -211,12 +211,12 @@ function PostDetailModal({
                       <Image
                         src={current.image_url}
                         alt={`Slide ${current.order}`}
-                        width={400}
-                        height={400}
-                        className="w-full object-contain aspect-square"
+                        width={500}
+                        height={500}
+                        className="w-full object-contain"
                       />
                     ) : (
-                      <div className="w-full aspect-square flex items-center justify-center">
+                      <div className="w-full aspect-[4/5] flex items-center justify-center">
                         <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
                       </div>
                     )}
@@ -238,33 +238,33 @@ function PostDetailModal({
                     {sorted.length > 1 && (
                       <>
                         <button
-                          className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
+                          className="absolute left-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
                           onClick={(e) => { e.stopPropagation(); setActiveSlideIndex((i) => (i - 1 + sorted.length) % sorted.length) }}
                         >
-                          <ChevronLeft className="w-4 h-4" />
+                          <ChevronLeft className="w-5 h-5" />
                         </button>
                         <button
-                          className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1.5 transition-colors"
                           onClick={(e) => { e.stopPropagation(); setActiveSlideIndex((i) => (i + 1) % sorted.length) }}
                         >
-                          <ChevronRight className="w-4 h-4" />
+                          <ChevronRight className="w-5 h-5" />
                         </button>
                       </>
                     )}
                   </div>
                   {/* Thumbnail strip */}
-                  <div className="flex gap-1 p-1.5 overflow-x-auto">
+                  <div className="flex gap-1.5 p-2 overflow-x-auto">
                     {sorted.map((slide, idx) => (
                       <button
                         key={slide.order}
                         className={cn(
-                          'relative flex-shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition-colors',
+                          'relative flex-shrink-0 w-14 h-14 rounded-md overflow-hidden border-2 transition-colors',
                           idx === activeSlideIndex ? 'border-blue-500' : 'border-transparent hover:border-gray-300'
                         )}
                         onClick={(e) => { e.stopPropagation(); setActiveSlideIndex(idx) }}
                       >
                         {slide.image_url ? (
-                          <Image src={slide.image_url} alt={`Slide ${slide.order}`} width={48} height={48} className="w-full h-full object-cover" />
+                          <Image src={slide.image_url} alt={`Slide ${slide.order}`} width={56} height={56} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full bg-gray-200 flex items-center justify-center">
                             <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
