@@ -275,6 +275,12 @@ async def _handle_carousel_slide(
                     override = post["image_text_fields"]
                     effective_fields = override if override is not None else spec.fields
                     if effective_fields:
+                        # Carousel: ilk slide ilk field, son slide ikinci field
+                        if len(effective_fields) >= 2:
+                            if is_first and not is_last:
+                                effective_fields = effective_fields[:1]
+                            elif is_last and not is_first:
+                                effective_fields = effective_fields[1:2]
                         raw_fields = post["template_fields"]
                         if raw_fields and isinstance(raw_fields, str):
                             try:
