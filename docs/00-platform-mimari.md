@@ -104,11 +104,13 @@ otomaix-redis              → internal (dışa açık değil)
 | Medya depolama | Cloudflare R2 | Egress ücreti sıfır |
 | AI medya üretimi | fal.ai | 600+ model, webhook callback |
 | Sosyal medya yayını | Upload-Post.com | Agency JWT onboarding |
+| AI medya üretimi (caption) | Anthropic Claude | Opus 4.6 caption, Haiku analiz/vision |
+| Video TTS | Azure TTS | Opsiyonel, Faceless video ses |
+| Instagram scraping | Apify | Opsiyonel, rakip analizi |
 | Ödeme | Paddle | Türkiye vergi/fatura yönetimi |
 | Analytics | PostHog (self-host) | GDPR uyumlu |
 | Error monitoring | Sentry | Standart |
 | Canlı destek | Crisp Chat | Free plan yeterli |
-| i18n | next-intl | Next.js özel |
 | Tarih işleme | date-fns + date-fns-tz | Timezone dönüşümü |
 
 ---
@@ -141,58 +143,38 @@ Bu dosya Claude Code'un session başında okuduğu "hafıza" dosyasıdır.
 ```markdown
 # [Servis Adı] — CLAUDE.md
 
+> **DRIFT KORUMA**
+> Bu dosya YALNIZCA: proje yapısı, env, deploy, konvansiyonlar.
+> Sprint logları → git commit.
+> Kararlar → memory/decisions_*.md.
+> Aktif iş → Tasks (oturum içi).
+> Bu dosyaya changelog EKLENMEZ.
+
 ## Proje Amacı
 [Kısa açıklama]
 
-## VPS Bilgileri
-- IP: 178.104.7.200
-- Deploy: Coolify
-- Servis adı: otomaix-[uygulama]-[katman]
+## Deploy
+- Coolify servis adı: otomaix-[uygulama]-[katman]
+- URL: https://[subdomain].otomaix.com
 
-## Bu Servisin Bağımlılıkları
-- PostgreSQL: internal, schema: [schema_adı]
-- Redis: internal
-- n8n: https://n8n.otomaix.com
+## Bağımlılıklar
+- PostgreSQL: schema: [schema_adı]
 - [diğer servisler]
 
-## Ortam Değişkenleri (.env)
-[Hangi env var'ların gerekli olduğu listesi]
+## .env Değişkenleri
+[Gerekli env var listesi]
 
-## Tamamlanan İşler
-- [x] ...
-- [x] ...
+## Klasör Yapısı
+[Dizin ağacı]
 
-## Devam Eden İş
-- [ ] [şu an yapılıyor]
-
-## Bir Sonraki Adım
-[Tam olarak ne yapılacak]
-
-## Önemli Kararlar
-[Bu projede alınan mimari kararlar]
+## Konvansiyonlar
+[Bu projeye özel kurallar]
 ```
 
 ---
 
-## Claude Code Kullanım Kuralları
+## Kesin Kurallar
 
-### Session başında her zaman şunu söyle:
-```
-Read CLAUDE.md and continue from where we left off.
-```
-
-### Session bitmeden önce şunu söyle:
-```
-Update CLAUDE.md: mark completed tasks, write the next step clearly.
-```
-
-### Büyük görevler için dosya referansı:
-```bash
-# Terminal'de
-claude "Read ~/otomaix/docs/01-social-phase1.md and complete Step 2"
-```
-
-### Kesin kurallar:
 - `social/frontend` session'ında `social/backend` kodu yazma
 - Her servis kendi CLAUDE.md'sine sahip olmalı
 - n8n workflow'ları her zaman `shared/n8n-workflows/` klasörüne JSON olarak export edilir
