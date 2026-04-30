@@ -12,7 +12,6 @@ Her iki fonksiyon da:
 """
 
 import io
-import logging
 import os
 import subprocess
 import tempfile
@@ -20,8 +19,7 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
-
-logger = logging.getLogger(__name__)
+import sentry_sdk
 
 from app.services.storage import r2
 
@@ -452,10 +450,10 @@ async def loop_and_mux_audio(
     try:
         result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
         if result.returncode != 0:
-            logger.warning("loop_and_mux_audio: ffmpeg not available (returncode=%s)", result.returncode)
+            sentry_sdk.capture_message(f"loop_and_mux_audio: ffmpeg not available (rc={result.returncode})", level="warning")
             return None
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        logger.warning("loop_and_mux_audio: ffmpeg not found or timed out")
+        sentry_sdk.capture_message("loop_and_mux_audio: ffmpeg not found or timed out", level="warning")
         return None
 
     try:
@@ -464,8 +462,6 @@ async def loop_and_mux_audio(
             audio_resp = await client.get(audio_url)
             video_resp.raise_for_status()
             audio_resp.raise_for_status()
-
-        logger.info("loop_and_mux_audio: downloaded video=%d bytes, audio=%d bytes", len(video_resp.content), len(audio_resp.content))
 
         with tempfile.TemporaryDirectory() as tmpdir:
             video_path = os.path.join(tmpdir, "bg.mp4")
@@ -488,18 +484,17 @@ async def loop_and_mux_audio(
             ]
             proc = subprocess.run(cmd, capture_output=True, timeout=120)
             if proc.returncode != 0:
-                logger.error("loop_and_mux_audio: ffmpeg failed (rc=%s) stderr=%s", proc.returncode, proc.stderr.decode(errors="replace")[:500])
+                stderr = proc.stderr.decode(errors="replace")[:500]
+                sentry_sdk.capture_message(f"loop_and_mux_audio: ffmpeg failed (rc={proc.returncode}) {stderr}", level="error")
                 return None
 
             video_bytes = Path(output_path).read_bytes()
 
         dest_path = f"brands/{brand_id}/posts/generated/{post_id}.mp4"
-        url = r2.upload(video_bytes, dest_path, "video/mp4")
-        logger.info("loop_and_mux_audio: success, uploaded %d bytes to %s", len(video_bytes), dest_path)
-        return url
+        return r2.upload(video_bytes, dest_path, "video/mp4")
 
-    except Exception:
-        logger.exception("loop_and_mux_audio: unexpected error for post %s", post_id)
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
         return None
 
 
@@ -652,7 +647,6 @@ async def apply_brand_processing(
 
     # Faceless video: loop + audio mux — intro/outro'dan ÖNCE
     if is_video and audio_url:
-        logger.info("apply_brand_processing: audio mux starting for post %s, audio_url=%s", post_id, audio_url)
         muxed = await loop_and_mux_audio(
             video_url=final_url,
             audio_url=audio_url,
@@ -661,9 +655,8 @@ async def apply_brand_processing(
         )
         if muxed:
             final_url = muxed
-            logger.info("apply_brand_processing: audio mux succeeded for post %s", post_id)
         else:
-            logger.warning("apply_brand_processing: audio mux returned None for post %s", post_id)
+            sentry_sdk.capture_message(f"audio mux returned None for post {post_id}", level="warning")
 
     # Intro video — sadece videolar için
     if is_video and intro_video_url:
