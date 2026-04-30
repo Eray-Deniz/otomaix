@@ -37,7 +37,7 @@ WEBHOOK_URL = "https://api.otomaix.com/webhooks/fal"
 
 # ─── 1. Script üretimi ──────────────────────────────────────────────────────
 
-async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "") -> dict:
+async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", rag_context: str | None = None) -> dict:
     """Claude API ile Türkçe sosyal medya video scripti üret.
 
     Returns: {"script": "...", "duration_estimate": 45}
@@ -56,17 +56,26 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "") ->
     system = (
         "Sen Türkçe sosyal medya video scriptleri yazan bir içerik uzmanısın. "
         "Scriptler doğal konuşma dilinde, akıcı ve ilgi çekici olmalı. "
-        "Yaklaşık 30-60 saniye sürecek uzunlukta yaz (75-150 kelime)."
+        "Yaklaşık 30-60 saniye sürecek uzunlukta yaz (75-150 kelime). "
+        "Kullanıcı hazır bir script verdiyse onu TEMELden yeniden yaz — aynı mesajı "
+        "farklı kelimelerle, farklı bir açıdan anlat. Birebir kopyalama."
     )
-    user_msg = (
-        f"Marka: {brand_name}\n"
-        f"Sektör: {sector}\n"
-        f"Üslup: {tone_tr}\n\n"
-        f"Konu: {prompt}\n\n"
-        "Bu konuda bir sosyal medya videosu için Türkçe script yaz. "
+    user_parts = [
+        f"Marka: {brand_name}",
+        f"Sektör: {sector}",
+        f"Üslup: {tone_tr}",
+        "",
+        f"Konu / Kullanıcı girdisi: {prompt}",
+    ]
+    if rag_context:
+        user_parts.append(f"\n=== MARKA DÖKÜMAN BAĞLAMI ===\n{rag_context}\n=== BAĞLAM SONU ===")
+        user_parts.append("Yukarıdaki doküman bağlamını içeriğe doğal şekilde yansıt.")
+    user_parts.append(
+        "\nBu konuda bir sosyal medya videosu için Türkçe script yaz. "
         "Her seferinde farklı bir anlatım açısı ve yaratıcı bir giriş kullan. "
         "Sadece script metnini yaz, başka açıklama ekleme."
     )
+    user_msg = "\n".join(user_parts)
 
     try:
         import anthropic
@@ -184,13 +193,14 @@ async def run_faceless_video_pipeline(
     brand_name: str,
     db: asyncpg.Connection,
     brand_description: str = "",
+    rag_context: str | None = None,
 ) -> dict:
     """Tam pipeline: post oluştur → script → TTS → fal.ai video.
 
     Returns post dict with post_id, script, audio_url.
     """
     # 1. Script üret
-    script_result = await generate_script(prompt, brand_kit, brand_name)
+    script_result = await generate_script(prompt, brand_kit, brand_name, rag_context=rag_context)
     script = script_result["script"]
     duration = script_result["duration_estimate"]
 

@@ -798,6 +798,10 @@ async def generate_faceless_video(
     brand_kit = _parse_brand_kit(brand["brand_kit"])
     brand_kit["sector"] = brand["sector"] or ""
 
+    rag_context: str | None = None
+    if payload.document_ids:
+        rag_context = await get_document_context(payload.document_ids, payload.prompt, db)
+
     post = await run_faceless_video_pipeline(
         brand_id=payload.brand_id,
         prompt=payload.prompt,
@@ -806,6 +810,7 @@ async def generate_faceless_video(
         brand_kit=brand_kit,
         brand_name=brand["name"],
         brand_description=brand["description"] or "",
+        rag_context=rag_context,
         db=db,
     )
     return OkResponse(data={
