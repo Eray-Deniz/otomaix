@@ -431,6 +431,67 @@ async def add_text_overlay(
         return None
 
 
+# ─── Faceless Video: loop + audio mux ────────────────────────────────────────
+
+async def loop_and_mux_audio(
+    video_url: str,
+    audio_url: str,
+    post_id: UUID,
+    brand_id: UUID,
+) -> str | None:
+    """5sn background videoyu audio süresine kadar loop et ve TTS audio'yu mux et.
+
+    FFmpeg tek pass: -stream_loop -1 ile video tekrarlanır, -shortest ile
+    audio bitince kesilir. Sonuç R2'ye yüklenir.
+
+    Returns public_url veya None (FFmpeg yoksa / hata durumunda).
+    """
+    try:
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
+        if result.returncode != 0:
+            return None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            video_resp = await client.get(video_url)
+            audio_resp = await client.get(audio_url)
+            video_resp.raise_for_status()
+            audio_resp.raise_for_status()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_path = os.path.join(tmpdir, "bg.mp4")
+            audio_path = os.path.join(tmpdir, "audio.mp3")
+            output_path = os.path.join(tmpdir, "output.mp4")
+
+            Path(video_path).write_bytes(video_resp.content)
+            Path(audio_path).write_bytes(audio_resp.content)
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-stream_loop", "-1",
+                "-i", video_path,
+                "-i", audio_path,
+                "-c:v", "libx264", "-preset", "fast",
+                "-c:a", "aac", "-b:a", "192k",
+                "-shortest",
+                "-movflags", "+faststart",
+                output_path,
+            ]
+            proc = subprocess.run(cmd, capture_output=True, timeout=120)
+            if proc.returncode != 0:
+                return None
+
+            video_bytes = Path(output_path).read_bytes()
+
+        dest_path = f"brands/{brand_id}/posts/generated/{post_id}.mp4"
+        return r2.upload(video_bytes, dest_path, "video/mp4")
+
+    except Exception:
+        return None
+
+
 # ─── Intro Video ─────────────────────────────────────────────────────────────
 
 async def add_intro_video(
@@ -519,13 +580,14 @@ async def apply_brand_processing(
     text_overlay_lines: list[str] | None = None,
     text_overlay_position: str = "bottom-left",
     slide_order: int | None = None,
+    audio_url: str | None = None,
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
 
-    1. Görsel ise + logo_overlay aktifse → arka plan parlaklığına göre
-       uygun logo varyantını seçip ekle
-    2. Video ise + intro_video_url varsa → intro/outro ekle
+    1. Görsel ise + logo_overlay aktifse → logo ekle
+    2. Video ise + audio_url varsa → loop + audio mux
+    3. Video ise + intro_video_url varsa → intro/outro ekle
 
     İşlenen URL döner; herhangi bir adım başarısız olursa orijinal URL korunur.
     """
@@ -576,6 +638,17 @@ async def apply_brand_processing(
         )
         if text_processed:
             final_url = text_processed
+
+    # Faceless video: loop + audio mux — intro/outro'dan ÖNCE
+    if is_video and audio_url:
+        muxed = await loop_and_mux_audio(
+            video_url=final_url,
+            audio_url=audio_url,
+            post_id=post_id,
+            brand_id=brand_id,
+        )
+        if muxed:
+            final_url = muxed
 
     # Intro video — sadece videolar için
     if is_video and intro_video_url:

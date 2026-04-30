@@ -31,22 +31,30 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
     request_id: str = body.get("request_id", "")
     status_field: str = (body.get("status") or "").upper()
     payload = body.get("payload") or {}
-    images = payload.get("images", []) if isinstance(payload, dict) else []
 
-    # fal.ai error payload detection — validation errors, model failures,
-    # rate-limits all arrive via webhook with status=ERROR or detail/error fields
-    # in the payload. Without explicit handling the post would hang in 'generating'.
+    # fal.ai error payload detection
     error_detail = None
     if isinstance(payload, dict):
         error_detail = payload.get("detail") or payload.get("error")
-    is_error = status_field == "ERROR" or bool(error_detail) or not images
+
+    # Image modelleri: payload.images[0].url
+    # Video modelleri: payload.video.url
+    images = payload.get("images", []) if isinstance(payload, dict) else []
+    video_data = payload.get("video", {}) if isinstance(payload, dict) else {}
 
     image_url: str = ""
+    video_url: str = ""
     if images and isinstance(images[0], dict):
         image_url = images[0].get("url", "")
-    if not is_error and not image_url:
-        is_error = True
-        error_detail = "empty image url"
+    if isinstance(video_data, dict):
+        video_url = video_data.get("url", "")
+
+    media_url = image_url or video_url
+    is_video_payload = bool(video_url) and not bool(image_url)
+
+    if not media_url and not error_detail:
+        error_detail = "no media url in payload"
+    is_error = status_field == "ERROR" or bool(error_detail) or not media_url
 
     post = await db.fetchrow("SELECT * FROM social.posts WHERE fal_job_id = $1", request_id)
 
@@ -111,17 +119,23 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
         return OkResponse(data={"post_id": str(post["id"]), "status": "failed", "reason": reason_short})
 
     if is_carousel_slide:
-        return await _handle_carousel_slide(post, request_id, image_url, db)
+        return await _handle_carousel_slide(post, request_id, media_url, db)
 
     post_id = post["id"]
     brand_id = post["brand_id"]
     content_type = post["content_type"] or "image"
-    ext = "jpg"
+
+    if is_video_payload:
+        ext = "mp4"
+        mime = "video/mp4"
+    else:
+        ext = "jpg"
+        mime = "image/jpeg"
     dest_path = f"brands/{brand_id}/posts/generated/{post_id}.{ext}"
 
     try:
         # R2'ye indir
-        raw_url = await r2.download_and_upload(image_url, dest_path, "image/jpeg")
+        raw_url = await r2.download_and_upload(media_url, dest_path, mime)
 
         # Marka bilgilerini çek (brand_kit, logo, intro_video)
         brand = await db.fetchrow(
@@ -185,7 +199,13 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
                         text_overlay_lines = lines
                         text_overlay_position = await detect_optimal_text_position(raw_url)
 
-        # Marka işlemlerini uygula (logo overlay / text overlay / intro video)
+        # Faceless video: audio URL'i R2 path convention'dan türet
+        audio_url: str | None = None
+        if is_video_payload and content_type == "video":
+            from app.core.config import settings as _settings
+            audio_url = f"{_settings.R2_PUBLIC_URL}/brands/{brand_id}/posts/audio/{post_id}.mp3"
+
+        # Marka işlemlerini uygula (logo overlay / text overlay / audio mux / intro video)
         final_url = await apply_brand_processing(
             post_id=post_id,
             brand_id=brand_id,
@@ -197,6 +217,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             intro_video_url=intro_video_url,
             text_overlay_lines=text_overlay_lines,
             text_overlay_position=text_overlay_position,
+            audio_url=audio_url,
         )
     except Exception as exc:
         sentry_sdk.set_context("fal_webhook", {"post_id": str(post_id), "brand_id": str(brand_id), "request_id": request_id})
