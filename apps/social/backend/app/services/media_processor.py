@@ -12,6 +12,7 @@ Her iki fonksiyon da:
 """
 
 import io
+import logging
 import os
 import subprocess
 import tempfile
@@ -19,6 +20,8 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 from app.services.storage import r2
 
