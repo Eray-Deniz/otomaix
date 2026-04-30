@@ -215,8 +215,8 @@ class HunyuanVideoAdapter:
 class WanI2VFlashAdapter:
     """Wan 2.6 image-to-video flash — 2 aşamalı pipeline.
 
-    Pipeline: FLUX.2 still → Wan i2v. audio_url ile TTS sesi doğrudan
-    video'ya embed edilir, FFmpeg mux gereksiz.
+    Pipeline: FLUX.2 still → Wan i2v. TTS audio FFmpeg ile mux edilir
+    (Wan'ın audio_url'i background music için, voiceover değil).
     """
 
     model_id = "wan/v2.6/image-to-video/flash"
@@ -236,7 +236,7 @@ class WanI2VFlashAdapter:
                 f"Supported: {', '.join(sorted(self.supported_ratios))}"
             )
         clamped = min(self._VALID_DURATIONS, key=lambda d: abs(d - duration))
-        args: dict[str, Any] = {
+        return {
             "prompt": prompt,
             "image_url": image_url,
             "aspect_ratio": aspect_ratio,
@@ -244,9 +244,6 @@ class WanI2VFlashAdapter:
             "duration": clamped,
             "negative_prompt": self._NEGATIVE,
         }
-        if audio_url:
-            args["audio_url"] = audio_url
-        return args
 
 
 FACELESS_BACKGROUND_ADAPTERS: dict[str, FacelessBackgroundAdapter] = {

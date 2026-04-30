@@ -199,15 +199,11 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
                         text_overlay_lines = lines
                         text_overlay_position = await detect_optimal_text_position(raw_url)
 
-        # Faceless video audio mux: Wan i2v audio'yu video'ya embed eder,
-        # FFmpeg mux gereksiz. Legacy Hunyuan için mux hâlâ gerekli.
+        # Faceless video: TTS audio'yu FFmpeg ile mux et (loop + ses değiştirme)
         audio_url: str | None = None
         if is_video_payload and content_type == "video":
-            from app.services.media_adapters import get_active_faceless_background_adapter
-            adapter = get_active_faceless_background_adapter()
-            if not adapter.requires_still_image:
-                from app.core.config import settings as _settings
-                audio_url = f"{_settings.R2_PUBLIC_URL}/brands/{brand_id}/posts/audio/{post_id}.mp3"
+            from app.core.config import settings as _settings
+            audio_url = f"{_settings.R2_PUBLIC_URL}/brands/{brand_id}/posts/audio/{post_id}.mp3"
 
         # Marka işlemlerini uygula (logo overlay / text overlay / audio mux / intro video)
         final_url = await apply_brand_processing(

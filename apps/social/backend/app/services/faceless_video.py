@@ -405,7 +405,8 @@ async def run_faceless_video_pipeline(
     # Motion prompt — hareketi tanımlar (Wan i2v için)
     motion_prompt = (
         "Slow cinematic camera push-in, soft ambient lighting, "
-        "gentle particle motion, no people, no human figures, no faces"
+        "gentle particle motion, seamless loop, return to starting position, "
+        "no people, no human figures, no faces"
     )
 
     try:

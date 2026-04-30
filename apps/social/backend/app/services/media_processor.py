@@ -476,6 +476,7 @@ async def loop_and_mux_audio(
                 "-stream_loop", "-1",
                 "-i", video_path,
                 "-i", audio_path,
+                "-map", "0:v", "-map", "1:a",
                 "-c:v", "libx264", "-preset", "fast",
                 "-c:a", "aac", "-b:a", "192k",
                 "-shortest",
