@@ -23,7 +23,6 @@ from app.services.media_adapters import get_active_faceless_background_adapter, 
 TURKISH_VOICES = [
     {"id": "tr-TR-EmelNeural",   "name": "Emel (Kadın)",     "gender": "female"},
     {"id": "tr-TR-AhmetNeural",  "name": "Ahmet (Erkek)",    "gender": "male"},
-    {"id": "tr-TR-HazelNeural",  "name": "Hazel (Kadın)",    "gender": "female"},
 ]
 
 DEFAULT_VOICE = "tr-TR-EmelNeural"
