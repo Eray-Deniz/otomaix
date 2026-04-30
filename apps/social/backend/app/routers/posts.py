@@ -790,7 +790,7 @@ async def generate_faceless_video(
     await check_plan_limit(user["sub"], "video", db)
     await check_plan_limit(user["sub"], "post", db)
     brand = await db.fetchrow(
-        "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
+        "SELECT brand_kit, name, sector, description FROM social.brands WHERE id = $1", payload.brand_id
     )
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
@@ -805,6 +805,7 @@ async def generate_faceless_video(
         aspect_ratio=payload.aspect_ratio,
         brand_kit=brand_kit,
         brand_name=brand["name"],
+        brand_description=brand["description"] or "",
         db=db,
     )
     return OkResponse(data={

@@ -183,6 +183,7 @@ async def run_faceless_video_pipeline(
     brand_kit: dict,
     brand_name: str,
     db: asyncpg.Connection,
+    brand_description: str = "",
 ) -> dict:
     """Tam pipeline: post oluştur → script → TTS → fal.ai video.
 
@@ -213,7 +214,27 @@ async def run_faceless_video_pipeline(
     audio_url = await text_to_speech(script, voice, post_id, brand_id, brand_name=brand_name)
 
     # 4. fal.ai arka plan videosu
-    image_prompt = f"Abstract background video for social media, {prompt}, professional, cinematic"
+    sector = brand_kit.get("sector", "")
+    colors = brand_kit.get("colors", [])
+    if isinstance(colors, dict):
+        color_str = ", ".join(f"{v}" for v in colors.values() if v)
+    elif isinstance(colors, list):
+        color_str = ", ".join(str(c) for c in colors if c)
+    else:
+        color_str = ""
+
+    bg_parts = [
+        "Faceless background video for social media, NO human figures or faces",
+        f"Topic: {prompt}",
+    ]
+    if brand_description:
+        bg_parts.append(f"Brand context: {brand_description}")
+    if sector:
+        bg_parts.append(f"Industry: {sector}")
+    if color_str:
+        bg_parts.append(f"Brand color palette: {color_str}")
+    bg_parts.append("Abstract, ambient, slow motion, cinematic lighting, professional, loopable")
+    image_prompt = ", ".join(bg_parts)
     try:
         fal_job_id = await generate_background_video(image_prompt, aspect_ratio, duration)
         await db.execute(
