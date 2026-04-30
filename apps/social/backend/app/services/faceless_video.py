@@ -104,25 +104,15 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", ra
 # ─── 2. TTS (Azure REST API) ────────────────────────────────────────────────
 
 def _build_ssml(text: str, voice: str, brand_name: str = "") -> str:
-    """Azure TTS için SSML yapısı oluştur.
+    """Azure TTS için SSML yapısı oluştur."""
+    import xml.etree.ElementTree as ET
 
-    brand_name verilmişse script içindeki marka adını <lang xml:lang="en-US">
-    ile sararak İngilizce telaffuz ettirir.
-    """
-    if brand_name:
-        import re
-        text = re.sub(
-            re.escape(brand_name),
-            f'<lang xml:lang="en-US">{brand_name}</lang>',
-            text,
-            flags=re.IGNORECASE,
-        )
-
-    return (
-        '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR">'
-        f'<voice name="{voice}">{text}</voice>'
-        '</speak>'
-    )
+    root = ET.Element("speak", version="1.0")
+    root.set("xmlns", "http://www.w3.org/2001/10/synthesis")
+    root.set("xml:lang", "tr-TR")
+    v = ET.SubElement(root, "voice", name=voice)
+    v.text = text
+    return ET.tostring(root, encoding="unicode")
 
 
 async def text_to_speech(
