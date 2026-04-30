@@ -219,7 +219,7 @@ class WanI2VFlashAdapter:
     video'ya embed edilir, FFmpeg mux gereksiz.
     """
 
-    model_id = "fal-ai/wan/v2.6/image-to-video/flash"
+    model_id = "wan/v2.6/image-to-video/flash"
     supported_ratios = frozenset({"9:16", "16:9"})
     requires_still_image = True
 
