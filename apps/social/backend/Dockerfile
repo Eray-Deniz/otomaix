@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     shared-mime-info \
     fonts-dejavu-core \
+    libenchant-2-dev \
+    hunspell-en-us \
+    hunspell-tr \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -9,6 +9,7 @@ Azure TTS key yoksa TTS adımı atlanır; post kaydı yine de oluşturulur.
 """
 
 import os
+import re
 from uuid import UUID
 
 import asyncpg
@@ -103,16 +104,73 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", ra
 
 # ─── 2. TTS (Azure REST API) ────────────────────────────────────────────────
 
-def _build_ssml(text: str, voice: str, brand_name: str = "") -> str:
-    """Azure TTS için SSML yapısı oluştur."""
-    import xml.etree.ElementTree as ET
+_VOICE_EN = "en-US-JennyNeural"
 
-    root = ET.Element("speak", version="1.0")
-    root.set("xmlns", "http://www.w3.org/2001/10/synthesis")
-    root.set("xml:lang", "tr-TR")
-    v = ET.SubElement(root, "voice", name=voice)
-    v.text = text
-    return ET.tostring(root, encoding="unicode")
+try:
+    import enchant
+    _en_dict = enchant.Dict("en_US")
+    _tr_dict = enchant.Dict("tr_TR")
+    _HAS_ENCHANT = True
+except Exception:
+    _HAS_ENCHANT = False
+
+
+def _is_english_word(word: str) -> bool:
+    """Kelimenin İngilizce olup olmadığını kontrol et."""
+    clean = re.sub(r"[.,!?;:\"'()\-]", "", word).lower()
+    if not clean or len(clean) <= 1:
+        return False
+    if re.search(r"[çğıöşüÇĞİÖŞÜ]", word):
+        return False
+    if re.search(r"\d", clean):
+        return False
+    # URL pattern
+    if re.search(r"\.(?:com|org|net|io|co)$", clean):
+        return True
+    # PascalCase / camelCase / ALL CAPS
+    if re.match(r"[A-Z][a-z]+[A-Z]", word) or re.match(r"[A-Z]{2,}$", clean):
+        return True
+    if _HAS_ENCHANT and re.match(r"^[a-zA-Z]+$", clean):
+        return _en_dict.check(clean) and not _tr_dict.check(clean)
+    return False
+
+
+def _detect_language_segments(text: str) -> list[tuple[str, str]]:
+    """Metni TR/EN bölümlerine ayır."""
+    tokens = re.findall(r"\S+|\s+", text)
+    segments: list[tuple[str, str]] = []
+    for token in tokens:
+        if token.isspace():
+            if segments:
+                segments[-1] = (segments[-1][0], segments[-1][1] + token)
+            continue
+        lang = "en" if _is_english_word(token) else "tr"
+        if segments and segments[-1][0] == lang:
+            segments[-1] = (lang, segments[-1][1] + token)
+        else:
+            segments.append((lang, token))
+    return segments
+
+
+def _build_ssml(text: str, voice: str, brand_name: str = "") -> str:
+    """Azure TTS için SSML yapısı oluştur.
+
+    İngilizce kelimeler enchant sözlük ile tespit edilip
+    İngilizce voice ile okunur.
+    """
+    from xml.sax.saxutils import escape
+
+    segments = _detect_language_segments(text)
+
+    inner = ""
+    for lang, txt in segments:
+        v = _VOICE_EN if lang == "en" else voice
+        inner += f'<voice name="{v}">{escape(txt)}</voice>\n'
+
+    return (
+        '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR">\n'
+        f"{inner}</speak>"
+    )
 
 
 async def text_to_speech(
@@ -124,6 +182,11 @@ async def text_to_speech(
 ) -> str | None:
     """Azure TTS REST API → mp3 → R2. Returns public_url veya None."""
     if not settings.AZURE_TTS_KEY or not settings.AZURE_TTS_REGION:
+        sentry_sdk.capture_message(
+            f"TTS skipped: AZURE_TTS_KEY={'set' if settings.AZURE_TTS_KEY else 'EMPTY'}, "
+            f"AZURE_TTS_REGION={settings.AZURE_TTS_REGION or 'EMPTY'}",
+            level="warning",
+        )
         return None
 
     from app.services.storage import r2
