@@ -224,6 +224,7 @@ class WanI2VFlashAdapter:
     requires_still_image = True
 
     _NEGATIVE = "people, person, human, face, hands, character, subtitles, text"
+    _VALID_DURATIONS = (5, 10, 15)
 
     def build_args(
         self, prompt: str, aspect_ratio: str, duration: int = 5, *,
@@ -234,12 +235,13 @@ class WanI2VFlashAdapter:
                 f"Unsupported aspect_ratio for {self.model_id}: {aspect_ratio!r}. "
                 f"Supported: {', '.join(sorted(self.supported_ratios))}"
             )
+        clamped = min(self._VALID_DURATIONS, key=lambda d: abs(d - duration))
         args: dict[str, Any] = {
             "prompt": prompt,
             "image_url": image_url,
             "aspect_ratio": aspect_ratio,
             "resolution": "720p",
-            "duration": duration,
+            "duration": clamped,
             "negative_prompt": self._NEGATIVE,
         }
         if audio_url:
