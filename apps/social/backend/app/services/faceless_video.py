@@ -13,6 +13,7 @@ from uuid import UUID
 
 import asyncpg
 import httpx
+import sentry_sdk
 
 from app.core.config import settings
 from app.services.media_adapters import get_active_faceless_background_adapter
@@ -146,15 +147,25 @@ async def text_to_speech(
         "User-Agent": "otomaix-social",
     }
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(url, content=ssml.encode("utf-8"), headers=headers)
-        if resp.status_code != 200:
-            return None
-        audio_bytes = resp.content
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, content=ssml.encode("utf-8"), headers=headers)
+            if resp.status_code != 200:
+                sentry_sdk.set_context("tts_error", {
+                    "post_id": str(post_id),
+                    "status_code": resp.status_code,
+                    "response_body": resp.text[:500],
+                })
+                sentry_sdk.capture_message(f"Azure TTS failed (HTTP {resp.status_code})", level="error")
+                return None
+            audio_bytes = resp.content
 
-    r2_path = f"brands/{brand_id}/posts/audio/{post_id}.mp3"
-    public_url = r2.upload(audio_bytes, r2_path, "audio/mpeg")
-    return public_url
+        r2_path = f"brands/{brand_id}/posts/audio/{post_id}.mp3"
+        public_url = r2.upload(audio_bytes, r2_path, "audio/mpeg")
+        return public_url
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
+        return None
 
 
 # ─── 3. fal.ai video üretimi ────────────────────────────────────────────────
