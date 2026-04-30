@@ -77,7 +77,7 @@ EVDS_API_KEY=            # Layer A finans
 IMAGE_MODEL=flux-2-pro
 VIDEO_MODEL=kling-v3-pro
 IMAGE_TO_VIDEO_MODEL=kling-v25-turbo-pro
-FACELESS_BACKGROUND_MODEL=hunyuan-video
+FACELESS_BACKGROUND_MODEL=wan-i2v-flash
 IMAGE_EDIT_MODEL=nano-banana-2-edit
 ```
 

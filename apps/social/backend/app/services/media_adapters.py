@@ -172,30 +172,34 @@ def get_active_image_to_video_adapter() -> ImageToVideoModelAdapter:
 class FacelessBackgroundAdapter(Protocol):
     """Faceless video arka plan üretim modelleri için soyutlama.
 
-    Imza text-to-video'dan farklı: (prompt, aspect_ratio, duration) → arguments.
-    Hunyuan gibi modeller resolution literal bekler (aspect_ratio → "720x1280"
-    mapping adapter içinde).
+    requires_still_image: True ise pipeline önce FLUX.2 still üretip
+    image_url olarak geçer (Wan i2v gibi 2-aşamalı modeller).
     """
 
     model_id: str
     supported_ratios: frozenset[str]
+    requires_still_image: bool
 
-    def build_args(self, prompt: str, aspect_ratio: str, duration: int = 5) -> dict[str, Any]: ...
+    def build_args(
+        self, prompt: str, aspect_ratio: str, duration: int = 5, *,
+        image_url: str = "", audio_url: str = "",
+    ) -> dict[str, Any]: ...
 
 
 class HunyuanVideoAdapter:
-    """Hunyuan Video faceless background adapter.
+    """Hunyuan Video faceless background adapter (legacy).
 
-    fal.ai API (2026-04 güncel): resolution enum ("480p"/"580p"/"720p")
-    + aspect_ratio enum ("16:9"/"9:16"). 1:1 ve 4:5 desteklenmiyor.
-    num_frames=129 (~5sn video) varsayılan.
+    Text-to-video — FLUX still gerektirmez, audio embed etmez.
     """
 
     model_id = "fal-ai/hunyuan-video"
-
     supported_ratios = frozenset({"9:16", "16:9"})
+    requires_still_image = False
 
-    def build_args(self, prompt: str, aspect_ratio: str, duration: int = 5) -> dict[str, Any]:
+    def build_args(
+        self, prompt: str, aspect_ratio: str, duration: int = 5, *,
+        image_url: str = "", audio_url: str = "",
+    ) -> dict[str, Any]:
         if aspect_ratio not in self.supported_ratios:
             raise ValueError(
                 f"Unsupported aspect_ratio for {self.model_id}: {aspect_ratio!r}. "
@@ -208,13 +212,49 @@ class HunyuanVideoAdapter:
         }
 
 
+class WanI2VFlashAdapter:
+    """Wan 2.6 image-to-video flash — 2 aşamalı pipeline.
+
+    Pipeline: FLUX.2 still → Wan i2v. audio_url ile TTS sesi doğrudan
+    video'ya embed edilir, FFmpeg mux gereksiz.
+    """
+
+    model_id = "fal-ai/wan/v2.6/image-to-video/flash"
+    supported_ratios = frozenset({"9:16", "16:9"})
+    requires_still_image = True
+
+    _NEGATIVE = "people, person, human, face, hands, character, subtitles, text"
+
+    def build_args(
+        self, prompt: str, aspect_ratio: str, duration: int = 5, *,
+        image_url: str = "", audio_url: str = "",
+    ) -> dict[str, Any]:
+        if aspect_ratio not in self.supported_ratios:
+            raise ValueError(
+                f"Unsupported aspect_ratio for {self.model_id}: {aspect_ratio!r}. "
+                f"Supported: {', '.join(sorted(self.supported_ratios))}"
+            )
+        args: dict[str, Any] = {
+            "prompt": prompt,
+            "image_url": image_url,
+            "aspect_ratio": aspect_ratio,
+            "resolution": "720p",
+            "duration": duration,
+            "negative_prompt": self._NEGATIVE,
+        }
+        if audio_url:
+            args["audio_url"] = audio_url
+        return args
+
+
 FACELESS_BACKGROUND_ADAPTERS: dict[str, FacelessBackgroundAdapter] = {
     "hunyuan-video": HunyuanVideoAdapter(),
+    "wan-i2v-flash": WanI2VFlashAdapter(),
 }
 
 
 def get_active_faceless_background_adapter() -> FacelessBackgroundAdapter:
-    key = (settings.FACELESS_BACKGROUND_MODEL or "hunyuan-video").strip()
+    key = (settings.FACELESS_BACKGROUND_MODEL or "wan-i2v-flash").strip()
     adapter = FACELESS_BACKGROUND_ADAPTERS.get(key)
     if not adapter:
         raise ValueError(

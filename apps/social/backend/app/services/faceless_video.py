@@ -17,7 +17,7 @@ import httpx
 import sentry_sdk
 
 from app.core.config import settings
-from app.services.media_adapters import get_active_faceless_background_adapter
+from app.services.media_adapters import get_active_faceless_background_adapter, get_active_image_adapter
 
 # Sabit Türkçe ses listesi
 TURKISH_VOICES = [
@@ -35,6 +35,72 @@ _faceless_bg_adapter = get_active_faceless_background_adapter()
 FAL_VIDEO_MODEL: str = _faceless_bg_adapter.model_id
 SUPPORTED_FACELESS_RATIOS: tuple[str, ...] = tuple(sorted(_faceless_bg_adapter.supported_ratios))
 WEBHOOK_URL = "https://api.otomaix.com/webhooks/fal"
+
+
+# ─── 0. Still image prompt üretimi ──────────────────────────────────────────
+
+async def _build_still_prompt(
+    topic: str,
+    brand_name: str,
+    brand_description: str,
+    sector: str,
+    color_str: str,
+) -> str:
+    """Marka bilgisinden FLUX.2 için sahne prompt'u üret.
+
+    Claude Opus 4.7 ile görsel-odaklı İngilizce prompt oluşturur.
+    API hatası durumunda fallback template kullanılır.
+    """
+    context_parts = []
+    if brand_name:
+        context_parts.append(f"Brand: {brand_name}")
+    if brand_description:
+        context_parts.append(f"What they do: {brand_description}")
+    if sector:
+        context_parts.append(f"Industry: {sector}")
+    if topic:
+        context_parts.append(f"Video topic: {topic}")
+    if color_str:
+        context_parts.append(f"Brand colors: {color_str}")
+
+    context = "\n".join(context_parts)
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        msg = client.messages.create(
+            model="claude-opus-4-7",
+            max_tokens=150,
+            cache_control={"type": "ephemeral"},
+            system=(
+                "You are an expert cinematographer and visual director specializing in brand storytelling. "
+                "Given brand info, output ONE English image generation prompt "
+                "describing a scene. Rules:\n"
+                "- Describe what the camera SEES: products, environments, surfaces, lighting, atmosphere\n"
+                "- Include brand colors naturally (lighting, surfaces, props)\n"
+                "- NEVER include people, faces, hands, text, logos, or brand names\n"
+                "- Style: cinematic, professional, 4K quality\n"
+                "- Output ONLY the prompt, nothing else."
+            ),
+            messages=[{"role": "user", "content": context}],
+        )
+        return msg.content[0].text.strip()
+    except Exception:
+        parts = []
+        if brand_description:
+            parts.append(brand_description)
+        elif topic:
+            parts.append(topic)
+        if sector:
+            parts.append(f"{sector} industry")
+        if color_str:
+            parts.append(f"color palette: {color_str}")
+        parts.append(
+            "product showcase, no people, no text, "
+            "cinematic composition, professional lighting, 4K"
+        )
+        return ", ".join(parts)
 
 
 # ─── 1. Script üretimi ──────────────────────────────────────────────────────
@@ -223,20 +289,50 @@ async def text_to_speech(
 
 # ─── 3. fal.ai video üretimi ────────────────────────────────────────────────
 
+async def _generate_still_image(prompt: str, aspect_ratio: str) -> str:
+    """FLUX.2 ile still görsel üret (senkron bekleme). Returns fal temp URL."""
+    import fal_client
+
+    image_adapter = get_active_image_adapter()
+    args = image_adapter.build_args(prompt, aspect_ratio)
+
+    result = await fal_client.subscribe_async(
+        image_adapter.model_id,
+        arguments=args,
+    )
+    return result["images"][0]["url"]
+
+
 async def generate_background_video(
-    image_prompt: str,
+    still_prompt: str,
+    motion_prompt: str,
     aspect_ratio: str,
     duration: int = 5,
+    audio_url: str = "",
 ) -> str:
     """fal.ai arka plan videosu üret — aktif FacelessBackgroundAdapter üzerinden.
 
-    Returns fal job ID. Desteklenmeyen aspect_ratio için ValueError; endpoint
-    katmanı submit öncesi validasyon yapmalı (SUPPORTED_FACELESS_RATIOS).
+    2 aşamalı adapters (Wan i2v): FLUX.2 still (still_prompt) üretir,
+    sonra Wan'a motion_prompt + image + audio gönderir.
+    Legacy adapters (Hunyuan): her iki prompt'u birleştirip text-to-video yapar.
+
+    Returns fal job ID.
     """
     import fal_client
 
     os.environ["FAL_KEY"] = settings.FAL_KEY
-    args = _faceless_bg_adapter.build_args(image_prompt, aspect_ratio, duration)
+
+    still_url = ""
+    if _faceless_bg_adapter.requires_still_image:
+        still_url = await _generate_still_image(still_prompt, aspect_ratio)
+        prompt_for_model = motion_prompt
+    else:
+        prompt_for_model = f"{still_prompt}, {motion_prompt}"
+
+    args = _faceless_bg_adapter.build_args(
+        prompt_for_model, aspect_ratio, duration,
+        image_url=still_url, audio_url=audio_url,
+    )
 
     handler = await fal_client.submit_async(
         _faceless_bg_adapter.model_id,
@@ -297,27 +393,33 @@ async def run_faceless_video_pipeline(
     else:
         color_str = ""
 
-    bg_parts = [
-        "Faceless background video for social media, NO human figures or faces",
-        f"Topic: {prompt}",
-    ]
-    if brand_description:
-        bg_parts.append(f"Brand context: {brand_description}")
-    if sector:
-        bg_parts.append(f"Industry: {sector}")
-    if color_str:
-        bg_parts.append(f"Brand color palette: {color_str}")
-    bg_parts.append("Abstract, ambient, slow motion, cinematic lighting, professional, loopable")
-    image_prompt = ", ".join(bg_parts)
+    # Still image prompt — FLUX.2 için sahne görseli
+    still_prompt = await _build_still_prompt(
+        topic=prompt,
+        brand_name=brand_name,
+        brand_description=brand_description,
+        sector=sector,
+        color_str=color_str,
+    )
+
+    # Motion prompt — hareketi tanımlar (Wan i2v için)
+    motion_prompt = (
+        "Slow cinematic camera push-in, soft ambient lighting, "
+        "gentle particle motion, no people, no human figures, no faces"
+    )
+
     try:
-        fal_job_id = await generate_background_video(image_prompt, aspect_ratio, duration)
+        fal_job_id = await generate_background_video(
+            still_prompt, motion_prompt, aspect_ratio, duration,
+            audio_url=audio_url or "",
+        )
         await db.execute(
             "UPDATE social.posts SET fal_job_id = $2 WHERE id = $1",
             post_id, fal_job_id,
         )
         post["fal_job_id"] = fal_job_id
-    except Exception:
-        pass  # Video üretimi webhook üzerinden takip edilir
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
 
     post["script"] = script
     post["audio_url"] = audio_url
