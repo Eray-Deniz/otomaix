@@ -186,33 +186,25 @@ class FacelessBackgroundAdapter(Protocol):
 class HunyuanVideoAdapter:
     """Hunyuan Video faceless background adapter.
 
-    video_length şu an hardcoded "5s" (Hunyuan kısa format optimize);
-    duration parametresi farklı modeller için esneklik bırakır.
-    num_inference_steps=30 — kalite/hız dengesi, model-spesifik.
+    fal.ai API (2026-04 güncel): resolution enum ("480p"/"580p"/"720p")
+    + aspect_ratio enum ("16:9"/"9:16"). 1:1 ve 4:5 desteklenmiyor.
+    num_frames=129 (~5sn video) varsayılan.
     """
 
     model_id = "fal-ai/hunyuan-video"
 
-    _RESOLUTION_MAP: dict[str, str] = {
-        "9:16": "720x1280",
-        "1:1":  "720x720",
-        "16:9": "1280x720",
-        "4:5":  "720x900",
-    }
-
-    supported_ratios = frozenset(_RESOLUTION_MAP.keys())
+    supported_ratios = frozenset({"9:16", "16:9"})
 
     def build_args(self, prompt: str, aspect_ratio: str, duration: int = 5) -> dict[str, Any]:
-        if aspect_ratio not in self._RESOLUTION_MAP:
+        if aspect_ratio not in self.supported_ratios:
             raise ValueError(
                 f"Unsupported aspect_ratio for {self.model_id}: {aspect_ratio!r}. "
                 f"Supported: {', '.join(sorted(self.supported_ratios))}"
             )
         return {
             "prompt": prompt,
-            "resolution": self._RESOLUTION_MAP[aspect_ratio],
-            "video_length": "5s",
-            "num_inference_steps": 30,
+            "resolution": "720p",
+            "aspect_ratio": aspect_ratio,
         }
 
 
