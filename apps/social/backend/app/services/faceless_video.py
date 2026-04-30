@@ -93,15 +93,26 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "") ->
 
 # ─── 2. TTS (Azure REST API) ────────────────────────────────────────────────
 
-def _build_ssml(text: str, voice: str) -> str:
-    """Azure TTS için SSML yapısı oluştur."""
-    import xml.etree.ElementTree as ET
-    root = ET.Element("speak", version="1.0")
-    root.set("xmlns", "http://www.w3.org/2001/10/synthesis")
-    root.set("xml:lang", "tr-TR")
-    v = ET.SubElement(root, "voice", name=voice)
-    v.text = text
-    return ET.tostring(root, encoding="unicode")
+def _build_ssml(text: str, voice: str, brand_name: str = "") -> str:
+    """Azure TTS için SSML yapısı oluştur.
+
+    brand_name verilmişse script içindeki marka adını <lang xml:lang="en-US">
+    ile sararak İngilizce telaffuz ettirir.
+    """
+    if brand_name:
+        import re
+        text = re.sub(
+            re.escape(brand_name),
+            f'<lang xml:lang="en-US">{brand_name}</lang>',
+            text,
+            flags=re.IGNORECASE,
+        )
+
+    return (
+        '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR">'
+        f'<voice name="{voice}">{text}</voice>'
+        '</speak>'
+    )
 
 
 async def text_to_speech(
@@ -109,6 +120,7 @@ async def text_to_speech(
     voice: str,
     post_id: UUID,
     brand_id: UUID,
+    brand_name: str = "",
 ) -> str | None:
     """Azure TTS REST API → mp3 → R2. Returns public_url veya None."""
     if not settings.AZURE_TTS_KEY or not settings.AZURE_TTS_REGION:
@@ -116,7 +128,7 @@ async def text_to_speech(
 
     from app.services.storage import r2
 
-    ssml = _build_ssml(script_text, voice)
+    ssml = _build_ssml(script_text, voice, brand_name=brand_name)
     url = f"https://{settings.AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
     headers = {
         "Ocp-Apim-Subscription-Key": settings.AZURE_TTS_KEY,
@@ -198,7 +210,7 @@ async def run_faceless_video_pipeline(
     post_id = post["id"]
 
     # 3. TTS → audio
-    audio_url = await text_to_speech(script, voice, post_id, brand_id)
+    audio_url = await text_to_speech(script, voice, post_id, brand_id, brand_name=brand_name)
 
     # 4. fal.ai arka plan videosu
     image_prompt = f"Abstract background video for social media, {prompt}, professional, cinematic"
