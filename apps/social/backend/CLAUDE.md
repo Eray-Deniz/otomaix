@@ -62,7 +62,7 @@ INTERNAL_API_KEY=
 
 # Opsiyonel
 OPENAI_API_KEY=          # RAG chunk embedding
-AZURE_TTS_KEY=           # Faceless video TTS
+ELEVENLABS_KEY=          # Faceless video TTS (ElevenLabs Flash 2.5)
 HEYGEN_API_KEY=          # AI Avatar
 APIFY_API_KEY=           # Instagram rakip analizi
 PADDLE_API_KEY=

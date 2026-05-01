@@ -200,7 +200,7 @@ function IcerikOlusturInner() {
   // Faceless video — Step 2
   const [script, setScript] = useState('')
   const [voices, setVoices] = useState<TurkishVoice[]>([])
-  const [selectedVoice, setSelectedVoice] = useState('tr-TR-EmelNeural')
+  const [selectedVoice, setSelectedVoice] = useState('ctoYieZ4J7WwcdhujpMq')
   const [durationEstimate, setDurationEstimate] = useState<number | null>(null)
   // Intro/outro pozisyonu (video için) — none/start/end/both
   const [introPosition, setIntroPosition] = useState<string>('none')
@@ -1280,8 +1280,9 @@ function IcerikOlusturInner() {
                     {(voices.length > 0
                       ? voices
                       : [
-                          { id: 'tr-TR-EmelNeural', name: 'Emel (Kadın)', gender: 'female' },
-                          { id: 'tr-TR-AhmetNeural', name: 'Ahmet (Erkek)', gender: 'male' },
+                          { id: 'ctoYieZ4J7WwcdhujpMq', name: 'Kaan (Erkek)', gender: 'male' },
+                          { id: 'EST9Ui6982FZPSi7gCHi', name: 'Buse (Kadın)', gender: 'female' },
+                          { id: 'qSeXEcewz7tA0Q0qk9fH', name: 'Zeynep (Kadın)', gender: 'female' },
                         ]
                     ).map((v) => (
                       <button

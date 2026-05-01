@@ -2,10 +2,10 @@
 
 Adımlar:
 1. generate_script()  → Claude API ile Türkçe 30-60 saniyelik script
-2. text_to_speech()   → Azure Cognitive Services TTS REST API → R2'ye mp3
+2. text_to_speech()   → ElevenLabs TTS API → R2'ye mp3
 3. generate_video()   → fal.ai ile arka plan videosu (async, webhook)
 
-Azure TTS key yoksa TTS adımı atlanır; post kaydı yine de oluşturulur.
+ELEVENLABS_KEY yoksa TTS adımı atlanır; post kaydı yine de oluşturulur.
 """
 
 import os
@@ -13,19 +13,20 @@ import re
 from uuid import UUID
 
 import asyncpg
-import httpx
 import sentry_sdk
 
 from app.core.config import settings
 from app.services.media_adapters import get_active_faceless_background_adapter, get_active_image_adapter
 
-# Sabit Türkçe ses listesi
 TURKISH_VOICES = [
-    {"id": "tr-TR-EmelNeural",   "name": "Emel (Kadın)",     "gender": "female"},
-    {"id": "tr-TR-AhmetNeural",  "name": "Ahmet (Erkek)",    "gender": "male"},
+    {"id": "ctoYieZ4J7WwcdhujpMq", "name": "Kaan (Erkek)",   "gender": "male"},
+    {"id": "EST9Ui6982FZPSi7gCHi", "name": "Buse (Kadın)",   "gender": "female"},
+    {"id": "qSeXEcewz7tA0Q0qk9fH", "name": "Zeynep (Kadın)", "gender": "female"},
 ]
 
-DEFAULT_VOICE = "tr-TR-EmelNeural"
+DEFAULT_VOICE = "ctoYieZ4J7WwcdhujpMq"
+
+ELEVENLABS_MODEL = "eleven_flash_v2_5"
 
 # Aktif faceless background adapter — modül import'unda bir kez çözülür.
 _faceless_bg_adapter = get_active_faceless_background_adapter()
@@ -167,75 +168,7 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", ra
     return {"script": script, "duration_estimate": duration_estimate}
 
 
-# ─── 2. TTS (Azure REST API) ────────────────────────────────────────────────
-
-_VOICE_EN = "en-US-JennyNeural"
-
-try:
-    import enchant
-    _en_dict = enchant.Dict("en_US")
-    _tr_dict = enchant.Dict("tr_TR")
-    _HAS_ENCHANT = True
-except Exception:
-    _HAS_ENCHANT = False
-
-
-def _is_english_word(word: str) -> bool:
-    """Kelimenin İngilizce olup olmadığını kontrol et."""
-    clean = re.sub(r"[.,!?;:\"'()\-]", "", word).lower()
-    if not clean or len(clean) <= 1:
-        return False
-    if re.search(r"[çğıöşüÇĞİÖŞÜ]", word):
-        return False
-    if re.search(r"\d", clean):
-        return False
-    # URL pattern
-    if re.search(r"\.(?:com|org|net|io|co)$", clean):
-        return True
-    # PascalCase / camelCase / ALL CAPS
-    if re.match(r"[A-Z][a-z]+[A-Z]", word) or re.match(r"[A-Z]{2,}$", clean):
-        return True
-    if _HAS_ENCHANT and re.match(r"^[a-zA-Z]+$", clean):
-        return _en_dict.check(clean) and not _tr_dict.check(clean)
-    return False
-
-
-def _detect_language_segments(text: str) -> list[tuple[str, str]]:
-    """Metni TR/EN bölümlerine ayır."""
-    tokens = re.findall(r"\S+|\s+", text)
-    segments: list[tuple[str, str]] = []
-    for token in tokens:
-        if token.isspace():
-            if segments:
-                segments[-1] = (segments[-1][0], segments[-1][1] + token)
-            continue
-        lang = "en" if _is_english_word(token) else "tr"
-        if segments and segments[-1][0] == lang:
-            segments[-1] = (lang, segments[-1][1] + token)
-        else:
-            segments.append((lang, token))
-    return segments
-
-
-def _build_ssml(text: str, voice: str, brand_name: str = "") -> str:
-    """Azure TTS için SSML yapısı oluştur.
-
-    İngilizce kelimeler enchant sözlük ile tespit edilip
-    İngilizce voice ile okunur.
-    """
-    from xml.sax.saxutils import escape
-
-    segments = _detect_language_segments(text)
-
-    inner = ""
-    for lang, txt in segments:
-        v = _VOICE_EN if lang == "en" else voice
-        inner += f'<voice name="{v}">{escape(txt)}</voice>\n'
-
-    return (
-        '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR">\n'
-        f"{inner}</speak>"
-    )
+# ─── 2. TTS (ElevenLabs API) ────────────────────────────────────────────────
 
 
 async def text_to_speech(
@@ -245,38 +178,23 @@ async def text_to_speech(
     brand_id: UUID,
     brand_name: str = "",
 ) -> str | None:
-    """Azure TTS REST API → mp3 → R2. Returns public_url veya None."""
-    if not settings.AZURE_TTS_KEY or not settings.AZURE_TTS_REGION:
-        sentry_sdk.capture_message(
-            f"TTS skipped: AZURE_TTS_KEY={'set' if settings.AZURE_TTS_KEY else 'EMPTY'}, "
-            f"AZURE_TTS_REGION={settings.AZURE_TTS_REGION or 'EMPTY'}",
-            level="warning",
-        )
+    """ElevenLabs TTS → mp3 → R2. Returns public_url veya None."""
+    if not settings.ELEVENLABS_KEY:
+        sentry_sdk.capture_message("TTS skipped: ELEVENLABS_KEY is empty", level="warning")
         return None
 
+    from elevenlabs.client import ElevenLabs
     from app.services.storage import r2
 
-    ssml = _build_ssml(script_text, voice, brand_name=brand_name)
-    url = f"https://{settings.AZURE_TTS_REGION}.tts.speech.microsoft.com/cognitiveservices/v1"
-    headers = {
-        "Ocp-Apim-Subscription-Key": settings.AZURE_TTS_KEY,
-        "Content-Type": "application/ssml+xml",
-        "X-Microsoft-OutputFormat": "audio-48khz-96kbitrate-mono-mp3",
-        "User-Agent": "otomaix-social",
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, content=ssml.encode("utf-8"), headers=headers)
-            if resp.status_code != 200:
-                sentry_sdk.set_context("tts_error", {
-                    "post_id": str(post_id),
-                    "status_code": resp.status_code,
-                    "response_body": resp.text[:500],
-                })
-                sentry_sdk.capture_message(f"Azure TTS failed (HTTP {resp.status_code})", level="error")
-                return None
-            audio_bytes = resp.content
+        client = ElevenLabs(api_key=settings.ELEVENLABS_KEY)
+        audio_iter = client.text_to_speech.convert(
+            text=script_text,
+            voice_id=voice,
+            model_id=ELEVENLABS_MODEL,
+            output_format="mp3_44100_128",
+        )
+        audio_bytes = b"".join(audio_iter)
 
         r2_path = f"brands/{brand_id}/posts/audio/{post_id}.mp3"
         public_url = r2.upload(audio_bytes, r2_path, "audio/mpeg")
