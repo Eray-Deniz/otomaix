@@ -35,7 +35,7 @@ def _validate_templates() -> None:
     from app.core.templates_data import SECTOR_GUIDANCE, TEMPLATES
 
     logger = logging.getLogger(__name__)
-    assert len(TEMPLATES) == 24, f"Expected 24 templates, got {len(TEMPLATES)}"
+    assert len(TEMPLATES) == 25, f"Expected 25 templates, got {len(TEMPLATES)}"
 
     for template_id, template in TEMPLATES.items():
         assert template.id == template_id, f"ID mismatch: {template.id} vs {template_id}"
