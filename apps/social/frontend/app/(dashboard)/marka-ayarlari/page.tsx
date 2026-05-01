@@ -121,7 +121,7 @@ const DEFAULT_BRAND_KIT: BrandKit = {
   timezone: 'Europe/Istanbul',
   voiceover: 'tr-TR-EmelNeural',
   logo_overlay: { enabled: false, position: 'bottom-right', opacity: 0.8 },
-  intro_video: { position: 'start' },
+  intro_video: { position: 'none' },
 }
 
 // ─── Save indicator ───────────────────────────────────────────────────────────
@@ -1039,15 +1039,16 @@ function MarkaAyarlariContent() {
             <div className="space-y-1.5">
               <Label>Video Pozisyonu</Label>
               <Select
-                value={kit.intro_video?.position ?? 'start'}
+                value={kit.intro_video?.position ?? 'none'}
                 onValueChange={(v) => onSelect(v, (val) => updateKit({ intro_video: { position: val } }))}
               >
                 <SelectTrigger>
                   <SelectValue>
-                    {(value: string) => ({ start: 'Başında', end: 'Sonunda', both: 'Her İkisi' } as Record<string, string>)[value] ?? value}
+                    {(value: string) => ({ none: 'Kullanma', start: 'Başında', end: 'Sonunda', both: 'Her İkisi' } as Record<string, string>)[value] ?? value}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Kullanma</SelectItem>
                   <SelectItem value="start">Başında</SelectItem>
                   <SelectItem value="end">Sonunda</SelectItem>
                   <SelectItem value="both">Her İkisi</SelectItem>

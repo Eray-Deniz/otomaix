@@ -811,6 +811,78 @@ TEMPLATES["carousel-genel-sablon"] = Template(
 )
 
 
+TEMPLATES["facelessvideo-genel-sablon"] = Template(
+    id="facelessvideo-genel-sablon",
+    name="Faceless Video Şablonu",
+    description="Tek konu/ürün/hizmet için AI sesli faceless video",
+    icon="🎬",
+    sectors=["*"],
+    contentTypes=["video"],
+    order=3,
+    formFields=[
+        TemplateFormField(id="ana_konu", label="Ana Konu / Ürün / Hizmet Adı", type="text", required=True,
+            placeholder="örn. Yeni koleksiyon, sunduğunuz hizmet, kampanya konusu",
+            validation={"maxLength": 120},
+            group="Konu"),
+        TemplateFormField(id="one_cikan_ozellik", label="Öne Çıkan Özellik", type="text", required=False,
+            placeholder="örn. Temel fayda, ayırt edici özellik, müşteri için değer",
+            validation={"maxLength": 200},
+            group="Konu"),
+        TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
+            placeholder="https://... (ürün, kampanya veya site linki)",
+            helpText="Gönderiyi gören kişiyi bir yere yönlendirmek isterseniz linki buraya yapıştırın. Boş bırakırsanız caption yönlendirme yapmaz.",
+            group="Yönlendirme"),
+        TemplateFormField(id="cta_label", label="Çağrı Metni", type="text", required=False,
+            defaultValue="Şimdi Keşfet",
+            placeholder="Şimdi Keşfet",
+            validation={"maxLength": 40},
+            helpText="Linkin üzerine yazılacak kısa çağrı metni. Örn: 'Şimdi Keşfet', 'İncele', 'Sipariş Ver'.",
+            group="Yönlendirme"),
+    ],
+    output=TemplateOutput(aspectRatioSuggestion="9:16"),
+    prompt=TemplatePrompt(
+        guidance=(
+            "Faceless video şablonu. Tek bir konuyu/ürünü/hizmeti anlatan AI sesli "
+            "kısa video üretir. Video'da insan yüzü görünmez, arka plan soyut/ambient "
+            "sahnelerden oluşur.\n\n"
+            "Bu şablon iki modda çalışır:\n\n"
+            "🎬 GENEL VİDEO MODU:\n"
+            "Soyut, ambient arka plan sahnesi üretilir. Ürün görseli üretme veya "
+            "kullanma — kullanıcı açıkça istemedikçe ürün/obje odaklı sahne kurma. "
+            "Doğa, şehir, tekstür, ışık oyunu, soyut hareket gibi atmosferik "
+            "sahneler tercih et.\n\n"
+            "📦 ÜRÜN/HİZMET VİDEO MODU:\n"
+            "Ürünün gerçek fotoğrafı video arka planı olarak kullanılır. Still image "
+            "prompt'u ürünü merkeze alan, stüdyo/lifestyle sahne olmalı. Ürün "
+            "dokümanları varsa script'te ürün bilgilerini kullan.\n\n"
+            "STILL IMAGE PROMPT (image_prompt için):\n"
+            "- Marka renklerini (HEX kodlarıyla) arka plan ve aksan olarak kullan\n"
+            "- Logo, metin katmanı, yazı TARIF ETME — bunlar post-process'te eklenir\n"
+            "- İnsan yüzü, el, karakter TARIF ETME — faceless video\n"
+            "- Sahne hareketli video'ya uygun olmalı (kamera hareketi düşün)\n\n"
+            "SCRIPT yönergesi:\n"
+            "- Türkçe, 30-60 saniye arası voiceover script'i\n"
+            "- Hook cümlesiyle başla (ilk 3 saniye kritik)\n"
+            "- Kısa, net cümleler — TTS'in doğal okuyacağı yapıda\n"
+            "- Abartılı iddia kullanma, bilgide olmayan şey uydurma\n\n"
+            "CAPTION formülü: Hook (ana konu + faydası) → Öne çıkan özellik → CTA. "
+            "Caption video'nun altına yazılacak sosyal medya metnidir, script'ten "
+            "farklıdır.\n\n"
+            "CTA (yönlendirme) kuralı:\n"
+            "- Kullanıcı 'Yönlendirme Linki' doldurduysa: caption'ın son satırında "
+            "çağrı metnini (cta_label) kullan ve platforma göre davran:\n"
+            "  • Instagram/TikTok/Threads: '👉 {cta_label} — profilimizdeki linkten "
+            "ulaşabilirsiniz'\n"
+            "  • LinkedIn/Facebook/Twitter/Pinterest: '👉 {cta_label}: {cta_url}'\n"
+            "- Kullanıcı link doldurmadıysa: yönlendirme satırı ekleme."
+        ),
+        priority=["form_fields", "brand_kit", "rag_docs"],
+    ),
+    defaults=TemplateDefaults(),
+    tags=["genel", "video", "faceless"],
+)
+
+
 TEMPLATES["genel-hakkimizda"] = Template(
     id="genel-hakkimizda",
     name="Hakkımızda",

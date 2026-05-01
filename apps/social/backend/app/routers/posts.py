@@ -192,8 +192,9 @@ class GenerateCaptionRequest(BaseModel):
     user_prompt: str | None = None
     document_ids: list[UUID] = Field(default_factory=list)
     platforms: list[str] = Field(default_factory=list)
-    # Phase 9 Sprint 7 — product/service context injection into caption + image_prompt.
     product_id: UUID | None = None
+    content_type: str | None = None
+    voice: str | None = None
 
 
 @router.post(
@@ -273,6 +274,7 @@ async def generate_caption(
         rag_context=rag_context,
         platforms=payload.platforms,
         product=product,
+        content_type=payload.content_type,
     )
 
     return OkResponse(data=result)
@@ -777,7 +779,7 @@ async def generate_faceless_video(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Faceless video pipeline: script üret → TTS → fal.ai arka plan videosu."""
+    """Faceless video pipeline: script → TTS → fal.ai arka plan videosu."""
     await assert_brand_owned(db, user, payload.brand_id)
     if payload.aspect_ratio not in SUPPORTED_FACELESS_RATIOS:
         raise HTTPException(
@@ -805,12 +807,18 @@ async def generate_faceless_video(
     post = await run_faceless_video_pipeline(
         brand_id=payload.brand_id,
         prompt=payload.prompt,
+        script=payload.script or "",
         voice=payload.voice,
         aspect_ratio=payload.aspect_ratio,
         brand_kit=brand_kit,
         brand_name=brand["name"],
         brand_description=brand["description"] or "",
         rag_context=rag_context,
+        platform_captions=payload.platform_captions,
+        template_id=payload.template_id,
+        template_fields=payload.template_fields,
+        intro_position=payload.intro_position,
+        product_id=payload.product_id,
         db=db,
     )
     return OkResponse(data={

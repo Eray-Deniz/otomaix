@@ -308,11 +308,13 @@ async def generate_background_video(
     aspect_ratio: str,
     duration: int = 5,
     audio_url: str = "",
+    product_image_url: str = "",
 ) -> str:
     """fal.ai arka plan videosu üret — aktif FacelessBackgroundAdapter üzerinden.
 
     2 aşamalı adapters (Wan i2v): FLUX.2 still (still_prompt) üretir,
     sonra Wan'a motion_prompt + image + audio gönderir.
+    product_image_url varsa FLUX.2 adımı atlanır, ürün görseli doğrudan Wan'a gider.
     Legacy adapters (Hunyuan): her iki prompt'u birleştirip text-to-video yapar.
 
     Returns fal job ID.
@@ -322,7 +324,10 @@ async def generate_background_video(
     os.environ["FAL_KEY"] = settings.FAL_KEY
 
     still_url = ""
-    if _faceless_bg_adapter.requires_still_image:
+    if product_image_url:
+        still_url = product_image_url
+        prompt_for_model = motion_prompt
+    elif _faceless_bg_adapter.requires_still_image:
         still_url = await _generate_still_image(still_prompt, aspect_ratio)
         prompt_for_model = motion_prompt
     else:
@@ -353,28 +358,49 @@ async def run_faceless_video_pipeline(
     db: asyncpg.Connection,
     brand_description: str = "",
     rag_context: str | None = None,
+    script: str = "",
+    platform_captions: dict | None = None,
+    template_id: str | None = None,
+    template_fields: dict | None = None,
+    intro_position: str = "none",
+    product_id: UUID | None = None,
 ) -> dict:
     """Tam pipeline: post oluştur → script → TTS → fal.ai video.
 
     Returns post dict with post_id, script, audio_url.
     """
-    # 1. Script üret
-    script_result = await generate_script(prompt, brand_kit, brand_name, rag_context=rag_context)
-    script = script_result["script"]
-    duration = script_result["duration_estimate"]
+    # intro_position'ı template_fields'e kaydet (post tablosunda ayrı kolon yok)
+    if template_fields is None:
+        template_fields = {}
+    template_fields["intro_position"] = intro_position
 
-    # 2. Post kaydı oluştur (script'i prompt'a kaydet)
+    # 1. Script — frontend'den geldiyse aynen kullan, yoksa üret
+    if script.strip():
+        word_count = len(script.split())
+        duration = max(15, min(60, round(word_count / 130 * 60)))
+    else:
+        script_result = await generate_script(prompt, brand_kit, brand_name, rag_context=rag_context)
+        script = script_result["script"]
+        duration = script_result["duration_estimate"]
+
+    # 2. Post kaydı oluştur
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
-            (brand_id, content_type, prompt, user_text, aspect_ratio, status)
-        VALUES ($1, 'video', $2, $3, $4, 'generating')
+            (brand_id, content_type, prompt, user_text, aspect_ratio, status,
+             template_id, template_fields, platform_captions, product_id)
+        VALUES ($1, 'video', $2, $3, $4, 'generating',
+                $5, $6, $7, $8)
         RETURNING *
         """,
         brand_id,
         prompt,
-        script,    # script'i user_text alanına kaydediyoruz
+        script,
         aspect_ratio,
+        template_id,
+        template_fields,
+        platform_captions,
+        product_id,
     )
     post = dict(row)
     post_id = post["id"]
@@ -383,25 +409,36 @@ async def run_faceless_video_pipeline(
     audio_url = await text_to_speech(script, voice, post_id, brand_id, brand_name=brand_name)
 
     # 4. fal.ai arka plan videosu
-    sector = brand_kit.get("sector", "")
-    colors = brand_kit.get("colors", [])
-    if isinstance(colors, dict):
-        color_str = ", ".join(f"{v}" for v in colors.values() if v)
-    elif isinstance(colors, list):
-        color_str = ", ".join(str(c) for c in colors if c)
-    else:
-        color_str = ""
+    # Ürün görseli varsa FLUX.2 still adımını atla, doğrudan Wan'a gönder
+    product_image_url = ""
+    if product_id:
+        product_row = await db.fetchrow(
+            "SELECT image_url FROM social.brand_products WHERE id = $1",
+            product_id,
+        )
+        if product_row and product_row["image_url"]:
+            product_image_url = product_row["image_url"]
 
-    # Still image prompt — FLUX.2 için sahne görseli
-    still_prompt = await _build_still_prompt(
-        topic=prompt,
-        brand_name=brand_name,
-        brand_description=brand_description,
-        sector=sector,
-        color_str=color_str,
-    )
+    # prompt = image_prompt (caption generator tarafından üretilen İngilizce sahne açıklaması)
+    # Eğer prompt boşsa veya Türkçe ise fallback olarak _build_still_prompt kullan
+    still_prompt = prompt.strip()
+    if not product_image_url and (not still_prompt or _looks_turkish(still_prompt)):
+        sector = brand_kit.get("sector", "")
+        colors = brand_kit.get("colors", [])
+        if isinstance(colors, dict):
+            color_str = ", ".join(f"{v}" for v in colors.values() if v)
+        elif isinstance(colors, list):
+            color_str = ", ".join(str(c) for c in colors if c)
+        else:
+            color_str = ""
+        still_prompt = await _build_still_prompt(
+            topic=prompt or script[:100],
+            brand_name=brand_name,
+            brand_description=brand_description,
+            sector=sector,
+            color_str=color_str,
+        )
 
-    # Motion prompt — hareketi tanımlar (Wan i2v için)
     motion_prompt = (
         "Slow cinematic camera push-in, soft ambient lighting, "
         "gentle particle motion, seamless loop, return to starting position, "
@@ -412,6 +449,7 @@ async def run_faceless_video_pipeline(
         fal_job_id = await generate_background_video(
             still_prompt, motion_prompt, aspect_ratio, duration,
             audio_url=audio_url or "",
+            product_image_url=product_image_url,
         )
         await db.execute(
             "UPDATE social.posts SET fal_job_id = $2 WHERE id = $1",
@@ -426,3 +464,8 @@ async def run_faceless_video_pipeline(
     post["duration_estimate"] = duration
 
     return post
+
+
+def _looks_turkish(text: str) -> bool:
+    """Basit Türkçe karakter kontrolü."""
+    return bool(re.search(r"[çğıöşüÇĞİÖŞÜ]", text))

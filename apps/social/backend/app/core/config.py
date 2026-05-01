@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""    # Opsiyonel — RAG chunk embedding için
     AZURE_TTS_KEY: str = ""     # Opsiyonel — Faceless video TTS için
     AZURE_TTS_REGION: str = "westeurope"  # Azure TTS bölgesi
+    ELEVENLABS_KEY: str = ""    # Opsiyonel — ElevenLabs TTS için
     HEYGEN_API_KEY: str = ""    # Opsiyonel — AI Avatar için
     APIFY_API_KEY: str = ""     # Opsiyonel — Instagram rakip analizi için
     PADDLE_API_KEY: str = ""    # Opsiyonel — Paddle ödeme entegrasyonu

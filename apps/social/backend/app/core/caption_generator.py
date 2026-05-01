@@ -91,8 +91,9 @@ async def generate_captions(
     rag_context: str | None,
     platforms: list[str],
     product: dict | None = None,
+    content_type: str | None = None,
 ) -> dict[str, Any]:
-    """Generate caption + image prompt + hashtags via Claude."""
+    """Generate caption + image prompt + hashtags via Claude. Video ise script de üretir."""
 
     system_prompt = build_system_prompt()
     brand_context = build_brand_context(brand, brand_kit, template)
@@ -100,7 +101,9 @@ async def generate_captions(
         template, template_fields, user_prompt, rag_context, platforms, product
     )
 
-    output_format = _build_output_format_instruction(template, platforms, template_fields)
+    output_format = _build_output_format_instruction(
+        template, platforms, template_fields, content_type=content_type,
+    )
 
     user_content = [
         {
@@ -160,11 +163,17 @@ async def generate_captions(
         data.setdefault("default_caption", "")
         data.setdefault("platform_captions", {})
         is_carousel = template is not None and "carousel" in (template.contentTypes or [])
+        is_video = content_type == "video"
         if is_carousel:
             data.setdefault("image_prompts", [])
         else:
             data.setdefault("image_prompt", "")
         data.setdefault("hashtags", [])
+        if is_video:
+            data.setdefault("script", "")
+            script_text = data.get("script") or ""
+            word_count = len(script_text.split())
+            data["duration_estimate"] = max(10, int(word_count * 60 / 130))
 
         _ensure_first_comment(data, template, platforms)
 
@@ -216,6 +225,7 @@ def _build_output_format_instruction(
     template: Template | None,
     platforms: list[str],
     template_fields: dict | None = None,
+    content_type: str | None = None,
 ) -> str:
     """Instruct Claude on exact JSON output format."""
 
@@ -237,9 +247,26 @@ def _build_output_format_instruction(
         platform_schema = '"default": {"caption": "..."}'
 
     is_carousel = template is not None and "carousel" in (template.contentTypes or [])
+    is_video = content_type == "video"
     slide_count = int((template_fields or {}).get("slide_count", 5)) if is_carousel else 0
 
-    if is_carousel:
+    if is_video:
+        image_schema = '"image_prompt": "English scene description for still image (fal.ai FLUX.2 Pro) — this becomes the video background"'
+        script_schema = ',\n  "script": "Türkçe voiceover script metni (30-60 saniye)"'
+        image_note = (
+            "ÖNEMLİ: image_prompt İngilizce yazılmalı (still image → video arka planı olacak).\n"
+            "script Türkçe yazılmalı — TTS ile seslendirilecek voiceover metni.\n"
+            "Caption'lar ve hashtag'ler Türkçe olmalı.\n\n"
+            "SCRIPT KURALLARI:\n"
+            "- 30-60 saniye arası (yaklaşık 65-130 kelime)\n"
+            "- Hook cümlesiyle başla (ilk 3 saniye kritik)\n"
+            "- Kısa, net cümleler — TTS'in doğal okuyacağı yapıda\n"
+            "- Bilgide olmayan şey uydurma\n"
+            "- CTA varsa script'in sonunda da söyle"
+        )
+        field_ref = "image_prompt'ta"
+        rules_title = "⚠️ image_prompt İÇİN KATIİ KURALLAR"
+    elif is_carousel:
         image_schema = (
             '"image_prompts": [\n'
             '    "Slide 1 (HOOK): English visual description for fal.ai FLUX.2 Pro",\n'
@@ -247,6 +274,7 @@ def _build_output_format_instruction(
             f'    "... tam olarak {slide_count} adet İngilizce prompt"\n'
             '  ]'
         )
+        script_schema = ""
         image_note = (
             f"ÖNEMLİ: image_prompts dizisinde TAM OLARAK {slide_count} adet İngilizce prompt olmalı.\n"
             "Her slide farklı bir görsel açı kategorisi kullanmalı — aynı açıyı iki slide'da tekrarlama.\n"
@@ -256,12 +284,21 @@ def _build_output_format_instruction(
         rules_title = "⚠️ HER image_prompts ELEMANI İÇİN KATIİ KURALLAR"
     else:
         image_schema = '"image_prompt": "English visual description for image AI (fal.ai FLUX.2 Pro)"'
+        script_schema = ""
         image_note = (
             "ÖNEMLİ: image_prompt İngilizce yazılmalı (AI model İngilizce prompt anlıyor).\n"
             "Caption'lar ve hashtag'ler Türkçe olmalı."
         )
         field_ref = "image_prompt'ta"
         rules_title = "⚠️ image_prompt İÇİN KATIİ KURALLAR"
+
+    video_scene_rule = ""
+    if is_video:
+        video_scene_rule = (
+            "\n7. FACELESS VIDEO: image_prompt'ta insan yüzü, el, karakter TARIF ETME — "
+            "faceless video arka planı için soyut/ambient sahne yaz. Kamera hareketi "
+            "düşünerek sahne kur (dolly, pan, zoom uyumlu)."
+        )
 
     return f"""ÇIKTI FORMATI (SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):
 
@@ -271,7 +308,7 @@ def _build_output_format_instruction(
     {platform_schema}
   }},
   {image_schema},
-  "hashtags": ["hashtag1", "hashtag2"]
+  "hashtags": ["hashtag1", "hashtag2"]{script_schema}
 }}
 
 {image_note}
@@ -282,5 +319,5 @@ def _build_output_format_instruction(
 3. TÜRKÇE METİN YASAK: {field_ref} hiçbir Türkçe kelime olmasın. "Rahat · Kaliteli · Şık" gibi özellik metinleri tarif etme — FLUX bunları aynen görsele yazıya döker. Özellikleri görsel olarak ima et (comfort → relaxed pose, quality → premium materials texture, style → modern composition).
 4. LOGO/ROZET/METİN KATMANI YASAK: "brand logo badge in corner", "feature badge", "text overlay", "watermark", "caption text" ASLA tarif etme. Gerçek marka logosu webhook pipeline'ında post-process olarak ekleniyor — FLUX'un logo çizmesine gerek YOK, hatta hayali logo uyduruyor.
 5. KOMPOZİSYON: Genel şablonlarda (genel-gorsel-sablon vb.) tam vücut, lifestyle, moda çekimi, sahne kompozisyonu gibi geniş kadrajlar tercih et — ürünü SADECE close-up'a sıkıştırma. Giyilebilir ürünler (ayakkabı, kıyafet, aksesuar) için tam vücut model + ürün dengeli görünmeli. E-ticaret ürün kartı şablonlarında ise ürün odaklı close-up/hero angle uygun.
-6. FORMAT ÖNERİSİ: "Professional [photography style] of [generic product category], [full scene composition], [background description] in [brand color HEX], [lighting style], [material/texture detail]. No text, no logos, no overlays."
+6. FORMAT ÖNERİSİ: "Professional [photography style] of [generic product category], [full scene composition], [background description] in [brand color HEX], [lighting style], [material/texture detail]. No text, no logos, no overlays."{video_scene_rule}
 """

@@ -52,6 +52,7 @@ type TemplatePhase = 'pick' | 'form' | 'caption'
 // `contentType='image'` + "Devam Et" tıklanınca otomatik seçilir; şablon grid'i gösterilmez.
 const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'
 const DEFAULT_CAROUSEL_TEMPLATE_ID = 'carousel-genel-sablon'
+const DEFAULT_VIDEO_TEMPLATE_ID = 'facelessvideo-genel-sablon'
 
 interface CarouselSlide {
   order: number
@@ -198,10 +199,12 @@ function IcerikOlusturInner() {
 
   // Faceless video — Step 2
   const [script, setScript] = useState('')
-  const [loadingScript, setLoadingScript] = useState(false)
   const [voices, setVoices] = useState<TurkishVoice[]>([])
   const [selectedVoice, setSelectedVoice] = useState('tr-TR-EmelNeural')
   const [durationEstimate, setDurationEstimate] = useState<number | null>(null)
+  // Intro/outro pozisyonu (video için) — none/start/end/both
+  const [introPosition, setIntroPosition] = useState<string>('none')
+  const [brandHasIntro, setBrandHasIntro] = useState(false)
 
   // Özel Gün — Step 2
   const [holidays, setHolidays] = useState<Holiday[]>([])
@@ -303,12 +306,13 @@ function IcerikOlusturInner() {
   useEffect(() => {
     async function fetchBrandKit() {
       if (!currentBrand?.id) return
-      const res = await api.get<{ brand_kit?: Record<string, unknown> | null }>(`/brands/${currentBrand.id}`)
+      const res = await api.get<{ brand_kit?: Record<string, unknown> | null; intro_video_url?: string | null }>(`/brands/${currentBrand.id}`)
       if (res.success && res.data) {
         const kit = res.data.brand_kit || {}
         const rawOverlay = kit['logo_overlay']
         const overlay = (rawOverlay && typeof rawOverlay === 'object') ? (rawOverlay as Record<string, unknown>) : {}
         setUseLogoOverlay(Boolean(overlay.enabled))
+        setBrandHasIntro(Boolean(res.data.intro_video_url))
       }
     }
     fetchBrandKit()
@@ -357,25 +361,6 @@ function IcerikOlusturInner() {
     )
   }
 
-  async function handleGenerateScript() {
-    if (!currentBrand?.id || !prompt.trim()) {
-      toast.error('Önce bir konu girin')
-      return
-    }
-    setLoadingScript(true)
-    const res = await api.post<{ script: string; duration_estimate: number }>('/ai/generate-script', {
-      brand_id: currentBrand.id,
-      prompt: prompt.trim(),
-    })
-    if (res.success && res.data) {
-      setScript(res.data.script)
-      setDurationEstimate(res.data.duration_estimate)
-    } else {
-      toast.error('Script üretilemedi')
-    }
-    setLoadingScript(false)
-  }
-
   // ── Step 2 helpers ──────────────────────────────────────────────────────────
 
   const fetchIdeas = useCallback(async () => {
@@ -421,14 +406,15 @@ function IcerikOlusturInner() {
       toast.error('Lütfen alıntı metnini girin')
       return
     }
-    // Image/carousel: her iki modda da caption üretilmiş olmalı (Akış C unified)
-    if (['image', 'carousel'].includes(contentType)) {
+    // Image/carousel/video: caption üretilmiş olmalı (Akış C unified)
+    if (['image', 'carousel', 'video'].includes(contentType)) {
       if (!captionData) {
         toast.error('Önce gönderi metnini üretin')
         return
       }
-    } else if (contentType === 'video' && !prompt.trim()) {
-      toast.error('Lütfen bir prompt girin')
+    }
+    if (contentType === 'video' && !script.trim()) {
+      toast.error('Lütfen bir script girin veya üretin')
       return
     }
 
@@ -439,21 +425,28 @@ function IcerikOlusturInner() {
     setStep(3)
 
     if (contentType === 'video') {
-      // Faceless video pipeline
+      // Faceless video pipeline — şablon tabanlı
+      const isTemplateMode = mode === 'template' && selectedTemplate
       const res = await api.post<GeneratedPost>('/posts/generate-faceless-video', {
         brand_id: currentBrand.id,
-        prompt: prompt.trim(),
+        prompt: prompt.trim() || captionData!.image_prompt || '',
+        script: script.trim(),
         voice: selectedVoice,
         document_ids: selectedDocIds,
         aspect_ratio: aspectRatio,
         platforms,
+        template_id: isTemplateMode ? selectedTemplate.id : null,
+        template_fields: isTemplateMode ? templateFields : null,
+        platform_captions: captionData!.platform_captions,
+        intro_position: introPosition,
+        product_id: selectedProduct?.id ?? null,
       })
       setGenerating(false)
       if (res.success && res.data) {
         analytics.contentGenerated(contentType, Math.round((Date.now() - genStart) / 1000))
         setGeneratedPost(res.data)
-        setScript(res.data.script ?? '')
-        setDurationEstimate(res.data.duration_estimate ?? null)
+        setCaption(captionData!.default_caption || '')
+        setHashtags(captionData!.hashtags.length ? captionData!.hashtags : [])
         toast.success('Video üretimi başlatıldı!')
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
@@ -592,7 +585,7 @@ function IcerikOlusturInner() {
 
     setLoadingCaption(true)
     const genStart = Date.now()
-    const res = await api.post<CaptionData>('/posts/generate-caption', {
+    const res = await api.post<CaptionData & { script?: string; duration_estimate?: number }>('/posts/generate-caption', {
       brand_id: currentBrand.id,
       template_id: selectedTemplate?.id ?? null,
       template_fields: selectedTemplate ? templateFields : null,
@@ -600,6 +593,8 @@ function IcerikOlusturInner() {
       document_ids: selectedDocIds,
       platforms,
       product_id: selectedProduct?.id ?? null,
+      content_type: contentType,
+      voice: contentType === 'video' ? selectedVoice : undefined,
     })
     setLoadingCaption(false)
     if (res.success && res.data) {
@@ -615,9 +610,15 @@ function IcerikOlusturInner() {
         image_prompt: res.data.image_prompt ?? '',
         image_prompts: res.data.image_prompts,
         hashtags: res.data.hashtags ?? [],
+        ...(res.data.script ? { script: res.data.script } : {}),
       })
+      if (res.data.script) setScript(res.data.script)
+      if (res.data.duration_estimate) setDurationEstimate(res.data.duration_estimate)
       setPhase('caption')
-      toast.success('Gönderi metni hazır — düzenleyip görseli üretin')
+      toast.success(contentType === 'video'
+        ? 'Gönderi metni ve script hazır — düzenleyip videoyu üretin'
+        : 'Gönderi metni hazır — düzenleyip görseli üretin'
+      )
     } else if (!res.success && res.error === 'rate_limit') {
       toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
     } else if (!res.success && res.error === 'plan_limit_reached' && res.plan_limit) {
@@ -752,6 +753,7 @@ function IcerikOlusturInner() {
     setImageSubType('general')
     setSelectedProduct(null)
     setAvailableProducts([])
+    setIntroPosition('none')
   }
 
   // Template seçim handler
@@ -890,26 +892,42 @@ function IcerikOlusturInner() {
             </div>
           </div>
 
-          {/* Phase 9 Sprint 9A — Görsel/Carousel alt tip seçici */}
-          {(contentType === 'image' || contentType === 'carousel') && (
+          {/* Alt tip seçici — Görsel/Carousel/Video */}
+          {(contentType === 'image' || contentType === 'carousel' || contentType === 'video') && (
             <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700">Görsel İçerik Türü</p>
+              <p className="text-sm font-medium text-gray-700">
+                {contentType === 'video' ? 'Video İçerik Türü' : 'Görsel İçerik Türü'}
+              </p>
               <div className="grid grid-cols-2 gap-3">
-                {(
-                  [
-                    {
-                      id: 'general' as ImageSubType,
-                      label: 'Genel Görsel İçerik',
-                      desc: 'Herhangi bir konu için AI görsel üret',
-                      icon: '🖼️',
-                    },
-                    {
-                      id: 'product' as ImageSubType,
-                      label: 'Ürün / Hizmet İçeriği',
-                      desc: 'Ürün görseli üzerinden yeni görsel oluştur',
-                      icon: '📦',
-                    },
-                  ] as { id: ImageSubType; label: string; desc: string; icon: string }[]
+                {(contentType === 'video'
+                  ? [
+                      {
+                        id: 'general' as ImageSubType,
+                        label: 'Genel Video',
+                        desc: 'Soyut/ambient arka plan ile AI sesli video',
+                        icon: '🎬',
+                      },
+                      {
+                        id: 'product' as ImageSubType,
+                        label: 'Ürün / Hizmet Videosu',
+                        desc: 'Ürün görseli üzerinden tanıtım videosu',
+                        icon: '📦',
+                      },
+                    ]
+                  : [
+                      {
+                        id: 'general' as ImageSubType,
+                        label: 'Genel Görsel İçerik',
+                        desc: 'Herhangi bir konu için AI görsel üret',
+                        icon: '🖼️',
+                      },
+                      {
+                        id: 'product' as ImageSubType,
+                        label: 'Ürün / Hizmet İçeriği',
+                        desc: 'Ürün görseli üzerinden yeni görsel oluştur',
+                        icon: '📦',
+                      },
+                    ]
                 ).map((sub) => (
                   <button
                     key={sub.id}
@@ -932,9 +950,11 @@ function IcerikOlusturInner() {
 
           <Button
             onClick={async () => {
-              if (contentType === 'image' || contentType === 'carousel') {
+              if (contentType === 'image' || contentType === 'carousel' || contentType === 'video') {
                 const templateId = contentType === 'carousel'
                   ? DEFAULT_CAROUSEL_TEMPLATE_ID
+                  : contentType === 'video'
+                  ? DEFAULT_VIDEO_TEMPLATE_ID
                   : DEFAULT_IMAGE_TEMPLATE_ID
                 setStep(2)
                 setMode('template')
@@ -978,7 +998,7 @@ function IcerikOlusturInner() {
               {CONTENT_TYPES.find((t) => t.id === contentType)?.icon}{' '}
               {CONTENT_TYPES.find((t) => t.id === contentType)?.label}
             </Badge>
-            {selectedTemplate && ['image', 'carousel'].includes(contentType) && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && (
+            {selectedTemplate && ['image', 'carousel', 'video'].includes(contentType) && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && (
               <Badge variant="secondary">
                 {selectedTemplate.icon} {selectedTemplate.name}
               </Badge>
@@ -991,12 +1011,12 @@ function IcerikOlusturInner() {
             </button>
           </div>
 
-          {/* Phase 8 Sprint 2 — image/carousel için varsayılan şablon fetch edilirken loader */}
-          {(contentType === 'image' || contentType === 'carousel') && loadingDefaultTemplate && (
+          {/* Varsayılan şablon fetch edilirken loader */}
+          {(contentType === 'image' || contentType === 'carousel' || contentType === 'video') && loadingDefaultTemplate && (
             <div className="flex items-center justify-center py-12 text-gray-500 gap-3">
               <Loader2 className="w-5 h-5 animate-spin" />
               <span className="text-sm">
-                {contentType === 'carousel' ? 'Carousel şablonu yükleniyor...' : 'Varsayılan görsel şablonu yükleniyor...'}
+                {contentType === 'carousel' ? 'Carousel şablonu yükleniyor...' : contentType === 'video' ? 'Video şablonu yükleniyor...' : 'Varsayılan görsel şablonu yükleniyor...'}
               </span>
             </div>
           )}
@@ -1013,9 +1033,9 @@ function IcerikOlusturInner() {
           )}
 
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret" */}
-          {['image', 'carousel'].includes(contentType) && mode === 'template' && phase === 'form' && selectedTemplate && (
+          {['image', 'carousel', 'video'].includes(contentType) && mode === 'template' && phase === 'form' && selectedTemplate && (
             <div className="space-y-5">
-              {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && (
+              {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && (
                 <button
                   onClick={handleBackToPick}
                   className="text-xs text-blue-500 hover:underline"
@@ -1147,8 +1167,8 @@ function IcerikOlusturInner() {
                 </div>
               </div>
 
-              {/* Logo filigran override — Phase 8 Sprint 1 */}
-              {(currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
+              {/* Logo filigran override — video hariç */}
+              {contentType !== 'video' && (currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
                   <div className="flex flex-col gap-0.5">
                     <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
@@ -1163,6 +1183,44 @@ function IcerikOlusturInner() {
                       onCheckedChange={(v) => setUseLogoOverlay(v)}
                     />
                   </div>
+                </div>
+              )}
+
+              {/* Intro/Outro pozisyon seçici — sadece video */}
+              {contentType === 'video' && (
+                <div className="space-y-2">
+                  <Label>Intro / Outro Video Pozisyonu</Label>
+                  {!brandHasIntro ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 p-4 text-center text-sm text-gray-500">
+                      Intro video yüklenmemiş.{' '}
+                      <a href="/marka-ayarlari?tab=gorseller" className="text-blue-500 hover:underline">
+                        Marka Ayarları → Görseller
+                      </a>{' '}
+                      sayfasından yükleyebilirsiniz.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2">
+                      {([
+                        { value: 'none', label: 'Kullanma' },
+                        { value: 'start', label: 'Başında' },
+                        { value: 'end', label: 'Sonunda' },
+                        { value: 'both', label: 'Her İkisi' },
+                      ]).map((opt) => (
+                        <button
+                          key={opt.value}
+                          onClick={() => setIntroPosition(opt.value)}
+                          className={cn(
+                            'px-3 py-2 rounded-xl border-2 text-center text-sm font-medium transition-all',
+                            introPosition === opt.value
+                              ? 'border-purple-500 bg-purple-50 text-purple-700'
+                              : 'border-gray-200 text-gray-600 hover:border-purple-300'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1214,19 +1272,48 @@ function IcerikOlusturInner() {
                 </div>
               )}
 
+              {/* Video: Ses seçimi */}
+              {contentType === 'video' && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Ses Seçimi</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {(voices.length > 0
+                      ? voices
+                      : [
+                          { id: 'tr-TR-EmelNeural', name: 'Emel (Kadın)', gender: 'female' },
+                          { id: 'tr-TR-AhmetNeural', name: 'Ahmet (Erkek)', gender: 'male' },
+                        ]
+                    ).map((v) => (
+                      <button
+                        key={v.id}
+                        onClick={() => setSelectedVoice(v.id)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                          selectedVoice === v.id
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'border-purple-200 text-purple-700 hover:border-purple-400'
+                        )}
+                      >
+                        {v.gender === 'female' ? '👩' : '👨'} {v.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Button
                 onClick={handleGenerateCaption}
                 className="w-full gap-2"
                 disabled={loadingCaption}
               >
                 {loadingCaption ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                Gönderi Metni Üret
+                {contentType === 'video' ? 'Gönderi Metni ve Script Üret' : 'Gönderi Metni Üret'}
               </Button>
             </div>
           )}
 
-          {/* Phase 7: phase=caption — caption düzenle + "Görseli Üret" (template veya free) */}
-          {['image', 'carousel'].includes(contentType) && phase === 'caption' && captionData && (
+          {/* Phase 7: phase=caption — caption düzenle + "Görseli/Videoyu Üret" (template veya free) */}
+          {['image', 'carousel', 'video'].includes(contentType) && phase === 'caption' && captionData && (
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <button
@@ -1254,17 +1341,42 @@ function IcerikOlusturInner() {
                 }}
               />
 
+              {/* Video: Script düzenleme */}
+              {contentType === 'video' && (
+                <div className="space-y-3 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-purple-800">Video Script</Label>
+                      <p className="text-xs text-purple-500 mt-0.5">Voiceover olarak okunacak metin — düzenleyebilirsiniz</p>
+                    </div>
+                  </div>
+                  <Textarea
+                    value={script}
+                    onChange={(e) => setScript(e.target.value)}
+                    rows={5}
+                    className="resize-none bg-white text-sm"
+                  />
+                  {durationEstimate && (
+                    <p className="text-xs text-purple-600">
+                      Tahmini süre: ~{durationEstimate} saniye
+                    </p>
+                  )}
+                </div>
+              )}
+
               <Button
                 onClick={handleGenerate}
                 className="w-full gap-2"
                 disabled={generating || (
-                  contentType === 'carousel'
+                  contentType === 'video'
+                    ? !script.trim()
+                    : contentType === 'carousel'
                     ? !(captionData.image_prompts && captionData.image_prompts.length > 0)
                     : !captionData.image_prompt.trim()
                 )}
               >
                 <Wand2 className="w-4 h-4" />
-                {contentType === 'carousel' ? 'Slide Görsellerini Üret' : 'Görseli Üret'}
+                {contentType === 'video' ? 'Videoyu Üret' : contentType === 'carousel' ? 'Slide Görsellerini Üret' : 'Görseli Üret'}
               </Button>
             </div>
           )}
@@ -1414,8 +1526,8 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* Klasik akış — sadece video/special_day/quote */}
-          {!['image', 'carousel'].includes(contentType) && (
+          {/* Klasik akış — sadece special_day/quote */}
+          {!['image', 'carousel', 'video'].includes(contentType) && (
           <>
           {/* Özel Gün — tatil seçici */}
           {contentType === 'special_day' && (
@@ -1631,70 +1743,6 @@ function IcerikOlusturInner() {
           </div>
           )}
 
-          {/* Faceless video — script editörü ve ses seçimi */}
-          {contentType === 'video' && (
-            <div className="space-y-4 p-4 bg-purple-50 border border-purple-200 rounded-xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-purple-800">Video Script</Label>
-                  <p className="text-xs text-purple-500 mt-0.5">AI Türkçe script üretir, düzenleyebilirsiniz</p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGenerateScript}
-                  disabled={loadingScript || !prompt.trim()}
-                  className="gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-100"
-                >
-                  {loadingScript
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <Wand2 className="w-3.5 h-3.5" />
-                  }
-                  Script Üret
-                </Button>
-              </div>
-
-              <Textarea
-                value={script}
-                onChange={(e) => setScript(e.target.value)}
-                placeholder="Önce 'Script Üret' butonuna tıklayın ya da doğrudan yazın..."
-                rows={5}
-                className="resize-none bg-white text-sm"
-              />
-
-              {durationEstimate && (
-                <p className="text-xs text-purple-600">
-                  Tahmini süre: ~{durationEstimate} saniye
-                </p>
-              )}
-
-              <div className="space-y-1.5">
-                <Label className="text-sm text-purple-800">Ses Seçimi</Label>
-                <div className="flex flex-wrap gap-2">
-                  {(voices.length > 0
-                    ? voices
-                    : [
-                        { id: 'tr-TR-EmelNeural', name: 'Emel (Kadın)', gender: 'female' },
-                        { id: 'tr-TR-AhmetNeural', name: 'Ahmet (Erkek)', gender: 'male' },
-                      ]
-                  ).map((v) => (
-                    <button
-                      key={v.id}
-                      onClick={() => setSelectedVoice(v.id)}
-                      className={cn(
-                        'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                        selectedVoice === v.id
-                          ? 'bg-purple-600 text-white border-purple-600'
-                          : 'border-purple-200 text-purple-700 hover:border-purple-400'
-                      )}
-                    >
-                      {v.gender === 'female' ? '👩' : '👨'} {v.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* 6. İçerik Üret butonu */}
           <Button
