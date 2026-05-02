@@ -573,6 +573,114 @@ async def add_intro_video(
         return None
 
 
+# ─── Subtitle Burn-in ──────────────────────────────────────────────────────────
+
+async def burn_subtitles(
+    video_url: str,
+    post_id: UUID,
+    brand_id: UUID,
+) -> str | None:
+    """Word-level timestamp'lerden altyazı oluşturup FFmpeg drawtext ile video'ya yaz.
+
+    Timestamp JSON dosyasını R2'den okur. Kelimeler 4-5'li gruplar halinde
+    ekranın alt kısmına yerleştirilir (highlight: aktif kelime beyaz, diğerleri
+    yarı-saydam).
+
+    Returns processed video URL veya None.
+    """
+    from app.core.config import settings as _settings
+
+    try:
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
+        if result.returncode != 0:
+            return None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+    import json as _json
+
+    ts_url = f"{_settings.R2_PUBLIC_URL}/brands/{brand_id}/posts/audio/{post_id}_timestamps.json"
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            ts_resp = await client.get(ts_url)
+            if ts_resp.status_code != 200:
+                return None
+            word_timestamps = _json.loads(ts_resp.text)
+
+            video_resp = await client.get(video_url)
+            video_resp.raise_for_status()
+    except Exception:
+        return None
+
+    if not word_timestamps:
+        return None
+
+    # Kelimeleri cümle gruplarına böl (4-5 kelime per subtitle)
+    WORDS_PER_GROUP = 4
+    groups: list[dict] = []
+    for i in range(0, len(word_timestamps), WORDS_PER_GROUP):
+        group_words = word_timestamps[i:i + WORDS_PER_GROUP]
+        text = " ".join(w["word"] for w in group_words)
+        start = group_words[0]["start"]
+        end = group_words[-1]["end"]
+        groups.append({"text": text, "start": start, "end": end})
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_path = os.path.join(tmpdir, "input.mp4")
+            output_path = os.path.join(tmpdir, "subtitled.mp4")
+
+            Path(video_path).write_bytes(video_resp.content)
+
+            # FFmpeg drawtext filter chain — her grup bir drawtext entry
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+            drawtext_filters = []
+            for g in groups:
+                escaped_text = g["text"].replace("'", "’").replace(":", "\\:")
+                dt = (
+                    f"drawtext=text='{escaped_text}'"
+                    f":fontfile={font_path}"
+                    f":fontsize=42"
+                    f":fontcolor=white"
+                    f":borderw=2"
+                    f":bordercolor=black@0.8"
+                    f":x=(w-text_w)/2"
+                    f":y=h-h/6"
+                    f":enable='between(t,{g['start']:.3f},{g['end']:.3f})'"
+                )
+                drawtext_filters.append(dt)
+
+            filter_chain = ",".join(drawtext_filters)
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-vf", filter_chain,
+                "-c:v", "libx264", "-preset", "fast",
+                "-c:a", "copy",
+                "-movflags", "+faststart",
+                output_path,
+            ]
+            proc = subprocess.run(cmd, capture_output=True, timeout=180)
+            if proc.returncode != 0:
+                stderr = proc.stderr.decode(errors="replace")[:500]
+                sentry_sdk.capture_message(
+                    f"burn_subtitles: ffmpeg failed (rc={proc.returncode}) {stderr}",
+                    level="error",
+                )
+                return None
+
+            video_bytes = Path(output_path).read_bytes()
+
+        dest_path = f"brands/{brand_id}/posts/generated/{post_id}_sub.mp4"
+        return r2.upload(video_bytes, dest_path, "video/mp4")
+
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
+        return None
+
+
 # ─── Post-generation pipeline ────────────────────────────────────────────────
 
 async def apply_brand_processing(
@@ -588,13 +696,15 @@ async def apply_brand_processing(
     text_overlay_position: str = "bottom-left",
     slide_order: int | None = None,
     audio_url: str | None = None,
+    subtitle_enabled: bool = False,
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
 
     1. Görsel ise + logo_overlay aktifse → logo ekle
     2. Video ise + audio_url varsa → loop + audio mux
-    3. Video ise + intro_video_url varsa → intro/outro ekle
+    3. Video ise + subtitle_enabled → altyazı burn-in
+    4. Video ise + intro_video_url varsa → intro/outro ekle
 
     İşlenen URL döner; herhangi bir adım başarısız olursa orijinal URL korunur.
     """
@@ -658,6 +768,16 @@ async def apply_brand_processing(
             final_url = muxed
         else:
             sentry_sdk.capture_message(f"audio mux returned None for post {post_id}", level="warning")
+
+    # Subtitle burn-in — audio mux sonrası, intro'dan önce
+    if is_video and subtitle_enabled:
+        subtitled = await burn_subtitles(
+            video_url=final_url,
+            post_id=post_id,
+            brand_id=brand_id,
+        )
+        if subtitled:
+            final_url = subtitled
 
     # Intro video — sadece videolar için
     if is_video and intro_video_url:

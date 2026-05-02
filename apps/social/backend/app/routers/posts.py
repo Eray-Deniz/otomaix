@@ -15,7 +15,7 @@ from app.core.security import (
     get_current_user_optional,
     get_service_auth,
 )
-from app.core.templates_data import get_template_by_id
+from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
 from app.models.schemas import (
     FacelessVideoGenerate,
     OkResponse,
@@ -27,6 +27,8 @@ from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context, get_product_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
 from app.services.faceless_video import (
+    DEFAULT_MAX_DURATION,
+    PLATFORM_MAX_DURATION,
     SUPPORTED_FACELESS_RATIOS,
     TURKISH_VOICES,
     run_faceless_video_pipeline,
@@ -792,7 +794,7 @@ async def generate_faceless_video(
     await check_plan_limit(user["sub"], "video", db)
     await check_plan_limit(user["sub"], "post", db)
     brand = await db.fetchrow(
-        "SELECT brand_kit, name, sector, description FROM social.brands WHERE id = $1", payload.brand_id
+        "SELECT brand_kit, name, sector, description, website_url FROM social.brands WHERE id = $1", payload.brand_id
     )
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
@@ -804,6 +806,15 @@ async def generate_faceless_video(
     if payload.document_ids:
         rag_context = await get_document_context(payload.document_ids, payload.prompt, db)
 
+    # Seçili platformların en kısıtlayıcı süre limitini al
+    max_duration = DEFAULT_MAX_DURATION
+    if payload.platforms:
+        durations = [PLATFORM_MAX_DURATION.get(p, DEFAULT_MAX_DURATION) for p in payload.platforms]
+        max_duration = min(durations)
+
+    sector_slug = brand["sector"] or ""
+    sector_guidance_text = SECTOR_GUIDANCE.get(sector_slug, "")
+
     post = await run_faceless_video_pipeline(
         brand_id=payload.brand_id,
         prompt=payload.prompt,
@@ -813,12 +824,15 @@ async def generate_faceless_video(
         brand_kit=brand_kit,
         brand_name=brand["name"],
         brand_description=brand["description"] or "",
+        website_url=brand["website_url"] or "",
+        sector_guidance=sector_guidance_text,
         rag_context=rag_context,
         platform_captions=payload.platform_captions,
         template_id=payload.template_id,
         template_fields=payload.template_fields,
         intro_position=payload.intro_position,
         product_id=payload.product_id,
+        max_duration=max_duration,
         db=db,
     )
     return OkResponse(data={

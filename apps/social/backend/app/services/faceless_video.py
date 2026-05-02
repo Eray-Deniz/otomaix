@@ -19,14 +19,31 @@ from app.core.config import settings
 from app.services.media_adapters import get_active_faceless_background_adapter, get_active_image_adapter
 
 TURKISH_VOICES = [
+    {"id": "2r6kIpjMt3EVR3MKrIvn", "name": "Buse (Kadın)",   "gender": "female"},
+    {"id": "6OFtxwgaAoYevNDlklvO", "name": "Zeynep (Kadın)", "gender": "female"},
+    {"id": "PdYVUd1CAGSXsTvZZTNn", "name": "Eylül (Kadın)",  "gender": "female"},
+    {"id": "IuRRIAcbQK5AQk1XevPj", "name": "Emre (Erkek)",   "gender": "male"},
     {"id": "ctoYieZ4J7WwcdhujpMq", "name": "Kaan (Erkek)",   "gender": "male"},
-    {"id": "EST9Ui6982FZPSi7gCHi", "name": "Buse (Kadın)",   "gender": "female"},
-    {"id": "qSeXEcewz7tA0Q0qk9fH", "name": "Zeynep (Kadın)", "gender": "female"},
+    {"id": "J17lijyP1BHYcM7ld0Rg", "name": "Ahmet (Erkek)",  "gender": "male"},
 ]
 
-DEFAULT_VOICE = "ctoYieZ4J7WwcdhujpMq"
+DEFAULT_VOICE = "2r6kIpjMt3EVR3MKrIvn"
 
 ELEVENLABS_MODEL = "eleven_flash_v2_5"
+
+# Platform bazlı max video süresi (saniye)
+PLATFORM_MAX_DURATION: dict[str, int] = {
+    "tiktok": 60,
+    "instagram": 90,
+    "youtube": 60,
+    "threads": 60,
+    "facebook": 120,
+    "linkedin": 120,
+    "twitter": 140,
+    "pinterest": 60,
+    "bluesky": 60,
+}
+DEFAULT_MAX_DURATION = 60
 
 # Aktif faceless background adapter — modül import'unda bir kez çözülür.
 _faceless_bg_adapter = get_active_faceless_background_adapter()
@@ -48,7 +65,8 @@ async def _build_still_prompt(
 ) -> str:
     """Marka bilgisinden FLUX.2 için sahne prompt'u üret.
 
-    Claude Opus 4.7 ile görsel-odaklı İngilizce prompt oluşturur.
+    Claude Opus 4.6 ile görsel-odaklı İngilizce prompt oluşturur.
+    7 görsel açı kategorisinden bağlama uygun olanını seçer.
     API hatası durumunda fallback template kullanılır.
     """
     context_parts = []
@@ -71,14 +89,23 @@ async def _build_still_prompt(
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=150,
+            max_tokens=200,
             cache_control={"type": "ephemeral"},
             system=(
                 "You are an expert cinematographer and visual director specializing in brand storytelling. "
-                "Given brand info, output ONE English image generation prompt "
-                "describing a scene. Rules:\n"
+                "Given brand info, output ONE English image generation prompt describing a scene.\n\n"
+                "VISUAL ANGLE — pick ONE that fits the video topic:\n"
+                "1. PAIN POINT: Show the problem — before scene, frustration, obstacle\n"
+                "2. OUTCOME: Show the transformation — after scene, success moment\n"
+                "3. SOCIAL PROOF: Show community — group usage, collective context\n"
+                "4. CURIOSITY: Show partial/hidden detail — extreme close-up, macro, mystery\n"
+                "5. URGENCY: Show scarcity/time — limited display, countdown context\n"
+                "6. IDENTITY: Show the target audience's environment — their world\n"
+                "7. CONTRARIAN: Show the unexpected — product in surprising context\n\n"
+                "Do NOT always pick the same angle. Vary based on topic.\n\n"
+                "Rules:\n"
                 "- Describe what the camera SEES: products, environments, surfaces, lighting, atmosphere\n"
-                "- Include brand colors naturally (lighting, surfaces, props)\n"
+                "- Include brand colors naturally (lighting, surfaces, props, accent tones)\n"
                 "- NEVER include people, faces, hands, text, logos, or brand names\n"
                 "- Style: cinematic, professional, 4K quality\n"
                 "- Output ONLY the prompt, nothing else."
@@ -103,9 +130,37 @@ async def _build_still_prompt(
         return ", ".join(parts)
 
 
+# ─── 0b. Motion prompt çeşitliliği ────────────────────────────────────────────
+
+_MOTION_PROMPTS = [
+    "Slow cinematic camera push-in, soft ambient lighting, gentle particle motion, seamless loop, no people, no faces",
+    "Smooth lateral dolly shot, warm natural light, subtle depth-of-field shift, no people, no faces",
+    "Gentle orbit around subject, golden hour lighting, cinematic bokeh, no people, no faces",
+    "Slow vertical tilt revealing the scene, soft diffused lighting, atmospheric haze, no people, no faces",
+    "Parallax effect with foreground blur, cool-tone ambient light, elegant composition, no people, no faces",
+    "Slow zoom-out revealing context, dramatic rim lighting, film grain texture, no people, no faces",
+    "Steady tracking shot with subtle camera sway, natural daylight, shallow focus, no people, no faces",
+]
+
+
+def _pick_motion_prompt() -> str:
+    """Her video için farklı kamera hareketi seç."""
+    import random
+    return random.choice(_MOTION_PROMPTS)
+
+
 # ─── 1. Script üretimi ──────────────────────────────────────────────────────
 
-async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", rag_context: str | None = None) -> dict:
+async def generate_script(
+    prompt: str,
+    brand_kit: dict,
+    brand_name: str = "",
+    brand_description: str = "",
+    website_url: str = "",
+    sector_guidance: str = "",
+    rag_context: str | None = None,
+    max_duration: int = DEFAULT_MAX_DURATION,
+) -> dict:
     """Claude API ile Türkçe sosyal medya video scripti üret.
 
     Returns: {"script": "...", "duration_estimate": 45}
@@ -121,27 +176,80 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", ra
     }
     tone_tr = tone_map.get(tonality, "profesyonel")
 
+    colors = brand_kit.get("colors", [])
+    if isinstance(colors, dict):
+        color_str = ", ".join(f"{k}: {v}" for k, v in colors.items() if v)
+    elif isinstance(colors, list):
+        color_str = ", ".join(str(c) for c in colors if c)
+    else:
+        color_str = ""
+
+    hashtags = brand_kit.get("hashtags", [])
+    hashtag_str = ", ".join(hashtags[:5]) if hashtags else ""
+
+    # Süre → kelime hedefi (~130 kelime/dakika Türkçe konuşma hızı)
+    max_words = round(max_duration / 60 * 130)
+    min_words = max(40, round(max_words * 0.5))
+
     system = (
-        "Sen Türkçe sosyal medya video scriptleri yazan bir içerik uzmanısın. "
-        "Scriptler doğal konuşma dilinde, akıcı ve ilgi çekici olmalı. "
-        "Yaklaşık 30-60 saniye sürecek uzunlukta yaz (75-150 kelime). "
-        "Kullanıcı hazır bir script verdiyse onu TEMELden yeniden yaz — aynı mesajı "
-        "farklı kelimelerle, farklı bir açıdan anlat. Birebir kopyalama."
+        "Sen Türkçe sosyal medya video scriptleri yazan bir içerik uzmanısın.\n\n"
+        f"SÜRE: {min_words}-{max_words} kelime (max {max_duration} saniye). "
+        "Bu limiti ASLA aşma.\n\n"
+        "YAZI KURALLARI:\n"
+        "1. FAYDA > ÖZELLİK: Ürün/hizmetin özelliğini değil, müşteriye ne "
+        "kazandırdığını anlat. AMA sadece verilen bilgideki özelliklerden fayda çıkar.\n"
+        "2. SOMUTLUK > SOYUTLUK: 'Kalite', 'premium', 'modern', 'inovatif', 'en iyi' "
+        "gibi belirsiz sözler KULLANMA. Spesifik detay veya durum anlat.\n"
+        "3. AKTİF SES: Edilgen cümle kurma. 'Yapılır/oluşturulur' değil, doğrudan hitap.\n"
+        "4. MÜŞTERİ DİLİ: Jargon kullanma, müşterinin günlük dilinde konuş.\n\n"
+        "PSİKOLOJİ (uygun olanı seç, hepsini sokma):\n"
+        "- SOMUTLUK: Her vaadin arkasında spesifik durum/rakam/zaman olmalı. "
+        "Gerçek değilse KULLANMA.\n"
+        "- LOSS AVERSION: 'Kaçırma' tarafını göster — ama SAHTE scarcity yaratma. "
+        "Gerçek stok/süre bilgisi yoksa kullanma.\n"
+        "- SOCIAL PROOF: Gerçek sayı/topluluk/referans varsa doğal şekilde yerleştir.\n"
+        "Emin değilsen hiçbir prensip sokma — doğal akışa bırak.\n\n"
+        "YASAK — İCAT ETME:\n"
+        "- Sayısal iddia uydurma ('%300 artış', '30 saatten 2 saate').\n"
+        "- Teknik özellik icat etme (malzeme, bileşen, sertifika).\n"
+        "- Dolaylı fayda/performans iddiası icat etme.\n"
+        "- Hayali müşteri hikayesi/yorumu uydurma.\n"
+        "Bilgide olmayan hiçbir şeyi yazma. İçerik kısa kalsa bile dürüst kalsın.\n\n"
+        "KULLANICI İSTEĞİ her zaman önceliklidir — konu/istek belirtildiyse "
+        "marka varsayılanlarını geçersiz kılar.\n\n"
+        "FORMAT: Sadece script metnini yaz. Başka açıklama, başlık, emoji ekleme. "
+        "Script doğal konuşma dilinde, sesli okunacak şekilde yaz. "
+        "Kullanıcı hazır script verdiyse TEMELden yeniden yaz — farklı açıdan anlat."
     )
+
+    # User message — marka bağlamı + konu
     user_parts = [
+        "=== MARKA BİLGİSİ ===",
         f"Marka: {brand_name}",
-        f"Sektör: {sector}",
-        f"Üslup: {tone_tr}",
-        "",
-        f"Konu / Kullanıcı girdisi: {prompt}",
     ]
+    if brand_description:
+        user_parts.append(f"Ne yapar: {brand_description}")
+    if sector:
+        user_parts.append(f"Sektör: {sector}")
+    user_parts.append(f"Üslup: {tone_tr}")
+    if color_str:
+        user_parts.append(f"Marka renkleri: {color_str}")
+    if website_url:
+        user_parts.append(f"Web sitesi: {website_url}")
+    if hashtag_str:
+        user_parts.append(f"Marka hashtag'leri: {hashtag_str}")
+    user_parts.append("=== MARKA BİLGİSİ SONU ===")
+
+    if sector_guidance:
+        user_parts.append(f"\n=== SEKTÖR REHBERİ ===\n{sector_guidance}\n=== SEKTÖR REHBERİ SONU ===")
+
     if rag_context:
         user_parts.append(f"\n=== MARKA DÖKÜMAN BAĞLAMI ===\n{rag_context}\n=== BAĞLAM SONU ===")
-        user_parts.append("Yukarıdaki doküman bağlamını içeriğe doğal şekilde yansıt.")
+
+    user_parts.append(f"\n=== KONU ===\n{prompt}\n=== KONU SONU ===")
     user_parts.append(
         "\nBu konuda bir sosyal medya videosu için Türkçe script yaz. "
-        "Her seferinde farklı bir anlatım açısı ve yaratıcı bir giriş kullan. "
-        "Sadece script metnini yaz, başka açıklama ekleme."
+        "Her seferinde farklı bir anlatım açısı ve yaratıcı bir giriş kullan."
     )
     user_msg = "\n".join(user_parts)
 
@@ -151,7 +259,7 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", ra
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=400,
+            max_tokens=500,
             temperature=1.0,
             cache_control={"type": "ephemeral"},
             system=system,
@@ -163,7 +271,7 @@ async def generate_script(prompt: str, brand_kit: dict, brand_name: str = "", ra
 
     # Kelime sayısına göre süre tahmini (~130 kelime/dakika Türkçe)
     word_count = len(script.split())
-    duration_estimate = max(15, min(60, round(word_count / 130 * 60)))
+    duration_estimate = max(15, min(max_duration, round(word_count / 130 * 60)))
 
     return {"script": script, "duration_estimate": duration_estimate}
 
@@ -177,31 +285,85 @@ async def text_to_speech(
     post_id: UUID,
     brand_id: UUID,
     brand_name: str = "",
-) -> str | None:
-    """ElevenLabs TTS → mp3 → R2. Returns public_url veya None."""
+) -> dict:
+    """ElevenLabs TTS → mp3 → R2. Returns {"audio_url": ..., "word_timestamps": [...]}.
+
+    word_timestamps: [{"word": "Merhaba", "start": 0.0, "end": 0.45}, ...]
+    """
     if not settings.ELEVENLABS_KEY:
         sentry_sdk.capture_message("TTS skipped: ELEVENLABS_KEY is empty", level="warning")
-        return None
+        return {"audio_url": None, "word_timestamps": []}
 
     from elevenlabs.client import ElevenLabs
     from app.services.storage import r2
 
     try:
         client = ElevenLabs(api_key=settings.ELEVENLABS_KEY)
-        audio_iter = client.text_to_speech.convert(
+
+        # with_timestamps → word-level alignment data
+        response = client.text_to_speech.convert_with_timestamps(
             text=script_text,
             voice_id=voice,
             model_id=ELEVENLABS_MODEL,
             output_format="mp3_44100_128",
         )
-        audio_bytes = b"".join(audio_iter)
+
+        # Response: generator of dicts with "audio_base64" and "alignment" keys
+        audio_chunks: list[bytes] = []
+        word_timestamps: list[dict] = []
+
+        import base64
+        for chunk in response:
+            if chunk.get("audio_base64"):
+                audio_chunks.append(base64.b64decode(chunk["audio_base64"]))
+            if chunk.get("alignment"):
+                alignment = chunk["alignment"]
+                chars = alignment.get("characters", [])
+                char_starts = alignment.get("character_start_times_seconds", [])
+                char_ends = alignment.get("character_end_times_seconds", [])
+
+                # Character-level → word-level aggregation
+                current_word = ""
+                word_start: float | None = None
+                for i, char in enumerate(chars):
+                    if char == " ":
+                        if current_word and word_start is not None:
+                            word_timestamps.append({
+                                "word": current_word,
+                                "start": word_start,
+                                "end": char_starts[i] if i < len(char_starts) else char_ends[i - 1],
+                            })
+                        current_word = ""
+                        word_start = None
+                    else:
+                        if word_start is None and i < len(char_starts):
+                            word_start = char_starts[i]
+                        current_word += char
+                # Son kelime
+                if current_word and word_start is not None:
+                    word_timestamps.append({
+                        "word": current_word,
+                        "start": word_start,
+                        "end": char_ends[-1] if char_ends else word_start + 0.3,
+                    })
+
+        audio_bytes = b"".join(audio_chunks)
+        if not audio_bytes:
+            return {"audio_url": None, "word_timestamps": []}
 
         r2_path = f"brands/{brand_id}/posts/audio/{post_id}.mp3"
         public_url = r2.upload(audio_bytes, r2_path, "audio/mpeg")
-        return public_url
+
+        # Timestamp'leri de R2'ye kaydet (webhook'ta subtitle burn-in için lazım)
+        if word_timestamps:
+            import json as _json
+            ts_path = f"brands/{brand_id}/posts/audio/{post_id}_timestamps.json"
+            r2.upload(_json.dumps(word_timestamps).encode(), ts_path, "application/json")
+
+        return {"audio_url": public_url, "word_timestamps": word_timestamps}
     except Exception as exc:
         sentry_sdk.capture_exception(exc)
-        return None
+        return {"audio_url": None, "word_timestamps": []}
 
 
 # ─── 3. fal.ai video üretimi ────────────────────────────────────────────────
@@ -275,6 +437,8 @@ async def run_faceless_video_pipeline(
     brand_name: str,
     db: asyncpg.Connection,
     brand_description: str = "",
+    website_url: str = "",
+    sector_guidance: str = "",
     rag_context: str | None = None,
     script: str = "",
     platform_captions: dict | None = None,
@@ -282,6 +446,7 @@ async def run_faceless_video_pipeline(
     template_fields: dict | None = None,
     intro_position: str = "none",
     product_id: UUID | None = None,
+    max_duration: int = DEFAULT_MAX_DURATION,
 ) -> dict:
     """Tam pipeline: post oluştur → script → TTS → fal.ai video.
 
@@ -295,9 +460,16 @@ async def run_faceless_video_pipeline(
     # 1. Script — frontend'den geldiyse aynen kullan, yoksa üret
     if script.strip():
         word_count = len(script.split())
-        duration = max(15, min(60, round(word_count / 130 * 60)))
+        duration = max(15, min(max_duration, round(word_count / 130 * 60)))
     else:
-        script_result = await generate_script(prompt, brand_kit, brand_name, rag_context=rag_context)
+        script_result = await generate_script(
+            prompt, brand_kit, brand_name,
+            brand_description=brand_description,
+            website_url=website_url,
+            sector_guidance=sector_guidance,
+            rag_context=rag_context,
+            max_duration=max_duration,
+        )
         script = script_result["script"]
         duration = script_result["duration_estimate"]
 
@@ -323,8 +495,20 @@ async def run_faceless_video_pipeline(
     post = dict(row)
     post_id = post["id"]
 
-    # 3. TTS → audio
-    audio_url = await text_to_speech(script, voice, post_id, brand_id, brand_name=brand_name)
+    async def _update_stage(stage: str) -> None:
+        await db.execute(
+            """UPDATE social.posts
+               SET template_fields = COALESCE(template_fields, '{}'::jsonb) || $2::jsonb
+               WHERE id = $1""",
+            post_id, {"generation_stage": stage},
+        )
+
+    await _update_stage("script_done")
+
+    # 3. TTS → audio + word timestamps
+    tts_result = await text_to_speech(script, voice, post_id, brand_id, brand_name=brand_name)
+    audio_url = tts_result["audio_url"]
+    await _update_stage("tts_done")
 
     # 4. fal.ai arka plan videosu
     # Ürün görseli varsa FLUX.2 still adımını atla, doğrudan Wan'a gönder
@@ -357,11 +541,8 @@ async def run_faceless_video_pipeline(
             color_str=color_str,
         )
 
-    motion_prompt = (
-        "Slow cinematic camera push-in, soft ambient lighting, "
-        "gentle particle motion, seamless loop, return to starting position, "
-        "no people, no human figures, no faces"
-    )
+    motion_prompt = _pick_motion_prompt()
+    await _update_stage("generating_video")
 
     try:
         fal_job_id = await generate_background_video(

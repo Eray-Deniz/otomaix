@@ -187,7 +187,7 @@ class FacelessVideoGenerate(BaseModel):
     brand_id: UUID
     prompt: str
     script: str = ""
-    voice: str = "tr-TR-EmelNeural"
+    voice: str = "2r6kIpjMt3EVR3MKrIvn"
     document_ids: list[UUID] = []
     aspect_ratio: str = "9:16"
     platforms: list[str] = []

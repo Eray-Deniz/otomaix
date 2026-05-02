@@ -54,6 +54,18 @@ const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'
 const DEFAULT_CAROUSEL_TEMPLATE_ID = 'carousel-genel-sablon'
 const DEFAULT_VIDEO_TEMPLATE_ID = 'facelessvideo-genel-sablon'
 
+const PLATFORM_MAX_DURATION: Record<string, number> = {
+  tiktok: 60,
+  instagram: 90,
+  youtube: 60,
+  threads: 60,
+  facebook: 120,
+  linkedin: 120,
+  twitter: 140,
+  pinterest: 60,
+  bluesky: 60,
+}
+
 interface CarouselSlide {
   order: number
   image_url: string | null
@@ -73,6 +85,7 @@ interface GeneratedPost {
   script?: string
   audio_url?: string
   duration_estimate?: number
+  template_fields?: Record<string, any>
 }
 
 interface Holiday {
@@ -200,10 +213,11 @@ function IcerikOlusturInner() {
   // Faceless video — Step 2
   const [script, setScript] = useState('')
   const [voices, setVoices] = useState<TurkishVoice[]>([])
-  const [selectedVoice, setSelectedVoice] = useState('ctoYieZ4J7WwcdhujpMq')
+  const [selectedVoice, setSelectedVoice] = useState('2r6kIpjMt3EVR3MKrIvn')
   const [durationEstimate, setDurationEstimate] = useState<number | null>(null)
   // Intro/outro pozisyonu (video için) — none/start/end/both
   const [introPosition, setIntroPosition] = useState<string>('none')
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true)
   const [brandHasIntro, setBrandHasIntro] = useState(false)
 
   // Özel Gün — Step 2
@@ -254,13 +268,18 @@ function IcerikOlusturInner() {
           output_url: res.data!.output_url,
           status: 'ready',
           slides: res.data!.slides ?? prev.slides,
+          template_fields: res.data!.template_fields ?? prev.template_fields,
         } : prev)
       } else if (res.success && res.data?.status === 'failed') {
         toast.error('Görsel üretilemedi — farklı bir en-boy oranı veya açıklama ile tekrar dene')
         setGeneratedPost(prev => prev ? { ...prev, status: 'failed' } : prev)
       } else if (!cancelled) {
-        if (res.success && res.data?.slides) {
-          setGeneratedPost(prev => prev ? { ...prev, slides: res.data!.slides } : prev)
+        if (res.success && res.data) {
+          setGeneratedPost(prev => prev ? {
+            ...prev,
+            slides: res.data!.slides ?? prev.slides,
+            template_fields: res.data!.template_fields ?? prev.template_fields,
+          } : prev)
         }
         setTimeout(poll, 3000)
       }
@@ -427,6 +446,10 @@ function IcerikOlusturInner() {
     if (contentType === 'video') {
       // Faceless video pipeline — şablon tabanlı
       const isTemplateMode = mode === 'template' && selectedTemplate
+      const videoTemplateFields = {
+        ...(isTemplateMode ? templateFields : {}),
+        subtitle_enabled: subtitleEnabled,
+      }
       const res = await api.post<GeneratedPost>('/posts/generate-faceless-video', {
         brand_id: currentBrand.id,
         prompt: prompt.trim() || captionData!.image_prompt || '',
@@ -436,7 +459,7 @@ function IcerikOlusturInner() {
         aspect_ratio: aspectRatio,
         platforms,
         template_id: isTemplateMode ? selectedTemplate.id : null,
-        template_fields: isTemplateMode ? templateFields : null,
+        template_fields: videoTemplateFields,
         platform_captions: captionData!.platform_captions,
         intro_position: introPosition,
         product_id: selectedProduct?.id ?? null,
@@ -1245,6 +1268,16 @@ function IcerikOlusturInner() {
                 </div>
               </div>
 
+              {/* Video: platform süre uyarısı */}
+              {contentType === 'video' && platforms.length > 0 && (() => {
+                const maxDur = Math.min(...platforms.map(p => PLATFORM_MAX_DURATION[p] ?? 60))
+                return (
+                  <p className="text-xs text-amber-600">
+                    Seçili platformlar max {maxDur} saniye video destekliyor. Script bu süreye göre ayarlanacak.
+                  </p>
+                )
+              })()}
+
               {/* Dokümanlar — sadece Genel Görsel modunda göster */}
               {imageSubType === 'general' && availableDocs.length > 0 && (
                 <div className="space-y-2">
@@ -1280,9 +1313,12 @@ function IcerikOlusturInner() {
                     {(voices.length > 0
                       ? voices
                       : [
+                          { id: '2r6kIpjMt3EVR3MKrIvn', name: 'Buse (Kadın)', gender: 'female' },
+                          { id: '6OFtxwgaAoYevNDlklvO', name: 'Zeynep (Kadın)', gender: 'female' },
+                          { id: 'PdYVUd1CAGSXsTvZZTNn', name: 'Eylül (Kadın)', gender: 'female' },
+                          { id: 'IuRRIAcbQK5AQk1XevPj', name: 'Emre (Erkek)', gender: 'male' },
                           { id: 'ctoYieZ4J7WwcdhujpMq', name: 'Kaan (Erkek)', gender: 'male' },
-                          { id: 'EST9Ui6982FZPSi7gCHi', name: 'Buse (Kadın)', gender: 'female' },
-                          { id: 'qSeXEcewz7tA0Q0qk9fH', name: 'Zeynep (Kadın)', gender: 'female' },
+                          { id: 'J17lijyP1BHYcM7ld0Rg', name: 'Ahmet (Erkek)', gender: 'male' },
                         ]
                     ).map((v) => (
                       <button
@@ -1299,6 +1335,27 @@ function IcerikOlusturInner() {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Video: Altyazı toggle */}
+              {contentType === 'video' && (
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">Altyazı (Subtitle)</Label>
+                  <button
+                    onClick={() => setSubtitleEnabled(!subtitleEnabled)}
+                    className={cn(
+                      'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                      subtitleEnabled ? 'bg-purple-600' : 'bg-gray-300'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform',
+                        subtitleEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                      )}
+                    />
+                  </button>
                 </div>
               )}
 
@@ -1828,13 +1885,39 @@ function IcerikOlusturInner() {
                       <p className="text-xs text-red-500 text-center px-4">Farklı bir açıklama veya ayarla tekrar deneyin</p>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-12 gap-3">
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
                       <div className="w-14 h-14 rounded-xl bg-purple-200 flex items-center justify-center">
                         <Loader2 className="w-7 h-7 text-purple-600 animate-spin" />
                       </div>
-                      <p className="text-sm text-purple-700 font-medium">Video render ediliyor...</p>
-                      <p className="text-xs text-purple-500">Bu 1-3 dakika sürebilir</p>
-                      <p className="text-xs text-purple-400">Post ID: {generatedPost.post_id.slice(0, 8)}...</p>
+                      {(() => {
+                        const stage = generatedPost.template_fields?.generation_stage || 'generating'
+                        const stages = [
+                          { key: 'script_done', label: 'Script üretildi' },
+                          { key: 'tts_done', label: 'Seslendirme tamamlandı' },
+                          { key: 'generating_video', label: 'Video render ediliyor' },
+                        ]
+                        const currentIdx = stages.findIndex(s => s.key === stage)
+                        return (
+                          <div className="flex flex-col items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              {stages.map((s, i) => {
+                                const done = i <= currentIdx && currentIdx >= 0
+                                const active = i === currentIdx
+                                return (
+                                  <div key={s.key} className="flex items-center gap-1.5">
+                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${done ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-400'}`}>
+                                      {done ? '✓' : i + 1}
+                                    </div>
+                                    <span className={`text-xs ${active ? 'text-purple-700 font-medium' : done ? 'text-purple-500' : 'text-purple-300'}`}>{s.label}</span>
+                                    {i < stages.length - 1 && <span className="text-purple-200 mx-1">→</span>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            <p className="text-xs text-purple-500 mt-1">Bu 1-3 dakika sürebilir</p>
+                          </div>
+                        )
+                      })()}
                     </div>
                   )}
                   {/* Script gösterimi */}

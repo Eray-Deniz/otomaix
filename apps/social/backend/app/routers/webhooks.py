@@ -201,11 +201,22 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
 
         # Faceless video: TTS audio'yu FFmpeg ile mux et (loop + ses değiştirme)
         audio_url: str | None = None
+        subtitle_enabled = False
         if is_video_payload and content_type == "video":
             from app.core.config import settings as _settings
             audio_url = f"{_settings.R2_PUBLIC_URL}/brands/{brand_id}/posts/audio/{post_id}.mp3"
 
-        # Marka işlemlerini uygula (logo overlay / text overlay / audio mux / intro video)
+            # subtitle_enabled: template_fields JSONB'den oku
+            t_fields = post["template_fields"]
+            if t_fields and isinstance(t_fields, str):
+                try:
+                    t_fields = json.loads(t_fields)
+                except (TypeError, ValueError):
+                    t_fields = {}
+            if isinstance(t_fields, dict):
+                subtitle_enabled = bool(t_fields.get("subtitle_enabled", False))
+
+        # Marka işlemlerini uygula (logo overlay / text overlay / audio mux / subtitle / intro video)
         final_url = await apply_brand_processing(
             post_id=post_id,
             brand_id=brand_id,
@@ -218,6 +229,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             text_overlay_lines=text_overlay_lines,
             text_overlay_position=text_overlay_position,
             audio_url=audio_url,
+            subtitle_enabled=subtitle_enabled,
         )
     except Exception as exc:
         sentry_sdk.set_context("fal_webhook", {"post_id": str(post_id), "brand_id": str(brand_id), "request_id": request_id})
