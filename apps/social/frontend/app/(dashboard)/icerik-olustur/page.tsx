@@ -213,7 +213,7 @@ function IcerikOlusturInner() {
   // Faceless video — Step 2
   const [script, setScript] = useState('')
   const [voices, setVoices] = useState<TurkishVoice[]>([])
-  const [selectedVoice, setSelectedVoice] = useState('2r6kIpjMt3EVR3MKrIvn')
+  const [selectedVoice, setSelectedVoice] = useState('qSeXEcewz7tA0Q0qk9fH')
   const [durationEstimate, setDurationEstimate] = useState<number | null>(null)
   // Intro/outro pozisyonu (video için) — none/start/end/both
   const [introPosition, setIntroPosition] = useState<string>('none')
@@ -1313,9 +1313,9 @@ function IcerikOlusturInner() {
                     {(voices.length > 0
                       ? voices
                       : [
-                          { id: '2r6kIpjMt3EVR3MKrIvn', name: 'Buse (Kadın)', gender: 'female' },
-                          { id: '6OFtxwgaAoYevNDlklvO', name: 'Zeynep (Kadın)', gender: 'female' },
-                          { id: 'PdYVUd1CAGSXsTvZZTNn', name: 'Eylül (Kadın)', gender: 'female' },
+                          { id: 'qSeXEcewz7tA0Q0qk9fH', name: 'Buse (Kadın)', gender: 'female' },
+                          { id: 'EST9Ui6982FZPSi7gCHi', name: 'Zeynep (Kadın)', gender: 'female' },
+                          { id: 'TASY7VCrU29rEMoYFTGG', name: 'Eylül (Kadın)', gender: 'female' },
                           { id: 'IuRRIAcbQK5AQk1XevPj', name: 'Emre (Erkek)', gender: 'male' },
                           { id: 'ctoYieZ4J7WwcdhujpMq', name: 'Kaan (Erkek)', gender: 'male' },
                           { id: 'J17lijyP1BHYcM7ld0Rg', name: 'Ahmet (Erkek)', gender: 'male' },

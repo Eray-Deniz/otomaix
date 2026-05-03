@@ -202,11 +202,12 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
         # Faceless video: TTS audio'yu FFmpeg ile mux et (loop + ses değiştirme)
         audio_url: str | None = None
         subtitle_enabled = False
+        intro_position_override: str | None = None
         if is_video_payload and content_type == "video":
             from app.core.config import settings as _settings
             audio_url = f"{_settings.R2_PUBLIC_URL}/brands/{brand_id}/posts/audio/{post_id}.mp3"
 
-            # subtitle_enabled: template_fields JSONB'den oku
+            # template_fields JSONB → subtitle_enabled + intro_position
             t_fields = post["template_fields"]
             if t_fields and isinstance(t_fields, str):
                 try:
@@ -215,6 +216,11 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
                     t_fields = {}
             if isinstance(t_fields, dict):
                 subtitle_enabled = bool(t_fields.get("subtitle_enabled", False))
+                # Manuel üretimde post-level intro_position override eder.
+                # Set değilse (legacy/auto-posting) brand_kit.intro_video.position fallback olur.
+                ip = t_fields.get("intro_position")
+                if isinstance(ip, str) and ip:
+                    intro_position_override = ip
 
         # Marka işlemlerini uygula (logo overlay / text overlay / audio mux / subtitle / intro video)
         final_url = await apply_brand_processing(
@@ -230,6 +236,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             text_overlay_position=text_overlay_position,
             audio_url=audio_url,
             subtitle_enabled=subtitle_enabled,
+            intro_position=intro_position_override,
         )
     except Exception as exc:
         sentry_sdk.set_context("fal_webhook", {"post_id": str(post_id), "brand_id": str(brand_id), "request_id": request_id})

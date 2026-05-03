@@ -697,6 +697,7 @@ async def apply_brand_processing(
     slide_order: int | None = None,
     audio_url: str | None = None,
     subtitle_enabled: bool = False,
+    intro_position: str | None = None,
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
@@ -704,7 +705,10 @@ async def apply_brand_processing(
     1. Görsel ise + logo_overlay aktifse → logo ekle
     2. Video ise + audio_url varsa → loop + audio mux
     3. Video ise + subtitle_enabled → altyazı burn-in
-    4. Video ise + intro_video_url varsa → intro/outro ekle
+    4. Video ise + intro_video_url + pozisyon varsa → intro/outro ekle
+
+    intro_position: "none" → intro eklenmez; "start"/"end"/"both" → o pozisyonda eklenir;
+    None → brand_kit.intro_video.position fallback (legacy + auto-posting için).
 
     İşlenen URL döner; herhangi bir adım başarısız olursa orijinal URL korunur.
     """
@@ -780,13 +784,16 @@ async def apply_brand_processing(
             final_url = subtitled
 
     # Intro video — sadece videolar için
-    if is_video and intro_video_url:
+    # Pozisyon önceliği: post-level intro_position (manuel üretim) >
+    # brand_kit.intro_video.position (auto-posting / legacy fallback)
+    effective_position = intro_position if intro_position else intro_video.get("position", "start")
+    if is_video and intro_video_url and effective_position != "none":
         merged = await add_intro_video(
             main_video_url=final_url,
             intro_video_url=intro_video_url,
             post_id=post_id,
             brand_id=brand_id,
-            position=intro_video.get("position", "start"),
+            position=effective_position,
         )
         if merged:
             final_url = merged
