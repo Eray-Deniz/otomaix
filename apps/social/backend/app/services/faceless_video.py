@@ -311,7 +311,8 @@ async def text_to_speech(
     try:
         client = ElevenLabs(api_key=settings.ELEVENLABS_KEY)
 
-        # with_timestamps → word-level alignment data
+        # with_timestamps → tek AudioWithTimestampsResponse objesi
+        # (audio_base_64 + alignment alanları, streaming DEĞİL)
         response = client.text_to_speech.convert_with_timestamps(
             text=script_text,
             voice_id=voice,
@@ -320,48 +321,47 @@ async def text_to_speech(
             voice_settings=VoiceSettings(**VOICE_SETTINGS),
         )
 
-        # Response: generator of dicts with "audio_base64" and "alignment" keys
-        audio_chunks: list[bytes] = []
-        word_timestamps: list[dict] = []
-
         import base64
-        for chunk in response:
-            if chunk.get("audio_base64"):
-                audio_chunks.append(base64.b64decode(chunk["audio_base64"]))
-            if chunk.get("alignment"):
-                alignment = chunk["alignment"]
-                chars = alignment.get("characters", [])
-                char_starts = alignment.get("character_start_times_seconds", [])
-                char_ends = alignment.get("character_end_times_seconds", [])
-
-                # Character-level → word-level aggregation
-                current_word = ""
-                word_start: float | None = None
-                for i, char in enumerate(chars):
-                    if char == " ":
-                        if current_word and word_start is not None:
-                            word_timestamps.append({
-                                "word": current_word,
-                                "start": word_start,
-                                "end": char_starts[i] if i < len(char_starts) else char_ends[i - 1],
-                            })
-                        current_word = ""
-                        word_start = None
-                    else:
-                        if word_start is None and i < len(char_starts):
-                            word_start = char_starts[i]
-                        current_word += char
-                # Son kelime
-                if current_word and word_start is not None:
-                    word_timestamps.append({
-                        "word": current_word,
-                        "start": word_start,
-                        "end": char_ends[-1] if char_ends else word_start + 0.3,
-                    })
-
-        audio_bytes = b"".join(audio_chunks)
-        if not audio_bytes:
+        # SDK alanı snake_case `audio_base_64`, eski sürümlerde `audio_base64` olabilir
+        audio_b64 = (
+            getattr(response, "audio_base_64", None)
+            or getattr(response, "audio_base64", None)
+        )
+        if not audio_b64:
             return {"audio_url": None, "word_timestamps": []}
+        audio_bytes = base64.b64decode(audio_b64)
+
+        word_timestamps: list[dict] = []
+        alignment = getattr(response, "alignment", None)
+        if alignment is not None:
+            chars = getattr(alignment, "characters", None) or []
+            char_starts = getattr(alignment, "character_start_times_seconds", None) or []
+            char_ends = getattr(alignment, "character_end_times_seconds", None) or []
+
+            # Character-level → word-level aggregation
+            current_word = ""
+            word_start: float | None = None
+            for i, char in enumerate(chars):
+                if char == " ":
+                    if current_word and word_start is not None:
+                        word_timestamps.append({
+                            "word": current_word,
+                            "start": word_start,
+                            "end": char_starts[i] if i < len(char_starts) else char_ends[i - 1],
+                        })
+                    current_word = ""
+                    word_start = None
+                else:
+                    if word_start is None and i < len(char_starts):
+                        word_start = char_starts[i]
+                    current_word += char
+            # Son kelime
+            if current_word and word_start is not None:
+                word_timestamps.append({
+                    "word": current_word,
+                    "start": word_start,
+                    "end": char_ends[-1] if char_ends else word_start + 0.3,
+                })
 
         r2_path = f"brands/{brand_id}/posts/audio/{post_id}.mp3"
         public_url = r2.upload(audio_bytes, r2_path, "audio/mpeg")
