@@ -85,7 +85,7 @@ interface GeneratedPost {
   script?: string
   audio_url?: string
   duration_estimate?: number
-  template_fields?: Record<string, any>
+  template_fields?: Record<string, unknown>
 }
 
 interface Holiday {
