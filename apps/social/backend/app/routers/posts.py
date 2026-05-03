@@ -31,6 +31,8 @@ from app.services.faceless_video import (
     PLATFORM_MAX_DURATION,
     SUPPORTED_FACELESS_RATIOS,
     TURKISH_VOICES,
+    run_faceless_stage1,
+    run_faceless_stage2,
     run_faceless_video_pipeline,
 )
 
@@ -842,6 +844,171 @@ async def generate_faceless_video(
         "duration_estimate": post["duration_estimate"],
         "status": "generating",
     })
+
+
+@router.post(
+    "/generate-faceless-stage1",
+    response_model=OkResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limiter(60, 3600))],
+)
+async def generate_faceless_stage1(
+    payload: FacelessVideoGenerate,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Stage 1: post oluştur (status='awaiting_approval') + TTS + FLUX.2 still.
+
+    Kota burada düşer (video + post). Onay/Reject endpoint'leri sonra çağrılır.
+    """
+    await assert_brand_owned(db, user, payload.brand_id)
+    if payload.aspect_ratio not in SUPPORTED_FACELESS_RATIOS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Desteklenmeyen en-boy oranı: '{payload.aspect_ratio}'. "
+                f"Geçerli değerler: {', '.join(SUPPORTED_FACELESS_RATIOS)}"
+            ),
+        )
+    if not (payload.script or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Script boş — önce /posts/generate-caption ile script üretin.",
+        )
+
+    # Kullanıcı kararı: kota Stage 1'de düşer, reject'te geri verilmez
+    await check_plan_limit(user["sub"], "video", db)
+    await check_plan_limit(user["sub"], "post", db)
+
+    brand = await db.fetchrow(
+        "SELECT brand_kit, name, sector, description FROM social.brands WHERE id = $1",
+        payload.brand_id,
+    )
+    if not brand:
+        raise HTTPException(status_code=404, detail="Brand not found")
+
+    brand_kit = _parse_brand_kit(brand["brand_kit"])
+    brand_kit["sector"] = brand["sector"] or ""
+
+    # Ürün auto-inject için isim/açıklama (service layer template_fields'e yazar)
+    product_name: str | None = None
+    product_description: str | None = None
+    if payload.product_id:
+        product_row = await db.fetchrow(
+            "SELECT name, description FROM social.brand_products WHERE id = $1 AND brand_id = $2",
+            payload.product_id, payload.brand_id,
+        )
+        if product_row:
+            product_name = product_row["name"]
+            product_description = product_row["description"]
+
+    max_duration = DEFAULT_MAX_DURATION
+    if payload.platforms:
+        durations = [PLATFORM_MAX_DURATION.get(p, DEFAULT_MAX_DURATION) for p in payload.platforms]
+        max_duration = min(durations)
+
+    try:
+        stage1 = await run_faceless_stage1(
+            brand_id=payload.brand_id,
+            prompt=payload.prompt,
+            script=payload.script,
+            voice=payload.voice,
+            aspect_ratio=payload.aspect_ratio,
+            brand_kit=brand_kit,
+            brand_name=brand["name"],
+            brand_description=brand["description"] or "",
+            platform_captions=payload.platform_captions,
+            template_id=payload.template_id,
+            template_fields=payload.template_fields,
+            intro_position=payload.intro_position,
+            product_id=payload.product_id,
+            product_name=product_name,
+            product_description=product_description,
+            max_duration=max_duration,
+            db=db,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return OkResponse(data={
+        "post_id": str(stage1["post_id"]),
+        "script": stage1["script"],
+        "audio_url": stage1["audio_url"],
+        "still_image_url": stage1["still_image_url"],
+        "duration_estimate": stage1["duration_estimate"],
+        "aspect_ratio": stage1["aspect_ratio"],
+        "status": "awaiting_approval",
+    })
+
+
+@router.post(
+    "/{post_id}/approve-faceless",
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(30, 3600))],
+)
+async def approve_faceless_video(
+    post_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Stage 2 tetikle: 'awaiting_approval' post'unu Wan I2V'ye gönder.
+
+    Kota Stage 1'de düşmüştü — burada düşmez.
+    """
+    row = await assert_post_owned(db, user, post_id)
+    if row["status"] != "awaiting_approval":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Post status='{row['status']}' — onay beklenmiyor.",
+        )
+
+    try:
+        result = await run_faceless_stage2(post_id=post_id, db=db)
+    except (LookupError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Stage 2 başlatılamadı: {exc}") from exc
+
+    return OkResponse(data={
+        "post_id": str(result["post_id"]),
+        "fal_job_id": result["fal_job_id"],
+        "status": result["status"],
+    })
+
+
+@router.post(
+    "/{post_id}/reject-faceless",
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(60, 3600))],
+)
+async def reject_faceless_video(
+    post_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """'awaiting_approval' post'unu DELETE et + R2'deki audio'yu temizle.
+
+    Kullanıcı kararı: post tamamen silinir, kota geri verilmez.
+    """
+    row = await assert_post_owned(db, user, post_id)
+    if row["status"] != "awaiting_approval":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Post status='{row['status']}' — reddedilemez.",
+        )
+
+    # R2 audio temizliği (best-effort)
+    try:
+        from app.services.storage import r2
+        audio_path = f"brands/{row['brand_id']}/posts/audio/{post_id}.mp3"
+        timestamps_path = f"brands/{row['brand_id']}/posts/audio/{post_id}_timestamps.json"
+        r2.delete(audio_path)
+        r2.delete(timestamps_path)
+    except Exception:  # noqa: BLE001
+        pass
+
+    await db.execute("DELETE FROM social.posts WHERE id = $1", post_id)
+    return OkResponse(data={"ok": True, "post_id": str(post_id)})
 
 
 @router.get("/voices/turkish", response_model=OkResponse)

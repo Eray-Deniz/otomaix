@@ -580,3 +580,254 @@ async def run_faceless_video_pipeline(
 def _looks_turkish(text: str) -> bool:
     """Basit Türkçe karakter kontrolü."""
     return bool(re.search(r"[çğıöşüÇĞİÖŞÜ]", text))
+
+
+# ─── Stage 1 / Stage 2 split (onay gate'li pipeline) ────────────────────────
+
+async def _resolve_still_prompt(
+    prompt: str,
+    script: str,
+    brand_kit: dict,
+    brand_name: str,
+    brand_description: str,
+) -> str:
+    """image_prompt'u still_prompt'a dönüştür; boş/Türkçe ise brand bağlamından üret."""
+    still_prompt = (prompt or "").strip()
+    if still_prompt and not _looks_turkish(still_prompt):
+        return still_prompt
+    sector = brand_kit.get("sector", "")
+    colors = brand_kit.get("colors", [])
+    if isinstance(colors, dict):
+        color_str = ", ".join(f"{v}" for v in colors.values() if v)
+    elif isinstance(colors, list):
+        color_str = ", ".join(str(c) for c in colors if c)
+    else:
+        color_str = ""
+    return await _build_still_prompt(
+        topic=prompt or script[:100],
+        brand_name=brand_name,
+        brand_description=brand_description,
+        sector=sector,
+        color_str=color_str,
+    )
+
+
+async def _submit_wan_video(
+    still_url: str,
+    prompt_for_model: str,
+    aspect_ratio: str,
+    duration: int,
+    audio_url: str = "",
+) -> str:
+    """Wan I2V'ye (veya aktif arka plan adapter'ına) submit et — Stage 2'nin Wan kısmı."""
+    import fal_client
+
+    os.environ["FAL_KEY"] = settings.FAL_KEY
+
+    args = _faceless_bg_adapter.build_args(
+        prompt_for_model, aspect_ratio, duration,
+        image_url=still_url, audio_url=audio_url,
+    )
+    handler = await fal_client.submit_async(
+        _faceless_bg_adapter.model_id,
+        arguments=args,
+        webhook_url=WEBHOOK_URL,
+    )
+    return handler.request_id
+
+
+async def run_faceless_stage1(
+    brand_id: UUID,
+    prompt: str,
+    script: str,
+    voice: str,
+    aspect_ratio: str,
+    brand_kit: dict,
+    brand_name: str,
+    db: asyncpg.Connection,
+    brand_description: str = "",
+    platform_captions: dict | None = None,
+    template_id: str | None = None,
+    template_fields: dict | None = None,
+    intro_position: str = "none",
+    product_id: UUID | None = None,
+    product_name: str | None = None,
+    product_description: str | None = None,
+    max_duration: int = DEFAULT_MAX_DURATION,
+) -> dict:
+    """Stage 1: post oluştur (status='awaiting_approval') + TTS + FLUX.2 still.
+
+    Wan I2V tetiklenmez — kullanıcı 4.3'te onaylayınca Stage 2 çalışır.
+    Returns: {post_id, script, audio_url, still_image_url, duration_estimate, ...}
+    """
+    if not script.strip():
+        raise ValueError("Stage 1 için script boş olamaz (caption-step'ten gelmeli)")
+
+    if template_fields is None:
+        template_fields = {}
+    template_fields["intro_position"] = intro_position
+    template_fields["generation_stage"] = "stage1_started"
+
+    # Ürün auto-inject (Madde 2 — DB izlenebilirliği için)
+    if product_id and product_name:
+        template_fields["ana_konu"] = product_name
+        template_fields["one_cikan_ozellik"] = product_description or ""
+
+    # Duration tahmini (130 wpm Türkçe)
+    word_count = len(script.split())
+    duration = max(15, min(max_duration, round(word_count / 130 * 60)))
+    template_fields["duration_estimate"] = duration
+
+    # Ürün görseli varsa FLUX.2 atlanır
+    product_image_url = ""
+    if product_id:
+        product_row = await db.fetchrow(
+            "SELECT image_url FROM social.brand_products WHERE id = $1",
+            product_id,
+        )
+        if product_row and product_row["image_url"]:
+            product_image_url = product_row["image_url"]
+
+    # Still prompt — Stage 2'de tekrar çözmemek için DB'ye kaydet
+    still_prompt = await _resolve_still_prompt(
+        prompt, script, brand_kit, brand_name, brand_description,
+    )
+    template_fields["still_prompt"] = still_prompt
+
+    # Post INSERT — TTS R2 path'i post_id'ye bağlı
+    row = await db.fetchrow(
+        """
+        INSERT INTO social.posts
+            (brand_id, content_type, prompt, user_text, aspect_ratio, status,
+             template_id, template_fields, platform_captions, product_id)
+        VALUES ($1, 'video', $2, $3, $4, 'awaiting_approval',
+                $5, $6, $7, $8)
+        RETURNING *
+        """,
+        brand_id, prompt, script, aspect_ratio,
+        template_id, template_fields, platform_captions, product_id,
+    )
+    post = dict(row)
+    post_id = post["id"]
+
+    async def _patch(patch: dict) -> None:
+        await db.execute(
+            """UPDATE social.posts
+               SET template_fields = COALESCE(template_fields, '{}'::jsonb) || $2::jsonb
+               WHERE id = $1""",
+            post_id, patch,
+        )
+
+    # TTS — fail olursa Stage 1 başarısız sayılır
+    tts_result = await text_to_speech(script, voice, post_id, brand_id, brand_name=brand_name)
+    audio_url = tts_result["audio_url"]
+    if not audio_url:
+        await db.execute(
+            "UPDATE social.posts SET status = 'failed' WHERE id = $1",
+            post_id,
+        )
+        raise RuntimeError("TTS üretimi başarısız oldu")
+    await _patch({"audio_url": audio_url, "generation_stage": "tts_done"})
+
+    # FLUX.2 still — ürün varsa atla
+    if product_image_url:
+        still_image_url = product_image_url
+    else:
+        try:
+            still_image_url = await _generate_still_image(still_prompt, aspect_ratio)
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
+            await db.execute(
+                "UPDATE social.posts SET status = 'failed' WHERE id = $1",
+                post_id,
+            )
+            raise RuntimeError(f"Still görsel üretimi başarısız: {exc}") from exc
+
+    await _patch({
+        "still_image_url": still_image_url,
+        "product_image_url": product_image_url,
+        "generation_stage": "awaiting_approval",
+    })
+
+    return {
+        "post_id": post_id,
+        "script": script,
+        "audio_url": audio_url,
+        "still_image_url": still_image_url,
+        "duration_estimate": duration,
+        "aspect_ratio": aspect_ratio,
+    }
+
+
+async def run_faceless_stage2(
+    post_id: UUID,
+    db: asyncpg.Connection,
+) -> dict:
+    """Stage 2: post'u 'awaiting_approval' durumundan al → Wan I2V submit.
+
+    Stage 1'in ürettiği audio_url + still_image_url + still_prompt template_fields'tan okunur.
+    Returns: {post_id, fal_job_id, status: 'generating'}
+    """
+    row = await db.fetchrow(
+        "SELECT * FROM social.posts WHERE id = $1",
+        post_id,
+    )
+    if not row:
+        raise LookupError(f"Post {post_id} bulunamadı")
+    if row["status"] != "awaiting_approval":
+        raise ValueError(f"Post status='{row['status']}' — onay beklenmiyor")
+
+    tf = row["template_fields"] or {}
+    audio_url = tf.get("audio_url", "")
+    still_image_url = tf.get("still_image_url", "")
+    product_image_url = tf.get("product_image_url", "")
+    still_prompt = tf.get("still_prompt", row["prompt"] or "")
+    duration = int(tf.get("duration_estimate", 30))
+    aspect_ratio = row["aspect_ratio"] or "9:16"
+
+    if not still_image_url:
+        raise ValueError("Stage 1 still görseli kaydedilmemiş — Stage 2 çalıştırılamaz")
+
+    # Wan submission: ürün görseliyse motion-only, FLUX.2 ürettiyse motion-only,
+    # legacy text-to-video adapter ise birleşik prompt
+    motion_prompt = _pick_motion_prompt()
+    if product_image_url or _faceless_bg_adapter.requires_still_image:
+        prompt_for_model = motion_prompt
+    else:
+        prompt_for_model = f"{still_prompt}, {motion_prompt}"
+
+    # Status flip + stage işaretle
+    await db.execute(
+        """UPDATE social.posts
+           SET status = 'generating',
+               template_fields = COALESCE(template_fields, '{}'::jsonb) || $2::jsonb
+           WHERE id = $1""",
+        post_id, {"generation_stage": "generating_video", "motion_prompt": motion_prompt},
+    )
+
+    try:
+        fal_job_id = await _submit_wan_video(
+            still_url=still_image_url,
+            prompt_for_model=prompt_for_model,
+            aspect_ratio=aspect_ratio,
+            duration=duration,
+            audio_url=audio_url,
+        )
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
+        await db.execute(
+            "UPDATE social.posts SET status = 'failed' WHERE id = $1",
+            post_id,
+        )
+        raise
+
+    await db.execute(
+        "UPDATE social.posts SET fal_job_id = $2 WHERE id = $1",
+        post_id, fal_job_id,
+    )
+
+    return {
+        "post_id": post_id,
+        "fal_job_id": fal_job_id,
+        "status": "generating",
+    }

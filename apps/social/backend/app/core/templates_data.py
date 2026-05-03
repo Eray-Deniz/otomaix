@@ -820,14 +820,6 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
     contentTypes=["video"],
     order=3,
     formFields=[
-        TemplateFormField(id="ana_konu", label="Ana Konu / Ürün / Hizmet Adı", type="text", required=True,
-            placeholder="örn. Yeni koleksiyon, sunduğunuz hizmet, kampanya konusu",
-            validation={"maxLength": 120},
-            group="Konu"),
-        TemplateFormField(id="one_cikan_ozellik", label="Öne Çıkan Özellik", type="text", required=False,
-            placeholder="örn. Temel fayda, ayırt edici özellik, müşteri için değer",
-            validation={"maxLength": 200},
-            group="Konu"),
         TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
             placeholder="https://... (ürün, kampanya veya site linki)",
             helpText="Gönderiyi gören kişiyi bir yere yönlendirmek isterseniz linki buraya yapıştırın. Boş bırakırsanız caption yönlendirme yapmaz.",
@@ -845,6 +837,9 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
             "Faceless video şablonu. Tek bir konuyu/ürünü/hizmeti anlatan AI sesli "
             "kısa video üretir. Video'da insan yüzü görünmez, arka plan soyut/ambient "
             "sahnelerden oluşur.\n\n"
+            "GİRDİ KAYNAĞI: Konu ve vurgular kullanıcının serbest metin alanından "
+            "(user_prompt) gelir. Ürün seçilmişse product bağlamı (name, description, "
+            "tags) ek olarak kullanılır.\n\n"
             "Bu şablon iki modda çalışır:\n\n"
             "🎬 GENEL VİDEO MODU:\n"
             "Soyut, ambient arka plan sahnesi üretilir. Ürün görseli üretme veya "
@@ -865,7 +860,8 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
             "- Hook cümlesiyle başla (ilk 3 saniye kritik)\n"
             "- Kısa, net cümleler — TTS'in doğal okuyacağı yapıda\n"
             "- Abartılı iddia kullanma, bilgide olmayan şey uydurma\n\n"
-            "CAPTION formülü: Hook (ana konu + faydası) → Öne çıkan özellik → CTA. "
+            "CAPTION formülü: Hook (konu + faydası) → öne çıkan özellik/değer → CTA. "
+            "Konu ve özellikleri user_prompt ve (varsa) product bağlamından çıkar. "
             "Caption video'nun altına yazılacak sosyal medya metnidir, script'ten "
             "farklıdır.\n\n"
             "CTA (yönlendirme) kuralı:\n"
@@ -876,7 +872,7 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
             "  • LinkedIn/Facebook/Twitter/Pinterest: '👉 {cta_label}: {cta_url}'\n"
             "- Kullanıcı link doldurmadıysa: yönlendirme satırı ekleme."
         ),
-        priority=["form_fields", "brand_kit", "rag_docs"],
+        priority=["user_prompt", "product", "brand_kit", "rag_docs"],
     ),
     defaults=TemplateDefaults(),
     tags=["genel", "video", "faceless"],

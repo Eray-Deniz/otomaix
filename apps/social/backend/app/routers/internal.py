@@ -93,7 +93,7 @@ async def get_due_configs(
             """
             SELECT COUNT(*) FROM social.posts
             WHERE brand_id = $1
-              AND status IN ('generating', 'ready', 'scheduled', 'publishing', 'published')
+              AND status IN ('generating', 'awaiting_approval', 'ready', 'scheduled', 'publishing', 'published')
               AND created_at >= $2
             """,
             config["brand_id"],
@@ -240,9 +240,10 @@ async def fail_stale_posts(
     _: None = Depends(get_service_auth),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Fail posts stuck in 'generating' > 10 minutes.
+    """Fail posts stuck in 'generating' > 10 minutes or 'awaiting_approval' > 2 hours.
 
-    Safety net for cases where fal.ai webhook is lost / delayed / silently dropped.
+    Safety net for cases where fal.ai webhook is lost / delayed / silently dropped,
+    veya kullanıcı 4.3 onay ekranını terk ettiyse Stage 1 çıktıları temizlenir.
     Should be called on a periodic n8n cron (recommended: every 10 min).
 
     NOTE: Must be declared BEFORE `/posts/{post_id}` — same rationale as scheduled-due.
@@ -251,12 +252,16 @@ async def fail_stale_posts(
         """
         UPDATE social.posts
         SET status = 'failed', updated_at = now()
-        WHERE status = 'generating'
-          AND created_at < now() - interval '10 minutes'
-        RETURNING id, brand_id, fal_job_id, created_at
+        WHERE (
+            (status = 'generating' AND created_at < now() - interval '10 minutes')
+            OR
+            (status = 'awaiting_approval' AND created_at < now() - interval '2 hours')
+        )
+        RETURNING id, brand_id, fal_job_id, status AS prev_status, created_at
         """
     )
     stale_ids: list[str] = []
+    awaiting_brand_ids: list[tuple[str, str]] = []
     for row in rows:
         post_id = str(row["id"])
         stale_ids.append(post_id)
@@ -273,6 +278,19 @@ async def fail_stale_posts(
             f"Stale post auto-failed: {post_id}",
             level="warning",
         )
+        # awaiting_approval timeout'ları için R2 audio temizliği
+        if row["prev_status"] == "awaiting_approval":
+            awaiting_brand_ids.append((str(row["brand_id"]), post_id))
+
+    if awaiting_brand_ids:
+        try:
+            from app.services.storage import r2
+            for brand_id, post_id in awaiting_brand_ids:
+                r2.delete(f"brands/{brand_id}/posts/audio/{post_id}.mp3")
+                r2.delete(f"brands/{brand_id}/posts/audio/{post_id}_timestamps.json")
+        except Exception:  # noqa: BLE001
+            pass
+
     return OkResponse(data={"failed_count": len(stale_ids), "post_ids": stale_ids})
 
 
