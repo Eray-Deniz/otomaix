@@ -31,6 +31,16 @@ DEFAULT_VOICE = "qSeXEcewz7tA0Q0qk9fH"
 
 ELEVENLABS_MODEL = "eleven_flash_v2_5"
 
+# Tüm sesler için kalite-odaklı uniform ayarlar (kelime atlama/yutma sorununu önler).
+# Voice'ların UI'daki kendi default'ları override edilir — production deterministic kalır.
+VOICE_SETTINGS = {
+    "stability": 1.0,
+    "similarity_boost": 1.0,
+    "style": 1.0,
+    "use_speaker_boost": True,
+    "speed": 1.08,
+}
+
 # Platform bazlı max video süresi (saniye)
 PLATFORM_MAX_DURATION: dict[str, int] = {
     "tiktok": 60,
@@ -295,6 +305,7 @@ async def text_to_speech(
         return {"audio_url": None, "word_timestamps": []}
 
     from elevenlabs.client import ElevenLabs
+    from elevenlabs.types import VoiceSettings
     from app.services.storage import r2
 
     try:
@@ -306,6 +317,7 @@ async def text_to_speech(
             voice_id=voice,
             model_id=ELEVENLABS_MODEL,
             output_format="mp3_44100_128",
+            voice_settings=VoiceSettings(**VOICE_SETTINGS),
         )
 
         # Response: generator of dicts with "audio_base64" and "alignment" keys
