@@ -44,7 +44,7 @@ interface TurkishVoice {
 
 type ContentType = 'image' | 'carousel' | 'video' | 'special_day' | 'quote'
 type AspectRatio = string
-type Step = 1 | 2 | 3
+type Step = 1 | 2 | 3 | 4
 type TemplateMode = 'template' | 'free'
 type TemplatePhase = 'pick' | 'form' | 'caption'
 
@@ -84,6 +84,7 @@ interface GeneratedPost {
   // Faceless video
   script?: string
   audio_url?: string
+  still_image_url?: string
   duration_estimate?: number
   template_fields?: Record<string, unknown>
 }
@@ -124,12 +125,19 @@ const PLATFORMS = [
 
 // ─── Step indicator ───────────────────────────────────────────────────────────
 
-function StepIndicator({ step }: { step: Step }) {
-  const steps = [
-    { n: 1, label: 'Tip Seçimi' },
-    { n: 2, label: 'İçerik Detayları' },
-    { n: 3, label: 'Önizleme' },
-  ]
+function StepIndicator({ step, contentType }: { step: Step; contentType: ContentType }) {
+  const steps = contentType === 'video'
+    ? [
+        { n: 1, label: 'Tip Seçimi' },
+        { n: 2, label: 'İçerik Detayları' },
+        { n: 3, label: 'Önizleme & Onay' },
+        { n: 4, label: 'Sonuç' },
+      ]
+    : [
+        { n: 1, label: 'Tip Seçimi' },
+        { n: 2, label: 'İçerik Detayları' },
+        { n: 3, label: 'Önizleme' },
+      ]
   return (
     <div className="flex items-center gap-2 mb-8">
       {steps.map((s, i) => (
@@ -241,6 +249,11 @@ function IcerikOlusturInner() {
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [scheduleAt, setScheduleAt] = useState('')
 
+  // Faceless video Stage 1/2 — onay sayfasında düzenleme yapıldı mı (banner için)
+  const [stage1Edited, setStage1Edited] = useState(false)
+  const [approving, setApproving] = useState(false)
+  const [rejecting, setRejecting] = useState(false)
+
   // Query-param prefill (ör. trendler sayfasından "İçerik Üret" butonu)
   useEffect(() => {
     const qPrompt = searchParams?.get('prompt')
@@ -257,6 +270,8 @@ function IcerikOlusturInner() {
   // Görsel/Carousel hazır olana kadar polling
   useEffect(() => {
     if (!generatedPost?.post_id || generatedPost.output_url || generatedPost.status === 'failed') return
+    // Stage 1 sonrası onay bekliyor — Stage 2 tetiklenene kadar polling yapma
+    if (generatedPost.status === 'awaiting_approval') return
     let cancelled = false
     const poll = async () => {
       if (cancelled) return
@@ -444,13 +459,14 @@ function IcerikOlusturInner() {
     setStep(3)
 
     if (contentType === 'video') {
-      // Faceless video pipeline — şablon tabanlı
+      // Faceless video Stage 1 — TTS + FLUX.2 still (kota burada düşer)
+      // Stage 2 (Wan I2V) kullanıcı önizlemeyi onayladıktan sonra ayrı endpoint ile tetiklenir.
       const isTemplateMode = mode === 'template' && selectedTemplate
       const videoTemplateFields = {
         ...(isTemplateMode ? templateFields : {}),
         subtitle_enabled: subtitleEnabled,
       }
-      const res = await api.post<GeneratedPost>('/posts/generate-faceless-video', {
+      const res = await api.post<GeneratedPost>('/posts/generate-faceless-stage1', {
         brand_id: currentBrand.id,
         prompt: prompt.trim() || captionData!.image_prompt || '',
         script: script.trim(),
@@ -467,10 +483,13 @@ function IcerikOlusturInner() {
       setGenerating(false)
       if (res.success && res.data) {
         analytics.contentGenerated(contentType, Math.round((Date.now() - genStart) / 1000))
-        setGeneratedPost(res.data)
+        setGeneratedPost({ ...res.data, status: 'awaiting_approval' })
         setCaption(captionData!.default_caption || '')
         setHashtags(captionData!.hashtags.length ? captionData!.hashtags : [])
-        toast.success('Video üretimi başlatıldı!')
+        setStage1Edited(false)
+        // Step 3 = Önizleme & Onay (video için yeni adım)
+        setStep(3)
+        toast.success('Ses ve sahne hazır — önizleyip onaylayın')
       } else if (!res.success && res.error === 'rate_limit') {
         setStep(2)
         toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
@@ -478,7 +497,8 @@ function IcerikOlusturInner() {
         setStep(2)
         setUpgradeMessage(res.plan_limit.message)
       } else {
-        toast.error('Video üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+        setStep(2)
+        toast.error('Önizleme üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
     } else if (contentType === 'special_day') {
       const res = await api.post<GeneratedPost>('/posts/generate', {
@@ -606,6 +626,12 @@ function IcerikOlusturInner() {
       return
     }
 
+    // Video + Genel akış: "Bu video ne anlatsın?" zorunlu (ürün modunda opsiyonel — backend ürün adını kullanır)
+    if (contentType === 'video' && imageSubType === 'general' && !prompt.trim()) {
+      toast.error('Lütfen "Bu video ne anlatsın?" alanını doldurun')
+      return
+    }
+
     setLoadingCaption(true)
     const genStart = Date.now()
     const res = await api.post<CaptionData & { script?: string; duration_estimate?: number }>('/posts/generate-caption', {
@@ -649,6 +675,48 @@ function IcerikOlusturInner() {
     } else {
       toast.error('Gönderi metni üretilemedi: ' + ((!res.success && res.error) || 'Bilinmeyen hata'))
     }
+  }
+
+  // Faceless video Stage 2: kullanıcı Stage 1 önizlemesini onayladı → Wan I2V tetikle
+  async function handleApproveFaceless() {
+    if (!generatedPost?.post_id || approving) return
+    setApproving(true)
+    const res = await api.post<{ post_id: string; fal_job_id: string; status: string }>(
+      `/posts/${generatedPost.post_id}/approve-faceless`,
+      {}
+    )
+    setApproving(false)
+    if (res.success && res.data) {
+      // Status='generating' → mevcut polling useEffect Wan I2V çıktısını çekecek
+      setGeneratedPost((prev) => prev ? { ...prev, status: 'generating' } : prev)
+      setStep(4)
+      toast.success('Video render ediliyor — bu 1-3 dakika sürebilir')
+    } else if (!res.success && res.error === 'rate_limit') {
+      toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
+    } else {
+      toast.error('Onaylanamadı: ' + ((!res.success && res.error) || 'Bilinmeyen hata'))
+    }
+  }
+
+  // Faceless video reject: post DB'den silinir, R2 audio temizlenir, kota refund YOK
+  async function handleRejectFaceless() {
+    if (rejecting) return
+    if (!generatedPost?.post_id) {
+      // Henüz Stage 1 başlamadıysa direkt geri dön
+      setStep(2)
+      return
+    }
+    setRejecting(true)
+    const res = await api.post(`/posts/${generatedPost.post_id}/reject-faceless`, {})
+    setRejecting(false)
+    if (res.success) {
+      toast.message('Üretim iptal edildi (kota geri verilmedi)')
+    } else {
+      toast.error('İptal edilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
+    }
+    setGeneratedPost(null)
+    setStage1Edited(false)
+    setStep(2)
   }
 
   async function handleRegenerate() {
@@ -777,6 +845,7 @@ function IcerikOlusturInner() {
     setSelectedProduct(null)
     setAvailableProducts([])
     setIntroPosition('none')
+    setStage1Edited(false)
   }
 
   // Template seçim handler
@@ -875,7 +944,7 @@ function IcerikOlusturInner() {
         <p className="text-sm text-gray-500 mt-0.5">AI ile sosyal medya içeriği üretin</p>
       </div>
 
-      <StepIndicator step={step} />
+      <StepIndicator step={step} contentType={contentType} />
 
       {/* ── STEP 1: Tip Seçimi ────────────────────────────────────────────── */}
       {step === 1 && (
@@ -1095,11 +1164,16 @@ function IcerikOlusturInner() {
                           type="button"
                           onClick={() => {
                             setSelectedProduct(p)
-                            setTemplateFields((prev) => ({
-                              ...prev,
-                              ana_konu: p.name,
-                              one_cikan_ozellik: p.description ?? '',
-                            }))
+                            // Video modunda backend Stage 1'de template_fields'i otomatik
+                            // inject ediyor (ana_konu = product.name); frontend auto-fill yapmaz.
+                            // Image/Carousel'de template form alanlarına yansıtmaya devam et.
+                            if (contentType !== 'video') {
+                              setTemplateFields((prev) => ({
+                                ...prev,
+                                ana_konu: p.name,
+                                one_cikan_ozellik: p.description ?? '',
+                              }))
+                            }
                           }}
                           className={cn(
                             'flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
@@ -1148,22 +1222,42 @@ function IcerikOlusturInner() {
                 onImageTextFieldsChange={setImageTextFields}
               />
 
-              {/* Tasarım ve içerik için istekleriniz — CTA'dan (şablon sonu) hemen sonra */}
+              {/* İstek/yönlendirme alanı — video modunda "Bu video ne anlatsın?" varyantı */}
               <div className="space-y-1.5">
                 <Label>
-                  Tasarım ve içerik için istekleriniz{' '}
-                  <span className="font-normal text-gray-400">(opsiyonel)</span>
+                  {contentType === 'video' ? (
+                    <>
+                      Bu video ne anlatsın?{' '}
+                      <span className="font-normal text-gray-400">
+                        ({imageSubType === 'general' ? 'zorunlu' : 'opsiyonel'})
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      Tasarım ve içerik için istekleriniz{' '}
+                      <span className="font-normal text-gray-400">(opsiyonel)</span>
+                    </>
+                  )}
                 </Label>
                 <Textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder={'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'}
+                  placeholder={
+                    contentType === 'video'
+                      ? imageSubType === 'general'
+                        ? 'Örn: "Sabah meditasyonu zihni nasıl temizler 30 saniyede anlat", "5 adımda evden iş kurma ipuçları"'
+                        : 'Örn: "Bu ürünün indirim kampanyasını vurgula", "kullanım anlarını öne çıkar" (boş bırakırsanız ürün adı ve açıklaması kullanılır)'
+                      : 'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'
+                  }
                   rows={3}
                   className="resize-none"
                 />
                 <p className="text-xs text-gray-500">
-                  Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel
-                  hem metin buradaki isteklere göre şekillenir.
+                  {contentType === 'video'
+                    ? imageSubType === 'general'
+                      ? 'Video script\'i ve gönderi metni buradaki anlatımdan üretilir.'
+                      : 'Boş bırakırsanız ürünün adı ve açıklaması temel alınır.'
+                    : 'Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir.'}
                 </p>
               </div>
 
@@ -1820,13 +1914,152 @@ function IcerikOlusturInner() {
         </div>
       )}
 
-      {/* ── STEP 3: Üretim & Önizleme ────────────────────────────────────── */}
-      {step === 3 && (
+      {/* ── STEP 3 (VIDEO): Önizleme & Onay — Stage 1 sonucu, Wan I2V'den önce ── */}
+      {step === 3 && contentType === 'video' && (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
-            <button onClick={() => { setStep(2); setGeneratedPost(null); setCaption(''); setHashtags([]) }} className="text-xs text-blue-500 hover:underline">
-              ← Geri
+            <button
+              onClick={handleRejectFaceless}
+              disabled={generating || approving || rejecting}
+              className="text-xs text-blue-500 hover:underline disabled:text-gray-300"
+            >
+              ← Geri Dön & Yeniden Üret
             </button>
+            <button onClick={resetWizard} className="text-xs text-gray-400 hover:text-gray-600">
+              Yeni İçerik Oluştur
+            </button>
+          </div>
+
+          {/* Stage 1 hâlâ üretim aşamasında */}
+          {generating && (
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-purple-100 flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+              </div>
+              <p className="text-gray-700 font-medium">Ses ve sahne hazırlanıyor...</p>
+              <p className="text-sm text-gray-400 text-center px-4">
+                Seslendirme ve ön sahne görseli üretiliyor — yaklaşık 15-25 saniye sürebilir.
+                Onaylamadıkça video render edilmez.
+              </p>
+            </div>
+          )}
+
+          {/* Stage 1 hazır — caption + script + audio + still önizleme */}
+          {!generating && generatedPost && generatedPost.status === 'awaiting_approval' && (
+            <div className="space-y-5">
+              {stage1Edited && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  <strong className="font-semibold">Düzenleme yapıldı.</strong>{' '}
+                  Yeni ses ve görselin üretilmesi için &quot;Geri Dön &amp; Yeniden Üret&quot;e
+                  basmanız gerekir. Aksi halde aşağıdaki ses/görsel ile devam edilir.
+                </div>
+              )}
+
+              {/* Still image önizleme */}
+              {generatedPost.still_image_url && (
+                <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-purple-50 to-violet-100 border border-purple-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={generatedPost.still_image_url}
+                    alt="Sahne önizlemesi"
+                    className="w-full max-h-80 object-contain"
+                  />
+                  <div className="px-4 py-2 bg-white/60 border-t border-purple-200 text-xs text-purple-700">
+                    🎬 Sahne (FLUX.2 still) — bu görsel video render&apos;ında animasyona dönüşür
+                  </div>
+                </div>
+              )}
+
+              {/* Audio player */}
+              {generatedPost.audio_url && (
+                <div className="rounded-xl border border-purple-200 bg-white p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm text-purple-800">Seslendirme Önizlemesi</Label>
+                    {generatedPost.duration_estimate && (
+                      <span className="text-xs text-purple-500">
+                        ~{generatedPost.duration_estimate} saniye
+                      </span>
+                    )}
+                  </div>
+                  <audio src={generatedPost.audio_url} controls className="w-full h-10" />
+                </div>
+              )}
+
+              {/* Caption editor (Stage 1'de düzenleme banner tetikler) */}
+              {captionData && (
+                <CaptionEditor
+                  data={captionData}
+                  platforms={platforms}
+                  onChange={(d) => {
+                    setCaptionData(d)
+                    setStage1Edited(true)
+                  }}
+                />
+              )}
+
+              {/* Script düzenleme */}
+              <div className="space-y-3 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                <div>
+                  <Label className="text-purple-800">Video Script</Label>
+                  <p className="text-xs text-purple-500 mt-0.5">
+                    Sesin okuduğu metin — düzenleme yaparsanız yeni ses üretilmez (Geri Dön gerekir)
+                  </p>
+                </div>
+                <Textarea
+                  value={script}
+                  onChange={(e) => {
+                    setScript(e.target.value)
+                    setStage1Edited(true)
+                  }}
+                  rows={5}
+                  className="resize-none bg-white text-sm"
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2"
+                  onClick={handleRejectFaceless}
+                  disabled={approving || rejecting}
+                >
+                  {rejecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                  Geri Dön & Yeniden Üret
+                </Button>
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={handleApproveFaceless}
+                  disabled={approving || rejecting}
+                >
+                  {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  Onayla & Videoyu Üret
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400 text-center">
+                &quot;Geri Dön&quot; tuşu önizlemeyi siler ve sizi içerik detaylarına geri gönderir.
+                Kullanılan kota geri verilmez.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── STEP 3 (NON-VIDEO) veya STEP 4 (VIDEO): Final Önizleme ───────── */}
+      {((step === 3 && contentType !== 'video') || step === 4) && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            {/* Video Step 4'te post zaten render ediliyor — geri dönüş resetWizard ile */}
+            {contentType === 'video' ? (
+              <span />
+            ) : (
+              <button
+                onClick={() => { setStep(2); setGeneratedPost(null); setCaption(''); setHashtags([]) }}
+                className="text-xs text-blue-500 hover:underline"
+              >
+                ← Geri
+              </button>
+            )}
             <button onClick={resetWizard} className="text-xs text-gray-400 hover:text-gray-600">
               Yeni İçerik Oluştur
             </button>

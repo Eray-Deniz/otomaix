@@ -890,18 +890,6 @@ async def generate_faceless_stage1(
     brand_kit = _parse_brand_kit(brand["brand_kit"])
     brand_kit["sector"] = brand["sector"] or ""
 
-    # Ürün auto-inject için isim/açıklama (service layer template_fields'e yazar)
-    product_name: str | None = None
-    product_description: str | None = None
-    if payload.product_id:
-        product_row = await db.fetchrow(
-            "SELECT name, description FROM social.brand_products WHERE id = $1 AND brand_id = $2",
-            payload.product_id, payload.brand_id,
-        )
-        if product_row:
-            product_name = product_row["name"]
-            product_description = product_row["description"]
-
     max_duration = DEFAULT_MAX_DURATION
     if payload.platforms:
         durations = [PLATFORM_MAX_DURATION.get(p, DEFAULT_MAX_DURATION) for p in payload.platforms]
@@ -922,8 +910,6 @@ async def generate_faceless_stage1(
             template_fields=payload.template_fields,
             intro_position=payload.intro_position,
             product_id=payload.product_id,
-            product_name=product_name,
-            product_description=product_description,
             max_duration=max_duration,
             db=db,
         )

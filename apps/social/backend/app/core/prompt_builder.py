@@ -272,19 +272,33 @@ def build_dynamic_content(
         parts.append(user_prompt)
         parts.append("=== KULLANICI İSTEĞİ SONU ===\n")
 
-    # Ürün adı/açıklama/etiketler şablon alanlarına (ana_konu, one_cikan_ozellik)
-    # frontend tarafından pre-fill edildiği için buraya yazılmaz — YAPISAL VERİLER
-    # bloğundan zaten Claude'a ulaşıyor. Sadece image-edit akışı için özel kural gerekli.
-    if product and product.get("image_url"):
-        parts.append(
-            "⚠️ image_prompt İÇİN ÖZEL KURAL: Bu içerikte ürünün mevcut "
-            "görseli fal.ai image-edit modeline referans olarak iletilecek. "
-            "Ürünün kendisini (şekil, renk, malzeme) image_prompt'ta YENİDEN "
-            "TARİF ETME — model referans görselden alacak. Sadece sahne, "
-            "kompozisyon, arka plan, ışık, atmosfer ve stil tarif et. "
-            "Örnek kalıp: 'Place the product on [surface] in [environment], "
-            "[lighting style], [mood/atmosphere], [composition notes].'"
-        )
+    # Ürün adı/açıklama/etiketler — template'in formFields listesinde ana_konu yoksa
+    # (ör. faceless video genel şablonu — sadeleştirme amacıyla bu alanlar kaldırıldı)
+    # Claude'a ayrı bir ÜRÜN BİLGİSİ bloğu üzerinden iletilir. Image/carousel template'lerinde
+    # ana_konu field'ı duruyor → frontend pre-fill üzerinden YAPISAL VERİLER'de gider, burası skip.
+    if product:
+        template_field_ids = {f.id for f in template.formFields} if template else set()
+        if "ana_konu" not in template_field_ids:
+            parts.append("=== ÜRÜN/HİZMET BİLGİSİ ===")
+            if product.get("name"):
+                parts.append(f"Ad: {product['name']}")
+            if product.get("description"):
+                parts.append(f"Açıklama: {product['description']}")
+            tags = product.get("tags") or []
+            if isinstance(tags, list) and tags:
+                parts.append(f"Etiketler: {', '.join(str(t) for t in tags)}")
+            parts.append("=== ÜRÜN BİLGİSİ SONU ===\n")
+
+        if product.get("image_url"):
+            parts.append(
+                "⚠️ image_prompt İÇİN ÖZEL KURAL: Bu içerikte ürünün mevcut "
+                "görseli fal.ai image-edit modeline referans olarak iletilecek. "
+                "Ürünün kendisini (şekil, renk, malzeme) image_prompt'ta YENİDEN "
+                "TARİF ETME — model referans görselden alacak. Sadece sahne, "
+                "kompozisyon, arka plan, ışık, atmosfer ve stil tarif et. "
+                "Örnek kalıp: 'Place the product on [surface] in [environment], "
+                "[lighting style], [mood/atmosphere], [composition notes].'"
+            )
 
     if template and template_fields:
         parts.append("=== YAPISAL VERİLER ===")

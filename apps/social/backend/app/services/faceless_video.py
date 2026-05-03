@@ -651,8 +651,6 @@ async def run_faceless_stage1(
     template_fields: dict | None = None,
     intro_position: str = "none",
     product_id: UUID | None = None,
-    product_name: str | None = None,
-    product_description: str | None = None,
     max_duration: int = DEFAULT_MAX_DURATION,
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + FLUX.2 still.
@@ -667,11 +665,6 @@ async def run_faceless_stage1(
         template_fields = {}
     template_fields["intro_position"] = intro_position
     template_fields["generation_stage"] = "stage1_started"
-
-    # Ürün auto-inject (Madde 2 — DB izlenebilirliği için)
-    if product_id and product_name:
-        template_fields["ana_konu"] = product_name
-        template_fields["one_cikan_ozellik"] = product_description or ""
 
     # Duration tahmini (130 wpm Türkçe)
     word_count = len(script.split())
