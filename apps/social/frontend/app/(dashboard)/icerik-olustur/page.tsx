@@ -1201,17 +1201,9 @@ function IcerikOlusturInner() {
                 </div>
               )}
 
-              <DynamicForm
-                template={selectedTemplate}
-                values={templateFields}
-                onChange={(id, v) =>
-                  setTemplateFields((prev) => ({ ...prev, [id]: v }))
-                }
-                imageTextFields={imageTextFields ?? undefined}
-                onImageTextFieldsChange={setImageTextFields}
-              />
-
-              {/* İstek/yönlendirme alanı — video modunda "Bu video ne anlatsın?" varyantı */}
+              {/* İstek/yönlendirme alanı — video modunda "Bu video ne anlatsın?" varyantı.
+                  DynamicForm'dan ÖNCE (Yönlendirme grubunun üstünde) — kullanıcı önce
+                  serbest tarifi yazsın, sonra cta gibi yapısal alanları doldursun. */}
               <div className="space-y-1.5">
                 <Label>
                   {contentType === 'video' ? (
@@ -1249,6 +1241,16 @@ function IcerikOlusturInner() {
                     : 'Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir.'}
                 </p>
               </div>
+
+              <DynamicForm
+                template={selectedTemplate}
+                values={templateFields}
+                onChange={(id, v) =>
+                  setTemplateFields((prev) => ({ ...prev, [id]: v }))
+                }
+                imageTextFields={imageTextFields ?? undefined}
+                onImageTextFieldsChange={setImageTextFields}
+              />
 
               {/* Aspect ratio */}
               <div className="space-y-2">
