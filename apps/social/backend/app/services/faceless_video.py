@@ -41,19 +41,21 @@ VOICE_SETTINGS = {
     "speed": 1.08,
 }
 
-# Platform bazlı max video süresi (saniye)
+# Tüm platformlar için tek tip max konuşma süresi (saniye).
+# Wan i2v 15s clip cap'i nedeniyle 30s'lik ses → max 1 ekstra loop = 2x clip.
+# Daha uzun süreler aynı clip'in monoton tekrarına yol açıyor.
 PLATFORM_MAX_DURATION: dict[str, int] = {
-    "tiktok": 60,
-    "instagram": 90,
-    "youtube": 60,
-    "threads": 60,
-    "facebook": 120,
-    "linkedin": 120,
-    "twitter": 140,
-    "pinterest": 60,
-    "bluesky": 60,
+    "tiktok": 30,
+    "instagram": 30,
+    "youtube": 30,
+    "threads": 30,
+    "facebook": 30,
+    "linkedin": 30,
+    "twitter": 30,
+    "pinterest": 30,
+    "bluesky": 30,
 }
-DEFAULT_MAX_DURATION = 60
+DEFAULT_MAX_DURATION = 30
 
 # Aktif faceless background adapter — modül import'unda bir kez çözülür.
 _faceless_bg_adapter = get_active_faceless_background_adapter()

@@ -54,18 +54,6 @@ const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'
 const DEFAULT_CAROUSEL_TEMPLATE_ID = 'carousel-genel-sablon'
 const DEFAULT_VIDEO_TEMPLATE_ID = 'facelessvideo-genel-sablon'
 
-const PLATFORM_MAX_DURATION: Record<string, number> = {
-  tiktok: 60,
-  instagram: 90,
-  youtube: 60,
-  threads: 60,
-  facebook: 120,
-  linkedin: 120,
-  twitter: 140,
-  pinterest: 60,
-  bluesky: 60,
-}
-
 interface CarouselSlide {
   order: number
   image_url: string | null
@@ -1362,16 +1350,6 @@ function IcerikOlusturInner() {
                   ))}
                 </div>
               </div>
-
-              {/* Video: platform süre uyarısı */}
-              {contentType === 'video' && platforms.length > 0 && (() => {
-                const maxDur = Math.min(...platforms.map(p => PLATFORM_MAX_DURATION[p] ?? 60))
-                return (
-                  <p className="text-xs text-amber-600">
-                    Seçili platformlar max {maxDur} saniye video destekliyor. Script bu süreye göre ayarlanacak.
-                  </p>
-                )
-              })()}
 
               {/* Dokümanlar — sadece Genel Görsel modunda göster */}
               {imageSubType === 'general' && availableDocs.length > 0 && (
