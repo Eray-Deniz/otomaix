@@ -240,14 +240,18 @@ async def fail_stale_posts(
     _: None = Depends(get_service_auth),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Fail posts stuck in 'generating' > 10 minutes or 'awaiting_approval' > 2 hours.
+    """Stale post'ları temizle — iki adım:
 
-    Safety net for cases where fal.ai webhook is lost / delayed / silently dropped,
-    veya kullanıcı 4.3 onay ekranını terk ettiyse Stage 1 çıktıları temizlenir.
-    Should be called on a periodic n8n cron (recommended: every 10 min).
+    1. UPDATE: 'generating' > 10 dk veya 'awaiting_approval' > 2 saat post'ları
+       'failed' yap (fal webhook kayıp/gecikmiş ya da kullanıcı onay ekranını terk).
+    2. DELETE: 'failed' > 3 gün post'ları DB'den sil + R2'deki bağlı dosyaları
+       (audio, generated, thumbnail, logo, carousel slide'ları) best-effort temizle.
+
+    Periyodik n8n cron'dan çağrılır (önerilen: her 10 dk).
 
     NOTE: Must be declared BEFORE `/posts/{post_id}` — same rationale as scheduled-due.
     """
+    # Adım 1 — Stale generating/awaiting_approval'ı failed'a çevir
     rows = await db.fetch(
         """
         UPDATE social.posts
@@ -291,7 +295,56 @@ async def fail_stale_posts(
         except Exception:  # noqa: BLE001
             pass
 
-    return OkResponse(data={"failed_count": len(stale_ids), "post_ids": stale_ids})
+    # Adım 2 — 7 günden eski failed post'ları DB'den DELETE et + R2'yi temizle
+    deleted_rows = await db.fetch(
+        """
+        DELETE FROM social.posts
+        WHERE status = 'failed' AND created_at < now() - interval '3 days'
+        RETURNING id, brand_id, content_type, slides
+        """
+    )
+    deleted_ids: list[str] = []
+    if deleted_rows:
+        try:
+            from app.services.storage import r2
+            for row in deleted_rows:
+                post_id = str(row["id"])
+                brand_id = str(row["brand_id"])
+                deleted_ids.append(post_id)
+                # Olası tüm R2 dosya path'lerini best-effort sil
+                paths = [
+                    f"brands/{brand_id}/posts/audio/{post_id}.mp3",
+                    f"brands/{brand_id}/posts/audio/{post_id}_timestamps.json",
+                    f"brands/{brand_id}/posts/generated/{post_id}.mp4",
+                    f"brands/{brand_id}/posts/generated/{post_id}.jpg",
+                    f"brands/{brand_id}/posts/generated/{post_id}_logo.jpg",
+                    f"brands/{brand_id}/posts/generated/{post_id}_sub.mp4",
+                    f"brands/{brand_id}/posts/thumbnails/{post_id}.jpg",
+                ]
+                # Carousel slide dosyaları (max 10 slide varsayımı)
+                if row["content_type"] == "carousel":
+                    for i in range(1, 11):
+                        paths.append(f"brands/{brand_id}/posts/generated/{post_id}_slide_{i}.jpg")
+                        paths.append(f"brands/{brand_id}/posts/generated/{post_id}_slide_{i}_logo.jpg")
+                for path in paths:
+                    try:
+                        r2.delete(path)
+                    except Exception:  # noqa: BLE001
+                        pass
+        except Exception:  # noqa: BLE001
+            pass
+
+        sentry_sdk.capture_message(
+            f"Stale failed posts purged: {len(deleted_ids)}",
+            level="info",
+        )
+
+    return OkResponse(data={
+        "failed_count": len(stale_ids),
+        "post_ids": stale_ids,
+        "purged_count": len(deleted_ids),
+        "purged_ids": deleted_ids,
+    })
 
 
 @router.get("/posts/{post_id}", response_model=OkResponse)
