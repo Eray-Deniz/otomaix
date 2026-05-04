@@ -632,10 +632,34 @@ async def burn_subtitles(
         fontsize = 42
         y_expr = "h-h/6"
 
+    # Kelime metinlerini temizle:
+    # 1. Yeni satır/sekme/taşıma karakterlerini boşluğa çevir — ElevenLabs paragraf
+    #    sonlarını ('\n\n') kelimenin içine sıkıştırıyor; FFmpeg drawtext bu kontrol
+    #    karakterini fontta bulamayıp dikey dikdörtgen (kayıp glyph) çiziyor.
+    # 2. Sadece noktalama olan kelimeleri (em-dash, üç nokta vb.) bir önceki kelimeye
+    #    birleştir — yalnız başına 50ms parlayan tek karakter çirkin görünüyor.
+    import re
+    _PUNCT_ONLY = re.compile(r"^[—–\-…•·,.;:!?\"'`]+$")
+    cleaned: list[dict] = []
+    for w in word_timestamps:
+        word = re.sub(r"\s+", " ", w["word"]).strip()
+        if not word:
+            continue
+        # Pure-punctuation token → bir önceki kelimeye yapıştır
+        if _PUNCT_ONLY.match(word) and cleaned:
+            prev = cleaned[-1]
+            prev["word"] = f"{prev['word']} {word}"
+            prev["end"] = w["end"]
+            continue
+        cleaned.append({"word": word, "start": w["start"], "end": w["end"]})
+
+    if not cleaned:
+        return None
+
     # Kelimeleri cümle gruplarına böl
     groups: list[dict] = []
-    for i in range(0, len(word_timestamps), words_per_group):
-        group_words = word_timestamps[i:i + words_per_group]
+    for i in range(0, len(cleaned), words_per_group):
+        group_words = cleaned[i:i + words_per_group]
         text = " ".join(w["word"] for w in group_words)
         start = group_words[0]["start"]
         end = group_words[-1]["end"]
