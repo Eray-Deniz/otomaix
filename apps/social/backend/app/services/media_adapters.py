@@ -63,8 +63,32 @@ class FluxProV2Adapter:
         return {"prompt": prompt, "image_size": self._SIZE_MAP[aspect_ratio]}
 
 
+class NanoBananaV2Adapter:
+    """nano-banana-2 text-to-image adapter (edit variant'ı değil).
+
+    Video pipeline'ında Stage 1 still görseli için kullanılır — tek model ailesi
+    (Gemini 2.5 Flash Image) ile hem text-to-image hem image-edit yolu. fal.ai
+    endpoint'i 'aspect_ratio' literal'i kabul ediyor ('9:16', '1:1', vb.).
+    """
+
+    model_id = "fal-ai/nano-banana-2"
+
+    supported_ratios = frozenset({
+        "1:1", "16:9", "9:16", "4:3", "3:4", "4:5", "2:3", "3:2",
+    })
+
+    def build_args(self, prompt: str, aspect_ratio: str) -> dict[str, Any]:
+        if aspect_ratio not in self.supported_ratios:
+            raise ValueError(
+                f"Unsupported aspect_ratio for {self.model_id}: {aspect_ratio!r}. "
+                f"Supported: {', '.join(sorted(self.supported_ratios))}"
+            )
+        return {"prompt": prompt, "aspect_ratio": aspect_ratio}
+
+
 IMAGE_ADAPTERS: dict[str, ImageModelAdapter] = {
     "flux-2-pro": FluxProV2Adapter(),
+    "nano-banana-2": NanoBananaV2Adapter(),
 }
 
 
@@ -269,13 +293,16 @@ def get_active_faceless_background_adapter() -> FacelessBackgroundAdapter:
 class ImageEditModelAdapter(Protocol):
     """Prompt + referans görsel(ler) → düzenlenmiş görsel.
 
-    Image-to-video gibi aspect_ratio yok — çıktı oranı input image'den türer.
-    Arayüz: (prompt, image_urls) → arguments dict.
+    aspect_ratio opsiyonel: belirtilirse model çıktı oranını override eder
+    (ör. video pipeline 9:16 ister). Belirtilmezse çıktı input image'in
+    oranına göre çıkar (image content type için).
     """
 
     model_id: str
 
-    def build_args(self, prompt: str, image_urls: list[str]) -> dict[str, Any]: ...
+    def build_args(
+        self, prompt: str, image_urls: list[str], *, aspect_ratio: str | None = None,
+    ) -> dict[str, Any]: ...
 
 
 class NanoBananaV2EditAdapter:
@@ -283,10 +310,15 @@ class NanoBananaV2EditAdapter:
 
     model_id = "fal-ai/nano-banana-2/edit"
 
-    def build_args(self, prompt: str, image_urls: list[str]) -> dict[str, Any]:
+    def build_args(
+        self, prompt: str, image_urls: list[str], *, aspect_ratio: str | None = None,
+    ) -> dict[str, Any]:
         if not image_urls:
             raise ValueError("image_urls boş olamaz — en az bir referans görsel gerekli")
-        return {"prompt": prompt, "image_urls": image_urls}
+        args: dict[str, Any] = {"prompt": prompt, "image_urls": image_urls}
+        if aspect_ratio:
+            args["aspect_ratio"] = aspect_ratio
+        return args
 
 
 IMAGE_EDIT_ADAPTERS: dict[str, ImageEditModelAdapter] = {

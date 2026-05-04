@@ -16,7 +16,12 @@ import asyncpg
 import sentry_sdk
 
 from app.core.config import settings
-from app.services.media_adapters import get_active_faceless_background_adapter, get_active_image_adapter
+from app.services.media_adapters import (
+    IMAGE_ADAPTERS,
+    IMAGE_EDIT_ADAPTERS,
+    get_active_faceless_background_adapter,
+    get_active_image_adapter,
+)
 
 TURKISH_VOICES = [
     {"id": "qSeXEcewz7tA0Q0qk9fH", "name": "Buse (Kadın)",   "gender": "female"},
@@ -77,12 +82,16 @@ async def _build_still_prompt(
     user_brief: str = "",
     product_info: str = "",
     product_doc_context: str = "",
+    image_edit_mode: bool = False,
 ) -> str:
-    """Marka bilgisinden FLUX.2 için sahne prompt'u üret.
+    """Sahne prompt'u üret (Claude Opus).
 
-    Claude Opus 4.6 ile görsel-odaklı İngilizce prompt oluşturur.
-    7 görsel açı kategorisinden bağlama uygun olanını seçer.
-    API hatası durumunda fallback template kullanılır.
+    image_edit_mode=False (default): Text-to-image için tam sahne tarifi
+    (öğeler, ışık, ürün dahil). Çıktı max 80 kelime.
+
+    image_edit_mode=True: Nano Banana edit için scene-only prompt.
+    Ürün tarif edilmez (model resmi zaten görüyor), sadece sahne yazılır.
+    Çıktı max 60 kelime — image-edit kısa prompt sever.
     """
     context_parts = []
     if user_brief:
@@ -97,7 +106,14 @@ async def _build_still_prompt(
     if sector:
         context_parts.append(f"Industry: {sector}")
     if product_info:
-        context_parts.append(f"Product/service in scene:\n{product_info}")
+        if image_edit_mode:
+            context_parts.append(
+                "Product context (the product image will be passed to the model — "
+                "do NOT describe the product itself):\n"
+                f"{product_info}"
+            )
+        else:
+            context_parts.append(f"Product/service in scene:\n{product_info}")
     if product_doc_context:
         context_parts.append(
             f"Product reference docs (use for accurate detail):\n{product_doc_context}"
@@ -109,37 +125,63 @@ async def _build_still_prompt(
 
     context = "\n\n".join(context_parts)
 
+    if image_edit_mode:
+        system_prompt = (
+            "You are an expert cinematographer writing prompts for an image-edit AI model "
+            "(Nano Banana / Gemini 2.5 Flash Image). The user's product photograph WILL BE "
+            "passed to the model as a reference image. Your job: describe ONLY the scene "
+            "around the product.\n\n"
+            "STRICT RULES:\n"
+            "- DO NOT describe the product's color, shape, material, or details — the model "
+            "  sees the actual product photo.\n"
+            "- Refer to the product as 'this exact product' or 'the item shown'.\n"
+            "- Describe ONLY: who is in the scene (if anyone), where it takes place, "
+            "  lighting, camera angle, mood, atmosphere.\n"
+            "- Honor USER'S SCENE REQUEST exactly — every element they named must appear.\n"
+            "- Style: cinematic, photorealistic, vertical 9:16 composition.\n"
+            "- NO text, logos, or brand names in the scene (added post-process).\n"
+            "- Output max 60 words. End the sentence cleanly.\n"
+            "- Output ONLY the prompt, nothing else.\n\n"
+            "Example: 'Place this exact product on a stylish woman walking through a "
+            "bustling modern shopping mall, polished marble floors, warm golden hour "
+            "lighting, soft bokeh of glowing storefronts behind, eye-level cinematic shot.'"
+        )
+        max_tokens = 300
+    else:
+        system_prompt = (
+            "You are an expert cinematographer and visual director specializing in brand storytelling. "
+            "Given brand info, output ONE English image generation prompt describing a scene.\n\n"
+            "PRIORITY: If a USER'S SCENE REQUEST is provided, build the scene EXACTLY around it — "
+            "honor every element the user mentioned (people, objects, environment, action). "
+            "Use brand info as supporting context, not as override.\n\n"
+            "VISUAL ANGLE — pick ONE that fits the video topic:\n"
+            "1. PAIN POINT: Show the problem — before scene, frustration, obstacle\n"
+            "2. OUTCOME: Show the transformation — after scene, success moment\n"
+            "3. SOCIAL PROOF: Show community — group usage, collective context\n"
+            "4. CURIOSITY: Show partial/hidden detail — extreme close-up, macro, mystery\n"
+            "5. URGENCY: Show scarcity/time — limited display, countdown context\n"
+            "6. IDENTITY: Show the target audience's environment — their world\n"
+            "7. CONTRARIAN: Show the unexpected — product in surprising context\n\n"
+            "Do NOT always pick the same angle. Vary based on topic.\n\n"
+            "Rules:\n"
+            "- Describe what the camera SEES: subjects, environments, surfaces, lighting, atmosphere\n"
+            "- Include brand colors naturally (lighting, surfaces, props, accent tones)\n"
+            "- NEVER include text, logos, or brand names (these are added in post-processing)\n"
+            "- Style: cinematic, professional, 4K quality\n"
+            "- Output max 80 words. Plan the sentence so it ends cleanly.\n"
+            "- Output ONLY the prompt, nothing else."
+        )
+        max_tokens = 400
+
     try:
         import anthropic
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=400,
+            max_tokens=max_tokens,
             cache_control={"type": "ephemeral"},
-            system=(
-                "You are an expert cinematographer and visual director specializing in brand storytelling. "
-                "Given brand info, output ONE English image generation prompt describing a scene.\n\n"
-                "PRIORITY: If a USER'S SCENE REQUEST is provided, build the scene EXACTLY around it — "
-                "honor every element the user mentioned (people, objects, environment, action). "
-                "Use brand info as supporting context, not as override.\n\n"
-                "VISUAL ANGLE — pick ONE that fits the video topic:\n"
-                "1. PAIN POINT: Show the problem — before scene, frustration, obstacle\n"
-                "2. OUTCOME: Show the transformation — after scene, success moment\n"
-                "3. SOCIAL PROOF: Show community — group usage, collective context\n"
-                "4. CURIOSITY: Show partial/hidden detail — extreme close-up, macro, mystery\n"
-                "5. URGENCY: Show scarcity/time — limited display, countdown context\n"
-                "6. IDENTITY: Show the target audience's environment — their world\n"
-                "7. CONTRARIAN: Show the unexpected — product in surprising context\n\n"
-                "Do NOT always pick the same angle. Vary based on topic.\n\n"
-                "Rules:\n"
-                "- Describe what the camera SEES: subjects, environments, surfaces, lighting, atmosphere\n"
-                "- Include brand colors naturally (lighting, surfaces, props, accent tones)\n"
-                "- NEVER include text, logos, or brand names (these are added in post-processing)\n"
-                "- Style: cinematic, professional, 4K quality\n"
-                "- Output max 80 words. Plan the sentence so it ends cleanly.\n"
-                "- Output ONLY the prompt, nothing else."
-            ),
+            system=system_prompt,
             messages=[{"role": "user", "content": context}],
         )
         return msg.content[0].text.strip()
@@ -401,7 +443,11 @@ async def text_to_speech(
 # ─── 3. fal.ai video üretimi ────────────────────────────────────────────────
 
 async def _generate_still_image(prompt: str, aspect_ratio: str) -> str:
-    """FLUX.2 ile still görsel üret (senkron bekleme). Returns fal temp URL."""
+    """Legacy FLUX.2 still üretimi (image content type tarafından kullanılır).
+
+    Video pipeline artık doğrudan _generate_still_via_text veya
+    _generate_still_via_edit helper'larını kullanıyor (Nano Banana ailesi).
+    """
     import fal_client
 
     image_adapter = get_active_image_adapter()
@@ -409,6 +455,44 @@ async def _generate_still_image(prompt: str, aspect_ratio: str) -> str:
 
     result = await fal_client.subscribe_async(
         image_adapter.model_id,
+        arguments=args,
+    )
+    return result["images"][0]["url"]
+
+
+async def _generate_still_via_text(prompt: str, aspect_ratio: str) -> str:
+    """Nano Banana 2 text-to-image ile still üret (senkron). Video Stage 1 için.
+
+    Ürün referans görseli yokken (genel video) veya kullanıcı tarifsizken
+    çağrılır. Çıktı 9:16 doğrudan model tarafından üretilir, FFmpeg pad gerek yok.
+    """
+    import fal_client
+
+    adapter = IMAGE_ADAPTERS["nano-banana-2"]
+    args = adapter.build_args(prompt, aspect_ratio)
+
+    result = await fal_client.subscribe_async(
+        adapter.model_id,
+        arguments=args,
+    )
+    return result["images"][0]["url"]
+
+
+async def _generate_still_via_edit(
+    prompt: str, image_urls: list[str], aspect_ratio: str,
+) -> str:
+    """Nano Banana 2 edit ile still üret (senkron). Ürün + brief senaryosu için.
+
+    image_urls genelde tek elemanlı: [product.image_url]. Prompt SAHNE-ONLY
+    olmalı — ürünü tarif etme, model resmi zaten görüyor.
+    """
+    import fal_client
+
+    adapter = IMAGE_EDIT_ADAPTERS["nano-banana-2-edit"]
+    args = adapter.build_args(prompt, image_urls, aspect_ratio=aspect_ratio)
+
+    result = await fal_client.subscribe_async(
+        adapter.model_id,
         arguments=args,
     )
     return result["images"][0]["url"]
@@ -613,23 +697,41 @@ async def _resolve_still_prompt(
     user_brief: str = "",
     product_info: str = "",
     product_doc_context: str = "",
+    image_edit_mode: bool = False,
 ) -> str:
     """image_prompt'u still_prompt'a dönüştür.
 
-    user_brief doluysa: caption gen'in image_prompt'unu yok say, brief + ürün/marka
-    bağlamıyla yeni bir sahne prompt'u üret.
-    user_brief boşsa: caption gen'in image_prompt'u (İngilizce) varsa onu kullan,
-    yoksa brand bağlamından fallback üret.
+    image_edit_mode=True (Nano Banana edit yolu): Her zaman _build_still_prompt
+    çağrılır, sahne-only prompt üretilir (ürün tarif edilmez).
+
+    image_edit_mode=False (text-to-image yolu):
+    - user_brief doluysa caption gen'in image_prompt'unu yok say, yeni sahne üret
+    - user_brief boşsa caption gen'in image_prompt'u (İngilizce) varsa onu kullan
+    - O da yoksa brand bağlamından fallback üret
     """
+    sector = brand_kit.get("sector", "")
+    colors = brand_kit.get("colors", [])
+    if isinstance(colors, dict):
+        color_str = ", ".join(f"{v}" for v in colors.values() if v)
+    elif isinstance(colors, list):
+        color_str = ", ".join(str(c) for c in colors if c)
+    else:
+        color_str = ""
+
+    if image_edit_mode:
+        return await _build_still_prompt(
+            topic="",
+            brand_name=brand_name,
+            brand_description=brand_description,
+            sector=sector,
+            color_str=color_str,
+            user_brief=user_brief.strip(),
+            product_info=product_info,
+            product_doc_context=product_doc_context,
+            image_edit_mode=True,
+        )
+
     if user_brief.strip():
-        sector = brand_kit.get("sector", "")
-        colors = brand_kit.get("colors", [])
-        if isinstance(colors, dict):
-            color_str = ", ".join(f"{v}" for v in colors.values() if v)
-        elif isinstance(colors, list):
-            color_str = ", ".join(str(c) for c in colors if c)
-        else:
-            color_str = ""
         return await _build_still_prompt(
             topic="",
             brand_name=brand_name,
@@ -644,14 +746,6 @@ async def _resolve_still_prompt(
     still_prompt = (prompt or "").strip()
     if still_prompt and not _looks_turkish(still_prompt):
         return still_prompt
-    sector = brand_kit.get("sector", "")
-    colors = brand_kit.get("colors", [])
-    if isinstance(colors, dict):
-        color_str = ", ".join(f"{v}" for v in colors.values() if v)
-    elif isinstance(colors, list):
-        color_str = ", ".join(str(c) for c in colors if c)
-    else:
-        color_str = ""
     return await _build_still_prompt(
         topic=prompt or script[:100],
         brand_name=brand_name,
@@ -725,9 +819,7 @@ async def run_faceless_stage1(
     duration = max(15, min(max_duration, round(word_count / 130 * 60)))
     template_fields["duration_estimate"] = duration
 
-    # Ürün görseli — kullanıcı tarif yazmadıysa FLUX atlanır ve doğrudan still olarak kullanılır.
-    # Kullanıcı tarif yazdıysa FLUX text-to-image çalışır, ürün resmi bu aşamada kullanılmaz
-    # (image-edit ileriki sprint'te eklenecek).
+    # Ürün görseli kontrolü
     product_image_url = ""
     if product_id:
         product_row = await db.fetchrow(
@@ -737,7 +829,21 @@ async def run_faceless_stage1(
         if product_row and product_row["image_url"]:
             product_image_url = product_row["image_url"]
 
-    use_product_as_still = bool(product_image_url) and not user_brief.strip()
+    has_brief = bool(user_brief.strip())
+    has_product_image = bool(product_image_url)
+
+    # Still üretim stratejisi (4 senaryo):
+    #   product + brief        → Nano Banana edit (ürün resmi referans, scene-only prompt)
+    #   product + brief yok    → ürün resmi as-is (mevcut davranış)
+    #   brief + ürün yok       → Nano Banana text-to-image (full sahne prompt)
+    #   hiçbiri yok            → Nano Banana text-to-image (markaya göre default)
+    use_product_as_still = has_product_image and not has_brief
+    use_image_edit = has_product_image and has_brief
+    template_fields["still_strategy"] = (
+        "product_as_still" if use_product_as_still
+        else "image_edit" if use_image_edit
+        else "text_to_image"
+    )
 
     # Still prompt — Stage 2'de tekrar çözmemek için DB'ye kaydet
     still_prompt = await _resolve_still_prompt(
@@ -745,6 +851,7 @@ async def run_faceless_stage1(
         user_brief=user_brief,
         product_info=product_info,
         product_doc_context=product_doc_context,
+        image_edit_mode=use_image_edit,
     )
     template_fields["still_prompt"] = still_prompt
 
@@ -783,20 +890,23 @@ async def run_faceless_stage1(
         raise RuntimeError("TTS üretimi başarısız oldu")
     await _patch({"audio_url": audio_url, "generation_stage": "tts_done"})
 
-    # FLUX.2 still — ürün resmi mevcut ve kullanıcı tarifi boşsa FLUX atlanır.
-    # Kullanıcı tarif yazdıysa FLUX çalışır (still_prompt o tarifi yansıtır).
-    if use_product_as_still:
-        still_image_url = product_image_url
-    else:
-        try:
-            still_image_url = await _generate_still_image(still_prompt, aspect_ratio)
-        except Exception as exc:
-            sentry_sdk.capture_exception(exc)
-            await db.execute(
-                "UPDATE social.posts SET status = 'failed' WHERE id = $1",
-                post_id,
+    # Still görseli üret — strategy'e göre
+    try:
+        if use_product_as_still:
+            still_image_url = product_image_url
+        elif use_image_edit:
+            still_image_url = await _generate_still_via_edit(
+                still_prompt, [product_image_url], aspect_ratio,
             )
-            raise RuntimeError(f"Still görsel üretimi başarısız: {exc}") from exc
+        else:
+            still_image_url = await _generate_still_via_text(still_prompt, aspect_ratio)
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
+        await db.execute(
+            "UPDATE social.posts SET status = 'failed' WHERE id = $1",
+            post_id,
+        )
+        raise RuntimeError(f"Still görsel üretimi başarısız: {exc}") from exc
 
     await _patch({
         "still_image_url": still_image_url,
