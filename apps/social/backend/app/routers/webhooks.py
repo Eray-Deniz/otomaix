@@ -237,6 +237,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             audio_url=audio_url,
             subtitle_enabled=subtitle_enabled,
             intro_position=intro_position_override,
+            aspect_ratio=post["aspect_ratio"] or "9:16",
         )
     except Exception as exc:
         sentry_sdk.set_context("fal_webhook", {"post_id": str(post_id), "brand_id": str(brand_id), "request_id": request_id})

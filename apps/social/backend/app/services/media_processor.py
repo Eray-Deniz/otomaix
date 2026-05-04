@@ -579,12 +579,16 @@ async def burn_subtitles(
     video_url: str,
     post_id: UUID,
     brand_id: UUID,
+    aspect_ratio: str = "9:16",
 ) -> str | None:
     """Word-level timestamp'lerden altyazı oluşturup FFmpeg drawtext ile video'ya yaz.
 
-    Timestamp JSON dosyasını R2'den okur. Kelimeler 4-5'li gruplar halinde
-    ekranın alt kısmına yerleştirilir (highlight: aktif kelime beyaz, diğerleri
-    yarı-saydam).
+    Timestamp JSON dosyasını R2'den okur. Kelimeler aspect ratio'ya göre
+    farklı boyutlarda gruplara ayrılıp ekranın alt safe-area'sına yerleştirilir.
+
+    aspect_ratio:
+        - 9:16 (dikey): fontsize=32, 3 kelime/grup, y=h*0.78 (alt UI bar'larla çakışmasın)
+        - 16:9 / 1:1 (yatay/kare): fontsize=42, 4 kelime/grup, y=h-h/6
 
     Returns processed video URL veya None.
     """
@@ -616,11 +620,22 @@ async def burn_subtitles(
     if not word_timestamps:
         return None
 
-    # Kelimeleri cümle gruplarına böl (4-5 kelime per subtitle)
-    WORDS_PER_GROUP = 4
+    # Aspect-ratio'ya göre subtitle parametreleri
+    # 9:16 dikey: dar genişlik → küçük font, az kelime, alt UI bar'dan uzak y
+    # 16:9 / 1:1: geniş alan → büyük font, çok kelime, alt 1/6'da
+    if aspect_ratio == "9:16":
+        words_per_group = 3
+        fontsize = 32
+        y_expr = "h*0.78"
+    else:
+        words_per_group = 4
+        fontsize = 42
+        y_expr = "h-h/6"
+
+    # Kelimeleri cümle gruplarına böl
     groups: list[dict] = []
-    for i in range(0, len(word_timestamps), WORDS_PER_GROUP):
-        group_words = word_timestamps[i:i + WORDS_PER_GROUP]
+    for i in range(0, len(word_timestamps), words_per_group):
+        group_words = word_timestamps[i:i + words_per_group]
         text = " ".join(w["word"] for w in group_words)
         start = group_words[0]["start"]
         end = group_words[-1]["end"]
@@ -641,12 +656,12 @@ async def burn_subtitles(
                 dt = (
                     f"drawtext=text='{escaped_text}'"
                     f":fontfile={font_path}"
-                    f":fontsize=42"
+                    f":fontsize={fontsize}"
                     f":fontcolor=white"
                     f":borderw=2"
                     f":bordercolor=black@0.8"
                     f":x=(w-text_w)/2"
-                    f":y=h-h/6"
+                    f":y={y_expr}"
                     f":enable='between(t,{g['start']:.3f},{g['end']:.3f})'"
                 )
                 drawtext_filters.append(dt)
@@ -698,6 +713,7 @@ async def apply_brand_processing(
     audio_url: str | None = None,
     subtitle_enabled: bool = False,
     intro_position: str | None = None,
+    aspect_ratio: str = "9:16",
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
@@ -779,6 +795,7 @@ async def apply_brand_processing(
             video_url=final_url,
             post_id=post_id,
             brand_id=brand_id,
+            aspect_ratio=aspect_ratio,
         )
         if subtitled:
             final_url = subtitled
