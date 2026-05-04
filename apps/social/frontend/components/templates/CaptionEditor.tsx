@@ -55,13 +55,9 @@ function normalizeTag(raw: string): string {
 }
 
 export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps) {
-  const tabs = platforms.length > 0 ? ['default', ...platforms] : ['default']
-  const [activeTab, setActiveTab] = useState(tabs[0])
+  const tabs = platforms
+  const [activeTab, setActiveTab] = useState(tabs[0] ?? '')
   const [hashtagInput, setHashtagInput] = useState('')
-
-  function updateDefault(caption: string) {
-    onChange({ ...data, default_caption: caption })
-  }
 
   function updatePlatform(platform: string, partial: Partial<PlatformCaption>) {
     const existing = data.platform_captions[platform] || { caption: '' }
@@ -105,8 +101,15 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
     updateHashtags(data.hashtags.filter((h) => h !== tag))
   }
 
-  const showHashtagEditor =
-    activeTab === 'default' || INLINE_HASHTAG_PLATFORMS.has(activeTab)
+  const showHashtagEditor = activeTab !== '' && INLINE_HASHTAG_PLATFORMS.has(activeTab)
+
+  if (tabs.length === 0) {
+    return (
+      <p className="text-sm text-gray-500">
+        Gönderi metnini düzenleyebilmek için önce platform seçin.
+      </p>
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -123,66 +126,50 @@ export function CaptionEditor({ data, platforms, onChange }: CaptionEditorProps)
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               )}
             >
-              {tab === 'default' ? 'Varsayılan' : PLATFORM_LABELS[tab] || tab}
+              {PLATFORM_LABELS[tab] || tab}
             </button>
           ))}
         </div>
       )}
 
-      {activeTab === 'default' ? (
+      <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label className="text-sm">Varsayılan Gönderi Metni</Label>
-          <p className="text-xs text-gray-400">Platform-özel gönderi metni yoksa kullanılır.</p>
+          <Label className="text-sm">
+            {PLATFORM_LABELS[activeTab] || activeTab} Gönderi Metni
+          </Label>
           <Textarea
-            value={data.default_caption}
-            onChange={(e) => updateDefault(e.target.value)}
-            placeholder="Gönderi metni..."
+            value={data.platform_captions[activeTab]?.caption ?? ''}
+            onChange={(e) => updatePlatform(activeTab, { caption: e.target.value })}
+            placeholder="Platform-özel gönderi metni..."
             rows={5}
             className="resize-none text-sm"
           />
         </div>
-      ) : (
-        <div className="space-y-3">
+
+        {data.platform_captions[activeTab]?.first_comment !== undefined && (
           <div className="space-y-1.5">
-            <Label className="text-sm">
-              {PLATFORM_LABELS[activeTab] || activeTab} Gönderi Metni
-            </Label>
+            <Label className="text-sm">İlk Yorum (hashtag bloğu)</Label>
+            <p className="text-xs text-gray-400">
+              Gönderi metninden ayrı olarak yayınlanacak ilk yorum metni.
+            </p>
             <Textarea
-              value={data.platform_captions[activeTab]?.caption ?? ''}
-              onChange={(e) => updatePlatform(activeTab, { caption: e.target.value })}
-              placeholder="Platform-özel gönderi metni..."
-              rows={5}
+              value={data.platform_captions[activeTab].first_comment ?? ''}
+              onChange={(e) =>
+                updatePlatform(activeTab, { first_comment: e.target.value })
+              }
+              placeholder="#hashtag1 #hashtag2 ..."
+              rows={3}
               className="resize-none text-sm"
             />
           </div>
-
-          {data.platform_captions[activeTab]?.first_comment !== undefined && (
-            <div className="space-y-1.5">
-              <Label className="text-sm">İlk Yorum (hashtag bloğu)</Label>
-              <p className="text-xs text-gray-400">
-                Gönderi metninden ayrı olarak yayınlanacak ilk yorum metni.
-              </p>
-              <Textarea
-                value={data.platform_captions[activeTab].first_comment ?? ''}
-                onChange={(e) =>
-                  updatePlatform(activeTab, { first_comment: e.target.value })
-                }
-                placeholder="#hashtag1 #hashtag2 ..."
-                rows={3}
-                className="resize-none text-sm"
-              />
-            </div>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       {showHashtagEditor && (
         <div className="space-y-1.5">
           <Label className="text-sm">Hashtag&apos;ler</Label>
           <p className="text-xs text-gray-400">
-            {activeTab === 'default'
-              ? 'Tüm platformlar için önerilen hashtag listesi.'
-              : `${PLATFORM_LABELS[activeTab] || activeTab} gönderi metnine eklenecek hashtag'ler.`}
+            {`${PLATFORM_LABELS[activeTab] || activeTab} gönderi metnine eklenecek hashtag'ler.`}
           </p>
           <div className="flex gap-2">
             <Input

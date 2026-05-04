@@ -303,13 +303,14 @@ def _build_output_format_instruction(
     return f"""ÇIKTI FORMATI (SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):
 
 {{
-  "default_caption": "Genel caption — fallback olarak kullanılır",
   "platform_captions": {{
     {platform_schema}
   }},
   {image_schema},
   "hashtags": ["hashtag1", "hashtag2"]{script_schema}
 }}
+
+ÖNEMLİ: Her seçili platform için platform_captions altında ayrı caption üret — varsayılan/genel caption üretme, her platforma özel yaz.
 
 {image_note}
 

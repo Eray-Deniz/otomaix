@@ -25,18 +25,21 @@ const PLATFORM_LABELS: Record<string, string> = {
 }
 
 export function CaptionPreview({ data, platforms, onEdit }: CaptionPreviewProps) {
-  const tabs = platforms.length > 0 ? ['default', ...platforms] : ['default']
-  const [activeTab, setActiveTab] = useState(tabs[0])
+  const tabs = platforms
+  const [activeTab, setActiveTab] = useState(tabs[0] ?? '')
 
+  if (tabs.length === 0) {
+    return (
+      <p className="text-sm text-gray-500">
+        Gönderi metnini görmek için önce platform seçin.
+      </p>
+    )
+  }
+
+  // Platform-özel caption yoksa default_caption fallback olarak gözükür
   const activeCaption =
-    activeTab === 'default'
-      ? data.default_caption
-      : data.platform_captions[activeTab]?.caption ?? data.default_caption
-
-  const activeFirstComment =
-    activeTab !== 'default'
-      ? data.platform_captions[activeTab]?.first_comment
-      : undefined
+    data.platform_captions[activeTab]?.caption ?? data.default_caption
+  const activeFirstComment = data.platform_captions[activeTab]?.first_comment
 
   return (
     <div className="space-y-3">
@@ -65,7 +68,7 @@ export function CaptionPreview({ data, platforms, onEdit }: CaptionPreviewProps)
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               )}
             >
-              {tab === 'default' ? 'Varsayılan' : PLATFORM_LABELS[tab] || tab}
+              {PLATFORM_LABELS[tab] || tab}
             </button>
           ))}
         </div>
@@ -88,7 +91,7 @@ export function CaptionPreview({ data, platforms, onEdit }: CaptionPreviewProps)
         </div>
       )}
 
-      {activeTab === 'default' && data.hashtags.length > 0 && (
+      {data.hashtags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {data.hashtags.map((tag) => (
             <Badge key={tag} variant="secondary" className="text-xs">
