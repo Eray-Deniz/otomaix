@@ -106,7 +106,16 @@ function PostDetailModal({
 
   if (!post) return null
 
-  const imageUrl = post.output_url ?? post.thumbnail_url
+  // Video post'larında output_url MP4 dosyası — Image render edemez.
+  // imageUrl yalnız görsel/carousel için; video aşağıda <video> ile render edilir.
+  const stillFromTemplate =
+    typeof post.template_fields?.still_image_url === 'string'
+      ? (post.template_fields.still_image_url as string)
+      : null
+  const imageUrl =
+    post.content_type === 'video'
+      ? null
+      : post.output_url ?? post.thumbnail_url
   const canAct = ['ready', 'failed', 'rejected'].includes(post.status)
 
   // datetime-local min: now + 5 minutes
@@ -280,7 +289,17 @@ function PostDetailModal({
                   </div>
                 </div>
               )
-            })() : imageUrl ? (
+            })() : post.content_type === 'video' && post.output_url ? (
+              <video
+                src={post.output_url}
+                poster={stillFromTemplate ?? undefined}
+                controls
+                preload="metadata"
+                playsInline
+                className="w-full"
+                style={{ aspectRatio: post.aspect_ratio?.replace(':', '/') ?? '9/16' }}
+              />
+            ) : imageUrl ? (
               <Image
                 src={imageUrl}
                 alt="İçerik önizleme"

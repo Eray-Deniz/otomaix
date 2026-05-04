@@ -42,6 +42,9 @@ export interface Post {
   created_at: string
   publications?: PostPublication[]
   slides?: CarouselSlide[]
+  // Video post'ları için: still_image_url (Nano Banana / FLUX çıktısı, ilk kare)
+  // önizleme için kullanılır. Backend SELECT * ile zaten döndürüyor.
+  template_fields?: Record<string, unknown> | null
 }
 
 // ─── Status config ─────────────────────────────────────────────────────────────
@@ -81,7 +84,16 @@ interface ContentCardProps {
 export function ContentCard({ post, onClick, onPublish, showWatermark = false }: ContentCardProps) {
   const [hovered, setHovered] = useState(false)
   const status = STATUS_CONFIG[post.status] ?? { label: post.status, className: 'bg-gray-100 text-gray-600' }
-  const imageUrl = post.thumbnail_url ?? post.output_url
+  // Video post'larında output_url MP4 dosyası — Image bileşeni render edemez.
+  // Bunun yerine still_image_url (template_fields içinde, Wan'a giden ilk kare) kullanılır.
+  const stillFromTemplate =
+    typeof post.template_fields?.still_image_url === 'string'
+      ? (post.template_fields.still_image_url as string)
+      : null
+  const imageUrl =
+    post.content_type === 'video'
+      ? stillFromTemplate ?? post.thumbnail_url
+      : post.thumbnail_url ?? post.output_url
 
   return (
     <div

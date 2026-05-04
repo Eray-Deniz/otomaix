@@ -1958,7 +1958,7 @@ function IcerikOlusturInner() {
                     className="w-full max-h-80 object-contain"
                   />
                   <div className="px-4 py-2 bg-white/60 border-t border-purple-200 text-xs text-purple-700">
-                    🎬 Sahne (FLUX.2 still) — bu görsel video render&apos;ında animasyona dönüşür
+                    🎬 Bu görsel video sunumunda animasyona dönüşür
                   </div>
                 </div>
               )}
@@ -2120,7 +2120,7 @@ function IcerikOlusturInner() {
                         const stages = [
                           { key: 'script_done', label: 'Script üretildi' },
                           { key: 'tts_done', label: 'Seslendirme tamamlandı' },
-                          { key: 'generating_video', label: 'Video render ediliyor' },
+                          { key: 'generating_video', label: 'Video hazırlanıyor...' },
                         ]
                         const currentIdx = stages.findIndex(s => s.key === stage)
                         return (
