@@ -75,7 +75,7 @@ async def init(
         """
         SELECT b.id, b.name, b.sector, b.sector_id,
                s.slug AS sector_slug, s.display_name AS sector_display_name,
-               b.logo_light_url, b.logo_dark_url, b.is_active
+               b.logo_light_url, b.logo_dark_url, b.website_url, b.is_active
         FROM social.brands b
         LEFT JOIN social.sectors s ON s.id = b.sector_id
         WHERE b.workspace_id = $1 AND b.is_active = true

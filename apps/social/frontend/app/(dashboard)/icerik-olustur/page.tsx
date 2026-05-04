@@ -840,7 +840,19 @@ function IcerikOlusturInner() {
   // Template seçim handler
   function handleSelectTemplate(template: Template) {
     setSelectedTemplate(template)
-    setTemplateFields({})
+    // Default değerlerle pre-fill et:
+    // - Her form field'ın template'teki defaultValue'su
+    // - cta_url özel: marka website_url'i varsa o kullanılır (defaultValue override edilir)
+    const defaults: Record<string, unknown> = {}
+    for (const f of template.formFields) {
+      if (f.defaultValue !== undefined && f.defaultValue !== null && f.defaultValue !== '') {
+        defaults[f.id] = f.defaultValue
+      }
+    }
+    if (currentBrand?.website_url && template.formFields.some((f) => f.id === 'cta_url')) {
+      defaults['cta_url'] = currentBrand.website_url
+    }
+    setTemplateFields(defaults)
     setImageTextFields(template.imageTextOverlay?.fields ?? null)
     setCaptionData(null)
     setPhase('form')
