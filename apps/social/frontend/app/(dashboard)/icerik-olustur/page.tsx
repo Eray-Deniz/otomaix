@@ -479,6 +479,7 @@ function IcerikOlusturInner() {
         platform_captions: captionData!.platform_captions,
         intro_position: introPosition,
         product_id: selectedProduct?.id ?? null,
+        visual_brief: prompt.trim(),
       })
       setGenerating(false)
       if (res.success && res.data) {

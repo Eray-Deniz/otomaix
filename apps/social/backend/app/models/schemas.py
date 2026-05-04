@@ -196,6 +196,10 @@ class FacelessVideoGenerate(BaseModel):
     platform_captions: dict | None = None
     intro_position: str = "none"
     product_id: UUID | None = None
+    # Kullanıcının "Bu video ne anlatsın?" alanına yazdığı ham metin.
+    # Boş ise sahne markaya/ürüne göre kurulur; doluysa sahne bu tarife göre üretilir
+    # ve ürün resmi yerine FLUX still oluşturulur.
+    visual_brief: str = ""
 
 
 class GenerateScriptRequest(BaseModel):

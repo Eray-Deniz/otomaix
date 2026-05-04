@@ -895,6 +895,38 @@ async def generate_faceless_stage1(
         durations = [PLATFORM_MAX_DURATION.get(p, DEFAULT_MAX_DURATION) for p in payload.platforms]
         max_duration = min(durations)
 
+    # Ürün bilgisi + ürün dokümanları → görsel prompt'una bağlam olarak gider.
+    # Brief ya da script, RAG sorgusu için kullanılır.
+    product_info = ""
+    product_doc_context = ""
+    if payload.product_id:
+        product_row = await db.fetchrow(
+            """
+            SELECT name, description, tags
+            FROM social.brand_products
+            WHERE id = $1 AND brand_id = $2
+            """,
+            payload.product_id, payload.brand_id,
+        )
+        if product_row:
+            parts: list[str] = []
+            if product_row["name"]:
+                parts.append(f"Name: {product_row['name']}")
+            if product_row["description"]:
+                parts.append(f"Description: {product_row['description']}")
+            tags = product_row["tags"] or []
+            if isinstance(tags, list) and tags:
+                parts.append(f"Tags: {', '.join(str(t) for t in tags)}")
+            product_info = "\n".join(parts)
+
+        rag_query = (payload.visual_brief or payload.script or payload.prompt or "").strip()
+        if rag_query:
+            ctx = await get_product_document_context(
+                [payload.product_id], rag_query, db,
+            )
+            if ctx:
+                product_doc_context = ctx
+
     try:
         stage1 = await run_faceless_stage1(
             brand_id=payload.brand_id,
@@ -911,6 +943,9 @@ async def generate_faceless_stage1(
             intro_position=payload.intro_position,
             product_id=payload.product_id,
             max_duration=max_duration,
+            user_brief=payload.visual_brief or "",
+            product_info=product_info,
+            product_doc_context=product_doc_context,
             db=db,
         )
     except RuntimeError as exc:

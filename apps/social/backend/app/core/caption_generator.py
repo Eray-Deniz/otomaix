@@ -295,9 +295,9 @@ def _build_output_format_instruction(
     video_scene_rule = ""
     if is_video:
         video_scene_rule = (
-            "\n7. FACELESS VIDEO: image_prompt'ta insan yüzü, el, karakter TARIF ETME — "
-            "faceless video arka planı için soyut/ambient sahne yaz. Kamera hareketi "
-            "düşünerek sahne kur (dolly, pan, zoom uyumlu)."
+            "\n7. VİDEO SAHNE: Kamera hareketi düşünerek sahne kur (dolly, pan, zoom uyumlu). "
+            "Kullanıcının tarifine ve ürün/marka bağlamına göre sahnede hangi öğeler "
+            "(insan, ürün, ortam, atmosfer) gerekiyorsa onları içer."
         )
 
     return f"""ÇIKTI FORMATI (SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):

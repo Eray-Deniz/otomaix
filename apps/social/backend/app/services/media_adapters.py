@@ -223,7 +223,7 @@ class WanI2VFlashAdapter:
     supported_ratios = frozenset({"9:16", "16:9"})
     requires_still_image = True
 
-    _NEGATIVE = "people, person, human, face, hands, character, subtitles, text"
+    _NEGATIVE = "subtitles, text, watermark, logo"
     _VALID_DURATIONS = (5, 10, 15)
 
     def build_args(

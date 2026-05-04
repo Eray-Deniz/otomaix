@@ -72,6 +72,9 @@ async def _build_still_prompt(
     brand_description: str,
     sector: str,
     color_str: str,
+    user_brief: str = "",
+    product_info: str = "",
+    product_doc_context: str = "",
 ) -> str:
     """Marka bilgisinden FLUX.2 için sahne prompt'u üret.
 
@@ -80,18 +83,29 @@ async def _build_still_prompt(
     API hatası durumunda fallback template kullanılır.
     """
     context_parts = []
+    if user_brief:
+        context_parts.append(
+            "USER'S SCENE REQUEST (highest priority — build the scene around this):\n"
+            f"{user_brief}"
+        )
     if brand_name:
         context_parts.append(f"Brand: {brand_name}")
     if brand_description:
         context_parts.append(f"What they do: {brand_description}")
     if sector:
         context_parts.append(f"Industry: {sector}")
+    if product_info:
+        context_parts.append(f"Product/service in scene:\n{product_info}")
+    if product_doc_context:
+        context_parts.append(
+            f"Product reference docs (use for accurate detail):\n{product_doc_context}"
+        )
     if topic:
         context_parts.append(f"Video topic: {topic}")
     if color_str:
         context_parts.append(f"Brand colors: {color_str}")
 
-    context = "\n".join(context_parts)
+    context = "\n\n".join(context_parts)
 
     try:
         import anthropic
@@ -99,11 +113,14 @@ async def _build_still_prompt(
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=200,
+            max_tokens=400,
             cache_control={"type": "ephemeral"},
             system=(
                 "You are an expert cinematographer and visual director specializing in brand storytelling. "
                 "Given brand info, output ONE English image generation prompt describing a scene.\n\n"
+                "PRIORITY: If a USER'S SCENE REQUEST is provided, build the scene EXACTLY around it — "
+                "honor every element the user mentioned (people, objects, environment, action). "
+                "Use brand info as supporting context, not as override.\n\n"
                 "VISUAL ANGLE — pick ONE that fits the video topic:\n"
                 "1. PAIN POINT: Show the problem — before scene, frustration, obstacle\n"
                 "2. OUTCOME: Show the transformation — after scene, success moment\n"
@@ -114,10 +131,11 @@ async def _build_still_prompt(
                 "7. CONTRARIAN: Show the unexpected — product in surprising context\n\n"
                 "Do NOT always pick the same angle. Vary based on topic.\n\n"
                 "Rules:\n"
-                "- Describe what the camera SEES: products, environments, surfaces, lighting, atmosphere\n"
+                "- Describe what the camera SEES: subjects, environments, surfaces, lighting, atmosphere\n"
                 "- Include brand colors naturally (lighting, surfaces, props, accent tones)\n"
-                "- NEVER include people, faces, hands, text, logos, or brand names\n"
+                "- NEVER include text, logos, or brand names (these are added in post-processing)\n"
                 "- Style: cinematic, professional, 4K quality\n"
+                "- Output max 80 words. Plan the sentence so it ends cleanly.\n"
                 "- Output ONLY the prompt, nothing else."
             ),
             messages=[{"role": "user", "content": context}],
@@ -134,7 +152,7 @@ async def _build_still_prompt(
         if color_str:
             parts.append(f"color palette: {color_str}")
         parts.append(
-            "product showcase, no people, no text, "
+            "product showcase, no text, no logos, "
             "cinematic composition, professional lighting, 4K"
         )
         return ", ".join(parts)
@@ -143,13 +161,13 @@ async def _build_still_prompt(
 # ─── 0b. Motion prompt çeşitliliği ────────────────────────────────────────────
 
 _MOTION_PROMPTS = [
-    "Slow cinematic camera push-in, soft ambient lighting, gentle particle motion, seamless loop, no people, no faces",
-    "Smooth lateral dolly shot, warm natural light, subtle depth-of-field shift, no people, no faces",
-    "Gentle orbit around subject, golden hour lighting, cinematic bokeh, no people, no faces",
-    "Slow vertical tilt revealing the scene, soft diffused lighting, atmospheric haze, no people, no faces",
-    "Parallax effect with foreground blur, cool-tone ambient light, elegant composition, no people, no faces",
-    "Slow zoom-out revealing context, dramatic rim lighting, film grain texture, no people, no faces",
-    "Steady tracking shot with subtle camera sway, natural daylight, shallow focus, no people, no faces",
+    "Slow cinematic camera push-in, soft ambient lighting, gentle particle motion, seamless loop",
+    "Smooth lateral dolly shot, warm natural light, subtle depth-of-field shift",
+    "Gentle orbit around subject, golden hour lighting, cinematic bokeh",
+    "Slow vertical tilt revealing the scene, soft diffused lighting, atmospheric haze",
+    "Parallax effect with foreground blur, cool-tone ambient light, elegant composition",
+    "Slow zoom-out revealing context, dramatic rim lighting, film grain texture",
+    "Steady tracking shot with subtle camera sway, natural daylight, shallow focus",
 ]
 
 
@@ -590,8 +608,37 @@ async def _resolve_still_prompt(
     brand_kit: dict,
     brand_name: str,
     brand_description: str,
+    user_brief: str = "",
+    product_info: str = "",
+    product_doc_context: str = "",
 ) -> str:
-    """image_prompt'u still_prompt'a dönüştür; boş/Türkçe ise brand bağlamından üret."""
+    """image_prompt'u still_prompt'a dönüştür.
+
+    user_brief doluysa: caption gen'in image_prompt'unu yok say, brief + ürün/marka
+    bağlamıyla yeni bir sahne prompt'u üret.
+    user_brief boşsa: caption gen'in image_prompt'u (İngilizce) varsa onu kullan,
+    yoksa brand bağlamından fallback üret.
+    """
+    if user_brief.strip():
+        sector = brand_kit.get("sector", "")
+        colors = brand_kit.get("colors", [])
+        if isinstance(colors, dict):
+            color_str = ", ".join(f"{v}" for v in colors.values() if v)
+        elif isinstance(colors, list):
+            color_str = ", ".join(str(c) for c in colors if c)
+        else:
+            color_str = ""
+        return await _build_still_prompt(
+            topic="",
+            brand_name=brand_name,
+            brand_description=brand_description,
+            sector=sector,
+            color_str=color_str,
+            user_brief=user_brief.strip(),
+            product_info=product_info,
+            product_doc_context=product_doc_context,
+        )
+
     still_prompt = (prompt or "").strip()
     if still_prompt and not _looks_turkish(still_prompt):
         return still_prompt
@@ -609,6 +656,8 @@ async def _resolve_still_prompt(
         brand_description=brand_description,
         sector=sector,
         color_str=color_str,
+        product_info=product_info,
+        product_doc_context=product_doc_context,
     )
 
 
@@ -652,6 +701,9 @@ async def run_faceless_stage1(
     intro_position: str = "none",
     product_id: UUID | None = None,
     max_duration: int = DEFAULT_MAX_DURATION,
+    user_brief: str = "",
+    product_info: str = "",
+    product_doc_context: str = "",
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + FLUX.2 still.
 
@@ -671,7 +723,9 @@ async def run_faceless_stage1(
     duration = max(15, min(max_duration, round(word_count / 130 * 60)))
     template_fields["duration_estimate"] = duration
 
-    # Ürün görseli varsa FLUX.2 atlanır
+    # Ürün görseli — kullanıcı tarif yazmadıysa FLUX atlanır ve doğrudan still olarak kullanılır.
+    # Kullanıcı tarif yazdıysa FLUX text-to-image çalışır, ürün resmi bu aşamada kullanılmaz
+    # (image-edit ileriki sprint'te eklenecek).
     product_image_url = ""
     if product_id:
         product_row = await db.fetchrow(
@@ -681,9 +735,14 @@ async def run_faceless_stage1(
         if product_row and product_row["image_url"]:
             product_image_url = product_row["image_url"]
 
+    use_product_as_still = bool(product_image_url) and not user_brief.strip()
+
     # Still prompt — Stage 2'de tekrar çözmemek için DB'ye kaydet
     still_prompt = await _resolve_still_prompt(
         prompt, script, brand_kit, brand_name, brand_description,
+        user_brief=user_brief,
+        product_info=product_info,
+        product_doc_context=product_doc_context,
     )
     template_fields["still_prompt"] = still_prompt
 
@@ -722,8 +781,9 @@ async def run_faceless_stage1(
         raise RuntimeError("TTS üretimi başarısız oldu")
     await _patch({"audio_url": audio_url, "generation_stage": "tts_done"})
 
-    # FLUX.2 still — ürün varsa atla
-    if product_image_url:
+    # FLUX.2 still — ürün resmi mevcut ve kullanıcı tarifi boşsa FLUX atlanır.
+    # Kullanıcı tarif yazdıysa FLUX çalışır (still_prompt o tarifi yansıtır).
+    if use_product_as_still:
         still_image_url = product_image_url
     else:
         try:
