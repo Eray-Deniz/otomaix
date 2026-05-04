@@ -641,6 +641,17 @@ async def burn_subtitles(
         end = group_words[-1]["end"]
         groups.append({"text": text, "start": start, "end": end})
 
+    # Ardışık gruplar arasına 50ms boşluk: FFmpeg between() inclusive olduğundan
+    # bir grubun bitiş ile diğerinin başlangıç anı çakıştığında ikisi aynı karede gözüküyor.
+    # Önceki grubu ufak miktar önce kapatarak temiz geçiş sağla.
+    GAP = 0.05
+    for idx in range(len(groups) - 1):
+        next_start = groups[idx + 1]["start"]
+        max_end = next_start - GAP
+        if groups[idx]["end"] > max_end:
+            # Grup en az 100ms görünsün diye guard
+            groups[idx]["end"] = max(max_end, groups[idx]["start"] + 0.1)
+
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             video_path = os.path.join(tmpdir, "input.mp4")
