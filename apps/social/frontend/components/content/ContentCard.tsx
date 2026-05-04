@@ -85,14 +85,15 @@ export function ContentCard({ post, onClick, onPublish, showWatermark = false }:
   const [hovered, setHovered] = useState(false)
   const status = STATUS_CONFIG[post.status] ?? { label: post.status, className: 'bg-gray-100 text-gray-600' }
   // Video post'larında output_url MP4 dosyası — Image bileşeni render edemez.
-  // Bunun yerine still_image_url (template_fields içinde, Wan'a giden ilk kare) kullanılır.
+  // Öncelik: thumbnail_url (webhook'ta videodan çıkarılan ilk kare, doğru) >
+  //         template_fields.still_image_url (Nano Banana çıktısı, yaklaşık) — fallback.
   const stillFromTemplate =
     typeof post.template_fields?.still_image_url === 'string'
       ? (post.template_fields.still_image_url as string)
       : null
   const imageUrl =
     post.content_type === 'video'
-      ? stillFromTemplate ?? post.thumbnail_url
+      ? post.thumbnail_url ?? stillFromTemplate
       : post.thumbnail_url ?? post.output_url
 
   return (

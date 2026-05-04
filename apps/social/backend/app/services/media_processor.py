@@ -731,6 +731,73 @@ async def burn_subtitles(
         return None
 
 
+# ─── Video Thumbnail Extraction ──────────────────────────────────────────────
+
+async def extract_video_thumbnail(
+    video_url: str,
+    post_id: UUID,
+    brand_id: UUID,
+) -> str | None:
+    """Videodan ilk kareyi çıkarıp R2'ye thumbnail olarak yükle.
+
+    Tüm post-process adımları (audio mux, subtitle, intro/outro) bittikten
+    sonra çağrılır — bu sayede thumbnail kullanıcının izleyeceği videonun
+    GERÇEK ilk karesi olur (altyazı dahil).
+
+    Returns public R2 URL veya None (FFmpeg yok / hata).
+    """
+    try:
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
+        if result.returncode != 0:
+            sentry_sdk.capture_message(
+                f"extract_video_thumbnail: ffmpeg not available (rc={result.returncode})",
+                level="warning",
+            )
+            return None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        sentry_sdk.capture_message(
+            "extract_video_thumbnail: ffmpeg not found or timed out", level="warning",
+        )
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            video_resp = await client.get(video_url)
+            video_resp.raise_for_status()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            video_path = os.path.join(tmpdir, "input.mp4")
+            output_path = os.path.join(tmpdir, "thumb.jpg")
+            Path(video_path).write_bytes(video_resp.content)
+
+            # FFmpeg ile ilk kareyi çıkar (-ss 0, -frames:v 1)
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", "0",
+                "-i", video_path,
+                "-frames:v", "1",
+                "-q:v", "2",  # JPEG kalitesi (1=en iyi, 31=en kötü)
+                output_path,
+            ]
+            proc = subprocess.run(cmd, capture_output=True, timeout=30)
+            if proc.returncode != 0:
+                stderr = proc.stderr.decode(errors="replace")[:500]
+                sentry_sdk.capture_message(
+                    f"extract_video_thumbnail: ffmpeg failed (rc={proc.returncode}) {stderr}",
+                    level="error",
+                )
+                return None
+
+            thumb_bytes = Path(output_path).read_bytes()
+
+        dest_path = f"brands/{brand_id}/posts/thumbnails/{post_id}.jpg"
+        return r2.upload(thumb_bytes, dest_path, "image/jpeg")
+
+    except Exception as exc:
+        sentry_sdk.capture_exception(exc)
+        return None
+
+
 # ─── Post-generation pipeline ────────────────────────────────────────────────
 
 async def apply_brand_processing(

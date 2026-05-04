@@ -10,7 +10,11 @@ import asyncpg
 from app.core.database import get_db
 from app.models.schemas import OkResponse
 from app.core.templates_data import get_template_by_id
-from app.services.media_processor import apply_brand_processing, detect_optimal_text_position
+from app.services.media_processor import (
+    apply_brand_processing,
+    detect_optimal_text_position,
+    extract_video_thumbnail,
+)
 from app.services.storage import r2
 
 logger = logging.getLogger(__name__)
@@ -248,13 +252,39 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
         )
         return OkResponse(data={"post_id": str(post_id), "error": str(exc)})
 
-    await db.execute(
-        "UPDATE social.posts SET status = 'ready', output_url = $1, updated_at = now() WHERE id = $2",
-        final_url,
-        post_id,
-    )
+    # Video post'ları için kütüphane preview thumbnail'i — videodan ilk kare
+    # FFmpeg ile çıkarılıp R2'ye yüklenir. Hata durumunda None döner; pipeline
+    # akmaya devam eder, sadece thumbnail boş kalır (frontend fallback'i çalışır).
+    thumbnail_url: str | None = None
+    if is_video_payload and content_type == "video":
+        try:
+            thumbnail_url = await extract_video_thumbnail(
+                video_url=final_url,
+                post_id=post_id,
+                brand_id=brand_id,
+            )
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
 
-    return OkResponse(data={"post_id": str(post_id), "output_url": final_url})
+    if thumbnail_url:
+        await db.execute(
+            """UPDATE social.posts
+               SET status = 'ready', output_url = $1, thumbnail_url = $2,
+                   updated_at = now()
+               WHERE id = $3""",
+            final_url, thumbnail_url, post_id,
+        )
+    else:
+        await db.execute(
+            "UPDATE social.posts SET status = 'ready', output_url = $1, updated_at = now() WHERE id = $2",
+            final_url, post_id,
+        )
+
+    return OkResponse(data={
+        "post_id": str(post_id),
+        "output_url": final_url,
+        "thumbnail_url": thumbnail_url,
+    })
 
 
 async def _handle_carousel_slide(
