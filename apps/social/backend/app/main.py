@@ -39,6 +39,11 @@ def _validate_templates() -> None:
 
     for template_id, template in TEMPLATES.items():
         assert template.id == template_id, f"ID mismatch: {template.id} vs {template_id}"
+        # Deprecated şablonlar geriye dönük uyumluluk için kayıtlı tutulur
+        # (eski post'ların get_template_by_id çağrıları kırılmasın). Kataloğta
+        # gizlidir (get_all_templates filtreler), startup validation'dan da muaf.
+        if template.status == "deprecated":
+            continue
         assert template.status == "active", f"{template_id} not active"
         assert len(template.sectors) > 0, f"{template_id} has no sectors"
         assert len(template.formFields) > 0, f"{template_id} has no form fields"
