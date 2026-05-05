@@ -142,11 +142,26 @@ async def _build_still_prompt(
             "- NO text, logos, or brand names in the scene (added post-process).\n"
             "- Output max 60 words. End the sentence cleanly.\n"
             "- Output ONLY the prompt, nothing else.\n\n"
+            "SHOT FRAMING (mandatory whenever a person appears in the scene):\n"
+            "- Use medium shot or full-body shot — NEVER a leg-only, waist-down, "
+            "  or back-of-head-only composition.\n"
+            "- Subject's face MUST be fully visible, well-lit, and within frame.\n"
+            "- Camera at eye level — not extreme low-angle, not bird's eye.\n"
+            "- Keep at least 30% headroom above the subject's head.\n"
+            "- If the brief is vague about framing, default to a medium shot "
+            "  showing face and upper body.\n\n"
+            "AVOID compositions that produce:\n"
+            "- cropped face, headless figure, decapitated framing, face out of frame\n"
+            "- waist-down only, leg-only shot, back of head only\n"
+            "- distorted anatomy, deformed hands, extra fingers, mutated body\n"
+            "- duplicate faces in a crowd, identical repeating people\n"
+            "- frozen mannequin-like crowd, lifeless static background figures\n\n"
             "Example: 'Place this exact product on a stylish woman walking through a "
-            "bustling modern shopping mall, polished marble floors, warm golden hour "
-            "lighting, soft bokeh of glowing storefronts behind, eye-level cinematic shot.'"
+            "bustling modern shopping mall, eye-level medium shot capturing her face "
+            "and upper body, polished marble floors, warm golden hour lighting, soft "
+            "bokeh of glowing storefronts behind.'"
         )
-        max_tokens = 300
+        max_tokens = 400
     else:
         system_prompt = (
             "You are an expert cinematographer and visual director specializing in brand storytelling. "
@@ -169,9 +184,22 @@ async def _build_still_prompt(
             "- NEVER include text, logos, or brand names (these are added in post-processing)\n"
             "- Style: cinematic, professional, 4K quality\n"
             "- Output max 80 words. Plan the sentence so it ends cleanly.\n"
-            "- Output ONLY the prompt, nothing else."
+            "- Output ONLY the prompt, nothing else.\n\n"
+            "SHOT FRAMING (mandatory whenever a person appears in the scene):\n"
+            "- Use medium shot or full-body shot — NEVER a leg-only, waist-down, "
+            "  or back-of-head-only composition unless the angle explicitly calls for it "
+            "  (e.g., CURIOSITY macro of a non-person object).\n"
+            "- Subject's face MUST be fully visible, well-lit, and within frame.\n"
+            "- Camera at eye level — not extreme low-angle, not bird's eye.\n"
+            "- Keep at least 30% headroom above the subject's head.\n\n"
+            "AVOID compositions that produce:\n"
+            "- cropped face, headless figure, decapitated framing, face out of frame\n"
+            "- waist-down only, leg-only shot, back of head only (unless intentional macro)\n"
+            "- distorted anatomy, deformed hands, extra fingers, mutated body\n"
+            "- duplicate faces in a crowd, identical repeating people\n"
+            "- frozen mannequin-like crowd, lifeless static background figures"
         )
-        max_tokens = 400
+        max_tokens = 500
 
     try:
         import anthropic
