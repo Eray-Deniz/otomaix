@@ -105,16 +105,11 @@ async def _build_still_prompt(
         context_parts.append(f"Brand: {brand_name}")
     if brand_description:
         context_parts.append(f"What they do: {brand_description}")
-    # Marka tonu + sektör rehberi sadece text-to-image dalında etkin.
-    # Image-edit modunda ürün resmi referans olduğu için sahnenin minimal kalması
-    # gerekiyor; bu iki bağlam Claude'a sahneye prop ekleme sinyali verip ürün
-    # odağını dağıtıyor. Text-to-image'da ise sahne sıfırdan kurulduğu için
-    # marka DNA'sını taşımak gerekli.
-    if brand_tonality and not image_edit_mode:
+    if brand_tonality:
         context_parts.append(f"Brand tone: {brand_tonality}")
     if sector:
         context_parts.append(f"Industry: {sector}")
-    if sector_guidance and not image_edit_mode:
+    if sector_guidance:
         context_parts.append(
             "Sector styling reference (use for tone/atmosphere cues, not literal text):\n"
             f"{sector_guidance}"
@@ -197,6 +192,8 @@ async def _build_still_prompt(
             "- Describe ONLY: who is in the scene (if anyone), where it takes place, "
             "  lighting, camera angle, mood, atmosphere.\n"
             "- Honor USER'S SCENE REQUEST exactly — every element they named must appear.\n"
+            "- Let brand tone and sector styling cues shape mood and atmosphere only — "
+            "  do NOT copy their wording into the scene as text.\n"
             "- Style: cinematic, photorealistic, vertical 9:16 composition.\n"
             "- NO text, logos, or brand names in the scene (added post-process).\n"
             "- Output max 60 words. End the sentence cleanly.\n"
