@@ -93,37 +93,79 @@ async def _build_still_prompt(
     Ürün tarif edilmez (model resmi zaten görüyor), sadece sahne yazılır.
     Çıktı max 60 kelime — image-edit kısa prompt sever.
     """
-    context_parts = []
-    if user_brief:
-        context_parts.append(
-            "USER'S SCENE REQUEST (highest priority — build the scene around this):\n"
-            f"{user_brief}"
-        )
+    # Stable bağlam (marka + ürün + ürün dokümanları) — aynı marka/ürün için
+    # değişmez, prompt cache'in faydalandığı kısım. RAG chunk'ları burada büyük.
+    stable_parts = []
     if brand_name:
-        context_parts.append(f"Brand: {brand_name}")
+        stable_parts.append(f"Brand: {brand_name}")
     if brand_description:
-        context_parts.append(f"What they do: {brand_description}")
+        stable_parts.append(f"What they do: {brand_description}")
     if sector:
-        context_parts.append(f"Industry: {sector}")
+        stable_parts.append(f"Industry: {sector}")
+    if color_str:
+        stable_parts.append(f"Brand colors: {color_str}")
     if product_info:
         if image_edit_mode:
-            context_parts.append(
+            stable_parts.append(
                 "Product context (the product image will be passed to the model — "
                 "do NOT describe the product itself):\n"
                 f"{product_info}"
             )
         else:
-            context_parts.append(f"Product/service in scene:\n{product_info}")
+            stable_parts.append(f"Product/service in scene:\n{product_info}")
     if product_doc_context:
-        context_parts.append(
+        stable_parts.append(
             f"Product reference docs (use for accurate detail):\n{product_doc_context}"
         )
-    if topic:
-        context_parts.append(f"Video topic: {topic}")
-    if color_str:
-        context_parts.append(f"Brand colors: {color_str}")
 
-    context = "\n\n".join(context_parts)
+    # Dinamik bağlam — her video çağrısında değişir, cache dışında kalır.
+    dynamic_parts = []
+    if user_brief:
+        dynamic_parts.append(
+            "USER'S SCENE REQUEST (highest priority — build the scene around this):\n"
+            f"{user_brief}"
+        )
+    if topic:
+        dynamic_parts.append(f"Video topic: {topic}")
+
+    stable_context = "\n\n".join(stable_parts)
+    dynamic_context = "\n\n".join(dynamic_parts)
+
+    # Ortak kompozisyon kuralları — tüm video tiplerinde geçerli, üründen bağımsız.
+    # PRODUCT_BLOCK sadece ürün/hizmet videosu üretiliyorsa eklenir (genel videoda yok).
+    is_product_video = image_edit_mode or bool(product_info)
+
+    people_block = (
+        "PEOPLE IN THE SCENE (applies whenever any person appears, one or many):\n"
+        "- PRIMARY SUBJECT (the person or people the brief focuses on): "
+        "frame so their face is visible — prefer full-body or medium-wide framing. "
+        "Headless, decapitated, or back-of-head-only framings of the primary "
+        "subject are not acceptable.\n"
+        "- BACKGROUND CROWD / EXTRAS: should look natural and alive "
+        "(not frozen or mannequin-like), but their individual faces do not "
+        "need to be resolved.\n"
+        "- Camera at eye level by default (not extreme low-angle, not bird's eye)."
+    )
+    avoid_block = (
+        "AVOID compositions that produce:\n"
+        "- cropped face, headless figure, face out of frame\n"
+        "- distorted anatomy, deformed hands, extra fingers, mutated body\n"
+        "- duplicate faces in a crowd, identical repeating people\n"
+        "- frozen mannequin-like crowd, lifeless static background figures"
+    )
+    product_block = (
+        "PRODUCT FOCUS (this video is about a specific product or service):\n"
+        "- The product/service MUST remain the primary visual focus — "
+        "prominently positioned, clearly visible, sharply lit.\n"
+        "- Any person in the scene is supporting context, not the focal point.\n"
+        "- Compose so both the product and (if present) the person fit "
+        "naturally in the frame."
+    )
+
+    framing_blocks = [people_block, avoid_block]
+    if is_product_video:
+        framing_blocks.append(product_block)
+    framing_section = "\n\n".join(framing_blocks)
 
     if image_edit_mode:
         system_prompt = (
@@ -142,26 +184,9 @@ async def _build_still_prompt(
             "- NO text, logos, or brand names in the scene (added post-process).\n"
             "- Output max 60 words. End the sentence cleanly.\n"
             "- Output ONLY the prompt, nothing else.\n\n"
-            "SHOT FRAMING (mandatory whenever a person appears in the scene):\n"
-            "- Use medium shot or full-body shot — NEVER a leg-only, waist-down, "
-            "  or back-of-head-only composition.\n"
-            "- Subject's face MUST be fully visible, well-lit, and within frame.\n"
-            "- Camera at eye level — not extreme low-angle, not bird's eye.\n"
-            "- Keep at least 30% headroom above the subject's head.\n"
-            "- If the brief is vague about framing, default to a medium shot "
-            "  showing face and upper body.\n\n"
-            "AVOID compositions that produce:\n"
-            "- cropped face, headless figure, decapitated framing, face out of frame\n"
-            "- waist-down only, leg-only shot, back of head only\n"
-            "- distorted anatomy, deformed hands, extra fingers, mutated body\n"
-            "- duplicate faces in a crowd, identical repeating people\n"
-            "- frozen mannequin-like crowd, lifeless static background figures\n\n"
-            "Example: 'Place this exact product on a stylish woman walking through a "
-            "bustling modern shopping mall, eye-level medium shot capturing her face "
-            "and upper body, polished marble floors, warm golden hour lighting, soft "
-            "bokeh of glowing storefronts behind.'"
+            f"{framing_section}"
         )
-        max_tokens = 400
+        max_tokens = 300
     else:
         system_prompt = (
             "You are an expert cinematographer and visual director specializing in brand storytelling. "
@@ -185,32 +210,34 @@ async def _build_still_prompt(
             "- Style: cinematic, professional, 4K quality\n"
             "- Output max 80 words. Plan the sentence so it ends cleanly.\n"
             "- Output ONLY the prompt, nothing else.\n\n"
-            "SHOT FRAMING (mandatory whenever a person appears in the scene):\n"
-            "- Use medium shot or full-body shot — NEVER a leg-only, waist-down, "
-            "  or back-of-head-only composition unless the angle explicitly calls for it "
-            "  (e.g., CURIOSITY macro of a non-person object).\n"
-            "- Subject's face MUST be fully visible, well-lit, and within frame.\n"
-            "- Camera at eye level — not extreme low-angle, not bird's eye.\n"
-            "- Keep at least 30% headroom above the subject's head.\n\n"
-            "AVOID compositions that produce:\n"
-            "- cropped face, headless figure, decapitated framing, face out of frame\n"
-            "- waist-down only, leg-only shot, back of head only (unless intentional macro)\n"
-            "- distorted anatomy, deformed hands, extra fingers, mutated body\n"
-            "- duplicate faces in a crowd, identical repeating people\n"
-            "- frozen mannequin-like crowd, lifeless static background figures"
+            f"{framing_section}"
         )
-        max_tokens = 500
+        max_tokens = 400
 
     try:
         import anthropic
+
+        # User content 2 bloğa bölünür: stable (cached) + dynamic (uncached).
+        # Stable kısım brand + ürün + RAG dokümanlarını içerir; ürün/hizmet
+        # videolarında 1024 token eşiğini geçince cache hit olur.
+        user_blocks: list[dict] = []
+        if stable_context:
+            user_blocks.append({
+                "type": "text",
+                "text": stable_context,
+                "cache_control": {"type": "ephemeral"},
+            })
+        if dynamic_context:
+            user_blocks.append({"type": "text", "text": dynamic_context})
+        if not user_blocks:
+            user_blocks.append({"type": "text", "text": "Generate a default brand scene."})
 
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
             model="claude-opus-4-7",
             max_tokens=max_tokens,
-            cache_control={"type": "ephemeral"},
             system=system_prompt,
-            messages=[{"role": "user", "content": context}],
+            messages=[{"role": "user", "content": user_blocks}],
         )
         return msg.content[0].text.strip()
     except Exception:
@@ -322,36 +349,32 @@ async def generate_script(
         "Kullanıcı hazır script verdiyse TEMELden yeniden yaz — farklı açıdan anlat."
     )
 
-    # User message — marka bağlamı + konu
-    user_parts = [
-        "=== MARKA BİLGİSİ ===",
-        f"Marka: {brand_name}",
-    ]
+    # Stable bağlam (marka + sektör rehberi + RAG dokümanları) — cache prefix.
+    stable_lines: list[str] = ["=== MARKA BİLGİSİ ===", f"Marka: {brand_name}"]
     if brand_description:
-        user_parts.append(f"Ne yapar: {brand_description}")
+        stable_lines.append(f"Ne yapar: {brand_description}")
     if sector:
-        user_parts.append(f"Sektör: {sector}")
-    user_parts.append(f"Üslup: {tone_tr}")
+        stable_lines.append(f"Sektör: {sector}")
+    stable_lines.append(f"Üslup: {tone_tr}")
     if color_str:
-        user_parts.append(f"Marka renkleri: {color_str}")
+        stable_lines.append(f"Marka renkleri: {color_str}")
     if website_url:
-        user_parts.append(f"Web sitesi: {website_url}")
+        stable_lines.append(f"Web sitesi: {website_url}")
     if hashtag_str:
-        user_parts.append(f"Marka hashtag'leri: {hashtag_str}")
-    user_parts.append("=== MARKA BİLGİSİ SONU ===")
-
+        stable_lines.append(f"Marka hashtag'leri: {hashtag_str}")
+    stable_lines.append("=== MARKA BİLGİSİ SONU ===")
     if sector_guidance:
-        user_parts.append(f"\n=== SEKTÖR REHBERİ ===\n{sector_guidance}\n=== SEKTÖR REHBERİ SONU ===")
-
+        stable_lines.append(f"\n=== SEKTÖR REHBERİ ===\n{sector_guidance}\n=== SEKTÖR REHBERİ SONU ===")
     if rag_context:
-        user_parts.append(f"\n=== MARKA DÖKÜMAN BAĞLAMI ===\n{rag_context}\n=== BAĞLAM SONU ===")
+        stable_lines.append(f"\n=== MARKA DÖKÜMAN BAĞLAMI ===\n{rag_context}\n=== BAĞLAM SONU ===")
+    stable_block = "\n".join(stable_lines)
 
-    user_parts.append(f"\n=== KONU ===\n{prompt}\n=== KONU SONU ===")
-    user_parts.append(
-        "\nBu konuda bir sosyal medya videosu için Türkçe script yaz. "
+    # Dinamik bağlam — konu her video için farklı, cache dışı.
+    dynamic_block = (
+        f"=== KONU ===\n{prompt}\n=== KONU SONU ===\n\n"
+        "Bu konuda bir sosyal medya videosu için Türkçe script yaz. "
         "Her seferinde farklı bir anlatım açısı ve yaratıcı bir giriş kullan."
     )
-    user_msg = "\n".join(user_parts)
 
     try:
         import anthropic
@@ -361,9 +384,18 @@ async def generate_script(
             model="claude-opus-4-7",
             max_tokens=500,
             temperature=1.0,
-            cache_control={"type": "ephemeral"},
             system=system,
-            messages=[{"role": "user", "content": user_msg}],
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": stable_block,
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {"type": "text", "text": dynamic_block},
+                ],
+            }],
         )
         script = msg.content[0].text.strip()
     except Exception:
