@@ -17,23 +17,23 @@ from app.core.security import (
 )
 from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
 from app.models.schemas import (
-    FacelessVideoGenerate,
     OkResponse,
     PostCreate,
     PostGenerate,
     PostUpdate,
+    ShortVideoGenerate,
 )
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context, get_product_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
-from app.services.faceless_video import (
+from app.services.short_video import (
     DEFAULT_MAX_DURATION,
     PLATFORM_MAX_DURATION,
-    SUPPORTED_FACELESS_RATIOS,
+    SUPPORTED_SHORT_VIDEO_RATIOS,
     TURKISH_VOICES,
-    run_faceless_stage1,
-    run_faceless_stage2,
-    run_faceless_video_pipeline,
+    run_short_video_pipeline,
+    run_short_video_stage1,
+    run_short_video_stage2,
 )
 
 router = APIRouter(prefix="/posts", tags=["posts"])
@@ -773,24 +773,32 @@ async def request_approval(
 
 
 @router.post(
-    "/generate-faceless-video",
+    "/generate-short-video",
     response_model=OkResponse,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(limiter(20, 3600))],  # 20/saat (image + video birlikte sayılır)
 )
-async def generate_faceless_video(
-    payload: FacelessVideoGenerate,
+@router.post(
+    "/generate-faceless-video",  # Alias — eski path. PR 3 cleanup'ta silinir.
+    response_model=OkResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limiter(20, 3600))],
+    deprecated=True,
+    include_in_schema=False,
+)
+async def generate_short_video(
+    payload: ShortVideoGenerate,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Faceless video pipeline: script → TTS → fal.ai arka plan videosu."""
+    """Kısa video pipeline: script → TTS → fal.ai arka plan videosu."""
     await assert_brand_owned(db, user, payload.brand_id)
-    if payload.aspect_ratio not in SUPPORTED_FACELESS_RATIOS:
+    if payload.aspect_ratio not in SUPPORTED_SHORT_VIDEO_RATIOS:
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Desteklenmeyen en-boy oranı: '{payload.aspect_ratio}'. "
-                f"Geçerli değerler: {', '.join(SUPPORTED_FACELESS_RATIOS)}"
+                f"Geçerli değerler: {', '.join(SUPPORTED_SHORT_VIDEO_RATIOS)}"
             ),
         )
     await check_plan_limit(user["sub"], "video", db)
@@ -817,7 +825,7 @@ async def generate_faceless_video(
     sector_slug = brand["sector"] or ""
     sector_guidance_text = SECTOR_GUIDANCE.get(sector_slug, "")
 
-    post = await run_faceless_video_pipeline(
+    post = await run_short_video_pipeline(
         brand_id=payload.brand_id,
         prompt=payload.prompt,
         script=payload.script or "",
@@ -847,13 +855,21 @@ async def generate_faceless_video(
 
 
 @router.post(
-    "/generate-faceless-stage1",
+    "/generate-short-video-stage1",
     response_model=OkResponse,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(limiter(60, 3600))],
 )
-async def generate_faceless_stage1(
-    payload: FacelessVideoGenerate,
+@router.post(
+    "/generate-faceless-stage1",  # Alias — eski path. PR 3 cleanup'ta silinir.
+    response_model=OkResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(limiter(60, 3600))],
+    deprecated=True,
+    include_in_schema=False,
+)
+async def generate_short_video_stage1(
+    payload: ShortVideoGenerate,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
@@ -862,12 +878,12 @@ async def generate_faceless_stage1(
     Kota burada düşer (video + post). Onay/Reject endpoint'leri sonra çağrılır.
     """
     await assert_brand_owned(db, user, payload.brand_id)
-    if payload.aspect_ratio not in SUPPORTED_FACELESS_RATIOS:
+    if payload.aspect_ratio not in SUPPORTED_SHORT_VIDEO_RATIOS:
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Desteklenmeyen en-boy oranı: '{payload.aspect_ratio}'. "
-                f"Geçerli değerler: {', '.join(SUPPORTED_FACELESS_RATIOS)}"
+                f"Geçerli değerler: {', '.join(SUPPORTED_SHORT_VIDEO_RATIOS)}"
             ),
         )
     if not (payload.script or "").strip():
@@ -928,7 +944,7 @@ async def generate_faceless_stage1(
                 product_doc_context = ctx
 
     try:
-        stage1 = await run_faceless_stage1(
+        stage1 = await run_short_video_stage1(
             brand_id=payload.brand_id,
             prompt=payload.prompt,
             script=payload.script,
@@ -963,11 +979,18 @@ async def generate_faceless_stage1(
 
 
 @router.post(
-    "/{post_id}/approve-faceless",
+    "/{post_id}/approve-short-video",
     response_model=OkResponse,
     dependencies=[Depends(limiter(30, 3600))],
 )
-async def approve_faceless_video(
+@router.post(
+    "/{post_id}/approve-faceless",  # Alias — eski path. PR 3 cleanup'ta silinir.
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(30, 3600))],
+    deprecated=True,
+    include_in_schema=False,
+)
+async def approve_short_video(
     post_id: UUID,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
@@ -984,7 +1007,7 @@ async def approve_faceless_video(
         )
 
     try:
-        result = await run_faceless_stage2(post_id=post_id, db=db)
+        result = await run_short_video_stage2(post_id=post_id, db=db)
     except (LookupError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
@@ -998,11 +1021,18 @@ async def approve_faceless_video(
 
 
 @router.post(
-    "/{post_id}/reject-faceless",
+    "/{post_id}/reject-short-video",
     response_model=OkResponse,
     dependencies=[Depends(limiter(60, 3600))],
 )
-async def reject_faceless_video(
+@router.post(
+    "/{post_id}/reject-faceless",  # Alias — eski path. PR 3 cleanup'ta silinir.
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(60, 3600))],
+    deprecated=True,
+    include_in_schema=False,
+)
+async def reject_short_video(
     post_id: UUID,
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),

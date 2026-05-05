@@ -4,7 +4,7 @@
 - ImageModelAdapter        → görsel üretimi
 - VideoModelAdapter        → text-to-video
 - ImageToVideoModelAdapter → image-to-video
-- FacelessBackgroundAdapter → faceless video arka plan üretimi
+- ShortVideoBackgroundAdapter → kısa video arka plan üretimi
 - ImageEditModelAdapter    → prompt + reference image(s) → düzenlenmiş görsel (Phase 9)
 
 Aktif model seçimi env var ile yapılır (`settings.IMAGE_MODEL` vb.); default'lar
@@ -190,11 +190,11 @@ def get_active_image_to_video_adapter() -> ImageToVideoModelAdapter:
     return adapter
 
 
-# ─── Faceless Video Background modality ─────────────────────────────────────
+# ─── Short Video Background modality ────────────────────────────────────────
 
 
-class FacelessBackgroundAdapter(Protocol):
-    """Faceless video arka plan üretim modelleri için soyutlama.
+class ShortVideoBackgroundAdapter(Protocol):
+    """Kısa video arka plan üretim modelleri için soyutlama.
 
     requires_still_image: True ise pipeline önce FLUX.2 still üretip
     image_url olarak geçer (Wan i2v gibi 2-aşamalı modeller).
@@ -211,7 +211,7 @@ class FacelessBackgroundAdapter(Protocol):
 
 
 class HunyuanVideoAdapter:
-    """Hunyuan Video faceless background adapter (legacy).
+    """Hunyuan Video kısa video background adapter (legacy).
 
     Text-to-video — FLUX still gerektirmez, audio embed etmez.
     """
@@ -270,19 +270,19 @@ class WanI2VFlashAdapter:
         }
 
 
-FACELESS_BACKGROUND_ADAPTERS: dict[str, FacelessBackgroundAdapter] = {
+SHORT_VIDEO_BACKGROUND_ADAPTERS: dict[str, ShortVideoBackgroundAdapter] = {
     "hunyuan-video": HunyuanVideoAdapter(),
     "wan-i2v-flash": WanI2VFlashAdapter(),
 }
 
 
-def get_active_faceless_background_adapter() -> FacelessBackgroundAdapter:
-    key = (settings.FACELESS_BACKGROUND_MODEL or "wan-i2v-flash").strip()
-    adapter = FACELESS_BACKGROUND_ADAPTERS.get(key)
+def get_active_short_video_background_adapter() -> ShortVideoBackgroundAdapter:
+    key = (settings.SHORT_VIDEO_BACKGROUND_MODEL or "wan-i2v-flash").strip()
+    adapter = SHORT_VIDEO_BACKGROUND_ADAPTERS.get(key)
     if not adapter:
         raise ValueError(
-            f"Unknown FACELESS_BACKGROUND_MODEL: {key!r}. "
-            f"Registered: {sorted(FACELESS_BACKGROUND_ADAPTERS.keys())}"
+            f"Unknown SHORT_VIDEO_BACKGROUND_MODEL: {key!r}. "
+            f"Registered: {sorted(SHORT_VIDEO_BACKGROUND_ADAPTERS.keys())}"
         )
     return adapter
 

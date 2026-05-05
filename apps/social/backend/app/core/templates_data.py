@@ -811,10 +811,10 @@ TEMPLATES["carousel-genel-sablon"] = Template(
 )
 
 
-TEMPLATES["facelessvideo-genel-sablon"] = Template(
-    id="facelessvideo-genel-sablon",
-    name="Faceless Video Şablonu",
-    description="Tek konu/ürün/hizmet için AI sesli faceless video",
+TEMPLATES["shortvideo-genel-sablon"] = Template(
+    id="shortvideo-genel-sablon",
+    name="Kısa Video Şablonu",
+    description="Tek konu/ürün/hizmet için AI sesli kısa video",
     icon="🎬",
     sectors=["*"],
     contentTypes=["video"],
@@ -834,9 +834,8 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
     output=TemplateOutput(aspectRatioSuggestion="9:16"),
     prompt=TemplatePrompt(
         guidance=(
-            "Faceless video şablonu. Tek bir konuyu/ürünü/hizmeti anlatan AI sesli "
-            "kısa video üretir. Video'da insan yüzü görünmez, arka plan soyut/ambient "
-            "sahnelerden oluşur.\n\n"
+            "Kısa video şablonu. Tek bir konuyu/ürünü/hizmeti anlatan AI sesli "
+            "kısa video üretir. Arka plan soyut/ambient sahnelerden oluşur.\n\n"
             "GİRDİ KAYNAĞI: Konu ve vurgular kullanıcının serbest metin alanından "
             "(user_prompt) gelir. Ürün seçilmişse product bağlamı (name, description, "
             "tags) ek olarak kullanılır.\n\n"
@@ -853,7 +852,6 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
             "STILL IMAGE PROMPT (image_prompt için):\n"
             "- Marka renklerini (HEX kodlarıyla) arka plan ve aksan olarak kullan\n"
             "- Logo, metin katmanı, yazı TARIF ETME — bunlar post-process'te eklenir\n"
-            "- İnsan yüzü, el, karakter TARIF ETME — faceless video\n"
             "- Sahne hareketli video'ya uygun olmalı (kamera hareketi düşün)\n\n"
             "SCRIPT yönergesi:\n"
             "- Türkçe, 15-30 saniye arası voiceover script'i\n"
@@ -875,7 +873,26 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
         priority=["user_prompt", "product", "brand_kit", "rag_docs"],
     ),
     defaults=TemplateDefaults(),
-    tags=["genel", "video", "faceless"],
+    tags=["genel", "video"],
+)
+
+
+# Eski şablon — geriye dönük uyumluluk için kayıtlı kalır (geçmiş post webhook'ları için).
+# status="deprecated" → kataloğta gizlenir. PR 3 cleanup'ta silinir.
+TEMPLATES["facelessvideo-genel-sablon"] = Template(
+    id="facelessvideo-genel-sablon",
+    name="Kısa Video Şablonu",
+    description="Tek konu/ürün/hizmet için AI sesli kısa video",
+    icon="🎬",
+    sectors=["*"],
+    contentTypes=["video"],
+    order=3,
+    status="deprecated",
+    formFields=TEMPLATES["shortvideo-genel-sablon"].formFields,
+    output=TEMPLATES["shortvideo-genel-sablon"].output,
+    prompt=TEMPLATES["shortvideo-genel-sablon"].prompt,
+    defaults=TEMPLATES["shortvideo-genel-sablon"].defaults,
+    tags=["genel", "video"],
 )
 
 
@@ -1277,6 +1294,8 @@ def get_all_templates(
     """
     results: list[Template] = []
     for tpl in TEMPLATES.values():
+        if tpl.status == "deprecated":
+            continue
         if sector is not None:
             if sector not in tpl.sectors and "*" not in tpl.sectors:
                 continue

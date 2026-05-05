@@ -62,7 +62,7 @@ INTERNAL_API_KEY=
 
 # Opsiyonel
 OPENAI_API_KEY=          # RAG chunk embedding
-ELEVENLABS_KEY=          # Faceless video TTS (ElevenLabs Flash 2.5)
+ELEVENLABS_KEY=          # Kısa video TTS (ElevenLabs Flash 2.5)
 HEYGEN_API_KEY=          # AI Avatar
 APIFY_API_KEY=           # Instagram rakip analizi
 PADDLE_API_KEY=
@@ -77,7 +77,7 @@ EVDS_API_KEY=            # Layer A finans
 IMAGE_MODEL=flux-2-pro
 VIDEO_MODEL=kling-v3-pro
 IMAGE_TO_VIDEO_MODEL=kling-v25-turbo-pro
-FACELESS_BACKGROUND_MODEL=wan-i2v-flash
+SHORT_VIDEO_BACKGROUND_MODEL=wan-i2v-flash
 IMAGE_EDIT_MODEL=nano-banana-2-edit
 ```
 
@@ -128,7 +128,7 @@ app/
 │   ├── avatar.py              # HeyGen entegrasyonu
 │   ├── competitor_analyzer.py # Website + Instagram analizi
 │   ├── document_processor.py  # PDF/Word/Excel çıkarma + chunking
-│   ├── faceless_video.py      # Script + TTS + video pipeline
+│   ├── short_video.py         # Script + TTS + kısa video pipeline
 │   ├── fal_ai.py              # fal.ai async generation + webhook submit
 │   ├── media_adapters.py      # Protocol-based adapter registry (5 modalite)
 │   ├── media_processor.py     # Logo overlay + text overlay + brand processing

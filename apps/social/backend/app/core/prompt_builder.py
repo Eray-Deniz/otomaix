@@ -273,7 +273,7 @@ def build_dynamic_content(
         parts.append("=== KULLANICI İSTEĞİ SONU ===\n")
 
     # Ürün adı/açıklama/etiketler — template'in formFields listesinde ana_konu yoksa
-    # (ör. faceless video genel şablonu — sadeleştirme amacıyla bu alanlar kaldırıldı)
+    # (ör. kısa video genel şablonu — sadeleştirme amacıyla bu alanlar kaldırıldı)
     # Claude'a ayrı bir ÜRÜN BİLGİSİ bloğu üzerinden iletilir. Image/carousel template'lerinde
     # ana_konu field'ı duruyor → frontend pre-fill üzerinden YAPISAL VERİLER'de gider, burası skip.
     if product:

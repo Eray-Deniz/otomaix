@@ -203,7 +203,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
                         text_overlay_lines = lines
                         text_overlay_position = await detect_optimal_text_position(raw_url)
 
-        # Faceless video: TTS audio'yu FFmpeg ile mux et (loop + ses değiştirme)
+        # Kısa video: TTS audio'yu FFmpeg ile mux et (loop + ses değiştirme)
         audio_url: str | None = None
         subtitle_enabled = False
         intro_position_override: str | None = None

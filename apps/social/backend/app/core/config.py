@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     INTERNAL_API_KEY: str = ""  # n8n → backend servis kimlik doğrulaması
     OPENAI_API_KEY: str = ""    # Opsiyonel — RAG chunk embedding için
-    ELEVENLABS_KEY: str = ""    # Opsiyonel — Faceless video TTS için
+    ELEVENLABS_KEY: str = ""    # Opsiyonel — Kısa video TTS için
     HEYGEN_API_KEY: str = ""    # Opsiyonel — AI Avatar için
     APIFY_API_KEY: str = ""     # Opsiyonel — Instagram rakip analizi için
     PADDLE_API_KEY: str = ""    # Opsiyonel — Paddle ödeme entegrasyonu
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     IMAGE_MODEL: str = "flux-2-pro"  # app.services.media_adapters.IMAGE_ADAPTERS key
     VIDEO_MODEL: str = "kling-v3-pro"  # app.services.media_adapters.VIDEO_ADAPTERS key
     IMAGE_TO_VIDEO_MODEL: str = "kling-v25-turbo-pro"  # app.services.media_adapters.IMAGE_TO_VIDEO_ADAPTERS key
-    FACELESS_BACKGROUND_MODEL: str = "wan-i2v-flash"  # app.services.media_adapters.FACELESS_BACKGROUND_ADAPTERS key
+    SHORT_VIDEO_BACKGROUND_MODEL: str = "wan-i2v-flash"  # app.services.media_adapters.SHORT_VIDEO_BACKGROUND_ADAPTERS key
     # Phase 9 — Image-edit modality (ürün görseli + prompt → düzenlenmiş görsel)
     IMAGE_EDIT_MODEL: str = "nano-banana-2-edit"  # app.services.media_adapters.IMAGE_EDIT_ADAPTERS key
 

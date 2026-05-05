@@ -1,4 +1,4 @@
-"""Faceless Video pipeline: script → TTS → fal.ai background video.
+"""Kısa Video pipeline: script → TTS → fal.ai background video.
 
 Adımlar:
 1. generate_script()  → Claude API ile Türkçe 15-30 saniyelik script
@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.services.media_adapters import (
     IMAGE_ADAPTERS,
     IMAGE_EDIT_ADAPTERS,
-    get_active_faceless_background_adapter,
+    get_active_short_video_background_adapter,
     get_active_image_adapter,
 )
 
@@ -62,12 +62,12 @@ PLATFORM_MAX_DURATION: dict[str, int] = {
 }
 DEFAULT_MAX_DURATION = 30
 
-# Aktif faceless background adapter — modül import'unda bir kez çözülür.
-_faceless_bg_adapter = get_active_faceless_background_adapter()
+# Aktif short video background adapter — modül import'unda bir kez çözülür.
+_short_bg_adapter = get_active_short_video_background_adapter()
 
 # Backward-compat module-level exports
-FAL_VIDEO_MODEL: str = _faceless_bg_adapter.model_id
-SUPPORTED_FACELESS_RATIOS: tuple[str, ...] = tuple(sorted(_faceless_bg_adapter.supported_ratios))
+FAL_VIDEO_MODEL: str = _short_bg_adapter.model_id
+SUPPORTED_SHORT_VIDEO_RATIOS: tuple[str, ...] = tuple(sorted(_short_bg_adapter.supported_ratios))
 WEBHOOK_URL = "https://api.otomaix.com/webhooks/fal"
 
 
@@ -506,7 +506,7 @@ async def generate_background_video(
     audio_url: str = "",
     product_image_url: str = "",
 ) -> str:
-    """fal.ai arka plan videosu üret — aktif FacelessBackgroundAdapter üzerinden.
+    """fal.ai arka plan videosu üret — aktif ShortVideoBackgroundAdapter üzerinden.
 
     2 aşamalı adapters (Wan i2v): FLUX.2 still (still_prompt) üretir,
     sonra Wan'a motion_prompt + image + audio gönderir.
@@ -523,19 +523,19 @@ async def generate_background_video(
     if product_image_url:
         still_url = product_image_url
         prompt_for_model = motion_prompt
-    elif _faceless_bg_adapter.requires_still_image:
+    elif _short_bg_adapter.requires_still_image:
         still_url = await _generate_still_image(still_prompt, aspect_ratio)
         prompt_for_model = motion_prompt
     else:
         prompt_for_model = f"{still_prompt}, {motion_prompt}"
 
-    args = _faceless_bg_adapter.build_args(
+    args = _short_bg_adapter.build_args(
         prompt_for_model, aspect_ratio, duration,
         image_url=still_url, audio_url=audio_url,
     )
 
     handler = await fal_client.submit_async(
-        _faceless_bg_adapter.model_id,
+        _short_bg_adapter.model_id,
         arguments=args,
         webhook_url=WEBHOOK_URL,
     )
@@ -544,7 +544,7 @@ async def generate_background_video(
 
 # ─── Ana pipeline ────────────────────────────────────────────────────────────
 
-async def run_faceless_video_pipeline(
+async def run_short_video_pipeline(
     brand_id: UUID,
     prompt: str,
     voice: str,
@@ -769,19 +769,19 @@ async def _submit_wan_video(
 
     os.environ["FAL_KEY"] = settings.FAL_KEY
 
-    args = _faceless_bg_adapter.build_args(
+    args = _short_bg_adapter.build_args(
         prompt_for_model, aspect_ratio, duration,
         image_url=still_url, audio_url=audio_url,
     )
     handler = await fal_client.submit_async(
-        _faceless_bg_adapter.model_id,
+        _short_bg_adapter.model_id,
         arguments=args,
         webhook_url=WEBHOOK_URL,
     )
     return handler.request_id
 
 
-async def run_faceless_stage1(
+async def run_short_video_stage1(
     brand_id: UUID,
     prompt: str,
     script: str,
@@ -924,7 +924,7 @@ async def run_faceless_stage1(
     }
 
 
-async def run_faceless_stage2(
+async def run_short_video_stage2(
     post_id: UUID,
     db: asyncpg.Connection,
 ) -> dict:
@@ -956,7 +956,7 @@ async def run_faceless_stage2(
     # Wan submission: ürün görseliyse motion-only, Nano Banana 2 ürettiyse motion-only,
     # legacy text-to-video adapter ise birleşik prompt
     motion_prompt = _pick_motion_prompt()
-    if product_image_url or _faceless_bg_adapter.requires_still_image:
+    if product_image_url or _short_bg_adapter.requires_still_image:
         prompt_for_model = motion_prompt
     else:
         prompt_for_model = f"{still_prompt}, {motion_prompt}"

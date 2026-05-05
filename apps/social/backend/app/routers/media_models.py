@@ -1,7 +1,7 @@
 """Phase 7 Sprint 7 — GET /media-models/active endpoint'i.
 
 Aktif fal.ai model registry bilgisi — 4 modalite (image / video /
-image_to_video / faceless_background) için model_id + supported_ratios.
+image_to_video / short_video_background) için model_id + supported_ratios.
 Frontend aspect selector'ı bu endpoint'ten dinamik populate edilir.
 
 Public endpoint (JWT gerekmez) — registry bilgisi hassas değil. 1 saat
@@ -13,10 +13,10 @@ from fastapi import APIRouter, Response
 from app.core.config import settings
 from app.models.schemas import OkResponse
 from app.services.media_adapters import (
-    get_active_faceless_background_adapter,
     get_active_image_adapter,
     get_active_image_edit_adapter,
     get_active_image_to_video_adapter,
+    get_active_short_video_background_adapter,
     get_active_video_adapter,
 )
 
@@ -35,8 +35,14 @@ async def get_active_media_models(response: Response):
     image = get_active_image_adapter()
     video = get_active_video_adapter()
     i2v = get_active_image_to_video_adapter()
-    faceless = get_active_faceless_background_adapter()
+    short_bg = get_active_short_video_background_adapter()
     image_edit = get_active_image_edit_adapter()
+
+    short_bg_payload = {
+        "key": settings.SHORT_VIDEO_BACKGROUND_MODEL,
+        "model_id": short_bg.model_id,
+        "supported_ratios": sorted(short_bg.supported_ratios),
+    }
 
     return OkResponse(
         data={
@@ -55,11 +61,9 @@ async def get_active_media_models(response: Response):
                 "model_id": i2v.model_id,
                 "supported_ratios": None,
             },
-            "faceless_background": {
-                "key": settings.FACELESS_BACKGROUND_MODEL,
-                "model_id": faceless.model_id,
-                "supported_ratios": sorted(faceless.supported_ratios),
-            },
+            "short_video_background": short_bg_payload,
+            # Geçici alias — eski frontend bundle'ları için. PR 3'te silinir.
+            "faceless_background": short_bg_payload,
             "image_edit": {
                 "key": settings.IMAGE_EDIT_MODEL,
                 "model_id": image_edit.model_id,

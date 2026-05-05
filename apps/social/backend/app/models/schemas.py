@@ -183,7 +183,7 @@ class PostGenerate(BaseModel):
     product_id: UUID | None = None
 
 
-class FacelessVideoGenerate(BaseModel):
+class ShortVideoGenerate(BaseModel):
     brand_id: UUID
     prompt: str
     script: str = ""

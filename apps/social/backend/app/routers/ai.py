@@ -353,7 +353,7 @@ async def generate_script_endpoint(
     db: asyncpg.Connection = Depends(get_db),
 ):
     """Claude ile Türkçe video scripti üret."""
-    from app.services.faceless_video import generate_script
+    from app.services.short_video import generate_script
 
     brand = await db.fetchrow(
         "SELECT name, sector, brand_kit FROM social.brands WHERE id = $1", payload.brand_id

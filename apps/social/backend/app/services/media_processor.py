@@ -432,7 +432,7 @@ async def add_text_overlay(
         return None
 
 
-# ─── Faceless Video: loop + audio mux ────────────────────────────────────────
+# ─── Kısa Video: loop + audio mux ────────────────────────────────────────────
 
 async def loop_and_mux_audio(
     video_url: str,
@@ -835,7 +835,7 @@ async def apply_brand_processing(
     intro_video = brand_kit.get("intro_video", {})
 
     is_image = content_type in ("image", "carousel")
-    is_video = content_type in ("video", "faceless_video", "ugc_video")
+    is_video = content_type in ("video", "short_video", "ugc_video")
 
     # Logo overlay — sadece görseller için
     logo_bbox: tuple[int, int, int, int] | None = None
@@ -878,7 +878,7 @@ async def apply_brand_processing(
         if text_processed:
             final_url = text_processed
 
-    # Faceless video: loop + audio mux — intro/outro'dan ÖNCE
+    # Kısa video: loop + audio mux — intro/outro'dan ÖNCE
     if is_video and audio_url:
         muxed = await loop_and_mux_audio(
             video_url=final_url,
