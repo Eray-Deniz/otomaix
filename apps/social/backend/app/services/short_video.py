@@ -83,6 +83,8 @@ async def _build_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
+    brand_tonality: str = "",
+    sector_guidance: str = "",
 ) -> str:
     """Sahne prompt'u üret (Claude Opus).
 
@@ -103,8 +105,15 @@ async def _build_still_prompt(
         context_parts.append(f"Brand: {brand_name}")
     if brand_description:
         context_parts.append(f"What they do: {brand_description}")
+    if brand_tonality:
+        context_parts.append(f"Brand tone: {brand_tonality}")
     if sector:
         context_parts.append(f"Industry: {sector}")
+    if sector_guidance:
+        context_parts.append(
+            "Sector styling reference (use for tone/atmosphere cues, not literal text):\n"
+            f"{sector_guidance}"
+        )
     if product_info:
         if image_edit_mode:
             context_parts.append(
@@ -161,6 +170,15 @@ async def _build_still_prompt(
         framing_blocks.append(product_block)
     framing_section = "\n\n".join(framing_blocks)
 
+    no_fabrication_block = (
+        "DO NOT FABRICATE SCENE ELEMENTS:\n"
+        "- No fake awards, trophies, certificates, medals, or badges in the scene.\n"
+        "- No fake testimonials, mock customer quotes, or staged review screens.\n"
+        "- No invented specs (numbers, percentages, ratings) shown as scene props.\n"
+        "- Only depict elements that come from the user's brief, product info, "
+        "  or sector styling cues. If something is not mentioned, don't add it."
+    )
+
     if image_edit_mode:
         system_prompt = (
             "You are an expert cinematographer writing prompts for an image-edit AI model "
@@ -174,10 +192,13 @@ async def _build_still_prompt(
             "- Describe ONLY: who is in the scene (if anyone), where it takes place, "
             "  lighting, camera angle, mood, atmosphere.\n"
             "- Honor USER'S SCENE REQUEST exactly — every element they named must appear.\n"
+            "- Let brand tone and sector styling cues shape mood and atmosphere only — "
+            "  do NOT copy their wording into the scene as text.\n"
             "- Style: cinematic, photorealistic, vertical 9:16 composition.\n"
             "- NO text, logos, or brand names in the scene (added post-process).\n"
             "- Output max 60 words. End the sentence cleanly.\n"
             "- Output ONLY the prompt, nothing else.\n\n"
+            f"{no_fabrication_block}\n\n"
             f"{framing_section}"
         )
         max_tokens = 300
@@ -200,10 +221,13 @@ async def _build_still_prompt(
             "Rules:\n"
             "- Describe what the camera SEES: subjects, environments, surfaces, lighting, atmosphere\n"
             "- Include brand colors naturally (lighting, surfaces, props, accent tones)\n"
+            "- Let brand tone and sector styling cues shape mood and atmosphere only — "
+            "  do NOT copy their wording into the scene as text.\n"
             "- NEVER include text, logos, or brand names (these are added in post-processing)\n"
             "- Style: cinematic, professional, 4K quality\n"
             "- Output max 80 words. Plan the sentence so it ends cleanly.\n"
             "- Output ONLY the prompt, nothing else.\n\n"
+            f"{no_fabrication_block}\n\n"
             f"{framing_section}"
         )
         max_tokens = 400
@@ -688,6 +712,8 @@ async def run_short_video_pipeline(
             brand_description=brand_description,
             sector=sector,
             color_str=color_str,
+            brand_tonality=brand_kit.get("tonality", ""),
+            sector_guidance=sector_guidance,
         )
 
     motion_prompt = _pick_motion_prompt()
@@ -731,6 +757,8 @@ async def _resolve_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
+    brand_tonality: str = "",
+    sector_guidance: str = "",
 ) -> str:
     """image_prompt'u still_prompt'a dönüştür.
 
@@ -762,6 +790,8 @@ async def _resolve_still_prompt(
             product_info=product_info,
             product_doc_context=product_doc_context,
             image_edit_mode=True,
+            brand_tonality=brand_tonality,
+            sector_guidance=sector_guidance,
         )
 
     if user_brief.strip():
@@ -774,6 +804,8 @@ async def _resolve_still_prompt(
             user_brief=user_brief.strip(),
             product_info=product_info,
             product_doc_context=product_doc_context,
+            brand_tonality=brand_tonality,
+            sector_guidance=sector_guidance,
         )
 
     still_prompt = (prompt or "").strip()
@@ -787,6 +819,8 @@ async def _resolve_still_prompt(
         color_str=color_str,
         product_info=product_info,
         product_doc_context=product_doc_context,
+        brand_tonality=brand_tonality,
+        sector_guidance=sector_guidance,
     )
 
 
@@ -833,6 +867,8 @@ async def run_short_video_stage1(
     user_brief: str = "",
     product_info: str = "",
     product_doc_context: str = "",
+    brand_tonality: str = "",
+    sector_guidance: str = "",
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
@@ -885,6 +921,8 @@ async def run_short_video_stage1(
         product_info=product_info,
         product_doc_context=product_doc_context,
         image_edit_mode=use_image_edit,
+        brand_tonality=brand_tonality,
+        sector_guidance=sector_guidance,
     )
     template_fields["still_prompt"] = still_prompt
 

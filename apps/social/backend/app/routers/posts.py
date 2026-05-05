@@ -943,6 +943,10 @@ async def generate_short_video_stage1(
             if ctx:
                 product_doc_context = ctx
 
+    sector_slug = brand["sector"] or ""
+    sector_guidance_text = SECTOR_GUIDANCE.get(sector_slug, "")
+    brand_tonality = brand_kit.get("tonality", "") or ""
+
     try:
         stage1 = await run_short_video_stage1(
             brand_id=payload.brand_id,
@@ -962,6 +966,8 @@ async def generate_short_video_stage1(
             user_brief=payload.visual_brief or "",
             product_info=product_info,
             product_doc_context=product_doc_context,
+            brand_tonality=brand_tonality,
+            sector_guidance=sector_guidance_text,
             db=db,
         )
     except RuntimeError as exc:
