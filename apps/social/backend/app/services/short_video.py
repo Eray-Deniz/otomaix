@@ -269,6 +269,7 @@ _MOTION_PROMPTS = [
     "Slow cinematic camera push-in, soft ambient lighting, gentle particle motion, seamless loop",
     "Smooth lateral dolly shot, warm natural light, subtle depth-of-field shift",
     "Gentle orbit around subject, golden hour lighting, cinematic bokeh",
+    "Slow vertical tilt revealing the scene, soft diffused lighting, atmospheric haze",
     "Parallax effect with foreground blur, cool-tone ambient light, elegant composition",
     "Slow zoom-out revealing context, dramatic rim lighting, film grain texture",
     "Steady tracking shot with subtle camera sway, natural daylight, shallow focus",
