@@ -447,7 +447,7 @@ function IcerikOlusturInner() {
     setStep(3)
 
     if (contentType === 'video') {
-      // Faceless video Stage 1 — TTS + FLUX.2 still (kota burada düşer)
+      // Faceless video Stage 1 — TTS + Nano Banana 2 still (kota burada düşer)
       // Stage 2 (Wan I2V) kullanıcı önizlemeyi onayladıktan sonra ayrı endpoint ile tetiklenir.
       const isTemplateMode = mode === 'template' && selectedTemplate
       const videoTemplateFields = {

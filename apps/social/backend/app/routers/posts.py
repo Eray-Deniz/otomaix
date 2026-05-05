@@ -857,7 +857,7 @@ async def generate_faceless_stage1(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Stage 1: post oluştur (status='awaiting_approval') + TTS + FLUX.2 still.
+    """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
     Kota burada düşer (video + post). Onay/Reject endpoint'leri sonra çağrılır.
     """

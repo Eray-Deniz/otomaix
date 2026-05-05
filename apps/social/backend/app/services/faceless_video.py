@@ -1,7 +1,7 @@
 """Faceless Video pipeline: script → TTS → fal.ai background video.
 
 Adımlar:
-1. generate_script()  → Claude API ile Türkçe 30-60 saniyelik script
+1. generate_script()  → Claude API ile Türkçe 15-30 saniyelik script
 2. text_to_speech()   → ElevenLabs TTS API → R2'ye mp3
 3. generate_video()   → fal.ai ile arka plan videosu (async, webhook)
 
@@ -801,7 +801,7 @@ async def run_faceless_stage1(
     product_info: str = "",
     product_doc_context: str = "",
 ) -> dict:
-    """Stage 1: post oluştur (status='awaiting_approval') + TTS + FLUX.2 still.
+    """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
     Wan I2V tetiklenmez — kullanıcı 4.3'te onaylayınca Stage 2 çalışır.
     Returns: {post_id, script, audio_url, still_image_url, duration_estimate, ...}
@@ -953,7 +953,7 @@ async def run_faceless_stage2(
     if not still_image_url:
         raise ValueError("Stage 1 still görseli kaydedilmemiş — Stage 2 çalıştırılamaz")
 
-    # Wan submission: ürün görseliyse motion-only, FLUX.2 ürettiyse motion-only,
+    # Wan submission: ürün görseliyse motion-only, Nano Banana 2 ürettiyse motion-only,
     # legacy text-to-video adapter ise birleşik prompt
     motion_prompt = _pick_motion_prompt()
     if product_image_url or _faceless_bg_adapter.requires_still_image:

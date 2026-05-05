@@ -856,7 +856,7 @@ TEMPLATES["facelessvideo-genel-sablon"] = Template(
             "- İnsan yüzü, el, karakter TARIF ETME — faceless video\n"
             "- Sahne hareketli video'ya uygun olmalı (kamera hareketi düşün)\n\n"
             "SCRIPT yönergesi:\n"
-            "- Türkçe, 30-60 saniye arası voiceover script'i\n"
+            "- Türkçe, 15-30 saniye arası voiceover script'i\n"
             "- Hook cümlesiyle başla (ilk 3 saniye kritik)\n"
             "- Kısa, net cümleler — TTS'in doğal okuyacağı yapıda\n"
             "- Abartılı iddia kullanma, bilgide olmayan şey uydurma\n\n"

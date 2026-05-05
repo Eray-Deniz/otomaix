@@ -251,14 +251,14 @@ def _build_output_format_instruction(
     slide_count = int((template_fields or {}).get("slide_count", 5)) if is_carousel else 0
 
     if is_video:
-        image_schema = '"image_prompt": "English scene description for still image (fal.ai FLUX.2 Pro) — this becomes the video background"'
-        script_schema = ',\n  "script": "Türkçe voiceover script metni (30-60 saniye)"'
+        image_schema = '"image_prompt": "English scene description for still image (fal.ai Nano Banana 2) — this becomes the video background"'
+        script_schema = ',\n  "script": "Türkçe voiceover script metni (15-30 saniye)"'
         image_note = (
             "ÖNEMLİ: image_prompt İngilizce yazılmalı (still image → video arka planı olacak).\n"
             "script Türkçe yazılmalı — TTS ile seslendirilecek voiceover metni.\n"
             "Caption'lar ve hashtag'ler Türkçe olmalı.\n\n"
             "SCRIPT KURALLARI:\n"
-            "- 30-60 saniye arası (yaklaşık 65-130 kelime)\n"
+            "- 15-30 saniye arası (yaklaşık 32-65 kelime)\n"
             "- Hook cümlesiyle başla (ilk 3 saniye kritik)\n"
             "- Kısa, net cümleler — TTS'in doğal okuyacağı yapıda\n"
             "- Bilgide olmayan şey uydurma\n"
