@@ -52,7 +52,7 @@ type TemplatePhase = 'pick' | 'form' | 'caption'
 // `contentType='image'` + "Devam Et" tıklanınca otomatik seçilir; şablon grid'i gösterilmez.
 const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'
 const DEFAULT_CAROUSEL_TEMPLATE_ID = 'carousel-genel-sablon'
-const DEFAULT_VIDEO_TEMPLATE_ID = 'facelessvideo-genel-sablon'
+const DEFAULT_VIDEO_TEMPLATE_ID = 'shortvideo-genel-sablon'
 
 interface CarouselSlide {
   order: number
@@ -69,7 +69,7 @@ interface GeneratedPost {
   hashtags?: string[]
   slides?: CarouselSlide[]
   slide_count?: number
-  // Faceless video
+  // Kısa video
   script?: string
   audio_url?: string
   still_image_url?: string
@@ -88,7 +88,7 @@ interface Holiday {
 const CONTENT_TYPES = [
   { id: 'image' as ContentType, label: 'Görsel', icon: '🖼️' },
   { id: 'carousel' as ContentType, label: 'Carousel', icon: '📱' },
-  { id: 'video' as ContentType, label: 'Video (Faceless)', icon: '🎬' },
+  { id: 'video' as ContentType, label: 'Kısa Video', icon: '🎬' },
   { id: 'special_day' as ContentType, label: 'Özel Gün', icon: '🎉' },
   { id: 'quote' as ContentType, label: 'Alıntı', icon: '💬' },
 ]
@@ -206,7 +206,7 @@ function IcerikOlusturInner() {
   // true/false = bu post için açıkça override et.
   const [useLogoOverlay, setUseLogoOverlay] = useState<boolean | null>(null)
 
-  // Faceless video — Step 2
+  // Kısa video — Step 2
   const [script, setScript] = useState('')
   const [voices, setVoices] = useState<TurkishVoice[]>([])
   const [selectedVoice, setSelectedVoice] = useState('qSeXEcewz7tA0Q0qk9fH')
@@ -237,7 +237,7 @@ function IcerikOlusturInner() {
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
   const [scheduleAt, setScheduleAt] = useState('')
 
-  // Faceless video Stage 1/2 — onay sayfasında düzenleme yapıldı mı (banner için)
+  // Kısa video Stage 1/2 — onay sayfasında düzenleme yapıldı mı (banner için)
   const [stage1Edited, setStage1Edited] = useState(false)
   const [approving, setApproving] = useState(false)
   const [rejecting, setRejecting] = useState(false)
@@ -363,7 +363,7 @@ function IcerikOlusturInner() {
 
   const availableAspectRatios = useMemo(() => {
     const supported = contentType === 'video'
-      ? mediaModels?.faceless_background.supported_ratios
+      ? mediaModels?.short_video_background.supported_ratios
       : mediaModels?.image.supported_ratios
     if (!supported) return ASPECT_RATIOS
     const supportedSet = new Set(supported)
@@ -447,14 +447,14 @@ function IcerikOlusturInner() {
     setStep(3)
 
     if (contentType === 'video') {
-      // Faceless video Stage 1 — TTS + Nano Banana 2 still (kota burada düşer)
+      // Kısa video Stage 1 — TTS + Nano Banana 2 still (kota burada düşer)
       // Stage 2 (Wan I2V) kullanıcı önizlemeyi onayladıktan sonra ayrı endpoint ile tetiklenir.
       const isTemplateMode = mode === 'template' && selectedTemplate
       const videoTemplateFields = {
         ...(isTemplateMode ? templateFields : {}),
         subtitle_enabled: subtitleEnabled,
       }
-      const res = await api.post<GeneratedPost>('/posts/generate-faceless-stage1', {
+      const res = await api.post<GeneratedPost>('/posts/generate-short-video-stage1', {
         brand_id: currentBrand.id,
         prompt: prompt.trim() || captionData!.image_prompt || '',
         script: script.trim(),
@@ -666,12 +666,12 @@ function IcerikOlusturInner() {
     }
   }
 
-  // Faceless video Stage 2: kullanıcı Stage 1 önizlemesini onayladı → Wan I2V tetikle
-  async function handleApproveFaceless() {
+  // Kısa video Stage 2: kullanıcı Stage 1 önizlemesini onayladı → Wan I2V tetikle
+  async function handleApproveShortVideo() {
     if (!generatedPost?.post_id || approving) return
     setApproving(true)
     const res = await api.post<{ post_id: string; fal_job_id: string; status: string }>(
-      `/posts/${generatedPost.post_id}/approve-faceless`,
+      `/posts/${generatedPost.post_id}/approve-short-video`,
       {}
     )
     setApproving(false)
@@ -679,7 +679,7 @@ function IcerikOlusturInner() {
       // Status='generating' → mevcut polling useEffect Wan I2V çıktısını çekecek
       setGeneratedPost((prev) => prev ? { ...prev, status: 'generating' } : prev)
       setStep(4)
-      toast.success('Video render ediliyor — bu 1-3 dakika sürebilir')
+      toast.success('Video üretiliyor — bu 1-3 dakika sürebilir')
     } else if (!res.success && res.error === 'rate_limit') {
       toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
     } else {
@@ -687,8 +687,8 @@ function IcerikOlusturInner() {
     }
   }
 
-  // Faceless video reject: post DB'den silinir, R2 audio temizlenir, kota refund YOK
-  async function handleRejectFaceless() {
+  // Kısa video reject: post DB'den silinir, R2 audio temizlenir, kota refund YOK
+  async function handleRejectShortVideo() {
     if (rejecting) return
     if (!generatedPost?.post_id) {
       // Henüz Stage 1 başlamadıysa direkt geri dön
@@ -696,7 +696,7 @@ function IcerikOlusturInner() {
       return
     }
     setRejecting(true)
-    const res = await api.post(`/posts/${generatedPost.post_id}/reject-faceless`, {})
+    const res = await api.post(`/posts/${generatedPost.post_id}/reject-short-video`, {})
     setRejecting(false)
     if (res.success) {
       toast.message('Üretim iptal edildi (kota geri verilmedi)')
@@ -1912,7 +1912,7 @@ function IcerikOlusturInner() {
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             <button
-              onClick={handleRejectFaceless}
+              onClick={handleRejectShortVideo}
               disabled={generating || approving || rejecting}
               className="text-xs text-blue-500 hover:underline disabled:text-gray-300"
             >
@@ -2014,7 +2014,7 @@ function IcerikOlusturInner() {
                 <Button
                   variant="outline"
                   className="flex-1 gap-2"
-                  onClick={handleRejectFaceless}
+                  onClick={handleRejectShortVideo}
                   disabled={approving || rejecting}
                 >
                   {rejecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
@@ -2022,7 +2022,7 @@ function IcerikOlusturInner() {
                 </Button>
                 <Button
                   className="flex-1 gap-2"
-                  onClick={handleApproveFaceless}
+                  onClick={handleApproveShortVideo}
                   disabled={approving || rejecting}
                 >
                   {approving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}

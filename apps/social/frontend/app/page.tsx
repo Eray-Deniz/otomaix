@@ -9,7 +9,7 @@ const FEATURES = [
   },
   {
     icon: '🎬',
-    title: 'Faceless Video',
+    title: 'Kısa Video',
     desc: 'Yüz göstermeden profesyonel video içerikleri. Türkçe seslendirme desteğiyle hazır.',
   },
   {

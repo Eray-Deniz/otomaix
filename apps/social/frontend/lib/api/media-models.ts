@@ -15,7 +15,7 @@ export interface ActiveMediaModels {
   image: ModalityConfig
   video: ModalityConfig
   image_to_video: ModalityConfig
-  faceless_background: ModalityConfig
+  short_video_background: ModalityConfig
 }
 
 export async function fetchActiveMediaModels(): Promise<ActiveMediaModels | null> {
