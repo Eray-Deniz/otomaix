@@ -26,10 +26,10 @@ from app.services.media_adapters import (
 TURKISH_VOICES = [
     {"id": "qSeXEcewz7tA0Q0qk9fH", "name": "Buse (Kadın)",   "gender": "female"},
     {"id": "EST9Ui6982FZPSi7gCHi", "name": "Zeynep (Kadın)", "gender": "female"},
-    {"id": "TASY7VCrU29rEMoYFTGG", "name": "Eylül (Kadın)",  "gender": "female"},
+    {"id": "kPzsL2i3teMYv0FxEYQ6", "name": "Eylül (Kadın)",  "gender": "female"},
     {"id": "IuRRIAcbQK5AQk1XevPj", "name": "Emre (Erkek)",   "gender": "male"},
     {"id": "ctoYieZ4J7WwcdhujpMq", "name": "Kaan (Erkek)",   "gender": "male"},
-    {"id": "J17lijyP1BHYcM7ld0Rg", "name": "Ahmet (Erkek)",  "gender": "male"},
+    {"id": "UgBBYS2sOqTuMpoF3BR0", "name": "Ahmet (Erkek)",  "gender": "male"},
 ]
 
 DEFAULT_VOICE = "qSeXEcewz7tA0Q0qk9fH"
