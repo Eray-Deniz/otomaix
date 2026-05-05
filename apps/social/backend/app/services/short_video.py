@@ -93,43 +93,37 @@ async def _build_still_prompt(
     Ürün tarif edilmez (model resmi zaten görüyor), sadece sahne yazılır.
     Çıktı max 60 kelime — image-edit kısa prompt sever.
     """
-    # Stable bağlam (marka + ürün + ürün dokümanları) — aynı marka/ürün için
-    # değişmez, prompt cache'in faydalandığı kısım. RAG chunk'ları burada büyük.
-    stable_parts = []
+    context_parts = []
+    if user_brief:
+        context_parts.append(
+            "USER'S SCENE REQUEST (highest priority — build the scene around this):\n"
+            f"{user_brief}"
+        )
     if brand_name:
-        stable_parts.append(f"Brand: {brand_name}")
+        context_parts.append(f"Brand: {brand_name}")
     if brand_description:
-        stable_parts.append(f"What they do: {brand_description}")
+        context_parts.append(f"What they do: {brand_description}")
     if sector:
-        stable_parts.append(f"Industry: {sector}")
-    if color_str:
-        stable_parts.append(f"Brand colors: {color_str}")
+        context_parts.append(f"Industry: {sector}")
     if product_info:
         if image_edit_mode:
-            stable_parts.append(
+            context_parts.append(
                 "Product context (the product image will be passed to the model — "
                 "do NOT describe the product itself):\n"
                 f"{product_info}"
             )
         else:
-            stable_parts.append(f"Product/service in scene:\n{product_info}")
+            context_parts.append(f"Product/service in scene:\n{product_info}")
     if product_doc_context:
-        stable_parts.append(
+        context_parts.append(
             f"Product reference docs (use for accurate detail):\n{product_doc_context}"
         )
-
-    # Dinamik bağlam — her video çağrısında değişir, cache dışında kalır.
-    dynamic_parts = []
-    if user_brief:
-        dynamic_parts.append(
-            "USER'S SCENE REQUEST (highest priority — build the scene around this):\n"
-            f"{user_brief}"
-        )
     if topic:
-        dynamic_parts.append(f"Video topic: {topic}")
+        context_parts.append(f"Video topic: {topic}")
+    if color_str:
+        context_parts.append(f"Brand colors: {color_str}")
 
-    stable_context = "\n\n".join(stable_parts)
-    dynamic_context = "\n\n".join(dynamic_parts)
+    context = "\n\n".join(context_parts)
 
     # Ortak kompozisyon kuralları — tüm video tiplerinde geçerli, üründen bağımsız.
     # PRODUCT_BLOCK sadece ürün/hizmet videosu üretiliyorsa eklenir (genel videoda yok).
@@ -217,27 +211,12 @@ async def _build_still_prompt(
     try:
         import anthropic
 
-        # User content 2 bloğa bölünür: stable (cached) + dynamic (uncached).
-        # Stable kısım brand + ürün + RAG dokümanlarını içerir; ürün/hizmet
-        # videolarında 1024 token eşiğini geçince cache hit olur.
-        user_blocks: list[dict] = []
-        if stable_context:
-            user_blocks.append({
-                "type": "text",
-                "text": stable_context,
-                "cache_control": {"type": "ephemeral"},
-            })
-        if dynamic_context:
-            user_blocks.append({"type": "text", "text": dynamic_context})
-        if not user_blocks:
-            user_blocks.append({"type": "text", "text": "Generate a default brand scene."})
-
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
         msg = client.messages.create(
             model="claude-opus-4-7",
             max_tokens=max_tokens,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_blocks}],
+            messages=[{"role": "user", "content": context}],
         )
         return msg.content[0].text.strip()
     except Exception:
@@ -349,32 +328,36 @@ async def generate_script(
         "Kullanıcı hazır script verdiyse TEMELden yeniden yaz — farklı açıdan anlat."
     )
 
-    # Stable bağlam (marka + sektör rehberi + RAG dokümanları) — cache prefix.
-    stable_lines: list[str] = ["=== MARKA BİLGİSİ ===", f"Marka: {brand_name}"]
+    # User message — marka bağlamı + konu
+    user_parts = [
+        "=== MARKA BİLGİSİ ===",
+        f"Marka: {brand_name}",
+    ]
     if brand_description:
-        stable_lines.append(f"Ne yapar: {brand_description}")
+        user_parts.append(f"Ne yapar: {brand_description}")
     if sector:
-        stable_lines.append(f"Sektör: {sector}")
-    stable_lines.append(f"Üslup: {tone_tr}")
+        user_parts.append(f"Sektör: {sector}")
+    user_parts.append(f"Üslup: {tone_tr}")
     if color_str:
-        stable_lines.append(f"Marka renkleri: {color_str}")
+        user_parts.append(f"Marka renkleri: {color_str}")
     if website_url:
-        stable_lines.append(f"Web sitesi: {website_url}")
+        user_parts.append(f"Web sitesi: {website_url}")
     if hashtag_str:
-        stable_lines.append(f"Marka hashtag'leri: {hashtag_str}")
-    stable_lines.append("=== MARKA BİLGİSİ SONU ===")
-    if sector_guidance:
-        stable_lines.append(f"\n=== SEKTÖR REHBERİ ===\n{sector_guidance}\n=== SEKTÖR REHBERİ SONU ===")
-    if rag_context:
-        stable_lines.append(f"\n=== MARKA DÖKÜMAN BAĞLAMI ===\n{rag_context}\n=== BAĞLAM SONU ===")
-    stable_block = "\n".join(stable_lines)
+        user_parts.append(f"Marka hashtag'leri: {hashtag_str}")
+    user_parts.append("=== MARKA BİLGİSİ SONU ===")
 
-    # Dinamik bağlam — konu her video için farklı, cache dışı.
-    dynamic_block = (
-        f"=== KONU ===\n{prompt}\n=== KONU SONU ===\n\n"
-        "Bu konuda bir sosyal medya videosu için Türkçe script yaz. "
+    if sector_guidance:
+        user_parts.append(f"\n=== SEKTÖR REHBERİ ===\n{sector_guidance}\n=== SEKTÖR REHBERİ SONU ===")
+
+    if rag_context:
+        user_parts.append(f"\n=== MARKA DÖKÜMAN BAĞLAMI ===\n{rag_context}\n=== BAĞLAM SONU ===")
+
+    user_parts.append(f"\n=== KONU ===\n{prompt}\n=== KONU SONU ===")
+    user_parts.append(
+        "\nBu konuda bir sosyal medya videosu için Türkçe script yaz. "
         "Her seferinde farklı bir anlatım açısı ve yaratıcı bir giriş kullan."
     )
+    user_msg = "\n".join(user_parts)
 
     try:
         import anthropic
@@ -385,17 +368,7 @@ async def generate_script(
             max_tokens=500,
             temperature=1.0,
             system=system,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": stable_block,
-                        "cache_control": {"type": "ephemeral"},
-                    },
-                    {"type": "text", "text": dynamic_block},
-                ],
-            }],
+            messages=[{"role": "user", "content": user_msg}],
         )
         script = msg.content[0].text.strip()
     except Exception:
