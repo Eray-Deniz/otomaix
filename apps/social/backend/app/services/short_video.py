@@ -144,31 +144,30 @@ async def _build_still_prompt(
     is_product_video = image_edit_mode or bool(product_info)
 
     people_block = (
-        "PEOPLE SAFETY (when any person appears):\n"
-        "- No distorted anatomy, deformed hands, extra fingers, or mutated bodies "
-        "in any visible body part.\n"
-        "- No duplicate faces in a crowd, no identical repeating people, no frozen "
-        "mannequin-like extras.\n"
-        "- Background crowd should look natural and alive."
+        "PEOPLE IN THE SCENE (applies whenever any person appears, one or many):\n"
+        "- PRIMARY SUBJECT (the person or people the brief focuses on): "
+        "frame so their face is visible — prefer full-body or medium-wide framing. "
+        "Headless, decapitated, or back-of-head-only framings of the primary "
+        "subject are not acceptable.\n"
+        "- BACKGROUND CROWD / EXTRAS: should look natural and alive "
+        "(not frozen or mannequin-like), but their individual faces do not "
+        "need to be resolved.\n"
+        "- Camera at eye level by default (not extreme low-angle, not bird's eye)."
     )
     avoid_block = (
-        "AVOID:\n"
-        "- Fake awards, trophies, certificates, or testimonial overlays as scene props\n"
-        "- Text or sign overlays (added post-process)"
+        "AVOID compositions that produce:\n"
+        "- cropped face, headless figure, face out of frame\n"
+        "- distorted anatomy, deformed hands, extra fingers, mutated body\n"
+        "- duplicate faces in a crowd, identical repeating people\n"
+        "- frozen mannequin-like crowd, lifeless static background figures"
     )
     product_block = (
-        "PRODUCT IS THE VISUAL HERO (this video is about a specific product or service):\n"
-        "- The composition exists to showcase the product. Camera angle, framing, "
-        "and lighting serve product visibility first.\n"
-        "- Pick camera angle so the product becomes the visual focal point:\n"
-        "  - Identify what part of the product matters most (where it's worn, used, "
-        "or seen) — make that part dominate the frame.\n"
-        "  - Match camera distance to product scale: small/wearable → close; "
-        "medium/handheld → mid; furniture/large → wide enough to show full form.\n"
-        "  - Examples: footwear → low-angle close to feet; furniture → eye-level "
-        "wide; food → top-down or 3/4 close.\n"
-        "- Person (if any) is context, not subject — partial body framing "
-        "(legs walking, body holding) is fine."
+        "PRODUCT FOCUS (this video is about a specific product or service):\n"
+        "- The product/service MUST remain the primary visual focus — "
+        "prominently positioned, clearly visible, sharply lit.\n"
+        "- Any person in the scene is supporting context, not the focal point.\n"
+        "- Compose so both the product and (if present) the person fit "
+        "naturally in the frame."
     )
 
     framing_blocks = [people_block, avoid_block]
@@ -176,16 +175,13 @@ async def _build_still_prompt(
         framing_blocks.append(product_block)
     framing_section = "\n\n".join(framing_blocks)
 
-    # Sadece text-to-image dalında kullanılır. "Fake awards" maddesi avoid_block'a
-    # taşındı (her iki dalda aktif). image_edit_mode'da bu blok eklenmiyor —
-    # "Only depict elements from brief" kuralı Claude'u over-literal yapıp
-    # ürün-merkezli framing çıkarımını engelliyordu (canlı testte kanıtlandı).
     no_fabrication_block = (
         "DO NOT FABRICATE SCENE ELEMENTS:\n"
+        "- No fake awards, trophies, certificates, medals, or badges in the scene.\n"
         "- No fake testimonials, mock customer quotes, or staged review screens.\n"
         "- No invented specs (numbers, percentages, ratings) shown as scene props.\n"
         "- Only depict elements that come from the user's brief, product info, "
-        "or sector styling cues. If something is not mentioned, don't add it."
+        "  or sector styling cues. If something is not mentioned, don't add it."
     )
 
     if image_edit_mode:
@@ -205,6 +201,7 @@ async def _build_still_prompt(
             "- NO text, logos, or brand names in the scene (added post-process).\n"
             "- Output max 60 words. End the sentence cleanly.\n"
             "- Output ONLY the prompt, nothing else.\n\n"
+            f"{no_fabrication_block}\n\n"
             f"{framing_section}"
         )
         max_tokens = 300
