@@ -241,7 +241,7 @@ async def generate_caption(
     if payload.product_id:
         product_row = await db.fetchrow(
             """
-            SELECT id, name, description, tags, image_url
+            SELECT id, type, name, description, tags, image_url
             FROM social.brand_products
             WHERE id = $1 AND brand_id = $2
             """,
