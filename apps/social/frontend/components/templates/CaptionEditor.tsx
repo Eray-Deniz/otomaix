@@ -19,6 +19,7 @@ export interface CaptionData {
   image_prompt: string
   image_prompts?: string[]
   hashtags: string[]
+  motion_style?: 'static' | 'smooth' | 'dynamic'
 }
 
 interface CaptionEditorProps {

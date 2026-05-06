@@ -200,6 +200,10 @@ class ShortVideoGenerate(BaseModel):
     # Boş ise sahne markaya/ürüne göre kurulur; doluysa sahne bu tarife göre üretilir
     # ve ürün resmi yerine FLUX still oluşturulur.
     visual_brief: str = ""
+    # Caption gen tarafından type='product' ürünler için seçilen motion stili.
+    # Stage 2'de PRODUCT_MOTION_CATALOG havuz seçimini belirler. Boşsa veya
+    # geçersizse genel havuza düşer.
+    motion_style: str | None = None
 
 
 class GenerateScriptRequest(BaseModel):

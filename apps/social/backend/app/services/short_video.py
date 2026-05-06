@@ -237,8 +237,15 @@ async def _build_still_prompt(
 
 
 # ─── 0b. Motion prompt çeşitliliği ────────────────────────────────────────────
+#
+# İki ayrı havuz:
+#   _GENERAL_MOTION_PROMPTS — sahne odaklı, sinema dili. Hizmet videolarında ve
+#     genel video modunda (ürün seçilmemiş) kullanılır.
+#   PRODUCT_MOTION_CATALOG  — ürün-merkezli kompozisyon kuralları içerir
+#     (subject locked center, fills X% of frame). Sadece type='product' ürünlerde
+#     kullanılır; motion_style anahtarı caption gen tarafından LLM ile seçilir.
 
-_MOTION_PROMPTS = [
+_GENERAL_MOTION_PROMPTS = [
     "Slow cinematic camera push-in, soft ambient lighting, gentle particle motion, seamless loop",
     "Smooth lateral dolly shot, warm natural light, subtle depth-of-field shift",
     "Gentle orbit around subject, golden hour lighting, cinematic bokeh",
@@ -248,11 +255,70 @@ _MOTION_PROMPTS = [
     "Steady tracking shot with subtle camera sway, natural daylight, shallow focus",
 ]
 
+PRODUCT_MOTION_CATALOG: dict[str, list[dict[str, str]]] = {
+    "static": [
+        {"id": "locked_off_light_play",
+         "prompt": "Static locked-off shot with subtle light shifting across the subject, "
+                   "subject locked in center frame, dominant in composition with shallow depth of field"},
+        {"id": "frozen_frame_bokeh",
+         "prompt": "Completely still camera with gentle bokeh particles drifting in background, "
+                   "subject locked in center frame, sharp focus on subject with heavily blurred background"},
+    ],
+    "smooth": [
+        {"id": "slow_push_in",
+         "prompt": "Slow cinematic camera push-in toward subject, subject locked in center frame, "
+                   "growing to fill at least 70% of frame with shallow depth of field"},
+        {"id": "lateral_dolly",
+         "prompt": "Smooth lateral dolly with subject tracked and locked in center frame, "
+                   "heavily blurred background flowing past with shallow depth of field"},
+        {"id": "gentle_orbit",
+         "prompt": "Gentle 30-degree orbit around the subject, subject locked in center frame "
+                   "throughout the motion, shallow depth of field keeping background blurred"},
+        {"id": "vertical_tilt",
+         "prompt": "Slow vertical tilt with subject locked in center frame, camera adjusts position "
+                   "to keep product centered throughout, subject fills at least 60% of frame"},
+        {"id": "parallax_blur",
+         "prompt": "Subtle foreground bokeh element drifting briefly across the edge of frame, "
+                   "clearing within the first second, subject locked in center frame in sharp focus "
+                   "with shallow depth of field"},
+        {"id": "slow_zoom_out",
+         "prompt": "Subtle pull-back from extreme close-up to medium shot, subject locked in center frame "
+                   "and remains dominant, filling at least 60% of the frame at end position"},
+        {"id": "steady_tracking",
+         "prompt": "Steady tracking shot following the subject, subject locked in center frame "
+                   "throughout, shallow depth of field with blurred background"},
+    ],
+    "dynamic": [
+        {"id": "snap_zoom_in",
+         "prompt": "Quick snap zoom toward the subject with energetic feel, subject locked in center frame, "
+                   "ending tight with subject filling at least 70% of frame"},
+        {"id": "fast_orbit_360",
+         "prompt": "Fast 360-degree orbit around the product in e-commerce turnaround style, "
+                   "subject locked in center frame throughout the rotation, clean blurred background"},
+        {"id": "whip_pan_reveal",
+         "prompt": "Whip pan motion blur transitioning to reveal subject, ending with subject "
+                   "locked in center frame in sharp focus, subject dominant with shallow depth of field"},
+        {"id": "handheld_follow",
+         "prompt": "Energetic handheld follow shot with slight shake, subject locked in center frame "
+                   "despite movement, shallow depth of field with blurred background"},
+    ],
+}
 
-def _pick_motion_prompt() -> str:
-    """Her video için farklı kamera hareketi seç."""
+
+def _pick_motion_prompt(
+    *,
+    product_type: str | None = None,
+    motion_style: str | None = None,
+) -> str:
+    """Video için kamera hareketi seç.
+
+    product_type='product' + geçerli motion_style → PRODUCT_MOTION_CATALOG
+    Diğer durumlarda (hizmet, genel video, geçersiz motion_style) → genel havuz.
+    """
     import random
-    return random.choice(_MOTION_PROMPTS)
+    if product_type == "product" and motion_style in PRODUCT_MOTION_CATALOG:
+        return random.choice(PRODUCT_MOTION_CATALOG[motion_style])["prompt"]
+    return random.choice(_GENERAL_MOTION_PROMPTS)
 
 
 # ─── 1. Script üretimi ──────────────────────────────────────────────────────
@@ -848,6 +914,7 @@ async def run_short_video_stage1(
     user_brief: str = "",
     product_info: str = "",
     product_doc_context: str = "",
+    motion_style: str | None = None,
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
@@ -861,6 +928,8 @@ async def run_short_video_stage1(
         template_fields = {}
     template_fields["intro_position"] = intro_position
     template_fields["generation_stage"] = "stage1_started"
+    if motion_style in ("static", "smooth", "dynamic"):
+        template_fields["motion_style"] = motion_style
 
     # Duration tahmini (130 wpm Türkçe)
     word_count = len(script.split())
@@ -1003,7 +1072,20 @@ async def run_short_video_stage2(
 
     # Wan submission: ürün görseliyse motion-only, Nano Banana 2 ürettiyse motion-only,
     # legacy text-to-video adapter ise birleşik prompt
-    motion_prompt = _pick_motion_prompt()
+    # Motion havuzu: type='product' → PRODUCT_MOTION_CATALOG[motion_style];
+    # type='service' veya ürün yok → _GENERAL_MOTION_PROMPTS.
+    product_type: str | None = None
+    if row["product_id"]:
+        product_row = await db.fetchrow(
+            "SELECT type FROM social.brand_products WHERE id = $1",
+            row["product_id"],
+        )
+        if product_row:
+            product_type = product_row["type"]
+    motion_style = tf.get("motion_style") if product_type == "product" else None
+    motion_prompt = _pick_motion_prompt(
+        product_type=product_type, motion_style=motion_style,
+    )
     if product_image_url or _short_bg_adapter.requires_still_image:
         prompt_for_model = motion_prompt
     else:

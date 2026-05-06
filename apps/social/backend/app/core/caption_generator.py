@@ -176,6 +176,17 @@ async def generate_captions(
             word_count = len(script_text.split())
             data["duration_estimate"] = max(10, int(word_count * 60 / 130))
 
+            # motion_style: yalnızca type='product' ürünlerde sorduk; geçersiz/null
+            # geldiyse smooth'a düşür. Hizmet ve genel video için alan kaldırılır.
+            is_product = bool(product and product.get("type") == "product")
+            if is_product:
+                ms = data.get("motion_style")
+                if ms not in ("static", "smooth", "dynamic"):
+                    ms = "smooth"
+                data["motion_style"] = ms
+            else:
+                data.pop("motion_style", None)
+
         _ensure_first_comment(data, template, platforms)
 
         if template and template.defaults.disclaimer:
@@ -256,6 +267,27 @@ def _build_output_format_instruction(
         image_schema = '"image_prompt": "English scene description for still image (fal.ai Nano Banana 2) — this becomes the video background"'
         script_schema = ',\n  "script": "Türkçe voiceover script metni (15-30 saniye)"'
 
+        # motion_style: sadece type='product' ürünlerde Claude'a sorulur.
+        # Hizmet ve genel video bu alanı üretmez — motion seçimi genel havuzdan random.
+        is_product = bool(product and product.get("type") == "product")
+        motion_style_schema = (
+            ',\n  "motion_style": "static|smooth|dynamic"' if is_product else ""
+        )
+        motion_style_rule = ""
+        if is_product:
+            motion_style_rule = (
+                "\n\nMOTION_STYLE SEÇİMİ (yalnızca metadata — caption ve script "
+                "metnine bu kelimeler veya Türkçe karşılıkları KESİNLİKLE sokulmaz):\n"
+                "- static: ürün durağan sergilendiğinde uygun (saat, takı, kitap, "
+                "küçük dekoratif obje, sanat eseri)\n"
+                "- smooth: standart ürün/hizmet tanıtımı (mobilya, kıyafet, gıda, "
+                "ev aleti, kozmetik) — emin değilsen bunu seç\n"
+                "- dynamic: enerji/hareket/heyecan çağrıştıran ürün (spor ekipmanı, "
+                "performans aracı, oyun/elektronik aksesuar, hız temalı)\n"
+                "Karar ürün adı + açıklamasına göre verilir. Hatalı format yerine "
+                "smooth dön."
+            )
+
         product_rules = ""
         if product and product.get("name"):
             product_rules = (
@@ -281,7 +313,10 @@ def _build_output_format_instruction(
             "(script içinde nokta karakteri kullanılmasın — TTS yanlış okuyor)\n"
             "- CTA varsa script'in sonunda da söyle"
             f"{product_rules}"
+            f"{motion_style_rule}"
         )
+        # script_schema'ya motion_style alanını ekle
+        script_schema = f"{script_schema}{motion_style_schema}"
         field_ref = "image_prompt'ta"
         rules_title = "⚠️ image_prompt İÇİN KATIİ KURALLAR"
     elif is_carousel:

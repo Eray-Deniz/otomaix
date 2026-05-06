@@ -962,6 +962,7 @@ async def generate_short_video_stage1(
             user_brief=payload.visual_brief or "",
             product_info=product_info,
             product_doc_context=product_doc_context,
+            motion_style=payload.motion_style,
             db=db,
         )
     except RuntimeError as exc:
