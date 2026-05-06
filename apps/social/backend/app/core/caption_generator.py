@@ -103,6 +103,7 @@ async def generate_captions(
 
     output_format = _build_output_format_instruction(
         template, platforms, template_fields, content_type=content_type,
+        product=product,
     )
 
     user_content = [
@@ -226,6 +227,7 @@ def _build_output_format_instruction(
     platforms: list[str],
     template_fields: dict | None = None,
     content_type: str | None = None,
+    product: dict | None = None,
 ) -> str:
     """Instruct Claude on exact JSON output format."""
 
@@ -253,16 +255,32 @@ def _build_output_format_instruction(
     if is_video:
         image_schema = '"image_prompt": "English scene description for still image (fal.ai Nano Banana 2) — this becomes the video background"'
         script_schema = ',\n  "script": "Türkçe voiceover script metni (15-30 saniye)"'
+
+        product_rules = ""
+        if product and product.get("name"):
+            product_rules = (
+                f"\n- Ürün/hizmet adı \"{product['name']}\" script içinde en az "
+                "bir kez geçmeli.\n"
+                "- Ürün açıklaması ve etiketlerinden script'e SOMUT bir özellik "
+                "taşı: renk, malzeme, kullanım durumu, ölçü/rakam, sektörel terim. "
+                "Soyut sıfatlar (\"şık\", \"premium\", \"kaliteli\", \"gösterişli\") "
+                "tek başına özellik sayılmaz — yanına somut bir dayanak gerekir."
+            )
+
         image_note = (
             "ÖNEMLİ: image_prompt İngilizce yazılmalı (still image → video arka planı olacak).\n"
             "script Türkçe yazılmalı — TTS ile seslendirilecek voiceover metni.\n"
             "Caption'lar ve hashtag'ler Türkçe olmalı.\n\n"
-            "SCRIPT KURALLARI:\n"
+            "SCRIPT KURALLARI (yalnızca `script` alanına uygulanır, "
+            "`platform_captions` alanına UYGULANMAZ):\n"
             "- 15-30 saniye arası (yaklaşık 32-65 kelime)\n"
             "- Hook cümlesiyle başla (ilk 3 saniye kritik)\n"
             "- Kısa, net cümleler — TTS'in doğal okuyacağı yapıda\n"
             "- Bilgide olmayan şey uydurma\n"
+            "- URL/domain yazıyla: \"mygoodshoes.com\" → \"mygoodshoes nokta com\" "
+            "(script içinde nokta karakteri kullanılmasın — TTS yanlış okuyor)\n"
             "- CTA varsa script'in sonunda da söyle"
+            f"{product_rules}"
         )
         field_ref = "image_prompt'ta"
         rules_title = "⚠️ image_prompt İÇİN KATIİ KURALLAR"

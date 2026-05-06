@@ -270,6 +270,15 @@ async def generate_script(
     """Claude API ile Türkçe sosyal medya video scripti üret.
 
     Returns: {"script": "...", "duration_estimate": 45}
+
+    NOT: Stage 1/2 split'inden beri kısa video script'i bu fonksiyondan
+    üretilmiyor. Aktif yol: /posts/generate-caption →
+    app.core.caption_generator.generate_captions (caption ile birlikte
+    script de döner; product dict — name/description/tags — Claude
+    context'ine build_dynamic_content üzerinden girer).
+    Bu fonksiyon yalnızca /ai/generate-script (standalone) ve eski
+    /posts/generate-short-video → run_short_video_pipeline için duruyor;
+    ürün bağlamı almıyor.
     """
     tonality = brand_kit.get("tonality", "professional")
     sector = brand_kit.get("sector", "")
@@ -600,6 +609,12 @@ async def run_short_video_pipeline(
     """Tam pipeline: post oluştur → script → TTS → fal.ai video.
 
     Returns post dict with post_id, script, audio_url.
+
+    NOT: Frontend Stage 1/2 split'inden beri bu yolu çağırmıyor — aktif
+    pipeline /posts/generate-short-video-stage1 → run_short_video_stage1
+    (script frontend'de /posts/generate-caption ile üretilip buraya
+    parametre olarak geliyor). Bu fonksiyon yalnızca eski
+    /posts/generate-short-video endpoint'i için duruyor.
     """
     # intro_position'ı template_fields'e kaydet (post tablosunda ayrı kolon yok)
     if template_fields is None:
