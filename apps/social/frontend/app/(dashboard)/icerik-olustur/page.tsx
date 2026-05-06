@@ -468,7 +468,6 @@ function IcerikOlusturInner() {
         intro_position: introPosition,
         product_id: selectedProduct?.id ?? null,
         visual_brief: prompt.trim(),
-        motion_style: captionData?.motion_style ?? null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -624,7 +623,7 @@ function IcerikOlusturInner() {
 
     setLoadingCaption(true)
     const genStart = Date.now()
-    const res = await api.post<CaptionData & { script?: string; duration_estimate?: number; motion_style?: 'static' | 'smooth' | 'dynamic' }>('/posts/generate-caption', {
+    const res = await api.post<CaptionData & { script?: string; duration_estimate?: number }>('/posts/generate-caption', {
       brand_id: currentBrand.id,
       template_id: selectedTemplate?.id ?? null,
       template_fields: selectedTemplate ? templateFields : null,
@@ -650,7 +649,6 @@ function IcerikOlusturInner() {
         image_prompts: res.data.image_prompts,
         hashtags: res.data.hashtags ?? [],
         ...(res.data.script ? { script: res.data.script } : {}),
-        ...(res.data.motion_style ? { motion_style: res.data.motion_style } : {}),
       })
       if (res.data.script) setScript(res.data.script)
       if (res.data.duration_estimate) setDurationEstimate(res.data.duration_estimate)

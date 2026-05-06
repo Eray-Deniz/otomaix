@@ -241,7 +241,7 @@ async def generate_caption(
     if payload.product_id:
         product_row = await db.fetchrow(
             """
-            SELECT id, type, name, description, tags, image_url
+            SELECT id, name, description, tags, image_url
             FROM social.brand_products
             WHERE id = $1 AND brand_id = $2
             """,
@@ -962,7 +962,6 @@ async def generate_short_video_stage1(
             user_brief=payload.visual_brief or "",
             product_info=product_info,
             product_doc_context=product_doc_context,
-            motion_style=payload.motion_style,
             db=db,
         )
     except RuntimeError as exc:
