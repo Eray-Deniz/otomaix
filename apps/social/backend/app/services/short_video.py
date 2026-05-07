@@ -848,6 +848,7 @@ async def run_short_video_stage1(
     user_brief: str = "",
     product_info: str = "",
     product_doc_context: str = "",
+    scene_reference_image_url: str = "",
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
@@ -879,17 +880,24 @@ async def run_short_video_stage1(
 
     has_brief = bool(user_brief.strip())
     has_product_image = bool(product_image_url)
+    has_scene_ref = bool(scene_reference_image_url)
 
-    # Still üretim stratejisi (4 senaryo):
+    # Still üretim stratejisi:
     #   product + brief        → Nano Banana edit (ürün resmi referans, scene-only prompt)
     #   product + brief yok    → ürün resmi as-is (mevcut davranış)
-    #   brief + ürün yok       → Nano Banana text-to-image (full sahne prompt)
+    #   scene_ref (genel mod)  → Nano Banana edit (referans görsel + sahne kompozisyonu)
+    #   brief + ref yok        → Nano Banana text-to-image (full sahne prompt)
     #   hiçbiri yok            → Nano Banana text-to-image (markaya göre default)
+    # Ürün ile scene_ref birlikte gelmemesi gerek (frontend genel modda scene_ref);
+    # defensive olarak ürün önceliklidir (mevcut tutarlılık).
     use_product_as_still = has_product_image and not has_brief
-    use_image_edit = has_product_image and has_brief
+    use_image_edit_product = has_product_image and has_brief
+    use_image_edit_scene = (not has_product_image) and has_scene_ref
+    use_image_edit = use_image_edit_product or use_image_edit_scene
     template_fields["still_strategy"] = (
         "product_as_still" if use_product_as_still
-        else "image_edit" if use_image_edit
+        else "image_edit_product" if use_image_edit_product
+        else "image_edit_scene" if use_image_edit_scene
         else "text_to_image"
     )
 
@@ -942,9 +950,13 @@ async def run_short_video_stage1(
     try:
         if use_product_as_still:
             still_image_url = product_image_url
-        elif use_image_edit:
+        elif use_image_edit_product:
             still_image_url = await _generate_still_via_edit(
                 still_prompt, [product_image_url], aspect_ratio,
+            )
+        elif use_image_edit_scene:
+            still_image_url = await _generate_still_via_edit(
+                still_prompt, [scene_reference_image_url], aspect_ratio,
             )
         else:
             still_image_url = await _generate_still_via_text(still_prompt, aspect_ratio)

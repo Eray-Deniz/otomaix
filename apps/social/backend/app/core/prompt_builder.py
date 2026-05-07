@@ -286,13 +286,43 @@ def build_dynamic_content(
     platforms: list[str] | None,
     product: dict | None = None,
     special_day: dict | None = None,
+    subject_reference_provided: bool = False,
 ) -> str:
     """Tier 3 — dynamic content (not cached).
 
     `special_day`: {"name": "Anneler Günü", "category": "commercial"} formatında.
     Doluysa caption + image_prompt'ı tatil tonuna yönlendiren ayrı bir blok eklenir.
+
+    `subject_reference_provided`: True ise kullanıcı bir referans görsel yüklemiş
+    (Atatürk fotoğrafı, kurucu portre vb.) → Nano Banana 2 edit ref'i olacak.
+    image_prompt merkezdeki kişiyi/objeyi tarif ETMEMELI; sahnenin etrafını,
+    ışığı, atmosferi, ek figürleri tarif etmeli — model image input'tan kişiyi
+    zaten görüyor, prompt'ta tarif kafa karıştırır ve identity drift yaratır.
     """
     parts: list[str] = []
+
+    if subject_reference_provided:
+        parts.append("=== REFERANS GÖRSEL BAĞLAMI (image_prompt için kritik kural) ===")
+        parts.append(
+            "Kullanıcı sahneye yerleştirilecek bir referans görsel (kişi/obje) yükledi. "
+            "Görsel üretimi Nano Banana 2 edit ile yapılacak — model bu referans "
+            "görseli zaten girdi olarak alıyor."
+        )
+        parts.append(
+            "image_prompt YAZIMINDA KURAL:\n"
+            "- Merkezdeki kişiyi/objeyi 'the reference subject' veya 'the person in "
+            "the photo' olarak bırak; YÜZ, KIYAFET, FİZİKSEL ÖZELLİK TARİF ETME.\n"
+            "- Sahnenin etrafını tarif et: ışık, atmosfer, arka plan, etrafındaki "
+            "kişi/obje, kompozisyon, kamera açısı, ruh hali.\n"
+            "- 'Atatürk', 'kurucu' gibi spesifik isimleri prompt'a yazma — model image "
+            "input'tan zaten tanıyor; prompt'ta isim aynı kişinin farklı bir versiyonunu "
+            "üretmesine yol açabilir.\n"
+            "- Örnek doğru: 'the reference subject standing in front of a large Turkish "
+            "flag at golden hour, surrounded by attentive young people in soft focus'.\n"
+            "- Örnek YANLIŞ: 'Atatürk in his iconic kalpak chatting with students' "
+            "(yüz tarif edildi → drift riski)."
+        )
+        parts.append("=== REFERANS GÖRSEL BAĞLAMI SONU ===\n")
 
     if special_day and special_day.get("name"):
         name = special_day["name"]

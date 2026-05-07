@@ -9,7 +9,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from app.core.config import settings
 from app.core.database import close_pool, get_pool
 from app.core.redis import close_redis
-from app.routers import ai, auth, autoposting, avatar, billing, brands, calendar, competitors, documents, internal, media_models, posts, product_documents, products, sectors, social, storage, templates as templates_router, trends, webhooks
+from app.routers import ai, auth, autoposting, avatar, billing, brand_reference_images, brands, calendar, competitors, documents, internal, media_models, posts, product_documents, products, sectors, social, storage, templates as templates_router, trends, webhooks
 from app.routers import settings as settings_router
 
 if settings.SENTRY_DSN:
@@ -88,6 +88,7 @@ app.include_router(internal.router)
 app.include_router(autoposting.router)
 app.include_router(avatar.router)
 app.include_router(brands.router)
+app.include_router(brand_reference_images.router)
 app.include_router(competitors.router)
 app.include_router(calendar.router)
 app.include_router(documents.router)

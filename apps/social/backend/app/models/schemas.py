@@ -181,6 +181,11 @@ class PostGenerate(BaseModel):
     # Set ise ve ürünün image_url'i varsa fal.ai nano-banana-2/edit tetiklenir.
     # Ürünün image_url'i yoksa FLUX text-to-image fallback (S4 kararı).
     product_id: UUID | None = None
+    # Sprint 3 (Özel Gün) — Marka referans görseli (Atatürk fotoğrafı, kurucu portre vb.)
+    # Doluysa Nano Banana 2 edit yolu kullanılır; image_prompt sahne kompozisyonunu
+    # tarif eder, merkezdeki kişi/objeyi 'the reference subject' olarak bırakır.
+    # Yalnız `imageSubType='general'` modunda gönderilir; ürünle birlikte gelmez.
+    scene_reference_image_url: str | None = None
 
 
 class ShortVideoGenerate(BaseModel):
@@ -204,6 +209,9 @@ class ShortVideoGenerate(BaseModel):
     # tatil tonuna yönlendirme için kullanır.
     special_day_name: str | None = None
     special_day_category: str | None = None
+    # Sprint 3 — marka referans görseli (Stage 1 still'inde Nano Banana edit ref'i).
+    # Doluysa scene_reference + brief senaryosu çalışır.
+    scene_reference_image_url: str | None = None
 
 
 class GenerateScriptRequest(BaseModel):

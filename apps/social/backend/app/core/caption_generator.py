@@ -94,11 +94,16 @@ async def generate_captions(
     content_type: str | None = None,
     special_day_name: str | None = None,
     special_day_category: str | None = None,
+    scene_reference_image_url: str | None = None,
 ) -> dict[str, Any]:
     """Generate caption + image prompt + hashtags via Claude. Video ise script de üretir.
 
     `special_day_name` + `special_day_category` doluysa caption tatil tonuna yönlendirilir
     (Tier 3 dynamic content'e ÖZEL GÜN BAĞLAMI bloğu eklenir).
+
+    `scene_reference_image_url` doluysa Nano Banana 2 edit ref'i kullanılacak —
+    image_prompt merkezdeki kişiyi/objeyi 'the reference subject' olarak bırakır,
+    sahne kompozisyonunu tarif eder (Tier 3 REFERANS GÖRSEL BAĞLAMI bloğu).
     """
 
     system_prompt = build_system_prompt()
@@ -111,6 +116,7 @@ async def generate_captions(
     dynamic_content = build_dynamic_content(
         template, template_fields, user_prompt, rag_context, platforms, product,
         special_day=special_day,
+        subject_reference_provided=bool(scene_reference_image_url),
     )
 
     output_format = _build_output_format_instruction(

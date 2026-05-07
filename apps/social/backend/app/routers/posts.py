@@ -176,6 +176,9 @@ class GenerateCaptionRequest(BaseModel):
     # Özel gün modunda doldurulur — caption_generator tatil tonuna yönlendirmek için kullanır.
     special_day_name: str | None = None
     special_day_category: str | None = None
+    # Sprint 3 — marka referans görseli; doluysa caption_generator image_prompt'u
+    # "the reference subject" formatında üretir (yüzü tarif etmez, sahneyi tarif eder).
+    scene_reference_image_url: str | None = None
 
 
 @router.post(
@@ -258,6 +261,7 @@ async def generate_caption(
         content_type=payload.content_type,
         special_day_name=payload.special_day_name,
         special_day_category=payload.special_day_category,
+        scene_reference_image_url=payload.scene_reference_image_url,
     )
 
     return OkResponse(data=result)
@@ -398,14 +402,22 @@ async def generate_post(
     import logging
     _logger = logging.getLogger(__name__)
 
+    # Edit ref kararı: ürün varsa ürün resmi (mevcut davranış); yoksa Sprint 3'te
+    # eklenen scene_reference_image_url varsa onu kullan; yoksa text-to-image.
+    edit_ref_url: str | None = None
+    if product_row and product_row["image_url"]:
+        edit_ref_url = product_row["image_url"]
+    elif payload.scene_reference_image_url:
+        edit_ref_url = payload.scene_reference_image_url
+
     if slides_data:
         # Phase 12 — Carousel: parallel fal.ai submissions for each slide
         try:
             tasks = []
             for slide in slides_data:
                 sp = slide["image_prompt"]
-                if product_row and product_row["image_url"]:
-                    tasks.append(generate_image_edit(sp, [product_row["image_url"]], brand_kit))
+                if edit_ref_url:
+                    tasks.append(generate_image_edit(sp, [edit_ref_url], brand_kit))
                 else:
                     tasks.append(generate_image(sp, payload.aspect_ratio, brand_kit))
             job_ids = await asyncio.gather(*tasks, return_exceptions=True)
@@ -431,9 +443,9 @@ async def generate_post(
     else:
         # Single image flow
         try:
-            if product_row and product_row["image_url"]:
+            if edit_ref_url:
                 fal_job_id = await generate_image_edit(
-                    enriched_prompt, [product_row["image_url"]], brand_kit
+                    enriched_prompt, [edit_ref_url], brand_kit
                 )
             else:
                 fal_job_id = await generate_image(enriched_prompt, payload.aspect_ratio, brand_kit)
@@ -948,6 +960,7 @@ async def generate_short_video_stage1(
             user_brief=payload.visual_brief or "",
             product_info=product_info,
             product_doc_context=product_doc_context,
+            scene_reference_image_url=payload.scene_reference_image_url or "",
             db=db,
         )
     except RuntimeError as exc:
