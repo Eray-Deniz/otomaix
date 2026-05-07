@@ -1441,6 +1441,15 @@ function IcerikOlusturInner() {
                 </p>
               </div>
 
+              {/* Sahne için referans görsel — özel gün dışı genel modlar; prompt textarea'sının hemen altında */}
+              {contentType !== 'special_day' && imageSubType === 'general' && currentBrand?.id && ['image', 'carousel', 'video'].includes(effectiveContentType) && (
+                <SceneReferencePicker
+                  brandId={currentBrand.id}
+                  value={selectedSceneReference}
+                  onChange={setSelectedSceneReference}
+                />
+              )}
+
               <DynamicForm
                 template={selectedTemplate}
                 values={templateFields}
@@ -1551,15 +1560,6 @@ function IcerikOlusturInner() {
                   ))}
                 </div>
               </div>
-
-              {/* Sprint 3 — Sahne için referans görsel (özel gün dışındaki genel modlar; özel günde tatil seçicinin altında) */}
-              {contentType !== 'special_day' && imageSubType === 'general' && currentBrand?.id && ['image', 'carousel', 'video'].includes(effectiveContentType) && (
-                <SceneReferencePicker
-                  brandId={currentBrand.id}
-                  value={selectedSceneReference}
-                  onChange={setSelectedSceneReference}
-                />
-              )}
 
               {/* Dokümanlar — sadece Genel Görsel modunda göster */}
               {imageSubType === 'general' && availableDocs.length > 0 && (
