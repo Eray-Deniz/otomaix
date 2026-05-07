@@ -132,6 +132,19 @@ class ProductUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class ProductImageOut(BaseModel):
+    id: UUID
+    product_id: UUID
+    image_url: str
+    image_key: str
+    is_primary: bool
+    position: int
+    label: str | None = None
+    mime_type: str | None = None
+    size_kb: int | None = None
+    created_at: datetime
+
+
 class ProductOut(BaseModel):
     id: UUID
     brand_id: UUID
@@ -139,12 +152,15 @@ class ProductOut(BaseModel):
     name: str
     description: str | None
     tags: list[str]
+    # Ana görsel (denormalize) — product_images tablosundaki is_primary=true satırın kopyası.
     image_url: str | None
     image_key: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
     document_count: int = 0
+    # Sprint 1 (Çoklu görsel) — ürünün tüm görselleri (position'a göre sıralı).
+    images: list[ProductImageOut] = []
 
 
 # ─── Post ───────────────────────────────────────────────────────────────────
@@ -181,6 +197,17 @@ class PostGenerate(BaseModel):
     # Set ise ve ürünün image_url'i varsa fal.ai nano-banana-2/edit tetiklenir.
     # Ürünün image_url'i yoksa FLUX text-to-image fallback (S4 kararı).
     product_id: UUID | None = None
+    # Sprint 1 (Çoklu Ürün Görseli) — kullanıcının seçtiği ürün görselleri.
+    # None/boş = ürünün ana görseli kullanılır (eski davranış, geriye dönük).
+    # Doluysa: bu görsellerin URL'leri Nano Banana 2 edit'e ref olarak verilir
+    # (max 5, fal sweet spot). Tek görsel modunda tüm seçilenler ref olur;
+    # carousel modunda `carousel_image_mode`'a göre slide'lara dağıtılır.
+    product_image_ids: list[UUID] | None = None
+    # Sprint 1 (Çoklu Ürün Görseli) — carousel slide × görsel eşleme modu.
+    # 'auto': edit_ref_urls round-robin (slide N → görsel N % len)
+    # 'primary_only': tüm slide'lar ana görseli kullanır (eski davranışla aynı)
+    # 'manual': Sprint 4'e ertelendi; şu an gelirse 'auto' fallback
+    carousel_image_mode: str = "auto"
     # Sprint 3 (Özel Gün) — Marka referans görseli (Atatürk fotoğrafı, kurucu portre vb.)
     # Doluysa Nano Banana 2 edit yolu kullanılır; image_prompt sahne kompozisyonunu
     # tarif eder, merkezdeki kişi/objeyi 'the reference subject' olarak bırakır.

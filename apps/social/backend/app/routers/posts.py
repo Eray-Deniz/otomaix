@@ -300,7 +300,10 @@ async def generate_post(
     # Phase 9 Sprint 6 — Ürün/Hizmet image-edit routing
     # product_id set ise ürünü markaya ait mi kontrol et; image_url varsa image-edit,
     # yoksa FLUX text-to-image fallback (S4 kararı).
+    # Sprint 1 (Çoklu Görsel) — product_image_ids varsa o görsellerin URL'leri,
+    # yoksa product.image_url (ana görsel) tek elemanlı listede edit ref olur.
     product_row = None
+    selected_product_image_urls: list[str] = []
     if payload.product_id:
         product_row = await db.fetchrow(
             "SELECT id, image_url FROM social.brand_products WHERE id = $1 AND brand_id = $2",
@@ -309,6 +312,23 @@ async def generate_post(
         )
         if not product_row:
             raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+        if payload.product_image_ids:
+            # Kullanıcı belirli görselleri seçti — position'a göre çek
+            img_rows = await db.fetch(
+                """
+                SELECT image_url FROM social.product_images
+                WHERE product_id = $1 AND id = ANY($2::uuid[])
+                ORDER BY is_primary DESC, position ASC, created_at ASC
+                """,
+                payload.product_id,
+                [str(x) for x in payload.product_image_ids],
+            )
+            selected_product_image_urls = [r["image_url"] for r in img_rows]
+            # Nano Banana sweet spot: max 5
+            selected_product_image_urls = selected_product_image_urls[:5]
+        elif product_row["image_url"]:
+            # Eski davranış: tek ana görsel
+            selected_product_image_urls = [product_row["image_url"]]
 
     # Build prompt based on content type
     # Özel gün artık Akış C üzerinden çalışır: frontend /generate-caption'dan
@@ -402,22 +422,31 @@ async def generate_post(
     import logging
     _logger = logging.getLogger(__name__)
 
-    # Edit ref kararı: ürün varsa ürün resmi (mevcut davranış); yoksa Sprint 3'te
+    # Edit ref kararı: ürün varsa ürün görselleri (Sprint 1: çoklu); yoksa Sprint 3'te
     # eklenen scene_reference_image_url varsa onu kullan; yoksa text-to-image.
-    edit_ref_url: str | None = None
-    if product_row and product_row["image_url"]:
-        edit_ref_url = product_row["image_url"]
+    edit_ref_urls: list[str] = []
+    if selected_product_image_urls:
+        edit_ref_urls = selected_product_image_urls
     elif payload.scene_reference_image_url:
-        edit_ref_url = payload.scene_reference_image_url
+        edit_ref_urls = [payload.scene_reference_image_url]
 
     if slides_data:
-        # Phase 12 — Carousel: parallel fal.ai submissions for each slide
+        # Phase 12 — Carousel: parallel fal.ai submissions for each slide.
+        # Sprint 1 (Çoklu Görsel) — slide × görsel eşlemesi carousel_image_mode'a göre:
+        #   'auto' (default): edit_ref_urls round-robin (slide N → görsel N % len)
+        #   'primary_only': tüm slide'lara ana görsel (eski davranış)
+        #   'manual' (Sprint 4): henüz aktif değil, auto fallback
+        carousel_mode = payload.carousel_image_mode if payload.carousel_image_mode in ("auto", "primary_only") else "auto"
         try:
             tasks = []
-            for slide in slides_data:
+            for i, slide in enumerate(slides_data):
                 sp = slide["image_prompt"]
-                if edit_ref_url:
-                    tasks.append(generate_image_edit(sp, [edit_ref_url], brand_kit))
+                if edit_ref_urls:
+                    if carousel_mode == "primary_only":
+                        slide_refs = [edit_ref_urls[0]]
+                    else:  # auto round-robin
+                        slide_refs = [edit_ref_urls[i % len(edit_ref_urls)]]
+                    tasks.append(generate_image_edit(sp, slide_refs, brand_kit))
                 else:
                     tasks.append(generate_image(sp, payload.aspect_ratio, brand_kit))
             job_ids = await asyncio.gather(*tasks, return_exceptions=True)
@@ -442,10 +471,12 @@ async def generate_post(
             _logger.error(f"Carousel fal.ai submission failed for post {post['id']}: {e}", exc_info=True)
     else:
         # Single image flow
+        # Sprint 1 (Çoklu Görsel) — tek görsel modunda kullanıcı 5'e kadar görsel seçtiyse
+        # tümünü Nano Banana edit'e referans olarak ver (model çoklu açıdan daha iyi sahne kurar).
         try:
-            if edit_ref_url:
+            if edit_ref_urls:
                 fal_job_id = await generate_image_edit(
-                    enriched_prompt, [edit_ref_url], brand_kit
+                    enriched_prompt, edit_ref_urls, brand_kit
                 )
             else:
                 fal_job_id = await generate_image(enriched_prompt, payload.aspect_ratio, brand_kit)
