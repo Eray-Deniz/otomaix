@@ -54,6 +54,15 @@ const DEFAULT_IMAGE_TEMPLATE_ID = 'genel-gorsel-sablon'
 const DEFAULT_CAROUSEL_TEMPLATE_ID = 'carousel-genel-sablon'
 const DEFAULT_VIDEO_TEMPLATE_ID = 'shortvideo-genel-sablon'
 
+// Özel Gün format → şablon ID mapping (Sprint 2). Format seçildiğinde otomatik fetch + select edilir.
+type SpecialDayFormat = 'image' | 'carousel' | 'video'
+const SPECIAL_DAY_TEMPLATE_IDS: Record<SpecialDayFormat, string> = {
+  image: 'ozelgun-gorsel-sablon',
+  carousel: 'ozelgun-carousel-sablon',
+  video: 'ozelgun-shortvideo-sablon',
+}
+const SPECIAL_DAY_TEMPLATE_ID_SET = new Set(Object.values(SPECIAL_DAY_TEMPLATE_IDS))
+
 interface CarouselSlide {
   order: number
   image_url: string | null
@@ -219,6 +228,14 @@ function IcerikOlusturInner() {
   // Özel Gün — Step 2
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [selectedHoliday, setSelectedHoliday] = useState<Holiday | null>(null)
+  // Sprint 2 — özel gün için format seçici (görsel/carousel/video). null = henüz seçilmedi.
+  const [specialDayFormat, setSpecialDayFormat] = useState<SpecialDayFormat | null>(null)
+
+  // Backend'e gönderilen / branching için kullanılan etkin içerik tipi.
+  // Özel gün modunda specialDayFormat (henüz seçilmemişse 'image' fallback olarak — UI'da format zorunlu).
+  const effectiveContentType: ContentType = contentType === 'special_day'
+    ? (specialDayFormat ?? 'image')
+    : contentType
 
   // Alıntı — Step 2
   const [quoteText, setQuoteText] = useState('')
@@ -362,13 +379,13 @@ function IcerikOlusturInner() {
   }, [])
 
   const availableAspectRatios = useMemo(() => {
-    const supported = contentType === 'video'
+    const supported = effectiveContentType === 'video'
       ? mediaModels?.short_video_background.supported_ratios
       : mediaModels?.image.supported_ratios
     if (!supported) return ASPECT_RATIOS
     const supportedSet = new Set(supported)
     return ASPECT_RATIOS.filter((ar) => supportedSet.has(ar.id))
-  }, [contentType, mediaModels])
+  }, [effectiveContentType, mediaModels])
 
   useEffect(() => {
     if (availableAspectRatios.length === 0) return
@@ -420,22 +437,28 @@ function IcerikOlusturInner() {
   async function handleGenerate() {
     if (!currentBrand?.id) { toast.error('Önce bir marka seçin'); return }
 
-    if (contentType === 'special_day' && !selectedHoliday) {
-      toast.error('Lütfen bir özel gün seçin')
-      return
+    if (contentType === 'special_day') {
+      if (!specialDayFormat) {
+        toast.error('Lütfen önce format seçin (Görsel / Carousel / Kısa Video)')
+        return
+      }
+      if (!selectedHoliday) {
+        toast.error('Lütfen bir özel gün seçin')
+        return
+      }
     }
     if (contentType === 'quote' && !quoteText.trim()) {
       toast.error('Lütfen alıntı metnini girin')
       return
     }
-    // Image/carousel/video: caption üretilmiş olmalı (Akış C unified)
-    if (['image', 'carousel', 'video'].includes(contentType)) {
+    // Image/carousel/video (özel gün + bu format'lar dahil): caption üretilmiş olmalı (Akış C unified)
+    if (['image', 'carousel', 'video'].includes(effectiveContentType)) {
       if (!captionData) {
         toast.error('Önce gönderi metnini üretin')
         return
       }
     }
-    if (contentType === 'video' && !script.trim()) {
+    if (effectiveContentType === 'video' && !script.trim()) {
       toast.error('Lütfen bir script girin veya üretin')
       return
     }
@@ -446,7 +469,7 @@ function IcerikOlusturInner() {
     setGenerating(true)
     setStep(3)
 
-    if (contentType === 'video') {
+    if (effectiveContentType === 'video') {
       // Kısa video Stage 1 — TTS + Nano Banana 2 still (kota burada düşer)
       // Stage 2 (Wan I2V) kullanıcı önizlemeyi onayladıktan sonra ayrı endpoint ile tetiklenir.
       const isTemplateMode = mode === 'template' && selectedTemplate
@@ -454,6 +477,8 @@ function IcerikOlusturInner() {
         ...(isTemplateMode ? templateFields : {}),
         subtitle_enabled: subtitleEnabled,
       }
+      // Stage 1 tatil bağlamından bağımsız: caption_generator (Akış C) image_prompt'u tatil tonunda
+      // üretir; Stage 1 still bu image_prompt'la çalışır. Ekstra special_day alanları yollamaya gerek yok.
       const res = await api.post<GeneratedPost>('/posts/generate-short-video-stage1', {
         brand_id: currentBrand.id,
         prompt: prompt.trim() || captionData!.image_prompt || '',
@@ -489,32 +514,6 @@ function IcerikOlusturInner() {
         setStep(2)
         toast.error('Önizleme üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
       }
-    } else if (contentType === 'special_day') {
-      const res = await api.post<GeneratedPost>('/posts/generate', {
-        brand_id: currentBrand.id,
-        content_type: 'special_day',
-        special_day_name: selectedHoliday!.name_tr,
-        special_day_category: selectedHoliday!.category,
-        prompt: prompt.trim() || null,
-        aspect_ratio: aspectRatio,
-        platforms,
-      })
-      setGenerating(false)
-      if (res.success && res.data) {
-        analytics.contentGenerated(contentType, Math.round((Date.now() - genStart) / 1000))
-        setGeneratedPost(res.data)
-        setCaption(res.data.caption ?? '')
-        setHashtags(res.data.hashtags ?? [])
-        toast.success('Özel gün içeriği üretiliyor!')
-      } else if (!res.success && res.error === 'rate_limit') {
-        setStep(2)
-        toast.error(`Saatlik limit aşıldı. ${res.retry_after ?? 60} saniye sonra tekrar deneyin.`)
-      } else if (!res.success && res.error === 'plan_limit_reached' && res.plan_limit) {
-        setStep(2)
-        setUpgradeMessage(res.plan_limit.message)
-      } else {
-        toast.error('İçerik üretilemedi: ' + (res.error ?? 'Bilinmeyen hata'))
-      }
     } else if (contentType === 'quote') {
       const res = await api.post<GeneratedPost>('/posts/generate', {
         brand_id: currentBrand.id,
@@ -542,11 +541,12 @@ function IcerikOlusturInner() {
       }
     } else {
       // Image / Carousel pipeline — Phase 7 unified Akış C (template veya free mod)
+      // Özel gün + image/carousel da bu yola düşer (effectiveContentType='image'|'carousel').
       const isTemplateMode = mode === 'template' && selectedTemplate
-      const isCarousel = contentType === 'carousel' && captionData!.image_prompts && captionData!.image_prompts.length > 0
+      const isCarousel = effectiveContentType === 'carousel' && captionData!.image_prompts && captionData!.image_prompts.length > 0
       const res = await api.post<GeneratedPost>('/posts/generate', {
         brand_id: currentBrand.id,
-        content_type: contentType,
+        content_type: effectiveContentType,
         content_category: null,
         prompt: null,
         user_text: null,
@@ -561,6 +561,8 @@ function IcerikOlusturInner() {
         use_logo_overlay: useLogoOverlay,
         image_text_fields: imageTextFields,
         product_id: selectedProduct?.id ?? null,
+        special_day_name: contentType === 'special_day' ? selectedHoliday?.name_tr ?? null : null,
+        special_day_category: contentType === 'special_day' ? selectedHoliday?.category ?? null : null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -616,8 +618,14 @@ function IcerikOlusturInner() {
     }
 
     // Video + Genel akış: "Bu video ne anlatsın?" zorunlu (ürün modunda opsiyonel — backend ürün adını kullanır)
-    if (contentType === 'video' && imageSubType === 'general' && !prompt.trim()) {
+    if (effectiveContentType === 'video' && imageSubType === 'general' && !prompt.trim()) {
       toast.error('Lütfen "Bu video ne anlatsın?" alanını doldurun')
+      return
+    }
+
+    // Özel gün modunda tatil seçilmiş olmalı (caption tatil tonunda yazılacak)
+    if (contentType === 'special_day' && !selectedHoliday) {
+      toast.error('Lütfen önce bir özel gün seçin')
       return
     }
 
@@ -631,8 +639,10 @@ function IcerikOlusturInner() {
       document_ids: selectedDocIds,
       platforms,
       product_id: selectedProduct?.id ?? null,
-      content_type: contentType,
-      voice: contentType === 'video' ? selectedVoice : undefined,
+      content_type: effectiveContentType,
+      voice: effectiveContentType === 'video' ? selectedVoice : undefined,
+      special_day_name: contentType === 'special_day' ? selectedHoliday?.name_tr ?? null : null,
+      special_day_category: contentType === 'special_day' ? selectedHoliday?.category ?? null : null,
     })
     setLoadingCaption(false)
     if (res.success && res.data) {
@@ -653,7 +663,7 @@ function IcerikOlusturInner() {
       if (res.data.script) setScript(res.data.script)
       if (res.data.duration_estimate) setDurationEstimate(res.data.duration_estimate)
       setPhase('caption')
-      toast.success(contentType === 'video'
+      toast.success(effectiveContentType === 'video'
         ? 'Gönderi metni ve script hazır — düzenleyip videoyu üretin'
         : 'Gönderi metni hazır — düzenleyip görseli üretin'
       )
@@ -835,6 +845,7 @@ function IcerikOlusturInner() {
     setAvailableProducts([])
     setIntroPosition('none')
     setStage1Edited(false)
+    setSpecialDayFormat(null)
   }
 
   // Template seçim handler
@@ -945,7 +956,7 @@ function IcerikOlusturInner() {
         <p className="text-sm text-gray-500 mt-0.5">AI ile sosyal medya içeriği üretin</p>
       </div>
 
-      <StepIndicator step={step} contentType={contentType} />
+      <StepIndicator step={step} contentType={effectiveContentType} />
 
       {/* ── STEP 1: Tip Seçimi ────────────────────────────────────────────── */}
       {step === 1 && (
@@ -968,6 +979,7 @@ function IcerikOlusturInner() {
                     setPhase('pick')
                     setMode('template')
                     setImageSubType('general')
+                    setSpecialDayFormat(null)
                   }}
                   className={cn(
                     'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all cursor-pointer',
@@ -1091,7 +1103,12 @@ function IcerikOlusturInner() {
               {CONTENT_TYPES.find((t) => t.id === contentType)?.icon}{' '}
               {CONTENT_TYPES.find((t) => t.id === contentType)?.label}
             </Badge>
-            {selectedTemplate && ['image', 'carousel', 'video'].includes(contentType) && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && (
+            {contentType === 'special_day' && specialDayFormat && (
+              <Badge variant="secondary">
+                {specialDayFormat === 'image' ? '🖼️ Görsel' : specialDayFormat === 'carousel' ? '📱 Carousel' : '🎬 Kısa Video'}
+              </Badge>
+            )}
+            {selectedTemplate && ['image', 'carousel', 'video'].includes(effectiveContentType) && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && !SPECIAL_DAY_TEMPLATE_ID_SET.has(selectedTemplate.id) && (
               <Badge variant="secondary">
                 {selectedTemplate.icon} {selectedTemplate.name}
               </Badge>
@@ -1104,12 +1121,165 @@ function IcerikOlusturInner() {
             </button>
           </div>
 
+          {/* Özel Gün — format seçici + alt tip + tatil seçici (Sprint 2) */}
+          {contentType === 'special_day' && (
+            <div className="space-y-5">
+              {/* Format segmented control */}
+              <div className="space-y-2">
+                <Label>Format Seçimi</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { id: 'image' as SpecialDayFormat, label: 'Görsel', icon: '🖼️' },
+                    { id: 'carousel' as SpecialDayFormat, label: 'Carousel', icon: '📱' },
+                    { id: 'video' as SpecialDayFormat, label: 'Kısa Video', icon: '🎬' },
+                  ]).map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={async () => {
+                        if (specialDayFormat === f.id) return
+                        setSpecialDayFormat(f.id)
+                        setMode('template')
+                        setSelectedTemplate(null)
+                        setTemplateFields({})
+                        setImageTextFields(null)
+                        setCaptionData(null)
+                        setPhase('form')
+                        setLoadingDefaultTemplate(true)
+                        try {
+                          const tpl = await fetchTemplateById(SPECIAL_DAY_TEMPLATE_IDS[f.id])
+                          if (tpl) {
+                            handleSelectTemplate(tpl)
+                          } else {
+                            toast.error('Özel gün şablonu yüklenemedi.')
+                          }
+                        } finally {
+                          setLoadingDefaultTemplate(false)
+                        }
+                      }}
+                      className={cn(
+                        'flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all',
+                        specialDayFormat === f.id
+                          ? 'border-amber-500 bg-amber-50'
+                          : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/30'
+                      )}
+                    >
+                      <span className="text-xl">{f.icon}</span>
+                      <span className="text-xs font-medium text-gray-700">{f.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Alt tip seçici (genel/ürün) — format seçildikten sonra görünür */}
+              {specialDayFormat && (
+                <div className="space-y-2">
+                  <Label>İçerik Türü</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {([
+                      {
+                        id: 'general' as ImageSubType,
+                        label: specialDayFormat === 'video' ? 'Genel Video' : 'Genel İçerik',
+                        desc: 'Tatilin anlamı + marka tonu',
+                        icon: specialDayFormat === 'video' ? '🎬' : '🖼️',
+                      },
+                      {
+                        id: 'product' as ImageSubType,
+                        label: 'Ürün / Hizmet',
+                        desc: 'Tatil bağlamında ürün/hizmet öne çıkarılır',
+                        icon: '📦',
+                      },
+                    ]).map((sub) => (
+                      <button
+                        key={sub.id}
+                        onClick={() => setImageSubType(sub.id)}
+                        className={cn(
+                          'flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-all',
+                          imageSubType === sub.id
+                            ? 'border-amber-500 bg-amber-50'
+                            : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/30'
+                        )}
+                      >
+                        <span className="text-lg">{sub.icon}</span>
+                        <span className="text-sm font-medium text-gray-800">{sub.label}</span>
+                        <span className="text-xs text-gray-500 leading-snug">{sub.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tatil seçici — format seçildikten sonra görünür */}
+              {specialDayFormat && (
+                <div className="space-y-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <div>
+                    <Label className="text-amber-800">Özel Gün Seçin</Label>
+                    <p className="text-xs text-amber-600 mt-0.5">Bu yıla ait milli, dini ve ticari özel günler</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5 max-h-52 overflow-y-auto pr-1">
+                    {holidays.length === 0 && (
+                      <p className="text-sm text-amber-600">Tatil listesi yükleniyor...</p>
+                    )}
+                    {holidays.map((h) => {
+                      const dateStr = new Date(h.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
+                      const categoryLabel = h.category === 'national' ? '🇹🇷' : h.category === 'religious' ? '🌙' : '🎊'
+                      const isPast = new Date(h.date) < new Date()
+                      return (
+                        <button
+                          key={h.date}
+                          disabled={isPast}
+                          onClick={() => {
+                            if (isPast) return
+                            setSelectedHoliday(h)
+                            // Tatil adını şablonun holiday_name field'ına otomatik yansıt.
+                            // Kullanıcı sonradan üzerine yazabilir; farklı tatil seçilirse yenilenir.
+                            setTemplateFields((prev) => ({ ...prev, holiday_name: h.name_tr }))
+                          }}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
+                            selectedHoliday?.date === h.date
+                              ? 'border-amber-500 bg-amber-100 text-amber-900'
+                              : isPast
+                              ? 'border-gray-100 bg-gray-50 text-gray-400 opacity-60 cursor-not-allowed'
+                              : 'border-amber-200 text-amber-800 hover:border-amber-400 hover:bg-amber-50'
+                          )}
+                        >
+                          <span className="text-base">{categoryLabel}</span>
+                          <span className="flex-1 font-medium">{h.name_tr}</span>
+                          <span className="text-xs opacity-70 flex-shrink-0">{dateStr}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {selectedHoliday && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-xs font-medium text-amber-800">Seçildi:</span>
+                      <span className="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">{selectedHoliday.name_tr}</span>
+                      <button
+                        onClick={() => {
+                          setSelectedHoliday(null)
+                          setTemplateFields((prev) => {
+                            const next = { ...prev }
+                            delete next.holiday_name
+                            return next
+                          })
+                        }}
+                        className="ml-auto text-xs text-amber-600 hover:underline"
+                      >
+                        Temizle
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Varsayılan şablon fetch edilirken loader */}
-          {(contentType === 'image' || contentType === 'carousel' || contentType === 'video') && loadingDefaultTemplate && (
+          {(effectiveContentType === 'image' || effectiveContentType === 'carousel' || effectiveContentType === 'video') && loadingDefaultTemplate && (
             <div className="flex items-center justify-center py-12 text-gray-500 gap-3">
               <Loader2 className="w-5 h-5 animate-spin" />
               <span className="text-sm">
-                {contentType === 'carousel' ? 'Carousel şablonu yükleniyor...' : contentType === 'video' ? 'Video şablonu yükleniyor...' : 'Varsayılan görsel şablonu yükleniyor...'}
+                {contentType === 'special_day' ? 'Özel gün şablonu yükleniyor...' : effectiveContentType === 'carousel' ? 'Carousel şablonu yükleniyor...' : effectiveContentType === 'video' ? 'Video şablonu yükleniyor...' : 'Varsayılan görsel şablonu yükleniyor...'}
               </span>
             </div>
           )}
@@ -1126,9 +1296,9 @@ function IcerikOlusturInner() {
           )}
 
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret" */}
-          {['image', 'carousel', 'video'].includes(contentType) && mode === 'template' && phase === 'form' && selectedTemplate && (
+          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && (
             <div className="space-y-5">
-              {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && (
+              {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && !SPECIAL_DAY_TEMPLATE_ID_SET.has(selectedTemplate.id) && (
                 <button
                   onClick={handleBackToPick}
                   className="text-xs text-blue-500 hover:underline"
@@ -1168,7 +1338,7 @@ function IcerikOlusturInner() {
                             // Video modunda backend Stage 1'de template_fields'i otomatik
                             // inject ediyor (ana_konu = product.name); frontend auto-fill yapmaz.
                             // Image/Carousel'de template form alanlarına yansıtmaya devam et.
-                            if (contentType !== 'video') {
+                            if (effectiveContentType !== 'video') {
                               setTemplateFields((prev) => ({
                                 ...prev,
                                 ana_konu: p.name,
@@ -1218,7 +1388,7 @@ function IcerikOlusturInner() {
                   serbest tarifi yazsın, sonra cta gibi yapısal alanları doldursun. */}
               <div className="space-y-1.5">
                 <Label>
-                  {contentType === 'video' ? (
+                  {effectiveContentType === 'video' ? (
                     <>
                       Bu video ne anlatsın?{' '}
                       <span className="font-normal text-gray-400">
@@ -1236,7 +1406,7 @@ function IcerikOlusturInner() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder={
-                    contentType === 'video'
+                    effectiveContentType === 'video'
                       ? imageSubType === 'general'
                         ? 'Örn: "Sabah meditasyonu zihni nasıl temizler 30 saniyede anlat", "5 adımda evden iş kurma ipuçları"'
                         : 'Örn: "Bu ürünün indirim kampanyasını vurgula", "kullanım anlarını öne çıkar" (boş bırakırsanız ürün adı ve açıklaması kullanılır)'
@@ -1246,7 +1416,7 @@ function IcerikOlusturInner() {
                   className="resize-none"
                 />
                 <p className="text-xs text-gray-500">
-                  {contentType === 'video'
+                  {effectiveContentType === 'video'
                     ? imageSubType === 'general'
                       ? 'Video script\'i ve gönderi metni buradaki anlatımdan üretilir.'
                       : 'Boş bırakırsanız ürünün adı ve açıklaması temel alınır.'
@@ -1288,7 +1458,7 @@ function IcerikOlusturInner() {
               </div>
 
               {/* Logo filigran override — video hariç */}
-              {contentType !== 'video' && (currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
+              {effectiveContentType !== 'video' && (currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
                 <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
                   <div className="flex flex-col gap-0.5">
                     <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
@@ -1307,7 +1477,7 @@ function IcerikOlusturInner() {
               )}
 
               {/* Intro/Outro pozisyon seçici — sadece video */}
-              {contentType === 'video' && (
+              {effectiveContentType === 'video' && (
                 <div className="space-y-2">
                   <Label>Intro / Outro Video Pozisyonu</Label>
                   {!brandHasIntro ? (
@@ -1393,7 +1563,7 @@ function IcerikOlusturInner() {
               )}
 
               {/* Video: Ses seçimi */}
-              {contentType === 'video' && (
+              {effectiveContentType === 'video' && (
                 <div className="space-y-1.5">
                   <Label className="text-sm">Ses Seçimi</Label>
                   <div className="flex flex-wrap gap-2">
@@ -1426,7 +1596,7 @@ function IcerikOlusturInner() {
               )}
 
               {/* Video: Altyazı toggle */}
-              {contentType === 'video' && (
+              {effectiveContentType === 'video' && (
                 <div className="flex items-center justify-between">
                   <Label className="text-sm">Altyazı (Subtitle)</Label>
                   <button
@@ -1452,13 +1622,13 @@ function IcerikOlusturInner() {
                 disabled={loadingCaption}
               >
                 {loadingCaption ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                {contentType === 'video' ? 'Gönderi Metni ve Script Üret' : 'Gönderi Metni Üret'}
+                {effectiveContentType === 'video' ? 'Gönderi Metni ve Script Üret' : 'Gönderi Metni Üret'}
               </Button>
             </div>
           )}
 
           {/* Phase 7: phase=caption — caption düzenle + "Görseli/Videoyu Üret" (template veya free) */}
-          {['image', 'carousel', 'video'].includes(contentType) && phase === 'caption' && captionData && (
+          {['image', 'carousel', 'video'].includes(effectiveContentType) && phase === 'caption' && captionData && (
             <div className="space-y-5">
               <div className="flex items-center justify-between">
                 <button
@@ -1487,7 +1657,7 @@ function IcerikOlusturInner() {
               />
 
               {/* Video: Script düzenleme */}
-              {contentType === 'video' && (
+              {effectiveContentType === 'video' && (
                 <div className="space-y-3 p-4 bg-purple-50 border border-purple-200 rounded-xl">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1513,15 +1683,15 @@ function IcerikOlusturInner() {
                 onClick={handleGenerate}
                 className="w-full gap-2"
                 disabled={generating || (
-                  contentType === 'video'
+                  effectiveContentType === 'video'
                     ? !script.trim()
-                    : contentType === 'carousel'
+                    : effectiveContentType === 'carousel'
                     ? !(captionData.image_prompts && captionData.image_prompts.length > 0)
                     : !captionData.image_prompt.trim()
                 )}
               >
                 <Wand2 className="w-4 h-4" />
-                {contentType === 'video' ? 'Videoyu Üret' : contentType === 'carousel' ? 'Slide Görsellerini Üret' : 'Görseli Üret'}
+                {effectiveContentType === 'video' ? 'Videoyu Üret' : effectiveContentType === 'carousel' ? 'Slide Görsellerini Üret' : 'Görseli Üret'}
               </Button>
             </div>
           )}
@@ -1671,108 +1841,35 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* Klasik akış — sadece special_day/quote */}
-          {!['image', 'carousel', 'video'].includes(contentType) && (
-          <>
-          {/* Özel Gün — tatil seçici */}
-          {contentType === 'special_day' && (
-            <div className="space-y-3 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-              <div>
-                <Label className="text-amber-800">Özel Gün Seçin</Label>
-                <p className="text-xs text-amber-600 mt-0.5">Bu yıla ait milli, dini ve ticari özel günler</p>
-              </div>
-              <div className="flex flex-col gap-1.5 max-h-52 overflow-y-auto pr-1">
-                {holidays.length === 0 && (
-                  <p className="text-sm text-amber-600">Tatil listesi yükleniyor...</p>
-                )}
-                {holidays.map((h) => {
-                  const dateStr = new Date(h.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
-                  const categoryLabel = h.category === 'national' ? '🇹🇷' : h.category === 'religious' ? '🌙' : '🎊'
-                  const isPast = new Date(h.date) < new Date()
-                  return (
-                    <button
-                      key={h.date}
-                      disabled={isPast}
-                      onClick={() => { if (!isPast) setSelectedHoliday(h) }}
-                      className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
-                        selectedHoliday?.date === h.date
-                          ? 'border-amber-500 bg-amber-100 text-amber-900'
-                          : isPast
-                          ? 'border-gray-100 bg-gray-50 text-gray-400 opacity-60 cursor-not-allowed'
-                          : 'border-amber-200 text-amber-800 hover:border-amber-400 hover:bg-amber-50'
-                      )}
-                    >
-                      <span className="text-base">{categoryLabel}</span>
-                      <span className="flex-1 font-medium">{h.name_tr}</span>
-                      <span className="text-xs opacity-70 flex-shrink-0">{dateStr}</span>
-                    </button>
-                  )
-                })}
-              </div>
-              {selectedHoliday && (
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-xs font-medium text-amber-800">Seçildi:</span>
-                  <span className="text-xs bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">{selectedHoliday.name_tr}</span>
-                  <button onClick={() => setSelectedHoliday(null)} className="ml-auto text-xs text-amber-600 hover:underline">Temizle</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Alıntı — quote input */}
+          {/* Klasik akış — sadece quote (özel gün artık Akış C unified flow'a geçti) */}
           {contentType === 'quote' && (
-            <div className="space-y-3 p-4 bg-violet-50 border border-violet-200 rounded-xl">
-              <div>
-                <Label className="text-violet-800">Alıntı Metni</Label>
-                <p className="text-xs text-violet-500 mt-0.5">Görselde yer almasını istediğiniz söz veya cümle</p>
-              </div>
-              <Textarea
-                value={quoteText}
-                onChange={(e) => setQuoteText(e.target.value)}
-                placeholder="Başarı, hazırlık ile fırsatın buluştuğu andır..."
-                rows={3}
-                className="resize-none bg-white text-sm"
-              />
-              <div className="space-y-1.5">
-                <Label className="text-sm text-violet-700">Kaynak / Yazar <span className="font-normal text-violet-400">(opsiyonel)</span></Label>
-                <input
-                  type="text"
-                  value={quoteAuthor}
-                  onChange={(e) => setQuoteAuthor(e.target.value)}
-                  placeholder="Atatürk, Einstein, anonim..."
-                  className="w-full text-sm px-3 py-2 border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 bg-white"
-                />
-              </div>
+          <>
+          {/* Alıntı — quote input */}
+          <div className="space-y-3 p-4 bg-violet-50 border border-violet-200 rounded-xl">
+            <div>
+              <Label className="text-violet-800">Alıntı Metni</Label>
+              <p className="text-xs text-violet-500 mt-0.5">Görselde yer almasını istediğiniz söz veya cümle</p>
             </div>
-          )}
-
-          {/* 1. En-Boy Oranı — special_day/quote için gösterilmez */}
-          {!['special_day', 'quote'].includes(contentType) && (
-          <div className="space-y-2">
-            <Label>En-Boy Oranı</Label>
-            <div className="grid grid-cols-5 gap-2">
-              {availableAspectRatios.map((ar) => (
-                <button
-                  key={ar.id}
-                  onClick={() => setAspectRatio(ar.id)}
-                  className={cn(
-                    'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
-                    aspectRatio === ar.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-300'
-                  )}
-                >
-                  <span className="text-xl">{ar.icon}</span>
-                  <span className="text-xs font-bold text-gray-800">{ar.label}</span>
-                  <span className="text-[10px] text-gray-400">{ar.desc}</span>
-                </button>
-              ))}
+            <Textarea
+              value={quoteText}
+              onChange={(e) => setQuoteText(e.target.value)}
+              placeholder="Başarı, hazırlık ile fırsatın buluştuğu andır..."
+              rows={3}
+              className="resize-none bg-white text-sm"
+            />
+            <div className="space-y-1.5">
+              <Label className="text-sm text-violet-700">Kaynak / Yazar <span className="font-normal text-violet-400">(opsiyonel)</span></Label>
+              <input
+                type="text"
+                value={quoteAuthor}
+                onChange={(e) => setQuoteAuthor(e.target.value)}
+                placeholder="Atatürk, Einstein, anonim..."
+                className="w-full text-sm px-3 py-2 border border-violet-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-500/20 focus:border-violet-400 bg-white"
+              />
             </div>
           </div>
-          )}
 
-          {/* 2. Platformlar */}
+          {/* Platformlar */}
           <div className="space-y-2">
             <Label>Platformlar</Label>
             <div className="flex flex-wrap gap-2">
@@ -1793,111 +1890,11 @@ function IcerikOlusturInner() {
             </div>
           </div>
 
-          {/* 3. Dokümanlar — special_day ve quote için gereksiz */}
-          {!['special_day', 'quote'].includes(contentType) && (
-            <div className="space-y-2">
-              <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
-              <p className="text-xs text-gray-400">Ürün kataloğu, hizmet listesi veya referans belgesi yükleyin — AI içerik üretirken bu belgeleri baz alır.</p>
-              {availableDocs.length === 0 ? (
-                <p className="text-xs text-gray-400 px-1">
-                  Henüz yüklü doküman yok.{' '}
-                  <a href="/marka-ayarlari?tab=belgeler" className="text-blue-500 hover:underline">
-                    Marka Ayarları → Dokümanlar
-                  </a>
-                  {' '}bölümünden ürün kataloğu, fiyat listesi vb. yükleyebilirsiniz.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {availableDocs.map((doc) => (
-                    <button
-                      key={doc.id}
-                      onClick={() => toggleDoc(doc.id)}
-                      className={cn(
-                        'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
-                        selectedDocIds.includes(doc.id)
-                          ? 'border-blue-500 bg-blue-50 text-blue-800'
-                          : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                      )}
-                    >
-                      <FileText className="w-4 h-4 flex-shrink-0" />
-                      <span className="truncate">{doc.name}</span>
-                      {doc.file_size_kb && (
-                        <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{doc.file_size_kb} KB</span>
-                      )}
-                      {selectedDocIds.includes(doc.id) && (
-                        <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
-                      )}
-                    </button>
-                  ))}
-                  {selectedDocIds.length > 0 && (
-                    <p className="text-xs text-blue-600">
-                      {selectedDocIds.length} doküman seçildi — AI içerik üretirken bu belgeleri referans alacak
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 4. Bana fikir öner — special_day/quote hariç tüm tipler */}
-          {!['special_day', 'quote'].includes(contentType) && (
-          <div className="space-y-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchIdeas}
-              disabled={loadingIdeas}
-              className="gap-2"
-            >
-              {loadingIdeas ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lightbulb className="w-4 h-4" />}
-              Bana fikir öner
-            </Button>
-            {ideas.length > 0 && (
-              <div className="flex flex-col gap-2 mt-2">
-                {ideas.map((idea, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setPrompt(idea)}
-                    className="text-left text-sm px-3 py-2 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-800 transition-colors"
-                  >
-                    💡 {idea}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          )}
-
-          {/* 5 & 6. İçerik Açıklaması & Tasarım Tercihleri — görsel/carousel/special_day/video için */}
-          {contentType !== 'quote' && (
-          <div className="space-y-1.5">
-            <Label>
-              {contentType === 'special_day' ? 'Ek Not (opsiyonel)' : 'İçerik Açıklaması & Tasarım Tercihleri'}
-            </Label>
-            <Textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder={
-                contentType === 'special_day'
-                  ? 'Özel günle ilgili eklemek istediğiniz bir mesaj veya not...'
-                  : 'İçerik hakkında iletmek istediğiniz detayları buraya yazabilirsiniz...'
-              }
-              rows={contentType === 'special_day' ? 2 : 4}
-              className="resize-none"
-            />
-          </div>
-          )}
-
-
-          {/* 6. İçerik Üret butonu */}
+          {/* İçerik Üret butonu */}
           <Button
             onClick={handleGenerate}
             className="w-full gap-2"
-            disabled={
-              (contentType === 'special_day' && !selectedHoliday) ||
-              (contentType === 'quote' && !quoteText.trim()) ||
-              (!['special_day', 'quote'].includes(contentType) && !prompt.trim())
-            }
+            disabled={!quoteText.trim()}
           >
             <Wand2 className="w-4 h-4" />
             İçerik Üret
@@ -1908,7 +1905,7 @@ function IcerikOlusturInner() {
       )}
 
       {/* ── STEP 3 (VIDEO): Önizleme & Onay — Stage 1 sonucu, Wan I2V'den önce ── */}
-      {step === 3 && contentType === 'video' && (
+      {step === 3 && effectiveContentType === 'video' && (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             <button
@@ -2039,11 +2036,11 @@ function IcerikOlusturInner() {
       )}
 
       {/* ── STEP 3 (NON-VIDEO) veya STEP 4 (VIDEO): Final Önizleme ───────── */}
-      {((step === 3 && contentType !== 'video') || step === 4) && (
+      {((step === 3 && effectiveContentType !== 'video') || step === 4) && (
         <div className="space-y-5">
           <div className="flex items-center justify-between">
             {/* Video Step 4'te post zaten render ediliyor — geri dönüş resetWizard ile */}
-            {contentType === 'video' ? (
+            {effectiveContentType === 'video' ? (
               <span />
             ) : (
               <button
@@ -2064,25 +2061,25 @@ function IcerikOlusturInner() {
               <div className="relative">
                 <div className={cn(
                   'w-16 h-16 rounded-2xl flex items-center justify-center',
-                  contentType === 'video' ? 'bg-purple-100' : 'bg-blue-100'
+                  effectiveContentType === 'video' ? 'bg-purple-100' : 'bg-blue-100'
                 )}>
                   <Loader2 className={cn(
                     'w-8 h-8 animate-spin',
-                    contentType === 'video' ? 'text-purple-600' : 'text-blue-600'
+                    effectiveContentType === 'video' ? 'text-purple-600' : 'text-blue-600'
                   )} />
                 </div>
               </div>
               <p className="text-gray-700 font-medium">
-                {contentType === 'video' ? 'Video üretiliyor...' :
-                 contentType === 'special_day' ? `${selectedHoliday?.name_tr} içeriği üretiliyor...` :
+                {contentType === 'special_day' ? `${selectedHoliday?.name_tr} içeriği üretiliyor...` :
+                 effectiveContentType === 'video' ? 'Video üretiliyor...' :
                  contentType === 'quote' ? 'Alıntı kartı üretiliyor...' :
-                 contentType === 'carousel' ? 'Carousel slide görselleri üretiliyor...' :
+                 effectiveContentType === 'carousel' ? 'Carousel slide görselleri üretiliyor...' :
                  'İçeriğiniz üretiliyor...'}
               </p>
               <p className="text-sm text-gray-400">
-                {contentType === 'video'
+                {effectiveContentType === 'video'
                   ? 'Script ve ses oluşturuluyor, arka plan videosu hazırlanıyor...'
-                  : contentType === 'carousel'
+                  : effectiveContentType === 'carousel'
                   ? `${captionData?.image_prompts?.length ?? 0} slide paralel üretiliyor, bu biraz sürebilir`
                   : 'Bu birkaç saniye sürebilir'
                 }
@@ -2094,7 +2091,7 @@ function IcerikOlusturInner() {
           {!generating && generatedPost && (
             <div className="space-y-5">
               {/* Video önizleme */}
-              {contentType === 'video' ? (
+              {effectiveContentType === 'video' ? (
                 <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-purple-50 to-violet-100 border border-purple-200">
                   {generatedPost.output_url ? (
                     <video
@@ -2164,7 +2161,7 @@ function IcerikOlusturInner() {
                     </div>
                   )}
                 </div>
-              ) : contentType === 'carousel' && generatedPost.slides && generatedPost.slides.length > 0 ? (
+              ) : effectiveContentType === 'carousel' && generatedPost.slides && generatedPost.slides.length > 0 ? (
                 /* Carousel slide grid önizleme */
                 <div className="space-y-3">
                   {(() => {
