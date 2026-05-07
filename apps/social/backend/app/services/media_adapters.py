@@ -276,10 +276,61 @@ class WanI2VFlashAdapter:
         }
 
 
+class KlingV25TurboProI2VAdapter:
+    """Kling 2.5 Turbo Pro image-to-video — identity preservation odaklı premium model.
+
+    Özel gün + kısa video kombinasyonunda kullanılır (Atatürk fotoğrafı gibi
+    referans görsel sahneye yerleştirildiğinde Wan flash yüz drift yapıyor;
+    Kling 2.5 Turbo Pro yüzü daha iyi koruyor).
+
+    Pipeline: Stage 1'de Nano Banana 2 edit ile still üretilir, bu adapter
+    still'i image_url olarak alıp 5sn video üretir. Audio uzunluğu 5sn'den
+    fazlaysa FFmpeg loop ile uzatılır (loop_and_mux_audio).
+
+    Maliyet: 5sn için $0.35 sabit. Audio ne kadar uzun olursa olsun tek
+    çağrı yeterli.
+
+    aspect_ratio parametresi modele iletilmez — çıktı still'in oranını korur.
+    """
+
+    model_id = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video"
+    # Stage 1 still hangi oranda üretildiyse aynısı çıkar; pipeline 9:16 / 16:9 yolluyor.
+    supported_ratios = frozenset({"9:16", "16:9", "1:1"})
+    requires_still_image = True
+
+    _NEGATIVE = (
+        "blur, distort, low quality, low resolution, watermark, on-screen text, subtitles, "
+        "identity shift, face deformation, morphing face, age change, "
+        "distorted hands, extra limbs, "
+        "flickering, jittery motion, frozen static people"
+    )
+    _FIXED_DURATION = 5
+
+    def build_args(
+        self, prompt: str, aspect_ratio: str, duration: int = 5, *,
+        image_url: str = "", audio_url: str = "",
+    ) -> dict[str, Any]:
+        # aspect_ratio + audio_url + duration parametreleri Kling 2.5 Turbo Pro tarafından
+        # kullanılmaz — signature uyumu için imzaya kalıyor. Duration her zaman 5sn,
+        # audio FFmpeg ile post-process'te mux edilir.
+        return {
+            "prompt": prompt,
+            "image_url": image_url,
+            "duration": str(self._FIXED_DURATION),
+            "negative_prompt": self._NEGATIVE,
+        }
+
+
 SHORT_VIDEO_BACKGROUND_ADAPTERS: dict[str, ShortVideoBackgroundAdapter] = {
     "hunyuan-video": HunyuanVideoAdapter(),
     "wan-i2v-flash": WanI2VFlashAdapter(),
+    "kling-v25-turbo-pro": KlingV25TurboProI2VAdapter(),
 }
+
+# Sprint 4 — Premium video adapter (Kling 2.5 Turbo Pro) trigger şartları.
+# Bu template'lerde Stage 2 Wan yerine Kling adapter'ını kullanır + webhook
+# audio loop'ta crossfade uygular (5sn sabit video → seamless seamless döngü).
+PREMIUM_VIDEO_TEMPLATE_IDS: frozenset[str] = frozenset({"ozelgun-shortvideo-sablon"})
 
 
 def get_active_short_video_background_adapter() -> ShortVideoBackgroundAdapter:

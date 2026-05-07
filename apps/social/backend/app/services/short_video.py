@@ -65,6 +65,28 @@ DEFAULT_MAX_DURATION = 30
 # Aktif short video background adapter — modül import'unda bir kez çözülür.
 _short_bg_adapter = get_active_short_video_background_adapter()
 
+# Sprint 4 — Özel gün + kısa video kombinasyonunda kullanılan premium I2V.
+# Identity preservation odaklı (Atatürk fotoğrafı vb. referans görsellerin yüzü
+# Wan flash'ta drift yapıyor, Kling 2.5 Turbo Pro daha iyi koruyor).
+# 5sn sabit üretir, FFmpeg loop_and_mux_audio ile audio uzunluğuna uzatılır.
+from app.services.media_adapters import (
+    SHORT_VIDEO_BACKGROUND_ADAPTERS as _SHORT_VIDEO_BG_REGISTRY,
+    PREMIUM_VIDEO_TEMPLATE_IDS as _PREMIUM_VIDEO_TEMPLATES,
+)
+_kling_premium_adapter = _SHORT_VIDEO_BG_REGISTRY["kling-v25-turbo-pro"]
+
+
+def _resolve_video_adapter(template_id: str | None):
+    """Template'e göre video adapter'ı seç.
+
+    Özel gün + kısa video → Kling 2.5 Turbo Pro (premium, identity preservation).
+    Diğer her şey → aktif default adapter (env'den, genelde Wan flash).
+    """
+    if template_id and template_id in _PREMIUM_VIDEO_TEMPLATES:
+        return _kling_premium_adapter
+    return _short_bg_adapter
+
+
 # Backward-compat module-level exports
 FAL_VIDEO_MODEL: str = _short_bg_adapter.model_id
 SUPPORTED_SHORT_VIDEO_RATIOS: tuple[str, ...] = tuple(sorted(_short_bg_adapter.supported_ratios))
@@ -811,18 +833,23 @@ async def _submit_wan_video(
     aspect_ratio: str,
     duration: int,
     audio_url: str = "",
+    template_id: str | None = None,
 ) -> str:
-    """Wan I2V'ye (veya aktif arka plan adapter'ına) submit et — Stage 2'nin Wan kısmı."""
+    """Stage 2 video submission — template'e göre adapter seçer.
+
+    Özel gün + kısa video → Kling 2.5 Turbo Pro; diğer → aktif default (Wan flash).
+    """
     import fal_client
 
     os.environ["FAL_KEY"] = settings.FAL_KEY
 
-    args = _short_bg_adapter.build_args(
+    adapter = _resolve_video_adapter(template_id)
+    args = adapter.build_args(
         prompt_for_model, aspect_ratio, duration,
         image_url=still_url, audio_url=audio_url,
     )
     handler = await fal_client.submit_async(
-        _short_bg_adapter.model_id,
+        adapter.model_id,
         arguments=args,
         webhook_url=WEBHOOK_URL,
     )
@@ -1013,10 +1040,12 @@ async def run_short_video_stage2(
     if not still_image_url:
         raise ValueError("Stage 1 still görseli kaydedilmemiş — Stage 2 çalıştırılamaz")
 
-    # Wan submission: ürün görseliyse motion-only, Nano Banana 2 ürettiyse motion-only,
+    # Stage 2 submission: ürün görseliyse motion-only, Nano Banana 2 ürettiyse motion-only,
     # legacy text-to-video adapter ise birleşik prompt
     motion_prompt = _pick_motion_prompt()
-    if product_image_url or _short_bg_adapter.requires_still_image:
+    template_id = row["template_id"]
+    target_adapter = _resolve_video_adapter(template_id)
+    if product_image_url or target_adapter.requires_still_image:
         prompt_for_model = motion_prompt
     else:
         prompt_for_model = f"{still_prompt}, {motion_prompt}"
@@ -1037,6 +1066,7 @@ async def run_short_video_stage2(
             aspect_ratio=aspect_ratio,
             duration=duration,
             audio_url=audio_url,
+            template_id=template_id,
         )
     except Exception as exc:
         sentry_sdk.capture_exception(exc)

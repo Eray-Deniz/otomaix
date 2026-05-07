@@ -15,6 +15,7 @@ from app.services.media_processor import (
     detect_optimal_text_position,
     extract_video_thumbnail,
 )
+from app.services.media_adapters import PREMIUM_VIDEO_TEMPLATE_IDS
 from app.services.storage import r2
 
 logger = logging.getLogger(__name__)
@@ -226,6 +227,9 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
                 if isinstance(ip, str) and ip:
                     intro_position_override = ip
 
+        # Premium I2V (Kling) 5sn sabit video üretir → audio uzunluğunda crossfade loop ile uzatılır.
+        audio_loop_crossfade = bool(template_id and template_id in PREMIUM_VIDEO_TEMPLATE_IDS)
+
         # Marka işlemlerini uygula (logo overlay / text overlay / audio mux / subtitle / intro video)
         final_url = await apply_brand_processing(
             post_id=post_id,
@@ -242,6 +246,7 @@ async def fal_webhook(request: Request, db: asyncpg.Connection = Depends(get_db)
             subtitle_enabled=subtitle_enabled,
             intro_position=intro_position_override,
             aspect_ratio=post["aspect_ratio"] or "9:16",
+            audio_loop_crossfade=audio_loop_crossfade,
         )
     except Exception as exc:
         sentry_sdk.set_context("fal_webhook", {"post_id": str(post_id), "brand_id": str(brand_id), "request_id": request_id})

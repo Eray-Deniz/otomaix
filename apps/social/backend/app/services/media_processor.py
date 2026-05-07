@@ -12,6 +12,7 @@ Her iki fonksiyon da:
 """
 
 import io
+import math
 import os
 import subprocess
 import tempfile
@@ -434,18 +435,97 @@ async def add_text_overlay(
 
 # ─── Kısa Video: loop + audio mux ────────────────────────────────────────────
 
+def _probe_duration_seconds(file_path: str) -> float | None:
+    """ffprobe ile dosyanın süresini saniye olarak döndürür. Hata → None."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-i", file_path, "-show_entries", "format=duration",
+             "-v", "quiet", "-of", "csv=p=0"],
+            capture_output=True, timeout=10,
+        )
+        if result.returncode == 0:
+            value = result.stdout.decode().strip()
+            return float(value) if value else None
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return None
+
+
+def _build_crossfade_loop_cmd(
+    video_path: str, audio_path: str, output_path: str,
+    audio_duration: float, video_duration: float,
+    xfade_seconds: float = 0.4,
+) -> list[str]:
+    """5sn videoyu N kez xfade ile birleştirip audio mux eden FFmpeg komutu üret.
+
+    n = ceil(audio_duration / (video_duration - xfade_seconds))
+    n=1 ise xfade gerekmez, sade akış.
+    """
+    overlap = xfade_seconds
+    effective = max(0.5, video_duration - overlap)
+    n = max(1, math.ceil(audio_duration / effective))
+
+    base_audio_args = [
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest", "-movflags", "+faststart",
+    ]
+    if n == 1:
+        # Audio kısa, tek video yetiyor — xfade gereksiz
+        return [
+            "ffmpeg", "-y",
+            "-i", video_path,
+            "-i", audio_path,
+            "-map", "0:v", "-map", "1:a",
+            "-c:v", "libx264", "-preset", "fast",
+            *base_audio_args,
+            output_path,
+        ]
+
+    inputs: list[str] = []
+    for _ in range(n):
+        inputs.extend(["-i", video_path])
+    inputs.extend(["-i", audio_path])
+
+    chain_parts: list[str] = []
+    prev_tag = "[0:v]"
+    for i in range(1, n):
+        offset = round(i * effective, 3)
+        tag = f"[v{i}]"
+        chain_parts.append(
+            f"{prev_tag}[{i}:v]xfade=transition=fade:duration={overlap}:offset={offset}{tag}"
+        )
+        prev_tag = tag
+    filter_complex = ";".join(chain_parts)
+    audio_index = n  # son input audio
+
+    return [
+        "ffmpeg", "-y",
+        *inputs,
+        "-filter_complex", filter_complex,
+        "-map", prev_tag, "-map", f"{audio_index}:a",
+        "-c:v", "libx264", "-preset", "fast",
+        *base_audio_args,
+        output_path,
+    ]
+
+
 async def loop_and_mux_audio(
     video_url: str,
     audio_url: str,
     post_id: UUID,
     brand_id: UUID,
+    crossfade: bool = False,
 ) -> str | None:
     """5sn background videoyu audio süresine kadar loop et ve TTS audio'yu mux et.
 
-    FFmpeg tek pass: -stream_loop -1 ile video tekrarlanır, -shortest ile
-    audio bitince kesilir. Sonuç R2'ye yüklenir.
+    crossfade=False (default): -stream_loop -1 ile sert kesik (hard cut) loop,
+    -shortest ile audio bitiminde kesilir. Wan flash akışında kullanılır.
 
-    Returns public_url veya None (FFmpeg yoksa / hata durumunda).
+    crossfade=True: ffprobe ile audio süresi alınır, N kopya video xfade
+    transition (0.4sn fade) ile birleştirilir → seamless loop. Kling 2.5
+    Turbo Pro premium akışında kullanılır (5sn sabit video + uzun TTS).
+
+    Sonuç R2'ye yüklenir. Returns public_url veya None (FFmpeg yoksa / hata).
     """
     try:
         result = subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
@@ -471,19 +551,46 @@ async def loop_and_mux_audio(
             Path(video_path).write_bytes(video_resp.content)
             Path(audio_path).write_bytes(audio_resp.content)
 
-            cmd = [
-                "ffmpeg", "-y",
-                "-stream_loop", "-1",
-                "-i", video_path,
-                "-i", audio_path,
-                "-map", "0:v", "-map", "1:a",
-                "-c:v", "libx264", "-preset", "fast",
-                "-c:a", "aac", "-b:a", "192k",
-                "-shortest",
-                "-movflags", "+faststart",
-                output_path,
-            ]
-            proc = subprocess.run(cmd, capture_output=True, timeout=120)
+            if crossfade:
+                audio_dur = _probe_duration_seconds(audio_path)
+                video_dur = _probe_duration_seconds(video_path)
+                if audio_dur is None or video_dur is None or video_dur < 1.0:
+                    # ffprobe başarısız → güvenli fallback (hard cut)
+                    sentry_sdk.capture_message(
+                        f"loop_and_mux_audio: probe failed, falling back to hard cut "
+                        f"(audio_dur={audio_dur}, video_dur={video_dur})",
+                        level="warning",
+                    )
+                    cmd = [
+                        "ffmpeg", "-y",
+                        "-stream_loop", "-1", "-i", video_path,
+                        "-i", audio_path,
+                        "-map", "0:v", "-map", "1:a",
+                        "-c:v", "libx264", "-preset", "fast",
+                        "-c:a", "aac", "-b:a", "192k",
+                        "-shortest", "-movflags", "+faststart",
+                        output_path,
+                    ]
+                else:
+                    cmd = _build_crossfade_loop_cmd(
+                        video_path, audio_path, output_path,
+                        audio_duration=audio_dur, video_duration=video_dur,
+                    )
+            else:
+                cmd = [
+                    "ffmpeg", "-y",
+                    "-stream_loop", "-1",
+                    "-i", video_path,
+                    "-i", audio_path,
+                    "-map", "0:v", "-map", "1:a",
+                    "-c:v", "libx264", "-preset", "fast",
+                    "-c:a", "aac", "-b:a", "192k",
+                    "-shortest",
+                    "-movflags", "+faststart",
+                    output_path,
+                ]
+
+            proc = subprocess.run(cmd, capture_output=True, timeout=180)
             if proc.returncode != 0:
                 stderr = proc.stderr.decode(errors="replace")[:500]
                 sentry_sdk.capture_message(f"loop_and_mux_audio: ffmpeg failed (rc={proc.returncode}) {stderr}", level="error")
@@ -816,6 +923,7 @@ async def apply_brand_processing(
     subtitle_enabled: bool = False,
     intro_position: str | None = None,
     aspect_ratio: str = "9:16",
+    audio_loop_crossfade: bool = False,
 ) -> str:
     """
     Fal.ai üretimi sonrası marka işlemlerini uygula.
@@ -885,6 +993,7 @@ async def apply_brand_processing(
             audio_url=audio_url,
             post_id=post_id,
             brand_id=brand_id,
+            crossfade=audio_loop_crossfade,
         )
         if muxed:
             final_url = muxed
