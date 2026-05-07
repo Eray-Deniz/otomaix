@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -15,19 +14,43 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Loader2, X, Upload, Package, Wrench, FileText, Trash2 } from 'lucide-react'
+import {
+  Loader2,
+  X,
+  Upload,
+  Package,
+  Wrench,
+  FileText,
+  Trash2,
+  Star,
+  Plus,
+  GripVertical,
+} from 'lucide-react'
 import {
   createProduct,
   updateProduct,
   uploadProductImage,
   uploadProductDocument,
+  fetchProductImages,
+  deleteProductImage,
+  setProductImagePrimary,
+  reorderProductImages,
 } from '@/lib/api/products'
-import type { Product, ProductType } from '@/lib/products.types'
+import type { Product, ProductImage, ProductType } from '@/lib/products.types'
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const MAX_IMAGES_PER_PRODUCT = 5
 const DOC_ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.txt'
 const MAX_DOC_BYTES = 50 * 1024 * 1024
+
+// Henüz upload edilmemiş görseller (yeni ürün modunda biriktirilir).
+interface PendingImage {
+  tempId: string
+  file: File
+  blobUrl: string
+  isPrimary: boolean
+}
 
 interface Props {
   open: boolean
@@ -53,12 +76,24 @@ export function ProductFormDialog({
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [isActive, setIsActive] = useState(true)
-  const [pendingImage, setPendingImage] = useState<File | null>(null)
-  const [pendingPreview, setPendingPreview] = useState<string | null>(null)
+
+  // Sprint 1 (Çoklu Görsel) — multi-image state.
+  // Edit modunda: existingImages DB'den fetch edilir, her aksiyon (sil/primary/reorder)
+  // anlık API çağrısıyla DB'yi günceller; pendingImages save'de toplu upload edilir.
+  // Yeni ürün modunda: yalnız pendingImages biriktirilir, save'de ürün yaratıldıktan
+  // sonra sırasıyla upload edilir.
+  const [existingImages, setExistingImages] = useState<ProductImage[]>([])
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
+  const [imageActionBusy, setImageActionBusy] = useState(false)
+
   const [pendingDocs, setPendingDocs] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
+  const dragSrcKey = useRef<string | null>(null)
+
+  // Toplam görsel sayısı (limit kontrolü için).
+  const totalImages = existingImages.length + pendingImages.length
 
   useEffect(() => {
     if (!open) return
@@ -68,28 +103,43 @@ export function ProductFormDialog({
       setDescription(product.description ?? '')
       setTags(product.tags ?? [])
       setIsActive(product.is_active)
+      // Backend listeden gelen images alanını kullan; yoksa /images endpoint'inden çek.
+      if (product.images && product.images.length > 0) {
+        setExistingImages(product.images)
+      } else if (product.id) {
+        // Eski response (geri uyumluluk) veya boş ürün — endpoint'ten kesin liste al.
+        void refreshExistingImages(product.id)
+      } else {
+        setExistingImages([])
+      }
     } else {
       setType('product')
       setName('')
       setDescription('')
       setTags([])
       setIsActive(true)
+      setExistingImages([])
     }
     setTagInput('')
-    setPendingImage(null)
-    setPendingPreview(null)
+    setPendingImages([])
     setPendingDocs([])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, product])
 
+  // Pending görsellerin blob URL'lerini cleanup et (modal kapanınca veya re-init'te).
   useEffect(() => {
-    if (!pendingImage) {
-      setPendingPreview(null)
-      return
+    return () => {
+      pendingImages.forEach((p) => URL.revokeObjectURL(p.blobUrl))
     }
-    const url = URL.createObjectURL(pendingImage)
-    setPendingPreview(url)
-    return () => URL.revokeObjectURL(url)
-  }, [pendingImage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  async function refreshExistingImages(productId: string) {
+    const res = await fetchProductImages(productId)
+    if (res.success && res.data) {
+      setExistingImages(res.data.items)
+    }
+  }
 
   function normalizeTag(raw: string): string | null {
     const val = raw.trim()
@@ -117,16 +167,102 @@ export function ProductFormDialog({
     setTagInput('')
   }
 
-  function handleFileSelect(file: File) {
+  function handleImageSelect(file: File) {
     if (!IMAGE_ACCEPT.split(',').includes(file.type)) {
       toast.error('Sadece JPG, PNG veya WebP kabul edilir')
       return
     }
     if (file.size > MAX_IMAGE_BYTES) {
-      toast.error('Dosya 10 MB sınırını aşıyor')
+      toast.error(`"${file.name}" 10 MB sınırını aşıyor`)
       return
     }
-    setPendingImage(file)
+    if (totalImages >= MAX_IMAGES_PER_PRODUCT) {
+      toast.error(`En fazla ${MAX_IMAGES_PER_PRODUCT} görsel yükleyebilirsiniz`)
+      return
+    }
+    const tempId = `p_${Math.random().toString(36).slice(2, 10)}`
+    const blobUrl = URL.createObjectURL(file)
+    // İlk görselse otomatik primary (backend'de de aynı mantık var; yeni ürün modunda
+    // upload sırasında ilk yüklenen primary olur).
+    const isPrimary = totalImages === 0
+    setPendingImages((prev) => [...prev, { tempId, file, blobUrl, isPrimary }])
+  }
+
+  function removePendingImage(tempId: string) {
+    setPendingImages((prev) => {
+      const target = prev.find((p) => p.tempId === tempId)
+      if (target) URL.revokeObjectURL(target.blobUrl)
+      const filtered = prev.filter((p) => p.tempId !== tempId)
+      // Primary kaldırılıyorsa, kalan ilk pending'i (yoksa ilk existing'i) primary yap.
+      if (target?.isPrimary && filtered.length > 0) {
+        filtered[0].isPrimary = true
+      } else if (target?.isPrimary && existingImages.length > 0) {
+        // Existing varken pending primary kaldırıldı — existing zaten kendi primary'sini taşır
+      }
+      return filtered
+    })
+  }
+
+  function setPendingPrimary(tempId: string) {
+    setPendingImages((prev) =>
+      prev.map((p) => ({ ...p, isPrimary: p.tempId === tempId }))
+    )
+    // Existing primary'yi pending devraldı; existing tarafında primary "kaybedilmiş" görünür.
+    // Save sırasında pending upload edildikten sonra PATCH /primary çağrılır.
+    setExistingImages((prev) => prev.map((e) => ({ ...e, is_primary: false })))
+  }
+
+  async function handleDeleteExisting(image: ProductImage) {
+    if (!product) return
+    setImageActionBusy(true)
+    try {
+      const res = await deleteProductImage(product.id, image.id)
+      if (!res.success) {
+        toast.error(res.error || 'Görsel silinemedi')
+        return
+      }
+      // Backend cascade: ana görselse bir sonrakini primary yapar — yeniden fetch et.
+      await refreshExistingImages(product.id)
+      toast.success('Görsel silindi')
+    } finally {
+      setImageActionBusy(false)
+    }
+  }
+
+  async function handleSetExistingPrimary(image: ProductImage) {
+    if (!product || image.is_primary) return
+    setImageActionBusy(true)
+    try {
+      const res = await setProductImagePrimary(product.id, image.id)
+      if (!res.success) {
+        toast.error(res.error || 'Ana görsel değiştirilemedi')
+        return
+      }
+      await refreshExistingImages(product.id)
+      // Pending tarafında primary varsa, o da artık primary değil (existing devraldı).
+      setPendingImages((prev) => prev.map((p) => ({ ...p, isPrimary: false })))
+    } finally {
+      setImageActionBusy(false)
+    }
+  }
+
+  async function commitReorder(newExistingOrder: ProductImage[]) {
+    if (!product) return
+    setExistingImages(newExistingOrder)
+    setImageActionBusy(true)
+    try {
+      const res = await reorderProductImages(
+        product.id,
+        newExistingOrder.map((i) => i.id)
+      )
+      if (!res.success) {
+        toast.error(res.error || 'Sıra kaydedilemedi')
+        // Rollback yerine yeniden fetch (state divergence riski)
+        await refreshExistingImages(product.id)
+      }
+    } finally {
+      setImageActionBusy(false)
+    }
   }
 
   function handleDocSelect(file: File) {
@@ -139,6 +275,31 @@ export function ProductFormDialog({
 
   function removeDoc(index: number) {
     setPendingDocs((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  // Drag-drop: existing görseller arasında native HTML5 DnD ile sıralama.
+  // Pending görseller upload edilmeden sıralanmaz (upload sırasıyla position 0..N alır).
+  function onDragStart(key: string) {
+    dragSrcKey.current = key
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault()
+  }
+
+  function onDropOnExisting(targetId: string) {
+    const srcKey = dragSrcKey.current
+    dragSrcKey.current = null
+    if (!srcKey || !srcKey.startsWith('e:')) return
+    const srcId = srcKey.slice(2)
+    if (srcId === targetId) return
+    const arr = [...existingImages]
+    const fromIdx = arr.findIndex((i) => i.id === srcId)
+    const toIdx = arr.findIndex((i) => i.id === targetId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const [moved] = arr.splice(fromIdx, 1)
+    arr.splice(toIdx, 0, moved)
+    void commitReorder(arr)
   }
 
   async function handleSave() {
@@ -186,10 +347,26 @@ export function ProductFormDialog({
         productId = res.data.id
       }
 
-      if (pendingImage) {
-        const imgRes = await uploadProductImage(productId, pendingImage)
-        if (!imgRes.success) {
-          toast.error(imgRes.error || 'Görsel yüklenemedi (ürün kaydedildi)')
+      // Pending görselleri yükle (sırayla — backend her POST'ta position bir sonraki).
+      // Yeni ürün modunda ilk yüklenen otomatik primary; eğer kullanıcı pending tarafından
+      // farklı bir tile'ı primary işaretlediyse, upload sonrası PATCH /primary ile düzeltilir.
+      const uploadedPending: { tempId: string; image: ProductImage }[] = []
+      for (const p of pendingImages) {
+        const imgRes = await uploadProductImage(productId, p.file)
+        if (!imgRes.success || !imgRes.data) {
+          toast.error(imgRes.error || `"${p.file.name}" yüklenemedi`)
+          continue
+        }
+        uploadedPending.push({ tempId: p.tempId, image: imgRes.data })
+      }
+
+      // Pending arasında "primary" işaretli olan varsa ve o, ilk yüklenen değilse,
+      // upload bittikten sonra PATCH /primary ile düzelt.
+      const primaryPending = pendingImages.find((p) => p.isPrimary)
+      if (primaryPending) {
+        const uploadedMatch = uploadedPending.find((u) => u.tempId === primaryPending.tempId)
+        if (uploadedMatch && !uploadedMatch.image.is_primary) {
+          await setProductImagePrimary(productId, uploadedMatch.image.id)
         }
       }
 
@@ -206,8 +383,6 @@ export function ProductFormDialog({
       setSaving(false)
     }
   }
-
-  const currentImage = pendingPreview ?? product?.image_url ?? null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -305,66 +480,147 @@ export function ProductFormDialog({
             </div>
           </div>
 
-          {/* Image upload */}
+          {/* Sprint 1 — Çoklu görsel grid */}
           <div className="space-y-1.5">
-            <Label>Görsel (opsiyonel)</Label>
-            <div
-              className="relative border-2 border-dashed border-gray-200 rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {currentImage ? (
-                <>
-                  {pendingPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={pendingPreview}
-                      alt="Ürün görseli önizleme"
-                      className="max-h-32 rounded-lg object-contain"
-                    />
-                  ) : (
-                    <Image
-                      src={currentImage}
-                      alt="Ürün görseli"
-                      width={200}
-                      height={128}
-                      className="max-h-32 rounded-lg object-contain"
-                    />
+            <div className="flex items-center justify-between">
+              <Label>
+                Görseller (opsiyonel)
+                <span className="ml-1 font-normal text-gray-400">
+                  {totalImages}/{MAX_IMAGES_PER_PRODUCT}
+                </span>
+              </Label>
+              {totalImages > 1 && (
+                <span className="text-xs text-gray-400">
+                  ★ ana görsel · sürükle-bırak ile sırala
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {/* Mevcut görseller (drag-drop sıralanabilir, anlık aksiyonlar) */}
+              {existingImages.map((img) => (
+                <div
+                  key={`e:${img.id}`}
+                  draggable={isEdit && !imageActionBusy}
+                  onDragStart={() => onDragStart(`e:${img.id}`)}
+                  onDragOver={onDragOver}
+                  onDrop={() => onDropOnExisting(img.id)}
+                  className="group relative aspect-square rounded-xl border border-gray-200 overflow-hidden bg-gray-50"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.image_url}
+                    alt={img.label ?? 'Ürün görseli'}
+                    className="w-full h-full object-cover"
+                  />
+                  {img.is_primary && (
+                    <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-white text-[10px] font-semibold flex items-center gap-0.5">
+                      <Star className="w-3 h-3 fill-current" />
+                      Ana
+                    </div>
                   )}
-                  {pendingImage && (
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-1.5 gap-1 opacity-0 group-hover:opacity-100">
+                    {!img.is_primary && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetExistingPrimary(img)}
+                        disabled={imageActionBusy}
+                        className="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-amber-500 hover:bg-amber-50"
+                        title="Ana görsel yap"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setPendingImage(null)
-                      }}
-                      className="absolute top-2 right-2 w-7 h-7 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center text-gray-600 hover:text-red-600"
-                      aria-label="İptal"
+                      onClick={() => handleDeleteExisting(img)}
+                      disabled={imageActionBusy}
+                      className="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-red-500 hover:bg-red-50"
+                      title="Sil"
                     >
-                      <X className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
+                  </div>
+                  {existingImages.length > 1 && (
+                    <div className="absolute bottom-1 left-1 w-5 h-5 rounded bg-white/90 flex items-center justify-center text-gray-400">
+                      <GripVertical className="w-3 h-3" />
+                    </div>
                   )}
-                </>
-              ) : (
-                <>
-                  <Upload className="w-5 h-5 text-gray-400" />
-                  <p className="text-sm text-gray-500">Dosya seç</p>
-                  <p className="text-xs text-gray-400">JPG, PNG veya WebP · Maks. 10 MB</p>
-                </>
+                </div>
+              ))}
+
+              {/* Pending (yüklenmemiş) görseller — yeni ürün modunda veya edit modunda yeni ek */}
+              {pendingImages.map((p) => (
+                <div
+                  key={`p:${p.tempId}`}
+                  className="group relative aspect-square rounded-xl border border-blue-200 overflow-hidden bg-blue-50/30"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p.blobUrl} alt="Yüklenecek görsel" className="w-full h-full object-cover" />
+                  {p.isPrimary && (
+                    <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-amber-400 text-white text-[10px] font-semibold flex items-center gap-0.5">
+                      <Star className="w-3 h-3 fill-current" />
+                      Ana
+                    </div>
+                  )}
+                  <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-blue-500 text-white text-[10px] font-semibold">
+                    yeni
+                  </div>
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-end p-1.5 gap-1 opacity-0 group-hover:opacity-100">
+                    {!p.isPrimary && (
+                      <button
+                        type="button"
+                        onClick={() => setPendingPrimary(p.tempId)}
+                        className="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-amber-500 hover:bg-amber-50"
+                        title="Ana görsel yap"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removePendingImage(p.tempId)}
+                      className="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-red-500 hover:bg-red-50"
+                      title="Kaldır"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Ekle tile — limit aşılmadıysa görünür */}
+              {totalImages < MAX_IMAGES_PER_PRODUCT && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-square rounded-xl border-2 border-dashed border-gray-200 flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span className="text-xs">Ekle</span>
+                </button>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={IMAGE_ACCEPT}
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    handleFileSelect(file)
-                    e.target.value = ''
-                  }
-                }}
-              />
             </div>
+
+            {totalImages === 0 && (
+              <p className="text-xs text-gray-400">JPG, PNG veya WebP · Maks. 10 MB · En fazla {MAX_IMAGES_PER_PRODUCT} görsel</p>
+            )}
+            {totalImages > 0 && totalImages >= MAX_IMAGES_PER_PRODUCT && (
+              <p className="text-xs text-amber-600">Maksimum görsel sayısına ulaşıldı.</p>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={IMAGE_ACCEPT}
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? [])
+                files.forEach(handleImageSelect)
+                e.target.value = ''
+              }}
+            />
           </div>
 
           {/* Document upload */}
@@ -436,7 +692,7 @@ export function ProductFormDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             İptal
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || imageActionBusy}>
             {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
             {isEdit ? 'Kaydet' : 'Ekle'}
           </Button>
@@ -475,3 +731,4 @@ function TypeButton({
     </button>
   )
 }
+

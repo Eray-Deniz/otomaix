@@ -1,15 +1,22 @@
 // Phase 9 — Sprint 8: /products + /product-documents API client
+// Sprint 1 (Çoklu Görsel) — yeni /products/{id}/images endpoint'leri
+//
 // Backend endpoints:
-//   POST   /products                          (create; 30/hr rate limit; 402 plan_limit)
-//   GET    /products?brand_id=&type=&active=  (list)
-//   GET    /products/{id}                     (detail)
-//   PATCH  /products/{id}                     (update; type immutable)
-//   DELETE /products/{id}                     (hard delete + R2 cleanup)
-//   POST   /products/{id}/image               (multipart image upload, max 10MB)
-//   POST   /product-documents                 (multipart doc upload; product_id + file)
-//   GET    /product-documents?product_id=     (list)
-//   GET    /product-documents/{id}            (detail)
-//   DELETE /product-documents/{id}            (cascade chunks + R2 cleanup)
+//   POST   /products                                (create; 30/hr rate limit; 402 plan_limit)
+//   GET    /products?brand_id=&type=&active=        (list — response.products[].images: [])
+//   GET    /products/{id}                           (detail — response.images: [])
+//   PATCH  /products/{id}                           (update; type immutable)
+//   DELETE /products/{id}                           (hard delete + R2 cleanup)
+//   POST   /products/{id}/image                     (DEPRECATED — eski tek görsel, içerden senkron)
+//   GET    /products/{id}/images                    (Sprint 1 — list)
+//   POST   /products/{id}/images                    (Sprint 1 — upload, max 5)
+//   DELETE /products/{id}/images/{image_id}         (Sprint 1 — sil + R2 cleanup)
+//   PATCH  /products/{id}/images/{image_id}/primary (Sprint 1 — ana görsel değiştir)
+//   PATCH  /products/{id}/images/reorder            (Sprint 1 — drag-drop sıra batch update)
+//   POST   /product-documents                       (multipart doc upload; product_id + file)
+//   GET    /product-documents?product_id=           (list)
+//   GET    /product-documents/{id}                  (detail)
+//   DELETE /product-documents/{id}                  (cascade chunks + R2 cleanup)
 
 import * as Sentry from '@sentry/nextjs'
 import { api, type ApiResponse } from '@/lib/api'
@@ -17,6 +24,7 @@ import type {
   Product,
   ProductCreatePayload,
   ProductDocument,
+  ProductImage,
   ProductType,
   ProductUpdatePayload,
 } from '@/lib/products.types'
@@ -71,13 +79,71 @@ export async function deleteProduct(
   return api.delete<{ deleted: boolean; id: string }>(`/products/${productId}`)
 }
 
-export async function uploadProductImage(
+/**
+ * @deprecated Sprint 1 — yeni `uploadProductImage` (çoklu görsel, /images endpoint'i) kullanın.
+ * Bu fonksiyon eski tek görsel davranışı için kalır: çağrıldığında ürünün TÜM görsellerini
+ * silip yenisini ana görsel olarak ekler. Geriye dönük uyumluluk için backend'de duruyor.
+ */
+export async function uploadProductImageLegacy(
   productId: string,
   file: File
 ): Promise<ApiResponse<Product>> {
   const form = new FormData()
   form.append('file', file)
   return api.upload<Product>(`/products/${productId}/image`, form)
+}
+
+// Sprint 1 (Çoklu Görsel) — yeni endpoint'ler
+
+interface ProductImagesListResponse {
+  items: ProductImage[]
+  count: number
+  max: number
+}
+
+export async function fetchProductImages(
+  productId: string
+): Promise<ApiResponse<ProductImagesListResponse>> {
+  return api.get<ProductImagesListResponse>(`/products/${productId}/images`)
+}
+
+/** Yeni görsel ekle (max 5 — backend 422 dönerse limit aşıldı). İlk görsel otomatik ana görsel olur. */
+export async function uploadProductImage(
+  productId: string,
+  file: File
+): Promise<ApiResponse<ProductImage>> {
+  const form = new FormData()
+  form.append('file', file)
+  return api.upload<ProductImage>(`/products/${productId}/images`, form)
+}
+
+export async function deleteProductImage(
+  productId: string,
+  imageId: string
+): Promise<ApiResponse<{ deleted: boolean; id: string }>> {
+  return api.delete<{ deleted: boolean; id: string }>(
+    `/products/${productId}/images/${imageId}`
+  )
+}
+
+export async function setProductImagePrimary(
+  productId: string,
+  imageId: string
+): Promise<ApiResponse<{ updated: boolean; primary_id: string }>> {
+  return api.patch<{ updated: boolean; primary_id: string }>(
+    `/products/${productId}/images/${imageId}/primary`,
+    {}
+  )
+}
+
+export async function reorderProductImages(
+  productId: string,
+  imageIds: string[]
+): Promise<ApiResponse<{ reordered: boolean; count: number }>> {
+  return api.patch<{ reordered: boolean; count: number }>(
+    `/products/${productId}/images/reorder`,
+    { image_ids: imageIds }
+  )
 }
 
 export async function fetchProductDocuments(
