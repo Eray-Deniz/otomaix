@@ -117,16 +117,12 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-baseline justify-between">
-        <Label>
-          Sahne için referans görsel{' '}
-          <span className="font-normal text-gray-400">(opsiyonel)</span>
-        </Label>
-        <span className="text-xs text-gray-400">{items.length}/{maxLimit} kaydedildi</span>
-      </div>
+      <Label>
+        Sahne için referans görsel{' '}
+        <span className="font-normal text-gray-400">(opsiyonel)</span>
+      </Label>
       <p className="text-xs text-gray-500">
-        Yüklediğiniz fotoğraf (örn. Atatürk portresi, kurucu görseli) Nano Banana 2 ile sahneye yerleştirilir
-        — yüz korunarak yeni bir kompozisyon üretilir.
+        Yüklediğiniz fotoğraf (örn. Atatürk portresi, kurucu görseli) yüz korunarak yeni bir kompozisyona yerleştirilir.
       </p>
 
       {/* Seçili gösterim */}

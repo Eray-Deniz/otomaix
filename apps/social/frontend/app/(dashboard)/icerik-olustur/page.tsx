@@ -1279,6 +1279,15 @@ function IcerikOlusturInner() {
                   )}
                 </div>
               )}
+
+              {/* Sahne için referans görsel — özel gün + genel mod, tatil seçicinin hemen altında */}
+              {specialDayFormat && imageSubType === 'general' && currentBrand?.id && (
+                <SceneReferencePicker
+                  brandId={currentBrand.id}
+                  value={selectedSceneReference}
+                  onChange={setSelectedSceneReference}
+                />
+              )}
             </div>
           )}
 
@@ -1543,8 +1552,8 @@ function IcerikOlusturInner() {
                 </div>
               </div>
 
-              {/* Sprint 3 — Sahne için referans görsel (sadece genel mod, Akış C tüm formatlar) */}
-              {imageSubType === 'general' && currentBrand?.id && ['image', 'carousel', 'video'].includes(effectiveContentType) && (
+              {/* Sprint 3 — Sahne için referans görsel (özel gün dışındaki genel modlar; özel günde tatil seçicinin altında) */}
+              {contentType !== 'special_day' && imageSubType === 'general' && currentBrand?.id && ['image', 'carousel', 'video'].includes(effectiveContentType) && (
                 <SceneReferencePicker
                   brandId={currentBrand.id}
                   value={selectedSceneReference}
