@@ -143,32 +143,6 @@ Yanıt olarak sadece JSON döndür: {{"image_prompt": "...", "caption": "...", "
     return enriched
 
 
-def _build_special_day_prompt(payload: PostGenerate, brand: object, brand_kit: dict) -> str:
-    """Build an fal.ai image prompt for special day / holiday content."""
-    holiday = payload.special_day_name or "Özel Gün"
-    brand_name = brand["name"] or ""
-    sector = brand["sector"] or ""
-    colors = ", ".join(brand_kit.get("colors", []))
-    style = brand_kit.get("style", "modern, professional")
-    extra = f" Additional context: {payload.prompt}" if payload.prompt else ""
-
-    category_hints = {
-        "religious": "warm, festive, respectful, traditional Turkish aesthetic",
-        "national": "patriotic, proud, celebratory, Turkish colors red and white",
-        "commercial": "vibrant, promotional, eye-catching, commercial photography style",
-    }
-    mood = category_hints.get(payload.special_day_category or "", "festive, celebratory, warm")
-
-    return (
-        f"Social media post image for {holiday}. "
-        f"Brand: {brand_name}, sector: {sector}. "
-        f"Visual mood: {mood}. "
-        f"Brand colors: {colors}. Style: {style}. "
-        f"Professional, high quality, suitable for {', '.join(payload.platforms) or 'social media'}."
-        f"{extra}"
-    )
-
-
 def _build_quote_prompt(payload: PostGenerate, brand: dict, brand_kit: dict) -> str:
     """Build an fal.ai image prompt for quote card content."""
     quote = payload.quote_text or ""
@@ -199,6 +173,9 @@ class GenerateCaptionRequest(BaseModel):
     product_id: UUID | None = None
     content_type: str | None = None
     voice: str | None = None
+    # Özel gün modunda doldurulur — caption_generator tatil tonuna yönlendirmek için kullanır.
+    special_day_name: str | None = None
+    special_day_category: str | None = None
 
 
 @router.post(
@@ -279,6 +256,8 @@ async def generate_caption(
         platforms=payload.platforms,
         product=product,
         content_type=payload.content_type,
+        special_day_name=payload.special_day_name,
+        special_day_category=payload.special_day_category,
     )
 
     return OkResponse(data=result)
@@ -328,9 +307,9 @@ async def generate_post(
             raise HTTPException(status_code=404, detail="Ürün bulunamadı")
 
     # Build prompt based on content type
-    if payload.content_type == "special_day":
-        enriched_prompt = _build_special_day_prompt(payload, brand, brand_kit)
-    elif payload.content_type == "quote":
+    # Özel gün artık Akış C üzerinden çalışır: frontend /generate-caption'dan
+    # tatil-aware image_prompt alır ve buraya yollar (payload.image_prompt).
+    if payload.content_type == "quote":
         enriched_prompt = _build_quote_prompt(payload, dict(brand), brand_kit)
     elif payload.image_prompt:
         # Phase 7 Sprint 4/5 — Akış C (unified): caption endpoint'ten image_prompt geldiyse

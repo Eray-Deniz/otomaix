@@ -200,6 +200,10 @@ class ShortVideoGenerate(BaseModel):
     # Boş ise sahne markaya/ürüne göre kurulur; doluysa sahne bu tarife göre üretilir
     # ve ürün resmi yerine FLUX still oluşturulur.
     visual_brief: str = ""
+    # Özel gün modunda (ozelgun-shortvideo-sablon) doldurulur — caption_generator
+    # tatil tonuna yönlendirme için kullanır.
+    special_day_name: str | None = None
+    special_day_category: str | None = None
 
 
 class GenerateScriptRequest(BaseModel):

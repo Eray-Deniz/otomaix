@@ -877,6 +877,323 @@ TEMPLATES["shortvideo-genel-sablon"] = Template(
 )
 
 
+TEMPLATES["ozelgun-gorsel-sablon"] = Template(
+    id="ozelgun-gorsel-sablon",
+    name="Özel Gün Görseli",
+    description="Tatil/özel gün için kutlama tonunda statik sosyal medya görseli",
+    icon="🎉",
+    sectors=["*"],
+    contentTypes=["image"],
+    order=4,
+    formFields=[
+        TemplateFormField(id="holiday_name", label="Tatil/Özel Gün Adı", type="text", required=True,
+            placeholder="örn. Anneler Günü, 23 Nisan, Ramazan Bayramı",
+            helpText="Tatil seçiciden otomatik doldurulur. Üzerine yazıp özelleştirebilirsiniz "
+                     "(örn. 'Sevgili Anneme').",
+            validation={"maxLength": 80},
+            group="Tatil"),
+        TemplateFormField(id="holiday_message", label="Özel Mesajınız (opsiyonel)", type="textarea", required=False,
+            placeholder="Markanızın bu özel günde paylaşmak istediği mesaj, dilek veya hatıra...",
+            helpText="Boş bırakırsanız caption tatilin genel anlamı + marka tonu üzerinden yazılır.",
+            validation={"maxLength": 300},
+            group="Tatil"),
+        TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
+            placeholder="https://... (kampanya, hediye seçimi, randevu linki)",
+            helpText="Bu özel günle ilgili bir kampanya/sayfa varsa link buraya. Boş bırakırsanız "
+                     "caption sadece kutlama/dilek mesajıyla biter.",
+            group="Yönlendirme"),
+        TemplateFormField(id="cta_label", label="Çağrı Metni (opsiyonel)", type="text", required=False,
+            placeholder="örn. Hediye Seçimi, Kampanyayı İncele, Randevu Al",
+            validation={"maxLength": 40},
+            helpText="Yönlendirme linki doldurulduysa caption'da bu çağrı metni görünür.",
+            group="Yönlendirme"),
+    ],
+    output=TemplateOutput(aspectRatioSuggestion="1:1"),
+    prompt=TemplatePrompt(
+        guidance=(
+            "Özel gün/tatil için statik sosyal medya görseli. Caption ve görsel "
+            "tatilin DUYGUSAL ANLAMINI taşımalı — ürün satışı/promosyon değil.\n\n"
+            "📅 ÖZEL GÜN BAĞLAMI:\n"
+            "Sana payload'da `special_day_name` (tatilin adı) ve `special_day_category` "
+            "(national | religious | commercial) bilgisi gelir. Kategori caption tonunu "
+            "belirler:\n"
+            "- **national** (23 Nisan, 19 Mayıs, 29 Ekim, 30 Ağustos): vatan/gurur/birlik "
+            "tonu. Aşırı slogan değil — markanın bu güne saygısını/katkısını anlat. "
+            "Atatürk veya tarihi figür için uydurma alıntı/söz YASAK.\n"
+            "- **religious** (Ramazan/Kurban Bayramı, Mevlid Kandili, Aşure): saygı + "
+            "samimi dilek. 'Bayramınız mübarek olsun' tonu uygun. Dini açıklama "
+            "yapma, hüküm verme.\n"
+            "- **commercial** (Anneler Günü, Babalar Günü, Sevgililer Günü, Yeni Yıl): "
+            "duygu + kişisel bağlantı. Kampanya/promosyon caption'ı YAZMA — hediye "
+            "yönlendirmesi sadece kullanıcı `cta_url` doldurduysa son satıra eklenir.\n\n"
+            "🎨 CAPTION FORMÜLÜ — TATİL FORMÜLÜ (ürün satışı formülü değil):\n"
+            "1. HOOK: Tatilin duygusal anlamı veya gözlem (1-2 cümle). "
+            "Örn. Anneler Günü için 'Bir annenin gözleri çocuğunu binlerce kişi "
+            "arasında bulur.'\n"
+            "2. KÖPRÜ: Markanın bu güne saygısı/dileği (1 cümle). "
+            "Marka adı geçmek zorunda değil — ton önemli.\n"
+            "3. KAPANIŞ: Kısa, samimi tebrik veya dilek. "
+            "Örn. 'Sevgi dolu bir gün diliyoruz.' / 'Bayramınız mübarek olsun.'\n"
+            "4. CTA (sadece kullanıcı `cta_url` doldurduysa): yumuşak yönlendirme. "
+            "'Hediye seçiminizde size eşlik etmek isteriz' gibi — agresif satış değil.\n\n"
+            "Kullanıcı `holiday_message` doldurduysa onu HOOK veya KÖPRÜ'ye organik "
+            "şekilde entegre et — aynen kopyalama, marka tonuna uyarla.\n\n"
+            "🚫 ÖZEL GÜN İÇİN YASAK:\n"
+            "- Sahte istatistik/araştırma uydurma ('annelerin %87'si...').\n"
+            "- Klişe slogan zinciri ('en güzel günler, en değerli anlar, en özel...').\n"
+            "- Aşırı satış dili ('%50 indirim! Acele edin!').\n"
+            "- Dini/milli günde dini/siyasi yorum.\n"
+            "- Ürün özelliği listeleme (bu şablon ürün satışı için değil).\n"
+            "- Tarihi figür için uydurma alıntı/söz.\n\n"
+            "🖼️ GÖRSEL YÖNERGESİ (image_prompt için, İngilizce):\n"
+            "Tatilin SEMBOLİZMİNİ + marka renklerini birleştir. Kategori başına "
+            "atmosfer ipuçları:\n"
+            "- **national**: Türk bayrağı renkleri (kırmızı + beyaz), gurur dolu fakat "
+            "abartısız sahne. Tören/anma sahneleri kategori bağlamında uygun.\n"
+            "- **religious**: warm light, traditional Turkish/Islamic patterns, "
+            "calligraphy tarzı süsleme, hilal/yıldız yumuşak biçimde. İnsan figürü "
+            "kullanılacaksa yüz detayı vurgulanmasın.\n"
+            "- **commercial**: duygusal sahne. Anneler Günü → anne-çocuk silueti, "
+            "çiçek; Sevgililer Günü → iki kişinin bağlantısı (eller, gölge); Yeni "
+            "Yıl → ışık, yenilenme, doğa döngüsü.\n\n"
+            "Marka rengini (HEX) arka plan veya aksan olarak entegre et — tatil "
+            "renkleri hep dominant olmasın, marka kimliği sezilebilir kalsın.\n\n"
+            "image_prompt'ta logo, marka rozeti veya yazı TARIF ETME — gerçek logo "
+            "ve image text overlay (tatil başlığı) post-process'te eklenir.\n\n"
+            "🎯 GÖRSEL AÇI KATEGORİSİ (image_prompt yazmadan önce bir açı seç):\n"
+            "1. SEMBOLİK SAHNE — tatilin ikonik objesini öne çıkar (bayrak, çiçek, "
+            "fener, mum)\n"
+            "2. İNSAN ANI — bağlantı/dilek anı (sarılma, el tutuşma, yaşlı bir el)\n"
+            "3. ATMOSFER — ışık/doku/renk üzerinden ruh hali (gün doğumu, sıcak ışık)\n"
+            "4. KÜLTÜREL DETAY — Türkiye'ye özgü görsel öğe (motif, bayrak, "
+            "geleneksel obje)\n\n"
+            "Açı seçimi: kategori + holiday_message birlikte yön verir. Genel "
+            "sahnede ATMOSFER veya SEMBOLİK SAHNE en güvenli; kişisel/duygusal "
+            "ton İNSAN ANI'na götürür. Aynı açıyı her özel günde kullanma.\n\n"
+            "CTA (caption sonu) kuralı:\n"
+            "- `cta_url` boşsa: caption tebrik/dilek cümlesiyle biter, link satırı yok.\n"
+            "- `cta_url` doluysa platforma göre:\n"
+            "  • Instagram/TikTok/Threads: '🎁 {cta_label} — profilimizdeki linkten "
+            "ulaşabilirsiniz' (useFirstComment aktifse URL first_comment'e)\n"
+            "  • LinkedIn/Facebook/Twitter/Pinterest: '🎁 {cta_label}: {cta_url}'\n"
+            "- Yumuşak emoji (🎁 🌷 🌙 🇹🇷) tatil tonuyla uyumlu kullanılabilir, abartma."
+        ),
+        priority=["form_fields", "brand_kit", "rag_docs"],
+    ),
+    defaults=TemplateDefaults(),
+    imageTextOverlay=ImageTextOverlaySpec(
+        fields=["holiday_name"],
+        position="bottom-left",
+    ),
+    tags=["özel gün", "tatil", "görsel"],
+)
+
+
+TEMPLATES["ozelgun-carousel-sablon"] = Template(
+    id="ozelgun-carousel-sablon",
+    name="Özel Gün Carousel",
+    description="Tatil/özel gün için çoklu slide kutlama hikayesi",
+    icon="🎉",
+    sectors=["*"],
+    contentTypes=["carousel"],
+    order=5,
+    formFields=[
+        TemplateFormField(id="holiday_name", label="Tatil/Özel Gün Adı", type="text", required=True,
+            placeholder="örn. Anneler Günü, 23 Nisan, Ramazan Bayramı",
+            helpText="Tatil seçiciden otomatik doldurulur. Üzerine yazıp özelleştirebilirsiniz.",
+            validation={"maxLength": 80},
+            group="Tatil"),
+        TemplateFormField(id="holiday_message", label="Özel Mesajınız (opsiyonel)", type="textarea", required=False,
+            placeholder="Bu özel günde paylaşmak istediğiniz mesaj, dilek veya hatıra...",
+            helpText="Boş bırakırsanız carousel hikayesi tatilin genel anlamı + marka tonu üzerinden kurgulanır.",
+            validation={"maxLength": 300},
+            group="Tatil"),
+        TemplateFormField(id="slide_count", label="Slide Sayısı", type="select", required=True,
+            defaultValue="4",
+            options=[
+                {"value": "3", "label": "3 Slide"},
+                {"value": "4", "label": "4 Slide"},
+                {"value": "5", "label": "5 Slide"},
+                {"value": "6", "label": "6 Slide"},
+                {"value": "7", "label": "7 Slide"},
+            ],
+            helpText="Özel gün carousel'lerinde 3-5 slide önerilir — kısa, duygusal akış.",
+            group="Carousel"),
+        TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
+            placeholder="https://... (kampanya, hediye seçimi, randevu linki)",
+            helpText="Boş bırakırsanız caption sadece kutlama/dilek mesajıyla biter.",
+            group="Yönlendirme"),
+        TemplateFormField(id="cta_label", label="Çağrı Metni (opsiyonel)", type="text", required=False,
+            placeholder="örn. Hediye Seçimi, Kampanyayı İncele, Randevu Al",
+            validation={"maxLength": 40},
+            group="Yönlendirme"),
+    ],
+    output=TemplateOutput(aspectRatioSuggestion="1:1"),
+    prompt=TemplatePrompt(
+        guidance=(
+            "Özel gün/tatil carousel'i. Slide dizisi tatilin duygusal anlamını "
+            "katmanlı olarak anlatır — ürün satış akışı değil, hikaye/dilek akışı.\n\n"
+            "📅 ÖZEL GÜN BAĞLAMI:\n"
+            "Sana payload'da `special_day_name` + `special_day_category` "
+            "(national | religious | commercial) gelir. Kategori tonu belirler:\n"
+            "- **national**: vatan/gurur/birlik. Tarihi figür için uydurma alıntı yasak.\n"
+            "- **religious**: saygı + samimi dilek. Dini açıklama/hüküm yapma.\n"
+            "- **commercial**: duygu + kişisel bağlantı. Promosyon değil.\n\n"
+            "🎠 CAROUSEL SLIDE DİZİSİ — TATİL HİKAYESİ:\n"
+            "- **Slide 1 (HOOK)**: Tatilin duygusal anlamına dair açılış sahnesi. "
+            "Sembolik veya atmosferik. Kullanıcıyı kaydırmaya teşvik eden duygusal "
+            "yakalama.\n"
+            "- **Slide 2 — Slide N-1 (HİKAYE)**: Her slide tatilin başka bir yönünü "
+            "işler. Olası açılar:\n"
+            "  • Tarihi/kültürel anlamı (national/religious'ta uygun)\n"
+            "  • İnsan/aile bağlantısı (commercial'da uygun)\n"
+            "  • Markanın bu güne saygısı/dileği (gizli reklam değil — paylaşılan "
+            "değer)\n"
+            "  • Dilek/temenniler\n"
+            "- **Slide N (KAPANIŞ)**: Samimi tebrik veya marka dileği. CTA varsa bu "
+            "slide'da görsel olarak yumuşak çağrı (ör. açık kapı, uzanan el). CTA "
+            "yoksa sadece tebrik atmosferi.\n\n"
+            "⚠️ SLIDE TUTARLILIĞI: Tüm slide'lar **aynı görsel atmosferde** kalmalı "
+            "(renk paleti, ışık tonu). Ürün carousel'lerindeki gibi farklı sahnelere "
+            "atlama — tek bir tatil ruh hali boyunca akış.\n\n"
+            "🎨 GÖRSEL AÇI KATEGORİSİ (her slide için ayrı seç):\n"
+            "1. SEMBOLİK SAHNE — bayrak, çiçek, fener, mum, motif\n"
+            "2. İNSAN ANI — sarılma, el, gözler, anılar\n"
+            "3. ATMOSFER — ışık, doku, renk geçişi\n"
+            "4. KÜLTÜREL DETAY — geleneksel motif, mekan, obje\n\n"
+            "Aynı açıyı arka arkaya 2 slide'da kullanma — çeşitlilik akışı taşır.\n\n"
+            "🖼️ GÖRSEL YÖNERGESİ (tüm slide'lar için, İngilizce):\n"
+            "- Tatilin sembolizmi + marka renklerini birleştir.\n"
+            "- Kategoriye göre atmosfer:\n"
+            "  • national: Türk bayrağı renkleri, gurur dolu fakat abartısız\n"
+            "  • religious: warm light, traditional patterns, calligraphy tarzı\n"
+            "  • commercial: duygusal sahne (anne-çocuk, çift, doğa, ışık)\n"
+            "- Logo, yazı, marka rozeti TARIF ETME (post-process'te eklenir).\n\n"
+            "📝 CAPTION FORMÜLÜ:\n"
+            "Caption TEK metin — slide bazlı ayrı caption yok, tüm carousel için "
+            "bir caption. Yapı:\n"
+            "1. HOOK: Tatilin duygusal anlamı (1-2 cümle)\n"
+            "2. KÖPRÜ: Markanın bu güne saygısı/dileği\n"
+            "3. KAPANIŞ: Samimi tebrik veya dilek\n"
+            "4. CTA (sadece `cta_url` doluysa): yumuşak yönlendirme\n\n"
+            "🚫 ÖZEL GÜN İÇİN YASAK:\n"
+            "- Sahte istatistik ('annelerin %87'si...').\n"
+            "- Klişe slogan zinciri.\n"
+            "- Aşırı satış dili ('%50 indirim').\n"
+            "- Dini/siyasi yorum.\n"
+            "- Tarihi figür için uydurma alıntı.\n"
+            "- Hashtag'lere yapay özellik sızdırma.\n\n"
+            "CTA kuralı:\n"
+            "- `cta_url` boşsa: caption tebrik cümlesiyle biter, link satırı yok.\n"
+            "- `cta_url` doluysa platforma göre:\n"
+            "  • Instagram/TikTok/Threads: '🎁 {cta_label} — profilimizdeki linkten "
+            "ulaşabilirsiniz'\n"
+            "  • LinkedIn/Facebook/Twitter/Pinterest: '🎁 {cta_label}: {cta_url}'"
+        ),
+        priority=["form_fields", "brand_kit", "rag_docs"],
+    ),
+    defaults=TemplateDefaults(),
+    imageTextOverlay=ImageTextOverlaySpec(
+        fields=["holiday_name"],
+        position="bottom-left",
+    ),
+    tags=["özel gün", "tatil", "carousel"],
+)
+
+
+TEMPLATES["ozelgun-shortvideo-sablon"] = Template(
+    id="ozelgun-shortvideo-sablon",
+    name="Özel Gün Kısa Video",
+    description="Tatil/özel gün için AI sesli kısa kutlama videosu",
+    icon="🎉",
+    sectors=["*"],
+    contentTypes=["video"],
+    order=6,
+    formFields=[
+        TemplateFormField(id="holiday_name", label="Tatil/Özel Gün Adı", type="text", required=True,
+            placeholder="örn. Anneler Günü, 23 Nisan, Ramazan Bayramı",
+            helpText="Tatil seçiciden otomatik doldurulur. Üzerine yazıp özelleştirebilirsiniz.",
+            validation={"maxLength": 80},
+            group="Tatil"),
+        TemplateFormField(id="holiday_message", label="Özel Mesajınız (opsiyonel)", type="textarea", required=False,
+            placeholder="Bu özel günde paylaşmak istediğiniz mesaj, dilek veya hatıra...",
+            helpText="Boş bırakırsanız script tatilin genel anlamı + marka tonu üzerinden yazılır.",
+            validation={"maxLength": 300},
+            group="Tatil"),
+        TemplateFormField(id="cta_url", label="Yönlendirme Linki (opsiyonel)", type="url", required=False,
+            placeholder="https://... (kampanya, hediye seçimi, randevu linki)",
+            helpText="Boş bırakırsanız caption sadece kutlama/dilek mesajıyla biter.",
+            group="Yönlendirme"),
+        TemplateFormField(id="cta_label", label="Çağrı Metni (opsiyonel)", type="text", required=False,
+            placeholder="örn. Hediye Seçimi, Kampanyayı İncele, Randevu Al",
+            validation={"maxLength": 40},
+            group="Yönlendirme"),
+    ],
+    output=TemplateOutput(aspectRatioSuggestion="9:16"),
+    prompt=TemplatePrompt(
+        guidance=(
+            "Özel gün/tatil kısa videosu. Voiceover script tatilin duygusal "
+            "anlamını anlatır — ürün satışı/promosyon değil, kutlama/dilek tonu.\n\n"
+            "📅 ÖZEL GÜN BAĞLAMI:\n"
+            "Sana payload'da `special_day_name` + `special_day_category` "
+            "(national | religious | commercial) gelir. Kategori tonu belirler:\n"
+            "- **national**: vatan/gurur/birlik. Tarihi figür için uydurma alıntı yasak.\n"
+            "- **religious**: saygı + samimi dilek. Dini açıklama/hüküm yapma.\n"
+            "- **commercial**: duygu + kişisel bağlantı. Kampanya değil.\n\n"
+            "🎙️ SCRIPT (TÜRKÇE VOICEOVER) — TATİL FORMÜLÜ:\n"
+            "Yapı (15-25 saniye, ~32-55 kelime — özel gün'de kısa daha etkili):\n"
+            "1. HOOK (ilk 3 saniye): Tatilin duygusal anlamı veya gözlem.\n"
+            "2. ANLAM (orta): Markanın bu güne saygısı/dileği. 1-2 cümle.\n"
+            "3. KAPANIŞ: Samimi tebrik. CTA varsa yumuşak yönlendirme.\n\n"
+            "Kullanıcı `holiday_message` doldurduysa onu HOOK veya ANLAM'a organik "
+            "şekilde entegre et — aynen kopyalama.\n\n"
+            "⚠️ SCRIPT KURALLARI:\n"
+            "- Türkçe, TTS'in doğal okuyacağı kısa cümleler.\n"
+            "- Tarihi figür için uydurma alıntı/söz YASAK.\n"
+            "- Dini/siyasi yorum yapma.\n"
+            "- Sahte istatistik uydurma.\n"
+            "- Aşırı satış dili kullanma.\n"
+            "- Bilgide olmayan iddia uydurma.\n\n"
+            "🖼️ STILL IMAGE PROMPT (image_prompt için, İngilizce):\n"
+            "Sahne hareketli video'ya uygun olmalı (kamera hareketi düşün — slow "
+            "push-in, gentle pan, atmospheric drift). Tatilin sembolizmi + marka "
+            "renklerini birleştir.\n\n"
+            "Kategori başına atmosfer:\n"
+            "- **national**: Türk bayrağı renkleri, gurur dolu fakat abartısız sahne.\n"
+            "- **religious**: warm light, traditional patterns, calligraphy süsleme.\n"
+            "- **commercial**: duygusal sahne (anne-çocuk silueti, eller, çiçek, "
+            "doğa, ışık).\n\n"
+            "Marka rengini (HEX) arka plan veya aksan olarak entegre et — tatil "
+            "renkleri hep dominant olmasın.\n\n"
+            "image_prompt'ta logo, yazı, marka rozeti TARIF ETME — gerçek logo + "
+            "altyazı post-process'te eklenir.\n\n"
+            "🎯 GÖRSEL AÇI KATEGORİSİ (image_prompt için bir açı seç):\n"
+            "1. SEMBOLİK SAHNE — bayrak, çiçek, fener, mum, motif\n"
+            "2. İNSAN ANI — sarılma, el, gözler\n"
+            "3. ATMOSFER — ışık, doku, renk geçişi\n"
+            "4. KÜLTÜREL DETAY — geleneksel motif, mekan, obje\n\n"
+            "📝 CAPTION FORMÜLÜ (script'ten ayrı, sosyal medya altyazısı):\n"
+            "1. HOOK: Tatilin duygusal anlamı (1-2 cümle)\n"
+            "2. KÖPRÜ: Markanın dileği\n"
+            "3. KAPANIŞ: Samimi tebrik\n"
+            "4. CTA (sadece `cta_url` doluysa): yumuşak yönlendirme\n\n"
+            "Caption ve script aynı şeyi tekrar etmesin — script konuşulan voiceover, "
+            "caption okunan sosyal medya metni. İkisi tatilin farklı yönlerine "
+            "değinebilir.\n\n"
+            "CTA kuralı:\n"
+            "- `cta_url` boşsa: caption tebrik cümlesiyle biter, link satırı yok.\n"
+            "- `cta_url` doluysa platforma göre:\n"
+            "  • Instagram/TikTok/Threads: '🎁 {cta_label} — profilimizdeki linkten "
+            "ulaşabilirsiniz'\n"
+            "  • LinkedIn/Facebook/Twitter/Pinterest: '🎁 {cta_label}: {cta_url}'"
+        ),
+        priority=["form_fields", "brand_kit", "rag_docs"],
+    ),
+    defaults=TemplateDefaults(),
+    tags=["özel gün", "tatil", "video"],
+)
+
+
 # Eski şablon — geriye dönük uyumluluk için kayıtlı kalır (geçmiş post webhook'ları için).
 # status="deprecated" → kataloğta gizlenir. PR 3 cleanup'ta silinir.
 TEMPLATES["facelessvideo-genel-sablon"] = Template(

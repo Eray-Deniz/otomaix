@@ -254,6 +254,30 @@ def build_brand_context(
     return "\n".join(parts)
 
 
+_SPECIAL_DAY_CATEGORY_TR = {
+    "national": "milli/ulusal",
+    "religious": "dini",
+    "commercial": "ticari/duygusal",
+}
+
+_SPECIAL_DAY_TONE_HINTS = {
+    "national": (
+        "Ton: vatan/gurur/birlik. Markanın bu güne saygısı esas. "
+        "Tarihi figür için uydurma alıntı/söz YASAK. "
+        "Aşırı slogan zinciri, dolu duygu sömürüsü kullanma."
+    ),
+    "religious": (
+        "Ton: saygı + samimi dilek. 'Bayramınız mübarek olsun' ailesi uygun. "
+        "Dini açıklama/hüküm yapma, mezhep/yorum tartışmasına girme."
+    ),
+    "commercial": (
+        "Ton: duygu + kişisel bağlantı. Promosyon/satış dili YASAK. "
+        "İndirim/kampanya cümlesi sokma — yönlendirme sadece kullanıcı "
+        "cta_url doldurduysa caption'ın son satırına gelir."
+    ),
+}
+
+
 def build_dynamic_content(
     template: Template | None,
     template_fields: dict | None,
@@ -261,9 +285,33 @@ def build_dynamic_content(
     rag_context: str | None,
     platforms: list[str] | None,
     product: dict | None = None,
+    special_day: dict | None = None,
 ) -> str:
-    """Tier 3 — dynamic content (not cached)."""
+    """Tier 3 — dynamic content (not cached).
+
+    `special_day`: {"name": "Anneler Günü", "category": "commercial"} formatında.
+    Doluysa caption + image_prompt'ı tatil tonuna yönlendiren ayrı bir blok eklenir.
+    """
     parts: list[str] = []
+
+    if special_day and special_day.get("name"):
+        name = special_day["name"]
+        category = special_day.get("category") or ""
+        category_tr = _SPECIAL_DAY_CATEGORY_TR.get(category, category or "genel")
+        tone_hint = _SPECIAL_DAY_TONE_HINTS.get(category, "")
+        parts.append("=== ÖZEL GÜN BAĞLAMI (caption + image_prompt için yön verici) ===")
+        parts.append(f"Tatil/özel gün: {name}")
+        parts.append(f"Kategori: {category_tr}")
+        if tone_hint:
+            parts.append(tone_hint)
+        parts.append(
+            "Bu içerik bir kutlama/tebrik postudur — ürün satış formülü uygulanmaz. "
+            "Caption tatilin duygusal anlamını taşımalı, marka kimliği saygıyla "
+            "sezdirilmeli. image_prompt tatilin sembolizmini + marka renklerini "
+            "birleştirmeli (ürünü değil, tatil atmosferini görselleştir — ürün "
+            "modunda image-edit zaten ürünü sahneye yerleştirir)."
+        )
+        parts.append("=== ÖZEL GÜN BAĞLAMI SONU ===\n")
 
     if user_prompt:
         parts.append(

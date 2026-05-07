@@ -92,13 +92,25 @@ async def generate_captions(
     platforms: list[str],
     product: dict | None = None,
     content_type: str | None = None,
+    special_day_name: str | None = None,
+    special_day_category: str | None = None,
 ) -> dict[str, Any]:
-    """Generate caption + image prompt + hashtags via Claude. Video ise script de üretir."""
+    """Generate caption + image prompt + hashtags via Claude. Video ise script de üretir.
+
+    `special_day_name` + `special_day_category` doluysa caption tatil tonuna yönlendirilir
+    (Tier 3 dynamic content'e ÖZEL GÜN BAĞLAMI bloğu eklenir).
+    """
 
     system_prompt = build_system_prompt()
     brand_context = build_brand_context(brand, brand_kit, template)
+    special_day = (
+        {"name": special_day_name, "category": special_day_category}
+        if special_day_name
+        else None
+    )
     dynamic_content = build_dynamic_content(
-        template, template_fields, user_prompt, rag_context, platforms, product
+        template, template_fields, user_prompt, rag_context, platforms, product,
+        special_day=special_day,
     )
 
     output_format = _build_output_format_instruction(
