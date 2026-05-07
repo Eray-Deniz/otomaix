@@ -26,6 +26,7 @@ import { fetchTemplateById } from '@/lib/api/templates'
 import type { Template } from '@/lib/templates.types'
 import { fetchProducts } from '@/lib/api/products'
 import type { Product } from '@/lib/products.types'
+import { SceneReferencePicker, type SelectedSceneReference } from '@/components/SceneReferencePicker'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,8 @@ function IcerikOlusturInner() {
   const [availableProducts, setAvailableProducts] = useState<Product[]>([])
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [loadingProducts, setLoadingProducts] = useState(false)
+  // Sprint 3 (Özel Gün) — Marka referans görseli (Nano Banana 2 edit ref'i, genel mod)
+  const [selectedSceneReference, setSelectedSceneReference] = useState<SelectedSceneReference | null>(null)
 
   // Phase 7 — Template system (image/carousel)
   const [mode, setMode] = useState<TemplateMode>('template')
@@ -336,6 +339,7 @@ function IcerikOlusturInner() {
   // imageSubType değişince ilgili state'leri sıfırla
   useEffect(() => {
     setSelectedProduct(null)
+    setSelectedSceneReference(null)
     setSelectedDocIds([])
     setCaptionData(null)
   }, [imageSubType])
@@ -493,6 +497,7 @@ function IcerikOlusturInner() {
         intro_position: introPosition,
         product_id: selectedProduct?.id ?? null,
         visual_brief: prompt.trim(),
+        scene_reference_image_url: imageSubType === 'general' ? selectedSceneReference?.image_url ?? null : null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -563,6 +568,7 @@ function IcerikOlusturInner() {
         product_id: selectedProduct?.id ?? null,
         special_day_name: contentType === 'special_day' ? selectedHoliday?.name_tr ?? null : null,
         special_day_category: contentType === 'special_day' ? selectedHoliday?.category ?? null : null,
+        scene_reference_image_url: imageSubType === 'general' ? selectedSceneReference?.image_url ?? null : null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -643,6 +649,7 @@ function IcerikOlusturInner() {
       voice: effectiveContentType === 'video' ? selectedVoice : undefined,
       special_day_name: contentType === 'special_day' ? selectedHoliday?.name_tr ?? null : null,
       special_day_category: contentType === 'special_day' ? selectedHoliday?.category ?? null : null,
+      scene_reference_image_url: imageSubType === 'general' ? selectedSceneReference?.image_url ?? null : null,
     })
     setLoadingCaption(false)
     if (res.success && res.data) {
@@ -846,6 +853,7 @@ function IcerikOlusturInner() {
     setIntroPosition('none')
     setStage1Edited(false)
     setSpecialDayFormat(null)
+    setSelectedSceneReference(null)
   }
 
   // Template seçim handler
@@ -1534,6 +1542,15 @@ function IcerikOlusturInner() {
                   ))}
                 </div>
               </div>
+
+              {/* Sprint 3 — Sahne için referans görsel (sadece genel mod, Akış C tüm formatlar) */}
+              {imageSubType === 'general' && currentBrand?.id && ['image', 'carousel', 'video'].includes(effectiveContentType) && (
+                <SceneReferencePicker
+                  brandId={currentBrand.id}
+                  value={selectedSceneReference}
+                  onChange={setSelectedSceneReference}
+                />
+              )}
 
               {/* Dokümanlar — sadece Genel Görsel modunda göster */}
               {imageSubType === 'general' && availableDocs.length > 0 && (
