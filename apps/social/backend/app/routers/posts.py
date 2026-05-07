@@ -356,6 +356,13 @@ async def generate_post(
     # Phase 7 — template_id varsa content_category'yi boşalt (yeni akış legacy ile karışmasın)
     effective_category = None if payload.template_id else payload.content_category
 
+    # Tek görsel akışında enriched_prompt'u template_fields'a kaydet (debug + "Yeniden Üret" için).
+    # Carousel için slides JSONB içinde slide bazlı image_prompt zaten tutuluyor; quote için sahne yok.
+    template_fields_for_db = payload.template_fields
+    if not slides_data and payload.content_type != "quote":
+        template_fields_for_db = dict(payload.template_fields or {})
+        template_fields_for_db["image_prompt"] = enriched_prompt
+
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
@@ -377,7 +384,7 @@ async def generate_post(
         payload.aspect_ratio,
         payload.platforms,
         payload.template_id,
-        payload.template_fields,
+        template_fields_for_db,
         payload.platform_captions,
         caption_value,
         hashtags_value,
