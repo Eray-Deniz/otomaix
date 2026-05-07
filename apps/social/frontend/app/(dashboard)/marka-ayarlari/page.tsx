@@ -25,6 +25,7 @@ import { toast } from 'sonner'
 import { Loader2, X, Upload, Check, FileText, Trash2, User, Video } from 'lucide-react'
 import { UpgradeModal } from '@/components/billing/UpgradeModal'
 import { ProductsTab } from '@/components/products/ProductsTab'
+import { SceneReferencePicker } from '@/components/SceneReferencePicker'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1056,6 +1057,18 @@ function MarkaAyarlariContent() {
               </Select>
             </div>
           )}
+
+          {/* Sprint 3 — Referans görsel kütüphanesi (içerik üretiminde Nano Banana edit ref'i) */}
+          <div className="space-y-3 pt-2 border-t border-gray-100">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Referans Görseller</h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sahnede kullanılacak referans görselleri (Atatürk fotoğrafı, kurucu portre vb.) buradan yönetin.
+                İçerik üretirken Genel mod altında bu kütüphaneden seçim yapabilirsiniz.
+              </p>
+            </div>
+            <SceneReferencePicker brandId={brand.id} mode="manage" />
+          </div>
         </TabsContent>
 
         {/* ── Tab 4: Sosyal Hesaplar ────────────────────────────────────────── */}

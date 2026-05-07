@@ -28,11 +28,16 @@ export interface SelectedSceneReference {
 
 interface Props {
   brandId: string
-  value: SelectedSceneReference | null
-  onChange: (ref: SelectedSceneReference | null) => void
+  /** 'select' (default) — içerik üretiminde tek seçim akışı.
+   *  'manage' — Marka Ayarları → Görseller'de kütüphane yönetimi (seçim yok).
+   */
+  mode?: 'select' | 'manage'
+  value?: SelectedSceneReference | null
+  onChange?: (ref: SelectedSceneReference | null) => void
 }
 
-export function SceneReferencePicker({ brandId, value, onChange }: Props) {
+export function SceneReferencePicker({ brandId, mode = 'select', value = null, onChange }: Props) {
+  const isManage = mode === 'manage'
   const [items, setItems] = useState<BrandReferenceImage[]>([])
   const [maxLimit, setMaxLimit] = useState<number>(20)
   const [loading, setLoading] = useState(false)
@@ -79,13 +84,15 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
       return
     }
     setUploading(true)
-    if (saveToLibrary) {
+    if (saveToLibrary || isManage) {
       const res = await uploadReferenceImageToLibrary(brandId, file, label.trim() || undefined)
       setUploading(false)
       if (res.success && res.data) {
         setItems((prev) => [res.data!, ...prev])
-        onChange({ id: res.data.id, image_url: res.data.image_url, label: res.data.label })
-        toast.success('Görsel kütüphaneye eklendi ve seçildi')
+        if (!isManage) {
+          onChange?.({ id: res.data.id, image_url: res.data.image_url, label: res.data.label })
+        }
+        toast.success(isManage ? 'Görsel kütüphaneye eklendi' : 'Görsel kütüphaneye eklendi ve seçildi')
         resetUploadForm()
       } else {
         toast.error(res.success ? 'Yükleme başarısız' : (res.error || 'Yükleme başarısız'))
@@ -94,7 +101,7 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
       const res = await uploadReferenceImageTemporary(brandId, file)
       setUploading(false)
       if (res.success && res.data) {
-        onChange({ id: null, image_url: res.data.image_url, label: label.trim() || null })
+        onChange?.({ id: null, image_url: res.data.image_url, label: label.trim() || null })
         toast.success('Görsel bu içerik için seçildi (kütüphaneye kaydedilmedi)')
         resetUploadForm()
       } else {
@@ -108,7 +115,7 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
     const res = await deleteReferenceImage(refId)
     if (res.success) {
       setItems((prev) => prev.filter((i) => i.id !== refId))
-      if (value?.id === refId) onChange(null)
+      if (value?.id === refId) onChange?.(null)
       toast.message('Referans görsel silindi')
     } else {
       toast.error('Silinemedi: ' + (res.error || 'Bilinmeyen hata'))
@@ -117,16 +124,18 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
 
   return (
     <div className="space-y-2">
-      <Label>
-        Sahne için referans görsel{' '}
-        <span className="font-normal text-gray-400">(opsiyonel)</span>
-      </Label>
+      {!isManage && (
+        <Label>
+          Sahne için referans görsel{' '}
+          <span className="font-normal text-gray-400">(opsiyonel)</span>
+        </Label>
+      )}
       <p className="text-xs text-gray-500">
         Yüklediğiniz fotoğraf (örn. Atatürk portresi, kurucu görseli) yüz korunarak yeni bir kompozisyona yerleştirilir.
       </p>
 
-      {/* Seçili gösterim */}
-      {value && (
+      {/* Seçili gösterim — yalnız select modunda */}
+      {!isManage && value && (
         <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={value.image_url} alt={value.label ?? 'Seçili referans'} className="w-12 h-12 rounded-lg object-cover" />
@@ -140,7 +149,7 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
           </div>
           <button
             type="button"
-            onClick={() => onChange(null)}
+            onClick={() => onChange?.(null)}
             className="text-amber-700 hover:text-amber-900"
             aria-label="Seçimi kaldır"
           >
@@ -160,30 +169,48 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
           <p className="text-xs text-gray-500 mb-1.5">Kütüphane</p>
           <div className="grid grid-cols-4 gap-2">
             {items.map((it) => {
-              const selected = value?.id === it.id
+              const selected = !isManage && value?.id === it.id
               return (
                 <div key={it.id} className="relative group">
-                  <button
-                    type="button"
-                    onClick={() => onChange({ id: it.id, image_url: it.image_url, label: it.label })}
-                    className={cn(
-                      'block w-full aspect-square rounded-lg overflow-hidden border-2 transition-all',
-                      selected ? 'border-amber-500 ring-2 ring-amber-200' : 'border-gray-200 hover:border-amber-300'
-                    )}
-                    title={it.label ?? 'Etiketsiz'}
-                  >
-                    <Image
-                      src={it.image_url}
-                      alt={it.label ?? 'Referans görsel'}
-                      width={120}
-                      height={120}
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
+                  {isManage ? (
+                    <div
+                      className="block w-full aspect-square rounded-lg overflow-hidden border-2 border-gray-200"
+                      title={it.label ?? 'Etiketsiz'}
+                    >
+                      <Image
+                        src={it.image_url}
+                        alt={it.label ?? 'Referans görsel'}
+                        width={120}
+                        height={120}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onChange?.({ id: it.id, image_url: it.image_url, label: it.label })}
+                      className={cn(
+                        'block w-full aspect-square rounded-lg overflow-hidden border-2 transition-all',
+                        selected ? 'border-amber-500 ring-2 ring-amber-200' : 'border-gray-200 hover:border-amber-300'
+                      )}
+                      title={it.label ?? 'Etiketsiz'}
+                    >
+                      <Image
+                        src={it.image_url}
+                        alt={it.label ?? 'Referans görsel'}
+                        width={120}
+                        height={120}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleDelete(it.id)}
-                    className="absolute top-1 right-1 bg-white/80 hover:bg-white text-gray-500 hover:text-red-600 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className={cn(
+                      'absolute top-1 right-1 bg-white/80 hover:bg-white text-gray-500 hover:text-red-600 rounded-full p-1 transition-opacity',
+                      isManage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    )}
                     aria-label="Sil"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -247,13 +274,15 @@ export function SceneReferencePicker({ brandId, value, onChange }: Props) {
             />
           </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-white border border-gray-200 px-3 py-2">
-            <div className="flex flex-col gap-0.5">
-              <Label className="text-sm font-medium text-gray-800 cursor-pointer">Marka kütüphanesine kaydet</Label>
-              <span className="text-xs text-gray-500">İleride tekrar kullanmak için</span>
+          {!isManage && (
+            <div className="flex items-center justify-between rounded-lg bg-white border border-gray-200 px-3 py-2">
+              <div className="flex flex-col gap-0.5">
+                <Label className="text-sm font-medium text-gray-800 cursor-pointer">Marka kütüphanesine kaydet</Label>
+                <span className="text-xs text-gray-500">İleride tekrar kullanmak için</span>
+              </div>
+              <Switch checked={saveToLibrary} onCheckedChange={setSaveToLibrary} />
             </div>
-            <Switch checked={saveToLibrary} onCheckedChange={setSaveToLibrary} />
-          </div>
+          )}
 
           <label className="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
             <input
