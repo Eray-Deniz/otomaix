@@ -1456,16 +1456,8 @@ function IcerikOlusturInner() {
                 </div>
               )}
 
-              {/* Sahne için referans görsel — özel gün video (akordeon dışı tek şablon kaldı)
-                  Image ve carousel özel gün şablonları akordeon kullandığı için Group-1'de render eder;
-                  burada ikinci kez render etmemek için image + carousel hariç tutuldu. */}
-              {specialDayFormat === 'video' && imageSubType === 'general' && currentBrand?.id && (
-                <SceneReferencePicker
-                  brandId={currentBrand.id}
-                  value={selectedSceneReference}
-                  onChange={setSelectedSceneReference}
-                />
-              )}
+              {/* Sahne referansı kaldırıldı — özel gün'ün her 3 formatı (image/carousel/video)
+                  artık akordeon Group-1 içindeki SceneReferencePicker'ı kullanıyor. */}
             </div>
           )}
 
@@ -1491,10 +1483,12 @@ function IcerikOlusturInner() {
           )}
 
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret"
-              NOT: genel-gorsel + carousel-genel + shortvideo-genel + ozelgun-gorsel + ozelgun-carousel
-              akordeon yapıya geçti (aşağıda ayrı blok). Bu legacy düz layout sadece
-              ozelgun-shortvideo ve diğer şablonlar için çalışır. */}
-          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && selectedTemplate.id !== SPECIAL_DAY_TEMPLATE_IDS.image && selectedTemplate.id !== SPECIAL_DAY_TEMPLATE_IDS.carousel && (
+              NOT: 6 ana şablon (genel-gorsel, carousel-genel, shortvideo-genel,
+              ozelgun-gorsel, ozelgun-carousel, ozelgun-shortvideo) akordeon yapıya
+              geçti (aşağıda ayrı blok). Bu legacy düz layout artık sadece serbest mod
+              (mode='free') ve hipotetik diğer şablonlar (sektör şablonları gibi)
+              için çalışır. */}
+          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && selectedTemplate.id !== SPECIAL_DAY_TEMPLATE_IDS.image && selectedTemplate.id !== SPECIAL_DAY_TEMPLATE_IDS.carousel && selectedTemplate.id !== SPECIAL_DAY_TEMPLATE_IDS.video && (
             <div className="space-y-5">
               {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && !SPECIAL_DAY_TEMPLATE_ID_SET.has(selectedTemplate.id) && (
                 <button
@@ -1939,16 +1933,17 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* genel-gorsel + carousel-genel + shortvideo-genel + ozelgun-gorsel + ozelgun-carousel
-              — akordeon Step 2 layout. Video için 5. blok "Video Detayları" eklenir;
-              "Yönlendirme & Logo" → "Yönlendirme" olur.
+          {/* Tüm 6 ana şablon akordeon Step 2 layout kullanır:
+              genel-gorsel + carousel-genel + shortvideo-genel + ozelgun-gorsel + ozelgun-carousel + ozelgun-shortvideo.
+              Video için 5. blok "Video Detayları" eklenir; "Yönlendirme & Logo" → "Yönlendirme" olur.
               Özel gün'de DynamicForm Konu grubu yerine "Tatil" grubunu render eder. */}
           {mode === 'template' && phase === 'form' && selectedTemplate && (
             (effectiveContentType === 'image' && selectedTemplate.id === DEFAULT_IMAGE_TEMPLATE_ID) ||
             (effectiveContentType === 'carousel' && selectedTemplate.id === DEFAULT_CAROUSEL_TEMPLATE_ID) ||
             (effectiveContentType === 'video' && selectedTemplate.id === DEFAULT_VIDEO_TEMPLATE_ID) ||
             (contentType === 'special_day' && specialDayFormat === 'image' && selectedTemplate.id === SPECIAL_DAY_TEMPLATE_IDS.image) ||
-            (contentType === 'special_day' && specialDayFormat === 'carousel' && selectedTemplate.id === SPECIAL_DAY_TEMPLATE_IDS.carousel)
+            (contentType === 'special_day' && specialDayFormat === 'carousel' && selectedTemplate.id === SPECIAL_DAY_TEMPLATE_IDS.carousel) ||
+            (contentType === 'special_day' && specialDayFormat === 'video' && selectedTemplate.id === SPECIAL_DAY_TEMPLATE_IDS.video)
           ) && (
             <div className="space-y-3">
               {/* ── Group-1: Görsel Kaynakları ─────────────────────────────── */}
@@ -2231,8 +2226,9 @@ function IcerikOlusturInner() {
                 </div>
 
                 {/* DynamicForm — şablona göre dinamik grup filtresi:
-                    video şablonunda Konu grubu yok (skip), ozelgun-* için 'Tatil', diğerlerinde 'Konu' */}
-                {effectiveContentType !== 'video' && (
+                    sadece shortvideo-genel-sablon'da Konu/Tatil grubu yok (skip),
+                    ozelgun-* (image/carousel/video hepsi) için 'Tatil', diğerlerinde 'Konu' */}
+                {selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && (
                   <DynamicForm
                     template={selectedTemplate}
                     values={templateFields}
