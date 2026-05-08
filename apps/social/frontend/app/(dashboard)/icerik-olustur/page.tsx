@@ -480,10 +480,10 @@ function IcerikOlusturInner() {
     if (selectedVoice) setPref('tts_voice', selectedVoice)
   }, [selectedVoice])
 
-  // Akordeon: mount'ta persist'ten yükle (genel-gorsel-sablon)
+  // Akordeon: mount'ta persist'ten yükle (akordeon kullanan şablonlar için ortak)
   useEffect(() => {
     const stored = getPref<{ group1?: boolean; group2?: boolean; group3?: boolean; group4?: boolean } | null>(
-      'accordion_genel_gorsel',
+      'accordion_default',
       null,
     )
     if (stored && typeof stored === 'object') {
@@ -504,7 +504,7 @@ function IcerikOlusturInner() {
       accordionWriteSkip.current = false
       return
     }
-    setPref('accordion_genel_gorsel', accordion)
+    setPref('accordion_default', accordion)
   }, [accordion])
 
   useEffect(() => {
@@ -1475,8 +1475,8 @@ function IcerikOlusturInner() {
           )}
 
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret"
-              NOT: genel-gorsel-sablon akordeon yapıya geçti (aşağıda ayrı blok). */}
-          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && (
+              NOT: genel-gorsel-sablon ve carousel-genel-sablon akordeon yapıya geçti (aşağıda ayrı blok). */}
+          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && (
             <div className="space-y-5">
               {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && !SPECIAL_DAY_TEMPLATE_ID_SET.has(selectedTemplate.id) && (
                 <button
@@ -1921,23 +1921,48 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* genel-gorsel-sablon — 4 katlanabilir blokla yeniden düzenlenmiş Step 2 layout */}
-          {effectiveContentType === 'image' && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id === DEFAULT_IMAGE_TEMPLATE_ID && (
+          {/* genel-gorsel-sablon + carousel-genel-sablon — 4 katlanabilir blokla yeniden düzenlenmiş Step 2 layout */}
+          {mode === 'template' && phase === 'form' && selectedTemplate && (
+            (effectiveContentType === 'image' && selectedTemplate.id === DEFAULT_IMAGE_TEMPLATE_ID) ||
+            (effectiveContentType === 'carousel' && selectedTemplate.id === DEFAULT_CAROUSEL_TEMPLATE_ID)
+          ) && (
             <div className="space-y-3">
               {/* ── Group-1: Görsel Kaynakları ─────────────────────────────── */}
               <AccordionBlock
                 icon="📦"
                 title="Görsel Kaynakları"
                 summary={(() => {
+                  const slideCount = effectiveContentType === 'carousel'
+                    ? String(templateFields.slide_count ?? '').trim()
+                    : ''
+                  const slidePart = slideCount ? `${slideCount} slide` : ''
+
+                  let mainPart: string
                   if (imageSubType === 'product') {
-                    if (!selectedProduct) return 'ürün seçilmedi'
-                    return `${selectedProduct.name} · ${selectedProductImageIds.length} görsel`
+                    mainPart = !selectedProduct
+                      ? 'ürün seçilmedi'
+                      : `${selectedProduct.name} · ${selectedProductImageIds.length} görsel`
+                  } else {
+                    mainPart = selectedSceneReference ? 'sahne referansı var' : 'sahne referansı yok'
                   }
-                  return selectedSceneReference ? 'sahne referansı var' : 'sahne referansı yok'
+
+                  return slidePart ? `${slidePart} · ${mainPart}` : mainPart
                 })()}
                 isOpen={accordion.group1}
                 onToggle={() => toggleAccordion('group1')}
               >
+                {/* Slide Sayısı — sadece carousel-genel-sablon (template'in "Carousel" grubu) */}
+                {effectiveContentType === 'carousel' && (
+                  <DynamicForm
+                    template={selectedTemplate}
+                    values={templateFields}
+                    onChange={(id, v) =>
+                      setTemplateFields((prev) => ({ ...prev, [id]: v }))
+                    }
+                    groupFilter="Carousel"
+                  />
+                )}
+
                 {/* Ürün/Hizmet seçici */}
                 {imageSubType === 'product' && (
                   <div className="space-y-2">
@@ -2072,6 +2097,44 @@ function IcerikOlusturInner() {
                         )
                       })}
                     </div>
+                  </div>
+                )}
+
+                {/* Görsel Dağılımı — carousel + ürün modu + birden fazla görsel seçili */}
+                {effectiveContentType === 'carousel' && selectedProduct && selectedProductImageIds.length > 1 && (
+                  <div className="space-y-2">
+                    <Label>Görsel Dağılımı</Label>
+                    <div className="flex rounded-xl border border-gray-200 bg-gray-50 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setCarouselImageMode('auto')}
+                        className={cn(
+                          'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                          carouselImageMode === 'auto'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        )}
+                      >
+                        Otomatik dağıt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCarouselImageMode('primary_only')}
+                        className={cn(
+                          'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all',
+                          carouselImageMode === 'primary_only'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        )}
+                      >
+                        Hepsi ana görsel
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {carouselImageMode === 'auto'
+                        ? 'Slide\'lar seçili görseller arasında sırayla dağıtılır.'
+                        : 'Tüm slide\'larda ana görsel kullanılır.'}
+                    </p>
                   </div>
                 )}
 
