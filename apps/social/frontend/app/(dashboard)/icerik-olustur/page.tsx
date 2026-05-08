@@ -449,11 +449,14 @@ function IcerikOlusturInner() {
     }
   }, [currentBrand?.id])
 
-  // Platform seçimi: değişince persist et (per marka)
+  // Platform seçimi: değişince persist et (per marka).
+  // Önemli: dep'te currentBrand?.id YOK — marka geçişini read effect ele alır;
+  // eklersek henüz read tetiklenmeden ESKİ marka'nın platforms'u YENİ marka'nın anahtarına yazılıyor.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!currentBrand?.id) return
     setPref(`platforms_${currentBrand.id}`, platforms)
-  }, [platforms, currentBrand?.id])
+  }, [platforms])
 
   useEffect(() => {
     async function fetchVoices() {
@@ -493,8 +496,14 @@ function IcerikOlusturInner() {
     }
   }, [])
 
-  // Akordeon: değişince persist
+  // Akordeon: değişince persist. İlk mount'ta default değerin persist'i ezmesini
+  // önlemek için ilk write skip edilir (read effect'in stored'u yüklemesi için zaman tanır).
+  const accordionWriteSkip = useRef(true)
   useEffect(() => {
+    if (accordionWriteSkip.current) {
+      accordionWriteSkip.current = false
+      return
+    }
     setPref('accordion_genel_gorsel', accordion)
   }, [accordion])
 
@@ -538,10 +547,13 @@ function IcerikOlusturInner() {
     })
   }, [availableAspectRatios, contentType])
 
-  // Aspect ratio: kullanıcı seçimini persist et (per içerik tipi)
+  // Aspect ratio: kullanıcı seçimini persist et (per içerik tipi).
+  // Önemli: dep'te contentType YOK — contentType geçişini read effect ele alır;
+  // eklersek henüz read tetiklenmeden ESKİ aspectRatio yeni contentType'ın anahtarına yazılıyor.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (aspectRatio) setPref(`aspect_${contentType}`, aspectRatio)
-  }, [aspectRatio, contentType])
+  }, [aspectRatio])
 
   function toggleDoc(id: string) {
     setSelectedDocIds((prev) =>
