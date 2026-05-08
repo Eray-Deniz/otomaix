@@ -71,13 +71,36 @@ class R2Storage:
         return f"{settings.R2_PUBLIC_URL}/{dest_path}"
 
     async def download_and_upload(self, source_url: str, dest_path: str, content_type: str) -> str:
-        """Download a file from a URL and upload it to R2 (used for fal.ai → R2)."""
+        """Download a file from a URL and upload it to R2 (used for fal.ai → R2).
+
+        fal.ai CDN bazen yavaş cevap veriyor — httpx default 5sn timeout yetersiz
+        kalıyor (carousel slide'larda ReadTimeout → tüm post fail). 30sn read
+        timeout + transient hata/timeout'larda 2 retry (1sn, 3sn backoff). 4xx
+        hataları (kalıcı) retry edilmez, anında fırlatılır.
+        """
+        import asyncio
         import httpx
 
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(source_url)
-            resp.raise_for_status()
-        return self.upload(resp.content, dest_path, content_type)
+        timeout = httpx.Timeout(30.0, connect=10.0)
+        backoffs = [0, 1, 3]
+        last_exc: Exception | None = None
+        for backoff in backoffs:
+            if backoff:
+                await asyncio.sleep(backoff)
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    resp = await client.get(source_url)
+                    resp.raise_for_status()
+                return self.upload(resp.content, dest_path, content_type)
+            except httpx.TimeoutException as exc:
+                last_exc = exc
+            except httpx.HTTPStatusError as exc:
+                if 500 <= exc.response.status_code < 600:
+                    last_exc = exc
+                else:
+                    raise
+        assert last_exc is not None
+        raise last_exc
 
 
 r2 = R2Storage()
