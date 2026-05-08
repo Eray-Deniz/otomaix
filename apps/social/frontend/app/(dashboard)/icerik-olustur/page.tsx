@@ -1456,7 +1456,7 @@ function IcerikOlusturInner() {
                                 return prev.filter((id) => id !== img.id)
                               }
                               if (prev.length >= 3) {
-                                toast.error('En fazla 3 görsel seçebilirsiniz — Nano Banana 2 sweet spot')
+                                toast.error('En fazla 3 görsel seçebilirsiniz')
                                 return prev
                               }
                               return [...prev, img.id]
