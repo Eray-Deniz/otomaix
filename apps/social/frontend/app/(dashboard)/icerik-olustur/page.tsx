@@ -590,7 +590,7 @@ function IcerikOlusturInner() {
         image_text_fields: imageTextFields,
         product_id: selectedProduct?.id ?? null,
         product_image_ids: selectedProductImageIds.length > 0 ? selectedProductImageIds : null,
-        carousel_image_mode: effectiveContentType === 'carousel' ? carouselImageMode : null,
+        ...(effectiveContentType === 'carousel' ? { carousel_image_mode: carouselImageMode } : {}),
         special_day_name: contentType === 'special_day' ? selectedHoliday?.name_tr ?? null : null,
         special_day_category: contentType === 'special_day' ? selectedHoliday?.category ?? null : null,
         scene_reference_image_url: imageSubType === 'general' ? selectedSceneReference?.image_url ?? null : null,
