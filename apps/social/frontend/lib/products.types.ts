@@ -21,6 +21,9 @@ export interface Product {
   type: ProductType
   name: string
   description: string | null
+  // Kısa pazarlama vurgusu (max 60 char). Görsel overlay'inde + caption'da öne çıkar.
+  // Boş bırakılabilir → null. Description (uzun teknik bilgi) sadece AI bağlamına gider.
+  highlight: string | null
   tags: string[]
   // Ana görsel (denormalize) — is_primary=true satırın kopyası; tek görsel
   // konumlarında (liste thumbnail vb.) kullanılır.
@@ -53,6 +56,7 @@ export interface ProductCreatePayload {
   type: ProductType
   name: string
   description?: string | null
+  highlight?: string | null
   tags?: string[]
   is_active?: boolean
 }
@@ -60,6 +64,7 @@ export interface ProductCreatePayload {
 export interface ProductUpdatePayload {
   name?: string
   description?: string | null
+  highlight?: string | null
   tags?: string[]
   is_active?: boolean
 }

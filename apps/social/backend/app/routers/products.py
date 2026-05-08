@@ -87,14 +87,15 @@ async def create_product(
     row = await db.fetchrow(
         """
         INSERT INTO social.brand_products
-            (brand_id, type, name, description, tags, is_active)
-        VALUES ($1, $2, $3, $4, $5, $6)
+            (brand_id, type, name, description, highlight, tags, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *
         """,
         payload.brand_id,
         payload.type,
         payload.name,
         payload.description,
+        payload.highlight,
         payload.tags,
         payload.is_active,
     )
@@ -269,6 +270,7 @@ async def update_product(
         [
             ("name", payload.name),
             ("description", payload.description),
+            ("highlight", payload.highlight),
             ("tags", payload.tags),
             ("is_active", payload.is_active),
         ],

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ─── Common response wrappers ───────────────────────────────────────────────
@@ -121,6 +121,7 @@ class ProductCreate(BaseModel):
     type: str  # "product" | "service"
     name: str
     description: str | None = None
+    highlight: str | None = Field(default=None, max_length=60)
     tags: list[str] = []
     is_active: bool = True
 
@@ -128,6 +129,7 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    highlight: str | None = Field(default=None, max_length=60)
     tags: list[str] | None = None
     is_active: bool | None = None
 
@@ -151,6 +153,7 @@ class ProductOut(BaseModel):
     type: str
     name: str
     description: str | None
+    highlight: str | None = None
     tags: list[str]
     # Ana görsel (denormalize) — product_images tablosundaki is_primary=true satırın kopyası.
     image_url: str | None

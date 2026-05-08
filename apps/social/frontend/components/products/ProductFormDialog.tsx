@@ -37,6 +37,7 @@ import {
   reorderProductImages,
 } from '@/lib/api/products'
 import type { Product, ProductImage, ProductType } from '@/lib/products.types'
+import { cn } from '@/lib/utils'
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -73,6 +74,7 @@ export function ProductFormDialog({
   const [type, setType] = useState<ProductType>('product')
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [highlight, setHighlight] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [isActive, setIsActive] = useState(true)
@@ -101,6 +103,7 @@ export function ProductFormDialog({
       setType(product.type)
       setName(product.name)
       setDescription(product.description ?? '')
+      setHighlight(product.highlight ?? '')
       setTags(product.tags ?? [])
       setIsActive(product.is_active)
       // Backend listeden gelen images alanını kullan; yoksa /images endpoint'inden çek.
@@ -116,6 +119,7 @@ export function ProductFormDialog({
       setType('product')
       setName('')
       setDescription('')
+      setHighlight('')
       setTags([])
       setIsActive(true)
       setExistingImages([])
@@ -315,6 +319,7 @@ export function ProductFormDialog({
         const res = await updateProduct(product.id, {
           name: trimmedName,
           description: description.trim() || null,
+          highlight: highlight.trim() || null,
           tags,
           is_active: isActive,
         })
@@ -329,6 +334,7 @@ export function ProductFormDialog({
           type,
           name: trimmedName,
           description: description.trim() || null,
+          highlight: highlight.trim() || null,
           tags,
           is_active: isActive,
         })
@@ -430,9 +436,40 @@ export function ProductFormDialog({
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Ürün/hizmetin ayırt edici özellikleri, hedef kitle, fiyat..."
+              placeholder="Teknik bilgiler, malzemeler, ölçüler, kullanım detayları..."
               rows={3}
             />
+            <p className="text-xs text-gray-500">
+              Sadece AI bağlamına gider, görsele basılmaz. Hammadde/ölçü gibi teknik
+              detayları buraya yazabilirsiniz.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label>
+                Öne Çıkan Vurgu
+                <span className="ml-1 font-normal text-gray-400">(opsiyonel)</span>
+              </Label>
+              <span
+                className={cn(
+                  'text-xs',
+                  highlight.length > 60 ? 'text-red-500' : 'text-gray-400'
+                )}
+              >
+                {highlight.length}/60
+              </span>
+            </div>
+            <Input
+              value={highlight}
+              onChange={(e) => setHighlight(e.target.value.slice(0, 60))}
+              placeholder="örn. Konfor ve şıklık bir arada"
+              maxLength={60}
+            />
+            <p className="text-xs text-gray-500">
+              Kısa pazarlama mesajı. Görselde ve caption&apos;da öne çıkar. Boş
+              bırakırsanız ürün adı kullanılır.
+            </p>
           </div>
 
           <div className="space-y-1.5">

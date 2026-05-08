@@ -1534,7 +1534,7 @@ function IcerikOlusturInner() {
                               setTemplateFields((prev) => ({
                                 ...prev,
                                 ana_konu: p.name,
-                                one_cikan_ozellik: p.description ?? '',
+                                one_cikan_ozellik: p.highlight ?? '',
                               }))
                             }
                           }}
@@ -2013,7 +2013,7 @@ function IcerikOlusturInner() {
                               setTemplateFields((prev) => ({
                                 ...prev,
                                 ana_konu: p.name,
-                                one_cikan_ozellik: p.description ?? '',
+                                one_cikan_ozellik: p.highlight ?? '',
                               }))
                             }}
                             className={cn(

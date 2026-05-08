@@ -413,7 +413,7 @@ def build_dynamic_content(
                 "(örn. 'malzemeyi vurgula', 'Türkiye'de üretildiğini belirt') "
                 "o zaman olduğu gibi kullanılabilir — user_prompt önceliği "
                 "her zaman geçerli.\n"
-                "Aynı kural YAPISAL VERİLER bloğundaki 'Öne Çıkan Özellik' "
+                "Aynı kural YAPISAL VERİLER bloğundaki 'Öne Çıkan Vurgu' "
                 "alanı için de geçerli — o alan spec içerse bile caption'da "
                 "fayda diline çevir.\n"
                 "Bu kural sadece caption metni içindir; image_prompt zaten "
