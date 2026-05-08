@@ -529,11 +529,9 @@ function IcerikOlusturInner() {
     return ASPECT_RATIOS.filter((ar) => supportedSet.has(ar.id))
   }, [effectiveContentType, mediaModels])
 
-  // Aspect ratio: persist'ten oku (per içerik tipi). Kullanıcının son tercihi
-  // şablon önerisinden ve fallback'ten önceliklidir; desteklenmiyorsa fallback.
-  // Önemli: dependency'de aspectRatio YOK — write effect ile oscillation olmaması için
-  // sadece contentType / availableAspectRatios değişince çalışır. Mevcut aspectRatio
-  // değerini setter functional form ile okuyoruz.
+  // Aspect ratio: persist'ten oku (per içerik tipi). Kullanıcının son AÇIK seçimi
+  // şablon önerisinden önceliklidir. Persist YALNIZCA UI handler'da (selectAspectRatio)
+  // yazılır — bu effect persist'e yazma yapmaz, sadece okur ve fallback uygular.
   useEffect(() => {
     if (availableAspectRatios.length === 0) return
     const stored = getPref<string | null>(`aspect_${contentType}`, null)
@@ -541,19 +539,25 @@ function IcerikOlusturInner() {
       setAspectRatio(stored)
       return
     }
+    // Persist yok — şablon önerisini uygula (kullanıcı bilinçli seçim yapana kadar
+    // tercih sayılmaz, persist'e yazılmaz)
+    const suggestion = selectedTemplate?.output.aspectRatioSuggestion
+    if (suggestion && availableAspectRatios.some((ar) => ar.id === suggestion)) {
+      setAspectRatio(suggestion)
+      return
+    }
     setAspectRatio((curr) => {
       if (availableAspectRatios.some((ar) => ar.id === curr)) return curr
       return availableAspectRatios[0].id
     })
-  }, [availableAspectRatios, contentType])
+  }, [availableAspectRatios, contentType, selectedTemplate?.id])
 
-  // Aspect ratio: kullanıcı seçimini persist et (per içerik tipi).
-  // Önemli: dep'te contentType YOK — contentType geçişini read effect ele alır;
-  // eklersek henüz read tetiklenmeden ESKİ aspectRatio yeni contentType'ın anahtarına yazılıyor.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (aspectRatio) setPref(`aspect_${contentType}`, aspectRatio)
-  }, [aspectRatio])
+  // Aspect ratio handler: kullanıcı UI'dan bir oran seçtiğinde state + persist birlikte yazılır.
+  // Persist sadece BURADA güncellenir; effect'lerin yazma yetkisi yoktur.
+  const selectAspectRatio = useCallback((id: string) => {
+    setAspectRatio(id)
+    setPref(`aspect_${contentType}`, id)
+  }, [contentType])
 
   function toggleDoc(id: string) {
     setSelectedDocIds((prev) =>
@@ -1037,10 +1041,9 @@ function IcerikOlusturInner() {
     setImageTextFields(template.imageTextOverlay?.fields ?? null)
     setCaptionData(null)
     setPhase('form')
-    // Aspect ratio önerisini uygula
-    if (template.output.aspectRatioSuggestion) {
-      setAspectRatio(template.output.aspectRatioSuggestion)
-    }
+    // NOT: Aspect ratio suggestion'ı burada UYGULANMAZ — read effect persist yoksa
+    // suggestion'ı zaten fallback olarak uygular. Burada setAspectRatio çağırırsak
+    // kullanıcı seçim yapmadığı halde persist'i kirletme riski oluşurdu.
     analytics.templateSelected(template.id, currentBrand?.sector_slug, contentType)
   }
 
@@ -1735,7 +1738,7 @@ function IcerikOlusturInner() {
                   {availableAspectRatios.map((ar) => (
                     <button
                       key={ar.id}
-                      onClick={() => setAspectRatio(ar.id)}
+                      onClick={() => selectAspectRatio(ar.id)}
                       className={cn(
                         'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
                         aspectRatio === ar.id
@@ -2281,7 +2284,7 @@ function IcerikOlusturInner() {
                     {availableAspectRatios.map((ar) => (
                       <button
                         key={ar.id}
-                        onClick={() => setAspectRatio(ar.id)}
+                        onClick={() => selectAspectRatio(ar.id)}
                         className={cn(
                           'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
                           aspectRatio === ar.id
@@ -2452,7 +2455,7 @@ function IcerikOlusturInner() {
                   {availableAspectRatios.map((ar) => (
                     <button
                       key={ar.id}
-                      onClick={() => setAspectRatio(ar.id)}
+                      onClick={() => selectAspectRatio(ar.id)}
                       className={cn(
                         'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
                         aspectRatio === ar.id
