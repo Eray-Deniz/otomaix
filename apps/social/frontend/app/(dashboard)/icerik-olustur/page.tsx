@@ -1456,8 +1456,10 @@ function IcerikOlusturInner() {
                 </div>
               )}
 
-              {/* Sahne için referans görsel — özel gün + genel mod, tatil seçicinin hemen altında */}
-              {specialDayFormat && imageSubType === 'general' && currentBrand?.id && (
+              {/* Sahne için referans görsel — özel gün carousel/video (akordeon dışı şablonlar)
+                  Özel gün image (ozelgun-gorsel-sablon) akordeon kullandığı için Group-1'de render eder;
+                  burada ikinci kez render etmemek için specialDayFormat !== 'image' koşulu eklendi. */}
+              {specialDayFormat && specialDayFormat !== 'image' && imageSubType === 'general' && currentBrand?.id && (
                 <SceneReferencePicker
                   brandId={currentBrand.id}
                   value={selectedSceneReference}
@@ -1489,10 +1491,10 @@ function IcerikOlusturInner() {
           )}
 
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret"
-              NOT: genel-gorsel + carousel-genel + shortvideo-genel akordeon yapıya geçti
-              (aşağıda ayrı blok). Bu legacy düz layout sadece ozelgun-* x3 ve diğer
-              şablonlar için çalışır. */}
-          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && (
+              NOT: genel-gorsel + carousel-genel + shortvideo-genel + ozelgun-gorsel
+              akordeon yapıya geçti (aşağıda ayrı blok). Bu legacy düz layout sadece
+              ozelgun-carousel + ozelgun-shortvideo ve diğer şablonlar için çalışır. */}
+          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && selectedTemplate.id !== SPECIAL_DAY_TEMPLATE_IDS.image && (
             <div className="space-y-5">
               {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && !SPECIAL_DAY_TEMPLATE_ID_SET.has(selectedTemplate.id) && (
                 <button
@@ -1937,12 +1939,14 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* genel-gorsel + carousel-genel + shortvideo-genel — akordeon Step 2 layout
-              Video için 5. blok "Video Detayları" eklenir; "Yönlendirme & Logo" → "Yönlendirme" olur. */}
+          {/* genel-gorsel + carousel-genel + shortvideo-genel + ozelgun-gorsel — akordeon Step 2 layout
+              Video için 5. blok "Video Detayları" eklenir; "Yönlendirme & Logo" → "Yönlendirme" olur.
+              Özel gün'de DynamicForm Konu grubu yerine "Tatil" grubunu render eder. */}
           {mode === 'template' && phase === 'form' && selectedTemplate && (
             (effectiveContentType === 'image' && selectedTemplate.id === DEFAULT_IMAGE_TEMPLATE_ID) ||
             (effectiveContentType === 'carousel' && selectedTemplate.id === DEFAULT_CAROUSEL_TEMPLATE_ID) ||
-            (effectiveContentType === 'video' && selectedTemplate.id === DEFAULT_VIDEO_TEMPLATE_ID)
+            (effectiveContentType === 'video' && selectedTemplate.id === DEFAULT_VIDEO_TEMPLATE_ID) ||
+            (contentType === 'special_day' && specialDayFormat === 'image' && selectedTemplate.id === SPECIAL_DAY_TEMPLATE_IDS.image)
           ) && (
             <div className="space-y-3">
               {/* ── Group-1: Görsel Kaynakları ─────────────────────────────── */}
@@ -2171,14 +2175,17 @@ function IcerikOlusturInner() {
                 icon="📝"
                 title="Konu"
                 summary={(() => {
-                  const ak = String(templateFields.ana_konu ?? '').trim()
-                  if (!ak) return 'henüz doldurulmadı'
-                  return ak.length > 40 ? ak.slice(0, 40) + '…' : ak
+                  // Özel gün şablonlarında ana alan holiday_name, diğerlerinde ana_konu
+                  const isOzelgun = selectedTemplate.id.startsWith('ozelgun-')
+                  const fieldId = isOzelgun ? 'holiday_name' : 'ana_konu'
+                  const value = String(templateFields[fieldId] ?? '').trim()
+                  if (!value) return 'henüz doldurulmadı'
+                  return value.length > 40 ? value.slice(0, 40) + '…' : value
                 })()}
                 isOpen={accordion.konu}
                 onToggle={() => toggleAccordion('konu')}
               >
-                {/* Tasarım/Anlatım textarea — video modunda label/placeholder/help-text farklı */}
+                {/* Tasarım/Anlatım textarea — video & özel gün modlarında label/placeholder/help-text farklılaşır */}
                 <div className="space-y-1.5">
                   <Label>
                     {effectiveContentType === 'video' ? (
@@ -2203,7 +2210,9 @@ function IcerikOlusturInner() {
                         ? imageSubType === 'general'
                           ? 'Örn: "Sabah meditasyonu zihni nasıl temizler 30 saniyede anlat", "5 adımda evden iş kurma ipuçları"'
                           : 'Örn: "Bu ürünün indirim kampanyasını vurgula", "kullanım anlarını öne çıkar" (boş bırakırsanız ürün adı ve açıklaması kullanılır)'
-                        : 'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'
+                        : selectedTemplate.id.startsWith('ozelgun-')
+                          ? 'Örn: "Çiçekler ön planda, sıcak/yumuşak ışık", "Tatil sembolünü merkeze al"'
+                          : 'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'
                     }
                     rows={3}
                     className="resize-none"
@@ -2213,11 +2222,14 @@ function IcerikOlusturInner() {
                       ? imageSubType === 'general'
                         ? 'Video script\'i ve gönderi metni buradaki anlatımdan üretilir.'
                         : 'Boş bırakırsanız ürünün adı ve açıklaması temel alınır.'
-                      : 'Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir.'}
+                      : selectedTemplate.id.startsWith('ozelgun-')
+                        ? 'Yazdıklarınız tatilin tonuna ek olarak görsel ve metni şekillendirir.'
+                        : 'Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir.'}
                   </p>
                 </div>
 
-                {/* DynamicForm Konu grubu — sadece image/carousel'de var; video şablonunda Konu grubu yok */}
+                {/* DynamicForm — şablona göre dinamik grup filtresi:
+                    video şablonunda Konu grubu yok (skip), ozelgun-* için 'Tatil', diğerlerinde 'Konu' */}
                 {effectiveContentType !== 'video' && (
                   <DynamicForm
                     template={selectedTemplate}
@@ -2227,7 +2239,7 @@ function IcerikOlusturInner() {
                     }
                     imageTextFields={imageTextFields ?? undefined}
                     onImageTextFieldsChange={setImageTextFields}
-                    groupFilter="Konu"
+                    groupFilter={selectedTemplate.id.startsWith('ozelgun-') ? 'Tatil' : 'Konu'}
                   />
                 )}
 
