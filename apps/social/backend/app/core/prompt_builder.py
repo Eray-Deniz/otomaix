@@ -367,6 +367,60 @@ def build_dynamic_content(
                 parts.append(f"Etiketler: {', '.join(str(t) for t in tags)}")
             parts.append("=== ÜRÜN BİLGİSİ SONU ===\n")
 
+        # Teknik spec sızdırma guardrail — ürün açıklaması hammadde/ölçü/menşei
+        # gibi PDP attribute'ları içerebilir; caption değer satışı yapmalı,
+        # spec listesini olduğu gibi tekrar etmemeli. Kural hem ÜRÜN BİLGİSİ
+        # bloğundaki "Açıklama" hem YAPISAL VERİLER'deki "Öne Çıkan Özellik"
+        # alanı için geçerli (image/carousel'de description o etiket altında
+        # gidebiliyor).
+        if product.get("description"):
+            parts.append(
+                "⚠️ ÜRÜN AÇIKLAMASI / TEKNİK SPEC KURALI:\n"
+                "Açıklama hammadde, materyal, ölçü, menşei, taban tipi, "
+                "üretim yeri gibi teknik spec içerebilir. Bunlar SADECE "
+                "doğruluk referansı — caption'da bu terimleri OLDUĞU GİBİ "
+                "yazma. Spec terimlerini kullanıcı için fayda/değer/his "
+                "diline çevir.\n"
+                "Örnekler (farklı sektörlerden — prensibi yakala, ürün "
+                "kategorisine göre uyarla):\n"
+                "- Tekstil/giyim: '%100 pamuk' → 'yumuşak dokunuş' / "
+                "'nefes alan kumaş'\n"
+                "- Mobilya: 'kayın masifi' → 'doğal ahşap his' / "
+                "'sağlam yapı'\n"
+                "- Ayakkabı/aksesuar: 'hakiki deri / dana derisi' → "
+                "'kaliteli dokunuş' / 'uzun ömürlü malzeme'\n"
+                "- Elektronik: '5000 mAh batarya' → 'uzun pil ömrü' "
+                "(mAh rakamını yazma)\n"
+                "- Kozmetik: 'hyaluronik asit içerir' → "
+                "'yoğun nemlendirme' / 'cilde tazelik'\n"
+                "- Gıda: '300 gr / %5 şeker' → tat ve kullanım "
+                "vurgusu (rakamı caption'a koyma)\n"
+                "- Hizmet: '10+ yıl deneyim' → 'tecrübeli ekip' / "
+                "'işin uzmanı' (rakam yerine güven duygusu)\n"
+                "Kategorik kural:\n"
+                "- Materyal/hammadde adı → ne hissettirdiği veya ne "
+                "işe yaradığı\n"
+                "- Ölçü, sayı, teknik değer (cm/gr/mm/mAh/kWh/MP/L) → "
+                "caption'da rakamı yazma, kullanım anlamına çevir\n"
+                "- Menşei / üretim yeri → 'yerli üretim' / 'el yapımı' "
+                "gibi genel ifade (sadece kullanıcı user_prompt'ta "
+                "vurgulamak istediyse)\n"
+                "- Bileşen/içerik adı → kullanıcı için sonucu/etkisi\n"
+                "Genel prensip: Her spec caption'da yer almak zorunda "
+                "değil. Kullanıcı için ne işe yaradığına bak — "
+                "yaramıyorsa hiç bahsetme.\n"
+                "İSTİSNA: Kullanıcı user_prompt'unda spec'i açıkça istediyse "
+                "(örn. 'malzemeyi vurgula', 'Türkiye'de üretildiğini belirt') "
+                "o zaman olduğu gibi kullanılabilir — user_prompt önceliği "
+                "her zaman geçerli.\n"
+                "Aynı kural YAPISAL VERİLER bloğundaki 'Öne Çıkan Özellik' "
+                "alanı için de geçerli — o alan spec içerse bile caption'da "
+                "fayda diline çevir.\n"
+                "Bu kural sadece caption metni içindir; image_prompt zaten "
+                "ürün özelliklerini tarif etmiyor (ürün referans görselden "
+                "alınıyor).\n"
+            )
+
         if product.get("image_url"):
             parts.append(
                 "⚠️ image_prompt İÇİN ÖZEL KURAL: Bu içerikte ürünün mevcut "
