@@ -522,17 +522,21 @@ function IcerikOlusturInner() {
 
   // Aspect ratio: persist'ten oku (per içerik tipi). Kullanıcının son tercihi
   // şablon önerisinden ve fallback'ten önceliklidir; desteklenmiyorsa fallback.
+  // Önemli: dependency'de aspectRatio YOK — write effect ile oscillation olmaması için
+  // sadece contentType / availableAspectRatios değişince çalışır. Mevcut aspectRatio
+  // değerini setter functional form ile okuyoruz.
   useEffect(() => {
     if (availableAspectRatios.length === 0) return
     const stored = getPref<string | null>(`aspect_${contentType}`, null)
     if (stored && availableAspectRatios.some((ar) => ar.id === stored)) {
-      if (aspectRatio !== stored) setAspectRatio(stored)
+      setAspectRatio(stored)
       return
     }
-    if (!availableAspectRatios.some((ar) => ar.id === aspectRatio)) {
-      setAspectRatio(availableAspectRatios[0].id)
-    }
-  }, [availableAspectRatios, aspectRatio, contentType])
+    setAspectRatio((curr) => {
+      if (availableAspectRatios.some((ar) => ar.id === curr)) return curr
+      return availableAspectRatios[0].id
+    })
+  }, [availableAspectRatios, contentType])
 
   // Aspect ratio: kullanıcı seçimini persist et (per içerik tipi)
   useEffect(() => {
