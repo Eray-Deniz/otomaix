@@ -11,6 +11,12 @@ interface DynamicFormProps {
   onChange: (fieldId: string, value: unknown) => void
   imageTextFields?: string[]
   onImageTextFieldsChange?: (fields: string[]) => void
+  /**
+   * Sadece belirtilen grup adındaki alanları render eder ve grup başlığını
+   * (h3) gizler. Akordeon başlığı zaten dışarıda render edildiğinde tekrarı
+   * önlemek için kullanılır. Verilmezse tüm gruplar başlıklarıyla render edilir.
+   */
+  groupFilter?: string
 }
 
 export function DynamicForm({
@@ -19,6 +25,7 @@ export function DynamicForm({
   onChange,
   imageTextFields,
   onImageTextFieldsChange,
+  groupFilter,
 }: DynamicFormProps) {
   // Group fields by .group (keep order of first occurrence)
   const groups: { name: string | undefined; fields: TemplateFormField[] }[] = []
@@ -27,6 +34,10 @@ export function DynamicForm({
     if (existing) existing.fields.push(field)
     else groups.push({ name: field.group, fields: [field] })
   }
+
+  const visibleGroups = groupFilter
+    ? groups.filter((g) => g.name === groupFilter)
+    : groups
 
   const overlaySpec = template.imageTextOverlay
   const overlayCandidateIds = new Set(overlaySpec?.fields ?? [])
@@ -42,7 +53,7 @@ export function DynamicForm({
 
   return (
     <div className="space-y-5">
-      {template.defaults.disclaimer && (
+      {template.defaults.disclaimer && !groupFilter && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
           <p className="text-xs font-semibold text-amber-800 mb-1">⚠ Otomatik Disclaimer</p>
           <p className="text-xs text-amber-700 leading-relaxed">
@@ -54,9 +65,9 @@ export function DynamicForm({
         </div>
       )}
 
-      {groups.map((group, gi) => (
+      {visibleGroups.map((group, gi) => (
         <div key={gi} className="space-y-3">
-          {group.name && (
+          {group.name && !groupFilter && (
             <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
               {group.name}
             </h3>

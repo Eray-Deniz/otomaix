@@ -13,7 +13,7 @@ import { api } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 import { toast } from 'sonner'
 import { analytics } from '@/lib/analytics'
-import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb, FileText, Package, Wrench, Star } from 'lucide-react'
+import { Loader2, Wand2, RefreshCw, Calendar, Send, X, Lightbulb, FileText, Package, Wrench, Star, ChevronDown } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { UpgradeModal } from '@/components/billing/UpgradeModal'
@@ -27,6 +27,7 @@ import type { Template } from '@/lib/templates.types'
 import { fetchProducts } from '@/lib/api/products'
 import type { Product } from '@/lib/products.types'
 import { SceneReferencePicker, type SelectedSceneReference } from '@/components/SceneReferencePicker'
+import { getPref, setPref } from '@/lib/preferences'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,6 +164,48 @@ function StepIndicator({ step, contentType }: { step: Step; contentType: Content
   )
 }
 
+// ─── Accordion block (Step 2 — genel-gorsel-sablon) ─────────────────────────
+
+interface AccordionBlockProps {
+  icon: string
+  title: string
+  summary?: string | null
+  isOpen: boolean
+  onToggle: () => void
+  children: React.ReactNode
+}
+
+function AccordionBlock({ icon, title, summary, isOpen, onToggle, children }: AccordionBlockProps) {
+  return (
+    <div className="rounded-xl border border-gray-200 overflow-hidden bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="text-base flex-shrink-0">{icon}</span>
+          <span className="text-sm font-medium text-gray-800 flex-shrink-0">{title}</span>
+          {summary && !isOpen && (
+            <span className="text-xs text-gray-400 truncate">· {summary}</span>
+          )}
+        </div>
+        <ChevronDown
+          className={cn(
+            'w-4 h-4 text-gray-400 flex-shrink-0 transition-transform',
+            isOpen && 'rotate-180'
+          )}
+        />
+      </button>
+      {isOpen && (
+        <div className="px-4 py-4 border-t border-gray-100 space-y-4">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
 export default function IcerikOlusturPage() {
@@ -222,6 +265,18 @@ function IcerikOlusturInner() {
   // Phase 8 Sprint 1 — per-post logo overlay override. null = marka varsayılanına uy,
   // true/false = bu post için açıkça override et.
   const [useLogoOverlay, setUseLogoOverlay] = useState<boolean | null>(null)
+
+  // Genel-gorsel-sablon akordeon (Step 2) — sadece bu şablonda kullanılır.
+  // Default: Konu (group2) açık. Mount sonrası persist'ten override edilir.
+  const [accordion, setAccordion] = useState({
+    group1: false,
+    group2: true,
+    group3: false,
+    group4: false,
+  })
+  const toggleAccordion = useCallback((g: 'group1' | 'group2' | 'group3' | 'group4') => {
+    setAccordion((s) => ({ ...s, [g]: !s[g] }))
+  }, [])
 
   // Kısa video — Step 2
   const [script, setScript] = useState('')
@@ -383,6 +438,23 @@ function IcerikOlusturInner() {
     fetchBrandKit()
   }, [currentBrand?.id])
 
+  // Platform seçimi: marka değişince persist'ten yükle (yoksa default ['instagram'])
+  useEffect(() => {
+    if (!currentBrand?.id) return
+    const stored = getPref<string[] | null>(`platforms_${currentBrand.id}`, null)
+    if (stored && Array.isArray(stored) && stored.length > 0) {
+      setPlatforms(stored)
+    } else {
+      setPlatforms(['instagram'])
+    }
+  }, [currentBrand?.id])
+
+  // Platform seçimi: değişince persist et (per marka)
+  useEffect(() => {
+    if (!currentBrand?.id) return
+    setPref(`platforms_${currentBrand.id}`, platforms)
+  }, [platforms, currentBrand?.id])
+
   useEffect(() => {
     async function fetchVoices() {
       const res = await api.get<TurkishVoice[]>('/posts/voices/turkish')
@@ -390,6 +462,41 @@ function IcerikOlusturInner() {
     }
     fetchVoices()
   }, [])
+
+  // TTS sesi: voices yüklendikten sonra persist'ten oku (listede varsa kullan)
+  useEffect(() => {
+    if (voices.length === 0) return
+    const stored = getPref<string | null>('tts_voice', null)
+    if (stored && voices.some((v) => v.id === stored)) {
+      setSelectedVoice(stored)
+    }
+  }, [voices])
+
+  // TTS sesi: değişince persist (global, brand'den bağımsız)
+  useEffect(() => {
+    if (selectedVoice) setPref('tts_voice', selectedVoice)
+  }, [selectedVoice])
+
+  // Akordeon: mount'ta persist'ten yükle (genel-gorsel-sablon)
+  useEffect(() => {
+    const stored = getPref<{ group1?: boolean; group2?: boolean; group3?: boolean; group4?: boolean } | null>(
+      'accordion_genel_gorsel',
+      null,
+    )
+    if (stored && typeof stored === 'object') {
+      setAccordion({
+        group1: Boolean(stored.group1),
+        group2: stored.group2 == null ? true : Boolean(stored.group2),
+        group3: Boolean(stored.group3),
+        group4: Boolean(stored.group4),
+      })
+    }
+  }, [])
+
+  // Akordeon: değişince persist
+  useEffect(() => {
+    setPref('accordion_genel_gorsel', accordion)
+  }, [accordion])
 
   useEffect(() => {
     async function fetchHolidays() {
@@ -413,12 +520,24 @@ function IcerikOlusturInner() {
     return ASPECT_RATIOS.filter((ar) => supportedSet.has(ar.id))
   }, [effectiveContentType, mediaModels])
 
+  // Aspect ratio: persist'ten oku (per içerik tipi). Kullanıcının son tercihi
+  // şablon önerisinden ve fallback'ten önceliklidir; desteklenmiyorsa fallback.
   useEffect(() => {
     if (availableAspectRatios.length === 0) return
+    const stored = getPref<string | null>(`aspect_${contentType}`, null)
+    if (stored && availableAspectRatios.some((ar) => ar.id === stored)) {
+      if (aspectRatio !== stored) setAspectRatio(stored)
+      return
+    }
     if (!availableAspectRatios.some((ar) => ar.id === aspectRatio)) {
       setAspectRatio(availableAspectRatios[0].id)
     }
-  }, [availableAspectRatios, aspectRatio])
+  }, [availableAspectRatios, aspectRatio, contentType])
+
+  // Aspect ratio: kullanıcı seçimini persist et (per içerik tipi)
+  useEffect(() => {
+    if (aspectRatio) setPref(`aspect_${contentType}`, aspectRatio)
+  }, [aspectRatio, contentType])
 
   function toggleDoc(id: string) {
     setSelectedDocIds((prev) =>
@@ -880,6 +999,7 @@ function IcerikOlusturInner() {
     setStage1Edited(false)
     setSpecialDayFormat(null)
     setSelectedSceneReference(null)
+    // Akordeon durumu kullanıcı tercihi olarak kalır (persist edildiği için reset etme)
   }
 
   // Template seçim handler
@@ -1338,8 +1458,9 @@ function IcerikOlusturInner() {
             />
           )}
 
-          {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret" */}
-          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && (
+          {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret"
+              NOT: genel-gorsel-sablon akordeon yapıya geçti (aşağıda ayrı blok). */}
+          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && (
             <div className="space-y-5">
               {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && !SPECIAL_DAY_TEMPLATE_ID_SET.has(selectedTemplate.id) && (
                 <button
@@ -1780,6 +1901,352 @@ function IcerikOlusturInner() {
               >
                 {loadingCaption ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
                 {effectiveContentType === 'video' ? 'Gönderi Metni ve Script Üret' : 'Gönderi Metni Üret'}
+              </Button>
+            </div>
+          )}
+
+          {/* genel-gorsel-sablon — 4 katlanabilir blokla yeniden düzenlenmiş Step 2 layout */}
+          {effectiveContentType === 'image' && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id === DEFAULT_IMAGE_TEMPLATE_ID && (
+            <div className="space-y-3">
+              {/* ── Group-1: Görsel Kaynakları ─────────────────────────────── */}
+              <AccordionBlock
+                icon="📦"
+                title="Görsel Kaynakları"
+                summary={(() => {
+                  if (imageSubType === 'product') {
+                    if (!selectedProduct) return 'ürün seçilmedi'
+                    return `${selectedProduct.name} · ${selectedProductImageIds.length} görsel`
+                  }
+                  return selectedSceneReference ? 'sahne referansı var' : 'sahne referansı yok'
+                })()}
+                isOpen={accordion.group1}
+                onToggle={() => toggleAccordion('group1')}
+              >
+                {/* Ürün/Hizmet seçici */}
+                {imageSubType === 'product' && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      Ürün / Hizmet Seç
+                      <span className="ml-1 font-normal text-gray-400">(zorunlu)</span>
+                    </p>
+                    {loadingProducts ? (
+                      <div className="flex items-center gap-2 py-4 text-gray-400 text-sm">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Ürünler yükleniyor...
+                      </div>
+                    ) : availableProducts.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-200 p-4 text-center text-sm text-gray-500">
+                        Henüz aktif ürün/hizmet yok.{' '}
+                        <a href="/marka-ayarlari?tab=urun-hizmet" className="text-blue-500 hover:underline">
+                          Marka Ayarları → Ürün/Hizmet
+                        </a>{' '}
+                        sayfasından ekleyebilirsiniz.
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                        {availableProducts.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProduct(p)
+                              setTemplateFields((prev) => ({
+                                ...prev,
+                                ana_konu: p.name,
+                                one_cikan_ozellik: p.description ?? '',
+                              }))
+                            }}
+                            className={cn(
+                              'flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+                              selectedProduct?.id === p.id
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/30'
+                            )}
+                          >
+                            {p.image_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={p.image_url}
+                                alt={p.name}
+                                className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                {p.type === 'service'
+                                  ? <Wrench className="w-4 h-4 text-gray-400" />
+                                  : <Package className="w-4 h-4 text-gray-400" />}
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
+                              {p.description && (
+                                <p className="text-xs text-gray-500 truncate">{p.description}</p>
+                              )}
+                            </div>
+                            {selectedProduct?.id === p.id && (
+                              <span className="text-blue-600 text-xs flex-shrink-0">✓</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Çoklu görsel seçici */}
+                {imageSubType === 'product' && selectedProduct && selectedProduct.images.length > 1 && (
+                  <div className="space-y-2">
+                    <Label>
+                      Hangi görseller kullanılsın?{' '}
+                      <span className="font-normal text-gray-400">
+                        ({selectedProductImageIds.length}/{Math.min(3, selectedProduct.images.length)})
+                      </span>
+                    </Label>
+                    <p className="text-xs text-gray-500">
+                      Seçilen görseller AI&apos;a referans olarak gönderilir. En iyi çıktı kalitesi için en fazla 3 görsel seçin. Farklı açılar (ön/yan/kullanım) sahneyi güçlendirir; renk varyantlarını karıştırmayın.
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {selectedProduct.images.map((img) => {
+                        const selected = selectedProductImageIds.includes(img.id)
+                        return (
+                          <button
+                            key={img.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProductImageIds((prev) => {
+                                if (prev.includes(img.id)) {
+                                  if (prev.length === 1) {
+                                    toast.error('En az 1 görsel seçili olmalı')
+                                    return prev
+                                  }
+                                  return prev.filter((id) => id !== img.id)
+                                }
+                                if (prev.length >= 3) {
+                                  toast.error('En fazla 3 görsel seçebilirsiniz')
+                                  return prev
+                                }
+                                return [...prev, img.id]
+                              })
+                            }}
+                            className={cn(
+                              'relative block w-full aspect-square rounded-lg overflow-hidden border-2 transition-all',
+                              selected
+                                ? 'border-blue-500 ring-2 ring-blue-200'
+                                : 'border-gray-200 hover:border-blue-300 opacity-60 hover:opacity-100'
+                            )}
+                            title={img.label ?? (img.is_primary ? 'Ana görsel' : 'Görsel')}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={img.image_url}
+                              alt={img.label ?? 'Ürün görseli'}
+                              className="w-full h-full object-cover"
+                            />
+                            {img.is_primary && (
+                              <span className="absolute top-1 left-1 bg-amber-400 text-white rounded-full p-0.5">
+                                <Star className="w-3 h-3" fill="currentColor" />
+                              </span>
+                            )}
+                            {selected && (
+                              <span className="absolute top-1 right-1 bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                                ✓
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sahne referans görseli — genel mod */}
+                {imageSubType === 'general' && currentBrand?.id && (
+                  <SceneReferencePicker
+                    brandId={currentBrand.id}
+                    value={selectedSceneReference}
+                    onChange={setSelectedSceneReference}
+                  />
+                )}
+              </AccordionBlock>
+
+              {/* ── Group-2: Konu (default açık) ───────────────────────────── */}
+              <AccordionBlock
+                icon="📝"
+                title="Konu"
+                summary={(() => {
+                  const ak = String(templateFields.ana_konu ?? '').trim()
+                  if (!ak) return 'henüz doldurulmadı'
+                  return ak.length > 40 ? ak.slice(0, 40) + '…' : ak
+                })()}
+                isOpen={accordion.group2}
+                onToggle={() => toggleAccordion('group2')}
+              >
+                {/* Tasarım ve içerik için istekleriniz */}
+                <div className="space-y-1.5">
+                  <Label>
+                    Tasarım ve içerik için istekleriniz{' '}
+                    <span className="font-normal text-gray-400">(opsiyonel)</span>
+                  </Label>
+                  <Textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder='Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'
+                    rows={3}
+                    className="resize-none"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir.
+                  </p>
+                </div>
+
+                <DynamicForm
+                  template={selectedTemplate}
+                  values={templateFields}
+                  onChange={(id, v) =>
+                    setTemplateFields((prev) => ({ ...prev, [id]: v }))
+                  }
+                  imageTextFields={imageTextFields ?? undefined}
+                  onImageTextFieldsChange={setImageTextFields}
+                  groupFilter="Konu"
+                />
+
+                {/* Dokümandan bağlam — sadece genel mod */}
+                {imageSubType === 'general' && availableDocs.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Dokümanlardan Bağlam Ekle <span className="font-normal text-gray-400">(opsiyonel)</span></Label>
+                    <div className="flex flex-col gap-1.5">
+                      {availableDocs.map((doc) => (
+                        <button
+                          key={doc.id}
+                          onClick={() => toggleDoc(doc.id)}
+                          className={cn(
+                            'flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left text-sm transition-colors',
+                            selectedDocIds.includes(doc.id)
+                              ? 'border-blue-500 bg-blue-50 text-blue-800'
+                              : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                          )}
+                        >
+                          <FileText className="w-4 h-4 flex-shrink-0" />
+                          <span className="truncate">{doc.name}</span>
+                          {selectedDocIds.includes(doc.id) && (
+                            <span className="ml-auto text-blue-600 text-xs">✓</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </AccordionBlock>
+
+              {/* ── Group-3: Yönlendirme & Logo ─────────────────────────────── */}
+              <AccordionBlock
+                icon="🎯"
+                title="Yönlendirme & Logo"
+                summary={(() => {
+                  const cta = String(templateFields.cta_url ?? '').trim()
+                  const ctaLabel = cta ? 'Link var' : 'Link yok'
+                  const hasLogo = currentBrand?.logo_light_url || currentBrand?.logo_dark_url
+                  const logoLabel = hasLogo ? (useLogoOverlay ? 'Logo açık' : 'Logo kapalı') : null
+                  return logoLabel ? `${ctaLabel} · ${logoLabel}` : ctaLabel
+                })()}
+                isOpen={accordion.group3}
+                onToggle={() => toggleAccordion('group3')}
+              >
+                <DynamicForm
+                  template={selectedTemplate}
+                  values={templateFields}
+                  onChange={(id, v) =>
+                    setTemplateFields((prev) => ({ ...prev, [id]: v }))
+                  }
+                  groupFilter="Yönlendirme"
+                />
+
+                {/* Logo filigran toggle */}
+                {(currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
+                  <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
+                      <span className="text-xs text-gray-500">Bu içerikte marka logosu köşeye yerleştirilsin mi?</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-xs font-medium ${useLogoOverlay ? 'text-purple-700' : 'text-gray-400'}`}>
+                        {useLogoOverlay ? 'Açık' : 'Kapalı'}
+                      </span>
+                      <Switch
+                        checked={Boolean(useLogoOverlay)}
+                        onCheckedChange={(v) => setUseLogoOverlay(v)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </AccordionBlock>
+
+              {/* ── Group-4: Yayın ─────────────────────────────────────────── */}
+              <AccordionBlock
+                icon="📤"
+                title="Yayın"
+                summary={(() => {
+                  const first = platforms[0]
+                  const firstLabel = first ? (PLATFORMS.find((p) => p.id === first)?.label ?? first) : null
+                  const more = platforms.length > 1 ? ` +${platforms.length - 1}` : ''
+                  const platformLabel = firstLabel ? `${firstLabel}${more}` : 'platform yok'
+                  return `${platformLabel} · ${aspectRatio}`
+                })()}
+                isOpen={accordion.group4}
+                onToggle={() => toggleAccordion('group4')}
+              >
+                {/* En-Boy Oranı */}
+                <div className="space-y-2">
+                  <Label>En-Boy Oranı</Label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {availableAspectRatios.map((ar) => (
+                      <button
+                        key={ar.id}
+                        onClick={() => setAspectRatio(ar.id)}
+                        className={cn(
+                          'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-center transition-all',
+                          aspectRatio === ar.id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-blue-300'
+                        )}
+                      >
+                        <span className="text-xl">{ar.icon}</span>
+                        <span className="text-xs font-bold text-gray-800">{ar.label}</span>
+                        <span className="text-[10px] text-gray-400">{ar.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Platformlar */}
+                <div className="space-y-2">
+                  <Label>Platformlar</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {PLATFORMS.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => togglePlatform(p.id)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                          platforms.includes(p.id)
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                        )}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </AccordionBlock>
+
+              <Button
+                onClick={handleGenerateCaption}
+                className="w-full gap-2"
+                disabled={loadingCaption}
+              >
+                {loadingCaption ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                Gönderi Metni Üret
               </Button>
             </div>
           )}
