@@ -164,7 +164,12 @@ function StepIndicator({ step, contentType }: { step: Step; contentType: Content
   )
 }
 
-// ─── Accordion block (Step 2 — genel-gorsel-sablon) ─────────────────────────
+// ─── Accordion block (Step 2 — akordeon kullanan şablonlar) ─────────────────
+
+// Semantik anahtarlar — şablon başına farklı anlam taşımayan blok kimlikleri.
+// 'video_detaylari' yalnızca shortvideo şablonunda render edilir; diğer
+// şablonlarda persist'te değer tutulsa da görsel olarak görünmez.
+type AccordionKey = 'gorsel_kaynaklari' | 'konu' | 'video_detaylari' | 'yonlendirme' | 'yayin'
 
 interface AccordionBlockProps {
   icon: string
@@ -266,15 +271,18 @@ function IcerikOlusturInner() {
   // true/false = bu post için açıkça override et.
   const [useLogoOverlay, setUseLogoOverlay] = useState<boolean | null>(null)
 
-  // Genel-gorsel-sablon akordeon (Step 2) — sadece bu şablonda kullanılır.
-  // Default: Konu (group2) açık. Mount sonrası persist'ten override edilir.
-  const [accordion, setAccordion] = useState({
-    group1: false,
-    group2: true,
-    group3: false,
-    group4: false,
+  // Step 2 akordeon (akordeon kullanan tüm şablonlar için ortak).
+  // Semantik anahtarlar — bir şablonda group X "Yönlendirme" iken diğerinde "Video Detayları"
+  // olmasın diye anonim group1-N indekslerinden semantik isimlere geçildi.
+  // Default: sadece konu açık. Mount sonrası persist'ten override edilir.
+  const [accordion, setAccordion] = useState<Record<AccordionKey, boolean>>({
+    gorsel_kaynaklari: false,
+    konu: true,
+    video_detaylari: false,
+    yonlendirme: false,
+    yayin: false,
   })
-  const toggleAccordion = useCallback((g: 'group1' | 'group2' | 'group3' | 'group4') => {
+  const toggleAccordion = useCallback((g: AccordionKey) => {
     setAccordion((s) => ({ ...s, [g]: !s[g] }))
   }, [])
 
@@ -482,16 +490,19 @@ function IcerikOlusturInner() {
 
   // Akordeon: mount'ta persist'ten yükle (akordeon kullanan şablonlar için ortak)
   useEffect(() => {
-    const stored = getPref<{ group1?: boolean; group2?: boolean; group3?: boolean; group4?: boolean } | null>(
+    const stored = getPref<Partial<Record<AccordionKey, boolean>> & { group1?: unknown } | null>(
       'accordion_default',
       null,
     )
-    if (stored && typeof stored === 'object') {
+    // Eski anonim format ('group1' alanı içeren) görüldüğünde görmezden gelinir —
+    // semantik anahtarlara geçildi, kullanıcı default'a tek seferlik döner.
+    if (stored && typeof stored === 'object' && !('group1' in stored)) {
       setAccordion({
-        group1: Boolean(stored.group1),
-        group2: stored.group2 == null ? true : Boolean(stored.group2),
-        group3: Boolean(stored.group3),
-        group4: Boolean(stored.group4),
+        gorsel_kaynaklari: Boolean(stored.gorsel_kaynaklari),
+        konu: stored.konu == null ? true : Boolean(stored.konu),
+        video_detaylari: Boolean(stored.video_detaylari),
+        yonlendirme: Boolean(stored.yonlendirme),
+        yayin: Boolean(stored.yayin),
       })
     }
   }, [])
@@ -1478,8 +1489,10 @@ function IcerikOlusturInner() {
           )}
 
           {/* Phase 7: phase=form — dinamik form + aspect/platform/docs + "Caption Üret"
-              NOT: genel-gorsel-sablon ve carousel-genel-sablon akordeon yapıya geçti (aşağıda ayrı blok). */}
-          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && (
+              NOT: genel-gorsel + carousel-genel + shortvideo-genel akordeon yapıya geçti
+              (aşağıda ayrı blok). Bu legacy düz layout sadece ozelgun-* x3 ve diğer
+              şablonlar için çalışır. */}
+          {['image', 'carousel', 'video'].includes(effectiveContentType) && mode === 'template' && phase === 'form' && selectedTemplate && selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && (
             <div className="space-y-5">
               {selectedTemplate.id !== DEFAULT_IMAGE_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_CAROUSEL_TEMPLATE_ID && selectedTemplate.id !== DEFAULT_VIDEO_TEMPLATE_ID && !SPECIAL_DAY_TEMPLATE_ID_SET.has(selectedTemplate.id) && (
                 <button
@@ -1924,10 +1937,12 @@ function IcerikOlusturInner() {
             </div>
           )}
 
-          {/* genel-gorsel-sablon + carousel-genel-sablon — 4 katlanabilir blokla yeniden düzenlenmiş Step 2 layout */}
+          {/* genel-gorsel + carousel-genel + shortvideo-genel — akordeon Step 2 layout
+              Video için 5. blok "Video Detayları" eklenir; "Yönlendirme & Logo" → "Yönlendirme" olur. */}
           {mode === 'template' && phase === 'form' && selectedTemplate && (
             (effectiveContentType === 'image' && selectedTemplate.id === DEFAULT_IMAGE_TEMPLATE_ID) ||
-            (effectiveContentType === 'carousel' && selectedTemplate.id === DEFAULT_CAROUSEL_TEMPLATE_ID)
+            (effectiveContentType === 'carousel' && selectedTemplate.id === DEFAULT_CAROUSEL_TEMPLATE_ID) ||
+            (effectiveContentType === 'video' && selectedTemplate.id === DEFAULT_VIDEO_TEMPLATE_ID)
           ) && (
             <div className="space-y-3">
               {/* ── Group-1: Görsel Kaynakları ─────────────────────────────── */}
@@ -1951,8 +1966,8 @@ function IcerikOlusturInner() {
 
                   return slidePart ? `${slidePart} · ${mainPart}` : mainPart
                 })()}
-                isOpen={accordion.group1}
-                onToggle={() => toggleAccordion('group1')}
+                isOpen={accordion.gorsel_kaynaklari}
+                onToggle={() => toggleAccordion('gorsel_kaynaklari')}
               >
                 {/* Slide Sayısı — sadece carousel-genel-sablon (template'in "Carousel" grubu) */}
                 {effectiveContentType === 'carousel' && (
@@ -2160,37 +2175,61 @@ function IcerikOlusturInner() {
                   if (!ak) return 'henüz doldurulmadı'
                   return ak.length > 40 ? ak.slice(0, 40) + '…' : ak
                 })()}
-                isOpen={accordion.group2}
-                onToggle={() => toggleAccordion('group2')}
+                isOpen={accordion.konu}
+                onToggle={() => toggleAccordion('konu')}
               >
-                {/* Tasarım ve içerik için istekleriniz */}
+                {/* Tasarım/Anlatım textarea — video modunda label/placeholder/help-text farklı */}
                 <div className="space-y-1.5">
                   <Label>
-                    Tasarım ve içerik için istekleriniz{' '}
-                    <span className="font-normal text-gray-400">(opsiyonel)</span>
+                    {effectiveContentType === 'video' ? (
+                      <>
+                        Bu video ne anlatsın?{' '}
+                        <span className="font-normal text-gray-400">
+                          ({imageSubType === 'general' ? 'zorunlu' : 'opsiyonel'})
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Tasarım ve içerik için istekleriniz{' '}
+                        <span className="font-normal text-gray-400">(opsiyonel)</span>
+                      </>
+                    )}
                   </Label>
                   <Textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder='Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'
+                    placeholder={
+                      effectiveContentType === 'video'
+                        ? imageSubType === 'general'
+                          ? 'Örn: "Sabah meditasyonu zihni nasıl temizler 30 saniyede anlat", "5 adımda evden iş kurma ipuçları"'
+                          : 'Örn: "Bu ürünün indirim kampanyasını vurgula", "kullanım anlarını öne çıkar" (boş bırakırsanız ürün adı ve açıklaması kullanılır)'
+                        : 'Örn: "Tenis kıyafetli bir kadın spor ayakkabıyı giyerken göster", "gönderi metninde %20 indirim vurgusu olsun", "stüdyo yerine plaj arka planı"'
+                    }
                     rows={3}
                     className="resize-none"
                   />
                   <p className="text-xs text-gray-500">
-                    Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir.
+                    {effectiveContentType === 'video'
+                      ? imageSubType === 'general'
+                        ? 'Video script\'i ve gönderi metni buradaki anlatımdan üretilir.'
+                        : 'Boş bırakırsanız ürünün adı ve açıklaması temel alınır.'
+                      : 'Yazdıklarınız şablon varsayılanlarını geçersiz kılar — hem görsel hem metin buradaki isteklere göre şekillenir.'}
                   </p>
                 </div>
 
-                <DynamicForm
-                  template={selectedTemplate}
-                  values={templateFields}
-                  onChange={(id, v) =>
-                    setTemplateFields((prev) => ({ ...prev, [id]: v }))
-                  }
-                  imageTextFields={imageTextFields ?? undefined}
-                  onImageTextFieldsChange={setImageTextFields}
-                  groupFilter="Konu"
-                />
+                {/* DynamicForm Konu grubu — sadece image/carousel'de var; video şablonunda Konu grubu yok */}
+                {effectiveContentType !== 'video' && (
+                  <DynamicForm
+                    template={selectedTemplate}
+                    values={templateFields}
+                    onChange={(id, v) =>
+                      setTemplateFields((prev) => ({ ...prev, [id]: v }))
+                    }
+                    imageTextFields={imageTextFields ?? undefined}
+                    onImageTextFieldsChange={setImageTextFields}
+                    groupFilter="Konu"
+                  />
+                )}
 
                 {/* Dokümandan bağlam — sadece genel mod */}
                 {imageSubType === 'general' && availableDocs.length > 0 && (
@@ -2220,19 +2259,131 @@ function IcerikOlusturInner() {
                 )}
               </AccordionBlock>
 
-              {/* ── Group-3: Yönlendirme & Logo ─────────────────────────────── */}
+              {/* ── Group: Video Detayları — yalnızca shortvideo şablonu ── */}
+              {effectiveContentType === 'video' && (
+                <AccordionBlock
+                  icon="🎬"
+                  title="Video Detayları"
+                  summary={(() => {
+                    const voiceFull = voices.find((v) => v.id === selectedVoice)?.name
+                    const voiceName = voiceFull?.split(' ')[0] ?? 'Ses'
+                    const subtitleLabel = subtitleEnabled ? 'Altyazı: açık' : 'Altyazı: kapalı'
+                    const introLabel = !brandHasIntro
+                      ? null
+                      : introPosition === 'none'
+                      ? 'Intro: yok'
+                      : introPosition === 'start'
+                      ? 'Intro: başta'
+                      : introPosition === 'end'
+                      ? 'Intro: sonda'
+                      : 'Intro: her iki yerde'
+                    return [voiceName, subtitleLabel, introLabel].filter(Boolean).join(' · ')
+                  })()}
+                  isOpen={accordion.video_detaylari}
+                  onToggle={() => toggleAccordion('video_detaylari')}
+                >
+                  {/* Ses Seçimi */}
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Ses Seçimi</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {(voices.length > 0
+                        ? voices
+                        : [
+                            { id: 'qSeXEcewz7tA0Q0qk9fH', name: 'Buse (Kadın)', gender: 'female' },
+                            { id: 'EST9Ui6982FZPSi7gCHi', name: 'Zeynep (Kadın)', gender: 'female' },
+                            { id: 'kPzsL2i3teMYv0FxEYQ6', name: 'Eylül (Kadın)', gender: 'female' },
+                            { id: 'IuRRIAcbQK5AQk1XevPj', name: 'Emre (Erkek)', gender: 'male' },
+                            { id: 'ctoYieZ4J7WwcdhujpMq', name: 'Kaan (Erkek)', gender: 'male' },
+                            { id: 'UgBBYS2sOqTuMpoF3BR0', name: 'Ahmet (Erkek)', gender: 'male' },
+                          ]
+                      ).map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => setSelectedVoice(v.id)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                            selectedVoice === v.id
+                              ? 'bg-purple-600 text-white border-purple-600'
+                              : 'border-purple-200 text-purple-700 hover:border-purple-400'
+                          )}
+                        >
+                          {v.gender === 'female' ? '👩' : '👨'} {v.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Altyazı toggle */}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Altyazı (Subtitle)</Label>
+                    <button
+                      onClick={() => setSubtitleEnabled(!subtitleEnabled)}
+                      className={cn(
+                        'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                        subtitleEnabled ? 'bg-purple-600' : 'bg-gray-300'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform',
+                          subtitleEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                        )}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Intro/Outro pozisyonu */}
+                  <div className="space-y-2">
+                    <Label>Intro / Outro Video Pozisyonu</Label>
+                    {!brandHasIntro ? (
+                      <div className="rounded-xl border border-dashed border-gray-200 p-4 text-center text-sm text-gray-500">
+                        Intro video yüklenmemiş.{' '}
+                        <a href="/marka-ayarlari?tab=gorseller" className="text-blue-500 hover:underline">
+                          Marka Ayarları → Görseller
+                        </a>{' '}
+                        sayfasından yükleyebilirsiniz.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-4 gap-2">
+                        {([
+                          { value: 'none', label: 'Kullanma' },
+                          { value: 'start', label: 'Başında' },
+                          { value: 'end', label: 'Sonunda' },
+                          { value: 'both', label: 'Her İkisi' },
+                        ]).map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setIntroPosition(opt.value)}
+                            className={cn(
+                              'px-3 py-2 rounded-xl border-2 text-center text-sm font-medium transition-all',
+                              introPosition === opt.value
+                                ? 'border-purple-500 bg-purple-50 text-purple-700'
+                                : 'border-gray-200 text-gray-600 hover:border-purple-300'
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </AccordionBlock>
+              )}
+
+              {/* ── Group: Yönlendirme (video) / Yönlendirme & Logo (image+carousel) ── */}
               <AccordionBlock
                 icon="🎯"
-                title="Yönlendirme & Logo"
+                title={effectiveContentType === 'video' ? 'Yönlendirme' : 'Yönlendirme & Logo'}
                 summary={(() => {
                   const cta = String(templateFields.cta_url ?? '').trim()
                   const ctaLabel = cta ? 'Link var' : 'Link yok'
-                  const hasLogo = currentBrand?.logo_light_url || currentBrand?.logo_dark_url
+                  // Video'da logo overlay desteği yok — özet satırında logo durumu da gösterilmez
+                  const hasLogo = effectiveContentType !== 'video' && (currentBrand?.logo_light_url || currentBrand?.logo_dark_url)
                   const logoLabel = hasLogo ? (useLogoOverlay ? 'Logo açık' : 'Logo kapalı') : null
                   return logoLabel ? `${ctaLabel} · ${logoLabel}` : ctaLabel
                 })()}
-                isOpen={accordion.group3}
-                onToggle={() => toggleAccordion('group3')}
+                isOpen={accordion.yonlendirme}
+                onToggle={() => toggleAccordion('yonlendirme')}
               >
                 <DynamicForm
                   template={selectedTemplate}
@@ -2243,8 +2394,8 @@ function IcerikOlusturInner() {
                   groupFilter="Yönlendirme"
                 />
 
-                {/* Logo filigran toggle */}
-                {(currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
+                {/* Logo filigran toggle — video'da gizli */}
+                {effectiveContentType !== 'video' && (currentBrand?.logo_light_url || currentBrand?.logo_dark_url) && (
                   <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
                     <div className="flex flex-col gap-0.5">
                       <Label className="text-sm font-medium text-gray-800 cursor-pointer">Logo filigranı bas</Label>
@@ -2274,8 +2425,8 @@ function IcerikOlusturInner() {
                   const platformLabel = firstLabel ? `${firstLabel}${more}` : 'platform yok'
                   return `${platformLabel} · ${aspectRatio}`
                 })()}
-                isOpen={accordion.group4}
-                onToggle={() => toggleAccordion('group4')}
+                isOpen={accordion.yayin}
+                onToggle={() => toggleAccordion('yayin')}
               >
                 {/* En-Boy Oranı */}
                 <div className="space-y-2">
@@ -2328,7 +2479,7 @@ function IcerikOlusturInner() {
                 disabled={loadingCaption}
               >
                 {loadingCaption ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                Gönderi Metni Üret
+                {effectiveContentType === 'video' ? 'Gönderi Metni ve Script Üret' : 'Gönderi Metni Üret'}
               </Button>
             </div>
           )}
