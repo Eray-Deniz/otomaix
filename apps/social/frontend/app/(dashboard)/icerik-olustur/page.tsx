@@ -349,11 +349,14 @@ function IcerikOlusturInner() {
     setCaptionData(null)
   }, [imageSubType])
 
-  // Ürün değişince ürünün tüm görsellerini default seçili yap (Sprint 3.5).
-  // Tek görselli ürünlerde yine de tek elemanlı liste; UI bölümü bu durumda gizli.
+  // Ürün değişince ürünün ilk 3 görselini default seçili yap (Sprint 3.5).
+  // Nano Banana 2 sweet spot 3 görsel; daha fazlası kompozisyon riski.
+  // Backend images dizisini is_primary + position sırasına göre döner, yani
+  // slice(0,3) ana görsel + sıradaki 2 pozisyonu seçer. Tek görselli ürünlerde
+  // yine de tek elemanlı liste; UI bölümü bu durumda gizli.
   useEffect(() => {
     if (selectedProduct) {
-      setSelectedProductImageIds(selectedProduct.images.map((img) => img.id))
+      setSelectedProductImageIds(selectedProduct.images.slice(0, 3).map((img) => img.id))
     } else {
       setSelectedProductImageIds([])
     }
@@ -1430,11 +1433,11 @@ function IcerikOlusturInner() {
                   <Label>
                     Hangi görseller kullanılsın?{' '}
                     <span className="font-normal text-gray-400">
-                      ({selectedProductImageIds.length}/{selectedProduct.images.length})
+                      ({selectedProductImageIds.length}/{Math.min(3, selectedProduct.images.length)})
                     </span>
                   </Label>
                   <p className="text-xs text-gray-500">
-                    Seçilen görseller AI&apos;a referans olarak gönderilir. Farklı açılar (ön/yan/kullanım) sahneyi güçlendirir; renk varyantlarını karıştırmayın.
+                    Seçilen görseller AI&apos;a referans olarak gönderilir. En iyi çıktı kalitesi için en fazla 3 görsel seçin. Farklı açılar (ön/yan/kullanım) sahneyi güçlendirir; renk varyantlarını karıştırmayın.
                   </p>
                   <div className="grid grid-cols-4 gap-2">
                     {selectedProduct.images.map((img) => {
@@ -1451,6 +1454,10 @@ function IcerikOlusturInner() {
                                   return prev
                                 }
                                 return prev.filter((id) => id !== img.id)
+                              }
+                              if (prev.length >= 3) {
+                                toast.error('En fazla 3 görsel seçebilirsiniz — Nano Banana 2 sweet spot')
+                                return prev
                               }
                               return [...prev, img.id]
                             })
