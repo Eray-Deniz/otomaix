@@ -14,6 +14,25 @@
 
 ---
 
+## Implementation Progress
+
+| Phase | Tasks | Durum |
+|---|---|---|
+| **A — Setup** | 1, 2, 3 | ✅ TAMAMLANDI (vault commit'leri: `d55394f`, `05c7dcc`, `4e8e9a4`) |
+| **B — Decisions** | 4, 5, 6 | ⏳ Sıradaki |
+| C — Cross-project | 7, 8 | — |
+| D — Apps/Social | 9, 10, 11, 12, 13 | — |
+| E — History | 14 | — |
+| F — Apps/CRM | 15 | — |
+| G — Sources | 16 | — |
+| H — Finalization | 17, 18, 19, 20, 21, 22, 23 | — |
+
+**Son güncelleme:** 2026-05-12, Phase A bittikten sonra context clear.
+
+**Resume için:** Yeni session'da `/execute-plan inline` çağrı. Skill plan dosyasını yükleyince bu progress section'ı görür, Task 4'ten devam eder. Vault `cwd: /root/otomaix-brain` olarak set edilmeli — orada git commit'leri vault repo'suna düşer.
+
+---
+
 ## File Structure (oluşturulacak)
 
 ### Vault root (`/root/otomaix-brain/`)
