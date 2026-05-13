@@ -18,18 +18,40 @@
 
 | Phase | Tasks | Durum |
 |---|---|---|
-| **A — Setup** | 1, 2, 3 | ✅ TAMAMLANDI (vault commit'leri: `d55394f`, `05c7dcc`, `4e8e9a4`) |
-| **B — Decisions** | 4, 5, 6 | ⏳ Sıradaki |
-| C — Cross-project | 7, 8 | — |
-| D — Apps/Social | 9, 10, 11, 12, 13 | — |
-| E — History | 14 | — |
-| F — Apps/CRM | 15 | — |
-| G — Sources | 16 | — |
-| H — Finalization | 17, 18, 19, 20, 21, 22, 23 | — |
+| **A — Setup** | 1, 2, 3 | ✅ TAMAMLANDI (vault commit'leri: `d55394f`, `d286d4c`, `d1aa199`) |
+| **B — Decisions** | 4, 5, 6 | ✅ TAMAMLANDI (commit'ler: `7962c7e` backend 36p, `572978c` frontend 29p, `f5ce138` crm 7p) |
+| **C — Cross-project** | 7, 8 | ✅ TAMAMLANDI (Task 7 commit `ce35796` 7 page; Task 8 commit `5e5c8be` 7 page = copywriting 6 + apps/social/architecture 1) |
+| **D — Apps/Social** | 9, 10, 11, 12, 13 | ✅ TAMAMLANDI (Task 9 `ff1bbbc` 2p, Task 10 `f923f5e` 1p, Task 11 `4f2f2fa` 1p, Task 12 `9196f8e` 6p, Task 13 `bdbe9d7` 6p) |
+| **E — History** | 14 | ✅ TAMAMLANDI (commit `e9e5726`, 5 phase report özet — phase-1/2/3/4/6) |
+| **F — Apps/CRM** | 15 | ✅ TAMAMLANDI (commit `d471596`, 4 page — admin-yapisi, n8n-entegrasyon, auth-akisi, deploy) |
+| **G — Sources** | 16 | ✅ TAMAMLANDI (commit `f58e996`, raw research frozen kopyalandı + frontmatter) |
+| **H — Finalization** | 17, 18, 19, 20, 21, 22, 23 | 🟡 17 ✅ (`c50616d` index 112p) + 18 ✅ (`2de0196` log 18 entry) + 19 ✅ (push) + 20 ✅ (`980a1d9` otomaix archive, brain-CLAUDE.md silindi) + 21 ✅ (commit.md Adım 8 Vault check eklendi); 22-23 sıradaki |
+| **I — Post-Faz 1 ek sayfalar** | 24, 25 | ✅ TAMAMLANDI (3 sayfa: claude-code-workflow + economics stub'ları) — vault 115 sayfa, "Stub Pages" discovery mekanizması kuruldu |
 
-**Son güncelleme:** 2026-05-12, Phase A bittikten sonra context clear.
+**Son güncelleme:** 2026-05-13, Task 24 + Task 25 eklendi ✅. Vault 112 → 115 sayfa, Cross-project / Economics bölümü açıldı, stub keşif mekanizması (frontmatter + log + index kuyruk) devreye alındı. Task 22-23 hâlâ kullanıcı doğrulaması (Madde 4 Obsidian lokal açılış + Madde 7 cold session test query) bekliyor.
 
-**Resume için:** Yeni session'da `/execute-plan inline` çağrı. Skill plan dosyasını yükleyince bu progress section'ı görür, Task 4'ten devam eder. Vault `cwd: /root/otomaix-brain` olarak set edilmeli — orada git commit'leri vault repo'suna düşer.
+**Önceki:** 2026-05-12 (gece), Task 22 ✅ + Task 23 verification kısmen bitti. Vault: 19 commit, 112 sayfa, GitHub push edildi (`Eray-Deniz/otomaix-brain-private`). Task 20 Otomaix repo `docs/_archive/` taşıması bitti (commit `980a1d9`, brain-CLAUDE.md silindi). Task 21 commit.md "Adım 8 Vault check" eklendi.
+
+**Yarın (2026-05-13+) resume:**
+
+1. **Task 23 Madde 4 — Lokal Obsidian (Windows, kullanıcı işi):**
+   - Git for Windows kur → Git Bash
+   - `cd ~/Documents && git clone https://github.com/Eray-Deniz/otomaix-brain-private.git`
+   - Obsidian (https://obsidian.md) indir + "Open folder as vault" → clone klasörü
+   - `Ctrl+G` Graph view aç, 112 sayfa + wikilink ağı doğrula
+   - Kullanıcı "açıldı" deyince Madde 4 ✅
+
+2. **Task 23 Madde 7 — Test query (kullanıcı onayı):**
+   - "FLUX neden seçilmedi" cevabı simüle edildi (context'imde vault dolu)
+   - Cold session test daha gerçekçi: yeni session aç, vault sayfalarını sıfırdan keşfederek aynı sorguyu çöz
+   - Cevap vault'taki sayfalardan çıktıysa Madde 7 ✅
+
+3. **Final adım:** Memory `project_otomaix_brain_phases.md` "Faz 1 TAMAMLANDI ✅ (2026-05-13)" işaretle, plan dosyasında Phase H tablosu ✅. Task 23 step "Memory'ye Faz 1 tamamlanma notu" tamamlanır.
+
+**Cleanup (opsiyonel, kullanıcı kararı):**
+- Coolify panel'den Silverbullet Compose servisini sil — kurulum vazgeçildi, çalışan container çöp halde (yanlış routing, sslip.io fallback). Lokal Obsidian seçildiği için bu servise gerek yok.
+
+**Vault canlı durum:** GitHub'a son push edilmiş commit `2de0196` (Task 18 log populate). Sonraki push gerekmedi (Task 19'dan sonra vault'a commit eklenmedi). Otomaix repo'da son commit `980a1d9` (archive) — push edilmedi (kullanıcı onayı yok).
 
 ---
 
@@ -1338,6 +1360,34 @@ Expected: 11 dosya (10 migrated + README).
 
 ---
 
+## Task 24: Claude Code workflow sayfası ✅
+
+**Faz 1 kapsamı dışında, post-faz ek sayfa.** Sebep: vault ingest tamamlandıktan sonra geriye dönüp bakınca "meta-sistem (slash command + Superpowers manual mode + kategori 1-4 disiplini) cross-project altında canonical bir referans olmalı" sonucuna varıldı. Bilgi `~/.claude/CLAUDE.md`'de canlı kaynaktan yükleniyor, vault sayfası gelecek-Claude için statik referans + wikilink ağına bağlanma noktası.
+
+- [x] **Step 1: Sayfa yaz** — `cross-project/infrastructure/claude-code-workflow.md` (197 satır, status: active)
+- [x] **Step 2: index.md güncelle** — Cross-project / Infrastructure altına 6. madde ekle
+- [x] **Step 3: Commit (vault)** — birleştirilmiş commit Task 25 ile (aşağıda)
+
+---
+
+## Task 25: Economics stub sayfaları ✅
+
+**Faz 1 kapsamı dışında, post-faz stub sayfa.** Sebep: vendor pricing ve per-feature cost bilgileri henüz yok (uygulama test aşamasında), ama yapıyı şimdi kurmak ve "doldurma tetiği"ni 3 yerde işaretlemek lazım — yoksa unutulur veya hallucination üretilir.
+
+**Stub discovery mekanizması (Karpathy pattern uyarlaması):**
+1. Frontmatter `status: stub` + `needs: [...]` + `when-to-fill: "..."` — Obsidian YAML search ile listelenir
+2. `log.md` entry'si — chronological hatırlatıcı
+3. `index.md` altında "🚧 Stub Pages (doldurulması bekleniyor)" bölümü — gözle görülür liste
+
+- [x] **Step 1: `cross-project/economics/` klasörü aç** + 2 stub sayfa yaz
+  - `vendor-pricing.md` — fal.ai + Anthropic + ElevenLabs + R2 fiyatlandırması (when-to-fill: ilk gerçek aylık faturalar)
+  - `per-feature-cost.md` — 1 carousel / video / image / caption üretim maliyeti (when-to-fill: ilk 10-20 gerçek üretim log ortalaması)
+- [x] **Step 2: index.md güncelle** — Cross-project / Economics yeni bölümü + "🚧 Stub Pages" en alt bölümü
+- [x] **Step 3: log.md entry** — `[2026-05-13 14:20] add | claude-code-workflow + economics stub (3 pages)`
+- [x] **Step 4: Commit (vault)** — Task 24 ile birleşik: `vault: add claude-code-workflow + economics stubs (3 pages)`
+
+---
+
 ## Final özet (plan kullanıcısı için)
 
 23 task, ~3 ana faz:
@@ -1377,3 +1427,1268 @@ Plan yazıldıktan sonra spec ile karşılaştırma:
 ✅ **Type consistency:** vault paths, frontmatter alanları, commit prefix'leri (`vault:` ve `docs:`) tüm task'larda tutarlı.
 
 **Bilinen sınır:** Migration task'ları gerçek "code" değil "content parsing" olduğu için klasik TDD failing-test akışı uygulanamadı; pre-check + action + post-check verification ile uyarlandı. Skill'in TDD ruhu (her adım doğrulanabilir, hiçbir adım kör değil) korunmuştur.
+
+---
+
+# Faz I — B+A Re-migration Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **Workflow override:** Otomaix CLAUDE.md "Skill Chain Override Notları" gereği `executing-plans` skill'inin auto-chain'leri (`finishing-a-development-branch`, `using-git-worktrees`) bilinçli olarak çağrılmayacak.
+
+**Goal:** Faz 1 migration sırasında yapılan attribution hatalarını sistematik temizle. Bilinen Phase 6 hatasını + olası diğer hataları (HIGH + MID tier 38 sayfa) B+A pipeline ile düzelt; LOW tier (77 sayfa) bilinçli olarak skip.
+
+**Architecture:** B (parçalı yaz + hibrit quote-back) + A (fresh-context subagent doğrulama). Tier-based kapsam (15 HIGH B+A / 23 MID sadece A / 77 LOW skip). Severity-tier mismatch handling (critical→sor, minor→otomatik, cosmetic→sessiz). `verification-status` frontmatter alanı ile state tracking.
+
+**Tech Stack:** Bash (script), `Agent` tool (subagent dispatch, `general-purpose` tipi), git (vault commit), Read/Edit/Write tools.
+
+**Spec referansı:** [`docs/specs/2026-05-13-vault-bplus-a-remigration.md`](../specs/2026-05-13-vault-bplus-a-remigration.md)
+
+---
+
+## Implementation Progress (Faz I)
+
+| Aşama | Tasks | Tahmini süre | Durum |
+|---|---|---|---|
+| **Hazırlık** | H1, H2 | ~1.5 saat | (sıradaki) |
+| **HIGH B+A** | T1, T2, T3, T4 | ~7-10 saat | |
+| **MID sadece A** | T5, T6, T7, T8 | ~3-4 saat | |
+| **Verification** | T9 (cold test) | ~30 dk | |
+
+**Toplam:** 10-15 saat aktif iş, 2-3 oturuma yayılabilir.
+
+**Son güncelleme:** 2026-05-13, Faz I planlandı (spec `a868a99`).
+
+---
+
+## File Structure (Faz I'de dokunulacak dosyalar)
+
+### Vault — değişecek
+```
+CLAUDE.md                          # H1: schema'ya verification-status alanı eklenir
+[115 wiki sayfası]                 # H2: hepsine verification-status: unverified eklenir
+
+# HIGH (15 sayfa — B+A baştan yazılır):
+apps/social/architecture/history/phase-1-altyapi-kurulumu.md
+apps/social/architecture/history/phase-2-temel-ozellikler.md
+apps/social/architecture/history/phase-3-gelismis-ozellikler.md
+apps/social/architecture/history/phase-4-saas-hazirlik.md
+apps/social/architecture/history/phase-6-trend-sistemi.md
+apps/social/architecture/template-system-design.md
+apps/social/architecture/carousel-design.md
+apps/social/architecture/marketingskills-entegrasyon.md
+apps/social/pipeline/carousel.md
+apps/social/templates/genel-gorsel-sablon.md
+apps/social/templates/carousel-genel-sablon.md
+apps/social/templates/shortvideo-genel-sablon.md
+apps/social/templates/ozelgun-gorsel-sablon.md
+apps/social/templates/ozelgun-carousel-sablon.md
+apps/social/templates/ozelgun-shortvideo-sablon.md
+
+# MID (23 sayfa — sadece A doğrulama):
+cross-project/infrastructure/{platform-overview,monorepo-yapisi,coolify-deploy,tech-stack,claudemd-template}.md
+cross-project/databases/postgres-multi-app-pattern.md
+cross-project/integrations/n8n.md
+cross-project/copywriting/{somutluk-kurali,loss-aversion,social-proof,gorsel-aci-7-kategori,hook-formulleri-yasak-karari,jtbd-neden-kaldirildi}.md
+cross-project/vendors/{fal-ai-models,nano-banana,wan,kling,elevenlabs,anthropic-claude}.md
+apps/crm/architecture/{admin-yapisi,n8n-entegrasyon,auth-akisi,deploy}.md
+
+log.md                             # her task sonunda entry
+```
+
+### Otomaix repo — değişecek
+```
+docs/plans/2026-05-12-otomaix-brain-faz1-impl.md   # bu plan dosyası (Faz I bölümü)
+```
+
+### Kaynak (read-only, _archive)
+```
+docs/_archive/01-social-phase1.md
+docs/_archive/02-social-phase2.md
+docs/_archive/03-social-phase3.md
+docs/_archive/04-social-phase4.md
+docs/_archive/06-social-trends-phase6.md
+docs/_archive/07-social-template-system.md
+docs/_archive/11-social-marketingskills.md
+docs/_archive/12-social-carousel.md
+docs/_archive/00-platform-mimari.md
+docs/_archive/05-crm-admin.md
+```
+
+---
+
+## Sayfa İşlem Şablonları (her task'ta referans)
+
+### Şablon B+A (HIGH-tier sayfa için)
+
+Her HIGH sayfa için aşağıdaki 10 step uygulanır:
+
+```
+1. Kaynak section'lara böl (Read + Grep ile `^## ` başlıkları bul)
+2. Mevcut vault sayfasını sil (overwrite için)
+3. Frontmatter yaz (title, type, status, last-verified, verification-status: b-written, sources, tags)
+4. Her section için B süreci:
+   a. Kaynak section'ı oku (satır aralığı)
+   b. Vault sayfasına `## başlık` yaz
+   c. Attribution-prone bilgi var mı? → varsa verbatim quote bloğu ekle
+       Format: `> **Kaynak alıntı** (\`@docs/_archive/<file>.md:NN-MM\`):\n> <verbatim metin>`
+   d. Yoksa line-number referans: `> Kaynak: <file>.md:NN-MM`
+   e. Paraphrase paragraf/bullet yaz (kaynak gözümün önünde tutarak)
+5. İlişkili sayfalar bölümü ekle (en az 1 inbound link için wikilink listesi)
+6. Frontmatter `verification-status: b-written` doğrula
+7. Subagent dispatch: Agent tool, general-purpose, prompt template (aşağıda)
+8. Rapor parse: severity-tier protokolü uygula
+   - critical → dur, kullanıcıya özet + öneri → onay → düzelt
+   - minor → otomatik düzelt (her birini Edit ile)
+   - cosmetic → otomatik düzelt (sessiz)
+9. Frontmatter `verification-status: a-verified` set et
+10. Vault commit (kaynak başına 1 commit, multiple sayfa içerebilir)
+```
+
+### Şablon A-only (MID-tier sayfa için)
+
+```
+1. Mevcut vault sayfasını oku (overwrite yok, doğrulama)
+2. Subagent dispatch: Agent tool, general-purpose, prompt template
+3. Rapor parse: severity-tier protokolü uygula
+4. Mismatch varsa düzelt (Edit ile)
+5. Frontmatter `verification-status: a-verified` set et
+6. Vault commit
+```
+
+### Şablon: Subagent prompt template
+
+Her A çağrısında `Agent` tool'a aşağıdaki prompt verilir (placeholder'lar her sayfa için doldurulur):
+
+```
+Görev: Vault sayfasını kaynak dosya ile karşılaştır, attribution hatası ara.
+
+Sayfa (oku): {{vault_page_path}}
+Kaynak (oku): {{source_file_path}}
+Tier: {{HIGH | MID}}
+
+Attribution-prone kategoriler (bunlarda kaynakla eşleşmeyen iddia = critical):
+- Numaralı/harfli listelerin atamaları (Layer A/B/C içeriği, Phase X sırası, vendor → model eşlemesi)
+- Sayısal değerler (fiyat, kota, eşik, satır sayısı, tarih)
+- Model/vendor/SKU/API adları
+- Karar verilen seçenek vs reddedilen alternatif
+- Kronolojik/numaralı sıra bilgisi
+
+Adımlar:
+1. Kaynak dosyayı oku (tamamı)
+2. Vault sayfasını oku (tamamı)
+3. Sayfadaki her attribution-prone iddia için kaynakta eşleşme ara
+4. Mismatch bul → severity belirle:
+   - critical = attribution hatası (atama/sıra/sayı/model yanlış)
+   - minor = yazım, eksik wikilink, kelime farkı, eksik referans
+   - cosmetic = frontmatter alanı eksik, başlık tutarsızlığı, format
+5. Mismatch raporu çıkar (markdown numbered list)
+
+Çıktı format:
+- Mismatch yoksa: tek satır "OK — sayfa kaynakla tutarlı"
+- Aksi halde:
+  1. **[critical]** <kısa başlık>
+     - Vault iddia: "..."
+     - Kaynak (satır N): "..."
+     - Tutarsızlık: <açıklama>
+  2. **[minor]** ...
+
+ÖNEMLİ: Sadece raporla. Sayfayı DÜZELTME, vault'a YAZMA. Bu salt-okunur audit.
+```
+
+---
+
+## Hazırlık — H1: Vault CLAUDE.md schema update
+
+**Files:**
+- Modify: `/root/otomaix-brain/CLAUDE.md`
+
+- [ ] **Step 1: Pre-check — mevcut schema'da `verification-status` yok mu doğrula**
+
+```bash
+grep -n "verification-status" /root/otomaix-brain/CLAUDE.md
+```
+Expected: çıktı yok (boş). Eğer satır dönerse alan zaten var, ekleme atlanır.
+
+- [ ] **Step 2: Mevcut schema'da "Frontmatter (her sayfada)" bölümünü bul**
+
+```bash
+grep -n "Frontmatter (her sayfada)" /root/otomaix-brain/CLAUDE.md
+```
+Expected: 1 satır numarası dönüyor.
+
+- [ ] **Step 3: Frontmatter YAML örneğine `verification-status` satırı ekle**
+
+Edit ile mevcut frontmatter blok örneğine bir satır ekle. Eski:
+
+```yaml
+---
+title: fal.ai Models
+type: vendor | decision | template | concept | research | policy | runbook
+status: active | superseded | draft
+last-verified: 2026-05-12
+sources:
+  - "[[sources/articles/2026-04-fal-blog]]"
+  - "[[sources/research/fal-model-comparison]]"
+tags: [video-gen, vendor]
+---
+```
+
+Yeni (eklenen satır: `verification-status`):
+
+```yaml
+---
+title: fal.ai Models
+type: vendor | decision | template | concept | research | policy | runbook
+status: active | superseded | draft
+last-verified: 2026-05-12
+verification-status: unverified | b-written | a-verified | conflict
+sources:
+  - "[[sources/articles/2026-04-fal-blog]]"
+  - "[[sources/research/fal-model-comparison]]"
+tags: [video-gen, vendor]
+---
+```
+
+- [ ] **Step 4: Schema'ya "Verification status" alt-bölümü ekle**
+
+"Çapraz bağlantı disiplini" bölümünden ÖNCE, "Frontmatter (her sayfada)" bölümünün altına aşağıdaki alt-bölüm eklenir:
+
+```markdown
+### Verification status (Faz I'den sonra)
+
+`verification-status` alanı sayfanın doğrulama durumunu işaretler:
+- `unverified` — re-migration yapılmadı, audit edilmemiş (default; LOW tier kalıcı bu durumda)
+- `b-written` — B parçalı yazıldı, A bekliyor (HIGH için ara state, kalıcı kalmamalı)
+- `a-verified` — kaynakla yan yana doğrulandı (Faz I — Re-migration kapsamında)
+- `conflict` — critical mismatch bulundu, kullanıcı kararı bekliyor (kalıcı kalmamalı)
+
+Re-migration süreci ve protokol: bkz `@/root/otomaix/docs/specs/2026-05-13-vault-bplus-a-remigration.md`.
+```
+
+- [ ] **Step 5: Post-check — schema güncellemesi doğrula**
+
+```bash
+grep -n "verification-status" /root/otomaix-brain/CLAUDE.md | wc -l
+```
+Expected: ≥ 3 satır (YAML örneğinde 1 + alt-bölüm başlığında 1 + 4 değer açıklaması 4 = toplam ≥ 6, ama minimum 3).
+
+- [ ] **Step 6: Commit (vault)**
+
+```bash
+cd /root/otomaix-brain
+git add CLAUDE.md
+git commit -m "vault: add verification-status field to schema (Faz I prep)"
+```
+
+- [ ] **Step 7: log.md entry**
+
+`/root/otomaix-brain/log.md` sonuna ekle:
+
+```markdown
+## [2026-05-XX HH:MM] schema | verification-status alanı (Faz I prep)
+- CLAUDE.md frontmatter şemasına `verification-status` alanı eklendi (4 değer: unverified | b-written | a-verified | conflict)
+- "Verification status (Faz I'den sonra)" alt-bölümü yazıldı
+- Re-migration süreci referansı `@/root/otomaix/docs/specs/2026-05-13-vault-bplus-a-remigration.md`
+- Vault commit: <Step 6 hash>
+```
+
+Sonra:
+```bash
+cd /root/otomaix-brain
+git add log.md
+git commit -m "vault: log H1 schema update entry"
+```
+
+---
+
+## Hazırlık — H2: Batch frontmatter ekleme
+
+**Files:**
+- Modify: 115 vault sayfası (frontmatter)
+
+- [ ] **Step 1: Pre-check — kaç sayfada `verification-status` alanı yok say**
+
+```bash
+cd /root/otomaix-brain
+find . -name "*.md" -not -path "./.git/*" -not -name "CLAUDE.md" -not -name "README.md" -not -name "index.md" -not -name "log.md" | wc -l
+```
+Expected: 115 sayfa (Faz 1 sonu durumu + 3 yeni).
+
+```bash
+find . -name "*.md" -not -path "./.git/*" -not -name "CLAUDE.md" -not -name "README.md" -not -name "index.md" -not -name "log.md" -exec grep -L "^verification-status:" {} \; | wc -l
+```
+Expected: 115 (hiçbirinde yok).
+
+- [ ] **Step 2: Python script yaz — batch frontmatter ekleme**
+
+`/root/otomaix-brain/scripts/add_verification_status.py` (geçici, faz sonu silinir):
+
+```python
+#!/usr/bin/env python3
+"""Batch insert `verification-status: unverified` after `last-verified:` in YAML frontmatter."""
+import re
+from pathlib import Path
+
+VAULT = Path("/root/otomaix-brain")
+EXCLUDE = {"CLAUDE.md", "README.md", "index.md", "log.md"}
+
+def add_field(path: Path) -> bool:
+    text = path.read_text(encoding="utf-8")
+    if re.search(r"^verification-status:", text, re.MULTILINE):
+        return False  # already has it
+    # frontmatter must be at top, between --- delimiters
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+    if not m:
+        print(f"SKIP (no frontmatter): {path}")
+        return False
+    fm = m.group(1)
+    # insert after `last-verified:` line if present, else before closing ---
+    if "last-verified:" in fm:
+        new_fm = re.sub(
+            r"(last-verified:\s*\S+)",
+            r"\1\nverification-status: unverified",
+            fm,
+            count=1,
+        )
+    else:
+        new_fm = fm + "\nverification-status: unverified"
+    new_text = text.replace(f"---\n{fm}\n---\n", f"---\n{new_fm}\n---\n", 1)
+    path.write_text(new_text, encoding="utf-8")
+    return True
+
+modified = 0
+skipped = 0
+for md in VAULT.rglob("*.md"):
+    if any(part == ".git" for part in md.parts):
+        continue
+    if md.name in EXCLUDE:
+        continue
+    if add_field(md):
+        modified += 1
+    else:
+        skipped += 1
+print(f"\nModified: {modified}, Skipped: {skipped}, Total: {modified + skipped}")
+```
+
+```bash
+mkdir -p /root/otomaix-brain/scripts
+# (scripts dizini olmasa da python script /tmp'ye yazılabilir)
+```
+
+- [ ] **Step 3: Script'i çalıştır**
+
+```bash
+cd /root/otomaix-brain
+python3 scripts/add_verification_status.py
+```
+Expected: `Modified: 115, Skipped: 0, Total: 115` (veya yakın — bazı sayfalarda frontmatter eksikse skip artar, o sayfalar tek tek elle düzeltilir).
+
+- [ ] **Step 4: Post-check — kaç sayfada eklendi**
+
+```bash
+cd /root/otomaix-brain
+find . -name "*.md" -not -path "./.git/*" -not -name "CLAUDE.md" -not -name "README.md" -not -name "index.md" -not -name "log.md" -exec grep -l "^verification-status: unverified" {} \; | wc -l
+```
+Expected: 115 (veya Step 3 Modified sayısı kadar).
+
+- [ ] **Step 5: Spot-check — bir sayfada nasıl göründüğüne bak**
+
+```bash
+head -12 /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+```
+Expected: frontmatter'da `verification-status: unverified` satırı görünmeli.
+
+- [ ] **Step 6: Script'i sil (geçici)**
+
+```bash
+rm /root/otomaix-brain/scripts/add_verification_status.py
+rmdir /root/otomaix-brain/scripts 2>/dev/null || true
+```
+
+- [ ] **Step 7: Commit (vault)**
+
+```bash
+cd /root/otomaix-brain
+git add -A
+git commit -m "vault: batch verification-status: unverified to 115 pages"
+```
+
+- [ ] **Step 8: log.md entry**
+
+```markdown
+## [2026-05-XX HH:MM] schema | batch unverified (115 pages)
+- 115 vault sayfasının frontmatter'ına `verification-status: unverified` eklendi
+- Python script ile batch insert (sonra silindi, geçiciydi)
+- Vault commit: <Step 7 hash>
+```
+
+```bash
+git add log.md && git commit -m "vault: log H2 batch frontmatter entry"
+```
+
+---
+
+## Task 1: Phase 6 (HIGH, B+A pipeline test + bilinen hata düzeltmesi)
+
+**Files:**
+- Modify: `/root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md`
+- Read: `/root/otomaix/docs/_archive/06-social-trends-phase6.md`
+
+**Bu task pipeline'ın ilk canlı testi.** Phase 6'da bilinen 3 Layer attribution hatası var (kaynak yanıltıcı kanıt: Layer A/B/C atamaları yanlış). Sayfa baştan yazılır, sonra subagent doğrular. Pipeline doğru çalışırsa subagent "OK" döner; çalışmazsa critical mismatch'ler bulur.
+
+- [ ] **Step 1: Pre-check — mevcut sayfanın hatası teyit**
+
+```bash
+grep -A 5 "Üç katmanlı yeni mimari" /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+```
+Expected: "Layer A: ... RSS + pytrends evrimi" gibi satır görünür (hatalı atama).
+
+- [ ] **Step 2: Kaynak dosyanın section yapısını çıkar**
+
+```bash
+grep -n "^## " /root/otomaix/docs/_archive/06-social-trends-phase6.md
+```
+Expected: 8-15 arası `##` başlık (hedef, problem, üç katman, layer detayları, kotalar, maliyet, UI, sonuç).
+
+- [ ] **Step 3: Mevcut sayfayı overwrite için Read et (yedek için)**
+
+```
+Read /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+```
+(Mevcut içerik referans olmasın diye — yeni yazımı kaynaktan yapacağız.)
+
+- [ ] **Step 4: Yeni sayfa yaz — frontmatter**
+
+Write ile `/root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md`:
+
+```yaml
+---
+title: Phase 6 — Trend Sistemi Yenileme
+type: history
+status: completed
+last-verified: 2026-05-13
+verification-status: b-written
+sources:
+  - "@/root/otomaix/docs/_archive/06-social-trends-phase6.md"
+tags: [social, history, phase-6, trends, apify, serper]
+---
+
+# Phase 6 — Trend Sistemi Yenileme
+```
+
+(Sayfa içeriği Step 5-12'de section section eklenir.)
+
+- [ ] **Step 5: Section "Süre" yaz**
+
+Kaynak satır aralığı: `grep -n "^## Süre\|^## Hedef" /root/otomaix/docs/_archive/06-social-trends-phase6.md` ile bul. Section yaz:
+
+```markdown
+## Süre
+
+> Kaynak: `@docs/_archive/06-social-trends-phase6.md:5-10`
+
+~3–4 hafta.
+```
+
+- [ ] **Step 6: Section "Hedef" yaz**
+
+Read kaynak satır aralığı (Hedef bölümü). Attribution-prone değil → line-number referans:
+
+```markdown
+## Hedef
+
+> Kaynak: `@docs/_archive/06-social-trends-phase6.md:NN-MM`
+
+`/trendler` sayfasını yüzeysel RSS + pytrends mantığından çıkarıp **üç katmanlı, sosyal-medya odaklı, kişiselleşmiş** trend sistemine çevirmek.
+```
+
+- [ ] **Step 7: Section "Problem (önceki durum)" yaz**
+
+Kaynak satır aralığı oku. Sayısal değer ("3 gazete RSS", "6 saat cache") → **attribution-prone**, verbatim quote zorunlu:
+
+```markdown
+## Problem (önceki durum)
+
+> **Kaynak alıntı** (`@docs/_archive/06-social-trends-phase6.md:NN-MM`):
+> - 3 gazete RSS + pytrends
+> - Sektör-bazlı 6 saatlik cache
+> - Tüm aynı sektördeki kullanıcılar aynı 6 sonucu görüyordu
+> - pytrends 429 sonrası fallback'lere düşüyordu
+> - Sosyal medya verisi (TikTok, Reddit, YouTube, Twitter, Instagram) yoktu
+
+Mevcut `app/services/trend_analyzer.py` yukarıdaki problemleri taşıyordu. Cache stratejisi kullanıcılar arası farklılaşmayı imkânsız kılıyordu.
+```
+
+- [ ] **Step 8: Section "Üç katmanlı yeni mimari" yaz (KRİTİK — attribution hatası burada oldu)**
+
+Kaynak satır aralığını dikkatle oku, Layer A/B/C atamalarını **verbatim quote ile** yapıştır:
+
+```markdown
+## Üç katmanlı yeni mimari
+
+> **Kaynak alıntı** (`@docs/_archive/06-social-trends-phase6.md:NN-MM`):
+> - Layer A — Ücretsiz gece taraması (cron 06:00 Istanbul)
+>   - 7 kaynak paralel: Google News, Google Trends, YouTube, Reddit, trends24.in, Pinterest Trends, TCMB EVDS
+>   - Sektör başına paylaşılan cache (`sector_trend_cache`)
+>   - Sıfıra yakın maliyet, herkese garantili dolu sayfa
+> - Layer B — Kullanıcı tetikli, kişisel
+>   - Marka RAG belgeleri + geçmiş postlar → arama sorguları üretilir
+>   - Serper.dev (canlı Google TR) + Claude Haiku sentezi
+>   - Tetik başı ~$0.005, aylık kota: Starter 5 / Pro 10 / Business 20 / Agency 50
+>   - Karar: Claude'un yerleşik web_search'ü değil Serper kullanıldı — ~10x ucuz
+> - Layer C — Pro+ aylık rapor
+>   - Apify aktörleri: 11 aktör (TikTok, Instagram, Twitter, Trendyol, Hepsiburada, Yemeksepeti, Booking, Sahibinden, vb.)
+>   - SECTOR_ACTOR_MAP ile sektöre göre 4-6 aktör seçilir
+>   - Çıktı: WeasyPrint PDF → R2'ye yüklenir
+>   - Aylık kota: Pro 1 / Business 3 / Agency 10 (Starter kilitli — upgrade funnel)
+>   - ~$0.55/rapor
+
+- **Layer A** — Ücretsiz gece taraması: cron 06:00 (`/internal/trends/nightly-sweep`) ile 7 kaynak paralel scrape, sektör-bazlı paylaşılan cache. Maliyet ~$0/ay.
+- **Layer B** — Kullanıcı tetikli kişiselleştirme: marka RAG + geçmiş post analizi → Serper.dev + Claude Haiku ile arama+sentez. Tetik başı ~$0.005, plan-bazlı kota.
+- **Layer C** — Pro+ aylık rapor: Apify 11 aktörden sektör-spesifik 4-6 aktör → WeasyPrint PDF. ~$0.55/rapor, plan-bazlı kota.
+- `trend_analyzer.py` üç katmanı orkestre eden orkestrator olarak refactor edildi.
+```
+
+- [ ] **Step 9: Section "Ana kararlar" yaz**
+
+Read kaynak ilgili bölümü. Karar atamaları **attribution-prone** → verbatim quote:
+
+```markdown
+## Ana kararlar
+
+> **Kaynak alıntı** (`@docs/_archive/06-social-trends-phase6.md:NN-MM`):
+> - Apify sosyal medya scraping için
+> - Üç katman ayrılması (concern separation, monolit reddedildi)
+> - Personalization brand sector + RAG bağlamı ile
+> - Cache layer-bazlı TTL
+> - Temperature kuralı: analitik görevler düşük temperature
+> - Serper.dev seçildi, Claude web_search reddedildi (~10x maliyet farkı)
+> - WeasyPrint PDF üretimi, alternatif (Puppeteer) kullanılmadı
+> - Apify aylık plan, ücretli ama predictable
+
+- Apify ile sosyal medya scraping (Instagram, TikTok, Reddit, YouTube, Twitter + e-ticaret aktörleri)
+- Üç katman ayrılması — tek monolit `trend_analyzer.py` reddedildi, concern separation tercih edildi
+- Personalization — brand sector + RAG bağlamı her kullanıcıya farklı sıralama
+- Cache stratejisi — layer-bazlı TTL (A uzun, C kısa)
+- Temperature kuralı — analitik görevler default, [[2026-02-15-temperature-kurali]]
+- Serper.dev — Claude'un yerleşik web_search'ü yerine seçildi (~10x maliyet farkı + predictable fatura)
+```
+
+- [ ] **Step 10: Section "Veritabanı" + "Maliyet (100 kullanıcı senaryosu)" + "Frontend" + "Tamamlanma" + "Sonraki phase" + "İlişkili" yaz**
+
+Aynı disiplin: kaynak satır aralığını oku, attribution-prone içerik var mı kontrol et, varsa verbatim quote yapıştır, yoksa line-number referans.
+
+```markdown
+## Veritabanı
+
+> Kaynak: `@docs/_archive/06-social-trends-phase6.md:NN-MM`
+
+Yeni migration (`019_sectors_hierarchy.sql`) hiyerarşik sektör tablosu ekledi: 11 sektör seed, `parent_sector_id` ile alt kırılım için hazır. `brands.sector` text alanı geri-uyumluluk için kaldı, `sector_id` UUID eklendi.
+
+Yeni tablolar: `sector_trend_cache`, `brand_trend_cache`, `trend_usage` (aylık sayaç), `sector_reports` (PDF metadata).
+
+Eski `trend_analyzer.py` DEPRECATED — silinmedi, geri-uyumluluk shim olarak kaldı.
+
+## Maliyet (100 kullanıcı senaryosu)
+
+> **Kaynak alıntı** (`@docs/_archive/06-social-trends-phase6.md:NN-MM`):
+> - Layer A: ~$5/ay (toplam, herkese paylaşımlı)
+> - Layer B: ~$5/ay (kullanıcı tetik başı ortalama)
+> - Layer C: ~$80/ay (Pro+ kullanıcılar arası dağılım)
+> - Toplam: ~$90/ay
+> - Dağılım: %85 Apify, %10 Haiku, %5 Serper. Layer A ücretsiz.
+
+(Yukarıdaki rakamlar 100 kullanıcı + ortalama tetik senaryosu içindir; gerçek değerler kullanıcı planı dağılımına bağlı.)
+
+## Frontend
+
+> Kaynak: `@docs/_archive/06-social-trends-phase6.md:NN-MM`
+
+`/trendler` sayfası 3-sekmeli yapıya geçti: **Sektör Trendleri** (Layer A) / **Bana Özel** (Layer B) / **Aylık Rapor** (Layer C). Kontör barı + 402 (Payment Required) → toast + `/fiyatlandirma` yönlendirmesi. UpgradeModal düşünüldü ama toast tercih edildi (daha az friction).
+
+## Tamamlanma
+
+✅ Phase 6 sonu (2026-04-16): 3-katmanlı trend sistemi canlıda, Apify scraping aktif, Serper Layer B çalışıyor, kişiselleşmiş öneriler her kullanıcıya farklı sıralama veriyor.
+
+## Sonraki phase'e geçiş
+
+Phase 7 ([[template-system-design]]) — sektör şablonlarından genel şablon stratejisine geçiş ve `caption-first` akış.
+
+## İlişkili
+
+- [[phase-4-saas-hazirlik]] — Paddle kotalandırma altyapısı (Layer B/C kota tabanı)
+- [[2026-02-15-temperature-kurali]] — Layer B Haiku sentez sıcaklığı
+- [[template-system-design]] — Phase 7'ye geçiş
+- [[fal-ai-models]] — vendor ekosistemi (trend'lerden ayrı çalışır)
+- [[anthropic-claude]] — Haiku 4.5 Layer B'de
+```
+
+(Satır aralıkları kaynaktan grep ile çıkarılır; placeholder `NN-MM` her step'te gerçek satır numarasıyla doldurulur.)
+
+- [ ] **Step 11: Post-check — sayfa yapısı**
+
+```bash
+grep -c "^## " /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+```
+Expected: 8-10 section.
+
+```bash
+grep -c "Kaynak alıntı\|^> Kaynak:" /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+```
+Expected: ≥ 6 (her section için 1 quote/referans).
+
+- [ ] **Step 12: Subagent dispatch — A doğrulama**
+
+`Agent` tool, `subagent_type: general-purpose`, prompt:
+
+```
+Görev: Vault sayfasını kaynak dosya ile karşılaştır, attribution hatası ara.
+
+Sayfa (oku): /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+Kaynak (oku): /root/otomaix/docs/_archive/06-social-trends-phase6.md
+Tier: HIGH
+
+Attribution-prone kategoriler (bunlarda kaynakla eşleşmeyen iddia = critical):
+- Numaralı/harfli listelerin atamaları (Layer A/B/C içeriği)
+- Sayısal değerler (fiyat, kota, eşik)
+- Model/vendor/SKU adları
+- Karar verilen seçenek vs reddedilen alternatif
+
+Adımlar:
+1. Kaynak dosyayı oku (tamamı)
+2. Vault sayfasını oku (tamamı)
+3. Sayfadaki her attribution-prone iddia için kaynakta eşleşme ara
+4. Mismatch bul → severity belirle (critical | minor | cosmetic)
+5. Mismatch raporu çıkar
+
+Çıktı format:
+- Mismatch yoksa: "OK — sayfa kaynakla tutarlı"
+- Aksi halde: numbered list, her madde [severity] + vault iddia + kaynak satır + tutarsızlık açıklaması
+
+ÖNEMLİ: Sadece raporla. Sayfayı DÜZELTME, vault'a YAZMA.
+```
+
+Expected: subagent raporu döner (~30-60 sn). Pipeline doğru çalıştıysa "OK" veya sadece minor/cosmetic.
+
+- [ ] **Step 13: Rapor parse — severity-tier protokolü uygula**
+
+Subagent raporunu oku:
+- **Critical mismatch varsa** (Step 8'deki Layer atamalarının yanlış olduğunu raporlarsa pipeline işe yaramıyor demektir — Step 8'i yeniden gözden geçir):
+  - Frontmatter `verification-status: conflict` set et (`Edit`)
+  - Kullanıcıya özet:
+    ```
+    ⚠️ Critical mismatch: phase-6-trend-sistemi
+    Subagent raporu: <kısa özet>
+    Önerim: <düzeltme önerisi>
+    Onay? [e/h]
+    ```
+  - Onay → Edit ile düzelt → tekrar Step 12 (A doğrulama)
+- **Sadece minor varsa:** her minor için `Edit`, log.md'de kümülatif sayaç
+- **Sadece cosmetic varsa:** her cosmetic için `Edit`, sessiz
+- **OK döndüyse:** doğrudan Step 14
+
+- [ ] **Step 14: Frontmatter `verification-status: a-verified` set et**
+
+```
+Edit /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+  old_string: verification-status: b-written
+  new_string: verification-status: a-verified
+```
+
+- [ ] **Step 15: Post-check — verification-status doğrula**
+
+```bash
+grep "verification-status:" /root/otomaix-brain/apps/social/architecture/history/phase-6-trend-sistemi.md
+```
+Expected: `verification-status: a-verified`
+
+- [ ] **Step 16: Commit (vault)**
+
+```bash
+cd /root/otomaix-brain
+git add apps/social/architecture/history/phase-6-trend-sistemi.md
+git commit -m "vault: re-migrate phase-6-trend-sistemi (B+A, Faz I Task 1)"
+```
+
+- [ ] **Step 17: log.md entry**
+
+```markdown
+## [2026-05-XX HH:MM] re-migrate | phase-6-trend-sistemi (HIGH, B+A)
+- Bilinen 3 Layer attribution hatası düzeltildi (Layer A/B/C içerikleri doğru atandı)
+- Section sayısı: ~9, verbatim quote: ~5, line-number referans: ~4
+- Subagent raporu: <OK | N minor düzeltme | N critical (düzeltildi)>
+- Vault commit: <hash>
+```
+
+```bash
+cd /root/otomaix-brain && git add log.md && git commit -m "vault: log Task 1 phase-6 re-migration"
+```
+
+---
+
+## Task 2: 07-template-system Bölüm 2+3 (HIGH, 7 sayfa)
+
+**Files:**
+- Modify (7):
+  - `/root/otomaix-brain/apps/social/architecture/template-system-design.md`
+  - `/root/otomaix-brain/apps/social/templates/genel-gorsel-sablon.md`
+  - `/root/otomaix-brain/apps/social/templates/carousel-genel-sablon.md`
+  - `/root/otomaix-brain/apps/social/templates/shortvideo-genel-sablon.md`
+  - `/root/otomaix-brain/apps/social/templates/ozelgun-gorsel-sablon.md`
+  - `/root/otomaix-brain/apps/social/templates/ozelgun-carousel-sablon.md`
+  - `/root/otomaix-brain/apps/social/templates/ozelgun-shortvideo-sablon.md`
+- Read: `/root/otomaix/docs/_archive/07-social-template-system.md`
+
+- [ ] **Step 1: Kaynak yapısını çıkar**
+
+```bash
+grep -n "^## \|^### " /root/otomaix/docs/_archive/07-social-template-system.md | head -50
+```
+Expected: kaynak çok bölümlü (~30-50 başlık); template-system-design + 6 şablon detayı + vendor bölümleri içerir.
+
+- [ ] **Step 2: Her sayfa için B+A grubu — "Sayfa İşlem Şablonu B+A" uygulanır**
+
+Aşağıdaki 7 sayfa için sırayla Şablon B+A'nın 10 step'i uygulanır:
+
+**Sayfa 1: `template-system-design.md`** (mimari panoraması, en uzun)
+- Kaynak section: Bölüm 2 (template-system-design + tasarım kararları)
+- Attribution-prone içerikler: 3-Tier prompt cache mimarisi, backend-driven tek kaynak kararı, Pydantic 1:1 TS senkron, PLATFORM_DEFAULTS merge sıralaması
+- Frontmatter: `type: concept`, `status: active`, `verification-status: b-written → a-verified`
+- B süreci uygulanır → Subagent dispatch → Severity-tier handling → `a-verified`
+
+**Sayfa 2: `genel-gorsel-sablon.md`**
+- Kaynak: Bölüm 3'ün "Genel görsel" alt-bölümü
+- Attribution-prone: vendor seçimleri (FLUX → fallback hierarchy), aspect ratio default'ları, prompt komponentleri (system + brand + dynamic + user)
+- Frontmatter: `type: template`, `status: active`
+- Şablon B+A uygulanır
+
+**Sayfa 3: `carousel-genel-sablon.md`**
+- Kaynak: Bölüm 3'ün "Carousel genel" alt-bölümü
+- Attribution-prone: slide sayısı default, Nano Banana 2 edit, overlay kuralı, R2 path naming pattern
+- Şablon B+A uygulanır
+
+**Sayfa 4: `shortvideo-genel-sablon.md`**
+- Kaynak: Bölüm 3'ün "Short video genel" alt-bölümü
+- Attribution-prone: Stage 1/2 split, FLUX still + Wan I2V, ElevenLabs Flash 2.5, kota refund yok kararı, awaiting_approval state
+- Şablon B+A uygulanır
+
+**Sayfa 5: `ozelgun-gorsel-sablon.md`**
+- Kaynak: Bölüm 3'ün "Özel gün görsel" alt-bölümü
+- Attribution-prone: brand_reference_images (max 20), scene_reference, Nano Banana edit
+- Şablon B+A uygulanır
+
+**Sayfa 6: `ozelgun-carousel-sablon.md`**
+- Kaynak: Bölüm 3'ün "Özel gün carousel" alt-bölümü
+- Attribution-prone: tatil hikayesi yapısı, slide tutarlılığı (reference image), Nano Banana
+- Şablon B+A uygulanır
+
+**Sayfa 7: `ozelgun-shortvideo-sablon.md`**
+- Kaynak: Bölüm 3'ün "Özel gün video" alt-bölümü
+- Attribution-prone: Kling 2.5 Turbo Pro (premium, sadece bu şablonda), crossfade loop, brand_reference
+- Şablon B+A uygulanır
+
+Her sayfa için Subagent dispatch ayrı çağrı (7 dispatch).
+
+- [ ] **Step 3: Post-check — 7 sayfada `verification-status: a-verified`**
+
+```bash
+for f in template-system-design.md \
+         templates/genel-gorsel-sablon.md \
+         templates/carousel-genel-sablon.md \
+         templates/shortvideo-genel-sablon.md \
+         templates/ozelgun-gorsel-sablon.md \
+         templates/ozelgun-carousel-sablon.md \
+         templates/ozelgun-shortvideo-sablon.md; do
+  grep "verification-status:" /root/otomaix-brain/apps/social/architecture/$f 2>/dev/null || \
+  grep "verification-status:" /root/otomaix-brain/apps/social/$f
+done
+```
+Expected: 7 satır, hepsi `a-verified`.
+
+- [ ] **Step 4: Commit (vault, 1 commit 7 sayfa)**
+
+```bash
+cd /root/otomaix-brain
+git add apps/social/architecture/template-system-design.md apps/social/templates/
+git commit -m "vault: re-migrate 07-template-system Bölüm 2+3 (7 pages, B+A)"
+```
+
+- [ ] **Step 5: log.md entry**
+
+```markdown
+## [2026-05-XX HH:MM] re-migrate | 07-template-system Bölüm 2+3 (7 HIGH pages, B+A)
+- Sayfalar: template-system-design + 6 active template
+- Critical mismatch: <N> (düzeltildi)
+- Minor: <N>, Cosmetic: <N>
+- Vault commit: <hash>
+```
+
+```bash
+git add log.md && git commit -m "vault: log Task 2 template-system re-migration"
+```
+
+---
+
+## Task 3: Phase 1-4 reports (HIGH, 4 sayfa)
+
+**Files:**
+- Modify (4):
+  - `/root/otomaix-brain/apps/social/architecture/history/phase-1-altyapi-kurulumu.md`
+  - `/root/otomaix-brain/apps/social/architecture/history/phase-2-temel-ozellikler.md`
+  - `/root/otomaix-brain/apps/social/architecture/history/phase-3-gelismis-ozellikler.md`
+  - `/root/otomaix-brain/apps/social/architecture/history/phase-4-saas-hazirlik.md`
+- Read (4):
+  - `/root/otomaix/docs/_archive/01-social-phase1.md`
+  - `/root/otomaix/docs/_archive/02-social-phase2.md`
+  - `/root/otomaix/docs/_archive/03-social-phase3.md`
+  - `/root/otomaix/docs/_archive/04-social-phase4.md`
+
+- [ ] **Step 1: Her phase report için kaynak yapısını çıkar**
+
+```bash
+for n in 01 02 03 04; do
+  echo "=== ${n} ==="
+  grep -n "^## " /root/otomaix/docs/_archive/${n}-social-phase*.md
+done
+```
+Expected: her dosyada ~5-10 section.
+
+- [ ] **Step 2: Phase 1 — Şablon B+A uygula**
+
+- Kaynak: `01-social-phase1.md` (Ay 1-2: VPS, FastAPI, Next.js, Coolify)
+- Attribution-prone: tech stack seçimleri (FastAPI vs Flask, Next.js 14 App Router vs Pages, Coolify vs Docker Swarm), VPS sağlayıcı, ilk subdomain'ler
+- Şablon B+A 10 step'i uygulanır → Subagent dispatch → handling → `a-verified`
+
+- [ ] **Step 3: Phase 2 — Şablon B+A uygula**
+
+- Kaynak: `02-social-phase2.md` (Ay 2-3: içerik üretimi, takvim, brand kit, auto posting)
+- Attribution-prone: Upload-Post API kararı, brand kit veri modeli, takvim default'ları, auto-posting cron
+- Şablon B+A uygulanır
+
+- [ ] **Step 4: Phase 3 — Şablon B+A uygula**
+
+- Kaynak: `03-social-phase3.md` (Ay 3-4: RAG, faceless video, rakip, Paddle)
+- Attribution-prone: RAG embedding modeli, faceless pipeline ilk versiyonu, Paddle webhook event'ları, rakip analizi vendor
+- Şablon B+A uygulanır
+
+- [ ] **Step 5: Phase 4 — Şablon B+A uygula**
+
+- Kaynak: `04-social-phase4.md` (Ay 4-6: self-serve, izleme, gözlemlenebilirlik)
+- Attribution-prone: Sentry kararı, Paddle plan'ların kotaları, self-serve onboarding adımları
+- Şablon B+A uygulanır
+
+- [ ] **Step 6: Post-check — 4 sayfada `a-verified`**
+
+```bash
+for n in 1 2 3 4; do
+  grep "verification-status:" /root/otomaix-brain/apps/social/architecture/history/phase-${n}-*.md
+done
+```
+Expected: 4 satır, hepsi `a-verified`.
+
+- [ ] **Step 7: Commit + log**
+
+```bash
+cd /root/otomaix-brain
+git add apps/social/architecture/history/
+git commit -m "vault: re-migrate phase 1-4 history (4 pages, B+A)"
+```
+
+log.md entry:
+```markdown
+## [2026-05-XX HH:MM] re-migrate | phase 1-4 history (4 HIGH pages, B+A)
+- Critical mismatch: <N>, Minor: <N>, Cosmetic: <N>
+- Vault commit: <hash>
+```
+
+```bash
+git add log.md && git commit -m "vault: log Task 3 phase 1-4 re-migration"
+```
+
+---
+
+## Task 4: Carousel + marketingskills-entegrasyon (HIGH, 3 sayfa)
+
+**Files:**
+- Modify (3):
+  - `/root/otomaix-brain/apps/social/pipeline/carousel.md`
+  - `/root/otomaix-brain/apps/social/architecture/carousel-design.md`
+  - `/root/otomaix-brain/apps/social/architecture/marketingskills-entegrasyon.md`
+- Read (2):
+  - `/root/otomaix/docs/_archive/12-social-carousel.md`
+  - `/root/otomaix/docs/_archive/11-social-marketingskills.md`
+
+- [ ] **Step 1: Kaynak yapısını çıkar**
+
+```bash
+grep -n "^## " /root/otomaix/docs/_archive/12-social-carousel.md
+grep -n "^## " /root/otomaix/docs/_archive/11-social-marketingskills.md
+```
+
+- [ ] **Step 2: `pipeline/carousel.md` — Şablon B+A**
+
+- Kaynak: `12-social-carousel.md` operasyonel akış bölümü
+- Attribution-prone: pipeline adımları (caption → slide bölme → görsel üretim → overlay → R2 → publish), Nano Banana edit kullanımı, slide naming pattern
+- Şablon B+A uygulanır
+
+- [ ] **Step 3: `architecture/carousel-design.md` — Şablon B+A**
+
+- Kaynak: `12-social-carousel.md` 9 tasarım kararı bölümü
+- Attribution-prone: 9 kararın sırası ve içeriği (caption-first, slide auto bölme, reference image tutarlılığı, polling pattern, vb.), her kararın gerekçesi
+- Şablon B+A uygulanır
+
+- [ ] **Step 4: `architecture/marketingskills-entegrasyon.md` — Şablon B+A**
+
+- Kaynak: `11-social-marketingskills.md` Phase 11 entegrasyon bölümü
+- Attribution-prone: Phase 11 tier mapping (hangi psikoloji prensibi hangi şablon tier'ı), post-spec kararları, prompt blok yapısı
+- Şablon B+A uygulanır
+
+- [ ] **Step 5: Post-check**
+
+```bash
+grep "verification-status:" \
+  /root/otomaix-brain/apps/social/pipeline/carousel.md \
+  /root/otomaix-brain/apps/social/architecture/carousel-design.md \
+  /root/otomaix-brain/apps/social/architecture/marketingskills-entegrasyon.md
+```
+Expected: 3 satır `a-verified`.
+
+- [ ] **Step 6: Commit + log**
+
+```bash
+cd /root/otomaix-brain
+git add apps/social/pipeline/carousel.md apps/social/architecture/carousel-design.md apps/social/architecture/marketingskills-entegrasyon.md
+git commit -m "vault: re-migrate carousel + marketingskills-entegrasyon (3 pages, B+A)"
+git add log.md && git commit -m "vault: log Task 4"
+```
+
+log.md entry standart formatta.
+
+---
+
+## Task 5: 00-platform-mimari türevleri (MID, 7 sayfa, sadece A)
+
+**Files:**
+- Modify (7):
+  - `cross-project/infrastructure/platform-overview.md`
+  - `cross-project/infrastructure/monorepo-yapisi.md`
+  - `cross-project/infrastructure/coolify-deploy.md`
+  - `cross-project/infrastructure/tech-stack.md`
+  - `cross-project/infrastructure/claudemd-template.md`
+  - `cross-project/databases/postgres-multi-app-pattern.md`
+  - `cross-project/integrations/n8n.md`
+- Read: `/root/otomaix/docs/_archive/00-platform-mimari.md`
+
+- [ ] **Step 1: Her sayfa için Şablon A-only uygula**
+
+Şablon A-only'nin 6 step'i her sayfa için tekrarlanır:
+
+```
+Sayfa N için:
+1. Mevcut vault sayfasını oku
+2. Subagent dispatch (general-purpose, prompt template, source: 00-platform-mimari.md, page: <N>)
+3. Rapor parse, severity-tier handling
+4. Mismatch varsa Edit ile düzelt
+5. Frontmatter `verification-status: a-verified`
+6. (Commit toplu Step 2 sonunda)
+```
+
+Subagent dispatch'leri paralel yapılabilir (Agent tool tek mesajda multiple call) — 7 sayfa eşzamanlı doğrulama: süreyi ~7 dk → ~2 dk'ya indirir.
+
+- [ ] **Step 2: Post-check**
+
+```bash
+for f in \
+  cross-project/infrastructure/platform-overview.md \
+  cross-project/infrastructure/monorepo-yapisi.md \
+  cross-project/infrastructure/coolify-deploy.md \
+  cross-project/infrastructure/tech-stack.md \
+  cross-project/infrastructure/claudemd-template.md \
+  cross-project/databases/postgres-multi-app-pattern.md \
+  cross-project/integrations/n8n.md; do
+  echo -n "$f: "
+  grep "verification-status:" /root/otomaix-brain/$f
+done
+```
+Expected: 7 satır `a-verified`.
+
+- [ ] **Step 3: Commit + log**
+
+```bash
+cd /root/otomaix-brain
+git add cross-project/
+git commit -m "vault: verify 00-platform-mimari derivatives (7 pages, A-only)"
+git add log.md && git commit -m "vault: log Task 5"
+```
+
+log.md entry:
+```markdown
+## [2026-05-XX HH:MM] verify | 00-platform-mimari derivatives (7 MID pages, sadece A)
+- Subagent paralel dispatch (7 eşzamanlı)
+- Critical mismatch: <N> (düzeltildi), Minor: <N>, Cosmetic: <N>
+- Vault commit: <hash>
+```
+
+---
+
+## Task 6: 11-marketingskills copywriting (MID, 6 sayfa, sadece A)
+
+**Files:**
+- Modify (6):
+  - `cross-project/copywriting/somutluk-kurali.md`
+  - `cross-project/copywriting/loss-aversion.md`
+  - `cross-project/copywriting/social-proof.md`
+  - `cross-project/copywriting/gorsel-aci-7-kategori.md`
+  - `cross-project/copywriting/hook-formulleri-yasak-karari.md`
+  - `cross-project/copywriting/jtbd-neden-kaldirildi.md`
+- Read: `/root/otomaix/docs/_archive/11-social-marketingskills.md`
+
+- [ ] **Step 1: Şablon A-only uygula her sayfa için (6 dispatch, paralel)**
+
+- [ ] **Step 2: Post-check**
+
+```bash
+for f in somutluk-kurali loss-aversion social-proof gorsel-aci-7-kategori hook-formulleri-yasak-karari jtbd-neden-kaldirildi; do
+  echo -n "$f: "
+  grep "verification-status:" /root/otomaix-brain/cross-project/copywriting/$f.md
+done
+```
+Expected: 6 satır `a-verified`.
+
+- [ ] **Step 3: Commit + log**
+
+```bash
+cd /root/otomaix-brain
+git add cross-project/copywriting/
+git commit -m "vault: verify copywriting pages (6 pages, A-only)"
+git add log.md && git commit -m "vault: log Task 6"
+```
+
+---
+
+## Task 7: 07-template-system vendors (MID, 6 sayfa, sadece A)
+
+**Files:**
+- Modify (6):
+  - `cross-project/vendors/fal-ai-models.md`
+  - `cross-project/vendors/nano-banana.md`
+  - `cross-project/vendors/wan.md`
+  - `cross-project/vendors/kling.md`
+  - `cross-project/vendors/elevenlabs.md`
+  - `cross-project/vendors/anthropic-claude.md`
+- Read: `/root/otomaix/docs/_archive/07-social-template-system.md` (Bölüm 4 — vendor pages)
+
+- [ ] **Step 1: Şablon A-only her sayfa için (6 dispatch, paralel)**
+
+Subagent'a kaynak olarak `07-social-template-system.md`'nin Bölüm 4'ünü (vendor pages) işaret et. Subagent kaynak okurken Bölüm 4'e odaklanır.
+
+- [ ] **Step 2: Post-check**
+
+```bash
+for f in fal-ai-models nano-banana wan kling elevenlabs anthropic-claude; do
+  echo -n "$f: "
+  grep "verification-status:" /root/otomaix-brain/cross-project/vendors/$f.md
+done
+```
+Expected: 6 satır `a-verified`.
+
+- [ ] **Step 3: Commit + log**
+
+```bash
+cd /root/otomaix-brain
+git add cross-project/vendors/
+git commit -m "vault: verify vendor pages (6 pages, A-only)"
+git add log.md && git commit -m "vault: log Task 7"
+```
+
+---
+
+## Task 8: 05-crm-admin (MID, 4 sayfa, sadece A)
+
+**Files:**
+- Modify (4):
+  - `apps/crm/architecture/admin-yapisi.md`
+  - `apps/crm/architecture/n8n-entegrasyon.md`
+  - `apps/crm/architecture/auth-akisi.md`
+  - `apps/crm/architecture/deploy.md`
+- Read: `/root/otomaix/docs/_archive/05-crm-admin.md`
+
+- [ ] **Step 1: Şablon A-only her sayfa için (4 dispatch, paralel)**
+
+- [ ] **Step 2: Post-check**
+
+```bash
+for f in admin-yapisi n8n-entegrasyon auth-akisi deploy; do
+  echo -n "$f: "
+  grep "verification-status:" /root/otomaix-brain/apps/crm/architecture/$f.md
+done
+```
+Expected: 4 satır `a-verified`.
+
+- [ ] **Step 3: Commit + log**
+
+```bash
+cd /root/otomaix-brain
+git add apps/crm/architecture/
+git commit -m "vault: verify crm-admin pages (4 pages, A-only)"
+git add log.md && git commit -m "vault: log Task 8"
+```
+
+---
+
+## Task 9: Spot cold test (3 random HIGH sayfa, kullanıcı işi)
+
+**Files:**
+- Read: Faz I HIGH listesinden 3 random sayfa
+- Modify: `/root/otomaix-brain/log.md` (sonuç)
+
+- [ ] **Step 1: Pre-check — tüm HIGH + MID `a-verified` mi**
+
+```bash
+cd /root/otomaix-brain
+
+# HIGH paths
+HIGH=(
+  apps/social/architecture/history/phase-1-altyapi-kurulumu.md
+  apps/social/architecture/history/phase-2-temel-ozellikler.md
+  apps/social/architecture/history/phase-3-gelismis-ozellikler.md
+  apps/social/architecture/history/phase-4-saas-hazirlik.md
+  apps/social/architecture/history/phase-6-trend-sistemi.md
+  apps/social/architecture/template-system-design.md
+  apps/social/architecture/carousel-design.md
+  apps/social/architecture/marketingskills-entegrasyon.md
+  apps/social/pipeline/carousel.md
+  apps/social/templates/genel-gorsel-sablon.md
+  apps/social/templates/carousel-genel-sablon.md
+  apps/social/templates/shortvideo-genel-sablon.md
+  apps/social/templates/ozelgun-gorsel-sablon.md
+  apps/social/templates/ozelgun-carousel-sablon.md
+  apps/social/templates/ozelgun-shortvideo-sablon.md
+)
+for f in "${HIGH[@]}"; do grep -L "verification-status: a-verified" "$f"; done
+```
+Expected: çıktı boş (hepsi a-verified).
+
+```bash
+# MID paths benzer kontrol (Task 5-8'in toplamı, 23 sayfa)
+# Hepsi a-verified olmalı
+grep -r "verification-status: conflict" /root/otomaix-brain/
+```
+Expected: çıktı boş (hiç conflict yok).
+
+- [ ] **Step 2: 3 random HIGH sayfa seç + farklı kaynak grubundan**
+
+```bash
+# Manuel seçim (script ile rastgele de yapılabilir):
+echo "1. Phase report: phase-3-gelismis-ozellikler.md"
+echo "2. Template: shortvideo-genel-sablon.md (Stage 1/2 split kararları)"
+echo "3. Architecture: carousel-design.md (9 tasarım kararı)"
+```
+
+- [ ] **Step 3: Her sayfa için bir soru hazırla**
+
+Sayfada cevabı olan ama doğrudan başlık olmayan sorular:
+
+1. **Phase 3:** *"Faceless video pipeline'ın ilk versiyonu hangi modelleri kullanıyordu?"*
+2. **Short video şablonu:** *"Stage 1 ve Stage 2 arasında kullanıcı reject ederse ne oluyor — kota geri verilir mi, audio silinir mi?"*
+3. **Carousel design:** *"Carousel'de slide'lar arası görsel tutarlılığı nasıl sağlanıyor?"*
+
+- [ ] **Step 4: Kullanıcı yeni Claude Code oturumu açar**
+
+Sen, kullanıcı olarak:
+```bash
+# Mac/Windows terminal veya VPS'te yeni session:
+cd /root/otomaix && claude
+```
+
+Yeni oturumda her soruyu sırayla sor. Cevapları yapıştır.
+
+- [ ] **Step 5: Her cevap için değerlendirme**
+
+Her cevap için 3 kriter:
+- ✅ Vault'tan geldi mi? (Read tool ile vault sayfası okundu — *"Read 1 file"* gibi sinyal)
+- ✅ `[[wikilink]]` citation içeriyor mu?
+- ✅ İçerik kaynakla (orijinal `_archive`) tutarlı mı — attribution doğru mu?
+
+3/3 hepsi tik → o sayfa için ✅.
+
+- [ ] **Step 6: Sonuç matrisi uygulama**
+
+| Sonuç | Yorum | Aksiyon |
+|---|---|---|
+| 3/3 sayfa ✅ | Vault güvenilir | Faz I tamamlandı |
+| 2/3 sayfa ✅ | 1 kaçak hata | Bulunan hatayı düzelt (Şablon B+A tek sayfa); sonra 2 yeni random sayfa ile re-test |
+| 1/3 veya 0/3 ✅ | Sistemik problem | Faz I tekrar açılır, kök sebep analizi yapılır |
+
+- [ ] **Step 7: log.md entry — cold test sonucu**
+
+```markdown
+## [2026-05-XX HH:MM] cold-test | Faz I verification (3 HIGH sayfa)
+- Test sayfaları: phase-3, shortvideo-sablon, carousel-design
+- Sorular: <her birinin kısa özeti>
+- Sonuç: <3/3 ✅ | 2/3 ✅ | <2 ❌>
+- Aksiyon: <Faz I tamamlandı | düzeltme yapıldı + retest | faz tekrar açıldı>
+- Test yapılan oturumu link: yeni claude session, lokal
+```
+
+```bash
+cd /root/otomaix-brain
+git add log.md
+git commit -m "vault: log Task 9 cold test result"
+```
+
+- [ ] **Step 8: 3/3 ✅ ise — Faz I tamamlama commit'i**
+
+```bash
+cd /root/otomaix-brain
+git commit --allow-empty -m "vault: Faz I re-migration complete (38 pages verified)"
+```
+
+- [ ] **Step 9: Memory güncelle — `project_otomaix_brain_phases.md`**
+
+`/root/.claude/projects/-root-otomaix/memory/project_otomaix_brain_phases.md` dosyasında Faz 1 + Faz I durumunu güncelle:
+
+```markdown
+- Faz 1 TAMAMLANDI ✅ (2026-05-13)
+- Faz I (Re-migration) TAMAMLANDI ✅ (2026-05-XX): 38 sayfa B+A doğrulandı (15 HIGH + 23 MID), cold test 3/3 geçti
+- Sıradaki: Faz 2 (Hermes Coolify entegrasyonu) — başlama tarihi belirsiz
+```
+
+- [ ] **Step 10: Plan dosyası Implementation Progress (Faz I) tablosu güncelle**
+
+`/root/otomaix/docs/plans/2026-05-12-otomaix-brain-faz1-impl.md` dosyasında Faz I tablosunda son sütun (Durum) ✅ olarak işaretle. Otomaix repo commit:
+
+```bash
+cd /root/otomaix
+git add docs/plans/2026-05-12-otomaix-brain-faz1-impl.md
+git commit -m "docs: mark Faz I complete in implementation plan"
+```
+
+---
+
+## Self-Review notları (Faz I)
+
+Plan yazıldıktan sonra spec ile karşılaştırma:
+
+✅ **Spec coverage:**
+- Section 1 (bağlam) — Goal'da özet, Task 1 ile bilinen hata düzeltmesi
+- Section 2 (tasarım özeti) — Architecture'da, Implementation Progress tablosunda
+- Section 3 (somut sayfa listesi) — File Structure'da tam liste, her Task'ta dosya path'leri
+- Section 4 (B süreci) — Şablon B+A 10-step'inde tam tanım, Task 1 örnekli, Task 2-4 referans
+- Section 5 (A süreci) — Şablon B+A Step 7'de subagent dispatch, Subagent prompt template ayrı bölümde
+- Section 6 (mismatch handling) — Şablon B+A Step 8'de severity-tier protokolü, Task 1 Step 13'te uygulanmış
+- Section 7 (state tracking) — H1 Schema update, H2 Batch frontmatter, her Task `b-written → a-verified` set
+- Section 8 (hazırlık + sıra) — H1, H2, Task 1-9 sırayla
+- Section 9 (çıkış kriteri) — Task 9 Step 1 (mekanik) + Step 5-6 (cold test)
+- Section 10 (plan yapısı) — Bu plan zaten Section 10'a uygun
+- Section 11 (risk değerlendirmesi) — Implicit, her Task'ta verification adımı
+- Section 12 (out of scope) — Plan kapsamı dışında yeni sayfa yazma, LOW tier, vb. (zaten plan içinde uygulanmıyor)
+
+✅ **No placeholders:** `TBD`, `// implement here` yok. `<N>` ve `<hash>` log entry'lerinde gerçek değer execution sırasında doldurulur (template-style placeholder, intentional). `<NN-MM>` satır aralığı placeholder'ları execution sırasında `grep -n` ile gerçek değere çevrilir — her Step'te bu yöntem açıklanır.
+
+✅ **Type consistency:** `verification-status` 4 değer her yerde aynı (`unverified`, `b-written`, `a-verified`, `conflict`). Şablon B+A 10 step, Şablon A-only 6 step — sayılar tutarlı. Subagent prompt template tek tanım, her Task'ta referans.
+
+**Bilinen sınır:** Migration task'ları "content parsing" olduğu için klasik TDD failing-test akışı yine uygulanamadı; pre-check + action + post-check verification ile uyarlandı (Faz 1 ile aynı konvansiyon). Skill'in TDD ruhu (her adım doğrulanabilir, hiçbir adım kör değil) korunmuştur.
+
+**Spec referansı:** Spec dosyası ile plan dosyası ayrı (`docs/specs/2026-05-13-...` ve `docs/plans/2026-05-12-...`). Plan, spec'in operationalizasyonudur.
