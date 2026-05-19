@@ -141,4 +141,21 @@ Workflow’lar:
 - Recharts formatter’da `ValueType | undefined` gelebilir; null/undefined check yapılmalıdır.
 - Coolify deploy’da `DATABASE_URL`, container içinden Docker network IP kullanmalıdır; `localhost` kullanılmamalıdır.
 - n8n `COUNT(*)` sonuçlarında IF node strict type validation varsa SQL tarafında `::int` cast kullanılmalıdır. BIGINT string serialization sorununa yol açabilir.
+
+## Dokümantasyon ve Drift Koruma
+
+Bu proje talimat dosyalarına yalnızca şu tür bilgiler eklenmelidir:
+
+- Proje yapısı
+- Env bilgisi
+- Deploy bilgisi
+- Konvansiyonlar
+
+Bu dosyalara sprint logu, aktif iş kaydı, karar geçmişi veya changelog eklenmemelidir.
+
+Kalıcı kayıt yerleri:
+
+- Kararlar: `/root/otomaix-brain/decisions/`
+- Değişiklik/query/ingest/lint kayıtları: `/root/otomaix-brain/log.md`
+- Değerli sentez ve araştırma sonuçları: `/root/otomaix-brain/research/`
 <!-- END CODEX-DISTILLED -->

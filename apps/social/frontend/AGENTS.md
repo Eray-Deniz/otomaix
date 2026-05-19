@@ -200,4 +200,10 @@ Bu tür proje talimat dosyaları yalnızca şu bilgileri içermelidir:
 - Konvansiyonlar
 
 Bu dosyalara sprint logu, aktif iş kaydı, karar geçmişi veya changelog eklenmemelidir.
+
+Kalıcı kayıt yerleri:
+
+- Kararlar: `/root/otomaix-brain/decisions/`
+- Değişiklik/query/ingest/lint kayıtları: `/root/otomaix-brain/log.md`
+- Değerli sentez ve araştırma sonuçları: `/root/otomaix-brain/research/`
 <!-- END CODEX-DISTILLED -->

@@ -20,6 +20,14 @@ Kapsam:
 - RAG doküman bağlamı
 - Ödeme yönetimi
 
+## Proje Kılavuzları
+
+Mimari, karar, vendor ve geçmiş bilgi için önce `/root/otomaix-brain/index.md` kontrol edilir. Aşağıdaki eski dokümanlar yalnızca vault'ta bilgi yoksa veya tarihsel bağlam gerekiyorsa kullanılır.
+
+- Genel mimari: `~/otomaix/docs/00-platform-mimari.md`
+- Phase kılavuzları: `~/otomaix/docs/01-social-phase1.md` ... `04-social-phase4.md`
+- CRM: `~/otomaix/docs/05-crm-admin.md`
+
 ## Deploy
 
 - Sunucu IP: `178.104.7.200`
@@ -62,10 +70,15 @@ Zorunlu/temel değişkenler:
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET_NAME`
-- `R2_PUBLIC_URL`
+- `R2_PUBLIC_URL`: `https://assets.otomaix.com`
 - `UPLOAD_POST_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `INTERNAL_API_KEY`
+
+Önemli örnek değerler:
+
+- `REDIS_URL`: `redis://default:<pass>@<coolify-redis-hostname>:6379/0`
+- `SUPABASE_URL`: `https://sqplkkivtkfyozrvnybe.supabase.co`
 
 Opsiyonel entegrasyonlar:
 
@@ -210,4 +223,10 @@ Bu proje talimat dosyalarına yalnızca şu tür bilgiler eklenmelidir:
 - Aktif iş kayıtları
 - Karar geçmişi
 - Changelog kayıtları
+
+Kalıcı kayıt yerleri:
+
+- Kararlar: `/root/otomaix-brain/decisions/`
+- Değişiklik/query/ingest/lint kayıtları: `/root/otomaix-brain/log.md`
+- Değerli sentez ve araştırma sonuçları: `/root/otomaix-brain/research/`
 <!-- END CODEX-DISTILLED -->
