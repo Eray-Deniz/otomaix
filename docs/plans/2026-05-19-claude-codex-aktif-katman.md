@@ -54,7 +54,7 @@ Bu kurallar `[[codex-entegrasyonu]]` (vault) ve `/root/otomaix-brain/AGENTS.md` 
 | **E — Root CLAUDE.md** | 9 | ✅ | `0f68359` |
 | **F — AGENTS.md sync** | 10 | ✅ | `ccb93d2` (repo damıtması) |
 | **G — Vault çapraz referans** | 11 | ✅ | vault `d2ad889` + `8dd5c34` (last-verified + log), push edildi |
-| **H — End-to-end smoke test** | 12 | ✅ | `71bd91b` (dummy task → archive walkthrough) |
+| **H — End-to-end smoke test** | 12 | ✅ | `71bd91b` (dummy task → archive walkthrough; **done path test edildi, cancelled path test edilmedi** — ileride gerçek cancel ile doğrulanmalı) |
 | **I — Memory + closure** | 13 | ✅ | bu commit (plan progress + memory önerisi) |
 
 **Tamamlandı:** 2026-05-19. Toplam: 5 repo commit + 2 vault commit + 1 plan closure commit = 8 commit, 0 push (vault hariç — vault push edildi).
