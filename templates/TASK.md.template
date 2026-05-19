@@ -1,0 +1,29 @@
+---
+title: <task adı>
+status: proposed     # proposed | active | blocked | waiting-review | done | archived | cancelled
+started: YYYY-MM-DD
+last-touched: YYYY-MM-DD
+blocked-by: null
+---
+
+# Goal
+
+<1-3 cümle: ne yapılacak + neden + başarı kriteri. Constraint'ler burada eritilir.>
+
+# References
+
+- Spec: `docs/specs/YYYY-MM-DD-<slug>.md`
+- Plan: `docs/plans/YYYY-MM-DD-<slug>.md`
+- Review: _(yok)_
+
+# Current Status
+
+_(başlangıçta: "Plan onaylandı, henüz başlanmadı")_
+
+# Open Problems
+
+_(yok)_
+
+# Decisions Log
+
+_(boş — kararlar geldikçe eklenecek; promote edilenler `→ Vault: [[decisions/...]]` formatıyla)_
