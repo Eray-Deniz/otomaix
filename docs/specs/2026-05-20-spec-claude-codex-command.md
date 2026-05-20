@@ -37,7 +37,7 @@ tarihi docs + vault) gösterir.
 | # | Karar |
 |---|---|
 | 1 | **Rename + stub:** yeni canonical `spec-claude-codex.md`; eski `plan-claude-codex.md` silinmez, deprecated stub'a çevrilir |
-| 2 | **Korunan mekanikler:** Codex çağrı pattern'i `plan-claude-codex.md` Adım 1b+3'ten **birebir** alınır (yeniden yazma — transcription drift önlemi) |
+| 2 | **Korunan mekanikler:** Codex çağrı pattern'i `plan-claude-codex.md` Adım 1b+3'ten korunur — **adversarial review scope seçimi hariç** (miras bug, §3 İstisna / Bulgu 2); gerisi yeniden yazılmaz (transcription drift önlemi) |
 | 3 | **Active layer entegrasyonu:** Adım 0 koşullu active context read; Codex prompt'una active task özeti; Adım 11 active task hatırlatması |
 | 4 | **Sayaç refactor:** `TURN` → `full_design_iteration_count` (yalnız temel tasarım değişiklikleri sayar) + ayrı `targeted_consistency_fix_count` |
 | 5 | **Sayaç kaynağı:** frontmatter source-of-truth; girişte okunur (resume güvenli) |
@@ -51,9 +51,10 @@ tarihi docs + vault) gösterir.
 
 ## 3. Korunan Mekanikler
 
-Aşağıdakiler `~/.claude/commands/plan-claude-codex.md`'den **birebir
-taşınır** — yeniden yazılmaz, kaynak dosyadan alınır (İlke 1: transcription
-drift önlemi):
+Aşağıdakiler `~/.claude/commands/plan-claude-codex.md`'den korunur —
+yeniden yazılmaz, kaynak dosyadan alınır (İlke 1: transcription drift
+önlemi). **Bir istisna var:** adversarial review scope seçimi (bkz.
+aşağıdaki İstisna notu / Bulgu 2):
 
 - Dinamik `codex-companion.mjs` bulma (`find` ile, hardcoded sürüm yok;
   fallback `~/.claude` taraması)
@@ -240,7 +241,8 @@ Spec final.
 - Codex review log: docs/reviews/codex/YYYY-MM-DD-<slug>.md
 - Full design iterations: N/3
 - Targeted consistency fixes: M
-- Status: spec-approved | approved-by-iteration-limit
+- Status: spec-approved
+- Codex review status: approved | approved-by-iteration-limit
 - Sonraki adım: /write-plan docs/specs/YYYY-MM-DD-<slug>.md
 ```
 
@@ -362,7 +364,7 @@ de bitip doğrulanmadan task closure (`/finish-branch`) tetiklenmez.
 
 | Konsept | Neden |
 |---|---|
-| Vault yazımı | Ayrı onaylı adım; last-verified + referans bütünlüğü disiplini |
+| Vault yazımı | Komut implementasyon commit'inin **dışında**; fakat rollout closure gate'inin parçası (bkz. §7 Rollout Gate) — last-verified + referans bütünlüğü disiplini |
 | Tarihi docs düzenleme | 2026-05-19 spec/plan o günün kaydı; geçmişi yeniden yazma |
 | Aktif task layer cancelled-path test gap | Ayrı, ilgisiz iş |
 | `/write-plan` veya diğer komutlarda değişiklik | Bu komut self-contained; rol ayrımı zaten net |
