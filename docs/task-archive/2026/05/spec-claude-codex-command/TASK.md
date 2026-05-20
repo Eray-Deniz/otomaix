@@ -21,7 +21,7 @@ kapat. **Başarı:** `rg plan-claude-codex` yalnız kasıtlı kalanları (stub +
 - Spec: `docs/specs/2026-05-20-spec-claude-codex-command.md`
 - Plan: `docs/plans/2026-05-20-spec-claude-codex-command.md`
 - Codex review log: `docs/reviews/codex/2026-05-20-spec-claude-codex-command.md`
-- Review: _(yok)_
+- Review: `docs/reviews/2026-05-20-spec-claude-codex-command.md`
 
 # Current Status
 
