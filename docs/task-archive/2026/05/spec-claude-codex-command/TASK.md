@@ -1,6 +1,6 @@
 ---
 title: spec-claude-codex Komutu (plan-claude-codex rename + akış refactor)
-status: active
+status: archived
 started: 2026-05-20
 last-touched: 2026-05-20
 blocked-by: null
@@ -25,7 +25,9 @@ kapat. **Başarı:** `rg plan-claude-codex` yalnız kasıtlı kalanları (stub +
 
 # Current Status
 
-Execution başladı (inline mod, 2026-05-20). Faz A (yeni komut dosyası) başlıyor.
+Tamamlandı (2026-05-20). spec-claude-codex komutu canlı (401 satır), eski
+plan-claude-codex stub, canlı + vault ref'ler güncel, fresh review 0 açık.
+Rollout gate: vault güncellendi → canonical-complete.
 
 # Open Problems
 

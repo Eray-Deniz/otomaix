@@ -5,25 +5,26 @@
 - Linked spec: docs/specs/2026-05-20-spec-claude-codex-command.md
 - Linked plan: docs/plans/2026-05-20-spec-claude-codex-command.md
 - Branch: main
-- Last updated: 2026-05-20 17:56
+- Last updated: 2026-05-20 (closure)
 
 ## Current State
-- Summary: Spec (2f00b6b/9c86093) + plan (b2943df) onaylandı ve commit edildi.
-  Implementation başlamadı (status TASK.md frontmatter'da).
+- Summary: **TAMAMLANDI (2026-05-20).** spec-claude-codex komutu inşa edildi
+  (cp + transform, 401 satır), eski plan-claude-codex stub, canlı + vault
+  ref'ler güncel, rollout gate kapandı. Fresh review: 0 critical, 0 açık.
 - Blocked: Hayır.
 
 ## Resume From
-- Start here: Plan Faz A, Task 1 (`cp plan-claude-codex.md → spec-claude-codex.md`)
+- Start here: Loose end yok — task tamamlandı, arşivleniyor.
 - Relevant files:
-  - docs/plans/2026-05-20-spec-claude-codex-command.md
-  - ~/.claude/commands/plan-claude-codex.md (kaynak mekanik)
-- Next command: /execute-plan docs/plans/2026-05-20-spec-claude-codex-command.md
+  - ~/.claude/commands/spec-claude-codex.md (canlı komut)
+  - docs/reviews/2026-05-20-spec-claude-codex-command.md (review)
+- Next command: (opsiyonel) yeni komutu dummy fikirle canlı dene; aksi halde yok.
 
 ## Verification
-- Passed: Spec Codex adversarial review (1 full design iteration) + 2 tur insan
-  review; plan 2 tur insan review (toplam 5 bulgu işlendi)
+- Passed: Faz A-F implementation; rg anti-drift + yapı (14 adım, self-ref 0,
+  HEAD~1 0, task mekaniği verbatim); fresh review 0 critical/0 açık; DoD ✓
 - Failed: _(yok)_
-- Not run: Implementation hiç çalıştırılmadı
+- Not run: Yeni komutun canlı end-to-end denemesi (dummy fikir) — opsiyonel
 
 ## Risks
 - Faz A çok edit'li (cp + ~9 task) — anti-drift sadece Adım 2 task bloğuna; her
