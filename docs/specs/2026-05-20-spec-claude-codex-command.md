@@ -142,6 +142,11 @@ yapılır. `docs/specs/` altında `status: draft` **veya**
 - Claude yaklaşımı / Codex yaklaşımı / sentez / yeniden çerçevele
 - "Yeniden çerçevele" → Adım 1'e dön.
 
+**"Sentez" seçilirse** Claude pasif kalmaz: Claude ve Codex çıktılarından en
+güçlü öğeleri seçer, çelişen noktaları gerekçeli çözer, tek birleşik `<SCOPE>`
+önerir. Kullanıcı bu scope'u onaylar, ayarlar veya reddeder. Onay/ayar sonrası
+`<SCOPE>` Adım 4'e girer. (Detaylı alt-akış: komut Adım 3 "İkisinin sentezi" bloğu.)
+
 ### Adım 4: Brainstorm ile Spec Draft
 
 `Skill` tool ile `superpowers:brainstorming`, **yalnız spec üretimi** için.
