@@ -30,6 +30,9 @@
   edit sonrası `rg` token doğrulaması şart, yoksa bash mekaniği drift'e açık
 
 ## Notes For Claude
+- Fresh review (2026-05-20): yeni komut dosyası ↔ spec — 2 Important fix (yanlış
+  adım çapraz-referansları, biri kaynaktan miras), 0 açık. Rapor:
+  docs/reviews/2026-05-20-spec-claude-codex-command.md
 - Codex'in özellikle dikkat çektiği bulgular: rollout gate, HEAD~1 miras bug,
   atomik reopen — hepsi spec/plan'a işlendi
 - Claude'un sonraki session'da işlemesi gereken şeyler: Faz A→F sırayla; **B (stub)
