@@ -1,6 +1,6 @@
 ---
 title: spec-claude-codex Komutu (plan-claude-codex rename + akış refactor)
-status: proposed
+status: active
 started: 2026-05-20
 last-touched: 2026-05-20
 blocked-by: null
@@ -25,8 +25,7 @@ kapat. **Başarı:** `rg plan-claude-codex` yalnız kasıtlı kalanları (stub +
 
 # Current Status
 
-Plan onaylandı ve commit edildi (`b2943df`), henüz başlanmadı.
-`/execute-plan` başında active'e geçilecek.
+Execution başladı (inline mod, 2026-05-20). Faz A (yeni komut dosyası) başlıyor.
 
 # Open Problems
 
