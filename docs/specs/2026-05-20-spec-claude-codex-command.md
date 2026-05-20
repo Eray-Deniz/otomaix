@@ -177,6 +177,12 @@ artar.
 
 ### Adım 6: Codex Adversarial Review
 
+- **Review kapsamı:** adversarial tasarım (design choices, hidden assumptions,
+  failure scenarios) **+ internal consistency / transcription-drift** (bölümler
+  arası çelişki, yanlış adım/çapraz-referans, stale komut adı/path/flag/frontmatter,
+  spec ↔ kararlar uyumsuzluğu, status/review-status tutarsızlığı). Bağımsız göz
+  (Codex) yalnız tasarımı değil yazım tutarlılığını da denetler — Adım 5/9
+  Claude self-sweep'inin kör noktasını kapatır.
 - **Birincil hedef: `<SPEC_PATH>` içeriği doğrudan.** Tek-spec review'da
   source-of-truth dosyanın kendisidir; prompt "Focus on <SPEC_PATH>" der ve
   Codex dosyayı read-only sandbox'ta okur (git diff'e bağımlı değil).
