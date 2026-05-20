@@ -1,3 +1,3 @@
 # Active Tasks
 
-_(no active tasks)_
+- `spec-claude-codex-command/` — plan onaylandı, /execute-plan bekliyor
