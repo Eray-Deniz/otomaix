@@ -1,4 +1,5 @@
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -50,6 +51,35 @@ class TestFrontmatter(unittest.TestCase):
     def test_empty_inline_list(self):
         fm, _ = bd.parse_frontmatter("---\nsources: []\n---\nx")
         self.assertEqual(fm["sources"], [])
+
+
+class TestScan(unittest.TestCase):
+    def _vault(self, files: dict) -> Path:
+        d = Path(tempfile.mkdtemp())
+        for rel, txt in files.items():
+            p = d / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(txt, encoding="utf-8")
+        return d
+
+    def test_iter_excludes(self):
+        v = self._vault({
+            "decisions/a.md": "x",
+            "_health/report.md": "x",
+            ".git/HEAD": "x",
+            "cross-project/vendors/assets/img.md": "x",
+        })
+        rels = bd.iter_markdown_files(v, CONFIG["exclude_globs"])
+        self.assertIn("decisions/a.md", rels)
+        self.assertNotIn("_health/report.md", rels)
+        self.assertNotIn("cross-project/vendors/assets/img.md", rels)
+
+    def test_page_index_basename(self):
+        rels = ["apps/crm/architecture/deploy.md", "apps/social/x.md"]
+        path_set, bidx = bd.build_page_index(rels)
+        self.assertIn("apps/crm/architecture/deploy.md", path_set)
+        self.assertEqual(bidx["deploy"], {"apps/crm/architecture/deploy.md"})
+        self.assertEqual(bidx["deploy.md"], {"apps/crm/architecture/deploy.md"})
 
 
 if __name__ == "__main__":

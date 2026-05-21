@@ -95,3 +95,47 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
             fm[key] = val.strip('"').strip("'")
             current_key = None
     return fm, body
+
+
+def _is_excluded(rel: str, globs: list[str]) -> bool:
+    for g in globs:
+        if fnmatch(rel, g):
+            return True
+        base = g.rstrip("*").rstrip("/")
+        if base and (rel == base or rel.startswith(base + "/")):
+            return True
+        core = g.strip("*").strip("/")
+        if core and ("/" + rel + "/").find("/" + core + "/") != -1:
+            return True
+    return False
+
+
+def iter_markdown_files(vault_root: Path, exclude_globs: list[str]) -> list[str]:
+    rels = []
+    for p in vault_root.rglob("*.md"):
+        rel = p.relative_to(vault_root).as_posix()
+        if _is_excluded(rel, exclude_globs):
+            continue
+        rels.append(rel)
+    return sorted(rels)
+
+
+def read_pages(vault_root: Path, rels: list[str]) -> dict[str, str]:
+    pages = {}
+    for rel in rels:
+        try:
+            pages[rel] = (vault_root / rel).read_text(encoding="utf-8")
+        except OSError:
+            pass
+    return pages
+
+
+def build_page_index(rels: list[str]) -> tuple[set[str], dict[str, set[str]]]:
+    path_set = set(rels)
+    bidx: dict[str, set[str]] = {}
+    for rel in rels:
+        name = rel.rsplit("/", 1)[-1]
+        stem = name[:-3] if name.endswith(".md") else name
+        for key in (name, stem):
+            bidx.setdefault(key, set()).add(rel)
+    return path_set, bidx
