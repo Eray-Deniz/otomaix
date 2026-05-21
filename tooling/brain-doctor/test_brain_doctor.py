@@ -82,5 +82,27 @@ class TestScan(unittest.TestCase):
         self.assertEqual(bidx["deploy.md"], {"apps/crm/architecture/deploy.md"})
 
 
+class TestExtract(unittest.TestCase):
+    def test_extract_and_classify(self):
+        content = (
+            "See [[apps/crm/architecture/deploy]] and [[x|alias]] and [[y#anchor]].\n"
+            "[md](./local.md) [ext](https://e.com) [src](@/root/z.md) [anchor](#sec)\n"
+            "`[[in-code]]` ignored.\n"
+            "```\n[[also-ignored]]\n```\n"
+        )
+        links = bd.extract_links(content)
+        targets = {(k, t) for k, t in links}
+        self.assertIn(("wikilink", "apps/crm/architecture/deploy"), targets)
+        self.assertIn(("wikilink", "x"), targets)
+        self.assertIn(("wikilink", "y"), targets)
+        self.assertIn(("mdlink", "./local.md"), targets)
+        self.assertNotIn(("wikilink", "in-code"), targets)
+        self.assertNotIn(("wikilink", "also-ignored"), targets)
+        for k, t in links:
+            self.assertFalse(t.startswith("http"))
+            self.assertFalse(t.startswith("@"))
+            self.assertNotEqual(t, "#sec")
+
+
 if __name__ == "__main__":
     unittest.main()

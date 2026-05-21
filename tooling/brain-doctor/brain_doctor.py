@@ -139,3 +139,33 @@ def build_page_index(rels: list[str]) -> tuple[set[str], dict[str, set[str]]]:
         for key in (name, stem):
             bidx.setdefault(key, set()).add(rel)
     return path_set, bidx
+
+
+_WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
+_MDLINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+
+
+def strip_code(content: str) -> str:
+    content = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
+    content = re.sub(r"`[^`\n]+`", "", content)
+    return content
+
+
+def extract_links(content: str) -> list[tuple[str, str]]:
+    """Return [(kind, target)] for internal links only.
+
+    Skips external URLs, pure anchors, and '@'-prefixed source-attribution refs.
+    """
+    clean = strip_code(content)
+    out: list[tuple[str, str]] = []
+    for m in _WIKILINK_RE.finditer(clean):
+        target = m.group(1).split("|")[0].split("#")[0].strip()
+        if target and not target.startswith("@"):
+            out.append(("wikilink", target))
+    for m in _MDLINK_RE.finditer(clean):
+        target = m.group(1).split("#")[0].strip()
+        if not target or target.startswith(("http://", "https://", "mailto:", "@")):
+            continue
+        if "/" in target or target.endswith(".md"):
+            out.append(("mdlink", target))
+    return out
