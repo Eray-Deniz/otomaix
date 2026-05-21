@@ -8,13 +8,14 @@
 - Last updated: 2026-05-21
 
 ## Current State
-- Summary: Implementasyon + /simplify + /review + /security-review tamam — `feat/brain-doctor`, 38 unittest PASS, gerçek vault smoke geçti. Tüm kalite adımları bitti, sadece `/finish-branch` + push kaldı.
-- Blocked: hayır
+- Summary: Tüm kalite zinciri tamam (execute-plan + simplify + review + security-review), 38 unittest PASS. `/finish-branch` → B (PR) seçildi: `feat/brain-doctor` origin'e push edildi (20 commit), `status: waiting-review`. PR `gh` olmadığı için URL ile manuel açılacak.
+- Blocked: hayır — review bekleniyor
 
 ## Resume From
-- Start here: `/finish-branch` (merge/PR/tut/sil)
+- Start here: PR oluşturulduktan sonra review feedback'i bekle. Merge edilince `/finish-branch` tekrar (A=merge → full closure + archive). Reddedilirse D (cancelled).
 - Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json`
-- Next command: `/finish-branch` (içinde push/merge kararı verilir)
+- Next command: PR aç → `https://github.com/Eray-Deniz/otomaix/compare/main...feat/brain-doctor?expand=1`
+- Açık iş: slash command `.claude/commands/brain-doctor.md` untracked (repo `.claude/` ignore) — PR'a dahil DEĞİL; istenirse `git add -f`. v1.1 hardening: TASK.md Open Problems (bellek-cap, md-escape).
 
 ## Verification
 - /security-review (bağımsız subagent + Claude ampirik doğrulama): 0 Kritik, 1 Yüksek (ReDoS → KAPATILDI: regex `{1,512}` sınırı), 1 Orta (symlink okuma → KAPATILDI: is_symlink skip), 1 Orta (bellek) + 1 Düşük (md escape) → ERTELENDİ v1.1 (Open Problems). Reviewer'ın ReDoS fix önerisi yanlıştı, doğru fix ampirik bulundu. Log: `docs/security-reviews/2026-05-21-otomaix-brain-doctor.md`

@@ -1,6 +1,6 @@
 ---
 title: Otomaix Brain Doctor v1
-status: active
+status: waiting-review
 started: 2026-05-21
 last-touched: 2026-05-21
 blocked-by: null
@@ -19,7 +19,7 @@ blocked-by: null
 
 # Current Status
 
-Implementasyon + /simplify + /review + /security-review tamam. 38 unittest PASS (`feat/brain-doctor`). Gerçek vault smoke geçti (vault değişmedi, exit 1, 28 bulgu — tüm kalite adımlarında birebir aynı). /simplify: 3 DRY helper. /review: 0 Critical, 1 Important (kapatıldı), 4 Minor (v1.1). /security-review: 0 Kritik, 1 Yüksek ReDoS (kapatıldı) + 1 Orta symlink (kapatıldı), kalanlar v1.1 (Open Problems). `status=active`. Sıradaki: `/finish-branch`. Push kullanıcı onayı bekliyor.
+Tüm kalite zinciri tamam. 38 unittest PASS. /simplify: 3 DRY helper. /review: 0 Critical, 1 Important (kapatıldı), 4 Minor (v1.1). /security-review: 0 Kritik, 1 Yüksek ReDoS + 1 Orta symlink (kapatıldı), kalanlar v1.1 (Open Problems). `/finish-branch` → B (PR): `feat/brain-doctor` origin'e push edildi (20 commit), `status=waiting-review`. PR URL ile manuel açılacak. Merge sonrası `/finish-branch` A → full closure + archive.
 
 # Open Problems
 
