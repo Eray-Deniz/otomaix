@@ -382,14 +382,18 @@ class TestCli(unittest.TestCase):
         self.assertEqual(rc, 2)
 
     def test_json_mode_clean_vault_exit_0(self):
+        import contextlib
+        import io
         v = self._vault({
             "index.md": "# Index\n- [[a]]\n",
             "a.md": ("---\ntitle: T\ntype: concept\nstatus: active\ntags: [x]\n"
                      "sources:\n  - \"@/r.md\"\nverification-status: unverified\n"
                      "last-verified: 2026-05-20\n---\n" + ("x" * 150)),
         })
-        rc = bd.main(["--vault", str(v), "--config", str(Path(__file__).with_name("brain_doctor.config.json")),
-                      "--json", "--no-report"])
+        # redirect stdout so the JSON payload doesn't pollute the test runner log
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = bd.main(["--vault", str(v), "--config", str(Path(__file__).with_name("brain_doctor.config.json")),
+                          "--json", "--no-report"])
         # may have warnings/info but no error → exit 0
         self.assertEqual(rc, 0)
 
