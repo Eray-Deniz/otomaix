@@ -19,11 +19,13 @@ blocked-by: null
 
 # Current Status
 
-Implementasyon + /simplify + /review tamam. 36 unittest PASS (`feat/brain-doctor`). Gerçek vault smoke geçti (vault değişmedi, exit 1). /simplify: 3 DRY helper. /review (bağımsız subagent): 0 Critical, 1 Important (index ambiguous-yutma) → TDD ile kapatıldı, 4 Minor → v1.1'e not. `status=active`. Sıradaki: `/security-review` → `/finish-branch`. Push kullanıcı onayı bekliyor.
+Implementasyon + /simplify + /review + /security-review tamam. 38 unittest PASS (`feat/brain-doctor`). Gerçek vault smoke geçti (vault değişmedi, exit 1, 28 bulgu — tüm kalite adımlarında birebir aynı). /simplify: 3 DRY helper. /review: 0 Critical, 1 Important (kapatıldı), 4 Minor (v1.1). /security-review: 0 Kritik, 1 Yüksek ReDoS (kapatıldı) + 1 Orta symlink (kapatıldı), kalanlar v1.1 (Open Problems). `status=active`. Sıradaki: `/finish-branch`. Push kullanıcı onayı bekliyor.
 
 # Open Problems
 
-_(yok)_
+v1.1 hardening (security review ertelenenleri — tek-kullanıcılı yerel araç için düşük öncelik):
+- [ ] `read_pages` üst boyut sınırı (büyük dosya bellek koruması) — vault dış auto-import gelirse gerekli (en büyük gerçek dosya şu an 20KB)
+- [ ] `render_markdown` detail/page escape (rapor bir trust boundary değil ama markdown enjeksiyonu temizliği)
 
 # Decisions Log
 

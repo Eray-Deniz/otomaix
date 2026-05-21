@@ -8,18 +8,19 @@
 - Last updated: 2026-05-21
 
 ## Current State
-- Summary: Implementasyon + /simplify + /review tamam — `feat/brain-doctor`, 36 unittest PASS, gerçek vault smoke geçti. /review tek 🟡'ı (index ambiguous-yutma) bu branch'te TDD ile kapatıldı. `/security-review` ve push bekliyor.
+- Summary: Implementasyon + /simplify + /review + /security-review tamam — `feat/brain-doctor`, 38 unittest PASS, gerçek vault smoke geçti. Tüm kalite adımları bitti, sadece `/finish-branch` + push kaldı.
 - Blocked: hayır
 
 ## Resume From
-- Start here: `/security-review` → `/finish-branch`
+- Start here: `/finish-branch` (merge/PR/tut/sil)
 - Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json`
-- Next command: `/security-review` (sonra push onayı `git push origin feat/brain-doctor`)
+- Next command: `/finish-branch` (içinde push/merge kararı verilir)
 
 ## Verification
-- /review (bağımsız general-purpose subagent, BASE 9b0376d..HEAD): 0 Critical, 1 Important (index ambiguous-yutma → KAPATILDI), 4 Minor (latent edge'ler + ölü `"deprecated"` dalı → v1.1). Log: `docs/reviews/2026-05-21-otomaix-brain-doctor.md`
+- /security-review (bağımsız subagent + Claude ampirik doğrulama): 0 Kritik, 1 Yüksek (ReDoS → KAPATILDI: regex `{1,512}` sınırı), 1 Orta (symlink okuma → KAPATILDI: is_symlink skip), 1 Orta (bellek) + 1 Düşük (md escape) → ERTELENDİ v1.1 (Open Problems). Reviewer'ın ReDoS fix önerisi yanlıştı, doğru fix ampirik bulundu. Log: `docs/security-reviews/2026-05-21-otomaix-brain-doctor.md`
+- /review (bağımsız subagent): 0 Critical, 1 Important (index ambiguous → KAPATILDI), 4 Minor (v1.1). Log: `docs/reviews/2026-05-21-otomaix-brain-doctor.md`
 - /simplify: 3 DRY helper (`_severity_counts`, `_is_under_glob_base`, `_exempt_files`), davranış birebir korundu
-- Passed: 36 unittest PASS (her task RED→GREEN, scaffold + review-fix dahil); gerçek vault smoke (124 sayfa, exit 1) — vault `git status` öncesi/sonrası temiz (read-only doğrulandı); rapor repo'ya yazıldı (`tooling/brain-doctor/reports/`, gitignored), vault'a değil
+- Passed: 38 unittest PASS (her task RED→GREEN, scaffold + review-fix + 2 security test dahil); gerçek vault smoke (124 sayfa, exit 1, 28 bulgu — tüm adımlarda birebir aynı) — vault read-only doğrulandı; rapor repo'ya (`reports/`, gitignored)
 - Smoke bulguları (TOOL DOĞRU çalışıyor, bunlar gerçek vault sorunları): 18 broken_wikilink (çoğu vault sayfalarının memory-slug'larına `[[project_special_day_redesign]]` gibi link vermesi — vault'ta o isimde sayfa yok), 4 unresolved_conflicts (AGENTS.md, CLAUDE.md, marketingskills-entegrasyon, ozelgun-gorsel-sablon), 1 frontmatter_missing_field, 3 deprecated_visibility, 2 stub
 - Failed: -
 - Not run: `/simplify`, `/review`, `/security-review`; push (onay bekliyor)
