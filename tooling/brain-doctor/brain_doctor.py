@@ -412,3 +412,41 @@ def run_checks(vault_root: Path, config: dict, today: date | None = None) -> Rep
 
     apply_severity(issues, config)
     return Report(generated=today.isoformat(), total_pages=len(pages), issues=issues)
+
+
+_ICON = {"error": "🔴", "warning": "🟡", "info": "🔵"}
+
+
+def render_json(report: Report) -> str:
+    return json.dumps(
+        {
+            "generated": report.generated,
+            "total_pages": report.total_pages,
+            "issues": [asdict(i) for i in report.issues],
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+def render_markdown(report: Report) -> str:
+    counts = {s: sum(1 for i in report.issues if i.severity == s) for s in ("error", "warning", "info")}
+    lines = [
+        f"# Brain Doctor Report — {report.generated}",
+        "",
+        f"- Toplam sayfa: {report.total_pages}",
+        f"- 🔴 error: {counts['error']}  🟡 warning: {counts['warning']}  🔵 info: {counts['info']}",
+        "",
+    ]
+    by_cat: dict[str, list[Issue]] = {}
+    for it in report.issues:
+        by_cat.setdefault(it.category, []).append(it)
+    for cat in sorted(by_cat):
+        items = by_cat[cat]
+        icon = _ICON.get(items[0].severity, "⚪")
+        lines.append(f"## {icon} {cat} ({len(items)})")
+        for it in items:
+            loc = f":{it.line}" if it.line else ""
+            lines.append(f"- `{it.page}{loc}` — {it.detail}")
+        lines.append("")
+    return "\n".join(lines)

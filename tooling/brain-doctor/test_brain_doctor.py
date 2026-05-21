@@ -300,5 +300,26 @@ class TestRun(unittest.TestCase):
             self.assertIn(i.category, CONFIG["severity"])
 
 
+class TestReport(unittest.TestCase):
+    def _report(self):
+        return bd.Report(generated="2026-05-21", total_pages=3, issues=[
+            bd.Issue("error", "broken_wikilink", "a.md", "broken: 'x'"),
+            bd.Issue("info", "stub", "b.md", "status: stub"),
+        ])
+
+    def test_json(self):
+        data = json.loads(bd.render_json(self._report()))
+        self.assertEqual(data["total_pages"], 3)
+        self.assertEqual(len(data["issues"]), 2)
+        self.assertEqual(data["issues"][0]["category"], "broken_wikilink")
+
+    def test_markdown(self):
+        md = bd.render_markdown(self._report())
+        self.assertIn("Brain Doctor Report", md)
+        self.assertIn("error: 1", md)
+        self.assertIn("broken_wikilink", md)
+        self.assertIn("`a.md`", md)
+
+
 if __name__ == "__main__":
     unittest.main()
