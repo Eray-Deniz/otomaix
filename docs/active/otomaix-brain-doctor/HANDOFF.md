@@ -8,16 +8,18 @@
 - Last updated: 2026-05-21
 
 ## Current State
-- Summary: Implementasyon tamam — 14 task TDD, 14 commit (`feat/brain-doctor`), 35 unittest PASS, gerçek vault smoke geçti. Kalite adımları (`/simplify`, `/review`, `/security-review`) ve push bekliyor.
+- Summary: Implementasyon + /simplify + /review tamam — `feat/brain-doctor`, 36 unittest PASS, gerçek vault smoke geçti. /review tek 🟡'ı (index ambiguous-yutma) bu branch'te TDD ile kapatıldı. `/security-review` ve push bekliyor.
 - Blocked: hayır
 
 ## Resume From
-- Start here: `/simplify` (DRY/YAGNI taraması) → `/review` → `/security-review` → `/finish-branch`
+- Start here: `/security-review` → `/finish-branch`
 - Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json`
-- Next command: `/simplify` (sonra push onayı `git push origin feat/brain-doctor`)
+- Next command: `/security-review` (sonra push onayı `git push origin feat/brain-doctor`)
 
 ## Verification
-- Passed: 35 unittest PASS (her task RED→GREEN doğrulandı, scaffold hariç); gerçek vault smoke (124 sayfa, exit 1) — vault `git status` öncesi/sonrası temiz (read-only doğrulandı); rapor repo'ya yazıldı (`tooling/brain-doctor/reports/`, gitignored), vault'a değil
+- /review (bağımsız general-purpose subagent, BASE 9b0376d..HEAD): 0 Critical, 1 Important (index ambiguous-yutma → KAPATILDI), 4 Minor (latent edge'ler + ölü `"deprecated"` dalı → v1.1). Log: `docs/reviews/2026-05-21-otomaix-brain-doctor.md`
+- /simplify: 3 DRY helper (`_severity_counts`, `_is_under_glob_base`, `_exempt_files`), davranış birebir korundu
+- Passed: 36 unittest PASS (her task RED→GREEN, scaffold + review-fix dahil); gerçek vault smoke (124 sayfa, exit 1) — vault `git status` öncesi/sonrası temiz (read-only doğrulandı); rapor repo'ya yazıldı (`tooling/brain-doctor/reports/`, gitignored), vault'a değil
 - Smoke bulguları (TOOL DOĞRU çalışıyor, bunlar gerçek vault sorunları): 18 broken_wikilink (çoğu vault sayfalarının memory-slug'larına `[[project_special_day_redesign]]` gibi link vermesi — vault'ta o isimde sayfa yok), 4 unresolved_conflicts (AGENTS.md, CLAUDE.md, marketingskills-entegrasyon, ozelgun-gorsel-sablon), 1 frontmatter_missing_field, 3 deprecated_visibility, 2 stub
 - Failed: -
 - Not run: `/simplify`, `/review`, `/security-review`; push (onay bekliyor)
