@@ -19,7 +19,7 @@ blocked-by: null
 
 # Current Status
 
-Tüm kalite zinciri tamam. 38 unittest PASS. /simplify: 3 DRY helper. /review: 0 Critical, 1 Important (kapatıldı), 4 Minor (v1.1). /security-review: 0 Kritik, 1 Yüksek ReDoS + 1 Orta symlink (kapatıldı), kalanlar v1.1 (Open Problems). `/finish-branch` → B (PR): `feat/brain-doctor` origin'e push edildi (24 commit), `status=waiting-review`. PR review feedback'i ele alındı: slash command `.gitignore` istisnasıyla tracked yapıldı, test stdout sızıntısı + HANDOFF staleness düzeltildi. PR URL ile manuel açılacak. Merge sonrası `/finish-branch` A → full closure + archive.
+Tüm kalite zinciri tamam. 38 unittest PASS. /simplify: 3 DRY helper. /review: 0 Critical, 1 Important (kapatıldı), 4 Minor (v1.1). /security-review: 0 Kritik, 1 Yüksek ReDoS + 1 Orta symlink (kapatıldı), kalanlar v1.1 (Open Problems). `/finish-branch` → B (PR): `feat/brain-doctor` origin'e push edildi (25 commit), `status=waiting-review`. PR review feedback'i ele alındı: slash command `.gitignore` istisnasıyla tracked yapıldı, test stdout sızıntısı + HANDOFF staleness düzeltildi. **PR #1 açıldı (gh): https://github.com/Eray-Deniz/otomaix/pull/1**. Merge sonrası `/finish-branch` A → full closure + archive.
 
 # Open Problems
 

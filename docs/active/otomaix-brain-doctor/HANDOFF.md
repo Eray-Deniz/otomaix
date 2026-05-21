@@ -8,13 +8,13 @@
 - Last updated: 2026-05-21
 
 ## Current State
-- Summary: Tüm kalite zinciri tamam (execute-plan + simplify + review + security-review), 38 unittest PASS. `/finish-branch` → B (PR) seçildi: `feat/brain-doctor` origin'e push edildi (24 commit), `status: waiting-review`. PR review feedback'i ele alındı (slash command tracked + test stdout + handoff staleness fix). PR `gh` olmadığı için URL ile manuel açılacak.
+- Summary: Tüm kalite zinciri tamam (execute-plan + simplify + review + security-review), 38 unittest PASS. `/finish-branch` → B (PR) seçildi: `feat/brain-doctor` origin'e push edildi (24 commit), `status: waiting-review`. PR review feedback'i ele alındı (slash command tracked + test stdout + handoff staleness fix). PR #1 açıldı: https://github.com/Eray-Deniz/otomaix/pull/1 (review/merge bekleniyor).
 - Blocked: hayır — review bekleniyor
 
 ## Resume From
 - Start here: PR oluşturulduktan sonra review feedback'i bekle. Merge edilince `/finish-branch` tekrar (A=merge → full closure + archive). Reddedilirse D (cancelled).
 - Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json`
-- Next command: PR aç → `https://github.com/Eray-Deniz/otomaix/compare/main...feat/brain-doctor?expand=1`
+- Next command: PR #1 (https://github.com/Eray-Deniz/otomaix/pull/1) review/merge → merge sonrası `/finish-branch` A (closure + archive)
 - Açık iş: v1.1 hardening (TASK.md Open Problems: bellek-cap, md-escape). Slash command artık tracked (gitignore istisnası) → PR'a dahil.
 
 ## Verification
@@ -24,7 +24,7 @@
 - Passed: 38 unittest PASS (her task RED→GREEN, scaffold + review-fix + 2 security test dahil); gerçek vault smoke (124 sayfa, exit 1, 28 bulgu — tüm adımlarda birebir aynı) — vault read-only doğrulandı; rapor repo'ya (`reports/`, gitignored)
 - Smoke bulguları (TOOL DOĞRU çalışıyor, bunlar gerçek vault sorunları): 18 broken_wikilink (çoğu vault sayfalarının memory-slug'larına `[[project_special_day_redesign]]` gibi link vermesi — vault'ta o isimde sayfa yok), 4 unresolved_conflicts (AGENTS.md, CLAUDE.md, marketingskills-entegrasyon, ozelgun-gorsel-sablon), 1 frontmatter_missing_field, 3 deprecated_visibility, 2 stub
 - Failed: -
-- Not run: PR henüz GitHub'da oluşturulmadı (gh CLI yok → prefilled URL verildi, manuel açılacak)
+- Not run: PR #1 açıldı (gh ile), review/merge bekleniyor
 
 ## Risks
 - `default_stale_days=45` ve `page_not_in_index` yanlış-pozitifleri ilk gerçek raporla kalibre edilecek (spec §11) — ilk smoke'ta stale/page_not_in_index hiç çıkmadı, kalibrasyon için ek veri gerekebilir
