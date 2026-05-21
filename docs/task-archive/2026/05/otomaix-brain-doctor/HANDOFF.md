@@ -15,7 +15,7 @@
 - Start here: Task kapandı (main'de canlı). v1.1 işine girilirse Open Problems'tan başla.
 - Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json` (main'de)
 - Next command: yok — yeni iş için `/brainstorm`. v1.1 hardening: TASK.md Open Problems (bellek-cap, md-escape).
-- Açık iş (kod-dışı): config kalibrasyonu — check_conflicts AGENTS.md/CLAUDE.md gibi meta dosyaları muaf tutsun mu (kullanıcı kararı).
+- ~~Açık iş (kod-dışı): config kalibrasyonu — check_conflicts AGENTS.md/CLAUDE.md gibi meta dosyaları muaf tutsun mu (kullanıcı kararı).~~ → **ÇÖZÜLDÜ (2026-05-21, post-arşiv):** check_conflicts artık exempt_files'ı atlıyor (AGENTS.md/CLAUDE.md muaf). Commit `4454d1d` (main). Gerçek vault warning 5→3.
 
 ## Verification
 - /security-review (bağımsız subagent + Claude ampirik doğrulama): 0 Kritik, 1 Yüksek (ReDoS → KAPATILDI: regex `{1,512}` sınırı), 1 Orta (symlink okuma → KAPATILDI: is_symlink skip), 1 Orta (bellek) + 1 Düşük (md escape) → ERTELENDİ v1.1 (Open Problems). Reviewer'ın ReDoS fix önerisi yanlıştı, doğru fix ampirik bulundu. Log: `docs/security-reviews/2026-05-21-otomaix-brain-doctor.md`
