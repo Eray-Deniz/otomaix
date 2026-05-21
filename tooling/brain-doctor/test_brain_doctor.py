@@ -275,5 +275,30 @@ class TestIndexChecks(unittest.TestCase):
         self.assertIn("decisions/old.md", flagged)
 
 
+class TestRun(unittest.TestCase):
+    def _vault(self, files):
+        d = Path(tempfile.mkdtemp())
+        for rel, txt in files.items():
+            p = d / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(txt, encoding="utf-8")
+        return d
+
+    def test_apply_severity_and_every_issue_mapped(self):
+        v = self._vault({
+            "index.md": "# Index\n- [[decisions/a]]\n",
+            "decisions/a.md": ("---\ntitle: T\ntype: decision\nstatus: active\ntags: [x]\n"
+                               "sources:\n  - \"@/r.md\"\nverification-status: unverified\n"
+                               "last-verified: 2026-05-01\n---\n" + ("x" * 150)),
+            "decisions/broken.md": "# no frontmatter and [[no/such]]\nbody body body body body",
+        })
+        report = bd.run_checks(v, CONFIG, today=_date(2026, 5, 21))
+        self.assertGreater(len(report.issues), 0)
+        # every emitted issue has a real severity from config
+        for i in report.issues:
+            self.assertIn(i.severity, ("error", "warning", "info"))
+            self.assertIn(i.category, CONFIG["severity"])
+
+
 if __name__ == "__main__":
     unittest.main()

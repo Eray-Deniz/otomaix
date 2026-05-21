@@ -383,3 +383,32 @@ def check_deprecated_visibility(pages: dict[str, str], index_referenced: set[str
             issues.append(Issue("", "deprecated_visibility", rel,
                                 f"status: {fm.get('status')} ama index'te görünür (policy candidate)"))
     return issues
+
+
+def apply_severity(issues: list[Issue], config: dict) -> None:
+    sev = config.get("severity", {})
+    for it in issues:
+        it.severity = sev[it.category]  # KeyError impossible: validate_severity_coverage ran
+
+
+def run_checks(vault_root: Path, config: dict, today: date | None = None) -> Report:
+    today = today or date.today()
+    rels = iter_markdown_files(vault_root, config.get("exclude_globs", []))
+    pages = read_pages(vault_root, rels)
+    path_set, basename_index = build_page_index(rels)
+
+    issues: list[Issue] = []
+    issues += check_links(pages, path_set, basename_index)
+    idx_issues, index_referenced = check_index(pages, path_set, basename_index)
+    issues += idx_issues
+    issues += check_page_not_in_index(pages, config, index_referenced)
+    issues += check_frontmatter(pages, config)
+    issues += check_stale(pages, config, today)
+    issues += check_conflicts(pages)
+    issues += check_empty(pages, config)
+    issues += check_stub(pages)
+    issues += check_orphan(pages, config, path_set, basename_index, index_referenced)
+    issues += check_deprecated_visibility(pages, index_referenced)
+
+    apply_severity(issues, config)
+    return Report(generated=today.isoformat(), total_pages=len(pages), issues=issues)
