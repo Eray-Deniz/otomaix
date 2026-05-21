@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import date as _date
 from pathlib import Path
 
 import brain_doctor as bd
@@ -182,6 +183,30 @@ class TestCheckFrontmatter(unittest.TestCase):
         self.assertIn("sources_empty", by_page["emptysrc.md"])
         # missing.md lacks sources entirely → sources_missing
         self.assertIn("sources_missing", by_page["missing.md"])
+
+
+class TestStale(unittest.TestCase):
+    def _page(self, status, lv):
+        return (f"---\ntitle: T\ntype: concept\nstatus: {status}\ntags: [x]\n"
+                f"sources:\n  - \"@/r.md\"\nverification-status: unverified\nlast-verified: {lv}\n---\nbody")
+
+    def test_resolve_days(self):
+        rules = CONFIG["stale_rules"]
+        self.assertIsNone(bd._resolve_stale_days("decisions/a.md", rules, 45))
+        self.assertEqual(bd._resolve_stale_days("cross-project/vendors/kling.md", rules, 45), 30)
+        self.assertEqual(bd._resolve_stale_days("cross-project/databases/x.md", rules, 45), 45)
+
+    def test_stale_only_active_and_over_threshold(self):
+        today = _date(2026, 5, 21)
+        pages = {
+            "cross-project/vendors/old.md": self._page("active", "2026-01-01"),   # >30d → stale
+            "cross-project/vendors/fresh.md": self._page("active", "2026-05-15"), # <30d → ok
+            "decisions/x.md": self._page("active", "2020-01-01"),                 # exempt glob
+            "cross-project/vendors/done.md": self._page("completed", "2020-01-01"),  # not active
+        }
+        issues = bd.check_stale(pages, CONFIG, today)
+        pages_flagged = {i.page for i in issues}
+        self.assertEqual(pages_flagged, {"cross-project/vendors/old.md"})
 
 
 if __name__ == "__main__":

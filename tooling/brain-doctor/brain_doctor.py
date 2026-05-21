@@ -243,3 +243,40 @@ def check_frontmatter(pages: dict[str, str], config: dict) -> list[Issue]:
             if isinstance(val, str) and val and val not in allowed:
                 issues.append(Issue("", "invalid_enum_value", rel, f"{fld}={val} enum dışı"))
     return issues
+
+
+def _resolve_stale_days(rel: str, rules: list[dict], default_days):
+    """First matching glob wins. Returns stale_days (may be None = exempt) or default."""
+    for rule in rules:
+        g = rule.get("glob", "")
+        base = g.rstrip("*").rstrip("/")
+        if (base and (rel == base or rel.startswith(base + "/"))) or fnmatch(rel, g):
+            return rule.get("stale_days")
+    return default_days
+
+
+def check_stale(pages: dict[str, str], config: dict, today: date) -> list[Issue]:
+    issues: list[Issue] = []
+    exempt = set(config.get("exempt_files", []))
+    rules = config.get("stale_rules", [])
+    default_days = config.get("default_stale_days")
+    for rel, content in pages.items():
+        if rel in exempt:
+            continue
+        fm, _ = parse_frontmatter(content)
+        if fm.get("status") != "active":
+            continue
+        days = _resolve_stale_days(rel, rules, default_days)
+        if days is None:
+            continue
+        lv = fm.get("last-verified")
+        if not isinstance(lv, str) or not lv:
+            continue  # missing last-verified handled by frontmatter check
+        try:
+            lv_date = datetime.strptime(lv.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        age = (today - lv_date).days
+        if age > days:
+            issues.append(Issue("", "stale", rel, f"last-verified {age} gün önce (eşik {days})"))
+    return issues
