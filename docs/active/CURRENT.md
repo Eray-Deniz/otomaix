@@ -1,3 +1,3 @@
 # Active Tasks
 
-_(no active tasks)_
+- `otomaix-brain-doctor/` — Brain Doctor v1: otomaix-brain vault yapısal sağlık denetçisi (stdlib CLI)
