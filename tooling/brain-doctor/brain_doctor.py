@@ -304,9 +304,12 @@ _CONFLICT_HEADING_RE = re.compile(r"^#{2,3}\s*.*Conflicts", re.MULTILINE)
 _UNRESOLVED_RE = re.compile(r"unresolved|çözülmedi|not resolved", re.IGNORECASE)
 
 
-def check_conflicts(pages: dict[str, str]) -> list[Issue]:
+def check_conflicts(pages: dict[str, str], config: dict) -> list[Issue]:
     issues: list[Issue] = []
+    exempt = _exempt_files(config)
     for rel, content in pages.items():
+        if rel in exempt:
+            continue  # meta files (AGENTS.md/CLAUDE.md vs.) conflict kuralını anlatır, kendileri conflict değil
         if _CONFLICT_HEADING_RE.search(content) and _UNRESOLVED_RE.search(content):
             issues.append(Issue("", "unresolved_conflicts", rel, "Çözülmemiş ⚠️ Conflicts bölümü"))
     return issues
@@ -425,7 +428,7 @@ def run_checks(vault_root: Path, config: dict, today: date | None = None) -> Rep
     issues += check_page_not_in_index(pages, config, index_referenced)
     issues += check_frontmatter(pages, config)
     issues += check_stale(pages, config, today)
-    issues += check_conflicts(pages)
+    issues += check_conflicts(pages, config)
     issues += check_empty(pages, config)
     issues += check_stub(pages)
     issues += check_orphan(pages, config, path_set, basename_index, index_referenced)

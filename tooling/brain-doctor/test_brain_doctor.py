@@ -216,8 +216,10 @@ class TestSimpleChecks(unittest.TestCase):
             "a.md": "body\n## ⚠️ Conflicts\n- Status: unresolved\n",
             "b.md": "body\n## ⚠️ Conflicts\n- Status: resolved\n",
             "c.md": "no conflicts here",
+            # exempt meta file (CLAUDE.md ∈ exempt_files) → conflict bölümü olsa bile flaglenmez
+            "CLAUDE.md": "meta\n## ⚠️ Conflicts\n- Status: unresolved\n",
         }
-        flagged = {i.page for i in bd.check_conflicts(pages)}
+        flagged = {i.page for i in bd.check_conflicts(pages, CONFIG)}
         self.assertEqual(flagged, {"a.md"})
 
     def test_empty(self):

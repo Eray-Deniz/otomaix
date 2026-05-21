@@ -149,7 +149,7 @@ glob kazanır; `stale_days: null` → muaf; eşleşme yoksa `default_stale_days`
 | 7 | frontmatter_missing_field | warning | Zorunlu alan eksik (required_frontmatter) |
 | 8 | invalid_enum_value | warning | type/status/verification-status enum dışı değer |
 | 9 | stale | warning | active sayfa, last-verified eşiği aşmış (§5) |
-| 10 | unresolved_conflicts | warning | "## ⚠️ Conflicts" başlığı + unresolved/çözülmedi metni |
+| 10 | unresolved_conflicts | warning | "## ⚠️ Conflicts" başlığı + unresolved/çözülmedi metni (exempt_files hariç — meta dosyalar conflict kuralını anlatır, kendileri conflict değil) |
 | 11 | empty_or_short | warning | Gövde (frontmatter sonrası) < min_content_chars |
 | 12 | sources_missing | warning | sources alanı yok |
 | 13 | sources_empty | info | sources var ama `[]` |
