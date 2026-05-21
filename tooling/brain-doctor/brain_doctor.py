@@ -450,3 +450,82 @@ def render_markdown(report: Report) -> str:
             lines.append(f"- `{it.page}{loc}` — {it.detail}")
         lines.append("")
     return "\n".join(lines)
+
+
+def repo_root(start: Path) -> Path:
+    """Walk up from a path to find the repo root (.git). Fallback: the path's dir."""
+    p = start.resolve()
+    for parent in [p, *p.parents]:
+        if (parent / ".git").exists():
+            return parent
+    return p if p.is_dir() else p.parent
+
+
+def resolve_report_dir(arg_output_dir: str | None, config: dict, config_path: Path) -> Path:
+    raw = arg_output_dir or config.get("default_report_dir", "tooling/brain-doctor/reports")
+    rp = Path(raw)
+    if rp.is_absolute():
+        return rp.resolve()
+    # relative → anchor to the repo root of the CONFIG file, NOT cwd (Codex Turn-2 fix)
+    return (repo_root(config_path) / rp).resolve()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="brain-doctor",
+                                     description="Otomaix Brain Doctor v1 — vault health checker")
+    parser.add_argument("--vault")
+    parser.add_argument("--config", default=str(Path(__file__).with_name("brain_doctor.config.json")))
+    parser.add_argument("--output-dir")
+    parser.add_argument("--allow-vault-output", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--no-report", action="store_true")
+    parser.add_argument("--min-severity", choices=["error", "warning", "info"])
+    args = parser.parse_args(argv)
+
+    try:
+        config_path = Path(args.config)
+        config = load_config(config_path)
+        validate_severity_coverage(config)
+        vault_root = Path(args.vault) if args.vault else Path(config["vault_path"])
+        if not vault_root.is_dir():
+            print(f"Vault yok: {vault_root}", file=sys.stderr)
+            return 2
+        report = run_checks(vault_root, config)
+    except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
+        print(f"Tool/config/IO hatası: {e}", file=sys.stderr)
+        return 2
+
+    had_error = any(i.severity == "error" for i in report.issues)
+
+    if args.min_severity:
+        floor = SEVERITY_RANK[args.min_severity]
+        report.issues = [i for i in report.issues if SEVERITY_RANK[i.severity] >= floor]
+
+    counts = {s: sum(1 for i in report.issues if i.severity == s) for s in ("error", "warning", "info")}
+    # Özet bir DIAGNOSTIC'tir → stderr. stdout yalnız veri taşır (--json'da saf JSON).
+    print(f"Brain Doctor — {report.generated}: {report.total_pages} sayfa | "
+          f"🔴 {counts['error']} 🟡 {counts['warning']} 🔵 {counts['info']}", file=sys.stderr)
+
+    if args.json:
+        print(render_json(report))
+    elif not args.no_report:
+        out_dir = resolve_report_dir(args.output_dir, config, config_path)
+        vault_abs = vault_root.resolve()
+        if (out_dir == vault_abs or vault_abs in out_dir.parents) and not args.allow_vault_output:
+            print(f"Reddedildi: çıktı vault altına ({out_dir}). --allow-vault-output gerekli.",
+                  file=sys.stderr)
+            return 2
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "report.md").write_text(render_markdown(report), encoding="utf-8")
+            (out_dir / "report.json").write_text(render_json(report), encoding="utf-8")
+            print(f"Rapor: {out_dir}/report.md (+ report.json)", file=sys.stderr)
+        except OSError as e:
+            print(f"Rapor yazılamadı: {e}", file=sys.stderr)
+            return 2
+
+    return 1 if had_error else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

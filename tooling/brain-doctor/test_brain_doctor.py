@@ -321,5 +321,67 @@ class TestReport(unittest.TestCase):
         self.assertIn("`a.md`", md)
 
 
+class TestCli(unittest.TestCase):
+    def _vault(self, files):
+        d = Path(tempfile.mkdtemp())
+        for rel, txt in files.items():
+            p = d / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(txt, encoding="utf-8")
+        return d
+
+    def test_repo_root_finds_git(self):
+        d = Path(tempfile.mkdtemp())
+        (d / ".git").mkdir()
+        sub = d / "tooling" / "brain-doctor"
+        sub.mkdir(parents=True)
+        self.assertEqual(bd.repo_root(sub / "brain_doctor.config.json"), d.resolve())
+
+    def test_vault_output_guard_blocks(self):
+        v = self._vault({"index.md": "# Index\n", "a.md": "---\ntitle: T\n---\n" + ("x" * 150)})
+        # output dir inside the vault, no --allow-vault-output → exit 2
+        rc = bd.main(["--vault", str(v), "--config", str(Path(__file__).with_name("brain_doctor.config.json")),
+                      "--output-dir", str(v / "_health")])
+        self.assertEqual(rc, 2)
+
+    def test_json_mode_clean_vault_exit_0(self):
+        v = self._vault({
+            "index.md": "# Index\n- [[a]]\n",
+            "a.md": ("---\ntitle: T\ntype: concept\nstatus: active\ntags: [x]\n"
+                     "sources:\n  - \"@/r.md\"\nverification-status: unverified\n"
+                     "last-verified: 2026-05-20\n---\n" + ("x" * 150)),
+        })
+        rc = bd.main(["--vault", str(v), "--config", str(Path(__file__).with_name("brain_doctor.config.json")),
+                      "--json", "--no-report"])
+        # may have warnings/info but no error → exit 0
+        self.assertEqual(rc, 0)
+
+    def test_json_stdout_is_pure_json(self):
+        import io, contextlib
+        v = self._vault({
+            "index.md": "# Index\n- [[a]]\n",
+            "a.md": ("---\ntitle: T\ntype: concept\nstatus: active\ntags: [x]\n"
+                     "sources:\n  - \"@/r.md\"\nverification-status: unverified\n"
+                     "last-verified: 2026-05-20\n---\n" + ("x" * 150)),
+        })
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            bd.main(["--vault", str(v), "--config", str(Path(__file__).with_name("brain_doctor.config.json")),
+                     "--json"])
+        # stdout MUST be pure JSON (summary + "Rapor:" go to stderr)
+        data = json.loads(buf.getvalue())
+        self.assertIn("issues", data)
+
+    def test_error_exit_1(self):
+        v = self._vault({"index.md": "# Index\n", "a.md": "# no frontmatter [[no/such]]\nbody body body"})
+        rc = bd.main(["--vault", str(v), "--config", str(Path(__file__).with_name("brain_doctor.config.json")),
+                      "--no-report"])
+        self.assertEqual(rc, 1)  # broken_wikilink + frontmatter_absent = error
+
+    def test_bad_config_exit_2(self):
+        rc = bd.main(["--config", "/nonexistent/config.json"])
+        self.assertEqual(rc, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
