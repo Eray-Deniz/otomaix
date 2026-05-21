@@ -280,3 +280,38 @@ def check_stale(pages: dict[str, str], config: dict, today: date) -> list[Issue]
         if age > days:
             issues.append(Issue("", "stale", rel, f"last-verified {age} gün önce (eşik {days})"))
     return issues
+
+
+_CONFLICT_HEADING_RE = re.compile(r"^#{2,3}\s*.*Conflicts", re.MULTILINE)
+_UNRESOLVED_RE = re.compile(r"unresolved|çözülmedi|not resolved", re.IGNORECASE)
+
+
+def check_conflicts(pages: dict[str, str]) -> list[Issue]:
+    issues: list[Issue] = []
+    for rel, content in pages.items():
+        if _CONFLICT_HEADING_RE.search(content) and _UNRESOLVED_RE.search(content):
+            issues.append(Issue("", "unresolved_conflicts", rel, "Çözülmemiş ⚠️ Conflicts bölümü"))
+    return issues
+
+
+def check_empty(pages: dict[str, str], config: dict) -> list[Issue]:
+    issues: list[Issue] = []
+    exempt = set(config.get("exempt_files", []))
+    min_chars = config.get("min_content_chars", 100)
+    for rel, content in pages.items():
+        if rel in exempt:
+            continue
+        _, body = parse_frontmatter(content)
+        n = len(body.strip())
+        if n < min_chars:
+            issues.append(Issue("", "empty_or_short", rel, f"Gövde {n} char (< {min_chars})"))
+    return issues
+
+
+def check_stub(pages: dict[str, str]) -> list[Issue]:
+    issues: list[Issue] = []
+    for rel, content in pages.items():
+        fm, _ = parse_frontmatter(content)
+        if fm.get("status") == "stub":
+            issues.append(Issue("", "stub", rel, "status: stub"))
+    return issues

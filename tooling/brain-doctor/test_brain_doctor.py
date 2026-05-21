@@ -209,5 +209,33 @@ class TestStale(unittest.TestCase):
         self.assertEqual(pages_flagged, {"cross-project/vendors/old.md"})
 
 
+class TestSimpleChecks(unittest.TestCase):
+    def test_conflicts(self):
+        pages = {
+            "a.md": "body\n## ⚠️ Conflicts\n- Status: unresolved\n",
+            "b.md": "body\n## ⚠️ Conflicts\n- Status: resolved\n",
+            "c.md": "no conflicts here",
+        }
+        flagged = {i.page for i in bd.check_conflicts(pages)}
+        self.assertEqual(flagged, {"a.md"})
+
+    def test_empty(self):
+        pages = {
+            "short.md": "---\ntitle: T\n---\ntiny",
+            "ok.md": "---\ntitle: T\n---\n" + ("x" * 150),
+            "index.md": "tiny",  # exempt
+        }
+        flagged = {i.page for i in bd.check_empty(pages, CONFIG)}
+        self.assertEqual(flagged, {"short.md"})
+
+    def test_stub(self):
+        pages = {
+            "s.md": "---\nstatus: stub\n---\nx",
+            "a.md": "---\nstatus: active\n---\nx",
+        }
+        flagged = {i.page for i in bd.check_stub(pages)}
+        self.assertEqual(flagged, {"s.md"})
+
+
 if __name__ == "__main__":
     unittest.main()
