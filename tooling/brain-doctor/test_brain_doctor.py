@@ -151,5 +151,38 @@ class TestCheckLinks(unittest.TestCase):
         self.assertEqual(cats, ["ambiguous_link", "broken_md_link", "broken_wikilink"])
 
 
+class TestCheckFrontmatter(unittest.TestCase):
+    def test_categories(self):
+        pages = {
+            "index.md": "no fm but exempt",
+            "ok.md": (
+                "---\ntitle: T\ntype: concept\nstatus: active\ntags: [x]\n"
+                "sources:\n  - \"@/r.md\"\nverification-status: unverified\nlast-verified: 2026-01-01\n---\nbody"
+            ),
+            "absent.md": "# no frontmatter\nbody body body",
+            "missing.md": "---\ntitle: T\ntype: concept\n---\nbody",
+            "badenum.md": (
+                "---\ntitle: T\ntype: wrongtype\nstatus: active\ntags: [x]\n"
+                "sources:\n  - \"@/r.md\"\nverification-status: unverified\nlast-verified: 2026-01-01\n---\nbody"
+            ),
+            "emptysrc.md": (
+                "---\ntitle: T\ntype: concept\nstatus: active\ntags: [x]\nsources: []\n"
+                "verification-status: unverified\nlast-verified: 2026-01-01\n---\nbody"
+            ),
+        }
+        issues = bd.check_frontmatter(pages, CONFIG)
+        by_page = {}
+        for i in issues:
+            by_page.setdefault(i.page, set()).add(i.category)
+        self.assertNotIn("index.md", by_page)        # exempt
+        self.assertNotIn("ok.md", by_page)            # complete
+        self.assertIn("frontmatter_absent", by_page["absent.md"])
+        self.assertIn("frontmatter_missing_field", by_page["missing.md"])
+        self.assertIn("invalid_enum_value", by_page["badenum.md"])
+        self.assertIn("sources_empty", by_page["emptysrc.md"])
+        # missing.md lacks sources entirely → sources_missing
+        self.assertIn("sources_missing", by_page["missing.md"])
+
+
 if __name__ == "__main__":
     unittest.main()

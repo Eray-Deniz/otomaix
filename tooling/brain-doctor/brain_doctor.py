@@ -215,3 +215,31 @@ def check_links(
                 cat = "broken_wikilink" if kind == "wikilink" else "broken_md_link"
             issues.append(Issue("", cat, rel, f"{status}: '{target}'"))
     return issues
+
+
+def check_frontmatter(pages: dict[str, str], config: dict) -> list[Issue]:
+    issues: list[Issue] = []
+    exempt = set(config.get("exempt_files", []))
+    required = config.get("required_frontmatter", [])
+    enums = config.get("enums", {})
+    for rel, content in pages.items():
+        if rel in exempt:
+            continue
+        fm, _ = parse_frontmatter(content)
+        if not fm:
+            issues.append(Issue("", "frontmatter_absent", rel, "Frontmatter bloğu yok"))
+            continue
+        for fld in required:
+            if fld == "sources":
+                if "sources" not in fm:
+                    issues.append(Issue("", "sources_missing", rel, "sources alanı yok"))
+                elif isinstance(fm["sources"], list) and not fm["sources"]:
+                    issues.append(Issue("", "sources_empty", rel, "sources boş ([])"))
+                continue
+            if fld not in fm or fm[fld] in ("", [], None):
+                issues.append(Issue("", "frontmatter_missing_field", rel, f"Zorunlu alan eksik: {fld}"))
+        for fld, allowed in enums.items():
+            val = fm.get(fld)
+            if isinstance(val, str) and val and val not in allowed:
+                issues.append(Issue("", "invalid_enum_value", rel, f"{fld}={val} enum dışı"))
+    return issues
