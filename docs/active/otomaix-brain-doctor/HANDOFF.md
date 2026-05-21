@@ -4,7 +4,7 @@
 - Task: Otomaix Brain Doctor v1
 - Linked spec: docs/specs/2026-05-21-otomaix-brain-doctor.md
 - Linked plan: docs/plans/2026-05-21-otomaix-brain-doctor.md
-- Branch: main
+- Branch: feat/brain-doctor (origin'e push edildi, waiting-review)
 - Last updated: 2026-05-21
 
 ## Current State
@@ -24,7 +24,7 @@
 - Passed: 38 unittest PASS (her task RED→GREEN, scaffold + review-fix + 2 security test dahil); gerçek vault smoke (124 sayfa, exit 1, 28 bulgu — tüm adımlarda birebir aynı) — vault read-only doğrulandı; rapor repo'ya (`reports/`, gitignored)
 - Smoke bulguları (TOOL DOĞRU çalışıyor, bunlar gerçek vault sorunları): 18 broken_wikilink (çoğu vault sayfalarının memory-slug'larına `[[project_special_day_redesign]]` gibi link vermesi — vault'ta o isimde sayfa yok), 4 unresolved_conflicts (AGENTS.md, CLAUDE.md, marketingskills-entegrasyon, ozelgun-gorsel-sablon), 1 frontmatter_missing_field, 3 deprecated_visibility, 2 stub
 - Failed: -
-- Not run: `/simplify`, `/review`, `/security-review`; push (onay bekliyor)
+- Not run: PR henüz GitHub'da oluşturulmadı (gh CLI yok → prefilled URL verildi, manuel açılacak)
 
 ## Risks
 - `default_stale_days=45` ve `page_not_in_index` yanlış-pozitifleri ilk gerçek raporla kalibre edilecek (spec §11) — ilk smoke'ta stale/page_not_in_index hiç çıkmadı, kalibrasyon için ek veri gerekebilir
@@ -34,10 +34,10 @@
 ## Notes For Claude
 - `.claude/commands/brain-doctor.md` diskte var, repo `.claude/`'yi ignore ediyor → tracked değil. Force-add (`git add -f`) kullanıcı kararı; default untracked
 - Codex'in dikkat çektiği iki nokta da implementasyonda doğrulandı: link resolution path-before-basename (Task 5, 6 test PASS); `--json` stdout saf JSON (Task 13 `test_json_stdout_is_pure_json` PASS)
-- Sıradaki session: `/simplify` ile başla, sonra review zinciri, en son `/finish-branch`
+- Sıradaki session: PR merge sonrası `/finish-branch` A (full closure + archive); reddedilirse D (cancelled)
 - Vault'a yazılması gerekebilecek kalıcı kararlar: yok (implementasyonda sürpriz çıkmadı)
-- Spec/plan güncellemesi gerektiren noktalar: §11 açık noktalar (stale/page_not_in_index kalibrasyonu) ilk rapordan sonra hâlâ açık
-- Kullanıcıdan karar bekleyen konular: push onayı; slash command force-add; config kalibrasyonu (conflict exempt)
+- Spec/plan güncellemesi gerektiren noktalar: §11 açık noktalar (stale/page_not_in_index kalibrasyonu) ilk rapordan sonra hâlâ açık; PR review: slash command spec/plan ile tutarlı hale getirilmeli (force-add veya "local-only" notu)
+- Kullanıcıdan karar bekleyen konular: slash command tracking (force-add vs spec/plan "local-only" düzeltmesi); config kalibrasyonu (conflict exempt)
 
 ## Notes For Codex
 - Review ederken özellikle: link resolution (spec §7) ve vault-output guard (§8) implementasyonu doğru mu
