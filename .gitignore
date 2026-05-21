@@ -3,7 +3,12 @@
 **/node_modules/
 **/__pycache__/
 **/*.pyc
+# Ignore every .claude/ (root + nested apps), but track the ROOT shared slash commands.
+# Root .claude dir is re-included so git can descend; its contents stay ignored except commands/.
 .claude/
+!/.claude/
+/.claude/*
+!/.claude/commands/
 screenshots/
 shared/load-tests/.venv/
 shared/load-tests/results/
