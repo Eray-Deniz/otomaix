@@ -8,29 +8,32 @@
 - Last updated: 2026-05-21
 
 ## Current State
-- Summary: Spec spec-approved + plan yazıldı/commit'lendi. Kod henüz yazılmadı.
+- Summary: Implementasyon tamam — 14 task TDD, 14 commit (`feat/brain-doctor`), 35 unittest PASS, gerçek vault smoke geçti. Kalite adımları (`/simplify`, `/review`, `/security-review`) ve push bekliyor.
 - Blocked: hayır
 
 ## Resume From
-- Start here: plan Task 1 (scaffold config + dataclasses + severity coverage guard)
-- Relevant files: `tooling/brain-doctor/` (henüz yok), `docs/plans/2026-05-21-otomaix-brain-doctor.md`
-- Next command: `/execute-plan docs/plans/2026-05-21-otomaix-brain-doctor.md`
+- Start here: `/simplify` (DRY/YAGNI taraması) → `/review` → `/security-review` → `/finish-branch`
+- Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json`
+- Next command: `/simplify` (sonra push onayı `git push origin feat/brain-doctor`)
 
 ## Verification
-- Passed: spec 4-turn Codex review (approve); plan üstünde 2 Codex fix uygulandı (json stdout purity, header)
+- Passed: 35 unittest PASS (her task RED→GREEN doğrulandı, scaffold hariç); gerçek vault smoke (124 sayfa, exit 1) — vault `git status` öncesi/sonrası temiz (read-only doğrulandı); rapor repo'ya yazıldı (`tooling/brain-doctor/reports/`, gitignored), vault'a değil
+- Smoke bulguları (TOOL DOĞRU çalışıyor, bunlar gerçek vault sorunları): 18 broken_wikilink (çoğu vault sayfalarının memory-slug'larına `[[project_special_day_redesign]]` gibi link vermesi — vault'ta o isimde sayfa yok), 4 unresolved_conflicts (AGENTS.md, CLAUDE.md, marketingskills-entegrasyon, ozelgun-gorsel-sablon), 1 frontmatter_missing_field, 3 deprecated_visibility, 2 stub
 - Failed: -
-- Not run: kod testleri (henüz kod yazılmadı)
+- Not run: `/simplify`, `/review`, `/security-review`; push (onay bekliyor)
 
 ## Risks
-- `default_stale_days=45` ve `page_not_in_index` yanlış-pozitifleri ilk gerçek raporla kalibre edilecek (spec §11)
+- `default_stale_days=45` ve `page_not_in_index` yanlış-pozitifleri ilk gerçek raporla kalibre edilecek (spec §11) — ilk smoke'ta stale/page_not_in_index hiç çıkmadı, kalibrasyon için ek veri gerekebilir
+- check_conflicts exempt_files'ı dikkate almıyor → AGENTS.md/CLAUDE.md gibi meta dosyalar conflict flagleniyor; spec gereği (conflict tüm sayfalara) ama kullanıcı bunları muaf tutmak isteyebilir (config kalibrasyonu)
 - frontmatter parser stdlib minimal — beklenmedik YAML edge-case'lerde gözden geçirilebilir
 
 ## Notes For Claude
-- Codex'in özellikle dikkat çektiği bulgular: link resolution path-before-basename (plan Task 5 testleri kritik); `--json` stdout saf JSON (Task 13 `test_json_stdout_is_pure_json`)
-- Claude'un sonraki session'da işlemesi gereken şeyler: `/execute-plan` ile Task 1'den başla, her task sonu commit
-- Vault'a yazılması gerekebilecek kalıcı kararlar: implementasyon sırasında çıkarsa (şu an beklenmiyor)
-- Spec/plan güncellemesi gerektiren noktalar: §11 açık noktalar ilk rapordan sonra kalibre
-- Kullanıcıdan karar bekleyen konular: execution modu (subagent-driven vs inline)
+- `.claude/commands/brain-doctor.md` diskte var, repo `.claude/`'yi ignore ediyor → tracked değil. Force-add (`git add -f`) kullanıcı kararı; default untracked
+- Codex'in dikkat çektiği iki nokta da implementasyonda doğrulandı: link resolution path-before-basename (Task 5, 6 test PASS); `--json` stdout saf JSON (Task 13 `test_json_stdout_is_pure_json` PASS)
+- Sıradaki session: `/simplify` ile başla, sonra review zinciri, en son `/finish-branch`
+- Vault'a yazılması gerekebilecek kalıcı kararlar: yok (implementasyonda sürpriz çıkmadı)
+- Spec/plan güncellemesi gerektiren noktalar: §11 açık noktalar (stale/page_not_in_index kalibrasyonu) ilk rapordan sonra hâlâ açık
+- Kullanıcıdan karar bekleyen konular: push onayı; slash command force-add; config kalibrasyonu (conflict exempt)
 
 ## Notes For Codex
 - Review ederken özellikle: link resolution (spec §7) ve vault-output guard (§8) implementasyonu doğru mu

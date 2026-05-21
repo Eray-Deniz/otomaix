@@ -1,6 +1,6 @@
 ---
 title: Otomaix Brain Doctor v1
-status: proposed
+status: active
 started: 2026-05-21
 last-touched: 2026-05-21
 blocked-by: null
@@ -19,7 +19,7 @@ blocked-by: null
 
 # Current Status
 
-Plan onaylandı (4-turn Codex spec review + plan üstünde 2 Codex fix uygulandı), henüz başlanmadı. `status=proposed`; `/execute-plan` başında `active`'e dönecek.
+Implementasyon tamam: 14 task TDD ile bitti, 14 commit (`feat/brain-doctor` branch'i), 35 unittest PASS. Gerçek vault smoke run'ı geçti — vault değiştirilmedi, exit kodları doğru (1 = error var). `status=active` (kalite adımları bekliyor). Sıradaki: `/simplify` → `/review` → `/security-review` → `/finish-branch`. Push kullanıcı onayı bekliyor.
 
 # Open Problems
 
@@ -31,3 +31,4 @@ _(yok)_
 - v1 yapısal-only; `--fix` v1.1'e, sektör-pack/LangGraph ertelendi (spec §2/§12)
 - Default rapor repo'ya yazılır, vault'a değil; vault-output guard (Codex Turn-2 düzeltmesi)
 - `--json` stdout saf JSON, özet stderr'e (Codex plan-review düzeltmesi)
+- Slash command `.claude/commands/brain-doctor.md` diskte var ama repo `.claude/`'yi ignore ettiği için tracked değil — force-add kararı kullanıcıya bırakıldı (untracked bırakmak default)
