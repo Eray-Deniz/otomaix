@@ -54,3 +54,44 @@ def validate_severity_coverage(config: dict) -> None:
     missing = ALL_CATEGORIES - set(config.get("severity", {}))
     if missing:
         raise ValueError(f"config.severity eksik kategoriler: {sorted(missing)}")
+
+
+def parse_frontmatter(content: str) -> tuple[dict, str]:
+    """Return (frontmatter_dict, body). Empty dict if no frontmatter block.
+
+    Minimal YAML subset (no external dep): scalars, inline [a, b], block '- item'.
+    """
+    if not content.startswith("---"):
+        return {}, content
+    end = content.find("\n---", 3)
+    if end == -1:
+        return {}, content
+    block = content[3:end].strip("\n")
+    body = content[end + 4:]
+    fm: dict = {}
+    current_key: str | None = None
+    for raw in block.splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        if re.match(r"^\s+-\s+", line) and current_key is not None:
+            item = line.strip()[1:].strip().strip('"').strip("'")
+            fm.setdefault(current_key, [])
+            if isinstance(fm[current_key], list):
+                fm[current_key].append(item)
+            continue
+        m = re.match(r"^([A-Za-z][\w-]*):\s*(.*)$", line)
+        if not m:
+            continue
+        key, val = m.group(1), m.group(2).strip()
+        if val == "":
+            fm[key] = []
+            current_key = key
+        elif val.startswith("[") and val.endswith("]"):
+            inner = val[1:-1].strip()
+            fm[key] = [x.strip().strip('"').strip("'") for x in inner.split(",") if x.strip()]
+            current_key = None
+        else:
+            fm[key] = val.strip('"').strip("'")
+            current_key = None
+    return fm, body
