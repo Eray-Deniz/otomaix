@@ -274,6 +274,19 @@ class TestIndexChecks(unittest.TestCase):
         flagged = {i.page for i in bd.check_deprecated_visibility(self.pages, referenced)}
         self.assertIn("decisions/old.md", flagged)
 
+    def test_index_ambiguous_ref_emitted(self):
+        # index.md basename-only ref to a duplicate basename → ambiguous, must not be swallowed
+        pages = {
+            "index.md": "# Index\n- [[x]]\n",
+            "dup/x.md": "---\nstatus: active\n---\n" + ("y" * 150),
+            "other/x.md": "---\nstatus: active\n---\n" + ("y" * 150),
+        }
+        path_set, bidx = bd.build_page_index(list(pages))
+        issues, referenced = bd.check_index(pages, path_set, bidx)
+        self.assertIn("ambiguous_link", {i.category for i in issues})
+        # ambiguous ref is unresolvable → must NOT be counted as referenced
+        self.assertEqual(referenced, set())
+
 
 class TestRun(unittest.TestCase):
     def _vault(self, files):

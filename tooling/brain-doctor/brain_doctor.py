@@ -355,6 +355,9 @@ def check_index(
         status, rel = resolve_link("index.md", target, path_set, basename_index)
         if rel:
             referenced.add(rel)
+        elif status == "ambiguous":
+            issues.append(Issue("", "ambiguous_link", "index.md",
+                                f"index'te belirsiz atıf (birden fazla sayfa): '{target}'"))
         elif status == "broken":
             issues.append(Issue("", "index_mismatch_missing_file", "index.md",
                                 f"index'te var, dosya yok: '{target}'"))
