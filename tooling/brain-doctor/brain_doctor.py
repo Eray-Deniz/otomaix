@@ -56,6 +56,21 @@ def validate_severity_coverage(config: dict) -> None:
         raise ValueError(f"config.severity eksik kategoriler: {sorted(missing)}")
 
 
+def _exempt_files(config: dict) -> set[str]:
+    """Files exempt from per-page checks (spec §5 exempt_files)."""
+    return set(config.get("exempt_files", []))
+
+
+def _is_under_glob_base(rel: str, glob: str) -> bool:
+    """True if rel equals or is nested under the non-wildcard base of a glob."""
+    base = glob.rstrip("*").rstrip("/")
+    return bool(base) and (rel == base or rel.startswith(base + "/"))
+
+
+def _severity_counts(issues: list[Issue]) -> dict[str, int]:
+    return {s: sum(1 for i in issues if i.severity == s) for s in ("error", "warning", "info")}
+
+
 def parse_frontmatter(content: str) -> tuple[dict, str]:
     """Return (frontmatter_dict, body). Empty dict if no frontmatter block.
 
@@ -101,8 +116,7 @@ def _is_excluded(rel: str, globs: list[str]) -> bool:
     for g in globs:
         if fnmatch(rel, g):
             return True
-        base = g.rstrip("*").rstrip("/")
-        if base and (rel == base or rel.startswith(base + "/")):
+        if _is_under_glob_base(rel, g):
             return True
         core = g.strip("*").strip("/")
         if core and ("/" + rel + "/").find("/" + core + "/") != -1:
@@ -219,7 +233,7 @@ def check_links(
 
 def check_frontmatter(pages: dict[str, str], config: dict) -> list[Issue]:
     issues: list[Issue] = []
-    exempt = set(config.get("exempt_files", []))
+    exempt = _exempt_files(config)
     required = config.get("required_frontmatter", [])
     enums = config.get("enums", {})
     for rel, content in pages.items():
@@ -249,15 +263,14 @@ def _resolve_stale_days(rel: str, rules: list[dict], default_days):
     """First matching glob wins. Returns stale_days (may be None = exempt) or default."""
     for rule in rules:
         g = rule.get("glob", "")
-        base = g.rstrip("*").rstrip("/")
-        if (base and (rel == base or rel.startswith(base + "/"))) or fnmatch(rel, g):
+        if _is_under_glob_base(rel, g) or fnmatch(rel, g):
             return rule.get("stale_days")
     return default_days
 
 
 def check_stale(pages: dict[str, str], config: dict, today: date) -> list[Issue]:
     issues: list[Issue] = []
-    exempt = set(config.get("exempt_files", []))
+    exempt = _exempt_files(config)
     rules = config.get("stale_rules", [])
     default_days = config.get("default_stale_days")
     for rel, content in pages.items():
@@ -296,7 +309,7 @@ def check_conflicts(pages: dict[str, str]) -> list[Issue]:
 
 def check_empty(pages: dict[str, str], config: dict) -> list[Issue]:
     issues: list[Issue] = []
-    exempt = set(config.get("exempt_files", []))
+    exempt = _exempt_files(config)
     min_chars = config.get("min_content_chars", 100)
     for rel, content in pages.items():
         if rel in exempt:
@@ -349,7 +362,7 @@ def check_index(
 
 
 def check_page_not_in_index(pages: dict[str, str], config: dict, referenced: set[str]) -> list[Issue]:
-    exempt = set(config.get("exempt_files", []))
+    exempt = _exempt_files(config)
     return [
         Issue("", "page_not_in_index", rel, "index.md kataloğunda yok")
         for rel in pages
@@ -361,7 +374,7 @@ def check_orphan(
     pages: dict[str, str], config: dict, path_set: set[str],
     basename_index: dict[str, set[str]], index_referenced: set[str],
 ) -> list[Issue]:
-    exempt = set(config.get("exempt_files", []))
+    exempt = _exempt_files(config)
     referenced = set(index_referenced)
     for rel, content in pages.items():
         for _, target in extract_links(content):
@@ -430,7 +443,7 @@ def render_json(report: Report) -> str:
 
 
 def render_markdown(report: Report) -> str:
-    counts = {s: sum(1 for i in report.issues if i.severity == s) for s in ("error", "warning", "info")}
+    counts = _severity_counts(report.issues)
     lines = [
         f"# Brain Doctor Report — {report.generated}",
         "",
@@ -501,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         floor = SEVERITY_RANK[args.min_severity]
         report.issues = [i for i in report.issues if SEVERITY_RANK[i.severity] >= floor]
 
-    counts = {s: sum(1 for i in report.issues if i.severity == s) for s in ("error", "warning", "info")}
+    counts = _severity_counts(report.issues)
     # Özet bir DIAGNOSTIC'tir → stderr. stdout yalnız veri taşır (--json'da saf JSON).
     print(f"Brain Doctor — {report.generated}: {report.total_pages} sayfa | "
           f"🔴 {counts['error']} 🟡 {counts['warning']} 🔵 {counts['info']}", file=sys.stderr)
