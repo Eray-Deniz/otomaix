@@ -1,0 +1,41 @@
+{
+  "vault_path": "/root/otomaix-brain",
+  "default_report_dir": "tooling/brain-doctor/reports",
+  "exclude_globs": ["_health/**", ".git/**", "**/assets/**", "**/.obsidian/**"],
+  "exempt_files": ["log.md", "AGENTS.md", "index.md", "CLAUDE.md", "inbox/README.md"],
+  "required_frontmatter": ["title", "type", "status", "tags", "sources", "verification-status", "last-verified"],
+  "optional_frontmatter": ["area"],
+  "enums": {
+    "type": ["decision", "concept", "vendor", "template", "history", "research"],
+    "status": ["active", "completed", "superseded", "stub", "frozen"],
+    "verification-status": ["a-verified", "unverified"]
+  },
+  "stale_rules": [
+    { "glob": "decisions/**", "stale_days": null },
+    { "glob": "apps/social/architecture/history/**", "stale_days": null },
+    { "glob": "cross-project/vendors/**", "stale_days": 30 },
+    { "glob": "apps/social/templates/**", "stale_days": 30 },
+    { "glob": "cross-project/infrastructure/**", "stale_days": 45 },
+    { "glob": "cross-project/copywriting/**", "stale_days": 60 }
+  ],
+  "default_stale_days": 45,
+  "min_content_chars": 100,
+  "severity": {
+    "broken_wikilink": "error",
+    "broken_md_link": "error",
+    "ambiguous_link": "error",
+    "index_mismatch_missing_file": "error",
+    "frontmatter_absent": "error",
+    "frontmatter_missing_field": "warning",
+    "invalid_enum_value": "warning",
+    "stale": "warning",
+    "unresolved_conflicts": "warning",
+    "empty_or_short": "warning",
+    "sources_missing": "warning",
+    "sources_empty": "info",
+    "page_not_in_index": "warning",
+    "orphan": "info",
+    "stub": "info",
+    "deprecated_visibility": "info"
+  }
+}
