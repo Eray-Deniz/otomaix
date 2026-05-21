@@ -1,6 +1,6 @@
 ---
 title: Otomaix Brain Doctor v1
-status: waiting-review
+status: archived
 started: 2026-05-21
 last-touched: 2026-05-21
 blocked-by: null
@@ -19,7 +19,7 @@ blocked-by: null
 
 # Current Status
 
-Tüm kalite zinciri tamam. 38 unittest PASS. /simplify: 3 DRY helper. /review: 0 Critical, 1 Important (kapatıldı), 4 Minor (v1.1). /security-review: 0 Kritik, 1 Yüksek ReDoS + 1 Orta symlink (kapatıldı), kalanlar v1.1 (Open Problems). `/finish-branch` → B (PR): `feat/brain-doctor` origin'e push edildi, `status=waiting-review`. PR review feedback'i ele alındı: slash command `.gitignore` istisnasıyla tracked yapıldı, test stdout sızıntısı + HANDOFF staleness düzeltildi. **PR #1 açıldı (gh): https://github.com/Eray-Deniz/otomaix/pull/1**. Merge sonrası `/finish-branch` A → full closure + archive.
+**DONE & ARCHIVED.** PR #1 squash merge ile main'e alındı (2026-05-21, merge commit `a69abb4`). Tüm kalite zinciri tamam: execute-plan (14 task TDD, 38 unittest) + simplify (3 DRY helper) + review (0🔴 1🟡 fix + 4🟢) + security-review (0🔴 1🟠 ReDoS fix + 1🟡 symlink fix) + 3 tur PR review (slash command tracked, test stdout, handoff/commit-count drift). v1.1 hardening Open Problems'da bırakıldı. Gerçek vault smoke read-only doğrulandı (124 sayfa, exit 1, 28 bulgu).
 
 # Open Problems
 

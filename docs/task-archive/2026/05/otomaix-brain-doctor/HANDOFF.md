@@ -8,14 +8,14 @@
 - Last updated: 2026-05-21
 
 ## Current State
-- Summary: Tüm kalite zinciri tamam (execute-plan + simplify + review + security-review), 38 unittest PASS. `/finish-branch` → B (PR) seçildi: `feat/brain-doctor` origin'e push edildi, `status: waiting-review`. PR review feedback'i ele alındı (slash command tracked + test stdout + handoff staleness fix). PR #1 açıldı: https://github.com/Eray-Deniz/otomaix/pull/1 (review/merge bekleniyor).
-- Blocked: hayır — review bekleniyor
+- Summary: DONE & ARCHIVED. PR #1 squash merge ile main'e alındı (merge commit `a69abb4`, 2026-05-21). Tüm kalite zinciri + 3 tur PR review tamamlandı, 38 unittest PASS. `feat/brain-doctor` branch'i silindi.
+- Blocked: hayır
 
 ## Resume From
-- Start here: PR oluşturulduktan sonra review feedback'i bekle. Merge edilince `/finish-branch` tekrar (A=merge → full closure + archive). Reddedilirse D (cancelled).
-- Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json`
-- Next command: PR #1 (https://github.com/Eray-Deniz/otomaix/pull/1) review/merge → merge sonrası `/finish-branch` A (closure + archive)
-- Açık iş: v1.1 hardening (TASK.md Open Problems: bellek-cap, md-escape). Slash command artık tracked (gitignore istisnası) → PR'a dahil.
+- Start here: Task kapandı (main'de canlı). v1.1 işine girilirse Open Problems'tan başla.
+- Relevant files: `tooling/brain-doctor/brain_doctor.py`, `test_brain_doctor.py`, `brain_doctor.config.json` (main'de)
+- Next command: yok — yeni iş için `/brainstorm`. v1.1 hardening: TASK.md Open Problems (bellek-cap, md-escape).
+- Açık iş (kod-dışı): config kalibrasyonu — check_conflicts AGENTS.md/CLAUDE.md gibi meta dosyaları muaf tutsun mu (kullanıcı kararı).
 
 ## Verification
 - /security-review (bağımsız subagent + Claude ampirik doğrulama): 0 Kritik, 1 Yüksek (ReDoS → KAPATILDI: regex `{1,512}` sınırı), 1 Orta (symlink okuma → KAPATILDI: is_symlink skip), 1 Orta (bellek) + 1 Düşük (md escape) → ERTELENDİ v1.1 (Open Problems). Reviewer'ın ReDoS fix önerisi yanlıştı, doğru fix ampirik bulundu. Log: `docs/security-reviews/2026-05-21-otomaix-brain-doctor.md`
