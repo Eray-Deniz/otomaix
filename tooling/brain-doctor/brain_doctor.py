@@ -169,3 +169,32 @@ def extract_links(content: str) -> list[tuple[str, str]]:
         if "/" in target or target.endswith(".md"):
             out.append(("mdlink", target))
     return out
+
+
+def resolve_link(
+    source_rel: str, target: str, path_set: set[str], basename_index: dict[str, set[str]]
+) -> tuple[str, str | None]:
+    """Resolve a link target per spec §7. Returns (status, resolved_rel | None).
+
+    status: 'ok' | 'broken' | 'ambiguous'. Path-temelli denemeler basename'den ÖNCE.
+    """
+    candidates = [target] if target.endswith(".md") else [target, target + ".md"]
+    # 1+2: exact vault-relative (as-written and .md-appended)
+    for c in candidates:
+        if c in path_set:
+            return "ok", c
+    # 3: source-relative (as-written and .md-appended)
+    src_dir = source_rel.rsplit("/", 1)[0] if "/" in source_rel else ""
+    for c in candidates:
+        rel = os.path.normpath(os.path.join(src_dir, c)).replace(os.sep, "/")
+        if rel in path_set:
+            return "ok", rel
+    # 4: basename fallback ONLY for targets without a path separator
+    if "/" in target:
+        return "broken", None
+    matches = basename_index.get(target, set())
+    if len(matches) == 1:
+        return "ok", next(iter(matches))
+    if len(matches) > 1:
+        return "ambiguous", None
+    return "broken", None

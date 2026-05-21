@@ -104,5 +104,40 @@ class TestExtract(unittest.TestCase):
             self.assertNotEqual(t, "#sec")
 
 
+class TestResolve(unittest.TestCase):
+    def setUp(self):
+        self.rels = [
+            "apps/crm/architecture/deploy.md",
+            "apps/social/architecture/deploy.md",   # duplicate basename "deploy"
+            "decisions/2026-05-19-x.md",
+            "cross-project/vendors/kling.md",
+        ]
+        self.path_set, self.bidx = bd.build_page_index(self.rels)
+
+    def _r(self, src, target):
+        return bd.resolve_link(src, target, self.path_set, self.bidx)[0]
+
+    def test_exact_with_md_appended(self):
+        # extensionless full path → step 2 resolves, NOT ambiguous despite dup basename
+        self.assertEqual(self._r("index.md", "cross-project/vendors/kling"), "ok")
+        self.assertEqual(self._r("index.md", "apps/crm/architecture/deploy"), "ok")
+
+    def test_exact_with_extension(self):
+        self.assertEqual(self._r("index.md", "decisions/2026-05-19-x.md"), "ok")
+
+    def test_basename_only_unique(self):
+        self.assertEqual(self._r("index.md", "kling"), "ok")
+
+    def test_basename_only_ambiguous(self):
+        self.assertEqual(self._r("index.md", "deploy"), "ambiguous")
+
+    def test_path_qualified_typo_is_broken_not_basename(self):
+        # path-qualified miss must NOT degrade to basename → broken (Codex Turn-3 fix)
+        self.assertEqual(self._r("index.md", "apps/crm/wrong/deploy"), "broken")
+
+    def test_source_relative(self):
+        self.assertEqual(self._r("apps/crm/architecture/x.md", "deploy.md"), "ok")
+
+
 if __name__ == "__main__":
     unittest.main()
