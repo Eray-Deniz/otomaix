@@ -127,6 +127,8 @@ def _is_excluded(rel: str, globs: list[str]) -> bool:
 def iter_markdown_files(vault_root: Path, exclude_globs: list[str]) -> list[str]:
     rels = []
     for p in vault_root.rglob("*.md"):
+        if p.is_symlink():
+            continue  # don't follow symlinks out of the vault (security review 🟡)
         rel = p.relative_to(vault_root).as_posix()
         if _is_excluded(rel, exclude_globs):
             continue
@@ -155,8 +157,11 @@ def build_page_index(rels: list[str]) -> tuple[set[str], dict[str, set[str]]]:
     return path_set, bidx
 
 
-_WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
-_MDLINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
+# Length bound ({1,512}) caps per-start backtracking → linear scan, prevents
+# ReDoS on pathological bracket-heavy vault content (security review 🟠).
+# Real link targets are well under 512 chars; longer ones are abnormal anyway.
+_WIKILINK_RE = re.compile(r"\[\[([^\]]{1,512})\]\]")
+_MDLINK_RE = re.compile(r"\[[^\]]{1,512}\]\(([^)]{1,512})\)")
 
 
 def strip_code(content: str) -> str:

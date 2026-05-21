@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from datetime import date as _date
 from pathlib import Path
@@ -286,6 +287,29 @@ class TestIndexChecks(unittest.TestCase):
         self.assertIn("ambiguous_link", {i.category for i in issues})
         # ambiguous ref is unresolvable → must NOT be counted as referenced
         self.assertEqual(referenced, set())
+
+
+class TestSecurity(unittest.TestCase):
+    def test_extract_links_no_redos(self):
+        # Pathological bracket-heavy vault content must not trigger quadratic
+        # backtracking in the link regexes (security review 🟠). Generous margin:
+        # bounded regex finishes in ~0.2s; unbounded would take many seconds.
+        payload = "[" * 100000
+        start = time.time()
+        bd.extract_links(payload)
+        elapsed = time.time() - start
+        self.assertLess(elapsed, 3.0, f"extract_links too slow ({elapsed:.1f}s) — ReDoS regression")
+
+    def test_symlinked_md_is_skipped(self):
+        # A symlink inside the vault pointing outside must not be read (security review 🟡).
+        d = Path(tempfile.mkdtemp())
+        (d / "real.md").write_text("---\nstatus: active\n---\nbody", encoding="utf-8")
+        outside = Path(tempfile.mkdtemp()) / "secret.md"
+        outside.write_text("TOP SECRET", encoding="utf-8")
+        (d / "leak.md").symlink_to(outside)
+        rels = bd.iter_markdown_files(d, [])
+        self.assertIn("real.md", rels)
+        self.assertNotIn("leak.md", rels)
 
 
 class TestRun(unittest.TestCase):
