@@ -237,5 +237,43 @@ class TestSimpleChecks(unittest.TestCase):
         self.assertEqual(flagged, {"s.md"})
 
 
+class TestIndexChecks(unittest.TestCase):
+    def setUp(self):
+        self.pages = {
+            "index.md": "# Index\n- [[decisions/a]]\n- [[missing/page]]\n- `cross-project/vendors/kling.md`\n",
+            "decisions/a.md": "---\nstatus: active\n---\n" + ("x" * 150),
+            "cross-project/vendors/kling.md": "---\nstatus: active\n---\n" + ("x" * 150),
+            "orphan/lonely.md": "---\nstatus: active\n---\n" + ("x" * 150),
+            "decisions/old.md": "---\nstatus: superseded\n---\n" + ("x" * 150),
+        }
+        # add old to index so deprecated_visibility triggers
+        self.pages["index.md"] += "- [[decisions/old]]\n"
+        self.rels = [r for r in self.pages]
+        self.path_set, self.bidx = bd.build_page_index(self.rels)
+
+    def test_index_mismatch_and_referenced(self):
+        issues, referenced = bd.check_index(self.pages, self.path_set, self.bidx)
+        self.assertTrue(any(i.category == "index_mismatch_missing_file" for i in issues))
+        self.assertIn("decisions/a.md", referenced)
+        self.assertIn("cross-project/vendors/kling.md", referenced)  # backtick ref
+
+    def test_page_not_in_index(self):
+        _, referenced = bd.check_index(self.pages, self.path_set, self.bidx)
+        flagged = {i.page for i in bd.check_page_not_in_index(self.pages, CONFIG, referenced)}
+        self.assertIn("orphan/lonely.md", flagged)
+        self.assertNotIn("decisions/a.md", flagged)
+
+    def test_orphan(self):
+        _, referenced = bd.check_index(self.pages, self.path_set, self.bidx)
+        flagged = {i.page for i in bd.check_orphan(self.pages, CONFIG, self.path_set, self.bidx, referenced)}
+        self.assertIn("orphan/lonely.md", flagged)
+        self.assertNotIn("decisions/a.md", flagged)  # referenced by index
+
+    def test_deprecated_visibility(self):
+        _, referenced = bd.check_index(self.pages, self.path_set, self.bidx)
+        flagged = {i.page for i in bd.check_deprecated_visibility(self.pages, referenced)}
+        self.assertIn("decisions/old.md", flagged)
+
+
 if __name__ == "__main__":
     unittest.main()

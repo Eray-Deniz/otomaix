@@ -315,3 +315,71 @@ def check_stub(pages: dict[str, str]) -> list[Issue]:
         if fm.get("status") == "stub":
             issues.append(Issue("", "stub", rel, "status: stub"))
     return issues
+
+
+_BACKTICK_REF_RE = re.compile(r"`([\w./-]+\.md)`")
+
+
+def _extract_index_refs(index_content: str) -> list[str]:
+    """index.md uses both [[wikilink]] and backtick `path.md` (spec §11)."""
+    refs: list[str] = []
+    for m in _WIKILINK_RE.finditer(index_content):
+        t = m.group(1).split("|")[0].split("#")[0].strip()
+        if t and not t.startswith("@"):
+            refs.append(t)
+    for m in _BACKTICK_REF_RE.finditer(index_content):
+        refs.append(m.group(1).strip())
+    return refs
+
+
+def check_index(
+    pages: dict[str, str], path_set: set[str], basename_index: dict[str, set[str]]
+) -> tuple[list[Issue], set[str]]:
+    issues: list[Issue] = []
+    referenced: set[str] = set()
+    index_content = pages.get("index.md", "")
+    for target in _extract_index_refs(index_content):
+        status, rel = resolve_link("index.md", target, path_set, basename_index)
+        if rel:
+            referenced.add(rel)
+        elif status == "broken":
+            issues.append(Issue("", "index_mismatch_missing_file", "index.md",
+                                f"index'te var, dosya yok: '{target}'"))
+    return issues, referenced
+
+
+def check_page_not_in_index(pages: dict[str, str], config: dict, referenced: set[str]) -> list[Issue]:
+    exempt = set(config.get("exempt_files", []))
+    return [
+        Issue("", "page_not_in_index", rel, "index.md kataloğunda yok")
+        for rel in pages
+        if rel not in exempt and rel not in referenced
+    ]
+
+
+def check_orphan(
+    pages: dict[str, str], config: dict, path_set: set[str],
+    basename_index: dict[str, set[str]], index_referenced: set[str],
+) -> list[Issue]:
+    exempt = set(config.get("exempt_files", []))
+    referenced = set(index_referenced)
+    for rel, content in pages.items():
+        for _, target in extract_links(content):
+            _, dest = resolve_link(rel, target, path_set, basename_index)
+            if dest:
+                referenced.add(dest)
+    return [
+        Issue("", "orphan", rel, "Hiç inbound link yok")
+        for rel in pages
+        if rel not in exempt and rel not in referenced
+    ]
+
+
+def check_deprecated_visibility(pages: dict[str, str], index_referenced: set[str]) -> list[Issue]:
+    issues: list[Issue] = []
+    for rel in sorted(index_referenced):
+        fm, _ = parse_frontmatter(pages.get(rel, ""))
+        if fm.get("status") in ("superseded", "deprecated"):
+            issues.append(Issue("", "deprecated_visibility", rel,
+                                f"status: {fm.get('status')} ama index'te görünür (policy candidate)"))
+    return issues
