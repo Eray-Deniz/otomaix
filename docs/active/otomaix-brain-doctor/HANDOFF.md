@@ -8,7 +8,7 @@
 - Last updated: 2026-05-21
 
 ## Current State
-- Summary: Tüm kalite zinciri tamam (execute-plan + simplify + review + security-review), 38 unittest PASS. `/finish-branch` → B (PR) seçildi: `feat/brain-doctor` origin'e push edildi (24 commit), `status: waiting-review`. PR review feedback'i ele alındı (slash command tracked + test stdout + handoff staleness fix). PR #1 açıldı: https://github.com/Eray-Deniz/otomaix/pull/1 (review/merge bekleniyor).
+- Summary: Tüm kalite zinciri tamam (execute-plan + simplify + review + security-review), 38 unittest PASS. `/finish-branch` → B (PR) seçildi: `feat/brain-doctor` origin'e push edildi, `status: waiting-review`. PR review feedback'i ele alındı (slash command tracked + test stdout + handoff staleness fix). PR #1 açıldı: https://github.com/Eray-Deniz/otomaix/pull/1 (review/merge bekleniyor).
 - Blocked: hayır — review bekleniyor
 
 ## Resume From
