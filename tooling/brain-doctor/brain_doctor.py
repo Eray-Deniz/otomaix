@@ -198,3 +198,20 @@ def resolve_link(
     if len(matches) > 1:
         return "ambiguous", None
     return "broken", None
+
+
+def check_links(
+    pages: dict[str, str], path_set: set[str], basename_index: dict[str, set[str]]
+) -> list[Issue]:
+    issues: list[Issue] = []
+    for rel, content in pages.items():
+        for kind, target in extract_links(content):
+            status, _ = resolve_link(rel, target, path_set, basename_index)
+            if status == "ok":
+                continue
+            if status == "ambiguous":
+                cat = "ambiguous_link"
+            else:
+                cat = "broken_wikilink" if kind == "wikilink" else "broken_md_link"
+            issues.append(Issue("", cat, rel, f"{status}: '{target}'"))
+    return issues

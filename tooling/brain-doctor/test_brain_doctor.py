@@ -139,5 +139,17 @@ class TestResolve(unittest.TestCase):
         self.assertEqual(self._r("apps/crm/architecture/x.md", "deploy.md"), "ok")
 
 
+class TestCheckLinks(unittest.TestCase):
+    def test_check_links_emits_categories(self):
+        rels = ["a.md", "sub/b.md", "sub/c.md", "dup/x.md", "other/x.md"]
+        path_set, bidx = bd.build_page_index(rels)
+        pages = {
+            "a.md": "[[sub/b]] ok\n[[no/such/page]] broken wiki\n[broken md](./missing.md)\n[[x]] ambiguous",
+        }
+        issues = bd.check_links(pages, path_set, bidx)
+        cats = sorted({i.category for i in issues})
+        self.assertEqual(cats, ["ambiguous_link", "broken_md_link", "broken_wikilink"])
+
+
 if __name__ == "__main__":
     unittest.main()
