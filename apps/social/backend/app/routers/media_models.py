@@ -62,8 +62,6 @@ async def get_active_media_models(response: Response):
                 "supported_ratios": None,
             },
             "short_video_background": short_bg_payload,
-            # Geçici alias — eski frontend bundle'ları için. PR 3'te silinir.
-            "faceless_background": short_bg_payload,
             "image_edit": {
                 "key": settings.IMAGE_EDIT_MODEL,
                 "model_id": image_edit.model_id,

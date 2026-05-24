@@ -807,14 +807,6 @@ async def request_approval(
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(limiter(20, 3600))],  # 20/saat (image + video birlikte sayılır)
 )
-@router.post(
-    "/generate-faceless-video",  # Alias — eski path. PR 3 cleanup'ta silinir.
-    response_model=OkResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(limiter(20, 3600))],
-    deprecated=True,
-    include_in_schema=False,
-)
 async def generate_short_video(
     payload: ShortVideoGenerate,
     user: dict = Depends(get_current_user),
@@ -888,14 +880,6 @@ async def generate_short_video(
     response_model=OkResponse,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(limiter(60, 3600))],
-)
-@router.post(
-    "/generate-faceless-stage1",  # Alias — eski path. PR 3 cleanup'ta silinir.
-    response_model=OkResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(limiter(60, 3600))],
-    deprecated=True,
-    include_in_schema=False,
 )
 async def generate_short_video_stage1(
     payload: ShortVideoGenerate,
@@ -1013,13 +997,6 @@ async def generate_short_video_stage1(
     response_model=OkResponse,
     dependencies=[Depends(limiter(30, 3600))],
 )
-@router.post(
-    "/{post_id}/approve-faceless",  # Alias — eski path. PR 3 cleanup'ta silinir.
-    response_model=OkResponse,
-    dependencies=[Depends(limiter(30, 3600))],
-    deprecated=True,
-    include_in_schema=False,
-)
 async def approve_short_video(
     post_id: UUID,
     user: dict = Depends(get_current_user),
@@ -1054,13 +1031,6 @@ async def approve_short_video(
     "/{post_id}/reject-short-video",
     response_model=OkResponse,
     dependencies=[Depends(limiter(60, 3600))],
-)
-@router.post(
-    "/{post_id}/reject-faceless",  # Alias — eski path. PR 3 cleanup'ta silinir.
-    response_model=OkResponse,
-    dependencies=[Depends(limiter(60, 3600))],
-    deprecated=True,
-    include_in_schema=False,
 )
 async def reject_short_video(
     post_id: UUID,

@@ -1196,25 +1196,6 @@ TEMPLATES["ozelgun-shortvideo-sablon"] = Template(
 )
 
 
-# Eski şablon — geriye dönük uyumluluk için kayıtlı kalır (geçmiş post webhook'ları için).
-# status="deprecated" → kataloğta gizlenir. PR 3 cleanup'ta silinir.
-TEMPLATES["facelessvideo-genel-sablon"] = Template(
-    id="facelessvideo-genel-sablon",
-    name="Kısa Video Şablonu",
-    description="Tek konu/ürün/hizmet için AI sesli kısa video",
-    icon="🎬",
-    sectors=["*"],
-    contentTypes=["video"],
-    order=3,
-    status="deprecated",
-    formFields=TEMPLATES["shortvideo-genel-sablon"].formFields,
-    output=TEMPLATES["shortvideo-genel-sablon"].output,
-    prompt=TEMPLATES["shortvideo-genel-sablon"].prompt,
-    defaults=TEMPLATES["shortvideo-genel-sablon"].defaults,
-    tags=["genel", "video"],
-)
-
-
 TEMPLATES["genel-hakkimizda"] = Template(
     id="genel-hakkimizda",
     name="Hakkımızda",
@@ -1613,8 +1594,6 @@ def get_all_templates(
     """
     results: list[Template] = []
     for tpl in TEMPLATES.values():
-        if tpl.status == "deprecated":
-            continue
         if sector is not None:
             if sector not in tpl.sectors and "*" not in tpl.sectors:
                 continue
