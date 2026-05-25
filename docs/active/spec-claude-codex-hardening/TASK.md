@@ -23,11 +23,14 @@ bütünlüğü: adım no, flag, path) geçiyor, mevcut spec'te drift kapatılmı
 
 # Current Status
 
-Uygulama + review tamam (2026-05-25). 6 edit + drift kapatma + spec Amendment işlendi.
-Fresh subagent review: **merge-ready**, companion iddiası kaynak koddan doğrulandı,
-0 critical. 2 Important (timeout 240s→480s, `$SCOPE` tırnaksız notu) düzeltildi.
-Review kaydı: `docs/reviews/2026-05-25-spec-claude-codex-hardening.md`.
-**Kalan:** /commit (kullanıcı onayı).
+Round-1 (6 edit + drift kapatma + spec Amendment + fresh review) commit `5e23c04`,
+origin/main'e push edildi. Fresh review merge-ready, 0 critical, 2 Important düzeltildi
+(240s→480s, `$SCOPE` notu). Review kaydı: `docs/reviews/2026-05-25-spec-claude-codex-hardening.md`.
+
+Round-2 (Codex 2-3. review): degradation downstream Adım 3/7'ye bağlandı (High); review'sız
+final YASAKLANDI (Option 1 — Adım 7 retry/stop, Adım 10 invariant notu); spec §3 supersede;
+active-doc drift düzeltmeleri. Uygulandı.
+**Kalan:** round-2 doc commit (kullanıcı onayı). Komut dosyası git'te değil (global).
 
 # Open Problems
 
@@ -35,10 +38,20 @@ _(yok)_
 
 # Decisions Log
 
-- 2026-05-25: Background lifecycle TERK → uniform `timeout 240s node companion <call>`.
+- 2026-05-25: Background lifecycle TERK → uniform `timeout 480s node companion <call>`
+  (ilk değer 240s; review'da 480s'e çıkarıldı — normal uzun review kesilmesin).
   Sebep: `handleReviewCommand` `--background`'u parse edip kullanmıyor (koşulsuz
   `runForegroundCommand`), job-lifecycle yalnız `task`'ta. Dış `timeout` her iki
   çağrı için uniform, job-id parsing yok (kırılganlık elenir). Kod doğrulandı.
+- 2026-05-25 (round-2): Degradation "Claude-only" downstream'e bağlandı — Adım 3 Codex
+  yoksa tek-perspektif (öneri/sentez/dropped-alt atla); Adım 7 Codex review yoksa
+  findings-döngüsü geçersiz. (Codex 2. review High bulgusu.)
+- 2026-05-25 (round-2b): Review'sız final YASAK (Option 1) — Adım 7 degradation yalnız
+  "tekrar dene (Recommended)" / "durdur (draft kalır)"; Adım 10'a invariant notu.
+  Değişmez kural: `codex_review_status: approved` = Codex gerçekten review etti. Sebep:
+  ilk fix "review'sız onayla" eklemişti → Adım 10 yine `approved` yazıp audit yalanı
+  üretiyordu (Codex 3. review). Option 2 (skipped-degraded status) reddedildi — yüzey
+  büyütür, invariant gevşetir.
 - 2026-05-25: Companion'a background eklemek REDDEDİLDİ — vendored plugin dosyası,
   güncellemede ezilir. Komut tarafında çözüm.
 - 2026-05-25: #4 (sentez yanlılığı) ekstra Codex çağrısı ALMAZ — "açık muhasebe"

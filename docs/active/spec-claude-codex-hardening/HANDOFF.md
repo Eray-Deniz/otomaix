@@ -8,25 +8,28 @@
 - Last updated: 2026-05-25
 
 ## Current State
-- Summary: 6 edit + drift kapatma + spec amendment UYGULANDI ve doğrulandı.
-  Tasarım Codex review sonrası background → uniform foreground+timeout'a çevrildi.
-- Blocked: Hayır. Kalan: /review + /commit (kullanıcı onayı).
+- Summary: Round-1 (6 edit + drift + amendment + review) commit `5e23c04` push edildi.
+  Round-2 (Codex 2. review: degradation downstream wiring + §3 supersede + doc drift fix)
+  uygulandı.
+- Blocked: Hayır. Kalan: round-2 doc commit (kullanıcı onayı).
 
 ## Resume From
-- Start here: /commit (review bitti, merge-ready).
+- Start here: round-2 doc commit.
 - Relevant files:
-  - ~/.claude/commands/spec-claude-codex.md (6 edit + 2 review fix uygulandı)
-  - docs/specs/2026-05-20-spec-claude-codex-command.md (§11 amendment, timeout 480s)
+  - ~/.claude/commands/spec-claude-codex.md (round-1 6 edit + 2 review fix + round-2 degradation wiring)
+  - docs/specs/2026-05-20-spec-claude-codex-command.md (§11 amendment + §3 supersede işareti, timeout 480s)
   - docs/reviews/2026-05-25-spec-claude-codex-hardening.md (review kaydı)
-- Next command: /commit.
+- Next command: round-2 doc commit.
 - Not: komut dosyası git'te DEĞİL (global ~/.claude/) — commit yalnız repo docs'unu kapsar.
 
 ## Verification
-- Passed: companion kodu doğrulandı (handleReviewCommand --background kullanmıyor
-  682-709, handleTask kullanıyor 758, timeout coreutils 9.4, adversarial read-only
-  hardcoded). Edit sonrası: bash -n 3 fonksiyonel blok placeholder doldurularak temiz;
-  Adım no 0-12 sırada; stale token (`--wait`/eski çağrı/"Companion script'i bul") yok;
-  yeni yapı (protokol, <CALL>, <DROPPED_ALT>, timeout 240s) yerinde.
+- Passed (round-1): companion kodu doğrulandı (handleReviewCommand --background kullanmıyor
+  682-709, handleTask kullanıyor 758, timeout coreutils 9.4, adversarial read-only hardcoded).
+  bash -n 3 fonksiyonel blok temiz; Adım no 0-12 sırada; stale token yok; yeni yapı
+  (protokol, <CALL>, <DROPPED_ALT>, timeout 480s) yerinde. Fresh review merge-ready.
+- Round-2: Codex 2-3. review bulguları doğrulandı + düzeltildi (degradation downstream
+  Adım 3/7; review'sız final yasak = Option 1; §3 supersede; active-doc drift). Adım no
+  0-12 sırada, degradation gate'leri yerinde, 240s drift yok (re-check geçti).
 - Failed: _(yok)_
 - Not run: komutun canlı end-to-end denemesi (dummy fikir) — opsiyonel
 

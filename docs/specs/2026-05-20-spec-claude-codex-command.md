@@ -61,6 +61,8 @@ aşağıdaki İstisna notu / Bulgu 2):
   fallback `~/.claude` taraması)
 - `node "$COMPANION" task --fresh --wait --cwd "$PROJECT_ROOT" "<prompt>"`
   (ön-scoping, read-only sandbox — `--write` YOK)
+  **[§11 ile supersede: Codex çağrıları artık `--wait` yerine foreground `timeout 480s`
+  + Codex Çağrı Protokolü; bu satırı kopyalama, §11'e bak.]**
 - Prompt **positional argüman** olarak verilir (`--prompt` flag'i değil)
 - `--cwd "$PROJECT_ROOT"` (`git rev-parse --show-toplevel || pwd`) →
   proje kökündeki `AGENTS.md` otomatik yüklenir
