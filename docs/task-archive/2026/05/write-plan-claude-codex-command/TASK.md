@@ -1,6 +1,6 @@
 ---
 title: /write-plan-claude-codex komutu
-status: waiting-review   # proposed | active | blocked | waiting-review | done | archived | cancelled
+status: done             # proposed | active | blocked | waiting-review | done | archived | cancelled
 started: 2026-05-25
 last-touched: 2026-05-25
 blocked-by: null
@@ -27,8 +27,10 @@ Implementation **tamamlandı** (Task 0→5, 2026-05-25). Canonical `spec-claude-
 normalize edildi (CODEX-CALL-PROTOCOL marker'ları), `write-plan-claude-codex.md` yazıldı,
 drift Check A **diff=0** + Check B tam, 7 canlı yüzey sweep'lendi (bare /write-plan = 0),
 `write-plan.md` stub'a çevrildi. Codex bağımsız doğrulama: blocking yok.
-**Bekliyor:** otomaix repo commit (3 dosya) + vault commit/push (claude-code-workflow.md) +
-/simplify → /review → /security-review. Hiçbir commit/push yapılmadı.
+**KAPANDI (2026-05-25):** otomaix commit+push (`4169537`), vault commit+push (`0bbc9fb`),
+global `~/.claude/` edit'leri diskte (repo-dışı, backup `/tmp/spec-claude-codex.md.bak`).
+/simplify temiz; /review no-critical (2 important çözüldü: vault accuracy + /spec-claude-codex
+eklendi); /security-review atlandı (markdown, kod/secret yok). Yeni komut canlı, drift-check diff=0.
 
 # Open Problems
 
