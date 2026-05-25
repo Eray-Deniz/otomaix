@@ -1,6 +1,6 @@
 ---
 title: /write-plan-claude-codex komutu
-status: proposed     # proposed | active | blocked | waiting-review | done | archived | cancelled
+status: waiting-review   # proposed | active | blocked | waiting-review | done | archived | cancelled
 started: 2026-05-25
 last-touched: 2026-05-25
 blocked-by: null
@@ -23,8 +23,12 @@ geçiyor, canlı yüzeylerde çıplak `/write-plan` kalmıyor, stub yerinde.
 
 # Current Status
 
-Spec + plan onaylandı ve commit'lendi (design commit `f9c53d2`). Implementation **henüz
-başlanmadı** — Task 0→5 bekliyor. Push yapılmadı.
+Implementation **tamamlandı** (Task 0→5, 2026-05-25). Canonical `spec-claude-codex.md`
+normalize edildi (CODEX-CALL-PROTOCOL marker'ları), `write-plan-claude-codex.md` yazıldı,
+drift Check A **diff=0** + Check B tam, 7 canlı yüzey sweep'lendi (bare /write-plan = 0),
+`write-plan.md` stub'a çevrildi. Codex bağımsız doğrulama: blocking yok.
+**Bekliyor:** otomaix repo commit (3 dosya) + vault commit/push (claude-code-workflow.md) +
+/simplify → /review → /security-review. Hiçbir commit/push yapılmadı.
 
 # Open Problems
 

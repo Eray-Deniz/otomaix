@@ -61,7 +61,7 @@ Bir kullanıcı sorusu/task geldiğinde:
 
 ### Mevcut slash command entegrasyonu (özet)
 
-- `/write-plan` sonu → TASK + HANDOFF yaratma sorusu
+- `/write-plan-claude-codex` sonu → TASK + HANDOFF yaratma sorusu
 - `/execute-plan` başı → status=active sorusu
 - `/commit` → Current Status update + Vault promotion check (P1)
 - `/review` → high/critical → Open Problems + Notes For Claude

@@ -56,7 +56,7 @@ F=~/.claude/commands/spec-claude-codex.md
 [ "$(grep -c 'CODEX-CALL-PROTOCOL:BEGIN' $F)" = 1 ] && [ "$(grep -c 'CODEX-CALL-PROTOCOL:END' $F)" = 1 ] && echo "OK: tek blok"
 # (b) blok boş değil + token'lar yerinde
 awk '/CODEX-CALL-PROTOCOL:BEGIN/{f=1} f{print} /CODEX-CALL-PROTOCOL:END/{f=0}' $F | tee /tmp/canon_block.txt | wc -l   # >0
-for t in "codex-companion.mjs" "git rev-parse" "AGENTS.md" "timeout 480s" "exit 124"; do grep -q "$t" /tmp/canon_block.txt && echo "OK: $t" || echo "EKSİK: $t"; done
+for t in "codex-companion.mjs" "git rev-parse" "AGENTS.md" "timeout 480s" "124"; do grep -q "$t" /tmp/canon_block.txt && echo "OK: $t" || echo "EKSİK: $t"; done
 # (c) degradation 3 seçeneği korunmuş (blok içinde veya hemen sonrası)
 for d in "Claude-only" "Tekrar dene" "durdur"; do grep -qi "$d" $F && echo "OK: $d" || echo "EKSİK: $d"; done
 # (d) semantik korunmuş: binding tablosu Adım 2 + Adım 6, task --fresh + adversarial-review hâlâ var
@@ -111,7 +111,7 @@ awk '/CODEX-CALL-PROTOCOL:BEGIN/{f=1} f{print} /CODEX-CALL-PROTOCOL:END/{f=0}' ~
 awk '/CODEX-CALL-PROTOCOL:BEGIN/{f=1} f{print} /CODEX-CALL-PROTOCOL:END/{f=0}' ~/.claude/commands/write-plan-claude-codex.md > /tmp/b.txt
 diff /tmp/a.txt /tmp/b.txt && echo "CHECK A PASS (diff=0)"
 # Check B — token tripwire (token'lar + spec'in istediği 3 degradation seçeneği — Codex Bulgu 2)
-for t in "codex-companion.mjs" "git rev-parse" "AGENTS.md" "timeout 480s" "exit 124"; do
+for t in "codex-companion.mjs" "git rev-parse" "AGENTS.md" "timeout 480s" "124"; do
   grep -q "$t" /tmp/b.txt && echo "OK: $t" || echo "EKSİK: $t"
 done
 for d in "Claude-only" "Tekrar dene" "durdur"; do

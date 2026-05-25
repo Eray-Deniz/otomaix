@@ -8,22 +8,24 @@
 - Last updated: 2026-05-25
 
 ## Current State
-- Summary: Spec (5 turn Codex review, approved-by-iteration-limit) + plan (2 turn, plan-approved)
-  yazıldı ve commit'lendi. Implementation başlanmadı.
+- Summary: Spec + plan onaylandı; **implementation tamamlandı (Task 0→5)**. Komut yazıldı,
+  drift-check diff=0, sweep temiz, stub yerinde. Codex bağımsız doğrulama: blocking yok.
 - Blocked: hayır
 
 ## Resume From
-- Start here: Plan Task 0 (canonical `spec-claude-codex.md`'ye CODEX-CALL-PROTOCOL marker'ları — ÖNCE backup).
-- Relevant files: `~/.claude/commands/spec-claude-codex.md` (canonical, normalize edilecek),
-  `~/.claude/commands/write-plan.md` (stub'a çevrilecek — SADECE plan-approved sonrası, sağlandı),
-  7 sweep yüzeyi (plan Bölüm/Task 3), vault `cross-project/infrastructure/claude-code-workflow.md`.
-- Next command: Plan Task 0'ı uygula (backup → marker ekle → semantic verify → rollback gerekirse).
+- Start here: otomaix repo commit (3 dosya) + vault commit/push (claude-code-workflow.md),
+  sonra /simplify → /review → /security-review.
+- Relevant files: değişen global `~/.claude/` komutları (repo dışı, commit yok, backup
+  `/tmp/spec-claude-codex.md.bak`); repo: `CLAUDE.md`, bu TASK/plan; vault: `claude-code-workflow.md`.
+- Next command: `/commit` (otomaix) → vault commit/push (onayla) → `/simplify`.
 
 ## Verification
-- Passed: spec drift-check tasarımı (Check A/B), plan sweep regex (temiz form 21 canlı ref buldu — doğru çalışıyor).
+- Passed: drift Check A (diff=0, iki blok 45 satır) + Check B (token + 3 degradation);
+  7 canlı yüzeyde bare /write-plan = 0; stub `[DEPRECATED]` + eski içerik temiz; not-run yok;
+  Task 0 behavior-preservation (canonical bozulmadı). Codex bağımsız doğrulama geçti.
 - Failed: _(yok)_
-- Not run: gerçek implementation doğrulamaları (Task 0-5 henüz çalışmadı); drift-check Check A
-  canonical marker'lar eklenince çalıştırılacak.
+- Not run: end-to-end komut çalıştırması (yeni `/write-plan-claude-codex` gerçek bir spec'le
+  henüz invoke edilmedi — skills listesi kaydı + içerik doğru, ama canlı akış denenmedi).
 
 ## Risks
 - Task 0 canlı `/spec-claude-codex`'i bozabilir → backup + post-edit semantic check + rollback (plan'da var).
