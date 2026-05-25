@@ -1,3 +1,3 @@
 # Active Tasks
 
-_(no active tasks)_
+- `write-plan-claude-codex-command/` — /write-plan'i çift-perspektif (Codex-review'lı) plan komutuna dönüştürme
