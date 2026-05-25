@@ -1,6 +1,6 @@
 ---
 title: spec-claude-codex Robustness Hardening
-status: active
+status: archived
 started: 2026-05-25
 last-touched: 2026-05-25
 blocked-by: null
@@ -35,7 +35,10 @@ Round-3 (Küme C): #5 sayaç frontmatter persist (`codex_targeted_fixes`), #6 ka
 yalnız yanıltıcı clean-dalı yorumu düzeltildi). Spec §11 (10 madde) + §3 güncel. Uygulandı.
 Codex 4. review 3 drift yakaladı (clean-dalı "diff'siz" iddiası, spec body frontmatter'da
 `codex_targeted_fixes` eksik, backward-compat belirsiz) → hepsi düzeltildi.
-**Kalan:** round-3 doc commit (kullanıcı onayı). Komut dosyası git'te değil (global).
+
+**KAPANIŞ (2026-05-25):** Tüm turlar canlı (`5e23c04`, `bc17e27`, `1f4ad48`). Vault promote
+edildi: `[[cross-project/infrastructure/codex-entegrasyonu]]` (Sınırlamalar — companion
+background/`--wait` gerçeği). Task archived.
 
 # Open Problems
 
@@ -48,6 +51,7 @@ _(yok)_
   Sebep: `handleReviewCommand` `--background`'u parse edip kullanmıyor (koşulsuz
   `runForegroundCommand`), job-lifecycle yalnız `task`'ta. Dış `timeout` her iki
   çağrı için uniform, job-id parsing yok (kırılganlık elenir). Kod doğrulandı.
+  → Vault: [[cross-project/infrastructure/codex-entegrasyonu]] (Sınırlamalar, 2026-05-25)
 - 2026-05-25 (round-2): Degradation "Claude-only" downstream'e bağlandı — Adım 3 Codex
   yoksa tek-perspektif (öneri/sentez/dropped-alt atla); Adım 7 Codex review yoksa
   findings-döngüsü geçersiz. (Codex 2. review High bulgusu.)
