@@ -2,6 +2,7 @@
 title: spec-claude-codex Komutu — plan-claude-codex rename + akış refactor
 status: spec-approved
 date: 2026-05-20
+amended: 2026-05-25
 tags: [tooling, workflow, claude, codex, slash-command]
 codex_review_status: approved
 codex_review_iterations: 1
@@ -404,3 +405,42 @@ de bitip doğrulanmadan task closure (`/finish-branch`) tetiklenmez.
   güncellenecek)
 - `~/.claude/commands/{write-plan,handoff,sync-agents-md,init}.md` — komşu
   komutlar
+
+## 11. Amendment 2026-05-25 — Robustness Hardening
+
+Bu spec'in 2026-05-20 hali rename + akış refactor'ı belgeler. 2026-05-25'te komuta
+dayanıklılık sertleştirmesi uygulandı (Claude + Codex ortak review). **Canonical
+davranış komut dosyasıdır** (`~/.claude/commands/spec-claude-codex.md`); bu bölüm
+delta'yı ve gerekçeyi kayda geçirir.
+
+**Kapsam: Küme A + B.** Ertelendi (Küme C): sayaç resume-persist, lightweight kaçış
+modu, git-scope sadeleştirme. Atlandı: sentez "açık muhasebe" (zaten Adım 3'te mevcut).
+
+### Değişiklikler
+
+1. **Codex Çağrı Protokolü (yeni ortak bölüm)** — Adım 2 ve Adım 6'daki tüm Codex
+   çağrıları preflight + foreground + `timeout 480s` + degradation menüsünden geçer.
+   Companion yoksa / çöker / asılırsa komut kullanıcıya seçenek sunar (Claude-only
+   devam / tekrar dene / durdur), sessizce kırılmaz. (#1 fail-handling, #2 timeout,
+   #9 AGENTS.md preflight.)
+2. **Adım 2 — perspektif bağımsızlığı kuralı** — Claude 1a çıktısını Codex sonucu
+   gelmeden sabitler; kontaminasyon önlenir. (#7)
+3. **Adım 3 — nötr menü → gerekçeli öneri + steelman** — Claude bir yön önerir
+   (Recommended), reddettiği seçeneği (özellikle Codex'inkini) steelman'ler. Yön ne
+   olursa olsun elenen ana alternatif `<DROPPED_ALT>` olarak saklanır. (#3)
+4. **Adım 6 — dropped-alternative review'a geçer** — adversarial prompt, seçilen yönün
+   doğruluğunu `<DROPPED_ALT>`'a karşı da sorgular; sentez yanlılığı ekstra Codex
+   çağrısı olmadan downstream'de denetlenir.
+5. **Adım 0 + Adım 11 — active-layer yazma sözleşmesi netleşti** — komut otomatik
+   mutation yapmaz; TASK.md'ye yazma YALNIZCA Adım 11'de kullanıcı açık onayıyla. (#10)
+
+### Gerekçe — neden background değil
+
+İlk tasarım Codex çağrılarını `--background` + `status --wait --timeout-ms` job
+lifecycle'ına çevirecekti. **Codex review bunu bloke etti, kod doğrulandı:**
+`handleReviewCommand` `--background` flag'ini parse ediyor ama kullanmıyor (koşulsuz
+`runForegroundCommand`); job-lifecycle yalnız `handleTask`'ta var. Companion vendored
+plugin dosyası olduğu için (güncellemede ezilir) ona background eklemek reddedildi.
+Çözüm: her iki çağrı için uniform dış `timeout 480s` (foreground) — job-id parsing
+kırılganlığı da elenir. `adversarial-review` zaten `sandbox: "read-only"` hardcoded,
+`task` `--write`'sız read-only.
