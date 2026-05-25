@@ -164,12 +164,13 @@ date: YYYY-MM-DD
 tags: [...]
 codex_review_status: pending
 codex_review_iterations: 0
+codex_targeted_fixes: 0
 codex_review_log: docs/reviews/codex/YYYY-MM-DD-<slug>.md
 ---
 ```
 
 `full_design_iteration_count = 0`, `targeted_consistency_fix_count = 0`
-(frontmatter `codex_review_iterations` source-of-truth).
+(frontmatter source-of-truth: `codex_review_iterations` + `codex_targeted_fixes`; bkz §11.8).
 
 ### Adım 5: Consistency Sweep (Codex öncesi)
 
@@ -193,8 +194,9 @@ artar.
   `--scope working-tree`. **`--base HEAD~1` sessiz varsayımı KULLANILMAZ**
   (Bulgu 2 — miras bug).
 - Spec commit'li ve working-tree temizse: kullanıcıdan **açık base/ref**
-  iste (örn. spec commit hash'i); inferans yapma. Kullanıcı vermezse dosya
-  içeriği doğrudan (diff'siz) review edilir.
+  iste (örn. spec commit hash'i); inferans yapma. Kullanıcı vermezse companion
+  `auto` scope kullanır (clean ağaçta default branch diff'i — "diff'siz" DEĞİL);
+  prompt yine `<SPEC_PATH>` içeriğini doğrudan okutur (bkz §11.10).
 - `node "$COMPANION" adversarial-review` çağrısı (kaynak mekanik §3; **scope
   seçimi hariç** — bu nokta miras bug nedeniyle iyileştirildi, bkz. yukarı).
 - Çıktı **verbatim** gösterilir + `docs/reviews/codex/YYYY-MM-DD-<slug>.md`
@@ -233,6 +235,7 @@ Frontmatter:
 status: spec-approved
 codex_review_status: approved        # veya approved-by-iteration-limit
 codex_review_iterations: <full_design_iteration_count>
+codex_targeted_fixes: <targeted_consistency_fix_count>
 codex_review_log: docs/reviews/codex/YYYY-MM-DD-<slug>.md
 ```
 
@@ -415,8 +418,8 @@ dayanıklılık sertleştirmesi uygulandı (Claude + Codex ortak review). **Cano
 davranış komut dosyasıdır** (`~/.claude/commands/spec-claude-codex.md`); bu bölüm
 delta'yı ve gerekçeyi kayda geçirir.
 
-**Kapsam: Küme A + B.** Ertelendi (Küme C): sayaç resume-persist, lightweight kaçış
-modu, git-scope sadeleştirme. Atlandı: sentez "açık muhasebe" (zaten Adım 3'te mevcut).
+**Kapsam: Küme A + B + Küme C (#5, #6) + Codex 2-3. review düzeltmeleri.** #8 araştırıldı,
+kaldırılmadı (madde 10). Atlandı: sentez "açık muhasebe" (#4, zaten Adım 3'te mevcut).
 
 ### Değişiklikler
 
@@ -435,6 +438,25 @@ modu, git-scope sadeleştirme. Atlandı: sentez "açık muhasebe" (zaten Adım 3
    çağrısı olmadan downstream'de denetlenir.
 5. **Adım 0 + Adım 11 — active-layer yazma sözleşmesi netleşti** — komut otomatik
    mutation yapmaz; TASK.md'ye yazma YALNIZCA Adım 11'de kullanıcı açık onayıyla. (#10)
+6. **Adım 3 + Adım 7 — degradation downstream'e bağlandı** (Codex 2. review, High) —
+   "Claude-only" seçilince Codex çıktısı varsayılmaz: Adım 3 tek-perspektif moduna geçer
+   (öneri/sentez/dropped-alt atlanır), Adım 7 Codex-findings döngüsünü atlar.
+7. **Review'sız final YASAK** (Codex 3. review; Option 1) — Adım 6 review degradation'ında
+   Adım 7 yalnız "tekrar dene / durdur" sunar; `approved` ÜRETİLMEZ. Değişmez kural:
+   `codex_review_status: approved` = Codex gerçekten review etti. (Option 2 `skipped-degraded`
+   reddedildi — yüzey büyütür, invariant gevşetir.)
+8. **Sayaç resume-persist (#5)** — `targeted_consistency_fix_count` artık frontmatter
+   `codex_targeted_fixes` alanında (Adım 5/7/9'da yazılır, Adım 1.5'te okunur). Önceden
+   yalnız hafızadaydı → resume'da rapor eksik sayardı. (`codex_review_iterations` deseni.)
+   Geriye dönük: eski spec'te alan yoksa 0 kabul edilir, ilk write'ta eklenir.
+9. **Kapsam ön-kontrolü (#6)** — Adım 2 başında hafif sınıflandırma: fikir küçükse
+   /brainstorm önerilir, tam akış overkill olduğunda kullanıcı vazgeçebilir. Yeni mod değil,
+   tek kapı (`--light` reddedildi — yüzey ikiye katlar).
+10. **Git-scope (#8) — araştırıldı, kaldırılMADI.** `collectReviewContext(scope)` diff
+    bağlamını besliyor (working-tree → uncommitted; clean → branch diff) → scope ölü değil,
+    ama prompt'un "read CURRENT content directly + Focus" odağı yanında ikincil/best-effort.
+    Tek kusur: "boşsa scope'suz" yorumu yanlıştı (companion "auto" → default branch diff'i)
+    → yorum düzeltildi, mekanik korundu.
 
 ### Gerekçe — neden background değil
 

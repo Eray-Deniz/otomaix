@@ -27,10 +27,15 @@ Round-1 (6 edit + drift kapatma + spec Amendment + fresh review) commit `5e23c04
 origin/main'e push edildi. Fresh review merge-ready, 0 critical, 2 Important düzeltildi
 (240s→480s, `$SCOPE` notu). Review kaydı: `docs/reviews/2026-05-25-spec-claude-codex-hardening.md`.
 
-Round-2 (Codex 2-3. review): degradation downstream Adım 3/7'ye bağlandı (High); review'sız
-final YASAKLANDI (Option 1 — Adım 7 retry/stop, Adım 10 invariant notu); spec §3 supersede;
-active-doc drift düzeltmeleri. Uygulandı.
-**Kalan:** round-2 doc commit (kullanıcı onayı). Komut dosyası git'te değil (global).
+Round-2 (Codex 2-3. review) commit `bc17e27`, push edildi: degradation downstream Adım 3/7'ye
+bağlandı (High); review'sız final YASAKLANDI (Option 1); spec §3 supersede; active-doc drift.
+
+Round-3 (Küme C): #5 sayaç frontmatter persist (`codex_targeted_fixes`), #6 kapsam ön-kontrolü
+(Adım 2 başı, overkill önleme), #8 araştırıldı → kaldırılMADI (scope diff bağlamı besliyor;
+yalnız yanıltıcı clean-dalı yorumu düzeltildi). Spec §11 (10 madde) + §3 güncel. Uygulandı.
+Codex 4. review 3 drift yakaladı (clean-dalı "diff'siz" iddiası, spec body frontmatter'da
+`codex_targeted_fixes` eksik, backward-compat belirsiz) → hepsi düzeltildi.
+**Kalan:** round-3 doc commit (kullanıcı onayı). Komut dosyası git'te değil (global).
 
 # Open Problems
 
@@ -57,10 +62,16 @@ _(yok)_
 - 2026-05-25: #4 (sentez yanlılığı) ekstra Codex çağrısı ALMAZ — "açık muhasebe"
   zaten Adım 3'te var; bias guard'lar: steelman kuralı + downstream Adım 6 +
   dropped-alternative'i Adım 6 prompt'una geçirme.
-- 2026-05-25: #6 `--light` modu REDDEDİLDİ (yüzey ikiye katlar) — yerine komut başı
-  hafif sınıflandırma/kaçış önerisi (bu turda kapsam dışı, Küme C).
-- 2026-05-25: #8 git-scope sadeleştirme ERTELENDİ (Küme C) — adversarial-review
-  context'i `collectReviewContext(scope)` ile git-diff'ten besleniyor, scope ölü değil.
+- 2026-05-25 (round-3): #5 UYGULANDI — `targeted_consistency_fix_count` frontmatter
+  `codex_targeted_fixes`'e persist (Adım 5/7/9 yazar, Adım 1.5 okur). Önce review-log
+  düşünülmüştü; Adım 9 artışının ardından review-log turn'ü olmadığı için frontmatter
+  seçildi (`codex_review_iterations` deseni).
+- 2026-05-25 (round-3): #6 UYGULANDI — `--light` modu REDDEDİLDİ (yüzey ikiye katlar);
+  yerine Adım 2 başında kapsam ön-kontrolü (küçük fikirde /brainstorm öner, vazgeçilebilir).
+- 2026-05-25 (round-3): #8 ARAŞTIRILDI → kaldırılMADI. `collectReviewContext(scope)`
+  (git.mjs:299) diff bağlamı besliyor (working-tree→uncommitted, clean→branch); scope ölü
+  değil ama prompt odağı yanında ikincil. Tek kusur: "boşsa scope'suz" yorumu yanlıştı
+  (companion auto→default branch diff) → yorum düzeltildi, mekanik korundu.
 - 2026-05-25: Yeni spec AÇILMADI — tasarım bu konuşmada yapıldı; mevcut 2026-05-20
   spec'e "Amendment 2026-05-25" bölümü (drift kapatma + WHY kalıcılığı).
 
@@ -70,5 +81,5 @@ _(yok)_
 - B: #3 menü→gerekçeli öneri+steelman (EDIT 3), dropped-alternative Adım 6 prompt
   (EDIT 5), #7 bağımsızlık kuralı (EDIT 2), #9 AGENTS.md preflight (EDIT 1),
   #10 active-layer sözleşme (EDIT 6)
-- Ertelendi (Küme C): #5 sayaç persist, #6 lightweight kaçış, #8 git-scope sadeleştirme
+- Küme C (round-3): #5 sayaç persist ✓, #6 kapsam ön-kontrolü ✓, #8 araştırıldı (kaldırılmadı)
 - Atlandı: #4 açık muhasebe (zaten Adım 3'te mevcut)

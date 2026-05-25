@@ -8,18 +8,17 @@
 - Last updated: 2026-05-25
 
 ## Current State
-- Summary: Round-1 (6 edit + drift + amendment + review) commit `5e23c04` push edildi.
-  Round-2 (Codex 2. review: degradation downstream wiring + §3 supersede + doc drift fix)
-  uygulandı.
-- Blocked: Hayır. Kalan: round-2 doc commit (kullanıcı onayı).
+- Summary: Round-1 `5e23c04` + Round-2 `bc17e27` push edildi. Round-3 (Küme C: #5 sayaç
+  persist, #6 kapsam ön-kontrolü, #8 araştırıldı/kaldırılmadı) uygulandı.
+- Blocked: Hayır. Kalan: round-3 doc commit (kullanıcı onayı).
 
 ## Resume From
-- Start here: round-2 doc commit.
+- Start here: round-3 doc commit. Sonrası: task kapanış/arşiv (kullanıcı kararı) + opsiyonel vault promotion.
 - Relevant files:
-  - ~/.claude/commands/spec-claude-codex.md (round-1 6 edit + 2 review fix + round-2 degradation wiring)
-  - docs/specs/2026-05-20-spec-claude-codex-command.md (§11 amendment + §3 supersede işareti, timeout 480s)
+  - ~/.claude/commands/spec-claude-codex.md (round-1/2/3 hepsi uygulandı)
+  - docs/specs/2026-05-20-spec-claude-codex-command.md (§11 10 madde + §3 supersede, timeout 480s)
   - docs/reviews/2026-05-25-spec-claude-codex-hardening.md (review kaydı)
-- Next command: round-2 doc commit.
+- Next command: round-3 doc commit.
 - Not: komut dosyası git'te DEĞİL (global ~/.claude/) — commit yalnız repo docs'unu kapsar.
 
 ## Verification
@@ -30,6 +29,12 @@
 - Round-2: Codex 2-3. review bulguları doğrulandı + düzeltildi (degradation downstream
   Adım 3/7; review'sız final yasak = Option 1; §3 supersede; active-doc drift). Adım no
   0-12 sırada, degradation gate'leri yerinde, 240s drift yok (re-check geçti).
+- Round-3: #8 companion doğrulandı (resolveReviewTarget git.mjs:134 auto→clean=branch;
+  collectReviewContext :299 scope→diff bağlamı). codex_targeted_fixes 8 yerde tutarlı;
+  scope bash `bash -n` temiz; Adım no 14; §11 10 madde sıralı; eski yanlış yorum yok.
+- Round-3 (Codex 4. review): 3 doc drift düzeltildi — yanlış "diff'siz" iddiası 0 (cmd+spec);
+  spec body frontmatter `codex_targeted_fixes` hizalı (draft+final); backward-compat notu
+  (alan yoksa 0, ilk write'ta ekle); §11.8/§11.10 cross-ref.
 - Failed: _(yok)_
 - Not run: komutun canlı end-to-end denemesi (dummy fikir) — opsiyonel
 
