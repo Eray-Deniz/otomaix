@@ -1,3 +1,3 @@
 # Active Tasks
 
-_(no active tasks)_
+- `2026-05-31-simplify-claude-codex-command/` — simplify-claude-codex.md komut implementasyonu (proposed; plan onaylandı, executor başlamadı)
