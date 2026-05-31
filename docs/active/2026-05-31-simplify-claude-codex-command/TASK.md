@@ -1,6 +1,6 @@
 ---
 title: simplify-claude-codex.md komut implementasyonu
-status: proposed
+status: waiting-review
 started: 2026-05-31
 last-touched: 2026-05-31
 blocked-by: null
@@ -19,11 +19,13 @@ Eski single-actor `/simplify` komutunu Claude-Codex ailesine entegre eden yeni `
 
 # Current Status
 
-Plan onaylandı, implementasyon henüz başlanmadı. 16 task (Task 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 11.5, 12, 13, 14, 15) sıralı.
+Execution tamamlandı (16 task, inline + standard). Final Codex review **approved** (0 critical/high). Status `waiting-review` — `/review` + `/security-review` + closure bekliyor. Komut dosyaları `~/.claude/commands/` (repo dışı); slash menüsünde aktif olması için Claude Code restart gerekir.
 
 # Open Problems
 
-_(yok)_
+_(yok — execution tamamlandı; spec-refine adayları HANDOFF Risks'te.)_
+
+**Çözülen (Drift 1, pre-exec):** spec/plan/review-log zaten `b5c9b33`'te commit'liydi; audit commit yalnız bu session'ın değişikliklerini (active-layer + execute-log) kapsadı — plan Step 9 `git add docs/specs|plans` no-op'tu, commit içeriği buna göre uyarlandı.
 
 # Decisions Log
 
@@ -36,3 +38,12 @@ _(yok)_
 - **Pre-scan scope: Hibrit** — 5 kategori + Other + `CANDIDATE: unlisted:` bağımsız aday (spec Q6).
 - **Commit modeli: İki dosya kümesi** (plan F1): docs/ repo audit + ~/.claude/commands/ global manual install + /tmp backup.
 - **Rebuild-from-clean rollback** (plan F10): Task 11.5 fail durumunda Task 2'den itibaren tüm replay.
+
+# Notes For Claude
+
+Execution state (`/execute-plan-claude-codex` Adım 4 — resume bu alandan okur):
+
+- execute_mode: inline
+- checkpoint_cadence: standard
+- execute_started: 2026-05-31 17:51
+- execute_start_ref: 500541bc7f2f289116aa66087c2c55ff231ba875

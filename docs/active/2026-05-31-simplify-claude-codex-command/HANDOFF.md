@@ -2,42 +2,46 @@
 
 ## Context
 - Task: simplify-claude-codex.md komut implementasyonu
-- Linked spec: `docs/specs/2026-05-31-simplify-claude-codex-command.md` (spec-approved, codex_review_status: approved)
-- Linked plan: `docs/plans/2026-05-31-simplify-claude-codex-command.md` (plan-approved, codex_plan_review_status: approved-by-iteration-limit)
+- Linked spec: `docs/specs/2026-05-31-simplify-claude-codex-command.md` (spec-approved)
+- Linked plan: `docs/plans/2026-05-31-simplify-claude-codex-command.md` (plan-approved)
 - Branch: main
 - Last updated: 2026-05-31
 
 ## Current State
-- Summary: Plan onaylandı (16 task, 3 Codex turn + 13 targeted fix). İmplementasyon `/execute-plan-claude-codex` ile başlatılır.
+- Summary: Execution tamamlandı (16 task, inline + standard cadence). Final Codex execution review **approved** (0 critical/high). Status `waiting-review`.
 - Blocked: hayır
 
 ## Resume From
-- Start here: `/execute-plan-claude-codex docs/plans/2026-05-31-simplify-claude-codex-command.md`
-- Relevant files: spec, plan, plan review log; mevcut 4 komut dosyası (`~/.claude/commands/{spec,write-plan,execute-plan,simplify}-claude-codex.md` — execute-plan'da `/simplify` 7 hit sweep edilecek)
-- Next command: `/execute-plan-claude-codex docs/plans/2026-05-31-simplify-claude-codex-command.md`
+- Start here: `/review` (sonra `/security-review` → `/finish-branch` closure).
+- Komut dosyaları repo dışı (`~/.claude/commands/`); slash menüsünde görünmesi için Claude Code restart gerekir. Rollback gerekirse `/tmp/*.md.bak` (Task 1 backup) → `cp /tmp/<name>.md.bak ~/.claude/commands/<name>.md`.
+- Next command: `/review`
 
 ## Verification
-- Passed: spec finalize (3 turn + 13 fix), plan finalize (3 turn + 13 fix), audit commit (b5c9b33)
-- Failed: yok
-- Not run: implementation (Task 1-15 henüz başlamadı)
+- full_test_suite: not-run (markdown slash-command; test suite yok — verification modeli drift-check, hepsi PASS)
+- pre_execution_codex_review: ran (environment drift focus; 3 drift bulundu, hepsi ele alındı)
+- checkpoint_codex_reviews: ran 5/5 (standard cadence; turn 5 bir tooling-degradation no-access turn'den sonra 1 retry gerektirdi, retry approve)
+- checkpoint_overrides: none
+- final_codex_execution_review: approved
+- final_codex_execution_review_reason: null
+- checkpoint_execution_review_status: ok
+- final_unresolved_high_severity_override: false
+- unresolved_critical_high: none
+- drift_contract: Check A 4-way (spec vs write-plan/execute/simplify diff=0) + Check B (8 tripwire × 4 dosya) + Task 11.5 section diff (12/12 = 0) + structural + smoke=pass → DRIFT CONTRACT: OK
+- audit_commit: docs/ (active-layer + execute-log); push: hayır (kullanıcı seçimi, local)
 
 ## Risks
-- R1 drift: CODEX-CALL-PROTOCOL bloğu byte-exact kopya (Task 3 fail-fast + Task 15 final). Marker count guard her awk öncesi.
-- R2 sweep: execute-plan'da `/simplify` 7 hit listesi line-table'lı; whitelist boş; non-whitelisted hit FAIL.
-- R3 smoke: 3-state (not-run/pass/fail); runtime mevcutsa pass/fail kesin; mevcut değilse not-run.
-- R4 commit modeli: docs/ commit + ~/.claude/commands/ manual install + /tmp backup. `git add ~/.claude/commands/...` YOK.
-- R5 spec append drift: Task 11.5 full diff matrix + manuel accept/reject; FAIL → rebuild-from-clean (Task 2'den).
-- R6 audit commit integrity: SMOKE_STATE variable substitution + pre+post placeholder guard.
+- **R-cp2 (spec-refine adayı, non-blocking):** Spec Adım 3 aday-tanım satırı `id` (kategori-N) informal; canonical `<id>`/`<KATEGORI>-N` + OTHER-1 yalnız Adım 5'te formal. Checkpoint 2'de medium olarak çıktı; byte-exact spec mirror'ı (diff=0) olduğu için execution hatası değil. Frozen spec'e dokunulmadı. Adım 5 + Kural F contract'ı tam karşılıyor.
+- **R-kuralF (spec-refine adayı, non-blocking):** Spec Adım 6'da "Kural F" iki kez geçiyor (malformed-block + Test Rewrite Scope) ve Kural E, F'den sonra geliyor — spec-içi label/sıralama tutarsızlığı. Byte-identical miras; komutta düzeltilmedi (Task 11.5 byte-fidelity gate'ini kırardı). Gelecek bir spec-refine + re-derive ile düzeltilmeli.
+- **R-smoke:** Komut load + frontmatter parse doğrulandı (skill listesinde kayıtlı), ama uçtan uca tam invoke edilmedi (gerçek simplify run + Codex çağrısı tetiklerdi). İlk gerçek kullanımda Adım 1 scope akışı gözlemlenmeli.
 
 ## Notes For Claude
-- Codex'in özellikle dikkat çektiği bulgular: F1 (repo path mismatch), F7 (spec append drift), F10 (rebuild semantik) — hepsi adreslendi.
-- Claude'un sonraki session'da işlemesi gereken şeyler: /execute-plan-claude-codex çağrısı (active task `proposed → active` flip onayı, mode + cadence seçimi, execute_start_ref kaydı).
-- Vault'a yazılması gerekebilecek kalıcı kararlar: yok şu an (claude-codex aile mimarisi vault'a `[[cross-project/infrastructure/codex-entegrasyonu]]` altında zaten var; bu komut o mimarinin bir parçası).
-- Spec/plan güncellemesi gerektiren noktalar: yok şu an.
-- Kullanıcıdan karar bekleyen konular: yok (plan onaylandı, executor başlayabilir).
+- next: `/review` → `/security-review` → `/finish-branch` (closure) → done.
+- execute_mode: inline · checkpoint_cadence: standard · execute_start_ref: 500541bc7f2f289116aa66087c2c55ff231ba875
+- execute_completed: 2026-05-31
+- branch_pushed: no (kullanıcı local'de tutmayı seçti; commit main'de bekliyor)
+- Komut dosyaları repo dışı olduğu için Codex review'ları git-diff yerine dosyaları doğrudan okuyarak çalıştı — bu task tipi için execute-plan-claude-codex'in git-diff merkezli review tasarımı bir friction; gelecekte not.
 
 ## Notes For Codex
-- Codex'in review ederken özellikle bakması gereken alanlar: drift Check A 4-way + Check B 8 token; spec section diff Task 11.5; /simplify sweep 7 hit; audit commit SMOKE_STATE binding.
-- Bilinen riskler: ~/.claude/commands/ outside-repo (commit yok); rebuild-from-clean cascade (Task 11.5 FAIL); smoke runtime mevcut olmayabilir.
-- Dokunmaması gereken alanlar: docs/ commit'i (audit log; ek commit yapılırsa orijinal commit hash kayıt için kaybolur — sadece amend gerek).
-- Önce okunması gereken dosyalar: plan (`docs/plans/2026-05-31-simplify-claude-codex-command.md`), spec (`docs/specs/2026-05-31-simplify-claude-codex-command.md`), Codex review log'lar.
+- Bu task tamamlandı; sonraki Codex review'ları `/review` / `/security-review` bağlamında.
+- Drift contract acceptance command plan sonunda (`DRIFT CONTRACT: OK`); herhangi bir refine PR'ında tekrar koşulmalı.
+- Codex log: `docs/reviews/codex/2026-05-31-simplify-claude-codex-command-execute.md` (pre-exec + 5 checkpoint + final turn).
