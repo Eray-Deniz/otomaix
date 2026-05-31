@@ -71,3 +71,40 @@ Yok. (Drift contract sağlam doğrulandı; eksik spec adımı yok; kopuk/yanılt
 - **Kapatılan:** 0 (Critical yok)
 - **Açık (devam):** Important #1 (R-kuralF) — spec-refine adayı, non-blocking. Minor #1 YENİ.
 - **Push-back (reddedilen):** 0 — tüm bulgular ölçümle gerekçeli.
+
+## Çözüm (2026-05-31, aynı oturum)
+
+Kullanıcı "tüm bulguları düzelt" → review + security bulguları birlikte uygulandı:
+
+- **Important #1 (R-kuralF):** Kural relabel E/F/G (malformed→E, test-suite→F, test-rewrite→G);
+  spec doc + simplify command birebir; "Kural A-F"→"A-G"; collision çözüldü.
+- **Minor #1:** spec-claude-codex Sözleşme Notları'na drift-enforcement bullet (write-plan/execute paritesi).
+- Security tarafı (Yüksek #1-2, Orta #1-2): bkz. `docs/security-reviews/2026-05-31-simplify-claude-codex-command.md` Çözüm.
+
+**Doğrulama:** Check A 4-way diff=0 (`2503b639`), Check B 8/8, body mirror diff=0, R-kuralF A-F=0.
+DRIFT CONTRACT: OK. Komut dosyaları repo-dışı.
+
+## Codex Re-Review (post-hardening, 2026-05-31)
+
+Kullanıcı hardening pass sonrası Codex'e ayrı bir review yaptırdı (Codex `2503b639` halini gördü).
+3 yeni bulgu — **üçü de gerçek koda karşı doğrulandı: geçerli (haklı), hepsi düzeltildi:**
+
+- **#1 (Codex High → kalibrasyon Medium-High) — dar scope refactor commit'ine alakasız dirty sızması:**
+  Final review koşulsuz `--scope working-tree`, commit gate hangi dosyanın stage edileceğini
+  belirtmiyordu → dar-arg + pre-existing dirty senaryosunda alakasız değişiklik `refactor:`
+  commit'ine bundle olabilirdi. **Fix (A — FIXED_FILES takibi):** Adım 7 her fix sonrası
+  `<FIXED_FILES>` set'i (mekanik test-update dahil); Adım 9 review working-tree kalır ama prompt'a
+  `<FIXED_FILES>`+`<INITIAL_DIRTY_FILE_COUNT>` açık (Codex dirty-leak kontrol eder); Adım 11 commit
+  **yalnız** `git add -- <FIXED_FILES>` (`git add -A`/`. ` YASAK); rapor "Committed files" vs
+  "Pre-existing dirty" ayrık. Commit kapsamı artık deterministik.
+- **#2 (Medium) — `<SCOPE_SLUG>` operasyonel kullanımdan önce tanımlı değil:** türetme Impl Notes'ta
+  gömülüydü, Adım 4.5 (slugify) ondan önce çalışıyordu → boş/yanlış slug riski (benim Orta#1 fix'imin
+  açığa çıkardığı boşluk). **Fix:** türetme + slugify **Adım 1'e** taşındı (scope kararıyla aynı anda,
+  boş→`scope` fallback); Adım 4.5 sadece kullanır; Impl Notes Adım 1'e yönlendirir.
+- **#3 (Low) — B2 şablonu imkansız "Final tests: FAIL":** B2 = "review ran" (Adım 8 PASS gerektirir);
+  FAIL Adım 9'a ulaşmaz. **Fix:** B2'den FAIL seçeneği kaldırıldı (B1 ile tutarlı).
+
+**Doğrulama (taze):** Check A canonical 4-way diff=0 (dokunulmadı), bare `git add -A`/`git add .`
+gerçek komut YOK (yalnız YASAK referansı), SCOPE_SLUG türetme Adım 1 (RAW_SLUG), B2 FAIL yok,
+FIXED_FILES spec↔command 8=8, **body mirror tüm edit section'larda diff=0** (Adım 1/7/9 + Şablonlar).
+Hepsi simplify-specific — canonical bloğa dokunmadı.

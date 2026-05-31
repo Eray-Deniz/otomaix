@@ -108,6 +108,18 @@ Bu flag Adım 9 scope kararını ve Adım 11 no-fixes-applied rapor varyantını
 
 Ayrıca `<INITIAL_DIRTY_FILE_COUNT>` da sakla (rapor için): `git status --short | wc -l`.
 
+**`<SCOPE_SLUG>` türet (burada — scope kararıyla aynı anda canonical slug üret; log dosyası adı buna bağlı, Adım 4.5'te hazır kullanılır):** Önce ham slug:
+- Argüman dosya/dizinse → dosya/dizin yolu (örn. `apps/social/backend`)
+- `git diff` (working tree) → `working-tree`
+- `git diff origin/main..HEAD` → branch adı
+- Son 5 commit → `recent-5-commits`
+
+Sonra **zorunlu sanitize** (glob/path güvenliği — boşluk/`*?[`/`/` glob+path bütünlüğünü bozar; yalnız `[a-z0-9-]`):
+```bash
+SCOPE_SLUG=$(printf '%s' "$RAW_SLUG" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//;s/-*$//')
+[ -z "$SCOPE_SLUG" ] && SCOPE_SLUG=scope   # boş türetme → çakışma fallback
+```
+
 ## Adım 2: Test Suite Preflight
 
 Fix'lere başlamadan önce test altyapısını tespit et:
@@ -189,10 +201,11 @@ mkdir -p docs/reviews/codex
 
 DATE=$(date +%Y-%m-%d)
 LOG_DIR=docs/reviews/codex
+# SCOPE_SLUG Adım 1'de canonical türetildi + sanitize edildi (yalnız [a-z0-9-]); burada hazır kullanılır.
 LOG_PREFIX="${LOG_DIR}/${DATE}-simplify-${SCOPE_SLUG}"
 
 # Mevcut ATTEMPT dosyalarını say (glob safety: hiç dosya yoksa 0 döndürmek için):
-ATTEMPT=$(ls ${LOG_PREFIX}-*.md 2>/dev/null | wc -l)
+ATTEMPT=$(ls "${LOG_PREFIX}"-*.md 2>/dev/null | wc -l)
 ATTEMPT=$((ATTEMPT + 1))
 
 LOG_FILE="${LOG_PREFIX}-${ATTEMPT}.md"
@@ -302,7 +315,7 @@ Codex'in bağımsız önerisi. Claude bunu kendi 5 kategorisinden birine **best-
 | **medium** | Plan göster, tek onay: "Şu medium-risk fix'leri uygulayacağım: <liste>. Onay?" |
 | **high** | Tek tek onay (per-item). Codex `DO_NOT_APPLY` ile gelen high-risk-blocked'lar **ekstra explicit** — Codex gerekçesi yanında. |
 
-### Kural F: Malformed veya Unknown `<id>` — Default Block
+### Kural E: Malformed veya Unknown `<id>` — Default Block
 
 Codex `DO_NOT_APPLY: <id>` üretir ama `<id>` Adım 3 canonical format'a uymuyorsa (boşluk, lower-case, eksik N, vs.) **veya** Adım 3 listesinde olmayan bir id'ye işaret ediyorsa (ve `unlisted:` prefix'i yok):
 
@@ -316,7 +329,7 @@ Codex `DO_NOT_APPLY: <id>` üretir ama `<id>` Adım 3 canonical format'a uymuyor
 
 Bu kural Codex'in token üretimindeki nondeterminism'i (model temperature, prompt drift) sessiz veto kaybına çevirmez.
 
-### Test-suite-yok Override (Kural E)
+### Test-suite-yok Override (Kural F)
 
 `<TEST_SUITE_PRESENT> = false` ise:
 
@@ -326,7 +339,7 @@ Bu kural Codex'in token üretimindeki nondeterminism'i (model temperature, promp
 - **Toplu "continue anyway" yasak.** Her high-risk aday için ayrı named override.
 - Override edilen aday'lar rapor `high-risk-no-tests override: <id-listesi>` satırında listelenir.
 
-### Test Rewrite Scope (Kural F)
+### Test Rewrite Scope (Kural G)
 
 Adım 7 fix uygulamasında testlere dokunma kuralı:
 
@@ -335,7 +348,7 @@ Adım 7 fix uygulamasında testlere dokunma kuralı:
 
 ### Sentez Onayı
 
-Tüm adaylar sınıflandırılıp Kural A-F işletildikten sonra kullanıcıya konsolide rapor:
+Tüm adaylar sınıflandırılıp Kural A-G işletildikten sonra kullanıcıya konsolide rapor:
 
 ```
 Sentez sonucu:
@@ -370,6 +383,8 @@ Claude yazar. Codex yazmaz. Uygulama sırası: **low → medium → high**. Per-
 `<TEST_SUITE_PRESENT> = false` durumunda scoped verification "lint + format only" düşer; "PASS" iddiası yapılmaz.
 
 Adım 7 sonu: tüm onaylanan adaylar uygulanmıştır (ya da explicit drop edilmiştir).
+
+**`<FIXED_FILES>` takibi (zorunlu — deterministik commit kapsamı için):** Her uygulanan fix sonrası değişen dosya(ları) `<FIXED_FILES>` set'ine ekle — **mekanik test-update dosyaları dahil** (prod tarafı rename/extract'in test dosyalarına yansıması). Bu set Adım 9 final review prompt'unu ve Adım 11 commit stage'ini belirler — `git add -A`/`git add .` YASAK. Bir fix `<SCOPE_FILES>` dışı bir dosyayı değiştirdiyse bu ayrı bir uyarı/guard konusudur (cross-file değişiklik kullanıcı onayı ister); onaylanırsa o dosya da `<FIXED_FILES>`'a girer.
 
 ## Adım 8: Final Tests
 
@@ -413,7 +428,7 @@ SCOPE="--scope working-tree"
 
 Working-tree default — simplify tüm fix'leri Adım 11 commit'ine kadar uncommitted tutar; final Codex review **her zaman working-tree diff'i** üzerinde çalışır. Pre-existing commit'lere bakmaz (`HEAD~1` veya benzeri base ref **kullanılmaz** — execute-plan'daki `execute_start_ref` mantığı simplify'da YOK, çünkü resume yok).
 
-**Pre-existing dirty + fixes-applied durumu:** Working-tree diff'i hem pre-existing dirty hem simplify'ın eklediği fix'leri içerir; Codex ikisini birlikte görür. Bu Codex'in işi (bağlam zaten karışık); rapor'da pre-existing dirty file count `<INITIAL_DIRTY_FILE_COUNT>` ayrı satır olarak gösterilir (kullanıcı simplify-fix vs pre-existing'i ayırt edebilsin).
+**Pre-existing dirty + fixes-applied durumu:** Working-tree diff'i hem pre-existing dirty hem simplify'ın eklediği fix'leri içerir; Codex ikisini birlikte görür (companion dar file-scope desteklemiyorsa review'u working-tree bırakmak kabul edilebilir). **Ama prompt'a `<FIXED_FILES>` ve `<INITIAL_DIRTY_FILE_COUNT>` açıkça verilir** — Codex özellikle alakasız dirty dosya sızıntısını kontrol eder. **Commit (Adım 11) yalnız `<FIXED_FILES>`'ı stage eder** — review geniş olabilir ama commit kapsamı deterministik/dar. Rapor'da pre-existing dirty file count `<INITIAL_DIRTY_FILE_COUNT>` ayrı satır olarak gösterilir (kullanıcı simplify-fix vs pre-existing'i ayırt edebilsin).
 
 ### No-fixes-applied Edge Case (iki alt-varyant — H2 düzeltmesi)
 
@@ -480,8 +495,9 @@ Assess:
 Cross-file scope check:
 - The command was scoped to <SCOPE_FILES>. Did any fix touch files outside this scope?
 - Were DRY/YAGNI patterns outside scope noted but not fixed?
+- This simplify run changed exactly <FIXED_FILES>. The working tree also holds <INITIAL_DIRTY_FILE_COUNT> pre-existing dirty file(s) NOT produced by this run. The commit (Adım 11) will stage ONLY <FIXED_FILES>. Flag if anything listed in <FIXED_FILES> is actually unrelated pre-existing work that would get bundled into the simplify commit, or if the working-tree diff mixes the two in a way that hides a real simplify regression.
 
-Categorize findings: critical | high | medium | low. Focus on the working-tree diff.
+Categorize findings: critical | high | medium | low. Review the working-tree diff, but remember the commit scope is <FIXED_FILES> only.
 ```
 
 ### Çıktı
@@ -528,9 +544,15 @@ Normal "commit" sunulmaz. 3 seçenek (`AskUserQuestion`):
 İki şart sağlanırsa kullanıcıya:
 > "Simplification tamam. Commit edelim mi?
 > Mesaj: `refactor: simplify <scope-özet> — DRY/YAGNI cleanup`
+> Stage edilecek (yalnız bu run'ın değiştirdiği): `<FIXED_FILES>`
 > <override notu varsa: `+ override-note: ...`>"
 
-- **Onay** → commit (Conventional Commits `refactor:` prefix; **push YOK**)
+- **Onay** → **yalnız `<FIXED_FILES>` stage edilir**, sonra commit (Conventional Commits `refactor:` prefix; **push YOK**):
+  ```bash
+  git add -- <FIXED_FILES>   # git add -A / git add . YASAK — pre-existing dirty commit'e sızmasın (deterministik commit kapsamı)
+  git commit -m "refactor: simplify <scope-özet> — DRY/YAGNI cleanup"
+  ```
+  Pre-existing dirty dosyalar working-tree'de **dokunulmadan kalır** (bu run'a ait değil).
 - **Ret** → fix'ler working-tree'de kalır; commit yok; kullanıcı manuel müdahale edebilir
 
 ### Final Rapor — 3 Şablon
@@ -543,6 +565,8 @@ Simplification complete — commit done | pending.
 - Mode: <standard|light>
 - Test suite: present | absent
 - Initial tree state: clean | dirty (<INITIAL_DIRTY_FILE_COUNT> pre-existing uncommitted files)
+- Committed files (yalnız bu run'ın değişiklikleri — staged): <FIXED_FILES>
+- Pre-existing dirty files (dokunulmadı, commit'e GİRMEDİ): <INITIAL_DIRTY_FILE_COUNT> | none
 - Adaylar: low <N> applied, medium <M> applied, high <K> applied, dropped <D> (codex-veto: <D1>, user-drop: <D2>)
 - Test-no override (named): <id-listesi> | none
 - Fixed inside scope: <kategori bazlı özet liste>
@@ -585,7 +609,7 @@ Simplification draft — final Codex review ran, user stopped at guard.
 - Mode: <standard|light>
 - Test suite: present | absent
 - Final tests:
-  - test_suite_present=true → "PASS" (Adım 8 çıktısı okundu) | "FAIL" (Adım 9'a gelinmez normalde)
+  - test_suite_present=true → "PASS" (Adım 8 çıktısı okundu — B2'ye yalnız Adım 8 PASS sonrası gelinir; FAIL Adım 9'a hiç ulaşmaz, B1 ile aynı kural). **FAIL B2'de görünmez.**
   - test_suite_present=false → "not-run (no test suite detected)" — "PASS" kelimesi YASAK (F2 düzeltmesi — M2 sweep B2'ye de uygulanır)
 - Pre-scan Codex review: ran (standard) | skipped (light)
 - Final Codex review: ran, stopped
@@ -664,7 +688,7 @@ Review-gated invariant rapor seviyesinde de korunur.
 | 6 | Codex pre-scan prompt scope'u? | **Hibrit: 5 kategori + Other + `CANDIDATE: unlisted:` bağımsız aday + `DO_NOT_APPLY` veto** | Ortak terminoloji sentez kolaylığı + Codex'in adversarial bağımsızlık değeri korunur |
 | 7 | Verification timing (Adım 7)? | **Scoped per batch (lint/format/test-subset); Adım 8 full suite finalde taze** | "Her fix sonrası full suite" overkill; kullanıcı düzeltmesi |
 | 8 | Mimari yön? | **Y1/A — execute-plan-style mirror + selective reuse from old simplify** | İki perspektif aynı yöne işaret etti; Codex "treat as small execution workflow" |
-| 9 | Codex 1. tur bulguları adresleme | **H1 token canonical + Kural F malformed-block; H2 initial-dirty-tree flag + iki varyant rapor; H3 "resume" dili kaldırıldı + previous-log link; M1 Y2/B tradeoff tablosu kalitatif gerekçeyle; M2 verification etiketi test-suite-aware** | Hepsi targeted fix (mimari/lifecycle değişmiyor); Codex review log'unda turn 1 detay |
+| 9 | Codex 1. tur bulguları adresleme | **H1 token canonical + Kural E malformed-block; H2 initial-dirty-tree flag + iki varyant rapor; H3 "resume" dili kaldırıldı + previous-log link; M1 Y2/B tradeoff tablosu kalitatif gerekçeyle; M2 verification etiketi test-suite-aware** | Hepsi targeted fix (mimari/lifecycle değişmiyor); Codex review log'unda turn 1 detay |
 | 10 | Codex 2. tur bulguları adresleme | **F1 Adım 9 FIXES_APPLIED early-exit gate (H2 operasyonel kapı); F2 B2 + B1 test-suite-aware Final tests etiketi (M2 sweep tamamlandı); F3 log filename ATTEMPT counter + previous-attempt link mekanizması; F4 sayaç netliği (codex_targeted_fixes = bireysel fix sayısı, codex_review_iterations = Codex turn sayısı)** | Hepsi targeted; Codex 2. tur log'unda detay |
 | 11 | Codex 3. tur bulguları adresleme | **F5 override audit path -<ATTEMPT>.md kullanır + commit override-note path birebir; F6 Adım 4.5 log dosyası explicit setup adımı (mkdir + ATTEMPT + previous-attempt link ilk satır); F7 B1 ran-FAIL state kaldırıldı + user-stop-after-test-fail sebebi eklendi** | Turn 3: critical/high YOK (ilk temiz tur); 3 medium/low mekanik düzeltme |
 
@@ -697,14 +721,10 @@ Review-gated invariant rapor seviyesinde de korunur.
 `docs/reviews/codex/<DATE>-simplify-<SCOPE_SLUG>-<ATTEMPT>.md`
 
 - `<DATE>` = YYYY-MM-DD (bugün)
-- `<SCOPE_SLUG>` scope tanımından türetilir:
-  - Argüman dosya/dizinse: dosya/dizin slug'ı
-  - `git diff` ise: `working-tree`
-  - `origin/main..HEAD` ise: branch adı
-  - Son 5 commit ise: `recent-5-commits`
+- `<SCOPE_SLUG>` **Adım 1'de** canonical türetilir + sanitize edilir (scope kararıyla aynı anda; türetme kuralları + slugify orada). Bu bölüm yalnız dosya-adı şablonunu tarif eder, türetmeyi tekrarlamaz.
 - `<ATTEMPT>` = aynı `<DATE>-simplify-<SCOPE_SLUG>` prefix'iyle bugün mevcut dosya sayısı + 1 (monotonic counter):
   ```bash
-  ATTEMPT=$(ls docs/reviews/codex/${DATE}-simplify-${SCOPE_SLUG}-*.md 2>/dev/null | wc -l)
+  ATTEMPT=$(ls "docs/reviews/codex/${DATE}-simplify-${SCOPE_SLUG}"-*.md 2>/dev/null | wc -l)
   ATTEMPT=$((ATTEMPT + 1))
   ```
 - B1/B2 sonrası kullanıcı `/simplify-claude-codex <SAME_SCOPE>` çalıştırırsa: yeni log dosyası ATTEMPT+1 olur; yeni dosyanın **ilk satırı** önceki ATTEMPT'in path'ine link:
