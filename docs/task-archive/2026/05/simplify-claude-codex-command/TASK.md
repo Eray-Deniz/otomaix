@@ -1,6 +1,6 @@
 ---
 title: simplify-claude-codex.md komut implementasyonu
-status: waiting-review
+status: archived
 started: 2026-05-31
 last-touched: 2026-05-31
 blocked-by: null
@@ -19,7 +19,7 @@ Eski single-actor `/simplify` komutunu Claude-Codex ailesine entegre eden yeni `
 
 # Current Status
 
-Execution tamamlandı (16 task, inline + standard). Final Codex review **approved** (0 critical/high). `/review` (merge-ready) + `/security-review` (0 kritik) yapıldı; çıkan **6 maddelik bulgu kümesi (Yüksek #1-2, Orta #1-2, R-kuralF, Minor #1) tamamı düzeltildi + doğrulandı** (kullanıcı "tüm bulguları düzelt"). Ardından kullanıcı ayrı bir **Codex re-review** yaptırdı → 3 yeni bulgu (commit-scope FIXED_FILES, SCOPE_SLUG→Adım 1, B2 FAIL); üçü de doğrulanıp düzeltildi (A: FIXED_FILES takibi seçildi). Status `waiting-review` — commit + closure bekliyor. Komut dosyaları `~/.claude/commands/` (repo dışı); slash menüsünde aktif olması için Claude Code restart gerekir.
+Execution tamamlandı (16 task, inline + standard). Final Codex review **approved** (0 critical/high). `/review` (merge-ready) + `/security-review` (0 kritik) yapıldı; çıkan **6 maddelik bulgu kümesi (Yüksek #1-2, Orta #1-2, R-kuralF, Minor #1) tamamı düzeltildi + doğrulandı** (kullanıcı "tüm bulguları düzelt"). Ardından kullanıcı ayrı bir **Codex re-review** yaptırdı → 3 yeni bulgu (commit-scope FIXED_FILES, SCOPE_SLUG→Adım 1, B2 FAIL); üçü de doğrulanıp düzeltildi (A: FIXED_FILES takibi seçildi). **DONE (2026-05-31):** iş tam bitti, 9 bulgu kapandı, docs main'e commit'lendi (`5a39f52` + öncekiler) ve `origin/main`'e push edildi. `/finish-branch` A (push + closure). Komut dosyaları `~/.claude/commands/` (repo dışı, push'a girmez); güncel komutların slash menüsünde görünmesi için Claude Code restart gerekir.
 
 # Open Problems
 

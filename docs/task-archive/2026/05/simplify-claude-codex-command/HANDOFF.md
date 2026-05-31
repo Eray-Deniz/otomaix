@@ -8,13 +8,13 @@
 - Last updated: 2026-05-31
 
 ## Current State
-- Summary: Execution tamamlandı (16 task, inline + standard cadence). Final Codex execution review **approved** (0 critical/high). Status `waiting-review`.
+- Summary: **DONE + archived.** Execution (16 task) → `/review` (merge-ready) → `/security-review` (0 kritik) → 9 bulgu (6 review/security + 3 Codex re-review) düzeltildi + doğrulandı → docs `origin/main`'e push. `/finish-branch` A (push + full closure).
 - Blocked: hayır
 
 ## Resume From
-- Start here: `/review` (sonra `/security-review` → `/finish-branch` closure).
-- Komut dosyaları repo dışı (`~/.claude/commands/`); slash menüsünde görünmesi için Claude Code restart gerekir. Rollback gerekirse `/tmp/*.md.bak` (Task 1 backup) → `cp /tmp/<name>.md.bak ~/.claude/commands/<name>.md`.
-- Next command: `/review`
+- Start here: **task kapandı** — yeni iş için `/brainstorm` veya `/spec-claude-codex`.
+- **Açık loose-end (closure değil, gelecek):** (1) R-cp2 spec-refine adayı (Adım 3 aday-tanım `<id>` informal) hâlâ açık; (2) komut dosyaları repo-dışı → güncel halin slash menüsünde görünmesi için **Claude Code restart** gerekir; (3) komut dosyalarının version-control'ü yok (dotfiles backup gelecekte değerlendirilebilir).
+- Next command: yeni feature için `/brainstorm`.
 
 ## Verification
 - full_test_suite: not-run (markdown slash-command; test suite yok — verification modeli drift-check, hepsi PASS)
@@ -27,7 +27,8 @@
 - final_unresolved_high_severity_override: false
 - unresolved_critical_high: none
 - drift_contract: Check A 4-way (spec vs write-plan/execute/simplify diff=0) + Check B (8 tripwire × 4 dosya) + Task 11.5 section diff (12/12 = 0) + structural + smoke=pass → DRIFT CONTRACT: OK
-- audit_commit: docs/ (active-layer + execute-log); push: hayır (kullanıcı seçimi, local)
+- post_review_hardening: 9 bulgu fix sonrası taze drift re-check — Check A md5 `2503b639` diff=0, Check B 8/8, body mirror diff=0 (Adım 1/7/9 + Şablonlar), USER_BASE_REF guard 5-girdi test, no bare `git add -A` → OK
+- closure: docs `origin/main`'e push edildi (6 commit); task done + archived. Komut dosyaları repo-dışı (push'a girmez).
 
 ## Risks
 - **R-cp2 (spec-refine adayı, non-blocking):** Spec Adım 3 aday-tanım satırı `id` (kategori-N) informal; canonical `<id>`/`<KATEGORI>-N` + OTHER-1 yalnız Adım 5'te formal. Checkpoint 2'de medium olarak çıktı; byte-exact spec mirror'ı (diff=0) olduğu için execution hatası değil. Adım 5 + Kural E (malformed/default-block) contract'ı tam karşılıyor. (Not: hardening pass'te frozen spec refine edildi; bu R-cp2 maddesi hâlâ açık spec-refine adayı.)
