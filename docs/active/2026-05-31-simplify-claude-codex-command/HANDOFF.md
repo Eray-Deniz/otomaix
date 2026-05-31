@@ -35,7 +35,9 @@
 - **R-smoke:** Komut load + frontmatter parse doğrulandı (skill listesinde kayıtlı), ama uçtan uca tam invoke edilmedi (gerçek simplify run + Codex çağrısı tetiklerdi). İlk gerçek kullanımda Adım 1 scope akışı gözlemlenmeli.
 
 ## Notes For Claude
-- next: `/review` → `/security-review` → `/finish-branch` (closure) → done.
+- next: `/security-review` → `/finish-branch` (closure) → done.
+- **`/review` DONE (2026-05-31):** fresh subagent, verdict **merge-ready (Evet)**; 0 Critical, 1 Important (= bilinen R-kuralF, spec-refine adayı), 3 Minor. Drift contract bağımsız md5/diff ile teyit edildi (Check A byte-identical, Check B 8/8, spec↔komut diff=0). Rapor: `docs/reviews/2026-05-31-simplify-claude-codex-command.md`.
+- **YENİ bulgu (Minor #1, non-blocking spec-refine adayı):** Plan Task 12 Step 1 `spec-claude-codex` Sözleşme Notları'ndaki "Drift enforcement" bölümüne edit yönlendirdi ama o section canonical'da hiç yoktu — contract binding satırında (line 42) belgeli, fonksiyonel boşluk yok, sadece canonical diğer 2 aynaya göre asimetrik. Gelecek spec-refine'da canonical'a paralel bullet eklenebilir.
 - execute_mode: inline · checkpoint_cadence: standard · execute_start_ref: 500541bc7f2f289116aa66087c2c55ff231ba875
 - execute_completed: 2026-05-31
 - branch_pushed: no (kullanıcı local'de tutmayı seçti; commit main'de bekliyor)
