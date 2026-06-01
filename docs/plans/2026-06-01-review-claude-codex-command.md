@@ -8,7 +8,7 @@ noisy_review_override: false
 unresolved_high_severity_override: false
 codex_plan_review_status: approved
 codex_plan_review_iterations: 2
-codex_plan_targeted_fixes: 4
+codex_plan_targeted_fixes: 5
 codex_plan_review_log: docs/reviews/codex/2026-06-01-review-claude-codex-command-plan.md
 ---
 
@@ -648,10 +648,10 @@ Expected: kalan hit'ler YALNIZ bilinçli korunan historical reference'lar (Step 
 
 Önkoşul: Task 2-13 tamamlandı, Task 11 section-diff geçti, Task 12 5-way + marker-intact geçti, Task 13 sweep geçti.
 
-- [ ] **Step 1: Stub yaz** (`~/.claude/commands/review.md` overwrite):
+- [ ] **Step 1: Stub yaz** (`~/.claude/commands/review.md` overwrite; description **quoted** — strict-YAML-safe, repo konvansiyonu 3/4 stub; unquoted `[..]` flow-sequence başlatıp parse'ı kırar):
 ```markdown
 ---
-description: [DEPRECATED] use /review-claude-codex
+description: "[DEPRECATED] use /review-claude-codex"
 ---
 
 Bu komut `/review-claude-codex` ile değiştirildi (iki bağımsız hakem: fresh Claude subagent + Codex adversarial-review, pinli worktree @ HEAD_SHA üzerinde; ana Claude sentez + agreement-signal + disposition ledger; drift-check 5-way).
@@ -722,6 +722,10 @@ SMOKE=pass; REASON=""
 head -1 "$CMD" | grep -qx -- "---" || { SMOKE=fail; REASON="frontmatter açılış '---' yok"; }
 awk 'NR>1 && /^---$/{f=1} END{exit !f}' "$CMD" || { SMOKE=fail; REASON="$REASON; kapanış '---' yok"; }
 grep -q "^description:" "$CMD" || { SMOKE=fail; REASON="$REASON; description: yok"; }
+# Gerçek YAML frontmatter parse — presence DEĞİL valid parse (Codex pre-exec: unquoted [..] description strict YAML'da kırılır). Hem yeni komut hem stub:
+for F in "$CMD" ~/.claude/commands/review.md; do
+  awk 'f&&/^---$/{exit} /^---$/{f=1;next} f' "$F" | python3 -c "import sys,yaml; yaml.safe_load(sys.stdin.read())" 2>/dev/null || { SMOKE=fail; REASON="$REASON; $F frontmatter YAML parse hatası"; }
+done
 [ "$(grep -c '^## Adım [1-9]' "$CMD")" -ge 9 ] || { SMOKE=fail; REASON="$REASON; Adım <9"; }
 [ "$(grep -c 'Şablon A\|Şablon B\|Şablon C\|reviewer-status\|[Dd]isposition\|No-review\|Chain-advance\|REQUIREMENT_SNAPSHOT\|git worktree add' "$CMD")" -ge 8 ] || { SMOKE=fail; REASON="$REASON; precedent'siz bölüm <8"; }
 echo "SMOKE_PRECOMMIT=$SMOKE ${REASON:+($REASON)}"
