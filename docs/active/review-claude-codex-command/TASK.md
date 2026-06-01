@@ -1,6 +1,6 @@
 ---
 title: review-claude-codex Komutu — /review'ın claude-codex aile eşi
-status: proposed
+status: active
 started: 2026-06-01
 last-touched: 2026-06-01
 blocked-by: null
@@ -19,7 +19,15 @@ blocked-by: null
 
 # Current Status
 
-_Plan onaylandı, henüz başlanmadı. Sonraki: `/execute-plan-claude-codex docs/plans/2026-06-01-review-claude-codex-command.md` (Subagent-Driven önerilir, 15 task)._
+_Execution **active** (2026-06-01) — batch 1 (Task 1-3) tamam, cross-session resume için duruldu. **Resume: Task 4** (detay HANDOFF.md Resume From + Notes For Claude)._
+
+**Execution State (resume için — Adım 8.2/11 base ref buradan okur):**
+- execute_mode: inline
+- checkpoint_cadence: standard
+- execute_started: 2026-06-01 12:35 UTC
+- execute_start_ref: 21e3c86fefaeabebe4637d22b4fa182149398c34
+- last_completed_task: 3 (batch 1 + checkpoint 1 done); next: Task 4
+- not: komut dosyası repo-DIŞI (`~/.claude/commands/review-claude-codex.md`), diskte mevcut; batch 1 repo commit üretmedi → last_checkpoint_ref = execute_start_ref
 
 # Open Problems
 
