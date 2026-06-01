@@ -1,3 +1,3 @@
 # Active Tasks
 
-- `security-review-claude-codex/` — /security-review'ı claude-codex ailesine entegrasyon (spec+plan onaylı, execution bekliyor)
+- `security-review-claude-codex/` — /security-review'ı claude-codex ailesine entegrasyon
