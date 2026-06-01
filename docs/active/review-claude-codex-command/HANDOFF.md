@@ -5,7 +5,7 @@
 - Linked spec: docs/specs/2026-06-01-review-claude-codex-command.md
 - Linked plan: docs/plans/2026-06-01-review-claude-codex-command.md
 - Branch: main
-- Last updated: 2026-06-01 (execution complete → waiting-review)
+- Last updated: 2026-06-01 (closure chain: simplify no-op + dual review done, 1 high fixed)
 
 ## Current State
 - Summary: Execution **COMPLETE** → status **waiting-review**. All 15 plan tasks done (batch 1 prior session; batches 2-5 this session). `~/.claude/commands/review-claude-codex.md` (515 lines) implements spec Adım 1-9 + Sözleşme Notları + Drift Sözleşmesi (5-way). Family drift contract migrated 4-way → 5-way across spec/write-plan/execute/simplify (marker blocks untouched). `review.md` → deprecated stub. Both family chains made coherent: `/review`→`/review-claude-codex` (in-scope) AND `/execute-plan`→`/execute-plan-claude-codex` (out-of-scope [medium] fixed with user approval).
@@ -18,6 +18,7 @@
 
 ## Verification
 - full_test_suite: PASS — drift Check A 5-way diff=0 (spec vs write-plan/execute/simplify/review), Check B 8 tripwire tokens × 5 files, marker count 2 × 5, spec-section byte-diff all=0 (Adım 1-9), pre-commit smoke=pass.
+- review_claude_codex (closure chain, 2026-06-01): dual review (claude_status=ran general-purpose, codex_status=ran). 1 high + 1 low, both-agree=0. Objektif: Check A 5-way md5 intact post-fix (`2503b639...`), Check B 8 tok × 5, stale-4way sweep clean, spec↔komut Adım 1 mirror diff=0. **high FIXED** ($ARG→$ARGUMENTS binding, spec:96+komut:151); low (cannot-verify matris) deferred-optional. Rapor: docs/reviews/2026-06-01-review-claude-codex-command.md + codex log ...-review.md.
 - pre_execution_codex_review: ran (clean, prior session)
 - checkpoint_codex_reviews: ran 4/4 total (cp1 prior session; cp2/cp3/cp4 this session), skipped 0 (standard cadence)
 - final_codex_execution_review: approved (ran; first pass flagged a procedural [high] = Task 15 evidence/audit-commit not yet recorded → resolved via docs-only audit commit 0a7143c; re-run confirmed no critical/high)
@@ -36,7 +37,9 @@
 - none. (cp4 [high] Check B wording FIXED; final [high] procedural — resolved by audit commit; out-of-scope [medium] /execute-plan staleness FIXED. Nothing deferred.)
 
 ## Notes For Claude
-- next: **restart Claude Code**, then `/simplify-claude-codex` → `/review-claude-codex` → `/security-review` → closure.
+- next: `/security-review` → closure (`/finish-branch`). (simplify=no-op done; review=done, 1 high fixed.)
+- **Restart gerekli (yine):** review fix komut dosyasını (`~/.claude/commands/review-claude-codex.md`) repo-dışı değiştirdi → `$ARG`→`$ARGUMENTS` binding ancak Claude Code restart ile aktif. `/tmp/*.bak` yok bu edit için (canlı dosya). Spec fix (`docs/specs/...:96`) repo-içi, commit'e girer.
+- review fix detayı: tek argüman = BASE_REF (`$ARGUMENTS`); slug branch/commit-subject'ten. Resolved BASE_REF/BASE_SHA/REVIEW_BASE_SHA Adım 1'de gösterilir (binding artık doğru).
 - execute_completed: 2026-06-01 14:24 UTC
 - branch_pushed: no (user chose keep-local; deliverable repo-outside so push only moves the docs audit trail)
 - Family is now on the **5-way** drift contract; both `/review` and `/execute-plan` next-step chains are coherent across all 5 commands.

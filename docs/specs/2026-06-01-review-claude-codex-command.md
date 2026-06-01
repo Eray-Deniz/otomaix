@@ -87,13 +87,15 @@ Spec bu davranışlara uymak zorunda — kod okunarak doğrulandı:
 
 | Terim | Anlam | Türetme |
 |---|---|---|
-| `BASE_REF` | Kullanıcı/hedef ref (örn. `origin/main`, SHA, `HEAD~5`) | Argüman; yoksa default `origin/main` |
+| `BASE_REF` | Kullanıcı/hedef ref (örn. `origin/main`, SHA, `HEAD~5`) | `$ARGUMENTS`; yoksa default `origin/main` |
 | `BASE_SHA` | `BASE_REF`'in resolved commit'i (pinli) | `git rev-parse --verify "${BASE_REF}^{commit}"` |
 | `HEAD_SHA` | Review başındaki HEAD (pinli) | `git rev-parse HEAD` |
 | `REVIEW_BASE_SHA` | Gerçek diff tabanı (merge-base) | `git merge-base "$HEAD_SHA" "$BASE_SHA"` |
 
+`$ARGUMENTS` doluysa `BASE_REF` odur (git ref: `origin/main`, SHA, `HEAD~5`); boşsa default `origin/main`.
+
 ```bash
-BASE_REF="${ARG:-origin/main}"
+BASE_REF="$ARGUMENTS"; [ -z "$BASE_REF" ] && BASE_REF="origin/main"
 BASE_SHA=$(git rev-parse --verify "${BASE_REF}^{commit}") || { echo "BASE_REF geçersiz"; STOP; }
 HEAD_SHA=$(git rev-parse HEAD)
 REVIEW_BASE_SHA=$(git merge-base "$HEAD_SHA" "$BASE_SHA")
@@ -104,7 +106,7 @@ REVIEW_BASE_SHA=$(git merge-base "$HEAD_SHA" "$BASE_SHA")
 > "Review aralığı: `REVIEW_BASE_SHA..HEAD_SHA` (BASE_REF=`<...>` → BASE_SHA=`<kısa>`; merge-base=`<kısa>`). Şu N commit: `<liste>`. Onay?"
 
 **`<SLUG>` türet + sanitize** (log dosya adı buna bağlı):
-- Argüman konu verdiyse → o; yoksa branch adı (`git branch --show-current`); yoksa ilk commit subject'i.
+- `RAW_SLUG` = branch adı (`git branch --show-current`); yoksa ilk commit subject'i. (Argüman BASE_REF'tir — slug konusu DEĞİL.)
 - Zorunlu sanitize (yalnız `[a-z0-9-]`):
   ```bash
   SLUG=$(printf '%s' "$RAW_SLUG" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//;s/-*$//')
