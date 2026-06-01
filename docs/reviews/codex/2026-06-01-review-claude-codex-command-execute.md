@@ -106,4 +106,35 @@ Next steps:
 
 CLAUDE ASSESSMENT (Adım 12 guard): The [high] is PROCEDURAL/evidence-completeness, not a deliverable defect — Codex independently confirmed all substantive surfaces clean (Check A byte-identical, Check B tokens, marker count 2, sweep false-positives-only, valid stub). Root cause: final review (Adım 11) was run after the Task 15 verification gates but before recording them in this log and before the deferred docs-only audit commit (review-gated invariant defers commit until after final review). Resolution = complete Adım 13 consistency sweep + Adım 14 docs-only audit commit (this log now records the Task 15 gate results above), then re-run the final review against the complete state for a clean on-record verdict.
 
+RESOLUTION ACTION: docs-only audit commit 0a7143c made ("docs: implement review-claude-codex command (plan execution audit)"); tree clean. Re-run below.
+
+## Final Execution Turn (RE-RUN, post-resolution) — 2026-06-01 14:24 UTC
+
+# Codex Adversarial Review
+
+Target: branch diff against 21e3c86
+Verdict: needs-attention
+
+No critical/high defects found in the new review command, drift contract, deprecated stub, /review sweep, or recorded audit commit. Medium blocker: one mirror still points approved plan users at deprecated /execute-plan, so the family chain is not coherent enough to ship.
+
+Findings:
+- [medium] Approved write-plan output still routes users to deprecated /execute-plan (/root/.claude/commands/write-plan-claude-codex.md:456)
+  The write-plan mirror's approved final report tells users the next step is `/execute-plan <PLAN_PATH>` instead of `/execute-plan-claude-codex <PLAN_PATH>`. This is a real chain-integrity break: a user following the approved output can bypass the claude-codex execution command and its checkpoint/final review gates. The same stale family-chain wording also appears in the write-plan flow summary and in spec-claude-codex's contract prose, while execute-plan-claude-codex itself labels old `/execute-plan` as deprecated. Inference: this is outside the requested /review sweep, but it violates the requested mirror-coherence check.
+  Recommendation: Update the approved-path next-step references in write-plan-claude-codex.md to `/execute-plan-claude-codex <PLAN_PATH>`, and sweep the related stale chain prose in spec-claude-codex.md/write-plan-claude-codex.md so old `/execute-plan` appears only where explicitly described as deprecated.
+
+Next steps:
+- Re-run a focused sweep for bare `/execute-plan` in the four mirror commands and classify each hit as deprecated-prose or active chain reference.
+- After fixing, re-run Check A 5-way, Check B token sweep, marker count, and the /review sweep to confirm the review-command work stayed intact.
+
+CLAUDE ASSESSMENT (Adım 12, re-run): Procedural [high] CLOSED — no critical/high in the review-claude-codex deliverable, drift contract, stub, sweep, or audit commit. The remaining [medium] is OUT OF SCOPE: it concerns the `/execute-plan` → `/execute-plan-claude-codex` chain (a different migration than this task's `/review` → `/review-claude-codex`) and is pre-existing. Verified hits: write-plan-claude-codex.md:36/441/456/507/508 + spec-claude-codex.md:703 (active); execute-plan-claude-codex.md:864 "(deprecated)" + simplify:8 "(spec/write-plan/execute-plan)" family-name list are correct/keep. Completion gate (full tests PASS + final review ran, no critical/high) is MET.
+
+## Out-of-scope [medium] FIX (user-approved) — 2026-06-01 14:24 UTC
+
+User chose to fix the [medium] now. Hit-by-hit `/execute-plan` → `/execute-plan-claude-codex` sweep (Task-13 discipline, blind sed forbidden):
+- REPLACED (active chain refs): spec-claude-codex.md:703; write-plan-claude-codex.md:36, 441, 456, 507, 508.
+- KEPT (correct): execute-plan-claude-codex.md:864 "eski /execute-plan (deprecated)" (historical label); simplify-claude-codex.md:8 "(spec/write-plan/execute-plan)" (family-name list, not a command invocation).
+Re-verify after fix (Codex's recommended checks): Check A 5-way PASS (marker blocks unaffected); Check B 8/8 × 5; marker count 2 × 5; /review sweep still only the 3 prose false-positives; remaining bare /execute-plan = only the 2 intentional KEEPs. Family chain now fully coherent (/review→/review-claude-codex AND /execute-plan→/execute-plan-claude-codex). No third full Codex review run — edits are out-of-marker prose and Codex explicitly recommended re-running the structural CHECKS (done, all pass), not a full re-review.
+
+OUTCOME: Execution complete. Full test suite (drift Check A/B + section-diff + smoke) PASS. Final Codex execution review: ran (procedural high resolved; no critical/high). Completion gate MET → TASK status → waiting-review.
+
 ---

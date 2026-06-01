@@ -1,6 +1,6 @@
 ---
 title: review-claude-codex Komutu — /review'ın claude-codex aile eşi
-status: active
+status: waiting-review
 started: 2026-06-01
 last-touched: 2026-06-01
 blocked-by: null
@@ -19,15 +19,15 @@ blocked-by: null
 
 # Current Status
 
-_Execution **active** (2026-06-01) — batch 1 (Task 1-3) tamam, cross-session resume için duruldu. **Resume: Task 4** (detay HANDOFF.md Resume From + Notes For Claude)._
+_Execution **complete** (2026-06-01) → status **waiting-review**. Tüm 15 task uygulandı (batch 1-5). Deliverable repo-DIŞI (`~/.claude/commands/`), Claude Code restart ile aktif. Sırada `/simplify-claude-codex` → `/review-claude-codex` → `/security-review` → closure._
 
-**Execution State (resume için — Adım 8.2/11 base ref buradan okur):**
-- execute_mode: inline
-- checkpoint_cadence: standard
-- execute_started: 2026-06-01 12:35 UTC
-- execute_start_ref: 21e3c86fefaeabebe4637d22b4fa182149398c34
-- last_completed_task: 3 (batch 1 + checkpoint 1 done); next: Task 4
-- not: komut dosyası repo-DIŞI (`~/.claude/commands/review-claude-codex.md`), diskte mevcut; batch 1 repo commit üretmedi → last_checkpoint_ref = execute_start_ref
+**Execution State (audit):**
+- execute_mode: inline · checkpoint_cadence: standard
+- execute_started: 2026-06-01 12:35 UTC · execute_completed: 2026-06-01 14:24 UTC
+- execute_start_ref: 21e3c86 · audit_commit: 0a7143c (docs-only, repo-side)
+- Checkpoints: cp1-4 hepsi ran, 0 skipped (standard cadence); cp4 [high] (Check B "beş dosyada" tutarsızlığı) FIXED
+- Final Codex review: ran → procedural [high] resolved (audit commit yapıldı) + 1 out-of-scope [medium] (/execute-plan → /execute-plan-claude-codex staleness) FIXED; no critical/high
+- not: komut dosyaları repo-DIŞI; repo commit yalnız docs audit trail
 
 # Open Problems
 
