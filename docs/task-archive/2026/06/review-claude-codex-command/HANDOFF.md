@@ -8,13 +8,13 @@
 - Last updated: 2026-06-01 (closure chain: simplify no-op + dual review done, 1 high fixed)
 
 ## Current State
-- Summary: Execution **COMPLETE** → status **waiting-review**. All 15 plan tasks done (batch 1 prior session; batches 2-5 this session). `~/.claude/commands/review-claude-codex.md` (515 lines) implements spec Adım 1-9 + Sözleşme Notları + Drift Sözleşmesi (5-way). Family drift contract migrated 4-way → 5-way across spec/write-plan/execute/simplify (marker blocks untouched). `review.md` → deprecated stub. Both family chains made coherent: `/review`→`/review-claude-codex` (in-scope) AND `/execute-plan`→`/execute-plan-claude-codex` (out-of-scope [medium] fixed with user approval).
+- Summary: **DONE → ARCHIVED (2026-06-01 closure).** Execution (15 task) + full closure chain complete: simplify (no-op, markdown) → dual review (1 high + 1 low, ikisi fixed) → security-review (1 high fixed, 1 medium deferred) → vault promotion (c9cf8d5) → push + archive. `~/.claude/commands/review-claude-codex.md` (~518 lines) implements spec Adım 1-9; family on 5-way drift contract; `review.md` deprecated stub; both `/review` and `/execute-plan` next-step chains coherent across all 5 commands (+ vault prose sweep).
 - Blocked: no
 
 ## Resume From
-- No resume needed — execution complete.
-- **Deliverables are repo-OUTSIDE** (`~/.claude/commands/*.md`): **Claude Code restart required** to activate `/review-claude-codex` and pick up the family edits. Restart-time smoke = load + frontmatter parse (skill list registration). Note: the skill list already shows `review-claude-codex` and `review: [DEPRECATED]` registered during this session.
-- Next chain: `/simplify-claude-codex` (markdown deliverable — likely no-op) → `/review-claude-codex` → `/security-review` → closure (`/finish-branch`).
+- **No resume — task closed + archived.** Re-opening only if the command needs changes (then new task or reactivate).
+- **Deliverables are repo-OUTSIDE** (`~/.claude/commands/*.md`): **Claude Code restart required** to activate the latest `/review-claude-codex` (3 closure edits: $ARGUMENTS binding + cannot-verify clarification + injection hardening). Running session still has the pre-fix version loaded.
+- **Deferred follow-up (aile-geneli):** canonical CODEX-CALL-PROTOCOL secret-scan pattern eksik (`.env.local`, `id_rsa`, GCP `*.json` vb.) → ayrı 5-way aile-hardening task'ı. Detay: security-review doc Orta.
 
 ## Verification
 - full_test_suite: PASS — drift Check A 5-way diff=0 (spec vs write-plan/execute/simplify/review), Check B 8 tripwire tokens × 5 files, marker count 2 × 5, spec-section byte-diff all=0 (Adım 1-9), pre-commit smoke=pass.
@@ -45,7 +45,8 @@
 - execute_completed: 2026-06-01 14:24 UTC
 - branch_pushed: no (user chose keep-local; deliverable repo-outside so push only moves the docs audit trail)
 - Family is now on the **5-way** drift contract; both `/review` and `/execute-plan` next-step chains are coherent across all 5 commands.
-- **Vault promotion: MANDATORY at closure** (family-wide 4-way→5-way drift-contract change + new dual-reviewer review command) — extend the decision doc + related pages. Codex does NOT write vault; Claude/user writes.
+- **Vault promotion: DONE (2026-06-01)** — decision doc `2026-05-26-spec-writeplan-review-gated-hardening` genişletildi (Invariant #13 çift bağımsız hakem + Check A 4→5-way + başlık/sonuçlar) + claude-code-workflow + codex-entegrasyonu + index + log güncellendi. Vault commit `c9cf8d5`, otomaix-brain-private'a push edildi. (`/execute-plan`→`/execute-plan-claude-codex` ertelenen prose sweep'i de bu turda kapatıldı.)
+- **Kalan tek closure adımı: `/finish-branch`** (branch lifecycle: merge/PR/tut/sil). Otomaix repo'da 4 commit local (a96832c, 85fbeda, 679ef47 + bu HANDOFF update); push kararı /finish-branch seçimine bağlı.
 
 ## Notes For Codex
 - When reviewing, read the new command + 4 mirrors DIRECTLY on disk (repo-outside, git-diff won't show them).

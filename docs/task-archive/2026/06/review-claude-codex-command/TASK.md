@@ -1,8 +1,9 @@
 ---
 title: review-claude-codex Komutu — /review'ın claude-codex aile eşi
-status: waiting-review
+status: archived
 started: 2026-06-01
 last-touched: 2026-06-01
+closed: 2026-06-01
 blocked-by: null
 ---
 
@@ -19,12 +20,14 @@ blocked-by: null
 
 # Current Status
 
-_Execution **complete** (2026-06-01) → status **waiting-review**. Tüm 15 task uygulandı (batch 1-5). Deliverable repo-DIŞI (`~/.claude/commands/`), Claude Code restart ile aktif._
+_**DONE → ARCHIVED (2026-06-01 closure).** Execution complete (15 task, batch 1-5) → closure chain (simplify no-op + dual review + security-review) → vault promotion → arşiv. Deliverable repo-DIŞI (`~/.claude/commands/`), Claude Code restart ile aktif._
 
 **Closure chain ilerleme (2026-06-01):**
 - `/simplify-claude-codex`: **no-op** (markdown slash-command; kod-kalite modeli uygulanmıyor — aile sözleşmesi). FIXES_APPLIED=0.
 - `/review-claude-codex`: **dual review tamam** — 1 high + 1 low, both-agree yok. Objektif drift Check A/B PASS. **high (C1) bu oturum DÜZELTİLDİ**: `BASE_REF="${ARG:-...}"` → `$ARGUMENTS` binding (spec:96 + komut:151 identical edit); `$ARG` tanımsızdı → explicit base sessizce yutuluyordu. low (L1, cannot-verify matris sınırı) da bu oturum düzeltildi (matrise netleştirme notu, spec+komut identical edit). Açık bulgu 0. Rapor: `docs/reviews/2026-06-01-review-claude-codex-command.md`.
-- Sırada: `/security-review` → closure (`/finish-branch`).
+- `/security-review`: **tamam** — 🔴0 🟠0(1 fixed: `$ARGUMENTS` quote-break, review-fix yan ürünü) 🟡1(deferred: secret-scan pattern, aile-geneli) 🟢2. Rapor: `docs/security-reviews/2026-06-01-review-claude-codex-command.md`.
+- **Vault promotion: DONE** — decision doc `2026-05-26-spec-writeplan-review-gated-hardening` (Invariant #13 + 5-way) + claude-code-workflow + codex-entegrasyonu + index + log. Vault commit `c9cf8d5` (otomaix-brain-private push).
+- **Closure (`/finish-branch`): DONE** — push + arşivle. 10 docs commit origin/main'e, task `done`→archived.
 
 **Execution State (audit):**
 - execute_mode: inline · checkpoint_cadence: standard
@@ -41,6 +44,6 @@ _(yok)_
 # Decisions Log
 
 _Kanonik kararlar spec Decisions Log'unda (23 satır) — burada tekrarlanmaz. Yük taşıyan iki çapa:_
-- Topoloji: iki bağımsız hakem + sentez (Codex meta-review / tek-hakem reddedildi). → spec Decision 1.
-- Drift 5-way: CODEX-CALL-PROTOCOL byte-identical 5 dosyada; review yalnız STEP_B kullanır, blok bütün kopyalanır. → spec Decision 16.
-_(execute sırasında çıkan yeni kararlar buraya; promote edilenler `→ Vault: [[decisions/...]]`)_
+- Topoloji: iki bağımsız hakem + sentez (Codex meta-review / tek-hakem reddedildi). → spec Decision 1. → **Vault: [[decisions/2026-05-26-spec-writeplan-review-gated-hardening]] Invariant #13** (promote edildi, c9cf8d5).
+- Drift 5-way: CODEX-CALL-PROTOCOL byte-identical 5 dosyada; review yalnız STEP_B kullanır, blok bütün kopyalanır. → spec Decision 16. → **Vault: aynı decision doc, Invariant #8 (5-way) + 2026-06-01 genişletme notu.**
+- (closure) review fix: `$ARG`→`$ARGUMENTS` binding + cannot-verify matris netleştirme + `$ARGUMENTS` injection hardening (3 edit, spec+komut mirror). Security: secret-scan pattern eksiği aile-geneli → ertelendi (ayrı hardening task'ı).
