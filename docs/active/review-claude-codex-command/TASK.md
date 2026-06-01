@@ -23,7 +23,7 @@ _Execution **complete** (2026-06-01) → status **waiting-review**. Tüm 15 task
 
 **Closure chain ilerleme (2026-06-01):**
 - `/simplify-claude-codex`: **no-op** (markdown slash-command; kod-kalite modeli uygulanmıyor — aile sözleşmesi). FIXES_APPLIED=0.
-- `/review-claude-codex`: **dual review tamam** — 1 high + 1 low, both-agree yok. Objektif drift Check A/B PASS. **high (C1) bu oturum DÜZELTİLDİ**: `BASE_REF="${ARG:-...}"` → `$ARGUMENTS` binding (spec:96 + komut:151 identical edit); `$ARG` tanımsızdı → explicit base sessizce yutuluyordu. low (L1, cannot-verify matris sınırı) opsiyonel, ertelendi. Rapor: `docs/reviews/2026-06-01-review-claude-codex-command.md`.
+- `/review-claude-codex`: **dual review tamam** — 1 high + 1 low, both-agree yok. Objektif drift Check A/B PASS. **high (C1) bu oturum DÜZELTİLDİ**: `BASE_REF="${ARG:-...}"` → `$ARGUMENTS` binding (spec:96 + komut:151 identical edit); `$ARG` tanımsızdı → explicit base sessizce yutuluyordu. low (L1, cannot-verify matris sınırı) da bu oturum düzeltildi (matrise netleştirme notu, spec+komut identical edit). Açık bulgu 0. Rapor: `docs/reviews/2026-06-01-review-claude-codex-command.md`.
 - Sırada: `/security-review` → closure (`/finish-branch`).
 
 **Execution State (audit):**

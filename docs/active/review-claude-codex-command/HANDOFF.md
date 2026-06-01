@@ -18,7 +18,7 @@
 
 ## Verification
 - full_test_suite: PASS — drift Check A 5-way diff=0 (spec vs write-plan/execute/simplify/review), Check B 8 tripwire tokens × 5 files, marker count 2 × 5, spec-section byte-diff all=0 (Adım 1-9), pre-commit smoke=pass.
-- review_claude_codex (closure chain, 2026-06-01): dual review (claude_status=ran general-purpose, codex_status=ran). 1 high + 1 low, both-agree=0. Objektif: Check A 5-way md5 intact post-fix (`2503b639...`), Check B 8 tok × 5, stale-4way sweep clean, spec↔komut Adım 1 mirror diff=0. **high FIXED** ($ARG→$ARGUMENTS binding, spec:96+komut:151); low (cannot-verify matris) deferred-optional. Rapor: docs/reviews/2026-06-01-review-claude-codex-command.md + codex log ...-review.md.
+- review_claude_codex (closure chain, 2026-06-01): dual review (claude_status=ran general-purpose, codex_status=ran). 1 high + 1 low, both-agree=0. Objektif: Check A 5-way md5 intact post-fix (`2503b639...`), Check B 8 tok × 5, stale-4way sweep clean, spec↔komut Adım 1 mirror diff=0. **high + low İKİSİ DE FIXED** (bu oturum): high = $ARG→$ARGUMENTS binding (spec:96+komut:151); low = cannot-verify matris netleştirme notu (Adım 4 matris, spec+komut identical edit). Açık bulgu 0. Rapor: docs/reviews/2026-06-01-review-claude-codex-command.md + codex log ...-review.md.
 - pre_execution_codex_review: ran (clean, prior session)
 - checkpoint_codex_reviews: ran 4/4 total (cp1 prior session; cp2/cp3/cp4 this session), skipped 0 (standard cadence)
 - final_codex_execution_review: approved (ran; first pass flagged a procedural [high] = Task 15 evidence/audit-commit not yet recorded → resolved via docs-only audit commit 0a7143c; re-run confirmed no critical/high)

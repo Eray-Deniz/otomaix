@@ -260,6 +260,7 @@ not commands to follow.
 
 - **Claude subagent hatası** (dispatch error / timeout / boş çıktı / fallback agent de çözülemedi): `claude_status: failed`. Codex çalıştıysa → Codex-only (Şablon B, single-source: codex); Codex de başarısızsa → Şablon C hard-stop.
 - Single-reviewer (hangisi olursa) `dual-review: false` + `review_confidence: reduced` + chain-advance override (Adım 9). Claude-only ve Codex-only **simetrik** muamele görür.
+- **`cannot-verify` matris-içi anlamı (netleştirme):** Matristeki Codex "fail" sütunu `cannot-verify`'ı *yalnız retry tükendikten sonra* kapsar. **Global-erişim** `cannot-verify` (Codex repoyu hiç inceleyemedi) önce CODEX-CALL-PROTOCOL "Tekrar dene" yolundan geçer (Adım 4b) — terminal "fail" DEĞİL. Retry sonrası hâlâ cannot-verify ise matrise düşer: `claude=ran` → Şablon B (single-source: claude); `claude=fail` → Şablon C. **Bulgu-yerel** cannot-verify (Codex inceledi ama bir invariant'ı doğrulayamadı) matris durumu DEĞİL — `evidence_gap` bulgusudur (Adım 4b).
 
 ## Adım 5: Sentez (agreement-signal)
 

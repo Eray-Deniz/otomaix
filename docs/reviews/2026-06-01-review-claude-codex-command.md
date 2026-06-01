@@ -29,18 +29,18 @@ none
 none
 
 ## Low
-- **[single-source: claude]** `cannot-verify` durumu reviewer-status matrisinde (review-claude-codex.md:312) "fail"e kollaps oluyor; ama Adım 4b (s.298) global-erişim cannot-verify'ı retry-able tooling-degradation olarak tanımlıyor. (claude=ran + codex=cannot-verify) kombinasyonu matriste açık bir satıra düşmüyor — okuyucu bir an duraksar. **Tanımsız davranış YOK** (her iki yol da Şablon B veya retry'a iniyor). Düşük etki; netleştirme opsiyonel.
+- **[single-source: claude] — FIXED (bu oturum)** `cannot-verify` durumu reviewer-status matrisinde (review-claude-codex.md:312) "fail"e kollaps oluyordu; ama Adım 4b (s.298) global-erişim cannot-verify'ı retry-able tooling-degradation olarak tanımlıyor. (claude=ran + codex=cannot-verify) kombinasyonu matriste açık bir satıra düşmüyordu — okuyucu bir an duraksıyordu. **Tanımsız davranış yoktu** (her iki yol da Şablon B veya retry'a iniyordu). **FIX:** matrise netleştirme notu eklendi (spec+komut identical edit) — "fail" sütunu cannot-verify'ı yalnız retry tükendikten sonra kapsar; global-erişim cannot-verify önce retry'a gider; bulgu-yerel cannot-verify matris durumu değil `evidence_gap` bulgusudur. Doğrulama: Check A md5 intact, Adım 4 spec↔komut mirror diff=0.
 
 ## Disposition Ledger (her ham bulgu — sessiz drop yok)
 | id | source | raw sev | final sev | disposition | gerekçe |
 |----|--------|---------|-----------|-------------|---------|
 | C1 | codex | high | high | kept → FIXED | $ARG/$ARGUMENTS binding doğrulandı (frontmatter + 3 kardeş + spec:96); silent wrong-range geçerli → bu oturum düzeltildi (spec:96+komut:151) |
-| L1 | claude | low | low | kept (deferred) | cannot-verify matris sınırı; netleştirme opsiyonel, tanımsız davranış yok |
+| L1 | claude | low | low | kept → FIXED | cannot-verify matris sınırı; netleştirme notu eklendi (spec+komut identical edit) |
 
 ## Sonuç
 - Kapatılan (push-back): 0
-- Düzeltilen (high): 1 (C1 — bu oturum, spec+komut identical edit)
-- Açık (devam): 1 (low L1 — opsiyonel netleştirme, ertelendi)
+- Düzeltilen: 2 (C1 high + L1 low — ikisi de bu oturum, spec+komut identical edit)
+- Açık (devam): 0
 - Hakemler-arası çelişki: none (örtüşmeyen alanlar; both-agree bulgu yok — high'ı yalnız Codex, low'u yalnız Claude buldu = cross-model çeşitlilik değeri)
 - Objektif drift kontrolleri (Check A/B + marker + stale-sweep): hepsi PASS
 
