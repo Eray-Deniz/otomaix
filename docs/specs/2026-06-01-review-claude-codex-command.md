@@ -92,10 +92,10 @@ Spec bu davranışlara uymak zorunda — kod okunarak doğrulandı:
 | `HEAD_SHA` | Review başındaki HEAD (pinli) | `git rev-parse HEAD` |
 | `REVIEW_BASE_SHA` | Gerçek diff tabanı (merge-base) | `git merge-base "$HEAD_SHA" "$BASE_SHA"` |
 
-`$ARGUMENTS` doluysa `BASE_REF` odur (git ref: `origin/main`, SHA, `HEAD~5`); boşsa default `origin/main`.
+`$ARGUMENTS` doluysa `BASE_REF` odur (git ref: `origin/main`, SHA, `HEAD~5`); boşsa default `origin/main`. **Güvenlik (zorunlu):** `$ARGUMENTS` komut gövdesine **literal metin** olarak gömülür → raw `$ARGUMENTS`'i bir shell atamasına (`VAR="$ARGUMENTS"`) **KOYMA** (tırnak-kaçışı/command injection: argümandaki `"` `` ` `` `$` `;` `|` `&` quote'tan kaçar, satır rev-parse guard'ından ÖNCE çalışır). Bir git ref asla bu karakterleri veya boşluk içermez → böyle bir argümanı **gömmeden reddet** (`STOP`). `BASE_REF`'i yalnız doğrulanmış temiz ref ile kur (boşsa `origin/main`).
 
 ```bash
-BASE_REF="$ARGUMENTS"; [ -z "$BASE_REF" ] && BASE_REF="origin/main"
+# BASE_REF = doğrulanmış temiz git ref (yukarıdaki güvenlik kuralı) veya boşsa origin/main — raw $ARGUMENTS shell'e gömülmez
 BASE_SHA=$(git rev-parse --verify "${BASE_REF}^{commit}") || { echo "BASE_REF geçersiz"; STOP; }
 HEAD_SHA=$(git rev-parse HEAD)
 REVIEW_BASE_SHA=$(git merge-base "$HEAD_SHA" "$BASE_SHA")

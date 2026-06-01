@@ -37,7 +37,9 @@
 - none. (cp4 [high] Check B wording FIXED; final [high] procedural — resolved by audit commit; out-of-scope [medium] /execute-plan staleness FIXED. Nothing deferred.)
 
 ## Notes For Claude
-- next: `/security-review` → closure (`/finish-branch`). (simplify=no-op done; review=done, 1 high fixed.)
+- next: closure (`/finish-branch`). (simplify=no-op; review=done 1 high+1 low fixed; security-review=done 1 high fixed.)
+- **security-review (2026-06-01):** 🔴0 🟠0(1 fixed) 🟡1(deferred) 🟢2. 🟠 = `$ARGUMENTS` quote-break (review-fix'in yan ürünü) → FIXED (raw `$ARGUMENTS` shell atamasından çıkarıldı, prose+reject-metachar). Rapor: docs/security-reviews/2026-06-01-review-claude-codex-command.md.
+- **DEFERRED FOLLOW-UP (aile-geneli, bu task'a özgü değil):** canonical CODEX-CALL-PROTOCOL secret-scan pattern listesi eksik (`.env.local`, `id_rsa`, `*.json` GCP, `.pgpass/.netrc/.git-credentials` vb. kaçıyor). 5-way mekanik propagation gerektirir. Ayrı aile-hardening task'ında ele al — kullanıcı 2026-06-01'de erteledi. Detay: security-review doc Orta bölümü.
 - **Restart gerekli (yine):** review fix komut dosyasını (`~/.claude/commands/review-claude-codex.md`) repo-dışı değiştirdi → `$ARG`→`$ARGUMENTS` binding ancak Claude Code restart ile aktif. `/tmp/*.bak` yok bu edit için (canlı dosya). Spec fix (`docs/specs/...:96`) repo-içi, commit'e girer.
 - review fix detayı: tek argüman = BASE_REF (`$ARGUMENTS`); slug branch/commit-subject'ten. Resolved BASE_REF/BASE_SHA/REVIEW_BASE_SHA Adım 1'de gösterilir (binding artık doğru).
 - execute_completed: 2026-06-01 14:24 UTC
