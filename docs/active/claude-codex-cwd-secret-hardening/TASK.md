@@ -18,7 +18,7 @@ substrat izolasyonuyla kapat.
 
 - **Keşif:** finish-branch-claude-codex security review (2026-06-02, dual) → bulgu **S-1**.
   Rapor: `docs/security-reviews/2026-06-02-finish-branch-claude-codex.md`; fix `d7a80c7` (yalnız finish-branch).
-- **Spec (draft):** `docs/specs/2026-06-02-claude-codex-cwd-secret-hardening.md` (iteration 3, Option Z; codex_targeted_fixes: 4).
+- **Spec (spec-approved):** `docs/specs/2026-06-02-claude-codex-cwd-secret-hardening.md` (iteration 3, Option Z; codex_targeted_fixes: 4).
 - **Codex review log (5 tur):** `docs/reviews/codex/2026-06-02-claude-codex-cwd-secret-hardening.md`.
 - **İzole eden örüntüler (referans):** review → pinli worktree `$REVIEW_WT`; security-review → git'siz export;
   finish-branch → git'siz export (S-1 fix deseni).

@@ -1,9 +1,9 @@
 ---
 title: claude-codex ailesi — Codex --cwd untracked-secret exposure hardening (CODEX-SCAN-SUBSTRATE / sanitized-fetch-clone)
-status: draft
+status: spec-approved
 date: 2026-06-02
 tags: [security, claude-codex, codex, drift-contract, scan-substrate]
-codex_review_status: pending
+codex_review_status: approved
 codex_review_iterations: 3
 codex_targeted_fixes: 4
 unresolved_high_severity_override: false
