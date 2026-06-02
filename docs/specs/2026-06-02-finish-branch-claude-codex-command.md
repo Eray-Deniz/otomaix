@@ -103,8 +103,8 @@ Mimari DROPPED_ALT ile hizalı):
 **Mode-aware scope'u Claude kendi hesaplar** (Codex'in çağrı tipinden ayrık), evidence olarak prompt'a
 enjekte eder. Codex deterministik git işlemine (ancestry, merge-base) **güvenilmez** — Claude kendi
 Bash'inde toplar, Codex yorumlar/sentezler:
-- normal-branch → `merge-base(BASE_SHA, HEAD_SHA)..HEAD_SHA`
-- mainline → `origin/main..HEAD`
+- normal-branch → `merge-base(origin/$DEFAULT, HEAD_SHA)..HEAD_SHA`  (`$DEFAULT` = remote default branch)
+- mainline → `origin/$DEFAULT..HEAD`
 - detached → dar best-effort + ref-loss
 
 Evidence'a **exact range diff snapshot** dahildir (scope'un `git diff` + commit listesi + `--stat`);

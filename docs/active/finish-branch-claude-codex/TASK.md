@@ -18,7 +18,7 @@ Mevcut tek-aktörlü `/finish-branch`'i claude-codex ailesine entegre eden `~/.c
 
 # Current Status
 
-**waiting-review — execution tamamlandı (2026-06-02).** 8 task'ın hepsi uygulandı (subagent-driven + standard cadence); final Codex execution review **approved** (critical/high yok, 1 LOW düzeltildi). Deliverable: `~/.claude/commands/finish-branch-claude-codex.md` (323 satır) + 6 sibling 6→7 bump + `finish-branch.md` deprecated stub. Doğrulanan: 7-way Check A (tek md5 `c7b5976c`) + Check B (7/7) + section-scoped fidelity gates PASS + frontmatter parse 9/9 + stale-sweep temiz. 2 checkpoint review (cp2'de 1 HIGH + 2 medium fix) + final review (1 LOW fix) — hepsi düzeltildi, override yok. Sıradaki: `/simplify-claude-codex` → `/review-claude-codex` → `/security-review-claude-codex` → closure. Test-EDİLMEYEN: gerçek closure-audit davranışı (restart + canlı branch ister).
+**waiting-review — execution + simplify + review tamamlandı (2026-06-02).** Execution: 8 task uygulandı, final Codex review approved. `/simplify-claude-codex`: **no-op** (repo-dışı markdown deliverable, kod yok; tekrar = kasıtlı drift contract). `/review-claude-codex` (dual: fresh Claude subagent + Codex): 0 critical, 1 high + 4 medium + 3 low bulgu — **8'inin HEPSİ düzeltildi** (hepsi marker bloğu DIŞINDA). Deliverable artık 326 satır + spec scope-notasyonu parity. Re-doğrulanan: 7-way Check A tek md5 `c7b5976c` (drift contract bozulmadı) + Check B 8/8 + frontmatter parse OK. Sıradaki: `/security-review-claude-codex` → closure. Test-EDİLMEYEN: gerçek closure-audit davranışı (restart + canlı branch ister).
 
 # Open Problems
 
@@ -34,3 +34,9 @@ _(yok — spec + plan review'larında tüm critical/high çözüldü)_
 - Evidence range-containment: `report_HEAD==audit_HEAD` AND `report_BASE` ⊑ `audit_BASE` → coverage-uncertain
 - Implementation: hibrit (finish-branch closure semantics base + security-review repo-external delivery scaffold); topoloji security-review'dan KOPYALANMAZ
 - Drift contract 6-way → 7-way (execute Task 5 sibling bump + closure'da vault decision doc genişlet)
+- **Review (2026-06-02, dual) bulguları + fix'leri** — rapor `docs/reviews/2026-06-02-finish-branch-claude-codex.md`; hepsi düzeltildi:
+  - HIGH: remote branch silme `HEAD_SHA`'a bağlı değildi (komutun kendi pinned-target invariant'ını çiğniyordu) → lease-bound `git push --force-with-lease=...:$HEAD_SHA origin :refs/heads/<branch>`
+  - MED: `BASE_SHA` tanımsız sembol → `audit_BASE` deterministik türetim (`merge-base origin/$DEFAULT HEAD_SHA`); detached branch-adı `check-ref-format` validation; normal merge push `MERGE_SHA`'a pin; degradation wording canonical AskUserQuestion'a bağlandı
+  - LOW: cwd override clarity callout; mainline `origin/main`→`origin/$DEFAULT`; log-path slug kaynağı belirtildi
+  - Hakemler-arası ayrışma: Claude shell-safety "temiz" dedi, Codex 3 high buldu → X-3 gerçek high, X-2 medium'a, X-1 low'a uzlaştırıldı (çift-hakem değeri)
+  - Tümü marker bloğu DIŞINDA → drift contract byte-identity korundu (re-verified `c7b5976c`)

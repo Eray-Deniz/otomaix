@@ -8,13 +8,13 @@
 - Last updated: 2026-06-02
 
 ## Current State
-- Summary: **Execution tamamlandı 2026-06-02** (subagent-driven + standard cadence). 8 task uygulandı; final Codex execution review **approved** (critical/high yok, 1 LOW fix). Status → `waiting-review`. Deliverable repo-dışı, audit commit docs-only.
+- Summary: **Execution + simplify + review tamamlandı 2026-06-02.** Execution: 8 task, final Codex approved. simplify-claude-codex: no-op (repo-dışı markdown). review-claude-codex (dual): 0 critical / 1 high / 4 medium / 3 low — **8'i de düzeltildi**, drift contract re-verified (`c7b5976c`). Status → `waiting-review`. Deliverable repo-dışı, audit commit docs-only.
 - Blocked: hayır
 
 ## Resume From
-- Start here: `/simplify-claude-codex` (DRY/YAGNI), sonra `/review-claude-codex` → `/security-review-claude-codex` → closure (`/finish-branch-claude-codex`).
-- Relevant files: deliverable repo-DIŞI `~/.claude/commands/finish-branch-claude-codex.md` (323 satır, yeni) + 6 sibling (7-way bump) + `finish-branch.md` (deprecated stub). Backup: `~/.claude/commands/*.bak-20260602-122858`. Codex log: `docs/reviews/codex/2026-06-02-finish-branch-claude-codex-command-execute.md`. init.md: değişiklik gerekmedi (/finish-branch ref'i yoktu).
-- Next command: `/simplify-claude-codex`
+- Start here: `/security-review-claude-codex` (sonra closure `/finish-branch-claude-codex`). simplify + review BİTTİ — tekrar çalıştırma.
+- Relevant files: deliverable repo-DIŞI `~/.claude/commands/finish-branch-claude-codex.md` (**326 satır**, review-fix'li) + 6 sibling (7-way) + `finish-branch.md` (deprecated stub). Review raporu: `docs/reviews/2026-06-02-finish-branch-claude-codex.md` + Codex log `docs/reviews/codex/2026-06-02-review-finish-branch-claude-codex-1.md`. Spec scope-notasyonu da parity-fix edildi. Backup: `~/.claude/commands/*.bak-20260602-122858` (review-fix ÖNCESİ; güncel hâl backup'sız — istersek yeni backup alınır).
+- Next command: `/security-review-claude-codex`
 
 ## Verification
 - full_test_suite: PASS (markdown deliverable — "test" = verification gates: 7-way Check A tek md5 `c7b5976c` + Check B 7/7 + section-scoped fidelity gates PASS + frontmatter parse 9/9 + stale-sweep temiz + chain-sweep temiz)
@@ -25,6 +25,7 @@
 - checkpoint_execution_review_status: ok
 - final_unresolved_high_severity_override: false
 - unresolved_critical_high: none
+- review_claude_codex (2026-06-02): dual ran (fresh Claude subagent + Codex task --fresh, contained temp-dir cwd); 0 critical / 1 high / 4 medium / 3 low; **8/8 fixed**; post-fix re-verify Check A 7/7 `c7b5976c` + Check B 8/8 + frontmatter parse OK
 - Not run: gerçek closure-audit davranışı (restart + canlı branch ister) — smoke ile doğrulanamaz
 
 ## Risks
@@ -38,11 +39,11 @@
 - checkpoint_cadence: standard
 - execute_started: 2026-06-02 12:22
 - execute_start_ref: 572f668204a53e16165fc8913bfb1a00b3d097bb   # Adım 8.2 checkpoint + Adım 11 final review base ref
-- next: `/simplify-claude-codex` → `/review-claude-codex` → `/security-review-claude-codex` → closure (`/finish-branch-claude-codex`)
+- next: `/security-review-claude-codex` → closure (`/finish-branch-claude-codex`)  [simplify=no-op + review=done+fixed]
 - execute_completed: 2026-06-02
 - branch_pushed: no — docs-audit commit ("...command build...") local'de yapıldı; push gate'te kullanıcı "beklet" dedi (2026-06-02); push closure'da
 - Push durumu: main, origin/main'den 1 commit ileride (bu build'in docs-audit commit'i); closure'a kadar held
-- **EXECUTE SESSION KAPANDI (2026-06-02).** Next session başlangıcı = `/simplify-claude-codex` (TASK status `waiting-review`; execute-plan'ı TEKRAR çalıştırma — implement bitti). Komut dosyaları repo-dışı, gerçek invoke için Claude Code restart gerekir. Backup: `~/.claude/commands/*.bak-20260602-122858`
+- **EXECUTE + SIMPLIFY + REVIEW BİTTİ (2026-06-02).** Next session başlangıcı = `/security-review-claude-codex` (TASK status `waiting-review`; execute-plan/simplify/review TEKRAR çalıştırma — bitti). Review 8 bulgu düzeltti (1 high + 4 medium + 3 low), drift contract re-verified. Komut dosyaları repo-dışı, gerçek invoke için Claude Code restart gerekir.
 - Vault promotion (closure P1, ZORUNLU): 6-way → 7-way drift contract → `decisions/2026-05-26-spec-writeplan-review-gated-hardening` 6→7 komut genişlet + workflow/codex/index/log güncelle (execute SONRASI closure'da, security-review pattern'i)
 - Spec/plan güncellemesi: yok (ikisi de approved). Kullanıcıdan karar bekleyen: yok
 
