@@ -8,27 +8,41 @@
 - Last updated: 2026-06-02
 
 ## Current State
-- Summary: Spec + plan ikisi de Codex adversarial review'dan geçti (her biri 4 tur, 5→2→1→0 ve 2→2→1→0, approve). Plan: 1/3 iteration + 3 targeted. **Execute YENİ OTURUMA bırakıldı** (kullanıcı kararı, context %46'da). Komut dosyaları henüz YAZILMADI.
+- Summary: **Execution tamamlandı 2026-06-02** (subagent-driven + standard cadence). 8 task uygulandı; final Codex execution review **approved** (critical/high yok, 1 LOW fix). Status → `waiting-review`. Deliverable repo-dışı, audit commit docs-only.
 - Blocked: hayır
 
 ## Resume From
-- Start here: `/execute-plan-claude-codex docs/plans/2026-06-02-finish-branch-claude-codex-command.md` → mod seçimi (Inline veya Subagent). 8 task: baseline+6-way teyit → gövde → byte-identical blok → security mechanics prose → 6→7 sibling bump → chain sweep → deprecated stub → doğrulama.
-- Relevant files: deliverable repo-DIŞI `~/.claude/commands/finish-branch-claude-codex.md` (yeni) + 6 sibling + init.md (7-way + chain) + finish-branch.md (stub). Pattern: `~/.claude/commands/security-review-claude-codex.md` + `docs/plans/2026-06-01-security-review-claude-codex-command.md`.
-- Next command: `/execute-plan-claude-codex docs/plans/2026-06-02-finish-branch-claude-codex-command.md`
+- Start here: `/simplify-claude-codex` (DRY/YAGNI), sonra `/review-claude-codex` → `/security-review-claude-codex` → closure (`/finish-branch-claude-codex`).
+- Relevant files: deliverable repo-DIŞI `~/.claude/commands/finish-branch-claude-codex.md` (323 satır, yeni) + 6 sibling (7-way bump) + `finish-branch.md` (deprecated stub). Backup: `~/.claude/commands/*.bak-20260602-122858`. Codex log: `docs/reviews/codex/2026-06-02-finish-branch-claude-codex-command-execute.md`. init.md: değişiklik gerekmedi (/finish-branch ref'i yoktu).
+- Next command: `/simplify-claude-codex`
 
 ## Verification
-- Passed: spec dual review (Turn 4 approve, no material findings) · plan review (Turn 4 approve, no material findings)
-- Failed: yok
-- Not run: execution doğrulaması (7-way Check A/B, section-scoped gates, frontmatter smoke) — execute Task 8'de; gerçek closure-audit davranışı restart + canlı branch ister
+- full_test_suite: PASS (markdown deliverable — "test" = verification gates: 7-way Check A tek md5 `c7b5976c` + Check B 7/7 + section-scoped fidelity gates PASS + frontmatter parse 9/9 + stale-sweep temiz + chain-sweep temiz)
+- pre_execution_codex_review: ran (no blocking drift; Task 8 allowlist precedent yakalandı)
+- checkpoint_codex_reviews: ran 2/2 (standard cadence); cp1 → 2 medium fix; cp2 → 1 HIGH (PR live-ref push) + 2 medium (HEAD_SHA scoping, detached gh --head) — hepsi FIXED, override YOK
+- final_codex_execution_review: approved (critical/high yok, 1 LOW fix: scope-creep guardrail wording)
+- final_codex_execution_review_reason: null
+- checkpoint_execution_review_status: ok
+- final_unresolved_high_severity_override: false
+- unresolved_critical_high: none
+- Not run: gerçek closure-audit davranışı (restart + canlı branch ister) — smoke ile doğrulanamaz
 
 ## Risks
-- 7-way blok byte-identical kalmalı (mekanik propagation, hand-edit YASAK; Check A md5 `c7b5976c`)
-- Repo-external deliverable: docs-only audit commit (explicit allowlist, `git add docs/` YASAK); restart-to-activate; gerçek invoke smoke ile doğrulanamaz
-- Prose→command fidelity: section-scoped gates (plan Task 4 Step 7) her kritik güvenlik mekaniğini (mode-detect, worktree@HEAD_SHA, SCAN_ROOT=$WT, range-containment, pinned-target, old-value discard, two-phase reclassify) executable formda assert eder — gate FAIL → task incomplete
+- 7-way blok byte-identical: **VERIFIED** (7 dosya tek md5 `c7b5976c`); ileride refine'de korunmalı (hand-edit YASAK, mekanik propagation)
+- Repo-external deliverable: docs-audit commit reconcile EDİLDİ — plan'ın 4-file allowlist'i (spec/plan/2 review-log) ZATEN commit'liydi; gerçek commit seti = TASK/HANDOFF/CURRENT + execute log (precedent 58b3b1d). restart-to-activate; gerçek invoke smoke ile doğrulanamaz
+- Vault promotion (closure P1, ZORUNLU): 6→7 drift contract vault decision doc genişletme HENÜZ yapılmadı — closure'da (`decisions/2026-05-26-spec-writeplan-review-gated-hardening` 6→7 + workflow/codex/index/log)
+- Test-EDİLMEYEN: gerçek closure-audit davranışı (mode-detect, worktree pin, Codex audit, reclassify, D=sil upgrade) restart + canlı branch ister
 
 ## Notes For Claude
-- next: yeni oturumda `/execute-plan-claude-codex <plan>` → Inline/Subagent mod sorusu → status=active flip
-- Push durumu: main origin/main'den ileride (security-review closure'dan sonra: finish-branch spec + plan + bu active-task commit'leri). Bu oturumda push önerildi; closure'a kadar local kalabilir
+- execute_mode: subagent-driven
+- checkpoint_cadence: standard
+- execute_started: 2026-06-02 12:22
+- execute_start_ref: 572f668204a53e16165fc8913bfb1a00b3d097bb   # Adım 8.2 checkpoint + Adım 11 final review base ref
+- next: `/simplify-claude-codex` → `/review-claude-codex` → `/security-review-claude-codex` → closure (`/finish-branch-claude-codex`)
+- execute_completed: 2026-06-02
+- branch_pushed: no — docs-audit commit ("...command build...") local'de yapıldı; push gate'te kullanıcı "beklet" dedi (2026-06-02); push closure'da
+- Push durumu: main, origin/main'den 1 commit ileride (bu build'in docs-audit commit'i); closure'a kadar held
+- **EXECUTE SESSION KAPANDI (2026-06-02).** Next session başlangıcı = `/simplify-claude-codex` (TASK status `waiting-review`; execute-plan'ı TEKRAR çalıştırma — implement bitti). Komut dosyaları repo-dışı, gerçek invoke için Claude Code restart gerekir. Backup: `~/.claude/commands/*.bak-20260602-122858`
 - Vault promotion (closure P1, ZORUNLU): 6-way → 7-way drift contract → `decisions/2026-05-26-spec-writeplan-review-gated-hardening` 6→7 komut genişlet + workflow/codex/index/log güncelle (execute SONRASI closure'da, security-review pattern'i)
 - Spec/plan güncellemesi: yok (ikisi de approved). Kullanıcıdan karar bekleyen: yok
 

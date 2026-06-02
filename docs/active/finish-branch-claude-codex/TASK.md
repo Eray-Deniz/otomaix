@@ -1,6 +1,6 @@
 ---
 title: finish-branch-claude-codex komutu
-status: proposed
+status: waiting-review
 started: 2026-06-02
 last-touched: 2026-06-02
 blocked-by: null
@@ -18,7 +18,7 @@ Mevcut tek-aktörlü `/finish-branch`'i claude-codex ailesine entegre eden `~/.c
 
 # Current Status
 
-**proposed — plan onaylandı (2026-06-02), execute YENİ OTURUMA bırakıldı.** Spec + plan ikisi de Codex adversarial review'dan geçti (her biri 4 tur, approve). Plan: 1/3 full iteration + 3 targeted fix. Execute henüz başlamadı; yeni oturumda `/execute-plan-claude-codex docs/plans/2026-06-02-finish-branch-claude-codex-command.md` + mod seçimi (Inline/Subagent) ile başlanacak.
+**waiting-review — execution tamamlandı (2026-06-02).** 8 task'ın hepsi uygulandı (subagent-driven + standard cadence); final Codex execution review **approved** (critical/high yok, 1 LOW düzeltildi). Deliverable: `~/.claude/commands/finish-branch-claude-codex.md` (323 satır) + 6 sibling 6→7 bump + `finish-branch.md` deprecated stub. Doğrulanan: 7-way Check A (tek md5 `c7b5976c`) + Check B (7/7) + section-scoped fidelity gates PASS + frontmatter parse 9/9 + stale-sweep temiz. 2 checkpoint review (cp2'de 1 HIGH + 2 medium fix) + final review (1 LOW fix) — hepsi düzeltildi, override yok. Sıradaki: `/simplify-claude-codex` → `/review-claude-codex` → `/security-review-claude-codex` → closure. Test-EDİLMEYEN: gerçek closure-audit davranışı (restart + canlı branch ister).
 
 # Open Problems
 
