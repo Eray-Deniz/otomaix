@@ -1,3 +1,3 @@
 # Active Tasks
 
-_(no active tasks)_
+- `finish-branch-claude-codex/` — /finish-branch'i claude-codex ailesine entegrasyon (plan onaylı, execute bekliyor)
