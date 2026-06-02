@@ -1,3 +1,3 @@
 # Active Tasks
 
-- `finish-branch-claude-codex/` — /finish-branch'in claude-codex aile eşi (advisory closure-audit komutu)
+- `claude-codex-cwd-secret-hardening/` — [proposed] aile-geneli Codex --cwd untracked-secret exposure (S-1 blast-radius; spec/write-plan/execute-plan/simplify)

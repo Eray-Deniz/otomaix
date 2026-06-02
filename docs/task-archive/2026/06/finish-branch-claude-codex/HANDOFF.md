@@ -8,11 +8,11 @@
 - Last updated: 2026-06-02
 
 ## Current State
-- Summary: **Execution + simplify + review + security-review tamamlandı 2026-06-02.** Execution: 8 task, final Codex approved. simplify: no-op (repo-dışı markdown). review (dual): 1 high/4 med/3 low → 8/8 fixed. security-review (dual): 1 high/3 medium → 4/4 fixed (S-1 secret-exposure-via-cwd → git'siz export; S-2/3/4 ref-validation/prompt-secret/worktree-dirty). drift contract re-verified (`c7b5976c`, tüm fix'ler marker DIŞINDA). Status → `waiting-review`; **kalite zinciri bitti, sıra closure**. Deliverable repo-dışı, audit commit docs-only.
+- Summary: **Execution + simplify + review + security-review tamamlandı 2026-06-02.** Execution: 8 task, final Codex approved. simplify: no-op (repo-dışı markdown). review (dual): 1 high/4 med/3 low → 8/8 fixed. security-review (dual): 1 high/3 medium → 4/4 fixed (S-1 secret-exposure-via-cwd → git'siz export; S-2/3/4 ref-validation/prompt-secret/worktree-dirty). drift contract re-verified (`c7b5976c`, tüm fix'ler marker DIŞINDA). **KAPANDI: status `archived` (2026-06-02);** closure + vault promotion (decision 6→7-way, vault commit `0d1af26` push'landı) yapıldı. Deliverable repo-dışı, audit commit docs-only.
 - Blocked: hayır
 
 ## Resume From
-- Start here: **closure → `/finish-branch-claude-codex`**. simplify + review + security-review BİTTİ — tekrar çalıştırma. Gate temiz (0 açık critical/high, dual complete).
+- **KAPANDI — bu task arşivlendi (`docs/task-archive/2026/06/finish-branch-claude-codex/`).** Devam YOK. Aile-geneli takip işi ayrı task: [[claude-codex-cwd-secret-hardening]] (proposed). Komut canlı invoke için Claude Code restart ister (repo-dışı).
 - Relevant files: deliverable repo-DIŞI `~/.claude/commands/finish-branch-claude-codex.md` (**344 satır**, review+security-fix'li) + 6 sibling (7-way) + `finish-branch.md` (deprecated stub). Raporlar: `docs/reviews/2026-06-02-...` + `docs/security-reviews/2026-06-02-...` (+ Codex log'ları). Backup: `~/.claude/commands/finish-branch-claude-codex.md.bak-20260602-postreview` (review-fix sonrası; security-fix'ler bundan SONRA — güncel hâl için yeni backup alınabilir).
 - Next command: `/finish-branch-claude-codex` (closure)
 

@@ -1,8 +1,9 @@
 ---
 title: finish-branch-claude-codex komutu
-status: waiting-review
+status: archived
 started: 2026-06-02
 last-touched: 2026-06-02
+closed: 2026-06-02
 blocked-by: null
 ---
 
@@ -18,7 +19,7 @@ Mevcut tek-aktörlü `/finish-branch`'i claude-codex ailesine entegre eden `~/.c
 
 # Current Status
 
-**waiting-review — execution + simplify + review + security-review tamamlandı (2026-06-02).** Execution: 8 task, final Codex approved. simplify: **no-op** (repo-dışı markdown). review (dual): 1 high+4 med+3 low → 8/8 fixed. security-review (dual: subagent + Codex task --fresh temp-dir): 1 high+3 medium → **4/4 fixed** (S-1 secret-exposure-via-cwd: mainline/detached `$PROJECT_ROOT`→git'siz export; S-2 ref check-ref-format+`--`; S-3 prompt-evidence secret hard-exclude; S-4 worktree dirty-check). Deliverable artık 344 satır. Re-doğrulanan: 7-way Check A tek md5 `c7b5976c` (drift contract bozulmadı, tüm fix'ler marker DIŞINDA) + Check B 8/8 + frontmatter OK. **Sıradaki: closure (`/finish-branch-claude-codex`)** — gate temiz (0 açık critical/high, dual complete). Test-EDİLMEYEN: gerçek closure-audit davranışı (restart + canlı branch ister).
+**waiting-review — execution + simplify + review + security-review tamamlandı (2026-06-02).** Execution: 8 task, final Codex approved. simplify: **no-op** (repo-dışı markdown). review (dual): 1 high+4 med+3 low → 8/8 fixed. security-review (dual: subagent + Codex task --fresh temp-dir): 1 high+3 medium → **4/4 fixed** (S-1 secret-exposure-via-cwd: mainline/detached `$PROJECT_ROOT`→git'siz export; S-2 ref check-ref-format+`--`; S-3 prompt-evidence secret hard-exclude; S-4 worktree dirty-check). Deliverable artık 344 satır. Re-doğrulanan: 7-way Check A tek md5 `c7b5976c` (drift contract bozulmadı, tüm fix'ler marker DIŞINDA) + Check B 8/8 + frontmatter OK. **KAPANDI (archived, 2026-06-02).** Kalite zinciri tamam: execute → simplify (no-op) → review (8/8 fix) → security-review (4/4 fix) → closure. Toplam 12 bulgu fix, drift contract `c7b5976c` korundu (hepsi marker DIŞI). Vault promotion yapıldı (decision 6→7-way, Invariant #15; vault commit `0d1af26`, push'landı). Aile-geneli S-1 ayrı task'a alındı ([[claude-codex-cwd-secret-hardening]]). Test-EDİLMEYEN: gerçek closure-audit davranışı (restart + canlı branch ister) — kabul edilen kalıntı.
 
 # Open Problems
 
@@ -34,6 +35,7 @@ _(yok — spec + plan review'larında tüm critical/high çözüldü)_
 - Evidence range-containment: `report_HEAD==audit_HEAD` AND `report_BASE` ⊑ `audit_BASE` → coverage-uncertain
 - Implementation: hibrit (finish-branch closure semantics base + security-review repo-external delivery scaffold); topoloji security-review'dan KOPYALANMAZ
 - Drift contract 6-way → 7-way (execute Task 5 sibling bump + closure'da vault decision doc genişlet)
+  - **→ Vault: [[decisions/2026-05-26-spec-writeplan-review-gated-hardening]]** (promote edildi 2026-06-02: 7. üye + Invariant #15 + 7-way; vault commit `0d1af26`)
 - **Review (2026-06-02, dual) bulguları + fix'leri** — rapor `docs/reviews/2026-06-02-finish-branch-claude-codex.md`; hepsi düzeltildi:
   - HIGH: remote branch silme `HEAD_SHA`'a bağlı değildi (komutun kendi pinned-target invariant'ını çiğniyordu) → lease-bound `git push --force-with-lease=...:$HEAD_SHA origin :refs/heads/<branch>`
   - MED: `BASE_SHA` tanımsız sembol → `audit_BASE` deterministik türetim (`merge-base origin/$DEFAULT HEAD_SHA`); detached branch-adı `check-ref-format` validation; normal merge push `MERGE_SHA`'a pin; degradation wording canonical AskUserQuestion'a bağlandı
