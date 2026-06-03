@@ -75,6 +75,24 @@ No-ship: the substrate block itself is byte-identical and static checks show the
 **Claude doğrulaması (Adım 12 öncesi):**
 - Finding 1 (high) — KESİN. spec Adım 6 (satır 400-414) okundu: `<CALL> = adversarial-review $SCOPE` + protokol; `run_codex_scan`/`CALL_KIND`/`REQUIRED_CURRENT_FILES` YOK. S-1 kapanışı uzak addendum'a bağımlı → kırılgan. Task 4 wiring eksikti (referans-bölümü ≠ per-call-site wiring). İlke 1.
 - Finding 2 (medium) — KESİN. `_css_secret_scan` regex case-sensitive (`-i` yok); uppercase env-key'ler kaçar. T6 yalnız lowercase. Gitignored `.env` için mitigated (ls-files --exclude-standard önce eler), ama untracked-non-ignored allow-list dosyaları için açık.
-- Karar: Adım 12 guard → kullanıcıya sunuldu.
+- Karar: Adım 12 guard → kullanıcıya sunuldu → "ikisini de düzelt" seçildi → DÜZELTİLDİ (commit 9a36d31) → re-review (aşağıda) APPROVE.
+
+---
+
+## Final Execution Turn (round 2 — re-review) — 2026-06-03 09:55 UTC
+
+Adım 12 Düzelt sonrası re-run. Scope: `--base e5b1f644..HEAD` (9a36d31 dahil; tek dirty = active-layer). `--cwd /root/otomaix` (exposure kullanıcı-kabul). Codex komut dosyalarını okudu + harness'ı `TMPDIR=/dev/shm` ile **kendisi koştu**.
+
+```
+# Codex Adversarial Review
+Target: branch diff against e5b1f644...
+Verdict: approve
+
+Ship: prior high S-1 call-site finding CLOSED, prior medium uppercase secret-scan finding CLOSED. Verified 9/9 concrete call-sites now carry local S-1 run_codex_scan directives; no protocol-outside --cwd "$PROJECT_ROOT" routes found. CODEX-CALL-PROTOCOL is still c7b5976c 7-way; CODEX-SCAN-SUBSTRATE is byte-identical 4-way; marker counts are clean. Harness ran with TMPDIR=/dev/shm: PASS=41 FAIL=0, including real uppercase T6 cases and canonical sourced T13/T14.
+
+No material findings.
+```
+
+**Sonuç:** `final_codex_execution_review: approved` (critical/high yok). Completion gate (full suite PASS + final review approved) sağlandı → Adım 15 (status `waiting-review`).
 
 ---

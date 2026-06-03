@@ -2,27 +2,27 @@
 
 ## Context
 - Task: claude-codex ailesi — Codex --cwd untracked-secret exposure hardening
-- Status: **active** — spec Option Z (sanitized fetch clone), iteration 3; Codex spec review Turn 6+7 bulguları uygulandı
+- Status: **waiting-review** — implementasyon tamamlandı (`/execute-plan-claude-codex`, inline+standard); final Codex review round-2 **APPROVE**
 - Keşif: finish-branch-claude-codex security review (2026-06-02), bulgu S-1
 
 ## Current State
-- Spec güncel: `docs/specs/2026-06-02-claude-codex-cwd-secret-hardening.md` (codex_review_iterations: 3, codex_targeted_fixes: 4).
-- Mekanizma: **sanitized fetch clone** — Codex tarafından gerçek companion git-context'ine karşı ampirik doğrulandı.
-- Codex spec review **Turn 6 (6 bulgu) + Turn 7 (2 bulgu) — hepsi uygulandı**: base-ref EXACT namespace (refs/*/origin/*/named/SHA), iki overlay modu (OVERLAY_WORKTREE / OVERLAY_REQUIRED_ONLY pathspec-limited), fail-closed materyalize patch, default-branch call-site resolve, active-layer sweep. T11/T12 test eklendi.
-- **Açık:** OP-4 (T1-T6 fail-closed harness) + spec'teki `@execution-pin` plumbing → implementasyon (execute-plan TDD) öncesi.
-- Working tree: spec + review log + active-layer untracked/değişik (commit'lenmedi).
+- **6 task uygulandı.** CODEX-SCAN-SUBSTRATE bloğu (5 fonksiyon) 4 komuta byte-identical gömüldü; her Codex çağrısı `run_codex_scan "$CALL_KIND" <CALL>` → `--cwd "$SCAN_ROOT"` (sanitized fetch clone). **S-1 kapandı** (working-tree `.env`/secret artık Codex'e gitmez).
+- Repo commit'leri: `41fc582` harness · `d317fc3` harness-fix (T13/T14 sourced canonical) · `c9429e8` feat docs · `9a36d31` final-review fix (call-site wiring + case-insensitive secret-scan). **Push yok** (closure).
+- Komut dosyaları repo-DIŞI (`~/.claude/commands/{spec,write-plan,execute-plan,simplify}-claude-codex.md`) → **restart ile aktif**. Backup: `~/.claude/commands/*.bak-20260603-070606`.
+- Harness: `docs/tools/codex-scan-substrate-harness.sh` (T1-T6/T11-T15, **41/41**).
 
-## Verification (iterasyon bazlı — DÜRÜST)
-- **Iter 0-2 (sentetik/worktree) — superseded:** mekanizma prose'da akıl yürütüldü, gerçek companion'a karşı KOŞULMADI; 5 review turu yakınsamadı (ders: [[feedback_empirical_validation_for_shell_specs]]).
-- **2026-06-02 Codex empirical pass (Iter 3) — TEST EDİLDİ:** throwaway repo + gerçek companion git-context ile sanitized fetch clone doğrulandı → `--base`/auto diff doğru, `.env`/stash/secret-branch/credential yok; worktree ampirik yapısal-zayıf (reddedildi). index-preserving overlay → 1 staged/1 unstaged/1 untracked korundu. (OP-1/2/3 = T7-T10.)
-- **Codex spec review (Turn 6+7) — TEST EDİLDİ:** Turn 6 `--base origin/main` namespace hatası → 6 bulgu; Turn 7 task-fresh overlay genişliği + full-ref namespace → 2 bulgu; hepsi uygulandı.
-- **HÂLÂ KOŞULMADI:** OP-4 (T1-T6 fail-closed/failure-injection) + `@execution-pin` plumbing (base-resolution, SHA-vs-ref, default-branch adayları) — implementasyon harness'ı.
+## Verification (execution — DÜRÜST, hepsi bu oturumda taze koşuldu)
+- **Deterministik suite (PASS):** Check A 7-way `c7b5976c` intact · Check C 4-way byte-identical (`cmp`+md5) · tripwire 15×4 (`grep -Eiq`/`run_codex_scan`/`css_resolve_base` dahil) · S-1 invariant=0 (4 komut, protokol-dışı `--cwd "$PROJECT_ROOT"` yok) · OP-4 harness **41/41** gerçek git fixture · smoke ×4 (frontmatter+marker+protokol).
+- **OP-4 KAPANDI:** T1-T6 (index-preserve, fail-closed, stale-guard, cleanup, symlink-exfil, secret-scan lower+UPPER) + T11/T12 (required-only/namespace) + **T13 (css_resolve_base) + T14 (run_codex_scan fail-closed) + T15 (subshell-safe cleanup)** — T13/T14 **sourced gerçek canonical fonksiyonu** test eder (ayna değil; checkpoint-1 high fix).
+- **Codex review zinciri:** pre-exec (drift yok) → checkpoint-1 (1 high T14-ayna + 1 med cleanup → **düzeltildi** d317fc3) → final round-1 (1 high call-site wiring kırılgan + 1 med uppercase secret-scan → **düzeltildi** 9a36d31) → **final round-2 APPROVE** (Codex harness'ı kendisi koştu, 41/41; 9/9 call-site local directive; no material findings).
+- **Önemli ders:** S-1 invariant grep'i fix-öncesi de 0'dı → finding 1'i yakalamadı; gerçek kapanış per-call-site local `run_codex_scan` direktifiyle sağlandı + Codex re-review ile doğrulandı (deterministik grep tek başına yetmedi).
 
-## Resume From (sıradaki)
-Turn 7 re-review bulguları uygulandı; mekanizma tarafında açık no-ship yok. Sıradaki:
-- **Implementasyon:** `/write-plan-claude-codex` → `/execute-plan-claude-codex` TDD — OP-4 (T1-T6 + T11/T12) harness + `@execution-pin` plumbing ampirik kapatılır.
-- (Opsiyonel) Turn 7 fix'li spec'i Codex'e bir tur daha (temiz teyit) — kullanıcı isterse.
-- İlk oku: spec "CODEX-SCAN-SUBSTRATE bloğu" + "OP-4" + review log Turn 7.
+## Resume From (sıradaki — closure)
+Execution `waiting-review`. Sıradaki:
+1. **Deploy:** Claude Code'u **restart** et → 4 komut (`~/.claude/commands/`) substratlı çalışmaya başlar. (Restart'a kadar Codex çağrıları hâlâ sertleştirilmemiş — bu görevin kapattığı risk canlıda ancak restart sonrası kapanır.)
+2. **`/review-claude-codex`** + **`/security-review-claude-codex`** — artık Codex substrat'la **contained** (yeni .env exposure yok); bağımsız hakem doğrulaması.
+3. **closure** (`/finish-branch-claude-codex` veya manuel) → push + `status: done` + arşiv (`docs/task-archive/2026/06/`).
+- Geçici artefakt: `/tmp/css-canonical.sh` ampirik scratch (geçici); repo gerçeği commit'lerde (41fc582/d317fc3/c9429e8/9a36d31) + 4 komut dosyasında.
 
 ## Risks
 - **`@execution-pin` plumbing:** base-resolution (call-site, live repo), SHA-vs-ref tespiti, default-branch adayları (main/master/trunk/origin-HEAD) Codex'çe tam spec'lenmedi → harness kesinleştirmeli.
@@ -44,3 +44,4 @@ Turn 7 re-review bulguları uygulandı; mekanizma tarafında açık no-ship yok.
 ## Notes For Claude
 - **Ders:** Kabuk/git/harici-araç davranışı içeren spec işinde **ampirik doğrula** (throwaway kur + çalıştır), prose'da kalıp delikleri review'a bırakma. Iter 0-2'de bu atlandı → 5 tur yakınsamadı; Iter 3'te Codex ampirik koşunca tek seferde oturdu. Detay: [[feedback_empirical_validation_for_shell_specs]].
 - Active-layer'ı flip'te grep-sweep et: bu drift **iki kez** Codex review'da yakalandı (Turn 6 #6 stale "TEST EDİLMEDİ"/Resume; Turn 7-followup #medium stale "review'a sokacak"/targeted_fixes:3). Decisions Log eklemek YETMEZ — Current Status + HANDOFF Context/Current State/Resume hepsi sweep edilmeli ([[feedback_sweep_sibling_sites]]).
+- **Codex exposure (kullanıcı süreç notu, execution'da hâlâ geçerli):** Substrate canlı 4 komuta DEPLOY edilip restart yapılana dek Codex çağrıları `--cwd "$PROJECT_ROOT"` (sertleştirilmemiş) ile çalışır → repo'daki `.env`'i okuyabilir. Execution sırasında Codex çağrılarını minimumda tut VEYA prompt/dosya kapsamını sır içermeyecek şekilde (yalnız plan/spec/kod docs) sınırla. Bu görev bizzat o riski kapatıyor; kapanana kadar ironiyi tekrarlama.

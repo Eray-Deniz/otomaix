@@ -1,9 +1,9 @@
 ---
 title: claude-codex ailesi — Codex --cwd untracked-secret exposure hardening
-status: active
+status: waiting-review
 proposed: 2026-06-02
 started: 2026-06-02
-last-touched: 2026-06-02
+last-touched: 2026-06-03
 blocked-by: null
 ---
 
@@ -19,23 +19,23 @@ substrat izolasyonuyla kapat.
 - **Keşif:** finish-branch-claude-codex security review (2026-06-02, dual) → bulgu **S-1**.
   Rapor: `docs/security-reviews/2026-06-02-finish-branch-claude-codex.md`; fix `d7a80c7` (yalnız finish-branch).
 - **Spec (spec-approved):** `docs/specs/2026-06-02-claude-codex-cwd-secret-hardening.md` (iteration 3, Option Z; codex_targeted_fixes: 4).
-- **Codex review log (5 tur):** `docs/reviews/codex/2026-06-02-claude-codex-cwd-secret-hardening.md`.
+- **Plan (plan-approved):** `docs/plans/2026-06-02-claude-codex-cwd-secret-hardening.md` (Codex plan review 3 tur → approve; planlama harness'ı T1-T14/33, **execution'da T1-T15/41'e genişledi** — bkz. Current Status; log `docs/reviews/codex/2026-06-02-claude-codex-cwd-secret-hardening-plan.md`).
+- **Execution review log:** `docs/reviews/codex/2026-06-03-claude-codex-cwd-secret-hardening-execute.md` (pre-exec + checkpoint-1 + final round-1/2).
+- **Codex review log (spec, 5 tur):** `docs/reviews/codex/2026-06-02-claude-codex-cwd-secret-hardening.md`.
 - **İzole eden örüntüler (referans):** review → pinli worktree `$REVIEW_WT`; security-review → git'siz export;
   finish-branch → git'siz export (S-1 fix deseni).
 - Drift contract: CODEX-CALL-PROTOCOL `c7b5976c` byte-identical (7-way), **call-site `--cwd` override marker DIŞINDA**.
 
 # Current Status
 
-**active — spec Option Z (sanitized fetch clone), iteration 3. Mekanizma Codex-ampirik doğrulanmış;
-spec review Turn 6+7 (8 bulgu) uygulandı. Mekanizma tarafında açık no-ship yok. Sıradaki: OP-4/OP-5
-harness + implementasyon (`/write-plan-claude-codex` → `/execute-plan-claude-codex`).**
+**waiting-review — implementasyon TAMAMLANDI (`/execute-plan-claude-codex`, inline + standard).
+Sıradaki: deploy (Claude Code restart) → `/review-claude-codex` + `/security-review-claude-codex` (Codex artık substrat'la contained) → closure → done.**
 
-- Spec güncel: `docs/specs/2026-06-02-claude-codex-cwd-secret-hardening.md` (codex_review_iterations: 3).
-- Mekanizma Codex tarafından gerçek companion git-context'ine karşı çalıştırılarak çözüldü:
-  **sanitized fetch clone** (OP-1), **REQUIRED_CURRENT_FILES** (OP-2), **index-preserving overlay** (OP-3).
-- **Kalan:** OP-4 (T1-T6 + T11/T12 fail-closed harness) + OP-5 (`@execution-pin` plumbing) → implementasyon (execute-plan TDD) öncesi.
-- **Sıradaki:** OP-4 (T1-T6 + T11/T12) harness + `@execution-pin` plumbing; ardından implementasyon (`/write-plan-claude-codex` → `/execute-plan-claude-codex`).
-- Working tree: spec + review log + active-layer untracked/değişik (commit'lenmedi).
+- 6 task uygulandı: baseline → OP-4 harness → 4-way byte-identical embed → call-site wiring → drift-doc → final suite.
+- **CODEX-SCAN-SUBSTRATE bloğu (5 fonksiyon: build_scan_substrate, _css_copy_safe, _css_secret_scan, css_resolve_base, run_codex_scan)** 4 komuta byte-identical gömüldü; her Codex çağrısı `run_codex_scan "$CALL_KIND" <CALL>` → `--cwd "$SCAN_ROOT"` (sanitized fetch clone) → **S-1 kapandı**.
+- Doğrulama (hepsi PASS): Check A 7-way `c7b5976c` intact · Check C 4-way byte-identical cmp+md5 · tripwire 15×4 · S-1 invariant=0 (4 komut, protokol-dışı `--cwd "$PROJECT_ROOT"` yok) · OP-4 harness **41/41** (gerçek git fixture; T13/T14 sourced gerçek fonksiyon) · smoke ×4.
+- Codex review: pre-exec ✓ · checkpoint-1 (1 high+1 med → düzeltildi) · final round-1 (1 high call-site wiring + 1 med uppercase secret-scan → düzeltildi) · **final round-2 APPROVE** (no material findings).
+- Commit'ler: `41fc582` (harness) · `d317fc3` (harness-fix) · `c9429e8` (feat docs) · `9a36d31` (final-review fix). **Push edilmedi** (closure'a ait). Komut dosyaları repo-DIŞI (`~/.claude/commands/`) → **restart ile aktif** (backup: `*.bak-20260603-070606`).
 
 # Open Problems
 
@@ -49,10 +49,20 @@ harness + implementasyon (`/write-plan-claude-codex` → `/execute-plan-claude-c
 - **OP-3 — staged/unstaged → ÇÖZÜLDÜ:** **index-preserving overlay** — `git diff --cached --binary HEAD |
   git apply --index` + `git diff --binary | git apply` + allow-list untracked copy (ampirik 1 staged/1 unstaged/
   1 untracked korundu). Flatten+belgele yerine bu.
-- **OP-4 — AÇIK (fail-closed harness):** T7-T10 + OP-3 ampirik koşuldu; **T1-T6 koşulmadı** — NUL parser,
-  producer failure, stale SCAN_ROOT, cleanup, symlink/secret-scan testleri ayrı harness ile, **implementasyon öncesi.**
-- **OP-5 — AÇIK (`@execution-pin` plumbing):** base-resolution (call-site live repo), SHA-vs-ref tespiti,
-  default-branch adayları (main/master/trunk/origin-HEAD) — Codex Turn 6 yön verdi, harness kesinleştirir.
+- **OP-4 — ÇÖZÜLDÜ:** `docs/tools/codex-scan-substrate-harness.sh` (T1-T6/T11-T15, 41/41 gerçek git fixture). Fail-closed (T2/T3/T14), cleanup (T4/T15 subshell-safe FIXTRACK), symlink exfil (T5), secret-scan lower+UPPER (T6), namespace (T12), OP-5 base-resolution (T13), call-site fail-closed (T14 sourced run_codex_scan).
+- **OP-5 — ÇÖZÜLDÜ (`@execution-pin`):** base-resolution canonical `css_resolve_base` (USER_BASE_REF + origin/HEAD → main/master/trunk fallback → fail-closed boş); SHA-vs-ref + namespace blok `build_scan_substrate` içinde (T12). T13 doğruladı.
+
+# Notes For Claude
+
+- execute_mode: inline
+- checkpoint_cadence: standard
+- execute_started: 2026-06-03 06:58 UTC
+- execute_start_ref: e5b1f644ecdf21cb11c97cfc210b09808cacf5b3   # git rev-parse HEAD; Adım 8.2 + Adım 11 base default
+- codex_cwd_exposure_accepted: true (kullanıcı, 2026-06-03) — pre-exec + final Codex çağrıları --cwd /root/otomaix ile; backend/.env + frontend/.env.local harici modele açık (S-1 ironisi, bu task kapatana dek geçerli)
+- execute_completed: 2026-06-03 09:55 UTC
+- full_test_suite: PASS · final_codex_execution_review: approved (round-2; round-1'in 2 bulgusu düzeltildi) · checkpoint_codex_reviews: 1/1 ran · checkpoint_overrides: none (hepsi düzeltildi) · unresolved_critical_high: none
+- branch_pushed: no (closure'a ait)
+- next: deploy (Claude Code restart, 4 komut substratlı çalışsın) → /review-claude-codex → /security-review-claude-codex → closure → done
 
 # Decisions Log
 
@@ -82,3 +92,19 @@ harness + implementasyon (`/write-plan-claude-codex` → `/execute-plan-claude-c
   genişti → iki mod: `OVERLAY_WORKTREE` (tüm dirty, --scope working-tree) vs `OVERLAY_REQUIRED_ONLY`
   (pathspec-limited, task-fresh; alakasız dirty girmez). (med) full-ref namespace → base-ref case'e `refs/*)` dalı.
   Test T11/T12 eklendi. `codex_targeted_fixes`=4.
+- 2026-06-02: **Plan-approved (`/write-plan-claude-codex`).** Yön: sentez (harness-first TDD → 4-way byte-identical
+  embed → per-command call-site fail-closed wiring → Check C `cmp` + smoke). Kullanıcı 2 düzeltme: (1) harness
+  plan acceptance'a komut-komut yazıldı (re-runnable regression, "ran-once" değil); (2) Check C **byte-for-byte
+  `cmp`** (normalize/whitespace/anlam toleransı YOK). Codex plan review 3 tur: Turn1 3high/2med (subshell,
+  main-branch, grep-zayıf, base fail-open, exit-0) → Turn2 1high/1med (call-site fallthrough, base'siz base-review)
+  → Turn3 **approve**. Harness T1-T14 throwaway'de gerçekten koşuldu (33/33 PASS) — kabuk/git mekanizması prose'da
+  bırakılmadı ([[feedback_empirical_validation_for_shell_specs]]). OP-4/OP-5 plan kapsamında, execution'da kapanır.
+- 2026-06-03: **Execution tamamlandı (`/execute-plan-claude-codex`, inline+standard) → waiting-review.** 6 task.
+  Checkpoint-1: 1 high (T14 harness-local ayna) + 1 med (mkfix subshell cleanup) → fail-closed kararı canonical
+  `run_codex_scan` + OP-5 `css_resolve_base`'e taşındı (T13/T14 sourced gerçek fonksiyon), `FIXTRACK` subshell-safe
+  cleanup (commit `d317fc3`). Final review round-1: 1 high (concrete call-site'lar protokole bağlı → S-1 kapanışı
+  uzak override'a bağımlı, **kırılgan**) + 1 med (`_css_secret_scan` case-sensitive → uppercase env-key kaçar) →
+  her concrete call-site'a local `run_codex_scan` direktifi (9/9) + `grep -Eiq` + T6 uppercase (commit `9a36d31`).
+  **Final round-2 APPROVE** (Codex harness'ı kendisi koştu 41/41; no material findings). Ders: S-1 invariant grep'i
+  fix-öncesi de 0'dı → referans ≠ anlam; gerçek kapanış local directive + Codex re-review ile
+  ([[feedback_verification_gates_rerunnable_byte_exact]]). **Push yok** (closure). Komut dosyaları restart ile aktif.
