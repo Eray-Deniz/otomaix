@@ -1,9 +1,10 @@
 ---
 title: claude-codex ailesi — Codex --cwd untracked-secret exposure hardening
-status: waiting-review
+status: done
 proposed: 2026-06-02
 started: 2026-06-02
 last-touched: 2026-06-03
+closed: 2026-06-03
 blocked-by: null
 ---
 
@@ -28,8 +29,12 @@ substrat izolasyonuyla kapat.
 
 # Current Status
 
-**waiting-review — implementasyon TAMAMLANDI (`/execute-plan-claude-codex`, inline + standard).
-Sıradaki: deploy (Claude Code restart) → `/review-claude-codex` + `/security-review-claude-codex` (Codex artık substrat'la contained) → closure → done.**
+**done — deploy (restart) yapıldı + closure-review koşuldu (2026-06-03). S-1 canlıda KAPALI.**
+Closure'da ağır dual-review ceremony'si yerine — Codex bu task'ı zaten 14 tur review etti (spec 7 + plan 3 + execute 4), mekanizmayı ampirik Codex çözdü — **deterministik + ampirik doğrulama** seçildi (kullanıcı kararı; gerekçe [[feedback_severity_gates_process_weight]]):
+- **Blast radius (backup'a karşı diff):** cerrahi — 4 komutta yalnız substrat bloğu + call-site direktifleri + 2 kasıtlı `--cwd` açıklaması; komutların asıl iş akışı bozulmadı.
+- **Drift contract'lar canlı dosyalarda:** Check A 7-way `c7b5976c` intact · Check C 4-way `0174e562` intact · harness **41/41** (canlı bloktan source).
+- **Drift fix:** 4 komutta stale "37 PASS" → de-volatilize edildi ("T1-T6/T11-T15 PASS"; sayı kaldırıldı, bir daha drift etmez — [[feedback_no_volatile_values_in_docs]]). Check C md5 değişmedi (fix blok dışında).
+- **Canlı smoke (gerçek companion 1.0.4):** `run_codex_scan task-fresh` rc=0 ("OK", Turn completed) + `--cwd SCAN_ROOT`≠fixture + planted secret substratta **0 hit** + `.env` substratta yok → **S-1 canlıda kapalı, çalıştırılmış kanıt**.
 
 - 6 task uygulandı: baseline → OP-4 harness → 4-way byte-identical embed → call-site wiring → drift-doc → final suite.
 - **CODEX-SCAN-SUBSTRATE bloğu (5 fonksiyon: build_scan_substrate, _css_copy_safe, _css_secret_scan, css_resolve_base, run_codex_scan)** 4 komuta byte-identical gömüldü; her Codex çağrısı `run_codex_scan "$CALL_KIND" <CALL>` → `--cwd "$SCAN_ROOT"` (sanitized fetch clone) → **S-1 kapandı**.
@@ -108,3 +113,8 @@ Sıradaki: deploy (Claude Code restart) → `/review-claude-codex` + `/security-
   **Final round-2 APPROVE** (Codex harness'ı kendisi koştu 41/41; no material findings). Ders: S-1 invariant grep'i
   fix-öncesi de 0'dı → referans ≠ anlam; gerçek kapanış local directive + Codex re-review ile
   ([[feedback_verification_gates_rerunnable_byte_exact]]). **Push yok** (closure). Komut dosyaları restart ile aktif.
+- 2026-06-03: **Closure (restart sonrası) → done.** Kullanıcı ağır dual-review ceremony'sini reddetti — bu task 14 Codex
+  turu görmüştü, mekanizmayı ampirik Codex çözmüştü (Claude'un 5 spec-turu önerisi yapısal kırıldı). Yerine deterministik +
+  ampirik closure: blast-radius diff (backup'a karşı, cerrahi-temiz) · Check A/C canlı intact · harness 41/41 · stale "37 PASS"
+  de-volatilize (4 komut) · **canlı smoke gerçek companion ile S-1=kapalı doğrulandı** (planted secret substratta 0 hit). Ders:
+  [[feedback_severity_gates_process_weight]] — küçük bulgu için tüm makineyi öğütme; süreç ağırlığı risk ağırlığıyla orantılı olmalı.

@@ -2,7 +2,7 @@
 
 ## Context
 - Task: claude-codex ailesi — Codex --cwd untracked-secret exposure hardening
-- Status: **waiting-review** — implementasyon tamamlandı (`/execute-plan-claude-codex`, inline+standard); final Codex review round-2 **APPROVE**
+- Status: **done** (2026-06-03) — deploy (restart) + closure-review koşuldu; S-1 canlıda KAPALI (gerçek companion smoke)
 - Keşif: finish-branch-claude-codex security review (2026-06-02), bulgu S-1
 
 ## Current State
@@ -17,12 +17,14 @@
 - **Codex review zinciri:** pre-exec (drift yok) → checkpoint-1 (1 high T14-ayna + 1 med cleanup → **düzeltildi** d317fc3) → final round-1 (1 high call-site wiring kırılgan + 1 med uppercase secret-scan → **düzeltildi** 9a36d31) → **final round-2 APPROVE** (Codex harness'ı kendisi koştu, 41/41; 9/9 call-site local directive; no material findings).
 - **Önemli ders:** S-1 invariant grep'i fix-öncesi de 0'dı → finding 1'i yakalamadı; gerçek kapanış per-call-site local `run_codex_scan` direktifiyle sağlandı + Codex re-review ile doğrulandı (deterministik grep tek başına yetmedi).
 
-## Resume From (sıradaki — closure)
-Execution `waiting-review`. Sıradaki:
-1. **Deploy:** Claude Code'u **restart** et → 4 komut (`~/.claude/commands/`) substratlı çalışmaya başlar. (Restart'a kadar Codex çağrıları hâlâ sertleştirilmemiş — bu görevin kapattığı risk canlıda ancak restart sonrası kapanır.)
-2. **`/review-claude-codex`** + **`/security-review-claude-codex`** — artık Codex substrat'la **contained** (yeni .env exposure yok); bağımsız hakem doğrulaması.
-3. **closure** (`/finish-branch-claude-codex` veya manuel) → push + `status: done` + arşiv (`docs/task-archive/2026/06/`).
-- Geçici artefakt: `/tmp/css-canonical.sh` ampirik scratch (geçici); repo gerçeği commit'lerde (41fc582/d317fc3/c9429e8/9a36d31) + 4 komut dosyasında.
+## Resume From — KAPANDI (done, 2026-06-03)
+Restart sonrası closure-review koşuldu (ağır dual-review ceremony reddedildi — 14 Codex turu yetti; gerekçe [[feedback_severity_gates_process_weight]]):
+1. **Blast radius** (backup'a karşı diff): 4 komutta cerrahi-temiz (substrat + call-site + 2 `--cwd` açıklaması; iş akışı bozulmadı).
+2. **Drift contract canlı:** Check A 7-way `c7b5976c` intact · Check C 4-way `0174e562` intact · harness **41/41** (canlı bloktan source).
+3. **Drift fix:** stale "37 PASS" → "T1-T6/T11-T15 PASS" (4 komut, de-volatilize; Check C md5 değişmedi).
+4. **Canlı smoke (gerçek companion 1.0.4):** `run_codex_scan task-fresh` rc=0 + `--cwd SCAN_ROOT`≠repo + planted secret 0 hit → **S-1 canlıda kapalı**.
+- Geçici artefakt: `/tmp/css-live-smoke.sh` (smoke scratch). Repo gerçeği commit'lerde (41fc582/d317fc3/c9429e8/9a36d31) + 4 komut dosyasında.
+- Kalan tek dış adım: **push + arşiv** (kullanıcı onayıyla bu oturumda).
 
 ## Risks
 - **`@execution-pin` plumbing:** base-resolution (call-site, live repo), SHA-vs-ref tespiti, default-branch adayları (main/master/trunk/origin-HEAD) Codex'çe tam spec'lenmedi → harness kesinleştirmeli.
