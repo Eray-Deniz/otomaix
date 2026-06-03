@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# OP-4 re-runnable harness — CODEX-SCAN-SUBSTRATE fail-closed/regression tests (T1-T6, T11, T12).
+# OP-4 re-runnable harness — CODEX-SCAN-SUBSTRATE fail-closed/regression tests (T1-T6, T11-T15).
 # Blok kaynağı: $CSS_BLOCK_FILE (TDD scratch) VEYA canonical komut dosyasından awk extraction (regression).
 # Gerçek throwaway git fixture'lar kurar; her test izole; herhangi FAIL → exit 1.
+# T13/T14, canonical bloktan source edilen GERÇEK css_resolve_base/run_codex_scan'i test eder (ayna DEĞİL — Codex checkpoint high#1).
 set -u
 PASS=0; FAIL=0
 _ok(){ echo "  ok: $*"; PASS=$((PASS+1)); }
@@ -18,16 +19,27 @@ fi
 SCAN_WT_DIRS=()
 # shellcheck disable=SC1090
 source "$BLOCK_FILE"
-type build_scan_substrate >/dev/null 2>&1 || { echo "FATAL: build_scan_substrate tanımsız"; exit 2; }
+for fn in build_scan_substrate css_resolve_base run_codex_scan; do
+  type "$fn" >/dev/null 2>&1 || { echo "FATAL: $fn tanımsız (blok eksik?)"; exit 2; }
+done
 
 CLEAN_DIRS=()
-_cleanup(){ for d in "${SCAN_WT_DIRS[@]:-}" "${CLEAN_DIRS[@]:-}"; do [ -n "$d" ] && rm -rf -- "$d"; done; }
+# FIXTRACK: fixture dizinleri SUBSHELL-SAFE kayıt. mkfix `FIX=$(mkfix)` ile subshell'de çalışır →
+# CLEAN_DIRS+= parent'a yansımaz (Codex checkpoint med#2). On-disk dosyaya append her iki kabukta da görünür.
+FIXTRACK=$(mktemp "${TMPDIR:-/tmp}/css-fixtrack.XXXXXX")
+_cleanup(){
+  for d in "${SCAN_WT_DIRS[@]:-}" "${CLEAN_DIRS[@]:-}"; do [ -n "$d" ] && rm -rf -- "$d"; done
+  if [ -n "${FIXTRACK:-}" ] && [ -f "$FIXTRACK" ]; then
+    while IFS= read -r d; do [ -n "$d" ] && rm -rf -- "$d"; done < "$FIXTRACK"
+    rm -f -- "$FIXTRACK"
+  fi
+}
 trap _cleanup EXIT
 
 # Fixture: base+feature commit; ignored .env; opsiyonel staged/unstaged/untracked/symlink/secret/base-ref.
 # Kullanım: FIX=$(mkfix); sonra istenen mutasyonlar eklenir.
 mkfix(){
-  local d; d=$(mktemp -d "${TMPDIR:-/tmp}/cssfix.XXXXXX"); CLEAN_DIRS+=("$d")
+  local d; d=$(mktemp -d "${TMPDIR:-/tmp}/cssfix.XXXXXX"); echo "$d" >> "$FIXTRACK"  # subshell-safe kayıt (Codex med#2)
   git -C "$d" init -q
   git -C "$d" symbolic-ref HEAD refs/heads/main      # default-branch skew'a karşı deterministik (init -b main eşdeğeri, version-agnostik)
   git -C "$d" config user.email t@t; git -C "$d" config user.name t
@@ -163,49 +175,49 @@ t12(){ echo "[T12] base-ref namespace";
   done
 }
 
-_resolve_base(){ # $1=repo ; "RESOLVED_BASE (OP-5)" snippet'inin aynası (USER_BASE_REF'siz dal)
-  local r="$1" cand
-  cand=$(git -C "$r" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
-  if [ -z "$cand" ]; then
-    for c in refs/remotes/origin/main refs/remotes/origin/master refs/remotes/origin/trunk refs/heads/main refs/heads/master refs/heads/trunk; do
-      git -C "$r" rev-parse --verify -q "${c}^{commit}" >/dev/null 2>&1 && { cand="$c"; break; }
-    done
-  fi
-  if [ -n "$cand" ] && git -C "$r" rev-parse --verify -q "${cand}^{commit}" >/dev/null 2>&1; then echo "$cand"; else echo ""; fi
-}
-t13(){ echo "[T13] OP-5 base resolution fail-closed";
+t13(){ echo "[T13] OP-5 base resolution (canonical css_resolve_base, ayna DEĞİL)";
   local FIX; FIX=$(mkfix)                                       # mkfix → HEAD=main (local main var)
   git -C "$FIX" update-ref refs/remotes/origin/main HEAD        # remote-tracking ref ekle
   git -C "$FIX" branch -m main mainline                         # local main'i kaldır (origin-HEAD da yok)
-  local rb; rb=$(_resolve_base "$FIX")
+  local rb; USER_BASE_REF=""; rb=$(css_resolve_base "$FIX")
   [ "$rb" = "refs/remotes/origin/main" ] && _ok "T13 origin/main fallback ($rb)" || _no "T13 yanlış base: '$rb'"
+  # USER_BASE_REF override: geçerli ref → aynen; geçersiz → boş + rc1 (fail-closed)
+  local SHA; SHA=$(git -C "$FIX" rev-parse HEAD)
+  USER_BASE_REF="$SHA"; rb=$(css_resolve_base "$FIX"); [ "$rb" = "$SHA" ] && _ok "T13 USER_BASE_REF geçerli → aynen" || _no "T13 USER_BASE_REF geçerli dalı: '$rb'"
+  USER_BASE_REF="nonexistent-zzz"; rb=$(css_resolve_base "$FIX"); [ -z "$rb" ] && _ok "T13 USER_BASE_REF geçersiz → boş (fail-closed)" || _no "T13 USER_BASE_REF geçersiz dalı: '$rb'"
+  USER_BASE_REF=""
   # negative: tamamen base'siz repo → boş (fail-closed, hata değil)
-  local BARE; BARE=$(mktemp -d "${TMPDIR:-/tmp}/cssbare.XXXXXX"); CLEAN_DIRS+=("$BARE")
+  local BARE; BARE=$(mktemp -d "${TMPDIR:-/tmp}/cssbare.XXXXXX"); echo "$BARE" >> "$FIXTRACK"
   git -C "$BARE" init -q; git -C "$BARE" symbolic-ref HEAD refs/heads/zzz
   git -C "$BARE" config user.email t@t; git -C "$BARE" config user.name t
   printf 'x\n' > "$BARE/f"; git -C "$BARE" add f; git -C "$BARE" commit -qm x
-  rb=$(_resolve_base "$BARE"); [ -z "$rb" ] && _ok "T13 base yok → boş (fail-closed)" || _no "T13 beklenmeyen base: '$rb'"
+  rb=$(css_resolve_base "$BARE"); [ -z "$rb" ] && _ok "T13 base yok → boş (fail-closed)" || _no "T13 beklenmeyen base: '$rb'"
 }
 
-_css_callsite(){ # call-site template control-flow AYNASI (fail-closed). $1=CALL_KIND
-  local CALL_KIND="$1"
-  if [ "$CALL_KIND" = "base-review" ] && [ -z "${RESOLVED_BASE:-}" ]; then return 0; fi   # unresolved base → degrade, NO call
-  BASE_REF="${RESOLVED_BASE:-}"
-  if build_scan_substrate; then node "$COMPANION" task --fresh --cwd "$SCAN_ROOT" "P"; fi   # call YALNIZ başarıda
-}
-t_callsite(){ echo "[T14] call-site fail-closed (fake companion)";
-  local FIX OLD CALLS; FIX=$(mkfix); OLD="$PWD"; CALLS=$(mktemp); CLEAN_DIRS+=("$CALLS")
-  node(){ echo x >> "$CALLS"; }; COMPANION="/dummy"          # fake companion: her çağrı bir satır
+t_callsite(){ echo "[T14] call-site fail-closed (canonical run_codex_scan + fake timeout, ayna DEĞİL)";
+  local FIX OLD CALLS; FIX=$(mkfix); OLD="$PWD"; CALLS=$(mktemp); echo "$CALLS" >> "$FIXTRACK"
+  # run_codex_scan gerçek invocation'ı `timeout 480s node ...` ile yapar. `timeout` external binary'dir;
+  # onu fonksiyonla shadow'la → node binary exec edilmez, çağrı sayılır (fake node yetmez: timeout exec eder).
+  timeout(){ echo x >> "$CALLS"; }; COMPANION="/dummy"; PROMPT="P"
   cd "$FIX"
-  REQUIRED_CURRENT_FILES=""; OVERLAY_WORKTREE=""; OVERLAY_REQUIRED_ONLY=""
-  : > "$CALLS"; RESOLVED_BASE="bad-ref-zzz"; _css_callsite base-review     # (a) substrate fail (bad base fetch)
+  REQUIRED_CURRENT_FILES=""
+  : > "$CALLS"; RESOLVED_BASE="bad-ref-zzz"; run_codex_scan base-review adversarial-review --base "$RESOLVED_BASE"   # (a) substrate fail (bad base fetch)
   [ ! -s "$CALLS" ] && _ok "T14a substrate fail → 0 companion call" || _no "T14a companion çağrıldı"
-  : > "$CALLS"; RESOLVED_BASE=""; _css_callsite base-review               # (b) unresolved auto-base
+  : > "$CALLS"; RESOLVED_BASE=""; run_codex_scan base-review adversarial-review                                      # (b) unresolved auto-base
   [ ! -s "$CALLS" ] && _ok "T14b unresolved base → 0 companion call" || _no "T14b companion çağrıldı"
-  : > "$CALLS"; RESOLVED_BASE=""; _css_callsite task-fresh                # (c) success → 1 call
+  : > "$CALLS"; RESOLVED_BASE=""; run_codex_scan task-fresh task --fresh                                             # (c) success → 1 call
   [ "$(wc -l < "$CALLS")" -eq 1 ] && _ok "T14c success → 1 companion call" || _no "T14c çağrı sayısı $(wc -l < "$CALLS")"
-  cd "$OLD"; unset -f node
+  cd "$OLD"; unset -f timeout
 }
 
-t_clean; t_dirty; t1; t2; t3; t4; t5; t6; t11; t12; t13; t_callsite
+t15(){ echo "[T15] fixture cleanup registry (subshell-safe — Codex med#2 regression)";
+  local before after probe
+  before=$(wc -l < "$FIXTRACK")
+  probe=$(mkfix)                                               # FIX=$(mkfix) ile aynı: subshell
+  after=$(wc -l < "$FIXTRACK")
+  [ "$after" -gt "$before" ] && _ok "T15 mkfix subshell'den FIXTRACK'e kayıt (parent görür) $before→$after" || _no "T15 subshell kaydı kayboldu (finding-2 regression)"
+  { [ -d "$probe" ] && grep -Fxq "$probe" "$FIXTRACK"; } && _ok "T15 probe FIXTRACK'te listeli → EXIT trap temizler" || _no "T15 probe FIXTRACK'te değil (orphan riski)"
+}
+
+t_clean; t_dirty; t1; t2; t3; t4; t5; t6; t11; t12; t13; t_callsite; t15
 echo "PASS=$PASS FAIL=$FAIL"; [ "$FAIL" -eq 0 ] || exit 1
