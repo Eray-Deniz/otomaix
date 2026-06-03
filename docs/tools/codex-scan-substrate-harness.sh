@@ -136,12 +136,20 @@ t5(){ echo "[T5] symlink exfil";
   [ ! -e "$SCAN_ROOT/.env" ] && _ok "T5 .env yok" || _no "T5 .env sızdı"
 }
 
-t6(){ echo "[T6] secret-content exclusion";
-  local FIX; FIX=$(mkfix)
-  printf 'api_key=abcd1234\n' > "$FIX/conf.txt"                # untracked, secret-içerik
-  REQUIRED_CURRENT_FILES=$'conf.txt'; OVERLAY_WORKTREE=1; OVERLAY_REQUIRED_ONLY=""; BASE_REF=""
+t6(){ echo "[T6] secret-content exclusion (lower + UPPER env keys — final review med)";
+  local FIX f; FIX=$(mkfix)
+  # her secret-içerikli untracked dosya substrata KOPYALANMAMALI (case-insensitive scan)
+  printf 'api_key=abcd1234\n'        > "$FIX/c_lower.txt"      # lowercase
+  printf 'OPENAI_API_KEY=sk-xyz\n'   > "$FIX/c_apikey.txt"     # UPPER env key
+  printf 'SECRET_KEY=zzz\n'          > "$FIX/c_secret.txt"
+  printf 'PASSWORD=hunter2\n'        > "$FIX/c_pass.txt"
+  printf 'TOKEN=ghp_abc\n'           > "$FIX/c_token.txt"
+  REQUIRED_CURRENT_FILES=$'c_lower.txt\nc_apikey.txt\nc_secret.txt\nc_pass.txt\nc_token.txt'
+  OVERLAY_WORKTREE=1; OVERLAY_REQUIRED_ONLY=""; BASE_REF=""
   _build_in "$FIX" || { _no "T6 build başarısız"; return; }
-  [ ! -e "$SCAN_ROOT/conf.txt" ] && _ok "T6 secret dosya dışlandı" || _no "T6 secret dosya sızdı"
+  for f in c_lower c_apikey c_secret c_pass c_token; do
+    [ ! -e "$SCAN_ROOT/$f.txt" ] && _ok "T6 $f dışlandı" || _no "T6 $f SIZDI"
+  done
 }
 
 t11(){ echo "[T11] required-only excludes unrelated dirty";

@@ -135,7 +135,7 @@ _css_copy_safe() { # $1=src_root $2=dst_root $3=relpath ; symlink DEREF ETMEZ; r
   mkdir -p -- "$(dirname -- "$dst")" || return 1; cp -P -- "$src" "$dst" || return 1
 }
 _css_secret_scan() { # $1=abs path ; icerik-bazli; eslesirse non-zero = disla
-  ! grep -Eq -- '(BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|secret[_-]?key|api[_-]?key|password[[:space:]]*=|token[[:space:]]*=|postgres://[^ ]*:[^ ]*@)' "$1" 2>/dev/null
+  ! grep -Eiq -- '(BEGIN [A-Z ]*PRIVATE KEY|AKIA[0-9A-Z]{16}|secret[_-]?key|api[_-]?key|password[[:space:]]*=|token[[:space:]]*=|postgres://[^ ]*:[^ ]*@)' "$1" 2>/dev/null
 }
 css_resolve_base() { # $1=live repo path; echo EXACT base ref veya bos (fail-closed). USER_BASE_REF oncelikli.
   local r="$1" cand

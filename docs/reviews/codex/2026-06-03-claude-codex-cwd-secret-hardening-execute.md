@@ -49,6 +49,32 @@ Next steps:
 
 **Claude doğrulaması (8.5 öncesi):**
 - Finding 2 (medium) — KESİN. TMPDIR=`/tmp/claude-0`'da 47 leaked fixture dizini (her birinde sahte `.env`). Kontrollü probe: `FIX=$(mkfix)` subshell → parent `CLEAN_DIRS`=0, EXIT trap fixture'ları temizlemiyor.
-- Finding 1 (high) — GEÇERLI. T14 harness-local `_css_callsite` aynasını test ediyor, gerçek embedded wiring'i değil. Substrate bloğu Check C ile byte-identical + harness davranış-doğrulu; call-site wiring yalnız grep-doğrulu (asimetri). Karar: Adım 8.5 guard'da kullanıcıya sunuldu.
+- Finding 1 (high) — GEÇERLI. T14 harness-local `_css_callsite` aynasını test ediyor, gerçek embedded wiring'i değil. Substrate bloğu Check C ile byte-identical + harness davranış-doğrulu; call-site wiring yalnız grep-doğrulu (asimetri). Karar: Adım 8.5 guard'da kullanıcıya sunuldu → DÜZELTİLDİ (run_codex_scan/css_resolve_base canonical, T13/T14 sourced; commit d317fc3).
+
+---
+
+## Final Execution Turn — 2026-06-03 09:15 UTC
+
+Scope: `--base e5b1f644..HEAD` (clean committed tree; tek dirty = active-layer task-tracking). `--cwd /root/otomaix` (exposure kullanıcı-kabul). Codex `$HOME/.claude/commands/` komut dosyalarını + harness'ı doğrudan okudu.
+
+```
+# Codex Adversarial Review
+Target: branch diff against e5b1f644...
+Verdict: needs-attention
+
+No-ship: the substrate block itself is byte-identical and static checks show the old live-repo cwd only inside CODEX-CALL-PROTOCOL, but the concrete command call-sites still instruct using that protocol instead of explicitly invoking the new wrapper. S-1 closure depends on a late prose override being honored, not on unambiguous per-call-site wiring.
+
+- [high] Concrete Codex call-sites still point at the old protocol path (spec-claude-codex.md:400-413)
+  The active call-site text still says to run `Codex Çağrı Protokolü`, while the protocol's concrete invocation remains `timeout 480s node "$COMPANION" <CALL> --cwd "$PROJECT_ROOT" "$PROMPT"`. The new run_codex_scan wrapper is only a later generic contract section; this call-site does not set CALL_KIND/REQUIRED_CURRENT_FILES/RESOLVED_BASE or call run_codex_scan. In these markdown command files the prose IS the executable wiring; a missed override routes Codex back to the live repo and reopens untracked-secret exposure.
+  Rec: rewrite each concrete call-site to show the exact run_codex_scan invocation, OR change the canonical protocol's single concrete invocation to delegate to run_codex_scan (BLOCKED: protocol is frozen 7-way, shared w/ 3 non-substrate commands).
+- [medium] Secret allow-list scan misses common uppercase env keys (_css_secret_scan, block)
+  Scan is case-sensitive; `OPENAI_API_KEY=`, `SECRET_KEY=`, `PASSWORD=`, `TOKEN=` slip through and get copied into substrate. T6 only covers lowercase api_key. (Mitigated for gitignored .env which is excluded earlier by ls-files --exclude-standard; matters for untracked non-ignored allow-listed files.)
+  Rec: make scan case-insensitive (grep -Ei) + add uppercase harness cases.
+```
+
+**Claude doğrulaması (Adım 12 öncesi):**
+- Finding 1 (high) — KESİN. spec Adım 6 (satır 400-414) okundu: `<CALL> = adversarial-review $SCOPE` + protokol; `run_codex_scan`/`CALL_KIND`/`REQUIRED_CURRENT_FILES` YOK. S-1 kapanışı uzak addendum'a bağımlı → kırılgan. Task 4 wiring eksikti (referans-bölümü ≠ per-call-site wiring). İlke 1.
+- Finding 2 (medium) — KESİN. `_css_secret_scan` regex case-sensitive (`-i` yok); uppercase env-key'ler kaçar. T6 yalnız lowercase. Gitignored `.env` için mitigated (ls-files --exclude-standard önce eler), ama untracked-non-ignored allow-list dosyaları için açık.
+- Karar: Adım 12 guard → kullanıcıya sunuldu.
 
 ---
