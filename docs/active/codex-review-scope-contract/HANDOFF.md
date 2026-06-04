@@ -28,6 +28,7 @@
 - `checkpoint_execution_review_status`: ok (checkpoint dalına girilmedi — combined final kullanıldı)
 - `final_unresolved_high_severity_override`: false
 - `unresolved_critical_high` (claude-confirmed C/H/M fix-required kümesi): **none**
+- `post_review_polish`: Task 7 binding'leri per-command overlay destination ile somutlandı (Codex follow-up, low-severity procedure-precision). Re-verify: drift-check PASS + S-1 41/0 + stale=0 (Codex'in belirttiği 3 kriter). Binding'ler external (commit'siz); RESTART gerek.
 
 ## Open Problems
 - **[residual #1 — ref/procedure-correctness]** statik kanıtlanamaz → Codex /execute review'a tahsis. Bu oturumda fiilen tetiklendi + düzeltildi (final-review base-wiring bug → FINAL_BASE_REF). Katman çalıştı.

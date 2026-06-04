@@ -95,6 +95,13 @@ round-4 approve). Mekanik: drift-check A–E PASS · S-1 41/0 · smoke 7/7 · st
   (semantik negatif), call-site-id marker boşluğu kaydırır. drift-check NOTE + balance-guard comment ile
   dökümante; completeness Codex /execute review'a tahsis (Codex round-3 "defensible" onayı). Memory
   [[feedback_semantic_negative_not_regexable]] + [[feedback_severity_gates_process_weight]].
+- 2026-06-04 (post-review polish): **Task 7 binding'leri per-command somutlandı** (Codex follow-up bulgusu —
+  düşük severity, prosedür-netliği, bug DEĞİL). command-policy satırına overlay destination eklendi:
+  fix-komutlar → `$SCAN_ROOT/claude-commands/`, review → `$REVIEW_WT/claude-commands/`, security-review →
+  `$SCAN_ROOT` (diff) + ayrı temp root (export), finish-branch → audit substrate + export temp root.
+  Spec §3.4'e sadık. Check E token'ları korundu; drift-check + S-1 + stale-sweep re-verify PASS. Overlay
+  hâlâ prose guidance (mekanize değil) — runtime davranışı değişmedi, gelecekteki command-policy review'a
+  daha net talimat.
 
 # Notes For Claude
 
