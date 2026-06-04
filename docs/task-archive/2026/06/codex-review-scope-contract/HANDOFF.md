@@ -8,13 +8,14 @@
 - Last updated: 2026-06-04 (execution complete → waiting-review)
 
 ## Current State
+- **✅ CLOSED 2026-06-04 (done → archived):** execute → review → security-review → finish-branch (mainline) tamam; vault promote ([[decisions/2026-06-04-codex-review-scope-contract]]); 10 commit origin/main'e push; deliverable repo-dışı → restart'ta aktif.
 - Summary: `/execute-plan-claude-codex` (inline + standard) ile 8 task uygulandı (RED-first). 7 komut dosyası
   (deliverable, repo-DIŞı `~/.claude/commands/*.md`) düzenlendi + `docs/tools/claude-codex-drift-check.sh`
   Check E (3 katman) eklendi. Codex final execution review **approved** (4 tur). Status `active → waiting-review`.
 - Blocked: no
 
 ## Resume From
-- **Start here:** closure — `/finish-branch-claude-codex` veya `done` flip + vault promotion (P1). (`/review-claude-codex` + `/security-review-claude-codex` TAMAMLANDI — aşağı Verification; security-risk override kabul edildi.)
+- **CLOSED 2026-06-04** (done → archived). Tüm zincir + finish-branch tamam; vault promote edildi ([[decisions/2026-06-04-codex-review-scope-contract]]); 10 commit origin/main'e push. Açık iş YOK (SF1 → ayrı proposed follow-up `s1-substrate-tracked-secret-scan`).
 - **Deliverable repo-DIŞı:** komut dosyaları + review fix'leri (F2/F3, execute-plan) düzenlendi ama **Claude Code RESTART** edilene kadar yeni davranış aktif DEĞİL.
 - **Push BEKLİYOR:** local commit'ler (TASK Current Status'ta enumerated) + closure docs; kullanıcı push'u ayrı onaylayacak.
 - **Relevant files:** plan (8 task) = doğruluk kaynağı · `docs/tools/claude-codex-drift-check.sh` (Check A–E) · `docs/tools/codex-scan-substrate-harness.sh` (S-1) · Codex log `docs/reviews/codex/2026-06-04-codex-review-scope-contract-execute.md`.

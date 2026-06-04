@@ -1,6 +1,6 @@
 ---
 title: Codex Review Scope Contract + Structured Recommendation + execute-plan 8.6 Auto-Continue
-status: waiting-review     # proposed | active | blocked | waiting-review | done | archived | cancelled
+status: archived     # proposed | active | blocked | waiting-review | done | archived | cancelled  (done → archived 2026-06-04)
 started: 2026-06-04
 last-touched: 2026-06-04
 blocked-by: null
@@ -28,6 +28,11 @@ yasak (Check E marker-anchored hard-gate bunu kanıtlar).
 - Review/Security: _(yok — execution sonrası /review-claude-codex + /security-review-claude-codex)_
 
 # Current Status
+
+**✅ CLOSED (done → archived) 2026-06-04.** Tüm zincir tamam: execute → review (F2/F3 fixed) →
+security-review (clean, SF1 spun-off, security-risk override) → finish-branch (mainline; Codex
+closure-audit "ready to close, no blockers"). Vault: [[decisions/2026-06-04-codex-review-scope-contract]].
+10 commit origin/main'e push edildi. Deliverable (7 komut dosyası + F2/F3 fix'leri) repo-DIŞı → restart'ta aktif.
 
 **EXECUTION TAMAMLANDI → waiting-review.** `/execute-plan-claude-codex` (inline + standard) ile 8 task
 TDD/RED-first uygulandı. 7 komut dosyası (deliverable, repo-DIŞı) düzenlendi: CODEX-REVIEW-SCOPE-CONTRACT
@@ -133,6 +138,10 @@ etti.** Rapor: `docs/security-reviews/2026-06-04-codex-review-scope-contract.md`
   substrate-hardening follow-up** (CURRENT.md); **SF2** (overlay token-presence = /review F1) → kabul tavan (subagent
   bağımsız low). **security-risk override kabul** (high'lar bu task'ın regression'ı değil; byte-locked güvenlik bloğunu
   closure'a iliştirmedik). [[feedback_severity_gates_process_weight]] + [[feedback_run_mandatory_review_gates]].
+- 2026-06-04 (closure): **`/finish-branch-claude-codex` mainline** — Codex closure-audit "ready to close,
+  no blockers". Task `done → archived`. **Vault promote:** [[decisions/2026-06-04-codex-review-scope-contract]]
+  (predecessor [[decisions/2026-06-04-auto-fix-review-policy]] devamı). 10 commit origin/main'e push edildi.
+  SF1 ayrı proposed follow-up kaldı (CURRENT.md `s1-substrate-tracked-secret-scan`).
 
 # Notes For Claude
 
