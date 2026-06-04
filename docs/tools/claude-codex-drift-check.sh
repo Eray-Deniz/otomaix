@@ -402,8 +402,10 @@ check_review_scope_binding() {
     [ "$miss" -eq 0 ] && ok "Check E binding + prompt-body wired + co-located: $marker ($cmd_slug)"
   done
   # Balance guard: each command file's REVIEW-SCOPE-BINDING begin-marker count must equal the number of
-  # sites the matrix expects for that command (catches a stray/extra binding the matrix does not enumerate,
-  # i.e. a new review/audit call wired without a matrix entry, or a leftover/duplicate marker).
+  # sites the matrix expects for that command. Catches a leftover/duplicate/removed BINDING marker
+  # (binding-count drift). It does NOT (and cannot) catch a newly added gated CALL that ships with no
+  # binding marker at all — that adds no begin marker, so the count is unchanged. See COMPLETENESS
+  # CEILING in the NOTE below: that case is allocated to the per-command Codex /execute review.
   local f base slug n_begin n_expected s
   while IFS= read -r f; do
     base=${f##*/}; slug=${base%-claude-codex.md}
@@ -418,6 +420,14 @@ check_review_scope_binding() {
 # overlay guard actually run correctly) is NOT statically provable → execution Codex review (spec §6
 # Katman 6). The one-per-command→per-call-site refinement (execute-plan checkpoint+final) closed a
 # real false-GREEN found by the final execution Codex review.
+# COMPLETENESS CEILING (accepted, final-review finding 2): the matrix asserts every KNOWN gated call
+# site (REVIEW_SCOPE_SITES) carries a correct binding, but it CANNOT statically prove that NO unbound
+# gated call exists. A future review/audit call added without BOTH a matrix entry AND a binding would
+# pass green. Proving that "negative" over free-form markdown (telling a real invocation apart from the
+# many definition/prose/table/comment mentions of `adversarial-review`/`task --fresh`) is a regex
+# bypass↔false-positive arms-race, not convergent — so it is a deliberate static ceiling, allocated to
+# the per-command Codex /execute review (which caught both findings this session). Keep REVIEW_SCOPE_SITES
+# in sync when adding a gated call (same maintenance contract as REVIEW_SCOPE_EXPECTED).
 
 check_execute_plan_clean_continue() {
   # execute-plan 8.6 CLEAN-PATH (delimited subsection) must contain NO user gate
