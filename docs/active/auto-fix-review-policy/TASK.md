@@ -19,7 +19,9 @@ claude-codex fix-yapan komutlarına (spec, write-plan, execute-plan, simplify) `
 
 # Current Status
 
-Execution tamamlandı (2026-06-04), status `waiting-review`. 8 task bitti (inline + standard). drift-check A/B/C/D PASS; Check D commit'lendi (58cb02e, push YOK). Sonraki: `/review-claude-codex` → `/security-review-claude-codex` → closure.
+`/review-claude-codex` çalıştı (2026-06-04, çift hakem) → **sistemik bulgu**: AUTO-FIX politikası prose'da ilan edilmiş ama prosedüre bağlanmamıştı (guard'lar/Adım 8/chain-gate hâlâ eski "kullanıcıya sor" davranışı). Kullanıcı "düzelt" dedi → 7+ yer + blast-radius düzeltildi → 5 Codex re-review turunda yakınsadı → **Codex verdict: approve/clean**; drift-check A/B/C/D PASS. Detay: `docs/reviews/2026-06-04-auto-fix-review-policy.md`.
+
+Status `waiting-review` devam. Sonraki: `/security-review-claude-codex` → closure. **Değişen deliverable:** 6 komut dosyası yeniden düzenlendi (repo-DIŞı; pre-fix yedek `*.bak-20260604T084344Z`). Repo'da commit bekleyen: review raporu + codex log + TASK/HANDOFF (+ önceki Check D 58cb02e). push YOK.
 
 # Notes For Claude
 
@@ -30,10 +32,12 @@ Execution tamamlandı (2026-06-04), status `waiting-review`. 8 task bitti (inlin
 
 # Open Problems
 
-- **medium=fix-required thread (execution'da çözüldü):** Plan Task 5 yalnız "guard'a binding prose ekle" diyordu; gerçekte medium=fix-required gate/enum/report/override/refine/invariant/checklist katmanlarına da geçmeliydi. Checkpoint 2'de Codex 2 high yakaladı → tur-4+ Codex çözüm önerisi (tam harita) → option b ile tek pass thread → 4 review turunda yakınsadı (6-tavan altında). Plan'ın Task 5 kapsamı dardı; gelecekte bu derinlik plana yazılmalı (kapanmış, kayıt amaçlı).
+- **[ÇÖZÜLDÜ — review fix] prose-declared-not-wired sistemik gap:** Execution AUTO-FIX bloğunu+binding'leri+medium enumerasyonlarını ekledi (Check D PASS) AMA asıl prosedürleri (executor guard 8.5/12/10, design-doc guard 7/13, Mode A refine, 4× "Manuel mod" notu, review chain-advance gate + status matrix + security cross-ref) eski "kullanıcıya sor / otomatik döngü değil / tek-eksen" davranışında bıraktı. `/review-claude-codex` (R1) yakaladı (Codex high; Claude subagent kaçırdı → sentezci fiili-satır tahkimi). 5 turda düzeltildi, Codex approve. **Ders (kayıt):** "medium=fix-required thread (execution'da çözüldü)" iddiası iyimserdi — medium enumerasyona threadlendi ama prosedür yapısı değişmemişti. `medium_fix_required_thread_depth` hafızasının tam tekrarı; gelecekte binding≠prosedür ayrı doğrulanmalı.
+- **[kapandı] medium=fix-required thread (execution checkpoint):** Plan Task 5 dardı (yalnız "guard binding"); execution'da gate/enum/report/override threadlendi ama refine/contract-note/chain-gate prosedürleri atlandı (yukarıdaki review-fix bunu tamamladı).
 - **F9 (bilinçli residual):** `check_reviewer_forbidden` wrapped-prose hard-block enumerasyonunu (`hard-block:` + sonraki prose satırı `…/medium`) yakalamıyor. Negatif check spec-ötesi tripwire; residual REPLACE-not-append + manual scenario trace + execution'da Codex reviewer-edit review ile kapsanır. Execution sırasında reviewer prose'u yazarken **hard-block satırı self-contained `hard-block … critical/high` olmalı, medium ayrı `advisory` cümlesinde**.
 
 # Decisions Log
 
 - 2026-06-03: Canonical block = `spec-claude-codex` (mevcut CODEX-CALL-PROTOCOL/SCAN-SUBSTRATE konvansiyonu, drift-check referans-[0]). Strateji: canonical-block-first + awk-extract byte-copy.
 - 2026-06-03: Reviewer-negatif-check TRIPWIRE olarak kabul edildi (spec-ötesi gold-plating); F9 wrapped-prose residual dokümante (kullanıcı kararı). `unresolved_high_severity_override: true`.
+- 2026-06-04: `/review-claude-codex` sistemik prose-declared-not-wired gap buldu; kullanıcı "düzelt" dedi (re-execution değil, hedefli fix). 6 komut dosyasının prosedürleri otonom döngüye / C/H/M handoff'a / iki-eksen chain-gate'e hizalandı. Codex 5-tur re-review → approve. Çözüm yöntemi: deterministik exhaustive süpürme + tur-bazlı Codex doğrulama (whack-a-mole yerine). drift-check byte-identical AUTO-FIX bloğu korundu.
