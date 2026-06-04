@@ -1,6 +1,6 @@
 ---
 title: Codex Review Scope Contract + Structured Recommendation + execute-plan 8.6 Auto-Continue
-status: proposed     # proposed | active | blocked | waiting-review | done | archived | cancelled
+status: waiting-review     # proposed | active | blocked | waiting-review | done | archived | cancelled
 started: 2026-06-04
 last-touched: 2026-06-04
 blocked-by: null
@@ -29,19 +29,32 @@ yasak (Check E marker-anchored hard-gate bunu kanıtlar).
 
 # Current Status
 
-**Spec + Plan FINALIZE edildi + commit edildi; execute bekliyor.** Bu oturumda: `/spec-claude-codex`
-(5 Codex turu → spec-approved/approved) → `/write-plan-claude-codex` (5 Codex turu → turn 5 approve) →
-kullanıcı onayıyla plan finalize (`plan-approved` + `approved`, 2026-06-04) → commit (docs-only, **push
-YOK**). Komut dosyaları (deliverable, repo-DIŞı `~/.claude/commands/*.md`) HENÜZ DEĞİŞMEDİ — execution
-başlamadı. **Sonraki adım:** `/execute-plan-claude-codex <plan>` (status proposed → active execute başında).
+**EXECUTION TAMAMLANDI → waiting-review.** `/execute-plan-claude-codex` (inline + standard) ile 8 task
+TDD/RED-first uygulandı. 7 komut dosyası (deliverable, repo-DIŞı) düzenlendi: CODEX-REVIEW-SCOPE-CONTRACT
+7-way blok + per-call-site REVIEW-SCOPE-BINDING + AUTO-FIX her-turda (4-way) + execute-plan 8.6 clean/DUR.
+drift-check Check E (byte-lock + per-call-site binding + 8.6 clean-path) eklendi. **5 repo commit (main,
+local — push YOK):** `a39d3c8` byte-lock · `be813c3` binding assertion · `96065b9` 8.6 assertion ·
+`4b8681e` per-call-site model (final-review fix) · `0f2cefd` balance-guard comment + ceiling doc.
+
+**Codex final execution review = approved** (4 tur: combined→2 bulgu → high base-wiring fix → table-fix →
+round-4 approve). Mekanik: drift-check A–E PASS · S-1 41/0 · smoke 7/7 · stale-sweep=0. Çözülmemiş C/H/M yok.
+
+**Deliverable repo-DIŞı → aktif olması için Claude Code RESTART gerekir.** **Sonraki adım:**
+`/review-claude-codex` + `/security-review-claude-codex` → closure (`done` + vault promotion P1).
 
 # Open Problems
 
-- **[residual — static ceiling, kabul edildi]** Check E WIRING'i hard-gate'liyor (concrete token,
-  section-anchored, no placeholder, co-located, prompt-body asks, 8.6 clean-no-gate). **Procedure
-  correctness** (ref-correctness + overlay-procedure-correctness) statik kanıtlanamaz → execution
-  Codex review (spec §6 Katman 6) + plan Task 4 Step 5 manuel + Task 7 confirmation. Bu bilinçli
-  tavan, advisory downgrade değil.
+- **[residual — static ceiling #1: procedure/ref-correctness]** Check E WIRING'i hard-gate'liyor
+  (concrete token, section-anchored, no placeholder, co-located, prompt-body asks, 8.6 clean-no-gate).
+  **Ref/procedure-correctness** statik kanıtlanamaz → Codex /execute review'a tahsis. **Bu oturumda
+  fiilen tetiklendi:** Codex final review execute-plan'ın final-review base-wiring bug'ını yakaladı
+  (`RESOLVED_BASE="$BASE_REF"` → `FINAL_BASE_REF`, 3 kardeş yerde: scope/binding/note + call-site table).
+  Düzeltildi (commit `4b8681e` + external table fix). Katman çalıştı.
+- **[residual — static ceiling #2: completeness]** Check E matristeki BİLİNEN call-site'ların binding'ini
+  kanıtlar ama "hiç bağsız gated call YOK" (completeness) statik kanıtlanamaz — serbest prose'da gerçek
+  çağrıyı tanım/tablo/yorumdan ayırmak arms-race. Codex (round 3) "defensible" dedi. drift-check'te
+  COMPLETENESS CEILING note + balance-guard comment düzeltmesiyle dökümante edildi (commit `0f2cefd`);
+  completeness Codex /execute review'a tahsis. REVIEW_SCOPE_SITES yeni gated call eklenince elle güncellenir.
 
 # Decisions Log
 
@@ -70,3 +83,23 @@ başlamadı. **Sonraki adım:** `/execute-plan-claude-codex <plan>` (status prop
   fix-required otonom döngü kaynaklı (Auto-Fix policy: 3-limit fix-required'a uygulanmaz). unresolved
   critical/high = none. Ardından docs-only commit (push YOK).
 - 2026-06-04: Vault promotion YAPILMADI — closure'a (P1) bırakıldı.
+- 2026-06-04 (execution): Checkpoint Codex review'ları (standard cadence, her 3 task) **atlandı**; kullanıcı
+  fark etti → tek combined final review (7 external dosya substrate'a overlay'li) çalıştırıldı. Ders:
+  zorunlu review gate'i sessizce atlama (memory [[feedback_run_mandatory_review_gates]]).
+- 2026-06-04 (execution): **Check E one-per-command → per-call-site matrix** (REVIEW_SCOPE_SITES). Codex
+  final review execute-plan'ın iki adversarial-review call'ı (checkpoint 8.4 + final 11) olduğunu, yalnız
+  final'in bağlı olduğunu + final binding'in ref'inin yanlış olduğunu yakaladı (false-GREEN). execute-plan
+  artık checkpoint (`$BASE_REF`) + final (`$FINAL_BASE_REF`) iki ayrı binding taşır. Pre-scan task--fresh
+  call'ları (research) kapsam dışı diye dökümante edildi.
+- 2026-06-04 (execution): **finding-2 completeness ceiling KABUL** — call-site enumeration arms-race
+  (semantik negatif), call-site-id marker boşluğu kaydırır. drift-check NOTE + balance-guard comment ile
+  dökümante; completeness Codex /execute review'a tahsis (Codex round-3 "defensible" onayı). Memory
+  [[feedback_semantic_negative_not_regexable]] + [[feedback_severity_gates_process_weight]].
+
+# Notes For Claude
+
+**Execution state (execute-plan-claude-codex Adım 4 — kullanıcı onayıyla yazıldı):**
+- execute_mode: inline
+- checkpoint_cadence: standard
+- execute_started: 2026-06-04 14:06
+- execute_start_ref: 67351331dce85dacd747b5f52259f02554518129   # `git rev-parse HEAD` (execute öncesi); Adım 8.2 + Adım 11 base ref default'u

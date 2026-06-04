@@ -3,66 +3,47 @@
 ## Context
 - Task: codex-review-scope-contract
 - Linked spec: `docs/specs/2026-06-04-codex-review-scope-contract.md` (spec-approved / approved)
-- Linked plan: `docs/plans/2026-06-04-codex-review-scope-contract.md` (plan-draft / pending — Codex turn-5 approve, finalize bekliyor)
+- Linked plan: `docs/plans/2026-06-04-codex-review-scope-contract.md` (plan-approved / approved)
 - Branch: main
-- Last updated: 2026-06-04 (oturum kapanışı; spec+plan üretildi, execute edilmedi)
+- Last updated: 2026-06-04 (execution complete → waiting-review)
 
 ## Current State
-- Summary: `/spec-claude-codex` → spec-approved/approved (Codex 5 tur, F1-F6 çözüldü). `/write-plan-claude-codex`
-  → plan Codex plan-review turn 5'te **approve** (P1-P8 çözüldü). Plan **finalize edildi**
-  (`plan-approved` + `approved`, kullanıcı onayı 2026-06-04). **Commit edildi** (docs-only: spec + plan +
-  2 codex log + active task + CURRENT.md; **push YOK** — git log). Komut dosyaları (deliverable) HENÜZ
-  DEĞİŞMEDİ — execution başlamadı.
+- Summary: `/execute-plan-claude-codex` (inline + standard) ile 8 task uygulandı (RED-first). 7 komut dosyası
+  (deliverable, repo-DIŞı `~/.claude/commands/*.md`) düzenlendi + `docs/tools/claude-codex-drift-check.sh`
+  Check E (3 katman) eklendi. Codex final execution review **approved** (4 tur). Status `active → waiting-review`.
 - Blocked: no
 
 ## Resume From
-- **Start here (SIRA, kritik):**
-  1. **Execute:** `/execute-plan-claude-codex docs/plans/2026-06-04-codex-review-scope-contract.md`
-     (Subagent-Driven önerilen / Inline). TASK.md status → `active` (execute başında). Spec + plan zaten
-     finalize + commit; **Codex'i plan için tekrar ÇALIŞTIRMA** (converged).
-  2. (Execution sonrası) `/review-claude-codex` + `/security-review-claude-codex` → closure.
-- **Relevant files:**
-  - Plan = tek doğruluk kaynağı: 8 task, RED-first, tam kod (block text + drift-check Check E awk +
-    AUTO-FIX edit + 8.6 rewrite + per-command binding tablosu).
-  - `docs/tools/claude-codex-drift-check.sh` (Check A/B/C/D mevcut; Check E EKLENECEK — plan Task 2/4/6).
-  - `docs/tools/codex-scan-substrate-harness.sh` (S-1 davranış testi; Task 7/8'de re-run).
-- **Next command:** (finalize+commit sonrası) `/execute-plan-claude-codex <plan>`.
+- **Start here:** `/review-claude-codex` → `/security-review-claude-codex` → closure (`/finish-branch-claude-codex` veya done flip + vault promotion P1).
+- **Deliverable repo-DIŞı:** komut dosyaları düzenlendi ama **Claude Code RESTART** edilene kadar yeni davranış aktif DEĞİL.
+- **Push BEKLİYOR:** 5 repo commit + bu closure docs commit'i local'de; kullanıcı push'u ayrı onaylayacak.
+- **Relevant files:** plan (8 task) = doğruluk kaynağı · `docs/tools/claude-codex-drift-check.sh` (Check A–E) · `docs/tools/codex-scan-substrate-harness.sh` (S-1) · Codex log `docs/reviews/codex/2026-06-04-codex-review-scope-contract-execute.md`.
 
 ## Verification
-- Passed:
-  - Spec Codex review: 5 tur, turn 5 = **approve** (`docs/reviews/codex/2026-06-04-codex-review-scope-contract.md`).
-    F1 (wiring-proof), F2 (security-review requirement-source independence), F3 (external-overlay realpath/
-    git-less-export), F4 (dirty-active hard-DUR), F6 (last_checkpoint POST_CP_HEAD single SHA) — hepsi closed.
-  - Plan Codex review: 5 tur, turn 5 = **approve** (`...-codex-review-scope-contract-plan.md`). P1-P8 closed
-    (P8 = prompt-body asks hard-gate, son wiring location). Konverjans: 5→2→2→1→0 bulgu.
-  - Spec final consistency sweep: clean (section/cross-ref/status-pair). Plan final sweep: clean; live
-    drift-check baseline PASS (plan canlı state değiştirmedi).
-- Failed: none.
-- Not run: execution (komut dosyaları henüz düzenlenmedi); /review + /security-review (execution sonrası);
-  drift-check Check E (henüz yok — execution'da eklenecek).
+- `full_test_suite` (bu iş için = drift-check + S-1 + smoke): **PASS** — drift-check A–E + binding + 8.6 clean (`exit=0`); S-1 harness PASS=41 FAIL=0; smoke-parse 7/7 (`call-proto=1 revscope=1 binding=1`, execute-plan binding=2); stale-sweep (`Tur 4+/Tur 1-3`) = 0; `max review 3` yalnız 4 AUTO-FIX negation.
+- `pre_execution_codex_review`: ran (önceki oturum, 14:11; env temiz).
+- `checkpoint_codex_reviews`: **skipped** (standard cadence ihlali — kullanıcı yakaladı; tek combined final review'a katlandı). Bkz. Decisions Log + [[feedback_run_mandatory_review_gates]].
+- `final_codex_execution_review`: **approved** (round 4). 4 tur: combined (2 bulgu: high base-wiring + medium completeness) → FINAL_BASE_REF fix → table split + full sweep → **approve**. Log: `docs/reviews/codex/2026-06-04-codex-review-scope-contract-execute.md`.
+- `final_codex_execution_review_reason`: null
+- `checkpoint_execution_review_status`: ok (checkpoint dalına girilmedi — combined final kullanıldı)
+- `final_unresolved_high_severity_override`: false
+- `unresolved_critical_high` (claude-confirmed C/H/M fix-required kümesi): **none**
+
+## Open Problems
+- **[residual #1 — ref/procedure-correctness]** statik kanıtlanamaz → Codex /execute review'a tahsis. Bu oturumda fiilen tetiklendi + düzeltildi (final-review base-wiring bug → FINAL_BASE_REF). Katman çalıştı.
+- **[residual #2 — completeness]** Check E "hiç bağsız gated call yok"u statik kanıtlayamaz (arms-race). Dökümante edildi (drift-check NOTE + balance-guard comment); Codex /execute review'a tahsis; REVIEW_SCOPE_SITES elle güncellenir. (Codex round-3 "defensible".)
 
 ## Risks
-- **Deliverable repo-DIŞı:** `~/.claude/commands/*.md` repo'da değil; bir repo diff bunları GÖSTERMEZ —
-  diskten doğrudan incele. Edit ÖNCESİ backup ZORUNLU (plan Task 1: `~/.claude/command-backups/`).
-  Komut değişikliği aktif olması için Claude Code RESTART gerekir.
-- **/tmp throwaway:** Bu oturumun `/tmp/css.sh` (substrate extract) + `/tmp/codex_*.sh` runner'ları
-  sonraki oturumda YOK. Codex çağrısı tekrar gerekirse (execution checkpoint review) substrate'ı yeniden
-  kur: `awk '/# CODEX-SCAN-SUBSTRATE:BEGIN/,/# CODEX-SCAN-SUBSTRATE:END/' ~/.claude/commands/spec-claude-codex.md > /tmp/css.sh`
-  → source → `run_codex_scan "<kind>" <CALL>` (REQUIRED_CURRENT_FILES + RESOLVED_BASE set; COMPANION+PROJECT_ROOT+SCAN_WT_DIRS trap). Bu oturumda böyle yapıldı, çalıştı.
-- **Check E arms-race riski:** plan-review'da P1→P4→P6→P7→P8 hep "static check too weak" idi — token-presence
-  procedure'ü kanıtlayamaz. Çözüm marker-anchored hard-gate + procedure-correctness'i execution review'a
-  bırakmak oldu. Execution'da Check E yazarken bu tavanı koru — sonsuz "daha sıkı" kovalama YAPMA.
-- Commit boundary: repo commit'leri docs/tools + docs (audit). `plan-claude-codex.md` dokunma (deprecated).
+- **Restart gerekli:** external komut dosyaları diskte güncel ama oturum hâlâ eski tanımları çalıştırıyor olabilir — RESTART sonrası aktif.
+- **execute-plan iki review-call'lı tek komut:** ileride yeni gated call eklenirse REVIEW_SCOPE_SITES + binding ZORUNLU güncellenmeli (completeness statik yakalanmaz).
+- **Codex çağrısı bu oturumda:** sanitized substrate + 7 komut dosyası overlay (secret-scan: security-review hit'i false-positive [güvenlik vocab], adjudike edildi). `/tmp` runner'ları sonraki oturumda yok — gerekirse yeniden kur.
 
 ## Notes For Claude
-- **next:** finalize plan (status etiketi onayı: `approved` öneriliyor) → commit (push-gated) → /execute-plan-claude-codex.
-- **Codex'in dikkat çektiği (çözüldü, ama execution'da koru):** F1/P1-P8 hepsi "binding≠procedure / static check too weak". Check E iki katmanı (byte-lock + marker-anchored) execution'da AYNEN uygulanmalı; advisory residual = sadece procedure-correctness.
-- **Vault'a yazılabilecek kalıcı kararlar (closure'da promote):** A1 mimari kararı + "marker-anchored Check E binding≠procedure'ü plan-seviyesinde de çözer" dersi (predecessor auto-fix-review-policy dersinin devamı).
-- **Kullanıcıdan karar bekleyen:** plan finalize status etiketi (`approved` vs `approved-by-iteration-limit`) — Claude `approved` öneriyor; finalize + commit açık onay bekliyor.
-- **execute mode:** kullanıcı Subagent vs Inline seçecek (plan Adım 19 / execute-plan Adım 4).
+- **next:** `/review-claude-codex` → `/security-review-claude-codex` → closure. (Bu doc/tools + command-prose değişikliği; security yüzeyi düşük — security-review düşük-değer olabilir, kullanıcı kararı.)
+- `execute_completed`: 2026-06-04
+- `branch_pushed`: no (kullanıcı "push YOK" seçti; 5 commit + closure docs local)
+- **Vault'a promote (closure'da):** A1 mimari + "per-call-site binding (execute-plan dual review call) — one-per-command yetmez" dersi + "ref/completeness statik tavan → Codex /execute review katmanı yakalar" (auto-fix-review-policy dersinin devamı).
 
 ## Notes For Codex
-- Review ederken: Check E'nin section-anchored hard-gate'leri gerçekten call-path'i kanıtlıyor mu (binding region + prompt-body + co-location); 7-way byte-identical bozulmamış mı; Check A/C/D regresyon yok mu.
-- Bilinen riskler: procedure-correctness statik kanıtlanamaz (kabul edilen tavan — bunu tekrar "too weak" diye flag etme); deliverable repo-dışı.
-- Dokunmaması gereken: CODEX-CALL-PROTOCOL (7-way) + CODEX-SCAN-SUBSTRATE (4-way) mevcut blokları; `plan-claude-codex.md`.
-- Önce okunması gereken: plan dosyası (8 task) + spec §3-§7 + `docs/tools/claude-codex-drift-check.sh` (mevcut Check A/B/C/D pattern'i, Check E onun aynası).
+- (Closure review'da) Dokunmaması gereken: CODEX-CALL-PROTOCOL (7-way) + CODEX-SCAN-SUBSTRATE (4-way) + AUTO-FIX (4-way) byte-locked bloklar; `plan-claude-codex.md`.
+- Bilinen kabul edilen tavanlar (tekrar "too weak" diye flag etme): ref/procedure-correctness + completeness statik kanıtlanamaz, Codex /execute review'a tahsisli.
