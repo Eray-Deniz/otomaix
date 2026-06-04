@@ -21,6 +21,19 @@ SUBSTRATE_EXPECTED=(spec write-plan execute-plan simplify)
 AUTO_FIX_EXPECTED=(spec write-plan execute-plan simplify)
 REVIEWER_EXPECTED=(review security-review)
 
+REVIEW_SCOPE_EXPECTED=(spec write-plan execute-plan simplify review security-review finish-branch)
+REVIEW_SCOPE_BEGIN='<!-- CODEX-REVIEW-SCOPE-CONTRACT:BEGIN'
+REVIEW_SCOPE_END='<!-- CODEX-REVIEW-SCOPE-CONTRACT:END'
+REVIEW_SCOPE_TOKENS=(
+  'Pinned target'
+  'Requirement sources'
+  'Dependency scope'
+  'Command-policy external-files'
+  'Coverage statement'
+  'fix recommendation'
+  'context-only overlay'
+)
+
 PROTO_BEGIN='<!-- CODEX-CALL-PROTOCOL:BEGIN'
 PROTO_END='<!-- CODEX-CALL-PROTOCOL:END'
 SUBSTRATE_BEGIN='# CODEX-SCAN-SUBSTRATE:BEGIN'
@@ -338,6 +351,10 @@ check_reviewer_tokens "Check D reviewer" "${REVIEWER_TOKENS[@]}"
 check_reviewer_forbidden "Check D reviewer"
 
 check_s1_literal_regression
+
+check_expected_blocks "Check E CODEX-REVIEW-SCOPE-CONTRACT" "$REVIEW_SCOPE_BEGIN" "$REVIEW_SCOPE_END" "revscope" "${REVIEW_SCOPE_EXPECTED[@]}"
+check_unexpected_markers "Check E CODEX-REVIEW-SCOPE-CONTRACT" "$REVIEW_SCOPE_BEGIN" "${REVIEW_SCOPE_EXPECTED[@]}"
+check_tokens "Check E CODEX-REVIEW-SCOPE-CONTRACT" "revscope" "${REVIEW_SCOPE_TOKENS[@]}"
 
 if [ "$FAIL" -eq 0 ]; then
   say "PASS: claude-codex drift check clean"
