@@ -12,7 +12,8 @@
 - Blocked: hayır
 
 ## Resume From
-- Start here: **`/finish-branch-claude-codex` (closure)** — review + security chain temiz, engel yok
+- **KAPANDI (done + archived, 2026-06-04).** Closure: 5 commit origin/main'e push, task `docs/task-archive/2026/06/auto-fix-review-policy/`'ye taşındı, Auto-Fix Policy kararı vault'a promote (`[[decisions/2026-06-04-auto-fix-review-policy]]`). Yeni iş için `/brainstorm`.
+- ~~Start here: `/finish-branch-claude-codex`~~ (tamamlandı)
 - Relevant files: ~/.claude/commands/{spec,write-plan,execute-plan,simplify,review,security-review,finish-branch}-claude-codex.md (repo-DIŞı, review-fix ile yeniden düzenlendi); docs/tools/claude-codex-drift-check.sh (repo-İÇİ, Check D commit'li)
 - Next command: /security-review-claude-codex
 - Review raporu: docs/reviews/2026-06-04-auto-fix-review-policy.md
