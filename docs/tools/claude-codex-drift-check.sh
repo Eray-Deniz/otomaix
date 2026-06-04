@@ -34,6 +34,23 @@ REVIEW_SCOPE_TOKENS=(
   'context-only overlay'
 )
 
+# Per gated review/audit call SITE (NOT per command). Most commands have one gated review/audit
+# call; execute-plan has TWO (checkpoint Adım 8.4 + final Adım 11) and each must carry its own
+# binding — a one-per-command binding leaves the checkpoint review (which drives the autonomous
+# AUTO-FIX every-turn loop) outside the contract. Format "<command-slug>:<binding-marker-slug>".
+# EXCLUDED by design: pre-scan / pre-execution `task --fresh` calls (spec Adım 2, write-plan Adım 6,
+# execute-plan Adım 6, simplify Adım 5) are research/environment calls, not gated-finding reviews.
+REVIEW_SCOPE_SITES=(
+  "spec:spec"
+  "write-plan:write-plan"
+  "execute-plan:execute-plan-checkpoint"
+  "execute-plan:execute-plan-final"
+  "simplify:simplify"
+  "review:review"
+  "security-review:security-review"
+  "finish-branch:finish-branch"
+)
+
 PROTO_BEGIN='<!-- CODEX-CALL-PROTOCOL:BEGIN'
 PROTO_END='<!-- CODEX-CALL-PROTOCOL:END'
 SUBSTRATE_BEGIN='# CODEX-SCAN-SUBSTRATE:BEGIN'
@@ -335,59 +352,72 @@ check_s1_literal_regression() {
 }
 
 check_review_scope_binding() {
-  # F1 hard-gate (section-anchored to the REVIEW-SCOPE-BINDING:<slug> region — NOT file-wide, NOT the
-  # contract block). Proves each command's co-located binding actually carries the asks + pinned-ref +
-  # overlay tokens, i.e. the call path is wired, not just the block pasted.
-  local slug file b e region miss post
-  say "--- Check E review-scope binding (section-anchored per command) ---"
-  for slug in "${REVIEW_SCOPE_EXPECTED[@]}"; do
-    file=$(cmd_path "$slug")
+  # F1 hard-gate, PER gated review/audit call SITE (section-anchored to each REVIEW-SCOPE-BINDING:<marker>
+  # region — NOT file-wide, NOT the contract block). Proves each gated call's co-located binding carries
+  # the asks + concrete pinned-ref + overlay tokens, i.e. every such call path is wired, not just the
+  # block pasted. execute-plan has two sites (checkpoint + final); one-per-command would leave the
+  # checkpoint review (which drives the autonomous AUTO-FIX loop) outside the contract — so the matrix
+  # enumerates call SITES (REVIEW_SCOPE_SITES), not commands.
+  local site cmd_slug marker file region miss post
+  say "--- Check E review-scope binding (per review/audit call site) ---"
+  for site in "${REVIEW_SCOPE_SITES[@]}"; do
+    cmd_slug=${site%%:*}; marker=${site##*:}
+    file=$(cmd_path "$cmd_slug")
     [ -f "$file" ] || { fail "Check E binding missing file: $file"; continue; }
-    b=$(grep -cF "<!-- REVIEW-SCOPE-BINDING:$slug -->" "$file")
-    e=$(grep -cF "<!-- /REVIEW-SCOPE-BINDING -->" "$file")
-    if [ "$b" -ne 1 ] || [ "$e" -ne 1 ]; then
-      fail "Check E binding marker count $slug: begin=$b end=$e (need 1/1)"; continue
+    if [ "$(grep -cF "<!-- REVIEW-SCOPE-BINDING:$marker -->" "$file")" -ne 1 ]; then
+      fail "Check E binding marker count $marker: need exactly 1 in $cmd_slug"; continue
     fi
-    region=$(awk -v s="<!-- REVIEW-SCOPE-BINDING:$slug -->" '
-      index($0,s){f=1} f{print} index($0,"<!-- /REVIEW-SCOPE-BINDING -->"){f=0}' "$file")
+    # Region = THIS site's begin .. its NEXT end marker (exit after first end → robust to multiple bindings).
+    region=$(awk -v s="<!-- REVIEW-SCOPE-BINDING:$marker -->" '
+      index($0,s){f=1} f{print} f && index($0,"<!-- /REVIEW-SCOPE-BINDING -->"){exit}' "$file")
+    printf '%s\n' "$region" | grep -qF '<!-- /REVIEW-SCOPE-BINDING -->' || { fail "Check E binding $marker: unterminated region"; continue; }
     miss=0
     # --- WIRING tokens (section-scoped to the binding region) ---
-    printf '%s\n' "$region" | grep -qF 'coverage statement'   || { fail "Check E binding $slug: no coverage-ask";        miss=1; }
-    printf '%s\n' "$region" | grep -qF 'fix recommendation'    || { fail "Check E binding $slug: no structured-rec-ask";  miss=1; }
-    # CONCRETE pinned-ref token — NOT the 'pinned target' label (Codex T3 P6: label is always present
-    # in the template → trivially passable). Require an actual ref/SHA identifier.
-    printf '%s\n' "$region" | grep -qE 'RESOLVED_BASE|BASE_REF|--base|REVIEW_BASE_SHA|HEAD_SHA|REVIEW_WT' || { fail "Check E binding $slug: no CONCRETE pinned-ref token (label alone insufficient)"; miss=1; }
-    # Overlay-setup hard-gate (Codex T3 P7 / spec §7): concrete guard terms, not just the 'external-overlay' label.
-    printf '%s\n' "$region" | grep -qF 'external-overlay'      || { fail "Check E binding $slug: no overlay marker";       miss=1; }
-    printf '%s\n' "$region" | grep -qE 'realpath'              || { fail "Check E binding $slug: no overlay realpath guard"; miss=1; }
-    printf '%s\n' "$region" | grep -qE 'regular[- ]file'       || { fail "Check E binding $slug: no overlay regular-file guard"; miss=1; }
-    printf '%s\n' "$region" | grep -qE 'secret[- ]scan'        || { fail "Check E binding $slug: no overlay secret-scan guard"; miss=1; }
-    printf '%s\n' "$region" | grep -qF 'context-only'          || { fail "Check E binding $slug: no overlay context-only label"; miss=1; }
-    # Placeholder reject (Codex T3 P6): no unfilled template tokens. Comment markers start "<!" so they
-    # are excluded; a placeholder like <slug>/<tablo>/<...> or the stub text "Task 4 doldurur" → RED.
-    printf '%s\n' "$region" | grep -qE '<[A-Za-z.]' && { fail "Check E binding $slug: unfilled placeholder (<...>) in binding"; miss=1; }
-    printf '%s\n' "$region" | grep -qF 'Task 4 doldurur' && { fail "Check E binding $slug: empty Task-3 stub not filled"; miss=1; }
-    # --- co-location + pinned-ref-before-call HARD-GATE (Codex T2 P4): a Codex call token must appear
-    # after the binding-END within the SAME section (terminated by the next ##/### heading). Proves the
-    # binding (carrying the in-region CONCRETE pinned-ref + asks) precedes the actual call.
-    # Section-bounded → does not match the bottom CODEX-SCAN-SUBSTRATE definition.
-    post=$(awk '/<!-- \/REVIEW-SCOPE-BINDING -->/{f=1; next} f && (/^### / || /^## /){exit} f{print}' "$file")
+    printf '%s\n' "$region" | grep -qF 'coverage statement'   || { fail "Check E binding $marker: no coverage-ask";        miss=1; }
+    printf '%s\n' "$region" | grep -qF 'fix recommendation'    || { fail "Check E binding $marker: no structured-rec-ask";  miss=1; }
+    # CONCRETE pinned-ref token — NOT the 'pinned target' label (Codex T3 P6). Require an actual ref/SHA id.
+    printf '%s\n' "$region" | grep -qE 'RESOLVED_BASE|BASE_REF|--base|REVIEW_BASE_SHA|HEAD_SHA|REVIEW_WT|EXECUTE_START_REF' || { fail "Check E binding $marker: no CONCRETE pinned-ref token (label alone insufficient)"; miss=1; }
+    # Overlay-setup hard-gate (Codex T3 P7 / spec §7): concrete guard terms, not just the label.
+    printf '%s\n' "$region" | grep -qF 'external-overlay'      || { fail "Check E binding $marker: no overlay marker";       miss=1; }
+    printf '%s\n' "$region" | grep -qE 'realpath'              || { fail "Check E binding $marker: no overlay realpath guard"; miss=1; }
+    printf '%s\n' "$region" | grep -qE 'regular[- ]file'       || { fail "Check E binding $marker: no overlay regular-file guard"; miss=1; }
+    printf '%s\n' "$region" | grep -qE 'secret[- ]scan'        || { fail "Check E binding $marker: no overlay secret-scan guard"; miss=1; }
+    printf '%s\n' "$region" | grep -qF 'context-only'          || { fail "Check E binding $marker: no overlay context-only label"; miss=1; }
+    # Placeholder reject (Codex T3 P6): no unfilled template tokens. Comment markers start "<!" → excluded.
+    printf '%s\n' "$region" | grep -qE '<[A-Za-z.]' && { fail "Check E binding $marker: unfilled placeholder (<...>) in binding"; miss=1; }
+    printf '%s\n' "$region" | grep -qF 'Task 4 doldurur' && { fail "Check E binding $marker: empty stub not filled"; miss=1; }
+    # --- co-location + pinned-ref-before-call HARD-GATE (Codex T2 P4), anchored to THIS site's binding:
+    # a Codex call token must appear after THIS binding's END within the SAME section (next ##/### heading).
+    post=$(awk -v s="<!-- REVIEW-SCOPE-BINDING:$marker -->" '
+      index($0,s){g=1; next}
+      g && /<!-- \/REVIEW-SCOPE-BINDING -->/{f=1; g=0; next}
+      f && (/^### / || /^## /){exit}
+      f{print}' "$file")
     printf '%s\n' "$post" | grep -qE 'run_codex_scan|node "\$COMPANION"|adversarial-review|task --fresh' \
-      || { fail "Check E binding $slug: no Codex call after binding in same section (co-location/pinned-ref-before-call)"; miss=1; }
-    # PROMPT-BODY wiring HARD-GATE (Codex T4 P8): the actual Codex prompt — in the SAME post-binding
-    # section, NOT the binding comment — must literally ask for the coverage statement + structured-rec.
-    # Proves the heredoc/companion prompt carries the asks, not just the binding prose (the predecessor
-    # binding-declared-not-prompt-wired class for OUTPUT requirements).
-    printf '%s\n' "$post" | grep -qF 'coverage statement' || { fail "Check E binding $slug: prompt body (post-binding section) lacks coverage-ask"; miss=1; }
-    printf '%s\n' "$post" | grep -qF 'fix recommendation' || { fail "Check E binding $slug: prompt body (post-binding section) lacks structured-rec-ask"; miss=1; }
-    [ "$miss" -eq 0 ] && ok "Check E binding + prompt-body wired + co-located: $slug"
+      || { fail "Check E binding $marker: no Codex call after binding in same section (co-location/pinned-ref-before-call)"; miss=1; }
+    # PROMPT-BODY wiring HARD-GATE (Codex T4 P8): the actual prompt (post-binding section, not the comment)
+    # must literally ask for the coverage statement + structured-rec.
+    printf '%s\n' "$post" | grep -qF 'coverage statement' || { fail "Check E binding $marker: prompt body (post-binding section) lacks coverage-ask"; miss=1; }
+    printf '%s\n' "$post" | grep -qF 'fix recommendation' || { fail "Check E binding $marker: prompt body (post-binding section) lacks structured-rec-ask"; miss=1; }
+    [ "$miss" -eq 0 ] && ok "Check E binding + prompt-body wired + co-located: $marker ($cmd_slug)"
   done
+  # Balance guard: each command file's REVIEW-SCOPE-BINDING begin-marker count must equal the number of
+  # sites the matrix expects for that command (catches a stray/extra binding the matrix does not enumerate,
+  # i.e. a new review/audit call wired without a matrix entry, or a leftover/duplicate marker).
+  local f base slug n_begin n_expected s
+  while IFS= read -r f; do
+    base=${f##*/}; slug=${base%-claude-codex.md}
+    n_begin=$(grep -cE '<!-- REVIEW-SCOPE-BINDING:[^ ]+ -->' "$f")
+    n_expected=0
+    for s in "${REVIEW_SCOPE_SITES[@]}"; do [ "${s%%:*}" = "$slug" ] && n_expected=$((n_expected + 1)); done
+    [ "$n_begin" -eq "$n_expected" ] || fail "Check E binding count mismatch in $slug: $n_begin begin markers, matrix expects $n_expected"
+  done < <(find "$COMMAND_DIR" -maxdepth 1 -type f -name '*-claude-codex.md' | sort)
 }
-# NOTE: Check E hard-gates WIRING (concrete tokens, section-anchored, no placeholders, co-located).
-# PROCEDURE CORRECTNESS (is the ref the semantically-right base; does the overlay guard actually run
-# correctly) is NOT statically provable → execution Codex review (spec §6 Katman 6) + Task 4 Step 5
-# manual ref-correctness. This is the deliberate static ceiling, not an advisory downgrade of the
-# wiring gates.
+# NOTE: Check E hard-gates WIRING per call site (concrete tokens, section-anchored, no placeholders,
+# co-located, balanced count). PROCEDURE CORRECTNESS (is the ref the semantically-right base; does the
+# overlay guard actually run correctly) is NOT statically provable → execution Codex review (spec §6
+# Katman 6). The one-per-command→per-call-site refinement (execute-plan checkpoint+final) closed a
+# real false-GREEN found by the final execution Codex review.
 
 check_execute_plan_clean_continue() {
   # execute-plan 8.6 CLEAN-PATH (delimited subsection) must contain NO user gate
