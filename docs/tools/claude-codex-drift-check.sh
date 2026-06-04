@@ -18,11 +18,15 @@ FAIL=0
 
 PROTO_EXPECTED=(spec write-plan execute-plan simplify review security-review finish-branch)
 SUBSTRATE_EXPECTED=(spec write-plan execute-plan simplify)
+AUTO_FIX_EXPECTED=(spec write-plan execute-plan simplify)
+REVIEWER_EXPECTED=(review security-review)
 
 PROTO_BEGIN='<!-- CODEX-CALL-PROTOCOL:BEGIN'
 PROTO_END='<!-- CODEX-CALL-PROTOCOL:END'
 SUBSTRATE_BEGIN='# CODEX-SCAN-SUBSTRATE:BEGIN'
 SUBSTRATE_END='# CODEX-SCAN-SUBSTRATE:END'
+AUTOFIX_BEGIN='<!-- AUTO-FIX-REVIEW-POLICY:BEGIN'
+AUTOFIX_END='<!-- AUTO-FIX-REVIEW-POLICY:END'
 
 # Canonical Check B token set (decision Invariant #8 — keep in sync with the doc).
 PROTO_TOKENS=(
@@ -52,6 +56,29 @@ SUBSTRATE_TOKENS=(
   'SCAN_WT_DIRS'
   'run_codex_scan'
   'css_resolve_base'
+)
+
+# Check D block tripwire tokens (spec decision: backstop must live INSIDE the block).
+AUTOFIX_TOKENS=(
+  'claude-confirmed'
+  'cluster-key'
+  'finding-id'
+  'global cap'
+  'reopen'
+  '6-tavan'
+)
+
+# Check D reviewer-side tokens (review + security-review; same list as spec architecture #2).
+# 'medium advisory' guarantees medium is NOT implied as a hard-block.
+REVIEWER_TOKENS=(
+  'fix-required'
+  'medium advisory'
+  'chain-gate'
+  'report-only'
+  'critical'
+  'high'
+  'medium'
+  'low'
 )
 
 say() { printf '%s\n' "$*"; }
@@ -176,6 +203,88 @@ check_tokens() {
   done
 }
 
+check_reviewer_tokens() {
+  local label="$1"; shift
+  local tokens=("$@")
+  local slug file token missing
+
+  say "--- $label reviewer tokens ---"
+  for slug in "${REVIEWER_EXPECTED[@]}"; do
+    file=$(cmd_path "$slug")
+    if [ ! -f "$file" ]; then
+      fail "$label missing reviewer file: $file"
+      continue
+    fi
+    missing=0
+    for token in "${tokens[@]}"; do
+      if ! grep -qF -- "$token" "$file"; then
+        fail "$label missing reviewer token in $slug: $token"
+        missing=1
+      fi
+    done
+    [ "$missing" -eq 0 ] && ok "$label reviewer tokens present: $slug"
+  done
+}
+
+check_reviewer_forbidden() {
+  # Negatif kapı (Codex F2/F5/F7): pozitif `medium advisory` token'ı medium'un hard-block OLMADIĞINI
+  # KANITLAMAZ. ENUMERATION-SCOPED (advisory-exclusion DEĞİL — o bypass edilebilirdi: eski
+  # `hard-block: critical/high/medium` + yakına appendlenen `medium advisory` pencereyi temizler).
+  # Mantık: bir chain hard-block satırı için (a) SATIRIN KENDİSİ medium/C/H/M içeriyorsa ihlal;
+  # (b) satırın hemen ardından gelen ARDIŞIK LİSTE enumerasyonu (lead-blank atlanır; ilk prose/
+  # trailing-blank'te durulur) bir `medium` öğesi içeriyorsa ihlal. Ayrı bir prose cümlesindeki
+  # `medium advisory` TARANMAZ (liste öğesi değil → false-positive yok, bypass yok). POSIX
+  # `tolower()` (Medium/MEDIUM) + `C/H/M` (boşluklu `C / H / M` dahil) normalize. Spec invariant:
+  # chain hard-block enumerasyonu YALNIZ critical/high.
+  #
+  # KAPSAM (Codex F9 + kullanıcı kararı 2026-06-03): bu bir TRIPWIRE'dır, tam ispat DEĞİL. Yakalar:
+  # (a) inline hard-block satırında medium/C/H/M; (b) hard-block altındaki ardışık LİSTE öğesinde
+  # medium. YAKALAMAZ: hard-block satırını takip eden WRAPPED PROSE continuation'da medium (örn.
+  # `hard-block:` + sonraki prose satırı `critical/high/medium`). Residual BİLİNÇLİ — prose'u tarayan
+  # her heuristik ya bypass edilir ya kanonik prose'a false-positive verir (medium'u hard-block
+  # yakınında meşru tartışan disclaimer'lar; F5/F7/F9 arms-race'i ampirik kanıt). Negatif check
+  # spec-ÖTESİdir (spec POZİTİF reviewer token check ister — o tam geçer). Residual'ı şu KATMANLAR
+  # kapsar: Task 6 REPLACE-not-append (eski enumerasyon silinir) + manual scenario trace (Task 8
+  # Step 3) + execution'da Codex'in gerçek reviewer-edit review'ı. Yazım kuralı: hard-block satırı
+  # self-contained "hard-block ... critical/high" olsun, medium ayrı `advisory` cümlesinde.
+  local label="$1"
+  local slug file bad
+  say "--- $label reviewer forbidden (medium-as-hard-block; enumeration-scoped TRIPWIRE) ---"
+  for slug in "${REVIEWER_EXPECTED[@]}"; do
+    file=$(cmd_path "$slug")
+    if [ ! -f "$file" ]; then
+      fail "$label missing reviewer file: $file"
+      continue
+    fi
+    bad=$(awk '
+      { raw[NR]=$0; low[NR]=tolower($0) }
+      END{
+        for(i=1;i<=NR;i++){
+          # Trigger YALNIZ "hard-block" (gate terimi). "chain-advance bloke etmez" gibi disclaimer
+          # ifadeleri tetiklemez (F7 false-positive onler). Yazim kurali: hard-block satiri yalniz
+          # critical/high enumere eder; medium ayrı `advisory` cümlesinde, "hard-block" kelimesiyle
+          # aynı satırda DEĞİL.
+          if(low[i] !~ /hard-?block/) continue
+          line=low[i]; gsub(/ *\/ */,"/",line); gsub(/c\/h\/m/,"medium",line)
+          if(line ~ /medium/){ print "L" i " inline: " raw[i]; continue }
+          started=0
+          for(j=i+1;j<=NR;j++){
+            if(low[j] ~ /^[[:space:]>]*$/){ if(started) break; else continue }
+            if(low[j] ~ /^[[:space:]>]*[-*+][[:space:]]/ || low[j] ~ /^[[:space:]>]*[0-9]+\.[[:space:]]/){
+              started=1; item=low[j]; gsub(/ *\/ */,"/",item); gsub(/c\/h\/m/,"medium",item)
+              if(item ~ /medium/){ print "L" j " bullet<-L" i ": " raw[j]; break }
+            } else break
+          }
+        }
+      }' "$file")
+    if [ -n "$bad" ]; then
+      fail "$label medium-as-hard-block phrasing in $slug: $bad"
+    else
+      ok "$label no medium hard-block phrasing: $slug"
+    fi
+  done
+}
+
 check_s1_literal_regression() {
   local slug file hits directives
 
@@ -221,6 +330,12 @@ check_tokens "Check A CODEX-CALL-PROTOCOL" "proto" "${PROTO_TOKENS[@]}"
 check_expected_blocks "Check C CODEX-SCAN-SUBSTRATE" "$SUBSTRATE_BEGIN" "$SUBSTRATE_END" "substrate" "${SUBSTRATE_EXPECTED[@]}"
 check_unexpected_markers "Check C CODEX-SCAN-SUBSTRATE" "$SUBSTRATE_BEGIN" "${SUBSTRATE_EXPECTED[@]}"
 check_tokens "Check C CODEX-SCAN-SUBSTRATE" "substrate" "${SUBSTRATE_TOKENS[@]}"
+
+check_expected_blocks "Check D AUTO-FIX-REVIEW-POLICY" "$AUTOFIX_BEGIN" "$AUTOFIX_END" "autofix" "${AUTO_FIX_EXPECTED[@]}"
+check_unexpected_markers "Check D AUTO-FIX-REVIEW-POLICY" "$AUTOFIX_BEGIN" "${AUTO_FIX_EXPECTED[@]}"
+check_tokens "Check D AUTO-FIX-REVIEW-POLICY" "autofix" "${AUTOFIX_TOKENS[@]}"
+check_reviewer_tokens "Check D reviewer" "${REVIEWER_TOKENS[@]}"
+check_reviewer_forbidden "Check D reviewer"
 
 check_s1_literal_regression
 
