@@ -1,8 +1,8 @@
 ---
 title: Auto-Fix Review Policy — claude-codex aile geneli
-status: proposed     # proposed | active | blocked | waiting-review | done | archived | cancelled
+status: waiting-review   # proposed | active | blocked | waiting-review | done | archived | cancelled
 started: 2026-06-03
-last-touched: 2026-06-03
+last-touched: 2026-06-04
 blocked-by: null
 source_plan: docs/plans/2026-06-03-auto-fix-review-policy.md
 ---
@@ -19,10 +19,18 @@ claude-codex fix-yapan komutlarına (spec, write-plan, execute-plan, simplify) `
 
 # Current Status
 
-Plan onaylandı (approved-by-iteration-limit), henüz başlanmadı. Sonraki: `/execute-plan-claude-codex docs/plans/2026-06-03-auto-fix-review-policy.md`.
+Execution tamamlandı (2026-06-04), status `waiting-review`. 8 task bitti (inline + standard). drift-check A/B/C/D PASS; Check D commit'lendi (58cb02e, push YOK). Sonraki: `/review-claude-codex` → `/security-review-claude-codex` → closure.
+
+# Notes For Claude
+
+- execute_mode: inline
+- checkpoint_cadence: standard
+- execute_started: 2026-06-04 06:49
+- execute_start_ref: 00acbfaa03671deb49f064aa06d4faf65c42f474
 
 # Open Problems
 
+- **medium=fix-required thread (execution'da çözüldü):** Plan Task 5 yalnız "guard'a binding prose ekle" diyordu; gerçekte medium=fix-required gate/enum/report/override/refine/invariant/checklist katmanlarına da geçmeliydi. Checkpoint 2'de Codex 2 high yakaladı → tur-4+ Codex çözüm önerisi (tam harita) → option b ile tek pass thread → 4 review turunda yakınsadı (6-tavan altında). Plan'ın Task 5 kapsamı dardı; gelecekte bu derinlik plana yazılmalı (kapanmış, kayıt amaçlı).
 - **F9 (bilinçli residual):** `check_reviewer_forbidden` wrapped-prose hard-block enumerasyonunu (`hard-block:` + sonraki prose satırı `…/medium`) yakalamıyor. Negatif check spec-ötesi tripwire; residual REPLACE-not-append + manual scenario trace + execution'da Codex reviewer-edit review ile kapsanır. Execution sırasında reviewer prose'u yazarken **hard-block satırı self-contained `hard-block … critical/high` olmalı, medium ayrı `advisory` cümlesinde**.
 
 # Decisions Log
