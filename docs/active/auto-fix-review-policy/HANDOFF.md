@@ -12,7 +12,7 @@
 - Blocked: hayır
 
 ## Resume From
-- Start here: `/security-review-claude-codex` (sonra closure `/finish-branch-claude-codex`)
+- Start here: **`/finish-branch-claude-codex` (closure)** — review + security chain temiz, engel yok
 - Relevant files: ~/.claude/commands/{spec,write-plan,execute-plan,simplify,review,security-review,finish-branch}-claude-codex.md (repo-DIŞı, review-fix ile yeniden düzenlendi); docs/tools/claude-codex-drift-check.sh (repo-İÇİ, Check D commit'li)
 - Next command: /security-review-claude-codex
 - Review raporu: docs/reviews/2026-06-04-auto-fix-review-policy.md
@@ -31,7 +31,8 @@
 - scenario trace: 9/9 tutarlı
 - **review_cycle (2026-06-04 `/review-claude-codex`):** çift hakem (Codex + fresh Claude subagent). Sistemik prose-declared-not-wired gap (Codex high; subagent kaçırdı). Kullanıcı "düzelt" → 6 komut prosedürü hizalandı → **Codex re-review R1-R5: R5 verdict approve/clean**; her fix sonrası drift-check PASS; deterministik exhaustive süpürme temiz ("serbest"/"otomatik döngü değil"/"kullanıcı seçer"). AUTO-FIX bloğu byte-identical (md5 9a3ebf71) korundu.
 - **review-fix pre-fix backup:** `~/.claude/command-backups/*.bak-20260604T084344Z` (6 dosya; karşılaştırma için).
-- branch_pushed: **no** (push hiç sorulmadı/yapılmadı). Repo'da commit bekleyen: önceki Check D `58cb02e` + review raporu + codex re-review log + TASK/HANDOFF güncellemeleri (bu cycle).
+- **security_review (2026-06-04 `/security-review-claude-codex`):** çift hakem, coverage_mode=diff. Task delta güvenlik-temiz (otonomi carve-out push/merge/state/vault/override'ı insan kapısı + 6-tavan/cap=10 backstop arkasında tutuyor; otonom commit→push tırmanması kapalı). Codex pre-existing **SR-1** buldu (security-review export teardown `rm -rf "$(dirname)"` + guard'sız mktemp → `rm -rf /` riski; delta-DIŞı). Kullanıcı "hardening" → mktemp `|| exit` + explicit parent (dirname kaldırıldı) ile security-review + review'da kapatıldı; **Codex re-review SR-1 RESOLVED**; drift-check PASS; fonksiyonel test (rm hedefi=parent, asla /). SR-2 (F9) kabul, SR-3 (env) not. SR-1 pre-fix yedek: `*.bak-20260604T095430Z`.
+- branch_pushed: **no** (push hiç sorulmadı/yapılmadı). Repo'da commit bekleyen: önceki Check D `58cb02e` + review/security raporları + codex logları + TASK/HANDOFF güncellemeleri.
 
 ## Risks
 - F9 residual (bilinçli tripwire): `check_reviewer_forbidden` wrapped-prose continuation'ı yakalamıyor. Reviewer prose F9 yazım kuralıyla yazıldı (hard-block satırı self-contained critical/high, medium ayrı advisory). Kapsayan katmanlar: REPLACE-not-append + manual scenario trace + execution Codex review (hepsi yapıldı, temiz).
