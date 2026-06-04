@@ -389,6 +389,23 @@ check_review_scope_binding() {
 # manual ref-correctness. This is the deliberate static ceiling, not an advisory downgrade of the
 # wiring gates.
 
+check_execute_plan_clean_continue() {
+  # execute-plan 8.6 CLEAN-PATH (delimited subsection) must contain NO user gate
+  # (AskUserQuestion / "Devam edelim mi"). The separate DUR-PATH subsection MAY ask — so the
+  # check is region-scoped to the delimited clean subsection (machine-checkable; Codex T1 P3).
+  local file region; file=$(cmd_path "execute-plan")
+  say "--- Check E execute-plan 8.6 clean-path (delimited region, no user gate) ---"
+  [ -f "$file" ] || { fail "Check E 8.6 missing file: $file"; return; }
+  grep -qF '<!-- 8.6-CLEAN-PATH -->'  "$file" || { fail "Check E 8.6: CLEAN-PATH begin marker missing"; return; }
+  grep -qF '<!-- /8.6-CLEAN-PATH -->' "$file" || { fail "Check E 8.6: CLEAN-PATH end marker missing"; return; }
+  region=$(awk '/<!-- 8.6-CLEAN-PATH -->/{f=1} f{print} /<!-- \/8.6-CLEAN-PATH -->/{f=0}' "$file")
+  if printf '%s\n' "$region" | grep -qE 'AskUserQuestion|Devam edelim mi'; then
+    fail "Check E 8.6 clean-path has user gate: $(printf '%s\n' "$region" | grep -nE 'AskUserQuestion|Devam edelim mi' | head -3)"
+  else
+    ok "Check E 8.6 clean-path delimited region has no user gate"
+  fi
+}
+
 say "COMMAND_DIR=$COMMAND_DIR"
 
 check_expected_blocks "Check A CODEX-CALL-PROTOCOL" "$PROTO_BEGIN" "$PROTO_END" "proto" "${PROTO_EXPECTED[@]}"
@@ -412,6 +429,8 @@ check_unexpected_markers "Check E CODEX-REVIEW-SCOPE-CONTRACT" "$REVIEW_SCOPE_BE
 check_tokens "Check E CODEX-REVIEW-SCOPE-CONTRACT" "revscope" "${REVIEW_SCOPE_TOKENS[@]}"
 
 check_review_scope_binding
+
+check_execute_plan_clean_continue
 
 if [ "$FAIL" -eq 0 ]; then
   say "PASS: claude-codex drift check clean"
