@@ -14,9 +14,9 @@
 - Blocked: no
 
 ## Resume From
-- **Start here:** `/review-claude-codex` → `/security-review-claude-codex` → closure (`/finish-branch-claude-codex` veya done flip + vault promotion P1).
-- **Deliverable repo-DIŞı:** komut dosyaları düzenlendi ama **Claude Code RESTART** edilene kadar yeni davranış aktif DEĞİL.
-- **Push BEKLİYOR:** 5 repo commit + bu closure docs commit'i local'de; kullanıcı push'u ayrı onaylayacak.
+- **Start here:** `/security-review-claude-codex` → closure (`/finish-branch-claude-codex` veya done flip + vault promotion P1). (`/review-claude-codex` TAMAMLANDI — aşağı Verification.)
+- **Deliverable repo-DIŞı:** komut dosyaları + review fix'leri (F2/F3, execute-plan) düzenlendi ama **Claude Code RESTART** edilene kadar yeni davranış aktif DEĞİL.
+- **Push BEKLİYOR:** local commit'ler (TASK Current Status'ta enumerated) + closure docs; kullanıcı push'u ayrı onaylayacak.
 - **Relevant files:** plan (8 task) = doğruluk kaynağı · `docs/tools/claude-codex-drift-check.sh` (Check A–E) · `docs/tools/codex-scan-substrate-harness.sh` (S-1) · Codex log `docs/reviews/codex/2026-06-04-codex-review-scope-contract-execute.md`.
 
 ## Verification
@@ -29,6 +29,7 @@
 - `final_unresolved_high_severity_override`: false
 - `unresolved_critical_high` (claude-confirmed C/H/M fix-required kümesi): **none**
 - `post_review_polish`: Task 7 binding'leri per-command overlay destination ile somutlandı (Codex follow-up, low-severity procedure-precision). Re-verify: drift-check PASS + S-1 41/0 + stale=0 (Codex'in belirttiği 3 kriter). Binding'ler external (commit'siz); RESTART gerek.
+- `review_claude_codex` (dual): **done 2026-06-04** — Claude subagent + Codex adversarial-review, pinli worktree + 7-komut context-only overlay. **dual-review: true**; unresolved C/H: **none** → chain serbest. Codex **F2** (execute-plan dirty SCOPE↔CALL_KIND false-GREEN, high) + **F3** (linked spec eksik vs spec L155, medium) → düzeltildi (F2 Yol-2 hard-DUR; F3 linked spec 3 yer); Codex re-review **CLOSED**. F1/L2 accepted ceiling. Re-verify: drift-check A–E exit 0 · S-1 41/0 · stale 0. Rapor: `docs/reviews/2026-06-04-codex-review-scope-contract.md`; Codex log `docs/reviews/codex/2026-06-04-review-codex-review-scope-contract-1.md` (Review + Re-review turn). Fix'ler execute-plan repo-DIŞı (restart'ta aktif).
 
 ## Open Problems
 - **[residual #1 — ref/procedure-correctness]** statik kanıtlanamaz → Codex /execute review'a tahsis. Bu oturumda fiilen tetiklendi + düzeltildi (final-review base-wiring bug → FINAL_BASE_REF). Katman çalıştı.
@@ -40,7 +41,7 @@
 - **Codex çağrısı bu oturumda:** sanitized substrate + 7 komut dosyası overlay (secret-scan: security-review hit'i false-positive [güvenlik vocab], adjudike edildi). `/tmp` runner'ları sonraki oturumda yok — gerekirse yeniden kur.
 
 ## Notes For Claude
-- **next:** `/review-claude-codex` → `/security-review-claude-codex` → closure. (Bu doc/tools + command-prose değişikliği; security yüzeyi düşük — security-review düşük-değer olabilir, kullanıcı kararı.)
+- **next:** `/security-review-claude-codex` → closure (`/review-claude-codex` done). (Bu doc/tools + command-prose değişikliği; security yüzeyi düşük — security-review düşük-değer olabilir, kullanıcı kararı.)
 - `execute_completed`: 2026-06-04
 - `branch_pushed`: no (kullanıcı "push YOK" seçti; 5 commit + closure docs local)
 - **Vault'a promote (closure'da):** A1 mimari + "per-call-site binding (execute-plan dual review call) — one-per-command yetmez" dersi + "ref/completeness statik tavan → Codex /execute review katmanı yakalar" (auto-fix-review-policy dersinin devamı).

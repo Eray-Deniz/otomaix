@@ -32,15 +32,25 @@ yasak (Check E marker-anchored hard-gate bunu kanıtlar).
 **EXECUTION TAMAMLANDI → waiting-review.** `/execute-plan-claude-codex` (inline + standard) ile 8 task
 TDD/RED-first uygulandı. 7 komut dosyası (deliverable, repo-DIŞı) düzenlendi: CODEX-REVIEW-SCOPE-CONTRACT
 7-way blok + per-call-site REVIEW-SCOPE-BINDING + AUTO-FIX her-turda (4-way) + execute-plan 8.6 clean/DUR.
-drift-check Check E (byte-lock + per-call-site binding + 8.6 clean-path) eklendi. **5 repo commit (main,
+drift-check Check E (byte-lock + per-call-site binding + 8.6 clean-path) eklendi. **Repo commit'leri (main,
 local — push YOK):** `a39d3c8` byte-lock · `be813c3` binding assertion · `96065b9` 8.6 assertion ·
 `4b8681e` per-call-site model (final-review fix) · `0f2cefd` balance-guard comment + ceiling doc.
 
 **Codex final execution review = approved** (4 tur: combined→2 bulgu → high base-wiring fix → table-fix →
 round-4 approve). Mekanik: drift-check A–E PASS · S-1 41/0 · smoke 7/7 · stale-sweep=0. Çözülmemiş C/H/M yok.
 
-**Deliverable repo-DIŞı → aktif olması için Claude Code RESTART gerekir.** **Sonraki adım:**
-`/review-claude-codex` + `/security-review-claude-codex` → closure (`done` + vault promotion P1).
+**Deliverable repo-DIŞı → aktif olması için Claude Code RESTART gerekir.**
+
+**`/review-claude-codex` TAMAMLANDI (2026-06-04, dual).** Fresh Claude subagent + Codex adversarial-review;
+pinli worktree + 7-komut context-only overlay. Codex 2 gerçek bulgu yakaladı (subagent "temiz" demişti —
+cross-model değer): **F2** (execute-plan dirty SCOPE↔CALL_KIND false-GREEN, high) → **Yol-2 hard-DUR ile
+düzeltildi**; **F3** (execute-plan binding/prompt linked spec eksik, spec L155, medium) → **düzeltildi**
+(linked spec 3 yere). İkisi de Codex re-review CLOSED. F1/L2 = dökümante kabul tavan (overlay prose-not-
+mechanized; düzeltme yok). Fix'ler execute-plan'da (repo-DIŞı, uncommitted → restart'ta aktif). Re-verify:
+drift-check A–E exit 0 · S-1 41/0 · stale 0. Rapor: `docs/reviews/2026-06-04-codex-review-scope-contract.md`.
+
+**Sonraki adım:** `/security-review-claude-codex` (unresolved high yok → chain serbest) → closure (`done`
++ vault promotion P1). Güvenlik yüzeyi düşük (docs/tools + komut-prose) — security-review düşük-değer olabilir.
 
 # Open Problems
 
@@ -102,6 +112,13 @@ round-4 approve). Mekanik: drift-check A–E PASS · S-1 41/0 · smoke 7/7 · st
   Spec §3.4'e sadık. Check E token'ları korundu; drift-check + S-1 + stale-sweep re-verify PASS. Overlay
   hâlâ prose guidance (mekanize değil) — runtime davranışı değişmedi, gelecekteki command-policy review'a
   daha net talimat.
+- 2026-06-04 (review): **`/review-claude-codex` dual** — Codex **F2** (execute-plan dirty SCOPE↔CALL_KIND
+  false-GREEN, high) + **F3** (checkpoint/final binding+prompt linked spec eksik vs spec L155, medium)
+  yakaladı (subagent kaçırmıştı — farklı eksen incelediler, çelişki değil). **F2 → Yol-2 (dirty'de hard-DUR,
+  SCOPE hep --base)**, **F3 → linked spec 3 yere** ile düzeltildi; Codex re-review ikisini de **CLOSED**.
+  **F1/L2** (overlay/co-location statik-tavan) kabul (düzeltme yok — drift NOTE + Task-7 "mekanize değil").
+  Fix'ler execute-plan repo-DIŞı (restart'ta aktif). [[feedback_rerun_review_after_fix]] (fix sonrası
+  re-review koşturuldu) + [[feedback_no_volatile_values_in_docs]] (L1 uçucu commit sayısı düzeltildi).
 
 # Notes For Claude
 
