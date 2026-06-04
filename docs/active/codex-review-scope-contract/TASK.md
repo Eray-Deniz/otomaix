@@ -49,8 +49,15 @@ düzeltildi**; **F3** (execute-plan binding/prompt linked spec eksik, spec L155,
 mechanized; düzeltme yok). Fix'ler execute-plan'da (repo-DIŞı, uncommitted → restart'ta aktif). Re-verify:
 drift-check A–E exit 0 · S-1 41/0 · stale 0. Rapor: `docs/reviews/2026-06-04-codex-review-scope-contract.md`.
 
-**Sonraki adım:** `/security-review-claude-codex` (unresolved high yok → chain serbest) → closure (`done`
-+ vault promotion P1). Güvenlik yüzeyi düşük (docs/tools + komut-prose) — security-review düşük-değer olabilir.
+**`/security-review-claude-codex` TAMAMLANDI (2026-06-04, dual, mode=diff).** Bu task'ın değişiklikleri
+**güvenlik-temiz** (iki hakem hemfikir, ampirik doğrulandı: injection/secret-leak/unsafe-op yok). Codex 2
+high buldu ama ikisi de bu task'ın getirdiği DEĞİL: **SF1** (tracked-dirty substrate secret-scan gap —
+pre-existing byte-locked S-1 blok) → **spun-off S-1 hardening follow-up** (CURRENT.md proposed); **SF2**
+(overlay token-presence = /review F1) → dökümante kabul tavan. **security-risk override: kullanıcı kabul
+etti.** Rapor: `docs/security-reviews/2026-06-04-codex-review-scope-contract.md`.
+
+**Sonraki adım:** closure — `/finish-branch-claude-codex` veya `done` flip + vault promotion (P1).
+(`/review` + `/security-review` done; security-risk override kabul; deliverable repo-dışı → RESTART gerek.)
 
 # Open Problems
 
@@ -119,6 +126,13 @@ drift-check A–E exit 0 · S-1 41/0 · stale 0. Rapor: `docs/reviews/2026-06-04
   **F1/L2** (overlay/co-location statik-tavan) kabul (düzeltme yok — drift NOTE + Task-7 "mekanize değil").
   Fix'ler execute-plan repo-DIŞı (restart'ta aktif). [[feedback_rerun_review_after_fix]] (fix sonrası
   re-review koşturuldu) + [[feedback_no_volatile_values_in_docs]] (L1 uçucu commit sayısı düzeltildi).
+- 2026-06-04 (security-review): **`/security-review-claude-codex` dual (mode=diff)** — bu task'ın değişiklikleri
+  güvenlik-temiz (ampirik: USER_BASE_REF injection-reject, heredoc literal, Check E'de rm/eval yok). Codex 2 high
+  (ikisi de bu task değil): **SF1** (tracked-dirty diff secret-scan'siz — `git apply` 1228-1231 vs `_css_secret_scan`
+  yalnız untracked 1233-1238; doğrulandı GERÇEK ama dar+pre-existing S-1 byte-locked blok) → **spun-off S-1
+  substrate-hardening follow-up** (CURRENT.md); **SF2** (overlay token-presence = /review F1) → kabul tavan (subagent
+  bağımsız low). **security-risk override kabul** (high'lar bu task'ın regression'ı değil; byte-locked güvenlik bloğunu
+  closure'a iliştirmedik). [[feedback_severity_gates_process_weight]] + [[feedback_run_mandatory_review_gates]].
 
 # Notes For Claude
 
