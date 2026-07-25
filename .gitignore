@@ -12,3 +12,7 @@
 screenshots/
 shared/load-tests/.venv/
 shared/load-tests/results/
+# Daimon kafes karantina kökü — daemon-owned 0700 runtime dizini, izlenmez.
+# (Kafes zaten yalnız incelenen yolları stage'ler; bu satır CLI tarafındaki
+#  `git add -A` kazasına karşı korumadır.)
+/.daimon/
