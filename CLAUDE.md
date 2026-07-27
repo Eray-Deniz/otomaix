@@ -10,7 +10,7 @@ Her app'in kendi `CLAUDE.md`'si vardır (`apps/social/backend`, `apps/social/fro
 
 CLAUDE.md dosyaları YALNIZCA: proje yapısı, env, deploy, konvansiyonlar.
 - Sprint logları → git commit
-- Kararlar → `~/.claude/projects/-root-otomaix/memory/decisions_*.md`
+- Kararlar → Vault `decisions/` (`/root/otomaix-brain/decisions/` — canonical karar evi)
 - Aktif iş → Tasks (oturum içi)
 - Changelog YAZILMAZ
 
@@ -62,7 +62,7 @@ Bir kullanıcı sorusu/task geldiğinde:
 ### Mevcut slash command entegrasyonu (özet)
 
 - `/write-plan-claude-codex` sonu → TASK + HANDOFF yaratma sorusu
-- `/execute-plan` başı → status=active sorusu
+- `/execute-plan-claude-codex` başı → status=active sorusu
 - `/commit` → Current Status update + Vault promotion check (P1)
-- `/review` → high/critical → Open Problems + Notes For Claude
-- `/finish-branch` → seçime göre matrix (merge/sil = closure+archive, PR = waiting-review, tut = no-op)
+- `/review-claude-codex` → high/critical → Open Problems + Notes For Claude
+- `/finish-branch-claude-codex` → seçime göre matrix (merge/sil = closure+archive, PR = waiting-review, tut = no-op)

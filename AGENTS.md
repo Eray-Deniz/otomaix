@@ -5,101 +5,99 @@
 > içerik ekleyebilirsin — korunur.
 
 <!-- BEGIN CODEX-DISTILLED -->
-> Bu icerik Codex CLI icin /root/otomaix/CLAUDE.md from distilled. Slash command, Skill tool gibi Claude-specific kurallar haric tutulmustur.
+> Bu içerik Codex CLI için /root/otomaix/CLAUDE.md'den damıtılmıştır.
 
-## Proje Ozeti
+## Proje Özeti
 
-Otomaix, ortak altyapi ustunde calisan AI otomasyon uygulamalarinin monorepo'sudur.
+Otomaix, ortak altyapı üzerinde çalışan AI otomasyon uygulamalarının monorepo’sudur.
 
-## Bilgi Kaynagi Sirasi
+## Bilgi Kaynakları
 
-Mimari, karar, vendor veya gecmis bilgi sorularinda once `/root/otomaix-brain/index.md` kontrol edilmelidir.
+Mimari, karar, vendor veya geçmiş bilgisi sorularında önce `/root/otomaix-brain/index.md` kontrol edilmelidir.
 
-Ilgili wiki sayfasi bulunup oradan okunmali; cevaplarda `[[wikilink]]` citation kullanilmalidir.
+İlgili wiki sayfası bulunup okunmalı ve yanıtlarda `[[wikilink]]` citation kullanılmalıdır.
 
-Vault'ta bilgi yoksa veya guncel degilse sira:
+Vault’ta bilgi yoksa veya güncel değilse şu sıra izlenir:
 
 1. Kod
 2. Memory
 3. `docs/_archive/`
 
-Vault canonical kaynaktir. Eski `docs/00-platform-mimari.md` ve diger mimari dokumanlar arsive tasinmistir; mimari bilgi icin vault esas alinmalidir.
+Vault canonical kaynaktır. Eski mimari dokümanlar, including `docs/00-platform-mimari.md`, arşivlenmiştir.
 
-## App Bazli Kurallar
+## Uygulama Bazlı Kurallar
 
-Her app'in kendi proje talimatlari vardir:
+Aşağıdaki uygulamaların kendi `CLAUDE.md` dosyaları vardır:
 
 - `apps/social/backend`
 - `apps/social/frontend`
 - `apps/crm`
 
-Bu dizinlerde calisilirken ilgili app'e ait ek kurallar dikkate alinmalidir.
+Bu dizinlerde çalışırken ilgili uygulamanın proje talimatları ayrıca okunmalı ve uygulanmalıdır.
 
-## Dokumantasyon ve Drift Koruma
+## Proje Talimat Dosyalarında Drift Koruması
 
-`CLAUDE.md` benzeri proje talimat dosyalari yalnizca su tur bilgileri icermelidir:
+`CLAUDE.md` türü proje talimat dosyaları yalnızca şu bilgileri içermelidir:
 
-- Proje yapisi
-- Env bilgisi
-- Deploy bilgisi
+- Proje yapısı
+- Ortam bilgileri
+- Deploy bilgileri
 - Konvansiyonlar
 
-Bu dosyalara sprint logu, aktif is kaydi veya changelog eklenmemelidir.
+Kayıtların canonical yerleri:
 
-Kayit yerleri:
+- Sprint geçmişi: git commit’leri
+- Kararlar: `/root/otomaix-brain/decisions/`
+- Aktif çalışma durumu: task sistemi
+- Changelog: oluşturulmaz
 
-- Sprint loglari: git commit
-- Kararlar: `~/.claude/projects/-root-otomaix/memory/decisions_*.md`
-- Aktif is: oturum ici task takibi
-- Changelog: yazilmaz
+## Çapraz Uygulama Kuralları
 
-## Capraz App Kurallari
+- CRM, `social` schema’sını yalnızca okuyabilir; yazamaz.
+- Frontend ile Backend arasındaki tek API gateway `api.otomaix.com` adresidir.
+- CRM, PostgreSQL’e doğrudan bağlanır; CRM için API katmanı yoktur.
+- Migration dosyaları `shared/db/migrations/` altında numaralandırılmış sırayla tutulur.
+- n8n workflow değişiklikleri `shared/n8n-workflows/` altına JSON export olarak eklenir.
 
-- CRM, `social` schema'yi yalnizca okur; yazmaz.
-- Frontend -> Backend iletisiminde tek API gateway kullanilir: `api.otomaix.com`.
-- CRM -> PostgreSQL direkt baglanir; CRM icin API katmani yoktur.
-- Migration dosyalari `shared/db/migrations/` altinda numaralandirilmis sirayla tutulur.
-- n8n workflow degisiklikleri `shared/n8n-workflows/` altina JSON export olarak eklenir.
+## Aktif Task Katmanı
 
-## Aktif Task Layer
+Canlı task durumu ve oturumlar arası devir teslim için repo içindeki aktif task katmanı kullanılır.
 
-Canli task state ve devir teslim icin repo overlay'i kullanilir.
-
-Detay dokumani:
+Ayrıntılı tanım:
 
 - `docs/specs/2026-05-19-claude-codex-aktif-katman.md`
 
-Path konvensiyonu:
+Path konvansiyonları:
 
-- `docs/active/CURRENT.md` — aktif task pointer'i; her zaman var olabilir, bos olabilir.
-- `docs/active/<slug>/TASK.md` — canonical task state; status, decisions, open problems.
-- `docs/active/<slug>/HANDOFF.md` — rolling session-boundary devir teslim.
-- `docs/task-archive/YYYY/MM/<slug>/` — kapanmis task'lar; bitis tarihine gore.
+- `docs/active/CURRENT.md`: aktif task pointer’ı
+- `docs/active/<slug>/TASK.md`: canonical task durumu, kararlar ve açık problemler
+- `docs/active/<slug>/HANDOFF.md`: rolling session-boundary devir teslim
+- `docs/task-archive/YYYY/MM/<slug>/`: tamamlanan task arşivi
 
-Canonical ayrim:
+Canonical içerik ayrımı:
 
-- Status, Decisions Log, Open Problems -> `TASK.md`
-- Verification, Risks, Notes For Claude/Codex -> `HANDOFF.md`
-- Promote edilen mimari kararlar -> Vault `decisions/`
+- Status, Decisions Log ve Open Problems: `TASK.md`
+- Verification, Risks ve Notes For Claude/Codex: `HANDOFF.md`
+- Kalıcı mimari kararlar: Vault içindeki `decisions/`
 
-Tum task transition'lari manuel `TASK.md` edit ile yapilir. Otomatik state mutation yoktur.
+Task durum geçişleri manuel `TASK.md` düzenlemeleriyle yapılır; otomatik state mutation yoktur.
 
-## Codex Yetkisi
+## Codex Yetki Sınırı
 
-Codex, Active Task Layer'a yazmaz.
+Codex, Active Task Layer dosyalarına yazmaz.
 
-Bulgu, analiz veya oneriler stdout/yanit olarak donulur; gerekiyorsa Claude veya kullanici bunlari `HANDOFF.md` icindeki ilgili alana isler.
+Bulgular, analizler ve öneriler stdout veya kullanıcı yanıtı olarak döndürülür. Gerekiyorsa başka bir yetkili aktör bunları `HANDOFF.md` içine işler.
 
-## Session Baslangic Protokolu
+## Oturum Başlangıç Protokolü
 
-Bir kullanici sorusu veya task geldiginde:
+Her kullanıcı sorusu veya görevi için:
 
-1. `docs/active/CURRENT.md` oku.
-2. Listelenen task'lardan kullanici sorusuyla alakali olani sec.
-3. Tek aktif task varsa otomatik secilebilir.
-4. Birden fazla alakali task varsa kullaniciya sor.
-5. Hicbiri uymuyorsa active layer'i atla.
-6. Secilen task icin `docs/active/<slug>/TASK.md` ve `docs/active/<slug>/HANDOFF.md` oku.
-7. Vault sorgusu gerekiyorsa `/root/otomaix-brain/index.md` ve ilgili wiki sayfalarini oku.
-8. Sonra cevap ver veya aksiyon al.
+1. `docs/active/CURRENT.md` okunur.
+2. Listelenen task’lardan kullanıcı talebiyle ilgili olan seçilir.
+3. Tek ilgili aktif task varsa otomatik seçilebilir.
+4. Birden fazla ilgili task varsa kullanıcıdan seçim istenir.
+5. Hiçbir task ilgili değilse aktif task katmanı atlanır.
+6. Seçilen task’ın `TASK.md` ve `HANDOFF.md` dosyaları okunur.
+7. Vault sorgusu gerekiyorsa `/root/otomaix-brain/index.md` ve ilgili wiki sayfaları okunur.
+8. Ardından yanıt verilir veya istenen işlem gerçekleştirilir.
 <!-- END CODEX-DISTILLED -->
