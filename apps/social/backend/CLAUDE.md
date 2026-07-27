@@ -3,7 +3,7 @@
 > **DRIFT KORUMA**
 > Bu dosya YALNIZCA: proje yapısı, env, deploy, konvansiyonlar.
 > Sprint logları → git commit.
-> Kararlar → memory/decisions_*.md.
+> Kararlar → Vault `decisions/` (`/root/otomaix-brain/decisions/` — canonical karar evi).
 > Aktif iş → Tasks (oturum içi).
 > Bu dosyaya changelog EKLENMEZ.
 
@@ -15,9 +15,9 @@ otomatik yayınlama, trend analizi, rakip analizi, RAG doküman bağlamı ve öd
 
 ## Proje Kılavuzları
 
-- Genel mimari: `~/otomaix/docs/00-platform-mimari.md`
-- Phase kılavuzları: `~/otomaix/docs/01-social-phase1.md` ... `04-social-phase4.md`
-- CRM: `~/otomaix/docs/05-crm-admin.md`
+- Bilgi kaynağı önce vault: `/root/otomaix-brain/index.md` (mimari/karar/vendor — canonical)
+- Eski kılavuzlar arşive taşındı: `docs/_archive/00-platform-mimari.md`,
+  `01..04-social-phase*.md`, `05-crm-admin.md` (tarihsel referans; güncel bilgi vault'ta)
 
 ## Deploy
 
@@ -106,6 +106,7 @@ app/
 │   ├── autoposting.py         # config CRUD, toggle, upcoming
 │   ├── avatar.py              # HeyGen stock/create/generate-ugc
 │   ├── billing.py             # Paddle checkout/portal/plans + CRM webhook notify
+│   ├── brand_reference_images.py # Marka referans görsel kütüphanesi CRUD (Özel Gün)
 │   ├── brands.py              # CRUD + brand_kit JSONB deep merge + logo/intro upload
 │   ├── calendar.py            # posts by date range, schedule, holidays
 │   ├── competitors.py         # CRUD + analiz + sentez raporu
@@ -114,6 +115,7 @@ app/
 │   ├── media_models.py        # /media-models/active (adapter registry)
 │   ├── posts.py               # generate (image/carousel/special_day/quote) + publish
 │   ├── product_documents.py   # Ürün doküman CRUD + RAG
+│   ├── product_images.py      # Ürün/Hizmet görsel kütüphanesi CRUD (Çoklu Ürün Görseli)
 │   ├── products.py            # Ürün/Hizmet CRUD + quota
 │   ├── sectors.py             # Sektör listesi
 │   ├── settings.py            # Kullanıcı ayarları
@@ -156,18 +158,24 @@ app/
 025: posts.image_text_fields
 026: brand_products + product_documents + product_document_chunks
 027: posts.product_id FK
+028: posts.template_id + shortvideo rename
+029: brand_reference_images (marka referans görsel kütüphanesi)
+030: product_images (ürün görsel kütüphanesi)
+031: brand_products.highlight
 
 ## Router Kayıt Sırası (main.py)
 
 ```
 auth → ai → billing (+webhooks) → internal → autoposting → avatar →
-brands → competitors → calendar → documents → media_models → posts →
-product_documents → products → sectors → settings → storage → social →
-templates → trends → webhooks
+brands → brand_reference_images → competitors → calendar → documents →
+media_models → posts → product_documents → product_images → products →
+sectors → settings → storage → social → templates → trends → webhooks
 ```
 
 **Kural:** Statik path'ler (`/posts/stats/summary`, `/posts/scheduled-due`, `/posts/fail-stale`)
 dinamik path'lerden (`/{post_id}`) ÖNCE deklare edilmeli. Aynı şekilde `/trends/personal` → `/{trend_index}`'den önce.
+Aynı kuralın router-seviyesi hali: `product_images` router'ı `products`'tan ÖNCE kayıt edilir —
+spesifik `/products/{id}/images` path'leri generic `/products/{id}`'den önce match etsin.
 
 ## n8n Workflow'ları
 

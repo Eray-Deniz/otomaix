@@ -3,7 +3,7 @@
 > **DRIFT KORUMA**
 > Bu dosya YALNIZCA: proje yapısı, env, deploy, konvansiyonlar.
 > Sprint logları → git commit.
-> Kararlar → memory/decisions_*.md.
+> Kararlar → Vault `decisions/` (`/root/otomaix-brain/decisions/` — canonical karar evi).
 > Aktif iş → Tasks (oturum içi).
 > Bu dosyaya changelog EKLENMEZ.
 
@@ -14,8 +14,9 @@ Otomaix ekibinin müşterileri yönettiği dahili admin paneli. Next.js 14 (App 
 
 ## Proje Kılavuzları
 
-- Genel mimari: `~/otomaix/docs/00-platform-mimari.md`
-- CRM kılavuzu: `~/otomaix/docs/05-crm-admin.md`
+- Bilgi kaynağı önce vault: `/root/otomaix-brain/index.md` (mimari/karar/vendor — canonical)
+- Eski kılavuzlar arşive taşındı: `docs/_archive/00-platform-mimari.md`,
+  `docs/_archive/05-crm-admin.md` (tarihsel referans; güncel bilgi vault'ta)
 
 ## Deploy
 

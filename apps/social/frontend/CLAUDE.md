@@ -3,7 +3,7 @@
 > **DRIFT KORUMA**
 > Bu dosya YALNIZCA: proje yapısı, env, deploy, konvansiyonlar.
 > Sprint logları → git commit.
-> Kararlar → memory/decisions_*.md.
+> Kararlar → Vault `decisions/` (`/root/otomaix-brain/decisions/` — canonical karar evi).
 > Aktif iş → Tasks (oturum içi).
 > Bu dosyaya changelog EKLENMEZ.
 
@@ -14,8 +14,9 @@ AI destekli sosyal medya içerik üretimi, takvim, otomatik yayın, trend/rakip 
 
 ## Proje Kılavuzları
 
-- Genel mimari: `~/otomaix/docs/00-platform-mimari.md`
-- Phase kılavuzları: `~/otomaix/docs/01-social-phase1.md` ... `04-social-phase4.md`
+- Bilgi kaynağı önce vault: `/root/otomaix-brain/index.md` (mimari/karar/vendor — canonical)
+- Eski kılavuzlar arşive taşındı: `docs/_archive/00-platform-mimari.md`,
+  `01..04-social-phase*.md` (tarihsel referans; güncel bilgi vault'ta)
 
 ## Deploy
 
@@ -86,6 +87,7 @@ components/
 │   ├── Providers.tsx                 # PostHog + Crisp sarmalayıcı
 │   ├── PostHogProvider.tsx           # PostHog init + pageview
 │   └── CrispProvider.tsx             # Crisp chat widget
+├── SceneReferencePicker.tsx          # Marka referans görsel seçici (Özel Gün — Akış C form)
 ├── templates/
 │   ├── TemplateCard.tsx
 │   ├── TemplateGrid.tsx              # (aktif kullanılmıyor — auto-select devrede)
@@ -99,6 +101,7 @@ lib/
 ├── store.ts                          # Zustand (user, workspace, brands, currentBrand)
 ├── supabase.ts                       # Supabase client
 ├── analytics.ts                      # PostHog typed event wrapper
+├── preferences.ts                    # Kullanıcı tercihi persist (localStorage, SSR-safe)
 ├── utils.ts                          # Yardımcı fonksiyonlar
 ├── templates.types.ts                # Template TypeScript interface'leri (1:1 backend Pydantic)
 └── products.types.ts                 # Ürün/Hizmet TypeScript interface'leri
