@@ -50,6 +50,13 @@
 - **Kapanışta Codex adversarial review** (tam dosya üzerinde).
 
 ## Parçalı yazımda bütünlük koruması (öneri — Eray'ın 2026-08-21 sorusuna cevaben)
+
+> ⚠️ **Kalıcılık kuralı (Eray onayı, 2026-08-21):** bu yöntem bölümü, spec tamamlanana kadar
+> HANDOFF'un her rolling yazımında KORUNUR; ilk spec oturumunda iskelet çıkarılırken yöntem
+> notu spec dosyasının kendisine (iskeletle birlikte) taşınır ve asıl evi orası olur.
+> Uygulamanın kanıt artefaktları: iskelet + bağımlılık haritası (madde 1, bölüm yazımından
+> önce Eray'a sunulur) · bölüm sonu tarama raporları (madde 4) · tam dosya Codex review
+> raporu (madde 5).
 1. **İskelet önce:** bölüm yazımına başlamadan tüm spec'in iskeleti çıkarılır — başlıklar,
    her bölümün tek cümlelik sorumluluğu, bölümler arası bağımlılık haritası. Küçüktür; her
    parça yazılırken bağlamda tutulur.
