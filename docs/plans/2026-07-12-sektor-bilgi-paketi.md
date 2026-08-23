@@ -1,6 +1,7 @@
 ---
 title: Sektör Bilgi Paketi Sistemi — Runtime Çekirdek + Araştırma Hattı Sözleşmeleri
-status: plan-approved
+status: superseded
+superseded-note: kaynak spec superseded (2026-08-23, Eray karari); yeni spec docs/specs/2026-08-21-sektor-bilgi-paketi.md tamamlaninca yeni plan sifirdan yazilir, bu plan dikkate alinmaz
 date: 2026-07-12
 source_spec: docs/specs/2026-07-11-sektor-bilgi-paketi.md
 source_spec_unapproved_override: false

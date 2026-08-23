@@ -1,6 +1,8 @@
 ---
 title: Sektör Bilgi Paketi Sistemi — Runtime Çekirdek + Araştırma Hattı Sözleşmeleri
-status: spec-approved
+status: superseded
+superseded-by: docs/specs/2026-08-21-sektor-bilgi-paketi.md
+superseded-date: 2026-08-23
 date: 2026-07-11
 tags: [social-backend, social-frontend, sector-packages, prompt-injection, taxonomy, regression-gate, migrations]
 codex_review_status: approved
@@ -11,6 +13,11 @@ codex_review_log: docs/reviews/codex/2026-07-11-sektor-bilgi-paketi.md
 ---
 
 # Sektör Bilgi Paketi Sistemi — Spec
+
+> ⚠️ **SUPERSEDED (2026-08-23, Eray kararı):** Bu spec geçersizdir. Yerine geçen spec
+> `docs/specs/2026-08-21-sektor-bilgi-paketi.md` — tamamen sentez girdisinden
+> (`docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md`) yazılır; bu belge
+> yeni spec'in yazımında DİKKATE ALINMAZ.
 
 ## 1. Özet ve hedef
 
