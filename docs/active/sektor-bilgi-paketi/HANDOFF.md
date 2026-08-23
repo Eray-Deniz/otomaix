@@ -1,66 +1,59 @@
 # Handoff
 
 ## Context
-- Task: sektor-bilgi-paketi — **faz: 45/45 ürün kararı kapandı + spec ONAYLANDI;
-  sırada sentez deposu sweep'i ve sıfırdan plan**
-- Last updated: 2026-08-23 (karar kapanış turu oturumu)
+- Task: sektor-bilgi-paketi — **faz: spec ONAYLI + sentez deposu sweep borcu
+  kapsam daraltmasıyla kapandı; sırada sıfırdan plan**
+- Last updated: 2026-08-23 (üçüncü oturum — sweep kapanışı)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (status: `spec-approved`;
   tüm K-ID satırları kapanış statüsünde)
-- Karar listesi: `docs/active/sektor-bilgi-paketi/KARAR-KAPANIS-LISTESI.md`
-  (Durum sütunu dolu — arşivlik; kanonik kayıt TASK Decisions Log + spec)
+- Karar listesi: `docs/active/sektor-bilgi-paketi/KARAR-KAPANIS-LISTESI.md` (arşivlik)
 - Review log: `docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-spec.md` (3 tur SHIP)
 - ⚠️ Eski spec (2026-07-11) ve plan (2026-07-12) **superseded** — dikkate alınmaz.
 
 ## Current State
-- **Karar turu bitti:** 45 karar Eray'la TEK TEK kapatıldı (toplu kapanış
-  kullanılmadı; her soru somut akış/senaryo özetiyle soruldu — kalıcı format tercihi).
-- **Öneriden farklı 3 karar:** K-71 açık sorular aktivasyonu BLOKLAR · K-45 çift
-  yönlü bakım bildirimi (yönetici + müşteri mesaj çifti, metinler sabit) · K-56
-  olay-bazlı ANINDA uyarı (eşik değil — paketsiz düşen her üretimde bildirim).
-- **Genişlemeli kapanışlar:** K-26 sektör-başına periyot alanı + VADE BİLDİRİMİ ·
-  K-69 hazırlık kapısı (K-70 sorumlusu=operatör dahil) · K-82 (K-83 dahil) ·
-  K-142 (K-143 hiç doğmadı).
-- **Faz 1'e eklenen iş kalemi:** bildirim mekanizması — K-45 + K-26 vade + K-56
-  uyarı aynı altyapıda (plan görevi olacak).
-- **Spec onayı:** Eray verdi; frontmatter `spec-approved` + `approved:` satırı.
-- Kayıt üçlemesi tamam: liste Durum sütunu + spec K-ID kapanışları (kardeş-site
-  sweep'li) + TASK Decisions Log tam döküm.
+- **Sweep borcu kapandı (kapsam daraltması, Eray):** kapanan 51 kararın (45 tur +
+  K-57 · K-70 · K-83 · K-143 bağlı + K-20 · K-21) araştırma deposuna geriye dönük
+  işlenmesi İPTAL edildi. Yerine kaynak belgeye (`/root/otomaix-sosyal-medya-arastirmasi/
+  sektor-bilgi-paketi-spec-input.md`) iki statü notu eklendi: belge başı (51 kapanışın
+  ID listesi + kanonik kayıt işaretçileri + "çelişkide spec esastır") ve Bölüm 17
+  başlığı (kısa ayna not). Snapshot (`docs/research/2026-08-21-sektor-bilgi-paketi-
+  spec-input.md`) notlu kaynakla yeniden eşitlendi.
+- **K-57 tespiti:** K-56 kapanışı ("rol sorusu da kapandı") K-57'yi fiilen kapatıyor;
+  TASK "Ek kapanışlar" listesine eklendi.
+- Başlanıp geri alınan tam sweep'in düzenlemeleri hiçbir commit'e girmedi; geri alım
+  sonrası kaynak sha baseline ile birebir doğrulandı.
 
 ## Resume From (sıra)
-1. **Sentez deposu sweep borcu:** kapanan 45 karar kanonik kaynakta
-   (`/root/otomaix-sosyal-medya-arastirmasi`, Bölüm 17 + Ek B) hâlâ açık görünüyor.
-   Kaynak güncellenince snapshot yeniden alınır (kural snapshot başlığında).
-   Codex oturumu: `codex resume 01a02e3f-9ff3-7ad3-b493-ac4cb070a8d3`.
-2. **`/write-plan-claude-codex`** — plan SIFIRDAN (eski plan superseded). Girdi:
-   yalnız yeni spec + snapshot. K-32…K-37 (pilot genişleme şartları) plan sırasında
-   ayrıca gelecek.
+1. **`/write-plan-claude-codex`** — plan SIFIRDAN (eski plan superseded). Girdi:
+   yeni spec + snapshot. **Karar statüsünde spec esastır** — snapshot'taki `[AÇIK]`
+   ifadeleri 51 kapanış için bayattır (statü notu belge başında). K-32…K-37 (pilot
+   genişleme şartları) plan sırasında ayrıca gelecek.
 
 ## Verification (bu oturum)
-- **Passed:** 45 kararın üç-yer kaydı (liste/spec/TASK) her kararda ayrı ayrı
-  yapıldı · listede açık satır kalmadığı grep ile doğrulandı (`| |$` → 0 eşleşme) ·
-  spec'te her kapanan K-ID'nin TÜM geçişleri grep'le bulunup güncellendi (kardeş-site
-  sweep; K-38'in 13.3'teki dolaylı izi dahil) · K-26 vade-uyarısı sorusu spec'e karşı
-  ölçüldü (uyarı mekanizması yoktu — kararla eklendi).
-- **Passed (oturum sonu):** commit `8ce26f7` + push origin/main — 7 dosya; working
-  tree temiz (git status ile doğrulandı).
-- **Not run:** Codex kapanış-doğrulaması bu oturumda KOŞULMADI (spec'e ~45 noktada
-  kapanış metni eklendi; review zinciri bunları henüz sınamadı) · sentez deposu
-  sweep'i yapılmadı · canlı hiçbir şey çalıştırılmadı.
-- **Kalan risk:** kapanış metinleri tek elden yazıldı — Codex doğrulama turu
-  (`/review-claude-codex` veya plan öncesi hızlı kapanış-sweep'i) drift'i yakalar;
-  iki-depo statü farkı (Resume 1) kapanana kadar snapshot bayat.
+- **Passed:** geri alım sonrası kaynak sha = `f056988d…` (snapshot baseline ile
+  birebir; `sha256sum` ile doğrulandı) · statü notundaki 45'lik ID listesi
+  KARAR-KAPANIS-LISTESI + TASK Decisions Log'a karşı bire bir sayıldı (45 + 4 bağlı
+  + K-20/K-21 = 51) · notlu kaynak commit'lendi (`b356033`, 3145 satır, sha
+  `efe21707…`) ve snapshot yeniden eşitlendi — `tail -n +7 | sha256sum` kaynak
+  sha'sıyla birebir (bayt-özdeşlik PASS).
+- **Not run:** Codex doğrulaması bu oturumda koşulmadı (statü notu tek elden yazıldı) ·
+  spec'in ~45 kapanış metni hâlâ review zincirinden geçmedi (önceki oturumdan kalan
+  risk — plan öncesi hızlı kapanış-sweep'i hâlâ değerli) · canlı hiçbir şey çalıştırılmadı.
+- **Kalan risk:** snapshot gövdesi bilinçli olarak bayat — plan yazımı/Codex review
+  sırasında snapshot'tan alıntılanan bir "açık karar" ifadesi statü notuna karşı
+  kontrol edilmeli; çelişkide spec esastır.
 
 ## Notes For Claude
-- HANDOFF rolling; karar izi TASK Decisions Log'da (bu oturumun tam dökümü orada).
-- **Karar sorma formatı kalıcı:** tek karar/soru + somut akış-senaryo düzeyinde
-  mimari özet (hafıza: decision-review-one-by-one). Soyut kavram listesi YETMEZ —
-  zaman damgalı/örnekli anlatım.
-- K-56'yı Eray yeniden çerçeveledi: "eşik" kavramı reddedildi, olay-bazlı model
-  kuruldu — plan yazarken alarm tasarımını eşiksiz kur.
-- Liste dosyası işlevini bitirdi; task kapanışında arşive gider, silinmez.
+- HANDOFF rolling; karar izi TASK Decisions Log'da.
+- Karar sorma formatı kalıcı: tek karar/soru + somut akış-senaryo özeti
+  (hafıza: decision-review-one-by-one).
+- K-56 olay-bazlı model (eşik YOK) — plan yazarken alarm tasarımını eşiksiz kur.
+- Sweep'in yeniden açılma koşulu: arşiv belgesi yeniden canlı girdi olursa
+  (TASK Decisions Log 2026-08-23 kaydı).
 
 ## Notes For Codex
 - Plan review'ında eski planın hiçbir hükmü referans alınmaz; kaynak yalnız yeni
-  spec (spec-approved) + snapshot.
+  spec (spec-approved) + snapshot. Snapshot'ın Bölüm 17/gövde statüleri 51 kapanış
+  için bayattır — statü notu (belge başı) bağlayıcıdır, çelişkide spec esastır.
 - Spec'teki ~45 kapanış eki tek elden yazıldı — plan öncesi kapanış-sweep
   doğrulaması değerli (occurrence tutarlılığı + K-ID çapraz atıfları).

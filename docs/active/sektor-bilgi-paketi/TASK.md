@@ -29,7 +29,10 @@ altında tam döküm. Öneriden farklı 3 karar: K-71 (açık sorular aktivasyon
 K-45 (çift yönlü bakım bildirimi — Faz 1'e bildirim mekanizması iş kalemi eklendi),
 K-56 (olay-bazlı anında uyarı — eşik değil). K-26 genişlemeli kapandı (vade
 bildirimi eklendi). **Spec ONAYLANDI (Eray, aynı oturum)** — frontmatter
-`spec-approved`. Sırada: commit → sentez deposu sweep'i → plan.
+`spec-approved`. **Üçüncü oturum (aynı gün): sentez deposu sweep borcu kapsam
+daraltmasıyla kapatıldı** — tam geriye dönük sweep İPTAL (Eray), yerine kaynak
+belgeye statü notu + snapshot yeniden eşitleme. Sırada: `/write-plan-claude-codex`
+ile sıfırdan plan.
 
 **Önceki durum (aynı gün, ilk oturum):** Spec yazıldı, Codex review 3 tur SHIP
 (11+1 bulgu çözüldü; log: `docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-spec.md`).
@@ -165,10 +168,21 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
   45/45 karar kapandı** — 41 öneri kabul (2'si genişlemeli: K-26 vade bildirimi,
   K-69+K-70), 3 öneriden farklı (K-71 bloklar · K-45 çift yönlü bildirim · K-56
   olay-bazlı anında uyarı), 1 öneri+yeniden-çerçeveleme (K-56'da eşik→olay). Ek
-  kapanışlar: K-70, K-83, K-143 (bağlı kararlar kendiliğinden çözüldü).
+  kapanışlar: K-70, K-83, K-143 (bağlı kararlar kendiliğinden çözüldü) ve K-57
+  (alarm sorumlusu = yönetici; K-56 kapanışının "rol sorusu da kapandı" hükmüyle —
+  sweep hazırlığında tespit edilip 2026-08-23 üçüncü oturumda bu listeye eklendi).
 - **2026-08-23 — Spec ONAYLANDI (Eray):** karar turu kapanışının ardından frontmatter
   `reviewed-pending-user-approval` → `spec-approved`. Plan `/write-plan-claude-codex`
   ile SIFIRDAN yazılacak (eski plan superseded).
+- **2026-08-23 — Sentez deposu sweep borcu KAPSAM DARALTMASIYLA kapandı (Eray):**
+  kapanan kararların kanonik kaynağa (araştırma deposu, Bölüm 17 + Ek B + gövde)
+  geriye dönük işlenmesi İPTAL — spec onaylandıktan sonra arşiv belgesini yeniden
+  yazmak (51 satır + ~30 kalan gövde düzenlemesi + ~47 Ek B kaydı + Codex doğrulama
+  turu) risk/fayda dengesini aşıyor; "süreç ağırlığı ≈ risk ağırlığı". Başlanan
+  düzenlemeler (51 satır + ~35 gövde) commit edilmeden geri alındı; baseline sha
+  doğrulandı. Yerine: kaynak belgeye statü notu (belge başı + Bölüm 17 başlığı —
+  51 kapanışın ID listesi + "çelişkide spec esastır" hükmü) + snapshot yeniden
+  eşitleme. Yeniden açılma koşulu: arşiv belgesi ileride yeniden canlı girdi olursa.
 - **2026-08-21 — Denetim + sweep (Eray: "yüksek bulguları giderelim" + commit onayı):**
   Codex denetiminin iki yüksek bulgusu sentez deposunda giderildi (commit'ler
   `8e298eb → c380e37`); dört kapanışın statü/kapsam izleri gövdeye işlendi, karar-durumu

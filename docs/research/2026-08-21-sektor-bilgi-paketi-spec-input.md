@@ -1,10 +1,17 @@
 > ⚠️ **SALT-OKUNUR KOPYA (snapshot) — DÜZENLENMEZ.** Spec yazımı için Otomaix'e alınan kanonik girdi kopyasıdır.
-> Kanonik kaynak: `/root/otomaix-sosyal-medya-arastirmasi/sektor-bilgi-paketi-spec-input.md` — commit `c380e37` (2026-08-21), 3136 satır.
-> Kaynak sha256: `f056988d5a78e91b58920805df9f0a0b87be376811058e92bf8967ebcb4cb62c`
+> Kanonik kaynak: `/root/otomaix-sosyal-medya-arastirmasi/sektor-bilgi-paketi-spec-input.md` — commit `b356033` (2026-08-23), 3145 satır.
+> Kaynak sha256: `efe217073b67bfc753a438e7938bc62dd8fb11446b53d91e9ffafb2c47b50b4d`
 > Doğrulama: `tail -n +7 <bu dosya> | sha256sum` kaynak sha'sını verir — ilk 6 satır (bu blok + boş satır) hariç bayt-özdeş kopyadır.
-> Kaynak depoda yeni değişiklik koşulursa bu kopya yeniden eşitlenir; spec kalıcı atıfları bu kopyanın satırlarına değil karar ID'lerine (K-xx) yapar. Bu sürüm, dört karar kapanışının (K-22 · K-27 · K-30 · K-05) gövde sweep'i + 4 turlu Codex kapanış-doğrulaması sonrası alınmıştır (kaynak commit'ler 8e298eb → c380e37).
+> Kaynak depoda yeni değişiklik koşulursa bu kopya yeniden eşitlenir; spec kalıcı atıfları bu kopyanın satırlarına değil karar ID'lerine (K-xx) yapar. Bu sürüm, 2026-08-23 statü notu eklendikten sonra alınmıştır: 51 teslim-sonrası kapanış (45 karar turu + K-57 · K-70 · K-83 · K-143 bağlı + K-20 · K-21) belge başındaki notta listelidir; gövde geriye dönük GÜNCELLENMEMİŞTİR — karar statüsünde çelişki hâlinde spec (`docs/specs/2026-08-21-sektor-bilgi-paketi.md`) esastır.
 
 # [Proje / Özellik Adı]
+
+> ⚠️ **STATÜ NOTU — 2026-08-23 (teslim sonrası kapanışlar; bu belge geriye dönük GÜNCELLENMEDİ).**
+> Bu belge sentez arşividir. Teslimden sonra, Otomaix spec seansında şu kararlar Eray'la tek tek **KAPANDI**:
+> 45 "spec öncesi kullanıcı kararı" turu — K-10 · K-16 · K-19 · K-26 · K-29 · K-31 · K-38 · K-39 · K-40 · K-43 · K-44 · K-45 · K-54 · K-56 · K-69 · K-71 · K-72 · K-73 · K-77 · K-79 · K-80 · K-81 · K-82 · K-105 · K-118 · K-119 · K-120 · K-121 · K-122 · K-123 · K-124 · K-126 · K-127 · K-129 · K-135 · K-136 · K-137 · K-138 · K-139 · K-140 · K-141 · K-142 · K-144 · K-149 · K-150 —
+> bağlı kapanışlar: K-57 · K-70 · K-83 · K-143; ayrıca **K-20** (kaynak-kanıtlı) ve **K-21** (C — ölçek gerekçesi 22'ye dayandırılmaz).
+> **Kanonik kayıt:** `otomaix` deposu — `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (spec-approved, K-ID kapanış satırlarıyla) + `docs/active/sektor-bilgi-paketi/TASK.md` Decisions Log. Kapanış listesi: `docs/active/sektor-bilgi-paketi/KARAR-KAPANIS-LISTESI.md`.
+> Bu belgedeki Bölüm 17 satırları ve gövdedeki `[AÇIK]` / "açık karardır" ifadeleri **yukarıdaki kararlar için BAYATTIR; çelişkide spec esastır.** Belgenin gövdesine geriye dönük sweep bilinçli olarak yapılmamıştır (2026-08-23 kapsam kararı, Eray).
 
 ## Spec öncesi girdi dosyası
 
@@ -2408,6 +2415,8 @@ Aşağıdaki ön koşulların her biri **yeni bir kapı** yaratır; 2.6'nın iki
 ---
 
 ## 17. Uygulama öncesi açık kararlar
+
+> ⚠️ **Statü notu (ayrıntı belge başında):** aşağıdaki satırların 51'i (45 kullanıcı kararı + K-57 · K-70 · K-83 · K-143 bağlı kapanışları + K-20 · K-21) 2026-08-23'te Otomaix spec seansında **kapandı**; satırlar geriye dönük güncellenmedi. Karar statüsünde kanonik kaynak Otomaix spec + TASK Decisions Log'dur; çelişkide **spec esastır**.
 
 [ZORUNLU — boşsa "Açık karar yok" yaz]
 
