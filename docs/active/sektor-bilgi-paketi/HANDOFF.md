@@ -27,13 +27,11 @@
   sweep'li) + TASK Decisions Log tam döküm.
 
 ## Resume From (sıra)
-1. **Commit** — bu oturum + önceki oturumun tüm çıktıları tek commit bekliyor
-   (`docs(spec+active)` kapsamı; Eray commit onayı süreci başladı).
-2. **Sentez deposu sweep borcu:** kapanan 45 karar kanonik kaynakta
+1. **Sentez deposu sweep borcu:** kapanan 45 karar kanonik kaynakta
    (`/root/otomaix-sosyal-medya-arastirmasi`, Bölüm 17 + Ek B) hâlâ açık görünüyor.
    Kaynak güncellenince snapshot yeniden alınır (kural snapshot başlığında).
    Codex oturumu: `codex resume 01a02e3f-9ff3-7ad3-b493-ac4cb070a8d3`.
-3. **`/write-plan-claude-codex`** — plan SIFIRDAN (eski plan superseded). Girdi:
+2. **`/write-plan-claude-codex`** — plan SIFIRDAN (eski plan superseded). Girdi:
    yalnız yeni spec + snapshot. K-32…K-37 (pilot genişleme şartları) plan sırasında
    ayrıca gelecek.
 
@@ -43,12 +41,14 @@
   spec'te her kapanan K-ID'nin TÜM geçişleri grep'le bulunup güncellendi (kardeş-site
   sweep; K-38'in 13.3'teki dolaylı izi dahil) · K-26 vade-uyarısı sorusu spec'e karşı
   ölçüldü (uyarı mekanizması yoktu — kararla eklendi).
+- **Passed (oturum sonu):** commit `8ce26f7` + push origin/main — 7 dosya; working
+  tree temiz (git status ile doğrulandı).
 - **Not run:** Codex kapanış-doğrulaması bu oturumda KOŞULMADI (spec'e ~45 noktada
-  kapanış metni eklendi; review zinciri bunları henüz sınamadı) · commit/push henüz
-  yapılmadı · sentez deposu sweep'i yapılmadı · canlı hiçbir şey çalıştırılmadı.
+  kapanış metni eklendi; review zinciri bunları henüz sınamadı) · sentez deposu
+  sweep'i yapılmadı · canlı hiçbir şey çalıştırılmadı.
 - **Kalan risk:** kapanış metinleri tek elden yazıldı — Codex doğrulama turu
   (`/review-claude-codex` veya plan öncesi hızlı kapanış-sweep'i) drift'i yakalar;
-  iki-depo statü farkı (madde 2) kapanana kadar snapshot bayat.
+  iki-depo statü farkı (Resume 1) kapanana kadar snapshot bayat.
 
 ## Notes For Claude
 - HANDOFF rolling; karar izi TASK Decisions Log'da (bu oturumun tam dökümü orada).
