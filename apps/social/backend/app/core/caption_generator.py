@@ -33,6 +33,7 @@ from app.models.templates import Template
 from app.services.sector_packages import (
     SectorPackageContext,
     motion_pool,
+    scene_pool,
     special_day_visual_accent,
 )
 
@@ -389,11 +390,24 @@ def _build_output_format_instruction(
         vurgu = special_day_visual_accent(package_context, special_day_name)
         if vurgu:
             visual_lines.append(f"Bu özel günün görsel vurgusu: {vurgu}")
+        # Durağan kare isteminin İKİ üreticisi var: bu çağrı (caption modelinin
+        # `image_prompt`'i) ve `short_video._build_still_prompt`. Havuz İKİSİNE
+        # de verilir. Yalnız ikincisine verilseydi, caption'ın hazır İngilizce
+        # istemini aynen kullanan dal sahne dilini HİÇ görmezdi — ölçüldü
+        # (checkpoint 11): o dal `_build_still_prompt`'a hiç uğramıyor.
+        #
+        # Sahne satırları görsel dil listesinin İÇİNE girer, sonrasına
+        # eklenmez: ayrı eklenseydi ve paket `gorsel_kodlar` taşımasaydı blok
+        # başlıksız bir madde listesine dönerdi.
+        for entry in scene_pool(package_context) if is_video else []:
+            visual_lines.append(f"Sektörel sahne dağarcığı: {entry}")
+
         if visual_lines:
             sector_visual_rule = (
                 "\n8. SEKTÖREL GÖRSEL DİL (ek bağlam — kullanıcı isteğini ve ürün "
                 "bilgisini GEÇERSİZ KILMAZ; sahnenin NASIL göründüğünü bağlar, NE "
-                "göründüğünü değil):\n"
+                "göründüğünü değil; dağarcıktan içeriğe uyanları kullan, hepsini "
+                "kullanmaya çalışma):\n"
                 + "\n".join(f"   - {line}" for line in visual_lines)
             )
 

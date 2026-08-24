@@ -294,6 +294,44 @@ def _pick_motion_prompt() -> str:
     return random.choice(_MOTION_PROMPTS)
 
 
+# `template_fields` İKİ SAHİPLİ bir isim uzayıdır: istemci kendi alanlarını
+# yollar, sunucu kendi hesapladıklarını aynı sözlüğe yazar, stage-2 ise sözlüğü
+# SUNUCU KAYDI sayıp güvenir. Koşullu yazılan her sunucu anahtarı bu yüzden
+# istemci tarafından uydurulabilir — ölçüldü (checkpoint 11): paketsiz markada
+# istemcinin koyduğu `motion_prompt` doğrulanmadan ücretli video modeline
+# gidiyordu.
+#
+# Küme tek anahtar değil SINIF olarak kapatılır: stage-1'in hesapladığı ve
+# stage-2'nin güvendiği HER anahtar burada listelenir ve istemci girdisinden
+# koşulsuz silinir. Yeni bir sunucu anahtarı eklenirse buraya da eklenmelidir;
+# aksi hâlde aynı sınıf yeni bir varyantla geri döner.
+SERVER_OWNED_TEMPLATE_FIELDS = frozenset(
+    {
+        "generation_stage",
+        "duration_estimate",
+        "still_strategy",
+        "still_prompt",
+        "still_image_url",
+        "product_image_url",
+        "audio_url",
+        "motion_prompt",
+    }
+)
+
+
+def strip_server_owned_fields(template_fields: dict | None) -> dict:
+    """İstemci girdisinden sunucuya ait anahtarları KOŞULSUZ ayıklar.
+
+    Kopya döner: çağıranın sözlüğü yan etkiyle değiştirilmez. Koşulsuzluk
+    şarttır — "yalnız geçerli bir değer üretebildiysek üzerine yaz" biçimi,
+    üretemediğimiz durumda istemcinin değerini hayatta bırakırdı.
+    """
+    cleaned = dict(template_fields or {})
+    for key in SERVER_OWNED_TEMPLATE_FIELDS:
+        cleaned.pop(key, None)
+    return cleaned
+
+
 def _effective_motion_prompt(template_fields: dict | None) -> str:
     """Stage-2'nin hareket kaynağı: sunucunun KENDİ kaydı, yoksa bugünkü havuz.
 
@@ -925,8 +963,10 @@ async def run_short_video_stage1(
     if not script.strip():
         raise ValueError("Stage 1 için script boş olamaz (caption-step'ten gelmeli)")
 
-    if template_fields is None:
-        template_fields = {}
+    # Sunucuya ait anahtarlar istemci girdisinden KOŞULSUZ ayıklanır
+    # (checkpoint 11): bu sözlük istemciden gelir ama stage-2 onu sunucu kaydı
+    # sayıp güvenir. Legacy tek-atış uç bilinçle DIŞARIDA (K-06 bekletiliyor).
+    template_fields = strip_server_owned_fields(template_fields)
     template_fields["intro_position"] = intro_position
     template_fields["generation_stage"] = "stage1_started"
 

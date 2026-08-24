@@ -312,3 +312,71 @@ async def test_caption_response_carries_model_motion_choice(
     assert result.get("motion_prompt") == chosen, (
         "modelin hareket seçimi yanıtta kayboldu — taşıma zinciri ilk halkada kopuk"
     )
+
+
+# ─── 6. Checkpoint 11 bulgularının regresyon kapıları ───────────────────────
+
+
+def test_client_cannot_forge_server_owned_template_fields():
+    """İstemci `template_fields`'a sunucu anahtarı YAZAMAZ (F2).
+
+    `template_fields` istemciden gelir ve stage-1 aynı sözlüğe kendi hesapladığı
+    değerleri yazar; stage-2 ise o sözlüğü SUNUCU KAYDI sayıp güvenir. İki
+    sahiplik tek isim uzayını paylaşınca, koşullu yazılan her sunucu anahtarı
+    istemci tarafından uydurulabilir hâle gelir.
+
+    Ölçüldü (düzeltmeden önce): paketsiz markada istemcinin koyduğu
+    `motion_prompt` doğrulamadan geçmeden veritabanına yazılıyor ve stage-2 onu
+    ücretli video modeline gönderiyordu — hem güven sınırı hem paketsiz-yol
+    değişmezliği ihlali.
+
+    Kapatılan şey tek anahtar DEĞİL, SINIF: sunucuya ait her anahtar istemci
+    girdisinden koşulsuz silinir; yalnız sunucu kodu geri koyabilir.
+    """
+    forged = {key: "uydurma" for key in sv.SERVER_OWNED_TEMPLATE_FIELDS}
+    forged["intro_position"] = "start"
+    forged["kullanici_alani"] = "korunmalı"
+
+    cleaned = sv.strip_server_owned_fields(forged)
+
+    for key in sv.SERVER_OWNED_TEMPLATE_FIELDS:
+        assert key not in cleaned, f"sunucu anahtarı istemciden geçti: {key}"
+    assert cleaned["kullanici_alani"] == "korunmalı", "istemcinin kendi alanı silindi"
+    # Girdi sözlüğü DEĞİŞTİRİLMEZ — çağıranın verisi yan etkiyle bozulmaz.
+    assert forged["motion_prompt"] == "uydurma"
+
+
+def test_stage1_strips_server_fields_before_validation():
+    """Temizlik doğrulamadan ÖNCE ve KOŞULSUZ koşar."""
+    source = inspect.getsource(sv.run_short_video_stage1)
+    strip_at = source.index("strip_server_owned_fields")
+    validate_at = source.index("resolve_motion_prompt")
+    assert strip_at < validate_at, "temizlik doğrulamadan sonra koşuyor"
+
+
+def test_scene_pool_reaches_every_still_prompt_producer(frozen_brand_fixtures):
+    """Sahne havuzu, durağan kare istemini ÜRETEN her çağrıya ulaşır (F3).
+
+    İki üretici var ve testin yalnız birine bakması gerçek bir deliği gizledi:
+    `_resolve_still_prompt`'un dört dalından biri (İngilizce hazır istem)
+    `_build_still_prompt`'a HİÇ uğramadan erken dönüyor — ölçüldü, o dalda
+    sahne havuzu hiç uygulanmıyordu.
+
+    Sözleşme bu yüzden yaprakta değil SINIFTA kurulur: hangi model çağrısı
+    durağan kare istemini üretiyorsa, havuz O ÇAĞRININ bağlamında olmalıdır.
+    Erken dönen dalın istemini caption çağrısı ürettiği için havuz oraya girer.
+    """
+    from app.core.caption_generator import _build_output_format_instruction
+
+    instruction = _build_output_format_instruction(
+        get_template_by_id(FROZEN_SINGLE_TEMPLATE_ID),
+        ["instagram"],
+        {},
+        content_type="video",
+        package_context=_context(),
+    )
+    for entry in SCENE_POOL:
+        assert entry in instruction, (
+            "caption çağrısı sahne havuzunu görmüyor — İngilizce hazır istem "
+            "dalında sahne dili hiçbir yere ulaşmaz"
+        )

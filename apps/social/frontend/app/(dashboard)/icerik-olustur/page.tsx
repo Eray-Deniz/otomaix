@@ -671,6 +671,7 @@ function IcerikOlusturInner() {
         product_image_ids: selectedProductImageIds.length > 0 ? selectedProductImageIds : null,
         visual_brief: prompt.trim(),
         scene_reference_image_url: imageSubType === 'general' ? selectedSceneReference?.image_url ?? null : null,
+        motion_prompt: captionData!.motion_prompt ?? null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -842,6 +843,9 @@ function IcerikOlusturInner() {
         image_prompts: res.data.image_prompts,
         hashtags: res.data.hashtags ?? [],
         ...(res.data.script ? { script: res.data.script } : {}),
+        // Paketli videoda modelin seçtiği kamera hareketi burada korunmazsa
+        // stage-1'e hiç ulaşmaz ve sektörel seçim sessizce rastgeleye düşer.
+        ...(res.data.motion_prompt ? { motion_prompt: res.data.motion_prompt } : {}),
       })
       if (res.data.script) setScript(res.data.script)
       if (res.data.duration_estimate) setDurationEstimate(res.data.duration_estimate)
