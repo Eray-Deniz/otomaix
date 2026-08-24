@@ -7,8 +7,12 @@ Bağlayıcı invariantlar (plan Task 1):
    burada tekrarlanmaz).
 2. Bağlantı dizesi KODA GÖMÜLMEZ: uygulamanın kendi ayarından
    (`app.core.config.settings.DATABASE_URL` → `.env`) türetilir ve veritabanı
-   adı `otomaix_test` ile değiştirilir. Canlı `otomaix` veritabanına bağlanmaya
-   çalışan altyapı `_require_test_database` guard'ıyla REDDEDİLİR.
+   adı `otomaix_test` ile değiştirilir.
+3. Yıkıcı işlem (DROP/CREATE DATABASE, migration uygulaması) YALNIZ
+   `127.0.0.1:5433/otomaix_test` üçlüsüne izinlidir. Kapı FAIL-CLOSED'dır:
+   host/port/veritabanı üçlüsü birebir eşleşmiyorsa — takma ad (`localhost`,
+   `::1`, `0.0.0.0`), eksik port, eksik host veya canlı `otomaix` adı — işlem
+   BAŞLAMADAN reddedilir. Varsayılana düşme YOKTUR.
 """
 
 from __future__ import annotations
@@ -27,6 +31,11 @@ TEST_DB_NAME = "otomaix_test"
 
 # Yönetim (CREATE/DROP DATABASE) bağlantısının koştuğu bakım veritabanı.
 MAINTENANCE_DB_NAME = "postgres"
+
+# Yıkıcı işlemlere izinli TEK uç nokta (plan "Global Constraints" bölümü).
+# Takma ad kabul edilmez: `localhost` / `::1` / `0.0.0.0` de REDDEDİLİR.
+REQUIRED_HOST = "127.0.0.1"
+REQUIRED_PORT = 5433
 
 # tests/ -> backend/ -> social/ -> apps/ -> <repo kökü>
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -57,15 +66,49 @@ def _migration_files() -> list[Path]:
     return [item[2] for item in files]
 
 
-def _require_test_database(url: str) -> str:
-    """Guard: test altyapısı YALNIZ `otomaix_test`e bağlanabilir."""
-    database = urlsplit(url).path.lstrip("/")
-    if database != TEST_DB_NAME:
+def _endpoint(url: str) -> tuple[str | None, int | None, str]:
+    """URL'i (host, port, veritabanı) üçlüsüne ayırır — varsayılan UYDURMAZ."""
+    parts = urlsplit(url)
+    try:
+        port = parts.port
+    except ValueError:
+        # Bozuk port ("abc", "-1", aralık dışı): belirsiz → fail-closed.
+        port = None
+    return parts.hostname, port, parts.path.lstrip("/")
+
+
+def _require_endpoint(url: str, *, database: str) -> str:
+    """Fail-closed kapı: host/port/veritabanı üçlüsü birebir eşleşmeli.
+
+    Parola hata mesajına ASLA girmez — yalnız host/port/veritabanı basılır.
+    """
+    seen_host, seen_port, seen_database = _endpoint(url)
+
+    problems: list[str] = []
+    if seen_host != REQUIRED_HOST:
+        problems.append(f"host={seen_host!r} (beklenen {REQUIRED_HOST!r})")
+    if seen_port != REQUIRED_PORT:
+        problems.append(f"port={seen_port!r} (beklenen {REQUIRED_PORT!r})")
+    if seen_database != database:
+        problems.append(f"veritabanı={seen_database!r} (beklenen {database!r})")
+
+    if problems:
         raise RuntimeError(
-            f"Test altyapısı {database!r} veritabanını hedefliyor; "
-            f"yalnız {TEST_DB_NAME!r} kabul edilir."
+            "Yıkıcı test altyapısı reddedildi — yalnız "
+            f"{REQUIRED_HOST}:{REQUIRED_PORT}/{database} kabul edilir. "
+            "Uyuşmayan: " + ", ".join(problems)
         )
     return url
+
+
+def _require_test_database(url: str) -> str:
+    """Guard: test altyapısı YALNIZ `127.0.0.1:5433/otomaix_test`e bağlanabilir."""
+    return _require_endpoint(url, database=TEST_DB_NAME)
+
+
+def _require_admin_database(url: str) -> str:
+    """Guard: yönetim bağlantısı YALNIZ aynı yerel uç noktanın bakım DB'sine gider."""
+    return _require_endpoint(url, database=MAINTENANCE_DB_NAME)
 
 
 def _with_database(url: str, database: str) -> str:
@@ -86,6 +129,14 @@ def test_database_url() -> str:
 
 def _run_psql(url: str, *, sql: str | None = None, file: Path | None = None) -> None:
     """psql'i çalıştırır. Parola argv'ye değil PGPASSWORD ortam değişkenine gider."""
+    # Kapı psql SÜRECİ BAŞLAMADAN koşar: yıkıcı komut asla uzak sunucuya gitmez.
+    # Bakım DB'si de aynı yerel uç noktaya kilitlidir (DROP/CREATE oradan koşar).
+    database = urlsplit(url).path.lstrip("/")
+    if database == MAINTENANCE_DB_NAME:
+        _require_admin_database(url)
+    else:
+        _require_test_database(url)
+
     parts = urlsplit(url)
     argv = [
         "psql",
@@ -94,13 +145,13 @@ def _run_psql(url: str, *, sql: str | None = None, file: Path | None = None) -> 
         "-v",
         "ON_ERROR_STOP=1",
         "-h",
-        parts.hostname or "127.0.0.1",
+        REQUIRED_HOST,
         "-p",
-        str(parts.port or 5432),
+        str(REQUIRED_PORT),
         "-U",
         parts.username or "",
         "-d",
-        parts.path.lstrip("/"),
+        database,
     ]
     argv += ["-c", sql] if sql is not None else ["-f", str(file)]
 
@@ -123,7 +174,7 @@ def test_db_setup() -> str:
     dokunulmaz.
     """
     url = test_database_url()
-    admin_url = _with_database(url, MAINTENANCE_DB_NAME)
+    admin_url = _require_admin_database(_with_database(url, MAINTENANCE_DB_NAME))
 
     _run_psql(admin_url, sql=f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}" WITH (FORCE)')
     _run_psql(admin_url, sql=f'CREATE DATABASE "{TEST_DB_NAME}"')
