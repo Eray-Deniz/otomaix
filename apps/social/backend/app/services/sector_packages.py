@@ -332,13 +332,25 @@ def _check_banned_brand_names(
 def _fold_turkish(text: str) -> str:
     """Adı karşılaştırılabilir tek biçime indirger.
 
-    Üç adım, sırası ÖNEMLİ: önce Unicode NFC (ayrışık `S`+birleşen-çengel ile
-    birleşik `Ş` aynı şey demektir — ölçüldü: ayrışık yazım tabloya hiç
-    uğramadan geçiyordu), sonra Türkçe→ASCII tablosu, sonra katlama. Sadece
-    `casefold()` yetmez: `"ALTINBAŞ".casefold()` noktalı `i` üretir,
-    `"Altınbaş".casefold()` noktasız `ı` bırakır.
+    Dört adım, sırası ÖNEMLİ:
+
+    1. **NFKC** — ayrışık `S`+birleşen-çengel ile birleşik `Ş` aynı şeydir.
+    2. **Türkçe→ASCII tablosu** — `ı`/`İ` gibi ATOMİK harfler (ayrışması yok)
+       burada düşer. Sadece `casefold()` yetmez: `"ALTINBAŞ".casefold()` noktalı
+       `i` üretir, `"Altınbaş".casefold()` noktasız `ı` bırakır.
+    3. **casefold** — kalan büyük/küçük harf farkı.
+    4. **NFD + birleşen işaretleri at** — kapanış adımı. Büyük/küçük harf
+       işlemlerinin KENDİSİ birleşen işaret üretir (`"İ".lower()` → `i`+U+0307)
+       ve NFC bunu geri birleştirmez; ölçüldü. Tek tek biçim yamamak üç tur
+       yakınsamadı, çünkü sorun bir varyant değil bir SINIF: "büyük/küçük harf
+       işleminden sağ çıkan birleşen işaret". Bu adım sınıfın tamamını kapatır.
+
+    Bilinçli yan etki: Türkçe dışı aksanlar da düşer (`é` → `e`). Yazım
+    kapısında bu, eşleşmeyi genişletir — yani reddetme yönüne çalışır.
     """
-    return unicodedata.normalize("NFC", text).translate(_TR_ASCII).casefold()
+    folded = unicodedata.normalize("NFKC", text).translate(_TR_ASCII).casefold()
+    decomposed = unicodedata.normalize("NFD", folded)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch))
 
 
 def _walk_strings(node: Any) -> list[str]:

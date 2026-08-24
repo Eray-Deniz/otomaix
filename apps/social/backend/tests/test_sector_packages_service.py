@@ -691,3 +691,59 @@ async def test_resolver_survives_context_construction_error(pkg_db, caplog, monk
 
     assert result is None
     assert caplog.records
+
+
+# ─── Checkpoint 8, tur 3 — sınıfı kapatma ───────────────────────────────────
+#
+# F3 üç turdur açık: her tur aynı eksenin daha dar bir varyantını buldu (Türkçe
+# büyük harf → ayrışık NFD → `İ`.lower()'ın ürettiği i+U+0307). Varyant yamalamak
+# yakınsamıyor. Buradaki test tek tek biçimleri değil, bir adın ÜRETİLEBİLİR TÜM
+# yazımlarını sınar: kanıt elle seçilmiş örnek değil, matristir.
+
+TURKISH_BRAND_SAMPLES = ["İnci", "Şeker", "Çağrı", "Altınbaş", "Gümüş", "Işık"]
+
+
+def _representations(name: str) -> list[str]:
+    """Bir adın pratikte karşılaşılabilir tüm yazımları.
+
+    Büyük/küçük harf işlemleri birleşen işaret ÜRETİR (`"İ".lower()` →
+    `i`+U+0307), normalizasyon biçimleri de ayrı yazımlar doğurur. İkisinin
+    çarpımı, metnin gerçekte gelebileceği biçim uzayıdır.
+    """
+    forms = {name, name.lower(), name.upper(), name.casefold(), name.title()}
+    for form in list(forms):
+        for norm in ("NFC", "NFD", "NFKC", "NFKD"):
+            forms.add(unicodedata.normalize(norm, form))
+    return sorted(forms)
+
+
+@pytest.mark.parametrize("brand", TURKISH_BRAND_SAMPLES)
+def test_brand_name_matching_is_representation_closed(brand):
+    """Adın HER yazımı, yasak listesinin HER yazımına karşı yakalanır.
+
+    Tek yönlü değil: yasak ad da içerik de farklı biçimde gelebilir, o yüzden
+    biçim uzayının tam çarpımı sınanır.
+    """
+    forms = _representations(brand)
+    escapes = []
+    for banned in forms:
+        for text in forms:
+            result = validate_package_content(
+                _valid_content(kanca_kaliplari=[f"{text} dükkanı"]),
+                banned_brand_names=[banned],
+                holiday_keys=HOLIDAY_KEYS,
+            )
+            if result.ok:
+                escapes.append((banned, text))
+
+    assert not escapes, (
+        f"{brand!r} için {len(escapes)}/{len(forms) ** 2} yazım çifti KAÇTI: "
+        f"{escapes[:5]}"
+    )
+
+
+@pytest.mark.parametrize("name", ["Şeker Bayramı", "İşçi Bayramı", "Çanakkale Zaferi"])
+def test_special_day_key_is_representation_closed(name):
+    """Gün adının her yazımı AYNI anahtarı verir — yazım/okuma ayrışamaz."""
+    keys = {normalize_special_day_key(form) for form in _representations(name)}
+    assert len(keys) == 1, f"{name!r} için {len(keys)} farklı anahtar üretildi: {keys}"
