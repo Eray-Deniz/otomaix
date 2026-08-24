@@ -430,15 +430,35 @@ async def test_english_passthrough_unchanged_without_pool():
     assert out == prompt
 
 
-async def test_scene_enrichment_does_not_duplicate():
-    """Zaten sektörel olan istem ikinci kez zenginleştirilmez."""
-    already = f"A gold ring, {SCENE_POOL[0].rstrip('.')}"
+@pytest.mark.parametrize(
+    "prompt,pool",
+    [
+        # Alt dize tuzağı: "ring" kelimesi "spring"in İÇİNDE geçiyor.
+        ("A spring display in soft light", ["ring"]),
+        # Kalıp gerçekten zaten var — tekrar KABUL EDİLİR.
+        (f"A gold ring, {SCENE_POOL[0].rstrip('.')}", SCENE_POOL),
+    ],
+)
+async def test_scene_enrichment_never_silently_skips(prompt, pool):
+    """Sektörel sinyal SESSİZCE düşmez — tekrar pahasına bile (F3, tur 4).
+
+    Yinelenme kontrolü bilinçle KALDIRILDI. Dört tur boyunca aynı invariant
+    farklı kök nedenlerle sızdı ve son üçünün ortak yanı şuydu: serbest metinden
+    "kalıp zaten var mı" sorusunu cevaplamaya çalışan bir yüklem. Böyle bir
+    yüklem yakınsamıyor — `"ring" in "spring"` ölçüldü ve zenginleştirmeyi
+    atlatıyordu.
+
+    Takasın yönü emniyetli: tekrar görsel modelde zararsız ve GÖRÜNÜR;
+    eksiklik ise sessizdi — paketli marka genel bir kare alıyor, kimse fark
+    etmiyordu.
+    """
     out = await sv._resolve_still_prompt(
-        prompt=already,
+        prompt=prompt,
         script="senaryo",
         brand_kit={"sector": "Kuyumculuk"},
         brand_name="Donuk",
         brand_description="takı",
-        scene_pool=SCENE_POOL,
+        scene_pool=pool,
     )
-    assert out == already
+    assert out != prompt, "sektörel sahne dili sessizce atlandı"
+    assert prompt.rstrip(". ") in out, "kullanıcının istemi kayboldu"

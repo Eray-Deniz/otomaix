@@ -839,24 +839,33 @@ def _enrich_with_scene(prompt: str, pool: list[str] | None) -> str:
     çünkü havuz öğeleri zaten görsel modelin dilinde yazılmış betimleyici
     İngilizce ifadelerdir (talimat cümlesi eklemek görsel modelde işe yaramaz).
 
-    Zaten sektörel olan istem ikinci kez zenginleştirilmez. Seçim havuzdan
-    rastgeledir: sabit bir öğeye bağlamak o markanın her karesini aynı kalıba
-    düşürürdü — K-02'yi kapatma sebebimizin tersi.
+    **Yinelenme kontrolü BİLİNÇLE YOKTUR** ve bu, dört turluk bir dersin
+    sonucudur. Kalıbın "zaten var olup olmadığını" serbest metinden çıkarmaya
+    çalışan bir yüklem yakınsamıyor: alt dize içerme `"ring"`i `"spring"`in
+    içinde bulup zenginleştirmeyi atlıyor (ölçüldü), noktalama kırpması anlamsız
+    öğeyi boş dizeye indirip her metinde bulunmuş sayıyordu (ölçüldü). Her tur
+    daha dar bir varyant açtı; çıkış yüklemi inceltmek değil KALDIRMAKTI.
+
+    Takas açık ve yönü emniyetli: kalıp zaten varsa metin tekrar eder — görsel
+    modelde zararsız, hatta vurgu etkisi yapar. Alternatifi ise sektörel sinyalin
+    SESSİZCE düşmesiydi; paketli marka genel bir kare alıyor ve bunu kimse
+    görmüyordu. Tekrar görünür, eksiklik görünmezdi.
+
+    Seçim havuzdan rastgeledir: sabit bir öğeye bağlamak o markanın her karesini
+    aynı kalıba düşürürdü — K-02'yi kapatma sebebimizin tersi.
     """
     if not pool:
         return prompt
-    # Aday kümesi savunma amaçlı yeniden süzülür: `scene_pool()` zaten anlamlı
-    # öğe döndürüyor, ama bu yardımcı doğrudan da çağrılabilir ve anlamsız bir
-    # öğe burada BOŞ DİZEYE inip "her metinde vardır" olurdu — yani tam da
-    # atlatmayı üreten yol.
-    candidates = [entry.rstrip(". ") for entry in pool]
-    candidates = [entry for entry in candidates if any(c.isalnum() for c in entry)]
+    # Aday kümesi savunma amaçlı süzülür: `scene_pool()` zaten anlamlı öğe
+    # döndürüyor ama bu yardımcı doğrudan da çağrılabilir. Süzme YOKLUK yönünde
+    # çalışır — aday kalmazsa istem bayt aynı döner.
+    candidates = [
+        stripped
+        for stripped in (entry.rstrip(". ") for entry in pool)
+        if any(c.isalnum() for c in stripped)
+    ]
     if not candidates:
         return prompt
-    lowered = prompt.lower()
-    for entry in candidates:
-        if entry.lower() in lowered:
-            return prompt
     return f"{prompt.rstrip('. ')}, {random.choice(candidates)}"
 
 
