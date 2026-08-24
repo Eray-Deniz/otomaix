@@ -16,3 +16,4 @@ shared/load-tests/results/
 # (Kafes zaten yalnız incelenen yolları stage'ler; bu satır CLI tarafındaki
 #  `git add -A` kazasına karşı korumadır.)
 /.daimon/
+apps/social/backend/.venv/
