@@ -298,13 +298,19 @@ def _wait_for_writer_lock(url: str, table: str, timeout: float = 15.0) -> None:
     raise AssertionError(f"eşzamanlı yazar {table} üstünde kilit almadı")
 
 
-def test_rollback_refuses_data_committed_while_it_waits(scratch_db_migrated):
+@pytest.mark.parametrize("isolation", ["read committed", "repeatable read"])
+def test_rollback_refuses_data_committed_while_it_waits(scratch_db_migrated, isolation):
     """Sayım ile silme arasına giren yazar veriyi KAYBETTİREMEZ.
 
     Kilitsiz sürümde pencere gerçekti: preflight açık transaction'daki satırı
     GÖREMEZ (0 sayar), sonra `DROP TABLE` yazarın commit'ini bekler ve satırı
     onunla birlikte yok ederdi. Kilit sayımdan ÖNCE alındığı için script artık
     yazarı bekler, satırı görür ve REDDEDER.
+
+    Oturumun varsayılan yalıtımı REPEATABLE READ ise kilit tek başına YETMEZ:
+    o seviyede snapshot, transaction'ın ilk deyiminde donar ve kilit beklenirken
+    commit edilen satır sayıma GÖRÜNMEZ — script kendi yalıtımını READ COMMITTED'a
+    çekmek zorundadır (Codex checkpoint 3, tur 2).
     """
     url = scratch_db_migrated
     _run_sql(url, _SEED_SQL)
@@ -335,7 +341,11 @@ def test_rollback_refuses_data_committed_while_it_waits(scratch_db_migrated):
         # Sonsuz bekleme testi asmasın: kilit 60 sn'de gelmezse psql hata verir
         # (o hâlde mesaj REDDEDILDI olmaz ve test doğru sebeple düşer).
         blocked_env = dict(env)
-        blocked_env["PGOPTIONS"] = "-c lock_timeout=60s"
+        # PGOPTIONS'ta boşluk TIRNAKLA değil ters bölü ile kaçırılır.
+        escaped = isolation.replace(" ", "\\ ")
+        blocked_env["PGOPTIONS"] = (
+            f"-c lock_timeout=60s -c default_transaction_isolation={escaped}"
+        )
         started = time.monotonic()
         result = subprocess.run(
             argv + ["-f", str(ROLLBACK_SQL)],
@@ -406,6 +416,37 @@ def test_rollback_clean_path_full_teardown(scratch_db_migrated):
         == root_count_before
     )
     assert _scalar(url, "SELECT count(*) FROM social.brands WHERE name = 'T3 Marka'") == "1"
+
+
+def test_rollback_refuses_to_run_inside_an_enclosing_transaction(scratch_db_migrated):
+    """`psql -1` gibi sarmalayıcı çağrı REDDEDİLİR — sahiplik çakışması.
+
+    Dosya kendi transaction'ını sahiplenir. Dışarıdan bir transaction açılmışsa
+    içerideki `BEGIN` savepoint YARATMAZ ve dosyanın `COMMIT`i ÇAĞIRANIN
+    transaction'ını erken kapatır: çağıranın atomik sandığı toplu iş, yıkım
+    kalıcı olduktan sonra yarıda kalabilir. Bu durum SQL'den saptanabilir —
+    transaction bloğu içinde `DO ... COMMIT` "invalid transaction termination"
+    verir — ve script hiçbir şeye dokunmadan durur.
+    """
+    url = scratch_db_migrated
+    _run_sql(url, _SEED_SQL)
+
+    argv, env = infra.psql_argv(url)
+    result = subprocess.run(
+        argv + ["-1", "-f", str(ROLLBACK_SQL)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert result.returncode != 0, (
+        f"sarmalanmış çağrı sessizce koştu — stdout:\n{result.stdout}"
+    )
+    for table in _TABLES:
+        assert _table_exists(url, table), f"{table} sarmalanmış çağrıda düşürüldü"
+    for table, column in _COLUMNS:
+        assert _column_exists(url, table, column), f"{table}.{column} düşürüldü"
 
 
 # --- 3. Runner sözleşmesi -------------------------------------------------

@@ -5,6 +5,13 @@
 --            sarar — çağıranın bayrağına muhtaç değildir. Hata hâlinde hiçbir
 --            adım kalıcı olmaz.
 --
+--            `-1` / `--single-transaction` GEÇMEYİN ve dosyayı açık bir
+--            transaction'ın içinden `\i` ile çağırmayın: transaction sahipliği
+--            bu dosyadadır. Sarmalanmış çağrıda içerideki `BEGIN` savepoint
+--            YARATMAZ, dosyanın `COMMIT`i ÇAĞIRANIN transaction'ını erken kapatır
+--            ve çağıranın atomik sandığı toplu iş yıkım kalıcı olduktan sonra
+--            yarıda kalabilir. Aşağıdaki kapı bu durumu SAPTAR ve durdurur.
+--
 -- SÖZLEŞME (plan Task 3, F4 tahkimi — veri-varken-REDDET modeli):
 --
 --   Bu script YALNIZ boş-veri yolunda koşar. `sector_packages` veya
@@ -37,7 +44,34 @@
 
 \set ON_ERROR_STOP on
 
+-- ---------------------------------------------------------------------------
+-- -1. Sarmalayıcı-transaction kapısı — sahiplik çakışmasını SAPTA
+-- ---------------------------------------------------------------------------
+--
+-- `DO ... COMMIT` üst düzeyde (autocommit) geçerlidir, açık bir transaction
+-- bloğunun içinde `invalid transaction termination` ile durur. Ölçüldü (PG 18.3):
+-- düz `psql -f` → rc=0 · `psql -1 -f` → rc=3. Kapı hiçbir şeye dokunmadan,
+-- BEGIN'den ÖNCE çalışır.
+
+\echo 'Not: bir sonraki adim "invalid transaction termination" derse, bu dosya'
+\echo '     sarmalayici bir transaction icinden cagrilmistir (ornegin psql -1).'
+\echo '     Dosya kendi transaction ini sahiplenir; sarmalamadan cagirin.'
+
+DO $nesting_guard$
+BEGIN
+    COMMIT;
+END
+$nesting_guard$;
+
 BEGIN;
+
+-- Yalıtım seviyesi SABİTLENİR — çağıranın oturum varsayılanına bırakılmaz.
+-- REPEATABLE READ'de snapshot transaction'ın İLK deyiminde donar: kilit
+-- beklenirken commit edilen satır sayıma GÖRÜNMEZ ve teardown onu yok eder.
+-- Ölçüldü: kilit tek başına o seviyede yetmiyordu (Codex checkpoint 3, tur 2).
+-- Bu deyim, dışarıda sorgu çalıştırmış bir transaction'ın içinde HATA verir —
+-- yani o durumda da yıkımdan önce durulur (fail-closed).
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 -- ---------------------------------------------------------------------------
 -- 0. PREFLIGHT — korunan tabloları kilitle, sonra say; veri varsa DUR
