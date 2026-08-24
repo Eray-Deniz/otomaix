@@ -167,55 +167,78 @@ def structural_errors(content: Any) -> list[str]:
     return errors
 
 
-# Etiket OKUNAN ama kurallı biçimde OLMAYAN metni yakalayan gevşek dedektör.
-# Kasıtlı olarak katı kalıptan DAHA GENİŞ: emniyet payı buradadır.
-_CHANNEL_MARKER_LOOSE_RE = re.compile(r"kanal\W{0,4}bagimli")
+# Bayrak DİL BİLGİSİ (spec §8.4 kapalı bayrak kümesinin BİÇİMİ).
+#
+# Kapı bir bayrak LİSTESİ tutmaz: spec kümeyi "sekiz bayrak, kapalı" diye bağlar
+# ama sekizini saymaz (sayım denetçi sözleşmesinde yaşar). Liste uydurmak açık
+# bir kararı yürütme katmanında kapatmak olurdu. Bunun yerine BİÇİM bağlanır:
+# `[slug]` ya da `[slug: değer]`. Adını bilmediğimiz bir bayrak meşru geçer,
+# bozuk yazılmış olan geçmez.
+_BRACKET_SEGMENT_RE = re.compile(r"\[[^\[\]]*\]")
+_FLAG_GRAMMAR_RE = re.compile(r"^\[\s*([a-z]+(?:-[a-z]+)*)\s*(?::\s*([a-z0-9_]+)\s*)?\]$")
+
+# Kanal bayrağının kanonik slug'ı — değeri kapalı kümeye karşı denetlenir.
+CHANNEL_FLAG_SLUG = "kanal-bagimli"
 
 
 def _check_channel_markers(content: dict, errors: list[str]) -> None:
-    """Kanal etiketi ya KURALLI ya da hiç — arada bir şey pakete giremez.
+    """Pakette geçen HER köşeli parantez kurallı bir bayrak olmak zorundadır.
 
-    Kapatılan sınıf (checkpoint 9, tur 2): **"insan gözüyle etiket okunan ama
-    katı kalıba uymayan metin"**. Tur 1 bu sınıfın karakter-temsili ayağını
-    kapattı (tipografik tire, görünmez karakter). Tur 2 ikinci ayağını gösterdi:
-    ayıraç eksikse (`]` yok, `:` yok) katı kalıp eşleşmiyor, kalıp "etiketsiz"
-    sayılıp doğrulanmamış markaya sızıyordu.
+    **Neden bu biçim (checkpoint 9, üç tur).** Önceki iki deneme "etiket gibi
+    görünen metni yakala" mantığındaydı ve yakınsamadı: tur 1 tipografik tire
+    ve görünmez karakteri kapattı, tur 2 eksik ayıracı kapattı, tur 3 alt çizgi
+    ve uzun ayırıcıyı açtı. Kök sebep, serbest metinden *"bu bir etiket
+    değildir"* i kanıtlamaya çalışmaktı — bu tür bir kapı ya bypass ya
+    yanlış-pozitif üretir, dördüncü bir regex dördüncü turu davet ederdi.
 
-    Bir regex varyantı daha eklemek üçüncü turda üçüncü varyantı davet ederdi.
-    Kapanış İKİ TARAFLI bir sözleşmedir:
+    Kapanış bu yüzden NEGATİF tahminden POZİTİF sözleşmeye taşındı: bayrak,
+    tanımı gereği köşeli parantezlidir; öyleyse parantez içinde geçen her şey
+    kurallı bayrak dil bilgisine uymak ZORUNDADIR. `[kanal_bağımlı: x]`,
+    `[kanal     bağımlı x]`, `[kanal-----bağımlı: x]`, `[kanal-bağımlı x]`,
+    dengesiz ya da iç içe ayraç — hepsi TEK kuralla düşer, ayrı ayrı
+    yakalanarak değil.
 
-    - **yazım tarafı (burası):** etiket-benzeri her metin kurallı bir etiketle
-      BİREBİR örtüşmek zorundadır; örtüşmezse içerik REDDEDİLİR;
-    - **okuma tarafı:** katı kalır (`_channel_tags`).
+    **Kapsam sınırı, dürüstçe:** ayraçsız yazılmış bir işaret (`kanal-bağımlı
+    whatsapp_hatti`) YAKALANMAZ ve yakalanması hedeflenmez — parantezsiz metin
+    bayrak konvansiyonunun dışındadır ve orada "işaret miydi" sorusunu sormak
+    tam da yakınsamayan tahmin oyunudur. İddia bu yüzden dar: *ayraçlı* her
+    işaret kapalıdır. Sınır `test_unbracketed_marker_is_a_documented_limit...`
+    ile pinlenir, sessizce kaybolamaz.
 
-    Böylece bozuk etiket bir pakette VAR OLAMAZ — okuma tarafının katılığı
-    yeterli hâle gelir. Sözleşme `structural_errors` üzerinden koştuğu için
-    çalışma zamanı da aynı ölçüyü uygular: bozuk etiketli bir paket K-15(a)
-    gereği TÜM yoluyla paketsiz yola düşer.
+    Yazım kapısı okuma tarafından KASITLI olarak daha katıdır (okuma
+    `[kanal - bağımlı: x]` biçimini de etiket sayar). Asimetrinin yönü
+    emniyetlidir: okuma daha çok etiket görür, yani daha çok kalıp atlar.
 
-    Bilinçli yanlış-pozitif: serbest metinde "kanal bağımlılığı" gibi bir ifade
-    de reddedilir. Yazım kapısında yanlış-pozitif yanlış-negatiften iyidir —
-    yazar ifadeyi değiştirir, sızan CTA ise sessizdir. Aynı duruş marka adı
-    kapısında da alınmıştı (belgeli tercih).
+    Kapı `structural_errors` içinden koşar, yani çalışma zamanı da aynı ölçüyü
+    uygular: bozuk bayraklı paket K-15(a) gereği TÜM yoluyla paketsiz yola düşer.
     """
     for text in _walk_strings(content):
         canonical = _canonical_marker_text(text)
-        loose = _CHANNEL_MARKER_LOOSE_RE.findall(canonical)
-        if not loose:
+        if "[" not in canonical and "]" not in canonical:
             continue
-        strict = _CHANNEL_TAG_RE.findall(canonical)
-        if len(strict) != len(loose):
+
+        segments = _BRACKET_SEGMENT_RE.findall(canonical)
+        if canonical.count("[") != len(segments) or canonical.count("]") != len(segments):
             errors.append(
-                f"bozuk kanal etiketi: {text!r} — kurallı biçim "
-                "`[kanal-bağımlı: <anahtar>]` olmalı "
-                f"(kapalı küme: {', '.join(sorted(CHANNEL_KEYS))})"
+                f"dengesiz/iç içe köşeli ayraç: {text!r} — bayrak biçimi "
+                "`[slug]` ya da `[slug: değer]` olmalı"
             )
             continue
-        for raw_key in strict:
-            key = raw_key.strip()
-            if key not in CHANNEL_KEYS:
+
+        for segment in segments:
+            match = _FLAG_GRAMMAR_RE.match(segment)
+            if match is None:
                 errors.append(
-                    f"kanal etiketinde bilinmeyen anahtar {key!r}: {text!r} — "
+                    f"kurallı bayrak değil: {segment!r} ({text!r}) — biçim "
+                    "`[slug]` ya da `[slug: değer]` olmalı"
+                )
+                continue
+            slug, value = match.group(1), match.group(2)
+            if slug != CHANNEL_FLAG_SLUG:
+                continue
+            if value is None or value not in CHANNEL_KEYS:
+                errors.append(
+                    f"kanal bayrağında geçersiz anahtar {value!r}: {text!r} — "
                     f"kapalı küme: {', '.join(sorted(CHANNEL_KEYS))}"
                 )
 

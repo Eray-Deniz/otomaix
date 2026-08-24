@@ -747,14 +747,75 @@ def test_malformed_marker_is_rejected_at_write_gate():
         "kapanış ayracı yok": "Yaz [kanal-bağımlı: whatsapp_hatti",
         "iki nokta yok": "Yaz [kanal-bağımlı whatsapp_hatti]",
         "açılış ayracı yok": "Yaz kanal-bağımlı: whatsapp_hatti]",
-        "hiç ayraç yok": "Yaz kanal-bağımlı whatsapp_hatti",
         "bilinmeyen anahtar": "Yaz [kanal-bağımlı: telegram]",
         "boş anahtar": "Yaz [kanal-bağımlı: ]",
         "tipografik tire + bozuk ayraç": "Yaz [kanal—bağımlı whatsapp_hatti]",
+        "alt çizgi ayırıcı": "Yaz [kanal_bağımlı: whatsapp_hatti]",
+        "çoklu boşluk ayırıcı": "Yaz [kanal     bağımlı whatsapp_hatti]",
+        "çoklu tire": "Yaz [kanal-----bağımlı: whatsapp_hatti]",
+        "nokta + alt çizgi": "Yaz [kanal._bağımlı: whatsapp_hatti]",
+        "iç içe ayraç": "Yaz [[kanal-bağımlı: whatsapp_hatti]]",
+        "serbest metin ayracı": "Yaz [bkz. 3] ve [kanal-bağımlı: whatsapp_hatti]",
     }
     escapes = [name for name, text in malformed.items() if not structural_errors(content_with(text))]
 
     assert not escapes, f"yazım kapısından geçen bozuk etiket: {escapes}"
+
+
+def test_write_gate_accepts_other_closed_set_flags_without_enumerating_them():
+    """Kapı bayrak LİSTESİNİ değil bayrak BİÇİMİNİ bilir.
+
+    Spec §8.4 kümeyi "sekiz bayrak, kapalı" diye bağlar ama sekizini burada
+    saymaz — sayım denetçi sözleşmesinde yaşar. Bu yüzden kapı bir liste
+    UYDURMAZ: biçimi (`[slug]` / `[slug: değer]`) zorlar, yalnız kanal
+    bayrağının DEĞERİNİ kapalı kümeye karşı denetler. Böylece adını bilmediğimiz
+    bir bayrak meşru şekilde geçer, bozuk yazılmış olan geçmez.
+    """
+    from app.services.sector_packages import structural_errors
+
+    def content_with(cta_text: str) -> dict:
+        return {
+            "kapsam": "kapsam",
+            "ton_ve_dil": "ton",
+            "gorsel_kodlar": "codes",
+            "cta_kaliplari": [cta(cta_text)],
+            "kanca_kaliplari": ["kanca"],
+            "takvim_temalari": ["tema"],
+            "yasaklar_ve_hassasiyetler": ["yasak"],
+            "video_kodlar": {"hareket": "a", "sahne": "b"},
+            "ozel_gun": {},
+        }
+
+    for flag in ("[eski-kaynak]", "[kopya-şüphesi]", "[yerel-değil]", "[kaynak-bağımlı]"):
+        assert structural_errors(content_with(f"Yaz {flag}")) == [], flag
+
+
+def test_unbracketed_marker_is_a_documented_limit_not_a_closure():
+    """Ayraçsız yazılmış işaret YAKALANMAZ — bu bilinen ve YAZILI sınırdır.
+
+    Sözleşme ayraç üzerinedir: bayrak, tanımı gereği köşeli parantezlidir.
+    Parantezsiz serbest metinden "bu aslında bir işaretti" sonucunu çıkarmak,
+    üç tur boyunca yakınsamayan tam da o tahmin oyunudur (checkpoint 9). Kapanış
+    iddiası bu yüzden DAR tutulur: *ayraçlı* her işaret kapalıdır.
+
+    Test, sınırın sessizce kaybolmasını engeller: davranış değişirse burada
+    görünür ve iddia yeniden yazılır.
+    """
+    from app.services.sector_packages import structural_errors
+
+    content = {
+        "kapsam": "kapsam",
+        "ton_ve_dil": "ton",
+        "gorsel_kodlar": "codes",
+        "cta_kaliplari": [cta("Yaz kanal-bağımlı whatsapp_hatti")],
+        "kanca_kaliplari": ["kanca"],
+        "takvim_temalari": ["tema"],
+        "yasaklar_ve_hassasiyetler": ["yasak"],
+        "video_kodlar": {"hareket": "a", "sahne": "b"},
+        "ozel_gun": {},
+    }
+
+    assert structural_errors(content) == [], "sınır kapandıysa iddia güncellenmeli"
 
 
 def test_write_gate_rejection_makes_runtime_fallback_consistent():
