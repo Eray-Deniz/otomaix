@@ -256,6 +256,19 @@ COMMENT ON TABLE social.generation_stamps IS
 -- Otomatik adlandırılan kısıtlar (CHECK'ler, `brand_id` FK'sı) ADLA değil
 -- KOLONLA aranır — ad üretimi Postgres'e aittir, garanti kolona bağlıdır.
 --
+-- TANIM ≠ UYGULANMA (F7 tur 3): doğru imzalı bir nesne yine de hiçbir şeyi
+-- zorlamıyor olabilir. Bu yüzden imzanın yanında uygulanma durumu da okunur:
+--   * indeksler — `indisvalid/indisready/indislive`. Yarım kalmış (invalid)
+--     bir indekste `indisunique` true kalır ama benzersizlik UYGULANMAZ.
+--     Hem kısmi indeks hem iki UNIQUE kısıtının arkasındaki indeks denetlenir.
+--   * yabancı anahtarlar — `conenforced` / `convalidated` ve kısıtı fiilen
+--     yürüten iç tetikleyiciler (`pg_trigger.tgconstraint`, dördü de
+--     `tgenabled='O'`). `ALTER TABLE ... DISABLE TRIGGER ALL` kısıt tanımını
+--     DEĞİŞTİRMEDEN FK'yı kapatır; tanıma bakan bir kontrol bunu göremez.
+-- `conenforced` PostgreSQL 18 kolonudur; bu sunucuda (18.3) varlığı
+-- `pg_attribute` üstünden ÖLÇÜLDÜ. Daha eski bir sunucuda blok "column does
+-- not exist" ile durur — fail-closed, sessiz geçiş yoktur.
+--
 -- ELLE UYGULARKEN: psql'i `-v ON_ERROR_STOP=1` ile çağırın. Ölçüldü — bayrak
 -- yokken hata mesajı yine basılır ama psql çıkış kodu 0 döner; sıfır-dışı çıkış
 -- yalnız bu bayrakla gelir (testler ve `conftest` onu zaten kullanır).
@@ -267,28 +280,33 @@ BEGIN
     WITH expected(label, want) AS (
         VALUES
             -- Sektör başına tek `active`: gerçekten UNIQUE mi, (sector_id)
-            -- üstünde mi, predicate tam olarak `status = 'active'` mi.
+            -- üstünde mi, predicate tam olarak `status = 'active'` mi, ve
+            -- indeks GERÇEKTEN uygulanıyor mu (valid/ready/live).
             ('uq_sector_packages_single_active',
-             'unique=true cols=sector_id pred=(status = ''active''::text)'),
+             'unique=true cols=sector_id pred=(status = ''active''::text)'
+             ' valid=true ready=true live=true'),
 
             -- Sürüm benzersizliği + bileşik damga FK'sının hedefi.
             ('sector_packages_sector_version_key',
-             'u|UNIQUE (sector_id, version)'),
+             'u|UNIQUE (sector_id, version)|idx valid=true ready=true live=true'),
             ('sector_packages_id_version_key',
-             'u|UNIQUE (id, version)'),
+             'u|UNIQUE (id, version)|idx valid=true ready=true live=true'),
 
             -- K-07 damga temsili: bileşik FK ve MATCH FULL (matchtype 'f').
             ('posts_package_stamp_fkey',
              'f|matchtype=f|FOREIGN KEY (package_id, package_version)'
-             ' REFERENCES social.sector_packages(id, version) MATCH FULL'),
+             ' REFERENCES social.sector_packages(id, version) MATCH FULL'
+             '|enforced=true validated=true trig=4 enabled=4'),
 
             -- Makbuz: bileşik FK + marka silmede CASCADE (deltype 'c').
             ('generation_stamps_package_fkey',
              'f|matchtype=s|FOREIGN KEY (package_id, package_version)'
-             ' REFERENCES social.sector_packages(id, version)'),
+             ' REFERENCES social.sector_packages(id, version)'
+             '|enforced=true validated=true trig=4 enabled=4'),
             ('generation_stamps.brand_id FK',
              'f|ondelete=c|FOREIGN KEY (brand_id)'
-             ' REFERENCES social.brands(id) ON DELETE CASCADE'),
+             ' REFERENCES social.brands(id) ON DELETE CASCADE'
+             '|enforced=true validated=true trig=4 enabled=4'),
 
             -- Değer kümesi kısıtları.
             ('sector_research_artifacts.kind CHECK',
@@ -328,14 +346,17 @@ BEGIN
         VALUES
             ('uq_sector_packages_single_active',
              (SELECT format(
-                         'unique=%s cols=%s pred=%s',
+                         'unique=%s cols=%s pred=%s valid=%s ready=%s live=%s',
                          CASE WHEN i.indisunique THEN 'true' ELSE 'false' END,
                          (SELECT string_agg(a.attname, ',' ORDER BY k.ord)
                             FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
                             JOIN pg_attribute a
                               ON a.attrelid = i.indrelid AND a.attnum = k.attnum),
                          coalesce(pg_get_expr(i.indpred, i.indrelid),
-                                  '<kismi degil>'))
+                                  '<kismi degil>'),
+                         CASE WHEN i.indisvalid THEN 'true' ELSE 'false' END,
+                         CASE WHEN i.indisready THEN 'true' ELSE 'false' END,
+                         CASE WHEN i.indislive THEN 'true' ELSE 'false' END)
                 FROM pg_index i
                 JOIN pg_class c ON c.oid = i.indexrelid
                 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -343,25 +364,55 @@ BEGIN
                  AND c.relname = 'uq_sector_packages_single_active'
                  AND i.indrelid = 'social.sector_packages'::regclass)),
 
+            -- UNIQUE kısıtı ARKASINDAKİ indeks de uygulanıyor olmalı: `conindid`
+            -- üstünden JOIN edilir, indeks yoksa satır düşer → '<nesne yok>'.
             ('sector_packages_sector_version_key',
-             (SELECT format('%s|%s', k.contype, pg_get_constraintdef(k.oid))
+             (SELECT format('%s|%s|idx valid=%s ready=%s live=%s',
+                            k.contype, pg_get_constraintdef(k.oid),
+                            CASE WHEN i.indisvalid THEN 'true' ELSE 'false' END,
+                            CASE WHEN i.indisready THEN 'true' ELSE 'false' END,
+                            CASE WHEN i.indislive THEN 'true' ELSE 'false' END)
                 FROM pg_constraint k
+                JOIN pg_index i ON i.indexrelid = k.conindid
                WHERE k.conrelid = 'social.sector_packages'::regclass
                  AND k.conname = 'sector_packages_sector_version_key')),
             ('sector_packages_id_version_key',
-             (SELECT format('%s|%s', k.contype, pg_get_constraintdef(k.oid))
+             (SELECT format('%s|%s|idx valid=%s ready=%s live=%s',
+                            k.contype, pg_get_constraintdef(k.oid),
+                            CASE WHEN i.indisvalid THEN 'true' ELSE 'false' END,
+                            CASE WHEN i.indisready THEN 'true' ELSE 'false' END,
+                            CASE WHEN i.indislive THEN 'true' ELSE 'false' END)
                 FROM pg_constraint k
+                JOIN pg_index i ON i.indexrelid = k.conindid
                WHERE k.conrelid = 'social.sector_packages'::regclass
                  AND k.conname = 'sector_packages_id_version_key')),
             ('posts_package_stamp_fkey',
-             (SELECT format('%s|matchtype=%s|%s', k.contype, k.confmatchtype,
-                            pg_get_constraintdef(k.oid))
+             (SELECT format('%s|matchtype=%s|%s|enforced=%s validated=%s'
+                            ' trig=%s enabled=%s',
+                            k.contype, k.confmatchtype,
+                            pg_get_constraintdef(k.oid),
+                            CASE WHEN k.conenforced THEN 'true' ELSE 'false' END,
+                            CASE WHEN k.convalidated THEN 'true' ELSE 'false' END,
+                            (SELECT count(*) FROM pg_trigger t
+                              WHERE t.tgconstraint = k.oid),
+                            (SELECT count(*) FROM pg_trigger t
+                              WHERE t.tgconstraint = k.oid
+                                AND t.tgenabled = 'O'))
                 FROM pg_constraint k
                WHERE k.conrelid = 'social.posts'::regclass
                  AND k.conname = 'posts_package_stamp_fkey')),
             ('generation_stamps_package_fkey',
-             (SELECT format('%s|matchtype=%s|%s', k.contype, k.confmatchtype,
-                            pg_get_constraintdef(k.oid))
+             (SELECT format('%s|matchtype=%s|%s|enforced=%s validated=%s'
+                            ' trig=%s enabled=%s',
+                            k.contype, k.confmatchtype,
+                            pg_get_constraintdef(k.oid),
+                            CASE WHEN k.conenforced THEN 'true' ELSE 'false' END,
+                            CASE WHEN k.convalidated THEN 'true' ELSE 'false' END,
+                            (SELECT count(*) FROM pg_trigger t
+                              WHERE t.tgconstraint = k.oid),
+                            (SELECT count(*) FROM pg_trigger t
+                              WHERE t.tgconstraint = k.oid
+                                AND t.tgenabled = 'O'))
                 FROM pg_constraint k
                WHERE k.conrelid = 'social.generation_stamps'::regclass
                  AND k.conname = 'generation_stamps_package_fkey')),
@@ -369,9 +420,20 @@ BEGIN
             -- Kolon bazlı arama: birden çok eşleşme tek imzada birleşir, böylece
             -- beklenenden sapma (eksik VEYA fazla kısıt) fail-closed yakalanır.
             ('generation_stamps.brand_id FK',
-             (SELECT string_agg(format('%s|ondelete=%s|%s', k.contype,
+             (SELECT string_agg(format('%s|ondelete=%s|%s|enforced=%s'
+                                       ' validated=%s trig=%s enabled=%s',
+                                       k.contype,
                                        k.confdeltype,
-                                       pg_get_constraintdef(k.oid)),
+                                       pg_get_constraintdef(k.oid),
+                                       CASE WHEN k.conenforced
+                                            THEN 'true' ELSE 'false' END,
+                                       CASE WHEN k.convalidated
+                                            THEN 'true' ELSE 'false' END,
+                                       (SELECT count(*) FROM pg_trigger t
+                                         WHERE t.tgconstraint = k.oid),
+                                       (SELECT count(*) FROM pg_trigger t
+                                         WHERE t.tgconstraint = k.oid
+                                           AND t.tgenabled = 'O')),
                                 ' && ' ORDER BY k.conname)
                 FROM pg_constraint k
                WHERE k.conrelid = 'social.generation_stamps'::regclass

@@ -15,7 +15,9 @@ Ek olarak K-07 damga temsili (posts bileşik FK + MATCH FULL),
 
 Son bölüm (F7) migration'ın kendi fail-closed garanti doğrulamasını sınar: aynı
 adda yanlış tanımlı bir nesne varken yeniden uygulama DURMALI, doğru şema
-üstünde ise rc=0 kalmalı (idempotentlik).
+üstünde ise rc=0 kalmalı (idempotentlik). Tanımı DOĞRU bırakıp yalnız
+uygulanma durumunu kapatan vakalar (geçersiz indeks, devre dışı FK iç
+tetikleyicileri) de aynı bölümde sınanır.
 
 Alt sektör satırları test İÇİNDE açılır — canlı seed dosyasına satır eklenmez.
 """
@@ -899,3 +901,77 @@ def test_migration_raises_when_kind_check_is_missing(test_db_setup):
         )
         == "1"
     ), "ROLLBACK sonrası CHECK geri gelmedi"
+
+
+# --- Uygulanma durumu: tanım DOĞRU ama garanti KAPALI (F7 tur 3) -----------
+#
+# Yukarıdaki vakalar nesnenin TANIMINI bozar. Bu iki vaka tanımı olduğu gibi
+# bırakır, yalnız UYGULANMA durumunu kapatır: katalogda imza aynı görünür ama
+# veritabanı artık hiçbir şeyi zorlamaz. Doğrulama bloğu bunu da yakalamalı.
+
+
+def _single_active_index_is_valid() -> str:
+    return _scalar(
+        """
+        SELECT i.indisvalid AND i.indisready AND i.indislive
+        FROM pg_index i
+        WHERE i.indexrelid = 'social.uq_sector_packages_single_active'::regclass
+        """
+    )
+
+
+def _generation_stamps_fk_triggers_enabled() -> str:
+    """`generation_stamps` üstündeki FK iç tetikleyicilerinden ETKİN olanlar."""
+    return _scalar(
+        """
+        SELECT count(*)
+        FROM pg_trigger t
+        JOIN pg_constraint k ON k.oid = t.tgconstraint
+        WHERE t.tgrelid = 'social.generation_stamps'::regclass
+          AND k.contype = 'f'
+          AND t.tgenabled = 'O'
+        """
+    )
+
+
+def test_migration_raises_when_single_active_index_is_invalid(test_db_setup):
+    """Geçersiz (yarım kalmış) indeks benzersizliği UYGULAMAZ — durmalı.
+
+    `indisunique` true kalır, kolonlar ve predicate aynıdır; yalnız
+    `indisvalid/indisready/indislive` düşer. Tanıma bakan bir doğrulama bunu
+    göremez, ama "sektör başına tek aktif paket" garantisi fiilen yoktur.
+    """
+    result = _reapply_032(
+        """
+        UPDATE pg_index SET indisvalid = false
+         WHERE indexrelid = 'social.uq_sector_packages_single_active'::regclass;
+        """
+    )
+
+    assert result.returncode != 0, (
+        "gecersiz (indisvalid=false) indeks sessizce kabul edildi — "
+        f"stdout:\n{result.stdout}"
+    )
+    assert "uq_sector_packages_single_active" in result.stderr, result.stderr
+    assert _single_active_index_is_valid() == "t", "ROLLBACK sonrası indeks bozuk kaldı"
+
+
+def test_migration_raises_when_fk_triggers_disabled(test_db_setup):
+    """`DISABLE TRIGGER ALL` FK'yı tanımı BOZMADAN kapatır — durmalı.
+
+    `pg_get_constraintdef` aynı dizeyi döndürmeye devam eder; kısıtı fiilen
+    uygulayan iç tetikleyiciler `tgenabled='D'` olur ve referans bütünlüğü
+    sessizce ortadan kalkar.
+    """
+    result = _reapply_032(
+        "ALTER TABLE social.generation_stamps DISABLE TRIGGER ALL;"
+    )
+
+    assert result.returncode != 0, (
+        "devre disi FK tetikleyicileri sessizce kabul edildi — "
+        f"stdout:\n{result.stdout}"
+    )
+    assert "generation_stamps_package_fkey" in result.stderr, result.stderr
+    assert _generation_stamps_fk_triggers_enabled() == "4", (
+        "ROLLBACK sonrası FK tetikleyicileri etkin durumuna dönmedi"
+    )
