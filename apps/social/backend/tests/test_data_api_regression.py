@@ -32,6 +32,7 @@ from app.routers import sectors as sectors_router
 from .conftest import (
     REQUIRED_HOST,
     REQUIRED_PORT,
+    SCRATCH_DB_NAME,
     _require_disposable_database,
     psql_argv,
 )
@@ -652,3 +653,55 @@ async def test_sweep_target_distinguishes_physical_clone(readonly_role, tmp_path
     rejected = _run_sweep(readonly_dsn, baseline=clone)
     assert rejected.returncode == 2, "fiziksel kopyanın tabanı kabul edildi"
     assert "başka bir hedeften" in rejected.stderr
+
+
+@pytest.mark.parametrize(
+    "dsn, beklenen",
+    [
+        ("postgresql://u:GIZLI@127.0.0.1/otomaix_test", "port açıkça verilmeli"),
+        ("postgresql://u:GIZLI@a,b:5433/otomaix_test", "çok-sunuculu"),
+        ("postgresql:///otomaix_test?host=/tmp/x&port=5433", "sunucu adı yok"),
+        ("postgresql://u:GIZLI@127.0.0.1:5433/", "veritabanı adı"),
+        ("mysql://u:GIZLI@127.0.0.1:5433/otomaix_test", "şema"),
+    ],
+)
+def test_sweep_rejects_ambiguous_connection_string(dsn, beklenen):
+    """Belirsiz bağlantı dizesi BAĞLANMADAN reddedilir — ve parola sızmaz.
+
+    Codex checkpoint 5 tur 5, yüksek bulgu: uç METİNDEN okunuyordu, ama asyncpg
+    `PGPORT` ve `?host=` gibi yolları da dikkate alır — iki farklı sunucuya giden
+    iki dize aynı metne inebiliyordu. Belirsiz biçimler artık kapıda duruyor.
+    """
+    result = _run_sweep(dsn)
+
+    assert result.returncode == 2, f"belirsiz dize kabul edildi: {dsn}"
+    assert beklenen in result.stderr
+    # Parola hiçbir akışa sızmaz.
+    assert "GIZLI" not in result.stdout
+    assert "GIZLI" not in result.stderr
+
+
+async def test_sweep_target_carries_server_side_peer(readonly_role):
+    """Kimlik sunucunun KENDİ gördüğü ucu da taşır — yalnız dizeyi değil.
+
+    Bu kümede ölçüldü: `127.0.0.1:5433`'e bağlanan bir istemciye sunucu kendini
+    başka bir adres/port ile bildiriyor (port yönlendirmesi). Kimlik bu yüzden
+    iki kaynaktan beslenir; yönlendirmenin ucu değişirse taban reddedilir.
+    """
+    _admin_url, readonly_dsn = readonly_role
+
+    result = _run_sweep(readonly_dsn)
+    assert result.returncode == 0, result.stderr
+
+    target = next(
+        line[len("target: ") :]
+        for line in result.stdout.splitlines()
+        if line.startswith("target: ")
+    )
+    _cluster, _, endpoints = target.partition("@")
+    client_part, sep, server_part = endpoints.partition("~")
+
+    assert sep, f"kimlik sunucu-taraflı ucu taşımıyor: {target}"
+    assert client_part == f"{REQUIRED_HOST}:{REQUIRED_PORT}/{SCRATCH_DB_NAME}"
+    # Sunucu tarafı `adres:port` biçiminde ve DOLU.
+    assert ":" in server_part and server_part.split(":")[1].isdigit()

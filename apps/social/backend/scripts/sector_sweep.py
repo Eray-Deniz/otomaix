@@ -42,6 +42,11 @@ Sözleşme:
   kaymayı gizlerdi. Bağlantı ucu şart, çünkü fiziksel bir kopya (yedekten geri
   yükleme, standby) veritabanı-içi kimliğin ÜÇÜNÜ DE aynen taşır — prod
   yedeğinden kurulmuş bir staging bu yüzden orijinalden ayırt edilemezdi.
+  Uç İKİ kaynaktan gelir: kanonik bağlantı dizesi ve sunucunun KENDİ gördüğü
+  adres. Yalnız dizeye bakmak yetmezdi — `PGPORT` ve `?host=` gibi yollar iki
+  farklı sunucuya giden iki dizeyi aynı metne indirger. Bilinen bedel: sunucu
+  adresi değişirse (ör. kap yeniden başlar ve yeni IP alır) eski taban
+  reddedilir; bu FAIL-CLOSED yöndür, taban yeniden alınır.
 * **Bilinçli sınır (BELGELİ KALINTI).** Araç, tabanın geçmişte DOĞRU olduğunu
   kanıtlayamaz; taban geçmiş bir durumdur ve güveni onu bu script'in yazmış
   olmasından alır. Elle düzenlenmiş (sayacı da güncellenmiş) bir taban, aynı
@@ -65,7 +70,7 @@ import sys
 from pathlib import Path
 
 import asyncpg
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 # Rapor biçimi değişirse artar — iki koşumun karşılaştırılabilirliği buna bağlı.
 # v2: rapor tam eşleme listesi taşır (v1 yalnız toplam sayı taşıyordu).
@@ -114,17 +119,68 @@ SELECT format(
 """
 
 
-def endpoint_identity(database_url: str) -> str:
-    """Bağlantı ucunun kimliği — `sunucu:port/veritabanı`. Parola/kullanıcı YOK.
+class InvalidTarget(ValueError):
+    """Bağlantı dizesi belirsiz — hangi sunucuya gidileceği metinden okunamıyor."""
 
-    Aynı veritabanına farklı adlarla (`localhost` vs `127.0.0.1`) bağlanmak
-    uyuşmazlık üretir; bu FAIL-CLOSED yöndür — araç durur, operatör tabanı
-    yeniden alır. Ters yön (sessizce kabul) tam da kapatılan hatadır.
+
+# Bağlantı ucunu METİNDEN okumak yetmez: asyncpg `PGPORT` gibi ortam
+# değişkenlerini ve `?host=`/`?port=` sorgu parametrelerini de dikkate alır.
+# İki FARKLI sunucuya giden iki dize aynı metni üretebilir (Codex checkpoint 5
+# tur 5). O yüzden iki kapı birden:
+#   1. Dize KANONİK olmak zorunda — tek TCP sunucusu, açık sayısal port, açık
+#      veritabanı adı, uç-değiştiren sorgu parametresi YOK. Belirsiz dize
+#      bağlanmadan ÖNCE reddedilir.
+#   2. Kimliğe sunucunun KENDİ gördüğü uç eklenir. Metne değil sunucunun
+#      cevabına dayanır; yönlendirilmiş port veya yeniden yönlendirilmiş ad
+#      buradan yakalanır.
+_ENDPOINT_QUERY_KEYS = frozenset({"host", "port", "dbname", "database"})
+
+# Sunucunun kendi gördüğü uç. Unix soketinde `inet_server_addr()` NULL döner;
+# `port` ayarı okunabilir (ÖLÇÜLDÜ — `unix_socket_directories` ve
+# `data_directory` salt-okunur role KAPALI, onlara dayanılmaz).
+_SERVER_PEER_SQL = """
+SELECT format(
+    '%s:%s',
+    coalesce(host(inet_server_addr()), 'local'),
+    coalesce(inet_server_port()::text, current_setting('port'))
+)
+"""
+
+
+def canonical_endpoint(database_url: str) -> str:
+    """Kanonik `sunucu:port/veritabanı` — belirsiz dizeyi REDDEDER.
+
+    Parola ve kullanıcı adı çıktıya GİRMEZ; hata mesajları da ham dizeyi
+    basmaz, yalnız hangi kuralın çiğnendiğini söyler.
     """
     parts = urlsplit(database_url)
-    host = parts.hostname or "?"
-    port = parts.port if parts.port is not None else "?"
-    database = parts.path.lstrip("/") or "?"
+
+    if parts.scheme not in ("postgresql", "postgres"):
+        raise InvalidTarget(f"şema {parts.scheme!r} desteklenmiyor")
+
+    authority = parts.netloc.rsplit("@", 1)[-1]
+    if "," in authority:
+        raise InvalidTarget("çok-sunuculu dize: hangi sunucu olduğu belirsiz")
+
+    host = parts.hostname
+    if not host:
+        raise InvalidTarget("sunucu adı yok (soket/varsayılan uç belirsizdir)")
+
+    try:
+        port = parts.port
+    except ValueError:
+        raise InvalidTarget("port sayısal değil") from None
+    if port is None:
+        raise InvalidTarget("port açıkça verilmeli (PGPORT'a düşülmez)")
+
+    database = parts.path.lstrip("/")
+    if not database:
+        raise InvalidTarget("veritabanı adı açıkça verilmeli")
+
+    overrides = sorted(_ENDPOINT_QUERY_KEYS & set(parse_qs(parts.query)))
+    if overrides:
+        raise InvalidTarget(f"uç-değiştiren sorgu parametresi: {', '.join(overrides)}")
+
     return f"{host}:{port}/{database}"
 
 
@@ -303,12 +359,16 @@ async def sweep(
     database_url: str, baseline: tuple[str, dict[str, str]] | None = None
 ) -> tuple[str, int]:
     """Raporu ve ihlal sayısını döner. Yazma YOK — salt-okunur transaction."""
+    # Belirsiz dize sunucuya HİÇ gitmez — doğrulama bağlantıdan ÖNCE.
+    canonical_endpoint(database_url)
+
     connection = await asyncpg.connect(database_url)
     try:
         # Yapısal salt-okunurluk: yetkili dizeyle koşulsa bile yazamaz.
         await connection.execute("BEGIN TRANSACTION READ ONLY")
         try:
             cluster_identity = await connection.fetchval(_TARGET_SQL)
+            server_peer = await connection.fetchval(_SERVER_PEER_SQL)
             rows = await connection.fetch(_SWEEP_SQL)
             sub_sector_rows = await connection.fetchval(_SUB_SECTOR_COUNT_SQL)
         finally:
@@ -316,9 +376,9 @@ async def sweep(
     finally:
         await connection.close()
 
-    if not cluster_identity:
+    if not cluster_identity or not server_peer:
         raise ValueError("hedef kimliği okunamadı — karşılaştırma yapılamaz")
-    target = f"{cluster_identity}@{endpoint_identity(database_url)}"
+    target = f"{cluster_identity}@{canonical_endpoint(database_url)}~{server_peer}"
 
     baseline_mapping = None
     if baseline is not None:
@@ -377,6 +437,20 @@ def main(argv: list[str] | None = None) -> int:
         report, violations = asyncio.run(sweep(args.database_url, baseline))
     except BaselineMismatch as exc:
         sys.stderr.write(f"baseline okunamadı: {exc}\n")
+        return 2
+    except InvalidTarget as exc:
+        sys.stderr.write(f"bağlantı dizesi kanonik değil: {exc}\n")
+        return 2
+    except Exception as exc:
+        # Bağlantı/sorgu hatası da FAIL-CLOSED olmalı: yakalanmayan istisna
+        # rc=1 ile çıkardı ve rc=1 "fark bulundu" anlamına gelir — karışırdı.
+        # Ham istisna metni BASILMAZ: bağlantı dizesini (dolayısıyla parolayı)
+        # taşıyabilir. Yalnız tür adı + kimlik bilgisi taşımayan uç basılır.
+        try:
+            where = canonical_endpoint(args.database_url)
+        except InvalidTarget:
+            where = "<kanonik olmayan uç>"
+        sys.stderr.write(f"sweep koşulamadı ({type(exc).__name__}) — hedef: {where}\n")
         return 2
 
     sys.stdout.write(report)
