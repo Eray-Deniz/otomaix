@@ -30,8 +30,8 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: b2d80c5cd0fee8145391db276efd6343fea10a93
-- cp_count: 2
+- last_checkpoint_ref: 914f531
+- cp_count: 3
 
 # Current Status
 
@@ -43,9 +43,21 @@ kanonik dizin taraması + açık compose dosyası + her psql çağrısında
 `ON_ERROR_STOP=1`; (b) `shared/db/migrations/rollback/032_down.sql` — veri varken
 hiçbir şeye dokunmadan REDDEDEN, boş yolda kendi kalıntısını denetleyen geri alma;
 (c) R-17 iki-adım aktivasyon ölçümü (tek transaction geçer, ters sıra reddedilir).
-`pytest tests/ -q` → **46 passed**. Task 3(a) Task 2'nin kalan sınırını da kapattı:
-bayraksız psql hatalı SQL'de rc=0, bayrakla rc=3 (taze ölçüm). Commit `fb6ff3f`,
-`Exec-Kind: code`; türetilmiş defter rc=0. Push YOK. Sıradaki iş: Task 4.
+Task 3(a) Task 2'nin kalan sınırını da kapattı: bayraksız psql hatalı SQL'de rc=0,
+bayrakla rc=3 (taze ölçüm).
+
+**Checkpoint 3 koştu (4 tur, sonuç `verdict: approve`).** Tur 1 → needs-attention
+(1 yüksek: geri alma preflight'ı ile silme arasında yarış); tur 2 → aynı küme yeniden
+açıldı (yüksek: REPEATABLE READ oturumunda kilit yetmiyor) + yeni yüksek (sarmalayıcı
+transaction çağıranın işlemini erken commit ediyor); tur 3 → kritik OUT-OF-DELTA
+(korunan tablo yokken kilit kurulamıyor, aradaki pencerede ileri-032 + yazım verisi
+DROP ile yok olabiliyor) + yakınsama kararı (B); tur 4 → **approve**, bulgu yok,
+yakınsama kararı **(A)**: "commit edilmiş korunan satır bu script tarafından asla yok
+edilmez ve yarım teardown ayakta kalmaz" invariantı her ulaşılabilir çağrı için geçerli.
+Üç düzeltmenin üçü de POZİTİF KONTROLLÜ: her yeni test, düzeltmeden ÖNCEKİ sürümde
+düşüyor. İki orta bulgu `accepted_risk` (Auto-Fix Policy; HANDOFF Risks).
+`pytest tests/ -q` → **50 passed**. Commit'ler `fb6ff3f` → `914f531`;
+türetilmiş defter rc=0. Push YOK. Sıradaki iş: Task 4.
 
 **Önceki durum (2026-08-24, altıncı oturum) — 16 task'ın 2'si bitti.**
 `/execute-plan-claude-codex` başlatıldı: dal `feat/sektor-bilgi-paketi`, mod
@@ -120,6 +132,15 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
   (a) on-prem imajı 18'e çek (mevcut kurulumlarda veri taşıma gerekir), (b) 032 doğrulamasını
   sürüm-duyarlı yap, (c) on-prem paketi kullanılmıyorsa statü notuyla bırak. Otonom
   düzeltilmedi: imaj/veri-taşıma kararı Eray-seviyesidir.
+- **Geri alma ile ileri 032 arasında çapraz serileştirme yok (residual, checkpoint 3 tur 3-4).**
+  `032_down.sql` kendi invariantını kapatıyor (tur 4 yakınsama kararı A), ama ileri koşan bir
+  032 uygulamasıyla script arasında ORTAK kilit yok. Tam serileştirme, 032'nin de kendi
+  transaction'ına sarılıp aynı advisory lock'u almasını gerektirir — 032 onaylı bir Task 2
+  artefaktı, bu task'ın dosya kümesi dışında. Bugünkü hâlde ulaşılabilir bir veri-kaybı yolu
+  YOK (korunan tablolar yoksa script baştan reddediyor, varsa ACCESS EXCLUSIVE altında).
+  Yeniden açılma koşulu: 032 ileri uygulaması ile geri alma aynı anda koşabilecek bir işletim
+  düzeni doğarsa (birden çok operatör / otomatik dağıtım), ya da 032 başka bir sebeple
+  transactional hâle gelirse. Evi: Task 16 kapanış listesi (manuel adımlar + arayüz teslimi).
 - (Plan onayı oturumundan açık problem kalmamıştı — plan `15db2cf` ile commit'li. Açık
   K-ID'ler planın "Karar Kapıları" tablosunda yönetiliyor; Plan 2 evi: K-84/K-151/K-152
   kapanınca ayrı plan. Aşağıdaki iki kayıt önceki oturumlardan, bilinçli açık.)
@@ -290,11 +311,10 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 - **2026-08-24 (yedinci oturum) — Task 3 inline koşuldu (Eray talebi):** "bu oturumda
   task'ları subagent olarak değil, inline yaz". Execution State'teki `execute_mode`
   DEĞİŞTİRİLMEDİ (subagent-driven kayıt olarak kalır; Task 1-2'yi doğru anlatıyor) —
-  inline yalnız bu oturumun çalışma biçimidir. Sonuç: Task 3 için Codex checkpoint
-  adversarial review'ı KOŞMADI; `cp_count` 2'de kaldı, `last_checkpoint_ref` Task 2'yi
-  gösteriyor. Task 3'ün kapsamı (dağıtım script'i + yıkıcı geri alma SQL'i) risk-tetikli
-  checkpoint'e aday olurdu; kapsanması ya ayrı bir checkpoint'e ya Adım 11 final
-  execution review'a kalıyor. Bu, sessiz atlama değil kayıtlı boşluktur.
+  inline yalnız bu oturumun çalışma biçimidir. **Kapsam düzeltmesi (Eray, aynı oturum):**
+  "inline" YALNIZ task yazımını kapsar; review/checkpoint kapıları normal koşar. İlk
+  yorumum bunu yanlışlıkla review'lara da genişletmişti — Eray düzeltti, checkpoint 3
+  aynı oturumda koştu (4 tur, approve).
 - **2026-08-24 (altıncı oturum) — Geçmiş yeniden yazımı (Eray onaylı):** `9ed5902` commit'i
   `Exec-Kind: code` etiketiyle inmişti ama yalnız `tests/` altına dokunuyordu → türetilmiş
   defter MECH-FAIL veriyor, Adım 11.0 mekanik kapısını ve push'u bloklyordu. Etiket `red-only`'ye

@@ -73,6 +73,14 @@
   geri almasını engellemiyor.
 - **F6 [low]** `idx_brands_sub_sector_id` planın Task 2 sözleşmesinde yazılı değil; sapma
   olarak bildirilmeden eklendi.
+- **F2-cp3 [medium]** On-prem kurulum paketi (`shared/local-deployment/docker-compose.yml`)
+  PostgreSQL 16 imajını pinliyor; migration 032 PG18 kolonu (`pg_constraint.conenforced`)
+  okuyor — ölçüldü: PG 16.13'te kolon YOK. On-prem `setup.sh` zinciri 032'de gürültülü
+  hatayla durur. Eray kararı (2026-08-24): canlı sistem test aşamasında, şimdi çözülmeyecek.
+  Detay + üç seçenek: TASK.md Open Problems.
+- **F3-cp3 [medium]** `test_rollback_refuses_when_package_data_exists` iki korunan tabloyu
+  AYNI anda dolduruyor; preflight'ın OR kapısının bir ayağı silinse test yine yeşil kalır.
+  Uygulama şu an ikisini de sayıyor. Auto-Fix Policy: medium → `accepted_risk`.
 - **F17** (önceki oturumdan, Eray risk-kabulü): damga = edited-lineage atfı. **Yeniden
   açtırma.**
 - **Sürüm kırılganlığı (dürüst sınır, bulgu değil):** 032 doğrulama bloğu PG18 `conenforced`
