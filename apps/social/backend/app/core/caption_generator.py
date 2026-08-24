@@ -34,6 +34,11 @@ from app.services.sector_packages import SectorPackageContext
 
 logger = logging.getLogger(__name__)
 
+# İÇ bayrak — yanıt sözleşmesinin parçası DEĞİLDİR, çağıran onu `pop` eder.
+# Yedek (fallback) dalları bu anahtarı HİÇ koymaz; yokluğu "paket uygulanmadı"
+# demektir, yani varsayılan yön güvenli taraftadır.
+PACKAGE_APPLIED_KEY = "_package_applied"
+
 _HASHTAG_RE = re.compile(r"#[\wÇĞİÖŞÜçğıöşü]+", re.UNICODE)
 
 
@@ -215,6 +220,12 @@ async def generate_captions(
                     if pcaption["caption"] and not pcaption["caption"].endswith(disclaimer):
                         pcaption["caption"] += f"\n\n{disclaimer}"
 
+        # K-07 kabul koşulu: damga YALNIZ paketin gerçekten şekillendirdiği bir
+        # ÇIKTIYA yazılır. Paket bağlamının çözülmüş olması bunu KANITLAMAZ —
+        # anahtar yoksa ya da çağrı patlarsa aşağıdaki yedek dal kullanıcı
+        # isteğini yankılar ve o metnin paketle hiçbir ilgisi olmaz. Bayrak bu
+        # yüzden burada, prompt kurulumunda değil, dönüş noktasında konur.
+        data[PACKAGE_APPLIED_KEY] = package_context is not None
         return data
 
     except Exception as e:

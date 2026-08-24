@@ -6,7 +6,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.caption_generator import generate_captions
+from app.core.caption_generator import PACKAGE_APPLIED_KEY, generate_captions
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.security import (
@@ -186,11 +186,6 @@ class GenerateCaptionRequest(BaseModel):
     scene_reference_image_url: str | None = None
 
 
-@router.post(
-    "/generate-caption",
-    response_model=OkResponse,
-    dependencies=[Depends(limiter(30, 3600))],  # 30/saat
-)
 async def _write_generation_stamp(db, brand_id, package_context) -> str | None:
     """K-07 üretim-anı makbuzu; paketsiz üretimde `None` döner.
 
@@ -228,6 +223,12 @@ async def _write_generation_stamp(db, brand_id, package_context) -> str | None:
     return str(stamp_id)
 
 
+
+@router.post(
+    "/generate-caption",
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(30, 3600))],  # 30/saat
+)
 async def generate_caption(
     payload: GenerateCaptionRequest,
     user: dict = Depends(get_current_user),
@@ -308,8 +309,10 @@ async def generate_caption(
         package_context=package_context,
     )
 
+    # Bayrak yanıt sözleşmesinin parçası değil — okunur ve DÜŞÜRÜLÜR.
+    package_applied = result.pop(PACKAGE_APPLIED_KEY, False)
     result["generation_id"] = await _write_generation_stamp(
-        db, payload.brand_id, package_context
+        db, payload.brand_id, package_context if package_applied else None
     )
     return OkResponse(data=CaptionGenerationOut(**result).model_dump())
 

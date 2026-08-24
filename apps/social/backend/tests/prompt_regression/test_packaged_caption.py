@@ -158,55 +158,22 @@ async def test_packaged_caption_replaces_sector_guidance(
     assert "Kuyumculuk: altın" in rendered
 
 
-async def test_packaged_idea_prompt_replaces_guidance(
-    db, frozen_brand_fixtures, monkeypatch
-):
+async def test_packaged_idea_prompt_replaces_guidance(db, monkeypatch):
     """Fikir önerme ucu da paket yoluna girer — iki ses ayrışması olmaz."""
     await _init_connection(db)
     calls = capture_anthropic_calls(monkeypatch, response_text="1. birinci\n2. ikinci")
-
-    root_id = await db.fetchval(
-        "SELECT id FROM social.sectors WHERE slug = $1", FROZEN_SECTOR_SLUG
-    )
-    assert root_id is not None
-    sub_id = await db.fetchval(
-        "INSERT INTO social.sectors (slug, display_name, parent_sector_id) "
-        "VALUES ($1, $2, $3) RETURNING id",
-        f"kuyumculuk-{uuid.uuid4().hex[:8]}",
-        "Kuyumculuk",
-        root_id,
-    )
-    await db.execute(
-        "INSERT INTO social.sector_packages "
-        "(sector_id, version, status, schema_version, content) "
-        "VALUES ($1, 1, 'active', 1, $2)",
-        sub_id,
-        _package_content(),
-    )
-    brand_id = await db.fetchval(
-        """
-        INSERT INTO social.brands (name, sector, description, brand_kit, sector_id, sub_sector_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
-        """,
-        frozen_brand_fixtures["brand"]["name"],
-        frozen_brand_fixtures["brand"]["sector"],
-        frozen_brand_fixtures["brand"]["description"],
-        frozen_brand_fixtures["brand_kit"],
-        root_id,
-        sub_id,
-    )
+    user, brand_id = await _seed_owned_brand(db, packaged=True)
 
     payload = ai_router.SuggestIdeasRequest(
         brand_id=brand_id,
         content_type="image",
         content_category="product",
-        prompt=frozen_brand_fixtures["user_prompt"],
-        platforms=frozen_brand_fixtures["platforms"],
+        prompt="Yeni sürüm duyurusu",
+        platforms=["instagram", "linkedin"],
         count=3,
         template_id=FROZEN_SINGLE_TEMPLATE_ID,
     )
-    await ai_router.suggest_ideas(payload=payload, user={"sub": str(uuid.uuid4())}, db=db)
+    await ai_router.suggest_ideas(payload=payload, user=user, db=db)
 
     assert len(calls) == 1, "fikir yüzeyi sessizce fallback'e düştü"
     rendered = calls[0].rendered
@@ -555,3 +522,102 @@ async def test_unpackaged_fixtures_still_byte_exact(frozen_brand_fixtures, monke
     )
     assert "SEKTÖR PAKETİ" not in call.rendered
     assert_matches_fixture("caption__single__no_special_day", call.rendered)
+
+
+# ─── 8. Checkpoint 10 bulgularının regresyon kapıları ───────────────────────
+
+
+def test_generate_caption_route_targets_the_handler():
+    """`/posts/generate-caption` GERÇEK işleyiciye bağlı olmalı (F1).
+
+    Dekoratör ile işleyici arasına bir yardımcı fonksiyon sokulursa FastAPI
+    yolu O yardımcıya bağlar: uç, kimlik doğrulamasız ve gövdesiz bir imzayla
+    açılır, asıl caption akışı HTTP üzerinden ERİŞİLEMEZ olur. Fonksiyonu
+    doğrudan çağıran testler bunu göremez — kapı yolun KENDİSİNE bakmalı.
+    """
+    from app.main import app
+
+    matches = [r for r in app.routes if getattr(r, "path", "") == "/posts/generate-caption"]
+    assert matches, "generate-caption yolu hiç kayıtlı değil"
+    for route in matches:
+        assert route.endpoint.__name__ == "generate_caption", (
+            f"yol yanlış işleyiciye bağlı: {route.endpoint.__name__}"
+        )
+
+
+async def test_suggest_ideas_rejects_foreign_brand(db, frozen_brand_fixtures, monkeypatch):
+    """Fikir ucu SAHİPLİK doğrular — kimlik doğrulama yetki değildir (F2).
+
+    Uç paket-farkındalığı kazandığı an, başkasının markasının paket içeriği
+    (spec §3.7'ye göre İÇSEL) yabancı bir kiracıya akmaya başlar. Sahiplik
+    kapısı bu yüzden paket enjeksiyonundan ÖNCE koşmalıdır.
+    """
+    from fastapi import HTTPException
+
+    await _init_connection(db)
+    calls = capture_anthropic_calls(monkeypatch, response_text="1. bir")
+    _, brand_id = await _seed_owned_brand(db, packaged=True)
+    stranger = {"sub": str(uuid.uuid4())}
+
+    payload = ai_router.SuggestIdeasRequest(
+        brand_id=brand_id,
+        content_type="image",
+        content_category="product",
+        prompt="deneme",
+        platforms=["instagram"],
+        count=3,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        await ai_router.suggest_ideas(payload=payload, user=stranger, db=db)
+
+    # Varlık sızmasın diye 404 (403 değil) — projenin yerleşik sözleşmesi.
+    assert excinfo.value.status_code == 404
+    assert not calls, "yetkisiz istek modele hiç ulaşmamalıydı"
+
+
+async def test_fallback_generation_is_not_stamped(db, monkeypatch):
+    """Paketsiz FALLBACK çıktısı paket damgası ALMAZ (F3).
+
+    Çözümleyicinin paket bulmuş olması, dönen içeriğin o paketle üretildiğini
+    KANITLAMAZ: anahtar yoksa ya da model çağrısı patlarsa `generate_captions`
+    kullanıcı isteğini yankılayan bir yedeğe düşer. O yedeği damgalamak,
+    üretilmemiş bir soyağacını doğrulanmış gibi göstermek olurdu.
+    """
+    await _init_connection(db)
+    capture_anthropic_calls(monkeypatch)
+    from app.core.config import settings
+
+    # Anahtar YOK → üretim yedek dala düşer (paket bağlamı çözülmüş olsa bile).
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "", raising=False)
+    user, brand_id = await _seed_owned_brand(db, packaged=True)
+
+    before = await db.fetchval("SELECT count(*) FROM social.generation_stamps")
+    data = await _call_generate_caption(db, user, brand_id)
+    after = await db.fetchval("SELECT count(*) FROM social.generation_stamps")
+
+    assert data.get("generation_id") is None, "yedek çıktı paket damgası aldı"
+    assert after == before, "yedek çıktı için makbuz yazıldı"
+
+
+@pytest.mark.parametrize("malformed", ["   ", "...", "!!"])
+async def test_malformed_special_day_falls_through_silently(
+    frozen_brand_fixtures, monkeypatch, caplog, malformed
+):
+    """Çözümlenemeyen gün adı SESSİZ DÜŞER — istisna KAÇMAZ (F4).
+
+    `normalize_special_day_key` yazım tarafı için fail-closed'dır ve
+    çözümlenemeyen adda `ValueError` fırlatır. Okuma tarafında bu, genel
+    kullanıcı girdisiyle tetiklenen işlenmemiş bir sunucu hatasına dönüşür ve
+    spec §11.1'in zorunlu sessiz-düşme sözleşmesini çiğner. Yazıcı katı kalır;
+    okuma sınırında hata mismatch'e ÇEVRİLİR.
+    """
+    with caplog.at_level(logging.WARNING):
+        rendered = await _packaged_caption(
+            frozen_brand_fixtures, monkeypatch, special_day_name=malformed
+        )
+
+    assert "SEKTÖR PAKETİ" in rendered, "paket yolu malformed gün yüzünden düştü"
+    assert "Ortak sevinç ve emek" not in rendered
+    assert any(
+        "özel gün" in record.getMessage() for record in caplog.records
+    ), "çözümlenemeyen gün adı log üretmedi"

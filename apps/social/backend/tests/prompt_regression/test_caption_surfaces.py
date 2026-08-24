@@ -115,10 +115,29 @@ async def test_ideas_surface_matches_fixture(db, frozen_brand_fixtures, monkeypa
     )
     assert sector_id is not None, "sabit sektör slug'ı kök seed'de yok"
 
+    # Sahiplik zinciri: uç, paket-farkındalığı kazandığı için artık sahiplik
+    # doğruluyor (checkpoint 10 / F2). Prompt GİRDİLERİ değişmedi — marka adı,
+    # açıklaması ve kiti aynı; fixture bayt olarak aynı kalmalı.
+    account_id = await db.fetchval(
+        "INSERT INTO social.accounts (email, name) VALUES ($1, $2) RETURNING id",
+        f"ideas-{uuid.uuid4().hex[:10]}@example.test",
+        "Fikir Sahibi",
+    )
+    workspace_id = await db.fetchval(
+        "INSERT INTO social.workspaces (account_id, name) VALUES ($1, $2) RETURNING id",
+        account_id,
+        "Fikir Workspace",
+    )
+    await db.execute(
+        "INSERT INTO social.workspace_members (workspace_id, account_id) VALUES ($1, $2)",
+        workspace_id,
+        account_id,
+    )
+
     brand_id = await db.fetchval(
         """
-        INSERT INTO social.brands (name, sector, description, brand_kit, sector_id)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO social.brands (name, sector, description, brand_kit, sector_id, workspace_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
         """,
         frozen_brand_fixtures["brand"]["name"],
@@ -126,6 +145,7 @@ async def test_ideas_surface_matches_fixture(db, frozen_brand_fixtures, monkeypa
         frozen_brand_fixtures["brand"]["description"],
         json.dumps(frozen_brand_fixtures["brand_kit"], ensure_ascii=False),
         sector_id,
+        workspace_id,
     )
 
     payload = ai_router.SuggestIdeasRequest(
@@ -138,7 +158,7 @@ async def test_ideas_surface_matches_fixture(db, frozen_brand_fixtures, monkeypa
         template_id=FROZEN_SINGLE_TEMPLATE_ID,
     )
 
-    await ai_router.suggest_ideas(payload=payload, user={"id": str(uuid.uuid4())}, db=db)
+    await ai_router.suggest_ideas(payload=payload, user={"sub": str(account_id)}, db=db)
 
     assert len(calls) == 1, "fikir yüzeyi sessizce fallback'e düştü"
     rendered = calls[0].rendered

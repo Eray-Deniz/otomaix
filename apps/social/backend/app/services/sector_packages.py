@@ -907,7 +907,23 @@ def render_special_day_lines(
     if not isinstance(ozel_gun, dict):
         return []
 
-    key = normalize_special_day_key(day_name)
+    # Normalize YAZIM tarafı için fail-closed'dır: çözümlenemeyen adda istisna
+    # fırlatır ve uydurma anahtar üretilmesini engeller. Okuma sınırında aynı
+    # istisna, genel kullanıcı girdisiyle tetiklenen işlenmemiş bir sunucu
+    # hatasına dönüşür ve spec §11.1'in ZORUNLU sessiz-düşme sözleşmesini
+    # çiğnerdi. Yazıcı katı KALIR; hata burada eşleşmeme durumuna çevrilir.
+    try:
+        key = normalize_special_day_key(day_name)
+    except ValueError as exc:
+        logger.warning(
+            "özel gün adı çözümlenemedi, dönem kalıpları basılmıyor "
+            "(package_id=%s sub_sector=%s gün=%r): %s",
+            context.package_id,
+            context.sub_sector_slug,
+            day_name,
+            exc,
+        )
+        return []
     entry = ozel_gun.get(key)
     if not isinstance(entry, dict):
         logger.warning(

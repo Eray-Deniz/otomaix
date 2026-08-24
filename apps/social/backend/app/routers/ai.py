@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.core.security import get_current_user
+from app.core.security import assert_brand_owned, get_current_user
 from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
 from app.services.sector_packages import render_package_block, resolve_package_context
 from app.models.schemas import OkResponse
@@ -158,6 +158,12 @@ async def suggest_ideas(
 ):
     """Generate content idea suggestions using Claude based on full context."""
     from app.services.document_processor import get_document_context
+
+    # Sahiplik kapısı paket enjeksiyonundan ÖNCE koşar. Kimlik doğrulama yetki
+    # DEĞİLDİR: bu uç paket-farkındalığı kazandığı an, başkasının markasının
+    # paket içeriği (spec §3.7'ye göre içsel) yabancı bir kiracıya akardı.
+    # 404 (403 değil) — başkasının kaynağının varlığı sızmasın (yerleşik kural).
+    await assert_brand_owned(db, user, payload.brand_id)
 
     brand = await db.fetchrow(
         """
