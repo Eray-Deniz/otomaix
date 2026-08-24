@@ -1,0 +1,7 @@
+[0] Slow cinematic camera push-in, soft ambient lighting, gentle particle motion, seamless loop
+[1] Smooth lateral dolly shot, warm natural light, subtle depth-of-field shift
+[2] Gentle orbit around subject, golden hour lighting, cinematic bokeh
+[3] Slow vertical tilt revealing the scene, soft diffused lighting, atmospheric haze
+[4] Parallax effect with foreground blur, cool-tone ambient light, elegant composition
+[5] Slow zoom-out revealing context, dramatic rim lighting, film grain texture
+[6] Steady tracking shot with subtle camera sway, natural daylight, shallow focus

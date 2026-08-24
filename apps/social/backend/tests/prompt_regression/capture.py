@@ -29,6 +29,18 @@ FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 # edilir: karşılaştırma başarısızlığı sessizce "güncelleme" olmaz.
 UPDATE_ENV = "PROMPT_REGRESSION_UPDATE"
 
+# `cache_control` içinde basılan alanlar. Küme fail-closed'dır: dışında bir alan
+# görülürse yakalama REDDEDİLİR (bkz. `_cache_suffix`).
+_KNOWN_CACHE_CONTROL_KEYS = frozenset({"type"})
+
+
+class UnrenderableBlock(AssertionError):
+    """Kayıpsız temsil edilemeyen bir girdi bloğu yakalandı.
+
+    `AssertionError` türevi: pytest bunu test hatası olarak gösterir ve sessiz
+    bir geçiş yerine ALARM üretir.
+    """
+
 # Yakalanan çağrıya verilen sabit yanıt. Üretim yolu bunu ayrıştırıp akmaya
 # devam eder; yanıtın İÇERİĞİ testin konusu DEĞİLDİR, prompt'tur.
 _CANNED_JSON = json.dumps(
@@ -81,7 +93,13 @@ class CapturedCall:
 
 
 def _as_blocks(content: Any) -> list[dict]:
-    """Düz metni de blok listesini de tek biçime indirger."""
+    """Düz metni de blok listesini de tek biçime indirger.
+
+    KAYIPLI temsil YOKTUR: metin olmayan bir blok (görsel, araç sonucu) `<tip>`
+    işaretine indirgenmez — `UnrenderableBlock` ile REDDEDİLİR. Gerekçe: fixture
+    ancak girdiyi kayıpsız temsil ediyorsa kanıttır; iki farklı görsel aynı
+    `<image>` işaretine inseydi fixture değişmeden prompt değişebilirdi.
+    """
     if content is None:
         return []
     if isinstance(content, str):
@@ -90,18 +108,34 @@ def _as_blocks(content: Any) -> list[dict]:
     for block in content:
         if isinstance(block, str):
             blocks.append({"type": "text", "text": block})
-        elif block.get("type") == "text":
+        elif isinstance(block, dict) and block.get("type") == "text":
             blocks.append(block)
         else:
-            # Metin olmayan blok (görsel vb.) sessizce DÜŞÜRÜLMEZ: türü basılır.
-            blocks.append({"type": block.get("type"), "text": f"<{block.get('type')}>"})
+            kind = block.get("type") if isinstance(block, dict) else type(block).__name__
+            raise UnrenderableBlock(
+                f"metin olmayan blok kayıpsız temsil edilemiyor: type={kind!r}. "
+                "Bu yüzeyi dondurmadan ÖNCE harness'a o blok türü için "
+                "deterministik ve kayıpsız bir temsil eklenmelidir."
+            )
     return blocks
 
 
 def _cache_suffix(block: dict) -> str:
+    """Önbellek sınırını basar; tanınmayan alan varsa REDDEDER.
+
+    Bugün `cache_control` tek alan taşıyor (`type`). Yarın bir alan eklenirse
+    (ör. `ttl`) yalnız `type` basmak onu görünmez kılardı — önbellek sınırı
+    mimari bir karardır (3 katmanlı prompt cache), sessizce kaymamalı.
+    """
     cache_control = block.get("cache_control")
     if not cache_control:
         return ""
+    unknown = set(cache_control) - _KNOWN_CACHE_CONTROL_KEYS
+    if unknown:
+        raise UnrenderableBlock(
+            f"cache_control tanınmayan alan taşıyor: {sorted(unknown)}. "
+            "Harness bu alanı basmıyor; temsil eklenmeden fixture dondurulamaz."
+        )
     return f" cache_control={cache_control.get('type')}"
 
 

@@ -43,3 +43,36 @@ def frozen_brand_fixtures() -> dict:
         "user_prompt": "Yeni sürüm duyurusu",
         "special_day": {"name": "Cumhuriyet Bayramı", "category": "national"},
     }
+
+
+# Kısa video yüzeylerinin sabit girdileri (plan Task 7). Ürün bilgisi üretimin
+# kendi biçiminde kurulur (`posts.py` stage-1: "Name: / Description: / Tags:").
+FROZEN_PRODUCT_INFO = (
+    "Name: Bulut Panel\n"
+    "Description: Tek ekrandan stok ve sipariş yönetimi.\n"
+    "Tags: bulut, panel, kobi"
+)
+
+
+@pytest.fixture
+def frozen_short_video_fixtures() -> dict:
+    """Kısa video durağan kare + script yüzeylerinin sabit girdileri."""
+    return {
+        "topic": "Yeni sürüm duyurusu",
+        "brand_name": "Donuk Teknoloji",
+        "brand_description": "Küçük işletmeler için bulut yazılımı.",
+        "sector": "Teknoloji",
+        "color_str": "#0A84FF, #1C1C1E",
+        "user_brief": "Ofiste ekibin panele bakarak gülümsediği bir sahne",
+        "product_info": FROZEN_PRODUCT_INFO,
+        "product_doc_context": "Panel, stok uyarılarını gün sonunda toplu gönderir.",
+        "script_prompt": "Yeni sürümü duyuran kısa video",
+        "brand_kit": {
+            "tonality": "professional",
+            "sector": "Teknoloji",
+            "hashtags": ["#teknoloji", "#bulut", "#kobi"],
+            "colors": {"primary": "#0A84FF", "secondary": "#1C1C1E"},
+        },
+        "website_url": "https://donukteknoloji.example",
+        "max_duration": 30,
+    }
