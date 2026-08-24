@@ -329,9 +329,13 @@ async def test_resolver_none_for_non_active_with_stale_log(pkg_db, caplog, statu
         result = await resolve_package_context(pkg_db, {"id": uuid.uuid4(), "sub_sector_id": sub_id})
 
     assert result is None
-    assert any(str(sub_id) in r.getMessage() for r in caplog.records), (
-        "bayat/eksik atama gözlemlenebilir log ÜRETMELİ"
-    )
+    # Mesaj da pinlenir: bu dal kapatılsa akış yine `None` döner (satır erişimi
+    # istisna atar, genel emniyet ağı yakalar) — sonuç aynı, TEŞHİS kaybolurdu.
+    # "Bayat atama" ile "sorgu patladı" işletimde farklı iki olaydır.
+    assert any(
+        "AKTİF paketi yok" in r.getMessage() and str(sub_id) in r.getMessage()
+        for r in caplog.records
+    ), "bayat/eksik atama kendi mesajıyla loglanmalı"
 
 
 async def test_resolver_swallows_db_error_returns_none(pkg_db, caplog):
@@ -427,7 +431,7 @@ def test_validator_rejects_empty_video_substructure():
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
-    assert any("video_kodlar alt yapılarından biri boş" in e for e in result.errors)
+    assert any("video_kodlar" in e and "boş" in e for e in result.errors)
 
 
 def test_validator_rejects_special_day_missing_slot():
@@ -439,4 +443,167 @@ def test_validator_rejects_special_day_missing_slot():
         content, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
-    assert any("eksik alan: kanca" in e for e in result.errors)
+    # Anahtar kümesi TAM olmalı: eksik alan da fazlalık da aynı kapıdan döner.
+    assert any("anahtar kümesi" in e for e in result.errors)
+
+
+# ─── Checkpoint 8 bulguları ─────────────────────────────────────────────────
+#
+# Üç yüksek bulgu: (1) yazım kapısı yaprak düzeyinde denetlemiyordu, kap tipine
+# bakıp geçiyordu; (2) çözümleyici her sözlüğü geçerli sayıyordu — boş sözlük
+# dâhil; (3) marka adı taraması Türkçe büyük/küçük harfe ve sözcük sınırına
+# duyarsızdı. Bir orta bulgu: mutasyon iddiası yardımcı-fonksiyon düzeyindeydi,
+# dal düzeyinde değil — üç dalın bekçisi yoktu.
+
+
+def _reject(**overrides) -> list[str]:
+    result = validate_package_content(
+        _valid_content(**overrides), banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+    )
+    assert not result.ok, "bozuk içerik KABUL edildi"
+    return result.errors
+
+
+# (1) Yaprak şeması
+
+
+def test_validator_rejects_cta_item_with_extra_key():
+    """`cta_kaliplari` öğesinin anahtar kümesi TAM — fazlası şema dışıdır."""
+    _reject(cta_kaliplari=[{"kalip": "a", "tur": "b", "gerekce": "c", "fazla": 1}])
+
+
+@pytest.mark.parametrize("bad", [None, 5, True, {"ic": "ice"}, ["dizi"]])
+def test_validator_rejects_non_text_cta_value(bad):
+    """CTA değerleri metin olmak zorunda — `None`/sayı/mantıksal geçmez."""
+    _reject(cta_kaliplari=[{"kalip": bad, "tur": "b", "gerekce": "c"}])
+
+
+@pytest.mark.parametrize("bad", ["   ", None, 0, False, {}, []])
+def test_validator_rejects_bad_list_member(bad):
+    """Dizi üyeleri dolu METİN olmalı — boşluk, `None`, sayı, boş yapı geçmez."""
+    _reject(kanca_kaliplari=[bad])
+
+
+def test_validator_rejects_empty_list_field():
+    """Boş dizi alanı reddedilir (mutasyon taramasında bekçisi YOKTU)."""
+    errors = _reject(kanca_kaliplari=[])
+    assert any("kanca_kaliplari" in e for e in errors)
+
+
+@pytest.mark.parametrize("bad", [False, 0, None, {"ic": "ice"}])
+def test_validator_rejects_non_text_video_substructure(bad):
+    """Video alt yapıları dolu metin olmalı — `False`/`0` "dolu" sayılmaz."""
+    _reject(video_kodlar={"hareket": bad, "sahne": "b"})
+
+
+def test_validator_rejects_unknown_special_day_slot():
+    """Özel gün girdisinin anahtar kümesi de TAM."""
+    entry = {s: "x" for s in ("tur", "mesaj_ekseni", "kanca", "cta", "gorsel_vurgu")}
+    entry["fazla"] = "şema dışı"
+    _reject(ozel_gun={CUMHURIYET_KEY: entry})
+
+
+@pytest.mark.parametrize("bad", ["   ", None, 5, False])
+def test_validator_rejects_bad_special_day_slot_value(bad):
+    """Boş/metin-olmayan özel gün alanı (mutasyon taramasında bekçisi YOKTU)."""
+    entry = {s: "x" for s in ("tur", "mesaj_ekseni", "kanca", "cta", "gorsel_vurgu")}
+    entry["kanca"] = bad
+    _reject(ozel_gun={CUMHURIYET_KEY: entry})
+
+
+# (3) Marka adı — Türkçe harf ve sözcük sınırı
+
+
+@pytest.mark.parametrize(
+    "banned,text",
+    [
+        ("Altınbaş", "ALTINBAŞ VİTRİNİ hazır"),   # büyük harf: casefold ı≠i tuzağı
+        ("IŞIK", "ışık tonu yumuşak"),            # I → ı
+        ("İNCİ", "inci dokusu"),                  # İ → i
+        ("Altınbaş", "Altınbaşlar için özel"),    # Türkçe ek: sağ sınır serbest
+        ("Altınbaş", "Altınbaş'tan seçmeler"),    # kesme işareti
+    ],
+)
+def test_validator_catches_brand_name_across_turkish_casing(banned, text):
+    """Marka adı Türkçe harf dönüşümleri ve eklerle GİZLENEMEZ."""
+    result = validate_package_content(
+        _valid_content(kanca_kaliplari=[text]),
+        banned_brand_names=[banned],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert not result.ok, f"{banned!r} adı {text!r} içinde kaçtı"
+
+
+def test_validator_does_not_reject_ordinary_word_containing_brand_name():
+    """Kısa marka adı sıradan sözcüğün İÇİNDE eşleşmez — sol sınır aranır.
+
+    "Ada" adı "mağazada" içinde geçer ama sol sınırda değil. Sol sınırda geçseydi
+    (ör. "adaya") bilinçli olarak YAKALANIRDI — bkz. `_check_banned_brand_names`
+    belgesindeki asimetri.
+    """
+    result = validate_package_content(
+        _valid_content(kanca_kaliplari=["Mağazada deneyin"]),
+        banned_brand_names=["Ada"],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert result.ok, result.errors
+
+
+def test_validator_catches_brand_name_in_dict_key():
+    """Yasak ad yalnız bir ANAHTARDA geçse de yakalanır (bekçisi YOKTU)."""
+    entry = {s: "x" for s in ("tur", "mesaj_ekseni", "kanca", "cta", "gorsel_vurgu")}
+    result = validate_package_content(
+        _valid_content(ozel_gun={CUMHURIYET_KEY: entry}),
+        banned_brand_names=[CUMHURIYET_KEY.split("-")[0]],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert not result.ok
+
+
+# (2) Çözümleyici — yapısal geçerlilik
+
+
+@pytest.mark.parametrize("broken", [{}, {"kapsam": "yalnız bir alan"}])
+async def test_resolver_falls_back_for_structurally_invalid_content(
+    pkg_db, caplog, broken
+):
+    """Sözlük OLMASI yetmez — yapısal olarak bozuk paket de mevcut yola düşer.
+
+    K-15(a) (alan-düzeyi atlama) bilinçli olarak YOK; sözleşme tüm yolun
+    düşmesini istiyor. Boş sözlüğü geçirmek, hatayı Task 10'un render'ına
+    taşırdı.
+    """
+    sub_id, _, _ = await _seed_package(pkg_db, status="active")
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET content = $2 WHERE sector_id = $1",
+        sub_id,
+        broken,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        result = await resolve_package_context(
+            pkg_db, {"id": uuid.uuid4(), "sub_sector_id": sub_id}
+        )
+
+    assert result is None
+    assert caplog.records
+
+
+async def test_resolver_survives_malformed_row(caplog):
+    """Satır çözümlemesi de emniyet sınırının İÇİNDE — istisna kaçmaz."""
+
+    class _HostileRow:
+        def __getitem__(self, _key):
+            raise RuntimeError("satır çözümlenemedi")
+
+    class _HostileConnection:
+        async def fetchrow(self, *_args, **_kwargs):
+            return _HostileRow()
+
+    with caplog.at_level(logging.WARNING):
+        result = await resolve_package_context(
+            _HostileConnection(), {"id": uuid.uuid4(), "sub_sector_id": uuid.uuid4()}
+        )
+
+    assert result is None
+    assert caplog.records

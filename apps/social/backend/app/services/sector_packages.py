@@ -89,6 +89,9 @@ SIZE_TARGET_CHARS = 6000
 # Bağlanan tek şey, iki AYRI alt yapının varlığıdır — ikisi iki ayrı yüzeye gider.
 VIDEO_SUBSTRUCTURE_COUNT = 2
 
+# `cta_kaliplari` öğesinin TAM anahtar kümesi (spec §3.4: {kalıp, tür, gerekçe}).
+CTA_ITEM_KEYS = frozenset({"kalip", "tur", "gerekce"})
+
 # `ozel_gun` girdisinin taşıdığı alanlar (spec §3.4 tablosu).
 SPECIAL_DAY_SLOTS = ("tur", "mesaj_ekseni", "kanca", "cta", "gorsel_vurgu")
 
@@ -118,132 +121,205 @@ def validate_package_content(
     """
     result = ValidationResult()
 
+    structural = structural_errors(content)
+    if structural:
+        result.errors.extend(structural)
     if not isinstance(content, dict):
-        result.errors.append(f"content nesne değil: {type(content).__name__}")
+        # Yapısal hata listesi zaten sebebi söyledi; dış girdi gerektiren
+        # kontroller (takvim, marka adları) bu noktadan sonra koşamaz.
         return result
 
-    _check_closed_field_set(content, result)
-    _check_field_shapes(content, result)
-    _check_special_days(content.get("ozel_gun"), holiday_keys, result)
+    _check_special_day_keys(content.get("ozel_gun"), holiday_keys, result)
     _check_banned_brand_names(content, banned_brand_names, result)
     _check_size_target(content, result)
 
     return result
 
 
-def _check_closed_field_set(content: dict, result: ValidationResult) -> None:
+def structural_errors(content: Any) -> list[str]:
+    """İçeriğin DIŞ GİRDİ GEREKTİRMEYEN yapısal hataları (spec §3.4).
+
+    Yazım kapısı ile çalışma zamanı çözümleyicisi AYNI listeyi kullanır. Ayrı
+    olsalardı yazımda geçen bir şekil çalışma zamanında farklı yorumlanabilirdi;
+    aynı olduklarında "yazılabilen her paket okunabilir" tek cümleyle doğrudur.
+
+    Yan etkisiz ve saf: çözümleyici bunu üretim yolunda çağırır.
+    """
+    errors: list[str] = []
+    if not isinstance(content, dict):
+        return [f"content nesne değil: {type(content).__name__}"]
+    _check_closed_field_set(content, errors)
+    _check_field_shapes(content, errors)
+    _check_special_day_shapes(content.get("ozel_gun"), errors)
+    return errors
+
+
+def _check_closed_field_set(content: dict, errors: list[str]) -> None:
     unknown = sorted(set(content) - CONTENT_FIELDS)
     if unknown:
-        result.errors.append(
+        errors.append(
             f"şema dışı alan(lar): {unknown} — alan kümesi kapalıdır, "
             "genişletme `schema_version` ile taşınır"
         )
     missing = sorted(CONTENT_FIELDS - set(content))
     if missing:
-        result.errors.append(f"eksik alan(lar): {missing}")
+        errors.append(f"eksik alan(lar): {missing}")
 
 
-def _check_field_shapes(content: dict, result: ValidationResult) -> None:
+def _check_field_shapes(content: dict, errors: list[str]) -> None:
+    """Alanları YAPRAK düzeyinde denetler.
+
+    Kap tipine bakıp geçmek yetmez (checkpoint 8, yüksek bulgu): `[None]`,
+    `["   "]`, `{"a": False}` gibi yükler JSON'a yazılabilir ve Task 10'un
+    render'ına deterministik olmayan veri taşırdı. Metin bekleyen her yaprak
+    DOLU BİR METİN olmak zorundadır.
+    """
     for name in TEXT_FIELDS:
-        if name not in content:
-            continue
-        value = content[name]
-        if not isinstance(value, str):
-            result.errors.append(f"{name} metin değil: {type(value).__name__}")
-        elif not _is_filled(value):
-            result.errors.append(
-                f"{name} boş — bilinçli boş bırakılacaksa {DELIBERATELY_EMPTY!r} yazılır"
-            )
+        if name in content:
+            _require_text(content[name], name, errors)
 
     for name in LIST_FIELDS:
         if name not in content:
             continue
         value = content[name]
         if not isinstance(value, list):
-            result.errors.append(f"{name} dizi değil: {type(value).__name__}")
-        elif not _is_filled(value):
-            result.errors.append(
+            errors.append(f"{name} dizi değil: {type(value).__name__}")
+            continue
+        if not value:
+            errors.append(
                 f"{name} boş — bilinçli boş bırakılacaksa {DELIBERATELY_EMPTY!r} yazılır"
             )
-
-    cta = content.get("cta_kaliplari")
-    if isinstance(cta, list):
-        for index, item in enumerate(cta):
-            if item == DELIBERATELY_EMPTY:
-                continue
-            if not isinstance(item, dict) or not {"kalip", "tur", "gerekce"} <= set(item):
-                result.errors.append(
-                    f"cta_kaliplari[{index}] {{kalip, tur, gerekce}} taşımıyor"
-                )
+            continue
+        if name == "cta_kaliplari":
+            _check_cta_items(value, errors)
+        else:
+            for index, item in enumerate(value):
+                _require_text(item, f"{name}[{index}]", errors)
 
     if "video_kodlar" in content:
         video = content["video_kodlar"]
         if not isinstance(video, dict) or len(video) != VIDEO_SUBSTRUCTURE_COUNT:
-            result.errors.append(
+            errors.append(
                 f"video_kodlar {VIDEO_SUBSTRUCTURE_COUNT} alt yapı taşımalı "
                 "(hareket ve sahne ayrı; alan adları K-02 ile bağlanacak)"
             )
-        elif not all(_is_filled(v) for v in video.values()):
-            result.errors.append("video_kodlar alt yapılarından biri boş")
+        else:
+            for key, value in video.items():
+                _require_text(value, f"video_kodlar[{key!r}]", errors)
 
     if "ozel_gun" in content and not isinstance(content["ozel_gun"], dict):
-        result.errors.append(
-            f"ozel_gun nesne değil: {type(content['ozel_gun']).__name__}"
+        errors.append(f"ozel_gun nesne değil: {type(content['ozel_gun']).__name__}")
+
+
+def _check_cta_items(items: list, errors: list[str]) -> None:
+    """CTA öğesi {kalip, tur, gerekce} — anahtar kümesi TAM, değerler metin."""
+    for index, item in enumerate(items):
+        label = f"cta_kaliplari[{index}]"
+        if item == DELIBERATELY_EMPTY:
+            continue
+        if not isinstance(item, dict):
+            errors.append(f"{label} nesne değil: {type(item).__name__}")
+            continue
+        if set(item) != CTA_ITEM_KEYS:
+            errors.append(
+                f"{label} anahtar kümesi {sorted(CTA_ITEM_KEYS)} olmalı, "
+                f"{sorted(item)} geldi"
+            )
+        for slot in sorted(CTA_ITEM_KEYS & set(item)):
+            _require_text(item[slot], f"{label}.{slot}", errors)
+
+
+def _check_special_day_shapes(ozel_gun: Any, errors: list[str]) -> None:
+    """Özel gün girdilerinin ŞEKLİ — anahtar doğrulaması ayrı (takvim gerekir)."""
+    if not isinstance(ozel_gun, dict):
+        return
+    for key, entry in ozel_gun.items():
+        label = f"ozel_gun[{key!r}]"
+        if not isinstance(entry, dict):
+            errors.append(f"{label} nesne değil: {type(entry).__name__}")
+            continue
+        if set(entry) != set(SPECIAL_DAY_SLOTS):
+            errors.append(
+                f"{label} anahtar kümesi {sorted(SPECIAL_DAY_SLOTS)} olmalı, "
+                f"{sorted(entry)} geldi"
+            )
+        for slot in SPECIAL_DAY_SLOTS:
+            if slot in entry:
+                _require_text(entry[slot], f"{label}.{slot}", errors)
+
+
+def _require_text(value: Any, label: str, errors: list[str]) -> None:
+    """Yaprak dolu bir METİN mi.
+
+    `içerik-önerilmez` (K-120) geçerli sayılır — "bilinçli boş" ile
+    "doldurulmamış" aynı değer olsaydı eksik iş dolu görünürdü. Mantıksal ve
+    sayısal değerler metin DEĞİLDİR: `False`/`0` eskiden "dolu" sayılıyordu.
+    """
+    if not isinstance(value, str):
+        errors.append(f"{label} metin değil: {type(value).__name__}")
+    elif not value.strip():
+        errors.append(
+            f"{label} boş — bilinçli boş bırakılacaksa {DELIBERATELY_EMPTY!r} yazılır"
         )
 
 
-def _is_filled(value: Any) -> bool:
-    """Değer dolu mu — `içerik-önerilmez` DOLU sayılır (K-120)."""
-    if isinstance(value, str):
-        return bool(value.strip())
-    if isinstance(value, (list, tuple, dict)):
-        return len(value) > 0
-    return value is not None
-
-
-def _check_special_days(
+def _check_special_day_keys(
     ozel_gun: Any, holiday_keys: set[str], result: ValidationResult
 ) -> None:
     """Anahtarlar sistem takvimine karşı doğrulanır — uydurma anahtar yasak."""
     if not isinstance(ozel_gun, dict):
         return
-    for key, entry in ozel_gun.items():
+    for key in ozel_gun:
         if key not in holiday_keys:
             result.errors.append(
                 f"özel gün anahtarı sistem takviminde YOK: {key!r} — "
                 "karşılıksız dönem pakete giremez (spec §4.4)"
             )
-        if not isinstance(entry, dict):
-            result.errors.append(f"ozel_gun[{key!r}] nesne değil")
-            continue
-        for slot in SPECIAL_DAY_SLOTS:
-            if slot not in entry:
-                result.errors.append(f"ozel_gun[{key!r}] eksik alan: {slot}")
-            elif not _is_filled(entry[slot]):
-                result.errors.append(
-                    f"ozel_gun[{key!r}].{slot} boş — bilinçli boş için "
-                    f"{DELIBERATELY_EMPTY!r} yazılır"
-                )
 
 
 def _check_banned_brand_names(
     content: dict, banned_brand_names: list[str], result: ValidationResult
 ) -> None:
-    """Gerçek marka/firma adı geçen metin pakete GİREMEZ (K-15 üçüncü bileşen).
+    """Gerçek marka/firma adı geçen metin pakete GİREMEZ (K-15, spec §12.3).
 
-    Tarama İÇ İÇE yapılar dâhil tüm metinlerde koşar: yasak ad `ozel_gun`
-    içindeki bir kancada da geçse kural aynıdır.
+    İki tuzak kapalı (checkpoint 8, yüksek bulgu):
+
+    **Türkçe harf.** `casefold()` tek başına yetmez: `"ALTINBAŞ".casefold()`
+    noktalı `i` üretir, `"Altınbaş".casefold()` noktasız `ı` bırakır — büyük
+    harfle yazılmış marka adı kaçardı (ölçüldü). İki taraf da `_normalize_slug`
+    ile AYNI Türkçe→ASCII tablosundan geçirilir, sonra katlanır.
+
+    **Sözcük sınırı.** Çıplak alt dize araması kısa adları sıradan sözcüklerin
+    içinde bulurdu ("Ada" ↔ "mağazada") ve meşru paketleri bloklardı. Eşleşme
+    SOL sınırda aranır. Sağ taraf bilinçle SERBEST: Türkçe eklemeli bir dildir,
+    "Altınbaş'tan" ve "Altınbaşlar" aynı adı taşır.
+
+    Bilinçli asimetri: kısa bir marka adı aynı zamanda sıradan bir sözcükse
+    (ör. "Ada") sol sınır onu yine de yakalar ve paket reddedilir. Yazım
+    kapısında yanlış-pozitif, yanlış-negatiften iyidir — operatör mesajı görür,
+    sızan marka bilgisi ise kalıcıdır.
     """
     names = [n.strip() for n in banned_brand_names if n and n.strip()]
     if not names:
         return
-    haystack = "\n".join(_walk_strings(content)).casefold()
+    haystack = _fold_turkish("\n".join(_walk_strings(content)))
     for name in names:
-        if name.casefold() in haystack:
+        folded = _fold_turkish(name)
+        if not folded:
+            continue
+        # Sol sınır yalnız ad harf/rakamla BAŞLIYORSA aranır; noktalama ile
+        # başlayan bir ad için sınır iddiası anlamsız olurdu.
+        prefix = r"(?<![^\W_])" if folded[0].isalnum() else ""
+        if re.search(prefix + re.escape(folded), haystack):
             result.errors.append(
                 f"pakette gerçek marka adı geçiyor: {name!r} — "
                 "marka bilgisi DNA/RAG katmanının işidir (spec §12.3)"
             )
+
+
+def _fold_turkish(text: str) -> str:
+    """Türkçe harfleri ASCII'ye indirip katlar — I/ı ve İ/i tuzağını kapatır."""
+    return text.translate(_TR_ASCII).casefold()
 
 
 def _walk_strings(node: Any) -> list[str]:
@@ -293,12 +369,19 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
     """Markanın aktif paketini okur; yoksa/bozuksa `None`.
 
     Üç adım (spec §4.2): `sub_sector_id` boş → mevcut yol · dolu → `status='active'`
-    tek satır · yok/bozuk → mevcut yol + log.
+    tek satır · yok/yapısal olarak geçersiz → mevcut yol + log.
+
+    "Bozuk" ölçüsü yazım kapısıyla AYNIDIR (`structural_errors`): sözlük olması
+    yetmez, alan şemasını tutturması gerekir. İki ölçü ayrı olsaydı yazımda geçen
+    bir şekil çalışma zamanında başka türlü yorumlanabilirdi; aynı olduklarında
+    "yazılabilen her paket okunabilir" tek cümleyle doğrudur. K-15(a) alan-düzeyi
+    atlama dalı bilinçle YOKTUR — sözleşme tüm yolun düşmesini ister.
 
     `draft`/`archived` HİÇ okunmaz; sorgu onları zaten dışlar. Önbellek YOKTUR
     (bağlanan teknik karar 4) — aktivasyon anında bayat bağlam kalmasın diye.
 
-    Bu fonksiyon üretim akışını ASLA kırmaz: her istisna yutulur ve `None`
+    Bu fonksiyon üretim akışını ASLA kırmaz: sorgu, satır çözümlemesi ve yapısal
+    doğrulama tek emniyet sınırının içindedir; her istisna yutulur ve `None`
     döner. Sessiz değildir — her başarısızlık log üretir.
     """
     sub_sector_id = brand.get("sub_sector_id")
@@ -316,6 +399,39 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
             """,
             sub_sector_id,
         )
+
+        if row is None:
+            logger.warning(
+                "alt sektöre atanmış markanın AKTİF paketi yok — bayat/eksik atama "
+                "(brand_id=%s sub_sector_id=%s)",
+                brand.get("id"),
+                sub_sector_id,
+            )
+            return None
+
+        # Satır çözümlemesi de emniyet sınırının İÇİNDE (checkpoint 8, yüksek
+        # bulgu): eskiden `try` yalnız sorguyu sarıyordu, satır erişiminde doğan
+        # bir istisna üretim akışına KAÇARDI.
+        package_id = row["id"]
+        version = row["version"]
+        content = row["content"]
+        sub_sector_slug = row["sub_sector_slug"]
+
+        # Sözlük OLMASI yetmez. Yazım kapısıyla AYNI yapısal doğrulayıcı koşar:
+        # yazılabilen her paket okunabilir, okunamayan paket hiç açılmaz. Boş
+        # sözlüğü geçirmek hatayı tüketiciye (Task 10 render'ı) taşırdı ve
+        # K-15(a) alan-düzeyi atlama dalı bilinçle YOK.
+        problems = structural_errors(content)
+        if problems:
+            logger.warning(
+                "sektör paketi içeriği yapısal olarak geçersiz, paketsiz yola "
+                "düşülüyor (brand_id=%s sub_sector_id=%s package_id=%s): %s",
+                brand.get("id"),
+                sub_sector_id,
+                package_id,
+                "; ".join(problems[:3]),
+            )
+            return None
     except Exception as exc:
         logger.warning(
             "sektör paketi okunamadı, paketsiz yola düşülüyor "
@@ -326,30 +442,9 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
         )
         return None
 
-    if row is None:
-        logger.warning(
-            "alt sektöre atanmış markanın AKTİF paketi yok — bayat/eksik atama "
-            "(brand_id=%s sub_sector_id=%s)",
-            brand.get("id"),
-            sub_sector_id,
-        )
-        return None
-
-    content = row["content"]
-    if not isinstance(content, dict):
-        logger.warning(
-            "sektör paketi içeriği bozuk (nesne değil: %s), paketsiz yola düşülüyor "
-            "(brand_id=%s sub_sector_id=%s package_id=%s)",
-            type(content).__name__,
-            brand.get("id"),
-            sub_sector_id,
-            row["id"],
-        )
-        return None
-
     return SectorPackageContext(
-        package_id=row["id"],
-        version=row["version"],
+        package_id=package_id,
+        version=version,
         content=content,
-        sub_sector_slug=row["sub_sector_slug"],
+        sub_sector_slug=sub_sector_slug,
     )
