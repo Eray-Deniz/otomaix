@@ -16,6 +16,8 @@ import asyncpg
 import sentry_sdk
 
 from app.core.config import settings
+from app.services.sector_packages import resolve_motion_prompt
+from app.services.sector_packages import scene_pool as package_scene_pool
 from app.services.media_adapters import (
     IMAGE_ADAPTERS,
     IMAGE_EDIT_ADAPTERS,
@@ -105,6 +107,7 @@ async def _build_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
+    scene_pool: list[str] | None = None,
 ) -> str:
     """Sahne prompt'u üret (Claude Opus).
 
@@ -114,6 +117,12 @@ async def _build_still_prompt(
     image_edit_mode=True: Nano Banana edit için scene-only prompt.
     Ürün tarif edilmez (model resmi zaten görüyor), sadece sahne yazılır.
     Çıktı max 60 kelime — image-edit kısa prompt sever.
+
+    `scene_pool`: paketin sahne havuzu (spec §4.3). İKİ modda da girer — tek
+    moda uygulamak yarım ayrışmadır: aynı marka bazı videolarda sektörel,
+    bazılarında genel görünürdü. Havuz EK BAĞLAMDIR: sahnenin NASIL göründüğünü
+    (ışık, doku, malzeme dili) sektöre bağlar, NE göründüğünü kullanıcının
+    isteği belirlemeye devam eder (spec §4.6 öncelik hiyerarşisi).
     """
     context_parts = []
     if user_brief:
@@ -144,6 +153,14 @@ async def _build_still_prompt(
         context_parts.append(f"Video topic: {topic}")
     if color_str:
         context_parts.append(f"Brand colors: {color_str}")
+    if scene_pool:
+        context_parts.append(
+            "SECTOR SCENE VOCABULARY (pick the entries that fit the topic; "
+            "do not try to use them all, and do not invent sector language "
+            "beyond this list — the user's scene request still governs WHAT "
+            "is shown):\n"
+            + "\n".join(f"- {entry}" for entry in scene_pool)
+        )
 
     context = "\n\n".join(context_parts)
 
@@ -275,6 +292,23 @@ def _pick_motion_prompt() -> str:
     """Her video için farklı kamera hareketi seç."""
     import random
     return random.choice(_MOTION_PROMPTS)
+
+
+def _effective_motion_prompt(template_fields: dict | None) -> str:
+    """Stage-2'nin hareket kaynağı: sunucunun KENDİ kaydı, yoksa bugünkü havuz.
+
+    Paketli yolda stage-1 seçimi havuz üyeliğine karşı doğrulayıp buraya yazar
+    (K-02 = A). Stage-2 istemciden gelen hiçbir şeye bakmaz — güven sınırı
+    stage-1'dedir ve kayıt sunucunundur.
+
+    Kayıt yok/boş/metin değilse bugünkü sabit havuza düşülür: paketsiz markanın
+    davranışı budur ve K-113 = A'nın (boş havuz) çalışma zamanı karşılığı da
+    aynı yere iner.
+    """
+    value = (template_fields or {}).get("motion_prompt")
+    if isinstance(value, str) and value.strip():
+        return value
+    return _pick_motion_prompt()
 
 
 # ─── 1. Script üretimi ──────────────────────────────────────────────────────
@@ -768,6 +802,7 @@ async def _resolve_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
+    scene_pool: list[str] | None = None,
 ) -> str:
     """image_prompt'u still_prompt'a dönüştür.
 
@@ -799,6 +834,7 @@ async def _resolve_still_prompt(
             product_info=product_info,
             product_doc_context=product_doc_context,
             image_edit_mode=True,
+            scene_pool=scene_pool,
         )
 
     if user_brief.strip():
@@ -811,6 +847,7 @@ async def _resolve_still_prompt(
             user_brief=user_brief.strip(),
             product_info=product_info,
             product_doc_context=product_doc_context,
+            scene_pool=scene_pool,
         )
 
     still_prompt = (prompt or "").strip()
@@ -824,6 +861,7 @@ async def _resolve_still_prompt(
         color_str=color_str,
         product_info=product_info,
         product_doc_context=product_doc_context,
+        scene_pool=scene_pool,
     )
 
 
@@ -876,6 +914,8 @@ async def run_short_video_stage1(
     product_info: str = "",
     product_doc_context: str = "",
     scene_reference_image_url: str = "",
+    package_context=None,
+    requested_motion_prompt: str | None = None,
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
@@ -935,8 +975,17 @@ async def run_short_video_stage1(
         product_info=product_info,
         product_doc_context=product_doc_context,
         image_edit_mode=use_image_edit,
+        scene_pool=package_scene_pool(package_context),
     )
     template_fields["still_prompt"] = still_prompt
+
+    # Hareket seçimi (K-02 = A): caption aşamasında model seçti, istemci taşıdı,
+    # doğrulama BURADA yapılır ve sonuç sunucunun kendi kaydına yazılır. Stage-2
+    # istemciden gelen hiçbir şeye bakmaz. Havuz yoksa/paketsizse anahtar hiç
+    # yazılmaz ve stage-2 bugünkü sabit havuza düşer (K-113 = A).
+    validated_motion = resolve_motion_prompt(package_context, requested_motion_prompt)
+    if validated_motion:
+        template_fields["motion_prompt"] = validated_motion
 
     # Post INSERT — TTS R2 path'i post_id'ye bağlı
     row = await db.fetchrow(
@@ -1042,7 +1091,7 @@ async def run_short_video_stage2(
 
     # Stage 2 submission: ürün görseliyse motion-only, Nano Banana 2 ürettiyse motion-only,
     # legacy text-to-video adapter ise birleşik prompt
-    motion_prompt = _pick_motion_prompt()
+    motion_prompt = _effective_motion_prompt(tf)
     template_id = row["template_id"]
     target_adapter = _resolve_video_adapter(template_id)
     if product_image_url or target_adapter.requires_still_image:

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -1008,3 +1009,107 @@ def render_special_day_lines(
             "saygı çerçevesi kurulamıyorsa içerik önerme."
         )
     return lines
+
+
+# ─── 6. Hareket havuzu (K-02 = A · K-113 = A — plan Task 11) ────────────────
+
+MOTION_POOL_KEY = "hareket"
+SCENE_POOL_KEY = "sahne"
+
+
+def _pool(context: SectorPackageContext | None, key: str) -> list[str]:
+    """Paketin adlı havuzunu dolu metinlere indirger; yoksa BOŞ liste.
+
+    Yazım kapısı bu şekli zaten zorluyor (`VIDEO_POOL_KEYS`), ama okuma tarafı
+    kapıya GÜVENMEZ: paket eski bir şemayla yazılmış olabilir ya da içerik elle
+    değiştirilebilir. Boş sonuç, çağıranın "havuz yok" dalına düşmesi demektir —
+    bu, uydurmanın değil geri düşüşün yönüdür.
+    """
+    if context is None:
+        return []
+    video = context.content.get("video_kodlar")
+    if not isinstance(video, dict):
+        return []
+    pool = video.get(key)
+    if not isinstance(pool, list):
+        return []
+    return [item for item in pool if isinstance(item, str) and item.strip()]
+
+
+def scene_pool(context: SectorPackageContext | None) -> list[str]:
+    """Durağan kare yüzeyine giden sahne havuzu (spec §4.3, iki modda da)."""
+    return _pool(context, SCENE_POOL_KEY)
+
+
+def motion_pool(context: SectorPackageContext | None) -> list[str]:
+    """Hareket yüzeyine giden havuz — modele SEÇTİRİLİR (K-02 = A)."""
+    return _pool(context, MOTION_POOL_KEY)
+
+
+def resolve_motion_prompt(
+    context: SectorPackageContext | None, requested: Any
+) -> str | None:
+    """İstemciden dönen hareket seçimini havuza karşı doğrular.
+
+    Sözleşme (spec §11.5 karar bloğu):
+
+    - paketsiz marka ya da boş/bozuk havuz → `None`; çağıran BUGÜNKÜ sabit
+      listeye düşer (K-113 = A). Bu katman orada hiçbir şey söylemez;
+    - `requested` havuzun TAM üyesiyse aynen kullanılır — modelin içeriğe uygun
+      seçimi budur;
+    - üye DEĞİLSE kullanılmaz ve uydurmaya düşülmez: sunucu AYNI havuzdan seçer.
+
+    **Neden tam eşleşme.** Seçim caption aşamasında yapılır, kullanım stage-1'de;
+    arada istemci vardır. Serbest metin kabul edilseydi video üreticisine keyfi
+    bir istem enjekte edilebilirdi. Bu, K-07 damgasının taşıma ilkesiyle aynıdır:
+    istemci taşır, sunucu doğrular.
+
+    **Neden geri düşüş rastgele.** Sabit bir öğeye (`pool[0]`) düşmek belirleyici
+    olurdu ama model alanı sistematik olarak döndürmediğinde o sektörün HER
+    videosu aynı kalıba düşerdi — yani K-02'yi kapatma sebebimizin ta kendisi
+    geri gelirdi. Seçici bu yüzden bugünkü `_pick_motion_prompt` ile aynı
+    biçimde çalışır; değişen yalnız KAYNAKTIR (input satır 485).
+    """
+    pool = motion_pool(context)
+    if not pool:
+        return None
+    if isinstance(requested, str) and requested in pool:
+        return requested
+    logger.warning(
+        "hareket seçimi havuzun üyesi değil, sunucu havuzdan seçiyor "
+        "(package_id=%s sub_sector=%s istenen=%r)",
+        context.package_id if context else None,
+        context.sub_sector_slug if context else None,
+        requested,
+    )
+    return random.choice(pool)
+
+
+def special_day_visual_accent(
+    context: SectorPackageContext | None, day_name: str | None
+) -> str | None:
+    """Eşleşen günün görsel vurgusu — GÖRSEL yüzeyine aittir (spec §4.3).
+
+    Caption metnine giden dönem kalıplarından AYRI tutulur: `gorsel_vurgu`
+    görsel director talimatına girer, `mesaj_ekseni`/`kanca`/`cta` metne. İkisi
+    aynı yerden basılsaydı "görsel dağarcığı doğru yüzeyde" kontrolü (spec §5.4)
+    anlamını yitirirdi.
+
+    Eşleşme yoksa `None`. Burada log ÜRETİLMEZ: aynı gün için eşleşme uyarısını
+    `render_special_day_lines` zaten basıyor ve iki yüzeyden iki kez uyarmak
+    aynı olayı çift sayardı.
+    """
+    if context is None or not day_name:
+        return None
+    ozel_gun = context.content.get("ozel_gun")
+    if not isinstance(ozel_gun, dict):
+        return None
+    try:
+        key = normalize_special_day_key(day_name)
+    except ValueError:
+        return None
+    entry = ozel_gun.get(key)
+    if not isinstance(entry, dict):
+        return None
+    vurgu = entry.get("gorsel_vurgu")
+    return vurgu if isinstance(vurgu, str) and vurgu.strip() else None

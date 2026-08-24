@@ -223,8 +223,12 @@ async def test_special_day_match_injects_period_block(
     block_start = rendered.index("=== ÖZEL GÜN BAĞLAMI")
     block_end = rendered.index("=== ÖZEL GÜN BAĞLAMI SONU ===")
     assert block_start < rendered.index("Ortak sevinç ve emek") < block_end
-    # Görsel vurgu caption yüzeyine GİRMEZ (spec §4.3 — görsel yüzeyi Task 11).
-    assert "Red and white accents" not in rendered
+    # Görsel vurgu özel gün BLOĞUNA girmez — o, görsel director yüzeyinin
+    # dağarcığıdır (spec §4.3). Task 11 onu çıktı talimatına bağladı, bu yüzden
+    # iddia prompt'un tamamı değil BLOĞUN İÇİ üzerinden kurulur; aksi hâlde
+    # doğru yüzeye basılan bir değer yanlışlıkla ihlal sayılırdı.
+    day_block = rendered[block_start:block_end]
+    assert "Red and white accents" not in day_block
 
 
 async def test_special_day_mismatch_silent_fallthrough_with_log(

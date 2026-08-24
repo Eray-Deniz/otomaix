@@ -293,6 +293,10 @@ class ShortVideoGenerate(BaseModel):
     # tatil tonuna yönlendirme için kullanır.
     special_day_name: str | None = None
     special_day_category: str | None = None
+    # K-02 = A: caption aşamasındaki model çağrısının seçtiği kamera hareketi.
+    # İstemci TAŞIR, sunucu paketin havuzuna karşı DOĞRULAR (üye değilse
+    # kullanılmaz) — serbest metin video üreticisine geçemez.
+    motion_prompt: str | None = None
     # Sprint 3 — marka referans görseli (Stage 1 still'inde Nano Banana edit ref'i).
     # Doluysa scene_reference + brief senaryosu çalışır.
     scene_reference_image_url: str | None = None

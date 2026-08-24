@@ -960,7 +960,8 @@ async def generate_short_video_stage1(
     await check_plan_limit(user["sub"], "post", db)
 
     brand = await db.fetchrow(
-        "SELECT brand_kit, name, sector, description FROM social.brands WHERE id = $1",
+        "SELECT id, brand_kit, name, sector, description, sub_sector_id "
+        "FROM social.brands WHERE id = $1",
         payload.brand_id,
     )
     if not brand:
@@ -968,6 +969,7 @@ async def generate_short_video_stage1(
 
     brand_kit = _parse_brand_kit(brand["brand_kit"])
     brand_kit["sector"] = brand["sector"] or ""
+    package_context = await resolve_package_context(db, dict(brand))
 
     max_duration = DEFAULT_MAX_DURATION
     if payload.platforms:
@@ -1026,6 +1028,8 @@ async def generate_short_video_stage1(
             product_info=product_info,
             product_doc_context=product_doc_context,
             scene_reference_image_url=payload.scene_reference_image_url or "",
+            package_context=package_context,
+            requested_motion_prompt=payload.motion_prompt,
             db=db,
         )
     except RuntimeError as exc:
