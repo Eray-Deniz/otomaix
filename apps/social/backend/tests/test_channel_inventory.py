@@ -1,0 +1,493 @@
+"""Task 9 — kanal envanteri: `brand_kit.channels` + deterministik CTA filtresi.
+
+Üç bağlayıcı iddia sınanır:
+
+1. **Filtre muhafazakârdır** (spec §12.2): `[kanal-bağımlı: X]` etiketli kalıp
+   YALNIZ markanın envanterinde `X` doğrulanmışsa geçer. Envanter yok, boş,
+   bozuk, `False`, `"true"` ya da `1` ise kalıp ATLANIR. Etiketsiz kalıp her
+   zaman geçer.
+2. **Anahtar uzayı KAPALIDIR** (`CHANNEL_KEYS`) ve kapalılık, çağıranın
+   veri verebildiği HER yüzeyde geçerlidir — tek bir yüzeyi korumak yetmez,
+   ikinci yüzey kapalılığı yalana çevirir (yapısal sweep testi bunu ölçer).
+3. **Yazım uçtan uca çalışır**: Pydantic'in bilinmeyen alanı sessizce düşürme
+   sınıfına karşı pozitif kontrol — API'den yazılan `channels` geri okunur.
+
+Etiket tanıma ile kanal doğrulaması BİLİNÇLİ olarak asimetriktir: etiket
+GENİŞ tanınır (her Unicode/büyük-küçük yazımı), kanal DAR doğrulanır (tam
+`True`). İkisi de aynı yöne — atlama yönüne — çalışır.
+"""
+
+from __future__ import annotations
+
+import ast
+import inspect
+import itertools
+import uuid
+from pathlib import Path
+
+import pytest
+from fastapi import HTTPException
+
+from app.core.database import _init_connection
+from app.core.utils import parse_brand_kit
+from app.models.schemas import BrandKitUpdate, BrandUpdate
+from app.routers import brands as brands_router
+from app.services.sector_packages import CHANNEL_KEYS, filter_channel_dependent
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+BRANDS_ROUTER_PATH = BACKEND_ROOT / "app" / "routers" / "brands.py"
+
+# Çağıranın brand_kit içeriği verebildiği şema tipleri. Bu tipleri parametre
+# olarak alan HER handler kanal kapısından geçmek ZORUNDADIR.
+CALLER_SUPPLIED_KIT_MODELS = frozenset({"BrandUpdate", "BrandKitUpdate"})
+
+# Router'daki kapı fonksiyonunun adı — yapısal sweep bunu arar.
+CHANNEL_GUARD_NAME = "_assert_valid_channels"
+
+
+def cta(kalip: str) -> dict:
+    """Doğrulayıcının kabul ettiği şekle sadık CTA öğesi (spec §3.4)."""
+    return {"kalip": kalip, "tur": "yonlendirme", "gerekce": "test"}
+
+
+# ─── 1. Deterministik filtre ────────────────────────────────────────────────
+
+
+def test_filter_drops_tagged_without_channel():
+    """Etiketli kalıp, kanal doğrulanmadıkça geçmez."""
+    items = [cta("WhatsApp'tan yaz [kanal-bağımlı: whatsapp_hatti]")]
+
+    assert filter_channel_dependent(items, {"whatsapp_hatti": False}) == []
+
+
+def test_filter_passes_tagged_with_channel_true():
+    """Kanal `True` ise etiketli kalıp AYNEN geçer — etiket silinmez."""
+    item = cta("WhatsApp'tan yaz [kanal-bağımlı: whatsapp_hatti]")
+
+    result = filter_channel_dependent([item], {"whatsapp_hatti": True})
+
+    assert result == [item]
+    assert "[kanal-bağımlı: whatsapp_hatti]" in result[0]["kalip"]
+
+
+def test_filter_conservative_when_channels_missing():
+    """Envanter hiç doldurulmamışsa etiketli kalıp ATLANIR (spec §12.2)."""
+    items = [cta("Mağazaya bekleriz [kanal-bağımlı: fiziksel_magaza]")]
+
+    assert filter_channel_dependent(items, None) == []
+    assert filter_channel_dependent(items, {}) == []
+
+
+def test_untagged_always_passes():
+    """Etiketsiz kalıp envanterden bağımsız geçer."""
+    items = [cta("Yorumlara yaz"), cta("Profildeki bağlantıya bak")]
+
+    assert filter_channel_dependent(items, None) == items
+    assert filter_channel_dependent(items, {"whatsapp_hatti": True}) == items
+
+
+def test_filter_preserves_order_and_identity():
+    """Filtre seçer; sıralamayı ve öğe kimliğini DEĞİŞTİRMEZ."""
+    a = cta("etiketsiz bir")
+    b = cta("randevu al [kanal-bağımlı: randevu_sistemi]")
+    c = cta("etiketsiz iki")
+
+    result = filter_channel_dependent([a, b, c], {"randevu_sistemi": True})
+
+    assert result == [a, b, c]
+    assert [id(x) for x in result] == [id(a), id(b), id(c)]
+
+
+def test_filter_drops_unknown_channel_key_in_tag():
+    """Kapalı uzay dışındaki `X` tanınmaz → kalıp atlanır (fail-closed).
+
+    Kritik nokta: bilinmeyen anahtar "etiketsiz" sayılıp GEÇMEZ. Öyle olsaydı
+    uzayın kapalılığı filtreyi delip geçmenin yolu olurdu.
+    """
+    items = [cta("Telegram'dan yaz [kanal-bağımlı: telegram]")]
+
+    assert filter_channel_dependent(items, {"telegram": True}) == []
+
+
+def test_filter_requires_every_tag_on_multi_tagged_item():
+    """Bir kalıp iki kanal iddia ediyorsa İKİSİ de doğrulanmalı."""
+    item = cta(
+        "Mağazada dene [kanal-bağımlı: fiziksel_magaza], "
+        "sonra siteden al [kanal-bağımlı: eticaret_sitesi]"
+    )
+
+    assert filter_channel_dependent([item], {"fiziksel_magaza": True}) == []
+    assert filter_channel_dependent(
+        [item], {"fiziksel_magaza": True, "eticaret_sitesi": True}
+    ) == [item]
+
+
+def test_filter_finds_tag_in_any_item_field():
+    """Etiket `kalip` dışındaki alanda dursa da kalıp kanal-bağımlıdır."""
+    item = {
+        "kalip": "Randevunu ayırt",
+        "tur": "yonlendirme",
+        "gerekce": "randevu akışı gerektirir [kanal-bağımlı: randevu_sistemi]",
+    }
+
+    assert filter_channel_dependent([item], None) == []
+    assert filter_channel_dependent([item], {"randevu_sistemi": True}) == [item]
+
+
+def test_filter_returns_empty_for_non_list_input():
+    """Liste olmayan girdi → boş sonuç (fail-closed; üretim akışı kırılmaz)."""
+    for bad in (None, "içerik-önerilmez", {"kalip": "x"}, 7):
+        assert filter_channel_dependent(bad, {"whatsapp_hatti": True}) == []
+
+
+def test_filter_drops_tagged_when_channels_not_a_dict():
+    """Bozuk envanter (liste/metin/sayı) = envanter YOK gibi davranır."""
+    items = [cta("WhatsApp [kanal-bağımlı: whatsapp_hatti]")]
+
+    for bad in ([], ["whatsapp_hatti"], "whatsapp_hatti", 1, True):
+        assert filter_channel_dependent(items, bad) == []
+
+
+def test_filter_keeps_non_dict_items_untagged():
+    """`içerik-önerilmez` gibi metin öğesi etiketsizdir → geçer; şekli bozulmaz."""
+    sentinel = "içerik-önerilmez"
+
+    assert filter_channel_dependent([sentinel], None) == [sentinel]
+    assert filter_channel_dependent(
+        [f"{sentinel} [kanal-bağımlı: whatsapp_hatti]"], None
+    ) == []
+
+
+# ─── 1b. Kapanış matrisi (elle seçilmiş örnek DEĞİL — üretilmiş uzay) ───────
+
+# Etiketin yazım uzayı: büyük/küçük harf · Türkçe harf · boşluk · anahtar yazımı.
+# Her biri AYNI etiket sınıfıdır; hiçbiri "etiketsiz" sayılamaz.
+TAG_SPELLINGS = (
+    "[kanal-bağımlı: {key}]",
+    "[KANAL-BAĞIMLI: {key}]",
+    "[Kanal-Bağımlı: {key}]",
+    "[kanal-bagimli: {key}]",
+    "[KANAL-BAGIMLI: {key}]",
+    "[kanal-bağımlı:{key}]",
+    "[kanal-bağımlı:  {key}  ]",
+    "[ kanal-bağımlı : {key} ]",
+    "[kanal - bağımlı: {key}]",
+)
+
+# Anahtarın yazım uzayı — kanonik biçime indirgenmeli.
+KEY_FORMS = (
+    lambda k: k,
+    lambda k: k.upper(),
+    lambda k: k.capitalize(),
+    lambda k: f" {k} ",
+)
+
+# Kanal değerinin uzayı: yalnız gerçek `True` geçirir.
+CHANNEL_VALUES = (
+    (True, True),
+    (False, False),
+    (None, False),
+    ("true", False),
+    ("evet", False),
+    (1, False),
+    (0, False),
+    ([], False),
+)
+
+
+@pytest.mark.parametrize("key", sorted(CHANNEL_KEYS))
+def test_tag_spelling_matrix_is_closed(key):
+    """Yazım × değer çaprazının TAMAMI: tanıma geniş, geçirme dar.
+
+    Elle seçilmiş üç örnek "sınıf kapandı" demek için yetmez (2026-08-24
+    dersi) — biçim uzayını testin kendisi üretir. Kaçan tek bir yazım,
+    kanal-bağımlı bir CTA'nın doğrulanmamış markaya sızması demektir.
+    """
+    escapes: list[tuple[str, object]] = []
+
+    for tag_form, key_form, (value, should_pass) in itertools.product(
+        TAG_SPELLINGS, KEY_FORMS, CHANNEL_VALUES
+    ):
+        written = tag_form.format(key=key_form(key))
+        item = cta(f"Bir kalıp {written}")
+        passed = filter_channel_dependent([item], {key: value}) == [item]
+        if passed != should_pass:
+            escapes.append((written, value))
+
+    assert not escapes, f"kaçan yazım/değer çifti: {escapes[:5]}"
+
+
+def test_matrix_has_no_false_positive_on_ordinary_text():
+    """Yanlış-pozitif kontrolü: sıradan metin etiket sayılmaz."""
+    innocuous = [
+        cta("Kanal bağımlılığı yaratmayın"),
+        cta("kanal-bağımlı bir kampanya kurgusu"),  # köşeli parantez YOK
+        cta("[not: kanal-bağımlı değil]"),
+        cta("[kanal-bagimsiz: whatsapp_hatti]"),
+    ]
+
+    assert filter_channel_dependent(innocuous, None) == innocuous
+
+
+# ─── 2. Kapalı anahtar uzayı — yazım kapısı ────────────────────────────────
+
+
+async def _seed_owner_and_brand(db, brand_kit: dict | None = None):
+    """Sahiplik zinciri: account → workspace → membership → brand."""
+    account_id = await db.fetchval(
+        "INSERT INTO social.accounts (email, name, plan_id) "
+        "VALUES ($1, $2, 'pro') RETURNING id",
+        f"kanal-{uuid.uuid4()}@example.test",
+        "Kanal Sahibi",
+    )
+    workspace_id = await db.fetchval(
+        "INSERT INTO social.workspaces (account_id, name) VALUES ($1, $2) RETURNING id",
+        account_id,
+        "Kanal Çalışma Alanı",
+    )
+    await db.execute(
+        "INSERT INTO social.workspace_members (workspace_id, account_id) VALUES ($1, $2)",
+        workspace_id,
+        account_id,
+    )
+    brand_id = await db.fetchval(
+        "INSERT INTO social.brands (workspace_id, name, brand_kit) "
+        "VALUES ($1, $2, $3) RETURNING id",
+        workspace_id,
+        "Kanal Markası",
+        brand_kit if brand_kit is not None else {"tonality": "professional"},
+    )
+    return {"sub": str(account_id)}, brand_id
+
+
+@pytest.fixture
+async def kit_db(db, monkeypatch):
+    """Üretimin kendi bağlantı yapılandırması + Redis'siz önbellek boşaltma."""
+    await _init_connection(db)
+
+    async def _noop(_pattern):
+        return None
+
+    monkeypatch.setattr(brands_router, "invalidate_pattern", _noop)
+    return db
+
+
+async def test_brand_kit_rejects_unknown_channel_key(kit_db):
+    """Kapalı uzay dışındaki anahtar 400 ile reddedilir — DB'ye ULAŞMAZ."""
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+
+    with pytest.raises(HTTPException) as exc:
+        await brands_router.update_brand_kit(
+            brand_id=brand_id,
+            payload=BrandKitUpdate(channels={"telegram": True}),
+            user=user,
+            db=kit_db,
+        )
+
+    assert exc.value.status_code == 400
+    assert "telegram" in str(exc.value.detail)
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert "channels" not in stored
+
+
+async def test_brand_kit_rejects_non_boolean_channel_value(kit_db):
+    """Değer `True`/`False` değilse reddedilir.
+
+    Filtre `is True` arar; `"true"` metni sessizce hiçbir zaman geçmezdi —
+    operatör kanalı açtığını sanır, CTA'lar sessizce düşerdi. Kapı, sessiz
+    yanlış-yapılandırmayı görünür hataya çevirir.
+    """
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+
+    with pytest.raises(HTTPException) as exc:
+        await brands_router.update_brand_kit(
+            brand_id=brand_id,
+            payload=BrandKitUpdate(channels={"whatsapp_hatti": "true"}),
+            user=user,
+            db=kit_db,
+        )
+
+    assert exc.value.status_code == 400
+
+
+async def test_brand_kit_rejects_non_dict_channels(kit_db):
+    """`channels` nesne değilse reddedilir."""
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+
+    with pytest.raises(HTTPException):
+        await brands_router.update_brand(
+            brand_id=brand_id,
+            payload=BrandUpdate(brand_kit={"channels": ["whatsapp_hatti"]}),
+            user=user,
+            db=kit_db,
+        )
+
+
+async def test_brand_kit_channels_roundtrip_via_api(kit_db):
+    """Yazılan `channels` geri okunur — Pydantic sessiz-düşürme pozitif kontrolü."""
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+    payload_channels = {"whatsapp_hatti": True, "fiziksel_magaza": False}
+
+    response = await brands_router.update_brand_kit(
+        brand_id=brand_id,
+        payload=BrandKitUpdate(channels=payload_channels),
+        user=user,
+        db=kit_db,
+    )
+
+    assert parse_brand_kit(response.data["brand_kit"])["channels"] == payload_channels
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert stored["channels"] == payload_channels
+    # Mevcut alanlar korunur — channels yazımı brand_kit'i sıfırlamaz.
+    assert stored["tonality"] == "professional"
+
+
+async def test_brand_kit_channels_partial_update_preserves_others(kit_db):
+    """Kısmi güncelleme diğer kanalları SİLMEZ (deep-merge; spec §12.2).
+
+    Sığ birleştirme olsaydı tek anahtarlık bir güncelleme markanın doğrulanmış
+    öbür kanallarını sessizce düşürürdü — filtre muhafazakâr olduğu için sonuç
+    "CTA'lar sessizce kayboldu" olurdu.
+    """
+    user, brand_id = await _seed_owner_and_brand(
+        kit_db,
+        {"tonality": "professional", "channels": {"fiziksel_magaza": True}},
+    )
+
+    await brands_router.update_brand_kit(
+        brand_id=brand_id,
+        payload=BrandKitUpdate(channels={"whatsapp_hatti": True}),
+        user=user,
+        db=kit_db,
+    )
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert stored["channels"] == {"fiziksel_magaza": True, "whatsapp_hatti": True}
+
+
+async def test_brand_update_surface_also_validates_channels(kit_db):
+    """İkinci yazım yüzeyi (`PATCH /brands/{id}`) de kapıdan geçer.
+
+    `update_brand` brand_kit'i BÜTÜN olarak yazar. Yalnız `update_brand_kit`
+    korunsaydı kapalı uzay bu yüzeyden delinirdi — kapalılık iddiası yalan
+    olurdu (varyant değil sınıf kapatılır).
+    """
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+
+    with pytest.raises(HTTPException) as exc:
+        await brands_router.update_brand(
+            brand_id=brand_id,
+            payload=BrandUpdate(brand_kit={"channels": {"telegram": True}}),
+            user=user,
+            db=kit_db,
+        )
+
+    assert exc.value.status_code == 400
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert "channels" not in stored
+
+
+async def test_brand_update_surface_accepts_valid_channels(kit_db):
+    """Pozitif kontrol: kapı geçerli envanteri REDDETMİYOR."""
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+
+    await brands_router.update_brand(
+        brand_id=brand_id,
+        payload=BrandUpdate(brand_kit={"channels": {"eticaret_sitesi": True}}),
+        user=user,
+        db=kit_db,
+    )
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert stored["channels"] == {"eticaret_sitesi": True}
+
+
+# ─── 3. Kapanışın yapısal kanıtı ───────────────────────────────────────────
+
+
+def test_every_caller_supplied_kit_surface_calls_the_guard():
+    """Çağıranın kit içeriği verebildiği HER handler kanal kapısını çağırır.
+
+    Elle sayılmış iki yüzey yerine kaynağın kendisi taranır: yarın üçüncü bir
+    handler `BrandUpdate` alırsa bu test kırmızıya döner.
+    """
+    tree = ast.parse(BRANDS_ROUTER_PATH.read_text(encoding="utf-8"))
+    unguarded = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            continue
+        annotations = {
+            arg.annotation.id
+            for arg in node.args.args + node.args.kwonlyargs
+            if isinstance(arg.annotation, ast.Name)
+        }
+        if not (annotations & CALLER_SUPPLIED_KIT_MODELS):
+            continue
+        calls = {
+            inner.func.id
+            for inner in ast.walk(node)
+            if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+        }
+        if CHANNEL_GUARD_NAME not in calls:
+            unguarded.append(node.name)
+
+    assert not unguarded, f"kanal kapısından geçmeyen handler: {unguarded}"
+
+
+def test_guarded_surface_set_is_not_empty():
+    """Yukarıdaki sweep'in pozitif kontrolü — boş kümede yeşil kalmasın."""
+    tree = ast.parse(BRANDS_ROUTER_PATH.read_text(encoding="utf-8"))
+    surfaces = [
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+        and {
+            arg.annotation.id
+            for arg in node.args.args + node.args.kwonlyargs
+            if isinstance(arg.annotation, ast.Name)
+        }
+        & CALLER_SUPPLIED_KIT_MODELS
+    ]
+
+    assert sorted(surfaces) == ["update_brand", "update_brand_kit"]
+
+
+def test_caller_supplied_kit_models_are_used_only_in_brands_router():
+    """Kit şemaları başka bir router'da kullanılmıyor — sweep tam kapsıyor."""
+    strays = []
+    for path in (BACKEND_ROOT / "app").rglob("*.py"):
+        if path == BRANDS_ROUTER_PATH:
+            continue
+        source = path.read_text(encoding="utf-8")
+        for model in CALLER_SUPPLIED_KIT_MODELS:
+            if model in source and "schemas.py" not in str(path):
+                strays.append(f"{path.relative_to(BACKEND_ROOT)}:{model}")
+
+    assert not strays, f"kit şeması router dışında da kullanılıyor: {strays}"
+
+
+def test_channel_keys_are_the_documented_closed_set():
+    """Kapalı küme spec §12.2 ile birebir."""
+    assert CHANNEL_KEYS == frozenset(
+        {"whatsapp_hatti", "fiziksel_magaza", "randevu_sistemi", "eticaret_sitesi"}
+    )
+
+
+def test_filter_signature_takes_channels_optional():
+    """Sözleşme imzası: `(items, channels)` — `channels` opsiyonel değil, açık."""
+    params = list(inspect.signature(filter_channel_dependent).parameters)
+    assert params == ["items", "channels"]

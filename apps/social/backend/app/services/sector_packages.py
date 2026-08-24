@@ -484,3 +484,113 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
             exc,
         )
         return None
+
+
+# ─── 4. Kanal envanteri (spec §12.2 — plan Task 9) ──────────────────────────
+
+# Anahtar uzayı KAPALIDIR ve `[kanal-bağımlı: X]` etiketinin X uzayıyla birebir
+# aynıdır. Serbest X değeri deterministik filtreyi imkânsız kılar (spec §12.2).
+CHANNEL_KEYS = frozenset(
+    {"whatsapp_hatti", "fiziksel_magaza", "randevu_sistemi", "eticaret_sitesi"}
+)
+
+# Etiket, `_fold_turkish`'ten geçmiş metinde aranır — bu yüzden kalıp katlanmış
+# biçimi (`bagimli`) tarif eder. Boşluk ve tire çevresi serbesttir.
+#
+# Tanıma GENİŞ, geçirme DAR: her iki gevşeklik de aynı yöne — ATLAMA yönüne —
+# çalışır. Bir yazımı tanımamak ise ters yöndedir (doğrulanmamış kanalın CTA'sı
+# sızar), o yüzden tanıma tarafında cömert olmak fail-closed'dır.
+_CHANNEL_TAG_RE = re.compile(r"\[\s*kanal\s*-\s*bagimli\s*:\s*([^\]]*)\]")
+
+
+def validate_channels(channels: Any) -> list[str]:
+    """Marka kanal envanterinin yazım kapısı. Boş liste = geçerli.
+
+    İki kural: anahtar kapalı kümede olmalı, değer MANTIKSAL olmalı.
+
+    Değer kuralı neden sert: filtre `is True` arar. `"true"` metni ya da `1`
+    sessizce hiçbir zaman geçmezdi — operatör kanalı açtığını sanır, CTA'lar
+    sessizce düşerdi. Kapı bu sessiz yanlış-yapılandırmayı görünür hataya
+    çevirir. (`isinstance(1, bool)` yanlıştır; `True` doğrudur.)
+    """
+    if not isinstance(channels, dict):
+        return [
+            f"channels nesne olmalı, {type(channels).__name__} geldi "
+            "(kapalı anahtar kümesi: " + ", ".join(sorted(CHANNEL_KEYS)) + ")"
+        ]
+
+    errors: list[str] = []
+    for key in sorted(channels, key=repr):
+        if not isinstance(key, str) or key not in CHANNEL_KEYS:
+            errors.append(
+                f"bilinmeyen kanal anahtarı {key!r} — kapalı küme: "
+                + ", ".join(sorted(CHANNEL_KEYS))
+            )
+            continue
+        value = channels[key]
+        if not isinstance(value, bool):
+            errors.append(
+                f"channels[{key!r}] mantıksal değer olmalı (true/false), "
+                f"{type(value).__name__} geldi"
+            )
+    return errors
+
+
+def _verified_channels(channels: Any) -> frozenset[str]:
+    """Markanın DOĞRULANMIŞ kanalları — yalnız kapalı kümede ve tam `True`.
+
+    `channels` yoksa, boşsa ya da nesne değilse sonuç boş kümedir: envanteri
+    doldurulmamış marka, hiçbir kanal-bağımlı kalıbı almaz (spec §12.2
+    "muhafazakâr davranır").
+    """
+    if not isinstance(channels, dict):
+        return frozenset()
+    return frozenset(key for key in CHANNEL_KEYS if channels.get(key) is True)
+
+
+def _channel_tags(item: Any) -> frozenset[str]:
+    """Öğenin taşıdığı kanal etiketlerini (kanonik anahtar biçiminde) toplar.
+
+    Etiket YALNIZ `kalip` alanında aranmaz — öğenin her metni taranır. Etiketin
+    hangi alanda durduğu brief/denetçi sözleşmesinin işidir; filtre onu
+    varsayarsa yanlış alana yazılmış bir etiket sessizce görünmez olurdu.
+
+    Anahtar da katlanmış gelir, yani `WHATSAPP_HATTI` ile `whatsapp_hatti` aynı
+    anahtardır. Kapalı kümeye ait olup olmadığına ÇAĞIRAN bakar — burada
+    "yazılan ne" toplanır, "geçerli mi" değil.
+    """
+    tags: set[str] = set()
+    for text in _walk_strings(item):
+        for match in _CHANNEL_TAG_RE.finditer(_fold_turkish(text)):
+            tags.add(match.group(1).strip())
+    return frozenset(tags)
+
+
+def filter_channel_dependent(items: Any, channels: Any) -> list[dict]:
+    """`[kanal-bağımlı: X]` etiketli kalıpları marka gerçeğine göre eler.
+
+    Sözleşme (spec §12.2 · plan Task 9):
+
+    - etiketsiz kalıp HER ZAMAN geçer;
+    - etiketli kalıp yalnız `channels[X] is True` ise geçer;
+    - `channels` yok/boş/bozuk → etiketli kalıp ATLANIR;
+    - etiketteki `X` kapalı kümede değilse kalıp ATLANIR — bilinmeyen anahtar
+      "etiketsiz" sayılMAZ, yoksa uzayın kapalılığı filtreyi delmenin yolu
+      olurdu;
+    - bir kalıp birden çok etiket taşıyorsa HEPSİ doğrulanmalıdır.
+
+    Filtre SEÇER, değiştirmez: dönen öğeler girdideki nesnelerin ta kendisidir
+    ve sıraları korunur. Etiket metni de silinmez (spec §3.4: "taşınır,
+    silinmez") — basım biçimi enjeksiyon katmanının (Task 10) işidir.
+
+    Girdi savunması her dalda açıktır (liste değil → boş; sözlük değil →
+    envantersiz sayılır), bu yüzden gövdede toptan bir `except` YOKTUR: burada
+    G/Ç yok, ve pakete giren içerik yazım kapısından + çözümleyicinin yapısal
+    doğrulamasından geçmiş JSON'dur. Test edilemeyen bir emniyet dalı, kapalı
+    olduğunu sandığın bir dal demektir.
+    """
+    if not isinstance(items, list):
+        return []
+
+    verified = _verified_channels(channels)
+    return [item for item in items if _channel_tags(item) <= verified]

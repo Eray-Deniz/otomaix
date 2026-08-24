@@ -9,6 +9,7 @@ from app.core.security import assert_brand_owned, assert_workspace_owned, get_cu
 from app.core.utils import parse_brand_kit
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
+from app.services.sector_packages import validate_channels
 from app.services.sector_resolver import resolve_sector
 from app.services.storage import r2
 
@@ -18,6 +19,28 @@ router = APIRouter(prefix="/brands", tags=["brands"])
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
+
+
+def _assert_valid_channels(kit: dict | None) -> None:
+    """Kanal envanterinin kapalı anahtar uzayı kapısı (spec §12.2).
+
+    Çağıranın brand_kit içeriği verebildiği HER yüzeyde koşar — yalnız
+    `update_brand_kit`'i korumak yetmez, çünkü `update_brand` brand_kit'i
+    BÜTÜN olarak yazar ve tek başına bırakılsa kapalılık iddiası yalan olurdu.
+    Yüzey kümesinin tamlığını `tests/test_channel_inventory.py` yapısal olarak
+    tarar (yeni bir handler eklenirse test kırmızıya döner).
+
+    Kapı yalnız `channels` alanı GELDİĞİNDE konuşur; brand_kit'in geri kalanı
+    bugünkü gibi serbesttir.
+    """
+    if not isinstance(kit, dict) or "channels" not in kit:
+        return
+    errors = validate_channels(kit["channels"])
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Geçersiz kanal envanteri: " + "; ".join(errors),
+        )
 
 
 @router.post("", response_model=OkResponse, status_code=status.HTTP_201_CREATED)
@@ -102,6 +125,8 @@ async def update_brand(
     updates = payload.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    # brand_kit bu yüzeyde BÜTÜN olarak yazılır — kanal kapısı burada da koşar.
+    _assert_valid_channels(updates.get("brand_kit"))
 
     # Phase 6 dual-write: frontend slug gönderir; TEXT kolona display_name yazılır,
     # sector_id UUID kanonik referans olur. AI/trend kodu hala TEXT okur (Türkçe ad).
@@ -158,7 +183,20 @@ async def update_brand_kit(
     # Merge incoming fields into existing brand_kit
     existing = parse_brand_kit(row["brand_kit"])
     updates = payload.model_dump(exclude_none=True)
+    _assert_valid_channels(updates)
     merged = {**existing, **updates}
+
+    # `channels` ANAHTAR BAZINDA birleşir (spec §12.2 "deep-merge"), oysa
+    # brand_kit'in geri kalanı bugünkü gibi bütün olarak değişir. Sebep tek
+    # yönlü: filtre muhafazakârdır, yani düşen bir kanal anahtarı CTA'ların
+    # SESSİZCE kaybolması demektir. Tek anahtarlık bir güncelleme markanın
+    # doğrulanmış öbür kanallarını silmemeli.
+    if "channels" in updates:
+        previous = existing.get("channels")
+        merged["channels"] = {
+            **(previous if isinstance(previous, dict) else {}),
+            **updates["channels"],
+        }
 
     updated = await db.fetchrow(
         "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1 RETURNING *",

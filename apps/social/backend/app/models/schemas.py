@@ -44,6 +44,11 @@ class BrandKitUpdate(BaseModel):
     voiceover: str | None = None
     logo_overlay: dict | None = None
     intro_video: dict | None = None
+    # Kanal envanteri (spec §12.2). TİPLİ olması şart: Pydantic şemada olmayan
+    # alanı sessizce DÜŞÜRÜR, yani alan burada yoksa istek router'a hiç ulaşmaz
+    # ve yazım sessizce kaybolurdu. Anahtar uzayının kapalılığı router'daki
+    # `_assert_valid_channels` kapısında zorlanır (kapalı küme: sector_packages).
+    channels: dict | None = None
 
 
 class BrandUpdate(BaseModel):
