@@ -31,7 +31,7 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
 - last_checkpoint_ref: 5c843da274239f17078b693150724de22e67d9ae
-- cp_count: 3
+- cp_count: 4
 
 # Current Status
 
@@ -57,7 +57,26 @@ edilmez ve yarım teardown ayakta kalmaz" invariantı her ulaşılabilir çağr�
 Üç düzeltmenin üçü de POZİTİF KONTROLLÜ: her yeni test, düzeltmeden ÖNCEKİ sürümde
 düşüyor. İki orta bulgu `accepted_risk` (Auto-Fix Policy; HANDOFF Risks).
 `pytest tests/ -q` → **50 passed**. Commit'ler `fb6ff3f` → `5c843da`;
-türetilmiş defter rc=0. Push YOK. Sıradaki iş: Task 4.
+türetilmiş defter rc=0. Push YOK.
+
+**Task 4 bitti (R-01/R-02 kök kova korumaları).** Çözümleyici ve `GET /sectors` artık
+yalnız kök satırları görüyor; iki önbellek anahtarı da sürüm atladı. Trend süpürmesi
+değiştirilmedi, test ile PİNLENDİ. Düzeltmeden önce iki koruma testi düşüyordu, süpürme
+testi geçiyordu — planın öngördüğü ayrım. Yayılma taraması: `social.sectors`in başka her
+okuması markanın kendi `sector_id`'si üstünden LEFT JOIN, sayım/listeleme değil.
+
+**Checkpoint 4 KOŞTU ama KAPANIŞ DOĞRULAMASI YAPILAMADI (dürüst sınır).** Tur 1 →
+needs-attention, tek yüksek bulgu: çözümleyici bozuk taksonomide `None` dönüyordu,
+`create_brand` NULL `sector_id` ile yazıyor, `update_brand` metni değiştirip eski
+kimliği bırakıyordu (Task 4 ÖNCESİNDEN gelen fail-open yol). Düzeltildi (`afc8daf`,
+pozitif kontrollü: eski sürümde iki yeni test düşüyor). **Ama tur 2 (kapanış doğrulaması)
+AÇILAMADI:** checkpoint aşamalarının Codex çağrı bütçesi (`global cap − 3`) doldu, kalan
+üç tur Adım 11 final review'a rezerve. Kural gereği yüksek bulguda sessiz devir YOK →
+Eray'a rapor edildi. `last_checkpoint_ref` BİLEREK ilerletilmedi (`5c843da…` kalır) ki
+Task 4 commit'leri bir sonraki checkpoint'in/finalin kapsamında kalsın.
+
+`pytest tests/ -q` → **55 passed**. Sıradaki iş: Task 5 (Task 4 kapanış doğrulaması
+final'e devredildi).
 
 **Etiket düzeltmesi (Eray onaylı, aynı oturum):** üç düzeltme commit'i `Exec-Kind: code`
 inmişti, ama defter `.sql` yolunu "impl" saymaz (yalnız test + `.sql` = `migration` —

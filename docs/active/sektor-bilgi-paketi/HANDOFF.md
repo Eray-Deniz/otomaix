@@ -81,6 +81,12 @@
 - **F3-cp3 [medium]** `test_rollback_refuses_when_package_data_exists` iki korunan tabloyu
   AYNI anda dolduruyor; preflight'ın OR kapısının bir ayağı silinse test yine yeşil kalır.
   Uygulama şu an ikisini de sayıyor. Auto-Fix Policy: medium → `accepted_risk`.
+- **Task 4 kapanış doğrulaması AÇIK (accepted_risk değil — devredilmiş kapı).** `afc8daf`
+  (fail-closed taksonomi kapısı) hiçbir Codex turuyla doğrulanmadı; checkpoint bütçesi
+  dolduğu için kapanış turu açılmadı. Kanıt bugün yalnız pozitif kontrollü testtir
+  (eski sürümde iki test düşüyor, yenisinde geçiyor). Evi: Adım 11 final execution review
+  — orada Task 4 commit'leri kapsamda olmalı (`last_checkpoint_ref` bu yüzden
+  ilerletilmedi).
 - **F17** (önceki oturumdan, Eray risk-kabulü): damga = edited-lineage atfı. **Yeniden
   açtırma.**
 - **Sürüm kırılganlığı (dürüst sınır, bulgu değil):** 032 doğrulama bloğu PG18 `conenforced`
