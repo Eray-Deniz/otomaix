@@ -535,3 +535,83 @@ async def test_sweep_rejects_duplicate_baseline_rows(readonly_role, tmp_path):
     result = _run_sweep(readonly_dsn, baseline=duplicated)
     assert result.returncode == 2, "tekrar eden kimlik sessizce kabul edildi"
     assert "tekrar eden marka kimliği" in result.stderr
+
+
+def _retarget(report: str, target: str) -> str:
+    """Raporun hedef beyanını değiştirir — "başka hedeften geçerli taban"."""
+    return "\n".join(
+        f"target: {target}" if line.startswith("target: ") else line
+        for line in report.splitlines()
+    ) + "\n"
+
+
+async def test_sweep_rejects_baseline_from_another_target(readonly_role, tmp_path):
+    """Başka bir veritabanının tabanı REDDEDİLİR — biçimi geçerli olsa bile.
+
+    Codex checkpoint 5 tur 3, yüksek bulgu: hedefe bağlanmamış bir taban, örneğin
+    boş bir klondan alınmış geçerli bir v2 raporu, her markayı `added` gösterir;
+    `added` ihlal olmadığı için kökten köke kayma `remapped: 0` + rc=0 ile
+    geçerdi. Rapor artık üretildiği veritabanının kimliğini taşır.
+    """
+    admin_url, readonly_dsn = readonly_role
+    await _seed_two_brands(admin_url)
+
+    full = _run_sweep(readonly_dsn)
+    assert full.returncode == 0, full.stderr
+    assert "target: " in full.stdout
+
+    # (a) Başka hedeften gelen BOŞ taban — bulgunun adlandırdığı tam girdi.
+    empty_other = tmp_path / "baska-bos.txt"
+    empty_other.write_text(
+        "sector_sweep report\n"
+        "schema_version: 2\n"
+        "target: 1/1/baska_veritabani\n"
+        "brands_total: 0\n"
+        "brands_root_anchored: 0\n"
+        "sub_sector_rows: 0\n"
+        "differences: 0\n"
+        "--- mapping ---\n",
+        encoding="utf-8",
+    )
+    rejected = _run_sweep(readonly_dsn, baseline=empty_other)
+    assert rejected.returncode == 2, "başka hedeften boş taban kabul edildi"
+    assert "başka bir hedeften" in rejected.stderr
+
+    # (b) Bu hedefin GERÇEK tabanı, yalnız hedef beyanı değiştirilmiş.
+    forged = tmp_path / "hedef-degistirilmis.txt"
+    forged.write_text(_retarget(full.stdout, "9/9/klon"), encoding="utf-8")
+    forged_run = _run_sweep(readonly_dsn, baseline=forged)
+    assert forged_run.returncode == 2, "hedefi uyuşmayan taban kabul edildi"
+
+    # (c) Hedef beyanı OLMAYAN taban da reddedilir (eski v2 taslakları).
+    stripped = tmp_path / "hedefsiz.txt"
+    stripped.write_text(
+        "\n".join(
+            line for line in full.stdout.splitlines() if not line.startswith("target: ")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert _run_sweep(readonly_dsn, baseline=stripped).returncode == 2
+
+
+async def test_sweep_accepts_new_brands_on_same_target(readonly_role, tmp_path):
+    """AYNI hedefte sonradan açılan marka ihlal DEĞİLDİR — bilinçli sınır.
+
+    Marka açmak olağan işletimdir. Kapı bunu ihlal sayarsa araç her gerçek
+    kullanımda alarm verir ve susturulur; o yüzden `added` raporlanır ama
+    başarısızlık üretmez. Bu testin işi o sınırı YAZILI tutmaktır.
+    """
+    admin_url, readonly_dsn = readonly_role
+
+    baseline = tmp_path / "bos-ama-ayni-hedef.txt"
+    before = _run_sweep(readonly_dsn)
+    assert "brands_total: 0" in before.stdout
+    baseline.write_text(before.stdout, encoding="utf-8")
+
+    await _seed_two_brands(admin_url)
+
+    after = _run_sweep(readonly_dsn, baseline=baseline)
+    assert "added: 2" in after.stdout
+    assert "remapped: 0" in after.stdout
+    assert after.returncode == 0, "yeni marka açmak yanlışlıkla ihlal sayıldı"

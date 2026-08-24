@@ -35,6 +35,16 @@ Sözleşme:
   marka kimliğine göre sıralıdır. Aynı veri → bayt-aynı çıktı.
 * **Ortamdan miras almaz.** Bağlantı dizesi `--database-url` ile AÇIKÇA verilir;
   `DATABASE_URL` ortam değişkeni okunmaz (yanlış veritabanına koşma riski yok).
+* **Taban hedefe BAĞLI.** Rapor, üretildiği veritabanının kimliğini (küme
+  kimliği / oid / ad) taşır; `--baseline` başka bir hedefin raporunu REDDEDER
+  (rc=2). Aksi hâlde başka bir veritabanından — örneğin boş bir klondan — gelen
+  geçerli biçimli bir taban her markayı "yeni" gösterir ve kaymayı gizlerdi.
+* **Bilinçli sınır (BELGELİ KALINTI).** Araç, tabanın geçmişte DOĞRU olduğunu
+  kanıtlayamaz; taban geçmiş bir durumdur ve güveni onu bu script'in yazmış
+  olmasından alır. Elle düzenlenmiş (sayacı da güncellenmiş) bir taban, aynı
+  hedefe aitse kabul edilir. Kimlik doğrulamalı özet (HMAC) bunu kapatırdı ama
+  salt-okunur bir işletim raporu için orantısızdır. Yeniden açılma koşulu: taban
+  dosyaları güvenilmeyen bir kanaldan taşınmaya başlarsa.
 * **Çıkış kodu.** 0 = temiz. 1 = kök bağlanma ihlali VEYA eşleme kayması
   (remapped/removed). Yeni marka (`added`) raporlanır ama BAŞARISIZLIK SAYILMAZ:
   marka açmak olağan işletimdir, ihlal değildir.
@@ -80,6 +90,22 @@ _SUB_SECTOR_COUNT_SQL = """
 SELECT count(*) FROM social.sectors WHERE parent_sector_id IS NOT NULL
 """
 
+# Hedef kimliği: küme kimliği / veritabanı oid'i / veritabanı adı. Üçü birlikte
+# "bu kümedeki bu veritabanı"nı adresler. Salt-okunur rolde erişilebilirliği
+# ÖLÇÜLDÜ (PostgreSQL 18.3, 127.0.0.1:5433).
+_TARGET_SQL = """
+SELECT format(
+    '%s/%s/%s',
+    (SELECT system_identifier FROM pg_control_system()),
+    (SELECT oid FROM pg_database WHERE datname = current_database()),
+    current_database()
+)
+"""
+
+
+class BaselineMismatch(ValueError):
+    """Taban BAŞKA bir veritabanından — karşılaştırma anlamsız, koşmaz."""
+
 
 def _difference_reason(row: asyncpg.Record) -> str | None:
     """Markanın KÖK BAĞLANMASINI bozan sebep — yoksa None."""
@@ -104,7 +130,7 @@ def _declared(report: str, field: str) -> str | None:
     return None
 
 
-def parse_mapping(report: str) -> dict[str, str]:
+def parse_baseline(report: str) -> tuple[str, dict[str, str]]:
     """Bir raporun eşleme bloğunu `{brand_id: sector_id}` olarak okur.
 
     Yalnız `--- mapping ---` ile sonraki blok başlığı arasını okur; özet
@@ -118,6 +144,10 @@ def parse_mapping(report: str) -> dict[str, str]:
     karşı doğrulanır: sürüm tam eşleşmeli, satır sayısı beyan edilen
     `brands_total` ile aynı olmalı, marka kimliği tekrar etmemeli.
     """
+    declared_target = _declared(report, "target")
+    if not declared_target:
+        raise ValueError("baseline 'target' beyanı yok — taze bir taban al.")
+
     declared_version = _declared(report, "schema_version")
     if declared_version != str(REPORT_SCHEMA_VERSION):
         raise ValueError(
@@ -162,7 +192,7 @@ def parse_mapping(report: str) -> dict[str, str]:
             f"baseline eksik: {declared_total} marka beyan edilmiş, eşleme "
             f"bloğunda {seen} satır var — dosya yarıda kesilmiş olabilir."
         )
-    return mapping
+    return declared_target, mapping
 
 
 def _compare(baseline: dict[str, str], current: dict[str, str]) -> tuple[list[str], int]:
@@ -201,6 +231,7 @@ def _compare(baseline: dict[str, str], current: dict[str, str]) -> tuple[list[st
 def _render(
     rows: list[asyncpg.Record],
     sub_sector_rows: int,
+    target: str,
     baseline: dict[str, str] | None,
 ) -> tuple[str, int]:
     """Raporu ve İHLAL sayısını üretir (ihlal = kök bağlanma + eşleme kayması)."""
@@ -215,6 +246,7 @@ def _render(
     lines = [
         "sector_sweep report",
         f"schema_version: {REPORT_SCHEMA_VERSION}",
+        f"target: {target}",
         f"brands_total: {len(rows)}",
         f"brands_root_anchored: {len(rows) - len(differences)}",
         f"sub_sector_rows: {sub_sector_rows}",
@@ -243,7 +275,7 @@ def _render(
 
 
 async def sweep(
-    database_url: str, baseline: dict[str, str] | None = None
+    database_url: str, baseline: tuple[str, dict[str, str]] | None = None
 ) -> tuple[str, int]:
     """Raporu ve ihlal sayısını döner. Yazma YOK — salt-okunur transaction."""
     connection = await asyncpg.connect(database_url)
@@ -251,6 +283,7 @@ async def sweep(
         # Yapısal salt-okunurluk: yetkili dizeyle koşulsa bile yazamaz.
         await connection.execute("BEGIN TRANSACTION READ ONLY")
         try:
+            target = await connection.fetchval(_TARGET_SQL)
             rows = await connection.fetch(_SWEEP_SQL)
             sub_sector_rows = await connection.fetchval(_SUB_SECTOR_COUNT_SQL)
         finally:
@@ -258,7 +291,21 @@ async def sweep(
     finally:
         await connection.close()
 
-    return _render(rows, sub_sector_rows, baseline)
+    if not target:
+        raise ValueError("hedef kimliği okunamadı — karşılaştırma yapılamaz")
+
+    baseline_mapping = None
+    if baseline is not None:
+        baseline_target, baseline_mapping = baseline
+        if baseline_target != target:
+            # BAŞKA bir veritabanının tabanı: her marka "yeni" görünür, kayma
+            # gizlenirdi (Codex checkpoint 5 tur 3).
+            raise BaselineMismatch(
+                f"taban başka bir hedeften: baseline={baseline_target!r} "
+                f"target={target!r}"
+            )
+
+    return _render(rows, sub_sector_rows, target, baseline_mapping)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -293,14 +340,19 @@ def main(argv: list[str] | None = None) -> int:
     baseline = None
     if args.baseline is not None:
         try:
-            baseline = parse_mapping(args.baseline.read_text(encoding="utf-8"))
+            baseline = parse_baseline(args.baseline.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             # Okunamayan/bozuk taban SESSİZ GEÇİLMEZ: karşılaştırmasız "temiz"
             # rapor, tam da bu aracın engellemek için var olduğu yanılgıdır.
             sys.stderr.write(f"baseline okunamadı: {exc}\n")
             return 2
 
-    report, violations = asyncio.run(sweep(args.database_url, baseline))
+    try:
+        report, violations = asyncio.run(sweep(args.database_url, baseline))
+    except BaselineMismatch as exc:
+        sys.stderr.write(f"baseline okunamadı: {exc}\n")
+        return 2
+
     sys.stdout.write(report)
     return 1 if violations else 0
 
