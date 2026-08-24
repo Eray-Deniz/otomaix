@@ -30,59 +30,70 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: b3ff1c53066cd8ae500bdd0ce3ddd134a78c15b0
-- cp_count: 5
+- last_checkpoint_ref: 46f4388d5ce02838d7bf33bbc08a1f7c48dc9f90
+- cp_count: 6
 
 # Current Status
 
-**2026-08-24 (yedinci oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 3'ü bitti.**
-Task 3 (migration dağıtım gerçeği + geri alma + atomiklik ölçümü) Eray talebiyle
-**inline** yürütüldü — bu oturumda alt-oturum (subagent) açılmadı, checkpoint
-review koşmadı. Üç ayak da bitti: (a) `run-migrations.sh` bayat elle-liste yerine
-kanonik dizin taraması + açık compose dosyası + her psql çağrısında
-`ON_ERROR_STOP=1`; (b) `shared/db/migrations/rollback/032_down.sql` — veri varken
-hiçbir şeye dokunmadan REDDEDEN, boş yolda kendi kalıntısını denetleyen geri alma;
-(c) R-17 iki-adım aktivasyon ölçümü (tek transaction geçer, ters sıra reddedilir).
-Task 3(a) Task 2'nin kalan sınırını da kapattı: bayraksız psql hatalı SQL'de rc=0,
-bayrakla rc=3 (taze ölçüm).
+**2026-08-24 (sekizinci oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 6'sı bitti.**
+Bu oturumda Task 5 ve Task 6 yürütüldü (inline; review/checkpoint kapıları normal koştu).
+`pytest tests/ -q` → **78 passed**. Türetilmiş defter rc=0, çalışma alanı temiz, **push YOK**.
 
-**Checkpoint 3 koştu (4 tur, sonuç `verdict: approve`).** Tur 1 → needs-attention
-(1 yüksek: geri alma preflight'ı ile silme arasında yarış); tur 2 → aynı küme yeniden
-açıldı (yüksek: REPEATABLE READ oturumunda kilit yetmiyor) + yeni yüksek (sarmalayıcı
-transaction çağıranın işlemini erken commit ediyor); tur 3 → kritik OUT-OF-DELTA
-(korunan tablo yokken kilit kurulamıyor, aradaki pencerede ileri-032 + yazım verisi
-DROP ile yok olabiliyor) + yakınsama kararı (B); tur 4 → **approve**, bulgu yok,
-yakınsama kararı **(A)**: "commit edilmiş korunan satır bu script tarafından asla yok
-edilmez ve yarım teardown ayakta kalmaz" invariantı her ulaşılabilir çağrı için geçerli.
-Üç düzeltmenin üçü de POZİTİF KONTROLLÜ: her yeni test, düzeltmeden ÖNCEKİ sürümde
-düşüyor. İki orta bulgu `accepted_risk` (Auto-Fix Policy; HANDOFF Risks).
-`pytest tests/ -q` → **50 passed**. Commit'ler `fb6ff3f` → `5c843da`;
-türetilmiş defter rc=0. Push YOK.
+**Task 4'ün devralınan açık kapısı KAPANDI.** Oturum, geçen oturumdan doğrulanmamış devralınan
+`afc8daf` (fail-closed taksonomi kapısı) ile başladı. Checkpoint 5'in ilk turu onu kapanış turu
+titizliğiyle inceledi ve KAPALI buldu: çözümleyicinin her çağıranı taranmış, `create_brand` ve
+`update_brand` yazımdan önce istisnayı bekliyor ve yutmuyor, `resolve_sector_id` aynı kapıya
+bağlanıyor. Devralınan tek borç buydu.
 
-**Task 4 bitti (R-01/R-02 kök kova korumaları).** Çözümleyici ve `GET /sectors` artık
-yalnız kök satırları görüyor; iki önbellek anahtarı da sürüm atladı. Trend süpürmesi
-değiştirilmedi, test ile PİNLENDİ. Düzeltmeden önce iki koruma testi düşüyordu, süpürme
-testi geçiyordu — planın öngördüğü ayrım. Yayılma taraması: `social.sectors`in başka her
-okuması markanın kendi `sector_id`'si üstünden LEFT JOIN, sayım/listeleme değil.
+**Task 5 bitti (veri/API regresyon kümesi + marka kök-sektör tam sweep).** Dört regresyon testi
+bugünkü invariantı pinliyor: alt sektör satırı eklemek `GET /sectors` çıktısını ve HİÇBİR markanın
+kök sektörünü değiştirmiyor (TAM sweep — örneklem değil), hiçbir üretim yolu damga kolonu yazmıyor
+(yedi `INSERT INTO social.posts` noktasının hepsi yapısal olarak tarandı). `scripts/sector_sweep.py`
+canlıda da koşulabilen salt-okunur operasyonel sweep.
 
-**Checkpoint 4 KOŞTU ama KAPANIŞ DOĞRULAMASI YAPILAMADI (dürüst sınır).** Tur 1 →
-needs-attention, tek yüksek bulgu: çözümleyici bozuk taksonomide `None` dönüyordu,
-`create_brand` NULL `sector_id` ile yazıyor, `update_brand` metni değiştirip eski
-kimliği bırakıyordu (Task 4 ÖNCESİNDEN gelen fail-open yol). Düzeltildi (`afc8daf`,
-pozitif kontrollü: eski sürümde iki yeni test düşüyor). **Ama tur 2 (kapanış doğrulaması)
-AÇILAMADI:** checkpoint aşamalarının Codex çağrı bütçesi (`global cap − 3`) doldu, kalan
-üç tur Adım 11 final review'a rezerve. Kural gereği yüksek bulguda sessiz devir YOK →
-Eray'a rapor edildi. `last_checkpoint_ref` BİLEREK ilerletilmedi (`5c843da…` kalır) ki
-Task 4 commit'leri bir sonraki checkpoint'in/finalin kapsamında kalsın.
+**Checkpoint 5: BEŞ TUR, `approve` ALINMADAN kullanıcı kararıyla kapatıldı (override).** Bulgu
+kümesi tek bir eksene oturdu — sweep'in taban dosyasına ne kadar güvenebileceği — ve her tur bir
+öncekinden dar bir varyant açtı: (1) rapor yalnız "kök bağlı mı" diyordu, kökten köke kayma
+görünmüyordu; (2) yarıda kesilmiş taban eksik markaları ihlal-olmayan `added` sayıyordu;
+(3) taban hangi veritabanından geldiğini taşımıyordu; (4) veritabanı-içi kimliği fiziksel kopya
+aynen taşıyor; (5) bağlantı ucu METİNDEN okunuyordu, oysa asyncpg `PGPORT`/`?host=` yollarını da
+dikkate alır. **Beşinin beşi de düzeltildi ve beşi de pozitif kontrollü.** Rapor artık tam eşleme
+listesi taşıyor, `--baseline` çift çift karşılaştırıyor, taban kendi beyanına karşı doğrulanıyor,
+kimlik hem kanonik bağlantı dizesinden hem sunucunun KENDİ bildirdiği uçtan besleniyor, belirsiz
+dize bağlanmadan reddediliyor, yakalanmayan istisna rc=2 veriyor (rc=1 "fark bulundu" demek —
+karışırdı) ve parola hiçbir akışa sızmıyor (ölçüldü).
 
-`pytest tests/ -q` → **55 passed**. Sıradaki iş: Task 5 (Task 4 kapanış doğrulaması
-final'e devredildi).
+İki öneri BİLİNÇLİ REDDEDİLDİ, gerekçesi script'in kendi belgesinde yazılı: (a) tabanın geçmişte
+doğru olduğunu kanıtlayan imzalı özet — taban geçmiş bir durumdur, araç geçmişi doğrulayamaz;
+imzasız özet yalnız kazara kesilmeyi yakalar, onu da satır sayısı zaten yakalıyor; (b) dışarıdan
+sağlanan kimlik — provisioning hikâyesi ister, bağlantı ucu aynı girdiyi bedava kapatıyor.
+Kalıntı ve yeniden açılma koşulu (taban dosyaları güvenilmeyen bir kanaldan taşınırsa) modül
+belgesinde. Override audit satırı execute review log'unda.
 
-**Etiket düzeltmesi (Eray onaylı, aynı oturum):** üç düzeltme commit'i `Exec-Kind: code`
-inmişti, ama defter `.sql` yolunu "impl" saymaz (yalnız test + `.sql` = `migration` —
-Task 2 commit'leri de öyle). Kırık defteri (rc=2) düzeltmek için o üç commit'in MESAJI
-yeniden yazıldı; **dosya içerikleri bayt-aynı** (`git diff backup/pre-t3-kind-fix HEAD`
-boş). Emniyet etiketi: `backup/pre-t3-kind-fix`.
+**Task 6 bitti (Katman-1 yakalama altyapısı + caption/fikir fixture'ları).** `capture.py` Claude'a
+giden çağrıyı kesip TAM prompt'u (model + sistem blokları + mesaj blokları + önbellek sınırları)
+deterministik metne çeviriyor. Test kendi prompt'unu KURMUYOR — üretimin kendi kod yolu koşuyor,
+yalnız ağ ucu kesiliyor. Dört fixture donduruldu: tekli caption (özel günlü/günsüz), carousel dalı
+(K-15b), fikir yüzeyi. Dondurma yalnız `PROMPT_REGRESSION_UPDATE=1` ile yapılıyor; bayraksız
+koşumda kırmızı test kendini yeşile boyayamıyor. İki sessiz-yeşil tuzağı kapatıldı: caption yolu
+anahtar yoksa, fikir yolu HER istisnada sessizce fallback'e düşüyor — ikisinde de "çağrı gerçekten
+yapıldı mı" ayrıca doğrulanıyor. Fixture'lar gözle incelendi: paket izi YOK, sektör rehberi
+dördünde de basılı (paketin ileride yerine geçeceği blok), üç katmanlı önbellek sınırı görünür,
+özel gün varyantı yalnız kendi bloğuyla ayrışıyor.
+
+**Checkpoint 6 koştu → `verdict: approve`, kritik/yüksek bulgu YOK.** İki orta bulgu
+`accepted_risk` (HANDOFF Risks). Codex ayrıca harness'ın her iki üretim import biçimini de
+gerçekten yakaladığını ve tam-bir-çağrı iddiasının sessiz fallback'i imkânsız kıldığını doğruladı.
+
+**Süreç notu (kayda değer).** Checkpoint 5 tek bir dosyada beş tur döndü ve kullanıcı haklı olarak
+"daha kaç review gerekecek" diye sordu. Dördüncü turda tavan kuralı gereği durup rapor edildi, ama
+"ucuz kapanış" önerisiyle döngü bir tur daha uzatıldı — o öneri geri görüşte hatalıydı. Ders:
+tavanda DURMAK kuralın kendisidir, ucuz düzeltme varlığı onu geçersiz kılmaz.
+
+**Önceki durum (2026-08-24, yedinci oturum) — 16 task'ın 3'ü bitti (Task 3 + Task 4).**
+Ayrıntı: Task 3 migration dağıtım/geri alma/atomiklik, Task 4 kök kova korumaları; checkpoint 3
+dört turda `approve`, checkpoint 4 tek tur `needs-attention` + kapanış turu açılamadı (bu oturumda
+kapandı). `Exec-Kind` etiket düzeltmesi için geçmiş yeniden yazıldı (`backup/pre-t3-kind-fix`).
 
 **Önceki durum (2026-08-24, altıncı oturum) — 16 task'ın 2'si bitti.**
 `/execute-plan-claude-codex` başlatıldı: dal `feat/sektor-bilgi-paketi`, mod
@@ -149,37 +160,33 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 
 # Open Problems
 
-- **On-prem paketi PostgreSQL 16'ya sabitli, migration 032 PG18 istiyor (Eray kararı bekliyor,
-  2026-08-24 yedinci oturum).** `shared/local-deployment/docker-compose.yml` `pgvector/pgvector:pg16`
-  imajını pinliyor; 032'nin fail-closed doğrulama bloğu `pg_constraint.conenforced` okuyor ve bu
-  kolon PG16'da YOK (ölçüldü: 16.13 sunucusunda `count(*) = 0`). Sonuç: on-prem `setup.sh` zinciri
-  032'de durur — sessizce değil, gürültülü hatayla. Canlı sistem PG18, etkilenmiyor. Seçenekler:
-  (a) on-prem imajı 18'e çek (mevcut kurulumlarda veri taşıma gerekir), (b) 032 doğrulamasını
-  sürüm-duyarlı yap, (c) on-prem paketi kullanılmıyorsa statü notuyla bırak. Otonom
-  düzeltilmedi: imaj/veri-taşıma kararı Eray-seviyesidir.
-- **Geri alma ile ileri 032 arasında çapraz serileştirme yok (residual, checkpoint 3 tur 3-4).**
-  `032_down.sql` kendi invariantını kapatıyor (tur 4 yakınsama kararı A), ama ileri koşan bir
-  032 uygulamasıyla script arasında ORTAK kilit yok. Tam serileştirme, 032'nin de kendi
-  transaction'ına sarılıp aynı advisory lock'u almasını gerektirir — 032 onaylı bir Task 2
-  artefaktı, bu task'ın dosya kümesi dışında. Bugünkü hâlde ulaşılabilir bir veri-kaybı yolu
-  YOK (korunan tablolar yoksa script baştan reddediyor, varsa ACCESS EXCLUSIVE altında).
-  Yeniden açılma koşulu: 032 ileri uygulaması ile geri alma aynı anda koşabilecek bir işletim
-  düzeni doğarsa (birden çok operatör / otomatik dağıtım), ya da 032 başka bir sebeple
-  transactional hâle gelirse. Evi: Task 16 kapanış listesi (manuel adımlar + arayüz teslimi).
-- (Plan onayı oturumundan açık problem kalmamıştı — plan `15db2cf` ile commit'li. Açık
-  K-ID'ler planın "Karar Kapıları" tablosunda yönetiliyor; Plan 2 evi: K-84/K-151/K-152
-  kapanınca ayrı plan. Aşağıdaki iki kayıt önceki oturumlardan, bilinçli açık.)
-- Spec'in ~45 kapanış metninin bağımsız kapanış-sweep'i Eray kararıyla ATLANDI
-  (2026-08-23 dördüncü oturum, "vazgeçtim plan yazımına geç") — kısmi hafifletme:
-  6 Codex plan-review turu spec'i tekrar tekrar okudu, K-ID çelişkisi raporlamadı.
-  Yeniden açılma: spec kapanış metinlerinden şüphe doğarsa.
-- Denetimin iki orta bulgusu bilinçli açık (Eray kapsamı: yalnız yüksekler): (1) sentez
-  deposu commit mesajı `432738b`'deki "35 benzersiz K/R-ID" sayımı yanlış (doğrusu 38;
-  git geçmişinde, içerik hatası değil), (2) snapshot Ek C'deki "beş prompt yüzeyi" sayısı
-  etiketsiz — küme kapalı değil. (Evi olan "spec seansı" tamamlandı ve K-15 (b) spec'te
-  kapandı; snapshot arşiv belgesi statü-notuyla spec'e bağlı. DÜŞÜRÜLDÜ — yeniden
-  açılma: arşiv belgesi ileride yeniden canlı girdi olursa, sweep-borcu kararıyla aynı
-  koşul.)
+- **Sweep tabanının kökeni — belgeli kalıntı (checkpoint 5, kullanıcı kararıyla kapatıldı).**
+  `scripts/sector_sweep.py` tabanı kanonik bağlantı dizesine + küme kimliğine + sunucunun kendi
+  bildirdiği uca bağlar. Bunun ötesi (elle düzenlenmiş, sayaçları da güncellenmiş taban; aynı uçta
+  duran bir kopya) yalnız imzalı özet veya dışarıdan sağlanan kimlikle kapanır; ikisi de salt-okunur
+  bir işletim raporu için orantısız bulundu. Gerekçe + yeniden açılma koşulu (taban dosyaları
+  güvenilmeyen bir kanaldan taşınırsa) modül belgesinde YAZILI. Evi: Adım 11 final execution review
+  (`checkpoint_overrides` listesi üzerinden yeniden değerlendirilir).
+- **On-prem paketi PostgreSQL 16'ya sabitli, migration 032 PG18 istiyor (Eray risk kabulü,
+  2026-08-24).** `shared/local-deployment/docker-compose.yml` `pgvector/pgvector:pg16` imajını
+  pinliyor; 032'nin fail-closed doğrulama bloğu `pg_constraint.conenforced` okuyor ve bu kolon
+  PG16'da YOK (ölçüldü: 16.13 sunucusunda `count(*) = 0`). On-prem `setup.sh` zinciri 032'de
+  gürültülü hatayla durur. Canlı sistem PG18, etkilenmiyor. Eray: "canlı sistem test aşamasında,
+  önemli değil" → **ÇÖZÜLMEDİ + park edildi**. Yeniden açılma: on-prem paketi gerçekten
+  kurulacaksa. Seçenekler: (a) imajı 18'e çek (veri taşıma gerekir), (b) 032 doğrulamasını
+  sürüm-duyarlı yap, (c) statü notuyla bırak.
+- **Geri alma ile ileri 032 arasında çapraz serileştirme yok (residual, checkpoint 3).**
+  `032_down.sql` kendi invariantını kapatıyor, ama ileri koşan bir 032 uygulamasıyla ORTAK kilit
+  yok. Tam serileştirme 032'nin de aynı advisory lock'u almasını gerektirir — 032 onaylı bir Task 2
+  artefaktı, o task'ın dosya kümesi dışında. Bugünkü hâlde ulaşılabilir veri-kaybı yolu YOK.
+  Yeniden açılma: 032 ileri uygulaması ile geri alma aynı anda koşabilecek bir işletim düzeni
+  doğarsa (birden çok operatör / otomatik dağıtım). Evi: Task 16 kapanış listesi.
+- Spec'in ~45 kapanış metninin bağımsız kapanış-sweep'i Eray kararıyla ATLANDI (2026-08-23) —
+  kısmi hafifletme: 6 Codex plan-review turu spec'i tekrar tekrar okudu, K-ID çelişkisi
+  raporlamadı. Yeniden açılma: spec kapanış metinlerinden şüphe doğarsa.
+- Sentez deposu denetiminin iki orta bulgusu (commit mesajında yanlış K/R-ID sayımı; snapshot
+  Ek C'deki etiketsiz "beş prompt yüzeyi" sayısı) **DÜŞÜRÜLDÜ** — evi olan spec seansı tamamlandı.
+  Yeniden açılma: arşiv belgesi ileride yeniden canlı girdi olursa.
 
 # Decisions Log
 
