@@ -15,6 +15,11 @@ Consumers:
 """
 from app.core.templates_data import SECTOR_GUIDANCE
 from app.models.templates import Template
+from app.services.sector_packages import (
+    SectorPackageContext,
+    render_package_block,
+    render_special_day_lines,
+)
 
 
 # Tier 1 — Static system prompt (cached, same for all calls)
@@ -186,11 +191,18 @@ def build_brand_context(
     brand: dict,
     brand_kit: dict,
     template: Template | None,
+    package_context: SectorPackageContext | None = None,
 ) -> str:
     """Tier 2 — cached brand + sector + template context.
 
     This block is reused across calls for the same brand+template combo.
     Cache hit reduces latency and cost significantly.
+
+    `package_context` doluysa sektör paketi kök `SECTOR_GUIDANCE` bloğunun
+    YERİNE geçer (spec §4.1 yan-yana basım yasağı). Tek kapı budur: paket dalına
+    giriş YALNIZ çözümleyicinin sonucuna bakar, burada ikinci bir koşul yazılmaz.
+    `None` dalı bugünkü kod yolunu BAYT DEĞİŞTİRMEDEN çalıştırır — Katman-1
+    fixture'ları bunu her artımda kanıtlar.
     """
     parts: list[str] = []
 
@@ -228,11 +240,20 @@ def build_brand_context(
     if hashtags:
         parts.append(f"Marka hashtagleri: {', '.join(hashtags[:5])}")
 
-    # Sector guidance (if brand has sector)
-    sector_slug = brand.get("sector_slug")
-    if sector_slug and sector_slug in SECTOR_GUIDANCE:
-        parts.append(f"\n--- SEKTÖR REHBERİ ({sector_slug}) ---")
-        parts.append(SECTOR_GUIDANCE[sector_slug])
+    # Sector guidance (if brand has sector) — paket varsa YERİNE paket bloğu
+    if package_context is not None:
+        parts.append(
+            render_package_block(
+                package_context,
+                surface="caption",
+                channels=brand_kit.get("channels"),
+            )
+        )
+    else:
+        sector_slug = brand.get("sector_slug")
+        if sector_slug and sector_slug in SECTOR_GUIDANCE:
+            parts.append(f"\n--- SEKTÖR REHBERİ ({sector_slug}) ---")
+            parts.append(SECTOR_GUIDANCE[sector_slug])
 
     # Template guidance
     if template:
@@ -287,6 +308,8 @@ def build_dynamic_content(
     product: dict | None = None,
     special_day: dict | None = None,
     subject_reference_provided: bool = False,
+    package_context: SectorPackageContext | None = None,
+    channels: dict | None = None,
 ) -> str:
     """Tier 3 — dynamic content (not cached).
 
@@ -298,6 +321,11 @@ def build_dynamic_content(
     image_prompt merkezdeki kişiyi/objeyi tarif ETMEMELI; sahnenin etrafını,
     ışığı, atmosferi, ek figürleri tarif etmeli — model image input'tan kişiyi
     zaten görüyor, prompt'ta tarif kafa karıştırır ve identity drift yaratır.
+
+    `package_context` doluysa ve seçili özel günün pakette karşılığı varsa dönem
+    kalıpları MEVCUT özel gün bloğunun içine eklenir — blok YAPISI değişmez
+    (spec §11.1). Karşılığı yoksa sessiz düşme + zorunlu log; bu, paket yolunun
+    kendisini düşürmez, yalnız o günün dağarcığı basılmaz.
     """
     parts: list[str] = []
 
@@ -341,6 +369,8 @@ def build_dynamic_content(
             "birleştirmeli (ürünü değil, tatil atmosferini görselleştir — ürün "
             "modunda image-edit zaten ürünü sahneye yerleştirir)."
         )
+        if package_context is not None:
+            parts.extend(render_special_day_lines(package_context, name, channels))
         parts.append("=== ÖZEL GÜN BAĞLAMI SONU ===\n")
 
     if user_prompt:

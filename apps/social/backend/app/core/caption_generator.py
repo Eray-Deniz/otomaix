@@ -30,6 +30,7 @@ from app.core.prompt_builder import (
     build_system_prompt,
 )
 from app.models.templates import Template
+from app.services.sector_packages import SectorPackageContext
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,7 @@ async def generate_captions(
     special_day_name: str | None = None,
     special_day_category: str | None = None,
     scene_reference_image_url: str | None = None,
+    package_context: SectorPackageContext | None = None,
 ) -> dict[str, Any]:
     """Generate caption + image prompt + hashtags via Claude. Video ise script de üretir.
 
@@ -104,10 +106,16 @@ async def generate_captions(
     `scene_reference_image_url` doluysa Nano Banana 2 edit ref'i kullanılacak —
     image_prompt merkezdeki kişiyi/objeyi 'the reference subject' olarak bırakır,
     sahne kompozisyonunu tarif eder (Tier 3 REFERANS GÖRSEL BAĞLAMI bloğu).
+
+    `package_context` sektör paketi çözümleyicisinin sonucudur (spec §4.2).
+    Doluysa Tier 2'de paket bloğu kök sektör rehberinin YERİNE geçer ve eşleşen
+    özel günde Tier 3'e dönem kalıpları girer. Bu fonksiyon paketi kendisi
+    ÇÖZMEZ — tek kapı çağıranın elindedir (router), böylece ikinci bir koşul
+    yüzeye yazılamaz.
     """
 
     system_prompt = build_system_prompt()
-    brand_context = build_brand_context(brand, brand_kit, template)
+    brand_context = build_brand_context(brand, brand_kit, template, package_context)
     special_day = (
         {"name": special_day_name, "category": special_day_category}
         if special_day_name
@@ -117,6 +125,8 @@ async def generate_captions(
         template, template_fields, user_prompt, rag_context, platforms, product,
         special_day=special_day,
         subject_reference_provided=bool(scene_reference_image_url),
+        package_context=package_context,
+        channels=brand_kit.get("channels"),
     )
 
     output_format = _build_output_format_instruction(

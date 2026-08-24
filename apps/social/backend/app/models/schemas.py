@@ -2,7 +2,11 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+import logging
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Common response wrappers ───────────────────────────────────────────────
@@ -10,6 +14,51 @@ from pydantic import BaseModel, Field
 class OkResponse(BaseModel):
     success: bool = True
     data: Any = None
+
+
+# ─── K-07 damga taşıma sözleşmesi — üretici ucu (plan Task 10) ──────────────
+
+# İstemciye GİTMEYECEK paket kimlik alanları. Bunlar `social.generation_stamps`
+# ve `social.posts` kolon adlarıdır — damganın kendisi sunucuda durur, istemci
+# yalnız opak makbuz kimliğini taşır ve kalıcı-kayıt isteğinde geri verir.
+#
+# Küme `SectorPackageContext` alanlarından TÜRETİLMEDİ, bilinçle: o dataclass
+# `content` ve `version` gibi genel adlar taşıyor ve caption yanıtına bir gün
+# meşru bir `content`/`version` alanı eklenirse sessizce düşürülürdü. Burada
+# kapatılan sınıf "paket kimlik ÇİFTİ"dir; çiftin taşındığı ad kümesi kapalıdır.
+PACKAGE_IDENTITY_KEYS = frozenset({"package_id", "package_version"})
+
+
+class CaptionGenerationOut(BaseModel):
+    """Caption üretim yanıtı — ham paket çifti istemciye DÖNMEZ.
+
+    `extra="allow"`: caption üreticisinin alan kümesi şablona göre değişir
+    (tekli/carousel/video), bu şema onu daraltmaz. Daralttığı tek şey paket
+    kimliğidir.
+
+    Düşürme sessiz DEĞİLDİR (uyarı log'lanır) ama istisna da fırlatmaz: bir gün
+    yanlışlıkla eklenen bir alan yüzünden tüm caption ucunun ölmesi, sözleşmeyi
+    korumaktan daha pahalı bir sonuç olurdu. Deny-by-default yön korunur.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    generation_id: UUID | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_package_identity(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        leaked = PACKAGE_IDENTITY_KEYS & set(data)
+        if not leaked:
+            return data
+        logger.warning(
+            "caption yanıtından paket kimlik alanı düşürüldü: %s "
+            "(K-07: istemci yalnız opak generation_id taşır)",
+            sorted(leaked),
+        )
+        return {k: v for k, v in data.items() if k not in PACKAGE_IDENTITY_KEYS}
 
 
 class ErrResponse(BaseModel):

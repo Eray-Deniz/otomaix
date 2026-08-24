@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.security import get_current_user
 from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
+from app.services.sector_packages import render_package_block, resolve_package_context
 from app.models.schemas import OkResponse
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -160,7 +161,8 @@ async def suggest_ideas(
 
     brand = await db.fetchrow(
         """
-        SELECT b.name, b.sector, b.description, b.brand_kit, s.slug AS sector_slug
+        SELECT b.id, b.name, b.sector, b.description, b.brand_kit,
+               b.sub_sector_id, s.slug AS sector_slug
         FROM social.brands b
         LEFT JOIN social.sectors s ON s.id = b.sector_id
         WHERE b.id = $1
@@ -171,6 +173,7 @@ async def suggest_ideas(
         raise HTTPException(status_code=404, detail="Brand not found")
 
     brand_kit = _parse_brand_kit(brand["brand_kit"])
+    package_context = await resolve_package_context(db, dict(brand))
     tonality = brand_kit.get("tonality", "professional")
     hashtags = brand_kit.get("hashtags", [])
     colors = brand_kit.get("colors") or {}
@@ -271,10 +274,22 @@ async def suggest_ideas(
     ]
 
     # Phase 7 — sektör rehberi + şablon guidance Tier 2'de (cache hit için)
-    sector_slug = brand["sector_slug"]
-    if sector_slug and sector_slug in SECTOR_GUIDANCE:
-        brand_context_parts.append(f"\n--- SEKTÖR REHBERİ ({sector_slug}) ---")
-        brand_context_parts.append(SECTOR_GUIDANCE[sector_slug])
+    #
+    # Yan-yana basım yasağının FİKİR ucu (spec §4.1): aktif paket varken kök
+    # rehber basılmaz, paket onun yerine geçer. Aksi hâlde öneri kök rehberle,
+    # üretim paketle konuşurdu — iki ses ayrışması. Tek kapı burada da
+    # çözümleyicinin sonucudur; ikinci bir koşul yazılmaz.
+    if package_context is not None:
+        brand_context_parts.append(
+            render_package_block(
+                package_context, surface="idea", channels=brand_kit.get("channels")
+            )
+        )
+    else:
+        sector_slug = brand["sector_slug"]
+        if sector_slug and sector_slug in SECTOR_GUIDANCE:
+            brand_context_parts.append(f"\n--- SEKTÖR REHBERİ ({sector_slug}) ---")
+            brand_context_parts.append(SECTOR_GUIDANCE[sector_slug])
 
     if template:
         brand_context_parts.append(f"\n--- ŞABLON TALİMATI ({template.name}) ---")

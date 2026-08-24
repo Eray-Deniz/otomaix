@@ -732,3 +732,234 @@ def filter_channel_dependent(items: Any, channels: Any) -> list[dict]:
 
     verified = _verified_channels(channels)
     return [item for item in items if _channel_tags(item) <= verified]
+
+
+# ─── 5. Enjeksiyon basımı (spec §4.3/§4.5 — plan Task 10) ───────────────────
+
+# K-04, spec §4.5 — NORMATİF metin, birebir. "2-3" talimat metninin parçasıdır,
+# eşik/kapı DEĞİLDİR (İlke 9).
+USAGE_INSTRUCTION = (
+    "Bu dağarcıktan içeriğe uyan 2-3 öğeyi seç; listeyi tamamlamaya çalışma; "
+    "ürün veya marka bilgisiyle çelişen kalıbı kullanma; markanın sahip olduğunu "
+    "bilmediğin kanalı veya hizmeti önerme."
+)
+
+BLOCK_HEADER = "SEKTÖR PAKETİ"
+
+# Yüzey → basılacak alanlar, SIRASIYLA. Sıra sabittir: aynı paket iki koşumda
+# aynı baytları üretmezse Katman-1 kapısı anlamını yitirir.
+#
+# Görsel/video dağarcığı (`gorsel_kodlar`, `video_kodlar`) bu yüzeylerde YOK —
+# spec §4.3 onları görsel director ve durağan kare yüzeylerine gönderir (Task
+# 11). Fazla basmak "doğru yüzey" kontrolünü (spec §5.4) delerdi.
+_SURFACE_FIELDS: dict[str, tuple[str, ...]] = {
+    "caption": (
+        "kapsam",
+        "ton_ve_dil",
+        "kanca_kaliplari",
+        "cta_kaliplari",
+        "takvim_temalari",
+        "yasaklar_ve_hassasiyetler",
+    ),
+    "idea": (
+        "kapsam",
+        "ton_ve_dil",
+        "kanca_kaliplari",
+        "cta_kaliplari",
+        "takvim_temalari",
+        "yasaklar_ve_hassasiyetler",
+    ),
+}
+
+_FIELD_LABELS = {
+    "kapsam": "Kapsam",
+    "ton_ve_dil": "Ton ve dil",
+    "kanca_kaliplari": "Kanca kalıpları",
+    "cta_kaliplari": "CTA kalıpları",
+    "takvim_temalari": "Takvim temaları",
+    "yasaklar_ve_hassasiyetler": "Yasaklar ve hassasiyetler",
+}
+
+# `anma` ve `kutlama` türlerinde CTA yerine kutlama-saygı kalıbı geçer
+# (spec §11.3). Karşılaştırma katlanmış biçimde yapılır — paket metni büyük
+# harfle ya da Türkçe harflerle yazılmış olabilir.
+_RESPECT_TYPES = frozenset({"anma", "kutlama"})
+_MEMORIAL_TYPE = "anma"
+
+
+def _strip_channel_tags(text: str) -> str:
+    """`[kanal-bağımlı: X]` işaretini BASILAN metinden çıkarır.
+
+    Etiket paket İÇERİĞİNDE taşınır ve silinmez (spec §3.4) — orası filtrenin
+    girdisidir. Modele giden metinde ise işaretin işi bitmiştir: filtre zaten
+    kararı vermiştir, kalan metin kalıbın kendisidir.
+
+    Tanıma ölçüsü filtreninkiyle AYNI yerden gelir: ayraç parçası tek tek
+    kanonikleştirilip `_CHANNEL_FLAG_RE`'ye sorulur. İkinci bir gramer
+    yazılmadı — yazılsaydı filtre bir yazımı tanıyıp basım tanımayabilirdi.
+
+    **Belgeli sınır:** ayracın kendisi ASCII `[` `]` olmak zorundadır. Tam
+    genişlikli ayraçla yazılmış bir etiketi filtre (kanonikleştirmeden sonra)
+    TANIR ama bu fonksiyon metinden çıkaramaz — çıkarma ham metinde ayraç
+    parçası aramak zorunda, kanonik metindeki konumu ham metne geri
+    eşlenemiyor (katlama 1:1 değil). Sonuç kozmetiktir, emniyet açığı değildir:
+    artık kalan etiket YALNIZ filtreden GEÇMİŞ, yani markada DOĞRULANMIŞ bir
+    kanalın kalıbında bulunabilir. Sınır testle pinlidir.
+    """
+
+    def _drop(match: re.Match) -> str:
+        segment = match.group(0)
+        canonical = _canonical_marker_text(segment).strip()
+        return "" if _CHANNEL_FLAG_RE.fullmatch(canonical) else segment
+
+    stripped = _BRACKET_SEGMENT_RE.sub(_drop, text)
+    # Etiketin bıraktığı boşluk artığı temizlenir; sonuç deterministiktir.
+    return re.sub(r"[ \t]{2,}", " ", stripped).strip()
+
+
+def _render_cta_items(items: Any, channels: Any) -> list[str]:
+    """CTA kalıplarını marka gerçeğine göre eleyip basar.
+
+    Eleme Task 9'un filtresidir — burada ikinci bir koşul YAZILMAZ.
+    `gerekce` basılmaz: o, kalıbın yazarına ait bir gerekçedir, üretim
+    talimatı değil.
+    """
+    lines: list[str] = []
+    for item in filter_channel_dependent(items, channels):
+        if isinstance(item, dict):
+            kalip = _strip_channel_tags(str(item.get("kalip", "")))
+            tur = str(item.get("tur", "")).strip()
+            lines.append(f"- {kalip} (tür: {tur})" if tur else f"- {kalip}")
+        else:
+            lines.append(f"- {_strip_channel_tags(str(item))}")
+    return lines
+
+
+def render_package_block(
+    context: SectorPackageContext, *, surface: str, channels: Any = None
+) -> str:
+    """Paket bloğunu deterministik metne çevirir (spec §4.3).
+
+    Blok kök `SECTOR_GUIDANCE`'ın YERİNE geçer — yan yana basılmaz (spec §4.1).
+    Başında K-04 kullanım talimatı durur: sonda duran bir talimat, listeyi
+    tamamlama refleksi çoktan tetiklendikten sonra gelirdi (spec §4.5).
+
+    `surface` geliştirici sabitidir, veri DEĞİL — tanınmayan yüzey sessizce
+    "hepsini bas"a düşmez, istisna fırlatır. Sessiz düşüş, yanlış yüzeye yanlış
+    dağarcık basmak demek olurdu (spec §5.4 "doğru yüzey" kontrolü).
+    """
+    fields = _SURFACE_FIELDS.get(surface)
+    if fields is None:
+        raise ValueError(
+            f"bilinmeyen enjeksiyon yüzeyi: {surface!r} — tanımlı yüzeyler: "
+            + ", ".join(sorted(_SURFACE_FIELDS))
+        )
+
+    content = context.content
+    parts = [
+        f"\n--- {BLOCK_HEADER} ({context.sub_sector_slug}) ---",
+        USAGE_INSTRUCTION,
+        "",
+    ]
+
+    for name in fields:
+        if name not in content:
+            continue
+        label = _FIELD_LABELS[name]
+        value = content[name]
+        if name == "cta_kaliplari":
+            lines = _render_cta_items(value, channels)
+            if lines:
+                parts.append(f"{label}:")
+                parts.extend(lines)
+        elif isinstance(value, list):
+            parts.append(f"{label}:")
+            parts.extend(f"- {item}" for item in value)
+        else:
+            parts.append(f"{label}: {value}")
+
+    parts.append(f"--- {BLOCK_HEADER} SONU ---")
+    return "\n".join(parts)
+
+
+def render_special_day_lines(
+    context: SectorPackageContext, day_name: str | None, channels: Any = None
+) -> list[str]:
+    """Seçili özel günün paket karşılığını basar; yoksa BOŞ döner + log.
+
+    Sessiz düşme sözleşmesi (spec §11.1) "iz bırakmadan düş" demek DEĞİLDİR:
+    üretim akışı kesilmez ama eşleşmeme GÖZLENEBİLİR olur. Eşleşmeme normal bir
+    durumdur (paket her günü taşımak zorunda değil), o yüzden seviye `info`
+    değil `warning` olmalı mı sorusu şuradan karara bağlandı: pakete atanmış bir
+    markada operatör bir günü eklemeyi unutmuş olabilir ve bu görülmelidir.
+
+    Görsel vurgu burada BASILMAZ — o, görsel yüzeyinin dağarcığıdır (spec §4.3,
+    Task 11). Anahtar eşleşmesi tek normalize modülünden geçer (K-01b).
+
+    Günün CTA'sı da bir CTA yüzeyidir ve AYNI kanal filtresinden geçer. Yazım
+    kapısı bayrağı bu yüzeyde de meşru sayar (`_channel_flag_scopes`); basım
+    yalnız `cta_kaliplari`'nı elerse doğrulanmamış kanal buradan sızardı —
+    kapsam okuma tarafıyla hizalı olmalı, ne eksik ne fazla.
+    """
+    if not day_name:
+        return []
+    ozel_gun = context.content.get("ozel_gun")
+    if not isinstance(ozel_gun, dict):
+        return []
+
+    key = normalize_special_day_key(day_name)
+    entry = ozel_gun.get(key)
+    if not isinstance(entry, dict):
+        logger.warning(
+            "özel gün paket karşılığı YOK, dönem kalıpları basılmıyor "
+            "(package_id=%s sub_sector=%s gün=%r anahtar=%r)",
+            context.package_id,
+            context.sub_sector_slug,
+            day_name,
+            key,
+        )
+        return []
+
+    tur = str(entry.get("tur", "")).strip()
+    lines = [f"--- {BLOCK_HEADER} DÖNEM KALIPLARI ---"]
+    if tur:
+        lines.append(f"Tür (paket): {tur}")
+        # K-03 (spec §11.2, kapalı): çatışmada paket türü üretim davranışında
+        # üstündür; takvim kategorisi günün kimliği için korunur ve basılmaya
+        # devam eder.
+        lines.append(
+            "Çatışma hâlinde bu tür üretim davranışında üstündür; yukarıdaki "
+            "takvim kategorisi günün kimliği için korunur."
+        )
+    for slot, label in (("mesaj_ekseni", "Mesaj ekseni"), ("kanca", "Kanca")):
+        value = entry.get(slot)
+        if isinstance(value, str) and value.strip():
+            lines.append(f"{label}: {value}")
+
+    cta = entry.get("cta")
+    if isinstance(cta, str) and cta.strip():
+        # Tek öğelik de olsa filtre AYNI fonksiyondur; burada ikinci bir kanal
+        # koşulu yazılmaz. Doğrulanmamış kanalın CTA'sı satırıyla birlikte
+        # DÜŞER (muhafazakâr yön, spec §12.2).
+        if filter_channel_dependent([cta], channels):
+            lines.append(f"CTA: {_strip_channel_tags(cta)}")
+
+    folded_tur = _fold_turkish(tur).strip()
+    if folded_tur in _RESPECT_TYPES:
+        lines.append(
+            "Bu dönemde CTA yerine kutlama-saygı kalıbı kullan; satış çağrısı "
+            "kullanma (indirim, kampanya, fiyat vurgusu yasak)."
+        )
+        # K-119 (Eray, 2026-08-23): yasak KULLANICI İSTEĞİNİ geçersiz kılar.
+        # Bu, öncelik hiyerarşisinin (spec §4.6) tek istisnasıdır ve talimatta
+        # AÇIKÇA yazması gerekir — yoksa model kullanıcı isteğini üstün sayar.
+        lines.append(
+            "Bu yasak KULLANICI İSTEĞİNİN ÜSTÜNDEDİR: kullanıcı kampanya, "
+            "indirim veya satış yönlendirmesi istese bile uygulanmaz."
+        )
+    if folded_tur == _MEMORIAL_TYPE:
+        lines.append(
+            "Anma ek kısıtı: yalnız saygı çerçevesinde içerik üret; uygun bir "
+            "saygı çerçevesi kurulamıyorsa içerik önerme."
+        )
+    return lines

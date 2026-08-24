@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from uuid import UUID
 
 import asyncpg
@@ -17,6 +18,7 @@ from app.core.security import (
 )
 from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
 from app.models.schemas import (
+    CaptionGenerationOut,
     OkResponse,
     PostCreate,
     PostGenerate,
@@ -26,6 +28,7 @@ from app.models.schemas import (
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context, get_product_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
+from app.services.sector_packages import resolve_package_context
 from app.services.short_video import (
     DEFAULT_MAX_DURATION,
     PLATFORM_MAX_DURATION,
@@ -35,6 +38,8 @@ from app.services.short_video import (
     run_short_video_stage1,
     run_short_video_stage2,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -186,6 +191,43 @@ class GenerateCaptionRequest(BaseModel):
     response_model=OkResponse,
     dependencies=[Depends(limiter(30, 3600))],  # 30/saat
 )
+async def _write_generation_stamp(db, brand_id, package_context) -> str | None:
+    """K-07 üretim-anı makbuzu; paketsiz üretimde `None` döner.
+
+    İstemciye YALNIZ bu opak kimlik gider; paket kimliği+sürümü sunucuda kalır
+    ve kalıcı-kayıt isteğinde makbuzdan okunur (tüketici uç Task 12).
+
+    Yazım başarısızlığı üretimi DÜŞÜRMEZ: caption zaten üretildi, kredisi
+    harcandı; makbuz yazılamadıysa kaybedilen şey paket ATFIDIR, içerik değil.
+    Sessiz de değildir — başarısızlık log üretir. Ters yön (makbuzsuz bir kimlik
+    döndürmek) istemciye var olmayan bir kayda işaret ettirirdi, o yüzden hata
+    dalında kimlik ÜRETİLMEZ.
+    """
+    if package_context is None:
+        return None
+    try:
+        stamp_id = await db.fetchval(
+            """
+            INSERT INTO social.generation_stamps (brand_id, package_id, package_version)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            """,
+            brand_id,
+            package_context.package_id,
+            package_context.version,
+        )
+    except Exception as exc:
+        logger.warning(
+            "üretim damgası yazılamadı, caption paket atfı olmadan dönüyor "
+            "(brand_id=%s package_id=%s): %s",
+            brand_id,
+            package_context.package_id,
+            exc,
+        )
+        return None
+    return str(stamp_id)
+
+
 async def generate_caption(
     payload: GenerateCaptionRequest,
     user: dict = Depends(get_current_user),
@@ -207,6 +249,7 @@ async def generate_caption(
         raise HTTPException(status_code=404, detail="Brand not found")
 
     brand_kit = _parse_brand_kit(brand["brand_kit"])
+    package_context = await resolve_package_context(db, dict(brand))
 
     template = None
     if payload.template_id:
@@ -262,9 +305,13 @@ async def generate_caption(
         special_day_name=payload.special_day_name,
         special_day_category=payload.special_day_category,
         scene_reference_image_url=payload.scene_reference_image_url,
+        package_context=package_context,
     )
 
-    return OkResponse(data=result)
+    result["generation_id"] = await _write_generation_stamp(
+        db, payload.brand_id, package_context
+    )
+    return OkResponse(data=CaptionGenerationOut(**result).model_dump())
 
 
 @router.post(
