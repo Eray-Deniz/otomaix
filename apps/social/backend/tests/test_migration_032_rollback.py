@@ -418,6 +418,28 @@ def test_rollback_clean_path_full_teardown(scratch_db_migrated):
     assert _scalar(url, "SELECT count(*) FROM social.brands WHERE name = 'T3 Marka'") == "1"
 
 
+def test_rollback_refuses_when_protected_tables_are_absent(scratch_db_migrated):
+    """Korunan tablolar yokken geri alma BAŞTA durur — ikinci koşum reddedilir.
+
+    Olmayan tablo kilitlenemez. Sessizce devam eden bir koşumda, preflight ile
+    `DROP TABLE IF EXISTS` arasında başka biri 032'yi ileri uygulayıp kanıt
+    yazarsa, DROP o yeni tabloyu görür ve kalıcı olarak yok ederdi (Codex
+    checkpoint 3, tur 3 — kritik). Giriş kapısı bu yolu tamamen kapatır.
+    """
+    url = scratch_db_migrated
+
+    first = _apply_rollback(url)
+    assert first.returncode == 0, f"ilk geri alma başarısız:\n{first.stderr}"
+    assert not _table_exists(url, "sector_packages")
+
+    second = _apply_rollback(url)
+    assert second.returncode != 0, (
+        f"korunan tablolar yokken geri alma yine koştu — stdout:\n{second.stdout}"
+    )
+    assert "REDDEDILDI" in second.stderr, second.stderr
+    assert "korunan tablolar eksik" in second.stderr, second.stderr
+
+
 def test_rollback_refuses_to_run_inside_an_enclosing_transaction(scratch_db_migrated):
     """`psql -1` gibi sarmalayıcı çağrı REDDEDİLİR — sahiplik çakışması.
 

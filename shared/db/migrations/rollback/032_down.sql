@@ -32,6 +32,15 @@
 --   `generation_stamps` ve `posts` damgaları ayrıca sayılmaz: ikisi de
 --   `sector_packages`e FK'lıdır, paket tablosu boşsa damga da yoktur.
 --
+--   KORUNAN TABLOLAR VAR OLMAK ZORUNDA. Biri yoksa script BAŞTA durur; "yoksa
+--   atla" davranışı YOKTUR. Gerekçe (Codex checkpoint 3, tur 3 — kritik):
+--   olmayan bir tablo KİLİTLENEMEZ. Tablolar yokken sessizce devam eden bir
+--   koşumda, preflight ile aşağıdaki `DROP TABLE IF EXISTS` arasında başka biri
+--   032'yi ileri uygulayıp kanıt satırı yazarsa, READ COMMITTED altında DROP o
+--   YENİ tabloyu görür ve kalıcı olarak yok ederdi. Girişte reddederek bu yol
+--   tamamen kapanır. Bedeli: geri alma İKİNCİ kez koşturulamaz (ilk koşum zaten
+--   ya tamamen başarılı ya tamamen geri alınmış olur — tek transaction).
+--
 -- SIRA (spec §6.2'nin üçlü sırası (3)-(5) çekirdeğidir; paket-FK gerçeği
 -- (1)-(2)'yi öne zorunlu kılar):
 --   1. posts damga kolonları + bileşik FK
@@ -40,7 +49,9 @@
 --   4. YALNIZ bu işin açtığı alt sektör satırları (kök seed'e dokunulmaz)
 --   5. tetikleyiciler + fonksiyonlar
 --
--- Her adım `IF EXISTS` taşır: yarım kalmış bir geri alma tekrar koşturulabilir.
+-- Adımlar `IF EXISTS` taşır (aynı transaction içinde artık-nesne kalmasın diye);
+-- bu, script'in TEKRAR koşturulabilir olduğu anlamına GELMEZ — yukarıdaki
+-- korunan-tablo kapısı ikinci koşumu reddeder.
 
 \set ON_ERROR_STOP on
 
@@ -82,25 +93,29 @@ DECLARE
     package_rows BIGINT := 0;
     artifact_rows BIGINT := 0;
 BEGIN
+    -- Korunan tablo YOKSA kilitlenemez → devam etmek yasaktır (fail-closed).
+    IF to_regclass('social.sector_packages') IS NULL
+       OR to_regclass('social.sector_research_artifacts') IS NULL THEN
+        RAISE EXCEPTION
+            'migration 032 geri alma REDDEDILDI: korunan tablolar eksik '
+            '(sector_packages var mi=%, sector_research_artifacts var mi=%)',
+            to_regclass('social.sector_packages') IS NOT NULL,
+            to_regclass('social.sector_research_artifacts') IS NOT NULL
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Olmayan tablo kilitlenemez; koruma kurulamaz. 032 tam '
+                         'uygulanmis bir sema uzerinde kosturun. Geri alma '
+                         'ikinci kez kosturulmaz.';
+    END IF;
+
     -- Kilit ÖNCE, sayım SONRA: aradaki pencere kapanır. Kilitler bu
     -- transaction commit/rollback edilene kadar tutulur, yani teardown boyunca.
-    IF to_regclass('social.sector_packages') IS NOT NULL THEN
-        EXECUTE 'LOCK TABLE social.sector_packages IN ACCESS EXCLUSIVE MODE';
-    END IF;
+    -- Sıra SABİT.
+    EXECUTE 'LOCK TABLE social.sector_packages IN ACCESS EXCLUSIVE MODE';
+    EXECUTE 'LOCK TABLE social.sector_research_artifacts IN ACCESS EXCLUSIVE MODE';
 
-    IF to_regclass('social.sector_research_artifacts') IS NOT NULL THEN
-        EXECUTE 'LOCK TABLE social.sector_research_artifacts '
-                'IN ACCESS EXCLUSIVE MODE';
-    END IF;
-
-    IF to_regclass('social.sector_packages') IS NOT NULL THEN
-        EXECUTE 'SELECT count(*) FROM social.sector_packages' INTO package_rows;
-    END IF;
-
-    IF to_regclass('social.sector_research_artifacts') IS NOT NULL THEN
-        EXECUTE 'SELECT count(*) FROM social.sector_research_artifacts'
-            INTO artifact_rows;
-    END IF;
+    EXECUTE 'SELECT count(*) FROM social.sector_packages' INTO package_rows;
+    EXECUTE 'SELECT count(*) FROM social.sector_research_artifacts'
+        INTO artifact_rows;
 
     IF package_rows > 0 OR artifact_rows > 0 THEN
         RAISE EXCEPTION
