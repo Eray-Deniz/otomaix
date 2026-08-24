@@ -48,6 +48,29 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 | K-11, K-12, K-13 | Katman-2 örneklem/eşik, maliyet, tavan | Plan 1'e girmez (pilot/Plan 2 ölçüm kalemleri); hiçbiri kapı yapılmaz. |
 | K-41, K-42, K-23 vb. motor/onay-yüzeyi kararları | Plan 2 alanı — bu planda hiçbir görev bunlara dokunmaz. |
 
+> **[SONRADAN EKLENDİ — 2026-08-24; spec eksik yazıldığı için, plan da eksiği miras aldı]**
+> Yukarıdaki tabloda **K-02 "Bekletilir"** diye işlenmiştir. Bu satır spec'in "açık" kaydına
+> dayanıyordu; spec-input'a dönüldüğünde kaydın eksik taşındığı görüldü
+> (`docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md`, karar kartı satır 2533):
+>
+> - Input K-02 için **A şıkkını ÖNERİR** — *"paket `video_kodlar`'ından sektöre özgü hareket
+>   havuzu; paketsizde mevcut liste aynen kalır"* — gerekçesi *"paketsiz üretimde modele giden
+>   prompt parçaları değişmez ve **ek model çağrısı doğmaz**"*.
+> - Kararın sahibi **teknik sahiptir**; ürün sahibi **yalnız A elenirse** devreye girer.
+> - Çözüm yolu **"spec içinde teknik olarak çözülür"**; *"paketsiz prompt değişmeden havuz
+>   beslenebiliyorsa **(A) seçenek tartışması düşer**"*.
+> - Input K-02'yi ayrıca **"spec'te özellikle çözülmesi gereken teknik konular"** listesinin
+>   2. maddesi olarak sayar (satır 3103).
+>
+> Ayrıca **K-113** ("hareket havuzu boşsa ne olacak" — input satır 2576, K-02'den AYRI
+> seçilebilir) ne spec'e ne bu plana taşınmıştır.
+>
+> **Sonuç:** planın "bekletilir" hükmü yanlış bir zemine dayanıyor — K-02 spec sonrasına
+> devredilecek bir ürün kararı değil, spec içinde kapanacak teknik bir kalemdi. Bu blok
+> yalnız EKSİĞİ KAYDEDER; tablodaki hüküm değiştirilmemiştir ve K-02'nin nasıl kapanacağı
+> ayrı bir karar turunun konusudur. Kapanış, aşağıdaki Task 8 ve Task 11 notlarını da
+> yürürlüğe sokar.
+
 ## Plan'ın bağladığı teknik kararlar (İlke 8: review zinciri doğrular; Eray'a FYI)
 
 1. **K-07 damga temsili = iki kolon + BİLEŞİK FK + OPAK sunucu-kayıtlı üretim-anı taşıma:** `posts.package_id UUID NULL` + `posts.package_version INT NULL`; çift, `(package_id, package_version) REFERENCES social.sector_packages(id, version) MATCH FULL` bileşik FK'sıyla bağlanır (`sector_packages`e `UNIQUE (id, version)` eklenir). MATCH FULL yarım-NULL çifti ve satırla eşleşmeyen sürümü DB düzeyinde reddeder; paketsiz üretimde her ikisi NULL. **Atıf sözleşmesi (güven sınırı dahil):** damga, İÇERİĞİ ÜRETEN çağrının (caption / kısa-video stage-1) çözümlediği paketi taşır. Üretim iki aşamalı olduğundan taşıma İSTEMCİDEN GEÇER ama ham çift ASLA istemciye emanet edilmez — paket yolundaki üretici çağrı `social.generation_stamps` satırı yazar (`id uuid · brand_id · package_id · package_version · created_at · consumed_at timestamptz NULL`; tablo **migration 032'de** kurulur — Task 10 bu tabloya Task 12'den ÖNCE muhtaçtır, sıralama bu yüzden 032) ve yanıtta yalnız OPAK `generation_id` döner (paketsizde null). Kalıcı-kayıt isteği `generation_id`'yi geri getirir; sunucu damgayı **ATOMİK ve TEK-KULLANIMLIK tüketir** — post-yaratma transaction'ı içinde `consumed_at IS NULL` koşullu güncelleme; dönen satırın `brand_id`'si isteğin doğrulanmış markasıyla eşleşmeli — ve kayıtlı çifti AYNEN yazar (yeniden çözümleme YOK). Geçersiz/yabancı/başka-markaya-ait VEYA daha önce TÜKETİLMİŞ (replay) `generation_id` → damga yazılmaz (NULL) + `stamp_invalid` olayı; üretim bloklanmaz — sahte veya yeniden-kullanılmış damga hiçbir koşulda yazılmaz. Kayıt anında aktif paket değişmişse geçerli damga yine yazılır + `stamp_stale_at_persist` olayı. **Damganın iddia sözleşmesi (F17 — Eray kararı 2026-08-23, risk kabulü):** damga "post'un İLK içeriğini bu üretim oturumu üretti" atfıdır (**edited lineage**) — kullanıcı caption'ı kaydetmeden önce düzenleyebildiği için bayt-bayt içerik kanıtı İDDİA EDİLMEZ ve içerik-özeti bağlaması KURULMAZ (meşru düzenlemeyi reddederdi). Kalan boşluk: marka sahibinin kendi KULLANILMAMIŞ makbuzunu kendi başka içeriğine takabilmesi — yalnız o markanın kendi analitiğini yanıltır; solo işletim + 2 marka gerçeğinde KABUL EDİLEN RİSK. Yeniden açılma koşulu: müşteri sayısı / ürünleşme artışı.
@@ -235,6 +258,15 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 - [ ] **Step 4:** Koş: PASS + tam sweep (`tests/prompt_regression/`) yeşil — bu task üretim prompt yoluna DOKUNMAZ, sweep bunu kanıtlar.
 - [ ] **Step 5:** Commit: `feat(packages): access layer — normalize module, content validator, package resolver`
 
+> **[SONRADAN EKLENDİ — 2026-08-24; spec eksik yazıldığı için]** Task 8 uygulanırken
+> doğrulayıcı `video_kodlar`'ın iki alt yapısının her birini **tek bir dolu metin** olarak
+> denetledi (K-02 açık sayıldığı için "opak doğrulama" böyle yorumlandı). Input ise alanı
+> **iki alt LİSTE / havuz** olarak yazar (satır 817 · 1717 · 485 — ayrıntı spec §3.4'e eklenen
+> notta). **Ölçüm (2026-08-24, taze):** `{"hareket": ["a","b","c"], "sahne": ["d","e"]}` bugünkü
+> kapıdan GEÇMİYOR — `video_kodlar['hareket'] metin değil: list`. Yani alternatif taşıyan meşru
+> bir paket bugün yazılamaz. K-02 kapandığında bu kapı liste şeklini kabul edecek biçimde
+> düzeltilmelidir; düzeltme Task 8'in kapsamına geri döner.
+
 ### Task 9: Kanal envanteri — `brand_kit.channels` + deterministik filtre
 
 **Files:**
@@ -298,6 +330,23 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 - [ ] **Step 3:** Uygula (`render_package_block(surface='visual'|'video_scene')` dalları).
 - [ ] **Step 4:** Koş: PASS + TAM sweep YEŞİL.
 - [ ] **Step 5:** Commit: `feat(injection): sector visual/scene language on image director + short-video stills`
+
+> **[SONRADAN EKLENDİ — 2026-08-24; spec eksik yazıldığı için]** Task 11'in
+> *"Hareket ayağı DOKUNULMAZ"* invariantı K-02'nin "bekletilir" hükmünden türetilmişti.
+> Yukarıdaki K-02 notuna göre o hüküm eksik bir zemine dayanıyor. Ek olarak iki şey bu
+> görevi doğrudan etkiler:
+>
+> - **Sahne ayağının kaynağı belirsiz kalmıştı.** Task 11 *"`video_kodlar`'ın SAHNE alt
+>   yapısı"* der ama iki alt yapının hangisinin sahne olduğu K-02'ye bağlı olduğu için
+>   yürütme sırasında seçilemez — yürütme 2026-08-24'te tam bu noktada durdu. Input sahne
+>   yüzeyini kesin yazar (satır 2768): durağan kare istemi paketin **sahne kodlarını** alır,
+>   **iki modda da**; hareket ayrı yüzeydir.
+> - **Hareket havuzunun mekanizması input'ta tarif edilmiştir** (satır 485): *"paket yolunda
+>   sektör havuzundan, mevcut yolda bugünkü sabit listeden"* — değişen kaynaktır, seçici
+>   değil. Paketsiz yolda `_MOTION_PROMPTS` byte-exact korunur (input satır 3103).
+>
+> K-02 kapandığında Task 11 hareket ayağını da kapsayacak biçimde yeniden yazılır; bu not
+> yalnız eksiği kaydeder, görevin mevcut metnini değiştirmez.
 
 ### Task 12: K-07 damga yazımı + gözlemlenebilirlik log çekirdeği
 
