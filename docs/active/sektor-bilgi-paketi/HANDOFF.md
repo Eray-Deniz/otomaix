@@ -1,5 +1,7 @@
 # Handoff
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-24 07:05) — bu anlatı yürütme öncesine aittir; güncel durum TASK.md "Execution State" + git defterinden okunur, çelişkide onlar esastır.
+
 ## Context
 - Task: sektor-bilgi-paketi — **faz: PLAN 1 ONAYLANDI (`plan-approved`, Tur 7 approve);
   sırada commit onayı → `/execute-plan-claude-codex`**

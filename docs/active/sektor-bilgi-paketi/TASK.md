@@ -1,9 +1,10 @@
 ---
 title: Sektör Bilgi Paketi — Runtime Çekirdek Uygulaması
-status: proposed
+status: active
 started: 2026-07-12
 last-touched: 2026-08-24
 blocked-by: null
+source_plan: docs/plans/2026-08-23-sektor-bilgi-paketi.md
 ---
 
 # Goal
@@ -16,9 +17,19 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # References
 
-- Spec: `docs/specs/2026-07-11-sektor-bilgi-paketi.md`
-- Plan: `docs/plans/2026-07-12-sektor-bilgi-paketi.md`
-- Review: `docs/reviews/codex/2026-07-12-sektor-bilgi-paketi-plan.md` (12 tur; approved)
+- Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
+- Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (Plan 1/2 runtime çekirdeği, `plan-approved`)
+- Review: `docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md` (7 tur; approved)
+- Superseded: `docs/specs/2026-07-11-...` + `docs/plans/2026-07-12-...` (2026-08-23 Eray kararı)
+
+# Execution State
+
+- execute_mode: subagent-driven
+- execute_started: 2026-08-24 07:05
+- execute_start_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
+- ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
+- execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
+- execute_branch: feat/sektor-bilgi-paketi
 
 # Current Status
 
