@@ -167,43 +167,41 @@ def structural_errors(content: Any) -> list[str]:
     return errors
 
 
-# Bayrak DİL BİLGİSİ (spec §8.4 kapalı bayrak kümesinin BİÇİMİ).
+# Paket içeriğinin KAPALI BAYRAK KAYDI — tek kalemli.
 #
-# Kapı bir bayrak LİSTESİ tutmaz: spec kümeyi "sekiz bayrak, kapalı" diye bağlar
-# ama sekizini saymaz (sayım denetçi sözleşmesinde yaşar). Liste uydurmak açık
-# bir kararı yürütme katmanında kapatmak olurdu. Bunun yerine BİÇİM bağlanır:
-# `[slug]` ya da `[slug: değer]`. Adını bilmediğimiz bir bayrak meşru geçer,
-# bozuk yazılmış olan geçmez.
+# Liste uydurulmadı, spec'ten TÜRETİLDİ: §8.4 bayrak kümesini "sekiz bayrak,
+# kapalı" diye bağlar; §8.5 bunların YEDİSİNİN sentez sırasında TÜKETİLDİĞİNİ
+# (karara etki edip kaybolduğunu) söyler ve yalnız kanal bayrağı için
+# "etiketiyle taşınır" der; §3.4 aynı hükmü alan tablosunda tekrarlar
+# ("taşınır, silinmez"). Dolayısıyla paket İÇERİĞİNDE geçebilecek bayrak
+# kümesi tektir — bunu yazmak yeni bir karar değil, mevcut hükmün kod karşılığı.
 _BRACKET_SEGMENT_RE = re.compile(r"\[[^\[\]]*\]")
-_FLAG_GRAMMAR_RE = re.compile(r"^\[\s*([a-z]+(?:-[a-z]+)*)\s*(?::\s*([a-z0-9_]+)\s*)?\]$")
-
-# Kanal bayrağının kanonik slug'ı — değeri kapalı kümeye karşı denetlenir.
-CHANNEL_FLAG_SLUG = "kanal-bagimli"
+_CHANNEL_FLAG_RE = re.compile(r"^\[\s*kanal\s*-\s*bagimli\s*:\s*([a-z0-9_]+)\s*\]$")
 
 
 def _check_channel_markers(content: dict, errors: list[str]) -> None:
-    """Pakette geçen HER köşeli parantez kurallı bir bayrak olmak zorundadır.
+    """Pakette geçen HER köşeli ayraç, kanal bayrağının ta kendisi olmalıdır.
 
-    **Neden bu biçim (checkpoint 9, üç tur).** Önceki iki deneme "etiket gibi
+    **Neden bu biçim (checkpoint 9, dört tur).** İlk üç deneme "etiket gibi
     görünen metni yakala" mantığındaydı ve yakınsamadı: tur 1 tipografik tire
-    ve görünmez karakteri kapattı, tur 2 eksik ayıracı kapattı, tur 3 alt çizgi
-    ve uzun ayırıcıyı açtı. Kök sebep, serbest metinden *"bu bir etiket
-    değildir"* i kanıtlamaya çalışmaktı — bu tür bir kapı ya bypass ya
-    yanlış-pozitif üretir, dördüncü bir regex dördüncü turu davet ederdi.
+    ve görünmez karakteri kapattı, tur 2 eksik ayıracı, tur 3 ayırıcı sınıfını,
+    tur 4 yanlış yazılmış bayrak adını açtı. Kök sebep her turda aynıydı:
+    serbest metinden *"bu bir etiket DEĞİLDİR"* i kanıtlamaya çalışmak. Bu tür
+    bir kapı ya bypass ya yanlış-pozitif üretir; beşinci regex beşinci turu
+    davet ederdi.
 
-    Kapanış bu yüzden NEGATİF tahminden POZİTİF sözleşmeye taşındı: bayrak,
-    tanımı gereği köşeli parantezlidir; öyleyse parantez içinde geçen her şey
-    kurallı bayrak dil bilgisine uymak ZORUNDADIR. `[kanal_bağımlı: x]`,
-    `[kanal     bağımlı x]`, `[kanal-----bağımlı: x]`, `[kanal-bağımlı x]`,
-    dengesiz ya da iç içe ayraç — hepsi TEK kuralla düşer, ayrı ayrı
-    yakalanarak değil.
+    Kapanış negatif tahminden KAPSAMAYA taşındı. Bayrak tanımı gereği köşeli
+    ayraçlıdır ve paket içeriğinde geçebilecek TEK bayrak vardır (yukarıdaki
+    türetme). Öyleyse kural tektir: **ayraç içindeki her şey kanal bayrağının
+    kurallı biçimine uymalı, yoksa içerik reddedilir.** Yanlış yazım, birleşik
+    yazım, eksik ayıraç, iç içe ayraç, sentezde tüketilmesi gereken bir bayrağın
+    pakete sızması — hepsi ayrı ayrı yakalanarak değil, TEK kuralla düşer.
 
     **Kapsam sınırı, dürüstçe:** ayraçsız yazılmış bir işaret (`kanal-bağımlı
-    whatsapp_hatti`) YAKALANMAZ ve yakalanması hedeflenmez — parantezsiz metin
+    whatsapp_hatti`) YAKALANMAZ ve yakalanması hedeflenmez — ayraçsız metin
     bayrak konvansiyonunun dışındadır ve orada "işaret miydi" sorusunu sormak
     tam da yakınsamayan tahmin oyunudur. İddia bu yüzden dar: *ayraçlı* her
-    işaret kapalıdır. Sınır `test_unbracketed_marker_is_a_documented_limit...`
-    ile pinlenir, sessizce kaybolamaz.
+    işaret kapalıdır. Sınır kendi testiyle pinlidir, sessizce kaybolamaz.
 
     Yazım kapısı okuma tarafından KASITLI olarak daha katıdır (okuma
     `[kanal - bağımlı: x]` biçimini de etiket sayar). Asimetrinin yönü
@@ -220,25 +218,24 @@ def _check_channel_markers(content: dict, errors: list[str]) -> None:
         segments = _BRACKET_SEGMENT_RE.findall(canonical)
         if canonical.count("[") != len(segments) or canonical.count("]") != len(segments):
             errors.append(
-                f"dengesiz/iç içe köşeli ayraç: {text!r} — bayrak biçimi "
-                "`[slug]` ya da `[slug: değer]` olmalı"
+                f"dengesiz/iç içe köşeli ayraç: {text!r} — paket içeriğinde ayraç "
+                "yalnız kanal bayrağı için kullanılır: `[kanal-bağımlı: <anahtar>]`"
             )
             continue
 
         for segment in segments:
-            match = _FLAG_GRAMMAR_RE.match(segment)
+            match = _CHANNEL_FLAG_RE.match(segment)
             if match is None:
                 errors.append(
-                    f"kurallı bayrak değil: {segment!r} ({text!r}) — biçim "
-                    "`[slug]` ya da `[slug: değer]` olmalı"
+                    f"paket içeriğine giremeyecek bayrak: {segment!r} ({text!r}) — "
+                    "burada geçebilecek TEK bayrak `[kanal-bağımlı: <anahtar>]`; "
+                    "diğer bayraklar sentezde tüketilir (spec §8.5)"
                 )
                 continue
-            slug, value = match.group(1), match.group(2)
-            if slug != CHANNEL_FLAG_SLUG:
-                continue
-            if value is None or value not in CHANNEL_KEYS:
+            key = match.group(1)
+            if key not in CHANNEL_KEYS:
                 errors.append(
-                    f"kanal bayrağında geçersiz anahtar {value!r}: {text!r} — "
+                    f"kanal bayrağında geçersiz anahtar {key!r}: {text!r} — "
                     f"kapalı küme: {', '.join(sorted(CHANNEL_KEYS))}"
                 )
 

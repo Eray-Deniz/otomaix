@@ -762,32 +762,65 @@ def test_malformed_marker_is_rejected_at_write_gate():
     assert not escapes, f"yazım kapısından geçen bozuk etiket: {escapes}"
 
 
-def test_write_gate_accepts_other_closed_set_flags_without_enumerating_them():
-    """Kapı bayrak LİSTESİNİ değil bayrak BİÇİMİNİ bilir.
+def _flag_content(cta_text: str) -> dict:
+    return {
+        "kapsam": "kapsam",
+        "ton_ve_dil": "ton",
+        "gorsel_kodlar": "codes",
+        "cta_kaliplari": [cta(cta_text)],
+        "kanca_kaliplari": ["kanca"],
+        "takvim_temalari": ["tema"],
+        "yasaklar_ve_hassasiyetler": ["yasak"],
+        "video_kodlar": {"hareket": "a", "sahne": "b"},
+        "ozel_gun": {},
+    }
 
-    Spec §8.4 kümeyi "sekiz bayrak, kapalı" diye bağlar ama sekizini burada
-    saymaz — sayım denetçi sözleşmesinde yaşar. Bu yüzden kapı bir liste
-    UYDURMAZ: biçimi (`[slug]` / `[slug: değer]`) zorlar, yalnız kanal
-    bayrağının DEĞERİNİ kapalı kümeye karşı denetler. Böylece adını bilmediğimiz
-    bir bayrak meşru şekilde geçer, bozuk yazılmış olan geçmez.
+
+def test_only_the_channel_flag_may_appear_in_package_content():
+    """Paket içeriğinde geçebilecek TEK bayrak kanal bayrağıdır (spec §8.5).
+
+    Kapalı kayıt UYDURULMADI, spec'ten TÜRETİLDİ: §8.4 kümeyi "sekiz bayrak,
+    kapalı" diye bağlar; §8.5 bunların YEDİSİNİN sentez sırasında TÜKETİLDİĞİNİ
+    (karara etki edip kaybolduğunu) söyler ve yalnız kanal bayrağı için
+    "etiketiyle taşınır" der; §3.4 aynı hükmü alan tablosunda tekrarlar
+    ("taşınır, silinmez"). Dolayısıyla paket içeriğinin geçerli bayrak listesi
+    tek kalemliktir ve bunu yazmak yeni bir karar DEĞİL, mevcut hükmün kod
+    karşılığıdır.
+
+    Bu, yanlış-yazım sınıfını da kapatır: sentezde tüketilmesi gereken bir
+    bayrak pakette görünüyorsa ya sentez sözleşmesi ihlal edilmiştir ya da
+    yazım hatalıdır — ikisi de reddedilmelidir.
     """
     from app.services.sector_packages import structural_errors
 
-    def content_with(cta_text: str) -> dict:
-        return {
-            "kapsam": "kapsam",
-            "ton_ve_dil": "ton",
-            "gorsel_kodlar": "codes",
-            "cta_kaliplari": [cta(cta_text)],
-            "kanca_kaliplari": ["kanca"],
-            "takvim_temalari": ["tema"],
-            "yasaklar_ve_hassasiyetler": ["yasak"],
-            "video_kodlar": {"hareket": "a", "sahne": "b"},
-            "ozel_gun": {},
-        }
+    consumed_upstream = ("[eski-kaynak]", "[kopya-şüphesi]", "[yerel-değil]", "[kaynak-bağımlı]")
+    escapes = [f for f in consumed_upstream if not structural_errors(_flag_content(f"Yaz {f}"))]
 
-    for flag in ("[eski-kaynak]", "[kopya-şüphesi]", "[yerel-değil]", "[kaynak-bağımlı]"):
-        assert structural_errors(content_with(f"Yaz {flag}")) == [], flag
+    assert not escapes, f"sentezde tüketilmesi gereken bayrak pakete girdi: {escapes}"
+
+    # Pozitif kontrol: kanal bayrağı geçer.
+    assert structural_errors(_flag_content("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
+
+
+def test_misspelled_channel_flag_is_rejected():
+    """Kanal bayrağının yanlış yazımı REDDEDİLİR (tur 4 bulgusu).
+
+    Kapalı kayıt tek kalemli olduğu için "yakın ama farklı" slug'ı ayırt etmeye
+    gerek kalmaz: kanal bayrağı DEĞİLSE zaten pakette olamaz. Sınıf, tahminle
+    değil kapsamayla kapanır.
+    """
+    from app.services.sector_packages import structural_errors
+
+    misspelled = (
+        "[kanal-bagimll: whatsapp_hatti]",
+        "[kanal-bagimli-whatsapp-hatti]",
+        "[whatsapp-gerekli: whatsapp_hatti]",
+        "[kanal-baglantili]",
+        "[kanal-bagimli]",  # değer YOK — kanal adı taşımayan kanal bayrağı
+    )
+    escapes = [f for f in misspelled if not structural_errors(_flag_content(f"WhatsApp {f}"))]
+
+    assert not escapes, f"yanlış yazılmış bayrak pakete girdi: {escapes}"
 
 
 def test_unbracketed_marker_is_a_documented_limit_not_a_closure():
@@ -803,19 +836,9 @@ def test_unbracketed_marker_is_a_documented_limit_not_a_closure():
     """
     from app.services.sector_packages import structural_errors
 
-    content = {
-        "kapsam": "kapsam",
-        "ton_ve_dil": "ton",
-        "gorsel_kodlar": "codes",
-        "cta_kaliplari": [cta("Yaz kanal-bağımlı whatsapp_hatti")],
-        "kanca_kaliplari": ["kanca"],
-        "takvim_temalari": ["tema"],
-        "yasaklar_ve_hassasiyetler": ["yasak"],
-        "video_kodlar": {"hareket": "a", "sahne": "b"},
-        "ozel_gun": {},
-    }
-
-    assert structural_errors(content) == [], "sınır kapandıysa iddia güncellenmeli"
+    assert structural_errors(
+        _flag_content("Yaz kanal-bağımlı whatsapp_hatti")
+    ) == [], "sınır kapandıysa iddia güncellenmeli"
 
 
 def test_write_gate_rejection_makes_runtime_fallback_consistent():
