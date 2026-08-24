@@ -21,6 +21,18 @@ _SECTOR_MAP_TTL = 3600  # 1 saat — sektörler neredeyse hiç değişmez
 _CACHE_KEY = "otomaix:social:sector_slug_map_v3"
 
 
+class TaxonomyUnavailableError(RuntimeError):
+    """Kök sektör taksonomisi kullanılamaz durumda — çözümleme YAPILMAZ.
+
+    Kök harita boşsa ya da düşüş kovası (`genel`) yoksa çözümleyici bir sonuç
+    UYDURAMAZ. Eskiden bu durumda `None` dönerdi ve çağıranlar onu "eşleşme yok"
+    sanıyordu: `create_brand` markayı ham kullanıcı metniyle ve NULL `sector_id`
+    ile yazıyor, `update_brand` metni değiştirip ESKİ `sector_id`'yi bırakıyordu
+    — yani bozuk taksonomi sessizce tutarsız veri üretiyordu. Artık yazımdan
+    ÖNCE durulur (Codex checkpoint 4, yüksek bulgu).
+    """
+
+
 def _normalize_slug(text: str | None) -> str:
     """Serbest metin sektör adını slug formatına indirger."""
     if not text:
@@ -37,15 +49,17 @@ def _normalize_slug(text: str | None) -> str:
     return slug or "genel"
 
 
-async def resolve_sector_id(db: asyncpg.Connection, sector_text: str | None) -> UUID | None:
-    """Serbest metin sektör adından sector_id döndür."""
-    resolved = await resolve_sector(db, sector_text)
-    return resolved[0] if resolved else None
+async def resolve_sector_id(db: asyncpg.Connection, sector_text: str | None) -> UUID:
+    """Serbest metin sektör adından sector_id döndür.
+
+    Taksonomi bozuksa `TaxonomyUnavailableError` fırlatır — `None` DÖNMEZ.
+    """
+    return (await resolve_sector(db, sector_text))[0]
 
 
 async def resolve_sector(
     db: asyncpg.Connection, sector_text: str | None
-) -> tuple[UUID, str] | None:
+) -> tuple[UUID, str]:
     """Slug veya serbest metinden (sector_id, display_name) tuple'ı döndür.
 
     brands.py dual-write için: TEXT kolona human-readable display_name yazılır,
@@ -53,6 +67,9 @@ async def resolve_sector(
     `brand['sector']` TEXT okur — Türkçe ad korunur, prompt kalitesi bozulmaz.
 
     - Boşsa veya eşleşme yoksa 'genel' sektörüne düşer
+    - Kök harita boşsa, ya da eşleşme yokken düşüş kovası ('genel') da yoksa
+      `TaxonomyUnavailableError` fırlatır (sessiz `None` YOK — çağıranlar onu
+      "eşleşme yok" sanıp tutarsız yazıyordu)
     - 'teknoloji' (slug) veya 'Teknoloji' (display) → ('Teknoloji', UUID)
     - 'e-ticaret-perakende' → ('E-Ticaret & Perakende', UUID)
     """
@@ -68,6 +85,12 @@ async def resolve_sector(
         cached = {r["slug"]: {"id": r["id"], "display_name": r["display_name"]} for r in rows}
         await set_cached(_CACHE_KEY, cached, _SECTOR_MAP_TTL)
 
+    # Fail-closed: boş haritada hiçbir girdi çözülemez.
+    if not cached:
+        raise TaxonomyUnavailableError(
+            "Kök sektör haritası BOŞ — migration/seed uygulanmamış olabilir."
+        )
+
     slug = _normalize_slug(sector_text)
 
     if slug in cached:
@@ -79,7 +102,14 @@ async def resolve_sector(
         if known_slug != "genel" and known_slug in slug:
             return UUID(entry["id"]), entry["display_name"]
 
-    if "genel" in cached:
-        entry = cached["genel"]
-        return UUID(entry["id"]), entry["display_name"]
-    return None
+    # Buraya gelen girdi hiçbir kök satırla eşleşmedi: düşüş kovası ŞART.
+    # Kapı dar tutulur — taksonomi onarımı sırasında tam eşleşen bir kök satır
+    # hâlâ çözülebilir kalsın diye kontrol sona bırakılır.
+    if "genel" not in cached:
+        raise TaxonomyUnavailableError(
+            f"'{slug}' hiçbir kök sektörle eşleşmedi ve düşüş kovası ('genel') "
+            f"haritada YOK (kayıt sayısı={len(cached)})."
+        )
+
+    entry = cached["genel"]
+    return UUID(entry["id"]), entry["display_name"]

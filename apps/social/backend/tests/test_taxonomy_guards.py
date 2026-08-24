@@ -89,6 +89,36 @@ async def test_resolver_ignores_sub_sector_rows(db):
     assert resolved_id in root_ids
 
 
+async def test_resolver_raises_when_root_taxonomy_is_empty(db):
+    """Kök harita boşken çözümleme YAPILMAZ — sessiz `None` yok.
+
+    Eski davranışta `None` dönüyordu ve çağıranlar onu "eşleşme yok" sanıyordu:
+    `create_brand` markayı NULL `sector_id` ile, `update_brand` ise metni
+    değiştirip ESKİ `sector_id`'yi bırakarak yazıyordu. İstisna, yazımdan ÖNCE,
+    çağrının kendisinde patlar (Codex checkpoint 4, yüksek bulgu).
+    """
+    await db.execute("DELETE FROM social.sectors")
+
+    with pytest.raises(sector_resolver.TaxonomyUnavailableError):
+        await sector_resolver.resolve_sector(db, "teknoloji")
+
+    with pytest.raises(sector_resolver.TaxonomyUnavailableError):
+        await sector_resolver.resolve_sector_id(db, None)
+
+
+async def test_resolver_raises_when_fallback_bucket_is_missing(db):
+    """Düşüş kovası (`genel`) yoksa eşleşmeyen girdi uydurulmaz — durulur."""
+    await db.execute("DELETE FROM social.sectors WHERE slug = 'genel'")
+
+    # Tam eşleşen kök satır hâlâ çözülebilir olmalı — kapı fazla geniş değil.
+    known = await sector_resolver.resolve_sector(db, "teknoloji")
+    assert known is not None
+
+    # Eşleşmeyen girdi için düşülecek kova yok → fail-closed.
+    with pytest.raises(sector_resolver.TaxonomyUnavailableError):
+        await sector_resolver.resolve_sector(db, "boyle-bir-sektor-yok")
+
+
 async def test_sectors_endpoint_excludes_sub_sectors(db):
     """R-02: `GET /sectors` alt satırı listelemez; kök liste aynen görünür."""
     sub_id = await _new_sub_sector(db)
