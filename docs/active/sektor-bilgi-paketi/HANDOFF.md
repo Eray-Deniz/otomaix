@@ -107,6 +107,9 @@
   gerekirse probe + `CSS_CALL_TIMEOUT=1200s` deseni (arka planda).
 - Yeniden açılan bir cluster 3. turda da yeni bir katman açarsa **DUR ve çerçeve teşhisi ver**
   — F7'de tur 3'te Codex'ten açık yakınsama kararı istedim, (A) verdi ve kapandı.
+- **`last_checkpoint_ref` TAM SHA olmalı (40 hane).** Kısa SHA yazınca Codex substratı
+  `git fetch ... -- <sha>` adımında `couldn't find remote ref` ile düşer; çağrı hiç yapılmaz
+  (fail-closed, rc=2 — kota harcanmaz ama checkpoint koşmaz). Bu oturumda bir kez oldu.
 - Push henüz hiç yapılmadı ve completion gate'e kadar yapılmayacak.
 
 ## Notes For Codex
