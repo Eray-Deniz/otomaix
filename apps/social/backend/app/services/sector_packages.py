@@ -494,13 +494,54 @@ CHANNEL_KEYS = frozenset(
     {"whatsapp_hatti", "fiziksel_magaza", "randevu_sistemi", "eticaret_sitesi"}
 )
 
-# Etiket, `_fold_turkish`'ten geçmiş metinde aranır — bu yüzden kalıp katlanmış
-# biçimi (`bagimli`) tarif eder. Boşluk ve tire çevresi serbesttir.
+# Etiket, kanonikleştirilmiş metinde aranır — bu yüzden kalıp katlanmış biçimi
+# (`bagimli`) ve ASCII tireyi tarif eder. Boşluk ve tire çevresi serbesttir.
 #
 # Tanıma GENİŞ, geçirme DAR: her iki gevşeklik de aynı yöne — ATLAMA yönüne —
 # çalışır. Bir yazımı tanımamak ise ters yöndedir (doğrulanmamış kanalın CTA'sı
 # sızar), o yüzden tanıma tarafında cömert olmak fail-closed'dır.
 _CHANNEL_TAG_RE = re.compile(r"\[\s*kanal\s*-\s*bagimli\s*:\s*([^\]]*)\]")
+
+# Unicode kategorisi `Pd` (dash punctuation) DIŞINDA kalan, gözle tire okunan
+# işaretler. `−` matematiksel eksi (Sm), `⁃` madde-işareti tire (Po), `˗`
+# değiştirici eksi (Sk), `➖` ağır eksi (So).
+_DASH_LOOKALIKES = frozenset({"−", "⁃", "˗", "➖"})
+
+
+def _canonical_marker_text(text: str) -> str:
+    """Etiket taraması için metni kanonikleştirir — YALNIZ tarama için.
+
+    `_fold_turkish` büyük/küçük harf ve Türkçe harf sınıfını kapatır ama
+    NOKTALAMAYA dokunmaz. Checkpoint 9'da ölçüldü: dokuz gerçekçi yazımdan
+    ALTISI etiketi görünmez kılıyordu — `kanal‑bağımlı` (U+2011), `kanal–`,
+    `kanal—`, `kanal−` ve `bağ<görünmez>ımlı` biçimleri "etiketsiz" sayılıp
+    doğrulanmamış markaya SIZIYORDU.
+
+    Kapatılan sınıf tek tek karakter değil: **"okunuşu etiket olan ama ASCII'ye
+    eşit olmayan işaret"**. İki bileşeni var ve ikisi de kategori düzeyinde
+    kapatılır (liste düzeyinde değil — yeni bir tire eklenirse yama gerekmesin):
+
+    - `Cf` (format) karakterleri DÜŞÜRÜLÜR: yumuşak tire, sıfır-genişlikli
+      boşluk/birleştirici, BOM, sözcük-birleştirici. Bunlar metne gözle
+      görünmeden girer (kopyala-yapıştır, biçimlendirme) ve baytı değiştirir.
+    - `Pd` (dash) karakterleri ve tire görünümlü diğer işaretler ASCII `-`
+      olur.
+
+    Bu dönüşüm `_fold_turkish`in İÇİNE konmadı: o fonksiyon marka adı yazım
+    kapısının da tabanıdır ve davranışı dondurulmuş bir kapanış matrisiyle
+    pinlenmiştir. Noktalama kanonikleştirmesi orada gereksiz bir davranış
+    değişikliği olurdu; burada ise sözleşmenin ta kendisi.
+    """
+    canonical: list[str] = []
+    for char in _fold_turkish(text):
+        category = unicodedata.category(char)
+        if category == "Cf":
+            continue
+        if category == "Pd" or char in _DASH_LOOKALIKES:
+            canonical.append("-")
+        else:
+            canonical.append(char)
+    return "".join(canonical)
 
 
 def validate_channels(channels: Any) -> list[str]:
@@ -555,13 +596,13 @@ def _channel_tags(item: Any) -> frozenset[str]:
     hangi alanda durduğu brief/denetçi sözleşmesinin işidir; filtre onu
     varsayarsa yanlış alana yazılmış bir etiket sessizce görünmez olurdu.
 
-    Anahtar da katlanmış gelir, yani `WHATSAPP_HATTI` ile `whatsapp_hatti` aynı
-    anahtardır. Kapalı kümeye ait olup olmadığına ÇAĞIRAN bakar — burada
+    Anahtar da kanonikleşmiş gelir, yani `WHATSAPP_HATTI` ile `whatsapp_hatti`
+    aynı anahtardır. Kapalı kümeye ait olup olmadığına ÇAĞIRAN bakar — burada
     "yazılan ne" toplanır, "geçerli mi" değil.
     """
     tags: set[str] = set()
     for text in _walk_strings(item):
-        for match in _CHANNEL_TAG_RE.finditer(_fold_turkish(text)):
+        for match in _CHANNEL_TAG_RE.finditer(_canonical_marker_text(text)):
             tags.add(match.group(1).strip())
     return frozenset(tags)
 

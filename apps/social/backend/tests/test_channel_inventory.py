@@ -491,3 +491,220 @@ def test_filter_signature_takes_channels_optional():
     """Sözleşme imzası: `(items, channels)` — `channels` opsiyonel değil, açık."""
     params = list(inspect.signature(filter_channel_dependent).parameters)
     assert params == ["items", "channels"]
+
+
+# ─── 4. Checkpoint 9 bulguları — kapatılan iki sınıf ────────────────────────
+
+# Etiketi "insan gözüyle aynı" ama baytça farklı yazan karakter sınıfları.
+# Hepsi paket içeriğine GERÇEKÇİ yollarla girer: Word/LLM kopyası tire yerine
+# uzun tire basar, biçimlendirme görünmez karakter bırakır. Sınıfın adı:
+# "okunuşu etiket olan ama ASCII'ye eşit olmayan işaret".
+MARKER_VARIANTS = {
+    "u2010 hyphen": "‐",
+    "u2011 non-breaking hyphen": "‑",
+    "u2012 figure dash": "‒",
+    "u2013 en dash": "–",
+    "u2014 em dash": "—",
+    "u2015 horizontal bar": "―",
+    "u2212 minus sign": "−",
+    "ufe58 small em dash": "﹘",
+    "ufe63 small hyphen": "﹣",
+    "uff0d fullwidth hyphen": "－",
+}
+
+INVISIBLE_VARIANTS = {
+    "u00ad soft hyphen": "­",
+    "u200b zero width space": "​",
+    "u200c zero width non-joiner": "‌",
+    "u200d zero width joiner": "‍",
+    "ufeff bom": "﻿",
+    "u2060 word joiner": "⁠",
+}
+
+SPACE_VARIANTS = {
+    "u00a0 nbsp": " ",
+    "u2009 thin space": " ",
+    "u202f narrow nbsp": " ",
+}
+
+
+@pytest.mark.parametrize("channels", [None, {"whatsapp_hatti": True}])
+def test_marker_variant_matrix_is_recognized_as_tag(channels):
+    """Etiketin yazım SINIFI kapanır — tek tek varyant yamalanmaz.
+
+    Checkpoint 9 bulgusu: kalıp yalnız ASCII `-` kabul ediyordu; U+2011/2013/
+    2014/2212 ve görünmez karakterler etiketi GÖRÜNMEZ kılıyordu, yani kalıp
+    "etiketsiz" sayılıp doğrulanmamış markaya SIZIYORDU (ölçüldü: 9 sondanın
+    6'sı sızdı). Tanınmayan bir yazım = sızıntı, o yüzden tanıma tarafı sınıfın
+    tamamını kapsamalıdır.
+    """
+    expected = [] if channels is None else "passthrough"
+    escapes: list[str] = []
+
+    for name, ch in MARKER_VARIANTS.items():
+        item = cta(f"Yaz [kanal{ch}bağımlı: whatsapp_hatti]")
+        result = filter_channel_dependent([item], channels)
+        if result != ([] if expected == [] else [item]):
+            escapes.append(f"tire/{name}")
+
+    for name, ch in INVISIBLE_VARIANTS.items():
+        item = cta(f"Yaz [kanal-bağ{ch}ımlı: whatsapp_hatti]")
+        result = filter_channel_dependent([item], channels)
+        if result != ([] if expected == [] else [item]):
+            escapes.append(f"görünmez/{name}")
+
+    for name, ch in SPACE_VARIANTS.items():
+        item = cta(f"Yaz [kanal-bağımlı:{ch}whatsapp_hatti]")
+        result = filter_channel_dependent([item], channels)
+        if result != ([] if expected == [] else [item]):
+            escapes.append(f"boşluk/{name}")
+
+    assert not escapes, f"etiket olarak tanınmayan yazım: {escapes}"
+
+
+def test_invisible_characters_inside_channel_key_are_canonicalized():
+    """Anahtarın İÇİNDEKİ görünmez karakter de kanonikleşir."""
+    item = cta("Yaz [kanal-bağımlı: whats​app_hatti]")
+
+    assert filter_channel_dependent([item], None) == []
+    assert filter_channel_dependent([item], {"whatsapp_hatti": True}) == [item]
+
+
+def test_marker_canonicalization_does_not_invent_tags():
+    """Kanonikleştirme yanlış-pozitif üretmez — yakın ama etiket olmayan metin."""
+    innocuous = [
+        cta("kanal—bağımsız bir kurgu"),
+        cta("[kanal–bagimsiz: whatsapp_hatti]"),
+        cta("kanal‑bağımlı: whatsapp_hatti"),  # köşeli parantez YOK
+    ]
+
+    assert filter_channel_dependent(innocuous, None) == innocuous
+
+
+async def test_concurrent_channel_writes_do_not_lose_keys(test_db_setup, monkeypatch):
+    """Eşzamanlı kit yazımı kanal kaybettirmez (checkpoint 9 high bulgusu).
+
+    Ölçülmüş kusur: handler `SELECT brand_kit` → Python'da birleştir →
+    `UPDATE brand_kit = <tam belge>` yapıyordu. Dört eşzamanlı PATCH aynı tabanı
+    okuyup birbirini eziyordu; ölçüm: 4 anahtardan 3'ü KAYBOLDU. Kayıp sessizdi
+    ve filtre muhafazakâr olduğu için sonucu "CTA'lar sebepsiz kayboldu" olurdu.
+
+    Bu test kendi bağlantılarını açar (oturum fixture'ı tek bağlantıyı bir
+    transaction'da tutar; eşzamanlılık ancak ayrı bağlantılarla ölçülür) ve
+    ürettiği satırları `finally`de siler — `otomaix_test` kirlenmez.
+    """
+    import asyncio
+
+    import asyncpg
+
+    from .conftest import _require_test_database
+
+    url = _require_test_database(test_db_setup)
+
+    async def _noop(_pattern):
+        return None
+
+    monkeypatch.setattr(brands_router, "invalidate_pattern", _noop)
+
+    setup = await asyncpg.connect(url)
+    await _init_connection(setup)
+    account_id = workspace_id = brand_id = None
+    workers: list = []
+    try:
+        account_id = await setup.fetchval(
+            "INSERT INTO social.accounts (email, name, plan_id) "
+            "VALUES ($1, 'Yarış Sahibi', 'pro') RETURNING id",
+            f"yaris-{uuid.uuid4()}@example.test",
+        )
+        workspace_id = await setup.fetchval(
+            "INSERT INTO social.workspaces (account_id, name) VALUES ($1, 'Yarış') RETURNING id",
+            account_id,
+        )
+        await setup.execute(
+            "INSERT INTO social.workspace_members (workspace_id, account_id) VALUES ($1, $2)",
+            workspace_id,
+            account_id,
+        )
+        brand_id = await setup.fetchval(
+            "INSERT INTO social.brands (workspace_id, name, brand_kit) "
+            "VALUES ($1, 'Yarış Markası', $2) RETURNING id",
+            workspace_id,
+            {"tonality": "professional"},
+        )
+
+        keys = sorted(CHANNEL_KEYS)
+        for _ in keys:
+            worker = await asyncpg.connect(url)
+            await _init_connection(worker)
+            workers.append(worker)
+
+        await asyncio.gather(
+            *[
+                brands_router.update_brand_kit(
+                    brand_id=brand_id,
+                    payload=BrandKitUpdate(channels={key: True}),
+                    user={"sub": str(account_id)},
+                    db=worker,
+                )
+                for key, worker in zip(keys, workers)
+            ]
+        )
+
+        stored = parse_brand_kit(
+            await setup.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+        )
+        assert sorted(stored.get("channels", {})) == keys, "eşzamanlı yazımda kanal KAYBOLDU"
+        assert stored["tonality"] == "professional"
+    finally:
+        for worker in workers:
+            await worker.close()
+        if brand_id:
+            await setup.execute("DELETE FROM social.brands WHERE id = $1", brand_id)
+        if workspace_id:
+            await setup.execute(
+                "DELETE FROM social.workspace_members WHERE workspace_id = $1", workspace_id
+            )
+            await setup.execute("DELETE FROM social.workspaces WHERE id = $1", workspace_id)
+        if account_id:
+            await setup.execute("DELETE FROM social.accounts WHERE id = $1", account_id)
+        await setup.close()
+
+
+def test_no_writer_reads_brand_kit_to_write_it_back():
+    """Hiçbir yazıcı `brand_kit`i okuyup geri YAZMAZ (sınıf kapanışı).
+
+    Varyant değil sınıf: `update_brand_kit`i atomik yapmak yetmez —
+    `avatar.py` de aynı okundu-değiştir-geri-yaz desenini kullanıyor ve
+    kanal envanterini SİLEBİLİR (checkpoint 9 bulgusunda adıyla anıldı).
+    Tarama kaynağın kendisini gezer: yarın üçüncü bir yazıcı aynı deseni
+    getirirse test kırmızıya döner.
+    """
+    offenders = []
+    for path in (BACKEND_ROOT / "app").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                continue
+            # Docstring'ler (ve başıboş metin ifadeleri) HARİÇ: tarama KOŞAN
+            # SQL'e bakar, anlatıya değil. Aksi hâlde "eskiden SELECT edip
+            # UPDATE ediyordu" diye yazan bir docstring kendi düzeltmesini
+            # ihlal gibi gösterirdi (ölçüldü — bu testin ilk hâli tam olarak
+            # buna takıldı).
+            prose = {
+                id(stmt.value)
+                for stmt in ast.walk(node)
+                if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
+            }
+            sql = " ".join(
+                inner.value
+                for inner in ast.walk(node)
+                if isinstance(inner, ast.Constant)
+                and isinstance(inner.value, str)
+                and id(inner) not in prose
+            )
+            writes_kit = "UPDATE social.brands" in sql and "brand_kit" in sql
+            reads_kit = "SELECT brand_kit" in sql
+            if writes_kit and reads_kit:
+                offenders.append(f"{path.relative_to(BACKEND_ROOT)}::{node.name}")
+
+    assert not offenders, f"okundu-değiştir-geri-yaz deseni: {offenders}"

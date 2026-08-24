@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from app.core.cache import get_cached, invalidate_pattern, set_cached
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, assert_workspace_owned, get_current_user
-from app.core.utils import parse_brand_kit
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
 from app.services.sector_packages import validate_channels
@@ -174,35 +173,62 @@ async def update_brand_kit(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Update the brand_kit JSONB field for a brand."""
-    await assert_brand_owned(db, user, brand_id)
-    row = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
+    """Update the brand_kit JSONB field for a brand.
 
-    # Merge incoming fields into existing brand_kit
-    existing = parse_brand_kit(row["brand_kit"])
+    Birleştirme SUNUCU TARAFINDA, TEK ifadede yapılır — okundu-değiştir-geri-yaz
+    DEĞİL. Eski biçim `SELECT brand_kit` → Python'da birleştir →
+    `UPDATE brand_kit = <tam belge>` idi ve kayıp-güncelleme üretiyordu: dört
+    eşzamanlı PATCH ölçüldüğünde dört anahtardan ÜÇÜ kayboldu (checkpoint 9).
+    Kayıp sessizdi; filtre muhafazakâr olduğu için sonucu "CTA'lar sebepsiz
+    kayboldu" olurdu.
+
+    `channels` ANAHTAR BAZINDA birleşir (spec §12.2 "deep-merge"), kitin geri
+    kalanı üst düzeyde birleşir (bugünkü davranış). Kanalın ayrıcalığı tek
+    yönlüdür: düşen bir kanal anahtarı sessiz davranış değişikliğidir.
+
+    `jsonb_typeof` kapıları, kolonun NULL ya da nesne-olmayan bir JSON değeri
+    taşıdığı bozuk satırlarda `||` operatörünün patlamasını önler.
+    """
+    await assert_brand_owned(db, user, brand_id)
     updates = payload.model_dump(exclude_none=True)
     _assert_valid_channels(updates)
-    merged = {**existing, **updates}
+    channels = updates.pop("channels", None)
 
-    # `channels` ANAHTAR BAZINDA birleşir (spec §12.2 "deep-merge"), oysa
-    # brand_kit'in geri kalanı bugünkü gibi bütün olarak değişir. Sebep tek
-    # yönlü: filtre muhafazakârdır, yani düşen bir kanal anahtarı CTA'ların
-    # SESSİZCE kaybolması demektir. Tek anahtarlık bir güncelleme markanın
-    # doğrulanmış öbür kanallarını silmemeli.
-    if "channels" in updates:
-        previous = existing.get("channels")
-        merged["channels"] = {
-            **(previous if isinstance(previous, dict) else {}),
-            **updates["channels"],
-        }
+    if channels is None:
+        updated = await db.fetchrow(
+            """
+            UPDATE social.brands
+            SET brand_kit = CASE WHEN jsonb_typeof(brand_kit) = 'object'
+                                 THEN brand_kit ELSE '{}'::jsonb END || $2,
+                updated_at = now()
+            WHERE id = $1
+            RETURNING *
+            """,
+            brand_id,
+            updates,
+        )
+    else:
+        updated = await db.fetchrow(
+            """
+            UPDATE social.brands
+            SET brand_kit = (CASE WHEN jsonb_typeof(brand_kit) = 'object'
+                                  THEN brand_kit ELSE '{}'::jsonb END || $2)
+                            || jsonb_build_object(
+                                   'channels',
+                                   CASE WHEN jsonb_typeof(brand_kit -> 'channels') = 'object'
+                                        THEN brand_kit -> 'channels' ELSE '{}'::jsonb END
+                                   || $3),
+                updated_at = now()
+            WHERE id = $1
+            RETURNING *
+            """,
+            brand_id,
+            updates,
+            channels,
+        )
 
-    updated = await db.fetchrow(
-        "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1 RETURNING *",
-        brand_id,
-        merged,
-    )
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
     await invalidate_pattern(f"otomaix:social:brands:{updated['workspace_id']}")
     return OkResponse(data=dict(updated))
 

@@ -15,7 +15,6 @@ import asyncpg
 import httpx
 
 from app.core.config import settings
-from app.core.utils import parse_brand_kit
 
 HEYGEN_BASE = "https://api.heygen.com"
 
@@ -100,6 +99,30 @@ async def list_stock_avatars() -> list[dict]:
 
 # ─── Fotoğraftan avatar oluşturma ───────────────────────────────────────────
 
+async def _merge_brand_kit(db: asyncpg.Connection, brand_id: UUID, patch: dict) -> None:
+    """`brand_kit`e üst düzey alan(lar) ekler — TEK atomik ifadede.
+
+    Kural (checkpoint 9): `brand_kit`i okuyup geri yazan hiçbir yazıcı kalmaz.
+    Okundu-değiştir-geri-yaz deseni eşzamanlı yazımlarda kayıp-güncelleme
+    üretiyordu (ölçüldü: dört eşzamanlı yazımın üçü kayboldu) ve bu yol marka
+    kanal envanterini sessizce silebiliyordu.
+
+    `jsonb_typeof` kapısı, kolon NULL ya da nesne-olmayan bir JSON taşıdığında
+    `||` operatörünün patlamasını önler.
+    """
+    await db.execute(
+        """
+        UPDATE social.brands
+        SET brand_kit = CASE WHEN jsonb_typeof(brand_kit) = 'object'
+                             THEN brand_kit ELSE '{}'::jsonb END || $2,
+            updated_at = now()
+        WHERE id = $1
+        """,
+        brand_id,
+        patch,
+    )
+
+
 async def create_avatar_from_photo(
     photo_url: str,
     name: str,
@@ -126,21 +149,21 @@ async def create_avatar_from_photo(
         avatar_id = data.get("photo_avatar_id") or data.get("avatar_id", "")
         preview_url = data.get("image_url", photo_url)
 
-    # brand_kit.avatar alanını güncelle
-    row = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
-    if row:
-        existing_kit = parse_brand_kit(row["brand_kit"])
-        existing_kit["avatar"] = {
-            "type": "custom",
-            "avatar_id": avatar_id,
-            "preview_url": preview_url,
-            "name": name,
-        }
-        await db.execute(
-            "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1",
-            brand_id,
-            existing_kit,
-        )
+    # brand_kit.avatar alanını güncelle — SUNUCU TARAFLI atomik birleştirme.
+    # Okundu-değiştir-geri-yaz olsaydı eşzamanlı bir kit yazımı (ör. kanal
+    # envanteri) sessizce silinirdi; checkpoint 9 bu yolu adıyla işaretledi.
+    await _merge_brand_kit(
+        db,
+        brand_id,
+        {
+            "avatar": {
+                "type": "custom",
+                "avatar_id": avatar_id,
+                "preview_url": preview_url,
+                "name": name,
+            }
+        },
+    )
 
     return {
         "avatar_id": avatar_id,
@@ -157,21 +180,15 @@ async def set_stock_avatar(
     brand_id: UUID,
     db: asyncpg.Connection,
 ) -> dict:
-    """Stok avatar seç ve brand_kit'e kaydet."""
-    row = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
-    existing_kit = parse_brand_kit(row["brand_kit"]) if row else {}
-    existing_kit["avatar"] = {
+    """Stok avatar seç ve brand_kit'e kaydet (atomik birleştirme)."""
+    avatar = {
         "type": "stock",
         "avatar_id": avatar_id,
         "preview_url": preview_url,
         "name": avatar_name,
     }
-    await db.execute(
-        "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1",
-        brand_id,
-        existing_kit,
-    )
-    return existing_kit["avatar"]
+    await _merge_brand_kit(db, brand_id, {"avatar": avatar})
+    return avatar
 
 
 # ─── UGC video üretimi ──────────────────────────────────────────────────────
