@@ -36,14 +36,31 @@ def brand_kit_merge_sql(kit_param: int, channels_param: int | None = None) -> st
     yazılabilir. PATCH semantiği zaten kısmi güncellemedir; silme gerekirse
     ayrı ve açık bir uç ister.
     """
-    base = (
-        "CASE WHEN jsonb_typeof(brand_kit) = 'object' "
-        f"THEN brand_kit ELSE '{{}}'::jsonb END || ${kit_param}"
+    # Kolonun GERÇEK nesne hâli. `object` doğrudan; `string` ise ÇİFT KODLANMIŞ
+    # bir nesne olabilir (bu projede yaşanmış bir kaza — `parse_brand_kit` tam
+    # bu yüzden JSON dizesi dönüşünü ayrıca ele alır). Çözülmüş biçim geçerli
+    # bir nesneyse birleştirmeye O girer.
+    #
+    # Bu dal olmasaydı — ve ilk yazımda yoktu — çift kodlu bir satırda tek
+    # alanlık güncelleme mevcut TÜM kit alanlarını sessizce silerdi (ölçüldü).
+    # Yani eşzamanlılık sınıfı kapatılırken yeni bir veri kaybı sınıfı açılmıştı.
+    #
+    # Geriye kalan (sayı/dizi/çözülemeyen metin) hiçbir kod yolunun ürettiği bir
+    # değer değildir; boş sayılır ve bu bilinçli bir sadeleştirmedir.
+    kit = (
+        "CASE WHEN jsonb_typeof(brand_kit) = 'object' THEN brand_kit "
+        "WHEN jsonb_typeof(brand_kit) = 'string' "
+        "AND (brand_kit #>> '{}') IS JSON OBJECT THEN (brand_kit #>> '{}')::jsonb "
+        "ELSE '{}'::jsonb END"
     )
+    base = f"({kit}) || ${kit_param}"
     if channels_param is None:
         return base
+    previous_channels = (
+        f"CASE WHEN jsonb_typeof(({kit}) -> 'channels') = 'object' "
+        f"THEN ({kit}) -> 'channels' ELSE '{{}}'::jsonb END"
+    )
     return (
         f"({base}) || jsonb_build_object('channels', "
-        "CASE WHEN jsonb_typeof(brand_kit -> 'channels') = 'object' "
-        f"THEN brand_kit -> 'channels' ELSE '{{}}'::jsonb END || ${channels_param})"
+        f"{previous_channels} || ${channels_param})"
     )

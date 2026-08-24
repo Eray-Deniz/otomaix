@@ -179,6 +179,29 @@ _BRACKET_SEGMENT_RE = re.compile(r"\[[^\[\]]*\]")
 _CHANNEL_FLAG_RE = re.compile(r"^\[\s*kanal\s*-\s*bagimli\s*:\s*([a-z0-9_]+)\s*\]$")
 
 
+def _channel_flag_scopes(content: dict) -> list:
+    """Bayrak kuralının uygulandığı YÜZEYLER — içeriğin tamamı DEĞİL.
+
+    Kural önce tüm içeriğe uygulanmıştı ve aşırıydı: görsel yönergedeki
+    `[close-up]` ya da kapsam metnindeki `[bkz. 3]` gibi zararsız bir notasyon
+    yapısal hata sayılıyor, çalışma zamanı da paketin TAMAMINI devre dışı
+    bırakıyordu. Spec bayrak sözlüğünü kapatır ama paket düz yazısındaki her
+    ayracı bayrağa AYIRMAZ.
+
+    Kapsam artık okuma tarafıyla hizalı: çalışma zamanı filtresi CTA öğesinin
+    TÜM metinlerini tarar, o yüzden yazım kapısı da tam o birimi kapsar — ne
+    eksik (aksi hâlde okumanın gördüğü bozuk bayrak yazımda denetlenmezdi) ne
+    fazla. Özel gün girdisinin CTA'sı da bir CTA yüzeyidir, o da dâhildir.
+    """
+    scopes: list = [content.get("cta_kaliplari")]
+    ozel_gun = content.get("ozel_gun")
+    if isinstance(ozel_gun, dict):
+        for entry in ozel_gun.values():
+            if isinstance(entry, dict) and "cta" in entry:
+                scopes.append(entry["cta"])
+    return scopes
+
+
 def _check_channel_markers(content: dict, errors: list[str]) -> None:
     """Pakette geçen HER köşeli ayraç, kanal bayrağının ta kendisi olmalıdır.
 
@@ -210,7 +233,7 @@ def _check_channel_markers(content: dict, errors: list[str]) -> None:
     Kapı `structural_errors` içinden koşar, yani çalışma zamanı da aynı ölçüyü
     uygular: bozuk bayraklı paket K-15(a) gereği TÜM yoluyla paketsiz yola düşer.
     """
-    for text in _walk_strings(content):
+    for text in _walk_strings(_channel_flag_scopes(content)):
         canonical = _canonical_marker_text(text)
         if "[" not in canonical and "]" not in canonical:
             continue

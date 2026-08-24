@@ -944,3 +944,128 @@ def test_kit_merge_sql_has_a_single_implementation():
             users.append(path.name)
 
     assert sorted(users) == ["avatar.py", "brands.py"]
+
+
+# ─── 6. Tur 5 — düzeltmelerin kendi yan etkileri ───────────────────────────
+
+
+async def test_merge_preserves_double_encoded_brand_kit(kit_db):
+    """Çift kodlanmış kit satırı birleştirmede VERİ KAYBETMEZ (tur 5, high).
+
+    Bu proje daha önce çift kodlama yaşadı — `parse_brand_kit` tam da bu yüzden
+    JSON *dizesi* dönüşünü ayrıca ele alıyor. Birleştirmeyi sunucuya taşırken o
+    ele alışı düşürmüştüm: nesne olmayan her değer boş sayılıyordu. Ölçüldü:
+    çift kodlu bir satırda tek alanlık güncelleme, mevcut TÜM kit alanlarını
+    geri dönülemez biçimde siliyordu.
+
+    Yani eşzamanlılık sınıfını kapatırken yeni bir sessiz veri kaybı sınıfı
+    açmışım. Düzeltmenin kendi yan etkisini ölçmek, düzeltmenin parçasıdır.
+    """
+    import json
+
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+    await kit_db.execute(
+        "UPDATE social.brands SET brand_kit = to_jsonb($2::text) WHERE id = $1",
+        brand_id,
+        json.dumps({"tonality": "professional", "colors": ["#0A84FF"], "voiceover": "v1"}),
+    )
+
+    await brands_router.update_brand_kit(
+        brand_id=brand_id,
+        payload=BrandKitUpdate(channels={"whatsapp_hatti": True}),
+        user=user,
+        db=kit_db,
+    )
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert stored["tonality"] == "professional", "çift kodlu satırda kit alanları SİLİNDİ"
+    assert stored["colors"] == ["#0A84FF"]
+    assert stored["voiceover"] == "v1"
+    assert stored["channels"] == {"whatsapp_hatti": True}
+
+
+async def test_merge_preserves_channels_inside_double_encoded_kit(kit_db):
+    """Çift kodlu satırda kanal envanteri de anahtar bazında korunur."""
+    import json
+
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+    await kit_db.execute(
+        "UPDATE social.brands SET brand_kit = to_jsonb($2::text) WHERE id = $1",
+        brand_id,
+        json.dumps({"channels": {"fiziksel_magaza": True}}),
+    )
+
+    await brands_router.update_brand_kit(
+        brand_id=brand_id,
+        payload=BrandKitUpdate(channels={"whatsapp_hatti": True}),
+        user=user,
+        db=kit_db,
+    )
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert stored["channels"] == {"fiziksel_magaza": True, "whatsapp_hatti": True}
+
+
+def test_ordinary_brackets_are_free_outside_cta_patterns():
+    """Sıradan köşeli parantez paketi geçersiz KILMAZ (tur 5, medium).
+
+    Ayraç kuralını içeriğin TAMAMINA uygulamıştım. Sonuç aşırıydı: görsel
+    yönerge alanındaki `[yakın plan]` ya da kapsam metnindeki `[bkz. 3]` gibi
+    zararsız bir notasyon yapısal hata sayılıyor, çalışma zamanı da paketin
+    TAMAMINI devre dışı bırakıyordu (K-15(a) tüm-yol düşüşü). Spec bayrak
+    sözlüğünü kapatıyor ama paket düz yazısındaki her ayracı bayrağa
+    ayırmıyor.
+
+    Kural artık bayrağın yaşadığı yere sınırlı: CTA kalıpları (ve özel gün
+    CTA'sı). Orası okuma tarafının taradığı birimin ta kendisi — yazım kapısı
+    okumanın gördüğü her metni kapsar, fazlasını değil.
+    """
+    from app.services.sector_packages import structural_errors
+
+    content = {
+        "kapsam": "Kuyumculuk [bkz. kaynak 3] alt sektörü",
+        "ton_ve_dil": "Güven veren [resmî] dil",
+        "gorsel_kodlar": "warm gold tones, [close-up] macro shot",
+        "cta_kaliplari": [cta("Yorumlara yaz")],
+        "kanca_kaliplari": ["Yeni sezon [ilkbahar] kancası"],
+        "takvim_temalari": ["Bayram [dini]"],
+        "yasaklar_ve_hassasiyetler": ["Fiyat vaadi yok [mevzuat 6502]"],
+        "video_kodlar": {"hareket": "slow pan", "sahne": "[wide] establishing"},
+        "ozel_gun": {},
+    }
+
+    assert structural_errors(content) == []
+
+
+def test_brackets_inside_cta_patterns_must_be_flags():
+    """CTA kalıbının içinde ayraç yalnız bayrak demektir — kural orada katı."""
+    from app.services.sector_packages import structural_errors
+
+    assert structural_errors(_flag_content("Yaz [yakın plan]")) != []
+    assert structural_errors(_flag_content("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
+
+
+def test_special_day_cta_brackets_must_be_flags():
+    """Özel gün CTA'sı da bayrak taşıyabilen bir yüzeydir — aynı kural geçerli."""
+    from app.services.sector_packages import structural_errors
+
+    def with_special_day(cta_text: str) -> dict:
+        content = _flag_content("Yorumlara yaz")
+        content["ozel_gun"] = {
+            "anneler-gunu": {
+                "tur": "kutlama",
+                "mesaj_ekseni": "eksen",
+                "kanca": "kanca",
+                "cta": cta_text,
+                "gorsel_vurgu": "vurgu",
+            }
+        }
+        return content
+
+    assert structural_errors(with_special_day("Yaz [kanal-bagimll: whatsapp_hatti]")) != []
+    assert structural_errors(with_special_day("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
+    assert structural_errors(with_special_day("Yaz")) == []
