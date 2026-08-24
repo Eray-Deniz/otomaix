@@ -496,6 +496,13 @@ VİDEO   durağan kare: İKİ modda da (metinden-görsele + ürün referanslı) 
 SON     post kaydı paket kimliği+sürümüne bağlanır (K-07)
 ```
 
+> **[SONRADAN EKLENDİ — 2026-08-24; K-02 kapanışı]** Yukarıdaki `VİDEO` satırının "hareket:
+> K-02" ucu artık belirlidir: **hareket havuzu paketin `video_kodlar.hareket` listesinden
+> gelir; seçimi caption aşamasındaki mevcut model çağrısı yapar; sunucu seçimi havuz
+> üyeliğine karşı doğrular; havuz boşsa bugünkü sabit listeye düşülür (K-113 = A).**
+> Paketsiz yolda bu satırın tamamı devre dışıdır ve bugünkü davranış byte-exact korunur.
+> Ayrıntı §11.5 karar bloğunda.
+
 ## 4.4 Özel gün anahtar sözleşmesi (K-01b — burada bağlanır; teknik sınıf)
 
 - **Doğruluk kaynağı sistem takvimidir:** `social.public_holidays` (taze ölçüm
@@ -1168,6 +1175,43 @@ KULLANILMAZ. Paketsiz üretimde mevcut havuz byte-exact korunur (Katman-1 çekir
 > **Spec içinde teknik olarak çözülür** — geri düşüş yolu tanımıdır."*
 > Yukarıdaki paragrafın "(a) seçilirse boş-havuz fallback'i ... ayrıca bağlanır" cümlesi
 > bu kalemi ima ediyordu ama **K-ID'siz** taşımıştı; kimliği burada geri konur.
+
+> **[KARAR KAPANDI — 2026-08-24, Eray onayı] K-02 = A (seçici modelde) · K-113 = A.**
+> Yukarıdaki "açık, üç seçenek" başlığı tarihsel kayıt olarak DURUR; yürürlükteki hüküm
+> budur.
+>
+> **K-02 = A.** Hareket dili paketin `video_kodlar.hareket` havuzundan gelir ve sektöre
+> özeldir. Paket yoluna girmeyen üretimde bugünkü `_MOTION_PROMPTS` listesi ve bugünkü
+> seçim yolu **byte-exact aynen** korunur. Havuzlar birlikte kullanılmaz.
+>
+> **Seçimi model yapar — ama AYRI ÇAĞRI AÇILMAZ.** Ürün gerekçesi (Eray, 2026-08-24):
+> içeriğe uygun hareket seçimi ("mücevher yakın çekimiyse yavaş yörünge") kodda kural
+> yazarak çözülemez; kombinasyon çarpımı büyür ve bu, paketin ortadan kaldırmak için var
+> olduğu prompt cerrahisine geri dönmektir (§1.2 iş değeri hükmü). **Ölçüm (2026-08-24,
+> taze):** kısa video ucu script'siz istek KABUL ETMEZ — `posts.py` birebir *"Script boş —
+> önce /posts/generate-caption ile script üretin"* hatası döner. Yani video akışında caption
+> model çağrısı zaten ZORUNLU olarak önce koşar ve video tipinde JSON döner. Hareket seçimi
+> o çağrının çıktısına bir alan olarak biner. Dolayısıyla input'un A gerekçesi ("ek model
+> çağrısı doğmaz") ve (b)'ye biçtiği maliyet/gecikme yükü ikisi de korunur: yeni çağrı yok.
+>
+> **Taşıma güven sınırı (teknik — İlke 8: FYI, review zinciri doğrular).** Seçim caption
+> aşamasında yapılır, kullanım stage-1'de olur; arada istemci vardır. İstemcinin döndürdüğü
+> hareket metni **sunucuda havuz üyeliğine karşı doğrulanır**; üye değilse KULLANILMAZ.
+> İstemciye serbest metin emanet edilmez — bu, K-07 damgasının taşıma sözleşmesiyle aynı
+> ilkedir. Üye değilse ya da model alanı hiç döndürmediyse **uydurmaya düşülmez**: aynı
+> havuzdan belirleyici bir seçim yapılır.
+>
+> **K-113 = A.** Paketin hareket havuzu boşsa bugünkü `_MOTION_PROMPTS` listesine düşülür.
+> Bu, input'un "yalnız bir hakemde" diye işaretlediği dalın karara bağlanmasıdır.
+>
+> **Alan adları bağlandı** (input satır 3103'ün istediği "6a/6b ayrımının nihai alan adlarına
+> bağlanması"): `video_kodlar.hareket` (6a — hareket kodları) · `video_kodlar.sahne`
+> (6b — sahne kodları). **İkisi de LİSTEDİR** (§3.4'e eklenen nota bakınız); tek cümle,
+> sektöre özel olsa bile o sektörün her videosunu aynı tipte üretirdi.
+>
+> **Yürürlüğe soktuğu işler:** paket içerik doğrulayıcısı liste şeklini kabul eder (plan
+> Task 8 notu) · durağan kare ve hareket enjeksiyonu (plan Task 11 notu) · paketi ÜRETEN
+> brief hattı iki havuzu da üretmek zorundadır (Plan 2 teslim kalemi).
 
 ## 11.6 Tur dışı acil güncelleme
 

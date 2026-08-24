@@ -71,6 +71,22 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 > ayrı bir karar turunun konusudur. Kapanış, aşağıdaki Task 8 ve Task 11 notlarını da
 > yürürlüğe sokar.
 
+> **[KARAR KAPANDI — 2026-08-24, Eray onayı]** Tablodaki **K-02 "Bekletilir"** hükmü
+> YÜRÜRLÜKTEN KALKTI (satır tarihsel kayıt olarak durur). Yürürlükteki hüküm spec §11.5'in
+> karar bloğudur: **K-02 = A (seçici modelde) · K-113 = A**. Özet:
+>
+> - Hareket havuzu paketin `video_kodlar.hareket` listesinden gelir, sektöre özeldir.
+> - Seçimi **caption aşamasındaki MEVCUT model çağrısı** yapar — ayrı çağrı açılmaz
+>   (ölçüldü: kısa video ucu script'siz istek kabul etmiyor, caption çağrısı zaten zorunlu).
+> - İstemcinin döndürdüğü hareket metni sunucuda **havuz üyeliğine karşı doğrulanır**;
+>   üye değilse aynı havuzdan belirleyici seçime düşülür.
+> - Havuz boşsa bugünkü `_MOTION_PROMPTS` listesine düşülür (K-113 = A).
+> - Paketsiz yolda hiçbir şey değişmez; Katman-1 byte-exact korunur.
+> - Alan adları: `video_kodlar.hareket` · `video_kodlar.sahne`; **ikisi de listedir**.
+>
+> Bu kapanış üç işi yürürlüğe sokar: Task 8 doğrulayıcı düzeltmesi · Task 11'in hareket
+> ayağıyla birlikte yazılması · Plan 2 brief hattının iki havuzu da üretmesi.
+
 ## Plan'ın bağladığı teknik kararlar (İlke 8: review zinciri doğrular; Eray'a FYI)
 
 1. **K-07 damga temsili = iki kolon + BİLEŞİK FK + OPAK sunucu-kayıtlı üretim-anı taşıma:** `posts.package_id UUID NULL` + `posts.package_version INT NULL`; çift, `(package_id, package_version) REFERENCES social.sector_packages(id, version) MATCH FULL` bileşik FK'sıyla bağlanır (`sector_packages`e `UNIQUE (id, version)` eklenir). MATCH FULL yarım-NULL çifti ve satırla eşleşmeyen sürümü DB düzeyinde reddeder; paketsiz üretimde her ikisi NULL. **Atıf sözleşmesi (güven sınırı dahil):** damga, İÇERİĞİ ÜRETEN çağrının (caption / kısa-video stage-1) çözümlediği paketi taşır. Üretim iki aşamalı olduğundan taşıma İSTEMCİDEN GEÇER ama ham çift ASLA istemciye emanet edilmez — paket yolundaki üretici çağrı `social.generation_stamps` satırı yazar (`id uuid · brand_id · package_id · package_version · created_at · consumed_at timestamptz NULL`; tablo **migration 032'de** kurulur — Task 10 bu tabloya Task 12'den ÖNCE muhtaçtır, sıralama bu yüzden 032) ve yanıtta yalnız OPAK `generation_id` döner (paketsizde null). Kalıcı-kayıt isteği `generation_id`'yi geri getirir; sunucu damgayı **ATOMİK ve TEK-KULLANIMLIK tüketir** — post-yaratma transaction'ı içinde `consumed_at IS NULL` koşullu güncelleme; dönen satırın `brand_id`'si isteğin doğrulanmış markasıyla eşleşmeli — ve kayıtlı çifti AYNEN yazar (yeniden çözümleme YOK). Geçersiz/yabancı/başka-markaya-ait VEYA daha önce TÜKETİLMİŞ (replay) `generation_id` → damga yazılmaz (NULL) + `stamp_invalid` olayı; üretim bloklanmaz — sahte veya yeniden-kullanılmış damga hiçbir koşulda yazılmaz. Kayıt anında aktif paket değişmişse geçerli damga yine yazılır + `stamp_stale_at_persist` olayı. **Damganın iddia sözleşmesi (F17 — Eray kararı 2026-08-23, risk kabulü):** damga "post'un İLK içeriğini bu üretim oturumu üretti" atfıdır (**edited lineage**) — kullanıcı caption'ı kaydetmeden önce düzenleyebildiği için bayt-bayt içerik kanıtı İDDİA EDİLMEZ ve içerik-özeti bağlaması KURULMAZ (meşru düzenlemeyi reddederdi). Kalan boşluk: marka sahibinin kendi KULLANILMAMIŞ makbuzunu kendi başka içeriğine takabilmesi — yalnız o markanın kendi analitiğini yanıltır; solo işletim + 2 marka gerçeğinde KABUL EDİLEN RİSK. Yeniden açılma koşulu: müşteri sayısı / ürünleşme artışı.
@@ -91,6 +107,12 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 - `app/services/sector_packages.py::activate_package(db, *, package_id, evidence: ActivationGateEvidence, actor)` / `rollback_package(db, *, sector_id, to_version, evidence: RollbackGateEvidence, actor)` / `deactivate_package(db, *, package_id, actor)` — durum geçişleri. Ham geçiş transaction'ı ÖZELDİR (`_apply_status_transition`); public API kendi kapı-kanıtı olmadan geçiş YAPMAZ — aktivasyon `ActivationGateEvidence`, rollback AYRI `RollbackGateEvidence` (yönetici onayı zorunlu) ister (Task 13 — K-71/K-28'in Plan-1 ayağı; K-103 yetkilendirme TEKNİĞİ ayrıca açık).
 - `app/services/notifications.py::record_admin_event(db, *, kind, payload, idempotency_key) -> uuid` — transactional outbox (Task 14); K-26 vade bildirimi (Plan 2 tur takibi) aynı altyapıyı çağırır.
 - Katman-1 harness (`tests/prompt_regression/`) — Plan 2 her turda yeniden koşturur.
+- **[SONRADAN EKLENDİ — 2026-08-24; K-02 kapanışının Plan 2 ayağı]** Brief/sentez hattı
+  `video_kodlar` için **İKİ HAVUZ** üretir: `hareket` ve `sahne`, ikisi de liste. Tek
+  elemanlı havuz sözleşmeyi teknik olarak karşılar ama ürün amacını karşılamaz — o sektörün
+  her videosu aynı tipte çıkar (spec §3.4 notu). Asgari eleman sayısı brief biçim
+  sözleşmesinin işidir ve **ölçülmemiş bir sayı kapı yapılmaz** (İlke 9). Task 16 bu kalemi
+  arayüz-sözleşme testinde doğrular.
 
 > Bu bölüm imzaların TEK kanonik evidir. Bir görev metniyle bu liste çelişirse liste esastır; Task 16 arayüz-sözleşme testi her fonksiyonu belgelenen argümanlarla import edip çağırır.
 
@@ -266,6 +288,11 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 > kapıdan GEÇMİYOR — `video_kodlar['hareket'] metin değil: list`. Yani alternatif taşıyan meşru
 > bir paket bugün yazılamaz. K-02 kapandığında bu kapı liste şeklini kabul edecek biçimde
 > düzeltilmelidir; düzeltme Task 8'in kapsamına geri döner.
+>
+> **[GÜNCELLEME — 2026-08-24: K-02 kapandı]** Düzeltme artık yürürlüktedir. Kapı
+> `video_kodlar`'ı TAM İKİ anahtarla (`hareket` · `sahne`) ve her ikisini **boş olmayan
+> metin listesi** olarak doğrular; öğeler dolu metin olmalıdır. Adlar bağlandığı için
+> "opak iki alt yapı" doğrulaması yerini adlı sözleşmeye bırakır.
 
 ### Task 9: Kanal envanteri — `brand_kit.channels` + deterministik filtre
 
@@ -347,6 +374,20 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 >
 > K-02 kapandığında Task 11 hareket ayağını da kapsayacak biçimde yeniden yazılır; bu not
 > yalnız eksiği kaydeder, görevin mevcut metnini değiştirmez.
+>
+> **[GÜNCELLEME — 2026-08-24: K-02 kapandı]** Task 11'in kapsamı şu üç bağlayıcı invariantla
+> GENİŞLER (görevin mevcut maddeleri geçerliliğini korur, yalnız *"Hareket ayağı
+> DOKUNULMAZ"* satırı yürürlükten kalkar):
+>
+> 1. **Sahne:** `video_kodlar.sahne` havuzu durağan kare istemine İKİ modda da girer
+>    (metinden-görsele + ürün referanslı). Kullanım talimatı (K-04) bloğun başındadır, yani
+>    model havuzdan seçer, uydurmaz.
+> 2. **Hareket:** paketli yolda seçim `video_kodlar.hareket` havuzundan yapılır ve seçimi
+>    caption aşamasındaki mevcut model çağrısı verir. Sunucu, istemciden dönen değeri
+>    **havuz üyeliğine karşı doğrular**; üye değilse/eksikse aynı havuzdan belirleyici
+>    seçime düşer. Havuz boşsa `_MOTION_PROMPTS`'a düşülür (K-113 = A).
+> 3. **Paketsiz yol dokunulmaz:** `_MOTION_PROMPTS` havuzu ve bugünkü seçim yolu paketsiz
+>    markada byte-exact korunur; `short_video__motion_pool` fixture'ı bunu pinler.
 
 ### Task 12: K-07 damga yazımı + gözlemlenebilirlik log çekirdeği
 
