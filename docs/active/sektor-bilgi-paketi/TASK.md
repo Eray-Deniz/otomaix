@@ -35,7 +35,56 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-24 (sekizinci oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 6'sı bitti.**
+**2026-08-24 (dokuzuncu oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 8'i bitti (planın yarısı).**
+Bu oturumda Task 7 ve Task 8 yürütüldü (inline; review/checkpoint kapıları normal koştu).
+`pytest tests/ -q` → **185 passed**. Türetilmiş defter rc=0, çalışma alanı temiz, **push YOK**.
+Devralınan açık kapı YOKTU ve bu oturum da açık kapı DEVRETMİYOR.
+
+**Task 7 bitti — KATMAN-1 FREEZE KAPISI KAPALI.** Dokuz fixture donduruldu: durağan kare tam
+matriste (metinden-görsele / ürün-edit × ürünlü / ürünsüz — dördü de, çünkü ürün odak bloğu
+ikisinin "veya"sından çıkıyor), script istemi rehberli ve rehbersiz, kamera hareketi havuzu içerik
+ve sıra olarak. Legacy uç KENDİ router yolundan donduruldu: sektör rehberini marka satırının
+görünen adıyla ("Teknoloji") slug anahtarlı tabloda arıyor, yani rehber her markada boş — bozukluk
+düzeltilmedi, K-06'nın istediği gibi aynen donduruldu. Yalnız dış dünya (ElevenLabs, fal.ai)
+kesildi. Ölçülen yan gerçek: `generate_script`'e bugün hiçbir üretim çağrısı dolu sektör rehberi
+geçmiyor (`/ai/generate-script` parametreyi hiç geçmiyor). Caption/fikir yüzeyleri ayrı, slug'ı
+doğru kullanan yoldan rehberi alıyor.
+
+Harness Task 7'nin ilk adımında fail-closed yapıldı (devralınan öneri): kayıpsız temsil
+edilemeyen girdi artık REDDEDİLİYOR. Task 6'nın dört fixture'ı bayt-aynı kaldı — mevcut kanıt
+bozulmadı.
+
+**Checkpoint 7: tek tur `approve`, kritik/yüksek YOK.** İki orta bulgu `accepted_risk`
+YAZILMADI, FIX edildi (gerekçe review log'unda): biri commit mesajındaki bir iddiayı çürütüyordu,
+ikisi de dakikalar önce yazılmış test kodundaydı. Re-review turu açılmadı.
+
+**Task 8 bitti (paket erişim katmanı).** `sector_packages.py`: tek normalize modülü (K-01b),
+içerik doğrulayıcı (yazımdan önceki kapı — REDDEDER), paket çözümleyici (çalışma zamanı — asla
+reddetmez, `None` + log ile düşer). Bilinçle kapı YAPILMAYAN iki şey: ~6.000 karakter tavanı
+UYARI (ölçülmemiş tasarım hedefi, İlke 9) ve `video_kodlar` alan adları serbest (K-02 açık —
+yalnız iki-alt-yapı sayısı bağlandı). K-15(a) alan-düzeyi atlama dalı bilinçle YOK.
+
+**Checkpoint 8: DÖRT TUR, tur 4'te `approve`.** Tur 1 üç yüksek + bir orta verdi; dördü de
+bağımsız sondajla doğrulandı (kabul edilmedi, ölçüldü): yazım kapısı kabın tipine bakıp geçiyordu
+(`[None]`, `["   "]`, `{"a": False}` kabul ediliyordu), çözümleyici `content={}` dâhil her sözlüğü
+geçerli sayıyordu, marka adı taraması Türkçe'ye kördü. Tur 2 iki yeni şey getirdi: F3 kapanmamıştı
+ve **F5 — önceki commit mesajımdaki "bağlam kurulumu emniyet sınırına taşındı" iddiası YANLIŞTI**
+(taşınmamıştı; düzeltildi ve commit'te açıkça yazıldı).
+
+**Tur 3'ün süreç kararı (kayda değer).** F3'te üç tur üst üste aynı eksenin daha dar bir varyantı
+geldi: Türkçe büyük harf → ayrışık Unicode → `İ`.lower()'ın ürettiği görünmez birleşen işaret.
+Dördüncü nokta yaması yerine SINIF kapatıldı — katlama artık tüm birleşen işaretleri atarak
+bitiyor. Kanıt da biçim değiştirdi: elle seçilmiş örnek yerine ÜRETİLMİŞ MATRİS (8 marka × tüm
+yazımlar = 277 çift, kaçan 0). Elle seçilmiş örnekler zaten üç turdur deliği açık tutan şeydi.
+
+**Mutasyon disiplini.** 23 kabul dalı tek tek devre dışı bırakıldı; ilk taramada üç dalın bekçisi
+yoktu ve Codex bunu orta bulgu olarak yakaladı — haklıydı, taramam yardımcı-fonksiyon düzeyindeydi,
+dal düzeyinde değil. Şimdi hepsinin bekçisi var.
+
+**`cp_count` = 8 = TAVAN.** Sıradaki riskli task (Task 9) tavan-aşımı kararına düşecek; Eray bu
+oturumda review'lara ve tavan aşımına açık izin verdi.
+
+**Önceki durum (2026-08-24, sekizinci oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 6'sı bitti.**
 Bu oturumda Task 5 ve Task 6 yürütüldü (inline; review/checkpoint kapıları normal koştu).
 `pytest tests/ -q` → **78 passed**. Türetilmiş defter rc=0, çalışma alanı temiz, **push YOK**.
 
