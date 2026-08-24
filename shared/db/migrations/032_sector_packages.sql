@@ -7,6 +7,7 @@
 --   4. social.sectors reparenting yasağı — K-08b'nin ayna ayağı
 --   5. social.posts.package_id/_version  — K-07 damga temsili (bileşik FK, MATCH FULL)
 --   6. social.generation_stamps          — üretim-anı damga makbuzu (tek kullanımlık)
+--   7. Garanti doğrulaması              — fail-closed katalog kontrolü (F7)
 --
 -- İki katman ayrımı (spec §3.1): ham kanıt DEĞİŞTİRİLEMEZ, paket katmanı sürümlenir.
 -- Embedding kolonu bilinçli YOKTUR — paket erişimi deterministiktir.
@@ -232,3 +233,227 @@ COMMENT ON COLUMN social.posts.package_id IS
     'K-07 damga — package_version ile birlikte MATCH FULL bilesik FK. Paketsiz uretimde her ikisi de NULL.';
 COMMENT ON TABLE social.generation_stamps IS
     'K-07 uretim-ani damga makbuzu. consumed_at tek-kullanim isareti; marka silinince CASCADE ile gider (F18).';
+
+-- ---------------------------------------------------------------------------
+-- 7. Garanti doğrulaması — fail-closed (F7)
+-- ---------------------------------------------------------------------------
+--
+-- `CREATE TABLE / INDEX IF NOT EXISTS` yalnız o ADDA bir nesne var mı diye
+-- bakar, TANIMINI doğrulamaz. Aynı adda ama yanlış tanımlı bir nesne önceden
+-- duruyorsa DDL sessizce atlanır, migration NOTICE basıp BAŞARIYLA biter ve
+-- yukarıda adı geçen garanti fark edilmeden yok olur. Canlıya uygulama elle
+-- yapıldığından (plan Task 3/16) bu makul bir deploy senaryosudur.
+--
+-- Aşağıdaki blok DDL'den SONRA koşar: katalogtan (pg_index / pg_constraint /
+-- pg_trigger) GERÇEK tanımı okur ve planın Task 2 "Interfaces" bölümünde
+-- garanti sayılan her maddeyi beklenen imzasıyla karşılaştırır. Tutmayan varsa
+-- hepsi tek mesajda (ad + beklenen + görülen) raporlanır ve migration
+-- EXCEPTION ile durur.
+--
+-- İdempotentlik BOZULMAZ: `IF NOT EXISTS` desenleri yerinde kalır; doğru şema
+-- üstünde bu blok sessizdir.
+--
+-- Otomatik adlandırılan kısıtlar (CHECK'ler, `brand_id` FK'sı) ADLA değil
+-- KOLONLA aranır — ad üretimi Postgres'e aittir, garanti kolona bağlıdır.
+--
+-- ELLE UYGULARKEN: psql'i `-v ON_ERROR_STOP=1` ile çağırın. Ölçüldü — bayrak
+-- yokken hata mesajı yine basılır ama psql çıkış kodu 0 döner; sıfır-dışı çıkış
+-- yalnız bu bayrakla gelir (testler ve `conftest` onu zaten kullanır).
+
+DO $verify$
+DECLARE
+    failures TEXT;
+BEGIN
+    WITH expected(label, want) AS (
+        VALUES
+            -- Sektör başına tek `active`: gerçekten UNIQUE mi, (sector_id)
+            -- üstünde mi, predicate tam olarak `status = 'active'` mi.
+            ('uq_sector_packages_single_active',
+             'unique=true cols=sector_id pred=(status = ''active''::text)'),
+
+            -- Sürüm benzersizliği + bileşik damga FK'sının hedefi.
+            ('sector_packages_sector_version_key',
+             'u|UNIQUE (sector_id, version)'),
+            ('sector_packages_id_version_key',
+             'u|UNIQUE (id, version)'),
+
+            -- K-07 damga temsili: bileşik FK ve MATCH FULL (matchtype 'f').
+            ('posts_package_stamp_fkey',
+             'f|matchtype=f|FOREIGN KEY (package_id, package_version)'
+             ' REFERENCES social.sector_packages(id, version) MATCH FULL'),
+
+            -- Makbuz: bileşik FK + marka silmede CASCADE (deltype 'c').
+            ('generation_stamps_package_fkey',
+             'f|matchtype=s|FOREIGN KEY (package_id, package_version)'
+             ' REFERENCES social.sector_packages(id, version)'),
+            ('generation_stamps.brand_id FK',
+             'f|ondelete=c|FOREIGN KEY (brand_id)'
+             ' REFERENCES social.brands(id) ON DELETE CASCADE'),
+
+            -- Değer kümesi kısıtları.
+            ('sector_research_artifacts.kind CHECK',
+             'c|CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+             ' ''synthesis''::text])))'),
+            ('sector_packages.status CHECK',
+             'c|CHECK ((status = ANY (ARRAY[''draft''::text, ''active''::text,'
+             ' ''archived''::text])))'),
+
+            -- Salt-ekleme: UPDATE/DELETE **ve** TRUNCATE ayağı.
+            ('sector_research_artifacts_append_only',
+             'CREATE TRIGGER sector_research_artifacts_append_only BEFORE DELETE'
+             ' OR UPDATE ON social.sector_research_artifacts FOR EACH ROW EXECUTE'
+             ' FUNCTION social.reject_research_artifact_mutation()|enabled=O'),
+            ('sector_research_artifacts_no_truncate',
+             'CREATE TRIGGER sector_research_artifacts_no_truncate BEFORE TRUNCATE'
+             ' ON social.sector_research_artifacts FOR EACH STATEMENT EXECUTE'
+             ' FUNCTION social.reject_research_artifact_mutation()|enabled=O'),
+
+            -- K-08b alt-sektör zorunluluğu (iki tablo; TG_ARGV[0] = kolon adı).
+            ('brands_sub_sector_must_be_sub',
+             'CREATE TRIGGER brands_sub_sector_must_be_sub BEFORE INSERT OR UPDATE'
+             ' ON social.brands FOR EACH ROW EXECUTE FUNCTION'
+             ' social.require_sub_sector_reference(''sub_sector_id'')|enabled=O'),
+            ('sector_packages_sector_must_be_sub',
+             'CREATE TRIGGER sector_packages_sector_must_be_sub BEFORE INSERT OR'
+             ' UPDATE ON social.sector_packages FOR EACH ROW EXECUTE FUNCTION'
+             ' social.require_sub_sector_reference(''sector_id'')|enabled=O'),
+
+            -- Reparenting yasağı — K-08b'nin ayna ayağı.
+            ('sectors_reject_reparenting',
+             'CREATE TRIGGER sectors_reject_reparenting BEFORE UPDATE ON'
+             ' social.sectors FOR EACH ROW EXECUTE FUNCTION'
+             ' social.reject_sector_reparenting()|enabled=O')
+    ),
+    observed(label, got) AS (
+        VALUES
+            ('uq_sector_packages_single_active',
+             (SELECT format(
+                         'unique=%s cols=%s pred=%s',
+                         CASE WHEN i.indisunique THEN 'true' ELSE 'false' END,
+                         (SELECT string_agg(a.attname, ',' ORDER BY k.ord)
+                            FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+                            JOIN pg_attribute a
+                              ON a.attrelid = i.indrelid AND a.attnum = k.attnum),
+                         coalesce(pg_get_expr(i.indpred, i.indrelid),
+                                  '<kismi degil>'))
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social'
+                 AND c.relname = 'uq_sector_packages_single_active'
+                 AND i.indrelid = 'social.sector_packages'::regclass)),
+
+            ('sector_packages_sector_version_key',
+             (SELECT format('%s|%s', k.contype, pg_get_constraintdef(k.oid))
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_packages'::regclass
+                 AND k.conname = 'sector_packages_sector_version_key')),
+            ('sector_packages_id_version_key',
+             (SELECT format('%s|%s', k.contype, pg_get_constraintdef(k.oid))
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_packages'::regclass
+                 AND k.conname = 'sector_packages_id_version_key')),
+            ('posts_package_stamp_fkey',
+             (SELECT format('%s|matchtype=%s|%s', k.contype, k.confmatchtype,
+                            pg_get_constraintdef(k.oid))
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.posts'::regclass
+                 AND k.conname = 'posts_package_stamp_fkey')),
+            ('generation_stamps_package_fkey',
+             (SELECT format('%s|matchtype=%s|%s', k.contype, k.confmatchtype,
+                            pg_get_constraintdef(k.oid))
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.generation_stamps'::regclass
+                 AND k.conname = 'generation_stamps_package_fkey')),
+
+            -- Kolon bazlı arama: birden çok eşleşme tek imzada birleşir, böylece
+            -- beklenenden sapma (eksik VEYA fazla kısıt) fail-closed yakalanır.
+            ('generation_stamps.brand_id FK',
+             (SELECT string_agg(format('%s|ondelete=%s|%s', k.contype,
+                                       k.confdeltype,
+                                       pg_get_constraintdef(k.oid)),
+                                ' && ' ORDER BY k.conname)
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.generation_stamps'::regclass
+                 AND k.contype = 'f'
+                 AND k.conkey = ARRAY[
+                         (SELECT a.attnum FROM pg_attribute a
+                           WHERE a.attrelid = 'social.generation_stamps'::regclass
+                             AND a.attname = 'brand_id')]::int2[])),
+            ('sector_research_artifacts.kind CHECK',
+             (SELECT string_agg(format('%s|%s', k.contype,
+                                       pg_get_constraintdef(k.oid)),
+                                ' && ' ORDER BY k.conname)
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_research_artifacts'::regclass
+                 AND k.contype = 'c'
+                 AND k.conkey = ARRAY[
+                         (SELECT a.attnum FROM pg_attribute a
+                           WHERE a.attrelid
+                                 = 'social.sector_research_artifacts'::regclass
+                             AND a.attname = 'kind')]::int2[])),
+            ('sector_packages.status CHECK',
+             (SELECT string_agg(format('%s|%s', k.contype,
+                                       pg_get_constraintdef(k.oid)),
+                                ' && ' ORDER BY k.conname)
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_packages'::regclass
+                 AND k.contype = 'c'
+                 AND k.conkey = ARRAY[
+                         (SELECT a.attnum FROM pg_attribute a
+                           WHERE a.attrelid = 'social.sector_packages'::regclass
+                             AND a.attname = 'status')]::int2[])),
+
+            -- `pg_get_triggerdef` zamanlama + olay kümesi + satır/deyim düzeyi +
+            -- fonksiyon + TG_ARGV'yi tek dizede taşır; `tgenabled` ayrıca
+            -- kontrol edilir (devre dışı tetikleyici de fail-open'dır).
+            ('sector_research_artifacts_append_only',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.sector_research_artifacts'::regclass
+                 AND t.tgname = 'sector_research_artifacts_append_only')),
+            ('sector_research_artifacts_no_truncate',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.sector_research_artifacts'::regclass
+                 AND t.tgname = 'sector_research_artifacts_no_truncate')),
+            ('brands_sub_sector_must_be_sub',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.brands'::regclass
+                 AND t.tgname = 'brands_sub_sector_must_be_sub')),
+            ('sector_packages_sector_must_be_sub',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.sector_packages'::regclass
+                 AND t.tgname = 'sector_packages_sector_must_be_sub')),
+            ('sectors_reject_reparenting',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.sectors'::regclass
+                 AND t.tgname = 'sectors_reject_reparenting'))
+    )
+    SELECT string_agg(
+               format('%s -> beklenen [%s] · gorulen [%s]',
+                      e.label, e.want, coalesce(o.got, '<nesne yok>')),
+               E'\n  - ' ORDER BY e.label)
+      INTO failures
+      FROM expected e
+      LEFT JOIN observed o ON o.label = e.label
+     WHERE o.got IS DISTINCT FROM e.want;
+
+    IF failures IS NOT NULL THEN
+        RAISE EXCEPTION 'migration 032 garanti dogrulamasi BASARISIZ:%',
+            E'\n  - ' || failures
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Ayni adda YANLIS TANIMLI bir nesne var; IF NOT EXISTS '
+                         'onu DEGISTIRMEZ. Nesneyi elle dusurup migration i '
+                         'yeniden uygulayin.';
+    END IF;
+END
+$verify$;

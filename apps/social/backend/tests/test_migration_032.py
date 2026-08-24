@@ -13,15 +13,24 @@ invariantlarını kanıtlar (plan Task 2 · spec §14.1):
 Ek olarak K-07 damga temsili (posts bileşik FK + MATCH FULL),
 `social.generation_stamps` sözleşmesi ve reparenting yasağı doğrulanır.
 
+Son bölüm (F7) migration'ın kendi fail-closed garanti doğrulamasını sınar: aynı
+adda yanlış tanımlı bir nesne varken yeniden uygulama DURMALI, doğru şema
+üstünde ise rc=0 kalmalı (idempotentlik).
+
 Alt sektör satırları test İÇİNDE açılır — canlı seed dosyasına satır eklenmez.
 """
 
 from __future__ import annotations
 
+import os
+import subprocess
 import uuid
+from urllib.parse import urlsplit
 
 import asyncpg
 import pytest
+
+from tests import conftest as infra
 
 # jsonb kolonlarına test tarafından geçirilen sabit içerik. asyncpg'nin
 # varsayılan jsonb kodlayıcısı metin kabul eder — `::jsonb` cast'e gerek yok.
@@ -725,3 +734,168 @@ async def test_brand_delete_cascades_stamps_consumed_and_unconsumed(db):
         )
         == 0
     )
+
+
+# --- Fail-closed garanti doğrulaması (F7) ----------------------------------
+#
+# `CREATE TABLE/INDEX IF NOT EXISTS` yalnız ADI arar, TANIMI doğrulamaz: aynı
+# adda YANLIŞ tanımlı bir nesne önceden varsa DDL sessizce atlanır, migration
+# NOTICE basıp başarıyla biter ve garanti kaybolur. Canlıya uygulama elle
+# yapıldığı için bu senaryo gerçektir; migration sonundaki doğrulama bloğu
+# bunu YAKALAMALI ve fail-closed durmalı.
+#
+# İzolasyon: her vaka `BEGIN … ROLLBACK` içinde koşar. psql tek oturumda önce
+# bozmayı, sonra `\i 032`'yi uygular; sonuç ne olursa olsun transaction geri
+# alınır (Postgres'te DDL transactional'dır). Diğer testlerin gördüğü şema
+# değişmez — her vaka bunu ayrıca ölçer.
+
+MIGRATION_032 = infra.MIGRATIONS_DIR / "032_sector_packages.sql"
+
+
+def _psql_argv() -> tuple[list[str], dict[str, str]]:
+    """Test DB'ye giden psql argv'si + parolayı taşıyan ortam.
+
+    Kapı `conftest`in fail-closed guard'ıdır: yalnız 127.0.0.1:5433/otomaix_test.
+    Parola argv'ye DEĞİL PGPASSWORD'a gider.
+    """
+    url = infra._require_test_database(infra.test_database_url())
+    parts = urlsplit(url)
+    argv = [
+        "psql",
+        "--no-psqlrc",
+        "--quiet",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-h",
+        infra.REQUIRED_HOST,
+        "-p",
+        str(infra.REQUIRED_PORT),
+        "-U",
+        parts.username or "",
+        "-d",
+        infra.TEST_DB_NAME,
+    ]
+    env = dict(os.environ)
+    if parts.password:
+        env["PGPASSWORD"] = parts.password
+    return argv, env
+
+
+def _reapply_032(setup_sql: str = "") -> subprocess.CompletedProcess:
+    """`setup_sql` + migration 032'yi TEK transaction'da koşar, sonra ROLLBACK."""
+    argv, env = _psql_argv()
+    script = f"BEGIN;\n{setup_sql}\n\\i {MIGRATION_032}\nROLLBACK;\n"
+    return subprocess.run(argv, input=script, env=env, capture_output=True, text=True)
+
+
+def _scalar(sql: str) -> str:
+    """Tek değerli sorgu — şemanın bozulmadan kaldığını ölçmek için."""
+    argv, env = _psql_argv()
+    result = subprocess.run(
+        argv + ["--tuples-only", "--no-align", "-c", sql],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout.strip()
+
+
+def _single_active_index_is_unique() -> str:
+    return _scalar(
+        """
+        SELECT i.indisunique
+        FROM pg_index i
+        JOIN pg_class c ON c.oid = i.indexrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'social'
+          AND c.relname = 'uq_sector_packages_single_active'
+        """
+    )
+
+
+def test_reapply_on_correct_schema_succeeds(test_db_setup):
+    """İdempotentlik: DOĞRU şema üstüne 032 yeniden uygulanınca rc=0 kalır."""
+    result = _reapply_032()
+    assert result.returncode == 0, (
+        "doğru şema üstüne yeniden uygulama başarısız oldu "
+        f"(rc={result.returncode}):\n{result.stderr}"
+    )
+
+
+def test_migration_raises_when_single_active_index_is_not_unique(test_db_setup):
+    """Aynı ADDA benzersiz-OLMAYAN indeks varken migration durmalı.
+
+    `CREATE UNIQUE INDEX IF NOT EXISTS` bu indeksi DEĞİŞTİRMEZ; doğrulama bloğu
+    olmadan migration sessizce başarılı olur ve "sektör başına tek aktif paket"
+    garantisi yok olur.
+    """
+    result = _reapply_032(
+        """
+        DROP INDEX social.uq_sector_packages_single_active;
+        CREATE INDEX uq_sector_packages_single_active
+            ON social.sector_packages (sector_id)
+            WHERE status = 'active';
+        """
+    )
+
+    assert result.returncode != 0, (
+        "benzersiz-olmayan indeks sessizce kabul edildi — "
+        f"stdout:\n{result.stdout}"
+    )
+    assert "uq_sector_packages_single_active" in result.stderr, result.stderr
+    assert _single_active_index_is_unique() == "t", "ROLLBACK sonrası şema bozuk kaldı"
+
+
+def test_migration_raises_when_sector_version_unique_is_missing(test_db_setup):
+    """Önceden var olan `sector_packages` eksik UNIQUE ile kalırsa durmalı.
+
+    `CREATE TABLE IF NOT EXISTS` gövdeyi doğrulamaz: kısıt geri gelmez.
+    """
+    result = _reapply_032(
+        """
+        ALTER TABLE social.sector_packages
+            DROP CONSTRAINT sector_packages_sector_version_key;
+        """
+    )
+
+    assert result.returncode != 0, (
+        "eksik UNIQUE (sector_id, version) sessizce kabul edildi — "
+        f"stdout:\n{result.stdout}"
+    )
+    assert "sector_packages_sector_version_key" in result.stderr, result.stderr
+    assert (
+        _scalar(
+            """
+            SELECT count(*) FROM pg_constraint
+            WHERE conrelid = 'social.sector_packages'::regclass
+              AND conname = 'sector_packages_sector_version_key'
+            """
+        )
+        == "1"
+    ), "ROLLBACK sonrası kısıt geri gelmedi"
+
+
+def test_migration_raises_when_kind_check_is_missing(test_db_setup):
+    """Önceden var olan `sector_research_artifacts` eksik CHECK ile kalırsa durmalı."""
+    result = _reapply_032(
+        """
+        ALTER TABLE social.sector_research_artifacts
+            DROP CONSTRAINT sector_research_artifacts_kind_check;
+        """
+    )
+
+    assert result.returncode != 0, (
+        f"eksik kind CHECK sessizce kabul edildi — stdout:\n{result.stdout}"
+    )
+    assert "kind" in result.stderr, result.stderr
+    assert (
+        _scalar(
+            """
+            SELECT count(*) FROM pg_constraint
+            WHERE conrelid = 'social.sector_research_artifacts'::regclass
+              AND contype = 'c'
+            """
+        )
+        == "1"
+    ), "ROLLBACK sonrası CHECK geri gelmedi"
