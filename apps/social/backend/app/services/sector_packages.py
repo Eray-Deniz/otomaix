@@ -97,9 +97,19 @@ DELIBERATELY_EMPTY = "içerik-önerilmez"
 # Tasarım hedefi, KAPI DEĞİL (spec §3.4 + İlke 9: ölçülmemiş sayı kapı olamaz).
 SIZE_TARGET_CHARS = 6000
 
-# K-02 AÇIK: hareket ve sahne kodlarının nihai alan ADLARI bağlanmamıştır.
-# Bağlanan tek şey, iki AYRI alt yapının varlığıdır — ikisi iki ayrı yüzeye gider.
-VIDEO_SUBSTRUCTURE_COUNT = 2
+# K-02 = A (Eray, 2026-08-24 — spec §11.5 karar bloğu): adlar BAĞLANDI ve şekil
+# LİSTEDİR. Kapanıştan önce burada yalnız "iki alt yapı var mı" sorulabiliyordu;
+# karar açık olduğu için adlar serbest, şekil de tek cümleydi.
+#
+# İki şey birden değişti ve ikisi de ürün gerekçesine dayanır:
+#
+# - **Adlar bağlı.** Serbest ad kabul edilseydi yazan taraf `motion`/`scene`
+#   yazar, okuyan taraf `hareket`/`sahne` arardı ve havuz sessizce hiç
+#   bulunamazdı — yazım/okuma ayrışmasının tam da K-01b'de kapatılan sınıfı.
+# - **Şekil liste.** Tek cümle, sektöre özel olsa bile o sektörün HER videosunu
+#   aynı tipte üretirdi. Çoğulluk biçimsel bir ayrıntı değil, alanın işlevinin
+#   parçasıdır (spec §3.4'e eklenen not; input "havuz" / "alt liste" der).
+VIDEO_POOL_KEYS = ("hareket", "sahne")
 
 # `cta_kaliplari` öğesinin TAM anahtar kümesi (spec §3.4: {kalıp, tür, gerekçe}).
 CTA_ITEM_KEYS = frozenset({"kalip", "tur", "gerekce"})
@@ -307,14 +317,33 @@ def _check_field_shapes(content: dict, errors: list[str]) -> None:
 
     if "video_kodlar" in content:
         video = content["video_kodlar"]
-        if not isinstance(video, dict) or len(video) != VIDEO_SUBSTRUCTURE_COUNT:
+        if not isinstance(video, dict) or set(video) != set(VIDEO_POOL_KEYS):
             errors.append(
-                f"video_kodlar {VIDEO_SUBSTRUCTURE_COUNT} alt yapı taşımalı "
-                "(hareket ve sahne ayrı; alan adları K-02 ile bağlanacak)"
+                "video_kodlar anahtar kümesi "
+                f"{sorted(VIDEO_POOL_KEYS)} olmalı (K-02 = A ile bağlandı); "
+                + (
+                    f"{sorted(video)} geldi"
+                    if isinstance(video, dict)
+                    else f"{type(video).__name__} geldi"
+                )
             )
         else:
-            for key, value in video.items():
-                _require_text(value, f"video_kodlar[{key!r}]", errors)
+            for key in VIDEO_POOL_KEYS:
+                pool = video[key]
+                label = f"video_kodlar[{key!r}]"
+                if not isinstance(pool, list):
+                    errors.append(
+                        f"{label} havuz (liste) olmalı, {type(pool).__name__} geldi — "
+                        "tek cümle o sektörün her videosunu aynı tipte üretirdi"
+                    )
+                    continue
+                if not pool:
+                    errors.append(
+                        f"{label} boş havuz — en az bir kalıp yazılmalı"
+                    )
+                    continue
+                for index, item in enumerate(pool):
+                    _require_text(item, f"{label}[{index}]", errors)
 
     if "ozel_gun" in content and not isinstance(content["ozel_gun"], dict):
         errors.append(f"ozel_gun nesne değil: {type(content['ozel_gun']).__name__}")

@@ -736,7 +736,7 @@ def test_malformed_marker_is_rejected_at_write_gate():
             "kanca_kaliplari": ["kanca"],
             "takvim_temalari": ["tema"],
             "yasaklar_ve_hassasiyetler": ["yasak"],
-            "video_kodlar": {"hareket": "a", "sahne": "b"},
+            "video_kodlar": {"hareket": ["a"], "sahne": ["b"]},
             "ozel_gun": {},
         }
 
@@ -771,7 +771,7 @@ def _flag_content(cta_text: str) -> dict:
         "kanca_kaliplari": ["kanca"],
         "takvim_temalari": ["tema"],
         "yasaklar_ve_hassasiyetler": ["yasak"],
-        "video_kodlar": {"hareket": "a", "sahne": "b"},
+        "video_kodlar": {"hareket": ["a"], "sahne": ["b"]},
         "ozel_gun": {},
     }
 
@@ -1034,7 +1034,7 @@ def test_ordinary_brackets_are_free_outside_cta_patterns():
         "kanca_kaliplari": ["Yeni sezon [ilkbahar] kancası"],
         "takvim_temalari": ["Bayram [dini]"],
         "yasaklar_ve_hassasiyetler": ["Fiyat vaadi yok [mevzuat 6502]"],
-        "video_kodlar": {"hareket": "slow pan", "sahne": "[wide] establishing"},
+        "video_kodlar": {"hareket": ["slow pan"], "sahne": ["[wide] establishing"]},
         "ozel_gun": {},
     }
 

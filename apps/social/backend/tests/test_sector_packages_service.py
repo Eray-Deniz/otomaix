@@ -47,8 +47,14 @@ def _valid_content(**overrides) -> dict:
         "kanca_kaliplari": ["Ayar farkını gözle ayırt edebilir misiniz?"],
         "gorsel_kodlar": "Warm directional light on polished metal, shallow depth of field.",
         "video_kodlar": {
-            "hareket": "Slow orbit around the display case.",
-            "sahne": "Boutique interior, warm ambient light.",
+            "hareket": [
+                "Slow orbit around the display case.",
+                "Gentle push-in on the ring tray.",
+            ],
+            "sahne": [
+                "Boutique interior, warm ambient light.",
+                "Velvet display surface, directional key light.",
+            ],
         },
         "takvim_temalari": ["Söz-nişan yoğunluğu ilkbaharda artar."],
         "yasaklar_ve_hassasiyetler": [
@@ -233,9 +239,9 @@ def test_validator_size_warning_not_rejection():
 
 
 def test_validator_rejects_video_kodlar_without_two_substructures():
-    """`video_kodlar` iki alt yapı taşır (K-02 kapısı) — adlar bağlanmaz, sayı bağlanır."""
+    """`video_kodlar` İKİ havuz taşır: `hareket` ve `sahne` (K-02 = A ile bağlandı)."""
     result = validate_package_content(
-        _valid_content(video_kodlar={"hareket": "tek yapı"}),
+        _valid_content(video_kodlar={"hareket": ["tek havuz"]}),
         banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
@@ -243,14 +249,48 @@ def test_validator_rejects_video_kodlar_without_two_substructures():
     assert any("video_kodlar" in e for e in result.errors)
 
 
-def test_validator_accepts_any_two_video_substructure_names():
-    """K-02 AÇIK: nihai alan adları bağlanmaz, yalnız iki-alt-yapı aranır."""
+def test_validator_rejects_unbound_video_substructure_names():
+    """K-02 = A: adlar artık BAĞLI. Serbest ad kabul edilmez.
+
+    K-02 açıkken kapı "herhangi iki ad" kabul ediyordu; karar kapandığı için
+    (2026-08-24) sözleşme adlıdır. Serbest ad kabul edilseydi yazan taraf
+    `motion`/`scene` yazar, okuyan taraf `hareket`/`sahne` arar ve havuz
+    sessizce hiç bulunamazdı.
+    """
     result = validate_package_content(
-        _valid_content(video_kodlar={"motion": "a", "scene": "b"}),
+        _valid_content(video_kodlar={"motion": ["a"], "scene": ["b"]}),
+        banned_brand_names=[],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert not result.ok
+    assert any("video_kodlar" in e for e in result.errors)
+
+
+def test_validator_accepts_multi_entry_pools():
+    """Havuzlar ÇOĞULDUR — alternatifsiz paket meşru ama tekil olmak zorunda değil."""
+    result = validate_package_content(
+        _valid_content(
+            video_kodlar={"hareket": ["a", "b", "c"], "sahne": ["d", "e"]}
+        ),
         banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert result.ok, result.errors
+
+
+def test_validator_rejects_video_substructure_that_is_not_a_list():
+    """Tek cümle artık geçmez — havuzun şekli listedir (spec §3.4 notu).
+
+    Tekil cümle, sektöre özel olsa bile o sektörün her videosunu aynı tipte
+    üretirdi; çoğulluk alanın işlevinin parçasıdır.
+    """
+    result = validate_package_content(
+        _valid_content(video_kodlar={"hareket": "tek cümle", "sahne": ["b"]}),
+        banned_brand_names=[],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert not result.ok
+    assert any("video_kodlar" in e for e in result.errors)
 
 
 # ─── 3. Çözümleyici — güvenli geri düşüş ────────────────────────────────────
@@ -423,15 +463,21 @@ def test_validator_rejects_non_dict_content():
     assert result.errors == ["content nesne değil: list"]
 
 
-def test_validator_rejects_empty_video_substructure():
-    """İki alt yapı VAR ama biri boş — sayı doğru, içerik değil."""
+@pytest.mark.parametrize("bad_pool", [[], ["  "], ["a", ""]])
+def test_validator_rejects_empty_video_substructure(bad_pool):
+    """İki havuz VAR ama biri boş — sayı doğru, içerik değil.
+
+    Boş havuz yazımda REDDEDİLİR. Çalışma zamanındaki boş-havuz dalı (K-113 = A,
+    mevcut listeye düşüş) bundan AYRI bir şeydir: o, paket okunduktan sonra
+    havuzun kullanılamaz çıkması hâlidir.
+    """
     result = validate_package_content(
-        _valid_content(video_kodlar={"hareket": "a", "sahne": "  "}),
+        _valid_content(video_kodlar={"hareket": bad_pool, "sahne": ["b"]}),
         banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
-    assert any("video_kodlar" in e and "boş" in e for e in result.errors)
+    assert any("video_kodlar" in e for e in result.errors)
 
 
 def test_validator_rejects_special_day_missing_slot():
@@ -490,10 +536,16 @@ def test_validator_rejects_empty_list_field():
     assert any("kanca_kaliplari" in e for e in errors)
 
 
-@pytest.mark.parametrize("bad", [False, 0, None, {"ic": "ice"}])
-def test_validator_rejects_non_text_video_substructure(bad):
-    """Video alt yapıları dolu metin olmalı — `False`/`0` "dolu" sayılmaz."""
-    _reject(video_kodlar={"hareket": bad, "sahne": "b"})
+@pytest.mark.parametrize("bad", [False, 0, None, {"ic": "ice"}, "tek cümle"])
+def test_validator_rejects_non_list_video_substructure(bad):
+    """Havuz LİSTE olmalı — `False`/`0`/sözlük/tek cümle havuz değildir."""
+    _reject(video_kodlar={"hareket": bad, "sahne": ["b"]})
+
+
+@pytest.mark.parametrize("bad", [False, 0, None, {"ic": "ice"}, ["ic"]])
+def test_validator_rejects_non_text_pool_entry(bad):
+    """Havuzun ÖĞELERİ dolu metin olmalı — kap doğru olsa da yaprak denetlenir."""
+    _reject(video_kodlar={"hareket": [bad], "sahne": ["b"]})
 
 
 def test_validator_rejects_unknown_special_day_slot():

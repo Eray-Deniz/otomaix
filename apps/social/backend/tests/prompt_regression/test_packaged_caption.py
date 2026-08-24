@@ -72,8 +72,14 @@ def _package_content(**overrides) -> dict:
         "kanca_kaliplari": ["Ayar farkını gözle ayırt edebilir misiniz?"],
         "gorsel_kodlar": "Warm directional light on polished metal, shallow depth of field.",
         "video_kodlar": {
-            "hareket": "Slow orbit around the display case.",
-            "sahne": "Boutique interior, warm ambient light.",
+            "hareket": [
+                "Slow orbit around the display case.",
+                "Gentle push-in on the ring tray.",
+            ],
+            "sahne": [
+                "Boutique interior, warm ambient light.",
+                "Velvet display surface, directional key light.",
+            ],
         },
         "takvim_temalari": ["Söz-nişan yoğunluğu ilkbaharda artar."],
         "yasaklar_ve_hassasiyetler": [
