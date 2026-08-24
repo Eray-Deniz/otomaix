@@ -5,162 +5,154 @@
 
 ## Context
 - Task: sektor-bilgi-paketi — Plan 1 yürütmesi açık (`/execute-plan-claude-codex` protokolü)
-- Last updated: 2026-08-24 (onuncu oturum — YALNIZ Task 9)
+- Last updated: 2026-08-24 (on birinci oturum — Task 10, Task 11, Task 8 revizyonu, K-02/K-113 kapanışı)
 - Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
+- Spec girdisi: `docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` — **bu oturumun dersi:
+  spec eksik yazılmıştı, cevaplar input'taydı. Karar sorusu çıkarsa ÖNCE input'a bak.**
 - Dal: `feat/sektor-bilgi-paketi` (**upstream YOK — hiç push edilmedi**)
 - Codex ham review log'u: `/root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md`
 
 ## Current State
-- **Biten:** Task 1–8 (önceki oturumlar) · **Task 9** (kanal envanteri + deterministik CTA
-  filtresi). **16 task'ın 9'u.**
-- **Devralınan borç YOK, devreden borç YOK.** Açık kapı bırakılmıyor; iki kalıntı Open Problems'ta
-  dürüst etiketiyle ve yeniden-açılma koşuluyla yazılı.
-- **Mod:** inline (Eray talebi). `execute_mode: subagent-driven` kaydı BİLEREK değiştirilmedi
-  (Task 1-2'yi doğru anlatıyor). inline YALNIZ task yazımını kapsar; review/checkpoint kapıları
-  normal koştu.
-- **Checkpoint:** `cp_count: 9` (tavan 8 — **aşıldı**, Eray oturum başında açıkça izin verdi,
-  audit `ceiling-exceed`). Checkpoint 9 **altı** turda kapandı.
-- **İNCELEME BÜTÇESİ BU OTURUMDA TÜKENDİ** — tavan 8, en az 3'ü finale rezerve; 6 tur koşuldu ve
-  tur 6 Eray kararıyla rezervden fonlandı. **Bütçe oturum başına sıfırlanır**, yeni oturum tam
-  payla başlar. Oturumun burada kapatılma sebebi budur.
+- **Biten:** Task 1–10 · **Task 11 kodu yazıldı ama checkpoint'i KAPANMADI.** Task 8 bu oturumda
+  K-02 kapanışı nedeniyle revize edildi.
+- **Tek açık kapı:** Task 11'in son düzeltmesi (`419eb21`) bağımsız hakemden geçmedi. Ayrıntı ve
+  evi TASK.md "Open Problems"ta.
+- **Mod:** inline. `execute_mode: subagent-driven` kaydı BİLEREK değiştirilmedi (Task 1-2'yi doğru
+  anlatıyor). inline YALNIZ task yazımını kapsar; review/checkpoint kapıları normal koştu.
+- **Checkpoint:** `cp_count: 10`, `last_checkpoint_ref` checkpoint 10'da (`c7de397`).
+  **Checkpoint 11 approve almadığı için ref İLERLETİLMEDİ** — §8.6 mutation protokolü yalnız
+  Clean/Accepted-risk dallarında çalışır. Tavan 8, yani her riskli task `CEILING_RISK` dalına
+  düşüyor; Eray bu oturum boyunca RUN-anyway izni verdi (audit `ceiling-exceed`).
+- **İNCELEME BÜTÇESİ TÜKENDİ + rezerveden bir tur kullanıldı.** Bütçe oturum başına sıfırlanır;
+  yeni oturum tam payla başlar.
 - **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
   Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 
 ## Resume From (sıra)
-1. **Task 10** — `### Task 10: Tek-kapı enjeksiyon — caption + fikir önerme`. Bu, işin en kritik
-   adımı: paket ÇÖZÜMLEYİCİSİ ilk kez gerçek üretim akışına bağlanıyor ve dört alanlık dönüş
-   sözleşmesi orada sınanıyor. **Ara inceleme olmadan yürütme** — bu yüzden taze oturum gerekti.
-2. Task 10 riskli sınıflanırsa checkpoint kararı yine TAVAN-AŞIMI dalına düşer (`cp_count` 9 >
-   tavan 8). Eray'ın izni bu iş için verilmiş durumda, ama aşımı **görünür şekilde bildir** —
-   sessizce geçme; audit satırı `ceiling-exceed`.
-3. Sonra Task 11 → 16.
-4. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
-   `.venv/bin/python -m pytest tests/prompt_regression/ -q` yeşil olmadan ilerlenmez (Task 7
-   freeze hükmü).
-5. Task 10 yazarken Task 9'un teslim ettiği filtre çağrılacak — `[kanal-bağımlı: X]` etiketli CTA
-   kalıpları basılmadan ÖNCE ondan geçirilir (plan Task 10 bağlayıcı invariantı).
+1. **Checkpoint 11'i kapat.** Kapsam `--base c7de39751793e02823ddeae77cf7c9d1b6e58887`.
+   Ledger'a şunlar yazılır (yeniden açtırma): F1 ve F2 **hakem tarafından KAPALI doğrulandı**
+   (tur 2); F3'ün dört kök nedeni ve dördüncü düzeltmesi (`419eb21` — yinelenme yüklemi
+   KALDIRILDI, kalıp her zaman eklenir). Yalnız `419eb21` yeni delta'dır.
+2. Approve gelirse §8.6 mutation protokolü: `last_checkpoint_ref = <o anki HEAD>` **ve**
+   `cp_count = 11`, tek commit'te.
+3. **Sonra Task 12** (K-07 damga yazımı + gözlemlenebilirlik log çekirdeği). Eray bu oturumda
+   "Task 12'ye geçince dur" dedi; o sınır bu oturuma aitti, yeni oturumda geçerli DEĞİL.
+4. Sonra Task 13 → 16.
+5. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
+   `.venv/bin/python -m pytest tests/prompt_regression/ -q` yeşil olmadan ilerlenmez (Task 7 freeze hükmü).
+6. **Frontend'e dokunulduysa `npx next build` KOŞULUR.** Bu oturumda ilk kez koşuldu ve geçti.
 
 ## Verification (bu oturum)
 - **Koşan komutlar / taze çıktı:**
-  - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **232 passed**
-    (oturum başında 185).
-  - `.venv/bin/python -m pytest tests/prompt_regression/ -q` → **25 passed** (freeze kapısı,
-    her düzeltme turundan sonra tekrar koşuldu).
-  - `.venv/bin/python -m pytest tests/test_channel_inventory.py -q` → **47 passed**.
-  - Kapanış matrisi: CTA öğesi içinde reddedilmesi gereken **21** yazımın 21'i kapalı (dört turun
-    TÜM sondaları + sentezde tüketilmesi gereken bayraklar + düz yazı ayracı); kabul edilmesi
-    gereken **8** biçimin 8'i geçiyor; CTA DIŞINDA serbest ayraç temiz.
-  - Etiket yazım matrisi: 9 yazım × 4 anahtar biçimi × 8 kanal değeri, kapalı kümedeki her anahtar
-    için → **kaçan 0**.
-  - Eşzamanlılık ölçümü: düzeltmeden ÖNCE 4 eşzamanlı yazımın **3'ü kayboldu**; sonra 4/4 korunuyor
-    (regresyon testi iki bağlantıyla koşuyor ve ürettiği satırları siliyor).
-  - Çift kodlama ölçümü: düzeltmeden ÖNCE tek alanlık güncelleme kitin TÜM alanlarını siliyordu;
-    sonra hepsi korunuyor.
-  - Canlı veritabanı ölçümü (salt okuma): `social.sector_packages` **YOK** (032 canlıya
-    uygulanmadı), 2 markanın **0'ında** nesne-olmayan `brand_kit`.
+  - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **296 passed**
+    (oturum başında 232).
+  - `.venv/bin/python -m pytest tests/prompt_regression/ -q` → **71 passed** (byte-exact freeze
+    kapısı; her düzeltme turundan sonra tekrar koşuldu, donmuş fixture'lar bayt değişmedi).
+  - `cd apps/social/frontend && npx next build` → **geçti** (bu daldaki ilk frontend derlemesi).
+  - Canlı veritabanı ölçümü (salt okuma, taze): `social.sector_packages` **YOK**
+    (`to_regclass` → `f`) — 032 canlıya uygulanmadı, yani bugün üretimde tek paket bile yok.
+  - Doküman değişikliğinin ekleme-yönü mekanik doğrulandı: `git diff --stat` → **108 satır
+    eklendi, 0 silindi** (spec+plan eksik kaydı), sonra **85 satır eklendi, 0 silindi**
+    (K-02/K-113 kapanışı).
 - **Pozitif kontrol disiplini:** her düzeltme, düzeltmeden ÖNCEKİ sürüme karşı düşen bir testle
-  kanıtlandı. Yapısal (AST) taramanın kendisi de eski koda karşı pozitif kontrol edildi — iki
-  ihlali yakalıyor, yani boşa çıkmış bir tarama değil.
-- **Codex:** checkpoint 9 → **6 tur**. Tur 1-2 dört bulgu, tur 3-4 sınıf-teşhisiyle DURDURULDU ve
-  Eray'a soruldu, tur 5 iki yeni bulgu (ikisi de önceki düzeltmelerin yan etkisi), tur 6 iki
-  medium (ikisi de yeniden-açma). **Yedi bulgunun yedisi de bağımsız sondajla doğrulandı.**
+  kanıtlandı. Ölçülen "önce" davranışları: caption rotası `_write_generation_stamp`'e bağlıydı ·
+  yedek çıktı paket damgası alıyordu · `"   "`/`"..."` gün adı işlenmemiş 500 üretiyordu ·
+  alternatif taşıyan paket yazılamıyordu · uydurulmuş `template_fields.motion_prompt` ücretli
+  video modeline ulaşıyordu · İngilizce hazır istem sahne havuzunu hiç görmüyordu ·
+  `"."` havuz öğesi zenginleştirmeyi atlatıyordu · `"ring" in "spring"`.
+- **Codex:** checkpoint 10 → 2 tur (approve). Checkpoint 11 → **4 tur, approve YOK**.
+  Toplam 11 bulgu; **11'i de bağımsız sondajla doğrulandı**, hiçbiri sondaj koşmadan kabul veya
+  reddedilmedi. Bir bulgunun severity'si Codex'in dediğinden yükseltildi (`medium → high`:
+  genel kullanıcı girdisinden işlenmemiş sunucu hatası).
 - **DENENMEYEN / kapsanmayan:**
-  - Canlıya (`otomaix`) hiçbir migration uygulanmadı — 032 canlı uygulaması manuel adım, Task 16.
-  - Frontend hiç çalıştırılmadı (`npx next build` koşmadı — ilk gerektiği yer Task 12).
-  - `sector_packages` modülünün HÂLÂ hiçbir tüketicisi yok — üretim yolu onu çağırmıyor (Task 10).
-    Kanal filtresi de bugün hiçbir üretim akışından çağrılmıyor.
-  - `IS JSON OBJECT` yüklemi **yalnız PostgreSQL 18.3'te ölçüldü**. PG16'da var olduğu bilgisi
-    belgeye dayanıyor, BU MAKİNEDE ÖLÇÜLMEDİ — on-prem paketi PG16 pinlediği için not düşülüyor.
-  - Avatar yazıcılarının yeni birleştirmesi HeyGen akışıyla uçtan uca koşulmadı (SQL değişikliği
-    testlerle kapsandı, gerçek avatar akışı denenmedi).
-  - `ozel_gun` CTA'sının çalışma zamanında filtreden geçip geçmeyeceği Task 10'un kararı; yazım
-    kapısı onu şimdiden kapsıyor (fazla-kapsama, emniyetli yön).
+  - **Task 11'in son düzeltmesi (`419eb21`) hakemden geçmedi** — bu oturumun tek açık kapısı.
+  - Frontend yalnız DERLENDİ; gerçek arayüzde tek bir video üretimi denenmedi. Hareket seçiminin
+    uçtan uca (caption → istemci → stage-1 → stage-2) gerçek akışta taşındığı ÖLÇÜLMEDİ;
+    kanıt birim ve yapısal testlerdir.
+  - Canlıya hiçbir migration uygulanmadı — 032 canlı uygulaması manuel adım, Task 16.
+  - Gerçek bir sektör paketi hiç yazılmadı; tüm ölçümler fixture üstünde. Paketi ÜRETEN hat
+    (araştırma → brief → sentez) Plan 2'nin işi.
+  - `IS JSON OBJECT` yüklemi yalnız PostgreSQL 18.3'te ölçüldü; PG16'da varlığı belgeye dayanıyor,
+    BU MAKİNEDE ÖLÇÜLMEDİ.
+  - Kısa video stage-2 gerçek bir fal.ai çağrısıyla koşulmadı (dış dünya kesildi).
 
 ## Risks
-- **[medium, accepted_risk — checkpoint 9]** CTA öğesi içinde serbest köşeli ayraç kullanılamaz.
-  Ayrıntı + yeniden açılma koşulu TASK.md Open Problems'ta. Evi: denetçi/brief sözleşmesi
-  (spec §8.7 listesi), Task 16'da Plan 2 teslim kalemi olarak doğrulanır.
-- **[medium, accepted_risk — checkpoint 9]** `brand_kit` anahtarı silinemez, yalnız üzerine
-  yazılabilir. Ayrıntı TASK.md Open Problems'ta.
-- **[belgeli sınır, borç DEĞİL]** Ayraçsız yazılmış kanal işareti (`kanal-bağımlı whatsapp_hatti`)
-  YAKALANMAZ ve yakalanması hedeflenmiyor — ayraç, bayrağı bayrak yapan şeydir. Sınır kendi
-  testiyle pinli, sessizce kaybolamaz.
-- **[bilinçli tasarım]** Etiket TANIMA geniş (her Unicode/büyük-küçük yazımı), kanal DOĞRULAMASI
-  dar (tam `True`). İkisi de atlama yönüne çalışır. Yazım kapısı okuma tarafından kasıtlı olarak
-  daha katıdır; asimetrinin yönü emniyetlidir.
-- **[bilinçli tasarım — kod belgesinde yazılı]** Marka adı eşleşmesi SOL sınır arar, sağ taraf
-  serbesttir (Türkçe eklemeli). Kısa bir marka adı sıradan bir sözcükse paket REDDEDİLİR. Yazım
-  kapısında yanlış-pozitif, yanlış-negatiften iyidir. Yeniden açılma: gerçek bir meşru paket bu
-  yüzden bloklanırsa.
-- **[bilinçli tasarım]** Katlama Türkçe dışı aksanları da düşürür; eşleşmeyi genişletir, yani
-  reddetme yönüne çalışır.
-- **[gözlem, borç DEĞİL]** `sector_resolver._normalize_slug` bilinçle DEĞİŞTİRİLMEDİ (başka bir
-  task'ın artefaktı); tutarlıdır, K-01b ihlali YOK.
-- **[medium, accepted_risk]** İki pytest oturumu aynı anda koşarsa biri diğerinin `otomaix_test`
-  veritabanını DROP eder (kilit yok).
-- **[medium, accepted_risk]** Migration keşfi tekrarlı numarayı reddetmiyor.
-- **[medium, accepted_risk]** `db` fixture'ının testler-arası geri sarma garantisini kanıtlayan
-  test yok.
-- **[medium, accepted_risk]** `sector_research_artifacts` TRUNCATE korumasının regresyon testi yok.
-- **[medium, accepted_risk]** Geri alma red testi iki korunan tabloyu AYNI anda dolduruyor.
-- **[medium, accepted_risk — Eray kararı]** On-prem paketi PostgreSQL 16 imajını pinliyor, 032
-  PG18 kolonu okuyor. **ÇÖZÜLMEDİ + park edildi.** Ayrıntı TASK.md Open Problems.
-- **[low, accepted_risk]** `idx_brands_sub_sector_id` planın Task 2 sözleşmesinde yazılı değil.
-- **F17 (Eray risk-kabulü):** damga = edited-lineage atfı. **Yeniden açtırma.**
-- **[checkpoint-override, checkpoint 5]** Sweep tabanının kökeni — TASK.md Open Problems'ta.
-  Adım 11 final review'a `checkpoint_overrides` olarak taşınır.
+
+**Bu oturumun kalemleri:**
+- **[açık borç — evi: yeni oturumun ilk işi]** Task 11'in son düzeltmesi (`419eb21`) hakemden
+  geçmedi. Ayrıntı TASK.md Open Problems.
+- **[bilinçli tasarım — dört turluk dersin sonucu]** Sahne zenginleştirmesinde yinelenme kontrolü
+  YOK; kalıp zaten varsa metin tekrar eder. Tekrar görsel modelde zararsız ve GÖRÜNÜR, eksiklik
+  sessizdi. Yeniden açılma: tekrarın görsel kaliteyi bozduğu gerçek üretimde ölçülürse.
+- **[bilinçli tasarım]** Hareket ve sahne geri düşüşü havuzdan RASTGELE seçer; sabit öğe o
+  sektörün her videosunu aynı kalıba düşürürdü.
+- **[bilinçli tasarım]** Damga yazımı başarısızsa `generation_id` null döner (eksik-atıf yönü);
+  üretim düşürülmez. Ters yön var olmayan kayda işaret ettirirdi.
+- **[doğrulama boşluğu — evi VAR: pilot]** Hareket/sahne seçiminin uçtan uca gerçek akışta
+  taşındığı ölçülmedi; kanıt birim ve yapısal testler. Gerçek ölçüm ancak canlı bir paket
+  varken mümkün (bugün `sector_packages` tablosu canlıda YOK — ölçüldü), o yüzden evi
+  **kuyumculuk pilotu**: pilotun ilk paketli videosunda hareketin havuzdan geldiği ve sahne
+  dilinin uygulandığı elle doğrulanır. Bu, evsiz bir park DEĞİL — pilot planlı bir fazdır.
+- **[Plan 2 teslim kalemi — evi VAR: plan "Plan 2'ye teslim edilen arayüzler", Task 16 doğrular]**
+  Brief/sentez hattı `video_kodlar` için İKİ HAVUZ üretmeli (`hareket`, `sahne`; ikisi de liste).
+  Asgari eleman sayısı **kapı YAPILMADI** (İlke 9).
+
+**Devralınan, değişmeyen kalemler** (ayrıntı TASK.md Open Problems + önceki oturum kayıtları):
+- `accepted_risk` (checkpoint 9): CTA içinde serbest köşeli ayraç yok · `brand_kit` anahtarı
+  silinemez.
+- Belgeli sınırlar (testle pinli, borç DEĞİL): ayraçsız kanal işareti yakalanmaz · tam genişlikli
+  ayraçlı etiket tanınır ama basımdan çıkarılamaz (kozmetik).
+- `accepted_risk` (test altyapısı): eşzamanlı iki pytest oturumu `otomaix_test`'i düşürür ·
+  migration keşfi tekrarlı numarayı reddetmiyor · `db` fixture geri sarma testi yok ·
+  `sector_research_artifacts` TRUNCATE regresyonu yok · `idx_brands_sub_sector_id` plan
+  sözleşmesinde yazılı değil (low).
+- **[Eray risk kabulü]** On-prem PG16 ↔ 032'nin PG18 kolonu: **çözülmedi + park edildi.**
+- **F17 (Eray):** damga = edited-lineage atfı. **Yeniden açtırma.**
+- **[checkpoint-override, checkpoint 5]** Sweep tabanının kökeni — kapalı.
 - **Residual (evi Task 16):** geri alma ile ileri 032 arasında ortak kilit yok.
-- **Temizlik borçları (evi: yürütme sonrası `/simplify-claude-codex`):** `test_migration_032.py` ve
-  `test_infra.py`'de kullanılmayan `pytest` importu · `brands.py`'deki `BrandOut` importu artık
-  kullanılmıyor (bu oturumdan önce de öyleydi).
-- **Etiketler (evi: `/finish-branch-claude-codex`):** `backup/pre-footer-fix` ve
+- **Temizlik borçları (evi: `/simplify-claude-codex`):** iki dosyada kullanılmayan `pytest`
+  importu · `brands.py`'de kullanılmayan `BrandOut`.
+- **Etiketler (evi: `/finish-branch-claude-codex`):** `backup/pre-footer-fix`,
   `backup/pre-t3-kind-fix` merge/PR kararından sonra silinir.
 
 ## Notes For Claude
-- **Bir kapı serbest metinden "X DEĞİLDİR"i kanıtlamaya çalışıyorsa regex'le yakınsamaz.** Bu
-  oturumun en pahalı dersi ve dördüncü tekrarı. Sinyal nettir: her tur bir öncekinden DAR bir vaka
-  açıyorsa yamalıyorsun demektir. Çıkış yamalamak değil, POZİTİF SÖZLEŞMEYE geçmek — "şu biçime
-  uyacak" (kapsama), "şuna benzemeyecek" (tahmin) değil.
-- **Sözleşmeyi uydurmadan önce kaynağı sonuna kadar oku.** Kapalı bayrak listesini "spec saymıyor"
-  diye yazılamaz sanmıştım; §8.5'in tüketim hükmü listeyi zaten belirliyordu. Uydurma ile türetme
-  arasındaki fark bir aramalık mesafedeydi.
-- **Kendi düzeltmenin yan etkisini ölç.** Tur 5'in iki bulgusu da benim düzeltmelerimdi: biri
-  sessiz veri kaybı açtı, biri kuralı aşırı genişletti. Bir sınıfı kapatırken yenisini açmak
-  gerçek ve sık bir sonuç.
-- **Kapsamı okuma tarafıyla hizala.** Yazım kapısı, okumanın taradığı birimi kapsamalı — ne eksik
-  (okuma denetlenmemiş bir şey görür) ne fazla (zararsız içerik reddedilir).
-- **Codex'i olduğu gibi kabul etme, ama ciddiye al.** Yedi bulgunun yedisi de sondajla DOĞRULANDI.
-  Sondaj koşmadan ne kabul et ne reddet. Tur 6'da iki madde yeniden açıldı — yeniden-açma
-  `RE-LITIGATED` olarak log'a yazılır, fix'e beslenmez; ama içindeki YENİ unsur ölçülür (ölçtüm,
-  boş çıktı).
-- **Severity Codex'in değil senin kararın.** Tur 1'in medium bulgusu high'dı (görevin tek bağlayıcı
-  invariantını gerçekçi girdiyle deliyordu) ve öyle işlendi; gerekçe commit mesajında yazılı.
-- **Eray'a teknik cümle onaylatma.** Bu oturumda İlke-8 kapısı bir soruyu geri çevirdi (seçenek
-  metninde proje-lokal kod terimi vardı). Soruyu tradeoff seviyesine yeniden yaz; kod-okuma
-  gerektiren doğrulama review zincirinin işidir.
-- **`Exec-Kind` etiketini yazmadan ÖNCE commit'in path kümesine BAK.** Geçerli küme:
-  `code|docs-only|migration|red-only|green-only|merge`. `tests/` altındaki HER ŞEY test sayılır.
-- **Codex çağrısı için `COMPANION` kurulmalı** ve prompt SHELL heredoc'uyla YAZILMAZ — SETUP fence
-  + Write tool ile `$CODEX_LOG` türevli yola.
-- **`last_checkpoint_ref` TAM SHA olmalı (40 hane).**
-- **Kota kapısı `SOFT` derse sebebi oku.** Bu oturumda sebep "ölçüm bayat (>900s)", kullanım
-  %1.0'dı; tek-çağrı dalı "uyar + devam" diyor.
-- **Sır tarayıcısı çok dosya eliyor** — Codex'e "git nesnelerinden oku" diye AÇIKÇA söyle.
+- **Karar sorusu çıkarsa ÖNCE spec-input'a bak.** Bu oturumun en pahalı dersi: Task 11'de "iki alt
+  yapıdan hangisi sahne" diye takıldım ve bunu yeni bir tasarım kararı gibi sundum. Cevap
+  input'ta yazılıydı (öneri · sahip · "spec içinde teknik olarak çözülür"). Spec'i ben yazmıştım
+  ve eksik taşımıştım. **Spec bir özet; kanonik ayrıntı input'ta.**
+- **Test yaprağa değil YOLA bakmalı.** Checkpoint bulgularının çoğu "yardımcıyı test ettim, ürün
+  yolu yönlendiricide ayrılıyordu" sınıfındandı. Rota kaydı, istemci taşıması, kalıcı kayıt —
+  ayrı ayrı sınanmalı; kaynak-dizesi iddiası entegrasyon deliğini göremez.
+- **Serbest metinden "bu zaten yeterli mi" sorusunu cevaplayan yüklem yakınsamaz.** Turlar
+  daralarak geliyorsa yamalamayı bırak: ya yüklemi sil (tekrar pahasına her zaman uygula), ya iki
+  tarafı TEK ortak ölçüye bağla (K-01b disiplini).
+- **Güven sınırını "kökeni şu olmalı" ile kurma.** Sunucu kökeni doğrulayamıyorsa o varsayımdır.
+  İki bulgu bundan doğdu: istemci sözlüğünü sunucu kaydı sanmak; İngilizce metni "caption
+  modelinden gelmiştir" saymak.
+- **Kör `replace` yapma — legacy uç aynı desenleri taşıyor.** `brand_kit["sector"]` ve
+  `template_fields is None` hem legacy `run_short_video_pipeline`'da hem stage-1'de eşleşiyor.
+  Tek-eşleşme iddiası (`count == 1`) bunu iki kez yakaladı; K-06 ihlali önlendi.
+- **`Exec-Kind`'ı yazmadan ÖNCE commit'in path kümesine BAK.** `last_checkpoint_ref` TAM SHA
+  (40 hane) ve YALNIZ §8.6 mutation protokolüyle değişir.
+- **Codex prompt'u SHELL heredoc'uyla YAZILMAZ** — SETUP fence + Write tool ile `$CODEX_LOG`
+  türevli yola. Timeout 124'te refleksle degradation'a düşme: önce 120s canlılık sondası, sağlamsa
+  `CSS_CALL_TIMEOUT=1200s` ile TEK tekrar (bu oturumda bir kez oldu, tekrar başarılı).
+- **Kota `SOFT` derse sebebi oku.** Bu oturumda hep "ölçüm bayat (>900s)", kullanım %1–6;
+  tek-çağrı dalı "uyar + devam".
 
 ## Notes For Codex
 - Kapsam daraltma prompt'ta veriliyor; sanitize substratta üretim dosyaları hariç tutuluyor —
   **yokluklarını bulgu sayma**, git nesnelerinden oku.
-- Sanitize substratta pytest/psql koşamıyorsun; runtime ölçümleri prompt'ta veriliyor, koda karşı
+- Sanitize substratta pytest/npx koşamıyorsun; runtime ölçümleri prompt'ta veriliyor, koda karşı
   doğrula.
 - Dispositioned `accepted_risk` maddeleri **yeniden açma** (yukarıdaki Risks listesi).
-  F17 Eray-tahkimli.
-- **Sweep tabanının kökeni (checkpoint 5 F1 kümesi) KAPALIDIR** — yeniden açma.
-- **Task 8'in üç bilinçli tasarım kararını bulgu sayma:** ~6.000 karakter tavanı UYARI'dır ·
-  `video_kodlar` alan adları K-02 açık olduğu için bağlanmadı · K-15(a) alan-düzeyi atlama dalı
-  bilinçle YOK.
-- **Task 9'un dört kapalı maddesini yeniden açma:** (a) ayraçsız işaret yakalanmaz — belgeli,
-  testle pinli sınır; (b) CTA DIŞINDA serbest ayraç serbesttir, bu bilinçli daraltmadır;
-  (c) CTA İÇİNDE ayraç yalnız bayraktır — kabul edilen içerik kısıtı, evi denetçi sözleşmesi;
-  (d) kit anahtarı silinemez — F3 düzeltmesinin kayıtlı bedeli. Dördü de Open Problems/Risks'te
-  dürüst etiketiyle yazılı.
+  F17 Eray-tahkimli. Sweep tabanının kökeni KAPALIDIR.
+- **Task 9/10'un kapalı sınırlarını yeniden açma:** ayraçsız işaret yakalanmaz · CTA DIŞINDA
+  serbest ayraç serbesttir · CTA İÇİNDE ayraç yalnız bayraktır · kit anahtarı silinemez · tam
+  genişlikli ayraçlı etiket basımdan çıkarılamaz · checkpoint 10'un F1-F4'ü kapalı.
+- **Bu oturumda tahkim edilen üç tasarım kararını bulgu sayma:** sahne zenginleştirmesinde
+  yinelenme kontrolü YOK (tekrar kabul edilen bedel) · hareket/sahne geri düşüşü havuzdan
+  RASTGELE seçer · damga yazımı başarısızsa `generation_id` null döner.
+- **K-06 açık:** legacy kısa video ucu pakete bilerek bağlanmadı.
+- **K-15(a)** alan-düzeyi atlama dalı bilinçle YOK.

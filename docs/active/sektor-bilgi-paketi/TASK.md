@@ -32,10 +32,48 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - execute_branch: feat/sektor-bilgi-paketi
 - last_checkpoint_ref: c7de39751793e02823ddeae77cf7c9d1b6e58887
 - cp_count: 10
+  <!-- Checkpoint 11 dört tur koştu ve APPROVE ALMADI; §8.6 mutation protokolü
+       yalnız Clean/Accepted-risk dallarında çalışır, o yüzden last_checkpoint_ref
+       checkpoint 10'da BIRAKILDI ve cp_count artırılmadı. Yeni oturum checkpoint
+       11'i taze bütçeyle kapatır. -->
 
 # Current Status
 
-**2026-08-24 (onuncu oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 9'u bitti.**
+**2026-08-24 (on birinci oturum) — PLAN 1 YÜRÜTME AÇIK; Task 10 ve 11 yazıldı, Task 8 revize
+edildi, K-02 ve K-113 KAPANDI. Checkpoint 11 KAPANMADI.**
+`pytest tests/ -q` → **296 passed** (oturum başında 232). Donmuş prompt kapısı → **71 passed**.
+`npx next build` → geçti (bu daldaki ilk frontend derlemesi). Çalışma alanı temiz, **push YOK**.
+
+**Task 10 bitti (tek-kapı enjeksiyon — caption + fikir önerme).** Paket bloğu kök sektör
+rehberinin yerine geçiyor; özel günde dönem kalıpları mevcut bloğun içine giriyor; CTA'lar Task
+9'un kanal filtresinden geçiyor; paketli üretim opak `generation_id` döndürüyor.
+**Checkpoint 10: iki tur, approve.** Tur 1'de üç high + bir medium; dördü de sondajla doğrulandı.
+İkisi benim kendi hatamdı ve ikisi de ancak yol/güven sınırına bakınca görünüyordu: (a) damga
+yardımcısını dekoratör ile işleyicinin ARASINA koymuşum, FastAPI rotayı ona bağlamış, caption ucu
+HTTP'den erişilemez hâle gelmişti; (b) damga, paketin ÇÖZÜLMÜŞ olmasına bakıyordu, dönen içeriğin
+o paketle üretildiğine değil — model patlayınca yedek çıktı paket damgası alıyordu (sahte soyağacı).
+
+**Spec eksikliği kapatıldı (Eray talebi).** Spec, spec-input'tan yazılırken K-02'nin **öneri ·
+sahip · çözüm yolu** ayaklarını düşürmüş, **K-113'ü hiç taşımamıştı**. İki commit bunu yalnız
+EKLEYEREK kapattı (108 satır eklendi, **0 satır silindi** — `git diff --stat` ile doğrulandı);
+her blok `[SONRADAN EKLENDİ]` etiketi taşıyor. Bu, yürütmenin Task 11'de tam olarak neden
+durduğunu da açıklıyor: "iki alt yapıdan hangisi sahne" sorusunun yazılı cevabı yoktu.
+
+**K-02 = A ve K-113 = A KAPANDI (Eray onayı).** Hareket dili paketin sektörel havuzundan gelir;
+seçimi caption aşamasındaki MEVCUT model çağrısı yapar (ölçüldü: kısa video ucu script'siz istek
+kabul etmiyor, yani o çağrı zaten zorunlu → ek çağrı doğmuyor); istemciden dönen değer sunucuda
+havuz üyeliğine karşı doğrulanır; havuz boşsa bugünkü listeye düşülür. Alan adları bağlandı
+(`video_kodlar.hareket` · `.sahne`), **ikisi de LİSTE**.
+
+**Task 8 revize edildi.** Yazdığım kapı `video_kodlar`'ın parçalarını tek cümle sanıyordu ve
+adları serbest bırakıyordu; ölçüldü, alternatif taşıyan meşru bir paket yazılamıyordu. Kapı artık
+adlı ve çoğul sözleşmeyi zorluyor.
+
+**Task 11 yazıldı ama CHECKPOINT 11 KAPANMADI.** Görsel dil, sahne havuzu (iki modda da) ve
+hareket havuzu bağlandı; legacy uç bilinçle bağlanmadı (K-06). **Dört tur koşuldu; F1 ve F2
+kapandı, F3 dört kez geri geldi ve son düzeltmesi HAKEMDEN GEÇMEDİ** (ayrıntı Open Problems).
+
+**Önceki durum (2026-08-24, onuncu oturum) — 16 task'ın 9'u bitti.**
 Bu oturumda YALNIZ Task 9 (kanal envanteri) yürütüldü — ama checkpoint'i altı tura yayıldı.
 `pytest tests/ -q` → **232 passed** (oturum başında 185). Donmuş prompt kapısı → **25 passed**.
 Çalışma alanı temiz, **push YOK**. Devralınan açık kapı YOKTU; bu oturum da açık kapı DEVRETMİYOR.
@@ -253,6 +291,30 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 
 # Open Problems
 
+- **[AÇIK BORÇ — tek gerçek açık kapı] Task 11'in son düzeltmesi bağımsız hakemden GEÇMEDİ.**
+  Checkpoint 11 dört tur koştu. F1 (frontend seçimi düşürüyordu) ve F2 (istemci `template_fields`
+  üzerinden sunucu anahtarı uydurabiliyordu) hakem tarafından KAPALI doğrulandı. **F3 dört kez
+  geri geldi ve her seferinde farklı kök nedenle:** (1) test yaprakta yazılmıştı, ürün yolu
+  yönlendiricide ayrılıyordu; (2) "gelen İngilizce istem caption modelinden gelmiştir" varsayımı
+  doğrulanabilir değildi; (3) kabul kapısı ile tüketici farklı boşluk ölçüsü kullanıyordu (`"."`
+  kapıdan geçip tüketimde boş dizeye iniyordu); (4) alt dize içerme yanlış pozitifi
+  (`"ring" in "spring"`).
+  **Dördüncü düzeltme yüklemi inceltmedi, KALDIRDI** — kalıp artık her zaman ekleniyor; tekrar
+  kabul edilen bedel, sessiz eksiklik değil. Kendi ölçümüm üç maddede yeşil (ring/spring tuzağı
+  zenginleşiyor · anlamsız havuzda bayt aynı · boş havuzda bayt aynı) ama **Codex bu commit'i
+  görmedi** (`419eb21`).
+  **Evi:** yeni oturumun ilk işi — checkpoint 11'i taze bütçeyle kapatmak.
+  **Neden bu oturumda kapatılmadı:** checkpoint payı (tavan 8 − finale rezerve 3 = 5) tükendi,
+  Eray bir tur rezerveden fonladı, o tur da yeni bir varyant buldu. Aynı eksende beşinci turu
+  yorgun bütçeyle koşmak yerine taze oturuma bırakıldı (Eray kararı).
+
+- **[Ders — kayda değer, borç DEĞİL] Bu eksende dört tur, dört kök neden.** Son üçünün ortak yanı:
+  serbest metinden *"bu zaten yeterli mi / bu girdi güvenilir mi"* sorusunu cevaplamaya çalışan bir
+  yüklem. Böyle bir yüklem yakınsamıyor; her tur bir öncekinden dar bir vaka açıyor. Çıkış her
+  seferinde yüklemi silmek ya da tek ortak ölçüye bağlamak oldu. Yeni oturumda aynı desen görülürse
+  (turlar daralarak geliyorsa) yamalamayı bırakıp sınıfı kapatmak gerekir.
+
+
 - **CTA öğesi içinde serbest köşeli ayraç kullanılamaz (Plan 2'ye teslim edilen içerik kısıtı,
   checkpoint 9).** Kanal bayrağının bozuk yazımını kapatan kural, CTA öğesindeki HER ayracı bayrak
   sayar; dolayısıyla `[bkz. kaynak 3]` gibi zararsız bir notasyon CTA içinde REDDEDİLİR (CTA
@@ -300,6 +362,28 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
   Yeniden açılma: arşiv belgesi ileride yeniden canlı girdi olursa.
 
 # Decisions Log
+
+- **2026-08-24 (on birinci oturum) — Spec eksikliğinin kapatılma biçimi (Eray):** spec ve planda
+  HİÇBİR ŞEY SİLİNMEYECEK; eksik kayıtlar ilgili maddelerin ALTINA, "eksik yazıldığı için sonradan
+  eklendi" notuyla eklenecek. Uygulandı ve mekanik olarak doğrulandı (108 satır eklendi, 0 silindi).
+
+- **2026-08-24 (on birinci oturum) — K-02 = A, seçici modelde (Eray):** hareket dili paketin
+  sektörel havuzundan gelir; havuzda birkaç alternatif bulunur; seçimi model yapar.
+  **Eray'ın gerekçesi:** tek cümle o sektörün her videosunu aynı tipte üretir; ayrıca "bu video
+  mücevher yakın çekimi anlatıyorsa yavaş yörünge seç" ayrımına ancak model karar verebilir, kodda
+  kural yazmak seçenek patlamasına gider — ki bu, paketin ortadan kaldırmak için var olduğu prompt
+  cerrahisine dönmektir (spec §1.2).
+  **Maliyet ayağı ölçüldü:** kısa video ucu script'siz istek kabul etmiyor, yani caption model
+  çağrısı o akışta ZATEN zorunlu; seçim o çağrının çıktısına alan olarak bindiği için ek çağrı
+  doğmuyor. Input'un A'yı önerme gerekçesi ("ek model çağrısı doğmaz") böylece korunuyor.
+
+- **2026-08-24 (on birinci oturum) — K-113 = A (Eray onayı):** hareket havuzu boşsa bugünkü sabit
+  listeye düşülür. Input bu dalın "yalnız tek hakemde" geçtiğini işaretlemişti; karara bağlandı.
+
+- **2026-08-24 (on birinci oturum) — Checkpoint 11 için rezerveden bir tur (Eray):** checkpoint
+  payı tükendikten sonra finale ayrılmış rezerveden bir tur fonlandı (audit: `checkpoint-cap-reserve`).
+  O tur da yeni bir varyant buldu; beşinci tur taze oturuma bırakıldı.
+
 
 > ⚠️ Aşağıdaki `K-xx` ID'leri sentez belgesinin (snapshot Bölüm 17) uzayıdır — eski spec'in
 > `K1–K7` gündemiyle karıştırılmaz. Kanonik kapanış kayıtları snapshot **Ek B**'dedir.
