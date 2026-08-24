@@ -33,6 +33,10 @@ UPDATE_ENV = "PROMPT_REGRESSION_UPDATE"
 # görülürse yakalama REDDEDİLİR (bkz. `_cache_suffix`).
 _KNOWN_CACHE_CONTROL_KEYS = frozenset({"type"})
 
+# Metin bloğunda basılan alanlar. Küme fail-closed'dır: dışında bir alan
+# görülürse yakalama REDDEDİLİR (bkz. `_require_closed_text_block`).
+_KNOWN_TEXT_BLOCK_KEYS = frozenset({"type", "text", "cache_control"})
+
 
 class UnrenderableBlock(AssertionError):
     """Kayıpsız temsil edilemeyen bir girdi bloğu yakalandı.
@@ -95,20 +99,35 @@ class CapturedCall:
 def _as_blocks(content: Any) -> list[dict]:
     """Düz metni de blok listesini de tek biçime indirger.
 
-    KAYIPLI temsil YOKTUR: metin olmayan bir blok (görsel, araç sonucu) `<tip>`
-    işaretine indirgenmez — `UnrenderableBlock` ile REDDEDİLİR. Gerekçe: fixture
-    ancak girdiyi kayıpsız temsil ediyorsa kanıttır; iki farklı görsel aynı
-    `<image>` işaretine inseydi fixture değişmeden prompt değişebilirdi.
+    KAYIPLI temsil YOKTUR. Üç kapı da fail-closed'dır (checkpoint 7):
+
+    1. **Kap:** yalnız düz metin veya liste/demet kabul edilir. Sözlük REDDEDİLİR
+       — `for block in content` bir sözlüğü ANAHTARLARI üzerinden gezer ve
+       `{"type": "image", ...}` sessizce "type" + "source" metin bloklarına
+       inerdi (ölçüldü).
+    2. **Blok:** metin olmayan blok (görsel, araç sonucu) `<tip>` işaretine
+       indirgenmez. İki farklı görsel aynı işarete inseydi fixture değişmeden
+       prompt değişebilirdi.
+    3. **Şema:** metin bloğunun alan kümesi KAPALIDIR. Tanınmayan bir üst alan
+       (ör. `citations`) sessizce düşmez — basılmayan alan, görünmeyen davranış
+       demektir.
     """
     if content is None:
         return []
     if isinstance(content, str):
         return [{"type": "text", "text": content}]
+    if not isinstance(content, (list, tuple)):
+        raise UnrenderableBlock(
+            f"blok kabı liste değil: {type(content).__name__} "
+            "(sözlük verilirse anahtarları metin sanılırdı). "
+            "İçerik ya düz metin ya da blok LİSTESİ olmalıdır."
+        )
     blocks = []
     for block in content:
         if isinstance(block, str):
             blocks.append({"type": "text", "text": block})
         elif isinstance(block, dict) and block.get("type") == "text":
+            _require_closed_text_block(block)
             blocks.append(block)
         else:
             kind = block.get("type") if isinstance(block, dict) else type(block).__name__
@@ -120,6 +139,21 @@ def _as_blocks(content: Any) -> list[dict]:
     return blocks
 
 
+def _require_closed_text_block(block: dict) -> None:
+    """Metin bloğunun basılan alan kümesini doğrular — fazlası REDDEDİLİR."""
+    unknown = set(block) - _KNOWN_TEXT_BLOCK_KEYS
+    if unknown:
+        raise UnrenderableBlock(
+            f"metin bloğu tanınmayan alan taşıyor: {sorted(unknown)}. "
+            "Harness bu alanları basmıyor; temsil eklenmeden fixture dondurulamaz."
+        )
+    if not isinstance(block.get("text"), str):
+        raise UnrenderableBlock(
+            "metin bloğunda `text` alanı yok veya metin değil — bozuk blok "
+            "sessizce boş basılmaz."
+        )
+
+
 def _cache_suffix(block: dict) -> str:
     """Önbellek sınırını basar; tanınmayan alan varsa REDDEDER.
 
@@ -127,9 +161,16 @@ def _cache_suffix(block: dict) -> str:
     (ör. `ttl`) yalnız `type` basmak onu görünmez kılardı — önbellek sınırı
     mimari bir karardır (3 katmanlı prompt cache), sessizce kaymamalı.
     """
-    cache_control = block.get("cache_control")
-    if not cache_control:
+    if "cache_control" not in block:
         return ""
+    cache_control = block["cache_control"]
+    if not isinstance(cache_control, dict) or not cache_control:
+        # Boş/bozuk `cache_control`, "önbellek yok" ile AYNI şey DEĞİLDİR:
+        # ikisi aynı bayta inseydi sınırın kaybolması görünmezdi.
+        raise UnrenderableBlock(
+            f"cache_control bozuk veya boş: {cache_control!r} — "
+            "önbellek sınırı sessizce yok sayılmaz."
+        )
     unknown = set(cache_control) - _KNOWN_CACHE_CONTROL_KEYS
     if unknown:
         raise UnrenderableBlock(
@@ -195,6 +236,12 @@ def assert_matches_fixture(name: str, rendered: str) -> None:
 
     Dondurma AÇIK talep olmadan ASLA yapılmaz: yoksa her kırmızı test kendini
     yeşile boyardı ve fixture'ın koruma değeri sıfıra inerdi.
+
+    İş sırası İKİ adımdır (checkpoint 7): bayrakla dondur — bu koşum
+    `test_update_flag_must_be_unset_for_verification` yüzünden KIRMIZI raporlar,
+    çünkü bir dondurma koşumu doğrulama koşumu DEĞİLDİR — sonra bayrağı kaldırıp
+    doğrula. Böylece ortamda asılı kalmış bir bayrak asla yeşil bir doğrulama
+    üretemez.
     """
     path = FIXTURES_DIR / f"{name}.txt"
     payload = rendered.encode("utf-8")
