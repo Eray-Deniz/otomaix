@@ -35,10 +35,13 @@ Sözleşme:
   marka kimliğine göre sıralıdır. Aynı veri → bayt-aynı çıktı.
 * **Ortamdan miras almaz.** Bağlantı dizesi `--database-url` ile AÇIKÇA verilir;
   `DATABASE_URL` ortam değişkeni okunmaz (yanlış veritabanına koşma riski yok).
-* **Taban hedefe BAĞLI.** Rapor, üretildiği veritabanının kimliğini (küme
-  kimliği / oid / ad) taşır; `--baseline` başka bir hedefin raporunu REDDEDER
-  (rc=2). Aksi hâlde başka bir veritabanından — örneğin boş bir klondan — gelen
-  geçerli biçimli bir taban her markayı "yeni" gösterir ve kaymayı gizlerdi.
+* **Taban hedefe BAĞLI.** Rapor, üretildiği veritabanının kimliğini taşır:
+  küme kimliği / oid / ad **artı bağlantı ucu** (`sunucu:port/veritabanı`).
+  `--baseline` başka bir hedefin raporunu REDDEDER (rc=2). Aksi hâlde başka bir
+  veritabanından gelen geçerli biçimli bir taban her markayı "yeni" gösterir ve
+  kaymayı gizlerdi. Bağlantı ucu şart, çünkü fiziksel bir kopya (yedekten geri
+  yükleme, standby) veritabanı-içi kimliğin ÜÇÜNÜ DE aynen taşır — prod
+  yedeğinden kurulmuş bir staging bu yüzden orijinalden ayırt edilemezdi.
 * **Bilinçli sınır (BELGELİ KALINTI).** Araç, tabanın geçmişte DOĞRU olduğunu
   kanıtlayamaz; taban geçmiş bir durumdur ve güveni onu bu script'in yazmış
   olmasından alır. Elle düzenlenmiş (sayacı da güncellenmiş) bir taban, aynı
@@ -62,6 +65,7 @@ import sys
 from pathlib import Path
 
 import asyncpg
+from urllib.parse import urlsplit
 
 # Rapor biçimi değişirse artar — iki koşumun karşılaştırılabilirliği buna bağlı.
 # v2: rapor tam eşleme listesi taşır (v1 yalnız toplam sayı taşıyordu).
@@ -90,9 +94,16 @@ _SUB_SECTOR_COUNT_SQL = """
 SELECT count(*) FROM social.sectors WHERE parent_sector_id IS NOT NULL
 """
 
-# Hedef kimliği: küme kimliği / veritabanı oid'i / veritabanı adı. Üçü birlikte
-# "bu kümedeki bu veritabanı"nı adresler. Salt-okunur rolde erişilebilirliği
-# ÖLÇÜLDÜ (PostgreSQL 18.3, 127.0.0.1:5433).
+# Hedef kimliğinin veritabanı-içi yarısı: küme kimliği / veritabanı oid'i /
+# veritabanı adı. Salt-okunur rolde erişilebilirliği ÖLÇÜLDÜ (PostgreSQL 18.3,
+# 127.0.0.1:5433).
+#
+# Bu üçlü TEK BAŞINA yetmez (Codex checkpoint 5 tur 4): fiziksel bir kopya —
+# yedekten geri yükleme, standby, depolama anlık görüntüsü — üçünü de AYNEN
+# taşır. PostgreSQL küme kimliğini zaten "aynı kümeden türedi" kanıtı olarak
+# kullanır. Prod yedeğinden kurulmuş bir staging veritabanı bu yüzden orijinalden
+# ayırt edilemezdi. Kimliğe bu yüzden BAĞLANTI UCU da eklenir: kopya başka bir
+# adreste durur.
 _TARGET_SQL = """
 SELECT format(
     '%s/%s/%s',
@@ -101,6 +112,20 @@ SELECT format(
     current_database()
 )
 """
+
+
+def endpoint_identity(database_url: str) -> str:
+    """Bağlantı ucunun kimliği — `sunucu:port/veritabanı`. Parola/kullanıcı YOK.
+
+    Aynı veritabanına farklı adlarla (`localhost` vs `127.0.0.1`) bağlanmak
+    uyuşmazlık üretir; bu FAIL-CLOSED yöndür — araç durur, operatör tabanı
+    yeniden alır. Ters yön (sessizce kabul) tam da kapatılan hatadır.
+    """
+    parts = urlsplit(database_url)
+    host = parts.hostname or "?"
+    port = parts.port if parts.port is not None else "?"
+    database = parts.path.lstrip("/") or "?"
+    return f"{host}:{port}/{database}"
 
 
 class BaselineMismatch(ValueError):
@@ -283,7 +308,7 @@ async def sweep(
         # Yapısal salt-okunurluk: yetkili dizeyle koşulsa bile yazamaz.
         await connection.execute("BEGIN TRANSACTION READ ONLY")
         try:
-            target = await connection.fetchval(_TARGET_SQL)
+            cluster_identity = await connection.fetchval(_TARGET_SQL)
             rows = await connection.fetch(_SWEEP_SQL)
             sub_sector_rows = await connection.fetchval(_SUB_SECTOR_COUNT_SQL)
         finally:
@@ -291,8 +316,9 @@ async def sweep(
     finally:
         await connection.close()
 
-    if not target:
+    if not cluster_identity:
         raise ValueError("hedef kimliği okunamadı — karşılaştırma yapılamaz")
+    target = f"{cluster_identity}@{endpoint_identity(database_url)}"
 
     baseline_mapping = None
     if baseline is not None:

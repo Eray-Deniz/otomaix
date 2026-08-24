@@ -615,3 +615,40 @@ async def test_sweep_accepts_new_brands_on_same_target(readonly_role, tmp_path):
     assert "added: 2" in after.stdout
     assert "remapped: 0" in after.stdout
     assert after.returncode == 0, "yeni marka açmak yanlışlıkla ihlal sayıldı"
+
+
+async def test_sweep_target_distinguishes_physical_clone(readonly_role, tmp_path):
+    """Fiziksel kopya AYIRT EDİLİR — veritabanı-içi kimlik aynı olsa bile.
+
+    Codex checkpoint 5 tur 4, yüksek bulgu: yedekten geri yüklenen bir kopya
+    (küme kimliği + oid + ad) üçlüsünü AYNEN taşır. Prod yedeğinden kurulmuş bir
+    staging bu yüzden orijinalden ayrılamıyordu. Kimliğe bağlantı ucu eklendi.
+
+    Kopyayı gerçekten kurmak yerine, kimliğin kopya-değişmez yarısını sabit
+    tutup DEĞİŞEN yarısını (bağlantı ucu) oynatıyoruz — bulgunun tarif ettiği
+    çakışmanın tam kendisi.
+    """
+    _admin_url, readonly_dsn = readonly_role
+
+    full = _run_sweep(readonly_dsn)
+    assert full.returncode == 0, full.stderr
+
+    target_line = next(
+        line for line in full.stdout.splitlines() if line.startswith("target: ")
+    )
+    cluster_part, _, endpoint_part = target_line[len("target: ") :].partition("@")
+
+    # Kimlik gerçekten iki parçalı: küme yarısı + uç yarısı.
+    assert cluster_part and endpoint_part, f"kimlik iki parçalı değil: {target_line}"
+    assert endpoint_part.startswith(f"{REQUIRED_HOST}:{REQUIRED_PORT}/")
+
+    # Kopya senaryosu: küme yarısı AYNEN korunur, yalnız uç değişir.
+    clone = tmp_path / "kopya.txt"
+    clone.write_text(
+        _retarget(full.stdout, f"{cluster_part}@staging.example:5432/otomaix"),
+        encoding="utf-8",
+    )
+
+    rejected = _run_sweep(readonly_dsn, baseline=clone)
+    assert rejected.returncode == 2, "fiziksel kopyanın tabanı kabul edildi"
+    assert "başka bir hedeften" in rejected.stderr
