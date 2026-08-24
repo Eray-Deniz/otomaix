@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Runtime Çekirdek Uygulaması
 status: proposed
 started: 2026-07-12
-last-touched: 2026-08-23
+last-touched: 2026-08-24
 blocked-by: null
 ---
 
@@ -22,8 +22,31 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-23 (ikinci oturum) — Karar kapanış turu TAMAMLANDI: 45/45 karar Eray'la
-tek tek kapatıldı ve spec'e işlendi.** Kayıt üçlemesi: liste Durum sütunu dolu +
+**2026-08-24 (beşinci oturum) — PLAN 1 ONAYLANDI (`plan-approved`, Tur 7 `verdict: approve`).**
+Eray yol seçimi: "sadeleştir + fix" — F23 kaldırmayla kapandı (recovered bandı + K-45
+geri-dönüş teslimi Plan 2'ye; atama-geçmişi kanıtı Plan 2 kalemi; metin/karar korunur),
+F22 (olay-türüne özgü sürüm şekilleri) + F24 (geçiş+olay tek transaction) mekanik fix.
+Tur 7 kapanış-doğrulaması: F22/F23/F24 CONFIRMED, yeni bulgu YOK. 24/24 bulgu kapalı
+(23 fix/devir + F17 Eray risk-kabulü). EXECUTE-NOTES kozmetikleri uygulandı. Repo
+HİS-özet review log yazıldı (`docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md`).
+Commit onayı Eray'da; sonrası `/execute-plan-claude-codex`.
+
+**Önceki durum (2026-08-23, dördüncü oturum):** Plan 1 yazıldı, 6 Codex review turu
+koştu; 3 açık high bulgu + YOL SEÇİMİ Eray kararı bekliyordu; oturum Eray talebiyle o
+noktada kapatıldı. Kapsam kararı: 2 planlı staged split (Eray) — Plan 1 = runtime çekirdeği
+(bu oturumda yazıldı: `docs/plans/2026-08-23-sektor-bilgi-paketi.md`, 16 task,
+status `plan-draft`, **COMMIT EDİLMEDİ — working tree'de untracked**), Plan 2 =
+işletim hattı (hat/motor/komut ailesi/pilot; açık K-84 ailesi kapanınca).
+Review: 24 bulgu (F1-F24), 21'i kapandı (19 fix+CONFIRMED · F17 Eray risk-kabulü:
+damga = edited-lineage atfı · F20/F21 tur-6 CONFIRMED). **Açık: F22 (yaşam-döngüsü
+olay şekilleri sınır durumları) · F23 (recovered bandı atama-geçmişi kanıtı) ·
+F24 (geçiş+olay atomikliği)** — üçünün de Codex yapılandırılmış çözümü review
+log'unda. Sıradaki adım SEÇİM: (1) sadeleştir+fix (geri-dönüş bandı Plan 2'ye →
+F23 yok olur; önerilen) / (2) üçünü düzelt / (3) durdur — Eray henüz SEÇMEDİ;
+yeni oturum bu sorudan başlar. Süreç notu: oturum sonunda belirsiz-mesajı onay
+sayma ihlali yaşandı (Eray yakaladı; plan dosyasına dokunulmadan durduruldu).
+
+**Önceki durum (üçüncü oturum):** Kayıt üçlemesi: liste Durum sütunu dolu +
 spec K-ID satırları "KAPANDI" statüsünde (kardeş-site sweep'li) + Decisions Log
 altında tam döküm. Öneriden farklı 3 karar: K-71 (açık sorular aktivasyonu BLOKLAR),
 K-45 (çift yönlü bakım bildirimi — Faz 1'e bildirim mekanizması iş kalemi eklendi),
@@ -51,6 +74,12 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 
 # Open Problems
 
+- **Plan 1 + aktif katman + review özeti COMMIT EDİLMEDİ** — Eray commit onayı bekleniyor
+  (kaybolma riski; ilk iş).
+- Spec'in ~45 kapanış metninin bağımsız kapanış-sweep'i Eray kararıyla ATLANDI
+  (2026-08-23 dördüncü oturum, "vazgeçtim plan yazımına geç") — kısmi hafifletme:
+  6 Codex plan-review turu spec'i tekrar tekrar okudu, K-ID çelişkisi raporlamadı.
+  Yeniden açılma: spec kapanış metinlerinden şüphe doğarsa.
 - Denetimin iki orta bulgusu bilinçli açık (Eray kapsamı: yalnız yüksekler): (1) sentez
   deposu commit mesajı `432738b`'deki "35 benzersiz K/R-ID" sayımı yanlış (doğrusu 38;
   git geçmişinde, içerik hatası değil), (2) snapshot Ek C'deki "beş prompt yüzeyi" sayısı
@@ -174,6 +203,19 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 - **2026-08-23 — Spec ONAYLANDI (Eray):** karar turu kapanışının ardından frontmatter
   `reviewed-pending-user-approval` → `spec-approved`. Plan `/write-plan-claude-codex`
   ile SIFIRDAN yazılacak (eski plan superseded).
+- **2026-08-23 (dördüncü oturum) — Plan yapısı: 2 planlı staged split (Eray):** Plan 1 =
+  runtime çekirdeği ("paketi TÜKETEN her şey"), Plan 2 = işletim hattı ("paketi ÜRETEN ve
+  AKTİVE EDEN her şey"); tek arayüz DB sözleşmesi + kanonik teslim listesi. Gerekçe: motor
+  ön-koşul kararları (K-84/K-151/K-152) açıkken detay-plan karar uydururdu.
+- **2026-08-23 (dördüncü oturum) — F17 risk kabulü (Eray):** K-07 damgası "üretim-oturumu
+  atfı"dır (edited lineage) — bayt-bayt içerik kanıtı iddia edilmez (caption düzenlenebilir);
+  aynı-marka kullanılmamış makbuz ikamesi kabul edilen risk; yeniden açılma: müşteri
+  sayısı/ürünleşme artışı. Plana işlendi (bağlanan teknik karar 1).
+- **2026-08-23 (dördüncü oturum) — Plan-içi teknik bağlamalar (İlke 8, review zinciri
+  sınadı):** K-07 bileşik FK + opak generation_id · K-08a TEXT · K-08b DB trigger +
+  reparenting yasağı · paket okuması önbelleksiz · Katman-1 = Anthropic istemci kesişimi ·
+  bildirim = transactional outbox + versiyonlu n8n workflow · K-101/K-102 tek-transaction
+  (dar-refactor fallback'li) · K-94 mekanizma-var-kural-açık (opsiyonel alan).
 - **2026-08-23 — Sentez deposu sweep borcu KAPSAM DARALTMASIYLA kapandı (Eray):**
   kapanan kararların kanonik kaynağa (araştırma deposu, Bölüm 17 + Ek B + gövde)
   geriye dönük işlenmesi İPTAL — spec onaylandıktan sonra arşiv belgesini yeniden
@@ -183,6 +225,12 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
   doğrulandı. Yerine: kaynak belgeye statü notu (belge başı + Bölüm 17 başlığı —
   51 kapanışın ID listesi + "çelişkide spec esastır" hükmü) + snapshot yeniden
   eşitleme. Yeniden açılma koşulu: arşiv belgesi ileride yeniden canlı girdi olursa.
+- **2026-08-24 — Yol seçimi: "sadeleştir + fix" (Eray) + Plan 1 ONAYI:** F23'ün konusu
+  (recovered bandı + K-45 geri-dönüş mesajının teslimi) Plan 2'ye taşındı — gerekçe:
+  tetiği (reaktivasyon) yalnız Plan 2 komut ailesinden koşulabilir, Plan 1 ömründe
+  recovered durumu hiç doğamaz; K-45 kararı ve sabit metinler KORUNUR, Plan 2 kalemi
+  atama-geçmişi kanıtını da içerir. F22 = olay-türüne özgü sürüm şekilleri (sentinelsiz),
+  F24 = olay kaydı geçişle aynı transaction. Tur 7 approve → `plan-approved`.
 - **2026-08-21 — Denetim + sweep (Eray: "yüksek bulguları giderelim" + commit onayı):**
   Codex denetiminin iki yüksek bulgusu sentez deposunda giderildi (commit'ler
   `8e298eb → c380e37`); dört kapanışın statü/kapsam izleri gövdeye işlendi, karar-durumu
