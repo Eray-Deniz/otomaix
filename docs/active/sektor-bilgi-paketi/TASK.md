@@ -30,8 +30,8 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: 9db42fc7d72f305558856317ba7b29747479f0ca
-- cp_count: 9
+- last_checkpoint_ref: c7de39751793e02823ddeae77cf7c9d1b6e58887
+- cp_count: 10
 
 # Current Status
 
