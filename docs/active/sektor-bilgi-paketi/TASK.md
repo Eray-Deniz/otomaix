@@ -35,7 +35,51 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-24 (dokuzuncu oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 8'i bitti (planın yarısı).**
+**2026-08-24 (onuncu oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 9'u bitti.**
+Bu oturumda YALNIZ Task 9 (kanal envanteri) yürütüldü — ama checkpoint'i altı tura yayıldı.
+`pytest tests/ -q` → **232 passed** (oturum başında 185). Donmuş prompt kapısı → **25 passed**.
+Çalışma alanı temiz, **push YOK**. Devralınan açık kapı YOKTU; bu oturum da açık kapı DEVRETMİYOR.
+
+**Task 9 bitti (kanal envanteri + deterministik CTA filtresi).** `[kanal-bağımlı: X]` etiketli
+CTA kalıpları markanın envanterine karşı deterministik olarak eleniyor; envanter yok/boş/bozuk
+ya da değer tam `True` değilse kalıp ATLANIYOR (spec §12.2 muhafazakârlık hükmü). Anahtar uzayı
+kapalı ve kapalılık, çağıranın kit içeriği verebildiği HER yüzeyde zorlanıyor — yüzey kümesinin
+tamlığı yapısal (AST) taramayla ölçülüyor.
+
+**Checkpoint 9: ALTI TUR, tavan-aşımı (Eray oturum başında izin verdi; audit `ceiling-exceed`).**
+Yedi bulgunun yedisi de bağımsız sondajla DOĞRULANDI — hiçbiri sondaj koşmadan kabul veya
+reddedilmedi. Beşi high, ikisi medium.
+
+**Turların anlattığı asıl hikâye: yamalama üç tur boyunca yakınsamadı.** Bulgular tek eksende
+daralarak geldi — tipografik/görünmez karakter (tur 1) → eksik ayıraç (tur 2) → ayırıcı sınıfı
+(tur 3) → yanlış yazılmış bayrak adı (tur 4). Kök sebep her turda aynıydı: kapı serbest metinden
+*"bu bir etiket DEĞİLDİR"* i kanıtlamaya çalışıyordu. Bu tür bir kapı yakınsamaz; her tur ya bir
+bypass ya bir yanlış-pozitif üretir. Tur 3 ve tur 4'te döngü sınıf-teşhisiyle DURDURULDU ve Eray'a
+soruldu (bkz. Decisions Log).
+
+**Çözüm tahminden KAPSAMAYA taşındı ve dayanağı spec'ten TÜRETİLDİ, uydurulmadı.** §8.4 bayrak
+kümesini "sekiz bayrak, kapalı" diye bağlıyor ama sekizini saymıyor; §8.5 eksik parçayı veriyor —
+sekizin YEDİSİ sentez sırasında tüketilir, yalnız kanal bayrağı "etiketiyle taşınır"; §3.4 aynı
+hükmü alan tablosunda tekrarlıyor. Yani paket İÇERİĞİNDE geçebilecek bayrak kümesi tek kalemlik.
+Kural: CTA öğesi içindeki her köşeli ayraç kanal bayrağının kurallı biçimi olmak zorunda. Yanlış
+yazım, birleşik yazım, eksik/iç içe ayraç, sentezde tüketilmesi gereken bir bayrağın sızması —
+hepsi TEK kuralla düşüyor. Açık bir K-ID kapatılmadı.
+
+**Tur 5 iki YENİ sınıf getirdi ve ikisi de benim düzeltmelerimin yan etkisiydi.** (a) Birleştirmeyi
+sunucuya taşırken çift kodlanmış kit satırının ele alınmasını düşürmüşüm: ölçüldü, tek alanlık bir
+güncelleme mevcut TÜM kit alanlarını siliyordu. (b) Ayraç kuralını içeriğin tamamına uygulamıştım:
+görsel yönergedeki zararsız bir notasyon paketin TAMAMINI devre dışı bırakıyordu. İkisi de
+düzeltildi. **Ders: düzeltmenin kendi yan etkisini ölçmek düzeltmenin parçasıdır.**
+
+**Eşzamanlılık sınıfı da kapandı.** `brand_kit` artık hiçbir yolda okunup geri yazılmıyor;
+üç yazıcı da tek bir sunucu-taraflı birleştirme ifadesinden geçiyor. Ölçüldü: düzeltmeden önce
+dört eşzamanlı yazımın ÜÇÜ kayboluyordu.
+
+**İnceleme bütçesi bu oturumda TÜKENDİ.** Altı tur koşuldu (tavan 8, en az 3'ü finale rezerve);
+tur 6 Eray kararıyla rezervden fonlandı. Task 10 ara inceleme olmadan yürütülmemeli — bütçe
+oturum başına sıfırlandığı için TAZE OTURUM gerekiyor.
+
+**Önceki durum (2026-08-24, dokuzuncu oturum) — 16 task'ın 8'i bitti (planın yarısı).**
 Bu oturumda Task 7 ve Task 8 yürütüldü (inline; review/checkpoint kapıları normal koştu).
 `pytest tests/ -q` → **185 passed**. Türetilmiş defter rc=0, çalışma alanı temiz, **push YOK**.
 Devralınan açık kapı YOKTU ve bu oturum da açık kapı DEVRETMİYOR.
@@ -208,6 +252,24 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 (devralma / supersede) spec seansında netleşecek, durum geçişi Eray'ındır.
 
 # Open Problems
+
+- **CTA öğesi içinde serbest köşeli ayraç kullanılamaz (Plan 2'ye teslim edilen içerik kısıtı,
+  checkpoint 9).** Kanal bayrağının bozuk yazımını kapatan kural, CTA öğesindeki HER ayracı bayrak
+  sayar; dolayısıyla `[bkz. kaynak 3]` gibi zararsız bir notasyon CTA içinde REDDEDİLİR (CTA
+  DIŞINDA serbesttir — ölçüldü). Bu, sentez motorunun çıktı biçimini bağlayan bir içerik kısıtıdır.
+  **Dürüst etiket: çözülmedi, bilinçli tercih.** Gerçek evi denetçi/brief sözleşmesidir (spec §8.7
+  "resmî tur öncesi zorunlu sözleşme düzeltmeleri" listesi — tarihli kapısı var: resmî tur öncesi).
+  Plan 2'ye teslim kalemi olarak Task 16'da doğrulanmalı. Yeniden açılma: motor çıktısı meşru
+  şekilde CTA içinde ayraç kullanmak zorunda kalırsa. Codex tur 6'da bunu tekrar açtı; tek yeni
+  unsuru ("mevcut satırları süpür") ÖLÇÜLDÜ ve boş çıktı — canlıda `social.sector_packages` tablosu
+  henüz YOK.
+- **`brand_kit` anahtarı artık silinemez, yalnız üzerine yazılabilir (checkpoint 9, kabul edilen
+  risk).** Eşzamanlı yazımda veri kaybını kapatmak için üç yazıcı da sunucu-taraflı birleştirmeye
+  geçti; bedeli, tam belge göndererek bir anahtarı düşürme yolunun kapanmasıdır. Ölçüldü: frontend
+  bu yüzeyi hiç kullanmıyor ve depoda kit anahtarı silen bir kod yolu YOK. **Dürüst etiket:
+  çözülmedi, bedeli bilinçle kabul edildi.** Yeniden açılma: bir kit anahtarını gerçekten silme
+  ihtiyacı doğarsa — o zaman sessiz tam-belge yazımı değil, açık ve belgeli bir silme sözleşmesi
+  gerekir.
 
 - **Sweep tabanının kökeni — belgeli kalıntı (checkpoint 5, kullanıcı kararıyla kapatıldı).**
   `scripts/sector_sweep.py` tabanı kanonik bağlantı dizesine + küme kimliğine + sunucunun kendi
