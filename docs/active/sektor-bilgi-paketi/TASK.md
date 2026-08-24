@@ -35,7 +35,19 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-24 (altıncı oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 2'si bitti.**
+**2026-08-24 (yedinci oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 3'ü bitti.**
+Task 3 (migration dağıtım gerçeği + geri alma + atomiklik ölçümü) Eray talebiyle
+**inline** yürütüldü — bu oturumda alt-oturum (subagent) açılmadı, checkpoint
+review koşmadı. Üç ayak da bitti: (a) `run-migrations.sh` bayat elle-liste yerine
+kanonik dizin taraması + açık compose dosyası + her psql çağrısında
+`ON_ERROR_STOP=1`; (b) `shared/db/migrations/rollback/032_down.sql` — veri varken
+hiçbir şeye dokunmadan REDDEDEN, boş yolda kendi kalıntısını denetleyen geri alma;
+(c) R-17 iki-adım aktivasyon ölçümü (tek transaction geçer, ters sıra reddedilir).
+`pytest tests/ -q` → **46 passed**. Task 3(a) Task 2'nin kalan sınırını da kapattı:
+bayraksız psql hatalı SQL'de rc=0, bayrakla rc=3 (taze ölçüm). Commit `fb6ff3f`,
+`Exec-Kind: code`; türetilmiş defter rc=0. Push YOK. Sıradaki iş: Task 4.
+
+**Önceki durum (2026-08-24, altıncı oturum) — 16 task'ın 2'si bitti.**
 `/execute-plan-claude-codex` başlatıldı: dal `feat/sektor-bilgi-paketi`, mod
 subagent-driven, `execute_start_ref = 5a9d5d4`. Task 1 (pytest altyapısı +
 atılabilir `otomaix_test` veritabanı) ve Task 2 (migration 032) bitti; 39 test
@@ -100,10 +112,17 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 
 # Open Problems
 
-- (Bu oturumdan yeni açık problem kalmadı — plan onaylı + commit'li `15db2cf`; sıradaki
-  iş yeni oturumda `/execute-plan-claude-codex`. Açık K-ID'ler planın "Karar Kapıları"
-  tablosunda yönetiliyor; Plan 2 evi: K-84/K-151/K-152 kapanınca ayrı plan. Aşağıdaki
-  iki kayıt önceki oturumlardan, bilinçli açık.)
+- **On-prem paketi PostgreSQL 16'ya sabitli, migration 032 PG18 istiyor (Eray kararı bekliyor,
+  2026-08-24 yedinci oturum).** `shared/local-deployment/docker-compose.yml` `pgvector/pgvector:pg16`
+  imajını pinliyor; 032'nin fail-closed doğrulama bloğu `pg_constraint.conenforced` okuyor ve bu
+  kolon PG16'da YOK (ölçüldü: 16.13 sunucusunda `count(*) = 0`). Sonuç: on-prem `setup.sh` zinciri
+  032'de durur — sessizce değil, gürültülü hatayla. Canlı sistem PG18, etkilenmiyor. Seçenekler:
+  (a) on-prem imajı 18'e çek (mevcut kurulumlarda veri taşıma gerekir), (b) 032 doğrulamasını
+  sürüm-duyarlı yap, (c) on-prem paketi kullanılmıyorsa statü notuyla bırak. Otonom
+  düzeltilmedi: imaj/veri-taşıma kararı Eray-seviyesidir.
+- (Plan onayı oturumundan açık problem kalmamıştı — plan `15db2cf` ile commit'li. Açık
+  K-ID'ler planın "Karar Kapıları" tablosunda yönetiliyor; Plan 2 evi: K-84/K-151/K-152
+  kapanınca ayrı plan. Aşağıdaki iki kayıt önceki oturumlardan, bilinçli açık.)
 - Spec'in ~45 kapanış metninin bağımsız kapanış-sweep'i Eray kararıyla ATLANDI
   (2026-08-23 dördüncü oturum, "vazgeçtim plan yazımına geç") — kısmi hafifletme:
   6 Codex plan-review turu spec'i tekrar tekrar okudu, K-ID çelişkisi raporlamadı.
@@ -268,6 +287,14 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
   requirements.txt'i sisteme kurmak, sistemde daha yeni sürümü bulunan **11 paketi geri sürüme**
   düşürüyordu (Pillow 12.2→11.2, weasyprint 68→63, uvicorn 0.51→0.30 vb.); canlı backend zaten
   Docker konteynerinde kendi Python'ıyla koşuyor, yani sistem paketleri canlıyı beslemiyor.
+- **2026-08-24 (yedinci oturum) — Task 3 inline koşuldu (Eray talebi):** "bu oturumda
+  task'ları subagent olarak değil, inline yaz". Execution State'teki `execute_mode`
+  DEĞİŞTİRİLMEDİ (subagent-driven kayıt olarak kalır; Task 1-2'yi doğru anlatıyor) —
+  inline yalnız bu oturumun çalışma biçimidir. Sonuç: Task 3 için Codex checkpoint
+  adversarial review'ı KOŞMADI; `cp_count` 2'de kaldı, `last_checkpoint_ref` Task 2'yi
+  gösteriyor. Task 3'ün kapsamı (dağıtım script'i + yıkıcı geri alma SQL'i) risk-tetikli
+  checkpoint'e aday olurdu; kapsanması ya ayrı bir checkpoint'e ya Adım 11 final
+  execution review'a kalıyor. Bu, sessiz atlama değil kayıtlı boşluktur.
 - **2026-08-24 (altıncı oturum) — Geçmiş yeniden yazımı (Eray onaylı):** `9ed5902` commit'i
   `Exec-Kind: code` etiketiyle inmişti ama yalnız `tests/` altına dokunuyordu → türetilmiş
   defter MECH-FAIL veriyor, Adım 11.0 mekanik kapısını ve push'u bloklyordu. Etiket `red-only`'ye
