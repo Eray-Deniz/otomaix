@@ -88,8 +88,8 @@
   verir (sessiz geçiş değil). Canlı + test aynı 18.3 sunucusunda.
 - Lint artıkları: `test_migration_032.py` ve `test_infra.py`'de kullanılmayan `pytest` importu.
   Evi: yürütme sonrası `/simplify-claude-codex`.
-- `backup/pre-footer-fix` etiketi: evi `/finish-branch-claude-codex` (merge/PR kararından
-  sonra silinir).
+- `backup/pre-footer-fix` ve `backup/pre-t3-kind-fix` etiketleri: evi
+  `/finish-branch-claude-codex` (merge/PR kararından sonra silinir).
 
 ## Notes For Claude
 - **Alt-oturum talimatına HER SEFERİNDE planın "Global Constraints" bloğunu koy.** Bu oturumda

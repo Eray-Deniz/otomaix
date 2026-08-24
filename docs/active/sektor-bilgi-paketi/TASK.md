@@ -30,7 +30,7 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: 914f531
+- last_checkpoint_ref: 5c843da
 - cp_count: 3
 
 # Current Status
@@ -56,8 +56,14 @@ yakınsama kararı **(A)**: "commit edilmiş korunan satır bu script tarafında
 edilmez ve yarım teardown ayakta kalmaz" invariantı her ulaşılabilir çağrı için geçerli.
 Üç düzeltmenin üçü de POZİTİF KONTROLLÜ: her yeni test, düzeltmeden ÖNCEKİ sürümde
 düşüyor. İki orta bulgu `accepted_risk` (Auto-Fix Policy; HANDOFF Risks).
-`pytest tests/ -q` → **50 passed**. Commit'ler `fb6ff3f` → `914f531`;
+`pytest tests/ -q` → **50 passed**. Commit'ler `fb6ff3f` → `5c843da`;
 türetilmiş defter rc=0. Push YOK. Sıradaki iş: Task 4.
+
+**Etiket düzeltmesi (Eray onaylı, aynı oturum):** üç düzeltme commit'i `Exec-Kind: code`
+inmişti, ama defter `.sql` yolunu "impl" saymaz (yalnız test + `.sql` = `migration` —
+Task 2 commit'leri de öyle). Kırık defteri (rc=2) düzeltmek için o üç commit'in MESAJI
+yeniden yazıldı; **dosya içerikleri bayt-aynı** (`git diff backup/pre-t3-kind-fix HEAD`
+boş). Emniyet etiketi: `backup/pre-t3-kind-fix`.
 
 **Önceki durum (2026-08-24, altıncı oturum) — 16 task'ın 2'si bitti.**
 `/execute-plan-claude-codex` başlatıldı: dal `feat/sektor-bilgi-paketi`, mod
