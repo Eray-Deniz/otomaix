@@ -74,8 +74,10 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 
 # Open Problems
 
-- **Plan 1 + aktif katman + review özeti COMMIT EDİLMEDİ** — Eray commit onayı bekleniyor
-  (kaybolma riski; ilk iş).
+- (Bu oturumdan yeni açık problem kalmadı — plan onaylı + commit'li `15db2cf`; sıradaki
+  iş yeni oturumda `/execute-plan-claude-codex`. Açık K-ID'ler planın "Karar Kapıları"
+  tablosunda yönetiliyor; Plan 2 evi: K-84/K-151/K-152 kapanınca ayrı plan. Aşağıdaki
+  iki kayıt önceki oturumlardan, bilinçli açık.)
 - Spec'in ~45 kapanış metninin bağımsız kapanış-sweep'i Eray kararıyla ATLANDI
   (2026-08-23 dördüncü oturum, "vazgeçtim plan yazımına geç") — kısmi hafifletme:
   6 Codex plan-review turu spec'i tekrar tekrar okudu, K-ID çelişkisi raporlamadı.
@@ -83,8 +85,10 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 - Denetimin iki orta bulgusu bilinçli açık (Eray kapsamı: yalnız yüksekler): (1) sentez
   deposu commit mesajı `432738b`'deki "35 benzersiz K/R-ID" sayımı yanlış (doğrusu 38;
   git geçmişinde, içerik hatası değil), (2) snapshot Ek C'deki "beş prompt yüzeyi" sayısı
-  etiketsiz — küme kapalı değil (K-15 (b) açık). Spec seansında Ek C maddesi yazılırken
-  etiketlenerek çözülür.
+  etiketsiz — küme kapalı değil. (Evi olan "spec seansı" tamamlandı ve K-15 (b) spec'te
+  kapandı; snapshot arşiv belgesi statü-notuyla spec'e bağlı. DÜŞÜRÜLDÜ — yeniden
+  açılma: arşiv belgesi ileride yeniden canlı girdi olursa, sweep-borcu kararıyla aynı
+  koşul.)
 
 # Decisions Log
 

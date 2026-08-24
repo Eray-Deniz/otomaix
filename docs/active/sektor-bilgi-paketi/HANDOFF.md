@@ -23,28 +23,27 @@
   (K-71 eşlemesi, "two-way" düşümü, trailing whitespace, TASK/HANDOFF tazeleme).
 - **Bulgu defteri kapalı: 24/24** (23 fix/devir + F17 Eray risk-kabulü —
   edited-lineage; re-litigate ETME).
-- ⚠️ **COMMIT EDİLMEDİ:** plan + review özeti (untracked) + TASK/HANDOFF (modified) —
-  Eray commit onayı bekleniyor; önerilen mesaj:
-  `docs: approve plan-1 for sektor-bilgi-paketi (7-turn codex review)`.
+- **COMMIT edildi:** `15db2cf` (plan + review özeti + TASK/HANDOFF; push YOK — Eray onayıyla).
 
 ## Resume From (sıra)
-1. Eray commit onayı verirse: plan + `docs/reviews/codex/2026-08-23-...-plan.md` +
-   `docs/active/sektor-bilgi-paketi/*` tek commit (push YOK).
-2. Sonrası: `/execute-plan-claude-codex docs/plans/2026-08-23-sektor-bilgi-paketi.md`
-   (Task 1'den; TASK.md status=active sorusu execute başında gelir).
-3. Plan 2 (işletim hattı) K-84/K-151/K-152 kapanınca ayrı `/write-plan-claude-codex`;
-   Plan 2 teslim listesi plan Task 16 + bağlanan-karar 6'daki devir kayıtlarını içerir
-   (K-45 geri-dönüş bandı + atama-geçmişi kanıtı BURADA — İlke 7 adlandırılmış ev).
+1. **`/execute-plan-claude-codex docs/plans/2026-08-23-sektor-bilgi-paketi.md`** —
+   Eray kararı (2026-08-24): plan taze oturumda execute edilir. Task 1'den (test
+   altyapısı bootstrap); TASK.md status=active sorusu execute başında gelir.
+2. Plan 2 (işletim hattı) ŞİMDİ YAZILMAZ (2026-08-24 değerlendirmesi: K-84 ailesi
+   açıkken karar uydururdu + execute öncesi bayatlardı); evi: K-84/K-151/K-152
+   kapanınca ayrı `/write-plan-claude-codex`. Teslim listesi plan Task 16 +
+   bağlanan-karar 6'daki devir kayıtları (K-45 geri-dönüş bandı + atama-geçmişi
+   kanıtı BURADA — İlke 7 adlandırılmış ev).
 
 ## Verification (bu oturum)
 - **Passed:** Tur 7 Codex review koştu (probe + 1200s deseni; ham çıktı log'a tee-append,
   `verdict: approve`) · plan-lint temiz (fix'ler sonrası tekrar koşuldu) ·
   `command-blocks-maint.sh verify` PASS · Codex fresh-checks: task dizisi 1..16 PASS,
   F22/F23/F24 marker sweep PASS, açık-karar kapı sweep PASS · kota preflight PROCEED.
-- **Not run:** hiçbir kod/test koşulmadı (plan-only iş) · commit yapılmadı (onay bekliyor).
-- **Kalan risk:** uncommitted dosyalar (kaybolma riski) · F17 kabul edilen risk
-  (yeniden açılma: müşteri/ürünleşme artışı) · sayaç-vs-tur-sayısı ayrımı (frontmatter 0 =
-  yapısal rewrite; fiili 7 tur — bu HANDOFF + loglar kanıt).
+- **Not run:** hiçbir kod/test koşulmadı (plan-only iş; execute yeni oturumda başlar).
+- **Kalan risk:** F17 kabul edilen risk (yeniden açılma: müşteri/ürünleşme artışı) ·
+  sayaç-vs-tur-sayısı ayrımı (frontmatter 0 = yapısal rewrite; fiili 7 tur — bu
+  HANDOFF + loglar kanıt).
 
 ## Notes For Claude
 - HANDOFF rolling; karar izi TASK Decisions Log'da.
