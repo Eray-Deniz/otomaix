@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -45,7 +46,13 @@ def normalize_special_day_key(name: str | None) -> str:
     Kural seti `sector_resolver._normalize_slug` ile BİRE BİR aynıdır ve testle
     eşitlenir — sektör slug'ı ile özel gün anahtarı aynı dünyayı adresler.
 
-    TEK bilinçli ayrım: `_normalize_slug` çözümlenemeyen girdide `genel` döndürür
+    İki bilinçli ayrım var. **Birincisi:** girdi önce Unicode NFC'ye çekilir;
+    `_normalize_slug` bunu yapmaz. Aynı adın iki yazımı aynı anahtarı vermek
+    ZORUNDADIR, yoksa tek-modül kuralının koruduğu şey (yazım ve okuma aynı
+    anahtarı görür) elden gider. Birleşik yazımda iki fonksiyon aynen eşittir —
+    kural seti genişletilmedi, sağlamlaştırıldı.
+
+    **İkincisi:** `_normalize_slug` çözümlenemeyen girdide `genel` döndürür
     (sektör düşüş kovası). Burada aynı davranış, bir sektör slug'ıyla ÇAKIŞAN
     sahte bir gün anahtarı üretirdi ve "sistemde karşılığı olmayan dönem pakete
     giremez" hükmünü (§4.4) sessizce delerdi. Bu yüzden çözümlenemeyen ad anahtar
@@ -53,6 +60,11 @@ def normalize_special_day_key(name: str | None) -> str:
     """
     if name is None or not str(name).strip():
         raise ValueError("özel gün adı boş — anahtar üretilemez (uydurma anahtar yasak)")
+    # Unicode biçim bağımsızlığı: ayrışık (NFD) yazılmış bir ad, birleşik
+    # yazımdan FARKLI bir anahtar üretiyordu (ölçüldü: "Şeker Bayramı" →
+    # `seker-bayrami` ve `s-eker-bayrami`). Yazım tarafı biri, okuma tarafı
+    # diğerini görürse özel gün bloğu sessizce hiç eşleşmez.
+    name = unicodedata.normalize("NFC", str(name))
     if not _has_slug_content(str(name)):
         raise ValueError(
             f"özel gün adı çözümlenemedi: {name!r} — normalize sonrası harf/rakam kalmıyor"
@@ -318,8 +330,15 @@ def _check_banned_brand_names(
 
 
 def _fold_turkish(text: str) -> str:
-    """Türkçe harfleri ASCII'ye indirip katlar — I/ı ve İ/i tuzağını kapatır."""
-    return text.translate(_TR_ASCII).casefold()
+    """Adı karşılaştırılabilir tek biçime indirger.
+
+    Üç adım, sırası ÖNEMLİ: önce Unicode NFC (ayrışık `S`+birleşen-çengel ile
+    birleşik `Ş` aynı şey demektir — ölçüldü: ayrışık yazım tabloya hiç
+    uğramadan geçiyordu), sonra Türkçe→ASCII tablosu, sonra katlama. Sadece
+    `casefold()` yetmez: `"ALTINBAŞ".casefold()` noktalı `i` üretir,
+    `"Altınbaş".casefold()` noktasız `ı` bırakır.
+    """
+    return unicodedata.normalize("NFC", text).translate(_TR_ASCII).casefold()
 
 
 def _walk_strings(node: Any) -> list[str]:
@@ -432,6 +451,18 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
                 "; ".join(problems[:3]),
             )
             return None
+
+        # Kurulum da `try` İÇİNDE: bugünkü dataclass kurucusu önemsiz, ama
+        # sözleşme "çözümleyicinin hiçbir hatası üretimi bloklamaz" diyor ve
+        # kurucuya bir gün doğrulama eklenirse istisna dışarı kaçmamalı.
+        # (Checkpoint 8 tur 2: önceki commit bunun taşındığını YAZMIŞTI, oysa
+        # taşınmamıştı — iddia yanlıştı.)
+        return SectorPackageContext(
+            package_id=package_id,
+            version=version,
+            content=content,
+            sub_sector_slug=sub_sector_slug,
+        )
     except Exception as exc:
         logger.warning(
             "sektör paketi okunamadı, paketsiz yola düşülüyor "
@@ -441,10 +472,3 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
             exc,
         )
         return None
-
-    return SectorPackageContext(
-        package_id=package_id,
-        version=version,
-        content=content,
-        sub_sector_slug=sub_sector_slug,
-    )

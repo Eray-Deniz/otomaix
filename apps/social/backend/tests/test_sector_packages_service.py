@@ -607,3 +607,87 @@ async def test_resolver_survives_malformed_row(caplog):
 
     assert result is None
     assert caplog.records
+
+
+# ─── Checkpoint 8, tur 2 ────────────────────────────────────────────────────
+#
+# F3 kapanmamıştı: Türkçe→ASCII tablosu Unicode'u NORMALİZE etmiyordu, yani
+# ayrışık (NFD) yazılmış bir ad hâlâ kaçıyordu. Aynı sınıf özel gün anahtarında
+# da ölçüldü. F4: CTA sentinel dalının bekçisi yoktu. F5: bağlam kurulumu emniyet
+# sınırının DIŞINDAYDI — önceki commit mesajı bunu yanlış anlatıyordu.
+
+import unicodedata  # noqa: E402
+
+from app.services.sector_packages import DELIBERATELY_EMPTY  # noqa: E402
+
+
+@pytest.mark.parametrize("brand", ["Şeker", "İnci", "Çağrı", "Altınbaş"])
+def test_validator_catches_brand_name_in_decomposed_unicode(brand):
+    """Ayrışık (NFD) yazılmış ad da yakalanır — iki yazım aynı adı taşır."""
+    decomposed = unicodedata.normalize("NFD", brand)
+    assert decomposed != brand or unicodedata.normalize("NFC", decomposed) == brand
+    result = validate_package_content(
+        _valid_content(kanca_kaliplari=[f"{decomposed} dükkanı"]),
+        banned_brand_names=[brand],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert not result.ok, f"{brand!r} ayrışık biçimde kaçtı"
+
+
+@pytest.mark.parametrize("brand", ["Şeker", "İnci"])
+def test_validator_catches_decomposed_banned_name_against_composed_text(brand):
+    """Ters yön: YASAK ad ayrışık, metin birleşik yazılmış."""
+    result = validate_package_content(
+        _valid_content(kanca_kaliplari=[f"{brand} dükkanı"]),
+        banned_brand_names=[unicodedata.normalize("NFD", brand)],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert not result.ok
+
+
+@pytest.mark.parametrize("name", ["Şeker Bayramı", "Çanakkale Zaferi", "İşçi Bayramı"])
+def test_normalize_key_is_unicode_form_independent(name):
+    """Aynı gün adının iki Unicode yazımı AYNI anahtarı verir.
+
+    Yazım tarafı birleşik, okuma tarafı ayrışık biçim görürse anahtar tutmaz ve
+    özel gün bloğu sessizce hiç eşleşmez — K-01b'nin tek-modül kuralının
+    önlemek için var olduğu şey tam olarak budur.
+    """
+    assert normalize_special_day_key(name) == normalize_special_day_key(
+        unicodedata.normalize("NFD", name)
+    )
+
+
+def test_validator_accepts_sentinel_cta_item():
+    """Tüm CTA listesi bilinçli boş olabilir (K-120) — dalın bekçisi budur."""
+    result = validate_package_content(
+        _valid_content(cta_kaliplari=[DELIBERATELY_EMPTY]),
+        banned_brand_names=[],
+        holiday_keys=HOLIDAY_KEYS,
+    )
+    assert result.ok, result.errors
+
+
+async def test_resolver_survives_context_construction_error(pkg_db, caplog, monkeypatch):
+    """Bağlam kurulumu da emniyet sınırının İÇİNDE.
+
+    Bugünkü dataclass kurucusu önemsiz, ama sözleşme "çözümleyicinin hiçbir
+    hatası üretimi bloklamaz" diyor — kurucuya bir doğrulama eklendiği gün bu
+    kapı olmasaydı istisna üretim akışına kaçardı.
+    """
+    import app.services.sector_packages as module
+
+    sub_id, _, _ = await _seed_package(pkg_db, status="active")
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("kurucu patladı")
+
+    monkeypatch.setattr(module, "SectorPackageContext", _boom)
+
+    with caplog.at_level(logging.WARNING):
+        result = await resolve_package_context(
+            pkg_db, {"id": uuid.uuid4(), "sub_sector_id": sub_id}
+        )
+
+    assert result is None
+    assert caplog.records
