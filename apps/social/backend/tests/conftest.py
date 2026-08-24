@@ -9,8 +9,10 @@ Bağlayıcı invariantlar (plan Task 1):
    (`app.core.config.settings.DATABASE_URL` → `.env`) türetilir ve veritabanı
    adı `otomaix_test` ile değiştirilir.
 3. Yıkıcı işlem (DROP/CREATE DATABASE, migration uygulaması) YALNIZ
-   `127.0.0.1:5433/otomaix_test` üçlüsüne izinlidir. Kapı FAIL-CLOSED'dır:
-   host/port/veritabanı üçlüsü birebir eşleşmiyorsa — takma ad (`localhost`,
+   `127.0.0.1:5433` uç noktasındaki KAPALI KÜME veritabanlarına izinlidir:
+   oturum veritabanı `otomaix_test` ve şema-yıkıcı testlerin taze kopyası
+   `otomaix_test_scratch` (`DISPOSABLE_DB_NAMES`). Kapı FAIL-CLOSED'dır:
+   host/port eşleşmiyorsa veya ad bu kümede değilse — takma ad (`localhost`,
    `::1`, `0.0.0.0`), eksik port, eksik host veya canlı `otomaix` adı — işlem
    BAŞLAMADAN reddedilir. Varsayılana düşme YOKTUR.
 """
@@ -28,6 +30,14 @@ import pytest
 
 # Atılabilir test veritabanı. Canlı `otomaix` bu dosyada asla hedeflenmez.
 TEST_DB_NAME = "otomaix_test"
+
+# Şema-yıkıcı testlerin (migration geri alma, runner koşumu) kullandığı ikinci
+# atılabilir veritabanı. `otomaix_test` oturum boyunca ayakta kalmalıdır; bu ad
+# her testte sıfırdan yaratılıp düşürülür.
+SCRATCH_DB_NAME = "otomaix_test_scratch"
+
+# Yıkıcı işlemlere izinli veritabanı adları — kapalı küme, fail-closed.
+DISPOSABLE_DB_NAMES = frozenset({TEST_DB_NAME, SCRATCH_DB_NAME})
 
 # Yönetim (CREATE/DROP DATABASE) bağlantısının koştuğu bakım veritabanı.
 MAINTENANCE_DB_NAME = "postgres"
@@ -77,38 +87,44 @@ def _endpoint(url: str) -> tuple[str | None, int | None, str]:
     return parts.hostname, port, parts.path.lstrip("/")
 
 
-def _require_endpoint(url: str, *, database: str) -> str:
-    """Fail-closed kapı: host/port/veritabanı üçlüsü birebir eşleşmeli.
+def _require_endpoint(url: str, *, databases: frozenset[str]) -> str:
+    """Fail-closed kapı: host/port eşleşmeli, veritabanı kapalı kümede olmalı.
 
     Parola hata mesajına ASLA girmez — yalnız host/port/veritabanı basılır.
     """
     seen_host, seen_port, seen_database = _endpoint(url)
+    allowed = ", ".join(sorted(databases))
 
     problems: list[str] = []
     if seen_host != REQUIRED_HOST:
         problems.append(f"host={seen_host!r} (beklenen {REQUIRED_HOST!r})")
     if seen_port != REQUIRED_PORT:
         problems.append(f"port={seen_port!r} (beklenen {REQUIRED_PORT!r})")
-    if seen_database != database:
-        problems.append(f"veritabanı={seen_database!r} (beklenen {database!r})")
+    if seen_database not in databases:
+        problems.append(f"veritabanı={seen_database!r} (beklenen {allowed})")
 
     if problems:
         raise RuntimeError(
             "Yıkıcı test altyapısı reddedildi — yalnız "
-            f"{REQUIRED_HOST}:{REQUIRED_PORT}/{database} kabul edilir. "
+            f"{REQUIRED_HOST}:{REQUIRED_PORT}/[{allowed}] kabul edilir. "
             "Uyuşmayan: " + ", ".join(problems)
         )
     return url
 
 
 def _require_test_database(url: str) -> str:
-    """Guard: test altyapısı YALNIZ `127.0.0.1:5433/otomaix_test`e bağlanabilir."""
-    return _require_endpoint(url, database=TEST_DB_NAME)
+    """Guard: oturum veritabanı YALNIZ `127.0.0.1:5433/otomaix_test` olabilir."""
+    return _require_endpoint(url, databases=frozenset({TEST_DB_NAME}))
+
+
+def _require_disposable_database(url: str) -> str:
+    """Guard: yıkıcı işlem YALNIZ atılabilir iki addan birine gidebilir."""
+    return _require_endpoint(url, databases=DISPOSABLE_DB_NAMES)
 
 
 def _require_admin_database(url: str) -> str:
     """Guard: yönetim bağlantısı YALNIZ aynı yerel uç noktanın bakım DB'sine gider."""
-    return _require_endpoint(url, database=MAINTENANCE_DB_NAME)
+    return _require_endpoint(url, databases=frozenset({MAINTENANCE_DB_NAME}))
 
 
 def _with_database(url: str, database: str) -> str:
@@ -127,17 +143,20 @@ def test_database_url() -> str:
     return _require_test_database(_with_database(configured, TEST_DB_NAME))
 
 
-def _run_psql(url: str, *, sql: str | None = None, file: Path | None = None) -> None:
-    """psql'i çalıştırır. Parola argv'ye değil PGPASSWORD ortam değişkenine gider."""
-    # Kapı psql SÜRECİ BAŞLAMADAN koşar: yıkıcı komut asla uzak sunucuya gitmez.
-    # Bakım DB'si de aynı yerel uç noktaya kilitlidir (DROP/CREATE oradan koşar).
-    database = urlsplit(url).path.lstrip("/")
+def psql_argv(url: str) -> tuple[list[str], dict[str, str]]:
+    """Guard'dan geçmiş psql argv'si + parolayı taşıyan ortam.
+
+    Kapı psql SÜRECİ BAŞLAMADAN koşar: yıkıcı komut asla uzak sunucuya gitmez.
+    Bakım DB'si de aynı yerel uç noktaya kilitlidir (DROP/CREATE oradan koşar).
+    Parola argv'ye DEĞİL PGPASSWORD ortam değişkenine gider.
+    """
+    parts = urlsplit(url)
+    database = parts.path.lstrip("/")
     if database == MAINTENANCE_DB_NAME:
         _require_admin_database(url)
     else:
-        _require_test_database(url)
+        _require_disposable_database(url)
 
-    parts = urlsplit(url)
     argv = [
         "psql",
         "--no-psqlrc",
@@ -153,16 +172,44 @@ def _run_psql(url: str, *, sql: str | None = None, file: Path | None = None) -> 
         "-d",
         database,
     ]
-    argv += ["-c", sql] if sql is not None else ["-f", str(file)]
 
     env = dict(os.environ)
     if parts.password:
         env["PGPASSWORD"] = parts.password
+    return argv, env
+
+
+def _run_psql(url: str, *, sql: str | None = None, file: Path | None = None) -> None:
+    """psql'i çalıştırır; sıfır-dışı çıkışta istisna fırlatır."""
+    argv, env = psql_argv(url)
+    argv += ["-c", sql] if sql is not None else ["-f", str(file)]
 
     result = subprocess.run(argv, env=env, capture_output=True, text=True)
     if result.returncode != 0:
         label = sql if sql is not None else str(file)
         raise RuntimeError(f"psql başarısız ({label}):\n{result.stderr.strip()}")
+
+
+def _apply_migrations(url: str) -> None:
+    """`social` şeması + pgvector + tüm numaralı migration'lar (sırayla)."""
+    _run_psql(url, sql="CREATE SCHEMA IF NOT EXISTS social")
+    _run_psql(url, sql="CREATE EXTENSION IF NOT EXISTS vector")
+    for migration in _migration_files():
+        _run_psql(url, file=migration)
+
+
+def _recreate_database(url: str) -> None:
+    """Hedef veritabanını DROP + CREATE eder (guard: yalnız atılabilir adlar)."""
+    database = urlsplit(_require_disposable_database(url)).path.lstrip("/")
+    admin_url = _require_admin_database(_with_database(url, MAINTENANCE_DB_NAME))
+    _run_psql(admin_url, sql=f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
+    _run_psql(admin_url, sql=f'CREATE DATABASE "{database}"')
+
+
+def _drop_database(url: str) -> None:
+    database = urlsplit(_require_disposable_database(url)).path.lstrip("/")
+    admin_url = _require_admin_database(_with_database(url, MAINTENANCE_DB_NAME))
+    _run_psql(admin_url, sql=f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
 
 
 @pytest.fixture(scope="session")
@@ -174,18 +221,40 @@ def test_db_setup() -> str:
     dokunulmaz.
     """
     url = test_database_url()
-    admin_url = _require_admin_database(_with_database(url, MAINTENANCE_DB_NAME))
-
-    _run_psql(admin_url, sql=f'DROP DATABASE IF EXISTS "{TEST_DB_NAME}" WITH (FORCE)')
-    _run_psql(admin_url, sql=f'CREATE DATABASE "{TEST_DB_NAME}"')
-
-    _run_psql(url, sql="CREATE SCHEMA IF NOT EXISTS social")
-    _run_psql(url, sql="CREATE EXTENSION IF NOT EXISTS vector")
-
-    for migration in _migration_files():
-        _run_psql(url, file=migration)
-
+    _recreate_database(url)
+    _apply_migrations(url)
     return url
+
+
+def _scratch_database_url() -> str:
+    """Şema-yıkıcı testlerin atılabilir ikinci veritabanı (guard'dan geçmiş)."""
+    return _require_disposable_database(
+        _with_database(test_database_url(), SCRATCH_DB_NAME)
+    )
+
+
+def _scratch_database(*, with_migrations: bool):
+    """`otomaix_test_scratch`i sıfırdan kurar, test bitince düşürür."""
+    url = _scratch_database_url()
+    _recreate_database(url)
+    if with_migrations:
+        _apply_migrations(url)
+    try:
+        yield url
+    finally:
+        _drop_database(url)
+
+
+@pytest.fixture
+def scratch_db_migrated():
+    """Tüm migration'ları uygulanmış, şeması bozulabilir taze veritabanı."""
+    yield from _scratch_database(with_migrations=True)
+
+
+@pytest.fixture
+def scratch_db_empty():
+    """Boş veritabanı — migration'ları test edilen aracın KENDİSİ uygular."""
+    yield from _scratch_database(with_migrations=False)
 
 
 @pytest.fixture

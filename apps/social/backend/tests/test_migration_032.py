@@ -24,10 +24,8 @@ Alt sektör satırları test İÇİNDE açılır — canlı seed dosyasına sat�
 
 from __future__ import annotations
 
-import os
 import subprocess
 import uuid
-from urllib.parse import urlsplit
 
 import asyncpg
 import pytest
@@ -758,29 +756,9 @@ def _psql_argv() -> tuple[list[str], dict[str, str]]:
     """Test DB'ye giden psql argv'si + parolayı taşıyan ortam.
 
     Kapı `conftest`in fail-closed guard'ıdır: yalnız 127.0.0.1:5433/otomaix_test.
-    Parola argv'ye DEĞİL PGPASSWORD'a gider.
+    Bayrak kümesi (ON_ERROR_STOP dahil) tek yerde, `conftest.psql_argv`de yaşar.
     """
-    url = infra._require_test_database(infra.test_database_url())
-    parts = urlsplit(url)
-    argv = [
-        "psql",
-        "--no-psqlrc",
-        "--quiet",
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-h",
-        infra.REQUIRED_HOST,
-        "-p",
-        str(infra.REQUIRED_PORT),
-        "-U",
-        parts.username or "",
-        "-d",
-        infra.TEST_DB_NAME,
-    ]
-    env = dict(os.environ)
-    if parts.password:
-        env["PGPASSWORD"] = parts.password
-    return argv, env
+    return infra.psql_argv(infra._require_test_database(infra.test_database_url()))
 
 
 def _reapply_032(setup_sql: str = "") -> subprocess.CompletedProcess:
