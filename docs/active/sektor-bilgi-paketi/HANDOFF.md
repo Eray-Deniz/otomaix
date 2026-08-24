@@ -1,60 +1,109 @@
 # Handoff
 
-> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-24 07:05) — bu anlatı yürütme öncesine aittir; güncel durum TASK.md "Execution State" + git defterinden okunur, çelişkide onlar esastır.
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-24 07:05) — bu anlatı oturum sonuna aittir; canlı yürütme
+> durumu TASK.md "Execution State" + git defterinden okunur, çelişkide onlar esastır.
 
 ## Context
-- Task: sektor-bilgi-paketi — **faz: PLAN 1 ONAYLANDI (`plan-approved`, Tur 7 approve);
-  sırada commit onayı → `/execute-plan-claude-codex`**
-- Last updated: 2026-08-24 (beşinci oturum — yol seçimi + Tur 7 + finalizasyon)
-- Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` — `plan-approved` +
-  `codex_plan_review_status: approved`, `codex_plan_review_iterations: 0`
-  (sayaç = yapısal rewrite sayar; toplam 7 review TURU koştu — tur kanıtı ham log'da)
-- Review özeti (repo): `docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md`
-- Ham review kanıtı (7 tur, byte-exact): `~/.claude/logs/otomaix--ffc87809/2026-08-23-sektor-bilgi-paketi-plan.md`
+- Task: sektor-bilgi-paketi — **faz: Plan 1 YÜRÜTME AÇIK (`/execute-plan-claude-codex`), 16 task'ın 2'si bitti**
+- Last updated: 2026-08-24 (altıncı oturum — execute başlangıcı, Task 1-2)
+- Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
+- Dal: `feat/sektor-bilgi-paketi` (main'den ayrıldı; **upstream YOK — hiç push edilmedi**)
+- Execute ham review log'u: `/root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md`
 
 ## Current State
-- **Eray yol seçimi (2026-08-24): "sadeleştir + fix".** F23 kaldırmayla kapandı
-  (recovered bandı + K-45 geri-dönüş mesajının TESLİMİ Plan 2'ye; atama-geçmişi
-  kanıtı Plan 2 kalemi; karar/metin korunur — plan bağlanan-karar 6, Task 14,
-  Task 16 kapsam-dışı listesi). F22 = olay-türüne özgü sürüm şekilleri (Task 12
-  + 5 test). F24 = olay kaydı geçişle aynı transaction (bağlanan-karar 8 +
-  Task 13 + 2 test).
-- **Tur 7 kapanış-doğrulaması: `verdict: approve`** — F22/F23/F24 CONFIRMED,
-  F1-F21 spot-doğrulandı, yeni bulgu YOK. EXECUTE-NOTES 4 kalemdi, hepsi uygulandı
-  (K-71 eşlemesi, "two-way" düşümü, trailing whitespace, TASK/HANDOFF tazeleme).
-- **Bulgu defteri kapalı: 24/24** (23 fix/devir + F17 Eray risk-kabulü —
-  edited-lineage; re-litigate ETME).
-- **COMMIT edildi:** `15db2cf` (plan + review özeti + TASK/HANDOFF; push YOK — Eray onayıyla).
+- **Mod:** subagent-driven (her task fresh alt-oturumda; ana oturum checkpoint + tahkim).
+- **Biten:** Task 1 (pytest altyapısı + atılabilir `otomaix_test` DB) · Task 2 (migration 032).
+- **HEAD:** `e3efbe9`; `execute_start_ref` (`5a9d5d4`) sonrası **9 commit**, hepsi local.
+- **Checkpoint:** 2 koştu, ikisi de sonunda `verdict: approve`. `cp_count: 2`,
+  `last_checkpoint_ref: b2d80c5…`.
+- **Ortam kurulumu (yeni oturumda TEKRAR KURMA — duruyor):**
+  `apps/social/backend/.venv` içinde requirements.txt + pytest 9.1.1 + pytest-asyncio 1.4.0.
+  Sistem Python'ına **dokunulmadı** (ölçüldü: asyncpg 0.31.0 / Pillow 12.2.0 yerinde).
+  Komut daima `.venv/bin/python` — makinede `python` komutu YOK, `python3` sistem Python'ı.
+- **Geçmiş yeniden yazıldı (Eray onaylı, 2026-08-24):** `9ed5902` commit'i `Exec-Kind: code`
+  taşıyordu ama yalnız `tests/` altına dokunuyordu → türetilmiş defter MECH-FAIL veriyordu
+  (Adım 11.0 kapısını ve push'u bloklardı). `red-only`'ye çevrildi, sonraki 5 commit replay
+  edildi, **dosya içerikleri bayt-aynı** (`git diff backup/pre-footer-fix HEAD` boş).
+  Emniyet etiketi: `backup/pre-footer-fix` (eski uç `960af6b`).
 
 ## Resume From (sıra)
-1. **`/execute-plan-claude-codex docs/plans/2026-08-23-sektor-bilgi-paketi.md`** —
-   Eray kararı (2026-08-24): plan taze oturumda execute edilir. Task 1'den (test
-   altyapısı bootstrap); TASK.md status=active sorusu execute başında gelir.
-2. Plan 2 (işletim hattı) ŞİMDİ YAZILMAZ (2026-08-24 değerlendirmesi: K-84 ailesi
-   açıkken karar uydururdu + execute öncesi bayatlardı); evi: K-84/K-151/K-152
-   kapanınca ayrı `/write-plan-claude-codex`. Teslim listesi plan Task 16 +
-   bağlanan-karar 6'daki devir kayıtları (K-45 geri-dönüş bandı + atama-geçmişi
-   kanıtı BURADA — İlke 7 adlandırılmış ev).
+1. **Task 3** — `### Task 3: Migration dağıtım gerçeği + geri alma + atomiklik ölçümü`.
+   Üç iş: (a) `shared/local-deployment/migrations/run-migrations.sh` elle yazılmış bayat
+   listeyi (001–011'de kalmış) kanonik dizin glob'una çevirir + her psql çağrısına
+   `-v ON_ERROR_STOP=1`; (b) `shared/db/migrations/rollback/032_down.sql` — veri varsa
+   REDDEDEN preflight'lı geri alma; (c) R-17 ampirik ölçümü: iki adımlı aktivasyonun tek
+   transaction'da geçtiği, ters sıranın kısmi indeksçe reddedildiği.
+   **Task 3 (a) ayağı, Task 2'nin kalan sınırını da kapatır:** 032'nin fail-closed doğrulama
+   bloğu ancak `-v ON_ERROR_STOP=1` ile sıfır-dışı çıkış üretir.
+2. Sonra plan sırası: Task 4 → 16. Task 7 bir FREEZE kapısıdır (Katman-1 fixture seti tam
+   yeşil olmadan Task 8'e geçilmez).
 
 ## Verification (bu oturum)
-- **Passed:** Tur 7 Codex review koştu (probe + 1200s deseni; ham çıktı log'a tee-append,
-  `verdict: approve`) · plan-lint temiz (fix'ler sonrası tekrar koşuldu) ·
-  `command-blocks-maint.sh verify` PASS · Codex fresh-checks: task dizisi 1..16 PASS,
-  F22/F23/F24 marker sweep PASS, açık-karar kapı sweep PASS · kota preflight PROCEED.
-- **Not run:** hiçbir kod/test koşulmadı (plan-only iş; execute yeni oturumda başlar).
-- **Kalan risk:** F17 kabul edilen risk (yeniden açılma: müşteri/ürünleşme artışı) ·
-  sayaç-vs-tur-sayısı ayrımı (frontmatter 0 = yapısal rewrite; fiili 7 tur — bu
-  HANDOFF + loglar kanıt).
+- **Koşan komutlar / taze çıktı:**
+  - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **39 passed** (son koşum
+    geçmiş yeniden yazımından SONRA).
+  - `ec_ledger_view <window> <root> - --post-window` → **rc=0**, 9 satırın hepsi etiketli
+    (footer düzeltmesinden sonra; öncesinde rc=2 MECH-FAIL veriyordu).
+  - `git diff backup/pre-footer-fix HEAD` → boş (yeniden yazım içerik değiştirmedi).
+  - `command-blocks-maint.sh verify` → PASS (oturum başında).
+  - Migration idempotentliği: 032 doğru şema üstüne ikinci kez uygulandı → `rc=0`.
+  - Fail-closed oracle'ları (032 doğrulama bloğu): benzersiz-olmayan indeks · eksik UNIQUE ·
+    eksik CHECK · geçersiz (invalid) indeks · `DISABLE TRIGGER ALL` · `NOT ENFORCED` → **hepsi rc=3**;
+    temiz kurulum ve doğru-şema-üstüne-tekrar → **rc=0**.
+- **Codex:** pre-execution drift taraması (rc=0, kayma yok) · checkpoint 1 (tur 1
+  needs-attention → fix → tur 2 approve) · checkpoint 2 (tur 1 needs-attention → fix →
+  tur 2 needs-attention/reopen → fix → tur 3 approve + yakınsama kararı (A)).
+- **DENENMEYEN / kapsanmayan:**
+  - Canlıya (`otomaix`) hiçbir migration uygulanmadı — 032/033/034 canlı uygulaması **manuel
+    adım**, Task 16 listesinde.
+  - Frontend hiç çalıştırılmadı (`npx next build` bu oturumda koşmadı — ilk gerektiği yer Task 12).
+  - Eşzamanlı iki pytest oturumu denenmedi.
+  - PostgreSQL 18 dışında hiçbir sürümde koşulmadı.
+  - Task 3-16 hiç başlamadı.
+
+## Risks (accepted_risk — Auto-Fix Policy: medium/low otonom düzeltilmez)
+- **F2 [medium]** İki pytest oturumu aynı anda koşarsa biri diğerinin `otomaix_test`'ini
+  DROP eder (kilit yok). Subagent-driven modda tek tek koşuluyor; risk düşük ama açık.
+- **F3 [medium]** Migration keşfi tekrarlı/eksik numarayı reddetmiyor (`032_a` + `032_b`
+  ikisi de 32 sayılır). Task 3'ün runner işi buna komşu — orada yeniden değerlendirilebilir.
+- **F4 [medium]** `db` fixture'ının testler-arası geri sarma garantisi kanıtlayan testi yok.
+- **F5 [medium]** `sector_research_artifacts` TRUNCATE koruması (plana ek, bildirildi) doğru
+  kurulmuş ama regresyon testi yok. Codex teyit etti: doğru çalışıyor, Task 3'ün DROP TABLE
+  geri almasını engellemiyor.
+- **F6 [low]** `idx_brands_sub_sector_id` planın Task 2 sözleşmesinde yazılı değil; sapma
+  olarak bildirilmeden eklendi.
+- **F17** (önceki oturumdan, Eray risk-kabulü): damga = edited-lineage atfı. **Yeniden
+  açtırma.**
+- **Sürüm kırılganlığı (dürüst sınır, bulgu değil):** 032 doğrulama bloğu PG18 `conenforced`
+  kolonunu ve `trig=4` iç-tetikleyici sayısını okur; başka majör sürümde **gürültülü** hata
+  verir (sessiz geçiş değil). Canlı + test aynı 18.3 sunucusunda.
+- Lint artıkları: `test_migration_032.py` ve `test_infra.py`'de kullanılmayan `pytest` importu.
+  Evi: yürütme sonrası `/simplify-claude-codex`.
+- `backup/pre-footer-fix` etiketi: evi `/finish-branch-claude-codex` (merge/PR kararından
+  sonra silinir).
 
 ## Notes For Claude
-- HANDOFF rolling; karar izi TASK Decisions Log'da.
-- Plan onaylı — yeniden review AÇMA; execute akışı `/execute-plan-claude-codex`
-  kendi checkpoint'lerini koşar.
-- F17 user-arbitrated: hiçbir review'da yeniden açtırma.
-- Karar sorularında: tek karar + sade-dil senaryo; belirsiz mesaj ONAY DEĞİL.
+- **Alt-oturum talimatına HER SEFERİNDE planın "Global Constraints" bloğunu koy.** Bu oturumda
+  koymadım ve Task 1'in yüksek bulgusu tam olarak oradan doğdu (plan `127.0.0.1:5433` diyordu,
+  task-seviyesi invariant yalnız db adını söylüyordu, kod da yalnız adı kontrol etti).
+- **`Exec-Kind` etiketini yazmadan ÖNCE commit'in path kümesine BAK.** `tests/` altındaki her
+  şey test sayılır (`conftest.py` dahil). hepsi test → `red-only` · hepsi impl → `green-only` ·
+  karışık → `code` · yalnız `.sql` → `migration` · yalnız docs → `docs-only`. Yanlış etiket
+  defteri kırar ve Adım 11.0'ı bloklar; bu oturumda tam olarak bu oldu.
+- **Kural zaten bağlıysa kullanıcıya menü açma.** critical/high → sormadan düzelt;
+  medium/low → `accepted_risk` yaz, devam et. Bu oturumda iki kez menü açtım, Eray haklı
+  olarak itiraz etti.
+- **Codex çağrılarında kapsamı daralt.** Tam spec + tam plan okutmak 480 sn timeout'una
+  çarpıyor (bir kez oldu). Prompt'ta hangi bölümlerin okunacağını açıkça yaz; uzun koşum
+  gerekirse probe + `CSS_CALL_TIMEOUT=1200s` deseni (arka planda).
+- Yeniden açılan bir cluster 3. turda da yeni bir katman açarsa **DUR ve çerçeve teşhisi ver**
+  — F7'de tur 3'te Codex'ten açık yakınsama kararı istedim, (A) verdi ve kapandı.
+- Push henüz hiç yapılmadı ve completion gate'e kadar yapılmayacak.
 
 ## Notes For Codex
-- (Tur 7'de bulgu kalmadı; execute-time checkpoint'ler plan görev metinlerindeki
-  invariant + test sözleşmelerini sınar. Plan 2 eksikliği bulgu değildir — staged
-  split Eray onaylı.)
+- Kapsam daraltma prompt'ta açıkça veriliyor; sanitize substratta `.env`, `config.py`,
+  `caption_generator.py` gibi dosyalar hariç tutuluyor — **yokluklarını bulgu sayma**.
+- Sanitize substratta pytest koşamıyorsun (venv yok + yazılabilir temp yok); runtime ölçümleri
+  prompt'ta veriliyor, koda karşı doğrula.
+- F2/F3/F4/F5/F6 dispositioned `accepted_risk` — **yeniden açma**. F17 kullanıcı-tahkimli.

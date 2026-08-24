@@ -35,7 +35,20 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-24 (beşinci oturum) — PLAN 1 ONAYLANDI (`plan-approved`, Tur 7 `verdict: approve`).**
+**2026-08-24 (altıncı oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 2'si bitti.**
+`/execute-plan-claude-codex` başlatıldı: dal `feat/sektor-bilgi-paketi`, mod
+subagent-driven, `execute_start_ref = 5a9d5d4`. Task 1 (pytest altyapısı +
+atılabilir `otomaix_test` veritabanı) ve Task 2 (migration 032) bitti; 39 test
+PASS. İki checkpoint koştu, ikisi de `verdict: approve` ile kapandı: checkpoint 1'de
+bir yüksek bulgu (yıkıcı test-DB işlemi yalnız veritabanı ADINI doğruluyordu, sunucu
+ucunu değil) tek turda, checkpoint 2'de bir yüksek bulgu (migration idempotentliği
+isim-eşitliğine dayanıyordu → garanti sessizce eksik kalabilirdi) üç turda kapandı.
+Beş orta/düşük bulgu `accepted_risk` olarak kayıtlı (HANDOFF Risks). Bir footer
+etiketi hatası defteri kırmıştı; Eray onayıyla geçmiş yeniden yazılarak düzeltildi
+(içerik bayt-aynı, emniyet etiketi `backup/pre-footer-fix`). **9 commit local,
+push YOK.** Sıradaki iş: Task 3.
+
+**Önceki durum (2026-08-24, beşinci oturum) — PLAN 1 ONAYLANDI (`plan-approved`, Tur 7 `verdict: approve`).**
 Eray yol seçimi: "sadeleştir + fix" — F23 kaldırmayla kapandı (recovered bandı + K-45
 geri-dönüş teslimi Plan 2'ye; atama-geçmişi kanıtı Plan 2 kalemi; metin/karar korunur),
 F22 (olay-türüne özgü sürüm şekilleri) + F24 (geçiş+olay tek transaction) mekanik fix.
@@ -248,6 +261,19 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
   recovered durumu hiç doğamaz; K-45 kararı ve sabit metinler KORUNUR, Plan 2 kalemi
   atama-geçmişi kanıtını da içerir. F22 = olay-türüne özgü sürüm şekilleri (sentinelsiz),
   F24 = olay kaydı geçişle aynı transaction. Tur 7 approve → `plan-approved`.
+- **2026-08-24 (altıncı oturum) — Yürütme başlangıç kararları (Eray):** yürütme ayrı dalda
+  (`feat/sektor-bilgi-paketi`) koşar — main temiz kalır, kapanış `/finish-branch-claude-codex`
+  kararına bırakılır · mod subagent-driven (16 task'lık planda bağlam korunması) · Python ortamı
+  **izole venv** (`apps/social/backend/.venv`), sistem Python'ına dokunulmaz. Gerekçe ölçüldü:
+  requirements.txt'i sisteme kurmak, sistemde daha yeni sürümü bulunan **11 paketi geri sürüme**
+  düşürüyordu (Pillow 12.2→11.2, weasyprint 68→63, uvicorn 0.51→0.30 vb.); canlı backend zaten
+  Docker konteynerinde kendi Python'ıyla koşuyor, yani sistem paketleri canlıyı beslemiyor.
+- **2026-08-24 (altıncı oturum) — Geçmiş yeniden yazımı (Eray onaylı):** `9ed5902` commit'i
+  `Exec-Kind: code` etiketiyle inmişti ama yalnız `tests/` altına dokunuyordu → türetilmiş
+  defter MECH-FAIL veriyor, Adım 11.0 mekanik kapısını ve push'u bloklyordu. Etiket `red-only`'ye
+  çevrildi, sonraki 5 commit replay edildi; **dosya içerikleri bayt-aynı** doğrulandı. Kök neden:
+  alt-oturum talimatında etiketi ben dikte ettim, commit'in path kümesine bakmadan. Emniyet
+  etiketi `backup/pre-footer-fix` (`/finish-branch` sonrası silinir).
 - **2026-08-21 — Denetim + sweep (Eray: "yüksek bulguları giderelim" + commit onayı):**
   Codex denetiminin iki yüksek bulgusu sentez deposunda giderildi (commit'ler
   `8e298eb → c380e37`); dört kapanışın statü/kapsam izleri gövdeye işlendi, karar-durumu
