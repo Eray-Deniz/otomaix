@@ -27,6 +27,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 import uuid
 from pathlib import Path
 
@@ -280,6 +281,85 @@ def test_rollback_refuses_when_package_data_exists(scratch_db_migrated):
     assert (
         _scalar(url, "SELECT count(*) FROM social.sectors WHERE slug = 't3-alt'") == "1"
     )
+
+
+def _wait_for_writer_lock(url: str, table: str, timeout: float = 15.0) -> None:
+    """Eşzamanlı yazarın satır kilidini alana kadar bekler (yoklama)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        held = _scalar(
+            url,
+            "SELECT count(*) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation "
+            f"WHERE c.relname = '{table}' AND l.mode = 'RowExclusiveLock' AND l.granted",
+        )
+        if held != "0":
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"eşzamanlı yazar {table} üstünde kilit almadı")
+
+
+def test_rollback_refuses_data_committed_while_it_waits(scratch_db_migrated):
+    """Sayım ile silme arasına giren yazar veriyi KAYBETTİREMEZ.
+
+    Kilitsiz sürümde pencere gerçekti: preflight açık transaction'daki satırı
+    GÖREMEZ (0 sayar), sonra `DROP TABLE` yazarın commit'ini bekler ve satırı
+    onunla birlikte yok ederdi. Kilit sayımdan ÖNCE alındığı için script artık
+    yazarı bekler, satırı görür ve REDDEDER.
+    """
+    url = scratch_db_migrated
+    _run_sql(url, _SEED_SQL)
+
+    argv, env = infra.psql_argv(url)
+    writer = subprocess.Popen(
+        argv + ["-f", "-"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        text=True,
+    )
+    writer.stdin.write(
+        "BEGIN;\n"
+        "INSERT INTO social.sector_packages "
+        "(sector_id, version, status, schema_version, content) VALUES "
+        "((SELECT id FROM social.sectors WHERE slug = 't3-alt'), 1, 'draft', 1, "
+        "'{\"k\": 1}');\n"
+        "SELECT pg_sleep(5);\n"
+        "COMMIT;\n"
+    )
+    writer.stdin.close()
+
+    try:
+        _wait_for_writer_lock(url, "sector_packages")
+
+        # Sonsuz bekleme testi asmasın: kilit 60 sn'de gelmezse psql hata verir
+        # (o hâlde mesaj REDDEDILDI olmaz ve test doğru sebeple düşer).
+        blocked_env = dict(env)
+        blocked_env["PGOPTIONS"] = "-c lock_timeout=60s"
+        started = time.monotonic()
+        result = subprocess.run(
+            argv + ["-f", str(ROLLBACK_SQL)],
+            env=blocked_env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        waited = time.monotonic() - started
+    finally:
+        writer.wait(timeout=60)
+
+    assert result.returncode != 0, (
+        f"araya giren yazara ragmen geri alma kostu — stdout:\n{result.stdout}"
+    )
+    assert "REDDEDILDI" in result.stderr, result.stderr
+    assert waited >= 1.0, (
+        "geri alma yazarı hiç beklemedi — kilit sayımdan önce alınmıyor olabilir "
+        f"(bekleme: {waited:.2f} sn)"
+    )
+
+    # Yazarın satırı ve tablolar yerinde.
+    assert _table_exists(url, "sector_packages")
+    assert _scalar(url, "SELECT count(*) FROM social.sector_packages") == "1"
 
 
 def test_rollback_clean_path_full_teardown(scratch_db_migrated):

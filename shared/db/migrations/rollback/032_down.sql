@@ -1,8 +1,9 @@
 -- Migration 032 GERİ ALMA — sektör bilgi paketi şeması
 --
--- KULLANIM:  psql -v ON_ERROR_STOP=1 -f 032_down.sql
---            (bayrak olmadan psql hatayı basar ama SIFIR döner — geri alma
---             yarım kalır ve "başarılı" görünür.)
+-- KULLANIM:  psql -f 032_down.sql
+--            Script `ON_ERROR_STOP`u KENDİ açar ve tüm gövdeyi TEK transaction'a
+--            sarar — çağıranın bayrağına muhtaç değildir. Hata hâlinde hiçbir
+--            adım kalıcı olmaz.
 --
 -- SÖZLEŞME (plan Task 3, F4 tahkimi — veri-varken-REDDET modeli):
 --
@@ -12,8 +13,14 @@
 --   ham kanıt verisi bir script'le imha edilmez. Canlıda veri varken yol
 --   GERİ ALMA DEĞİL, ileri düzeltme (forward-fix) migration'ıdır.
 --
---   Preflight EN BAŞTADIR: reddetme durumunda hiçbir DDL çalışmamış olur —
---   transaction sarmalayıcısına bağımlı değildir.
+--   Preflight EN BAŞTADIR ve sayım YALNIZ korunan iki tablo ACCESS EXCLUSIVE
+--   kilidi ALTINDAYKEN yapılır. Kilitler transaction sonuna kadar tutulur:
+--   sayımdan sonra, silmeden önce araya giren bir yazar OLAMAZ. Kilitsiz sürümde
+--   bu pencere gerçekti — eşzamanlı bir INSERT sayımdan sonra commit edip
+--   DROP TABLE ile yok edilebilirdi (Codex checkpoint 3, yüksek bulgu).
+--
+--   Kilit sırası SABİTTİR (önce sector_packages, sonra sector_research_artifacts):
+--   aynı script'in iki koşumu birbirini kilitlemez, deadlock üretmez.
 --
 --   `generation_stamps` ve `posts` damgaları ayrıca sayılmaz: ikisi de
 --   `sector_packages`e FK'lıdır, paket tablosu boşsa damga da yoktur.
@@ -28,8 +35,12 @@
 --
 -- Her adım `IF EXISTS` taşır: yarım kalmış bir geri alma tekrar koşturulabilir.
 
+\set ON_ERROR_STOP on
+
+BEGIN;
+
 -- ---------------------------------------------------------------------------
--- 0. PREFLIGHT — veri varsa hiçbir şey yapmadan DUR
+-- 0. PREFLIGHT — korunan tabloları kilitle, sonra say; veri varsa DUR
 -- ---------------------------------------------------------------------------
 
 DO $preflight$
@@ -37,6 +48,17 @@ DECLARE
     package_rows BIGINT := 0;
     artifact_rows BIGINT := 0;
 BEGIN
+    -- Kilit ÖNCE, sayım SONRA: aradaki pencere kapanır. Kilitler bu
+    -- transaction commit/rollback edilene kadar tutulur, yani teardown boyunca.
+    IF to_regclass('social.sector_packages') IS NOT NULL THEN
+        EXECUTE 'LOCK TABLE social.sector_packages IN ACCESS EXCLUSIVE MODE';
+    END IF;
+
+    IF to_regclass('social.sector_research_artifacts') IS NOT NULL THEN
+        EXECUTE 'LOCK TABLE social.sector_research_artifacts '
+                'IN ACCESS EXCLUSIVE MODE';
+    END IF;
+
     IF to_regclass('social.sector_packages') IS NOT NULL THEN
         EXECUTE 'SELECT count(*) FROM social.sector_packages' INTO package_rows;
     END IF;
@@ -190,3 +212,5 @@ BEGIN
     END IF;
 END
 $verify_down$;
+
+COMMIT;
