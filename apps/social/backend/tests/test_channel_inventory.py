@@ -708,3 +708,155 @@ def test_no_writer_reads_brand_kit_to_write_it_back():
                 offenders.append(f"{path.relative_to(BACKEND_ROOT)}::{node.name}")
 
     assert not offenders, f"okundu-değiştir-geri-yaz deseni: {offenders}"
+
+
+# ─── 5. Checkpoint 9 turu 2 — aynı iki sınıfın kalan ayakları ───────────────
+
+
+def test_malformed_marker_is_rejected_at_write_gate():
+    """Bozuk etiket YAZIM kapısında reddedilir (F4 sınıf kapanışı).
+
+    Tur 1'de etiketin KARAKTER temsili kapatıldı; tur 2 aynı eksenin ikinci
+    ayağını açtı: ayıraç eksikse (`]` yok, `:` yok) katı kalıp eşleşmiyor,
+    kalıp "etiketsiz" sayılıp geçiyordu. Bir regex varyantı daha eklemek
+    üçüncü turda üçüncü varyantı davet ederdi.
+
+    Kapanış iki taraflı bir SÖZLEŞMEYLE yapılır: yazım kapısı, etiket
+    OKUNAN ama kurallı BİÇİMDE olmayan hiçbir metni içeri almaz; okuma tarafı
+    katı kalır. Böylece bozuk etiket bir pakette VAR OLAMAZ.
+    """
+    from app.services.sector_packages import structural_errors
+
+    def content_with(cta_text: str) -> dict:
+        return {
+            "kapsam": "kapsam",
+            "ton_ve_dil": "ton",
+            "gorsel_kodlar": "codes",
+            "cta_kaliplari": [cta(cta_text)],
+            "kanca_kaliplari": ["kanca"],
+            "takvim_temalari": ["tema"],
+            "yasaklar_ve_hassasiyetler": ["yasak"],
+            "video_kodlar": {"hareket": "a", "sahne": "b"},
+            "ozel_gun": {},
+        }
+
+    # Önce pozitif kontrol: kurallı etiket taşıyan içerik TEMİZ geçer.
+    assert structural_errors(content_with("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
+
+    malformed = {
+        "kapanış ayracı yok": "Yaz [kanal-bağımlı: whatsapp_hatti",
+        "iki nokta yok": "Yaz [kanal-bağımlı whatsapp_hatti]",
+        "açılış ayracı yok": "Yaz kanal-bağımlı: whatsapp_hatti]",
+        "hiç ayraç yok": "Yaz kanal-bağımlı whatsapp_hatti",
+        "bilinmeyen anahtar": "Yaz [kanal-bağımlı: telegram]",
+        "boş anahtar": "Yaz [kanal-bağımlı: ]",
+        "tipografik tire + bozuk ayraç": "Yaz [kanal—bağımlı whatsapp_hatti]",
+    }
+    escapes = [name for name, text in malformed.items() if not structural_errors(content_with(text))]
+
+    assert not escapes, f"yazım kapısından geçen bozuk etiket: {escapes}"
+
+
+def test_write_gate_rejection_makes_runtime_fallback_consistent():
+    """Yazım kapısından geçemeyen içerik çalışma zamanında da okunmaz.
+
+    `structural_errors` iki tarafın ORTAK ölçüsüdür (Task 8 sözleşmesi), yani
+    bozuk etiketli bir paket K-15(a) gereği TÜM yoluyla paketsiz yola düşer —
+    alan-düzeyi atlama yok. Bu test o bağın hâlâ tek ölçü olduğunu pinler.
+    """
+    from app.services import sector_packages as sp
+
+    source = inspect.getsource(sp.resolve_package_context)
+    assert "structural_errors(content)" in source
+
+
+async def test_brand_update_surface_does_not_erase_concurrent_kit_state(kit_db):
+    """`PATCH /brands/{id}` bayat bir belgeyle kanal envanterini SİLEMEZ (F3).
+
+    Tur 1 sunucu-taraflı okundu-değiştir-geri-yaz desenini kapattı; tur 2
+    sınıfın ikinci ayağını gösterdi: `BrandUpdate` tam bir `brand_kit` kabul
+    ediyor ve doğrudan atıyordu. İstemci kiti okur, arada başka bir istek
+    `channels` ekler, sonra bayat PATCH tüm belgeyi ezip yeni durumu silerdi.
+
+    Sınıfın dürüst tanımı: "bayat bir okumadan hesaplanmış belgeyle
+    `brand_kit`i DEĞİŞTİREBİLEN her yol". Üç üyesi vardı; üçü de birleştirmeye
+    geçti.
+    """
+    user, brand_id = await _seed_owner_and_brand(kit_db)
+
+    # Eşzamanlı/atomik yazım: kanal envanteri eklenir.
+    await brands_router.update_brand_kit(
+        brand_id=brand_id,
+        payload=BrandKitUpdate(channels={"whatsapp_hatti": True}),
+        user=user,
+        db=kit_db,
+    )
+
+    # Bayat istemci belgesi: `channels` HİÇ yok (istemci onu görmeden okumuştu).
+    await brands_router.update_brand(
+        brand_id=brand_id,
+        payload=BrandUpdate(brand_kit={"tonality": "friendly"}),
+        user=user,
+        db=kit_db,
+    )
+
+    stored = parse_brand_kit(
+        await kit_db.fetchval("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
+    )
+    assert stored["channels"] == {"whatsapp_hatti": True}, "bayat PATCH kanalları SİLDİ"
+    assert stored["tonality"] == "friendly"
+
+
+def test_no_writer_replaces_brand_kit_wholesale():
+    """Hiçbir yazıcı `brand_kit`e ÇIPLAK parametre atamaz (sınıf kapanışı).
+
+    Önceki yapısal tarama yalnız okundu-değiştir-geri-yaz desenini görüyordu;
+    bayat-belge ataması (`brand_kit = $2`) onun ağından geçiyordu. Sınıfın
+    kendisi şudur: **`brand_kit`e yapılan her yazım BİRLEŞTİRME olmalıdır**.
+    Tarama bunu SQL metninden ölçer.
+
+    **Kapsam sınırı (dürüstçe):** tarama yalnız METİN SABİTLERİNİ görür; SQL'i
+    çalışma zamanında kuran `update_brand` bu ağdan geçer. Onun kanıtı
+    davranışsaldır (`test_brand_update_surface_does_not_erase_concurrent_kit_state`)
+    ve birleştirme ifadesinin tek evden geldiği ayrıca pinlenir
+    (`test_kit_merge_sql_has_a_single_implementation`). Üçü birlikte sınıfı
+    kapatır; tek başına bu tarama kapatmaz.
+    """
+    import re as _re
+
+    assignment = _re.compile(r"brand_kit\s*=\s*\$\d+")
+    offenders = []
+    for path in (BACKEND_ROOT / "app").rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+                continue
+            prose = {
+                id(stmt.value)
+                for stmt in ast.walk(node)
+                if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant)
+            }
+            for inner in ast.walk(node):
+                if not (isinstance(inner, ast.Constant) and isinstance(inner.value, str)):
+                    continue
+                if id(inner) in prose:
+                    continue
+                if assignment.search(inner.value):
+                    offenders.append(f"{path.relative_to(BACKEND_ROOT)}::{node.name}")
+
+    assert not offenders, f"brand_kit'e çıplak atama (birleştirme değil): {sorted(set(offenders))}"
+
+
+def test_kit_merge_sql_has_a_single_implementation():
+    """Birleştirme SQL'i tek yerde yaşar — üç yazıcı da onu çağırır."""
+    from app.core.utils import brand_kit_merge_sql
+
+    assert callable(brand_kit_merge_sql)
+
+    users = []
+    for path in (BACKEND_ROOT / "app").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if "brand_kit_merge_sql" in source and path.name != "utils.py":
+            users.append(path.name)
+
+    assert sorted(users) == ["avatar.py", "brands.py"]

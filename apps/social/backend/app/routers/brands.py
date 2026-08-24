@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from app.core.cache import get_cached, invalidate_pattern, set_cached
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, assert_workspace_owned, get_current_user
+from app.core.utils import brand_kit_merge_sql
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
 from app.services.sector_packages import validate_channels
@@ -124,7 +125,6 @@ async def update_brand(
     updates = payload.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
-    # brand_kit bu yüzeyde BÜTÜN olarak yazılır — kanal kapısı burada da koşar.
     _assert_valid_channels(updates.get("brand_kit"))
 
     # Phase 6 dual-write: frontend slug gönderir; TEXT kolona display_name yazılır,
@@ -136,8 +136,32 @@ async def update_brand(
             updates["sector"] = sector_display
             updates["sector_id"] = sector_id
 
-    fields = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(updates))
-    values = list(updates.values())
+    # `brand_kit` bu yüzeyde de BİRLEŞTİRİLİR, atanmaz. Eskiden istemcinin
+    # gönderdiği tam belge doğrudan yazılıyordu: istemci kiti okur, arada başka
+    # bir istek atomik olarak `channels` (ya da `avatar`) ekler, sonra bayat
+    # PATCH tüm belgeyi ezip yeni durumu silerdi (checkpoint 9, tur 2).
+    kit = updates.pop("brand_kit", None)
+    kit_channels = None
+    if isinstance(kit, dict) and "channels" in kit:
+        kit = dict(kit)
+        kit_channels = kit.pop("channels")
+
+    assignments: list[str] = []
+    values: list = []
+    for key, value in updates.items():
+        values.append(value)
+        assignments.append(f"{key} = ${len(values) + 1}")
+
+    if kit is not None:
+        values.append(kit)
+        kit_param = len(values) + 1
+        channels_param = None
+        if kit_channels is not None:
+            values.append(kit_channels)
+            channels_param = len(values) + 1
+        assignments.append("brand_kit = " + brand_kit_merge_sql(kit_param, channels_param))
+
+    fields = ", ".join(assignments)
     row = await db.fetchrow(
         f"UPDATE social.brands SET {fields} WHERE id = $1 RETURNING *",
         brand_id,
@@ -194,38 +218,14 @@ async def update_brand_kit(
     _assert_valid_channels(updates)
     channels = updates.pop("channels", None)
 
-    if channels is None:
-        updated = await db.fetchrow(
-            """
-            UPDATE social.brands
-            SET brand_kit = CASE WHEN jsonb_typeof(brand_kit) = 'object'
-                                 THEN brand_kit ELSE '{}'::jsonb END || $2,
-                updated_at = now()
-            WHERE id = $1
-            RETURNING *
-            """,
-            brand_id,
-            updates,
-        )
-    else:
-        updated = await db.fetchrow(
-            """
-            UPDATE social.brands
-            SET brand_kit = (CASE WHEN jsonb_typeof(brand_kit) = 'object'
-                                  THEN brand_kit ELSE '{}'::jsonb END || $2)
-                            || jsonb_build_object(
-                                   'channels',
-                                   CASE WHEN jsonb_typeof(brand_kit -> 'channels') = 'object'
-                                        THEN brand_kit -> 'channels' ELSE '{}'::jsonb END
-                                   || $3),
-                updated_at = now()
-            WHERE id = $1
-            RETURNING *
-            """,
-            brand_id,
-            updates,
-            channels,
-        )
+    values: list = [updates] if channels is None else [updates, channels]
+    merge = brand_kit_merge_sql(2, None if channels is None else 3)
+    updated = await db.fetchrow(
+        f"UPDATE social.brands SET brand_kit = {merge}, updated_at = now() "
+        "WHERE id = $1 RETURNING *",
+        brand_id,
+        *values,
+    )
 
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")

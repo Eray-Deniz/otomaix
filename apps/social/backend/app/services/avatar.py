@@ -15,6 +15,7 @@ import asyncpg
 import httpx
 
 from app.core.config import settings
+from app.core.utils import brand_kit_merge_sql
 
 HEYGEN_BASE = "https://api.heygen.com"
 
@@ -111,13 +112,8 @@ async def _merge_brand_kit(db: asyncpg.Connection, brand_id: UUID, patch: dict) 
     `||` operatörünün patlamasını önler.
     """
     await db.execute(
-        """
-        UPDATE social.brands
-        SET brand_kit = CASE WHEN jsonb_typeof(brand_kit) = 'object'
-                             THEN brand_kit ELSE '{}'::jsonb END || $2,
-            updated_at = now()
-        WHERE id = $1
-        """,
+        f"UPDATE social.brands SET brand_kit = {brand_kit_merge_sql(2)}, updated_at = now() "
+        "WHERE id = $1",
         brand_id,
         patch,
     )
