@@ -459,3 +459,79 @@ async def test_sweep_rejects_unreadable_baseline(readonly_role, tmp_path):
     old_schema = _run_sweep(readonly_dsn, baseline=stale)
     assert old_schema.returncode == 2, "eski şemalı taban sessizce yok sayıldı"
     assert "baseline okunamadı" in old_schema.stderr
+
+
+async def test_sweep_rejects_incomplete_baseline(readonly_role, tmp_path):
+    """Yarıda kesilmiş taban REDDEDİLİR — eksik marka "yeni" sayılamaz.
+
+    Codex checkpoint 5 tur 2, yüksek bulgu: eksik taban fail-OPEN'dı. Eşleme
+    bloğu kesilirse eksik markalar `added` sınıfına düşüyordu ve `added` ihlal
+    sayılmadığı için o markanın kökten köke kayması `remapped: 0` + rc=0 ile
+    geçiyordu. Bu testin ikinci ayağı tam o senaryoyu kurar.
+    """
+    admin_url, readonly_dsn = readonly_role
+    await _seed_two_brands(admin_url)
+
+    full = _run_sweep(readonly_dsn)
+    assert full.returncode == 0, full.stderr
+    assert "brands_total: 2" in full.stdout
+
+    # (a) Eşleme bloğu başlıkta kesilmiş: hiç satır yok, beyan 2 diyor.
+    header_only = tmp_path / "kesik-bas.txt"
+    header_only.write_text(
+        full.stdout.split("--- mapping ---")[0] + "--- mapping ---\n",
+        encoding="utf-8",
+    )
+    truncated = _run_sweep(readonly_dsn, baseline=header_only)
+    assert truncated.returncode == 2, "boş eşleme bloğu sessizce kabul edildi"
+    assert "baseline okunamadı" in truncated.stderr
+
+    # (b) Eşleme bloğu ORTASINDA kesilmiş + kesilen markanın sektörü kaymış.
+    #     Düzeltmeden önce bu koşum rc=0 verirdi.
+    lines = full.stdout.splitlines()
+    cut = lines.index("--- mapping ---")
+    partial = tmp_path / "kesik-orta.txt"
+    partial.write_text("\n".join(lines[: cut + 2]) + "\n", encoding="utf-8")
+
+    dropped_brand = lines[cut + 2].split()[0]
+    mover = await asyncpg.connect(admin_url)
+    try:
+        await mover.execute(
+            """
+            UPDATE social.brands SET sector_id = (
+                SELECT id FROM social.sectors
+                WHERE parent_sector_id IS NULL AND id <> sector_id
+                ORDER BY slug LIMIT 1
+            )
+            WHERE id = $1::uuid
+            """,
+            dropped_brand,
+        )
+    finally:
+        await mover.close()
+
+    hidden = _run_sweep(readonly_dsn, baseline=partial)
+    assert hidden.returncode == 2, "eksik taban kaymayı gizledi"
+    assert "baseline eksik" in hidden.stderr
+
+
+async def test_sweep_rejects_duplicate_baseline_rows(readonly_role, tmp_path):
+    """Tekrar eden marka kimliği REDDEDİLİR — sözlük sessizce üzerine yazardı."""
+    admin_url, readonly_dsn = readonly_role
+    await _seed_two_brands(admin_url)
+
+    full = _run_sweep(readonly_dsn)
+    lines = full.stdout.splitlines()
+    cut = lines.index("--- mapping ---")
+
+    duplicated = tmp_path / "tekrarli.txt"
+    # Bir satır iki kez; toplam satır sayısı beyanla UYUŞUR, yani bu testi
+    # geçiren tek şey tekrar denetimidir (sayı denetimi değil).
+    body = lines[cut + 1 : cut + 3]
+    duplicated.write_text(
+        "\n".join(lines[: cut + 1] + [body[0], body[0]]) + "\n", encoding="utf-8"
+    )
+
+    result = _run_sweep(readonly_dsn, baseline=duplicated)
+    assert result.returncode == 2, "tekrar eden kimlik sessizce kabul edildi"
+    assert "tekrar eden marka kimliği" in result.stderr

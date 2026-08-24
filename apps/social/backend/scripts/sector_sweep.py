@@ -93,14 +93,47 @@ def _difference_reason(row: asyncpg.Record) -> str | None:
     return None
 
 
+def _declared(report: str, field: str) -> str | None:
+    """Rapor başlığındaki `<field>: <değer>` satırını okur (ilk eşleşme)."""
+    prefix = f"{field}: "
+    for line in report.splitlines():
+        if line == MAPPING_HEADER:
+            break
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip()
+    return None
+
+
 def parse_mapping(report: str) -> dict[str, str]:
     """Bir raporun eşleme bloğunu `{brand_id: sector_id}` olarak okur.
 
     Yalnız `--- mapping ---` ile sonraki blok başlığı arasını okur; özet
     satırları ve karşılaştırma bloğu ayrıştırmaya GİRMEZ.
+
+    TAMLIK DENETİMİ (Codex checkpoint 5 tur 2, yüksek bulgu): yarıda kesilmiş
+    bir taban FAIL-OPEN'dı. Eksik kalan markalar `_compare`'de "yeni eklenmiş"
+    sayılıyordu, `added` ise ihlal DEĞİLDİR — yani o markalardan birinin kökten
+    köke kayması `remapped: 0` + rc=0 ile geçiyordu. Kesilme olağan bir kaza
+    (yarıda kalmış yönlendirme yazımı), o yüzden taban artık kendi beyanına
+    karşı doğrulanır: sürüm tam eşleşmeli, satır sayısı beyan edilen
+    `brands_total` ile aynı olmalı, marka kimliği tekrar etmemeli.
     """
+    declared_version = _declared(report, "schema_version")
+    if declared_version != str(REPORT_SCHEMA_VERSION):
+        raise ValueError(
+            f"baseline şema sürümü {declared_version!r}, beklenen "
+            f"{str(REPORT_SCHEMA_VERSION)!r} — taze bir taban al."
+        )
+
+    declared_total = _declared(report, "brands_total")
+    if declared_total is None or not declared_total.isdigit():
+        raise ValueError(
+            f"baseline 'brands_total' beyanı okunamadı: {declared_total!r}"
+        )
+
     mapping: dict[str, str] = {}
     inside = False
+    seen = 0
     for line in report.splitlines():
         if line == MAPPING_HEADER:
             inside = True
@@ -114,11 +147,20 @@ def parse_mapping(report: str) -> dict[str, str]:
         parts = line.split()
         if len(parts) != 2:
             raise ValueError(f"eşleme satırı ayrıştırılamadı: {line!r}")
+        if parts[0] in mapping:
+            # Sözlük sessizce üzerine yazardı; tekrar eden kimlik bozuk tabandır.
+            raise ValueError(f"baseline'da tekrar eden marka kimliği: {parts[0]}")
         mapping[parts[0]] = parts[1]
+        seen += 1
     if not inside:
         raise ValueError(
             f"baseline raporunda {MAPPING_HEADER!r} bloğu yok — "
             "eski şemalı (v1) bir rapor olabilir; taze bir taban al."
+        )
+    if seen != int(declared_total):
+        raise ValueError(
+            f"baseline eksik: {declared_total} marka beyan edilmiş, eşleme "
+            f"bloğunda {seen} satır var — dosya yarıda kesilmiş olabilir."
         )
     return mapping
 
