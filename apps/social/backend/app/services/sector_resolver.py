@@ -16,7 +16,9 @@ import asyncpg
 from app.core.cache import get_cached, set_cached
 
 _SECTOR_MAP_TTL = 3600  # 1 saat — sektörler neredeyse hiç değişmez
-_CACHE_KEY = "otomaix:social:sector_slug_map_v2"
+# v3: harita YALNIZ kök sektörleri taşır (R-01). Sürüm artışı, filtresiz
+# v2 değerini önbellekte bırakmış kurulumları da devre dışı bırakır.
+_CACHE_KEY = "otomaix:social:sector_slug_map_v3"
 
 
 def _normalize_slug(text: str | None) -> str:
@@ -56,7 +58,13 @@ async def resolve_sector(
     """
     cached = await get_cached(_CACHE_KEY)
     if not cached:
-        rows = await db.fetch("SELECT id::text, slug, display_name FROM social.sectors")
+        # R-01: alt sektör satırları (`parent_sector_id IS NOT NULL`) yalnız paket
+        # katmanının adresidir — marka çözümlemesi onları HİÇ görmez. Filtre
+        # burada durur: kısmi eşleşme dalı da aynı haritada gezer.
+        rows = await db.fetch(
+            "SELECT id::text, slug, display_name FROM social.sectors "
+            "WHERE parent_sector_id IS NULL"
+        )
         cached = {r["slug"]: {"id": r["id"], "display_name": r["display_name"]} for r in rows}
         await set_cached(_CACHE_KEY, cached, _SECTOR_MAP_TTL)
 

@@ -13,13 +13,20 @@ from app.models.schemas import OkResponse
 
 router = APIRouter(prefix="/sectors", tags=["sectors"])
 
-_CACHE_KEY = "otomaix:social:sectors:list"
+# v2: liste YALNIZ kök sektörleri döndürür (R-02); sürüm artışı eski
+# filtresiz değeri devre dışı bırakır.
+_CACHE_KEY = "otomaix:social:sectors:list:v2"
 _TTL = 3600  # 1 saat — sektörler neredeyse hiç değişmez
 
 
 @router.get("", response_model=OkResponse)
 async def list_sectors(db: asyncpg.Connection = Depends(get_db)):
-    """Tüm aktif sektörleri döndürür (auth gerekmez — onboarding'de de kullanılır)."""
+    """Kök sektörleri döndürür (auth gerekmez — onboarding'de de kullanılır).
+
+    R-02: alt sektör satırları bu listeye GİRMEZ. Üç frontend tüketicisi
+    (onboarding, marka oluşturma, marka ayarları) bugünkü listeyi aynen görür;
+    alt sektör ataması ayrı bir akıştır.
+    """
     cached = await get_cached(_CACHE_KEY)
     if cached is not None:
         return OkResponse(data=cached)
@@ -28,6 +35,7 @@ async def list_sectors(db: asyncpg.Connection = Depends(get_db)):
         """
         SELECT id::text, slug, display_name, parent_sector_id::text, keywords
         FROM social.sectors
+        WHERE parent_sector_id IS NULL
         ORDER BY display_name
         """
     )
