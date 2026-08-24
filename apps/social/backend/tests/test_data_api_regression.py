@@ -271,15 +271,36 @@ def readonly_role(scratch_db_migrated: str):
         _psql(url, f"DROP ROLE IF EXISTS {READONLY_ROLE}")
 
 
-def _run_sweep(dsn: str) -> subprocess.CompletedProcess:
+def _run_sweep(dsn: str, baseline: Path | None = None) -> subprocess.CompletedProcess:
     """Script'i ÇIPLAK ortamda koşar — bağlantı dizesi ortamdan miras ALINMAZ."""
+    argv = [sys.executable, str(SWEEP_SCRIPT), "--database-url", dsn, "--dry-run"]
+    if baseline is not None:
+        argv += ["--baseline", str(baseline)]
     return subprocess.run(
-        [sys.executable, str(SWEEP_SCRIPT), "--database-url", dsn, "--dry-run"],
+        argv,
         cwd=str(BACKEND_ROOT),
         env={"PATH": "/usr/bin:/bin"},
         capture_output=True,
         text=True,
     )
+
+
+async def _seed_two_brands(admin_url: str) -> None:
+    """İlk kök sektöre bağlı iki marka açar (COMMIT edilmiş)."""
+    seeder = await asyncpg.connect(admin_url)
+    try:
+        root_id = await seeder.fetchval(
+            "SELECT id FROM social.sectors WHERE parent_sector_id IS NULL "
+            "ORDER BY slug LIMIT 1"
+        )
+        for index in range(2):
+            await seeder.execute(
+                "INSERT INTO social.brands (name, sector_id) VALUES ($1, $2)",
+                f"Sweep Markası {index}",
+                root_id,
+            )
+    finally:
+        await seeder.close()
 
 
 async def test_sector_sweep_readonly_and_deterministic(readonly_role):
@@ -298,19 +319,7 @@ async def test_sector_sweep_readonly_and_deterministic(readonly_role):
         await writer.close()
 
     # Kök sektöre bağlı iki marka (COMMIT edilmiş — script ayrı bağlantıdan okur).
-    seeder = await asyncpg.connect(admin_url)
-    try:
-        root_id = await seeder.fetchval(
-            "SELECT id FROM social.sectors WHERE parent_sector_id IS NULL ORDER BY slug LIMIT 1"
-        )
-        for index in range(2):
-            await seeder.execute(
-                "INSERT INTO social.brands (name, sector_id) VALUES ($1, $2)",
-                f"Sweep Markası {index}",
-                root_id,
-            )
-    finally:
-        await seeder.close()
+    await _seed_two_brands(admin_url)
 
     first = _run_sweep(readonly_dsn)
     second = _run_sweep(readonly_dsn)
@@ -347,3 +356,106 @@ async def test_sector_sweep_readonly_and_deterministic(readonly_role):
     assert drifted.returncode != 0, "kök-dışı marka fark olarak raporlanmadı"
     assert "differences: 1" in drifted.stdout
     assert "sub_sector" in drifted.stdout
+
+
+async def test_sweep_baseline_detects_root_to_root_remap(readonly_role, tmp_path):
+    """Kökten KÖKE kayma yakalanır — iki uç da geçerli kök olsa bile.
+
+    Codex checkpoint 5, yüksek bulgu: rapor yalnız "kök bağlı mı" sorusunu
+    yanıtlıyordu. A kökünden B köküne kayan marka o soruyu geçer; bağlayıcı
+    invariant ise `(brand_id, sector_id)` çiftinin AYNI kalmasıdır.
+    """
+    admin_url, readonly_dsn = readonly_role
+    await _seed_two_brands(admin_url)
+
+    baseline = tmp_path / "before.txt"
+    before = _run_sweep(readonly_dsn)
+    assert before.returncode == 0, before.stderr
+    baseline.write_text(before.stdout, encoding="utf-8")
+
+    # Marka BAŞKA BİR KÖKE taşınır — kök bağlanma bozulmaz, eşleme bozulur.
+    mover = await asyncpg.connect(admin_url)
+    try:
+        target_root = await mover.fetchval(
+            """
+            SELECT id FROM social.sectors
+            WHERE parent_sector_id IS NULL
+              AND id <> (SELECT sector_id FROM social.brands WHERE name = $1)
+            ORDER BY slug LIMIT 1
+            """,
+            "Sweep Markası 0",
+        )
+        await mover.execute(
+            "UPDATE social.brands SET sector_id = $1 WHERE name = $2",
+            target_root,
+            "Sweep Markası 0",
+        )
+    finally:
+        await mover.close()
+
+    after = _run_sweep(readonly_dsn, baseline=baseline)
+
+    # Kök bağlanma HÂLÂ temiz — eski rapor bu yüzden kaymayı gizliyordu.
+    assert "differences: 0" in after.stdout
+    # Eşleme karşılaştırması kaymayı görür ve kapı kapanır.
+    assert "remapped: 1" in after.stdout
+    assert "- remapped brand=" in after.stdout
+    assert after.returncode != 0, "kökten köke kayma kapıyı kapatmadı"
+
+
+async def test_sweep_baseline_clean_after_sub_sector_insert(readonly_role, tmp_path):
+    """Beklenen değişiklik YANLIŞ ALARM üretmez — satır açmak eşlemeyi bozmaz.
+
+    Plan 2'nin satır-açma adımı `sub_sector_rows` sayısını değiştirir. Ham iki
+    raporu bayt olarak kıyaslamak bu yüzden her seferinde alarm verirdi;
+    karşılaştırma yalnız eşleme bloğuna bakar.
+    """
+    admin_url, readonly_dsn = readonly_role
+    await _seed_two_brands(admin_url)
+
+    baseline = tmp_path / "before.txt"
+    before = _run_sweep(readonly_dsn)
+    baseline.write_text(before.stdout, encoding="utf-8")
+
+    opener = await asyncpg.connect(admin_url)
+    try:
+        await opener.execute(
+            """
+            INSERT INTO social.sectors (slug, display_name, parent_sector_id)
+            VALUES ($1, $2, (SELECT id FROM social.sectors
+                             WHERE parent_sector_id IS NULL ORDER BY slug LIMIT 1))
+            """,
+            SUB_SLUG,
+            "Kuaför Salonu",
+        )
+    finally:
+        await opener.close()
+
+    after = _run_sweep(readonly_dsn, baseline=baseline)
+
+    # Taksonomi sayısı DEĞİŞTİ — yani ham bayt kıyası burada alarm verirdi.
+    assert "sub_sector_rows: 1" in after.stdout
+    assert after.stdout != before.stdout
+    # Eşleme ise bozulmadı.
+    assert "remapped: 0" in after.stdout
+    assert "removed: 0" in after.stdout
+    assert after.returncode == 0, after.stdout
+
+
+async def test_sweep_rejects_unreadable_baseline(readonly_role, tmp_path):
+    """Okunamayan/bozuk taban SESSİZ GEÇİLMEZ — karşılaştırmasız 'temiz' yok."""
+    _admin_url, readonly_dsn = readonly_role
+
+    missing = _run_sweep(readonly_dsn, baseline=tmp_path / "yok.txt")
+    assert missing.returncode == 2, "olmayan taban sessizce yok sayıldı"
+    # Sebep AÇIKÇA taban okunamaması olmalı: argparse'ın bayrağı tanımaması da
+    # rc=2 verir, o yüzden tek başına çıkış kodu bu iddiayı kanıtlamaz.
+    assert "baseline okunamadı" in missing.stderr
+
+    stale = tmp_path / "v1.txt"
+    stale.write_text(
+        "sector_sweep report\nschema_version: 1\ndifferences: 0\n", encoding="utf-8"
+    )
+    old_schema = _run_sweep(readonly_dsn, baseline=stale)
+    assert old_schema.returncode == 2, "eski şemalı taban sessizce yok sayıldı"
+    assert "baseline okunamadı" in old_schema.stderr

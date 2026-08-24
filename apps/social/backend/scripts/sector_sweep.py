@@ -1,15 +1,30 @@
 #!/usr/bin/env python3
 """Marka → kök sektör tam sweep'i (salt-okunur, deterministik, re-runnable).
 
-Spec §5.3 / plan Task 5. Tek iddiası var ve o iddia TAM kümede ölçülür:
+Spec §5.3 / plan Task 5. İKİ iddiası var ve ikisi de TAM kümede ölçülür:
 
-    Her markanın `sector_id`'si bir KÖK sektör satırına (`parent_sector_id IS NULL`)
-    bağlıdır.
+1. **Kök bağlanma.** Her markanın `sector_id`'si bir KÖK sektör satırına
+   (`parent_sector_id IS NULL`) bağlıdır. Alt sektör satırları yalnız paket
+   katmanının adresidir; markanın kendi sektörü asla oraya kaymamalıdır (R-01).
+2. **Eşleme değişmezliği.** Mevcut her markanın `(brand_id, sector_id)` çifti
+   ÖNCE ve SONRA birebir AYNIdır — kökten köke kayma da ihlaldir.
 
-Alt sektör satırları yalnız paket katmanının adresidir; markanın kendi sektörü
-asla oraya kaymamalıdır (R-01). Bu script o kaymayı canlıda da görünür kılar —
-Plan 2'nin satır-açma adımının ÖNCESİNDE ve SONRASINDA aynı komut koşulur, iki
-rapor karşılaştırılır.
+İkinci iddia birincisinden TÜRETİLEMEZ: A kökünden B köküne kayan bir marka
+"kök bağlı" kalmaya devam eder. Bu yüzden rapor toplam sayı değil TAM EŞLEME
+LİSTESİ taşır ve `--baseline` ile önceki bir rapora karşı çift çift
+karşılaştırılır. (Codex checkpoint 5, yüksek bulgu: ilk sürüm yalnız toplam
+sayı basıyordu ve kökten köke kaymayı `differences: 0` ile geçiriyordu.)
+
+Kullanım deseni — Plan 2'nin satır-açma adımı:
+
+    sector_sweep.py --database-url ... > before.txt
+    <satır açma adımı>
+    sector_sweep.py --database-url ... --baseline before.txt
+
+`--baseline` karşılaştırması YALNIZ eşlemeye bakar; taksonomi sayıları
+(`sub_sector_rows`) satır açılınca DOĞAL olarak değişir ve karşılaştırmaya
+girmez. İki ham raporu bayt olarak kıyaslamak bu yüzden yanlış alarm verirdi —
+kıyas aracın kendi içindedir, operatörün gözünde değil.
 
 Sözleşme:
 
@@ -20,7 +35,9 @@ Sözleşme:
   marka kimliğine göre sıralıdır. Aynı veri → bayt-aynı çıktı.
 * **Ortamdan miras almaz.** Bağlantı dizesi `--database-url` ile AÇIKÇA verilir;
   `DATABASE_URL` ortam değişkeni okunmaz (yanlış veritabanına koşma riski yok).
-* **Çıkış kodu.** Fark yoksa 0, fark varsa 1 — CI/operasyon zincirine takılabilir.
+* **Çıkış kodu.** 0 = temiz. 1 = kök bağlanma ihlali VEYA eşleme kayması
+  (remapped/removed). Yeni marka (`added`) raporlanır ama BAŞARISIZLIK SAYILMAZ:
+  marka açmak olağan işletimdir, ihlal değildir.
 
 Kullanım:
 
@@ -32,11 +49,21 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 
 import asyncpg
 
 # Rapor biçimi değişirse artar — iki koşumun karşılaştırılabilirliği buna bağlı.
-REPORT_SCHEMA_VERSION = 1
+# v2: rapor tam eşleme listesi taşır (v1 yalnız toplam sayı taşıyordu).
+REPORT_SCHEMA_VERSION = 2
+
+# Eşleme bloğunun başlığı — `--baseline` ayrıştırıcısı bu işareti arar.
+MAPPING_HEADER = "--- mapping ---"
+COMPARISON_HEADER = "--- baseline comparison ---"
+
+# Eşlemesi olmayan marka için basılan yer tutucu. Boş dize basmak satırı
+# ayrıştırılamaz yapardı.
+NO_SECTOR = "-"
 
 _SWEEP_SQL = """
 SELECT
@@ -55,7 +82,7 @@ SELECT count(*) FROM social.sectors WHERE parent_sector_id IS NOT NULL
 
 
 def _difference_reason(row: asyncpg.Record) -> str | None:
-    """Markanın kök bağlanmasını bozan sebep — yoksa None."""
+    """Markanın KÖK BAĞLANMASINI bozan sebep — yoksa None."""
     if row["sector_id"] is None:
         return "null_sector"
     if not row["sector_exists"]:
@@ -66,12 +93,82 @@ def _difference_reason(row: asyncpg.Record) -> str | None:
     return None
 
 
-def _render(rows: list[asyncpg.Record], sub_sector_rows: int) -> str:
-    differences = [
-        (row["brand_id"], row["sector_id"], reason, row["parent_sector_id"])
-        for row in rows
-        if (reason := _difference_reason(row)) is not None
+def parse_mapping(report: str) -> dict[str, str]:
+    """Bir raporun eşleme bloğunu `{brand_id: sector_id}` olarak okur.
+
+    Yalnız `--- mapping ---` ile sonraki blok başlığı arasını okur; özet
+    satırları ve karşılaştırma bloğu ayrıştırmaya GİRMEZ.
+    """
+    mapping: dict[str, str] = {}
+    inside = False
+    for line in report.splitlines():
+        if line == MAPPING_HEADER:
+            inside = True
+            continue
+        if not inside:
+            continue
+        if line.startswith("--- "):
+            break
+        if not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) != 2:
+            raise ValueError(f"eşleme satırı ayrıştırılamadı: {line!r}")
+        mapping[parts[0]] = parts[1]
+    if not inside:
+        raise ValueError(
+            f"baseline raporunda {MAPPING_HEADER!r} bloğu yok — "
+            "eski şemalı (v1) bir rapor olabilir; taze bir taban al."
+        )
+    return mapping
+
+
+def _compare(baseline: dict[str, str], current: dict[str, str]) -> tuple[list[str], int]:
+    """Baseline ile şimdiki eşlemeyi çift çift karşılaştırır.
+
+    `remapped` ve `removed` ihlaldir; `added` olağan işletimdir.
+    """
+    remapped = sorted(
+        brand_id
+        for brand_id, sector_id in current.items()
+        if brand_id in baseline and baseline[brand_id] != sector_id
+    )
+    removed = sorted(set(baseline) - set(current))
+    added = sorted(set(current) - set(baseline))
+
+    lines = [
+        COMPARISON_HEADER,
+        f"baseline_brands: {len(baseline)}",
+        f"remapped: {len(remapped)}",
+        f"removed: {len(removed)}",
+        f"added: {len(added)}",
     ]
+    for brand_id in remapped:
+        lines.append(
+            f"- remapped brand={brand_id} "
+            f"from={baseline[brand_id]} to={current[brand_id]}"
+        )
+    for brand_id in removed:
+        lines.append(f"- removed brand={brand_id} was={baseline[brand_id]}")
+    for brand_id in added:
+        lines.append(f"- added brand={brand_id} sector_id={current[brand_id]}")
+
+    return lines, len(remapped) + len(removed)
+
+
+def _render(
+    rows: list[asyncpg.Record],
+    sub_sector_rows: int,
+    baseline: dict[str, str] | None,
+) -> tuple[str, int]:
+    """Raporu ve İHLAL sayısını üretir (ihlal = kök bağlanma + eşleme kayması)."""
+    reasons = {row["brand_id"]: _difference_reason(row) for row in rows}
+    differences = [row for row in rows if reasons[row["brand_id"]] is not None]
+
+    mapping = {
+        row["brand_id"]: row["sector_id"] if row["sector_id"] else NO_SECTOR
+        for row in rows
+    }
 
     lines = [
         "sector_sweep report",
@@ -81,16 +178,32 @@ def _render(rows: list[asyncpg.Record], sub_sector_rows: int) -> str:
         f"sub_sector_rows: {sub_sector_rows}",
         f"differences: {len(differences)}",
     ]
-    for brand_id, sector_id, reason, parent_sector_id in differences:
+    for row in differences:
         lines.append(
-            f"- brand={brand_id} sector_id={sector_id} "
-            f"reason={reason} parent_sector_id={parent_sector_id}"
+            f"- brand={row['brand_id']} sector_id={row['sector_id']} "
+            f"reason={reasons[row['brand_id']]} "
+            f"parent_sector_id={row['parent_sector_id']}"
         )
-    return "\n".join(lines) + "\n"
+
+    # Eşleme bloğu: satır sırası sorgudan gelir (brand_id'ye göre sıralı).
+    lines.append(MAPPING_HEADER)
+    for row in rows:
+        lines.append(f"{row['brand_id']} {mapping[row['brand_id']]}")
+
+    violations = len(differences)
+    if baseline is not None:
+        comparison, drift = _compare(baseline, mapping)
+        lines.append("")
+        lines.extend(comparison)
+        violations += drift
+
+    return "\n".join(lines) + "\n", violations
 
 
-async def sweep(database_url: str) -> tuple[str, int]:
-    """Raporu ve fark sayısını döner. Yazma YOK — salt-okunur transaction."""
+async def sweep(
+    database_url: str, baseline: dict[str, str] | None = None
+) -> tuple[str, int]:
+    """Raporu ve ihlal sayısını döner. Yazma YOK — salt-okunur transaction."""
     connection = await asyncpg.connect(database_url)
     try:
         # Yapısal salt-okunurluk: yetkili dizeyle koşulsa bile yazamaz.
@@ -103,9 +216,7 @@ async def sweep(database_url: str) -> tuple[str, int]:
     finally:
         await connection.close()
 
-    report = _render(rows, sub_sector_rows)
-    difference_count = sum(1 for row in rows if _difference_reason(row) is not None)
-    return report, difference_count
+    return _render(rows, sub_sector_rows, baseline)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -118,6 +229,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Bağlantı dizesi — AÇIKÇA verilir, ortamdan miras alınmaz.",
     )
     parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help=(
+            "Önceki bir sweep raporu. Eşlemeler çift çift karşılaştırılır; "
+            "kökten köke kayma da ihlal sayılır. Taksonomi sayıları "
+            "karşılaştırmaya girmez."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
@@ -127,9 +248,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    report, difference_count = asyncio.run(sweep(args.database_url))
+    baseline = None
+    if args.baseline is not None:
+        try:
+            baseline = parse_mapping(args.baseline.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            # Okunamayan/bozuk taban SESSİZ GEÇİLMEZ: karşılaştırmasız "temiz"
+            # rapor, tam da bu aracın engellemek için var olduğu yanılgıdır.
+            sys.stderr.write(f"baseline okunamadı: {exc}\n")
+            return 2
+
+    report, violations = asyncio.run(sweep(args.database_url, baseline))
     sys.stdout.write(report)
-    return 1 if difference_count else 0
+    return 1 if violations else 0
 
 
 if __name__ == "__main__":
