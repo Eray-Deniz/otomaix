@@ -9,6 +9,7 @@ ELEVENLABS_KEY yoksa TTS adımı atlanır; post kaydı yine de oluşturulur.
 """
 
 import os
+import random
 import re
 from uuid import UUID
 
@@ -830,6 +831,28 @@ def _looks_turkish(text: str) -> bool:
 
 # ─── Stage 1 / Stage 2 split (onay gate'li pipeline) ────────────────────────
 
+def _enrich_with_scene(prompt: str, pool: list[str] | None) -> str:
+    """Hazır İngilizce istemi sektörel sahne diliyle zenginleştirir.
+
+    Havuz yoksa istem BAYT AYNI döner — paketsiz yolun değişmezliği burada
+    korunur. Havuz varsa ondan bir kalıp eklenir; ek model çağrısı YOKTUR,
+    çünkü havuz öğeleri zaten görsel modelin dilinde yazılmış betimleyici
+    İngilizce ifadelerdir (talimat cümlesi eklemek görsel modelde işe yaramaz).
+
+    Zaten sektörel olan istem ikinci kez zenginleştirilmez. Seçim havuzdan
+    rastgeledir: sabit bir öğeye bağlamak o markanın her karesini aynı kalıba
+    düşürürdü — K-02'yi kapatma sebebimizin tersi.
+    """
+    if not pool:
+        return prompt
+    lowered = prompt.lower()
+    for entry in pool:
+        if entry.rstrip(". ").lower() in lowered:
+            return prompt
+    chosen = random.choice(pool)
+    return f"{prompt.rstrip('. ')}, {chosen.rstrip('. ')}"
+
+
 async def _resolve_still_prompt(
     prompt: str,
     script: str,
@@ -890,7 +913,16 @@ async def _resolve_still_prompt(
 
     still_prompt = (prompt or "").strip()
     if still_prompt and not _looks_turkish(still_prompt):
-        return still_prompt
+        # Bu dal, caption modelinin ürettiği hazır İngilizce istemi AYNEN
+        # kullanır ve hiçbir model çağrısı yapmaz. Paketli markada bu, sektörel
+        # sahne dilinin hiç uygulanmadığı bir yol açıyordu (checkpoint 11 F3).
+        #
+        # İlk düzeltme "gelen istem caption modelinden gelmiştir, o da havuzu
+        # gördü" varsayımına dayanıyordu; varsayım DOĞRULANABİLİR DEĞİL: uç
+        # doğrudan çağrılabilir ve caption modeli patlarsa yedek dal
+        # "social media post image" döndürür (ölçüldü) — o da İngilizcedir.
+        # Kapı bu yüzden kökene değil HAVUZUN VARLIĞINA bakar.
+        return _enrich_with_scene(still_prompt, scene_pool)
     return await _build_still_prompt(
         topic=prompt or script[:100],
         brand_name=brand_name,

@@ -380,3 +380,65 @@ def test_scene_pool_reaches_every_still_prompt_producer(frozen_brand_fixtures):
             "caption çağrısı sahne havuzunu görmüyor — İngilizce hazır istem "
             "dalında sahne dili hiçbir yere ulaşmaz"
         )
+
+
+@pytest.mark.parametrize(
+    "english_prompt",
+    [
+        "Warm studio shot of a gold ring on velvet",   # doğrudan API çağrısı
+        "social media post image",                     # caption modeli patladı (yedek)
+    ],
+)
+async def test_english_passthrough_still_gets_scene_pool(english_prompt):
+    """Doğrulanamayan İngilizce istem sektörel etkisiz GEÇEMEZ (F3, tur 2).
+
+    İlk düzeltme "stage-1'e gelen İngilizce istem caption modelinden gelmiştir,
+    o da havuzu gördü" varsayımına dayanıyordu. Varsayım DOĞRULANABİLİR DEĞİL:
+
+    - kimliği doğrulanmış bir çağıran ucu doğrudan çağırıp kendi İngilizce
+      istemini yollayabilir;
+    - caption modeli patlarsa yedek dal `"social media post image"` döndürür —
+      ölçüldü — ve o da İngilizcedir.
+
+    İkisinde de paketli marka tamamen genel bir kare alırdı. Kapı bu yüzden
+    kökene değil, HAVUZUN VARLIĞINA bakar.
+    """
+    out = await sv._resolve_still_prompt(
+        prompt=english_prompt,
+        script="senaryo",
+        brand_kit={"sector": "Kuyumculuk"},
+        brand_name="Donuk",
+        brand_description="takı",
+        scene_pool=SCENE_POOL,
+    )
+    assert english_prompt.rstrip(". ") in out, "kullanıcının istemi kayboldu"
+    assert any(entry.rstrip(". ") in out for entry in SCENE_POOL), (
+        "sektörel sahne dili hiç uygulanmadı"
+    )
+
+
+async def test_english_passthrough_unchanged_without_pool():
+    """Havuz yoksa erken dönüş BAYT AYNI kalır — paketsiz yol dokunulmaz."""
+    prompt = "Warm studio shot of a gold ring on velvet"
+    out = await sv._resolve_still_prompt(
+        prompt=prompt,
+        script="senaryo",
+        brand_kit={"sector": "Kuyumculuk"},
+        brand_name="Donuk",
+        brand_description="takı",
+    )
+    assert out == prompt
+
+
+async def test_scene_enrichment_does_not_duplicate():
+    """Zaten sektörel olan istem ikinci kez zenginleştirilmez."""
+    already = f"A gold ring, {SCENE_POOL[0].rstrip('.')}"
+    out = await sv._resolve_still_prompt(
+        prompt=already,
+        script="senaryo",
+        brand_kit={"sector": "Kuyumculuk"},
+        brand_name="Donuk",
+        brand_description="takı",
+        scene_pool=SCENE_POOL,
+    )
+    assert out == already
