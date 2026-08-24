@@ -845,12 +845,19 @@ def _enrich_with_scene(prompt: str, pool: list[str] | None) -> str:
     """
     if not pool:
         return prompt
+    # Aday kümesi savunma amaçlı yeniden süzülür: `scene_pool()` zaten anlamlı
+    # öğe döndürüyor, ama bu yardımcı doğrudan da çağrılabilir ve anlamsız bir
+    # öğe burada BOŞ DİZEYE inip "her metinde vardır" olurdu — yani tam da
+    # atlatmayı üreten yol.
+    candidates = [entry.rstrip(". ") for entry in pool]
+    candidates = [entry for entry in candidates if any(c.isalnum() for c in entry)]
+    if not candidates:
+        return prompt
     lowered = prompt.lower()
-    for entry in pool:
-        if entry.rstrip(". ").lower() in lowered:
+    for entry in candidates:
+        if entry.lower() in lowered:
             return prompt
-    chosen = random.choice(pool)
-    return f"{prompt.rstrip('. ')}, {chosen.rstrip('. ')}"
+    return f"{prompt.rstrip('. ')}, {random.choice(candidates)}"
 
 
 async def _resolve_still_prompt(

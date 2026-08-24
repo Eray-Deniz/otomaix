@@ -799,3 +799,35 @@ def test_special_day_key_is_representation_closed(name):
     """Gün adının her yazımı AYNI anahtarı verir — yazım/okuma ayrışamaz."""
     keys = {normalize_special_day_key(form) for form in _representations(name)}
     assert len(keys) == 1, f"{name!r} için {len(keys)} farklı anahtar üretildi: {keys}"
+
+
+@pytest.mark.parametrize("junk", [".", "  .  ", "…", "-", "!!!", "·"])
+def test_validator_rejects_punctuation_only_leaf(junk):
+    """Noktalama-dışı içeriği olmayan yaprak İÇERİK DEĞİLDİR.
+
+    Kapı ile tüketici FARKLI ölçü kullanınca, kabulden geçen bir değer tüketimde
+    hiçe indirgenir ve sessiz bir delik açar. Ölçüldü (checkpoint 11, tur 3):
+    sahne havuzundaki `"."` yazım kapısından geçiyor, tüketicide boş dizeye
+    iniyor ve "her metnin içinde boş dize vardır" olduğu için sektörel
+    zenginleştirmeyi tamamen atlatıyordu.
+
+    Çözüm yamaya değil TEK ÖLÇÜYE bağlandı — K-01b'nin tek-normalize kuralıyla
+    aynı disiplin: yazım ve okuma aynı yüklemi paylaşır.
+    """
+    _reject(video_kodlar={"hareket": [junk], "sahne": ["b"]})
+    _reject(kanca_kaliplari=[junk])
+    _reject(kapsam=junk)
+
+
+def test_resolver_drops_meaningless_pool_entries():
+    """Okuma tarafı da aynı yüklemi uygular — eski paketler için savunma."""
+    from app.services.sector_packages import SectorPackageContext, _pool
+
+    content = _valid_content()
+    content["video_kodlar"] = {
+        "hareket": [".", "Slow orbit around the display case."],
+        "sahne": ["…", "Boutique interior, warm ambient light."],
+    }
+    ctx = SectorPackageContext(uuid.uuid4(), 1, content, "kuyumculuk")
+    assert _pool(ctx, "hareket") == ["Slow orbit around the display case."]
+    assert _pool(ctx, "sahne") == ["Boutique interior, warm ambient light."]

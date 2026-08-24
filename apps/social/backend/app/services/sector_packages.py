@@ -387,18 +387,38 @@ def _check_special_day_shapes(ozel_gun: Any, errors: list[str]) -> None:
                 _require_text(entry[slot], f"{label}.{slot}", errors)
 
 
+def has_meaningful_text(value: Any) -> bool:
+    """Yaprak, noktalama ve boşluk dışında İÇERİK taşıyor mu.
+
+    **Yazım ve okuma bu TEK yüklemi paylaşır** — K-01b'nin tek-normalize
+    kuralıyla aynı disiplin. İkisi ayrı ölçü kullanırsa kabulden geçen bir değer
+    tüketimde hiçe indirgenir ve sessiz bir delik açar.
+
+    Ölçüldü (checkpoint 11, tur 3): sahne havuzundaki `"."` yazım kapısından
+    geçiyordu (çünkü kapı yalnız `strip()` bakıyordu), tüketicide ise noktalama
+    atılınca boş dizeye iniyordu. "Her metin boş dizeyi içerir" olduğu için
+    sektörel zenginleştirme tamamen atlanıyor, üstelik ne hata ne log
+    üretiliyordu. Sorun tek karakter değil ÖLÇÜ AYRIŞMASIydı; bu yüzden kural
+    tek yerde yaşar ve iki taraf da onu çağırır.
+    """
+    return isinstance(value, str) and any(ch.isalnum() for ch in value)
+
+
 def _require_text(value: Any, label: str, errors: list[str]) -> None:
-    """Yaprak dolu bir METİN mi.
+    """Yaprak ANLAMLI bir METİN mi.
 
     `içerik-önerilmez` (K-120) geçerli sayılır — "bilinçli boş" ile
     "doldurulmamış" aynı değer olsaydı eksik iş dolu görünürdü. Mantıksal ve
     sayısal değerler metin DEĞİLDİR: `False`/`0` eskiden "dolu" sayılıyordu.
+    Yalnız noktalamadan oluşan değerler de içerik DEĞİLDİR (bkz.
+    `has_meaningful_text`).
     """
     if not isinstance(value, str):
         errors.append(f"{label} metin değil: {type(value).__name__}")
-    elif not value.strip():
+    elif not has_meaningful_text(value):
         errors.append(
-            f"{label} boş — bilinçli boş bırakılacaksa {DELIBERATELY_EMPTY!r} yazılır"
+            f"{label} boş ya da yalnız noktalama — bilinçli boş bırakılacaksa "
+            f"{DELIBERATELY_EMPTY!r} yazılır"
         )
 
 
@@ -1033,7 +1053,10 @@ def _pool(context: SectorPackageContext | None, key: str) -> list[str]:
     pool = video.get(key)
     if not isinstance(pool, list):
         return []
-    return [item for item in pool if isinstance(item, str) and item.strip()]
+    # Okuma tarafı da AYNI yüklemi uygular: kapı bugün anlamsız yaprağı
+    # reddediyor ama eski bir paket ya da elle değiştirilmiş içerik hâlâ
+    # taşıyabilir. Süzme burada da yapılır ki tüketiciler hep anlamlı öğe görsün.
+    return [item for item in pool if has_meaningful_text(item)]
 
 
 def scene_pool(context: SectorPackageContext | None) -> list[str]:
