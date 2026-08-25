@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.security import assert_brand_owned, get_current_user
 from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
+from app.routers.sectors import fetch_sub_sector_candidates
 from app.services.sector_packages import render_package_block, resolve_package_context
 from app.models.schemas import OkResponse
 
@@ -24,10 +25,33 @@ class AnalyzeWebsiteRequest(BaseModel):
     url: str
 
 
+def _resolve_sub_sector_suggestion(raw, candidates: list[dict]) -> dict | None:
+    """Model önerisinin KAPALI doğrulaması (spec §7.1).
+
+    İki dönüş biçimi vardır: aday kümedeki bir satır ya da BOŞ. Üçüncü biçim
+    yoktur — serbest metin, uydurma slug, tip dışı değer ve aday listesi
+    boşken gelen her öneri aynı yere, boşa düşer.
+
+    Kapı listenin KENDİSİNE karşı çalışır, ayrı bir kopyaya değil: prompt'a
+    gömülen küme ile burada eşleştirilen küme aynı canlı sorgunun çıktısıdır,
+    yani ikisi arasında bayatlama penceresi yoktur.
+    """
+    if not isinstance(raw, str):
+        return None
+    slug = raw.strip()
+    if not slug:
+        return None
+    for row in candidates:
+        if row["slug"] == slug:
+            return row
+    return None
+
+
 @router.post("/analyze-website", response_model=OkResponse)
 async def analyze_website(
     payload: AnalyzeWebsiteRequest,
     user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
 ):
     """Fetch a website and extract brand info using Claude."""
     import re
@@ -50,6 +74,25 @@ async def analyze_website(
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text).strip()[:4000]
 
+    # Aday küme CANLI sorgudan gelir ve prompt'a KAPALI liste olarak gömülür
+    # (plan "bağladığı teknik kararlar" 7). Aday yoksa alt sektör hiç sorulmaz:
+    # boş listeden seçim istemek modeli uydurmaya davet ederdi.
+    candidates = await fetch_sub_sector_candidates(db)
+    if candidates:
+        candidate_lines = "\n".join(
+            f"- {row['slug']}: {row['display_name']}" for row in candidates
+        )
+        sub_sector_field = '"sub_sector": "aşağıdaki listeden TAM slug veya boş string"'
+        sub_sector_rule = (
+            "\n\nAlt sektör için YALNIZ şu listeden seç ve slug'ı AYNEN yaz:\n"
+            f"{candidate_lines}\n"
+            "Hiçbiri uymuyorsa `sub_sector` alanını boş string bırak. "
+            "Listede olmayan bir değer YAZMA."
+        )
+    else:
+        sub_sector_field = '"sub_sector": ""'
+        sub_sector_rule = ""
+
     system_prompt = (
         "Sen bir marka analisti olarak web sitesi içeriğinden marka bilgilerini çıkarıyorsun. "
         "Yanıtını SADECE JSON olarak ver, başka hiçbir şey yazma."
@@ -60,8 +103,11 @@ async def analyze_website(
         '{"name": "marka adı", "description": "1-2 cümle açıklama", '
         '"sector": "sektör (örn: Teknoloji, Gıda, Tekstil, vb)", '
         '"colors": ["#hex1", "#hex2", "#hex3"], '
-        '"tonality": "professional|friendly|fun|informative"}\n\n'
-        "Eğer bilgi bulamazsan ilgili alanı boş string bırak. Renkler için sitenin görsel renklerini tahmin et."
+        '"tonality": "professional|friendly|fun|informative", '
+        f'{sub_sector_field}}}\n\n'
+        "Eğer bilgi bulamazsan ilgili alanı boş string bırak. "
+        "Renkler için sitenin görsel renklerini tahmin et."
+        f"{sub_sector_rule}"
     )
 
     try:
@@ -84,8 +130,21 @@ async def analyze_website(
             if raw.startswith("json"):
                 raw = raw[4:]
         data = json.loads(raw)
+        if not isinstance(data, dict):
+            # Model geçerli JSON ama nesne-olmayan bir gövde döndürebilir
+            # (liste, sayı). Aşağıdaki alan yazımı o gövdede patlardı; bilinen
+            # boş şablona düşmek fail-closed davranıştır.
+            raise ValueError("analyze-website yanıtı JSON nesnesi değil")
     except Exception:
         data = {"name": "", "description": "", "sector": "", "colors": [], "tonality": "professional"}
+
+    # Öneri alanı HER YOLDA aynı kapıdan geçer (model hatası, geçersiz JSON,
+    # aday-dışı öneri) ve yanıt şekli sabittir: üç alan hep vardır, ya doludur
+    # ya `null`. Ham `sub_sector` değeri istemciye SIZMAZ.
+    suggestion = _resolve_sub_sector_suggestion(data.pop("sub_sector", None), candidates)
+    data["sub_sector_id"] = suggestion["id"] if suggestion else None
+    data["sub_sector_slug"] = suggestion["slug"] if suggestion else None
+    data["sub_sector_display_name"] = suggestion["display_name"] if suggestion else None
 
     return OkResponse(data=data)
 

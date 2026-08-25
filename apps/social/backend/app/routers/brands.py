@@ -22,6 +22,49 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
 
 
+# K-08b tetikleyicisinin ve `sub_sector_id` yabancı anahtarının SQLSTATE'leri.
+# Tetikleyici `integrity_constraint_violation` (23000) ile RAISE eder; var
+# olmayan kimlik FK ihlaline (23503) düşer.
+_SUB_SECTOR_WRITE_SQLSTATES = frozenset({"23000", "23503"})
+
+_SUB_SECTOR_WRITE_DETAIL = (
+    "Geçersiz alt sektör: yalnız bir alt sektör satırı atanabilir "
+    "(kök sektör ve bilinmeyen kimlik kabul edilmez)."
+)
+
+
+def _sub_sector_write_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail=_SUB_SECTOR_WRITE_DETAIL
+    )
+
+
+async def _assert_assignable_sub_sector(db: asyncpg.Connection, sub_sector_id) -> None:
+    """Atanabilirlik kapısının UYGULAMA ayağı (plan teknik karar 3).
+
+    Garanti DB'dedir (K-08b tetikleyicisi); bu kontrol onun yerine geçmez,
+    ÖNÜNE geçer: tetikleyici patladığında elimizde yalnız bir veritabanı
+    istisnası olur ve doğru istemci mesajını üretmek için hata metnini
+    ayrıştırmak gerekirdi.
+
+    Kapı YALNIZ "alt sektör satırı mı" sorar. Aktif paket şartı ARAMAZ:
+    K-43 gereği paketi arşivlenen markanın ataması KORUNUR, dolayısıyla
+    paketsiz bir alt sektör meşru bir kayıtlı değerdir ve onu yeniden
+    kaydetmek yasak olamaz. Aday kümesi neyin ÖNERİLECEĞİNİ belirler,
+    neyin saklanabileceğini değil.
+    """
+    if sub_sector_id is None:
+        return
+    is_sub_sector = await db.fetchval(
+        "SELECT parent_sector_id IS NOT NULL FROM social.sectors WHERE id = $1",
+        sub_sector_id,
+    )
+    # Satır yoksa değer NULL'dır — o da reddedilir (tetikleyiciyle aynı
+    # fail-closed yön).
+    if is_sub_sector is not True:
+        raise _sub_sector_write_error()
+
+
 def _assert_valid_channels(kit: dict | None) -> None:
     """Kanal envanterinin kapalı anahtar uzayı kapısı (spec §12.2).
 
@@ -55,19 +98,33 @@ async def create_brand(
     await check_plan_limit(user["sub"], "brand", db)
     resolved = await resolve_sector(db, payload.sector)
     sector_id, sector_display = resolved if resolved else (None, payload.sector)
-    row = await db.fetchrow(
-        """
-        INSERT INTO social.brands (workspace_id, name, description, website_url, sector, sector_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *
-        """,
-        payload.workspace_id,
-        payload.name,
-        payload.description,
-        payload.website_url,
-        sector_display,
-        sector_id,
-    )
+    await _assert_assignable_sub_sector(db, payload.sub_sector_id)
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO social.brands
+                (workspace_id, name, description, website_url, sector, sector_id, sub_sector_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+            """,
+            payload.workspace_id,
+            payload.name,
+            payload.description,
+            payload.website_url,
+            sector_display,
+            sector_id,
+            payload.sub_sector_id,
+        )
+    except asyncpg.exceptions.IntegrityConstraintViolationError as exc:
+        # Ön kontrol ile yazım arasında satır silinebilir (yarış). Backstop DAR:
+        # yalnız bu istek FİİLEN bir alt sektör yazdıysa ve hata o kapıların
+        # SQLSTATE'iyse çevrilir — başka bir bütünlük ihlali (benzersizlik,
+        # NOT NULL, başka FK) olduğu gibi yükselir, yoksa gerçek arıza 400 diye
+        # maskelenirdi. (`get_db` transaction AÇMAZ — ifadeler autocommit'tir,
+        # yani düşen tek ifade bağlantıyı zehirlemez; ölçüldü.)
+        if payload.sub_sector_id is None or exc.sqlstate not in _SUB_SECTOR_WRITE_SQLSTATES:
+            raise
+        raise _sub_sector_write_error() from exc
     await invalidate_pattern(f"otomaix:social:brands:{payload.workspace_id}")
     return OkResponse(data=dict(row))
 
@@ -168,6 +225,13 @@ async def update_brand(
     """Partially update a brand."""
     await assert_brand_owned(db, user, brand_id)
     updates = payload.model_dump(exclude_none=True)
+    # `exclude_none` açık `null`'ı da düşürür; atamayı boşaltmak ise tam olarak
+    # `null` göndermektir. Bu yüzden alan gönderildi mi sorusu değerden DEĞİL,
+    # `model_fields_set`'ten okunur: gönderilmediyse dokunulmaz, `null`
+    # gönderildiyse silinir (spec §7.5).
+    if "sub_sector_id" in payload.model_fields_set:
+        updates["sub_sector_id"] = payload.sub_sector_id
+        await _assert_assignable_sub_sector(db, payload.sub_sector_id)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
     _assert_valid_channels(updates.get("brand_kit"))
@@ -207,11 +271,17 @@ async def update_brand(
         assignments.append("brand_kit = " + brand_kit_merge_sql(kit_param, channels_param))
 
     fields = ", ".join(assignments)
-    row = await db.fetchrow(
-        f"UPDATE social.brands SET {fields} WHERE id = $1 RETURNING *",
-        brand_id,
-        *values,
-    )
+    try:
+        row = await db.fetchrow(
+            f"UPDATE social.brands SET {fields} WHERE id = $1 RETURNING *",
+            brand_id,
+            *values,
+        )
+    except asyncpg.exceptions.IntegrityConstraintViolationError as exc:
+        # create_brand ile aynı dar backstop (yarış penceresi).
+        if payload.sub_sector_id is None or exc.sqlstate not in _SUB_SECTOR_WRITE_SQLSTATES:
+            raise
+        raise _sub_sector_write_error() from exc
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
     await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")

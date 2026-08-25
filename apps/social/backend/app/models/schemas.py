@@ -81,6 +81,11 @@ class BrandCreate(BaseModel):
     description: str | None = None
     website_url: str | None = None
     sector: str | None = None
+    # Alt sektör ataması (spec §7.3). Varsayılan BOŞtur — boş alan bugünkü
+    # paketsiz yoldur. Şemada tipli durması şart: Pydantic şemada olmayan alanı
+    # sessizce düşürür, yani alan burada yoksa istek router'a hiç ulaşmaz ve
+    # kullanıcının teyit ettiği atama sessizce kaybolurdu.
+    sub_sector_id: UUID | None = None
 
 
 class BrandKitUpdate(BaseModel):
@@ -110,6 +115,11 @@ class BrandUpdate(BaseModel):
     logo_dark_url: str | None = None
     intro_video_url: str | None = None
     is_active: bool | None = None
+    # Atamayı BOŞALTMAK açıkça `null` göndermekle olur. Router bu alanı
+    # `model_fields_set` ile okur: `exclude_none` serileştirmesi açık `null`'ı
+    # düşürürdü ve kullanıcı yanlış atamasını hiçbir zaman geri alamazdı
+    # (spec §7.5 düzeltme yolu).
+    sub_sector_id: UUID | None = None
 
 
 class BrandOut(BaseModel):
@@ -120,6 +130,7 @@ class BrandOut(BaseModel):
     website_url: str | None
     sector: str | None
     sector_id: UUID | None = None
+    sub_sector_id: UUID | None = None
     sector_slug: str | None = None
     sector_display_name: str | None = None
     brand_kit: dict

@@ -78,6 +78,9 @@ interface BrandKit {
   voiceover: string
   logo_overlay: { enabled: boolean; position: string; opacity: number }
   intro_video: { position: string }
+  // Kanal envanteri — anahtar uzayı KAPALIdır (spec §12.2). Doğrulama
+  // sunucudadır; buradaki dört anahtar onun aynasıdır, kaynağı değil.
+  channels: Record<string, boolean>
   avatar?: ActiveAvatar
 }
 
@@ -87,6 +90,7 @@ interface Brand {
   description: string | null
   website_url: string | null
   sector: string | null
+  sub_sector_id: string | null
   brand_kit: BrandKit
   logo_light_url: string | null
   logo_dark_url: string | null
@@ -100,6 +104,23 @@ interface Sector {
   slug: string
   display_name: string
 }
+
+// Aday alt sektörler — aktif paketi olanlar. Liste CANLI uçtan gelir; sayfada
+// kopyası tutulmaz (spec §7.2).
+type SubSectorCandidate = Sector
+
+// Kanal envanterinin kapalı kümesi. Sunucu aynı dört anahtarı zorlar; buraya
+// beşinci bir satır eklemek tek başına hiçbir şeyi açmaz (istek 400 döner).
+const CHANNEL_OPTIONS = [
+  { key: 'whatsapp_hatti', label: 'WhatsApp hattı' },
+  { key: 'fiziksel_magaza', label: 'Fiziksel mağaza' },
+  { key: 'randevu_sistemi', label: 'Randevu sistemi' },
+  { key: 'eticaret_sitesi', label: 'E-ticaret sitesi' },
+]
+
+// Atamayı boşaltmanın açılır listedeki karşılığı. Boş string base-ui Select'te
+// "seçim yok" anlamına geldiği için ayrı bir gözle görülür seçenek gerekiyor.
+const SUB_SECTOR_NONE = '__none__'
 
 const TONALITIES = [
   { value: 'professional', label: 'Profesyonel' },
@@ -134,6 +155,7 @@ const DEFAULT_BRAND_KIT: BrandKit = {
   voiceover: 'tr-TR-EmelNeural',
   logo_overlay: { enabled: false, position: 'bottom-right', opacity: 0.8 },
   intro_video: { position: 'none' },
+  channels: {},
 }
 
 // ─── Save indicator ───────────────────────────────────────────────────────────
@@ -400,6 +422,7 @@ function deepMergeKit(defaults: BrandKit, incoming: any): BrandKit {
     intro_video: {
       position: incoming?.intro_video?.position ?? defaults.intro_video.position,
     },
+    channels: incoming?.channels ?? defaults.channels,
   }
 }
 
@@ -440,11 +463,17 @@ function MarkaAyarlariContent() {
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
   const [analyzingWebsite, setAnalyzingWebsite] = useState(false)
   const [sectors, setSectors] = useState<Sector[]>([])
+  const [subSectorCandidates, setSubSectorCandidates] = useState<SubSectorCandidate[]>([])
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     api.get<Sector[]>('/sectors').then((res) => {
       if (res.success && res.data) setSectors(res.data)
+    })
+    // Aday küme ayrı bir istektir ve BOŞ dönebilir — o durumda bileşen pasif
+    // kalır (spec §7.1 "aday yoksa öneri yok").
+    api.get<SubSectorCandidate[]>('/sectors/sub-sector-candidates').then((res) => {
+      if (res.success && res.data) setSubSectorCandidates(res.data)
     })
   }, [])
 
@@ -511,6 +540,9 @@ function MarkaAyarlariContent() {
         description: updated.description,
         website_url: updated.website_url,
         sector: updated.sector,
+        // Açık `null` atamayı BOŞALTIR; sunucu bu alanı `model_fields_set`
+        // üzerinden okuduğu için `null` sessizce düşmez.
+        sub_sector_id: updated.sub_sector_id,
       })
       setSaving(false)
       setSaved(true)
@@ -562,6 +594,8 @@ function MarkaAyarlariContent() {
         sector: string
         colors: string[]
         tonality: string
+        sub_sector_id: string | null
+        sub_sector_display_name: string | null
       }>('/ai/analyze-website', { url })
 
       if (res.success && res.data) {
@@ -570,6 +604,13 @@ function MarkaAyarlariContent() {
         if (res.data.name) { brandFields.name = res.data.name; filled.push('ad') }
         if (res.data.description) { brandFields.description = res.data.description; filled.push('açıklama') }
         if (res.data.sector) { brandFields.sector = res.data.sector; filled.push('sektör') }
+        // Öneri sunucuda aday kümeye karşı doğrulanmıştır; gelen kimlik ya
+        // listededir ya `null`. Ön yüz ayrıca doğrulamaz, ÖNSEÇER — son söz
+        // kullanıcınındır (spec §7.1 teyit adımı).
+        if (res.data.sub_sector_id) {
+          brandFields.sub_sector_id = res.data.sub_sector_id
+          filled.push('alt sektör önerisi')
+        }
         if (Object.keys(brandFields).length > 0) updateBrand(brandFields)
 
         const kitFields: Partial<BrandKit> = {}
@@ -903,6 +944,75 @@ function MarkaAyarlariContent() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Alt sektör teyidi — mevcut sektör seçiminin YANINDA (K-19).
+              Yeni bir yüzey açılmaz; aday yoksa bileşen pasiftir. */}
+          <div className="space-y-1.5">
+            <Label>Alt Sektör</Label>
+            {subSectorCandidates.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                Şu an sektörünüz için hazır bir alt sektör paketi yok. Hazır olduğunda
+                burada seçebileceksiniz.
+              </p>
+            ) : (
+              <>
+                <Select
+                  value={brand.sub_sector_id ?? SUB_SECTOR_NONE}
+                  onValueChange={(v) =>
+                    onSelect(v, (val) =>
+                      updateBrand({ sub_sector_id: val === SUB_SECTOR_NONE ? null : val })
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Alt sektör seç">
+                      {(value: string) =>
+                        subSectorCandidates.find((s) => s.id === value)?.display_name ??
+                        'Seçilmedi'
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SUB_SECTOR_NONE}>Seçilmedi</SelectItem>
+                    {subSectorCandidates.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.display_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">
+                  Alt sektör seçmek zorunlu değildir. Boş bırakırsanız gönderileriniz
+                  bugünkü genel modda üretilir.
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Kanal envanteri — hangi kanallara sahipsiniz? İşaretlenmeyen kanalın
+              çağrısı içeriklere KONULMAZ (spec §12.2 muhafazakâr davranış). */}
+          <div className="space-y-2">
+            <Label>Sahip Olduğunuz Kanallar</Label>
+            <p className="text-xs text-gray-500">
+              Yalnız işaretlediğiniz kanallara yönlendiren çağrılar kullanılır.
+              İşaretlenmeyen kanal hiçbir gönderide geçmez.
+            </p>
+            <div className="space-y-2 pt-1">
+              {CHANNEL_OPTIONS.map((channel) => (
+                <div key={channel.key} className="flex items-center justify-between">
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {channel.label}
+                  </span>
+                  <Switch
+                    checked={kit.channels?.[channel.key] === true}
+                    onCheckedChange={(checked) =>
+                      updateKit({
+                        channels: { ...(kit.channels ?? {}), [channel.key]: checked === true },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </TabsContent>
 
