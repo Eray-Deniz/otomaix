@@ -1238,17 +1238,28 @@ async def test_finalization_refuses_to_resurrect_a_swept_post(pkg_db, monkeypatc
     ) is None, "karşılığı olmayan kayıt için makbuz tüketildi (öksüz makbuz)"
 
 
-def test_library_polling_stops_on_status_change():
-    """Kütüphane yoklaması durum değişimini de bitiş sayar (tur 3, M2).
+def test_library_polling_reconciles_backend_changeable_states():
+    """Yoklama kümesi, arka ucun HÂLÂ değiştirebileceği satırları kapsar (tur 4).
 
-    Stage-1 postu artık `generating` doğuyor ve `awaiting_approval`da bitiyor —
-    çıktı URL'si ÜRETMEDEN. Yalnız `output_url`e bakan eski koşul o satırı
-    sonsuza kadar `generating` gösterip her 3 saniyede bir istek atıyordu
-    (ölçüldü). Bu, durum sözleşmesi değişince kaçırılan bir tüketiciydi.
+    İki ayrı gerileme burada birden pinleniyor ve ikisi de benim açtığım:
+
+    1. Değişim ölçüsü yalnız `output_url` idi. Kısa video stage-1 çıktı URL'si
+       ÜRETMEDEN bitiyor; o satır sonsuza kadar `generating` görünüp her 3
+       saniyede bir istek atıyordu (tur 3, M2).
+    2. Düzeltirken `failed` satırlarını yoklama kümesinden ÇIKARDIM. Ama arka
+       uçta `failed` terminal DEĞİL: bayat-iş süpürücüsü 10 dakikayı aşan bir
+       üretimi `failed` yapıyor, fal.ai webhook'u geç gelen başarıyı sonradan
+       `ready` + `output_url` yazabiliyor. Kullanıcı başarısız görünen ama
+       aslında hazır olan bir içerikle kalırdı (tur 4).
 
     **Dürüst etiket: YAPISAL kapı.** Gerçek yoklama davranışı bu suite'ten
-    ölçülemez (JS koşucusu yok); kapı yalnız değişim ölçüsünün `output_url`e
-    daralmadığını pinler.
+    ölçülemez (JS koşucusu yok). Kapının pinlediği şey, yoklama kümesinin
+    `failed`i kapsaması ve değişim ölçüsünün `status`u içermesidir.
+
+    **Altta çözülmemiş bir tutarsızlık var ve etiketi dürüst:** süpürücü
+    "başarısız" derken webhook aynı satırı "hazır" yapabiliyor. Bu bir ÜRÜN
+    kararıdır (geç gelen başarı kabul edilsin mi) ve Task 12'nin kapsamı
+    DIŞINDADIR — burada yalnız arayüzün arka uçla tutarlı kalması sağlandı.
     """
     import re
 
@@ -1259,4 +1270,8 @@ def test_library_polling_stops_on_status_change():
     assert "status" in block, (
         "yoklama yalnız output_url'e bakıyor — çıktı üretmeden biten üretim "
         "sonsuza kadar 'generating' görünür"
+    )
+    assert "'failed'" in block, (
+        "yoklama `failed` satırlarını uzlaştırmıyor — geç gelen webhook başarısı "
+        "arayüze hiç yansımaz"
     )

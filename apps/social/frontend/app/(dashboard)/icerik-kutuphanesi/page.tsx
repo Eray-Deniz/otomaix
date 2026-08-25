@@ -653,14 +653,26 @@ export default function IcerikKutuphanesPage() {
   // stage-1'i `generating` doğup `awaiting_approval`da bitiyor ve çıktı URL'si
   // ÜRETMİYOR; yalnız `output_url`e bakan eski koşul o satırı sonsuza kadar
   // `generating` gösterir ve her 3 saniyede bir istek atmaya devam ederdi
-  // (ölçüldü). Aynı boşluk `failed` için de vardı.
+  // (ölçüldü).
   //
   // Yeniden çizim döngüsü riskine karşı: `setPosts` YALNIZ gerçekten değişen
   // bir alan varsa çağrılır. Koşulsuz birleştirme her turda yeni nesne kimliği
   // üretir, bu efektin `posts` bağımlılığını tetikler ve sonsuz döngü kurardı.
   useEffect(() => {
+    // Uzlaştırılacak satırlar: henüz çıktısı olmayan ve arka ucun KULLANICI
+    // MÜDAHALESİ OLMADAN hâlâ değiştirebileceği durumlar.
+    //
+    // `failed` bu kümede BİLEREK duruyor. Bayat-iş süpürücüsü 10 dakikayı aşan
+    // bir üretimi `failed` yapıyor, ama fal.ai webhook'u geç gelen bir başarıyı
+    // sonradan `ready` + `output_url` olarak yazabiliyor — arka uçta `failed`
+    // terminal DEĞİL. Bu satırları yoklamadan çıkarmak, kullanıcıya başarısız
+    // görünen ama aslında hazır olan bir içerik bırakırdı (bu, `status`
+    // ölçüsünü eklerken açtığım bir gerileme).
+    //
+    // `awaiting_approval` ise gerçekten terminal: kısa video stage-1 orada
+    // biter, çıktı URL'si üretmez ve devamı kullanıcının onayına bağlıdır.
     const generatingIds = posts
-      .filter((p) => p.status === 'generating' && !p.output_url)
+      .filter((p) => (p.status === 'generating' || p.status === 'failed') && !p.output_url)
       .map((p) => p.id)
     if (generatingIds.length === 0) return
 
