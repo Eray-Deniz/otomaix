@@ -380,10 +380,149 @@ BEGIN
              'id:uuid:nn:gen_random_uuid() && brand_id:uuid:nn:- && package_id:uuid:nn:- && package_version:integer:nn:- && created_at:timestamp with time zone:null:now() && consumed_at:timestamp with time zone:null:-'),
 
             ('generation_stamps PRIMARY KEY',
-             'p|PRIMARY KEY (id)|enforced=true validated=true')
+             'p|PRIMARY KEY (id)|enforced=true validated=true'),
+
+            -- ---------------------------------------------------------------
+            -- KAPALI MANİFEST (final review tur 2 — FAZLADAN nesne de bulgudur)
+            --
+            -- Yukarıdaki madde madde kontroller POZİTİF bir izin listesidir:
+            -- adı geçen nesnenin doğru tanımlı olduğunu söyler, ama adı GEÇMEYEN
+            -- bir nesnenin varlığı hakkında hiçbir şey söylemez. Ölçülen boşluk:
+            -- aynı adda, beklenen kolonları ve kısıtları taşıyan ama ÜSTÜNE bir
+            -- `CHECK (false)`, fazladan bir UNIQUE ya da yazımı reddeden bir
+            -- tetikleyici eklenmiş tablo, izin listesinden GEÇER ve her geçerli
+            -- yazımı reddeder. Migration "başarılı" der, uygulama yazamaz.
+            --
+            -- Bu yüzden kısıt · tetikleyici · indeks kümeleri TAM eşleşmedir.
+            -- Eksik olan da fazla olan da aynı mesajda raporlanır.
+            --
+            -- `NOT NULL` kısıtları (contype='n') DIŞARIDA: PostgreSQL 17'den
+            -- itibaren pg_constraint'te satır olarak görünürler, 16'da
+            -- görünmezler. Null'lanabilirlik zaten kolon imzasında denetleniyor.
+            --
+            -- İndeks satırı benzersizliği VE fiilen uygulanma durumunu taşır:
+            -- yarım kalmış (invalid) bir indeks `indisunique=true` kalır ama
+            -- hiçbir şeyi zorlamaz.
+            -- ---------------------------------------------------------------
+            ('sector_research_artifacts kısıt kümesi (kapalı)',
+             'sector_research_artifacts_kind_check|CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text, ''synthesis''::text]))) && sector_research_artifacts_pkey|PRIMARY KEY (id)'),
+
+            ('sector_research_artifacts tetikleyici kümesi (kapalı)',
+             'sector_research_artifacts_append_only|enabled && sector_research_artifacts_no_truncate|enabled'),
+
+            ('sector_research_artifacts indeks kümesi (kapalı)',
+             'idx_sector_research_artifacts_slug_run|f|live && sector_research_artifacts_pkey|t|live'),
+            ('sector_packages kısıt kümesi (kapalı)',
+             'sector_packages_id_version_key|UNIQUE (id, version) && sector_packages_pkey|PRIMARY KEY (id) && sector_packages_sector_id_fkey|FOREIGN KEY (sector_id) REFERENCES social.sectors(id) && sector_packages_sector_version_key|UNIQUE (sector_id, version) && sector_packages_status_check|CHECK ((status = ANY (ARRAY[''draft''::text, ''active''::text, ''archived''::text])))'),
+
+            ('sector_packages tetikleyici kümesi (kapalı)',
+             'sector_packages_sector_must_be_sub|enabled'),
+
+            ('sector_packages indeks kümesi (kapalı)',
+             'sector_packages_id_version_key|t|live && sector_packages_pkey|t|live && sector_packages_sector_version_key|t|live && uq_sector_packages_single_active|t|live'),
+            ('generation_stamps kısıt kümesi (kapalı)',
+             'generation_stamps_brand_id_fkey|FOREIGN KEY (brand_id) REFERENCES social.brands(id) ON DELETE CASCADE && generation_stamps_package_fkey|FOREIGN KEY (package_id, package_version) REFERENCES social.sector_packages(id, version) && generation_stamps_pkey|PRIMARY KEY (id)'),
+
+            ('generation_stamps tetikleyici kümesi (kapalı)',
+             '<yok>'),
+
+            ('generation_stamps indeks kümesi (kapalı)',
+             'generation_stamps_pkey|t|live')
     ),
     observed(label, got) AS (
         VALUES
+            ('sector_research_artifacts kısıt kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', k.conname,
+                                                pg_get_constraintdef(k.oid)),
+                                         ' && ' ORDER BY k.conname), '<yok>')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_research_artifacts'::regclass
+                 AND k.contype <> 'n')),
+
+            ('sector_research_artifacts tetikleyici kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', t.tgname,
+                                                CASE WHEN t.tgenabled = 'O'
+                                                     THEN 'enabled'
+                                                     ELSE 'DISABLED' END),
+                                         ' && ' ORDER BY t.tgname), '<yok>')
+                FROM pg_trigger t
+               WHERE t.tgrelid = 'social.sector_research_artifacts'::regclass
+                 AND NOT t.tgisinternal)),
+
+            ('sector_research_artifacts indeks kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+                                                i.indisunique,
+                                                CASE WHEN i.indisvalid
+                                                      AND i.indisready
+                                                      AND i.indislive
+                                                     THEN 'live'
+                                                     ELSE 'BROKEN' END),
+                                         ' && ' ORDER BY c.relname), '<yok>')
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = 'social.sector_research_artifacts'::regclass)),
+
+            ('sector_packages kısıt kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', k.conname,
+                                                pg_get_constraintdef(k.oid)),
+                                         ' && ' ORDER BY k.conname), '<yok>')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_packages'::regclass
+                 AND k.contype <> 'n')),
+
+            ('sector_packages tetikleyici kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', t.tgname,
+                                                CASE WHEN t.tgenabled = 'O'
+                                                     THEN 'enabled'
+                                                     ELSE 'DISABLED' END),
+                                         ' && ' ORDER BY t.tgname), '<yok>')
+                FROM pg_trigger t
+               WHERE t.tgrelid = 'social.sector_packages'::regclass
+                 AND NOT t.tgisinternal)),
+
+            ('sector_packages indeks kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+                                                i.indisunique,
+                                                CASE WHEN i.indisvalid
+                                                      AND i.indisready
+                                                      AND i.indislive
+                                                     THEN 'live'
+                                                     ELSE 'BROKEN' END),
+                                         ' && ' ORDER BY c.relname), '<yok>')
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = 'social.sector_packages'::regclass)),
+
+            ('generation_stamps kısıt kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', k.conname,
+                                                pg_get_constraintdef(k.oid)),
+                                         ' && ' ORDER BY k.conname), '<yok>')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.generation_stamps'::regclass
+                 AND k.contype <> 'n')),
+
+            ('generation_stamps tetikleyici kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', t.tgname,
+                                                CASE WHEN t.tgenabled = 'O'
+                                                     THEN 'enabled'
+                                                     ELSE 'DISABLED' END),
+                                         ' && ' ORDER BY t.tgname), '<yok>')
+                FROM pg_trigger t
+               WHERE t.tgrelid = 'social.generation_stamps'::regclass
+                 AND NOT t.tgisinternal)),
+
+            ('generation_stamps indeks kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+                                                i.indisunique,
+                                                CASE WHEN i.indisvalid
+                                                      AND i.indisready
+                                                      AND i.indislive
+                                                     THEN 'live'
+                                                     ELSE 'BROKEN' END),
+                                         ' && ' ORDER BY c.relname), '<yok>')
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = 'social.generation_stamps'::regclass)),
             ('sector_research_artifacts tablo imzası',
              (SELECT format('relkind=%s relpersistence=%s partition=%s'
                             ' rls=%s force_rls=%s',

@@ -51,6 +51,17 @@ REQUIRED_PORT = 5433
 REPO_ROOT = Path(__file__).resolve().parents[4]
 MIGRATIONS_DIR = REPO_ROOT / "shared" / "db" / "migrations"
 
+# Dizin ZİNCİRİ de kanonik olmalı (dağıtım runner'ıyla aynı kural, iki okuyucu).
+# `shared/db` ya da `migrations` bir symlink ise çocuklar düz dosya görünür ve
+# dosya-düzeyi kontrol sessiz kalır — testler o zaman depo DIŞINDAKİ SQL'i
+# uygular ve "kanonik dizinden koştuk" iddiası yanlış olur. Fiziksel yollar
+# karşılaştırılır: deponun tamamı symlink altındaysa iki taraf da aynı çözülür.
+if MIGRATIONS_DIR.resolve() != (REPO_ROOT.resolve() / "shared" / "db" / "migrations"):
+    raise RuntimeError(
+        "Migration dizini kanonik yerinde değil (symlink zinciri): "
+        f"{MIGRATIONS_DIR.resolve()}"
+    )
+
 # Migration dosyaları numaralı önek taşır: `NNN_ad.sql`.
 _MIGRATION_PREFIX = re.compile(r"^(\d+)_")
 

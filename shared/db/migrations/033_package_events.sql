@@ -149,10 +149,71 @@ BEGIN
              'id:uuid:nn:gen_random_uuid() && event_type:text:nn:- && sector_id:uuid:null:- && brand_id:uuid:null:- && package_id:uuid:null:- && from_version:integer:null:- && to_version:integer:null:- && actor:text:null:- && detail:jsonb:null:- && created_at:timestamp with time zone:nn:now()'),
 
             ('package_events PRIMARY KEY',
-             'p|PRIMARY KEY (id)|enforced=true validated=true')
+             'p|PRIMARY KEY (id)|enforced=true validated=true'),
+
+            -- ---------------------------------------------------------------
+            -- KAPALI MANİFEST (final review tur 2 — FAZLADAN nesne de bulgudur)
+            --
+            -- Yukarıdaki madde madde kontroller POZİTİF bir izin listesidir:
+            -- adı geçen nesnenin doğru tanımlı olduğunu söyler, ama adı GEÇMEYEN
+            -- bir nesnenin varlığı hakkında hiçbir şey söylemez. Ölçülen boşluk:
+            -- aynı adda, beklenen kolonları ve kısıtları taşıyan ama ÜSTÜNE bir
+            -- `CHECK (false)`, fazladan bir UNIQUE ya da yazımı reddeden bir
+            -- tetikleyici eklenmiş tablo, izin listesinden GEÇER ve her geçerli
+            -- yazımı reddeder. Migration "başarılı" der, uygulama yazamaz.
+            --
+            -- Bu yüzden kısıt · tetikleyici · indeks kümeleri TAM eşleşmedir.
+            -- Eksik olan da fazla olan da aynı mesajda raporlanır.
+            --
+            -- `NOT NULL` kısıtları (contype='n') DIŞARIDA: PostgreSQL 17'den
+            -- itibaren pg_constraint'te satır olarak görünürler, 16'da
+            -- görünmezler. Null'lanabilirlik zaten kolon imzasında denetleniyor.
+            --
+            -- İndeks satırı benzersizliği VE fiilen uygulanma durumunu taşır:
+            -- yarım kalmış (invalid) bir indeks `indisunique=true` kalır ama
+            -- hiçbir şeyi zorlamaz.
+            -- ---------------------------------------------------------------
+            ('package_events kısıt kümesi (kapalı)',
+             'package_events_brand_id_fkey|FOREIGN KEY (brand_id) REFERENCES social.brands(id) ON DELETE CASCADE && package_events_pkey|PRIMARY KEY (id) && package_events_type_check|CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text, ''package_read_error''::text, ''stale_assignment_fallback''::text, ''stamp_missing''::text, ''stamp_invalid''::text, ''stamp_stale_at_persist''::text, ''activation''::text, ''rollback''::text, ''deactivation''::text])))'),
+
+            ('package_events tetikleyici kümesi (kapalı)',
+             '<yok>'),
+
+            ('package_events indeks kümesi (kapalı)',
+             'idx_package_events_brand_created|f|live && idx_package_events_sector_created|f|live && package_events_pkey|t|live')
     ),
     observed(label, got) AS (
         VALUES
+            ('package_events kısıt kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', k.conname,
+                                                pg_get_constraintdef(k.oid)),
+                                         ' && ' ORDER BY k.conname), '<yok>')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.package_events'::regclass
+                 AND k.contype <> 'n')),
+
+            ('package_events tetikleyici kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', t.tgname,
+                                                CASE WHEN t.tgenabled = 'O'
+                                                     THEN 'enabled'
+                                                     ELSE 'DISABLED' END),
+                                         ' && ' ORDER BY t.tgname), '<yok>')
+                FROM pg_trigger t
+               WHERE t.tgrelid = 'social.package_events'::regclass
+                 AND NOT t.tgisinternal)),
+
+            ('package_events indeks kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+                                                i.indisunique,
+                                                CASE WHEN i.indisvalid
+                                                      AND i.indisready
+                                                      AND i.indislive
+                                                     THEN 'live'
+                                                     ELSE 'BROKEN' END),
+                                         ' && ' ORDER BY c.relname), '<yok>')
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = 'social.package_events'::regclass)),
             ('package_events tablo imzası',
              (SELECT format('relkind=%s relpersistence=%s partition=%s'
                             ' rls=%s force_rls=%s',

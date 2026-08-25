@@ -23,7 +23,7 @@ kopyalanıp çalıştırılabilir; sır (bağlantı dizesi) belgeye GİRMEZ, aya
 
 | İddia | Komut (birebir koşulabilir) | Çıktı |
 |---|---|---|
-| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `564 passed` |
+| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `571 passed` |
 | Katman-1 byte-exact kapısı yeşil | `cd apps/social/backend && .venv/bin/python -m pytest tests/prompt_regression/ -q` | `121 passed` |
 | Marka → kök sektör sweep'i temiz | aşağıdaki iki adım | `differences: 0` (rc=0), hedef doğrulandı |
 
@@ -249,11 +249,22 @@ bittikten sonra** koşulacak. Bu kapanış raporu bu yüzden arayüz yüzeyleri 
 
 Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin kendisidir.
 
-1. **Migration'ları canlıya uygula:** 032 · 033 · 034, numara sırasıyla.
-   Tercih edilen yol dağıtım runner'ıdır (`shared/local-deployment/migrations/run-migrations.sh`):
-   her dosyayı `-v ON_ERROR_STOP=1` VE `--single-transaction` ile uygular, yani reddeden bir
-   doğrulama yarım şema bırakmaz. Elle `psql` çağrılıyorsa İKİ bayrak da verilmelidir —
-   yalnız `ON_ERROR_STOP=1` atomiklik SAĞLAMAZ (ölçüldü).
+1. **Migration'ları canlıya uygula:** 032 · 033 · 034, numara sırasıyla, DOSYA DOSYA:
+
+   ```
+   psql "<canlı DSN>" -v ON_ERROR_STOP=1 --single-transaction \
+        -f shared/db/migrations/032_sector_packages.sql
+   ```
+   (aynısı 033 ve 034 için).
+
+   **İKİ bayrak da zorunludur:** yalnız `ON_ERROR_STOP=1` atomiklik SAĞLAMAZ — reddeden bir
+   doğrulama bloğu kendinden önceki DDL'i commit edilmiş bırakır (ölçüldü).
+
+   **Dağıtım runner'ı (`run-migrations.sh`) bu iş için KULLANILMAZ.** Runner uygulanmış
+   migration DEFTERİ tutmaz; 001'den başlayıp hepsini yeniden koşar ve zaten göçmüş bir
+   veritabanında 003'ün koşulsuz `ADD CONSTRAINT`ine takılıp 032'ye HİÇ ULAŞMAZ (final
+   review'ın orta bulgusu; ilk yazdığım talimat bu yüzden yanlıştı). Runner sıfırdan yerel
+   kurulum içindir.
 2. **`N8N_ADMIN_EVENT_SECRET` canlıya kurulmalı.** Ayrıca
    `apps/social/backend/.env.example` dosyasına bu satır **ELLE** eklenmeli — sır-dosyası
    yazma kapısı agent'ı engelliyor, bu yüzden depoda örnek satır YOK.
@@ -300,7 +311,21 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
   `package_events`) tablo imzası + attnum sıralı kolon imzası + birincil anahtarı
   doğrulanıyor. Tuzak testleriyle ölçüldü (yanlış tip · PK'sız · UNLOGGED · satır
   güvenliği açık); kapılar kaldırılınca aynı tuzaklar GEÇİYOR — yani testler yeni
-  kapıları ölçüyor, öncekileri değil.
+  kapıları ölçüyor, öncekileri değil. **İkinci turda genişletildi:** madde madde kontrol
+  POZİTİF bir izin listesiydi — adı geçmeyen nesne hakkında hiçbir şey söylemiyordu. Artık
+  kısıt · tetikleyici · indeks kümeleri KAPALI karşılaştırılıyor; fazladan bir `CHECK (false)`,
+  fazladan bir UNIQUE ya da yazımı reddeden bir tetikleyici de yakalanıyor (üçü de ayrı
+  tuzakla ölçüldü — üçü de eskiden GEÇİYORDU).
+- ~~Migration 011 yarım kalmış eşzamanlı indeks kalıntısını sessizce geçer~~ →
+  **KAPATILDI.** `IF NOT EXISTS` geçersiz bir indeksin ADINI görüp DDL'i atlıyordu: migration
+  başarılı biterken indeks kullanılamaz kalıyor, planlayıcı onu kullanmıyor ve hiçbir hata
+  görünmüyordu. 011 artık beklenen indekslerin varlığını VE uygulanır olduğunu denetliyor;
+  onarımı OTOMATİK yapmıyor (üretimde indeks düşürmek bilinçli karardır), ne yapılacağını
+  söyleyip DURUYOR. Testle ölçüldü.
+- ~~Migration dizininin symlink OLMASI~~ → **KAPATILDI.** Dosya adına bakan kapı bunu
+  göremiyordu: `shared/db` symlink olduğunda her çocuk düz dosya görünür. Runner ve test
+  altyapısı artık dizin zincirini FİZİKSEL yolla karşılaştırıyor; depo dışına çıkan yol
+  ilk veritabanı dokunuşundan ÖNCE reddediliyor.
 - **`sector_packages.sector_id` değişmez değil** — yaşam döngüsü geçişleri uyuşmazlıkta
   fail-closed durur, ama kolonu değişmez kılan migration yazılmadı. Ölçüldü: depoda bu
   kolonu güncelleyen üretim yolu YOK. Ev: `CURRENT.md` →
@@ -334,7 +359,7 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
 
 ## 8. Kapanış cümlesi
 
-Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (564 arka uç testi · 121
+Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (571 arka uç testi · 121
 byte-exact fixture · canlı sweep farkı 0). **Arayüz yüzeyleri ve canlı ortam adımları
 DOĞRULANMADI** — ertelendi, evi ve tetiği §5-6'da yazılı. Bu rapor "sistem çalışıyor"
 demez; "şu kapılar şu komutlarla ölçüldü ve şunlar ölçülmedi" der.

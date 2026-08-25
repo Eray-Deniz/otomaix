@@ -1034,3 +1034,34 @@ def test_artifacts_table_property_corruption_is_caught(persistence, suffix, labe
     assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
     assert FAILURE_MARKER_032 in result.stderr, result.stderr
     assert "sector_research_artifacts tablo imzası" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "extra, label",
+    [
+        (
+            "ALTER TABLE social.sector_research_artifacts "
+            "ADD CONSTRAINT artifacts_never_check CHECK (false);",
+            "fazladan CHECK (false)",
+        ),
+        (
+            "CREATE FUNCTION social.probe_reject_032() RETURNS trigger AS $fn$ "
+            "BEGIN RAISE EXCEPTION 'red'; END $fn$ LANGUAGE plpgsql; "
+            "CREATE TRIGGER artifacts_probe_reject BEFORE INSERT "
+            "ON social.sector_research_artifacts FOR EACH ROW "
+            "EXECUTE FUNCTION social.probe_reject_032();",
+            "yazımı reddeden fazladan tetikleyici",
+        ),
+    ],
+)
+def test_artifacts_extra_objects_are_caught(extra, label):
+    """FAZLADAN nesne de bulgudur — kanıt katmanı yazılamaz hâle getirilemez.
+
+    Beklenen her nesne yerinde olduğu için madde madde kontroller sessiz kalır;
+    tablo yine de her `INSERT`i reddeder. Ham kanıt yazılamayan bir katman
+    Plan 2'nin ilk adımını sessizce durdururdu.
+    """
+    result = _reapply_032(_artifacts_decoy() + "\n" + extra)
+    assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
+    assert FAILURE_MARKER_032 in result.stderr, result.stderr
+    assert "kümesi (kapalı)" in result.stderr, result.stderr

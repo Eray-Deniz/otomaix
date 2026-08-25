@@ -797,3 +797,79 @@ def test_runner_rejects_symlinked_migrations(tmp_path, scratch_db_empty, kind):
     assert not calls, (
         f"{kind} reddedilmeden ÖNCE veritabanına dokunuldu: {calls[:3]}"
     )
+
+
+def test_migration_011_rejects_invalid_index_residue(scratch_db_migrated):
+    """Yarım kalmış eşzamanlı indeksin KALINTISI sessizce geçemez.
+
+    `CREATE INDEX CONCURRENTLY` iptal/çakışma/çökme ile yarıda kalırsa katalogda
+    GEÇERSİZ bir indeks kalır. `IF NOT EXISTS` sonraki koşumda o ADI görüp DDL'i
+    ATLAR — migration BAŞARILI biter, indeks hâlâ kullanılamaz durumdadır ve
+    planlayıcı onu kullanmaz. Hiçbir hata görünmez; semptom "sorgu yavaşladı".
+
+    Kalıntı burada gerçek bir yarıda kesme ile değil, katalogda `indisvalid`
+    bayrağı düşürülerek kurulur — ölçülen şey migration'ın o DURUMA verdiği
+    tepkidir, kesintinin kendisi değil.
+    """
+    argv, env = infra.psql_argv(scratch_db_migrated)
+    migration_011 = infra.MIGRATIONS_DIR / "011_performance_indexes.sql"
+
+    def _run(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            argv + list(args), env=env, capture_output=True, text=True
+        )
+
+    # Temiz şemada yeniden koşum SESSİZDİR (idempotentlik bozulmadı).
+    clean = _run("-f", str(migration_011))
+    assert clean.returncode == 0, clean.stderr
+
+    broken = _run(
+        "-c",
+        "UPDATE pg_index SET indisvalid = false "
+        "  WHERE indexrelid = 'social.idx_posts_brand_created'::regclass",
+    )
+    assert broken.returncode == 0, broken.stderr
+
+    result = _run("-f", str(migration_011))
+    assert result.returncode != 0, (
+        "geçersiz indeks kalıntısı sessizce geçti — yeniden koşum onarmıyor "
+        f"ama başarı raporluyor:\n{result.stdout}"
+    )
+    assert "GECERSIZ indeks" in result.stderr, result.stderr
+    assert "idx_posts_brand_created" in result.stderr, result.stderr
+
+
+def test_runner_rejects_aliased_migrations_directory(tmp_path, scratch_db_empty):
+    """Dizin ZİNCİRİ symlink'liyse runner VERİTABANINA DOKUNMADAN durur.
+
+    Dosya adına bakan kapı bunu göremez: `shared/db` bir symlink olduğunda her
+    çocuk düz dosya olarak görünür ve `-L` yanlış döner. O hâlde depo DIŞINDA
+    duran (ve orada değişebilen) SQL canlıya uygulanırdı.
+    """
+    tree = tmp_path / "repo"
+    outside = tmp_path / "elsewhere" / "migrations"
+    outside.mkdir(parents=True)
+    for path in infra._migration_files():
+        shutil.copy2(path, outside / path.name)
+
+    deploy = tree / "shared" / "local-deployment"
+    (deploy / "migrations").mkdir(parents=True)
+    (tree / "shared" / "db").mkdir(parents=True)
+    (tree / "shared" / "db" / "migrations").symlink_to(outside)
+    shutil.copy2(RUNNER, deploy / "migrations" / RUNNER.name)
+    shutil.copy2(COMPOSE_FILE, deploy / "docker-compose.yml")
+
+    env, log = _shim_env(tmp_path, scratch_db_empty)
+    result = subprocess.run(
+        ["bash", str(deploy / "migrations" / RUNNER.name)],
+        cwd=str(tree),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0, (
+        f"symlink'li migration dizini kabul edildi:\n{result.stdout}\n{result.stderr}"
+    )
+    calls = [line for line in log.read_text().splitlines() if line.strip()]
+    assert not calls, f"reddedilmeden ÖNCE veritabanına dokunuldu: {calls[:3]}"

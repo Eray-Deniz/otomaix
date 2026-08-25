@@ -43,6 +43,21 @@ if [ ! -d "$MIGRATIONS_DIR" ]; then
     exit 1
 fi
 
+# DİZİN ZİNCİRİ de kanonik olmalı — yalnız dosya adına bakmak YETMEZ.
+# `shared/db/migrations` ya da ATASI (`shared/db`) bir symlink ise her çocuk
+# düz dosya olarak görünür, dosya-düzeyi symlink kapısı sessiz kalır ve depo
+# DIŞINDA duran SQL canlıya uygulanır. Karşılaştırma FİZİKSEL yollar arasında
+# yapılır: deponun tamamı symlink'li bir yolun altındaysa iki taraf da aynı
+# şekilde çözülür ve kural yanlış alarm vermez.
+PHYS_REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
+PHYS_MIGRATIONS_DIR="$(cd "$MIGRATIONS_DIR" && pwd -P)"
+if [ "$PHYS_MIGRATIONS_DIR" != "$PHYS_REPO_ROOT/shared/db/migrations" ]; then
+    echo "  ✗ Migration dizini kanonik yerinde değil (symlink zinciri):" >&2
+    echo "    beklenen: $PHYS_REPO_ROOT/shared/db/migrations" >&2
+    echo "    çözülen : $PHYS_MIGRATIONS_DIR" >&2
+    exit 1
+fi
+
 if [ ! -f "$COMPOSE_FILE" ]; then
     echo "  ✗ docker-compose.yml bulunamadı: $COMPOSE_FILE" >&2
     exit 1

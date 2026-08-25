@@ -305,3 +305,40 @@ def test_events_table_property_corruption_is_caught(persistence, suffix, label):
     assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
     assert FAILURE_MARKER in result.stderr, result.stderr
     assert "package_events tablo imzası" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "extra, label",
+    [
+        (
+            "ALTER TABLE social.package_events "
+            "ADD CONSTRAINT package_events_never_check CHECK (false);",
+            "fazladan CHECK (false)",
+        ),
+        (
+            "ALTER TABLE social.package_events "
+            "ADD CONSTRAINT package_events_extra_unique UNIQUE (event_type);",
+            "fazladan UNIQUE",
+        ),
+        (
+            "CREATE FUNCTION social.probe_reject() RETURNS trigger AS $fn$ "
+            "BEGIN RAISE EXCEPTION 'red'; END $fn$ LANGUAGE plpgsql; "
+            "CREATE TRIGGER package_events_probe_reject BEFORE INSERT "
+            "ON social.package_events FOR EACH ROW "
+            "EXECUTE FUNCTION social.probe_reject();",
+            "yazımı reddeden fazladan tetikleyici",
+        ),
+    ],
+)
+def test_events_extra_objects_are_caught(extra, label):
+    """FAZLADAN nesne de bulgudur — pozitif izin listesi yetmez.
+
+    Üçü de beklenen kolonları, kısıtları ve indeksleri BİREBİR taşır; yani
+    madde madde kontrollerin hepsinden geçerler. Ama üçü de tabloyu fiilen
+    yazılamaz ya da beklenenden dar hâle getirir: migration "başarılı" der,
+    uygulama yazamaz. Kapalı küme karşılaştırması bunun tek kapısıdır.
+    """
+    result = _reapply_033(_events_decoy() + "\n" + extra)
+    assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
+    assert FAILURE_MARKER in result.stderr, result.stderr
+    assert "kümesi (kapalı)" in result.stderr, result.stderr
