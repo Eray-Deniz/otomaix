@@ -427,10 +427,83 @@ BEGIN
              '<yok>'),
 
             ('generation_stamps indeks kümesi (kapalı)',
-             'CREATE UNIQUE INDEX generation_stamps_pkey ON social.generation_stamps USING btree (id)|t|live')
+             'CREATE UNIQUE INDEX generation_stamps_pkey ON social.generation_stamps USING btree (id)|t|live'),
+
+            -- ---------------------------------------------------------------
+            -- TAŞIYICI SÖZLEŞME (final review tur 4)
+            --
+            -- `brands` ve `posts` bu migration'ın YARATTIĞI tablolar değil, ama
+            -- 032 onlara kolon · yabancı anahtar · indeks EKLER — ve `ADD COLUMN
+            -- IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` var olanı DEĞİŞTİRMEZ.
+            -- Doğrulayıcı buraya bakmıyordu: yalnız `brands` tetikleyicisi
+            -- denetleniyordu. Sonuç fail-open'dı — kolonu YABANCI ANAHTARSIZ
+            -- duran bir veritabanında 032 rc=0 ile geçerdi (sektör silinince
+            -- markanın ataması ÖKSÜZ kalır), ya da aynı adda benzersiz bir
+            -- indeks meşru marka yazımlarını reddederken migration "başarılı"
+            -- derdi.
+            -- ---------------------------------------------------------------
+            ('brands.sub_sector_id kolon imzası',
+             'sub_sector_id:uuid:null:-'),
+            ('posts.package_id kolon imzası',
+             'package_id:uuid:null:-'),
+            ('posts.package_version kolon imzası',
+             'package_version:integer:null:-'),
+            ('brands_sub_sector_id_fkey',
+             'f|FOREIGN KEY (sub_sector_id) REFERENCES social.sectors(id)|enforced=true validated=true'),
+            ('idx_brands_sub_sector_id',
+             'CREATE INDEX idx_brands_sub_sector_id ON social.brands USING btree (sub_sector_id)|f|live')
     ),
     observed(label, got) AS (
         VALUES
+            ('brands.sub_sector_id kolon imzası',
+             (SELECT format('%s:%s:%s:%s', a.attname,
+                            format_type(a.atttypid, a.atttypmod),
+                            CASE WHEN a.attnotnull THEN 'nn' ELSE 'null' END,
+                            coalesce(pg_get_expr(d.adbin, d.adrelid), '-'))
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.brands'::regclass
+                 AND a.attname = 'sub_sector_id')),
+            ('posts.package_id kolon imzası',
+             (SELECT format('%s:%s:%s:%s', a.attname,
+                            format_type(a.atttypid, a.atttypmod),
+                            CASE WHEN a.attnotnull THEN 'nn' ELSE 'null' END,
+                            coalesce(pg_get_expr(d.adbin, d.adrelid), '-'))
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.posts'::regclass
+                 AND a.attname = 'package_id')),
+            ('posts.package_version kolon imzası',
+             (SELECT format('%s:%s:%s:%s', a.attname,
+                            format_type(a.atttypid, a.atttypmod),
+                            CASE WHEN a.attnotnull THEN 'nn' ELSE 'null' END,
+                            coalesce(pg_get_expr(d.adbin, d.adrelid), '-'))
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.posts'::regclass
+                 AND a.attname = 'package_version')),
+            ('brands_sub_sector_id_fkey',
+             (SELECT format('%s|%s|enforced=%s validated=%s',
+                            k.contype, pg_get_constraintdef(k.oid),
+                            CASE WHEN k.conenforced THEN 'true' ELSE 'false' END,
+                            CASE WHEN k.convalidated THEN 'true' ELSE 'false' END)
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.brands'::regclass
+                 AND k.conname = 'brands_sub_sector_id_fkey')),
+            ('idx_brands_sub_sector_id',
+             (SELECT format('%s|%s|%s', pg_get_indexdef(i.indexrelid),
+                            i.indisunique,
+                            CASE WHEN i.indisvalid AND i.indisready
+                                  AND i.indislive
+                                 THEN 'live' ELSE 'BROKEN' END)
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social'
+                 AND c.relname = 'idx_brands_sub_sector_id')),
             ('sector_research_artifacts kısıt kümesi (kapalı)',
              (SELECT coalesce(string_agg(format('%s|%s', k.conname,
                                                 pg_get_constraintdef(k.oid)),

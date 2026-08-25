@@ -1065,3 +1065,42 @@ def test_artifacts_extra_objects_are_caught(extra, label):
     assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
     assert FAILURE_MARKER_032 in result.stderr, result.stderr
     assert "kümesi (kapalı)" in result.stderr, result.stderr
+
+
+@pytest.mark.parametrize(
+    "corruption, label",
+    [
+        (
+            "ALTER TABLE social.brands DROP CONSTRAINT brands_sub_sector_id_fkey;",
+            "yabancı anahtarı düşürülmüş taşıyıcı kolon",
+        ),
+        (
+            "DROP INDEX social.idx_brands_sub_sector_id; "
+            "CREATE UNIQUE INDEX idx_brands_sub_sector_id "
+            "ON social.brands (sub_sector_id);",
+            "aynı adda BENZERSİZ indeks taklidi",
+        ),
+        (
+            "DROP INDEX social.idx_brands_sub_sector_id; "
+            "CREATE INDEX idx_brands_sub_sector_id ON social.brands (name);",
+            "aynı adda YANLIŞ KOLONLU indeks",
+        ),
+    ],
+)
+def test_carrier_contract_corruption_is_caught(corruption, label):
+    """`brands` taşıyıcı sözleşmesi bozuksa migration DURur.
+
+    `ADD COLUMN IF NOT EXISTS` ve `CREATE INDEX IF NOT EXISTS` VAR OLANI
+    DEĞİŞTİRMEZ; doğrulayıcı buraya bakmazsa migration bozuk sözleşmenin
+    üstünden rc=0 ile geçer. Somut bedeller: yabancı anahtarsız kolonda sektör
+    silinince markanın ataması ÖKSÜZ kalır; benzersiz bir indeks taklidi ise
+    aynı alt sektöre ikinci markayı atamayı REDDEDER — yani meşru bir müşteri
+    işlemi, hiçbir yerde görünmeyen bir sebeple patlar.
+    """
+    result = _reapply_032(corruption)
+    assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
+    assert FAILURE_MARKER_032 in result.stderr, result.stderr
+    assert (
+        "brands_sub_sector_id_fkey" in result.stderr
+        or "idx_brands_sub_sector_id" in result.stderr
+    ), result.stderr
