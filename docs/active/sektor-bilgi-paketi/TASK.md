@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Runtime Çekirdek Uygulaması
 status: active
 started: 2026-07-12
-last-touched: 2026-08-24
+last-touched: 2026-08-25
 blocked-by: null
 source_plan: docs/plans/2026-08-23-sektor-bilgi-paketi.md
 ---
@@ -30,14 +30,41 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: c7de39751793e02823ddeae77cf7c9d1b6e58887
-- cp_count: 10
-  <!-- Checkpoint 11 dört tur koştu ve APPROVE ALMADI; §8.6 mutation protokolü
-       yalnız Clean/Accepted-risk dallarında çalışır, o yüzden last_checkpoint_ref
-       checkpoint 10'da BIRAKILDI ve cp_count artırılmadı. Yeni oturum checkpoint
-       11'i taze bütçeyle kapatır. -->
+- last_checkpoint_ref: 0c19d83b6d2bdb654ba7e0a297307afeb4a5bee3
+- cp_count: 11
+  <!-- Checkpoint 11 iki oturuma yayıldı: on birinci oturumda dört tur koştu ve
+       APPROVE ALMADI, bu yüzden ref checkpoint 10'da bırakılmıştı. On ikinci
+       oturumda tur 5 (yeni kök neden: model-patlaması yedek dalı) ve tur 6
+       (approve, bulgu yok) koştu; §8.6 Clean dalı ateşlendi ve ref/sayaç
+       birlikte ilerledi. -->
 
 # Current Status
+
+**2026-08-25 (on ikinci oturum) — CHECKPOINT 11 KAPANDI (approve, bulgu yok). Devralınan tek
+açık kapı kapatıldı; Task 1–11 bitti, sıradaki Task 12.**
+`pytest tests/ -q` → **345 passed** (oturum başında 296). Donmuş prompt kapısı → **121 passed**
+(oturum başında 72; devralınan HANDOFF 71 diyordu — son düzeltme bir test daha eklemişti).
+Çalışma alanı temiz, **push YOK**.
+
+**F3 beşinci kez geldi ve BAŞKA bir eksendeydi.** Önceki dört tur tek bir yüklem etrafında
+dönüyordu ("kalıp zaten var mı") ve o yüklem tur 4'te silinerek kapanmıştı. Tur 5'in kök nedeni
+bozulmuş bağımlılık yoluydu: Anthropic çağrısı patladığında `_build_still_prompt` yalnız
+marka/sektör/renk taşıyan genel bir yedek metin üretiyor, havuz hiç girmiyordu — ölçüldü,
+`_resolve_still_prompt`'un dört dalının DÖRDÜNDE de. Video başarıyla üretiliyor, paketli marka
+sektörel sinyalini sessizce kaybediyordu.
+
+**Düzeltme (`0c19d83`) sınıf düzeyinde kuruldu.** Kural: model çağrısı YAPMAYAN her durağan-kare
+yolu havuzdan bir kalıp ekler; model çağrısı YAPAN her yol havuzu bağlamda taşır. Bu iki küme
+çıkışların TAMAMIDIR (hakem de aynı sayımı bağımsız yaptı). Kapanış elle seçilmiş örnekle değil
+ÜRETİLMİŞ matrisle kanıtlandı: mod × kullanıcı isteği × istem dili (12 dal) × model
+ayakta/düşük = 24 hücre, hem paketli hem paketsiz tarafta. Düzeltmeden önce 12 model-düşük
+hücrenin 11'i kırmızıydı (12.'si zaten zenginleştirme yolundan geçen İngilizce dalı).
+
+**Süreç dersi (Eray itirazı, kayda değer).** Beş tur aynı maddenin beş kez açılması DEĞİL, aynı
+sözün beş ayrı çıkıştan delinmesiydi; ama beş tura çıkması hakemin değil yürütmenin hatasıdır.
+Her turda bulunan delik yamandı, "bu sözün kaç çıkışı var, hepsini say" sorusu beşinci tura
+kadar sorulmadı. Hakem delta bakar — tam haritayı çıkarmak yürütmenin işidir. Turlar daralarak
+geliyorsa yamalamayı bırakıp çıkış uzayını saymak KURAL hâline getirildi.
 
 **2026-08-24 (on birinci oturum) — PLAN 1 YÜRÜTME AÇIK; Task 10 ve 11 yazıldı, Task 8 revize
 edildi, K-02 ve K-113 KAPANDI. Checkpoint 11 KAPANMADI.**
@@ -291,24 +318,13 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 
 # Open Problems
 
-- **[AÇIK BORÇ — tek gerçek açık kapı] Task 11'in son düzeltmesi bağımsız hakemden GEÇMEDİ.**
-  Checkpoint 11 dört tur koştu. F1 (frontend seçimi düşürüyordu) ve F2 (istemci `template_fields`
-  üzerinden sunucu anahtarı uydurabiliyordu) hakem tarafından KAPALI doğrulandı. **F3 dört kez
-  geri geldi ve her seferinde farklı kök nedenle:** (1) test yaprakta yazılmıştı, ürün yolu
-  yönlendiricide ayrılıyordu; (2) "gelen İngilizce istem caption modelinden gelmiştir" varsayımı
-  doğrulanabilir değildi; (3) kabul kapısı ile tüketici farklı boşluk ölçüsü kullanıyordu (`"."`
-  kapıdan geçip tüketimde boş dizeye iniyordu); (4) alt dize içerme yanlış pozitifi
-  (`"ring" in "spring"`).
-  **Dördüncü düzeltme yüklemi inceltmedi, KALDIRDI** — kalıp artık her zaman ekleniyor; tekrar
-  kabul edilen bedel, sessiz eksiklik değil. Kendi ölçümüm üç maddede yeşil (ring/spring tuzağı
-  zenginleşiyor · anlamsız havuzda bayt aynı · boş havuzda bayt aynı) ama **Codex bu commit'i
-  görmedi** (`419eb21`).
-  **Evi:** yeni oturumun ilk işi — checkpoint 11'i taze bütçeyle kapatmak.
-  **Neden bu oturumda kapatılmadı:** checkpoint payı (tavan 8 − finale rezerve 3 = 5) tükendi,
-  Eray bir tur rezerveden fonladı, o tur da yeni bir varyant buldu. Aynı eksende beşinci turu
-  yorgun bütçeyle koşmak yerine taze oturuma bırakıldı (Eray kararı).
+- **[KAPANDI 2026-08-25] Task 11'in checkpoint'i kapandı.** Devralınan açık kapı buydu.
+  Tur 5 yeni bir kök neden buldu (model-patlaması yedek dalı havuzu taşımıyordu — bağımsız
+  sondajla doğrulandı, dört dalın dördünde), `0c19d83` ile sınıf düzeyinde kapatıldı; tur 6
+  `approve`, bulgu yok. §8.6 Clean dalı ateşlendi, `last_checkpoint_ref` + `cp_count` birlikte
+  ilerledi. F1 ve F2 zaten tur 2'de kapalı doğrulanmıştı.
 
-- **[Ders — kayda değer, borç DEĞİL] Bu eksende dört tur, dört kök neden.** Son üçünün ortak yanı:
+- **[Ders — kayda değer, borç DEĞİL] Bu eksende BEŞ tur, beş kök neden.** Son üçünün ortak yanı:
   serbest metinden *"bu zaten yeterli mi / bu girdi güvenilir mi"* sorusunu cevaplamaya çalışan bir
   yüklem. Böyle bir yüklem yakınsamıyor; her tur bir öncekinden dar bir vaka açıyor. Çıkış her
   seferinde yüklemi silmek ya da tek ortak ölçüye bağlamak oldu. Yeni oturumda aynı desen görülürse

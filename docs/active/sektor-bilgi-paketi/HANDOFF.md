@@ -5,7 +5,7 @@
 
 ## Context
 - Task: sektor-bilgi-paketi — Plan 1 yürütmesi açık (`/execute-plan-claude-codex` protokolü)
-- Last updated: 2026-08-24 (on birinci oturum — Task 10, Task 11, Task 8 revizyonu, K-02/K-113 kapanışı)
+- Last updated: 2026-08-25 (on ikinci oturum — checkpoint 11 kapatıldı; devralınan tek açık kapı kapandı)
 - Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
 - Spec girdisi: `docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` — **bu oturumun dersi:
@@ -14,42 +14,43 @@
 - Codex ham review log'u: `/root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md`
 
 ## Current State
-- **Biten:** Task 1–10 · **Task 11 kodu yazıldı ama checkpoint'i KAPANMADI.** Task 8 bu oturumda
-  K-02 kapanışı nedeniyle revize edildi.
-- **Tek açık kapı:** Task 11'in son düzeltmesi (`419eb21`) bağımsız hakemden geçmedi. Ayrıntı ve
-  evi TASK.md "Open Problems"ta.
+- **Biten:** Task 1–11. **Checkpoint 11 KAPANDI** (tur 6: `approve`, bulgu yok).
+- **Açık kapı YOK.** Devralınan borç (Task 11'in hakemden geçmemiş son düzeltmesi) bu oturumda
+  kapandı; tur 5 yeni bir kök neden buldu (model-patlaması yedek dalı havuzu taşımıyordu) ve
+  `0c19d83` ile sınıf düzeyinde kapatıldı.
 - **Mod:** inline. `execute_mode: subagent-driven` kaydı BİLEREK değiştirilmedi (Task 1-2'yi doğru
   anlatıyor). inline YALNIZ task yazımını kapsar; review/checkpoint kapıları normal koştu.
-- **Checkpoint:** `cp_count: 10`, `last_checkpoint_ref` checkpoint 10'da (`c7de397`).
-  **Checkpoint 11 approve almadığı için ref İLERLETİLMEDİ** — §8.6 mutation protokolü yalnız
-  Clean/Accepted-risk dallarında çalışır. Tavan 8, yani her riskli task `CEILING_RISK` dalına
-  düşüyor; Eray bu oturum boyunca RUN-anyway izni verdi (audit `ceiling-exceed`).
-- **İNCELEME BÜTÇESİ TÜKENDİ + rezerveden bir tur kullanıldı.** Bütçe oturum başına sıfırlanır;
-  yeni oturum tam payla başlar.
+- **Checkpoint:** `cp_count: 11`, `last_checkpoint_ref` = `0c19d83`. §8.6 Clean dalı ateşlendi,
+  iki alan tek commit'te ilerledi. Tavan 8, yani her riskli task `CEILING_RISK` dalına düşüyor;
+  Eray bu oturumda da RUN-anyway izni verdi (audit `ceiling-exceed`).
+- **İnceleme bütçesi:** bu oturumda checkpoint 11 için 2 tur koşuldu (kümülatif 6). Eray bu
+  oturum için tur sayısı kısıtını AÇIKÇA kaldırdı ("codex review sayıları önemli değil").
 - **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
   Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 
 ## Resume From (sıra)
-1. **Checkpoint 11'i kapat.** Kapsam `--base c7de39751793e02823ddeae77cf7c9d1b6e58887`.
-   Ledger'a şunlar yazılır (yeniden açtırma): F1 ve F2 **hakem tarafından KAPALI doğrulandı**
-   (tur 2); F3'ün dört kök nedeni ve dördüncü düzeltmesi (`419eb21` — yinelenme yüklemi
-   KALDIRILDI, kalıp her zaman eklenir). Yalnız `419eb21` yeni delta'dır.
-2. Approve gelirse §8.6 mutation protokolü: `last_checkpoint_ref = <o anki HEAD>` **ve**
-   `cp_count = 11`, tek commit'te.
-3. **Sonra Task 12** (K-07 damga yazımı + gözlemlenebilirlik log çekirdeği). Eray bu oturumda
-   "Task 12'ye geçince dur" dedi; o sınır bu oturuma aitti, yeni oturumda geçerli DEĞİL.
-4. Sonra Task 13 → 16.
-5. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
+1. **Task 12** (K-07 damga yazımı + gözlemlenebilirlik log çekirdeği). Devralınan açık kapı YOK.
+2. Sonra Task 13 → 16.
+3. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
    `.venv/bin/python -m pytest tests/prompt_regression/ -q` yeşil olmadan ilerlenmez (Task 7 freeze hükmü).
-6. **Frontend'e dokunulduysa `npx next build` KOŞULUR.** Bu oturumda ilk kez koşuldu ve geçti.
+4. **Frontend'e dokunulduysa `npx next build` KOŞULUR.** Bu oturumda frontend'e dokunulmadı,
+   dolayısıyla derleme KOŞULMADI — son geçen derleme on birinci oturumdakidir.
 
 ## Verification (bu oturum)
-- **Koşan komutlar / taze çıktı:**
-  - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **296 passed**
-    (oturum başında 232).
-  - `.venv/bin/python -m pytest tests/prompt_regression/ -q` → **71 passed** (byte-exact freeze
-    kapısı; her düzeltme turundan sonra tekrar koşuldu, donmuş fixture'lar bayt değişmedi).
-  - `cd apps/social/frontend && npx next build` → **geçti** (bu daldaki ilk frontend derlemesi).
+- **Koşan komutlar / taze çıktı (on ikinci oturum):**
+  - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **345 passed**
+    (oturum başında 296).
+  - `.venv/bin/python -m pytest tests/prompt_regression/ -q` → **121 passed** (byte-exact freeze
+    kapısı; düzeltmeden sonra tekrar koşuldu, donmuş fixture'lar bayt değişmedi).
+  - `ec_ledger_view` → türetilmiş defter rc=0; `T11-fix5` doğru kind/test/impl sütunlarıyla
+    görünüyor (ilk commit denemesinde footer bloğu boş satırla bölünmüştü, `unlabeled` düştü;
+    amend ile düzeltildi ve tekrar ölçüldü).
+  - Bağımsız sondaj (taze): model düşürülüp `_resolve_still_prompt`'un dört dalı da koşuldu —
+    düzeltmeden ÖNCE dördünde de havuzun izi YOKTU; sonra dördünde de var.
+  - `npx next build` bu oturumda **KOŞULMADI** (frontend'e dokunulmadı).
+
+- **Önceki oturumun (on birinci) ölçümleri:** `pytest tests/ -q` → 296 · donmuş kapı → 71 ·
+  `npx next build` → geçti (bu daldaki ilk frontend derlemesi).
   - Canlı veritabanı ölçümü (salt okuma, taze): `social.sector_packages` **YOK**
     (`to_regclass` → `f`) — 032 canlıya uygulanmadı, yani bugün üretimde tek paket bile yok.
   - Doküman değişikliğinin ekleme-yönü mekanik doğrulandı: `git diff --stat` → **108 satır
@@ -61,12 +62,12 @@
   alternatif taşıyan paket yazılamıyordu · uydurulmuş `template_fields.motion_prompt` ücretli
   video modeline ulaşıyordu · İngilizce hazır istem sahne havuzunu hiç görmüyordu ·
   `"."` havuz öğesi zenginleştirmeyi atlatıyordu · `"ring" in "spring"`.
-- **Codex:** checkpoint 10 → 2 tur (approve). Checkpoint 11 → **4 tur, approve YOK**.
-  Toplam 11 bulgu; **11'i de bağımsız sondajla doğrulandı**, hiçbiri sondaj koşmadan kabul veya
-  reddedilmedi. Bir bulgunun severity'si Codex'in dediğinden yükseltildi (`medium → high`:
-  genel kullanıcı girdisinden işlenmemiş sunucu hatası).
+- **Codex:** checkpoint 10 → 2 tur (approve). Checkpoint 11 → **6 tur (4 önceki oturumda +
+  2 bu oturumda), tur 6 `approve`, bulgu yok**. Toplam 12 bulgu; **12'si de bağımsız sondajla
+  doğrulandı**, hiçbiri sondaj koşmadan kabul veya reddedilmedi. Bir bulgunun severity'si
+  Codex'in dediğinden yükseltildi (`medium → high`).
+  **Eray bu oturumda tur sayısı kısıtını açıkça kaldırdı** ("codex review sayıları önemli değil").
 - **DENENMEYEN / kapsanmayan:**
-  - **Task 11'in son düzeltmesi (`419eb21`) hakemden geçmedi** — bu oturumun tek açık kapısı.
   - Frontend yalnız DERLENDİ; gerçek arayüzde tek bir video üretimi denenmedi. Hareket seçiminin
     uçtan uca (caption → istemci → stage-1 → stage-2) gerçek akışta taşındığı ÖLÇÜLMEDİ;
     kanıt birim ve yapısal testlerdir.
@@ -80,9 +81,7 @@
 ## Risks
 
 **Bu oturumun kalemleri:**
-- **[açık borç — evi: yeni oturumun ilk işi]** Task 11'in son düzeltmesi (`419eb21`) hakemden
-  geçmedi. Ayrıntı TASK.md Open Problems.
-- **[bilinçli tasarım — dört turluk dersin sonucu]** Sahne zenginleştirmesinde yinelenme kontrolü
+- **[bilinçli tasarım — beş turluk dersin sonucu]** Sahne zenginleştirmesinde yinelenme kontrolü
   YOK; kalıp zaten varsa metin tekrar eder. Tekrar görsel modelde zararsız ve GÖRÜNÜR, eksiklik
   sessizdi. Yeniden açılma: tekrarın görsel kaliteyi bozduğu gerçek üretimde ölçülürse.
 - **[bilinçli tasarım]** Hareket ve sahne geri düşüşü havuzdan RASTGELE seçer; sabit öğe o
@@ -151,6 +150,10 @@
 - **Task 9/10'un kapalı sınırlarını yeniden açma:** ayraçsız işaret yakalanmaz · CTA DIŞINDA
   serbest ayraç serbesttir · CTA İÇİNDE ayraç yalnız bayraktır · kit anahtarı silinemez · tam
   genişlikli ayraçlı etiket basımdan çıkarılamaz · checkpoint 10'un F1-F4'ü kapalı.
+- **Model çağrısı yapan yolda havuz BAĞLAM olarak verilir** (spec §4.3: dağarcık ek bağlamdır,
+  geçersiz-kılıcı değildir). Modelin o dağarcığı kullanıp kullanmadığı fail-closed bir soru
+  DEĞİLDİR ve bulgu sayılmaz. Model çağrısı YAPMAYAN iki yol (İngilizce erken dönüş + patlama
+  yedeği) havuzdan kalıp EKLER; bu iki küme çıkışların tamamıdır.
 - **Bu oturumda tahkim edilen üç tasarım kararını bulgu sayma:** sahne zenginleştirmesinde
   yinelenme kontrolü YOK (tekrar kabul edilen bedel) · hareket/sahne geri düşüşü havuzdan
   RASTGELE seçer · damga yazımı başarısızsa `generation_id` null döner.
