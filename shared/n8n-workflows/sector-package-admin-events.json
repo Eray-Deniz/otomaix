@@ -1,0 +1,160 @@
+{
+  "name": "Sektör Paketi Yönetici Olayları",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "nodes": [
+    {
+      "id": "webhook-admin-events",
+      "name": "Yönetici Olayı Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": {
+        "path": "sector-package-admin-events",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "8f2b0a41-6c3d-4e57-9b12-7ad5c0e93f6a"
+    },
+    {
+      "id": "code-dedupe",
+      "name": "Tekrarları Ele",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": {
+        "jsCode": "// Teslim hedefi EN-AZ-BİR-KEZ: backend, gönderim sonrası çökmede aynı olayı\n// yeniden yollar. Tekilleştirme alıcı tarafın işidir ve anahtar `event_id`'dir\n// (backend sözleşmesi: kimlik yeniden gönderimlerde DEĞİŞMEZ).\n//\n// Pencere sınırlıdır (son 500 kimlik): kalıcı bir depo tutmak bu workflow'un\n// işi değil, sınırsız büyüyen bir static data ise kendi başına bir arıza olur.\nconst state = $getWorkflowStaticData('global');\nif (!Array.isArray(state.seenEventIds)) state.seenEventIds = [];\n\nconst body = $input.first().json.body || {};\nconst eventId = body.event_id;\n\nif (!eventId) {\n  // Kimliksiz zarf sözleşme dışıdır — sessizce geçirmek yerine görünür kıl.\n  return [{ json: { duplicate: false, malformed: true, envelope: body } }];\n}\n\nif (state.seenEventIds.includes(eventId)) {\n  return [{ json: { duplicate: true, event_id: eventId } }];\n}\n\nstate.seenEventIds.push(eventId);\nif (state.seenEventIds.length > 500) {\n  state.seenEventIds = state.seenEventIds.slice(-500);\n}\n\nreturn [{ json: { duplicate: false, malformed: false, envelope: body, event_id: eventId } }];"
+      }
+    },
+    {
+      "id": "if-new-event",
+      "name": "Yeni Olay mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-new",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "code-format",
+      "name": "Mesaj Hazırla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, -80],
+      "parameters": {
+        "jsCode": "// Zarf sözleşmesi (backend: services/notifications.py::build_envelope):\n//   { event_id, kind, payload, contract_version }\n// `contract_version` alan eklendiğinde/çıktığında artar — mesajda görünür\n// olması, canlıda sürüm uyuşmazlığını sessiz bırakmamak içindir.\nconst item = $input.first().json;\n\nif (item.malformed) {\n  return [{ json: { message: '⚠️ Sektör paketi: KİMLİKSİZ olay zarfı geldi (sözleşme dışı). Ham gövde loglarda.' } }];\n}\n\nconst envelope = item.envelope || {};\nconst payload = envelope.payload || {};\n\nconst BASLIK = {\n  'package_event.stale_assignment_fallback': '🟠 Bayat atama — paketsiz yola düşüldü',\n  'package_event.package_read_error': '🔴 Paket okunamadı — paketsiz yola düşüldü',\n  'package_event.mismatch_fallthrough': '🟡 Özel gün eşleşmedi — genel içerik üretildi'\n};\n\nconst baslik = BASLIK[envelope.kind] || `ℹ️ ${envelope.kind}`;\nconst detay = payload.detail ? JSON.stringify(payload.detail) : '—';\n\nconst message = [\n  baslik,\n  '',\n  `Marka: ${payload.brand_id || '—'}`,\n  `Sektör: ${payload.sector_id || '—'}`,\n  `Paket: ${payload.package_id || '—'}`,\n  `Detay: ${detay}`,\n  '',\n  `Olay: ${envelope.event_id} (sözleşme v${envelope.contract_version})`\n].join('\\n');\n\nreturn [{ json: { message } }];"
+      }
+    },
+    {
+      "id": "http-telegram",
+      "name": "Telegram Bildir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, -80],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.OTOMAIX_ADMIN_TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $env.OTOMAIX_ADMIN_TELEGRAM_CHAT_ID, text: $('Mesaj Hazırla').item.json.message }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "noop-duplicate",
+      "name": "Tekrar — Atla",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [660, 80],
+      "parameters": {}
+    },
+    {
+      "id": "schedule-recovery",
+      "name": "Her 5 Dakika (Kurtarma)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 320],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "http-dispatch-pending",
+      "name": "Bekleyenleri Süpür",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 320],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.otomaix.com/internal/admin-events/dispatch-pending",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nFP1FbcwkIw8n9SS",
+          "name": "Otomaix Internal API Key"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Yönetici Olayı Webhook": {
+      "main": [[{ "node": "Tekrarları Ele", "type": "main", "index": 0 }]]
+    },
+    "Tekrarları Ele": {
+      "main": [[{ "node": "Yeni Olay mı?", "type": "main", "index": 0 }]]
+    },
+    "Yeni Olay mı?": {
+      "main": [
+        [{ "node": "Mesaj Hazırla", "type": "main", "index": 0 }],
+        [{ "node": "Tekrar — Atla", "type": "main", "index": 0 }]
+      ]
+    },
+    "Mesaj Hazırla": {
+      "main": [[{ "node": "Telegram Bildir", "type": "main", "index": 0 }]]
+    },
+    "Her 5 Dakika (Kurtarma)": {
+      "main": [[{ "node": "Bekleyenleri Süpür", "type": "main", "index": 0 }]]
+    }
+  }
+}

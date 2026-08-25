@@ -29,6 +29,17 @@ import { SceneReferencePicker } from '@/components/SceneReferencePicker'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Paket durumu bandı (K-45). `mode` KAPALI bir birlik DEĞİL, düz metin:
+ * Plan 2 `recovered` modunu ekleyecek ve yeni bir mod bu tipi kırmamalı.
+ * `message` daima backend'den gelir — sabit metin ÖNYÜZDE tutulmaz, yoksa
+ * iki yerde ıraksayan bir vaat doğar.
+ */
+interface PackageStatus {
+  mode: string
+  message: string | null
+}
+
 interface StockAvatar {
   avatar_id: string
   avatar_name: string
@@ -412,6 +423,7 @@ function MarkaAyarlariContent() {
   const [removingLogo, setRemovingLogo] = useState<'light' | 'dark' | null>(null)
   const [removingVideo, setRemovingVideo] = useState(false)
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'bilgiler')
+  const [packageStatus, setPackageStatus] = useState<PackageStatus | null>(null)
   const [documents, setDocuments] = useState<BrandDocument[]>([])
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
@@ -472,6 +484,19 @@ function MarkaAyarlariContent() {
       setLoading(false)
     }
     load()
+  }, [currentBrand?.id])
+
+  // Paket durumu bandı — marka yüklemesinden BAĞIMSIZ bir istek.
+  // Bilerek ayrı: durum ucu düşerse marka ayarları sayfası çalışmaya devam
+  // etmeli (bant bir bilgilendirmedir, sayfanın koşulu değil).
+  useEffect(() => {
+    if (!currentBrand?.id) { setPackageStatus(null); return }
+    let cancelled = false
+    api.get<PackageStatus>(`/brands/${currentBrand.id}/package-status`).then((res) => {
+      if (cancelled) return
+      setPackageStatus(res.success && res.data ? res.data : null)
+    })
+    return () => { cancelled = true }
   }, [currentBrand?.id])
 
   // Debounced auto-save for brand info
@@ -791,6 +816,13 @@ function MarkaAyarlariContent() {
         </div>
         <SaveIndicator saving={saving} saved={saved} />
       </div>
+
+      {/* Paket durumu bandı — metin BACKEND'den gelir (K-45 sabit metni). */}
+      {packageStatus?.message && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">{packageStatus.message}</p>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6 flex-wrap w-full gap-y-1">

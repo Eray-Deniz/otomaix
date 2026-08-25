@@ -9,6 +9,7 @@ from app.core.security import assert_brand_owned, assert_workspace_owned, get_cu
 from app.core.utils import brand_kit_merge_sql
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
+from app.services.notifications import MAINTENANCE_BANNER_MESSAGE
 from app.services.sector_packages import validate_channels
 from app.services.sector_resolver import resolve_sector
 from app.services.storage import r2
@@ -97,6 +98,50 @@ async def list_brands(
     data = [dict(r) for r in rows]
     await set_cached(cache_key, data, _BRANDS_TTL)
     return OkResponse(data=data)
+
+
+@router.get("/{brand_id}/package-status", response_model=OkResponse)
+async def get_package_status(
+    brand_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Marka sahibinin göreceği paket durumu — K-45 devre-dışı ayağı.
+
+    Yanıt YALNIZ durum ve mesaj taşır; paket içeriği bu uçtan ASLA sızmaz.
+    Üç mod:
+
+    * `unpackaged` — markanın alt sektör ataması yok. Normal yol, mesaj yok.
+    * `packaged` — atama var ve o sektörün aktif paketi var.
+    * `maintenance` — atama var ama aktif paket YOK (bayat atama). Marka
+      sahibinin gözünden bu bir arıza değil, geçici bir bakımdır; metin K-45'in
+      SABİT devre-dışı metnidir ve tek kaynağı `notifications` modülüdür.
+
+    Durum modeli kapalı bir enum DEĞİL, düz metindir: Plan 2 buraya
+    `recovered` modunu ekleyecek ve yeni bir mod şemayı kırmamalı.
+
+    **Rota sırası:** bu tanım `/{brand_id}` GET'inden ÖNCE gelmelidir; FastAPI
+    rotaları bildirim sırasına göre eşler ve sonra gelseydi bile yol farklı
+    olduğu için çakışmazdı — yine de dosyadaki mevcut konvansiyona uyulur.
+    """
+    await assert_brand_owned(db, user, brand_id)
+    sub_sector_id = await db.fetchval(
+        "SELECT sub_sector_id FROM social.brands WHERE id = $1", brand_id
+    )
+    if not sub_sector_id:
+        return OkResponse(data={"mode": "unpackaged", "message": None})
+
+    has_active = await db.fetchval(
+        "SELECT 1 FROM social.sector_packages "
+        "WHERE sector_id = $1 AND status = 'active' LIMIT 1",
+        sub_sector_id,
+    )
+    if has_active:
+        return OkResponse(data={"mode": "packaged", "message": None})
+
+    return OkResponse(
+        data={"mode": "maintenance", "message": MAINTENANCE_BANNER_MESSAGE}
+    )
 
 
 @router.get("/{brand_id}", response_model=OkResponse)

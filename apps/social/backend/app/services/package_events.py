@@ -22,6 +22,8 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from app.services import notifications
+
 logger = logging.getLogger(__name__)
 
 # ─── Kapalı olay kümesi ve iki kapsam sınıfı (F21) ──────────────────────────
@@ -43,6 +45,21 @@ BRAND_SCOPED_EVENTS = frozenset({
 LIFECYCLE_EVENTS = frozenset({"activation", "rollback", "deactivation"})
 
 EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS
+
+# K-56: bu üç olay HER OLUŞTA bir yönetici bildirimi (outbox satırı) üretir —
+# eşik/oran YOKTUR (olay-bazlı, spec §14.4). Damga olayları (`stamp_*`) bu
+# kümede DEĞİLDİR: onlar atıf muhasebesidir, "paketli üretim beklendiği gibi
+# çalışmadı" sınıfına girmezler.
+#
+# Bağ TEK KAPIDADIR, çağrı yerlerinde değil. Fan-out'u `_record_event` gibi
+# sarmalayıcılara ya da tek tek uçlara koymak, yarın eklenecek bir çağrı
+# yerinin bildirimi sessizce atlamasına izin verirdi — sınıf kapatılır,
+# varyant değil.
+ADMIN_NOTIFIED_EVENTS = frozenset({
+    "mismatch_fallthrough",
+    "package_read_error",
+    "stale_assignment_fallback",
+})
 
 # `detail` şekil kapısı. Sınır POZİTİF bir sözleşmedir, negatif bir yüklem
 # DEĞİL: "bu metin paket içeriği değildir"i serbest metinden kanıtlamaya
@@ -193,7 +210,7 @@ async def log_package_event(
         )
 
     try:
-        return await db.fetchval(
+        event_id = await db.fetchval(
             """
             INSERT INTO social.package_events
                 (event_type, sector_id, brand_id, package_id,
@@ -219,3 +236,57 @@ async def log_package_event(
             exc,
         )
         return None
+
+    if event_id is not None and event_type in ADMIN_NOTIFIED_EVENTS:
+        await _notify_admin(
+            db,
+            event_id=event_id,
+            event_type=event_type,
+            sector_id=sector_id,
+            brand_id=brand_id,
+            package_id=package_id,
+            detail=detail,
+        )
+    return event_id
+
+
+async def _notify_admin(
+    db,
+    *,
+    event_id: UUID,
+    event_type: str,
+    sector_id: UUID | None,
+    brand_id: UUID | None,
+    package_id: UUID | None,
+    detail: dict | None,
+) -> None:
+    """Olayı yönetici bildirim outbox'ına yazar — ASLA akışı düşürmez.
+
+    Aynı transaction'dadır: olay kaydı geri alınırsa bildirim de yoktur.
+    `idempotency_key` olay kimliğidir; olay satırı zaten tekil olduğu için
+    ikinci bir tekillik ölçüsü uydurmaya gerek yok ve iki ölçü ıraksayamaz.
+
+    Payload paket İÇERİĞİ taşımaz: `detail` zaten skaler-değerli kısa bir
+    sözlüktür (şekil kapısı yukarıda), buraya olduğu gibi geçer.
+    """
+    try:
+        await notifications.record_admin_event(
+            db,
+            kind=f"package_event.{event_type}",
+            payload={
+                "event_id": str(event_id),
+                "event_type": event_type,
+                "sector_id": str(sector_id) if sector_id else None,
+                "brand_id": str(brand_id) if brand_id else None,
+                "package_id": str(package_id) if package_id else None,
+                "detail": detail,
+            },
+            idempotency_key=f"package_event:{event_id}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "yönetici bildirimi yazılamadı (event_type=%s event_id=%s): %s",
+            event_type,
+            event_id,
+            exc,
+        )
