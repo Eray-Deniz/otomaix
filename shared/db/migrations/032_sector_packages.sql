@@ -340,10 +340,166 @@ BEGIN
             ('sectors_reject_reparenting',
              'CREATE TRIGGER sectors_reject_reparenting BEFORE UPDATE ON'
              ' social.sectors FOR EACH ROW EXECUTE FUNCTION'
-             ' social.reject_sector_reparenting()|enabled=O')
+             ' social.reject_sector_reparenting()|enabled=O'),
+
+            -- ---------------------------------------------------------------
+            -- TABLO + KOLON İMZASI + BİRİNCİL ANAHTAR (final review, 2026-08-25)
+            --
+            -- Aşağıdaki kısıt/indeks/tetikleyici kontrolleri tablonun sözleşmesinin
+            -- TAMAMI DEĞİLDİR. 034'te ÖLÇÜLDÜ: kolonu yanlış tipte, birincil
+            -- anahtarsız ve varsayılansız ama CHECK'leri ve indeksleri birebir
+            -- doğru olan sahte bir tablo migration'dan rc=0 ile geçiyordu; ayrıca
+            -- `UNLOGGED` bir tablo diğer bütün imzaları AYNEN üretir ve temiz
+            -- olmayan bir kapanışta TRUNCATE edilir (commit edilmiş satırlar yok
+            -- olur). Aynı boşluk 032'de de vardı — 034 sertleştirilirken burası
+            -- bilinçli olarak açık bırakılmıştı, final review yeniden buldu.
+            --
+            -- İmza attnum sırasındadır ve TAM eşleşmedir: eksik kolon da FAZLA
+            -- kolon da yakalanır.
+            -- ---------------------------------------------------------------
+            ('sector_research_artifacts tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+
+            ('sector_research_artifacts kolon imzası',
+             'id:uuid:nn:gen_random_uuid() && run_id:text:nn:- && sector_slug:text:nn:- && kind:text:nn:- && source:text:nn:- && brief_ref:text:null:- && content_md:text:nn:- && created_at:timestamp with time zone:null:now()'),
+
+            ('sector_research_artifacts PRIMARY KEY',
+             'p|PRIMARY KEY (id)|enforced=true validated=true'),
+            ('sector_packages tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+
+            ('sector_packages kolon imzası',
+             'id:uuid:nn:gen_random_uuid() && sector_id:uuid:nn:- && version:integer:nn:- && status:text:nn:- && schema_version:integer:nn:- && content:jsonb:nn:- && decision_log:jsonb:nn:''[]''::jsonb && run_id:text:null:- && created_at:timestamp with time zone:null:now() && activated_at:timestamp with time zone:null:-'),
+
+            ('sector_packages PRIMARY KEY',
+             'p|PRIMARY KEY (id)|enforced=true validated=true'),
+            ('generation_stamps tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+
+            ('generation_stamps kolon imzası',
+             'id:uuid:nn:gen_random_uuid() && brand_id:uuid:nn:- && package_id:uuid:nn:- && package_version:integer:nn:- && created_at:timestamp with time zone:null:now() && consumed_at:timestamp with time zone:null:-'),
+
+            ('generation_stamps PRIMARY KEY',
+             'p|PRIMARY KEY (id)|enforced=true validated=true')
     ),
     observed(label, got) AS (
         VALUES
+            ('sector_research_artifacts tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s'
+                            ' rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'sector_research_artifacts')),
+
+            ('sector_research_artifacts kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s',
+                                       a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull
+                                            THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid),
+                                                '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.sector_research_artifacts'::regclass
+                 AND a.attnum > 0
+                 AND NOT a.attisdropped)),
+
+            ('sector_research_artifacts PRIMARY KEY',
+             (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
+                                       k.contype, pg_get_constraintdef(k.oid),
+                                       CASE WHEN k.conenforced
+                                            THEN 'true' ELSE 'false' END,
+                                       CASE WHEN k.convalidated
+                                            THEN 'true' ELSE 'false' END),
+                                ' && ')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_research_artifacts'::regclass
+                 AND k.contype = 'p')),
+
+            ('sector_packages tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s'
+                            ' rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'sector_packages')),
+
+            ('sector_packages kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s',
+                                       a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull
+                                            THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid),
+                                                '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.sector_packages'::regclass
+                 AND a.attnum > 0
+                 AND NOT a.attisdropped)),
+
+            ('sector_packages PRIMARY KEY',
+             (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
+                                       k.contype, pg_get_constraintdef(k.oid),
+                                       CASE WHEN k.conenforced
+                                            THEN 'true' ELSE 'false' END,
+                                       CASE WHEN k.convalidated
+                                            THEN 'true' ELSE 'false' END),
+                                ' && ')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_packages'::regclass
+                 AND k.contype = 'p')),
+
+            ('generation_stamps tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s'
+                            ' rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'generation_stamps')),
+
+            ('generation_stamps kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s',
+                                       a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull
+                                            THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid),
+                                                '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.generation_stamps'::regclass
+                 AND a.attnum > 0
+                 AND NOT a.attisdropped)),
+
+            ('generation_stamps PRIMARY KEY',
+             (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
+                                       k.contype, pg_get_constraintdef(k.oid),
+                                       CASE WHEN k.conenforced
+                                            THEN 'true' ELSE 'false' END,
+                                       CASE WHEN k.convalidated
+                                            THEN 'true' ELSE 'false' END),
+                                ' && ')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.generation_stamps'::regclass
+                 AND k.contype = 'p')),
             ('uq_sector_packages_single_active',
              (SELECT format(
                          'unique=%s cols=%s pred=%s valid=%s ready=%s live=%s',

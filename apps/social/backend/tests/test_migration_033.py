@@ -231,3 +231,77 @@ def test_non_partial_index_is_caught():
         f"predicate kaybı sessizce kabul edildi — stdout:\n{result.stdout}"
     )
     assert FAILURE_MARKER in result.stderr, result.stderr
+
+
+# ─── Tablo/kolon imzası tuzakları (final review, 2026-08-25) ────────────────
+
+
+def _events_decoy(
+    *,
+    detail_type: str = "JSONB",
+    id_extra: str = "PRIMARY KEY DEFAULT gen_random_uuid()",
+    persistence: str = "",
+    suffix: str = "",
+) -> str:
+    """Aynı ADDA, kısıtları ve indeksleri DOĞRU ama imzası bozuk sahte tablo.
+
+    `CREATE TABLE IF NOT EXISTS` bu tabloyu DEĞİŞTİRMEZ; garanti bloğu onu
+    yakalamazsa migration rc=0 ile geçer ve yanlış tanımlı tablo canlıda kalır.
+    """
+    return f"""
+        DROP TABLE IF EXISTS social.package_events CASCADE;
+        CREATE {persistence} TABLE social.package_events (
+            id UUID {id_extra},
+            event_type TEXT NOT NULL,
+            sector_id UUID,
+            brand_id UUID,
+            package_id UUID,
+            from_version INT,
+            to_version INT,
+            actor TEXT,
+            detail {detail_type},
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        {suffix}
+    """
+
+
+def test_events_wrong_detail_type_is_caught():
+    """`detail` JSONB değilse migration DURur — kolon imzası kapısı."""
+    result = _reapply_033(_events_decoy(detail_type="TEXT"))
+    assert result.returncode != 0, f"yanlış tipli detail geçti:\n{result.stdout}"
+    assert FAILURE_MARKER in result.stderr, result.stderr
+    assert "package_events kolon imzası" in result.stderr
+
+
+def test_events_missing_primary_key_is_caught():
+    """`id` birincil anahtar değilse migration DURur."""
+    result = _reapply_033(_events_decoy(id_extra="DEFAULT gen_random_uuid()"))
+    assert result.returncode != 0, f"PK'sız tablo geçti:\n{result.stdout}"
+    assert FAILURE_MARKER in result.stderr, result.stderr
+    assert "package_events PRIMARY KEY" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "persistence, suffix, label",
+    [
+        ("UNLOGGED", "", "UNLOGGED tablo"),
+        (
+            "",
+            "ALTER TABLE social.package_events ENABLE ROW LEVEL SECURITY;",
+            "satır güvenliği açık tablo",
+        ),
+    ],
+)
+def test_events_table_property_corruption_is_caught(persistence, suffix, label):
+    """Tablonun KENDİ özellikleri de sözleşmenin parçası.
+
+    İkisi de kolon imzasını, kısıtları ve indeksleri BİREBİR aynı üretir.
+    `UNLOGGED` bir olay tablosu temiz olmayan kapanışta TRUNCATE edilir — yaşam
+    döngüsü geçmişi (kim, ne zaman, hangi sürüm) yok olur; RLS ise satırları
+    yazdırır ama okutmaz, yani denetim izi sessizce görünmez olur.
+    """
+    result = _reapply_033(_events_decoy(persistence=persistence, suffix=suffix))
+    assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
+    assert FAILURE_MARKER in result.stderr, result.stderr
+    assert "package_events tablo imzası" in result.stderr

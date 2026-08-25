@@ -179,9 +179,38 @@ def psql_argv(url: str) -> tuple[list[str], dict[str, str]]:
     return argv, env
 
 
-def _run_psql(url: str, *, sql: str | None = None, file: Path | None = None) -> None:
-    """psql'i çalıştırır; sıfır-dışı çıkışta istisna fırlatır."""
+# Dış transaction'a SARILMAYAN migration'lar — iki gerekçe, ikisi de dosyanın
+# kendi içeriğinden gelir:
+#   * `CREATE INDEX CONCURRENTLY` içerenler transaction bloğunda KOŞAMAZ (011).
+#   * Kendi `BEGIN/COMMIT`ini taşıyanlar zaten atomiktir; sarmak garantiyi
+#     ZAYIFLATIR — içteki COMMIT dıştakini erken kapatır (017, ölçüldü).
+# Liste dağıtım runner'ındaki (`run-migrations.sh`) `SELF_MANAGED_TX` ile AYNI
+# olmalıdır: tek gerçek, iki okuyucu. Uyum
+# `test_migration_032_rollback.py::test_single_transaction_exemption_is_exact`
+# ile iki yönlü ölçülür.
+NON_TRANSACTIONAL_MIGRATIONS = frozenset(
+    {"011_performance_indexes.sql", "017_trend_cache_unique.sql"}
+)
+
+
+def _run_psql(
+    url: str,
+    *,
+    sql: str | None = None,
+    file: Path | None = None,
+    single_transaction: bool = False,
+) -> None:
+    """psql'i çalıştırır; sıfır-dışı çıkışta istisna fırlatır.
+
+    `single_transaction`, dağıtım runner'ının migration uygularken kullandığı
+    anlambilimin AYNISIDIR: dosya tek transaction'da koşar, doğrulama bloğu
+    reddederse daha önce uyguladığı DDL de geri alınır. Testlerin üretimden
+    FARKLI bir anlambilimle koşması, üretimde var olmayan bir garantiyi
+    varmış gibi gösterirdi.
+    """
     argv, env = psql_argv(url)
+    if single_transaction:
+        argv += ["--single-transaction"]
     argv += ["-c", sql] if sql is not None else ["-f", str(file)]
 
     result = subprocess.run(argv, env=env, capture_output=True, text=True)
@@ -195,7 +224,11 @@ def _apply_migrations(url: str) -> None:
     _run_psql(url, sql="CREATE SCHEMA IF NOT EXISTS social")
     _run_psql(url, sql="CREATE EXTENSION IF NOT EXISTS vector")
     for migration in _migration_files():
-        _run_psql(url, file=migration)
+        _run_psql(
+            url,
+            file=migration,
+            single_transaction=migration.name not in NON_TRANSACTIONAL_MIGRATIONS,
+        )
 
 
 def _recreate_database(url: str) -> None:

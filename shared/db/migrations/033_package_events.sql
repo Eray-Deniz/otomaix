@@ -129,10 +129,68 @@ BEGIN
             ('idx_package_events_sector_created',
              'CREATE INDEX idx_package_events_sector_created ON'
              ' social.package_events USING btree (sector_id, created_at DESC)'
-             ' WHERE (sector_id IS NOT NULL)|valid=true ready=true live=true')
+             ' WHERE (sector_id IS NOT NULL)|valid=true ready=true live=true'),
+
+            -- ---------------------------------------------------------------
+            -- TABLO + KOLON İMZASI + BİRİNCİL ANAHTAR (final review, 2026-08-25)
+            --
+            -- Yukarıdaki CHECK/indeks kontrolleri tablonun sözleşmesinin TAMAMI
+            -- DEĞİLDİR. 034'te ÖLÇÜLDÜ: kolonu yanlış tipte ve birincil anahtarsız
+            -- ama CHECK'leri ve indeksleri birebir doğru sahte bir tablo rc=0 ile
+            -- geçiyordu; `UNLOGGED` bir tablo da diğer bütün imzaları AYNEN
+            -- üretir ve temiz olmayan bir kapanışta TRUNCATE edilir — olay
+            -- geçmişi (kim, ne zaman, hangi sürüm) sessizce yok olurdu.
+            -- İmza attnum sırasındadır ve TAM eşleşmedir.
+            -- ---------------------------------------------------------------
+            ('package_events tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+
+            ('package_events kolon imzası',
+             'id:uuid:nn:gen_random_uuid() && event_type:text:nn:- && sector_id:uuid:null:- && brand_id:uuid:null:- && package_id:uuid:null:- && from_version:integer:null:- && to_version:integer:null:- && actor:text:null:- && detail:jsonb:null:- && created_at:timestamp with time zone:nn:now()'),
+
+            ('package_events PRIMARY KEY',
+             'p|PRIMARY KEY (id)|enforced=true validated=true')
     ),
     observed(label, got) AS (
         VALUES
+            ('package_events tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s'
+                            ' rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'package_events')),
+
+            ('package_events kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s',
+                                       a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull
+                                            THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid),
+                                                '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.package_events'::regclass
+                 AND a.attnum > 0
+                 AND NOT a.attisdropped)),
+
+            ('package_events PRIMARY KEY',
+             (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
+                                       k.contype, pg_get_constraintdef(k.oid),
+                                       CASE WHEN k.conenforced
+                                            THEN 'true' ELSE 'false' END,
+                                       CASE WHEN k.convalidated
+                                            THEN 'true' ELSE 'false' END),
+                                ' && ')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.package_events'::regclass
+                 AND k.contype = 'p')),
             ('package_events.event_type CHECK',
              (SELECT string_agg(format('%s|%s', k.contype,
                                        pg_get_constraintdef(k.oid)),

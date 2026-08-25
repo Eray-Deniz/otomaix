@@ -23,7 +23,7 @@ kopyalanıp çalıştırılabilir; sır (bağlantı dizesi) belgeye GİRMEZ, aya
 
 | İddia | Komut (birebir koşulabilir) | Çıktı |
 |---|---|---|
-| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `551 passed` |
+| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `564 passed` |
 | Katman-1 byte-exact kapısı yeşil | `cd apps/social/backend && .venv/bin/python -m pytest tests/prompt_regression/ -q` | `121 passed` |
 | Marka → kök sektör sweep'i temiz | aşağıdaki iki adım | `differences: 0` (rc=0), hedef doğrulandı |
 
@@ -249,8 +249,11 @@ bittikten sonra** koşulacak. Bu kapanış raporu bu yüzden arayüz yüzeyleri 
 
 Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin kendisidir.
 
-1. **Migration'ları canlıya uygula:** 032 · 033 · 034, psql ile ve
-   `-v ON_ERROR_STOP=1` bayrağıyla, numara sırasıyla.
+1. **Migration'ları canlıya uygula:** 032 · 033 · 034, numara sırasıyla.
+   Tercih edilen yol dağıtım runner'ıdır (`shared/local-deployment/migrations/run-migrations.sh`):
+   her dosyayı `-v ON_ERROR_STOP=1` VE `--single-transaction` ile uygular, yani reddeden bir
+   doğrulama yarım şema bırakmaz. Elle `psql` çağrılıyorsa İKİ bayrak da verilmelidir —
+   yalnız `ON_ERROR_STOP=1` atomiklik SAĞLAMAZ (ölçüldü).
 2. **`N8N_ADMIN_EVENT_SECRET` canlıya kurulmalı.** Ayrıca
    `apps/social/backend/.env.example` dosyasına bu satır **ELLE** eklenmeli — sır-dosyası
    yazma kapısı agent'ı engelliyor, bu yüzden depoda örnek satır YOK.
@@ -272,10 +275,32 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
   `IS JSON OBJECT` ve `conenforced` yalnız PostgreSQL 18.3'te ÖLÇÜLDÜ; PG16'daki varlıkları
   BELGEYE dayanıyor, ölçüme değil.
 - **033 ve 034 için geri alma script'i YOK** — plan istemedi, uydurulmadı.
-- **Migration 032/033'ün garanti blokları** kolon/tablo imzasını denetlemiyor (yalnız kısıt
-  ve indeks). 034'te kapatıldı; 032/033 önceden var olan borçtur. Ev: `CURRENT.md` →
-  `migration-guarantee-block-signature-gap`. Tetik: canlıya elle şema müdahalesi veya bu
-  tablolarda şema değişikliği.
+- ~~Başarısız migration yarım şema bırakır~~ → **KAPATILDI (2026-08-25, final review F-H2).**
+  `ON_ERROR_STOP=1` yalnız AKIŞI durduruyordu, YAPILANI geri almıyordu; ölçüldü — reddeden
+  bir doğrulama bloğundan önceki DDL commit edilmiş kalıyordu. Dağıtım runner'ı artık her
+  dosyayı `--single-transaction` ile uyguluyor ve test altyapısı AYNI anlambilimi kullanıyor
+  (üretimde olmayan bir garantiyi testte varmış gibi göstermemek için).
+  **İki dosya muaf ve ikisinin de gerekçesi ölçülü:** 011 `CREATE INDEX CONCURRENTLY`
+  içerir (transaction bloğunda koşamaz; atomik DEĞİL, yeniden koşum tamamlar), 017 kendi
+  `BEGIN/COMMIT`ini taşır (sarmak garantiyi ZAYIFLATIRDI — içteki COMMIT dıştakini erken
+  kapatıyor, ölçüldü). Muafiyet listesi gerçekle iki yönlü test edilir.
+- **[accepted_risk — final review, orta]** `record_admin_event` aynı idempotency anahtarıyla
+  gelen FARKLI bir olayı sessizce yutar: mevcut satırın kimliğini döner, `kind`/`payload`
+  karşılaştırmaz. Bu BİLİNÇLİ bir karardır ("outbox bir denetim kaydıdır, sonradan gelen bir
+  çağrı gerçekliği yeniden yazamaz") ve testle pinlidir. Değiştirmek bir tasarım kararıdır,
+  düzeltme değil. Bugünkü çağıran anahtarı UUID'den türetiyor, yani çakışma yolu dar.
+- **[accepted_risk — final review, orta]** `resolve_package_context` marka sözlüğünde
+  `sub_sector_id` anahtarının YOKLUĞUNU, açık `NULL` ile aynı sayar: eksik projeksiyon sessizce
+  "paketsiz" dalına düşer ve beklenen `package_read_error` olayı yazılmaz. Bugün tüm çağıranlar
+  alanı taşıyor; ayırt etmek tip sözleşmesi işidir ve çözümleyicinin bloklamama kuralıyla
+  birlikte tasarlanmalı.
+- ~~Migration 032/033'ün garanti blokları kolon/tablo imzasını denetlemiyor~~ →
+  **KAPATILDI (2026-08-25, final review F1).** 034'ün deseni 032 ve 033'e taşındı: dört
+  tablonun (`sector_research_artifacts` · `sector_packages` · `generation_stamps` ·
+  `package_events`) tablo imzası + attnum sıralı kolon imzası + birincil anahtarı
+  doğrulanıyor. Tuzak testleriyle ölçüldü (yanlış tip · PK'sız · UNLOGGED · satır
+  güvenliği açık); kapılar kaldırılınca aynı tuzaklar GEÇİYOR — yani testler yeni
+  kapıları ölçüyor, öncekileri değil.
 - **`sector_packages.sector_id` değişmez değil** — yaşam döngüsü geçişleri uyuşmazlıkta
   fail-closed durur, ama kolonu değişmez kılan migration yazılmadı. Ölçüldü: depoda bu
   kolonu güncelleyen üretim yolu YOK. Ev: `CURRENT.md` →
@@ -309,7 +334,7 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
 
 ## 8. Kapanış cümlesi
 
-Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (551 arka uç testi · 121
+Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (564 arka uç testi · 121
 byte-exact fixture · canlı sweep farkı 0). **Arayüz yüzeyleri ve canlı ortam adımları
 DOĞRULANMADI** — ertelendi, evi ve tetiği §5-6'da yazılı. Bu rapor "sistem çalışıyor"
 demez; "şu kapılar şu komutlarla ölçüldü ve şunlar ölçülmedi" der.

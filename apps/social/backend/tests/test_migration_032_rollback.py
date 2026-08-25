@@ -25,8 +25,10 @@ ON_ERROR_STOP bayrağı) ölçülür, taklit edilmez.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -598,3 +600,200 @@ def test_runner_stops_on_sql_error(tmp_path, scratch_db_empty):
     assert "031_zz_injected_bad.sql" in applied
     assert "032_sector_packages.sql" not in applied, "zincir hatadan sonra devam etti"
     assert not _table_exists(scratch_db_empty, "sector_packages"), "kısmi 032 nesnesi var"
+
+# ─── Dağıtım atomikliği (final review F-H2) ─────────────────────────────────
+
+
+def test_single_transaction_exemption_is_exact():
+    """Muafiyet listesi ile GERÇEK iki yönlü uyumlu: liste ne eksik ne fazla.
+
+    Muafiyetin İKİ meşru gerekçesi var ve ikisi de dosyanın kendi içeriğinden
+    okunur:
+      * `CREATE INDEX CONCURRENTLY` — transaction bloğunda KOŞAMAZ (011).
+      * Kendi `BEGIN/COMMIT`i — dosya zaten atomiktir (017). ÖLÇÜLDÜ: böyle bir
+        dosyayı `--single-transaction` ile sarmak garantiyi ZAYIFLATIR, çünkü
+        içteki COMMIT dıştaki transaction'ı erken kapatır ve sonrasındaki DDL
+        hata durumunda bile kalır.
+
+    Kontrat POZİTİF ve İKİ YÖNLÜDÜR: muaf olan dosyanın gerekçelerden BİRİ
+    olmalı, muaf OLMAYAN hiçbirinde İKİSİ DE olmamalı. Tek yön yeterli olmazdı —
+    yalnız birincisi listeye keyfî dosya eklenmesine, yalnız ikincisi
+    CONCURRENTLY ekleyen yeni bir migration'ın listeye yazılmadan kalmasına
+    izin verirdi. İkincisi üretimde "cannot run inside a transaction block" ile
+    PATLARDI.
+    """
+    concurrently, self_tx = set(), set()
+    for path in infra._migration_files():
+        body = path.read_text(encoding="utf-8")
+        if re.search(r"\bCONCURRENTLY\b", body):
+            concurrently.add(path.name)
+        if re.search(r"(?mi)^\s*(BEGIN|COMMIT)\s*;", body):
+            self_tx.add(path.name)
+
+    exempt = set(infra.NON_TRANSACTIONAL_MIGRATIONS)
+    assert concurrently | self_tx == exempt, (
+        "muafiyet listesi gerçekle uyuşmuyor\n"
+        f"CONCURRENTLY içeren: {sorted(concurrently)}\n"
+        f"kendi transaction'ı olan: {sorted(self_tx)}\n"
+        f"muaf listelenen: {sorted(exempt)}"
+    )
+    for name in exempt:
+        assert name in concurrently or name in self_tx, (
+            f"{name} gerekçesiz muaf — listede ama iki sebepten hiçbirini taşımıyor"
+        )
+
+    # Dağıtım runner'ı ile test altyapısı AYNI listeyi taşımalı (tek gerçek).
+    runner = (
+        infra.REPO_ROOT / "shared" / "local-deployment" / "migrations"
+        / "run-migrations.sh"
+    ).read_text(encoding="utf-8")
+    for name in exempt:
+        assert f'"{name}"' in runner, (
+            f"{name} test altyapısında muaf ama runner'da değil — iki okuyucu ıraksadı"
+        )
+
+
+def test_self_transactional_file_is_not_double_wrapped(scratch_db_empty):
+    """Kendi COMMIT'ini taşıyan dosyayı sarmak garantiyi ZAYIFLATIR — ölçülür.
+
+    Bu, muafiyetin ikinci gerekçesinin gerçekliğidir: `--single-transaction`
+    altında içteki COMMIT dıştaki transaction'ı ERKEN kapatır, ve o noktadan
+    sonrası hata durumunda bile geri alınmaz. Yani sarmak, korumadığı gibi
+    koruduğu izlenimi verir.
+    """
+    argv, env = infra.psql_argv(scratch_db_empty)
+    with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as handle:
+        handle.write(
+            "CREATE SCHEMA IF NOT EXISTS probe;\n"
+            "BEGIN;\nCREATE TABLE probe.inner_tx (id INT);\nCOMMIT;\n"
+            "CREATE TABLE probe.after_commit (id INT);\n"
+            "DO $v$ BEGIN RAISE EXCEPTION 'red (kurgu)'; END $v$;\n"
+        )
+        script_path = handle.name
+
+    def _exists(name: str) -> str:
+        result = subprocess.run(
+            argv + ["--tuples-only", "--no-align", "-c",
+                    f"SELECT to_regclass('probe.{name}') IS NOT NULL"],
+            env=env, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        return result.stdout.strip()
+
+    try:
+        result = subprocess.run(
+            argv + ["--single-transaction", "-f", script_path],
+            env=env, capture_output=True, text=True,
+        )
+        assert result.returncode != 0
+        assert _exists("inner_tx") == "t" and _exists("after_commit") == "t", (
+            "içteki COMMIT dıştaki transaction'ı kapatmadı — muafiyetin ikinci "
+            "gerekçesi bu sürümde geçerli DEĞİL, liste gözden geçirilmeli"
+        )
+    finally:
+        os.unlink(script_path)
+
+
+def test_failed_migration_leaves_no_partial_ddl(scratch_db_empty):
+    """Doğrulama bloğu reddettiğinde ÖNCEKİ DDL de geri alınır.
+
+    Bu testin ölçtüğü şey ÜRETİM anlambilimidir: dosya `--single-transaction`
+    ile koşar. Ölçüldü (2026-08-25) — bayraksız koşumda `ON_ERROR_STOP=1` yalnız
+    AKIŞI durduruyor, doğrulama hatasından ÖNCE yaratılmış tablo commit edilmiş
+    kalıyordu; yani başarısız bir dağıtım yarım değişmiş bir şema bırakırdı.
+
+    Neden sahte bir dosya: gerçek 032'yi düşürmek için önce 001-031'i uygulamak
+    gerekir ve ölçülen şey migration'ın İÇERİĞİ değil, ÇALIŞTIRMA anlambilimidir.
+    Sahte dosya gerçek desenle aynı sırayı taşır: önce DDL, sonra reddeden
+    doğrulama bloğu.
+    """
+    argv, env = infra.psql_argv(scratch_db_empty)
+
+    with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as handle:
+        handle.write(
+            "CREATE SCHEMA IF NOT EXISTS probe;\n"
+            "CREATE TABLE probe.before_verify (id INT);\n"
+            "DO $v$ BEGIN RAISE EXCEPTION 'dogrulama reddetti (kurgu)'; END $v$;\n"
+        )
+        script_path = handle.name
+
+    def _exists() -> str:
+        result = subprocess.run(
+            argv + ["--tuples-only", "--no-align", "-c",
+                    "SELECT to_regclass('probe.before_verify') IS NOT NULL"],
+            env=env, capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        return result.stdout.strip()
+
+    try:
+        applied = subprocess.run(
+            argv + ["--single-transaction", "-f", script_path],
+            env=env, capture_output=True, text=True,
+        )
+        assert applied.returncode != 0, "reddeden migration sıfır çıkış verdi"
+        assert _exists() == "f", (
+            "doğrulama öncesi DDL commit edilmiş kaldı — dağıtım ATOMİK DEĞİL"
+        )
+
+        # Pozitif kontrol: bayrak OLMADAN aynı dosya kalıntı bırakır. Bu satır,
+        # yukarıdaki iddianın bayraktan geldiğini kanıtlar (yoksa test, hiçbir
+        # şey ölçmeden yeşil kalabilirdi).
+        bare = subprocess.run(
+            argv + ["-f", script_path], env=env, capture_output=True, text=True
+        )
+        assert bare.returncode != 0
+        assert _exists() == "t", (
+            "bayraksız koşum da temiz çıktı — bu test bayrağın etkisini ÖLÇMÜYOR"
+        )
+    finally:
+        os.unlink(script_path)
+
+
+@pytest.mark.parametrize("kind", ["symlink", "dangling-symlink"])
+def test_runner_rejects_symlinked_migrations(tmp_path, scratch_db_empty, kind):
+    """Symlink migration VERİTABANINA DOKUNMADAN reddedilir.
+
+    Dosya adı, uygulanacak baytların kimliği yerine geçemez: `-f` symlink'i
+    İZLER, yani kanonik dizindeki numaralı bir symlink baytları bu ağacın
+    DIŞINDA duran (ve orada değişebilen) bir dosyadan alıp canlıya uygulatırdı.
+    Kapı ilk `psql` çağrısından ÖNCE koşmalı — yoksa red, şema zaten değişmişken
+    gelir.
+
+    Tekrarlı NUMARA burada bilerek test EDİLMEZ: eşit numarada dosya adına
+    düşmek bu deponun BELGELİ davranışıdır (runner ve test keşfi aynı `(int, ad)`
+    sırasını paylaşır) ve `test_runner_stops_on_sql_error` ona dayanır.
+    """
+    tree = tmp_path / "repo"
+    canonical = tree / "shared" / "db" / "migrations"
+    deploy = tree / "shared" / "local-deployment"
+    (deploy / "migrations").mkdir(parents=True)
+    canonical.mkdir(parents=True)
+    for path in infra._migration_files():
+        shutil.copy2(path, canonical / path.name)
+    shutil.copy2(RUNNER, deploy / "migrations" / RUNNER.name)
+    shutil.copy2(COMPOSE_FILE, deploy / "docker-compose.yml")
+
+    if kind == "symlink":
+        outside = tmp_path / "outside.sql"
+        outside.write_text("SELECT 1;\n", encoding="utf-8")
+        (canonical / "900_outside.sql").symlink_to(outside)
+    else:
+        (canonical / "901_dangling.sql").symlink_to(tmp_path / "yok.sql")
+
+    env, log = _shim_env(tmp_path, scratch_db_empty)
+    result = subprocess.run(
+        ["bash", str(deploy / "migrations" / RUNNER.name)],
+        cwd=str(tree),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0, (
+        f"{kind} sessizce kabul edildi:\n{result.stdout}\n{result.stderr}"
+    )
+    calls = [line for line in log.read_text().splitlines() if line.strip()]
+    assert not calls, (
+        f"{kind} reddedilmeden ÖNCE veritabanına dokunuldu: {calls[:3]}"
+    )

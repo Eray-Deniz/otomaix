@@ -953,3 +953,84 @@ def test_migration_raises_when_fk_triggers_disabled(test_db_setup):
     assert _generation_stamps_fk_triggers_enabled() == "4", (
         "ROLLBACK sonrası FK tetikleyicileri etkin durumuna dönmedi"
     )
+
+
+# ─── Tablo/kolon imzası tuzakları (final review, 2026-08-25) ────────────────
+
+FAILURE_MARKER_032 = "migration 032 garanti dogrulamasi BASARISIZ"
+
+
+def _artifacts_decoy(
+    *,
+    content_type: str = "TEXT",
+    id_extra: str = "PRIMARY KEY DEFAULT gen_random_uuid()",
+    persistence: str = "",
+    suffix: str = "",
+) -> str:
+    """Aynı ADDA, CHECK'i ve indeksi DOĞRU ama imzası bozuk sahte tablo.
+
+    `sector_research_artifacts` seçildi çünkü ona gelen yabancı anahtar YOKTUR;
+    tuzak kurulumu başka tabloları düşürmeden yapılabilir.
+    """
+    return f"""
+        DROP TABLE IF EXISTS social.sector_research_artifacts CASCADE;
+        CREATE {persistence} TABLE social.sector_research_artifacts (
+            id UUID {id_extra},
+            run_id TEXT NOT NULL,
+            sector_slug TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK (kind IN ('research', 'review', 'synthesis')),
+            source TEXT NOT NULL,
+            brief_ref TEXT,
+            content_md {content_type} NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT now()
+        );
+        CREATE INDEX idx_sector_research_artifacts_slug_run
+            ON social.sector_research_artifacts (sector_slug, run_id);
+        {suffix}
+    """
+
+
+def test_artifacts_wrong_content_type_is_caught():
+    """`content_md` TEXT değilse migration DURur — kolon imzası kapısı.
+
+    Ham kanıt katmanı Plan 2'nin YAZDIĞI yüzeydir; yanlış tipli bir kolon
+    ya yazımı düşürür ya sessizce dönüştürür.
+    """
+    result = _reapply_032(_artifacts_decoy(content_type="JSONB"))
+    assert result.returncode != 0, f"yanlış tipli content_md geçti:\n{result.stdout}"
+    assert FAILURE_MARKER_032 in result.stderr, result.stderr
+    assert "sector_research_artifacts kolon imzası" in result.stderr
+
+
+def test_artifacts_missing_primary_key_is_caught():
+    """`id` birincil anahtar değilse migration DURur."""
+    result = _reapply_032(_artifacts_decoy(id_extra="DEFAULT gen_random_uuid()"))
+    assert result.returncode != 0, f"PK'sız tablo geçti:\n{result.stdout}"
+    assert FAILURE_MARKER_032 in result.stderr, result.stderr
+    assert "sector_research_artifacts PRIMARY KEY" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "persistence, suffix, label",
+    [
+        ("UNLOGGED", "", "UNLOGGED tablo"),
+        (
+            "",
+            "ALTER TABLE social.sector_research_artifacts "
+            "ENABLE ROW LEVEL SECURITY;",
+            "satır güvenliği açık tablo",
+        ),
+    ],
+)
+def test_artifacts_table_property_corruption_is_caught(persistence, suffix, label):
+    """Salt-ekleme kanıt katmanının dayanıklılığı da sözleşmenin parçası.
+
+    `UNLOGGED` bir kanıt tablosu temiz olmayan kapanışta TRUNCATE edilir — yani
+    "ham kanıt asla silinmez" vaadi (salt-ekleme tetikleyicisi) ayakta kalırken
+    verinin kendisi yok olur. İkisi de kolon imzasını, CHECK'i ve indeksi
+    BİREBİR aynı üretir; imza doğrulaması onları göremezdi.
+    """
+    result = _reapply_032(_artifacts_decoy(persistence=persistence, suffix=suffix))
+    assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
+    assert FAILURE_MARKER_032 in result.stderr, result.stderr
+    assert "sector_research_artifacts tablo imzası" in result.stderr
