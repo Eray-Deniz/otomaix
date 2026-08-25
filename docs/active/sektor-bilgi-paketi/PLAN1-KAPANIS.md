@@ -23,7 +23,7 @@ kopyalanıp çalıştırılabilir; sır (bağlantı dizesi) belgeye GİRMEZ, aya
 
 | İddia | Komut (birebir koşulabilir) | Çıktı |
 |---|---|---|
-| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `571 passed` |
+| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `574 passed` |
 | Katman-1 byte-exact kapısı yeşil | `cd apps/social/backend && .venv/bin/python -m pytest tests/prompt_regression/ -q` | `121 passed` |
 | Marka → kök sektör sweep'i temiz | aşağıdaki iki adım | `differences: 0` (rc=0), hedef doğrulandı |
 
@@ -321,7 +321,12 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
   başarılı biterken indeks kullanılamaz kalıyor, planlayıcı onu kullanmıyor ve hiçbir hata
   görünmüyordu. 011 artık beklenen indekslerin varlığını VE uygulanır olduğunu denetliyor;
   onarımı OTOMATİK yapmıyor (üretimde indeks düşürmek bilinçli karardır), ne yapılacağını
-  söyleyip DURUYOR. Testle ölçüldü.
+  söyleyip DURUYOR. Testle ölçüldü. **Üçüncü turda genişletildi:** ilk yazdığım blok indeksi
+  ADA göre eşliyordu; aynı adda ama başka tabloya/kolona kurulmuş GEÇERLİ bir indeks geçerdi
+  (`IF NOT EXISTS` o adı görüp DDL'i atlar, migration "başarılı" der, beklenen indeks hiç var
+  olmaz; benzersiz bir taklit ayrıca meşru yazımları reddeder). Kimlik artık TAM TANIMDIR —
+  032/033'ün indeks manifestlerinde de öyle. Üç taklitle ölçüldü (yanlış kolon · benzersiz
+  taklit · başka tablo); üçü de `indisvalid=true` olduğu için geçerlilik kontrolüne takılmıyordu.
 - ~~Migration dizininin symlink OLMASI~~ → **KAPATILDI.** Dosya adına bakan kapı bunu
   göremiyordu: `shared/db` symlink olduğunda her çocuk düz dosya görünür. Runner ve test
   altyapısı artık dizin zincirini FİZİKSEL yolla karşılaştırıyor; depo dışına çıkan yol
@@ -359,7 +364,7 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
 
 ## 8. Kapanış cümlesi
 
-Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (571 arka uç testi · 121
+Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (574 arka uç testi · 121
 byte-exact fixture · canlı sweep farkı 0). **Arayüz yüzeyleri ve canlı ortam adımları
 DOĞRULANMADI** — ertelendi, evi ve tetiği §5-6'da yazılı. Bu rapor "sistem çalışıyor"
 demez; "şu kapılar şu komutlarla ölçüldü ve şunlar ölçülmedi" der.

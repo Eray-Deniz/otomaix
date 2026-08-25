@@ -46,63 +46,61 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_trend_cache_fetched
 
 DO $verify011$
 DECLARE
-    broken TEXT;
-    missing TEXT;
+    failures TEXT;
 BEGIN
-    WITH expected(name) AS (
-        VALUES ('idx_posts_brand_created'),
-               ('idx_posts_brand_scheduled'),
-               ('idx_posts_brand_published'),
-               ('idx_trend_cache_fetched')
+    -- Kimlik ADA değil TAM TANIMA bağlıdır. Ölçüldü (final review tur 3): ada
+    -- göre eşleyen bir kontrol, aynı ADDA ama BAŞKA TABLOYA / başka kolona /
+    -- başka predicate'e kurulmuş GEÇERLİ bir indeksi kabul eder. O durumda
+    -- `CREATE INDEX CONCURRENTLY IF NOT EXISTS` adı görüp DDL'i ATLAR ve
+    -- migration "başarılı" der; beklenen indeks hiç var olmaz. Benzersiz bir
+    -- taklit ayrıca meşru yazımları REDDEDER.
+    WITH expected(name, want) AS (
+        VALUES
+            ('idx_posts_brand_created',
+             'CREATE INDEX idx_posts_brand_created ON social.posts'
+             ' USING btree (brand_id, created_at DESC)|f|live'),
+            ('idx_posts_brand_scheduled',
+             'CREATE INDEX idx_posts_brand_scheduled ON social.posts'
+             ' USING btree (brand_id, scheduled_at)'
+             ' WHERE (scheduled_at IS NOT NULL)|f|live'),
+            ('idx_posts_brand_published',
+             'CREATE INDEX idx_posts_brand_published ON social.posts'
+             ' USING btree (brand_id, published_at DESC)'
+             ' WHERE (published_at IS NOT NULL)|f|live'),
+            ('idx_trend_cache_fetched',
+             'CREATE INDEX idx_trend_cache_fetched ON social.trend_cache'
+             ' USING btree (fetched_at DESC)|f|live')
     ),
-    actual AS (
-        SELECT c.relname AS name,
-               i.indisvalid AND i.indisready AND i.indislive AS usable
+    observed(name, got) AS (
+        SELECT c.relname,
+               format('%s|%s|%s',
+                      pg_get_indexdef(i.indexrelid),
+                      i.indisunique,
+                      CASE WHEN i.indisvalid AND i.indisready AND i.indislive
+                           THEN 'live' ELSE 'BROKEN' END)
           FROM pg_index i
           JOIN pg_class c ON c.oid = i.indexrelid
           JOIN pg_namespace n ON n.oid = c.relnamespace
          WHERE n.nspname = 'social'
     )
-    SELECT string_agg(e.name, ', ' ORDER BY e.name)
-      INTO missing
+    SELECT string_agg(
+               format('%s -> beklenen [%s] · gorulen [%s]',
+                      e.name, e.want, coalesce(o.got, '<indeks yok>')),
+               E'\n  - ' ORDER BY e.name)
+      INTO failures
       FROM expected e
-      LEFT JOIN actual a ON a.name = e.name
-     WHERE a.name IS NULL;
+      LEFT JOIN observed o ON o.name = e.name
+     WHERE o.got IS DISTINCT FROM e.want;
 
-    WITH expected(name) AS (
-        VALUES ('idx_posts_brand_created'),
-               ('idx_posts_brand_scheduled'),
-               ('idx_posts_brand_published'),
-               ('idx_trend_cache_fetched')
-    ),
-    actual AS (
-        SELECT c.relname AS name,
-               i.indisvalid AND i.indisready AND i.indislive AS usable
-          FROM pg_index i
-          JOIN pg_class c ON c.oid = i.indexrelid
-          JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'social'
-    )
-    SELECT string_agg(e.name, ', ' ORDER BY e.name)
-      INTO broken
-      FROM expected e
-      JOIN actual a ON a.name = e.name
-     WHERE NOT a.usable;
-
-    IF missing IS NOT NULL THEN
-        RAISE EXCEPTION 'migration 011 dogrulamasi BASARISIZ: eksik indeks: %',
-            missing
-            USING ERRCODE = 'integrity_constraint_violation';
-    END IF;
-
-    IF broken IS NOT NULL THEN
-        RAISE EXCEPTION 'migration 011 dogrulamasi BASARISIZ: GECERSIZ indeks: %',
-            broken
+    IF failures IS NOT NULL THEN
+        RAISE EXCEPTION 'migration 011 dogrulamasi BASARISIZ:%',
+            E'\n  - ' || failures
             USING ERRCODE = 'integrity_constraint_violation',
-                  HINT = 'Yarim kalmis CONCURRENTLY kurulumunun kalintisi. '
-                         'IF NOT EXISTS bu adi gorup DDL i ATLAR, yani yeniden '
-                         'kosum onu ONARMAZ. Elle: DROP INDEX CONCURRENTLY '
-                         '<ad>; sonra migration i tekrar uygulayin.';
+                  HINT = 'Ayni ADDA yanlis tanimli ya da yarim kalmis (invalid) '
+                         'bir indeks var. CONCURRENTLY + IF NOT EXISTS o adi '
+                         'gorup DDL i ATLAR, yani yeniden kosum ONARMAZ. Elle: '
+                         'DROP INDEX CONCURRENTLY <ad>; sonra migration i '
+                         'tekrar uygulayin.';
     END IF;
 END
 $verify011$;

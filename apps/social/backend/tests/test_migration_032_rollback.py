@@ -835,8 +835,10 @@ def test_migration_011_rejects_invalid_index_residue(scratch_db_migrated):
         "geçersiz indeks kalıntısı sessizce geçti — yeniden koşum onarmıyor "
         f"ama başarı raporluyor:\n{result.stdout}"
     )
-    assert "GECERSIZ indeks" in result.stderr, result.stderr
+    assert "migration 011 dogrulamasi BASARISIZ" in result.stderr, result.stderr
     assert "idx_posts_brand_created" in result.stderr, result.stderr
+    # Görülen değer kalıntıyı ADIYLA anlatmalı: geçerlilik bayrağı düşük.
+    assert "BROKEN" in result.stderr, result.stderr
 
 
 def test_runner_rejects_aliased_migrations_directory(tmp_path, scratch_db_empty):
@@ -873,3 +875,55 @@ def test_runner_rejects_aliased_migrations_directory(tmp_path, scratch_db_empty)
     )
     calls = [line for line in log.read_text().splitlines() if line.strip()]
     assert not calls, f"reddedilmeden ÖNCE veritabanına dokunuldu: {calls[:3]}"
+
+
+@pytest.mark.parametrize(
+    "impostor, label",
+    [
+        (
+            "CREATE INDEX idx_posts_brand_created "
+            "ON social.posts (created_at);",
+            "aynı adda YANLIŞ KOLONLU indeks",
+        ),
+        (
+            "CREATE UNIQUE INDEX idx_posts_brand_created "
+            "ON social.posts (id);",
+            "aynı adda BENZERSİZ taklit",
+        ),
+        (
+            "CREATE INDEX idx_posts_brand_created "
+            "ON social.trend_cache (fetched_at);",
+            "aynı adda BAŞKA TABLODA indeks",
+        ),
+    ],
+)
+def test_migration_011_rejects_same_name_wrong_index(
+    scratch_db_migrated, impostor, label
+):
+    """Aynı ADDA ama yanlış tanımlı GEÇERLİ indeks de reddedilir.
+
+    Ad kimlik DEĞİLDİR: `CREATE INDEX CONCURRENTLY IF NOT EXISTS` adı görüp
+    DDL'i ATLAR, yani beklenen indeks hiç var olmaz ve migration "başarılı"
+    der. Benzersiz bir taklit ayrıca meşru yazımları REDDEDER — yani yalnız
+    performans değil, doğruluk sorunu.
+
+    Geçerlilik bayrağına bakan bir kontrol bunların ÜÇÜNÜ DE kaçırırdı
+    (hepsi `indisvalid=true`); yakalayan şey tam tanım karşılaştırmasıdır.
+    """
+    argv, env = infra.psql_argv(scratch_db_migrated)
+    migration_011 = infra.MIGRATIONS_DIR / "011_performance_indexes.sql"
+
+    def _run(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            argv + list(args), env=env, capture_output=True, text=True
+        )
+
+    assert _run("-f", str(migration_011)).returncode == 0, "temiz koşum düştü"
+    assert _run("-c", "DROP INDEX social.idx_posts_brand_created").returncode == 0
+    assert _run("-c", impostor).returncode == 0, f"{label} kurulamadı"
+
+    result = _run("-f", str(migration_011))
+    assert result.returncode != 0, (
+        f"{label} sessizce geçti — migration başarı raporluyor:\n{result.stdout}"
+    )
+    assert "idx_posts_brand_created" in result.stderr, result.stderr

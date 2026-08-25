@@ -180,7 +180,7 @@ BEGIN
              '<yok>'),
 
             ('package_events indeks kümesi (kapalı)',
-             'idx_package_events_brand_created|f|live && idx_package_events_sector_created|f|live && package_events_pkey|t|live')
+             'CREATE INDEX idx_package_events_brand_created ON social.package_events USING btree (brand_id, created_at DESC) WHERE (brand_id IS NOT NULL)|f|live && CREATE INDEX idx_package_events_sector_created ON social.package_events USING btree (sector_id, created_at DESC) WHERE (sector_id IS NOT NULL)|f|live && CREATE UNIQUE INDEX package_events_pkey ON social.package_events USING btree (id)|t|live')
     ),
     observed(label, got) AS (
         VALUES
@@ -203,7 +203,12 @@ BEGIN
                  AND NOT t.tgisinternal)),
 
             ('package_events indeks kümesi (kapalı)',
-             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+             -- ADI değil TAM TANIMI karşılaştırılır. Ölçüldü (final review tur 3):
+             -- ada göre eşleyen bir kontrol, aynı ADDA ama başka tabloya/kolona
+             -- kurulmuş GEÇERLİ bir indeksi kabul eder — `IF NOT EXISTS` o adı
+             -- görüp DDL'i atlar ve migration "başarılı" der.
+             (SELECT coalesce(string_agg(format('%s|%s|%s',
+                                                pg_get_indexdef(i.indexrelid),
                                                 i.indisunique,
                                                 CASE WHEN i.indisvalid
                                                       AND i.indisready

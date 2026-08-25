@@ -411,7 +411,7 @@ BEGIN
              'sector_research_artifacts_append_only|enabled && sector_research_artifacts_no_truncate|enabled'),
 
             ('sector_research_artifacts indeks kümesi (kapalı)',
-             'idx_sector_research_artifacts_slug_run|f|live && sector_research_artifacts_pkey|t|live'),
+             'CREATE INDEX idx_sector_research_artifacts_slug_run ON social.sector_research_artifacts USING btree (sector_slug, run_id)|f|live && CREATE UNIQUE INDEX sector_research_artifacts_pkey ON social.sector_research_artifacts USING btree (id)|t|live'),
             ('sector_packages kısıt kümesi (kapalı)',
              'sector_packages_id_version_key|UNIQUE (id, version) && sector_packages_pkey|PRIMARY KEY (id) && sector_packages_sector_id_fkey|FOREIGN KEY (sector_id) REFERENCES social.sectors(id) && sector_packages_sector_version_key|UNIQUE (sector_id, version) && sector_packages_status_check|CHECK ((status = ANY (ARRAY[''draft''::text, ''active''::text, ''archived''::text])))'),
 
@@ -419,7 +419,7 @@ BEGIN
              'sector_packages_sector_must_be_sub|enabled'),
 
             ('sector_packages indeks kümesi (kapalı)',
-             'sector_packages_id_version_key|t|live && sector_packages_pkey|t|live && sector_packages_sector_version_key|t|live && uq_sector_packages_single_active|t|live'),
+             'CREATE UNIQUE INDEX sector_packages_id_version_key ON social.sector_packages USING btree (id, version)|t|live && CREATE UNIQUE INDEX sector_packages_pkey ON social.sector_packages USING btree (id)|t|live && CREATE UNIQUE INDEX sector_packages_sector_version_key ON social.sector_packages USING btree (sector_id, version)|t|live && CREATE UNIQUE INDEX uq_sector_packages_single_active ON social.sector_packages USING btree (sector_id) WHERE (status = ''active''::text)|t|live'),
             ('generation_stamps kısıt kümesi (kapalı)',
              'generation_stamps_brand_id_fkey|FOREIGN KEY (brand_id) REFERENCES social.brands(id) ON DELETE CASCADE && generation_stamps_package_fkey|FOREIGN KEY (package_id, package_version) REFERENCES social.sector_packages(id, version) && generation_stamps_pkey|PRIMARY KEY (id)'),
 
@@ -427,7 +427,7 @@ BEGIN
              '<yok>'),
 
             ('generation_stamps indeks kümesi (kapalı)',
-             'generation_stamps_pkey|t|live')
+             'CREATE UNIQUE INDEX generation_stamps_pkey ON social.generation_stamps USING btree (id)|t|live')
     ),
     observed(label, got) AS (
         VALUES
@@ -450,7 +450,12 @@ BEGIN
                  AND NOT t.tgisinternal)),
 
             ('sector_research_artifacts indeks kümesi (kapalı)',
-             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+             -- ADI değil TAM TANIMI karşılaştırılır. Ölçüldü (final review tur 3):
+             -- ada göre eşleyen bir kontrol, aynı ADDA ama başka tabloya/kolona
+             -- kurulmuş GEÇERLİ bir indeksi kabul eder — `IF NOT EXISTS` o adı
+             -- görüp DDL'i atlar ve migration "başarılı" der.
+             (SELECT coalesce(string_agg(format('%s|%s|%s',
+                                                pg_get_indexdef(i.indexrelid),
                                                 i.indisunique,
                                                 CASE WHEN i.indisvalid
                                                       AND i.indisready
@@ -481,7 +486,12 @@ BEGIN
                  AND NOT t.tgisinternal)),
 
             ('sector_packages indeks kümesi (kapalı)',
-             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+             -- ADI değil TAM TANIMI karşılaştırılır. Ölçüldü (final review tur 3):
+             -- ada göre eşleyen bir kontrol, aynı ADDA ama başka tabloya/kolona
+             -- kurulmuş GEÇERLİ bir indeksi kabul eder — `IF NOT EXISTS` o adı
+             -- görüp DDL'i atlar ve migration "başarılı" der.
+             (SELECT coalesce(string_agg(format('%s|%s|%s',
+                                                pg_get_indexdef(i.indexrelid),
                                                 i.indisunique,
                                                 CASE WHEN i.indisvalid
                                                       AND i.indisready
@@ -512,7 +522,12 @@ BEGIN
                  AND NOT t.tgisinternal)),
 
             ('generation_stamps indeks kümesi (kapalı)',
-             (SELECT coalesce(string_agg(format('%s|%s|%s', c.relname,
+             -- ADI değil TAM TANIMI karşılaştırılır. Ölçüldü (final review tur 3):
+             -- ada göre eşleyen bir kontrol, aynı ADDA ama başka tabloya/kolona
+             -- kurulmuş GEÇERLİ bir indeksi kabul eder — `IF NOT EXISTS` o adı
+             -- görüp DDL'i atlar ve migration "başarılı" der.
+             (SELECT coalesce(string_agg(format('%s|%s|%s',
+                                                pg_get_indexdef(i.indexrelid),
                                                 i.indisunique,
                                                 CASE WHEN i.indisvalid
                                                       AND i.indisready
