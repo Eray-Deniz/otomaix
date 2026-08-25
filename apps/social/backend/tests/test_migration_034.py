@@ -33,7 +33,7 @@ FAILURE_MARKER = "migration 034 garanti dogrulamasi BASARISIZ"
 # ayrı ayrı görünür.
 _DECOY_TEMPLATE = """
 DROP TABLE social.admin_events CASCADE;
-CREATE TABLE social.admin_events (
+CREATE {persistence}TABLE social.admin_events (
     id UUID {id_extra},
     kind TEXT NOT NULL,
     payload {payload_type} NOT NULL,
@@ -56,8 +56,15 @@ CREATE INDEX idx_admin_events_claimable
 """
 
 
-def _decoy(*, payload_type: str = "JSONB", id_extra: str = "PRIMARY KEY DEFAULT gen_random_uuid()") -> str:
-    return _DECOY_TEMPLATE.format(payload_type=payload_type, id_extra=id_extra)
+def _decoy(
+    *,
+    payload_type: str = "JSONB",
+    id_extra: str = "PRIMARY KEY DEFAULT gen_random_uuid()",
+    persistence: str = "",
+) -> str:
+    return _DECOY_TEMPLATE.format(
+        payload_type=payload_type, id_extra=id_extra, persistence=persistence
+    )
 
 
 def _psql_argv() -> tuple[list[str], dict[str, str]]:
@@ -160,6 +167,44 @@ def test_missing_id_default_is_caught():
     )
     assert FAILURE_MARKER in result.stderr, result.stderr
     assert "kolon imzası" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "setup_suffix, persistence, label",
+    [
+        ("", "UNLOGGED ", "UNLOGGED (kalıcı değil — çökmede TRUNCATE edilir)"),
+        (
+            "ALTER TABLE social.admin_events ENABLE ROW LEVEL SECURITY;",
+            "",
+            "RLS açık (kira sorgularına outbox BOŞ görünür)",
+        ),
+    ],
+    ids=["unlogged", "row_level_security"],
+)
+def test_table_level_property_corruption_is_caught(
+    setup_suffix: str, persistence: str, label: str
+):
+    """Tablonun KENDİ katalog özellikleri de sözleşmenin parçasıdır.
+
+    Tek örnekle değil küçük bir matrisle kapatılır: aynı sınıfın iki kardeşi
+    (dayanıklılık ve görünürlük) ayrı ayrı ölçülür. İkisi de kolon imzasını,
+    kısıtları ve indeksi BİREBİR aynı üretir — yani imza doğrulaması onları
+    göremezdi.
+
+    ÖLÇÜLDÜ (checkpoint 14 tur 2): `UNLOGGED` sahte tablo migration'dan rc=0 ile
+    geçiyordu. Temiz olmayan bir PostgreSQL kapanışında UNLOGGED tablo TRUNCATE
+    edilir; commit edilmiş outbox satırları yok olur ve transactional outbox'ın
+    tek varlık sebebi — "bildirim, haber verdiği işle aynı kaderi paylaşır" —
+    sessizce ortadan kalkar. RLS ise satırları yazdırır ama okutmaz: bildirimler
+    birikir, hiç teslim edilmez ve hiçbir hata görünmez.
+    """
+    result = _reapply_034(_decoy(persistence=persistence) + "\n" + setup_suffix)
+
+    assert result.returncode != 0, (
+        f"{label} sessizce geçti — stdout:\n{result.stdout}"
+    )
+    assert FAILURE_MARKER in result.stderr, result.stderr
+    assert "tablo imzası" in result.stderr
 
 
 @pytest.mark.parametrize(

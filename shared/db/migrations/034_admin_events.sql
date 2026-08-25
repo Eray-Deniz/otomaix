@@ -105,7 +105,25 @@ DECLARE
 BEGIN
     WITH expected(label, want) AS (
         VALUES
-            -- KOLON İMZASI ÖNCE gelir ve TAM tabloyu tarif eder: ad · tip ·
+            -- TABLO İMZASI: nesnenin KENDİ katalog özellikleri. Kolon/kısıt/
+            -- indeks imzası tablonun tamamı DEĞİLDİR — ÖLÇÜLDÜ (checkpoint 14,
+            -- tur 2): `UNLOGGED` bir tablo bunların HEPSİNİ birebir aynı üretir
+            -- ve doğrulamadan geçiyordu. Oysa temiz olmayan bir kapanışta
+            -- UNLOGGED tablo TRUNCATE edilir; commit edilmiş outbox satırları
+            -- yok olur ve transactional outbox'ın tek varlık sebebi ("bildirim,
+            -- haber verdiği işle aynı kaderi paylaşır") sessizce ortadan kalkar.
+            --   relkind='r'        -> sıradan tablo (görünüm/yabancı tablo değil)
+            --   relpersistence='p' -> KALICI (unlogged/temp değil)
+            --   relispartition='f' -> bölüm değil
+            --   rls=f force_rls=f  -> satır güvenliği KAPALI. Açık bir RLS +
+            --      kısıtlayıcı politika, kira sorgularına outbox'ı BOŞ
+            --      gösterirdi: satırlar yazılır ama hiç teslim edilmez ve
+            --      hiçbir hata da görünmez. Dayanıklılıkla aynı sınıf —
+            --      nesnenin kendi özellikleri de sözleşmenin parçası.
+            ('admin_events tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+
+            -- KOLON İMZASI: ad · tip ·
             -- null'lanabilirlik · kanonik varsayılan, attnum sırasında.
             -- Yalnız kısıt ve indeks doğrulamak YETMEZ (checkpoint 14, F4):
             -- ÖLÇÜLDÜ — `payload` TEXT olan, `id`'si PK'sız ve varsayılansız,
@@ -151,6 +169,17 @@ BEGIN
     ),
     observed(label, got) AS (
         VALUES
+            ('admin_events tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s'
+                            ' rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'admin_events')),
+
             ('admin_events kolon imzası',
              (SELECT string_agg(format('%s:%s:%s:%s',
                                        a.attname,
