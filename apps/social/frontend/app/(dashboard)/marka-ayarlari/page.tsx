@@ -91,9 +91,6 @@ interface Brand {
   website_url: string | null
   sector: string | null
   sub_sector_id: string | null
-  // Sunucudan gelen sürüm işareti. Yazarken geri gönderilir; satır bu arada
-  // başka bir yerde değiştiyse sunucu yazımı reddeder.
-  updated_at: string
   brand_kit: BrandKit
   logo_light_url: string | null
   logo_dark_url: string | null
@@ -495,12 +492,8 @@ function MarkaAyarlariContent() {
   // İKİNCİSİ birincinin bekleyen PATCH'ini iptal ediyordu — site analizi tam
   // olarak bu sırayı üretiyor, yani analizden gelen ad/açıklama/sektör
   // sessizce kaydedilmeden kalıyordu.
-  // Zamanlayıcı, bekleyen işin KENDİSİNİ de taşır. Yalnız kimliği tutulsaydı
-  // sayfadan ayrılırken yapılabilecek tek şey işi İPTAL etmek olurdu — yani
-  // "çıkarken gönder" vaadi tersine çalışırdı.
-  type PendingSave = { id: ReturnType<typeof setTimeout>; run: () => void }
-  const saveTimer = useRef<PendingSave | null>(null)
-  const kitSaveTimer = useRef<PendingSave | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const kitSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Handle OAuth callback result (?connected=platform or ?error=...)
   useEffect(() => {
@@ -551,51 +544,30 @@ function MarkaAyarlariContent() {
     return () => { cancelled = true }
   }, [currentBrand?.id])
 
-  // ── Kayıt eş güdümü ────────────────────────────────────────────────────
+  // Kayıt eş güdümü — TEK yaşam döngüsü, iki yol.
   //
-  // Bu sayfayı MÜŞTERİ kendi doldurur, yani "kaydettim sandım" kabul edilebilir
-  // bir sonuç değil. Dört ayrı kayıp yolu vardı; dördü de burada kapanır:
-  //
-  // 1. Yazıp hemen çıkma — bekleme süresi dolmadan sayfadan ayrılınca istek
-  //    HİÇ gitmiyordu. Artık sayfa gizlenirken bekleyen ne varsa gönderilir,
-  //    hâlâ tamamlanmamış bir şey varsa tarayıcı uyarısı çıkar.
-  // 2. Sıra bozulması — iki istek aynı anda havada olabiliyordu ve eski olan
-  //    sonra varırsa yeniyi eziyordu. Artık akış başına TEK istek uçar;
-  //    uçarken yapılan düzenlemeler bekleyene yazılır, istek dönünce bekleyen
-  //    gönderilir. İki isteğin sırası bozulamaz çünkü ikisi aynı anda olamaz.
-  // 3. İki sekme / iki cihaz — sekmeler birbirini görmez, bu yüzden yalnız
-  //    sunucu çözebilir: yazım en son görülen sürümle koşullanır, çakışmada
-  //    sunucu reddeder ve sayfa güncel hâli yükleyip kullanıcıyı uyarır.
-  // 4. Gösterge dürüstlüğü — "Kaydedildi" ancak bekleyen, uçan ve zamanlanmış
-  //    hiçbir şey kalmayınca ve hiçbiri düşmemişse yanar.
-  const saveState_ = useRef<{
-    inFlight: boolean
-    queued: (() => Promise<{ success: boolean; error?: string }>) | null
-    failed: boolean
-  }>({ inFlight: false, queued: null, failed: false })
+  // Marka ve kit kayıtları artık paralel uçabiliyor (ayrı zamanlayıcılar).
+  // "Kaydedildi" bir işlemin bitmesine bağlanırsa, ilk biten diğeri hâlâ
+  // uçarken başarı gösterir — kullanıcı sayfayı kapatabilir. Bayrak yerine
+  // SAYAÇ tutulur: başarı ancak uçuştaki HER kayıt bittiğinde ve hiçbiri
+  // düşmemişse gösterilir. `ApiResponse.success` de artık okunuyor; eskiden
+  // ağ/HTTP hatasından sonra da "Kaydedildi" yazıyordu.
+  const saveOps = useRef({ pending: 0, failed: false })
 
-  const [conflict, setConflict] = useState(false)
-
-  const drain = useCallback(async () => {
-    if (saveState_.current.inFlight) return
-    const next = saveState_.current.queued
-    if (!next) return
-    saveState_.current.queued = null
-    saveState_.current.inFlight = true
+  const runSave = useCallback(async (call: () => Promise<{ success: boolean }>) => {
+    if (saveOps.current.pending === 0) saveOps.current.failed = false
+    saveOps.current.pending += 1
     setSaveState('saving')
-    let res: { success: boolean; error?: string }
+    let ok = false
     try {
-      res = await next()
+      ok = (await call()).success
     } catch {
-      res = { success: false }
+      ok = false
     }
-    saveState_.current.inFlight = false
-    if (!res.success) saveState_.current.failed = true
-    if (saveState_.current.queued) {
-      void drain()
-      return
-    }
-    if (saveState_.current.failed) {
+    saveOps.current.pending -= 1
+    if (!ok) saveOps.current.failed = true
+    if (saveOps.current.pending > 0) return
+    if (saveOps.current.failed) {
       setSaveState('error')
       return
     }
@@ -603,44 +575,13 @@ function MarkaAyarlariContent() {
     setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 2000)
   }, [])
 
-  // Aynı akışın bekleyeni ÜSTÜNE YAZILIR: uçarken yapılan on düzenleme tek bir
-  // isteğe iner ve yalnız en sonuncusu gönderilir.
-  const enqueue = useCallback(
-    (call: () => Promise<{ success: boolean; error?: string }>) => {
-      if (!saveState_.current.inFlight && !saveState_.current.queued) {
-        saveState_.current.failed = false
-      }
-      saveState_.current.queued = call
-      setSaveState('saving')
-      void drain()
-    },
-    [drain]
-  )
-
-  // Marka satırını sunucuda değiştiren BAŞKA yollar da var (logo, tanıtım
-  // videosu, kit, avatar) ve hepsi sürüm işaretini ilerletir. Onlardan sonra
-  // elimizdeki işaret bayatlar ve bir sonraki otomatik kayıt SAHTE çakışma
-  // verirdi — kullanıcı hiçbir şey yapmadığı hâlde "başka sekmede değişti"
-  // uyarısı görür ve bekleyen düzenlemesini kaybederdi.
-  const refreshVersion = useCallback(async (brandId: string) => {
-    const res = await api.get<Brand>(`/brands/${brandId}`)
-    if (!res.success || !res.data) return
-    const fresh = res.data
-    setBrand((prev) =>
-      prev && prev.id === fresh.id ? { ...prev, updated_at: fresh.updated_at } : prev
-    )
-  }, [])
-
-  // Yazma durduktan sonra gönderim (debounce). Zamanlayıcılar AYRI: tek
-  // zamanlayıcı paylaşıldığında art arda gelen marka + kit güncellemelerinde
-  // ikincisi birincinin bekleyen isteğini iptal ediyordu.
+  // Debounced auto-save for brand info
   const scheduleSave = useCallback((updated: Brand) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current.id)
-    const run = () => {
-      saveTimer.current = null
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(async () => {
       if (!updated.id) return
-      enqueue(async () => {
-        const res = await api.patch<Brand>(`/brands/${updated.id}`, {
+      await runSave(() =>
+        api.patch(`/brands/${updated.id}`, {
           name: updated.name,
           description: updated.description,
           website_url: updated.website_url,
@@ -648,118 +589,17 @@ function MarkaAyarlariContent() {
           // Açık `null` atamayı BOŞALTIR; sunucu bu alanı `model_fields_set`
           // üzerinden okuduğu için `null` sessizce düşmez.
           sub_sector_id: updated.sub_sector_id,
-          // En son GÖRÜLEN sürüm. Satır bu arada başka bir sekmede değiştiyse
-          // sunucu bu yazımı reddeder.
-          expected_version: updated.updated_at,
         })
-        if (res.success && res.data) {
-          // Yeni sürüm işaretini SAKLA — yoksa bir sonraki yazım kendi
-          // yazdığımız satırla çakışırdı.
-          const next = res.data
-          setBrand((prev) =>
-            prev && prev.id === next.id ? { ...prev, updated_at: next.updated_at } : prev
-          )
-        } else {
-          setConflict(true)
-        }
-        return res
-      })
-    }
-    saveTimer.current = { id: setTimeout(run, 1500), run }
-  }, [enqueue])
+      )
+    }, 1500)
+  }, [runSave])
 
   const scheduleKitSave = useCallback((kit: BrandKit, brandId: string) => {
-    if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current.id)
-    const run = () => {
-      kitSaveTimer.current = null
-      // Kit yazımı sunucuda anahtar bazında BİRLEŞİR, tam belgeyi ezmez —
-      // bu yüzden ayrıca sürüm koşulu istemez.
-      enqueue(async () => {
-        const res = await api.patch<Brand>(`/brands/${brandId}/kit`, kit)
-        if (res.success && res.data) {
-          const next = res.data
-          setBrand((prev) =>
-            prev && prev.id === next.id ? { ...prev, updated_at: next.updated_at } : prev
-          )
-        }
-        return res
-      })
-    }
-    kitSaveTimer.current = { id: setTimeout(run, 1500), run }
-  }, [enqueue])
-
-  // Sayfadan ayrılırken bekleyeni GÖNDER, hâlâ bitmemişse UYAR.
-  //
-  // En olası kayıp buydu ve tümüyle açıktı: kullanıcı bir alanı doldurup
-  // bekleme süresi dolmadan sekmeyi kapatırsa istek hiç gitmiyordu ve hiçbir
-  // şey söylenmiyordu.
-  useEffect(() => {
-    function flushPending() {
-      // Bekleme süresini ATLA ve işi ŞİMDİ yap. `run` kendi referansını
-      // temizler, o yüzden ayrıca sıfırlamaya gerek yok.
-      const pendingBrand = saveTimer.current
-      if (pendingBrand) {
-        clearTimeout(pendingBrand.id)
-        pendingBrand.run()
-      }
-      const pendingKit = kitSaveTimer.current
-      if (pendingKit) {
-        clearTimeout(pendingKit.id)
-        pendingKit.run()
-      }
-      void drain()
-    }
-
-    function hasUnsavedWork() {
-      return Boolean(
-        saveTimer.current ||
-          kitSaveTimer.current ||
-          saveState_.current.inFlight ||
-          saveState_.current.queued
-      )
-    }
-
-    function onVisibility() {
-      if (document.visibilityState === 'hidden') flushPending()
-    }
-
-    function onBeforeUnload(event: BeforeUnloadEvent) {
-      if (!hasUnsavedWork()) return
-      event.preventDefault()
-      // Tarayıcılar kendi metinlerini gösterir; burada yalnız "sor" deriz.
-      event.returnValue = ''
-    }
-
-    document.addEventListener('visibilitychange', onVisibility)
-    window.addEventListener('pagehide', flushPending)
-    window.addEventListener('beforeunload', onBeforeUnload)
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility)
-      window.removeEventListener('pagehide', flushPending)
-      window.removeEventListener('beforeunload', onBeforeUnload)
-    }
-  }, [drain])
-
-  // Çakışma: satır başka bir yerde değişmiş. Güncel hâli yükle ve kullanıcıya
-  // ne olduğunu SÖYLE — sessizce ezmek de, sessizce vazgeçmek de yanlış olurdu.
-  useEffect(() => {
-    if (!conflict || !currentBrand?.id) return
-    let cancelled = false
-    api.get<Brand>(`/brands/${currentBrand.id}`).then((res) => {
-      if (cancelled) return
-      if (res.success && res.data) {
-        const fresh = res.data
-        fresh.brand_kit = deepMergeKit(DEFAULT_BRAND_KIT, fresh.brand_kit ?? {})
-        setBrand(fresh)
-        toast.error(
-          'Bu marka başka bir sekmede değiştirilmiş. En güncel hâli yüklendi — ' +
-            'son değişikliğini tekrar yapman gerekebilir.'
-        )
-      }
-      setConflict(false)
-    })
-    return () => { cancelled = true }
-  }, [conflict, currentBrand?.id])
+    if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
+    kitSaveTimer.current = setTimeout(async () => {
+      await runSave(() => api.patch(`/brands/${brandId}/kit`, kit))
+    }, 1500)
+  }, [runSave])
 
   function updateBrand(fields: Partial<Brand>) {
     setBrand((prev) => {
@@ -847,7 +687,6 @@ function MarkaAyarlariContent() {
     if (res.success && res.data) {
       const urlField = variant === 'light' ? 'logo_light_url' : 'logo_dark_url'
       setBrand((prev) => prev ? { ...prev, [urlField]: res.data!.url } : prev)
-      void refreshVersion(brand.id)
       toast.success('Logo yüklendi')
     } else {
       toast.error('Logo yüklenemedi')
@@ -863,7 +702,6 @@ function MarkaAyarlariContent() {
     const res = await api.upload<{ url: string }>(`/brands/${brand.id}/intro-video`, fd)
     if (res.success && res.data) {
       setBrand((prev) => prev ? { ...prev, intro_video_url: res.data!.url } : prev)
-      void refreshVersion(brand.id)
       toast.success('Intro video yüklendi')
     } else {
       toast.error('Video yüklenemedi')
@@ -879,7 +717,6 @@ function MarkaAyarlariContent() {
     if (res.success) {
       const urlField = variant === 'light' ? 'logo_light_url' : 'logo_dark_url'
       setBrand((prev) => prev ? { ...prev, [urlField]: null } : prev)
-      void refreshVersion(brand.id)
       toast.success('Logo kaldırıldı')
     } else {
       toast.error('Logo kaldırılamadı')
@@ -894,7 +731,6 @@ function MarkaAyarlariContent() {
     const res = await api.delete(`/brands/${brand.id}/intro-video`)
     if (res.success) {
       setBrand((prev) => prev ? { ...prev, intro_video_url: null } : prev)
-      void refreshVersion(brand.id)
       toast.success('Intro video kaldırıldı')
     } else {
       toast.error('Video kaldırılamadı')
@@ -978,7 +814,6 @@ function MarkaAyarlariContent() {
     fd.append('name', file.name.replace(/\.[^.]+$/, ''))
     const res = await api.upload<ActiveAvatar>('/avatar/create', fd)
     if (res.success && res.data) {
-      void refreshVersion(brand.id)
       setBrand((prev) => prev ? {
         ...prev,
         brand_kit: { ...prev.brand_kit, avatar: res.data as unknown as ActiveAvatar }
@@ -1002,7 +837,6 @@ function MarkaAyarlariContent() {
       preview_url: av.preview_url || av.preview_image_url,
     })
     if (res.success && res.data) {
-      void refreshVersion(brand.id)
       setBrand((prev) => prev ? {
         ...prev,
         brand_kit: { ...prev.brand_kit, avatar: res.data as unknown as ActiveAvatar }
