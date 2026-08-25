@@ -260,6 +260,16 @@ async def _build_still_prompt(
         )
         return msg.content[0].text.strip()
     except Exception:
+        # Model susduğunda havuz bağlamla taşınamaz — bu dal hiç model görmez.
+        # Ölçüldü (checkpoint 11, tur 5): yedek metin yalnız marka/sektör/renk
+        # taşıyordu, yani geçici bir Anthropic kesintisi paketli markanın
+        # sektörel sinyalini SESSİZCE düşürüyor ve video başarıyla üretiliyordu.
+        #
+        # Kural bu yüzden yaprakta değil sınıfta kurulur: **model çağrısı
+        # yapmayan her durağan-kare yolu havuzdan bir kalıp EKLER.** İki yol
+        # var (buradaki yedek + `_resolve_still_prompt`'un İngilizce erken
+        # dönüşü) ve ikisi de aynı yardımcıdan geçer. Havuz yoksa metin
+        # bugünküyle BAYT AYNI kalır — paketsiz yol dokunulmaz.
         parts = []
         if brand_description:
             parts.append(brand_description)
@@ -273,7 +283,7 @@ async def _build_still_prompt(
             "product showcase, no text, no logos, "
             "cinematic composition, professional lighting, 4K"
         )
-        return ", ".join(parts)
+        return _enrich_with_scene(", ".join(parts), scene_pool)
 
 
 # ─── 0b. Motion prompt çeşitliliği ────────────────────────────────────────────

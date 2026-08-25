@@ -22,6 +22,7 @@ Dört yüzey, dört ayrı sözleşme:
 from __future__ import annotations
 
 import inspect
+import itertools
 
 import pytest
 
@@ -30,7 +31,7 @@ from app.core.templates_data import get_template_by_id
 from app.services import short_video as sv
 from app.services.sector_packages import resolve_motion_prompt
 
-from .capture import capture_anthropic_calls
+from .capture import break_anthropic_calls, capture_anthropic_calls
 from .conftest import FROZEN_SINGLE_TEMPLATE_ID
 from .test_packaged_caption import CUMHURIYET_KEY, _context, _package_content
 
@@ -462,3 +463,113 @@ async def test_scene_enrichment_never_silently_skips(prompt, pool):
     )
     assert out != prompt, "sektörel sahne dili sessizce atlandı"
     assert prompt.rstrip(". ") in out, "kullanıcının istemi kayboldu"
+
+
+# ─── 5. Bozulmuş bağımlılık — sınıf kapanışı (F3, tur 5) ────────────────────
+
+_STILL_BRANCHES = list(
+    itertools.product(
+        [False, True],                                          # image_edit_mode
+        ["", "mağazada bir kadın"],                             # user_brief
+        ["", "Bir yüzük vitrinde", "Warm studio shot on velvet"],  # prompt
+    )
+)
+
+_STILL_BRAND = {
+    "brand_kit": {"sector": "Kuyumculuk", "colors": ["#D4AF37"]},
+    "brand_name": "Donuk",
+    "brand_description": "el yapımı takı",
+    "script": "senaryo",
+}
+
+
+@pytest.mark.parametrize("model_alive", [True, False], ids=["model-ayakta", "model-düşük"])
+@pytest.mark.parametrize("image_edit_mode,user_brief,prompt", _STILL_BRANCHES)
+async def test_scene_pool_survives_every_still_branch(
+    monkeypatch, image_edit_mode, user_brief, prompt, model_alive
+):
+    """Paketli markada sahne havuzu HİÇBİR dalda sessizce düşmez.
+
+    Kapanış elle seçilmiş örnekle değil ÜRETİLMİŞ matrisle kanıtlanır: bu
+    eksende dört tur boyunca her düzeltme bir varyantı kapattı ve bir sonraki
+    tur komşu varyantı açtı (dal atlandı → köken varsayımı → noktalama ölçüsü →
+    alt dize içerme). Beşinci kök neden BAŞKA bir eksendeydi: model çağrısı
+    PATLADIĞINDA `_build_still_prompt`'un yedek metni havuzu hiç taşımıyordu
+    (ölçüldü — dört dalın dördünde de).
+
+    Matris `_resolve_still_prompt`'un tüm dal uzayını (mod × kullanıcı isteği ×
+    istem dili) modelin AYAKTA ve DÜŞÜK hâlleriyle çarpar. Sözleşme tek
+    cümledir: havuz ya modele giden bağlamda olacak, ya üretilen istemde.
+    """
+    calls = (
+        capture_anthropic_calls(monkeypatch, response_text="A generic studio shot")
+        if model_alive
+        else break_anthropic_calls(monkeypatch)
+    )
+
+    out = await sv._resolve_still_prompt(
+        prompt=prompt,
+        user_brief=user_brief,
+        image_edit_mode=image_edit_mode,
+        scene_pool=SCENE_POOL,
+        **_STILL_BRAND,
+    )
+
+    in_context = any(entry in call.rendered for call in calls for entry in SCENE_POOL)
+    in_output = any(entry.rstrip(". ") in out for entry in SCENE_POOL)
+    assert in_context or in_output, (
+        f"sektörel sahne dili bu dalda hiç ulaşmadı: {image_edit_mode=} "
+        f"{user_brief=!r} {prompt=!r} {model_alive=} → {out!r}"
+    )
+
+
+@pytest.mark.parametrize("model_alive", [True, False], ids=["model-ayakta", "model-düşük"])
+@pytest.mark.parametrize("image_edit_mode,user_brief,prompt", _STILL_BRANCHES)
+async def test_unpackaged_still_untouched_in_every_branch(
+    monkeypatch, image_edit_mode, user_brief, prompt, model_alive
+):
+    """Havuzsuz marka aynı matrisin hiçbir hücresinde sektörel iz almaz.
+
+    Pozitif kapının negatif kontrolü: zenginleştirmeyi her yola yaymak,
+    paketsiz yolun değişmezliğini (K6) bozmanın da en kolay yoludur.
+    """
+    calls = (
+        capture_anthropic_calls(monkeypatch, response_text="A generic studio shot")
+        if model_alive
+        else break_anthropic_calls(monkeypatch)
+    )
+
+    out = await sv._resolve_still_prompt(
+        prompt=prompt,
+        user_brief=user_brief,
+        image_edit_mode=image_edit_mode,
+        scene_pool=None,
+        **_STILL_BRAND,
+    )
+
+    for entry in SCENE_POOL:
+        assert entry.rstrip(". ") not in out, "paketsiz istemde sektörel iz var"
+        assert not any(entry in call.rendered for call in calls), (
+            "paketsiz çağrının bağlamında sektörel iz var"
+        )
+
+
+async def test_unpackaged_model_failure_fallback_is_pinned(monkeypatch):
+    """Model düştüğünde paketsiz yedek metin BAYT olarak sabittir.
+
+    Yedek dala dokunulacaksa paketsiz çıktının değişmediği burada görünür —
+    "havuzu da ekleyelim" düzeltmesi sessizce paketsiz metni kaydıramaz.
+    """
+    break_anthropic_calls(monkeypatch)
+    out = await sv._resolve_still_prompt(
+        prompt="",
+        user_brief="",
+        image_edit_mode=False,
+        scene_pool=None,
+        **_STILL_BRAND,
+    )
+    assert out == (
+        "el yapımı takı, Kuyumculuk industry, color palette: #D4AF37, "
+        "product showcase, no text, no logos, cinematic composition, "
+        "professional lighting, 4K"
+    )

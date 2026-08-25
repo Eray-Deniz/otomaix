@@ -265,3 +265,29 @@ def assert_matches_fixture(name: str, rendered: str) -> None:
             f"dondurulmuş {len(frozen)} bayt, üretilen {len(payload)} bayt.\n"
             "Bu bir ALARM'dır: paketsiz markanın prompt'u değişmemeliydi."
         )
+
+
+def break_anthropic_calls(monkeypatch) -> list[CapturedCall]:
+    """Modeli DÜŞÜRÜR — bozulmuş bağımlılık dalını ölçmek için.
+
+    `capture_anthropic_calls`'ın ikizi: o başarılı çağrının girdisini yakalar,
+    bu ise çağrının HİÇ tamamlanmadığı yolu üretir. İkisi aynı yerde yaşar
+    çünkü bir prompt sözleşmesinin iki ucudur — "model konuştuğunda ne gitti"
+    ve "model susduğunda ne üretildi". İkincisi ölçülmezse bozulmuş bağımlılık
+    sessizce sözleşmenin dışına çıkar (checkpoint 11, tur 5).
+
+    Dönen liste HER ZAMAN boştur; imza ikizle aynı tutulur ki çağıran iki dalı
+    tek biçimde ele alabilsin.
+    """
+    calls: list[CapturedCall] = []
+
+    class _DownClient:
+        def __init__(self, *_args, **_kwargs) -> None:
+            raise RuntimeError("anthropic erişilemiyor (test)")
+
+    monkeypatch.setattr(anthropic, "Anthropic", _DownClient)
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key-not-used", raising=False)
+    return calls
