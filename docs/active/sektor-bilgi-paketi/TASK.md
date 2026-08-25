@@ -1,6 +1,6 @@
 ---
 title: Sektör Bilgi Paketi — Runtime Çekirdek Uygulaması
-status: active
+status: waiting-review
 started: 2026-07-12
 last-touched: 2026-08-25
 blocked-by: null
