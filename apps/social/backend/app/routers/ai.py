@@ -236,8 +236,14 @@ async def suggest_sub_sector(
     def _call_model() -> str:
         import anthropic
 
+        # `max_retries=0` BİLİNÇLİ: dış `wait_for` yalnız BEKLEMEYİ keser, senkron
+        # çağrıyı durduramaz — iş parçacığı çağrı bitene kadar tutulur. SDK
+        # varsayılanı iki yeniden denemedir, yani işgal sessizce üç katına
+        # çıkardı. Süre sınırının tek sahibi dışarıdaki kapıdır.
         client = anthropic.Anthropic(
-            api_key=settings.ANTHROPIC_API_KEY, timeout=_SUGGEST_TIMEOUT_SECONDS
+            api_key=settings.ANTHROPIC_API_KEY,
+            timeout=_SUGGEST_TIMEOUT_SECONDS,
+            max_retries=0,
         )
         message = client.messages.create(
             model="claude-opus-4-7",
@@ -274,10 +280,13 @@ async def suggest_sub_sector(
             if raw.startswith("json"):
                 raw = raw[4:]
         parsed = json.loads(raw)
-        # Nesne olmayan gövde `raw_field`'ı None bırakır — doğrulayıcı onu
-        # zaten boşa düşürür.
-        if isinstance(parsed, dict):
-            raw_field = parsed.get("sub_sector")
+        # Sözleşme TEK bir geçerli boş biçim tanımlar: BOŞ STRING. Anahtarı hiç
+        # taşımayan, `null` ya da yanlış tipte taşıyan yanıt sağlayıcı tarafının
+        # ihlalidir — "aday yok" DEĞİLDİR. İkisini aynı yere düşürmek bozuk bir
+        # entegrasyonu normal kullanıcı sonucu gibi gösterirdi.
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("sub_sector"), str):
+            raise ValueError("yanıt `sub_sector` metnini taşımıyor")
+        raw_field = parsed["sub_sector"]
     except Exception as exc:
         # Ayrıştırma hatası da sağlayıcı tarafının arızasıdır (sözleşmeye
         # uymayan yanıt), geçerli bir "eşleşme yok" DEĞİLDİR.

@@ -253,7 +253,13 @@ export default function OnboardingPage() {
         description: state.brand.description || null,
         sector: state.brand.sector || null,
       })
-      if (res.success && res.data?.sub_sector_id) {
+      if (!res.success) {
+        // Sunucu arızası ile "uygun aday yok" AYNI mesaja düşemez: sunucu bu
+        // ikisini bilerek ayırıyor (arıza 503) ve burada birleştirmek o ayrımı
+        // son adımda yok ederdi — bozuk bir entegrasyon kullanıcıya normal bir
+        // sonuç gibi görünürdü.
+        toast.error(res.error || 'Öneri servisi şu an yanıt vermiyor, listeden seçebilirsin')
+      } else if (res.data?.sub_sector_id) {
         updateBrand({ subSectorId: res.data.sub_sector_id })
         toast.success(`Öneri: ${res.data.sub_sector_display_name ?? 'alt sektör seçildi'} — değiştirebilirsin`)
       } else {

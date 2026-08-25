@@ -617,7 +617,11 @@ async def test_analyze_website_prompt_embeds_closed_candidate_list(flow_db, monk
         ('"aday-sitesiz"', True),
         ('"listede-olmayan"', False),
         ('"serbest metin"', False),
-        ("null", False),
+        # `null` ve diğer tip-dışı biçimler BU testin konusu değil: onlar
+        # sağlayıcı sözleşme ihlalidir ve 503 verir
+        # (`test_suggest_sub_sector_rejects_malformed_shape`). Burada ölçülen
+        # şey, GEÇERLİ biçimde gelen bir metnin listeye karşı süzülmesidir.
+        ('""', False),
     ],
 )
 async def test_website_less_suggestion_uses_same_closed_list(
@@ -796,3 +800,87 @@ async def test_suggest_sub_sector_does_not_block_forever(flow_db, monkeypatch):
 
     assert exc.value.status_code == 503
     assert elapsed < 3, f"çağrı süre sınırına uymadı ({elapsed:.1f}s)"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "[]",                       # nesne değil
+        "{}",                       # anahtar yok
+        '{"sub_sector": null}',     # null
+        '{"sub_sector": 7}',        # sayı
+        '{"sub_sector": ["a"]}',    # liste
+    ],
+)
+async def test_suggest_sub_sector_rejects_malformed_shape(flow_db, monkeypatch, body):
+    """Sözleşmeye uymayan yanıt "eşleşme yok" DEĞİLDİR (F9 kapanışı).
+
+    Talimat tek bir geçerli boş biçim tanımlar: BOŞ STRING. Anahtarı hiç
+    taşımayan, `null` ya da yanlış tipte taşıyan yanıt sağlayıcı tarafının
+    sözleşme ihlalidir; onu sessizce "uygun aday yok"a çevirmek, bozuk bir
+    entegrasyonu normal bir kullanıcı sonucu gibi gösterirdi.
+    """
+    sub_id = await _new_sub_sector(flow_db, slug="aday-bicim", display="Aday Biçim")
+    await _activate_package(flow_db, sub_id)
+    _fake_anthropic(monkeypatch, body)
+
+    with pytest.raises(HTTPException) as exc:
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(name="Marka"),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+    assert exc.value.status_code == 503
+
+
+async def test_suggest_sub_sector_empty_string_is_a_real_no_match(flow_db, monkeypatch):
+    """BOŞ STRING geçerli "eşleşme yok"tur — 200 döner, hata değil.
+
+    Karşı kontrol: yukarıdaki biçim kapısı gerçek bir kullanıcı sonucunu
+    arızaya çevirmiyor.
+    """
+    sub_id = await _new_sub_sector(flow_db, slug="aday-bos", display="Aday Boş")
+    await _activate_package(flow_db, sub_id)
+    _fake_anthropic(monkeypatch, '{"sub_sector": ""}')
+
+    data = (
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(name="Marka"),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+    ).data
+    assert data["sub_sector_id"] is None
+
+
+async def test_suggest_sub_sector_does_not_multiply_thread_occupancy(flow_db, monkeypatch):
+    """Sağlayıcı istemcisi KENDİ yeniden denemelerini yapmaz (F7 kapanışı).
+
+    Dış süre sınırı yalnız BEKLEMEYİ keser; senkron çağrı iş parçacığını
+    tutmaya devam eder. SDK varsayılanı iki yeniden denemedir, yani iş
+    parçacığı işgali sessizce üç katına çıkardı. Sınırın tek sahibi dışarıdaki
+    kapı olmalı.
+    """
+    sub_id = await _new_sub_sector(flow_db, slug="aday-retry", display="Aday Retry")
+    await _activate_package(flow_db, sub_id)
+
+    seen: dict = {}
+
+    class _Client:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+            raise RuntimeError("dur")
+
+    import anthropic
+
+    monkeypatch.setattr(anthropic, "Anthropic", _Client)
+
+    with pytest.raises(HTTPException):
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(name="Marka"),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+
+    assert seen.get("max_retries") == 0, "SDK yeniden denemeleri kapatılmamış"
+    assert seen.get("timeout") == ai_router._SUGGEST_TIMEOUT_SECONDS
