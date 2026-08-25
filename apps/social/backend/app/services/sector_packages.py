@@ -1291,3 +1291,363 @@ async def resolve_persist_stamp(
         )
 
     return (package_id, package_version)
+
+
+# ─── 6. Yaşam döngüsü (plan Task 13) ────────────────────────────────────────
+#
+# Üç public geçiş + tek draft yazıcısı. Ortak omurga `_apply_status_transition`
+# ÖZELDİR: public yüzeyden kanıtsız geçiş YOLU YOKTUR (K-28'in Plan-1 ayağı).
+# Çağıranın KİMLİĞİNİN doğrulanması (K-103) bu katmanın konusu değildir —
+# burada taşınan şey kanıttır, yetki değil; sınır dürüstçe budur.
+#
+# **Sıra sözleşmesi: olay ÖNCE, geçiş SONRA.** İkisi aynı transaction'dadır
+# (F24), ama sıra keyfî DEĞİL: `log_package_event`'in "bu bir devir teslim mi"
+# ölçüsü sektörde AKTİF bir satır olup olmadığına bakar ve o ölçü yalnız geçiş
+# uygulanmadan önce doğrudur. Sıra tersine çevrilirse deaktivasyon sonrası
+# aktivasyon yanlışlıkla devir teslim sayılır.
+
+
+class LifecycleError(RuntimeError):
+    """Yaşam döngüsü DURUMU istenen geçişe uygun değil (hedef yok, yanlış statü)."""
+
+
+class GateNotSatisfied(RuntimeError):
+    """Geçiş kapısının kanıtı sağlanmadı — geçiş YAPILMAZ."""
+
+
+@dataclass(frozen=True)
+class ActivationGateEvidence:
+    """Aktivasyon kapısının mekanik kanıtı (spec §2.3, K-71).
+
+    `expected_active_version` OPSİYONELDİR ve bu K-94'ün açık kalmasının kod
+    karşılığıdır: dolu gelirse geçiş anındaki gerçek aktif sürümle eşleşmeli
+    (yetenek kurulu), `None` gelirse kontrol yapılmaz. Alanın onay akışında
+    ZORUNLU olup olmayacağı kararın kendisidir ve burada yazılmaz.
+    """
+
+    activation_eligible: bool
+    open_questions_count: int
+    katman1_passed: bool
+    checklist_approved: bool
+    expected_active_version: int | None = None
+
+
+@dataclass(frozen=True)
+class RollbackGateEvidence:
+    """Rollback kapısının kanıtı — aktivasyon kanıtıyla PAYLAŞILMAZ.
+
+    Acil rollback, ADAYIN aktivasyon kapılarından bağımsızdır: "aday yeterli
+    değil" diye aktif sürümü geri alamamak, acil kolu işlevsiz bırakırdı. O
+    yüzden buradaki tek insan kapısı yönetici onayıdır.
+    """
+
+    manager_approved: bool
+    katman1_passed: bool
+
+
+def _require_actor(actor: Any) -> str:
+    if not isinstance(actor, str) or not actor.strip():
+        raise ValueError("actor zorunlu — sahipsiz yaşam döngüsü işlemi yazılmaz")
+    return actor.strip()
+
+
+async def _set_status(db, package_id: UUID, status: str) -> None:
+    """Tek satırın durumunu günceller.
+
+    Ayrı bir fonksiyon olmasının iki sebebi var: geçişin her adımı AYNI kapıdan
+    geçsin (ikinci bir UPDATE yazımı doğmasın) ve atomiklik testi geçiş adımını
+    gerçekten düşürebilsin.
+    """
+    await db.execute(
+        "UPDATE social.sector_packages SET status = $2, "
+        "activated_at = CASE WHEN $2 = 'active' THEN now() ELSE activated_at END "
+        "WHERE id = $1",
+        package_id,
+        status,
+    )
+
+
+async def _lock_active_row(db, sector_id: UUID):
+    """Sektörün aktif satırını KİLİTLEYEREK okur.
+
+    `FOR UPDATE` olmadan iki eşzamanlı aktivasyon aynı "önceki aktif"i görür,
+    ikisi de onu arşivler ve ikisi de kendini aktif yapmaya çalışır; tek-aktif
+    kısmi indeksi birini reddeder ama denetim izi çoktan iki devir teslim
+    yazmış olur. Kilit o pencereyi kapatır.
+    """
+    return await db.fetchrow(
+        "SELECT id, version FROM social.sector_packages "
+        "WHERE sector_id = $1 AND status = 'active' FOR UPDATE",
+        sector_id,
+    )
+
+
+async def _apply_status_transition(
+    db,
+    *,
+    sector_id: UUID,
+    event_type: str,
+    actor: str,
+    activate: tuple[UUID, int] | None,
+    archive: UUID | None,
+    from_version: int | None,
+    to_version: int | None,
+) -> None:
+    """Ham iki-adım geçişi + olay kaydı — TEK transaction (F24, K-101/K-102).
+
+    ÖZELDİR ve modül dışına verilmez. Public yüzey (aktivasyon / rollback /
+    deaktivasyon) kendi kapı kanıtını doğruladıktan SONRA buraya gelir.
+
+    Olay yazımı burada `_record_event` ile SARILMAZ: çalışma zamanı yollarında
+    bir denetim satırı yüzünden kullanıcının içeriğini düşürmek orantısızdır,
+    ama yaşam döngüsünde izsiz bir geçiş sessiz bir yalandır. `log_package_event`
+    altyapı hatasında `None` döner — o dönüş burada HATA sayılır.
+    """
+    async with db.transaction():
+        event_id = await log_package_event(
+            db,
+            event_type=event_type,
+            sector_id=sector_id,
+            package_id=activate[0] if activate else archive,
+            from_version=from_version,
+            to_version=to_version,
+            actor=actor,
+        )
+        if event_id is None:
+            raise LifecycleError(
+                f"{event_type} olayı yazılamadı — izsiz geçiş yapılmaz (F24)"
+            )
+
+        if archive is not None:
+            await _set_status(db, archive, "archived")
+        if activate is not None:
+            await _set_status(db, activate[0], "active")
+
+
+async def insert_draft(
+    db,
+    *,
+    sector_id: UUID,
+    content: dict,
+    schema_version: int,
+    run_id: str | None = None,
+    actor: str,
+) -> UUID:
+    """Doğrulayıcı-arkalı TEK draft yazıcısı (spec §3.6; K-135 yazma yüzeyi).
+
+    Doğrulayıcının iki dış girdisi (sistem takvimi, kayıtlı marka adları)
+    ÇAĞIRANDAN alınmaz, DB'den okunur. Aksi hâlde kapı yalnız çağıran doğru
+    listeyi verdiğinde çalışırdı — yani kapı değil nezaket kuralı olurdu.
+
+    `version` sektör içinde son + 1'dir. Eşzamanlı iki yazımda ikisi de aynı
+    numarayı görebilir; `UNIQUE (sector_id, version)` birini reddeder
+    (fail-closed).
+    """
+    owner = _require_actor(actor)
+
+    holiday_rows = await db.fetch(
+        "SELECT name_tr FROM social.public_holidays WHERE name_tr IS NOT NULL"
+    )
+    holiday_keys = {
+        key
+        for key in (normalize_special_day_key(row["name_tr"]) for row in holiday_rows)
+        if key
+    }
+    brand_rows = await db.fetch("SELECT name FROM social.brands WHERE name IS NOT NULL")
+
+    result = validate_package_content(
+        content,
+        banned_brand_names=[row["name"] for row in brand_rows],
+        holiday_keys=holiday_keys,
+    )
+    if not result.ok:
+        raise ValueError("paket içeriği yazım kapısını geçmedi: " + "; ".join(result.errors))
+    for warning in result.warnings:
+        logger.warning("paket taslağı uyarısı (sector_id=%s): %s", sector_id, warning)
+
+    return await db.fetchval(
+        """
+        INSERT INTO social.sector_packages
+            (sector_id, version, status, schema_version, content, decision_log, run_id)
+        SELECT $1,
+               COALESCE(MAX(version), 0) + 1,
+               'draft',
+               $2,
+               $3,
+               $4,
+               $5
+          FROM social.sector_packages
+         WHERE sector_id = $1
+        RETURNING id
+        """,
+        sector_id,
+        schema_version,
+        content,
+        [{"event": "draft_created", "actor": owner}],
+        run_id,
+    )
+
+
+async def activate_package(
+    db,
+    *,
+    package_id: UUID,
+    evidence: ActivationGateEvidence,
+    actor: str,
+) -> None:
+    """Taslağı aktif yapar; varsa öncekini AYNI transaction'da arşivler.
+
+    Kanıt alanlarından herhangi biri sağlanmazsa `GateNotSatisfied` ile
+    REDDEDER — mekanik kontrol, yorum değil.
+    """
+    owner = _require_actor(actor)
+
+    unmet = []
+    if not evidence.activation_eligible:
+        unmet.append("activation_eligible")
+    if evidence.open_questions_count != 0:
+        unmet.append(f"open_questions_count={evidence.open_questions_count} (K-71: 0 olmalı)")
+    if not evidence.katman1_passed:
+        unmet.append("katman1_passed")
+    if not evidence.checklist_approved:
+        unmet.append("checklist_approved")
+    if unmet:
+        raise GateNotSatisfied("aktivasyon kapısı sağlanmadı: " + ", ".join(unmet))
+
+    async with db.transaction():
+        target = await db.fetchrow(
+            "SELECT sector_id, version, status FROM social.sector_packages WHERE id = $1",
+            package_id,
+        )
+        if target is None:
+            raise LifecycleError(f"paket bulunamadı: {package_id}")
+        if target["status"] != "draft":
+            raise LifecycleError(
+                f"yalnız 'draft' aktive edilebilir (görülen: {target['status']!r}); "
+                "arşivlenmiş sürümü geri getirmek rollback_package'ın işidir"
+            )
+
+        sector_id = target["sector_id"]
+        current = await _lock_active_row(db, sector_id)
+        current_version = current["version"] if current else None
+
+        if evidence.expected_active_version is not None and (
+            current_version != evidence.expected_active_version
+        ):
+            raise GateNotSatisfied(
+                "expected_active_version uyuşmuyor: kanıt "
+                f"{evidence.expected_active_version}, gerçek {current_version} — "
+                "onay verildiğinden beri aktif sürüm değişmiş (K-94 yeteneği)"
+            )
+
+        await _apply_status_transition(
+            db,
+            sector_id=sector_id,
+            event_type="activation",
+            actor=owner,
+            activate=(package_id, target["version"]),
+            archive=current["id"] if current else None,
+            from_version=current_version,
+            to_version=target["version"],
+        )
+
+
+async def rollback_package(
+    db,
+    *,
+    sector_id: UUID,
+    to_version: int,
+    evidence: RollbackGateEvidence,
+    actor: str,
+) -> None:
+    """Arşivlenmiş bir sürümü geri getirir; aktif olanı arşivler.
+
+    Hedef-sürüm kanıtı ÇAĞIRANDAN alınmaz, burada doğrulanır: hedef o sektörde
+    var olmalı ve `archived` durumda olmalı.
+    """
+    owner = _require_actor(actor)
+
+    unmet = []
+    if not evidence.manager_approved:
+        unmet.append("manager_approved")
+    if not evidence.katman1_passed:
+        unmet.append("katman1_passed")
+    if unmet:
+        raise GateNotSatisfied("rollback kapısı sağlanmadı: " + ", ".join(unmet))
+
+    async with db.transaction():
+        has_archived = await db.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM social.sector_packages "
+            "WHERE sector_id = $1 AND status = 'archived')",
+            sector_id,
+        )
+        if not has_archived:
+            raise LifecycleError(
+                "bu sektörde arşivlenmiş sürüm YOK — geri dönülecek bir nokta "
+                "yoksa istenen şey rollback değil geri çekmedir: deactivate_package"
+            )
+
+        target = await db.fetchrow(
+            "SELECT id, status FROM social.sector_packages "
+            "WHERE sector_id = $1 AND version = $2",
+            sector_id,
+            to_version,
+        )
+        if target is None:
+            raise LifecycleError(f"hedef sürüm bu sektörde yok: v{to_version}")
+        if target["status"] != "archived":
+            raise LifecycleError(
+                f"hedef sürüm arşivlenmiş değil (görülen: {target['status']!r}) — "
+                "rollback yalnız bir zamanlar aktif olmuş sürüme döner"
+            )
+
+        current = await _lock_active_row(db, sector_id)
+        if current is None:
+            raise LifecycleError(
+                "bu sektörde aktif sürüm YOK — geri alınacak bir geçiş yok; "
+                "yeni sürüm açmak activate_package'ın işidir"
+            )
+
+        await _apply_status_transition(
+            db,
+            sector_id=sector_id,
+            event_type="rollback",
+            actor=owner,
+            activate=(target["id"], to_version),
+            archive=current["id"],
+            from_version=current["version"],
+            to_version=to_version,
+        )
+
+
+async def deactivate_package(db, *, package_id: UUID, actor: str) -> None:
+    """K-38 acil geri çekme — kanıt İSTEMEZ, olay kaydı ZORUNLUDUR.
+
+    Kanıt istememesi bilinçlidir: acil kol, onay toplamayı bekleyemez. Bedeli
+    denetim iziyle ödenir — kim, ne zaman, hangi sürümü çekti.
+    """
+    owner = _require_actor(actor)
+
+    async with db.transaction():
+        row = await db.fetchrow(
+            "SELECT sector_id, version, status FROM social.sector_packages "
+            "WHERE id = $1 FOR UPDATE",
+            package_id,
+        )
+        if row is None:
+            raise LifecycleError(f"paket bulunamadı: {package_id}")
+        if row["status"] != "active":
+            raise LifecycleError(
+                f"yalnız aktif paket geri çekilebilir (görülen: {row['status']!r})"
+            )
+
+        await _apply_status_transition(
+            db,
+            sector_id=row["sector_id"],
+            event_type="deactivation",
+            actor=owner,
+            activate=None,
+            archive=package_id,
+            from_version=row["version"],
+            to_version=None,
+        )

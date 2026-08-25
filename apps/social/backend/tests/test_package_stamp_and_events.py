@@ -206,15 +206,18 @@ async def test_activation_event_first_allows_null_from_version(pkg_db):
 async def test_activation_event_replacement_requires_from_version(pkg_db):
     """Yerine-geçme aktivasyonunda `from_version` ZORUNLU (F22).
 
-    "İlk mi yerine-geçme mi" sorusu ÇAĞIRANA sorulmaz, aynı tablodan okunur:
-    sektörde arşivlenmiş başka bir paket satırı varsa bu bir devir teslimdir.
-    İki ayrı alan (bir "bu replacement" bayrağı + `from_version`) birbiriyle
-    çelişebilirdi; tek ölçüye bağlamak o sınıfı kapatır.
+    "Yerine geçilen bir şey var mı" sorusu ÇAĞIRANA sorulmaz, aynı tablodan
+    okunur: sektörde ŞU AN aktif olan başka bir paket varsa bu bir devir
+    teslimdir. İki ayrı alan (bir "bu replacement" bayrağı + `from_version`)
+    birbiriyle çelişebilirdi; tek ölçüye bağlamak o sınıfı kapatır.
+
+    Olay geçişten ÖNCE yazılır (`_apply_status_transition` sözleşmesi), o
+    yüzden bu kurulum devredilen sürümü hâlâ `active` tutar.
     """
-    sub_id, first_id = await _seed_sector_and_package(pkg_db, status="archived", version=1)
+    sub_id, first_id = await _seed_sector_and_package(pkg_db, status="active", version=1)
     second_id = await pkg_db.fetchval(
         "INSERT INTO social.sector_packages (sector_id, version, status, schema_version, content) "
-        "VALUES ($1, 2, 'active', 1, $2) RETURNING id",
+        "VALUES ($1, 2, 'draft', 1, $2) RETURNING id",
         sub_id,
         _valid_content(),
     )

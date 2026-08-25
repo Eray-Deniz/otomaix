@@ -82,20 +82,30 @@ def _validate_detail(detail: Any) -> None:
 
 
 async def _is_replacement_activation(db, *, sector_id: UUID, package_id: UUID) -> bool:
-    """Bu aktivasyon bir devir teslim mi, sektörün İLK paketi mi.
+    """Bu aktivasyon bir devir teslim mi, yoksa yerine geçtiği bir şey yok mu.
 
     Soru ÇAĞIRANA sorulmaz, paket tablosundan okunur. Ayrı bir "bu bir
     yerine-geçmedir" bayrağı ile `from_version` iki ayrı beyandır ve
     çelişebilirler; ikisini tek ölçüye bağlamak o sınıfı kapatır (K-01b
-    disiplini). Ölçü: sektörde ARŞİVLENMİŞ başka bir paket satırı var mı —
-    `archived`, yaşam döngüsünde "bir zamanlar aktifti" demektir.
+    disiplini).
+
+    **Ölçü: sektörde ŞU AN aktif olan başka bir paket var mı.** İlk yazımda
+    ölçü "arşivlenmiş satır var mı" idi ve o vekil ölçü yanlıştı: acil geri
+    çekme (K-38) sonrası sektörde arşivlenmiş satır KALIR ama aktif satır
+    kalmaz, dolayısıyla sonraki aktivasyon yerine geçtiği bir şey olmadan
+    "devir teslim" sayılıp reddediliyordu — meşru bir yol kapalıydı (Task 13
+    ölçtü). "Yerine geçilen sürüm" tanım gereği geçiş anında AKTİF olandır.
+
+    **Sıra bağımlılığı — sözleşmenin parçası:** ölçü yalnız durum geçişi
+    UYGULANMADAN ÖNCE doğrudur. Tek yazıcı `_apply_status_transition`'dır ve
+    olayı geçişten önce yazar; sıra tersine çevrilirse bu ölçü çöker.
     """
     return bool(
         await db.fetchval(
             """
             SELECT EXISTS (
                 SELECT 1 FROM social.sector_packages
-                WHERE sector_id = $1 AND id <> $2 AND status = 'archived'
+                WHERE sector_id = $1 AND id <> $2 AND status = 'active'
             )
             """,
             sector_id,
