@@ -16,12 +16,14 @@ Spec §7.1-7.3'ün bağladığı üç iddia burada ölçülür:
 from __future__ import annotations
 
 import ast
+import time
 import uuid
 from pathlib import Path
 
 import asyncpg
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.core.database import _init_connection
 from app.models.schemas import BrandCreate, BrandUpdate
@@ -677,3 +679,120 @@ async def test_website_less_suggestion_empty_when_no_candidates(flow_db, monkeyp
 
     assert data["sub_sector_id"] is None
     assert "kwargs" not in captured, "aday yokken model yine de çağrıldı (boşuna ücret)"
+
+
+# ─── 6. Checkpoint 15 tur 2 bulguları ───────────────────────────────────────
+
+
+async def test_suggest_sub_sector_bounds_its_input():
+    """Girdi SINIRLI (F7). Ücretli bir uca sınırsız metin gönderilemez."""
+    with pytest.raises(ValidationError):
+        ai_router.SuggestSubSectorRequest(name="x" * 500)
+    with pytest.raises(ValidationError):
+        ai_router.SuggestSubSectorRequest(name="Marka", description="d" * 5000)
+    with pytest.raises(ValidationError):
+        ai_router.SuggestSubSectorRequest(name="   ")  # boş ad anlamsız çağrı
+
+    # Makul girdi geçer — kapı her şeyi reddetmiyor.
+    assert ai_router.SuggestSubSectorRequest(name="Marka", description="Kuaför").name == "Marka"
+
+
+async def test_suggest_sub_sector_declares_rate_limit():
+    """Uç, ev kuralındaki kota kapısını TAŞIR (F7).
+
+    Yapısal iddia: kotayı davranışsal ölçmek Redis ister ve ev kuralı Redis
+    yokken zaten fail-open'dır (`app/core/rate_limit.py` belgeli kararı) —
+    yani davranışsal test burada boş bir yeşil üretirdi. Ölçülen şey, ucun
+    kardeşleriyle AYNI kapıyı bildirmesidir.
+    """
+    from app.main import app
+
+    routes = {
+        r.path: r for r in app.routes if getattr(r, "path", None) and hasattr(r, "methods")
+    }
+    guarded = routes["/ai/suggest-sub-sector"]
+    sibling = routes["/ai/suggest-ideas"]
+
+    def _limiter_deps(route):
+        return [
+            d for d in route.dependant.dependencies
+            if "_check" in getattr(d.call, "__name__", "")
+        ]
+
+    assert _limiter_deps(guarded), "yeni ücretli uçta kota kapısı YOK"
+    assert _limiter_deps(sibling), "karşılaştırma dayanağı kayboldu (kardeş uç kotasız)"
+
+
+async def test_suggest_sub_sector_surfaces_provider_failure(flow_db, monkeypatch):
+    """Sağlayıcı arızası BAŞARI gibi dönmez (F9).
+
+    Geçerli "eşleşme yok" ile "model çağrılamadı" aynı yanıta düşerse bozuk bir
+    API anahtarı ya da sağlayıcı kesintisi kullanıcıya "uygun öneri çıkmadı"
+    diye görünür ve hiçbir yerde iz bırakmaz.
+    """
+    sub_id = await _new_sub_sector(flow_db, slug="aday-ariza", display="Aday Arıza")
+    await _activate_package(flow_db, sub_id)
+
+    class _Boom:
+        def __init__(self, **_kwargs):
+            raise RuntimeError("sağlayıcı erişilemez")
+
+    import anthropic
+
+    monkeypatch.setattr(anthropic, "Anthropic", _Boom)
+
+    with pytest.raises(HTTPException) as exc:
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(name="Marka"),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+    assert exc.value.status_code == 503
+
+    # Karşı kontrol: GEÇERLİ eşleşme-yok hâlâ 200 + boş döner, hata DEĞİL.
+    _fake_anthropic(monkeypatch, '{"sub_sector": ""}')
+    data = (
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(name="Marka"),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+    ).data
+    assert data["sub_sector_id"] is None
+
+
+async def test_suggest_sub_sector_does_not_block_forever(flow_db, monkeypatch):
+    """Asılı sağlayıcı çağrısı işçiyi süresiz TUTMAZ (F7).
+
+    Çağrı olay döngüsünün dışında ve süre sınırlı koşar; sınır aşılırsa uç
+    503 verir — yanıtsız beklemez.
+    """
+    sub_id = await _new_sub_sector(flow_db, slug="aday-asili", display="Aday Asılı")
+    await _activate_package(flow_db, sub_id)
+
+    monkeypatch.setattr(ai_router, "_SUGGEST_TIMEOUT_SECONDS", 0.2)
+
+    class _Messages:
+        def create(self, **_kwargs):
+            time.sleep(5)  # olay döngüsünü bloklayacak kadar uzun
+            raise AssertionError("zaman aşımı tetiklenmedi")
+
+    class _Hanging:
+        def __init__(self, **_kwargs):
+            self.messages = _Messages()
+
+    import anthropic
+
+    monkeypatch.setattr(anthropic, "Anthropic", _Hanging)
+
+    started = time.monotonic()
+    with pytest.raises(HTTPException) as exc:
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(name="Marka"),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+    elapsed = time.monotonic() - started
+
+    assert exc.value.status_code == 503
+    assert elapsed < 3, f"çağrı süre sınırına uymadı ({elapsed:.1f}s)"

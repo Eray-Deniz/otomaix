@@ -160,15 +160,22 @@ const DEFAULT_BRAND_KIT: BrandKit = {
 
 // ─── Save indicator ───────────────────────────────────────────────────────────
 
-function SaveIndicator({ saving, saved }: { saving: boolean; saved: boolean }) {
-  if (saving) return (
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+function SaveIndicator({ state }: { state: SaveState }) {
+  if (state === 'saving') return (
     <span className="flex items-center gap-1 text-xs text-gray-400">
       <Loader2 className="w-3 h-3 animate-spin" /> Kaydediliyor...
     </span>
   )
-  if (saved) return (
+  if (state === 'saved') return (
     <span className="flex items-center gap-1 text-xs text-emerald-600">
       <Check className="w-3 h-3" /> Kaydedildi
+    </span>
+  )
+  if (state === 'error') return (
+    <span className="flex items-center gap-1 text-xs text-red-600">
+      <X className="w-3 h-3" /> Kaydedilemedi
     </span>
   )
   return null
@@ -439,8 +446,7 @@ function MarkaAyarlariContent() {
 
   const [brand, setBrand] = useState<Brand | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [uploadingLogo, setUploadingLogo] = useState<'light' | 'dark' | null>(null)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [removingLogo, setRemovingLogo] = useState<'light' | 'dark' | null>(null)
@@ -538,39 +544,62 @@ function MarkaAyarlariContent() {
     return () => { cancelled = true }
   }, [currentBrand?.id])
 
+  // Kayıt eş güdümü — TEK yaşam döngüsü, iki yol.
+  //
+  // Marka ve kit kayıtları artık paralel uçabiliyor (ayrı zamanlayıcılar).
+  // "Kaydedildi" bir işlemin bitmesine bağlanırsa, ilk biten diğeri hâlâ
+  // uçarken başarı gösterir — kullanıcı sayfayı kapatabilir. Bayrak yerine
+  // SAYAÇ tutulur: başarı ancak uçuştaki HER kayıt bittiğinde ve hiçbiri
+  // düşmemişse gösterilir. `ApiResponse.success` de artık okunuyor; eskiden
+  // ağ/HTTP hatasından sonra da "Kaydedildi" yazıyordu.
+  const saveOps = useRef({ pending: 0, failed: false })
+
+  const runSave = useCallback(async (call: () => Promise<{ success: boolean }>) => {
+    if (saveOps.current.pending === 0) saveOps.current.failed = false
+    saveOps.current.pending += 1
+    setSaveState('saving')
+    let ok = false
+    try {
+      ok = (await call()).success
+    } catch {
+      ok = false
+    }
+    saveOps.current.pending -= 1
+    if (!ok) saveOps.current.failed = true
+    if (saveOps.current.pending > 0) return
+    if (saveOps.current.failed) {
+      setSaveState('error')
+      return
+    }
+    setSaveState('saved')
+    setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 2000)
+  }, [])
+
   // Debounced auto-save for brand info
   const scheduleSave = useCallback((updated: Brand) => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(async () => {
       if (!updated.id) return
-      setSaving(true)
-      setSaved(false)
-      await api.patch(`/brands/${updated.id}`, {
-        name: updated.name,
-        description: updated.description,
-        website_url: updated.website_url,
-        sector: updated.sector,
-        // Açık `null` atamayı BOŞALTIR; sunucu bu alanı `model_fields_set`
-        // üzerinden okuduğu için `null` sessizce düşmez.
-        sub_sector_id: updated.sub_sector_id,
-      })
-      setSaving(false)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      await runSave(() =>
+        api.patch(`/brands/${updated.id}`, {
+          name: updated.name,
+          description: updated.description,
+          website_url: updated.website_url,
+          sector: updated.sector,
+          // Açık `null` atamayı BOŞALTIR; sunucu bu alanı `model_fields_set`
+          // üzerinden okuduğu için `null` sessizce düşmez.
+          sub_sector_id: updated.sub_sector_id,
+        })
+      )
     }, 1500)
-  }, [])
+  }, [runSave])
 
   const scheduleKitSave = useCallback((kit: BrandKit, brandId: string) => {
     if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
     kitSaveTimer.current = setTimeout(async () => {
-      setSaving(true)
-      setSaved(false)
-      await api.patch(`/brands/${brandId}/kit`, kit)
-      setSaving(false)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      await runSave(() => api.patch(`/brands/${brandId}/kit`, kit))
     }, 1500)
-  }, [])
+  }, [runSave])
 
   function updateBrand(fields: Partial<Brand>) {
     setBrand((prev) => {
@@ -868,7 +897,7 @@ function MarkaAyarlariContent() {
           <h1 className="text-xl font-bold text-gray-900">Marka Ayarları</h1>
           <p className="text-sm text-gray-500 mt-0.5">{brand.name}</p>
         </div>
-        <SaveIndicator saving={saving} saved={saved} />
+        <SaveIndicator state={saveState} />
       </div>
 
       {/* Paket durumu bandı — metin BACKEND'den gelir (K-45 sabit metni). */}

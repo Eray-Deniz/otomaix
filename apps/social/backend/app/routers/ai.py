@@ -1,10 +1,12 @@
 """AI helper endpoints — content idea suggestions + website analysis via Claude."""
 
+import asyncio
+import logging
 from uuid import UUID
 
 import asyncpg
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -17,6 +19,13 @@ from app.models.schemas import OkResponse
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
+logger = logging.getLogger(__name__)
+
+# Sağlayıcı çağrısının üst sınırı. Çağrı senkron istemciyle yapılır, o yüzden
+# olay döngüsünün DIŞINDA koşturulur — aksi hâlde asılı bir sağlayıcı tek bir
+# istekle işçiyi süresiz tutardı.
+_SUGGEST_TIMEOUT_SECONDS = 20.0
+
 
 from app.core.utils import parse_brand_kit as _parse_brand_kit
 
@@ -26,11 +35,25 @@ class AnalyzeWebsiteRequest(BaseModel):
 
 
 class SuggestSubSectorRequest(BaseModel):
-    """Web sitesiz geri düşüşün girdisi (spec §7.1): ad + açıklama + kök sektör."""
+    """Web sitesiz geri düşüşün girdisi (spec §7.1): ad + açıklama + kök sektör.
 
-    name: str
-    description: str | None = None
-    sector: str | None = None
+    Alanlar SINIRLI: bu uç ücretli bir model çağrısı doğurur, dolayısıyla
+    girdi boyu bir maliyet yüzeyidir. Sınırlar marka formunun kendi
+    gerçekleriyle uyumlu; darlaştırmak değil, sınırsızlığı kapatmak amaç.
+    """
+
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    sector: str | None = Field(default=None, max_length=200)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank(cls, value: str) -> str:
+        # Yalnız boşluktan oluşan ad, modele sorulacak hiçbir şey taşımaz —
+        # çağrı yapılmadan reddedilir.
+        if not value.strip():
+            raise ValueError("name boş olamaz")
+        return value
 
 
 def _candidate_prompt_block(candidates: list[dict]) -> str:
@@ -173,7 +196,11 @@ async def analyze_website(
     return OkResponse(data=data)
 
 
-@router.post("/suggest-sub-sector", response_model=OkResponse)
+@router.post(
+    "/suggest-sub-sector",
+    response_model=OkResponse,
+    dependencies=[Depends(limiter(20, 3600))],  # 20/saat — kardeş uçlarla aynı ev kuralı
+)
 async def suggest_sub_sector(
     payload: SuggestSubSectorRequest,
     user: dict = Depends(get_current_user),
@@ -206,13 +233,12 @@ async def suggest_sub_sector(
         f"{_candidate_prompt_block(candidates)}"
     )
 
-    raw_field = None
-    try:
-        import json
-
+    def _call_model() -> str:
         import anthropic
 
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(
+            api_key=settings.ANTHROPIC_API_KEY, timeout=_SUGGEST_TIMEOUT_SECONDS
+        )
         message = client.messages.create(
             model="claude-opus-4-7",
             max_tokens=128,
@@ -220,21 +246,46 @@ async def suggest_sub_sector(
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
-        raw = message.content[0].text.strip()
+        return message.content[0].text.strip()
+
+    try:
+        # Senkron istemci ayrı bir iş parçacığında; süre sınırı DIŞARIDAN
+        # uygulanır ki istemcinin kendi zaman aşımı çalışmasa bile uç yanıtsız
+        # kalmasın.
+        raw = await asyncio.wait_for(
+            asyncio.to_thread(_call_model), timeout=_SUGGEST_TIMEOUT_SECONDS
+        )
+    except Exception as exc:
+        # Sağlayıcı arızası GEÇERLİ "eşleşme yok" ile aynı yanıta düşemez:
+        # düşseydi bozuk bir API anahtarı kullanıcıya "uygun öneri çıkmadı"
+        # diye görünür ve hiçbir yerde iz bırakmazdı. Prompt log'lanmaz.
+        logger.error("suggest_sub_sector: sağlayıcı çağrısı başarısız: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Alt sektör önerisi şu an alınamıyor; listeden seçebilirsiniz.",
+        ) from exc
+
+    raw_field = None
+    try:
+        import json
+
         if "```" in raw:
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
         parsed = json.loads(raw)
         # Nesne olmayan gövde `raw_field`'ı None bırakır — doğrulayıcı onu
-        # zaten boşa düşürür, ayrı bir dal gerekmez.
+        # zaten boşa düşürür.
         if isinstance(parsed, dict):
             raw_field = parsed.get("sub_sector")
-    except Exception:
-        # Model/ayrıştırma hatası öneriyi BOŞ bırakır. Öneri bir kolaylıktır;
-        # kullanıcı açılır listeden zaten seçebilir, o yüzden burada isteği
-        # düşürmek fayda değil sürtünme üretirdi.
-        raw_field = None
+    except Exception as exc:
+        # Ayrıştırma hatası da sağlayıcı tarafının arızasıdır (sözleşmeye
+        # uymayan yanıt), geçerli bir "eşleşme yok" DEĞİLDİR.
+        logger.error("suggest_sub_sector: model yanıtı ayrıştırılamadı: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Alt sektör önerisi şu an alınamıyor; listeden seçebilirsiniz.",
+        ) from exc
 
     return OkResponse(
         data=_suggestion_fields(_resolve_sub_sector_suggestion(raw_field, candidates))
