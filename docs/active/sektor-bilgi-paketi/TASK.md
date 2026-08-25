@@ -30,9 +30,20 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: f17e24896dac5b21290e810afa3869c9822b3463
-- cp_count: 15
-  <!-- Checkpoint 15: üç tur; DUR dalı → kullanıcı kararı KAPSAM DARALT.
+- last_checkpoint_ref: d9c42646366f69180fe17c345a634cc7911f81b9
+- cp_count: 16
+  <!-- Checkpoint 16 (Task 15b): TEK tur, needs-attention -> DUR dalı ->
+       kullanıcı kararı GERİ AL. Beş high, beşi de o turun ürünü ve beşi de
+       kod okunarak doğrulandı (iki en ağırı: bekleyen iş için tek yuva ->
+       marka ve kimlik yazımı birbirini siliyordu; başarısız HER yazım
+       "çakışma" sayılıp kullanıcının taslağını yok ediyordu). Önyüz geri
+       alındı (`d9c4264`), otomatik kaydetme Task 15 sonrası hâlinde kaldı.
+       Sunucu tarafındaki koşullu yazım kapısı + 5 testi UYKUDA bırakıldı.
+       Kök neden YÖNTEM: önyüzde otomatik test altyapısı yok, doğrulama
+       "okundu + derlendi" ile yapıldı. Alt sistem CURRENT.md'de
+       `brand-settings-save-integrity` olarak adlandırıldı (tetik: Task 16'dan
+       sonra, canlıya müşteri alınmadan ÖNCE).
+       Checkpoint 15: üç tur; DUR dalı → kullanıcı kararı KAPSAM DARALT.
        Tur 1: bir high + beş medium. Tur 2: F1-F6 kapalı doğrulandı, bir yeni
        high (yeni ücretli uçta kabul kontrolü yok) + iki medium; biri kendi
        düzeltmemin yan etkisiydi (zamanlayıcıları ayırınca "Kaydedildi"
@@ -76,339 +87,32 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-25 (on üçüncü oturum) — TASK 13 BİTTİ, CHECKPOINT 13 KAPANDI. Açık kapı YOK.**
-Üç tur; tur 3 `approve`, bulgu yok. `pytest tests/ -q` → **459 passed** (oturum başında 405);
-donmuş prompt + migration kapıları → **131 passed**. Çalışma alanı temiz, push YOK.
-Önyüze DOKUNULMADI, o yüzden derleme kapısı tetiklenmedi.
+**2026-08-25 (on beşinci oturum) — TASK 15 BİTTİ. TASK 15b AÇILDI, DENETİMDE DÜŞTÜ, GERİ ALINDI.
+Açık kapı YOK.**
 
-**Task 13 bitti:** yaşam döngüsü servisleri (aktivasyon / rollback / acil geri çekme) ve
-`insert_draft` kuruldu. Ham iki-adım geçişi ÖZEL; public yüzeyden kanıtsız geçiş yolu yok.
-Geçiş ile olay kaydı tek transaction'da (F24) ve sıra sözleşmesi artık MEKANİK.
+**Task 15 (atama akışı) bitti.** Aday küme kanonik sorgudan (canlı, önbelleksiz) tek evde
+üretiliyor; iki tüketici yüzeyi kapalı, üretim akışı kümeye hiç uğramıyor. Model önerisi kapalı
+listeye karşı doğrulanıyor — üçüncü dönüş biçimi yok. `sub_sector_id` yazımı marka oluşturma ve
+marka ayarlarında açık, boşaltma açık `null` ile. Web sitesiz geri düşüşün öneri ucu da eklendi
+(spec §7.1'in denetimde fark edilen eksik ayağı).
 
-**Yolda bir Task 12 kusuru düzeltildi.** Olay kaydının "devir teslim mi" ölçüsü "sektörde
-arşivlenmiş paket var mı" idi; acil geri çekme sonrası arşivlenmiş satır kalır ama aktif satır
-kalmaz, dolayısıyla "geri çek → bakım → yeniden aç" akışında yeni aktivasyon REDDEDİLİYORDU.
-Meşru bir yol kapalıydı. Ölçü tanımın kendisine bağlandı: yerine geçilen sürüm, geçiş anında
-AKTİF olandır.
+Checkpoint 15 ÜÇ tur koştu: tur 1'de bir high + beş medium, tur 2'de F1-F6 kapalı + bir yeni
+high + iki medium, tur 3'te iki sınıf "sayarak kapanmaz" teşhisiyle geri geldi. Sistemik-sınıf
+kuralı ateşlendi, otonom döngü tavan beklenmeden durdu. Eray kararı: kaydetme bütünlüğü ayrı
+görev (15b), sağlayıcı çağrısının kesilememesi kod tabanı geneli desen olarak kaydedildi.
 
-**Turların anlattığı hikâye — dördün üçü kendi ürünümdü.** Tur 1 iki high + bir medium buldu:
-kanıt sınıflarında çalışma-zamanı tip zorlaması yoktu (`"false"` metni DOĞRU sayılıyor, yani
-"aktive edilemez" işaretli aday aktive edilebiliyordu); aynı taslağı iki transaction birlikte
-aktive edip denetim izine iki aktivasyon yazabiliyordu. Medium advisory SAYILMADI — sıra
-bağımlılığını bu parti getirmişti.
+**Task 15b (kaydetme bütünlüğü) yazıldı ve GERİ ALINDI.** Denetim beş high buldu; beşi de o
+turun ürünüydü ve iki yolda kod, düzelttiği hatadan kötüydü. Eray kararı: önyüz geri alınır,
+otomatik kaydetme bugünkü hâlinde kalır, alt sistem adlandırılmış iş olur.
 
-**Tur 2'nin dersi en pahalısı: düzeltmenin kendi yan etkisi.** F2'yi kapatmak için serileştirme
-çapasını sektör satırına taşımak YENİ bir high açtı (F4) — paket kilitlenmeden önce okunmak
-zorunda olduğu için sektör penceresi doğdu. Kilit altında sektör yeniden okunup bağlandı.
-**Pencere KAPANMADI, fail-closed yapıldı** — kapanması `sector_id`'yi değişmez kılan bir
-migration ister ve Task 13'ün dosya kapsamında değildi; tetikli kayıt olarak HANDOFF'ta duruyor.
+**Premis düzeltmesi (Eray):** marka ayarları MÜŞTERİ yüzeyidir — abone kendi marka bilgisini
+orada doldurur. Bulgu ciddiyetini "tek operatör / 2 marka" ölçeğiyle küçültmek YANLIŞTI; ölçüt
+"müşteri kaydettiğini sanıp kaydetmemiş olabilir mi"dir.
 
-**Ölçülmemiş makine bırakılmadı.** Sektör kilidi ilk yazımda hiçbir testin ölçmediği bir
-katmandı (pozitif kontrol yeşil kaldı). Ölçülebilir farkı teste bağlandı: kilitsizken kaybeden
-taraf ham veritabanı kısıt ihlaliyle ölüyor. Ayrıca kendi testimde bir sahte yeşil yakalandı —
-F4 deaktivasyon yarış testi hedefi yanlış durumda kurduğu için ölçmesi gerekeni ölçmüyordu.
-
-**2026-08-25 (on ikinci oturum, ikinci yarı) — TASK 12 BİTTİ, CHECKPOINT 12 KAPANDI.**
-Beş tur; tur 3'ten itibaren `approve`. Tur 1'in dört high bulgusunun dördü de bağımsız
-sondajla doğrulandı ve düzeltildi. `pytest tests/ -q` → **405 passed**; donmuş prompt +
-migration kapıları → **131 passed**; `npx next build` → exit=0. Çalışma alanı temiz, push YOK.
-
-**Task 12 bitti:** damga tüketimi (atomik, tek kullanımlık) iki kalıcı-kayıt ucunda da
-bağlandı; `social.package_events` + `log_package_event` kuruldu; Task 8-11'in geçici
-logları kalıcı olaya bağlandı; istemci makbuzu caption yanıtından iki isteğe de taşıyor.
-
-**Turların anlattığı hikâye — iki kez aynı ders.** İlk düzeltmelerimin İKİSİ de (F3, F4)
-varyantı kapatıp sınıfı açık bıraktı: F3'te elle kurduğum indeks imzası eksikti (aynı adda
-UNIQUE bir indeks kapıdan geçiyordu — ölçüldü), F4'te sırayı kaydırdım ama geçişi atomik
-yapmadım. İkisi de ikinci turda TAM ölçüye bağlanarak kapandı: `pg_get_indexdef` (kanonik
-tanımın tamamı) ve tek transaction'da onaya-açılma + damga.
-
-**Medium'lar advisory sayılmadı — çünkü bu partinin kendi gerilemeleriydi.** M1 (süpürücü
-kararını geri alma) ve M2'nin tur-4 varyantı (geç webhook başarısı arayüze ulaşmıyor)
-düzeltildi; M1 için pozitif kontrol koşuldu (kapı kaldırılınca test düşüyor).
-
-**M2 residual KABUL EDİLEN RİSK ve gerekçesi ÖLÇÜLDÜ.** Üç turda üç varyant geldi; ortak
-yan, istemcide cevaplanamayan bir soruyu ("bu satır daha değişecek mi") yüklemle çözmeye
-çalışmaktı. Altıncı yama açılmadı. Ölçüldü ki sınırsız yoklama bu partinin ürünü DEĞİL:
-`0c19d83` sürümünde de terminal başarısız satır sonsuza kadar yoklanıyordu (üstelik kart
-yanlış durum gösteriyordu). Yük aynı, görünürlük arttı. Gerçek çözüm arka uçtan türetilmiş
-bir uzlaştırma sinyalidir ve o, Eray'ın park ettiği ürün kararının içindedir.
-
-**2026-08-25 (on ikinci oturum) — CHECKPOINT 11 KAPANDI (approve, bulgu yok). Devralınan tek
-açık kapı kapatıldı; Task 1–11 bitti, sıradaki Task 12.**
-`pytest tests/ -q` → **345 passed** (oturum başında 296). Donmuş prompt kapısı → **121 passed**
-(oturum başında 72; devralınan HANDOFF 71 diyordu — son düzeltme bir test daha eklemişti).
-Çalışma alanı temiz, **push YOK**.
-
-**F3 beşinci kez geldi ve BAŞKA bir eksendeydi.** Önceki dört tur tek bir yüklem etrafında
-dönüyordu ("kalıp zaten var mı") ve o yüklem tur 4'te silinerek kapanmıştı. Tur 5'in kök nedeni
-bozulmuş bağımlılık yoluydu: Anthropic çağrısı patladığında `_build_still_prompt` yalnız
-marka/sektör/renk taşıyan genel bir yedek metin üretiyor, havuz hiç girmiyordu — ölçüldü,
-`_resolve_still_prompt`'un dört dalının DÖRDÜNDE de. Video başarıyla üretiliyor, paketli marka
-sektörel sinyalini sessizce kaybediyordu.
-
-**Düzeltme (`0c19d83`) sınıf düzeyinde kuruldu.** Kural: model çağrısı YAPMAYAN her durağan-kare
-yolu havuzdan bir kalıp ekler; model çağrısı YAPAN her yol havuzu bağlamda taşır. Bu iki küme
-çıkışların TAMAMIDIR (hakem de aynı sayımı bağımsız yaptı). Kapanış elle seçilmiş örnekle değil
-ÜRETİLMİŞ matrisle kanıtlandı: mod × kullanıcı isteği × istem dili (12 dal) × model
-ayakta/düşük = 24 hücre, hem paketli hem paketsiz tarafta. Düzeltmeden önce 12 model-düşük
-hücrenin 11'i kırmızıydı (12.'si zaten zenginleştirme yolundan geçen İngilizce dalı).
-
-**Süreç dersi (Eray itirazı, kayda değer).** Beş tur aynı maddenin beş kez açılması DEĞİL, aynı
-sözün beş ayrı çıkıştan delinmesiydi; ama beş tura çıkması hakemin değil yürütmenin hatasıdır.
-Her turda bulunan delik yamandı, "bu sözün kaç çıkışı var, hepsini say" sorusu beşinci tura
-kadar sorulmadı. Hakem delta bakar — tam haritayı çıkarmak yürütmenin işidir. Turlar daralarak
-geliyorsa yamalamayı bırakıp çıkış uzayını saymak KURAL hâline getirildi.
-
-**2026-08-24 (on birinci oturum) — PLAN 1 YÜRÜTME AÇIK; Task 10 ve 11 yazıldı, Task 8 revize
-edildi, K-02 ve K-113 KAPANDI. Checkpoint 11 KAPANMADI.**
-`pytest tests/ -q` → **296 passed** (oturum başında 232). Donmuş prompt kapısı → **71 passed**.
-`npx next build` → geçti (bu daldaki ilk frontend derlemesi). Çalışma alanı temiz, **push YOK**.
-
-**Task 10 bitti (tek-kapı enjeksiyon — caption + fikir önerme).** Paket bloğu kök sektör
-rehberinin yerine geçiyor; özel günde dönem kalıpları mevcut bloğun içine giriyor; CTA'lar Task
-9'un kanal filtresinden geçiyor; paketli üretim opak `generation_id` döndürüyor.
-**Checkpoint 10: iki tur, approve.** Tur 1'de üç high + bir medium; dördü de sondajla doğrulandı.
-İkisi benim kendi hatamdı ve ikisi de ancak yol/güven sınırına bakınca görünüyordu: (a) damga
-yardımcısını dekoratör ile işleyicinin ARASINA koymuşum, FastAPI rotayı ona bağlamış, caption ucu
-HTTP'den erişilemez hâle gelmişti; (b) damga, paketin ÇÖZÜLMÜŞ olmasına bakıyordu, dönen içeriğin
-o paketle üretildiğine değil — model patlayınca yedek çıktı paket damgası alıyordu (sahte soyağacı).
-
-**Spec eksikliği kapatıldı (Eray talebi).** Spec, spec-input'tan yazılırken K-02'nin **öneri ·
-sahip · çözüm yolu** ayaklarını düşürmüş, **K-113'ü hiç taşımamıştı**. İki commit bunu yalnız
-EKLEYEREK kapattı (108 satır eklendi, **0 satır silindi** — `git diff --stat` ile doğrulandı);
-her blok `[SONRADAN EKLENDİ]` etiketi taşıyor. Bu, yürütmenin Task 11'de tam olarak neden
-durduğunu da açıklıyor: "iki alt yapıdan hangisi sahne" sorusunun yazılı cevabı yoktu.
-
-**K-02 = A ve K-113 = A KAPANDI (Eray onayı).** Hareket dili paketin sektörel havuzundan gelir;
-seçimi caption aşamasındaki MEVCUT model çağrısı yapar (ölçüldü: kısa video ucu script'siz istek
-kabul etmiyor, yani o çağrı zaten zorunlu → ek çağrı doğmuyor); istemciden dönen değer sunucuda
-havuz üyeliğine karşı doğrulanır; havuz boşsa bugünkü listeye düşülür. Alan adları bağlandı
-(`video_kodlar.hareket` · `.sahne`), **ikisi de LİSTE**.
-
-**Task 8 revize edildi.** Yazdığım kapı `video_kodlar`'ın parçalarını tek cümle sanıyordu ve
-adları serbest bırakıyordu; ölçüldü, alternatif taşıyan meşru bir paket yazılamıyordu. Kapı artık
-adlı ve çoğul sözleşmeyi zorluyor.
-
-**Task 11 yazıldı ama CHECKPOINT 11 KAPANMADI.** Görsel dil, sahne havuzu (iki modda da) ve
-hareket havuzu bağlandı; legacy uç bilinçle bağlanmadı (K-06). **Dört tur koşuldu; F1 ve F2
-kapandı, F3 dört kez geri geldi ve son düzeltmesi HAKEMDEN GEÇMEDİ** (ayrıntı Open Problems).
-
-**Önceki durum (2026-08-24, onuncu oturum) — 16 task'ın 9'u bitti.**
-Bu oturumda YALNIZ Task 9 (kanal envanteri) yürütüldü — ama checkpoint'i altı tura yayıldı.
-`pytest tests/ -q` → **232 passed** (oturum başında 185). Donmuş prompt kapısı → **25 passed**.
-Çalışma alanı temiz, **push YOK**. Devralınan açık kapı YOKTU; bu oturum da açık kapı DEVRETMİYOR.
-
-**Task 9 bitti (kanal envanteri + deterministik CTA filtresi).** `[kanal-bağımlı: X]` etiketli
-CTA kalıpları markanın envanterine karşı deterministik olarak eleniyor; envanter yok/boş/bozuk
-ya da değer tam `True` değilse kalıp ATLANIYOR (spec §12.2 muhafazakârlık hükmü). Anahtar uzayı
-kapalı ve kapalılık, çağıranın kit içeriği verebildiği HER yüzeyde zorlanıyor — yüzey kümesinin
-tamlığı yapısal (AST) taramayla ölçülüyor.
-
-**Checkpoint 9: ALTI TUR, tavan-aşımı (Eray oturum başında izin verdi; audit `ceiling-exceed`).**
-Yedi bulgunun yedisi de bağımsız sondajla DOĞRULANDI — hiçbiri sondaj koşmadan kabul veya
-reddedilmedi. Beşi high, ikisi medium.
-
-**Turların anlattığı asıl hikâye: yamalama üç tur boyunca yakınsamadı.** Bulgular tek eksende
-daralarak geldi — tipografik/görünmez karakter (tur 1) → eksik ayıraç (tur 2) → ayırıcı sınıfı
-(tur 3) → yanlış yazılmış bayrak adı (tur 4). Kök sebep her turda aynıydı: kapı serbest metinden
-*"bu bir etiket DEĞİLDİR"* i kanıtlamaya çalışıyordu. Bu tür bir kapı yakınsamaz; her tur ya bir
-bypass ya bir yanlış-pozitif üretir. Tur 3 ve tur 4'te döngü sınıf-teşhisiyle DURDURULDU ve Eray'a
-soruldu (bkz. Decisions Log).
-
-**Çözüm tahminden KAPSAMAYA taşındı ve dayanağı spec'ten TÜRETİLDİ, uydurulmadı.** §8.4 bayrak
-kümesini "sekiz bayrak, kapalı" diye bağlıyor ama sekizini saymıyor; §8.5 eksik parçayı veriyor —
-sekizin YEDİSİ sentez sırasında tüketilir, yalnız kanal bayrağı "etiketiyle taşınır"; §3.4 aynı
-hükmü alan tablosunda tekrarlıyor. Yani paket İÇERİĞİNDE geçebilecek bayrak kümesi tek kalemlik.
-Kural: CTA öğesi içindeki her köşeli ayraç kanal bayrağının kurallı biçimi olmak zorunda. Yanlış
-yazım, birleşik yazım, eksik/iç içe ayraç, sentezde tüketilmesi gereken bir bayrağın sızması —
-hepsi TEK kuralla düşüyor. Açık bir K-ID kapatılmadı.
-
-**Tur 5 iki YENİ sınıf getirdi ve ikisi de benim düzeltmelerimin yan etkisiydi.** (a) Birleştirmeyi
-sunucuya taşırken çift kodlanmış kit satırının ele alınmasını düşürmüşüm: ölçüldü, tek alanlık bir
-güncelleme mevcut TÜM kit alanlarını siliyordu. (b) Ayraç kuralını içeriğin tamamına uygulamıştım:
-görsel yönergedeki zararsız bir notasyon paketin TAMAMINI devre dışı bırakıyordu. İkisi de
-düzeltildi. **Ders: düzeltmenin kendi yan etkisini ölçmek düzeltmenin parçasıdır.**
-
-**Eşzamanlılık sınıfı da kapandı.** `brand_kit` artık hiçbir yolda okunup geri yazılmıyor;
-üç yazıcı da tek bir sunucu-taraflı birleştirme ifadesinden geçiyor. Ölçüldü: düzeltmeden önce
-dört eşzamanlı yazımın ÜÇÜ kayboluyordu.
-
-**İnceleme bütçesi bu oturumda TÜKENDİ.** Altı tur koşuldu (tavan 8, en az 3'ü finale rezerve);
-tur 6 Eray kararıyla rezervden fonlandı. Task 10 ara inceleme olmadan yürütülmemeli — bütçe
-oturum başına sıfırlandığı için TAZE OTURUM gerekiyor.
-
-**Önceki durum (2026-08-24, dokuzuncu oturum) — 16 task'ın 8'i bitti (planın yarısı).**
-Bu oturumda Task 7 ve Task 8 yürütüldü (inline; review/checkpoint kapıları normal koştu).
-`pytest tests/ -q` → **185 passed**. Türetilmiş defter rc=0, çalışma alanı temiz, **push YOK**.
-Devralınan açık kapı YOKTU ve bu oturum da açık kapı DEVRETMİYOR.
-
-**Task 7 bitti — KATMAN-1 FREEZE KAPISI KAPALI.** Dokuz fixture donduruldu: durağan kare tam
-matriste (metinden-görsele / ürün-edit × ürünlü / ürünsüz — dördü de, çünkü ürün odak bloğu
-ikisinin "veya"sından çıkıyor), script istemi rehberli ve rehbersiz, kamera hareketi havuzu içerik
-ve sıra olarak. Legacy uç KENDİ router yolundan donduruldu: sektör rehberini marka satırının
-görünen adıyla ("Teknoloji") slug anahtarlı tabloda arıyor, yani rehber her markada boş — bozukluk
-düzeltilmedi, K-06'nın istediği gibi aynen donduruldu. Yalnız dış dünya (ElevenLabs, fal.ai)
-kesildi. Ölçülen yan gerçek: `generate_script`'e bugün hiçbir üretim çağrısı dolu sektör rehberi
-geçmiyor (`/ai/generate-script` parametreyi hiç geçmiyor). Caption/fikir yüzeyleri ayrı, slug'ı
-doğru kullanan yoldan rehberi alıyor.
-
-Harness Task 7'nin ilk adımında fail-closed yapıldı (devralınan öneri): kayıpsız temsil
-edilemeyen girdi artık REDDEDİLİYOR. Task 6'nın dört fixture'ı bayt-aynı kaldı — mevcut kanıt
-bozulmadı.
-
-**Checkpoint 7: tek tur `approve`, kritik/yüksek YOK.** İki orta bulgu `accepted_risk`
-YAZILMADI, FIX edildi (gerekçe review log'unda): biri commit mesajındaki bir iddiayı çürütüyordu,
-ikisi de dakikalar önce yazılmış test kodundaydı. Re-review turu açılmadı.
-
-**Task 8 bitti (paket erişim katmanı).** `sector_packages.py`: tek normalize modülü (K-01b),
-içerik doğrulayıcı (yazımdan önceki kapı — REDDEDER), paket çözümleyici (çalışma zamanı — asla
-reddetmez, `None` + log ile düşer). Bilinçle kapı YAPILMAYAN iki şey: ~6.000 karakter tavanı
-UYARI (ölçülmemiş tasarım hedefi, İlke 9) ve `video_kodlar` alan adları serbest (K-02 açık —
-yalnız iki-alt-yapı sayısı bağlandı). K-15(a) alan-düzeyi atlama dalı bilinçle YOK.
-
-**Checkpoint 8: DÖRT TUR, tur 4'te `approve`.** Tur 1 üç yüksek + bir orta verdi; dördü de
-bağımsız sondajla doğrulandı (kabul edilmedi, ölçüldü): yazım kapısı kabın tipine bakıp geçiyordu
-(`[None]`, `["   "]`, `{"a": False}` kabul ediliyordu), çözümleyici `content={}` dâhil her sözlüğü
-geçerli sayıyordu, marka adı taraması Türkçe'ye kördü. Tur 2 iki yeni şey getirdi: F3 kapanmamıştı
-ve **F5 — önceki commit mesajımdaki "bağlam kurulumu emniyet sınırına taşındı" iddiası YANLIŞTI**
-(taşınmamıştı; düzeltildi ve commit'te açıkça yazıldı).
-
-**Tur 3'ün süreç kararı (kayda değer).** F3'te üç tur üst üste aynı eksenin daha dar bir varyantı
-geldi: Türkçe büyük harf → ayrışık Unicode → `İ`.lower()'ın ürettiği görünmez birleşen işaret.
-Dördüncü nokta yaması yerine SINIF kapatıldı — katlama artık tüm birleşen işaretleri atarak
-bitiyor. Kanıt da biçim değiştirdi: elle seçilmiş örnek yerine ÜRETİLMİŞ MATRİS (8 marka × tüm
-yazımlar = 277 çift, kaçan 0). Elle seçilmiş örnekler zaten üç turdur deliği açık tutan şeydi.
-
-**Mutasyon disiplini.** 23 kabul dalı tek tek devre dışı bırakıldı; ilk taramada üç dalın bekçisi
-yoktu ve Codex bunu orta bulgu olarak yakaladı — haklıydı, taramam yardımcı-fonksiyon düzeyindeydi,
-dal düzeyinde değil. Şimdi hepsinin bekçisi var.
-
-**`cp_count` = 8 = TAVAN.** Sıradaki riskli task (Task 9) tavan-aşımı kararına düşecek; Eray bu
-oturumda review'lara ve tavan aşımına açık izin verdi.
-
-**Önceki durum (2026-08-24, sekizinci oturum) — PLAN 1 YÜRÜTME AÇIK; 16 task'ın 6'sı bitti.**
-Bu oturumda Task 5 ve Task 6 yürütüldü (inline; review/checkpoint kapıları normal koştu).
-`pytest tests/ -q` → **78 passed**. Türetilmiş defter rc=0, çalışma alanı temiz, **push YOK**.
-
-**Task 4'ün devralınan açık kapısı KAPANDI.** Oturum, geçen oturumdan doğrulanmamış devralınan
-`afc8daf` (fail-closed taksonomi kapısı) ile başladı. Checkpoint 5'in ilk turu onu kapanış turu
-titizliğiyle inceledi ve KAPALI buldu: çözümleyicinin her çağıranı taranmış, `create_brand` ve
-`update_brand` yazımdan önce istisnayı bekliyor ve yutmuyor, `resolve_sector_id` aynı kapıya
-bağlanıyor. Devralınan tek borç buydu.
-
-**Task 5 bitti (veri/API regresyon kümesi + marka kök-sektör tam sweep).** Dört regresyon testi
-bugünkü invariantı pinliyor: alt sektör satırı eklemek `GET /sectors` çıktısını ve HİÇBİR markanın
-kök sektörünü değiştirmiyor (TAM sweep — örneklem değil), hiçbir üretim yolu damga kolonu yazmıyor
-(yedi `INSERT INTO social.posts` noktasının hepsi yapısal olarak tarandı). `scripts/sector_sweep.py`
-canlıda da koşulabilen salt-okunur operasyonel sweep.
-
-**Checkpoint 5: BEŞ TUR, `approve` ALINMADAN kullanıcı kararıyla kapatıldı (override).** Bulgu
-kümesi tek bir eksene oturdu — sweep'in taban dosyasına ne kadar güvenebileceği — ve her tur bir
-öncekinden dar bir varyant açtı: (1) rapor yalnız "kök bağlı mı" diyordu, kökten köke kayma
-görünmüyordu; (2) yarıda kesilmiş taban eksik markaları ihlal-olmayan `added` sayıyordu;
-(3) taban hangi veritabanından geldiğini taşımıyordu; (4) veritabanı-içi kimliği fiziksel kopya
-aynen taşıyor; (5) bağlantı ucu METİNDEN okunuyordu, oysa asyncpg `PGPORT`/`?host=` yollarını da
-dikkate alır. **Beşinin beşi de düzeltildi ve beşi de pozitif kontrollü.** Rapor artık tam eşleme
-listesi taşıyor, `--baseline` çift çift karşılaştırıyor, taban kendi beyanına karşı doğrulanıyor,
-kimlik hem kanonik bağlantı dizesinden hem sunucunun KENDİ bildirdiği uçtan besleniyor, belirsiz
-dize bağlanmadan reddediliyor, yakalanmayan istisna rc=2 veriyor (rc=1 "fark bulundu" demek —
-karışırdı) ve parola hiçbir akışa sızmıyor (ölçüldü).
-
-İki öneri BİLİNÇLİ REDDEDİLDİ, gerekçesi script'in kendi belgesinde yazılı: (a) tabanın geçmişte
-doğru olduğunu kanıtlayan imzalı özet — taban geçmiş bir durumdur, araç geçmişi doğrulayamaz;
-imzasız özet yalnız kazara kesilmeyi yakalar, onu da satır sayısı zaten yakalıyor; (b) dışarıdan
-sağlanan kimlik — provisioning hikâyesi ister, bağlantı ucu aynı girdiyi bedava kapatıyor.
-Kalıntı ve yeniden açılma koşulu (taban dosyaları güvenilmeyen bir kanaldan taşınırsa) modül
-belgesinde. Override audit satırı execute review log'unda.
-
-**Task 6 bitti (Katman-1 yakalama altyapısı + caption/fikir fixture'ları).** `capture.py` Claude'a
-giden çağrıyı kesip TAM prompt'u (model + sistem blokları + mesaj blokları + önbellek sınırları)
-deterministik metne çeviriyor. Test kendi prompt'unu KURMUYOR — üretimin kendi kod yolu koşuyor,
-yalnız ağ ucu kesiliyor. Dört fixture donduruldu: tekli caption (özel günlü/günsüz), carousel dalı
-(K-15b), fikir yüzeyi. Dondurma yalnız `PROMPT_REGRESSION_UPDATE=1` ile yapılıyor; bayraksız
-koşumda kırmızı test kendini yeşile boyayamıyor. İki sessiz-yeşil tuzağı kapatıldı: caption yolu
-anahtar yoksa, fikir yolu HER istisnada sessizce fallback'e düşüyor — ikisinde de "çağrı gerçekten
-yapıldı mı" ayrıca doğrulanıyor. Fixture'lar gözle incelendi: paket izi YOK, sektör rehberi
-dördünde de basılı (paketin ileride yerine geçeceği blok), üç katmanlı önbellek sınırı görünür,
-özel gün varyantı yalnız kendi bloğuyla ayrışıyor.
-
-**Checkpoint 6 koştu → `verdict: approve`, kritik/yüksek bulgu YOK.** İki orta bulgu
-`accepted_risk` (HANDOFF Risks). Codex ayrıca harness'ın her iki üretim import biçimini de
-gerçekten yakaladığını ve tam-bir-çağrı iddiasının sessiz fallback'i imkânsız kıldığını doğruladı.
-
-**Süreç notu (kayda değer).** Checkpoint 5 tek bir dosyada beş tur döndü ve kullanıcı haklı olarak
-"daha kaç review gerekecek" diye sordu. Dördüncü turda tavan kuralı gereği durup rapor edildi, ama
-"ucuz kapanış" önerisiyle döngü bir tur daha uzatıldı — o öneri geri görüşte hatalıydı. Ders:
-tavanda DURMAK kuralın kendisidir, ucuz düzeltme varlığı onu geçersiz kılmaz.
-
-**Önceki durum (2026-08-24, yedinci oturum) — 16 task'ın 3'ü bitti (Task 3 + Task 4).**
-Ayrıntı: Task 3 migration dağıtım/geri alma/atomiklik, Task 4 kök kova korumaları; checkpoint 3
-dört turda `approve`, checkpoint 4 tek tur `needs-attention` + kapanış turu açılamadı (bu oturumda
-kapandı). `Exec-Kind` etiket düzeltmesi için geçmiş yeniden yazıldı (`backup/pre-t3-kind-fix`).
-
-**Önceki durum (2026-08-24, altıncı oturum) — 16 task'ın 2'si bitti.**
-`/execute-plan-claude-codex` başlatıldı: dal `feat/sektor-bilgi-paketi`, mod
-subagent-driven, `execute_start_ref = 5a9d5d4`. Task 1 (pytest altyapısı +
-atılabilir `otomaix_test` veritabanı) ve Task 2 (migration 032) bitti; 39 test
-PASS. İki checkpoint koştu, ikisi de `verdict: approve` ile kapandı: checkpoint 1'de
-bir yüksek bulgu (yıkıcı test-DB işlemi yalnız veritabanı ADINI doğruluyordu, sunucu
-ucunu değil) tek turda, checkpoint 2'de bir yüksek bulgu (migration idempotentliği
-isim-eşitliğine dayanıyordu → garanti sessizce eksik kalabilirdi) üç turda kapandı.
-Beş orta/düşük bulgu `accepted_risk` olarak kayıtlı (HANDOFF Risks). Bir footer
-etiketi hatası defteri kırmıştı; Eray onayıyla geçmiş yeniden yazılarak düzeltildi
-(içerik bayt-aynı, emniyet etiketi `backup/pre-footer-fix`). **9 commit local,
-push YOK.** Sıradaki iş: Task 3.
-
-**Önceki durum (2026-08-24, beşinci oturum) — PLAN 1 ONAYLANDI (`plan-approved`, Tur 7 `verdict: approve`).**
-Eray yol seçimi: "sadeleştir + fix" — F23 kaldırmayla kapandı (recovered bandı + K-45
-geri-dönüş teslimi Plan 2'ye; atama-geçmişi kanıtı Plan 2 kalemi; metin/karar korunur),
-F22 (olay-türüne özgü sürüm şekilleri) + F24 (geçiş+olay tek transaction) mekanik fix.
-Tur 7 kapanış-doğrulaması: F22/F23/F24 CONFIRMED, yeni bulgu YOK. 24/24 bulgu kapalı
-(23 fix/devir + F17 Eray risk-kabulü). EXECUTE-NOTES kozmetikleri uygulandı. Repo
-HİS-özet review log yazıldı (`docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md`).
-Commit onayı Eray'da; sonrası `/execute-plan-claude-codex`.
-
-**Önceki durum (2026-08-23, dördüncü oturum):** Plan 1 yazıldı, 6 Codex review turu
-koştu; 3 açık high bulgu + YOL SEÇİMİ Eray kararı bekliyordu; oturum Eray talebiyle o
-noktada kapatıldı. Kapsam kararı: 2 planlı staged split (Eray) — Plan 1 = runtime çekirdeği
-(bu oturumda yazıldı: `docs/plans/2026-08-23-sektor-bilgi-paketi.md`, 16 task,
-status `plan-draft`, **COMMIT EDİLMEDİ — working tree'de untracked**), Plan 2 =
-işletim hattı (hat/motor/komut ailesi/pilot; açık K-84 ailesi kapanınca).
-Review: 24 bulgu (F1-F24), 21'i kapandı (19 fix+CONFIRMED · F17 Eray risk-kabulü:
-damga = edited-lineage atfı · F20/F21 tur-6 CONFIRMED). **Açık: F22 (yaşam-döngüsü
-olay şekilleri sınır durumları) · F23 (recovered bandı atama-geçmişi kanıtı) ·
-F24 (geçiş+olay atomikliği)** — üçünün de Codex yapılandırılmış çözümü review
-log'unda. Sıradaki adım SEÇİM: (1) sadeleştir+fix (geri-dönüş bandı Plan 2'ye →
-F23 yok olur; önerilen) / (2) üçünü düzelt / (3) durdur — Eray henüz SEÇMEDİ;
-yeni oturum bu sorudan başlar. Süreç notu: oturum sonunda belirsiz-mesajı onay
-sayma ihlali yaşandı (Eray yakaladı; plan dosyasına dokunulmadan durduruldu).
-
-**Önceki durum (üçüncü oturum):** Kayıt üçlemesi: liste Durum sütunu dolu +
-spec K-ID satırları "KAPANDI" statüsünde (kardeş-site sweep'li) + Decisions Log
-altında tam döküm. Öneriden farklı 3 karar: K-71 (açık sorular aktivasyonu BLOKLAR),
-K-45 (çift yönlü bakım bildirimi — Faz 1'e bildirim mekanizması iş kalemi eklendi),
-K-56 (olay-bazlı anında uyarı — eşik değil). K-26 genişlemeli kapandı (vade
-bildirimi eklendi). **Spec ONAYLANDI (Eray, aynı oturum)** — frontmatter
-`spec-approved`. **Üçüncü oturum (aynı gün): sentez deposu sweep borcu kapsam
-daraltmasıyla kapatıldı** — tam geriye dönük sweep İPTAL (Eray), yerine kaynak
-belgeye statü notu + snapshot yeniden eşitleme. Sırada: `/write-plan-claude-codex`
-ile sıfırdan plan.
-
-**Önceki durum (aynı gün, ilk oturum):** Spec yazıldı, Codex review 3 tur SHIP
-(11+1 bulgu çözüldü; log: `docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-spec.md`).
-Eski spec/plan superseded. Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md`
-(status: reviewed-pending-user-approval).
-
-**2026-08-21 güncellemesi:** İki hakem mimari belgesinin sentezi tamamlandı ve kanonik girdi
-snapshot olarak alındı (`docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md`).
-**Aynı gün ikinci oturum:** sentez commit'lerinin Codex denetimi koşuldu (4 bulgu: 2 yüksek,
-2 orta); iki yüksek bulgu (bayat karar statüleri + K-05 kapsam tersliği) 4 commit'lik gövde
-sweep'iyle giderildi ve 4 turlu Codex kapanış-doğrulaması **CONFIRMED** ile kapandı; snapshot
-yeni kaynak commit `c380e37` üzerinden yeniden alındı (bayt-özdeşlik sha ile doğrulandı).
-**Sıradaki iş: yeni spec'in yazımı** (`docs/specs/2026-08-21-sektor-bilgi-paketi.md`) —
-seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; ilişkileri
-(devralma / supersede) spec seansında netleşecek, durum geçişi Eray'ındır.
+**Yöntem dersi (kayda geçti):** otomatik test altyapısı olmayan bir dosyada elle eşzamanlılık
+kodu yazıldı ve doğrulama "okundu + derlendi" ile yapıldı. Bu yöntem araya-girme hatalarını
+tanım gereği yakalayamaz. Arka uçta mutasyonla ölçülen her şey sağlam çıktı; kırılan her şey
+ölçülemeyen tarafta oldu.
 
 # Open Problems
 

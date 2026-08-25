@@ -5,7 +5,7 @@
 
 ## Context
 - Task: sektor-bilgi-paketi — Plan 1 yürütmesi açık (`/execute-plan-claude-codex` protokolü)
-- Last updated: 2026-08-25 (on dördüncü oturum — Task 14 yazıldı, checkpoint 14 kapandı)
+- Last updated: 2026-08-25 (on beşinci oturum — Task 15 bitti, Task 15b geri alındı)
 - Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
 - Spec girdisi: `docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` — **karar sorusu
@@ -14,158 +14,156 @@
 - Codex ham review log'u: `/root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md`
 
 ## Current State
-- **Biten:** Task 1–14 (16'nın 14'ü). **Checkpoint 14 KAPANDI. Açık kapı YOK.**
-- **Checkpoint:** sayaç ve ref TASK.md "Execution State"ten okunur — burada TEKRARLANMAZ
-  (türetilebilir değer iki yerde tutulunca ıraksar). Son checkpoint §8.6 Clean dalında kapandı.
+- **Biten:** Task 1–15 (16'nın 15'i). **Açık kapı YOK.**
+- **Checkpoint:** sayaç ve ref TASK.md "Execution State"ten okunur — burada TEKRARLANMAZ.
 - **Mod:** inline. `execute_mode: subagent-driven` kaydı BİLEREK değiştirilmedi (Task 1-2'yi
   doğru anlatıyor). inline YALNIZ task yazımını kapsar; review/checkpoint kapıları normal koştu.
-- **Tavan:** 8; sayaç tavanın ÜSTÜNDE olduğu için her riskli task `CEILING_RISK` dalına düşüyor.
-  Eray bu oturumda tavan iznini AÇIKÇA verdi; **o izin BU OTURUMA aitti**, yeni oturumda
-  tekrar sorulmalı.
+- **Tavan:** 8; sayaç tavanın ÜSTÜNDE, her riskli task `CEILING_RISK` dalına düşüyor. Eray bu
+  oturumda tavan iznini AÇIKÇA verdi; **o izin BU OTURUMA aitti**, yeni oturumda tekrar sorulmalı.
 - **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
   Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 
 ## Resume From (sıra)
-1. **Task 15** — atama akışı (aday küme, öneri, teyit UI). Aday küme teslimi plan
-   §"bağladığı teknik kararlar" 7'de yazılı: öneri çağrısına **kapalı liste prompt'a gömülür**
-   + dönüş doğrulaması listede-veya-boş; açılır listeye teslim
-   `GET /sectors/sub-sector-candidates` (canlı sorgu, kopya TUTULMAZ).
-   **Yeniden tasarlanmaz, oradan okunur.**
-2. Sonra Task 16 (arayüz-sözleşme doğrulaması + manuel adımlar).
-3. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
-   `.venv/bin/python -m pytest tests/prompt_regression/ -q` yeşil olmadan ilerlenmez
-   (Task 7 freeze hükmü).
-4. **Frontend'e dokunulduysa `npx next build` KOŞULUR.** (Task 15 önyüze dokunacak.)
-5. Oturum başında tavan-aşımı için Eray'dan izin iste (yukarıdaki not).
+1. **Task 16** — kapanış: tam sweep + kabul eşlemesi + Plan 2 arayüz teslimi + MANUEL adımlar.
+   Manuel adımların listesi aşağıda "Risks" altında; hiçbiri bu oturumda yapılmadı.
+2. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
+   `.venv/bin/python -m pytest tests/prompt_regression/ -q` yeşil olmadan ilerlenmez.
+3. Oturum başında tavan-aşımı için Eray'dan izin iste.
+4. **Task 16'dan SONRA, canlıya müşteri alınmadan ÖNCE:** `CURRENT.md` →
+   `brand-settings-save-integrity`. Bu madde bu oturumun ürünüdür ve ertelenmiş değil,
+   **evi olan** bir iştir.
 
 ## Verification (bu oturum)
 
 **Koşan komutlar / taze çıktı:**
-- `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **502 passed**
-  (oturum başında 459; Task 14 yazımından sonra 481; checkpoint 14 düzeltmelerinden sonra 502).
+- `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **538 passed**
+  (oturum başında 502; Task 15 + düzeltmeler + Task 15b arka uç kapısı).
 - `.venv/bin/python -m pytest tests/prompt_regression/ -q` → **121 passed**
   (byte-exact freeze kapısı; donmuş fixture'lar bayt DEĞİŞMEDİ).
-- `.venv/bin/python -m pytest tests/test_notifications.py tests/test_migration_034.py -q`
-  → **43 passed** (Codex'in tur 3'te istediği doğrulama; taze koşuldu).
-- `cd apps/social/frontend && npx next build` → **başarılı** (önyüz bandı eklendi).
-- `ec_ledger_view --post-window` → **rc=0**, T14 ve fix commit'leri etiketli.
+- `cd apps/social/frontend && npx next build` → **başarılı** (geri alma sonrası taze koşuldu).
+- Uygulama ayağa kalkıyor; `/sectors/sub-sector-candidates` kayıtlı ve rota sırası doğru.
 - `command-blocks-maint.sh verify` → **PASS**.
-- Uygulama ayağa kalkıyor: `app.main` import edildi, iki yeni rota kayıtlı ve
-  `/brands/{brand_id}/package-status` `/brands/{brand_id}`'den ÖNCE geliyor (ölçüldü).
 
 **Pozitif kontroller (kapıların gerçekten ölçtüğünü kanıtlayanlar — hepsi taze):**
-- Task 14 yazımında **7 mutasyon**, hepsi ilgili testi DÜŞÜRDÜ: claim'deki sayaç artışı (F19) ·
-  süpürücünün kira koşulu (F20) · finalize'ın jeton kapısı · `ON CONFLICT` dedupe · K-56 tek
-  kapı bağlaması · bildirim sarmalayıcısının `try`'ı · sahiplik kapısı.
-- Checkpoint 14 düzeltmelerinin **hepsi önce KIRMIZI görüldü** (F1/F2 beş test, F3 iki test,
-  F4 dört + iki bozulma vakası) ve ancak düzeltmeden sonra yeşile döndü.
-- `UNLOGGED` sahte tablosunun migration'dan rc=0 ile GEÇTİĞİ ayrıca elle ölçüldü — bulgu
-  Codex tarafından "çıkarım" diye işaretlenmişti, kabul edilmeden önce doğrulandı.
+- Task 15 yazımında **7 mutasyon**, hepsi ilgili testi DÜŞÜRDÜ (aday sorgusunun aktif-paket
+  şartı · kök filtresi · açık-null boşaltma · öneri tip kapısı · öneri listede-mi kapısı ·
+  atanabilirlik ön-kontrolü · yapısal detektörün ayrım gücü).
+- Düzeltme turlarında **7 mutasyon daha** (kota kapısı · girdi sınırı · sağlayıcı arızasının
+  görünürlüğü · süre sınırı · boş-aday kısa devresi · kısıt-adı ayrımı · kapalı listenin
+  prompta gömülmesi) — hepsi yakalandı.
+- Task 15b arka uç kapısında **3 mutasyon**, hepsi yakalandı.
+- **İki mutasyon HAYATTA KALDI ve ikisi de gerçek boşluk gösterdi:** biri benim no-op kurgu
+  hatamdı, öteki boş-aday kısa devresinin amacının ÇIKTI değil "boşuna ücretli çağrı yakmamak"
+  olduğunu ortaya çıkardı — o iddia ayrıca teste bağlandı.
 
-**ÇÜRÜTÜLEN VARSAYIM (kayda değer):** "indeks düşerse migration DURur" varsayımı YANLIŞTI.
-`CREATE INDEX IF NOT EXISTS` eksik indeksi GERÇEKTEN geri getirir (kısıtların aksine — çünkü
-`CREATE TABLE IF NOT EXISTS` bütün ifadeyi atlar). Kapının sözü daraltıldı ve iki ayrı testle
-pinlendi: eksik indeks ONARILIR, yanlış tanımlı indeks REDDEDİLİR.
+**ÇÜRÜTÜLEN / DÜZELTİLEN VARSAYIMLAR (kayda değer):**
+- "Tetikleyici `RaiseError` fırlatır" YANLIŞTI — `IntegrityConstraintViolationError` fırlatıyor;
+  ilk yakalama kümem hiç çalışmayacaktı.
+- "SQLSTATE sınıfı bizim kapımızı tanımlar" YANLIŞTI — aynı sınıfı çalışma alanı ve kök sektör
+  yabancı anahtarları da üretiyor; kapı artık kısıt ADINA bakıyor.
+- "Sürüm damgası testlerde ölçülebilir" YANLIŞTI — damga transaction'ın BAŞLANGIÇ anı, standart
+  düzenek her şeyi tek transaction'da tuttuğu için damga hiç ilerlemiyor ve kapı SAHTE YEŞİL
+  verirdi. Testler ayrı transaction'lara taşındı.
+- **Premis düzeltmesi (Eray):** marka ayarları MÜŞTERİ yüzeyi; riski "tek operatör" ölçeğiyle
+  küçültmek yanlıştı.
 
-**Codex:** checkpoint 14 → **3 tur** (tur 1: 4 high · tur 2: 3'ü kapalı + F4 yeniden açıldı ·
-tur 3: approve, bulgu yok). Tur 1 ilk çağrısı 480s'de timeout'a düştü; canlılık yoklaması
-companion'ın sağlam olduğunu gösterdi ve protokolün öngördüğü tek tekrar 1200s ile koştu.
+**Codex:** checkpoint 15 → **3 tur** (needs-attention; sistemik-sınıf DUR'u ateşlendi).
+Task 15b checkpoint → **1 tur** (needs-attention; 5 high → geri alma).
+Bir çağrı 480s'de timeout'a düştü; canlılık yoklaması companion'ın sağlam olduğunu gösterdi ve
+protokolün öngördüğü tek tekrar 1200s ile koştu. Bir çağrı da kısaltılmış SHA yüzünden substratı
+kuramadı (rc=2) — Codex hiç çağrılmadı; **taban ref'i daima TAM SHA ver.**
 
 **DENENMEYEN / kapsanmayan:**
-- **Canlı n8n importu ve gerçek Telegram teslimi DENENMEDİ** — Task 16 manuel adımı. Workflow
-  JSON'ının yapısı ve sır içermediği ölçüldü; canlıda çalıştığı ölçülmedi.
-- `N8N_ADMIN_EVENT_SECRET` canlıya KURULMADI; kurulmadan bildirim gönderimi fail-closed durur
-  (satır `pending`de birikir, kaybolmaz).
-- Canlıya hiçbir migration uygulanmadı (032 · 033 · 034) — manuel adım, Task 16.
+- **Task 15'in MANUEL UI doğrulaması YAPILMADI** (plan Step 5). Gerçek tarayıcıda onayla /
+  değiştir / boşalt üçlüsü, boş-aday hâli, kanal doldurma ve sitesiz öneri düğmesi
+  DENENMEDİ. Task 16 raporuna "doğrulanmadı" olarak girer.
+- **Canlı n8n importu ve gerçek Telegram teslimi DENENMEDİ.**
+- Canlıya hiçbir migration uygulanmadı (032 · 033 · 034).
 - Gerçek arayüzde tek bir üretim denenmedi; gerçek bir sektör paketi hiç yazılmadı.
-- `IS JSON OBJECT` yüklemi ve `conenforced` yalnız PostgreSQL 18.3'te ölçüldü; PG16'da
-  varlıkları BELGEYE dayanıyor.
-- Kısa video stage-2 gerçek bir fal.ai çağrısıyla koşulmadı (dış dünya kesildi).
-- **Eşzamanlılık testi `SKIP LOCKED`'in bloklamama özelliğini KANITLAMAZ** — ipucu kaldırılınca
-  test yine geçiyor (READ COMMITTED yeniden değerlendirmesi doğruluğu koruyor). Ölçülen
-  doğruluk (tek teslim), ölçülmeyen throughput.
-- Hızlı yolun havuz DAVRANIŞI tek bağlantılık gerçek havuzla ölçüldü; ÇOK bağlantılı bir
-  patlama senaryosu (20 bağlantı, N eşzamanlı olay) ölçülmedi.
+- Öneri uçlarının hiçbiri GERÇEK model çağrısıyla koşulmadı (hepsi sahte istemciyle).
+- Kota kapısı davranışsal ölçülmedi (Redis ister; ev kuralı Redis yokken zaten fail-open).
+- `IS JSON OBJECT` ve `conenforced` yalnız PostgreSQL 18.3'te ölçüldü; PG16'da varlıkları
+  BELGEYE dayanıyor.
 
 ## Risks
 
 **Bilinçli tasarım kararları (bulgu SAYILMAZ):**
-- Sahne zenginleştirmesinde yinelenme kontrolü YOK; hareket/sahne geri düşüşü RASTGELE seçer.
-- Damga yazımı başarısızsa `generation_id` null döner; üretim düşürülmez.
-- Model çağrısı yapan yolda havuz BAĞLAM olarak verilir (spec §4.3).
-- `stamp_missing` yalnız makbuz BEKLENEN akışlarda yazılır (`RECEIPTLESS_CONTENT_TYPES`).
-- `insert_draft` yasak marka adlarını TÜM markalardan türetir; yanlış-pozitif bilinçlidir.
-- **Bildirim teslimi EN-AZ-BİR-KEZ'dir**; yinelenen yönetici uyarısı gürültüdür, veri kaybı
-  değil. n8n tarafındaki tekilleştirme static data'ya dayanır ve o BELGELERDE DENEYSEL'dir —
-  yani BEST-EFFORT, tek-teslim garantisi DEĞİL.
-- **Hızlı yol genel bir "commit sonrası" kancası DEĞİLDİR:** açık transaction içinde yazan
-  çağıranlar için hiç koşmaz; teslimi kurtarma yolu (n8n schedule) üstlenir. Teslim garantisi
-  hızlı yola DAYANMAZ.
-- Kira süresi (300 sn) ÖLÇÜLMEMİŞ bir tahmindir ve hiçbir kapının eşiği DEĞİLDİR.
+- Alt sektör YAZIM kapısı yalnız "alt sektör satırı mı" sorar; aktif paket şartı ARAMAZ.
+  K-43 gereği paketi arşivlenen markanın ataması korunur, yani paketsiz alt sektör meşru bir
+  kayıtlı değerdir. Aday kümesi neyin ÖNERİLECEĞİNİ belirler, neyin saklanabileceğini değil.
+  Codex bunu genişletmek istedi; planın bağlayıcı invariantı yalnız tetikleyiciyi adlandırdığı
+  için REDDEDİLDİ (tasarım değişikliği, yürütme kararı değil).
+- Öneri ucunun kota kapısı Redis yokken fail-open'dır — ev kuralının belgeli kararı. Tek uç
+  için ayrı politika uydurulmadı.
+- Site analizi ucunun "model hatası → boş şablonla HTTP başarı" davranışı bu partiden ÖNCE de
+  vardı ve değiştirilmedi; YENİ öneri ucunda aynı sınıf kapatıldı (arıza 503).
+- Sunucudaki koşullu yazım kapısı ve 5 testi depoda UYKUDA — hiçbir çağıran sürüm göndermiyor,
+  davranış Task 15 sonrasıyla aynı. Uyanmadan tek başına bir şey garanti ETMEZ.
 
 **Açık kalemler — hepsinin evi VAR:**
-- **[Eray tetikledi]** Süpürücü "başarısız" derken webhook aynı satırı "hazır" yapabiliyor;
-  arka uçta `failed` terminal DEĞİL ve 10 dakikalık eşiğin ölçülmüş dayanağı YOK.
-  Ev: `docs/active/CURRENT.md` → `stale-sweeper-vs-late-webhook-terminality`.
-  **Tetik: sektör bilgi paketi işi TAMAMEN bittikten sonra**, fal.ai model değişikliğiyle.
-- **[çözülmedi + park edildi, TETİKLİ]** `sector_packages.sector_id` yazımdan sonra DEĞİŞMEZ
-  değil. Ev: `CURRENT.md` → `sector-package-sector-id-immutability`.
-- **[YENİ — tetikli kayıt]** Migration **032 ve 033**'ün garanti blokları kolon imzasını ve
-  tablo katalog imzasını doğrulaMIYOR; 034'te kapatılan sınıfın aynısı. Bu partinin ürünü
-  DEĞİL (önceden var olan borç), o yüzden sessizce düzeltilmedi.
-  Ev: `CURRENT.md` → `migration-guarantee-block-signature-gap`.
-- **[Manuel adım — evi Task 16]** `N8N_ADMIN_EVENT_SECRET` canlıya kurulmalı · n8n'de
-  "Otomaix Admin Event Key" header-auth kimlik bilgisi yaratılmalı ve workflow'daki
-  `REPLACE_WITH_ADMIN_EVENT_KEY_CREDENTIAL` yer tutucusu gerçek kimlikle değiştirilmeli ·
-  `OTOMAIX_ADMIN_TELEGRAM_BOT_TOKEN` + `OTOMAIX_ADMIN_TELEGRAM_CHAT_ID` env'leri kurulmalı ·
-  workflow import edilip TEK Telegram teslimi smoke'u koşulmalı.
+- **[YENİ — bu oturumun ürünü]** Marka ayarları otomatik kaydetmesinin dört kayıp yolu açık.
+  Ev: `CURRENT.md` → `brand-settings-save-integrity`. **Tetik: Task 16'dan sonra, canlıya
+  müşteri alınmadan ÖNCE.** Önyüz test altyapısı bu işin ÖN KOŞULU.
+- **[YENİ]** Senkron sağlayıcı çağrısı gerçekten kesilemiyor (süre sınırı yalnız beklemeyi
+  keser). Kod tabanı GENELİ bir desen — caption, kısa video, site analizi hepsi aynı.
+  Bu partinin kusuru değil; somut kusurları (yeniden deneme çarpanı, biçim doğrulaması,
+  önyüzün arızayı gizlemesi) kapatıldı.
+- **[Eray tetikledi]** Süpürücü ↔ geç webhook terminallik çelişkisi. Ev: `CURRENT.md`.
+  Tetik: sektör bilgi paketi işi TAMAMEN bittikten sonra.
+- **[çözülmedi + park edildi, TETİKLİ]** `sector_packages.sector_id` değişmez değil. Ev: `CURRENT.md`.
+- **[TETİKLİ]** Migration 032/033'ün garanti blokları kolon/tablo imzası doğrulamıyor. Ev: `CURRENT.md`.
+- **[Manuel adım — evi Task 16]** `N8N_ADMIN_EVENT_SECRET` canlıya kurulmalı · n8n'de header-auth
+  kimlik bilgisi yaratılmalı ve workflow'daki yer tutucu değiştirilmeli ·
+  `OTOMAIX_ADMIN_TELEGRAM_BOT_TOKEN` + `..._CHAT_ID` env'leri kurulmalı · workflow import edilip
+  TEK Telegram teslimi smoke'u koşulmalı.
 - **[Manuel adım — evi Task 16]** `apps/social/backend/.env.example`'a `N8N_ADMIN_EVENT_SECRET`
-  satırı ELLE eklenmeli: sır-dosyası yazma kapısı (global `permissions.deny`) bu dosyayı
-  koruyor, agent yazamaz. Backend `CLAUDE.md`'ye işlendi.
-- **[accepted_risk, checkpoint 12]** Kütüphane yoklaması terminal başarısız satırları sınırsız
-  yokluyor. ÖLÇÜLDÜ: bu partinin ürünü DEĞİL.
+  satırı ELLE eklenmeli (sır-dosyası yazma kapısı agent'ı engelliyor).
+- **[Manuel adım — evi Task 16]** Task 15'in UI doğrulaması.
+- **[accepted_risk, checkpoint 12]** Kütüphane yoklaması terminal başarısız satırları sınırsız yokluyor.
 - **[doğrulama boşluğu — evi: kuyumculuk pilotu]** Uçtan uca gerçek akış ölçümü.
-- **[Plan 2 teslim kalemi — evi: plan "Plan 2'ye teslim edilen arayüzler", Task 16 doğrular]**
-  Brief/sentez hattı `video_kodlar` için İKİ HAVUZ üretmeli (`hareket`, `sahne`).
-- **[Plan 2 teslim kalemi]** `recovered` modu + geri-dönüş mesajı Plan 2'dedir (F23 kapanışı).
-  `package-status` ucunun durum modeli kapalı enum DEĞİL, düz metin — yeni mod şemayı kırmaz.
-- **[Residual — evi Task 16]** 033 ve **034** için geri alma script'i YOK (plan istemedi).
+- **[Plan 2 teslim kalemi]** Brief/sentez hattı `video_kodlar` için İKİ HAVUZ üretmeli.
+- **[Plan 2 teslim kalemi]** `recovered` modu + geri-dönüş mesajı (F23 kapanışı).
+- **[Residual — evi Task 16]** 033 ve 034 için geri alma script'i YOK (plan istemedi).
 - **[Temizlik borçları — evi `/simplify-claude-codex`]** İki dosyada kullanılmayan `pytest`
   importu · `brands.py`'de kullanılmayan `BrandOut`.
 - **[Etiketler — evi `/finish-branch-claude-codex`]** `backup/pre-footer-fix`,
   `backup/pre-t3-kind-fix` merge/PR kararından sonra silinir.
 
 **Devralınan, değişmeyen kalemler:**
-- `accepted_risk` (checkpoint 9): CTA içinde serbest köşeli ayraç yok · `brand_kit` anahtarı
-  silinemez.
-- Belgeli sınırlar (testle pinli, borç DEĞİL): ayraçsız kanal işareti yakalanmaz · tam
-  genişlikli ayraçlı etiket tanınır ama basımdan çıkarılamaz (kozmetik).
-- `accepted_risk` (test altyapısı): eşzamanlı iki pytest oturumu `otomaix_test`'i düşürür ·
-  migration keşfi tekrarlı numarayı reddetmiyor · `db` fixture geri sarma testi yok ·
-  `sector_research_artifacts` TRUNCATE regresyonu yok · `idx_brands_sub_sector_id` plan
-  sözleşmesinde yazılı değil (low).
-- **[Eray risk kabulü]** On-prem PG16 ↔ 032'nin PG18 kolonu: **çözülmedi + park edildi.**
+- `accepted_risk` (checkpoint 9): CTA içinde serbest köşeli ayraç yok · `brand_kit` anahtarı silinemez.
+- Belgeli sınırlar (testle pinli, borç DEĞİL): ayraçsız kanal işareti yakalanmaz · tam genişlikli
+  ayraçlı etiket tanınır ama basımdan çıkarılamaz.
+- `accepted_risk` (test altyapısı): **eşzamanlı iki pytest oturumu `otomaix_test`'i düşürür**
+  (bu oturumda bir kez tetiklendi — arka plan ve ön plan koşumu çakıştı, 9 hata verdi; tek
+  koşumda 538 passed) · migration keşfi tekrarlı numarayı reddetmiyor · `db` fixture geri sarma
+  testi yok · `sector_research_artifacts` TRUNCATE regresyonu yok.
+- **[Eray risk kabulü]** On-prem PG16 ↔ 032'nin PG18 kolonu: çözülmedi + park edildi.
 - **F17 (Eray):** damga = edited-lineage atfı. **Yeniden açtırma.**
-- **[checkpoint-override, checkpoint 5]** Sweep tabanının kökeni — kapalı.
 
 ## Notes For Claude
 
+- **ÖLÇEMEDİĞİN YERE ELLE EŞZAMANLILIK KODU YAZMA.** Bu oturumun en pahalı dersi: önyüzde
+  otomatik test altyapısı yok ve oraya elle bir eş güdüm katmanı yazıldı; doğrulama "okundu +
+  derlendi" ile yapıldı. Beş high çıktı ve kod iki yolda düzelttiği hatadan kötüydü. Sıra ve
+  araya-girme hataları okumayla görülmez. Ya ölçüm aracı önce kurulur, ya sınıfı silen bir
+  tasarım seçilir.
 - **ARAÇ TUZAĞI — tekrarlama.** `run_codex_scan` `$COMPANION` ve `$PROMPT` değişkenlerini
-  KULLANIR ama TANIMLAMAZ; ikisini de çağıran kurar (CODEX-CALL-PROTOCOL preflight +
-  `PROMPT=$(cat -- "$CODEX_PROMPT_FILE")`). Kurulmazsa `node ""` koşar: arka planda sessizce
-  exit 0 + boş çıktı, ön planda ASILI kalır. Teşhis kısayolu: stderr'de `[codex]` işareti
-  YOKSA çağrı kurulmamıştır — kotaya, substrata, timeout'a bakma.
-- **Codex 480s'de timeout verirse reflekssel degradation'a düşme:** önce 120s canlılık
-  yoklaması ("reply OK, do not read files"), companion sağlamsa `CSS_CALL_TIMEOUT=1200s` ile
-  BİR tekrar. Bu oturumda tam olarak bu oldu ve tekrar başarılı koştu.
+  KULLANIR ama TANIMLAMAZ; ikisini de çağıran kurar. Kurulmazsa `node ""` koşar: arka planda
+  sessizce exit 0 + boş çıktı, ön planda ASILI kalır. stderr'de `[codex]` işareti YOKSA çağrı
+  kurulmamıştır.
+- **Taban ref'i daima TAM SHA ver.** Kısaltılmış SHA substrat kurulumunda `couldn't find remote
+  ref` ile düşer (rc=2) ve Codex hiç çağrılmaz — bu oturumda bir kez oldu.
+- **Codex 480s'de timeout verirse reflekssel degradation'a düşme:** önce 120s canlılık yoklaması,
+  companion sağlamsa `CSS_CALL_TIMEOUT=1200s` ile BİR tekrar.
+- **Mutasyonu geri alırken `git checkout <dosya>` KULLANMA** — dosyada commit edilmemiş iş varsa
+  onu da siler. Bu oturumda bir dosyanın tüm değişikliklerini böyle kaybettim ve yeniden yazdım.
+  Yedek kopya al, kopyadan geri yaz.
 - **Codex'in "inferred / could not run" etiketli bulgusunu sonda koşmadan kabul etme.**
-  Bu oturumda F4'ün yeniden açılışı böyle geldi; ölçüldü ve DOĞRU çıktı — ama ölçüm kararı
-  değiştirebilirdi ve o ölçüm yapılmadan fix yazılsaydı gerekçe uydurma olurdu.
-- **Aynı sınıf iki tur üst üste çıkarsa yamamayı bırak.** Checkpoint 14'te tur 1 ve tur 2
-  aynı sınıfa çarptı ("doğrulayıcı tanımın tamamını görmüyor"); tur 2 fix'i varyantı değil
-  sınıfı kapattı ve kapanış elle seçilmiş örnekle değil MATRİSLE kanıtlandı. Tur 3 prompt'una
-  "bu sınıfın dar bir varyantı daha çıkarsa yama kalemi olarak değil, sayarak-kapanmaz
-  teşhisi olarak raporla" kısıtı yazıldı. Bu kalıp işe yaradı — tekrarla.
-- **Kendi düzeltmenin yan etkisini ölç.** Checkpoint 13'te F4 düzeltmenin KENDİ ürünüydü;
-  checkpoint 14'te F3 fix'i iki dosyada sınıf-süpürmesi gerektirdi (hızlı yol + iç uç nokta).
-  Tek yeri düzeltip geçmek, sonraki turun garantili kardeş bulgusudur.
+- **Aynı sınıf iki-üç tur üst üste çıkarsa yamamayı bırak** ve çerçeve-teşhisli raporu kullanıcıya
+  götür. Bu oturumda tam olarak bu yapıldı ve doğru karar oradan çıktı.
+- **Kendi düzeltmenin yan etkisini ölç.** Task 15b'de sürüm koruması eklenince marka satırını
+  değiştiren DİĞER beş yol (logo, video, kimlik bilgileri, avatar) elimizdeki işareti bayatlatıp
+  SAHTE çakışma üretecekti — yani düzeltme, düzelttiği hatadan beter olacaktı.
+- **Yorumun kodun sahip olmadığı bir garantiyi iddia etmesine dikkat.** 15b'de "aynı akışın
+  bekleyeni üstüne yazılır" yazılmıştı; kod akışları hiç ayırmıyordu. Yorumu yazarken değil,
+  yazdıktan sonra koda karşı OKU.
