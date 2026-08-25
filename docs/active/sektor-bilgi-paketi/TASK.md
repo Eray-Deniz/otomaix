@@ -30,9 +30,24 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: d9c42646366f69180fe17c345a634cc7911f81b9
-- cp_count: 16
-  <!-- Checkpoint 16 (Task 15b): TEK tur, needs-attention -> DUR dalı ->
+- last_checkpoint_ref: a2f450507b2097477fbcd5f27149fc0895914793
+- cp_count: 17
+  <!-- Checkpoint 17 (Task 16 + dört fix): DÖRT tur. Tur 1 needs-attention
+       (1 high + 2 medium): sözleşme testi "migration 032 şeması"nı iki tablo adına
+       indirmişti, rapor tam kapsama iddia ediyordu. Tur 2 needs-attention: aynı eksenin
+       yeni varyantı (PK/varsayılan/FK yok) -> yöntem DEĞİŞTİRİLDİ, seçilmiş özellik
+       listesi yerine kataloğdan kapalı MANİFEST. Tur 3 needs-attention (2 high): manifest
+       nesneleri kapatmıştı ama YÜZEY listesi hâlâ elle seçilmişti (UNLOGGED tablo
+       geçerdi) -> 034'ün tablo-imzası standardı eklendi; ve F5: tur 2'de yazdığım sweep
+       boru hattı sweep'in çıkış kodunu yutuyordu (kendi düzeltmemin açtığı delik,
+       hakem buldu). Tur 4 APPROVE; tek medium (kontrol tablosu ona çıkmışken metin
+       dokuz diyordu) belge düzeltmesiyle kapatıldı, beşinci tur AÇILMADI.
+       Toplam 10 mutasyon pozitif kontrolü, hepsi de04ede'ye karşı taze ölçüldü.
+       Tavan (8) AŞILDI: Eray bu oturumda izni açıkça verdi (RUN-anyway; ceiling-exceed).
+       MECH-FAIL çözüldü: T15b* footer'ları S1 gramerine uymuyordu ve revert commit'i
+       yanlış kind taşıyordu; Eray onayıyla mesaj-yeniden-yazımı yapıldı (ağaç hash'leri
+       BİREBİR aynı doğrulandı; emniyet etiketi backup/pre-t15b-footer-fix).
+       Checkpoint 16 (Task 15b): TEK tur, needs-attention -> DUR dalı ->
        kullanıcı kararı GERİ AL. Beş high, beşi de o turun ürünü ve beşi de
        kod okunarak doğrulandı (iki en ağırı: bekleyen iş için tek yuva ->
        marka ve kimlik yazımı birbirini siliyordu; başarısız HER yazım
