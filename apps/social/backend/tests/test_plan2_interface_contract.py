@@ -85,179 +85,291 @@ async def _sub_sector(db) -> uuid.UUID:
 # ─── Madde 1: Migration 032 şeması ──────────────────────────────────────────
 
 
-# Plan 2'nin BAĞLI olduğu 032 yüzeyi — kolon imzası (ad · tip · null'lanabilirlik).
-# Kaynak: shared/db/migrations/032_sector_packages.sql. Migration'ın KENDİ garanti bloğu
-# yalnız kısıtları ve indeksleri denetler; kolon imzasını denetleMEZ (bilinen boşluk,
-# `CURRENT.md` → migration-guarantee-block-signature-gap). Bu yüzden imza kapısı BURADA.
-MIGRATION_032_COLUMNS = {
+# ─── Madde 1: Migration 032 şeması — KAPALI MANİFEST ────────────────────────
+#
+# Neden seçilmiş özellik listesi DEĞİL: iki bağımsız review turu üst üste aynı ekseni
+# buldu ("şu özelliği de denetlemiyorsun") — önce tablo/kolon, sonra birincil anahtar ·
+# varsayılan · yabancı anahtar. Elle uzatılan liste her turda yeni bir varyant üretir ve
+# kapanmaz. Bu yüzden liste değil MANİFEST: her ilişkinin kolon · kısıt · indeks ·
+# tetikleyici kümesi kataloğdan okunur ve beklenenle KAPALI KÜME olarak karşılaştırılır.
+# Eksik olan da FAZLA olan da bulgudur; yeni bir özellik ekseni "denetlenmiyor" olamaz,
+# çünkü eksen seçilmiyor.
+#
+# Manifest kataloğdan ÜRETİLDİ, sonra `shared/db/migrations/032_sector_packages.sql`'e
+# karşı okunarak doğrulandı. Dürüst sınır: manifest, migration'ın o dosyada YAZDIĞINI
+# değil, uygulandığında ORTAYA ÇIKANI pinler — migration'ın kendisi yanlışsa manifest o
+# yanlışı dondurur. Koruduğu şey sonraki SESSİZ sapmadır.
+#
+# `NOT NULL <kolon>` kısıtları manifestten DIŞLANIR: PostgreSQL 17'den itibaren
+# `pg_constraint`'te satır olarak görünürler, 16'da görünmezler. Null'lanabilirlik zaten
+# kolon imzasında denetleniyor; bu satırları dışlamak kapsam kaybetmeden sürüm
+# bağımlılığını kaldırır (bu depo PG16 ↔ PG18 farkını kabul edilmiş risk olarak taşıyor).
+
+EXPECTED_032_MANIFEST = {
     "sector_research_artifacts": {
-        "id": ("uuid", "NO"),
-        "run_id": ("text", "NO"),
-        "sector_slug": ("text", "NO"),
-        "kind": ("text", "NO"),
-        "source": ("text", "NO"),
-        "brief_ref": ("text", "YES"),
-        "content_md": ("text", "NO"),
-        "created_at": ("timestamp with time zone", "YES"),
+        "columns": {
+            "id": ("uuid", "NO", "gen_random_uuid()"),
+            "run_id": ("text", "NO", None),
+            "sector_slug": ("text", "NO", None),
+            "kind": ("text", "NO", None),
+            "source": ("text", "NO", None),
+            "brief_ref": ("text", "YES", None),
+            "content_md": ("text", "NO", None),
+            "created_at": ("timestamp with time zone", "YES", "now()"),
+        },
+        "constraints": {
+            "sector_research_artifacts_pkey": "PRIMARY KEY (id)",
+            "sector_research_artifacts_kind_check": (
+                "CHECK ((kind = ANY (ARRAY['research'::text, 'review'::text, "
+                "'synthesis'::text])))"
+            ),
+        },
+        "indexes": {
+            "sector_research_artifacts_pkey": (
+                "CREATE UNIQUE INDEX sector_research_artifacts_pkey ON "
+                "social.sector_research_artifacts USING btree (id)"
+            ),
+            "idx_sector_research_artifacts_slug_run": (
+                "CREATE INDEX idx_sector_research_artifacts_slug_run ON "
+                "social.sector_research_artifacts USING btree (sector_slug, run_id)"
+            ),
+        },
+        "triggers": {
+            "sector_research_artifacts_append_only": (
+                "CREATE TRIGGER sector_research_artifacts_append_only BEFORE DELETE OR "
+                "UPDATE ON social.sector_research_artifacts FOR EACH ROW EXECUTE "
+                "FUNCTION social.reject_research_artifact_mutation()",
+                "O",
+            ),
+            "sector_research_artifacts_no_truncate": (
+                "CREATE TRIGGER sector_research_artifacts_no_truncate BEFORE TRUNCATE ON "
+                "social.sector_research_artifacts FOR EACH STATEMENT EXECUTE FUNCTION "
+                "social.reject_research_artifact_mutation()",
+                "O",
+            ),
+        },
     },
     "sector_packages": {
-        "id": ("uuid", "NO"),
-        "sector_id": ("uuid", "NO"),
-        "version": ("integer", "NO"),
-        "status": ("text", "NO"),
-        "schema_version": ("integer", "NO"),
-        "content": ("jsonb", "NO"),
-        "decision_log": ("jsonb", "NO"),
-        "run_id": ("text", "YES"),  # K-110 AÇIK — nullable KALIR
-        "created_at": ("timestamp with time zone", "YES"),
-        "activated_at": ("timestamp with time zone", "YES"),
+        "columns": {
+            "id": ("uuid", "NO", "gen_random_uuid()"),
+            "sector_id": ("uuid", "NO", None),
+            "version": ("integer", "NO", None),
+            "status": ("text", "NO", None),
+            "schema_version": ("integer", "NO", None),
+            "content": ("jsonb", "NO", None),
+            "decision_log": ("jsonb", "NO", "'[]'::jsonb"),
+            "run_id": ("text", "YES", None),  # K-110 AÇIK — nullable KALIR
+            "created_at": ("timestamp with time zone", "YES", "now()"),
+            "activated_at": ("timestamp with time zone", "YES", None),
+        },
+        "constraints": {
+            "sector_packages_pkey": "PRIMARY KEY (id)",
+            "sector_packages_sector_version_key": "UNIQUE (sector_id, version)",
+            "sector_packages_id_version_key": "UNIQUE (id, version)",
+            "sector_packages_sector_id_fkey": (
+                "FOREIGN KEY (sector_id) REFERENCES social.sectors(id)"
+            ),
+            "sector_packages_status_check": (
+                "CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, "
+                "'archived'::text])))"
+            ),
+        },
+        "indexes": {
+            "sector_packages_pkey": (
+                "CREATE UNIQUE INDEX sector_packages_pkey ON social.sector_packages "
+                "USING btree (id)"
+            ),
+            "sector_packages_sector_version_key": (
+                "CREATE UNIQUE INDEX sector_packages_sector_version_key ON "
+                "social.sector_packages USING btree (sector_id, version)"
+            ),
+            "sector_packages_id_version_key": (
+                "CREATE UNIQUE INDEX sector_packages_id_version_key ON "
+                "social.sector_packages USING btree (id, version)"
+            ),
+            "uq_sector_packages_single_active": (
+                "CREATE UNIQUE INDEX uq_sector_packages_single_active ON "
+                "social.sector_packages USING btree (sector_id) WHERE "
+                "(status = 'active'::text)"
+            ),
+        },
+        "triggers": {
+            "sector_packages_sector_must_be_sub": (
+                "CREATE TRIGGER sector_packages_sector_must_be_sub BEFORE INSERT OR "
+                "UPDATE ON social.sector_packages FOR EACH ROW EXECUTE FUNCTION "
+                "social.require_sub_sector_reference('sector_id')",
+                "O",
+            ),
+        },
     },
     "generation_stamps": {
-        "id": ("uuid", "NO"),
-        "brand_id": ("uuid", "NO"),
-        "package_id": ("uuid", "NO"),
-        "package_version": ("integer", "NO"),
-        "created_at": ("timestamp with time zone", "YES"),
-        "consumed_at": ("timestamp with time zone", "YES"),
+        "columns": {
+            "id": ("uuid", "NO", "gen_random_uuid()"),
+            "brand_id": ("uuid", "NO", None),
+            "package_id": ("uuid", "NO", None),
+            "package_version": ("integer", "NO", None),
+            "created_at": ("timestamp with time zone", "YES", "now()"),
+            "consumed_at": ("timestamp with time zone", "YES", None),
+        },
+        "constraints": {
+            "generation_stamps_pkey": "PRIMARY KEY (id)",
+            "generation_stamps_brand_id_fkey": (
+                "FOREIGN KEY (brand_id) REFERENCES social.brands(id) ON DELETE CASCADE"
+            ),
+            # MATCH FULL YOK — iki kolon da NOT NULL, yarım çift zaten imkânsız.
+            "generation_stamps_package_fkey": (
+                "FOREIGN KEY (package_id, package_version) REFERENCES "
+                "social.sector_packages(id, version)"
+            ),
+        },
+        "indexes": {
+            "generation_stamps_pkey": (
+                "CREATE UNIQUE INDEX generation_stamps_pkey ON social.generation_stamps "
+                "USING btree (id)"
+            ),
+        },
+        "triggers": {},
     },
 }
 
-# Taşıyıcı tablolara EKLENEN kolonlar (tablonun tamamı 032'nin değil).
-MIGRATION_032_ADDED_COLUMNS = {
-    ("brands", "sub_sector_id"): ("uuid", "YES"),
-    ("posts", "package_id"): ("uuid", "YES"),
-    ("posts", "package_version"): ("integer", "YES"),
+# Taşıyıcı tablolar (tablonun TAMAMI 032'nin değil) — 032'nin EKLEDİĞİ yüzey.
+EXPECTED_032_CARRIER_COLUMNS = {
+    ("brands", "sub_sector_id"): ("uuid", "YES", None),
+    ("posts", "package_id"): ("uuid", "YES", None),
+    ("posts", "package_version"): ("integer", "YES", None),
 }
 
-# Garantiler: kısıt adı -> (tip, ek yüklem). 'f' = MATCH FULL (confmatchtype).
-MIGRATION_032_CONSTRAINTS = {
-    "sector_packages_sector_version_key": "u",
-    "sector_packages_id_version_key": "u",
-    "posts_package_stamp_fkey": "f",
-    "generation_stamps_package_fkey": "f",
+EXPECTED_032_CARRIER_CONSTRAINTS = {
+    "brands_sub_sector_id_fkey": "FOREIGN KEY (sub_sector_id) REFERENCES social.sectors(id)",
+    # K-07 damgası: MATCH FULL yarım-NULL çifti imkânsız kılar.
+    "posts_package_stamp_fkey": (
+        "FOREIGN KEY (package_id, package_version) REFERENCES "
+        "social.sector_packages(id, version) MATCH FULL"
+    ),
 }
 
-MIGRATION_032_TRIGGERS = (
-    "sector_research_artifacts_append_only",
-    "sector_research_artifacts_no_truncate",
-    "brands_sub_sector_must_be_sub",
-    "sector_packages_sector_must_be_sub",
-    "sectors_reject_reparenting",
-)
+EXPECTED_032_CARRIER_TRIGGERS = {
+    "brands_sub_sector_must_be_sub": (
+        "CREATE TRIGGER brands_sub_sector_must_be_sub BEFORE INSERT OR UPDATE ON "
+        "social.brands FOR EACH ROW EXECUTE FUNCTION "
+        "social.require_sub_sector_reference('sub_sector_id')"
+    ),
+    "sectors_reject_reparenting": (
+        "CREATE TRIGGER sectors_reject_reparenting BEFORE UPDATE ON social.sectors FOR "
+        "EACH ROW EXECUTE FUNCTION social.reject_sector_reparenting()"
+    ),
+}
 
 
-async def _column_signature(db, table: str) -> dict:
-    rows = await db.fetch(
-        "SELECT column_name, data_type, is_nullable FROM information_schema.columns "
-        "WHERE table_schema = 'social' AND table_name = $1",
-        table,
-    )
-    return {r["column_name"]: (r["data_type"], r["is_nullable"]) for r in rows}
+def _char(value):
+    """asyncpg `"char"` kolonlarını bayt olarak döner — metne çevrilir."""
+    return value.decode() if isinstance(value, (bytes, bytearray)) else value
 
 
-async def test_migration_032_column_signatures_delivered(db):
-    """Üç tablonun kolon imzası (ad · tip · null'lanabilirlik) TAM eşleşir.
-
-    Kapalı küme karşılaştırması: eksik kolon da FAZLA kolon da bulgudur — Plan 2
-    yazma yüzeyi şemanın tamamına bakar, seçilmiş bir alt kümesine değil.
-    """
-    for table, expected in MIGRATION_032_COLUMNS.items():
-        observed = await _column_signature(db, table)
-        assert observed, f"social.{table} yok — 032 teslim edilmemiş"
-        assert observed == expected, (
-            f"social.{table} kolon imzası sözleşmeden SAPTI\n"
-            f"beklenen: {sorted(expected.items())}\n"
-            f"gözlenen: {sorted(observed.items())}"
+async def _relation_manifest(db, table: str) -> dict:
+    """Bir ilişkinin TAM katalog imzası — beklenenle kapalı küme karşılaştırması için."""
+    columns = {
+        row["column_name"]: (row["data_type"], row["is_nullable"], row["column_default"])
+        for row in await db.fetch(
+            "SELECT column_name, data_type, is_nullable, column_default "
+            "  FROM information_schema.columns "
+            " WHERE table_schema = 'social' AND table_name = $1",
+            table,
         )
-
-
-async def test_migration_032_added_columns_on_carrier_tables(db):
-    """`brands.sub_sector_id` + `posts` damga çifti — 032'nin eklediği kolonlar."""
-    for (table, column), expected in MIGRATION_032_ADDED_COLUMNS.items():
-        observed = await _column_signature(db, table)
-        assert column in observed, f"social.{table}.{column} yok"
-        assert observed[column] == expected, (
-            f"social.{table}.{column} imzası saptı: {observed[column]} != {expected}"
-        )
-
-
-async def test_migration_032_constraints_delivered(db):
-    """İki benzersizlik kısıtı + iki bileşik FK; damga FK'sı MATCH FULL."""
-    rows = await db.fetch(
-        "SELECT c.conname, c.contype, c.confmatchtype FROM pg_constraint AS c "
-        "JOIN pg_namespace AS n ON n.oid = c.connamespace WHERE n.nspname = 'social'"
-    )
-    # asyncpg `"char"` kolonlarını bayt olarak döner — metne çevrilir.
-    def _char(value):
-        return value.decode() if isinstance(value, (bytes, bytearray)) else value
-
-    observed = {
-        r["conname"]: (_char(r["contype"]), _char(r["confmatchtype"])) for r in rows
     }
-    for name, expected in MIGRATION_032_CONSTRAINTS.items():
-        assert name in observed, f"kısıt yok: {name}"
-        contype, matchtype = observed[name]
-        if expected == "f":
-            assert contype == "f", f"{name} yabancı anahtar değil ({contype})"
-        else:
-            assert contype == expected, f"{name} tipi {contype}, beklenen {expected}"
-    # K-07 damgası: yarım çift (yalnız id VEYA yalnız version) İMKÂNSIZ olmalı.
-    assert observed["posts_package_stamp_fkey"][1] == "f", (
-        "posts damga FK'sı MATCH FULL değil — yarım-NULL çift sızabilir"
-    )
-
-
-async def test_migration_032_single_active_index_is_unique_and_partial(db):
-    """Tek-aktif garantisi: UNIQUE + KISMİ + `sector_id` anahtarlı + geçerli.
-
-    Adın var olması yetmez; aynı adla benzersiz OLMAYAN ya da yanlış kolonla
-    kurulmuş bir indeks garantiyi sessizce boşaltırdı.
-    """
-    row = await db.fetchrow(
-        "SELECT i.indisunique, i.indisvalid, i.indpred IS NOT NULL AS is_partial, "
-        "       pg_get_indexdef(i.indexrelid) AS definition "
-        "  FROM pg_index AS i "
-        "  JOIN pg_class AS c ON c.oid = i.indexrelid "
-        "  JOIN pg_namespace AS n ON n.oid = c.relnamespace "
-        " WHERE n.nspname = 'social' AND c.relname = 'uq_sector_packages_single_active'"
-    )
-    assert row is not None, "uq_sector_packages_single_active yok"
-    assert row["indisunique"], "indeks UNIQUE değil — tek-aktif garantisi yok"
-    assert row["indisvalid"], "indeks GEÇERSİZ (invalid) — zorlamıyor"
-    assert row["is_partial"], "indeks kısmi değil — arşivlenmiş sürümleri de kilitler"
-    assert "(sector_id)" in row["definition"], row["definition"]
-    assert "status = 'active'" in row["definition"], row["definition"]
-
-
-async def test_migration_032_triggers_delivered(db):
-    """Salt-ekleme · alt sektör zorlaması · yeniden-ebeveynleme reddi ayakta."""
-    rows = await db.fetch(
-        "SELECT t.tgname FROM pg_trigger AS t "
-        "  JOIN pg_class AS c ON c.oid = t.tgrelid "
-        "  JOIN pg_namespace AS n ON n.oid = c.relnamespace "
-        " WHERE n.nspname = 'social' AND NOT t.tgisinternal"
-    )
-    observed = {r["tgname"] for r in rows}
-    missing = [name for name in MIGRATION_032_TRIGGERS if name not in observed]
-    assert not missing, f"eksik tetikleyici(ler): {missing}"
-
-
-async def test_migration_032_value_checks_delivered(db):
-    """`kind` ve `status` kapalı kümeleri DB düzeyinde zorlanıyor."""
-    definitions = {
-        r["conname"]: r["definition"]
-        for r in await db.fetch(
+    constraints = {
+        row["conname"]: row["definition"]
+        for row in await db.fetch(
             "SELECT c.conname, pg_get_constraintdef(c.oid) AS definition "
             "  FROM pg_constraint AS c "
-            "  JOIN pg_namespace AS n ON n.oid = c.connamespace "
-            " WHERE n.nspname = 'social' AND c.contype = 'c'"
+            "  JOIN pg_class AS r ON r.oid = c.conrelid "
+            "  JOIN pg_namespace AS n ON n.oid = r.relnamespace "
+            " WHERE n.nspname = 'social' AND r.relname = $1",
+            table,
+        )
+        # PG17+ `NOT NULL` kısıtlarını satır olarak gösterir, PG16 göstermez —
+        # null'lanabilirlik zaten kolon imzasında denetleniyor.
+        if not row["definition"].startswith("NOT NULL ")
+    }
+    indexes = {
+        row["indexname"]: row["indexdef"]
+        for row in await db.fetch(
+            "SELECT indexname, indexdef FROM pg_indexes "
+            " WHERE schemaname = 'social' AND tablename = $1",
+            table,
         )
     }
-    joined = " ".join(definitions.values())
-    for value in ("research", "review", "synthesis"):
-        assert f"'{value}'" in joined, f"kind kapalı kümesinde {value} yok"
-    for value in ("draft", "active", "archived"):
-        assert f"'{value}'" in joined, f"status kapalı kümesinde {value} yok"
+    triggers = {
+        row["tgname"]: (row["definition"], _char(row["tgenabled"]))
+        for row in await db.fetch(
+            "SELECT t.tgname, pg_get_triggerdef(t.oid) AS definition, t.tgenabled "
+            "  FROM pg_trigger AS t "
+            "  JOIN pg_class AS r ON r.oid = t.tgrelid "
+            "  JOIN pg_namespace AS n ON n.oid = r.relnamespace "
+            " WHERE n.nspname = 'social' AND r.relname = $1 AND NOT t.tgisinternal",
+            table,
+        )
+    }
+    return {
+        "columns": columns,
+        "constraints": constraints,
+        "indexes": indexes,
+        "triggers": triggers,
+    }
+
+
+@pytest.mark.parametrize("table", sorted(EXPECTED_032_MANIFEST))
+async def test_migration_032_relation_manifest_is_closed(db, table):
+    """İlişkinin kolon · kısıt · indeks · tetikleyici kümesi manifestle BİREBİR aynı.
+
+    Kapalı karşılaştırma: bir birincil anahtarın, varsayılanın, yabancı anahtarın,
+    tetikleyicinin ya da indeksin kaybolması da, habersiz eklenmesi de bu testi
+    düşürür. Tek tek özellik saymak yerine kümeyi karşılaştırmanın sebebi budur.
+    """
+    observed = await _relation_manifest(db, table)
+    expected = EXPECTED_032_MANIFEST[table]
+    assert observed["columns"], f"social.{table} yok — 032 teslim edilmemiş"
+    for facet in ("columns", "constraints", "indexes", "triggers"):
+        assert observed[facet] == expected[facet], (
+            f"social.{table} '{facet}' manifestten SAPTI\n"
+            f"yalnız gözlenende: {sorted(set(observed[facet]) - set(expected[facet]))}\n"
+            f"yalnız beklenende: {sorted(set(expected[facet]) - set(observed[facet]))}\n"
+            f"gözlenen: {sorted(observed[facet].items())}"
+        )
+
+
+async def test_migration_032_carrier_surface_delivered(db):
+    """Taşıyıcı tablolara eklenen kolon · FK · tetikleyici — tanımlarıyla birlikte."""
+    for (table, column), expected in EXPECTED_032_CARRIER_COLUMNS.items():
+        manifest = await _relation_manifest(db, table)
+        assert column in manifest["columns"], f"social.{table}.{column} yok"
+        assert manifest["columns"][column] == expected, (
+            f"social.{table}.{column} imzası saptı: "
+            f"{manifest['columns'][column]} != {expected}"
+        )
+        if column == "sub_sector_id":
+            assert (
+                manifest["constraints"].get("brands_sub_sector_id_fkey")
+                == EXPECTED_032_CARRIER_CONSTRAINTS["brands_sub_sector_id_fkey"]
+            ), "brands.sub_sector_id yabancı anahtarı yok/sapmış"
+        if column == "package_id":
+            assert (
+                manifest["constraints"].get("posts_package_stamp_fkey")
+                == EXPECTED_032_CARRIER_CONSTRAINTS["posts_package_stamp_fkey"]
+            ), "posts damga FK'sı yok/sapmış (MATCH FULL dahil)"
+
+    for table in ("brands", "sectors"):
+        manifest = await _relation_manifest(db, table)
+        for name, definition in EXPECTED_032_CARRIER_TRIGGERS.items():
+            if name in manifest["triggers"]:
+                assert manifest["triggers"][name] == (definition, "O"), (
+                    f"{name} tanımı/etkinliği saptı: {manifest['triggers'][name]}"
+                )
+    observed_triggers = set()
+    for table in ("brands", "sectors"):
+        observed_triggers |= set((await _relation_manifest(db, table))["triggers"])
+    missing = [n for n in EXPECTED_032_CARRIER_TRIGGERS if n not in observed_triggers]
+    assert not missing, f"eksik taşıyıcı tetikleyici(ler): {missing}"
 
 
 async def test_plan2_write_surface_produces_draft_only(pkg_db):

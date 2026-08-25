@@ -23,9 +23,29 @@ kopyalanıp çalıştırılabilir; sır (bağlantı dizesi) belgeye GİRMEZ, aya
 
 | İddia | Komut (birebir koşulabilir) | Çıktı |
 |---|---|---|
-| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `553 passed` |
+| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `551 passed` |
 | Katman-1 byte-exact kapısı yeşil | `cd apps/social/backend && .venv/bin/python -m pytest tests/prompt_regression/ -q` | `121 passed` |
-| Marka → kök sektör sweep'i temiz | `cd apps/social/backend && .venv/bin/python -c "import sys; sys.path.insert(0,'.'); sys.path.insert(0,'scripts'); from app.core.config import settings; import sector_sweep; raise SystemExit(sector_sweep.main(['--database-url', settings.DATABASE_URL, '--dry-run']))"` | `brands_total: 2 · brands_root_anchored: 2 · differences: 0` (rc=0) |
+| Marka → kök sektör sweep'i temiz | aşağıdaki iki adım | `differences: 0` (rc=0), hedef doğrulandı |
+
+**Sweep — hedefe BAĞLI komut.** Çıplak koşum "canlıya bakıldı"ı kanıtlamaz: bağlantı
+dizesi ayarlardan gelir ve yanlış yapılandırılmış temiz bir veritabanı da `rc=0` döner.
+Bu yüzden komut, raporun taşıdığı hedef parmak izine karşı **fail-closed** karşılaştırılır
+(parmak izi sır DEĞİLDİR; bağlantı dizesi belgeye hiç girmez):
+
+```
+cd apps/social/backend && .venv/bin/python -c "
+import sys; sys.path.insert(0, '.'); sys.path.insert(0, 'scripts')
+from app.core.config import settings
+import sector_sweep
+raise SystemExit(sector_sweep.main(['--database-url', settings.DATABASE_URL, '--dry-run']))" \
+  | tee /dev/stderr \
+  | grep -qFx "target: 7626046209338777641/16384/otomaix@127.0.0.1:5433/otomaix~10.0.1.9:5432"
+```
+
+Ölçülen hedef: `7626046209338777641/16384/otomaix@127.0.0.1:5433/otomaix~10.0.1.9:5432`.
+Ölçüldü: doğru parmak iziyle `rc=0`, kasıtlı yanlış parmak iziyle `rc=1`. Sunucu adresi
+değişirse (kap yeniden başlar, yeni IP alır) komut BAŞARISIZ olur — bu fail-closed yöndür,
+taban yeniden alınır.
 
 Sweep CANLI veritabanına karşı koşuldu (salt-okunur transaction). Test koşumları
 `otomaix_test` üstünde.
@@ -113,16 +133,12 @@ alanlarının her biri ayrı ayrı parametrelenir) · `test_raw_transition_not_p
 
 Planın "Plan 2'ye teslim edilen arayüzler" bölümü KANONİK listedir. Her maddesi
 `apps/social/backend/tests/test_plan2_interface_contract.py` içinde belgelenen argümanlarla
-import edilip ÇAĞRILIR (15 test, hepsi PASS).
+import edilip ÇAĞRILIR (13 test, hepsi PASS).
 
 | # | Teslim maddesi | Sözleşme testi |
 |---|---|---|
-| 1 | Migration 032 şeması — kolon imzaları (üç tablo, KAPALI küme: eksik de fazla da bulgu) | `test_migration_032_column_signatures_delivered` |
-| 1a | Taşıyıcı tablolara eklenen kolonlar (`brands.sub_sector_id` · `posts` damga çifti) | `test_migration_032_added_columns_on_carrier_tables` |
-| 1b | Garantiler: iki benzersizlik kısıtı + iki bileşik FK + damga FK'sının MATCH FULL'ü | `test_migration_032_constraints_delivered` |
-| 1c | Tek-aktif indeksi: UNIQUE + kısmi + `sector_id` anahtarlı + geçerli (ad yetmez) | `test_migration_032_single_active_index_is_unique_and_partial` |
-| 1d | Tetikleyiciler: salt-ekleme · alt sektör zorlaması · yeniden-ebeveynleme reddi | `test_migration_032_triggers_delivered` |
-| 1e | `kind` / `status` kapalı kümeleri DB düzeyinde zorlanıyor | `test_migration_032_value_checks_delivered` |
+| 1 | Migration 032 şeması — üç ilişkinin TAM katalog manifesti (kolon+varsayılan · kısıt+birincil/yabancı anahtar · indeks · tetikleyici; KAPALI küme) | `test_migration_032_relation_manifest_is_closed` (ilişki başına parametreli) |
+| 1a | Taşıyıcı tabloların 032-ait yüzeyi (`brands.sub_sector_id` + FK · `posts` damga çifti + MATCH FULL · iki tetikleyici) | `test_migration_032_carrier_surface_delivered` |
 | 1b | K-135: Plan 2 yalnız `draft` yazar, yalnız `insert_draft` üzerinden | `test_plan2_write_surface_produces_draft_only` |
 | 2 | `normalize_special_day_key(name) -> str` | `test_normalize_special_day_key_documented_signature` |
 | 3 | `validate_package_content(content, *, banned_brand_names, holiday_keys)` | `test_validate_package_content_documented_signature` |
@@ -134,29 +150,41 @@ import edilip ÇAĞRILIR (15 test, hepsi PASS).
 | 7 | Katman-1 harness (`tests/prompt_regression/`) | `test_katman1_harness_is_delivered_and_live` |
 | 8 | `video_kodlar` İKİ HAVUZ (`hareket` + `sahne`, ikisi de liste) | `test_video_kodlar_delivers_two_pools` |
 
-**Pozitif kontrol (sözleşme testinin gerçekten ölçtüğünün kanıtı).** Her mutasyon
-uygulandı, ilgili test koşuldu, sonra mutasyon geri alındı. Ortak koşum komutu:
+**Pozitif kontrol.** Dokuz mutasyonun HEPSİ, dosyanın SON hâline (13 test) karşı
+yeniden koşuldu — eski ölçümden taşınan sayı YOKTUR. Ortak komut:
 `cd apps/social/backend && .venv/bin/python -m pytest tests/test_plan2_interface_contract.py -q`
 
-| Mutasyon (uygulanan değişiklik) | Sonuç |
-|---|---|
-| `sector_packages.py`: `VIDEO_POOL_KEYS` → `("hareket",)` | `6 failed, 4 passed` |
-| `sector_packages.py`: `_check_special_day_keys(...)` çağrısı kaldırıldı | `1 failed, 9 passed` |
-| `capture.py`: `assert_matches_fixture` başına erken `return` | `1 failed, 9 passed` |
-| `sector_packages.py`: `insert_draft` `'draft'` yerine `'active'` yazdı | `4 failed, 6 passed` |
-| `032_*.sql`: `content_md` → `content_markdown` | `1 failed, 14 passed` (kolon imzası kapısı) |
+| # | Mutasyon (uygulanan tam değişiklik) | Sonuç | Yakalayan |
+|---|---|---|---|
+| M1 | `sector_packages.py`: `VIDEO_POOL_KEYS` → `("hareket",)` | `6 failed, 7 passed` | sözleşme testi |
+| M2 | `sector_packages.py`: `_check_special_day_keys(...)` çağrısı kaldırıldı | `1 failed, 12 passed` | sözleşme testi |
+| M3 | `capture.py`: `assert_matches_fixture` başına erken `return` | `1 failed, 12 passed` | sözleşme testi |
+| M4 | `sector_packages.py`: `insert_draft` `'draft'` yerine `'active'` yazdı | `4 failed, 9 passed` | sözleşme testi |
+| M5 | `032_*.sql`: `content_md` → `content_markdown` | `1 failed, 12 passed` | manifest (kolon) |
+| M6 | `032_*.sql`: `sector_packages.id` `PRIMARY KEY` → `UNIQUE` | `1 failed, 12 passed` | manifest (kısıt) |
+| M7 | `032_*.sql`: `decision_log` `DEFAULT '[]'` kaldırıldı | `1 failed, 12 passed` | manifest (varsayılan) |
+| M8 | `032_*.sql`: `sector_id` `REFERENCES social.sectors(id)` kaldırıldı | `1 failed, 12 passed` | manifest (yabancı anahtar) |
+| M9 | `032_*.sql`: `brands` tetikleyicisi `BEFORE INSERT OR UPDATE` → `BEFORE INSERT` | `4 passed, 9 errors` | migration'ın KENDİ garanti bloğu |
 
-**Şema mutasyonlarının nerede yakalandığı — dürüst ayrım.** Üç şema mutasyonu
-(`CREATE UNIQUE INDEX` → `CREATE INDEX` · salt-ekleme tetikleyicisinin adı bozuldu ·
-damga FK'sından `MATCH FULL` kaldırıldı) sözleşme testine ULAŞMADAN, migration'ın KENDİ
-garanti bloğunca reddedildi (`11 errors` — veritabanı hiç kurulamadı). Yani bu üç eksende
-asıl kapı migration'ın kendisidir. Kolon imzası ekseninde ise garanti bloğu SESSİZ kalıyor
-(bilinen boşluk) ve yakalayan tek şey bu sözleşme testidir.
+**Hangi eksende asıl kapı kim — dürüst ayrım.** M9 ve daha önce ölçülen üç mutasyon
+(indeks UNIQUE'liği · tetikleyici adı · damga FK'sının MATCH FULL'ü) sözleşme testine
+ULAŞMADAN migration'ın kendi garanti bloğunca reddedilir (veritabanı hiç kurulamaz).
+Kolon imzası · birincil anahtar · varsayılan · yabancı anahtar eksenlerinde ise garanti
+bloğu SESSİZ kalıyor (bilinen boşluk: `CURRENT.md` →
+`migration-guarantee-block-signature-gap`) ve yakalayan tek şey bu manifesttir.
 
-**Katalog iddialarının ayırt gücü ayrıca ölçüldü** (geri sarılan transaction içinde şema
-bozuldu, detektör sorgusu koşuldu, sonra geri sarıldı — kalıcı değişiklik yok):
-tetikleyici · tek-aktif indeksi · benzersizlik kısıtı · damga kolonu — DÖRDÜ DE yakalandı
-(`önce=1 · bozukken=0 · geri-sarıldı=1`).
+**Neden liste değil manifest.** İki bağımsız review turu üst üste AYNI ekseni buldu
+("şu özelliği de denetlemiyorsun" — önce tablo/kolon, sonra birincil anahtar/varsayılan/
+yabancı anahtar). Elle uzatılan özellik listesi her turda yeni bir varyant üretir ve
+kapanmaz. Manifest ekseni SEÇMEZ: her ilişkinin kolon · kısıt · indeks · tetikleyici
+kümesi kataloğdan okunup beklenenle kapalı küme olarak karşılaştırılır; eksik olan da
+fazla olan da bulgudur.
+
+**Manifestin dürüst sınırı.** Manifest kataloğdan üretildi ve `032_sector_packages.sql`'e
+karşı okunarak doğrulandı; yani migration'ın YAZDIĞINI değil, uygulandığında ORTAYA
+ÇIKANI pinler. Migration'ın kendisi yanlışsa manifest o yanlışı dondurur — koruduğu şey
+sonraki SESSİZ sapmadır. `NOT NULL` kısıt satırları manifestten dışlandı (PG17+ bunları
+kısıt olarak listeler, PG16 listelemez; null'lanabilirlik zaten kolon imzasında).
 
 **Kapsam sınırı (dürüst etiket):** bu testler arayüzlerin VAR ve ÇAĞRILABİLİR olduğunu
 kanıtlar; Plan 2'nin onları doğru KULLANACAĞINI kanıtlamaz.
@@ -264,7 +292,7 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
 
 ## 8. Kapanış cümlesi
 
-Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (553 arka uç testi · 121
+Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (551 arka uç testi · 121
 byte-exact fixture · canlı sweep farkı 0). **Arayüz yüzeyleri ve canlı ortam adımları
 DOĞRULANMADI** — ertelendi, evi ve tetiği §5-6'da yazılı. Bu rapor "sistem çalışıyor"
 demez; "şu kapılar şu komutlarla ölçüldü ve şunlar ölçülmedi" der.
