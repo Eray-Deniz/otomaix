@@ -5,7 +5,7 @@
 
 ## Context
 - Task: sektor-bilgi-paketi — Plan 1 yürütmesi açık (`/execute-plan-claude-codex` protokolü)
-- Last updated: 2026-08-25 (on ikinci oturum — checkpoint 11 kapatıldı; devralınan tek açık kapı kapandı)
+- Last updated: 2026-08-25 (on ikinci oturum — checkpoint 11 kapandı, Task 12 yazıldı, checkpoint 12 kapandı)
 - Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
 - Spec girdisi: `docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` — **bu oturumun dersi:
@@ -14,23 +14,26 @@
 - Codex ham review log'u: `/root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md`
 
 ## Current State
-- **Biten:** Task 1–11. **Checkpoint 11 KAPANDI** (tur 6: `approve`, bulgu yok).
-- **Açık kapı YOK.** Devralınan borç (Task 11'in hakemden geçmemiş son düzeltmesi) bu oturumda
-  kapandı; tur 5 yeni bir kök neden buldu (model-patlaması yedek dalı havuzu taşımıyordu) ve
-  `0c19d83` ile sınıf düzeyinde kapatıldı.
+- **Biten:** Task 1–12. **Checkpoint 11 ve 12 KAPANDI.**
+- **Açık kapı YOK.** Devralınan borç (Task 11'in hakemden geçmemiş son düzeltmesi) kapandı
+  (checkpoint 11, tur 6 approve). Task 12 yazıldı ve checkpoint 12 beş turda kapandı
+  (tur 3'ten itibaren approve); kalan tek medium kabul edilen risk, evi CURRENT.md'de.
 - **Mod:** inline. `execute_mode: subagent-driven` kaydı BİLEREK değiştirilmedi (Task 1-2'yi doğru
   anlatıyor). inline YALNIZ task yazımını kapsar; review/checkpoint kapıları normal koştu.
-- **Checkpoint:** `cp_count: 11`, `last_checkpoint_ref` = `0c19d83`. §8.6 Clean dalı ateşlendi,
+- **Checkpoint:** `cp_count: 12`, `last_checkpoint_ref` = `532825e`. §8.6 Clean dalı ateşlendi,
   iki alan tek commit'te ilerledi. Tavan 8, yani her riskli task `CEILING_RISK` dalına düşüyor;
   Eray bu oturumda da RUN-anyway izni verdi (audit `ceiling-exceed`).
-- **İnceleme bütçesi:** bu oturumda checkpoint 11 için 2 tur koşuldu (kümülatif 6). Eray bu
-  oturum için tur sayısı kısıtını AÇIKÇA kaldırdı ("codex review sayıları önemli değil").
+- **İnceleme bütçesi:** bu oturumda 7 tur koşuldu (checkpoint 11 için 2, checkpoint 12 için 5).
+  Eray bu oturum için tur sayısı kısıtını AÇIKÇA kaldırdı ("codex review sayıları önemli değil").
 - **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
   Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 
 ## Resume From (sıra)
-1. **Task 12** (K-07 damga yazımı + gözlemlenebilirlik log çekirdeği). Devralınan açık kapı YOK.
-2. Sonra Task 13 → 16.
+1. **Task 13** (yaşam döngüsü servis fonksiyonları: aktivasyon / rollback / deaktivasyon).
+   Devralınan açık kapı YOK. Task 12'nin `log_package_event`'i hazır ve yaşam-döngüsü
+   olaylarının şekil sözleşmesi (F22) test edilmiş durumda — Task 13 onu çağıracak,
+   `_apply_status_transition` ile AYNI transaction'da (F24).
+2. Sonra Task 14 → 16.
 3. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
    `.venv/bin/python -m pytest tests/prompt_regression/ -q` yeşil olmadan ilerlenmez (Task 7 freeze hükmü).
 4. **Frontend'e dokunulduysa `npx next build` KOŞULUR.** Bu oturumda frontend'e dokunulmadı,
@@ -38,16 +41,21 @@
 
 ## Verification (bu oturum)
 - **Koşan komutlar / taze çıktı (on ikinci oturum):**
-  - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **345 passed**
-    (oturum başında 296).
-  - `.venv/bin/python -m pytest tests/prompt_regression/ -q` → **121 passed** (byte-exact freeze
-    kapısı; düzeltmeden sonra tekrar koşuldu, donmuş fixture'lar bayt değişmedi).
+  - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **405 passed**
+    (oturum başında 296; checkpoint 11 kapanışında 345).
+  - `.venv/bin/python -m pytest tests/prompt_regression/ tests/test_migration_033.py -q`
+    → **131 passed** (byte-exact freeze kapısı + yeni migration kapısı; donmuş fixture'lar
+    bayt değişmedi).
+  - `cd apps/social/frontend && npx next build` → **exit=0** (Task 12 önyüze dokundu).
+  - Pozitif kontrol (M1 kapısı): `AND status = 'generating'` kaldırılınca test DÜŞÜYOR,
+    geri konunca geçiyor.
+  - Pozitif kontrol (033 doğrulayıcısı): altı bozulma vakasının altısı da migration'ı
+    DURDURUYOR; temiz şemada sessiz.
   - `ec_ledger_view` → türetilmiş defter rc=0; `T11-fix5` doğru kind/test/impl sütunlarıyla
     görünüyor (ilk commit denemesinde footer bloğu boş satırla bölünmüştü, `unlabeled` düştü;
     amend ile düzeltildi ve tekrar ölçüldü).
   - Bağımsız sondaj (taze): model düşürülüp `_resolve_still_prompt`'un dört dalı da koşuldu —
     düzeltmeden ÖNCE dördünde de havuzun izi YOKTU; sonra dördünde de var.
-  - `npx next build` bu oturumda **KOŞULMADI** (frontend'e dokunulmadı).
 
 - **Önceki oturumun (on birinci) ölçümleri:** `pytest tests/ -q` → 296 · donmuş kapı → 71 ·
   `npx next build` → geçti (bu daldaki ilk frontend derlemesi).
@@ -97,6 +105,13 @@
   Brief/sentez hattı `video_kodlar` için İKİ HAVUZ üretmeli (`hareket`, `sahne`; ikisi de liste).
   Asgari eleman sayısı **kapı YAPILMADI** (İlke 9).
 
+- **[açık kalem — evi VAR, tetiği Eray verdi]** Süpürücü "başarısız" derken webhook aynı
+  satırı "hazır" yapabiliyor; arka uçta `failed` terminal DEĞİL ve 10 dakikalık eşiğin
+  ölçülmüş dayanağı YOK. Bu oturumda yalnız arayüz tutarlı hâle getirildi. Ev:
+  `docs/active/CURRENT.md` → `stale-sweeper-vs-late-webhook-terminality`. **Tetik: sektör
+  bilgi paketi işi TAMAMEN bittikten sonra** (fal.ai model değişikliğiyle birlikte).
+  Kapanışta (`/finish-branch-claude-codex`) yeniden görünür kılınacak.
+
 **Devralınan, değişmeyen kalemler** (ayrıntı TASK.md Open Problems + önceki oturum kayıtları):
 - `accepted_risk` (checkpoint 9): CTA içinde serbest köşeli ayraç yok · `brand_kit` anahtarı
   silinemez.
@@ -112,6 +127,8 @@
 - **Residual (evi Task 16):** geri alma ile ileri 032 arasında ortak kilit yok.
 - **Temizlik borçları (evi: `/simplify-claude-codex`):** iki dosyada kullanılmayan `pytest`
   importu · `brands.py`'de kullanılmayan `BrandOut`.
+- **Kapanışta gündeme gelecek (evi: `/finish-branch-claude-codex`):** yukarıdaki
+  süpürücü↔webhook açık kalemi — dal kapanırken Eray'a hatırlatılacak.
 - **Etiketler (evi: `/finish-branch-claude-codex`):** `backup/pre-footer-fix`,
   `backup/pre-t3-kind-fix` merge/PR kararından sonra silinir.
 

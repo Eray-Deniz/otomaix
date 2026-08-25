@@ -30,15 +30,45 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: 0c19d83b6d2bdb654ba7e0a297307afeb4a5bee3
-- cp_count: 11
-  <!-- Checkpoint 11 iki oturuma yayıldı: on birinci oturumda dört tur koştu ve
+- last_checkpoint_ref: 532825e2fe223d931f81322be361ab842047e361
+- cp_count: 12
+  <!-- Checkpoint 12: beş tur; tur 3'ten itibaren `approve`. §8.6 3. dal
+       (Accepted-risk devamı) ateşlendi — kalan tek medium önceden var olan
+       bir borçtur ve evi CURRENT.md'dedir. Ayrıntı: Codex defterindeki
+       "Checkpoint 12 disposition".
+       Checkpoint 11 iki oturuma yayıldı: on birinci oturumda dört tur koştu ve
        APPROVE ALMADI, bu yüzden ref checkpoint 10'da bırakılmıştı. On ikinci
        oturumda tur 5 (yeni kök neden: model-patlaması yedek dalı) ve tur 6
        (approve, bulgu yok) koştu; §8.6 Clean dalı ateşlendi ve ref/sayaç
        birlikte ilerledi. -->
 
 # Current Status
+
+**2026-08-25 (on ikinci oturum, ikinci yarı) — TASK 12 BİTTİ, CHECKPOINT 12 KAPANDI.**
+Beş tur; tur 3'ten itibaren `approve`. Tur 1'in dört high bulgusunun dördü de bağımsız
+sondajla doğrulandı ve düzeltildi. `pytest tests/ -q` → **405 passed**; donmuş prompt +
+migration kapıları → **131 passed**; `npx next build` → exit=0. Çalışma alanı temiz, push YOK.
+
+**Task 12 bitti:** damga tüketimi (atomik, tek kullanımlık) iki kalıcı-kayıt ucunda da
+bağlandı; `social.package_events` + `log_package_event` kuruldu; Task 8-11'in geçici
+logları kalıcı olaya bağlandı; istemci makbuzu caption yanıtından iki isteğe de taşıyor.
+
+**Turların anlattığı hikâye — iki kez aynı ders.** İlk düzeltmelerimin İKİSİ de (F3, F4)
+varyantı kapatıp sınıfı açık bıraktı: F3'te elle kurduğum indeks imzası eksikti (aynı adda
+UNIQUE bir indeks kapıdan geçiyordu — ölçüldü), F4'te sırayı kaydırdım ama geçişi atomik
+yapmadım. İkisi de ikinci turda TAM ölçüye bağlanarak kapandı: `pg_get_indexdef` (kanonik
+tanımın tamamı) ve tek transaction'da onaya-açılma + damga.
+
+**Medium'lar advisory sayılmadı — çünkü bu partinin kendi gerilemeleriydi.** M1 (süpürücü
+kararını geri alma) ve M2'nin tur-4 varyantı (geç webhook başarısı arayüze ulaşmıyor)
+düzeltildi; M1 için pozitif kontrol koşuldu (kapı kaldırılınca test düşüyor).
+
+**M2 residual KABUL EDİLEN RİSK ve gerekçesi ÖLÇÜLDÜ.** Üç turda üç varyant geldi; ortak
+yan, istemcide cevaplanamayan bir soruyu ("bu satır daha değişecek mi") yüklemle çözmeye
+çalışmaktı. Altıncı yama açılmadı. Ölçüldü ki sınırsız yoklama bu partinin ürünü DEĞİL:
+`0c19d83` sürümünde de terminal başarısız satır sonsuza kadar yoklanıyordu (üstelik kart
+yanlış durum gösteriyordu). Yük aynı, görünürlük arttı. Gerçek çözüm arka uçtan türetilmiş
+bir uzlaştırma sinyalidir ve o, Eray'ın park ettiği ürün kararının içindedir.
 
 **2026-08-25 (on ikinci oturum) — CHECKPOINT 11 KAPANDI (approve, bulgu yok). Devralınan tek
 açık kapı kapatıldı; Task 1–11 bitti, sıradaki Task 12.**
@@ -317,6 +347,26 @@ seans sırası ve yöntem HANDOFF.md'de. Eski spec/plan sentezden habersizdir; i
 (devralma / supersede) spec seansında netleşecek, durum geçişi Eray'ındır.
 
 # Open Problems
+
+- **[AÇIK KALEM — evi VAR, tetiği Eray verdi] Süpürücünün "başarısız"ı ile webhook'un
+  "hazır"ı çelişiyor.** Süpürücü `generating`i 10 dakikada `failed` yapıyor; `fal_webhook`
+  tek görsel/video satırını `fal_job_id` ile bulup durum kapısı OLMADAN sonradan `ready`
+  yazabiliyor. Arka uçta `failed` TERMİNAL DEĞİL. **10 dakikanın ölçülmüş dayanağı yok** —
+  vault kararı gerekçeyi "webhook kaybı güvenlik ağı" diye yazıyor, model süresi ölçümüne
+  ya da sağlayıcı belgesine dayanmıyor (kayıt `verification-status: unverified`).
+  Bu oturumda YALNIZ arayüz arka uçla tutarlı hâle getirildi (`532825e`); sözleşme
+  ÇÖZÜLMEDİ. **Dürüst etiket: çözülmedi + evi var.**
+  Ev: `docs/active/CURRENT.md` → `stale-sweeper-vs-late-webhook-terminality`.
+  **Tetik (Eray, 2026-08-25): sektör bilgi paketi işi TAMAMEN bittikten sonra** — fal.ai
+  model değişikliği de o döneme planlı, eşik gerçek model süreleriyle birlikte ölçülmeli.
+  Kapsam dışı olduğu için Task 12'de çözülmedi; `/finish-branch-claude-codex` kapanışında
+  yeniden görünür kılınmalı.
+
+- **[DÜZELTME — kayda geçiyor] `76b4a15` commit mesajında ölçülmemiş bir iddia var.**
+  Mesaj "çöken bir stage-1 eskiden hayalet bir `awaiting_approval` olarak kalırdı" diyor.
+  YANLIŞ: süpürücü `awaiting_approval`ı zaten 2 saatte topluyordu (`internal.py` okundu).
+  Gerçek fark 2 saat → 10 dakika. Commit geçmişi yeniden yazılmadı çünkü inceleme tabanı
+  kayardı; düzeltme burada ve `T12-fix3` mesajında yaşıyor.
 
 - **[KAPANDI 2026-08-25] Task 11'in checkpoint'i kapandı.** Devralınan açık kapı buydu.
   Tur 5 yeni bir kök neden buldu (model-patlaması yedek dalı havuzu taşımıyordu — bağımsız
