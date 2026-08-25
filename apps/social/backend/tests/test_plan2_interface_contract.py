@@ -90,8 +90,8 @@ async def _sub_sector(db) -> uuid.UUID:
 # Neden seçilmiş özellik listesi DEĞİL: iki bağımsız review turu üst üste aynı ekseni
 # buldu ("şu özelliği de denetlemiyorsun") — önce tablo/kolon, sonra birincil anahtar ·
 # varsayılan · yabancı anahtar. Elle uzatılan liste her turda yeni bir varyant üretir ve
-# kapanmaz. Bu yüzden liste değil MANİFEST: her ilişkinin kolon · kısıt · indeks ·
-# tetikleyici kümesi kataloğdan okunur ve beklenenle KAPALI KÜME olarak karşılaştırılır.
+# kapanmaz. Bu yüzden liste değil MANİFEST: her ilişkinin tablo imzası · kolon ·
+# kısıt · indeks · tetikleyici kümesi kataloğdan okunur ve beklenenle KAPALI KÜME olarak karşılaştırılır.
 # Eksik olan da FAZLA olan da bulgudur; yeni bir özellik ekseni "denetlenmiyor" olamaz,
 # çünkü eksen seçilmiyor.
 #
@@ -107,6 +107,8 @@ async def _sub_sector(db) -> uuid.UUID:
 
 EXPECTED_032_MANIFEST = {
     "sector_research_artifacts": {
+        # 034'ün tablo-imzası standardı (aynı beş alan).
+        "relation": ("r", "p", False, False, False),
         "columns": {
             "id": ("uuid", "NO", "gen_random_uuid()"),
             "run_id": ("text", "NO", None),
@@ -150,6 +152,8 @@ EXPECTED_032_MANIFEST = {
         },
     },
     "sector_packages": {
+        # 034'ün tablo-imzası standardı (aynı beş alan).
+        "relation": ("r", "p", False, False, False),
         "columns": {
             "id": ("uuid", "NO", "gen_random_uuid()"),
             "sector_id": ("uuid", "NO", None),
@@ -203,6 +207,8 @@ EXPECTED_032_MANIFEST = {
         },
     },
     "generation_stamps": {
+        # 034'ün tablo-imzası standardı (aynı beş alan).
+        "relation": ("r", "p", False, False, False),
         "columns": {
             "id": ("uuid", "NO", "gen_random_uuid()"),
             "brand_id": ("uuid", "NO", None),
@@ -268,6 +274,14 @@ def _char(value):
 
 async def _relation_manifest(db, table: str) -> dict:
     """Bir ilişkinin TAM katalog imzası — beklenenle kapalı küme karşılaştırması için."""
+    relation = await db.fetchrow(
+        "SELECT c.relkind, c.relpersistence, c.relispartition, c.relrowsecurity, "
+        "       c.relforcerowsecurity "
+        "  FROM pg_class AS c "
+        "  JOIN pg_namespace AS n ON n.oid = c.relnamespace "
+        " WHERE n.nspname = 'social' AND c.relname = $1",
+        table,
+    )
     columns = {
         row["column_name"]: (row["data_type"], row["is_nullable"], row["column_default"])
         for row in await db.fetch(
@@ -311,6 +325,19 @@ async def _relation_manifest(db, table: str) -> dict:
         )
     }
     return {
+        # Tablonun KENDİ katalog özellikleri. Kısıt/indeks/tetikleyici tanımlarının
+        # HİÇBİRİ bunu taşımaz: `CREATE TABLE` → `CREATE UNLOGGED TABLE` değişikliği
+        # diğer dört yüzeyi bayt-aynı bırakır ama çökmede tabloyu boşaltır. Alan
+        # listesi 034'ün tablo-imzası standardıyla AYNI (kendi icadım değil).
+        "relation": (
+            _char(relation["relkind"]),
+            _char(relation["relpersistence"]),
+            relation["relispartition"],
+            relation["relrowsecurity"],
+            relation["relforcerowsecurity"],
+        )
+        if relation is not None
+        else None,
         "columns": columns,
         "constraints": constraints,
         "indexes": indexes,
@@ -329,6 +356,10 @@ async def test_migration_032_relation_manifest_is_closed(db, table):
     observed = await _relation_manifest(db, table)
     expected = EXPECTED_032_MANIFEST[table]
     assert observed["columns"], f"social.{table} yok — 032 teslim edilmemiş"
+    assert observed["relation"] == expected["relation"], (
+        f"social.{table} tablo imzası saptı (relkind · kalıcılık · bölüm · satır "
+        f"güvenliği): {observed['relation']} != {expected['relation']}"
+    )
     for facet in ("columns", "constraints", "indexes", "triggers"):
         assert observed[facet] == expected[facet], (
             f"social.{table} '{facet}' manifestten SAPTI\n"

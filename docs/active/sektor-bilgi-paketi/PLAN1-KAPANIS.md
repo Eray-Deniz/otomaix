@@ -27,25 +27,38 @@ kopyalanıp çalıştırılabilir; sır (bağlantı dizesi) belgeye GİRMEZ, aya
 | Katman-1 byte-exact kapısı yeşil | `cd apps/social/backend && .venv/bin/python -m pytest tests/prompt_regression/ -q` | `121 passed` |
 | Marka → kök sektör sweep'i temiz | aşağıdaki iki adım | `differences: 0` (rc=0), hedef doğrulandı |
 
-**Sweep — hedefe BAĞLI komut.** Çıplak koşum "canlıya bakıldı"ı kanıtlamaz: bağlantı
-dizesi ayarlardan gelir ve yanlış yapılandırılmış temiz bir veritabanı da `rc=0` döner.
-Bu yüzden komut, raporun taşıdığı hedef parmak izine karşı **fail-closed** karşılaştırılır
-(parmak izi sır DEĞİLDİR; bağlantı dizesi belgeye hiç girmez):
+**Sweep — hedefe BAĞLI ve çıkış kodunu KORUYAN komut.** İki ayrı arıza yolu var ve
+komut ikisini de kapatmak zorunda: (1) çıplak koşum "canlıya bakıldı"ı kanıtlamaz —
+bağlantı dizesi ayarlardan gelir, yanlış yapılandırılmış temiz bir veritabanı da `rc=0`
+döner; (2) çıktıyı boruya verip hedefi `grep`'le aramak sweep'in KENDİ çıkış kodunu
+yutar — ihlal bulan bir sweep (`differences: 1`, rc=1) doğru hedefi bastığı için
+"temiz" görünür. İkincisi ölçüldü: eski boru hattı biçimi bu senaryoda `rc=0` veriyordu.
 
 ```
-cd apps/social/backend && .venv/bin/python -c "
+cd apps/social/backend && out=$(.venv/bin/python -c "
 import sys; sys.path.insert(0, '.'); sys.path.insert(0, 'scripts')
 from app.core.config import settings
 import sector_sweep
-raise SystemExit(sector_sweep.main(['--database-url', settings.DATABASE_URL, '--dry-run']))" \
-  | tee /dev/stderr \
-  | grep -qFx "target: 7626046209338777641/16384/otomaix@127.0.0.1:5433/otomaix~10.0.1.9:5432"
+raise SystemExit(sector_sweep.main(['--database-url', settings.DATABASE_URL, '--dry-run']))") ; rc=$?
+printf '%s\n' "$out"
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qFx "target: 7626046209338777641/16384/otomaix@127.0.0.1:5433/otomaix~10.0.1.9:5432"
 ```
 
+Üç çıkış-kodu kontrolü ÖLÇÜLDÜ:
+
+| Senaryo | Beklenen | Ölçülen |
+|---|---|---|
+| temiz + doğru hedef | `rc=0` | `rc=0` |
+| ihlal (`differences: 1`) + doğru hedef | `rc≠0` | `rc=1` |
+| temiz + yanlış hedef | `rc≠0` | `rc=1` |
+
+İhlal senaryosu, doğru hedefi basıp 1 ile çıkan bir vekil üreticiyle kurgulandı: canlı
+veritabanında ihlal YOK (`differences: 0`) ve oraya kasten ihlal yazılmadı. Yani ölçülen
+şey komutun BİÇİMİDİR, canlı verinin bozulması değil — dürüst sınır.
+
 Ölçülen hedef: `7626046209338777641/16384/otomaix@127.0.0.1:5433/otomaix~10.0.1.9:5432`.
-Ölçüldü: doğru parmak iziyle `rc=0`, kasıtlı yanlış parmak iziyle `rc=1`. Sunucu adresi
-değişirse (kap yeniden başlar, yeni IP alır) komut BAŞARISIZ olur — bu fail-closed yöndür,
-taban yeniden alınır.
+Sunucu adresi değişirse (kap yeniden başlar, yeni IP alır) komut BAŞARISIZ olur — bu
+fail-closed yöndür, taban yeniden alınır.
 
 Sweep CANLI veritabanına karşı koşuldu (salt-okunur transaction). Test koşumları
 `otomaix_test` üstünde.
@@ -165,6 +178,9 @@ yeniden koşuldu — eski ölçümden taşınan sayı YOKTUR. Ortak komut:
 | M7 | `032_*.sql`: `decision_log` `DEFAULT '[]'` kaldırıldı | `1 failed, 12 passed` | manifest (varsayılan) |
 | M8 | `032_*.sql`: `sector_id` `REFERENCES social.sectors(id)` kaldırıldı | `1 failed, 12 passed` | manifest (yabancı anahtar) |
 | M9 | `032_*.sql`: `brands` tetikleyicisi `BEFORE INSERT OR UPDATE` → `BEFORE INSERT` | `4 passed, 9 errors` | migration'ın KENDİ garanti bloğu |
+| M10 | `032_*.sql`: `sector_research_artifacts` → `CREATE UNLOGGED TABLE` | `1 failed, 12 passed` | manifest (tablo imzası) |
+
+**Tablo imzası neden ayrı bir yüzey.** M10'u başka HİÇBİR kapı yakalamıyor: kısıt, indeks ve tetikleyici tanımlarının hiçbiri tablonun kalıcı mı geçici mi olduğunu taşımaz, kolon imzası da taşımaz. `UNLOGGED` bir tablo çökmede BOŞALIR. Yüzey listesi kendi icadım değil — migration 034'ün tablo-imzası standardıyla aynı beş alan (relkind · kalıcılık · bölüm · satır güvenliği · zorlanmış satır güvenliği). Aynı mutasyon `sector_packages` üstünde denendiğinde PostgreSQL'in KENDİSİ reddediyor (kalıcı `posts` tablosundan ona yabancı anahtar var), o yüzden ölçüm gelen yabancı anahtarı olmayan tabloyla yapıldı.
 
 **Hangi eksende asıl kapı kim — dürüst ayrım.** M9 ve daha önce ölçülen üç mutasyon
 (indeks UNIQUE'liği · tetikleyici adı · damga FK'sının MATCH FULL'ü) sözleşme testine
