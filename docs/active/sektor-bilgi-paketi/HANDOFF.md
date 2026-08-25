@@ -26,10 +26,14 @@
 ## Resume From (sıra)
 1. **Task 16** — kapanış: tam sweep + kabul eşlemesi + Plan 2 arayüz teslimi + MANUEL adımlar.
    Manuel adımların listesi aşağıda "Risks" altında; hiçbiri bu oturumda yapılmadı.
-2. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
+2. **Task 16'nın manuel adımları KOŞULMAZ** — Eray kararıyla Plan 2 sonrasındaki tek
+   doğrulama turuna devredildi. Task 16 yine yazılır (tam sweep · kabul eşlemesi · arayüz
+   sözleşme testi), ama manuel adımlar "ertelendi + evi belli" diye kaydedilir, "yapıldı"
+   diye DEĞİL.
+3. **Task 8'den sonraki HER task'ın son adımı tam sweep'tir:**
    `.venv/bin/python -m pytest tests/prompt_regression/ -q` yeşil olmadan ilerlenmez.
-3. Oturum başında tavan-aşımı için Eray'dan izin iste.
-4. **Task 16'dan SONRA, canlıya müşteri alınmadan ÖNCE:** `CURRENT.md` →
+4. Oturum başında tavan-aşımı için Eray'dan izin iste.
+5. **Task 16'dan SONRA, canlıya müşteri alınmadan ÖNCE:** `CURRENT.md` →
    `brand-settings-save-integrity`. Bu madde bu oturumun ürünüdür ve ertelenmiş değil,
    **evi olan** bir iştir.
 
@@ -74,10 +78,12 @@ protokolün öngördüğü tek tekrar 1200s ile koştu. Bir çağrı da kısalt�
 kuramadı (rc=2) — Codex hiç çağrılmadı; **taban ref'i daima TAM SHA ver.**
 
 **DENENMEYEN / kapsanmayan:**
-- **Task 15'in MANUEL UI doğrulaması YAPILMADI** (plan Step 5). Gerçek tarayıcıda onayla /
-  değiştir / boşalt üçlüsü, boş-aday hâli, kanal doldurma ve sitesiz öneri düğmesi
-  DENENMEDİ. Task 16 raporuna "doğrulanmadı" olarak girer.
-- **Canlı n8n importu ve gerçek Telegram teslimi DENENMEDİ.**
+- **TÜM MANUEL DOĞRULAMALAR PLAN 2 SONRASINA ERTELENDİ (Eray kararı, 2026-08-25).**
+  Kapsam: Task 15'in arayüz doğrulaması (onayla/değiştir/boşalt · boş-aday hâli · kanal
+  doldurma · sitesiz öneri düğmesi) · canlı n8n importu ve gerçek Telegram teslimi ·
+  gerçek arayüzde uçtan uca üretim. Ev: **Plan 2 bitiminde koşulacak tek doğrulama turu.**
+  Bu erteleme Task 16'nın kabul eşlemesine AYNEN yazılır: Plan 1, arayüz yüzeyleri
+  DOĞRULANMAMIŞ hâlde kapanır — "doğrulandı" diye kaydedilmez.
 - Canlıya hiçbir migration uygulanmadı (032 · 033 · 034).
 - Gerçek arayüzde tek bir üretim denenmedi; gerçek bir sektör paketi hiç yazılmadı.
 - Öneri uçlarının hiçbiri GERÇEK model çağrısıyla koşulmadı (hepsi sahte istemciyle).

@@ -376,6 +376,11 @@ tanım gereği yakalayamaz. Arka uçta mutasyonla ölçülen her şey sağlam ç
   "inline" YALNIZ task yazımını kapsar; review/checkpoint kapıları normal koşar. İlk
   yorumum bunu yanlışlıkla review'lara da genişletmişti — Eray düzeltti, checkpoint 3
   aynı oturumda koştu (4 tur, approve).
+- **2026-08-25 (on beşinci oturum) — Manuel doğrulamalar Plan 2 sonrasına ertelendi (Eray):**
+  Task 15'in arayüz doğrulaması, canlı n8n importu + Telegram smoke'u ve gerçek uçtan uca üretim
+  denemesi TEK bir doğrulama turunda, **Plan 2 bittikten sonra** koşulacak. Sonuç: Plan 1
+  kapanış raporu arayüz yüzeyleri için "doğrulandı" İDDİA ETMEZ; erteleme evi ve tetiğiyle
+  birlikte kaydedilir. Task 16 otomatik kapılarını (tam sweep, arayüz sözleşme testi) yine koşar.
 - **2026-08-24 (altıncı oturum) — Geçmiş yeniden yazımı (Eray onaylı):** `9ed5902` commit'i
   `Exec-Kind: code` etiketiyle inmişti ama yalnız `tests/` altına dokunuyordu → türetilmiş
   defter MECH-FAIL veriyor, Adım 11.0 mekanik kapısını ve push'u bloklyordu. Etiket `red-only`'ye
