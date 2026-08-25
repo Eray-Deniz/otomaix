@@ -28,7 +28,12 @@ from app.models.schemas import (
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context, get_product_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
-from app.services.sector_packages import resolve_package_context, resolve_persist_stamp
+from app.services.package_events import log_package_event
+from app.services.sector_packages import (
+    match_special_day,
+    resolve_package_context,
+    resolve_persist_stamp,
+)
 from app.services.short_video import (
     DEFAULT_MAX_DURATION,
     PLATFORM_MAX_DURATION,
@@ -186,6 +191,13 @@ class GenerateCaptionRequest(BaseModel):
     scene_reference_image_url: str | None = None
 
 
+# Caption çağrısı YAPMAYAN içerik türleri — makbuz hiç doğmaz, yokluğu anomali
+# değildir. Küme KAPALI ve dar tutulur: yeni bir tür eklendiğinde varsayılan
+# "makbuz beklenir"dir, yani unutulan bir tür yanlış-pozitif olay üretir
+# (gürültü), sessiz bir denetim boşluğu DEĞİL.
+RECEIPTLESS_CONTENT_TYPES = frozenset({"quote"})
+
+
 async def _write_generation_stamp(db, brand_id, package_context) -> str | None:
     """K-07 üretim-anı makbuzu; paketsiz üretimde `None` döner.
 
@@ -308,6 +320,23 @@ async def generate_caption(
         scene_reference_image_url=payload.scene_reference_image_url,
         package_context=package_context,
     )
+
+    # Özel gün EŞLEŞMEZLİĞİ burada kaydedilir: basım yolu (prompt_builder)
+    # eşzamanlıdır ve donmuş prompt kapısının içinden geçer — oraya bir
+    # veritabanı yazımı sokmak o kapıyı kirletirdi. Sahip, db'si olan ve günü
+    # isteyen TEK uçtur; yüklem basım yoluyla PAYLAŞILIR, kopyalanmaz.
+    if package_context is not None and payload.special_day_name:
+        matched_key, mismatch_reason = match_special_day(
+            package_context, payload.special_day_name
+        )
+        if mismatch_reason is not None:
+            await log_package_event(
+                db,
+                event_type="mismatch_fallthrough",
+                brand_id=payload.brand_id,
+                package_id=package_context.package_id,
+                detail={"reason": mismatch_reason, "key": matched_key},
+            )
 
     # Bayrak yanıt sözleşmesinin parçası değil — okunur ve DÜŞÜRÜLÜR.
     package_applied = result.pop(PACKAGE_APPLIED_KEY, False)
@@ -446,10 +475,12 @@ async def generate_post(
             db,
             dict(brand),
             payload.generation_id,
-            # Makbuz YALNIZ caption çağrısı yapan akışlarda doğar. `platform_captions`
-            # o çağrının sunucuda görünen izidir: alıntı akışı caption üretmez ve
-            # onu göndermez, dolayısıyla makbuz yokluğu orada anomali değildir.
-            receipt_expected=bool(payload.platform_captions),
+            # Makbuz YALNIZ caption çağrısı yapan akışlarda doğar. Beklenti
+            # OPSİYONEL bir alandan türetilemez: `platform_captions`i düşürmek
+            # denetim izini susturmaya yeterdi (fail-open). İçerik türü akışı
+            # BELİRLER — düşürülmesi üretimi de bozar — ve bilinmeyen tür
+            # BEKLENİR tarafına düşer.
+            receipt_expected=payload.content_type not in RECEIPTLESS_CONTENT_TYPES,
         )
         row = await db.fetchrow(
             """

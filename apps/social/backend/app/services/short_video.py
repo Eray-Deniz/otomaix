@@ -1089,27 +1089,23 @@ async def run_short_video_stage1(
 
     # Post INSERT — TTS R2 path'i post_id'ye bağlı.
     #
-    # K-07: kısa videonun KALICI KAYDI burada doğar, o yüzden makbuz tüketimi de
-    # buradadır ve post yazımıyla AYNI transaction'dadır (plan Task 12). Stage-2
-    # yeni bir post yaratmaz; onun damgası bu satırda yazılır.
-    async with db.transaction():
-        stamp_package_id, stamp_package_version = await resolve_persist_stamp(
-            db, {"id": brand_id, "sub_sector_id": sub_sector_id}, generation_id
-        )
-        row = await db.fetchrow(
-            """
-            INSERT INTO social.posts
-                (brand_id, content_type, prompt, user_text, aspect_ratio, status,
-                 template_id, template_fields, platform_captions, product_id,
-                 package_id, package_version)
-            VALUES ($1, 'video', $2, $3, $4, 'awaiting_approval',
-                    $5, $6, $7, $8, $9, $10)
-            RETURNING *
-            """,
-            brand_id, prompt, script, aspect_ratio,
-            template_id, template_fields, platform_captions, product_id,
-            stamp_package_id, stamp_package_version,
-        )
+    # Damga BURADA yazılmaz. Makbuz tek kullanımlıktır ve stage-1'in kalıcı
+    # başarısı bu satırda DEĞİL, TTS + still üretimi geçtikten sonra doğar:
+    # burada tüketilseydi TTS patladığında makbuz yanar, arayüz kullanıcıyı
+    # adım 2'ye geri atar (ölçüldü) ve AYNI makbuzla yapılan yeniden deneme
+    # damgasız kalırdı — damga başarısız postun üstünde asılı kalırken.
+    row = await db.fetchrow(
+        """
+        INSERT INTO social.posts
+            (brand_id, content_type, prompt, user_text, aspect_ratio, status,
+             template_id, template_fields, platform_captions, product_id)
+        VALUES ($1, 'video', $2, $3, $4, 'awaiting_approval',
+                $5, $6, $7, $8)
+        RETURNING *
+        """,
+        brand_id, prompt, script, aspect_ratio,
+        template_id, template_fields, platform_captions, product_id,
+    )
     post = dict(row)
     post_id = post["id"]
 
@@ -1159,6 +1155,21 @@ async def run_short_video_stage1(
         "product_image_url": product_image_url,
         "generation_stage": "awaiting_approval",
     })
+
+    # K-07 damga — stage-1'in KALICI BAŞARI noktası burasıdır. Makbuz tüketimi
+    # ile damganın posta yazılması TEK transaction'dadır: ayrı olsalardı makbuz
+    # tüketilip damga yazılmayabilir (kayıp atıf) ya da tersi olabilirdi.
+    async with db.transaction():
+        stamp_package_id, stamp_package_version = await resolve_persist_stamp(
+            db, {"id": brand_id, "sub_sector_id": sub_sector_id}, generation_id
+        )
+        if stamp_package_id is not None:
+            await db.execute(
+                "UPDATE social.posts SET package_id = $2, package_version = $3 WHERE id = $1",
+                post_id,
+                stamp_package_id,
+                stamp_package_version,
+            )
 
     return {
         "post_id": post_id,

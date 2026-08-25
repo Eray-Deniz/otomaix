@@ -177,13 +177,22 @@ async def test_brand_sector_mappings_full_sweep_unchanged(db):
     assert await _brand_sector_map(db) != before, "sweep marka kayışına duyarsız"
 
 
-def _post_insert_statements() -> list[tuple[Path, str]]:
-    """`app/` içindeki her `INSERT INTO social.posts` ifadesini toplar."""
+def _post_write_statements() -> list[tuple[Path, str]]:
+    """`app/` içindeki her `social.posts` YAZIM ifadesini toplar.
+
+    INSERT ve UPDATE'in İKİSİ de taranır. Yalnız INSERT taramak kapıyı sahte
+    yeşile boyar: damga bir yolda INSERT'le, başka bir yolda UPDATE'le
+    yazılabilir (kısa video stage-1 tam olarak öyle yapıyor — makbuz, üretimin
+    kalıcı başarı noktasında tüketiliyor). Kapının ölçtüğü şey ifadenin FİİLİ
+    değil, damga çiftinin bütünlüğüdür.
+    """
     statements: list[tuple[Path, str]] = []
     for path in sorted(APP_DIR.rglob("*.py")):
         text = path.read_text(encoding="utf-8")
-        for match in re.finditer(r"INSERT\s+INTO\s+social\.posts", text):
+        for match in re.finditer(r"(?:INSERT\s+INTO|UPDATE)\s+social\.posts", text):
             end = text.find('"""', match.end())
+            if end == -1:
+                end = text.find("\n", match.end())
             statements.append((path, text[match.start() : end if end != -1 else None]))
     return statements
 
@@ -209,13 +218,14 @@ async def test_package_stamp_pair_is_never_half_written(db):
     (a) **Bütünlük** — hiçbir üretim yolu `package_id`'yi `package_version`
         olmadan (ya da tersini) yazmaz. Yarım çift, MATCH FULL bileşik FK'sının
         DB düzeyinde reddettiği şeydir; kod düzeyinde de üretilmemelidir.
+        Tarama INSERT ve UPDATE'in İKİSİNİ de kapsar.
     (b) **Kapalılık** — damga yazan dosya kümesi yukarıdaki listeye EŞİTTİR.
         Yeni bir post yazıcısının sessizce damga yazmaya başlaması da, mevcut
         bir yolun damgasını sessizce kaybetmesi de bu eşitliği bozar.
     (c) **Davranış** — damgasız yazılan kayıt NULL/NULL kalır ve damgasız
         sorgulanabilir (paketsiz yolun değişmezliği).
     """
-    statements = _post_insert_statements()
+    statements = _post_write_statements()
     assert statements, "üretim yolu bulunamadı — yapısal sweep boşa koştu"
 
     stamped_paths = set()

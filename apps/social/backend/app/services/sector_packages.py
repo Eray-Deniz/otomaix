@@ -633,13 +633,20 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
                 package_id,
                 "; ".join(problems[:3]),
             )
+            # Bu bir DOĞRULAMA hatasıdır, eşleşmezlik DEĞİL (spec §14.4 ikisini
+            # ayrı sayar). Paket okundu ama şemayı tutturmadı; "bu gün pakette
+            # yok" ile aynı kutuya konsaydı işletim ikisini ayırt edemezdi.
             await _record_event(
                 db,
-                event_type="mismatch_fallthrough",
+                event_type="package_read_error",
                 brand_id=brand.get("id"),
                 sector_id=sub_sector_id,
                 package_id=package_id,
-                detail={"problem_count": len(problems), "first_problem": problems[0][:200]},
+                detail={
+                    "reason": "structural",
+                    "problem_count": len(problems),
+                    "first_problem": problems[0][:200],
+                },
             )
             return None
 
@@ -671,7 +678,7 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
             event_type="package_read_error",
             brand_id=brand.get("id"),
             sector_id=sub_sector_id,
-            detail={"error": type(exc).__name__},
+            detail={"reason": "read_failed", "error": type(exc).__name__},
         )
         return None
 
@@ -975,6 +982,31 @@ def render_package_block(
     return "\n".join(parts)
 
 
+def match_special_day(context, day_name: str) -> tuple[str | None, str | None]:
+    """İstenen özel günün pakette karşılığı var mı — `(anahtar, sebep)`.
+
+    Saf ve eşzamanlıdır: hem basım yolu (`render_special_day_lines`) hem olay
+    kaydını yazan async sahip AYNI yüklemi çağırır. İki ayrı ölçü olsaydı basım
+    "eşleşti" derken denetim izi "eşleşmedi" diyebilirdi (K-01b disiplini).
+
+    `sebep is None` = eşleşti. Anahtar, çözümlenebildiği her durumda döner —
+    log ve olay `detail`i onu taşır, çünkü işletimde "hangi anahtara bakıldı"
+    sorusu eşleşmemenin kendisinden daha çok iş görür.
+    """
+    if not day_name:
+        return (None, None)
+    ozel_gun = context.content.get("ozel_gun")
+    try:
+        key = normalize_special_day_key(day_name)
+    except ValueError:
+        return (None, "day_name_not_normalizable")
+    if not isinstance(ozel_gun, dict):
+        return (key, "package_has_no_special_days")
+    if not isinstance(ozel_gun.get(key), dict):
+        return (key, "no_entry_for_day")
+    return (key, None)
+
+
 def render_special_day_lines(
     context: SectorPackageContext, day_name: str | None, channels: Any = None
 ) -> list[str]:
@@ -996,38 +1028,23 @@ def render_special_day_lines(
     """
     if not day_name:
         return []
-    ozel_gun = context.content.get("ozel_gun")
-    if not isinstance(ozel_gun, dict):
-        return []
-
-    # Normalize YAZIM tarafı için fail-closed'dır: çözümlenemeyen adda istisna
-    # fırlatır ve uydurma anahtar üretilmesini engeller. Okuma sınırında aynı
-    # istisna, genel kullanıcı girdisiyle tetiklenen işlenmemiş bir sunucu
-    # hatasına dönüşür ve spec §11.1'in ZORUNLU sessiz-düşme sözleşmesini
-    # çiğnerdi. Yazıcı katı KALIR; hata burada eşleşmeme durumuna çevrilir.
-    try:
-        key = normalize_special_day_key(day_name)
-    except ValueError as exc:
-        logger.warning(
-            "özel gün adı çözümlenemedi, dönem kalıpları basılmıyor "
-            "(package_id=%s sub_sector=%s gün=%r): %s",
-            context.package_id,
-            context.sub_sector_slug,
-            day_name,
-            exc,
-        )
-        return []
-    entry = ozel_gun.get(key)
-    if not isinstance(entry, dict):
+    # Eşleşme yüklemi TEK yerde yaşar (`match_special_day`); burası onun
+    # sonucunu kullanır. Olay kaydını async sahip yazar — basım yolu
+    # eşzamanlıdır ve donmuş prompt kapısının içinden geçer, oraya bir
+    # veritabanı yazımı sokmak o kapıyı da kirletirdi.
+    key, reason = match_special_day(context, day_name)
+    if reason is not None:
         logger.warning(
             "özel gün paket karşılığı YOK, dönem kalıpları basılmıyor "
-            "(package_id=%s sub_sector=%s gün=%r anahtar=%r)",
+            "(package_id=%s sub_sector=%s gün=%r anahtar=%r sebep=%s)",
             context.package_id,
             context.sub_sector_slug,
             day_name,
             key,
+            reason,
         )
         return []
+    entry = context.content["ozel_gun"][key]
 
     tur = str(entry.get("tur", "")).strip()
     lines = [f"--- {BLOCK_HEADER} DÖNEM KALIPLARI ---"]
@@ -1200,9 +1217,12 @@ async def resolve_persist_stamp(
       YAZILMAZ + `stamp_invalid`. Üretim bloklanmaz.
     * Makbuzsuz istek + marka paket yolunda + makbuz BEKLENİYORDUYSA →
       `stamp_missing`. `receipt_expected`, üretimin bir caption çağrısının
-      ucunda olup olmadığını söyler: alıntı akışı gibi caption üretmeyen yollar
-      için makbuz hiç doğmaz, o yüzden yokluğu bir anomali DEĞİLDİR. Bu bayrak
-      istemcinin beyanı değil, çağıran ucun kendi akış bilgisidir.
+      ucunda olup olmadığını söyler; caption üretmeyen yollar (alıntı) için
+      makbuz hiç doğmaz, yokluğu anomali DEĞİLDİR. Değer İSTEMCİNİN DÜŞÜREBİLECEĞİ
+      bir alandan türetilemez: opsiyonel bir alanın yokluğu denetim izini
+      susturmak için yeterli olurdu (fail-open). Çağıran onu içerik türü gibi
+      akışı BELİRLEYEN, düşürülmesi akışı da bozan bir girdiden hesaplar ve
+      bilinmeyen durumda BEKLENİR tarafına düşer.
     * Damganın paketi kayıt anında artık aktif değilse damga YİNE yazılır +
       `stamp_stale_at_persist`. Provenans dürüsttür: damgayı düşürmek üretimin
       gerçek kökenini silerdi, yeniden çözümlemek ise post'a onu üretmeyen bir

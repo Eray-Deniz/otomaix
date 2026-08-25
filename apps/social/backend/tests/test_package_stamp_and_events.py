@@ -687,33 +687,6 @@ async def test_stale_assignment_event_recorded(pkg_db):
     assert kinds == ["stale_assignment_fallback"]
 
 
-async def test_mismatch_event_recorded(pkg_db):
-    """Yapısal olarak geçersiz paket içeriği `mismatch_fallthrough` üretir.
-
-    Aktif paket VAR ama şemayı tutturmuyor: üretim paketsiz yola düşer ve bu
-    düşüş kalıcı olarak kaydedilir. Bayat atamadan (paket YOK) ayrı bir olaydır
-    — işletimde biri "paket üretilmemiş", diğeri "üretilmiş ama bozuk" der.
-    """
-    sub_id, package_id = await _seed_sector_and_package(pkg_db)
-    await pkg_db.execute(
-        "UPDATE social.sector_packages SET content = $2 WHERE id = $1",
-        package_id,
-        {"kapsam": "yalnız kapsam var, gerisi eksik"},
-    )
-    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
-
-    result = await resolve_package_context(pkg_db, {"id": brand_id, "sub_sector_id": sub_id})
-
-    assert result is None, "bozuk paket üretimi bloklamaz, paketsiz yola düşer"
-    rows = await pkg_db.fetch(
-        "SELECT event_type, package_id, detail FROM social.package_events WHERE brand_id = $1",
-        brand_id,
-    )
-    assert [r["event_type"] for r in rows] == ["mismatch_fallthrough"]
-    assert rows[0]["package_id"] == package_id
-    assert "first_problem" in rows[0]["detail"], "teşhis olayla birlikte taşınmalı"
-
-
 async def test_package_read_error_recorded_when_only_the_read_fails(pkg_db):
     """Okuma hatası kalıcı olarak kaydedilir — hata bağlantıdan gelmiyorsa."""
     sub_id, _ = await _seed_sector_and_package(pkg_db)
@@ -740,7 +713,7 @@ async def test_package_read_error_recorded_when_only_the_read_fails(pkg_db):
         "SELECT event_type, detail FROM social.package_events WHERE brand_id = $1", brand_id
     )
     assert [r["event_type"] for r in rows] == ["package_read_error"]
-    assert rows[0]["detail"] == {"error": "RuntimeError"}
+    assert rows[0]["detail"] == {"reason": "read_failed", "error": "RuntimeError"}
 
 
 async def test_package_read_error_degrades_to_log_when_db_is_down(caplog):
@@ -955,3 +928,189 @@ async def test_stage1_forged_receipt_writes_null_and_alerts(pkg_db, monkeypatch)
         )
     ]
     assert kinds == ["stamp_invalid"]
+
+
+# ═══ 6. Checkpoint 12 bulgularının regresyon kapıları ══════════════════════
+
+
+async def test_special_day_mismatch_records_the_event(pkg_db):
+    """Özel gün EŞLEŞMEZLİĞİ kalıcı olay üretir (spec §14.4 "eşleşmezlik log'u").
+
+    Spec iki ayrı kalem sayıyor: *eşleşmezlik* ve *okuma/doğrulama hatası*.
+    Eşleşmezlik, istenen özel günün pakette karşılığı olmamasıdır — paketin
+    kendisi sağlamdır, yalnız o gün yoktur. İlk yazımda bu olay yanlışlıkla
+    yapısal geçersizlik dalına bağlanmıştı; o dal bir DOĞRULAMA hatasıdır ve
+    kendi olayına aittir. Yanlış etiket, işletimde "paket bozuk" ile "bu gün
+    pakette yok"u aynı kutuya koyardı.
+    """
+    from app.routers import posts as posts_router
+    from app.routers.posts import GenerateCaptionRequest
+
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    async def _fake_captions(**_kwargs):
+        return {
+            "default_caption": "x",
+            "platform_captions": {},
+            "image_prompt": "x",
+            "hashtags": [],
+        }
+
+    import app.routers.posts as _posts
+    original = _posts.generate_captions
+    _posts.generate_captions = _fake_captions
+    try:
+        await posts_router.generate_caption(
+            payload=GenerateCaptionRequest(
+                brand_id=brand_id,
+                platforms=["instagram"],
+                special_day_name="Bilinmeyen Uydurma Günü",
+                special_day_category="commercial",
+            ),
+            user={"sub": str(account_id)},
+            db=pkg_db,
+        )
+    finally:
+        _posts.generate_captions = original
+
+    rows = await pkg_db.fetch(
+        "SELECT event_type, package_id FROM social.package_events WHERE brand_id = $1",
+        brand_id,
+    )
+    assert [r["event_type"] for r in rows] == ["mismatch_fallthrough"]
+    assert rows[0]["package_id"] == package_id
+
+
+async def test_structurally_invalid_package_is_a_validation_error(pkg_db):
+    """Yapısal geçersizlik DOĞRULAMA hatasıdır, eşleşmezlik DEĞİL."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET content = $2 WHERE id = $1",
+        package_id,
+        {"kapsam": "yalnız kapsam var, gerisi eksik"},
+    )
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    result = await resolve_package_context(pkg_db, {"id": brand_id, "sub_sector_id": sub_id})
+
+    assert result is None
+    rows = await pkg_db.fetch(
+        "SELECT event_type, detail FROM social.package_events WHERE brand_id = $1", brand_id
+    )
+    assert [r["event_type"] for r in rows] == ["package_read_error"]
+    assert rows[0]["detail"]["reason"] == "structural"
+
+
+@pytest.mark.parametrize(
+    "captions",
+    [pytest.param(None, id="alan-yok"), pytest.param({}, id="boş-sözlük")],
+)
+async def test_receipt_expectation_is_not_client_suppressible(
+    pkg_db, no_image_calls, captions
+):
+    """İstemci OPSİYONEL bir alanı düşürerek denetim izini SUSTURAMAZ.
+
+    Makbuz beklentisi, istemcinin gönderip göndermemekte serbest olduğu bir
+    alandan türetilemez: `platform_captions` boş ya da yok gönderilirse paketli
+    bir marka damgasız kayıt yapar ve olay hiç yazılmazdı — fail-open. Beklenti
+    artık içerik türünden okunuyor; bilinmeyen tür de BEKLENİR sayılır
+    (fail-closed yön).
+    """
+    from app.models.schemas import PostGenerate
+    from app.routers import posts as posts_router
+
+    sub_id, _ = await _seed_sector_and_package(pkg_db)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    await posts_router.generate_post(
+        payload=PostGenerate(
+            brand_id=brand_id,
+            content_type="image",
+            image_prompt="A gold ring on velvet",
+            platforms=["instagram"],
+            platform_captions=captions,
+        ),
+        user={"sub": str(account_id)},
+        db=pkg_db,
+    )
+
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == ["stamp_missing"]
+
+
+async def test_stage1_failure_leaves_the_receipt_reusable(pkg_db, monkeypatch):
+    """Stage-1 dış dünyada patlarsa makbuz YANMAZ — yeniden deneme damgalanır.
+
+    Ölçüldü (düzeltmeden önce): makbuz post yazımıyla birlikte, TTS ve still
+    üretiminden ÖNCE tüketiliyordu. TTS patlayınca post `failed` oluyor, arayüz
+    kullanıcıyı adım 2'ye geri atıyor ve AYNI `generation_id` ile tekrar
+    deneniyor — ikinci istek makbuzu tüketilmiş buluyor, başarılı video
+    DAMGASIZ kalıyor ve damga başarısız postun üstünde kalıyordu.
+
+    Kural: makbuz, üretimin KALICI BAŞARI noktasında tüketilir.
+    """
+    from app.services import short_video as sv
+
+    sub_id, package_id = await _seed_sector_and_package(pkg_db, version=2)
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=2)
+
+    async def _tts_fails(*_a, **_k):
+        return {"audio_url": ""}
+
+    monkeypatch.setattr(sv, "text_to_speech", _tts_fails)
+    monkeypatch.setattr(sv, "_resolve_still_prompt", lambda *_a, **_k: _noop_prompt())
+
+    with pytest.raises(RuntimeError):
+        await sv.run_short_video_stage1(
+            brand_id=brand_id,
+            prompt="A gold ring on velvet",
+            script="Kısa bir senaryo metni.",
+            voice="qSeXEcewz7tA0Q0qk9fH",
+            aspect_ratio="9:16",
+            brand_kit={"sector": "Kuyumculuk"},
+            brand_name="Damga Markası",
+            db=pkg_db,
+            platform_captions={"instagram": {"caption": "x"}},
+            sub_sector_id=sub_id,
+            generation_id=stamp_id,
+        )
+
+    assert await pkg_db.fetchval(
+        "SELECT consumed_at FROM social.generation_stamps WHERE id = $1", stamp_id
+    ) is None, "başarısız koşum makbuzu YAKTI — yeniden deneme damgalanamaz"
+    assert await pkg_db.fetchval(
+        "SELECT count(*) FROM social.posts WHERE brand_id = $1 AND package_id IS NOT NULL",
+        brand_id,
+    ) == 0, "başarısız post damga taşıyor"
+
+    # Yeniden deneme: bu kez dış dünya çalışıyor → damga BU posta yazılır.
+    result = await _run_stage1(
+        pkg_db,
+        brand_id=brand_id,
+        sub_sector_id=sub_id,
+        generation_id=stamp_id,
+        monkeypatch=monkeypatch,
+    )
+    row = await pkg_db.fetchrow(
+        "SELECT package_id, package_version FROM social.posts WHERE id = $1",
+        result["post_id"],
+    )
+    assert row["package_id"] == package_id and row["package_version"] == 2
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == [], "başarılı yeniden deneme sahte bir olay üretmemeli"
+
+
+async def _noop_prompt():
+    return "A gold ring on velvet"
