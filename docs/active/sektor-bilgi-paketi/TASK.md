@@ -30,9 +30,23 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: e85dd56c7328df358c8865a6756aea2595ef0432
-- cp_count: 14
-  <!-- Checkpoint 14: üç tur; tur 3 `approve`, bulgu YOK -> §8.6 Clean dalı.
+- last_checkpoint_ref: f17e24896dac5b21290e810afa3869c9822b3463
+- cp_count: 15
+  <!-- Checkpoint 15: üç tur; DUR dalı → kullanıcı kararı KAPSAM DARALT.
+       Tur 1: bir high + beş medium. Tur 2: F1-F6 kapalı doğrulandı, bir yeni
+       high (yeni ücretli uçta kabul kontrolü yok) + iki medium; biri kendi
+       düzeltmemin yan etkisiydi (zamanlayıcıları ayırınca "Kaydedildi"
+       göstergesi ilk biten işlemde yanıyordu). Tur 3: F1-F6 yine kapalı, ama
+       iki sınıf "sayarak kapanmaz" teşhisiyle geri geldi → sistemik-sınıf
+       kuralı ateşlendi, tavan BEKLENMEDEN durduruldu.
+       Kalan iki sınıf accepted_risk DEĞİL, adlandırılmış eve taşındı:
+       otomatik-kaydetme bütünlüğü -> Task 15b (Task 16'dan ÖNCE);
+       sağlayıcı çağrısının kesilememesi -> kod tabanı geneli desen, bu
+       partinin kusuru değil. Somut kusurlar f17e248'de kapatıldı.
+       Premis düzeltmesi (Eray): marka ayarları MÜŞTERİ yüzeyidir; riski
+       "tek operatör" ölçeğiyle küçültmek yanlıştı.
+       Ayrıntı: Codex defteri, 2026-08-25 checkpoint 15 disposition.
+       Checkpoint 14: üç tur; tur 3 `approve`, bulgu YOK -> §8.6 Clean dalı.
        Tur 1: DÖRT high (kimliksiz webhook · teslimden önce onay · havuz
        tüketimi · migration kendi tablosunu doğrulamıyor). Tur 2: ilk üçü kapalı
        doğrulandı, F4 YENİDEN AÇILDI — kapı kolon imzasını görüyordu ama
