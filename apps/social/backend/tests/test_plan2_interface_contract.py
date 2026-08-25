@@ -85,38 +85,179 @@ async def _sub_sector(db) -> uuid.UUID:
 # ─── Madde 1: Migration 032 şeması ──────────────────────────────────────────
 
 
-async def test_migration_032_tables_and_columns_delivered(db):
-    """İki tablo + Plan 2'nin yazdığı kolonlar + tek-aktif garantisi ayakta."""
-    for table in ("sector_research_artifacts", "sector_packages"):
-        exists = await db.fetchval(
-            "SELECT to_regclass($1) IS NOT NULL", f"social.{table}"
-        )
-        assert exists, f"social.{table} yok — 032 teslim edilmemiş"
+# Plan 2'nin BAĞLI olduğu 032 yüzeyi — kolon imzası (ad · tip · null'lanabilirlik).
+# Kaynak: shared/db/migrations/032_sector_packages.sql. Migration'ın KENDİ garanti bloğu
+# yalnız kısıtları ve indeksleri denetler; kolon imzasını denetleMEZ (bilinen boşluk,
+# `CURRENT.md` → migration-guarantee-block-signature-gap). Bu yüzden imza kapısı BURADA.
+MIGRATION_032_COLUMNS = {
+    "sector_research_artifacts": {
+        "id": ("uuid", "NO"),
+        "run_id": ("text", "NO"),
+        "sector_slug": ("text", "NO"),
+        "kind": ("text", "NO"),
+        "source": ("text", "NO"),
+        "brief_ref": ("text", "YES"),
+        "content_md": ("text", "NO"),
+        "created_at": ("timestamp with time zone", "YES"),
+    },
+    "sector_packages": {
+        "id": ("uuid", "NO"),
+        "sector_id": ("uuid", "NO"),
+        "version": ("integer", "NO"),
+        "status": ("text", "NO"),
+        "schema_version": ("integer", "NO"),
+        "content": ("jsonb", "NO"),
+        "decision_log": ("jsonb", "NO"),
+        "run_id": ("text", "YES"),  # K-110 AÇIK — nullable KALIR
+        "created_at": ("timestamp with time zone", "YES"),
+        "activated_at": ("timestamp with time zone", "YES"),
+    },
+    "generation_stamps": {
+        "id": ("uuid", "NO"),
+        "brand_id": ("uuid", "NO"),
+        "package_id": ("uuid", "NO"),
+        "package_version": ("integer", "NO"),
+        "created_at": ("timestamp with time zone", "YES"),
+        "consumed_at": ("timestamp with time zone", "YES"),
+    },
+}
 
-    columns = {
-        row["column_name"]
-        for row in await db.fetch(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_schema = 'social' AND table_name = 'sector_packages'"
+# Taşıyıcı tablolara EKLENEN kolonlar (tablonun tamamı 032'nin değil).
+MIGRATION_032_ADDED_COLUMNS = {
+    ("brands", "sub_sector_id"): ("uuid", "YES"),
+    ("posts", "package_id"): ("uuid", "YES"),
+    ("posts", "package_version"): ("integer", "YES"),
+}
+
+# Garantiler: kısıt adı -> (tip, ek yüklem). 'f' = MATCH FULL (confmatchtype).
+MIGRATION_032_CONSTRAINTS = {
+    "sector_packages_sector_version_key": "u",
+    "sector_packages_id_version_key": "u",
+    "posts_package_stamp_fkey": "f",
+    "generation_stamps_package_fkey": "f",
+}
+
+MIGRATION_032_TRIGGERS = (
+    "sector_research_artifacts_append_only",
+    "sector_research_artifacts_no_truncate",
+    "brands_sub_sector_must_be_sub",
+    "sector_packages_sector_must_be_sub",
+    "sectors_reject_reparenting",
+)
+
+
+async def _column_signature(db, table: str) -> dict:
+    rows = await db.fetch(
+        "SELECT column_name, data_type, is_nullable FROM information_schema.columns "
+        "WHERE table_schema = 'social' AND table_name = $1",
+        table,
+    )
+    return {r["column_name"]: (r["data_type"], r["is_nullable"]) for r in rows}
+
+
+async def test_migration_032_column_signatures_delivered(db):
+    """Üç tablonun kolon imzası (ad · tip · null'lanabilirlik) TAM eşleşir.
+
+    Kapalı küme karşılaştırması: eksik kolon da FAZLA kolon da bulgudur — Plan 2
+    yazma yüzeyi şemanın tamamına bakar, seçilmiş bir alt kümesine değil.
+    """
+    for table, expected in MIGRATION_032_COLUMNS.items():
+        observed = await _column_signature(db, table)
+        assert observed, f"social.{table} yok — 032 teslim edilmemiş"
+        assert observed == expected, (
+            f"social.{table} kolon imzası sözleşmeden SAPTI\n"
+            f"beklenen: {sorted(expected.items())}\n"
+            f"gözlenen: {sorted(observed.items())}"
+        )
+
+
+async def test_migration_032_added_columns_on_carrier_tables(db):
+    """`brands.sub_sector_id` + `posts` damga çifti — 032'nin eklediği kolonlar."""
+    for (table, column), expected in MIGRATION_032_ADDED_COLUMNS.items():
+        observed = await _column_signature(db, table)
+        assert column in observed, f"social.{table}.{column} yok"
+        assert observed[column] == expected, (
+            f"social.{table}.{column} imzası saptı: {observed[column]} != {expected}"
+        )
+
+
+async def test_migration_032_constraints_delivered(db):
+    """İki benzersizlik kısıtı + iki bileşik FK; damga FK'sı MATCH FULL."""
+    rows = await db.fetch(
+        "SELECT c.conname, c.contype, c.confmatchtype FROM pg_constraint AS c "
+        "JOIN pg_namespace AS n ON n.oid = c.connamespace WHERE n.nspname = 'social'"
+    )
+    # asyncpg `"char"` kolonlarını bayt olarak döner — metne çevrilir.
+    def _char(value):
+        return value.decode() if isinstance(value, (bytes, bytearray)) else value
+
+    observed = {
+        r["conname"]: (_char(r["contype"]), _char(r["confmatchtype"])) for r in rows
+    }
+    for name, expected in MIGRATION_032_CONSTRAINTS.items():
+        assert name in observed, f"kısıt yok: {name}"
+        contype, matchtype = observed[name]
+        if expected == "f":
+            assert contype == "f", f"{name} yabancı anahtar değil ({contype})"
+        else:
+            assert contype == expected, f"{name} tipi {contype}, beklenen {expected}"
+    # K-07 damgası: yarım çift (yalnız id VEYA yalnız version) İMKÂNSIZ olmalı.
+    assert observed["posts_package_stamp_fkey"][1] == "f", (
+        "posts damga FK'sı MATCH FULL değil — yarım-NULL çift sızabilir"
+    )
+
+
+async def test_migration_032_single_active_index_is_unique_and_partial(db):
+    """Tek-aktif garantisi: UNIQUE + KISMİ + `sector_id` anahtarlı + geçerli.
+
+    Adın var olması yetmez; aynı adla benzersiz OLMAYAN ya da yanlış kolonla
+    kurulmuş bir indeks garantiyi sessizce boşaltırdı.
+    """
+    row = await db.fetchrow(
+        "SELECT i.indisunique, i.indisvalid, i.indpred IS NOT NULL AS is_partial, "
+        "       pg_get_indexdef(i.indexrelid) AS definition "
+        "  FROM pg_index AS i "
+        "  JOIN pg_class AS c ON c.oid = i.indexrelid "
+        "  JOIN pg_namespace AS n ON n.oid = c.relnamespace "
+        " WHERE n.nspname = 'social' AND c.relname = 'uq_sector_packages_single_active'"
+    )
+    assert row is not None, "uq_sector_packages_single_active yok"
+    assert row["indisunique"], "indeks UNIQUE değil — tek-aktif garantisi yok"
+    assert row["indisvalid"], "indeks GEÇERSİZ (invalid) — zorlamıyor"
+    assert row["is_partial"], "indeks kısmi değil — arşivlenmiş sürümleri de kilitler"
+    assert "(sector_id)" in row["definition"], row["definition"]
+    assert "status = 'active'" in row["definition"], row["definition"]
+
+
+async def test_migration_032_triggers_delivered(db):
+    """Salt-ekleme · alt sektör zorlaması · yeniden-ebeveynleme reddi ayakta."""
+    rows = await db.fetch(
+        "SELECT t.tgname FROM pg_trigger AS t "
+        "  JOIN pg_class AS c ON c.oid = t.tgrelid "
+        "  JOIN pg_namespace AS n ON n.oid = c.relnamespace "
+        " WHERE n.nspname = 'social' AND NOT t.tgisinternal"
+    )
+    observed = {r["tgname"] for r in rows}
+    missing = [name for name in MIGRATION_032_TRIGGERS if name not in observed]
+    assert not missing, f"eksik tetikleyici(ler): {missing}"
+
+
+async def test_migration_032_value_checks_delivered(db):
+    """`kind` ve `status` kapalı kümeleri DB düzeyinde zorlanıyor."""
+    definitions = {
+        r["conname"]: r["definition"]
+        for r in await db.fetch(
+            "SELECT c.conname, pg_get_constraintdef(c.oid) AS definition "
+            "  FROM pg_constraint AS c "
+            "  JOIN pg_namespace AS n ON n.oid = c.connamespace "
+            " WHERE n.nspname = 'social' AND c.contype = 'c'"
         )
     }
-    # `insert_draft`'ın yazdığı küme — Plan 2 bu kolonlara BAĞLIDIR.
-    assert {
-        "id",
-        "sector_id",
-        "version",
-        "status",
-        "schema_version",
-        "content",
-        "decision_log",
-        "run_id",
-    } <= columns
-
-    single_active = await db.fetchval(
-        "SELECT count(*) FROM pg_indexes WHERE schemaname = 'social' "
-        "AND indexname = 'uq_sector_packages_single_active'"
-    )
-    assert single_active == 1, "tek-aktif garantisi (kısmi indeks) yok"
+    joined = " ".join(definitions.values())
+    for value in ("research", "review", "synthesis"):
+        assert f"'{value}'" in joined, f"kind kapalı kümesinde {value} yok"
+    for value in ("draft", "active", "archived"):
+        assert f"'{value}'" in joined, f"status kapalı kümesinde {value} yok"
 
 
 async def test_plan2_write_surface_produces_draft_only(pkg_db):
