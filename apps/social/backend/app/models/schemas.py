@@ -224,6 +224,10 @@ class ProductOut(BaseModel):
 
 class PostGenerate(BaseModel):
     brand_id: UUID
+    # K-07 damga taşıma sözleşmesinin TÜKETİCİ ucu (plan Task 12). Üretici uç
+    # (`/generate-caption`) opak makbuzu döndürür; istemci onu buraya AYNEN geri
+    # verir. Ham paket çifti hiçbir yönde istemciye emanet edilmez.
+    generation_id: UUID | None = None
     content_type: str  # image | carousel | special_day | quote
     content_category: str | None = None  # product | service | corporate (legacy, template_id yoksa kullanılır)
     prompt: str | None = None
@@ -274,6 +278,9 @@ class PostGenerate(BaseModel):
 
 class ShortVideoGenerate(BaseModel):
     brand_id: UUID
+    # K-07 damga taşıma sözleşmesinin TÜKETİCİ ucu (plan Task 12) — kısa video
+    # kalıcı kaydı stage-1'de doğar, makbuz oraya taşınır.
+    generation_id: UUID | None = None
     prompt: str
     script: str = ""
     voice: str = "qSeXEcewz7tA0Q0qk9fH"

@@ -17,7 +17,7 @@ import asyncpg
 import sentry_sdk
 
 from app.core.config import settings
-from app.services.sector_packages import resolve_motion_prompt
+from app.services.sector_packages import resolve_motion_prompt, resolve_persist_stamp
 from app.services.sector_packages import scene_pool as package_scene_pool
 from app.services.media_adapters import (
     IMAGE_ADAPTERS,
@@ -1012,6 +1012,8 @@ async def run_short_video_stage1(
     scene_reference_image_url: str = "",
     package_context=None,
     requested_motion_prompt: str | None = None,
+    sub_sector_id=None,
+    generation_id=None,
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
@@ -1085,19 +1087,29 @@ async def run_short_video_stage1(
     if validated_motion:
         template_fields["motion_prompt"] = validated_motion
 
-    # Post INSERT — TTS R2 path'i post_id'ye bağlı
-    row = await db.fetchrow(
-        """
-        INSERT INTO social.posts
-            (brand_id, content_type, prompt, user_text, aspect_ratio, status,
-             template_id, template_fields, platform_captions, product_id)
-        VALUES ($1, 'video', $2, $3, $4, 'awaiting_approval',
-                $5, $6, $7, $8)
-        RETURNING *
-        """,
-        brand_id, prompt, script, aspect_ratio,
-        template_id, template_fields, platform_captions, product_id,
-    )
+    # Post INSERT — TTS R2 path'i post_id'ye bağlı.
+    #
+    # K-07: kısa videonun KALICI KAYDI burada doğar, o yüzden makbuz tüketimi de
+    # buradadır ve post yazımıyla AYNI transaction'dadır (plan Task 12). Stage-2
+    # yeni bir post yaratmaz; onun damgası bu satırda yazılır.
+    async with db.transaction():
+        stamp_package_id, stamp_package_version = await resolve_persist_stamp(
+            db, {"id": brand_id, "sub_sector_id": sub_sector_id}, generation_id
+        )
+        row = await db.fetchrow(
+            """
+            INSERT INTO social.posts
+                (brand_id, content_type, prompt, user_text, aspect_ratio, status,
+                 template_id, template_fields, platform_captions, product_id,
+                 package_id, package_version)
+            VALUES ($1, 'video', $2, $3, $4, 'awaiting_approval',
+                    $5, $6, $7, $8, $9, $10)
+            RETURNING *
+            """,
+            brand_id, prompt, script, aspect_ratio,
+            template_id, template_fields, platform_captions, product_id,
+            stamp_package_id, stamp_package_version,
+        )
     post = dict(row)
     post_id = post["id"]
 

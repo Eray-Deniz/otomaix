@@ -23,6 +23,11 @@ export interface CaptionData {
   // kamera hareketi. İstemci yalnız TAŞIR — sunucu stage-1'de havuz üyeliğine
   // karşı doğrular, üye değilse kullanmaz. Kullanıcıya gösterilmez, düzenlenmez.
   motion_prompt?: string
+  // K-07 damga taşıma sözleşmesi: paketli üretimde sunucunun yazdığı OPAK
+  // makbuz kimliği. İstemci yalnız TAŞIR — ham paket kimliği+sürümü hiçbir
+  // yönde istemciye geçmez. Kalıcı-kayıt isteğinde aynen geri verilir; sunucu
+  // makbuzu tek kullanımlık tüketip damgayı kendi kaydından yazar.
+  generation_id?: string
 }
 
 interface CaptionEditorProps {

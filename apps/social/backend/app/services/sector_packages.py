@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+from app.services.package_events import log_package_event
 from app.services.sector_resolver import _normalize_slug
 
 logger = logging.getLogger(__name__)
@@ -543,6 +544,23 @@ class SectorPackageContext:
     sub_sector_slug: str
 
 
+async def _record_event(db, **kwargs) -> None:
+    """Olay yazımı BU yüzeyde asla üretimi düşürmez.
+
+    `log_package_event` sözleşme ihlalinde bilerek istisna atar (yarım denetim
+    izi üretmemek için). Ama çalışma zamanı yollarında o istisnanın kaçması,
+    bir denetim satırı yüzünden kullanıcının içeriğini düşürmek olurdu —
+    çözümleyicinin kendi sözleşmesi "üretim akışını ASLA kırmaz"dır. O yüzden
+    çağrı burada sarılır ve başarısızlık log'a düşer.
+    """
+    try:
+        await log_package_event(db, **kwargs)
+    except Exception as exc:
+        logger.error(
+            "paket olayı kaydedilemedi (event_type=%s): %s", kwargs.get("event_type"), exc
+        )
+
+
 async def resolve_package_context(db, brand: dict) -> SectorPackageContext | None:
     """Markanın aktif paketini okur; yoksa/bozuksa `None`.
 
@@ -585,6 +603,12 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
                 brand.get("id"),
                 sub_sector_id,
             )
+            await _record_event(
+                db,
+                event_type="stale_assignment_fallback",
+                brand_id=brand.get("id"),
+                sector_id=sub_sector_id,
+            )
             return None
 
         # Satır çözümlemesi de emniyet sınırının İÇİNDE (checkpoint 8, yüksek
@@ -609,6 +633,14 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
                 package_id,
                 "; ".join(problems[:3]),
             )
+            await _record_event(
+                db,
+                event_type="mismatch_fallthrough",
+                brand_id=brand.get("id"),
+                sector_id=sub_sector_id,
+                package_id=package_id,
+                detail={"problem_count": len(problems), "first_problem": problems[0][:200]},
+            )
             return None
 
         # Kurulum da `try` İÇİNDE: bugünkü dataclass kurucusu önemsiz, ama
@@ -629,6 +661,17 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
             brand.get("id"),
             sub_sector_id,
             exc,
+        )
+        # Belgeli sınır (plan Task 12): okuma hatası VERİTABANININ KENDİSİNDEN
+        # geliyorsa olay satırı da yazılamaz — o durumda bağımsız best-effort
+        # kanal yukarıdaki `logger.warning`'dir. Hata başka bir sebeptense
+        # (satır çözümlemesi, kurucu) olay normal yazılır.
+        await _record_event(
+            db,
+            event_type="package_read_error",
+            brand_id=brand.get("id"),
+            sector_id=sub_sector_id,
+            detail={"error": type(exc).__name__},
         )
         return None
 
@@ -1136,3 +1179,95 @@ def special_day_visual_accent(
         return None
     vurgu = entry.get("gorsel_vurgu")
     return vurgu if isinstance(vurgu, str) and vurgu.strip() else None
+
+
+# ─── 6. K-07 damga tüketimi — kalıcı-kayıt ucu (plan Task 12) ───────────────
+
+
+async def resolve_persist_stamp(
+    db, brand: dict, generation_id, *, receipt_expected: bool = True
+) -> tuple:
+    """Kalıcı-kayıt anında yazılacak `(package_id, package_version)` çiftini verir.
+
+    Sözleşme (K-07, bağlanan teknik karar 1):
+
+    * Makbuz ATOMİK ve TEK-KULLANIMLIK tüketilir — koşullu güncelleme
+      (`consumed_at IS NULL` + doğrulanmış marka). Eşzamanlı iki kayıt aynı
+      makbuzla gelirse kazanan tektir; kaybeden satırı tüketilmiş bulur.
+    * Kayıtlı çift AYNEN yazılır. Kayıt anında YENİDEN ÇÖZÜMLEME YOKTUR: içeriği
+      üreten paket neyse damga odur.
+    * Geçersiz / yabancı / başka markaya ait / zaten tüketilmiş makbuz → damga
+      YAZILMAZ + `stamp_invalid`. Üretim bloklanmaz.
+    * Makbuzsuz istek + marka paket yolunda + makbuz BEKLENİYORDUYSA →
+      `stamp_missing`. `receipt_expected`, üretimin bir caption çağrısının
+      ucunda olup olmadığını söyler: alıntı akışı gibi caption üretmeyen yollar
+      için makbuz hiç doğmaz, o yüzden yokluğu bir anomali DEĞİLDİR. Bu bayrak
+      istemcinin beyanı değil, çağıran ucun kendi akış bilgisidir.
+    * Damganın paketi kayıt anında artık aktif değilse damga YİNE yazılır +
+      `stamp_stale_at_persist`. Provenans dürüsttür: damgayı düşürmek üretimin
+      gerçek kökenini silerdi, yeniden çözümlemek ise post'a onu üretmeyen bir
+      paketi iliştirirdi.
+
+    Bu fonksiyon kalıcı-kayıt transaction'ının İÇİNDEN çağrılmalıdır — tüketim
+    ile post yazımı ayrı transaction'larda olursa makbuz tüketilip post
+    yazılmayabilir (kayıp atıf) ya da tersi (çift atıf).
+    """
+    brand_id = brand.get("id")
+
+    if generation_id is None:
+        # Paketsiz marka için makbuzsuz istek NORMALDİR — olay üretmez.
+        #
+        # "Paket yolunda mı" sorusu `resolve_package_context` ile DEĞİL, doğrudan
+        # sorguyla cevaplanır. Çözümleyici kendi olaylarını yazar; burada
+        # çağrılsaydı paketi hiç KULLANMAYAN bir kayıt isteği (ör. görsel
+        # üretimi) bayat-atama olayı üretirdi. O olayın anlamı "bir üretim yolu
+        # paketi istedi ve alamadı"dır; kayıt ucu paketi istemez, yalnız
+        # makbuzun beklenip beklenmediğini sorar.
+        on_package_path = bool(
+            brand.get("sub_sector_id")
+            and await db.fetchval(
+                "SELECT EXISTS (SELECT 1 FROM social.sector_packages "
+                "WHERE sector_id = $1 AND status = 'active')",
+                brand.get("sub_sector_id"),
+            )
+        )
+        if on_package_path and receipt_expected:
+            await _record_event(db, event_type="stamp_missing", brand_id=brand_id)
+        return (None, None)
+
+    row = await db.fetchrow(
+        """
+        UPDATE social.generation_stamps
+        SET consumed_at = now()
+        WHERE id = $1 AND brand_id = $2 AND consumed_at IS NULL
+        RETURNING package_id, package_version
+        """,
+        generation_id,
+        brand_id,
+    )
+    if row is None:
+        await _record_event(db, event_type="stamp_invalid", brand_id=brand_id)
+        return (None, None)
+
+    package_id = row["package_id"]
+    package_version = row["package_version"]
+
+    # Bayatlık ölçümü DOĞRUDAN sorguyla yapılır, çözümleyiciyle DEĞİL:
+    # `resolve_package_context` kendi olaylarını yazar ve burada çağrılsaydı tek
+    # bir kayıt isteği iki olay üretirdi (bayat atama + bayat damga). Soru zaten
+    # dar: bu makbuzun işaret ettiği sürüm hâlâ aktif mi.
+    still_active = await db.fetchval(
+        "SELECT status = 'active' FROM social.sector_packages WHERE id = $1 AND version = $2",
+        package_id,
+        package_version,
+    )
+    if not still_active:
+        await _record_event(
+            db,
+            event_type="stamp_stale_at_persist",
+            brand_id=brand_id,
+            package_id=package_id,
+            detail={"stamped_version": package_version},
+        )
+
+    return (package_id, package_version)

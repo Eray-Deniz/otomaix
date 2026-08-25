@@ -28,7 +28,7 @@ from app.models.schemas import (
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context, get_product_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
-from app.services.sector_packages import resolve_package_context
+from app.services.sector_packages import resolve_package_context, resolve_persist_stamp
 from app.services.short_video import (
     DEFAULT_MAX_DURATION,
     PLATFORM_MAX_DURATION,
@@ -340,7 +340,8 @@ async def generate_post(
             ),
         )
     brand = await db.fetchrow(
-        "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
+        "SELECT id, brand_kit, name, sector, sub_sector_id FROM social.brands WHERE id = $1",
+        payload.brand_id,
     )
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
@@ -437,36 +438,51 @@ async def generate_post(
         template_fields_for_db = dict(payload.template_fields or {})
         template_fields_for_db["image_prompt"] = enriched_prompt
 
-    row = await db.fetchrow(
-        """
-        INSERT INTO social.posts
-            (brand_id, content_type, content_category, prompt, user_text,
-             document_ids, aspect_ratio, platforms, status,
-             template_id, template_fields, platform_captions,
-             caption, hashtags, use_logo_overlay, image_text_fields,
-             product_id, slides)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
-                $9, $10, $11, $12, $13, $14, $15, $16, $17)
-        RETURNING *
-        """,
-        payload.brand_id,
-        payload.content_type,
-        effective_category,
-        payload.prompt or payload.special_day_name or payload.quote_text,
-        payload.user_text,
-        [str(d) for d in payload.document_ids] if payload.document_ids else None,
-        payload.aspect_ratio,
-        payload.platforms,
-        payload.template_id,
-        template_fields_for_db,
-        payload.platform_captions,
-        caption_value,
-        hashtags_value,
-        payload.use_logo_overlay,
-        payload.image_text_fields,
-        payload.product_id,
-        slides_data,
-    )
+    # K-07: makbuz tüketimi ile post yazımı AYNI transaction'dadır (plan Task 12).
+    # Ayrı olsalardı makbuz tüketilip post yazılmayabilir (kayıp atıf) ya da post
+    # yazılıp makbuz tüketilmeyebilirdi (aynı makbuz ikinci posta da takılır).
+    async with db.transaction():
+        stamp_package_id, stamp_package_version = await resolve_persist_stamp(
+            db,
+            dict(brand),
+            payload.generation_id,
+            # Makbuz YALNIZ caption çağrısı yapan akışlarda doğar. `platform_captions`
+            # o çağrının sunucuda görünen izidir: alıntı akışı caption üretmez ve
+            # onu göndermez, dolayısıyla makbuz yokluğu orada anomali değildir.
+            receipt_expected=bool(payload.platform_captions),
+        )
+        row = await db.fetchrow(
+            """
+            INSERT INTO social.posts
+                (brand_id, content_type, content_category, prompt, user_text,
+                 document_ids, aspect_ratio, platforms, status,
+                 template_id, template_fields, platform_captions,
+                 caption, hashtags, use_logo_overlay, image_text_fields,
+                 product_id, slides, package_id, package_version)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
+                    $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            RETURNING *
+            """,
+            payload.brand_id,
+            payload.content_type,
+            effective_category,
+            payload.prompt or payload.special_day_name or payload.quote_text,
+            payload.user_text,
+            [str(d) for d in payload.document_ids] if payload.document_ids else None,
+            payload.aspect_ratio,
+            payload.platforms,
+            payload.template_id,
+            template_fields_for_db,
+            payload.platform_captions,
+            caption_value,
+            hashtags_value,
+            payload.use_logo_overlay,
+            payload.image_text_fields,
+            payload.product_id,
+            slides_data,
+            stamp_package_id,
+            stamp_package_version,
+        )
     post = dict(row)
 
     import logging
@@ -1030,6 +1046,8 @@ async def generate_short_video_stage1(
             scene_reference_image_url=payload.scene_reference_image_url or "",
             package_context=package_context,
             requested_motion_prompt=payload.motion_prompt,
+            sub_sector_id=brand["sub_sector_id"],
+            generation_id=payload.generation_id,
             db=db,
         )
     except RuntimeError as exc:

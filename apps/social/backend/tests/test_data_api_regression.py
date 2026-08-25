@@ -188,22 +188,51 @@ def _post_insert_statements() -> list[tuple[Path, str]]:
     return statements
 
 
-async def test_unpackaged_post_has_no_package_stamp(db):
-    """Paketsiz üretim kaydında damga kolonları NULL kalır.
+# Damga yazan kalıcı-kayıt yolları — KAPALI küme (plan Task 12).
+#
+# Damga, İÇERİĞİ ÜRETEN çağrının makbuzunu taşır. Yalnız iki yol bir üretim
+# oturumunun kalıcı kaydını doğurur: görsel/carousel akışı (`/posts/generate`)
+# ve kısa video stage-1. Diğer post yazıcıları (n8n içe aktarımı, avatar, trend
+# üretimi, legacy tek-atış kısa video) bir caption makbuzunun ucunda DEĞİLDİR;
+# oralara damga yazmak, atfı olmayan bir kayda atıf uydurmak olurdu. Legacy uç
+# ayrıca K-06 gereği pakete bilinçle bağlanmamıştır.
+STAMP_WRITING_POST_PATHS = frozenset({
+    "app/routers/posts.py",
+    "app/services/short_video.py",
+})
 
-    İki ayak: (a) yapısal — bugün hiçbir üretim yolu damga kolonlarına YAZMIYOR
-    (Task 12 damgayı eklediğinde bu test bilinçli olarak güncellenecek);
-    (b) davranışsal — üretim yolunun kolon kümesiyle yazılan kayıt damgasız
-    kalır ve damgasız olarak sorgulanabilir.
+
+async def test_package_stamp_pair_is_never_half_written(db):
+    """Damga çifti ya birlikte yazılır ya hiç — ve yalnız kapalı kümede.
+
+    Üç ayak:
+    (a) **Bütünlük** — hiçbir üretim yolu `package_id`'yi `package_version`
+        olmadan (ya da tersini) yazmaz. Yarım çift, MATCH FULL bileşik FK'sının
+        DB düzeyinde reddettiği şeydir; kod düzeyinde de üretilmemelidir.
+    (b) **Kapalılık** — damga yazan dosya kümesi yukarıdaki listeye EŞİTTİR.
+        Yeni bir post yazıcısının sessizce damga yazmaya başlaması da, mevcut
+        bir yolun damgasını sessizce kaybetmesi de bu eşitliği bozar.
+    (c) **Davranış** — damgasız yazılan kayıt NULL/NULL kalır ve damgasız
+        sorgulanabilir (paketsiz yolun değişmezliği).
     """
     statements = _post_insert_statements()
     assert statements, "üretim yolu bulunamadı — yapısal sweep boşa koştu"
 
+    stamped_paths = set()
     for path, statement in statements:
-        assert "package_id" not in statement, f"{path} damga yazıyor (package_id)"
-        assert "package_version" not in statement, (
-            f"{path} damga yazıyor (package_version)"
+        has_id = "package_id" in statement
+        has_version = "package_version" in statement
+        assert has_id == has_version, (
+            f"{path}: damga çifti YARIM yazılıyor "
+            f"(package_id={has_id}, package_version={has_version})"
         )
+        if has_id:
+            stamped_paths.add(str(path.relative_to(APP_DIR.parent)))
+
+    assert stamped_paths == STAMP_WRITING_POST_PATHS, (
+        "damga yazan yol kümesi değişti — beklenen "
+        f"{sorted(STAMP_WRITING_POST_PATHS)}, görülen {sorted(stamped_paths)}"
+    )
 
     brand_id = (await _seed_brands(db, count=1))[0]
     row = await db.fetchrow(

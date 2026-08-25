@@ -1,0 +1,957 @@
+"""K-07 damga tüketimi + kalıcı paket olay kaydı (plan Task 12).
+
+İki ayrı sözleşme, tek dosyada çünkü ikisi de aynı olay tablosuna yaslanıyor:
+
+1. **Olay kaydı (`log_package_event`).** Kapalı olay kümesi, iki kapsam sınıfı
+   (F21) ve olay-türüne özgü sürüm şekli (F22). Fonksiyon kendi sözleşmesini
+   DOĞRULAR — çağıran tarafın dikkatine bırakılmaz, çünkü olay kaydı bir
+   denetim izidir ve yarım kayıt sessiz bir yalan üretir.
+2. **Damga tüketimi (K-07).** Üretim anında yazılan makbuz, kalıcı-kayıt
+   isteğinde ATOMİK ve TEK-KULLANIMLIK tüketilir; kayıtlı çift AYNEN yazılır,
+   kayıt anında yeniden çözümleme YAPILMAZ.
+
+**Test yaprağa değil YOLA bakar** (checkpoint 11'in dersi): damga testleri
+yardımcı fonksiyonu değil, gerçek kalıcı-kayıt ucunu (`/posts/generate` ve kısa
+video stage-1) koşar. Yardımcıyı test edip yönlendiricide ayrılan yolu kaçırmak
+bu yürütmede iki kez ölçüldü.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid
+
+import asyncpg
+import pytest
+
+from app.core.database import _init_connection
+from app.services.sector_packages import resolve_package_context
+from app.services.package_events import (
+    BRAND_SCOPED_EVENTS,
+    EVENT_TYPES,
+    LIFECYCLE_EVENTS,
+    PackageEventContractError,
+    log_package_event,
+)
+
+# ─── Ortak seed ─────────────────────────────────────────────────────────────
+
+
+# Yapısal olarak GEÇERLİ içerik tek yerde yaşar: yazım kapısıyla okuma kapısı
+# aynı doğrulayıcıyı paylaşıyor (Task 8), o yüzden fixture'ı kopyalamak iki
+# ölçü yaratma riskidir — kopya bayatlarsa bu dosya sessizce "geçersiz paket"
+# senaryosunu test etmeye başlardı (ölçüldü: ilk yazımda tam bunu yaptı).
+from .test_sector_packages_service import _valid_content  # noqa: E402
+
+
+async def _seed_sector_and_package(db, *, status: str = "active", version: int = 1):
+    """Kök sektör + alt sektör + paket. `(sub_id, package_id)` döner."""
+    root_id = await db.fetchval(
+        "SELECT id FROM social.sectors WHERE parent_sector_id IS NULL LIMIT 1"
+    )
+    assert root_id is not None, "kök sektör seed'i eksik"
+    sub_id = await db.fetchval(
+        "INSERT INTO social.sectors (slug, display_name, parent_sector_id) "
+        "VALUES ($1, $2, $3) RETURNING id",
+        f"alt-{uuid.uuid4().hex[:8]}",
+        "Alt Sektör",
+        root_id,
+    )
+    package_id = await db.fetchval(
+        "INSERT INTO social.sector_packages (sector_id, version, status, schema_version, content) "
+        "VALUES ($1, $2, $3, 1, $4) RETURNING id",
+        sub_id,
+        version,
+        status,
+        _valid_content(),
+    )
+    return sub_id, package_id
+
+
+async def _seed_brand(db, *, sub_sector_id=None):
+    """Hesap + workspace + üyelik + marka. `(account_id, brand_id)` döner."""
+    account_id = await db.fetchval(
+        "INSERT INTO social.accounts (email, name, plan_id) "
+        "VALUES ($1, 'Damga Sahibi', 'pro') RETURNING id",
+        f"damga-{uuid.uuid4()}@example.test",
+    )
+    workspace_id = await db.fetchval(
+        "INSERT INTO social.workspaces (account_id, name) VALUES ($1, 'Damga') RETURNING id",
+        account_id,
+    )
+    await db.execute(
+        "INSERT INTO social.workspace_members (workspace_id, account_id) VALUES ($1, $2)",
+        workspace_id,
+        account_id,
+    )
+    brand_id = await db.fetchval(
+        "INSERT INTO social.brands (workspace_id, name, sector, brand_kit, sub_sector_id) "
+        "VALUES ($1, 'Damga Markası', 'Kuyumculuk', $2, $3) RETURNING id",
+        workspace_id,
+        {"tonality": "professional"},
+        sub_sector_id,
+    )
+    return account_id, brand_id
+
+
+async def _write_stamp(db, *, brand_id, package_id, version) -> uuid.UUID:
+    return await db.fetchval(
+        "INSERT INTO social.generation_stamps (brand_id, package_id, package_version) "
+        "VALUES ($1, $2, $3) RETURNING id",
+        brand_id,
+        package_id,
+        version,
+    )
+
+
+@pytest.fixture
+async def pkg_db(db):
+    """Üretimin KENDİ bağlantı yapılandırması (jsonb codec) uygulanmış bağlantı."""
+    await _init_connection(db)
+    return db
+
+
+# ═══ 1. Olay kaydı sözleşmesi ═══════════════════════════════════════════════
+
+
+async def test_event_types_are_a_closed_set():
+    """Olay kümesi kapalı ve iki kapsam sınıfı ÖRTÜŞMEZ."""
+    assert EVENT_TYPES == BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS
+    assert not (BRAND_SCOPED_EVENTS & LIFECYCLE_EVENTS)
+    assert LIFECYCLE_EVENTS == {"activation", "rollback", "deactivation"}
+
+
+async def test_unknown_event_type_rejected(pkg_db):
+    """Küme dışı tür yazılamaz — kapalı küme kapı olarak işler."""
+    _, brand_id = await _seed_brand(pkg_db)
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(pkg_db, event_type="uydurma_olay", brand_id=brand_id)
+
+
+@pytest.mark.parametrize("event_type", sorted(BRAND_SCOPED_EVENTS))
+async def test_brand_scoped_event_requires_brand_id(pkg_db, event_type):
+    """Marka-kapsamlı olay markasız yazılamaz (F21).
+
+    Markasız bir `stamp_invalid` kaydı hangi markanın etkilendiğini söylemez;
+    denetim izi olarak değersiz, üstelik "olay kaydedildi" görüntüsü verir.
+    """
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(pkg_db, event_type=event_type)
+
+
+async def test_brand_scoped_event_persists(pkg_db):
+    """Geçerli marka-kapsamlı olay satır olarak yazılır."""
+    _, brand_id = await _seed_brand(pkg_db)
+    event_id = await log_package_event(
+        pkg_db, event_type="stamp_invalid", brand_id=brand_id, detail={"reason": "consumed"}
+    )
+    row = await pkg_db.fetchrow(
+        "SELECT event_type, brand_id, detail FROM social.package_events WHERE id = $1", event_id
+    )
+    assert row["event_type"] == "stamp_invalid"
+    assert row["brand_id"] == brand_id
+    assert row["detail"] == {"reason": "consumed"}
+
+
+async def test_lifecycle_event_valid_without_brand(pkg_db):
+    """İlk aktivasyon marka atamasından ÖNCE meşrudur (F21) — fan-out YOK."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    event_id = await log_package_event(
+        pkg_db,
+        event_type="activation",
+        sector_id=sub_id,
+        package_id=package_id,
+        to_version=1,
+        actor="admin",
+    )
+    row = await pkg_db.fetchrow(
+        "SELECT brand_id, sector_id, to_version FROM social.package_events WHERE id = $1", event_id
+    )
+    assert row["brand_id"] is None
+    assert row["sector_id"] == sub_id
+    assert row["to_version"] == 1
+
+
+@pytest.mark.parametrize("missing", ["sector_id", "package_id", "actor"])
+async def test_lifecycle_event_requires_sector_package_actor(pkg_db, missing):
+    """Yaşam döngüsü olayı üç alanı ZORUNLU ister (F21)."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    kwargs = dict(
+        event_type="activation",
+        sector_id=sub_id,
+        package_id=package_id,
+        to_version=1,
+        actor="admin",
+    )
+    kwargs[missing] = None
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(pkg_db, **kwargs)
+
+
+async def test_activation_event_first_allows_null_from_version(pkg_db):
+    """İLK aktivasyonda `from_version` NULL meşrudur (F22)."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    event_id = await log_package_event(
+        pkg_db,
+        event_type="activation",
+        sector_id=sub_id,
+        package_id=package_id,
+        to_version=1,
+        actor="admin",
+    )
+    assert event_id is not None
+
+
+async def test_activation_event_replacement_requires_from_version(pkg_db):
+    """Yerine-geçme aktivasyonunda `from_version` ZORUNLU (F22).
+
+    "İlk mi yerine-geçme mi" sorusu ÇAĞIRANA sorulmaz, aynı tablodan okunur:
+    sektörde arşivlenmiş başka bir paket satırı varsa bu bir devir teslimdir.
+    İki ayrı alan (bir "bu replacement" bayrağı + `from_version`) birbiriyle
+    çelişebilirdi; tek ölçüye bağlamak o sınıfı kapatır.
+    """
+    sub_id, first_id = await _seed_sector_and_package(pkg_db, status="archived", version=1)
+    second_id = await pkg_db.fetchval(
+        "INSERT INTO social.sector_packages (sector_id, version, status, schema_version, content) "
+        "VALUES ($1, 2, 'active', 1, $2) RETURNING id",
+        sub_id,
+        _valid_content(),
+    )
+    assert first_id != second_id
+
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            pkg_db,
+            event_type="activation",
+            sector_id=sub_id,
+            package_id=second_id,
+            to_version=2,
+            actor="admin",
+        )
+
+    event_id = await log_package_event(
+        pkg_db,
+        event_type="activation",
+        sector_id=sub_id,
+        package_id=second_id,
+        from_version=1,
+        to_version=2,
+        actor="admin",
+    )
+    assert event_id is not None
+
+
+async def test_activation_event_requires_to_version(pkg_db):
+    """Aktivasyonun hedef sürümü uydurma değerle temsil edilemez (F22)."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            pkg_db,
+            event_type="activation",
+            sector_id=sub_id,
+            package_id=package_id,
+            actor="admin",
+        )
+
+
+@pytest.mark.parametrize("drop", ["from_version", "to_version"])
+async def test_rollback_event_requires_source_and_target_versions(pkg_db, drop):
+    """Rollback İKİ sürümü de ister: arşivlenen kaynak + geri getirilen hedef."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    kwargs = dict(
+        event_type="rollback",
+        sector_id=sub_id,
+        package_id=package_id,
+        from_version=2,
+        to_version=1,
+        actor="admin",
+    )
+    kwargs[drop] = None
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(pkg_db, **kwargs)
+
+
+async def test_deactivation_event_requires_from_null_to(pkg_db):
+    """Deaktivasyonun hedefi YOKTUR — `to_version` NULL kalmalı (F22)."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            pkg_db,
+            event_type="deactivation",
+            sector_id=sub_id,
+            package_id=package_id,
+            actor="admin",
+        )
+
+    event_id = await log_package_event(
+        pkg_db,
+        event_type="deactivation",
+        sector_id=sub_id,
+        package_id=package_id,
+        from_version=3,
+        actor="admin",
+    )
+    assert event_id is not None
+
+
+async def test_lifecycle_event_rejects_contradictory_shape(pkg_db):
+    """Çelişkili kombinasyon reddedilir (F22): deaktivasyon + hedef sürüm."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            pkg_db,
+            event_type="deactivation",
+            sector_id=sub_id,
+            package_id=package_id,
+            from_version=3,
+            to_version=4,
+            actor="admin",
+        )
+
+
+@pytest.mark.parametrize(
+    "bad_detail",
+    [
+        pytest.param({"content": _valid_content()}, id="paket-içeriği"),
+        pytest.param({"pool": ["a", "b"]}, id="liste"),
+        pytest.param({"long": "x" * 500}, id="uzun-metin"),
+        pytest.param("düz metin", id="sözlük-değil"),
+    ],
+)
+async def test_event_detail_excludes_package_content(pkg_db, bad_detail):
+    """`detail` KAPALI bir şekle uyar; paket içeriği yapısal olarak giremez.
+
+    "Bu metin paket içeriği DEĞİL mi" sorusunu serbest metinden cevaplamaya
+    çalışan bir yüklem yakınsamaz (bu yürütmede beş tur boyunca ölçüldü). O
+    yüzden kural NEGATİF değil POZİTİF: `detail` yalnız skaler değerli, kısa
+    bir sözlüktür. Paket içeriği iç içe ve uzundur — şekle takılır, anlamına
+    bakılmasına gerek kalmaz.
+    """
+    _, brand_id = await _seed_brand(pkg_db)
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            pkg_db, event_type="stamp_invalid", brand_id=brand_id, detail=bad_detail
+        )
+
+
+async def test_event_write_failure_does_not_block_caller(caplog):
+    """Olay tablosu yazılamazsa üretim DÜŞMEZ — hata log'a düşer.
+
+    Sözleşme ihlali (çağıranın hatası) İSTİSNA atar; altyapı hatası atmaz. İkisi
+    ayrı sınıftır: birincisi kodun yanlış olduğunu söyler ve testte yakalanmalı,
+    ikincisi kullanıcının içeriğini düşürmek için yeterli sebep değildir.
+    """
+
+    class _WriteFails:
+        async def fetchval(self, *_args, **_kwargs):
+            raise RuntimeError("tablo yok")
+
+    with caplog.at_level(logging.ERROR):
+        result = await log_package_event(
+            _WriteFails(), event_type="stamp_invalid", brand_id=uuid.uuid4()
+        )
+
+    assert result is None
+    assert any("paket olayı yazılamadı" in r.getMessage() for r in caplog.records)
+
+
+# ═══ 2. Damga tüketimi — GERÇEK kalıcı-kayıt ucundan ════════════════════════
+
+
+async def _generate_post(db, *, account_id, brand_id, generation_id=None):
+    """`/posts/generate` ucunu üretim yolundan koşar (yaprak yardımcı DEĞİL)."""
+    from app.models.schemas import PostGenerate
+    from app.routers import posts as posts_router
+
+    return await posts_router.generate_post(
+        payload=PostGenerate(
+            brand_id=brand_id,
+            content_type="image",
+            image_prompt="A gold ring on velvet",
+            platforms=["instagram"],
+            # Caption-öncüllü akışın sunucuda görünen izi — makbuz beklentisi
+            # buna bağlıdır (alıntı akışı bunu göndermez).
+            platform_captions={"instagram": {"caption": "x", "hashtags": ["#x"]}},
+            generation_id=generation_id,
+        ),
+        user={"sub": str(account_id)},
+        db=db,
+    )
+
+
+@pytest.fixture
+def no_image_calls(monkeypatch):
+    """fal.ai submit'i keser — bu dosyanın konusu damga, görsel değil."""
+    from app.routers import posts as posts_router
+
+    async def _fake_generate_image(*_args, **_kwargs):
+        return "fake-job-id"
+
+    monkeypatch.setattr(posts_router, "generate_image", _fake_generate_image)
+    monkeypatch.setattr(posts_router, "generate_image_edit", _fake_generate_image)
+
+
+async def test_persist_writes_recorded_stamp_verbatim(pkg_db, no_image_calls):
+    """Kayıtlı çift AYNEN yazılır — kayıt anında yeniden çözümleme YOK."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db, version=7)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=7)
+
+    response = await _generate_post(
+        pkg_db, account_id=account_id, brand_id=brand_id, generation_id=stamp_id
+    )
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id, package_version FROM social.posts WHERE id = $1",
+        uuid.UUID(response.data["post_id"]),
+    )
+    assert row["package_id"] == package_id
+    assert row["package_version"] == 7
+    consumed = await pkg_db.fetchval(
+        "SELECT consumed_at FROM social.generation_stamps WHERE id = $1", stamp_id
+    )
+    assert consumed is not None, "makbuz tüketilmedi — tek kullanım işareti yazılmalı"
+
+
+async def test_unpackaged_post_stamp_null(pkg_db, no_image_calls):
+    """Paketsiz markada damga NULL ve olay üretilmez — normal yol sessizdir."""
+    account_id, brand_id = await _seed_brand(pkg_db)
+
+    response = await _generate_post(pkg_db, account_id=account_id, brand_id=brand_id)
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id, package_version FROM social.posts WHERE id = $1",
+        uuid.UUID(response.data["post_id"]),
+    )
+    assert row["package_id"] is None and row["package_version"] is None
+    events = await pkg_db.fetch(
+        "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+    )
+    assert events == [], "paketsiz üretim olay üretmez"
+
+
+async def test_missing_generation_id_on_packaged_brand_logs_event(pkg_db, no_image_calls):
+    """Paket yolundaki marka makbuzsuz kayıt yaparsa `stamp_missing` yazılır."""
+    sub_id, _ = await _seed_sector_and_package(pkg_db)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    response = await _generate_post(pkg_db, account_id=account_id, brand_id=brand_id)
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id FROM social.posts WHERE id = $1",
+        uuid.UUID(response.data["post_id"]),
+    )
+    assert row["package_id"] is None
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == ["stamp_missing"]
+
+
+async def test_forged_generation_id_writes_null_and_alerts(pkg_db, no_image_calls):
+    """Uydurulmuş makbuz kimliği damga YAZDIRMAZ; üretim de bloklanmaz."""
+    sub_id, _ = await _seed_sector_and_package(pkg_db)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    response = await _generate_post(
+        pkg_db, account_id=account_id, brand_id=brand_id, generation_id=uuid.uuid4()
+    )
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id FROM social.posts WHERE id = $1",
+        uuid.UUID(response.data["post_id"]),
+    )
+    assert row["package_id"] is None
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == ["stamp_invalid"]
+
+
+async def test_cross_brand_generation_id_rejected(pkg_db, no_image_calls):
+    """Başka markanın makbuzu bu markanın postuna TAKILAMAZ."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    _, other_brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stolen = await _write_stamp(
+        pkg_db, brand_id=other_brand_id, package_id=package_id, version=1
+    )
+
+    response = await _generate_post(
+        pkg_db, account_id=account_id, brand_id=brand_id, generation_id=stolen
+    )
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id FROM social.posts WHERE id = $1",
+        uuid.UUID(response.data["post_id"]),
+    )
+    assert row["package_id"] is None
+    still_unconsumed = await pkg_db.fetchval(
+        "SELECT consumed_at FROM social.generation_stamps WHERE id = $1", stolen
+    )
+    assert still_unconsumed is None, "yabancı makbuz tüketilmemeli — sahibi hâlâ kullanabilmeli"
+
+
+async def test_same_brand_replay_of_consumed_id_rejected(pkg_db, no_image_calls):
+    """Aynı markanın TÜKETİLMİŞ makbuzu ikinci kez yazılamaz (replay)."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=1)
+
+    first = await _generate_post(
+        pkg_db, account_id=account_id, brand_id=brand_id, generation_id=stamp_id
+    )
+    second = await _generate_post(
+        pkg_db, account_id=account_id, brand_id=brand_id, generation_id=stamp_id
+    )
+
+    first_row = await pkg_db.fetchrow(
+        "SELECT package_id FROM social.posts WHERE id = $1",
+        uuid.UUID(first.data["post_id"]),
+    )
+    second_row = await pkg_db.fetchrow(
+        "SELECT package_id FROM social.posts WHERE id = $1",
+        uuid.UUID(second.data["post_id"]),
+    )
+    assert first_row["package_id"] == package_id
+    assert second_row["package_id"] is None, "yeniden kullanılan makbuz damga yazdırmamalı"
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == ["stamp_invalid"]
+
+
+async def test_old_version_stamp_replay_to_new_post_rejected(pkg_db, no_image_calls):
+    """Tüketilmiş ESKİ sürüm makbuzu yeni posta taşınamaz."""
+    sub_id, package_id = await _seed_sector_and_package(pkg_db, version=1)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=1)
+    await pkg_db.execute(
+        "UPDATE social.generation_stamps SET consumed_at = now() WHERE id = $1", stamp_id
+    )
+
+    response = await _generate_post(
+        pkg_db, account_id=account_id, brand_id=brand_id, generation_id=stamp_id
+    )
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id FROM social.posts WHERE id = $1",
+        uuid.UUID(response.data["post_id"]),
+    )
+    assert row["package_id"] is None
+
+
+async def test_deactivation_between_stages_keeps_producing_stamp_and_logs_stale(
+    pkg_db, no_image_calls
+):
+    """Aşamalar arası deaktivasyon: ÖZGÜN çift yazılır + `stamp_stale_at_persist`.
+
+    Provenans dürüsttür: içeriği o paket üretti. Damgayı düşürmek üretimin
+    gerçek kökenini silerdi; yeniden çözümlemek ise post'a onu üretmeyen bir
+    paketi iliştirirdi. İkisi de yanlış; doğru olan özgün çifti yazıp durumu
+    olay olarak kaydetmektir.
+    """
+    sub_id, package_id = await _seed_sector_and_package(pkg_db, version=4)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=4)
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET status = 'archived' WHERE id = $1", package_id
+    )
+
+    response = await _generate_post(
+        pkg_db, account_id=account_id, brand_id=brand_id, generation_id=stamp_id
+    )
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id, package_version FROM social.posts WHERE id = $1",
+        uuid.UUID(response.data["post_id"]),
+    )
+    assert row["package_id"] == package_id and row["package_version"] == 4
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == ["stamp_stale_at_persist"]
+
+
+async def test_concurrent_persists_with_same_id_single_winner(test_db_setup, monkeypatch):
+    """İki eşzamanlı kayıt aynı makbuzla gelirse damgayı TEK kazanan alır.
+
+    Tüketim koşullu güncellemedir ve kalıcı-kayıt transaction'ı içindedir;
+    ikinci istek satırı tüketilmiş bulur, damga yazmaz ve olay üretir.
+    """
+    from .conftest import _require_test_database
+
+    url = _require_test_database(test_db_setup)
+    setup = await asyncpg.connect(url)
+    await _init_connection(setup)
+
+    workers: list = []
+    account_id = brand_id = sub_id = None
+    try:
+        sub_id, package_id = await _seed_sector_and_package(setup)
+        account_id, brand_id = await _seed_brand(setup, sub_sector_id=sub_id)
+        stamp_id = await _write_stamp(
+            setup, brand_id=brand_id, package_id=package_id, version=1
+        )
+
+        for _ in range(2):
+            worker = await asyncpg.connect(url)
+            await _init_connection(worker)
+            workers.append(worker)
+
+        from app.routers import posts as posts_router
+
+        async def _fake_generate_image(*_args, **_kwargs):
+            return "fake-job-id"
+
+        monkeypatch.setattr(posts_router, "generate_image", _fake_generate_image)
+        monkeypatch.setattr(posts_router, "generate_image_edit", _fake_generate_image)
+
+        results = await asyncio.gather(
+            *[
+                _generate_post(
+                    worker, account_id=account_id, brand_id=brand_id, generation_id=stamp_id
+                )
+                for worker in workers
+            ]
+        )
+
+        stamped = await setup.fetch(
+            "SELECT package_id FROM social.posts WHERE id = ANY($1::uuid[])",
+            [uuid.UUID(r.data["post_id"]) for r in results],
+        )
+        winners = [r for r in stamped if r["package_id"] is not None]
+        assert len(winners) == 1, f"tek kazanan olmalı, {len(winners)} damga yazıldı"
+        kinds = [
+            r["event_type"]
+            for r in await setup.fetch(
+                "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+            )
+        ]
+        assert kinds == ["stamp_invalid"], "kaybeden istek olay üretmeli"
+    finally:
+        for worker in workers:
+            await worker.close()
+        if brand_id:
+            await setup.execute("DELETE FROM social.posts WHERE brand_id = $1", brand_id)
+            await setup.execute("DELETE FROM social.brands WHERE id = $1", brand_id)
+        if account_id:
+            await setup.execute(
+                "DELETE FROM social.workspace_members WHERE account_id = $1", account_id
+            )
+            await setup.execute(
+                "DELETE FROM social.workspaces WHERE account_id = $1", account_id
+            )
+            await setup.execute("DELETE FROM social.accounts WHERE id = $1", account_id)
+        if sub_id:
+            await setup.execute(
+                "DELETE FROM social.sector_packages WHERE sector_id = $1", sub_id
+            )
+            await setup.execute("DELETE FROM social.sectors WHERE id = $1", sub_id)
+        await setup.close()
+
+
+# ═══ 3. Task 8-11'in geçici logları kalıcı olay kaydına bağlandı ═══════════
+
+
+async def test_stale_assignment_event_recorded(pkg_db):
+    """Bayat atama (`draft`/`archived`) kalıcı olay üretir — yalnız log değil."""
+    sub_id, _ = await _seed_sector_and_package(pkg_db, status="archived")
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    result = await resolve_package_context(
+        pkg_db, {"id": brand_id, "sub_sector_id": sub_id}
+    )
+
+    assert result is None
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == ["stale_assignment_fallback"]
+
+
+async def test_mismatch_event_recorded(pkg_db):
+    """Yapısal olarak geçersiz paket içeriği `mismatch_fallthrough` üretir.
+
+    Aktif paket VAR ama şemayı tutturmuyor: üretim paketsiz yola düşer ve bu
+    düşüş kalıcı olarak kaydedilir. Bayat atamadan (paket YOK) ayrı bir olaydır
+    — işletimde biri "paket üretilmemiş", diğeri "üretilmiş ama bozuk" der.
+    """
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET content = $2 WHERE id = $1",
+        package_id,
+        {"kapsam": "yalnız kapsam var, gerisi eksik"},
+    )
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    result = await resolve_package_context(pkg_db, {"id": brand_id, "sub_sector_id": sub_id})
+
+    assert result is None, "bozuk paket üretimi bloklamaz, paketsiz yola düşer"
+    rows = await pkg_db.fetch(
+        "SELECT event_type, package_id, detail FROM social.package_events WHERE brand_id = $1",
+        brand_id,
+    )
+    assert [r["event_type"] for r in rows] == ["mismatch_fallthrough"]
+    assert rows[0]["package_id"] == package_id
+    assert "first_problem" in rows[0]["detail"], "teşhis olayla birlikte taşınmalı"
+
+
+async def test_package_read_error_recorded_when_only_the_read_fails(pkg_db):
+    """Okuma hatası kalıcı olarak kaydedilir — hata bağlantıdan gelmiyorsa."""
+    sub_id, _ = await _seed_sector_and_package(pkg_db)
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    class _ReadFails:
+        """Yalnız paket sorgusunu düşürür; bağlantı sağlam kalır."""
+
+        def __init__(self, real):
+            self._real = real
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+        async def fetchrow(self, *_args, **_kwargs):
+            raise RuntimeError("okuma düştü")
+
+    result = await resolve_package_context(
+        _ReadFails(pkg_db), {"id": brand_id, "sub_sector_id": sub_id}
+    )
+
+    assert result is None
+    rows = await pkg_db.fetch(
+        "SELECT event_type, detail FROM social.package_events WHERE brand_id = $1", brand_id
+    )
+    assert [r["event_type"] for r in rows] == ["package_read_error"]
+    assert rows[0]["detail"] == {"error": "RuntimeError"}
+
+
+async def test_package_read_error_degrades_to_log_when_db_is_down(caplog):
+    """BELGELİ SINIR: veritabanının kendisi erişilemezse olay da yazılamaz.
+
+    Plan Task 12 bu sınırı açıkça tanır — o durumda bağımsız best-effort kanal
+    `logger`'dır. Test bunu bir eksiklik olarak değil, ÖLÇÜLMÜŞ ve belgelenmiş
+    davranış olarak pinler: sessizce kaybolmadığını (log üretildiğini) ve
+    çağıranın DÜŞMEDİĞİNİ (None döndüğünü) kanıtlar.
+    """
+
+    class _DeadConnection:
+        async def fetchrow(self, *_args, **_kwargs):
+            raise RuntimeError("bağlantı yok")
+
+        async def fetchval(self, *_args, **_kwargs):
+            raise RuntimeError("bağlantı yok")
+
+    with caplog.at_level(logging.ERROR):
+        result = await resolve_package_context(
+            _DeadConnection(), {"id": uuid.uuid4(), "sub_sector_id": uuid.uuid4()}
+        )
+
+    assert result is None
+    assert any(
+        "paket olayı yazılamadı" in r.getMessage() for r in caplog.records
+    ), "olay yazımı başarısızlığı sessiz kalmamalı"
+
+
+async def test_quote_flow_without_caption_call_logs_no_event(pkg_db, no_image_calls):
+    """Caption çağrısı YAPMAYAN akışta makbuz yokluğu anomali DEĞİLDİR.
+
+    Alıntı akışı `/generate-caption`'a hiç uğramaz; makbuz doğmaz. `stamp_missing`
+    "beklenen makbuz gelmedi" demektir — hiç beklenmediği yerde yazılırsa denetim
+    izi yanlış konuşur ve gerçek eksiklikler gürültüde kaybolur.
+    """
+    from app.models.schemas import PostGenerate
+    from app.routers import posts as posts_router
+
+    sub_id, _ = await _seed_sector_and_package(pkg_db)
+    account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    await posts_router.generate_post(
+        payload=PostGenerate(
+            brand_id=brand_id,
+            content_type="quote",
+            quote_text="Kısa bir alıntı.",
+            platforms=["instagram"],
+        ),
+        user={"sub": str(account_id)},
+        db=pkg_db,
+    )
+
+    events = await pkg_db.fetch(
+        "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+    )
+    assert events == [], "caption üretmeyen akış makbuz olayı üretmemeli"
+
+
+# ═══ 4. İstemci taşıması — yapısal kapı ════════════════════════════════════
+
+FRONTEND_DIR = (
+    __import__("pathlib").Path(__file__).resolve().parents[2] / "frontend"
+)
+
+
+def _persist_payloads() -> list[tuple[str, str]]:
+    """Üretim sayfasındaki kalıcı-kayıt isteklerinin gövdelerini çıkarır."""
+    import re
+
+    page = (FRONTEND_DIR / "app/(dashboard)/icerik-olustur/page.tsx").read_text("utf-8")
+    bodies = []
+    for match in re.finditer(r"api\.post<[^>]*>\('(/posts/[^']+)',\s*\{", page):
+        depth = 1
+        i = match.end()
+        while i < len(page) and depth:
+            depth += {"{": 1, "}": -1}.get(page[i], 0)
+            i += 1
+        bodies.append((match.group(1), page[match.end() : i]))
+    return bodies
+
+
+def test_every_caption_first_persist_request_carries_the_receipt():
+    """Caption çağrısının ucundaki HER kalıcı-kayıt isteği makbuzu taşır (K-07).
+
+    Beklenen küme sabit listeyle değil, isteğin KENDİSİNDEN türetilir:
+    `platform_captions` gönderen istek caption çağrısının ucundadır, dolayısıyla
+    makbuzu da taşımalıdır. Yeni bir caption-öncüllü akış eklenirse bu kapı onu
+    liste güncellemeden yakalar.
+
+    **Dürüst etiket: bu YAPISAL bir kapıdır, davranışsal değil.** İsteğin gerçek
+    gövdesinde alanın gittiğini kanıtlamaz; kanıtı gerçek arayüz koşumudur
+    (kuyumculuk pilotu). Checkpoint 11'de tam bu halka koptuğu ve hiçbir birim
+    testi görmediği için kapı yine de kuruluyor.
+    """
+    payloads = _persist_payloads()
+    assert payloads, "kalıcı-kayıt isteği bulunamadı — yapısal sweep boşa koştu"
+
+    caption_first = [
+        (endpoint, body) for endpoint, body in payloads if "platform_captions" in body
+    ]
+    assert caption_first, "caption-öncüllü istek bulunamadı — sweep duyarsız"
+    for endpoint, body in caption_first:
+        assert "generation_id" in body, (
+            f"{endpoint}: caption-öncüllü istek makbuzu taşımıyor — "
+            "paketli üretim damgasız kaydedilir"
+        )
+
+
+def test_caption_response_handler_preserves_the_receipt():
+    """Caption yanıtındaki makbuz istemci durumunda KORUNUR.
+
+    Zincirin ilk halkası: yanıt alanı `captionData`'ya yazılmazsa sonraki
+    isteklere hiç ulaşmaz. Checkpoint 11 F1 tam olarak buydu (hareket seçimi
+    yeniden kurulan nesnede düşüyordu).
+    """
+    page = (FRONTEND_DIR / "app/(dashboard)/icerik-olustur/page.tsx").read_text("utf-8")
+    assert "res.data.generation_id" in page, (
+        "caption yanıtındaki makbuz istemci durumuna hiç yazılmıyor"
+    )
+    editor = (FRONTEND_DIR / "components/templates/CaptionEditor.tsx").read_text("utf-8")
+    assert "generation_id" in editor, "CaptionData tipi makbuzu taşımıyor"
+
+
+# ═══ 5. İkinci kalıcı-kayıt ucu — kısa video stage-1 ═══════════════════════
+
+
+async def _run_stage1(db, *, brand_id, sub_sector_id, generation_id, monkeypatch):
+    """Stage-1'i ÜRETİM yolundan koşar; yalnız dış dünya kesilir."""
+    from app.services import short_video as sv
+
+    async def _fake_tts(*_a, **_k):
+        return {"audio_url": "https://example.test/a.mp3"}
+
+    async def _fake_still_text(*_a, **_k):
+        return "https://example.test/still.jpg"
+
+    async def _fake_still_prompt(*_a, **_k):
+        return "A gold ring on velvet"
+
+    monkeypatch.setattr(sv, "text_to_speech", _fake_tts)
+    monkeypatch.setattr(sv, "_generate_still_via_text", _fake_still_text)
+    monkeypatch.setattr(sv, "_generate_still_via_edit", _fake_still_text)
+    monkeypatch.setattr(sv, "_resolve_still_prompt", _fake_still_prompt)
+
+    return await sv.run_short_video_stage1(
+        brand_id=brand_id,
+        prompt="A gold ring on velvet",
+        script="Kısa bir senaryo metni.",
+        voice="qSeXEcewz7tA0Q0qk9fH",
+        aspect_ratio="9:16",
+        brand_kit={"sector": "Kuyumculuk"},
+        brand_name="Damga Markası",
+        db=db,
+        platform_captions={"instagram": {"caption": "x"}},
+        sub_sector_id=sub_sector_id,
+        generation_id=generation_id,
+    )
+
+
+async def test_stage1_persist_writes_recorded_stamp(pkg_db, monkeypatch):
+    """Kısa videonun kalıcı kaydı da makbuzu tüketip damgayı yazar.
+
+    İKİNCİ kalıcı-kayıt ucudur ve ayrı sınanır. Bu yürütmede iki kez ölçüldü:
+    bir yolu test edip diğerini varsaymak, yönlendiricide ayrılan gerçek ürün
+    yolunu gözden kaçırıyor.
+    """
+    sub_id, package_id = await _seed_sector_and_package(pkg_db, version=5)
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=5)
+
+    result = await _run_stage1(
+        pkg_db,
+        brand_id=brand_id,
+        sub_sector_id=sub_id,
+        generation_id=stamp_id,
+        monkeypatch=monkeypatch,
+    )
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id, package_version FROM social.posts WHERE id = $1",
+        result["post_id"],
+    )
+    assert row["package_id"] == package_id
+    assert row["package_version"] == 5
+    assert await pkg_db.fetchval(
+        "SELECT consumed_at FROM social.generation_stamps WHERE id = $1", stamp_id
+    ) is not None
+
+
+async def test_stage1_forged_receipt_writes_null_and_alerts(pkg_db, monkeypatch):
+    """Stage-1'de de uydurulmuş makbuz damga YAZDIRMAZ; video yine üretilir."""
+    sub_id, _ = await _seed_sector_and_package(pkg_db)
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    result = await _run_stage1(
+        pkg_db,
+        brand_id=brand_id,
+        sub_sector_id=sub_id,
+        generation_id=uuid.uuid4(),
+        monkeypatch=monkeypatch,
+    )
+
+    row = await pkg_db.fetchrow(
+        "SELECT package_id FROM social.posts WHERE id = $1", result["post_id"]
+    )
+    assert row["package_id"] is None
+    kinds = [
+        r["event_type"]
+        for r in await pkg_db.fetch(
+            "SELECT event_type FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert kinds == ["stamp_invalid"]
