@@ -114,6 +114,8 @@ kuramadı (rc=2) — Codex hiç çağrılmadı; **taban ref'i daima TAM SHA ver.
   keser). Kod tabanı GENELİ bir desen — caption, kısa video, site analizi hepsi aynı.
   Bu partinin kusuru değil; somut kusurları (yeniden deneme çarpanı, biçim doğrulaması,
   önyüzün arızayı gizlemesi) kapatıldı.
+  Ev: `CURRENT.md` → `sync-provider-calls-not-cancellable`. **Tetik: canlıya gerçek müşteri
+  yükü alınmadan ÖNCE, ya da işçi doygunluğu gözlenirse.**
 - **[Eray tetikledi]** Süpürücü ↔ geç webhook terminallik çelişkisi. Ev: `CURRENT.md`.
   Tetik: sektör bilgi paketi işi TAMAMEN bittikten sonra.
 - **[çözülmedi + park edildi, TETİKLİ]** `sector_packages.sector_id` değişmez değil. Ev: `CURRENT.md`.
