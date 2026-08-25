@@ -243,9 +243,20 @@ async def update_brand(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Partially update a brand."""
+    """Partially update a brand.
+
+    **Koşullu yazım (Task 15b).** `expected_version` doluysa yazım yalnız satır
+    o sürümdeyken uygulanır. Bunu sunucu yapmak ZORUNDADIR: iki sekme (ya da
+    iki cihaz) birbirini görmez, dolayısıyla istemci tarafındaki hiçbir sıraya
+    dizme aralarındaki yarışı kapatamaz.
+
+    Sürüm göndermeyen çağıran bugünkü davranışı aynen görür — kapı isteğe
+    bağlıdır ve başka yüzeyleri bozmaz.
+    """
     await assert_brand_owned(db, user, brand_id)
     updates = payload.model_dump(exclude_none=True)
+    # Sürüm bir SÜTUN değil, bir KOŞUL — güncellenecek alanlar kümesinden çıkar.
+    expected_version = updates.pop("expected_version", None)
     # `exclude_none` açık `null`'ı da düşürür; atamayı boşaltmak ise tam olarak
     # `null` göndermektir. Bu yüzden alan gönderildi mi sorusu değerden DEĞİL,
     # `model_fields_set`'ten okunur: gönderilmediyse dokunulmaz, `null`
@@ -292,9 +303,13 @@ async def update_brand(
         assignments.append("brand_kit = " + brand_kit_merge_sql(kit_param, channels_param))
 
     fields = ", ".join(assignments)
+    version_clause = ""
+    if expected_version is not None:
+        values.append(expected_version)
+        version_clause = f" AND updated_at = ${len(values) + 1}"
     try:
         row = await db.fetchrow(
-            f"UPDATE social.brands SET {fields} WHERE id = $1 RETURNING *",
+            f"UPDATE social.brands SET {fields} WHERE id = $1{version_clause} RETURNING *",
             brand_id,
             *values,
         )
@@ -304,6 +319,21 @@ async def update_brand(
             raise
         raise _sub_sector_write_error() from exc
     if not row:
+        # "Satır güncellenmedi" iki AYRI şey olabilir ve istemci için sonuçları
+        # zıttır: marka silinmişse tazelemek işe yaramaz, çakışma varsa tam
+        # olarak tazelemek gerekir. Ayırmazsak istemci sonsuza dek yeniden
+        # dener. (Sahiplik kapısı silinmiş markayı zaten yukarıda karşılar;
+        # bu dal ikisi arasındaki yarış penceresi içindir.)
+        if expected_version is not None and await db.fetchval(
+            "SELECT 1 FROM social.brands WHERE id = $1", brand_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Bu marka başka bir yerde değiştirildi. En güncel hâli "
+                    "yükleyip değişikliğinizi tekrar uygulayın."
+                ),
+            )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
     await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")
     return OkResponse(data=dict(row))

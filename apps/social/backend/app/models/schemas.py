@@ -120,6 +120,13 @@ class BrandUpdate(BaseModel):
     # düşürürdü ve kullanıcı yanlış atamasını hiçbir zaman geri alamazdı
     # (spec §7.5 düzeltme yolu).
     sub_sector_id: UUID | None = None
+    # İstemcinin en son GÖRDÜĞÜ sürüm (satırın güncellenme anı). Doluysa yazım
+    # koşullu olur: satır o sürümden ilerlemişse yazım REDDEDİLİR. Boş
+    # bırakılabilir — sürüm göndermeyen çağıranlar bugünkü davranışı görür.
+    #
+    # Bu alan bir SÜTUN DEĞİLDİR; router onu güncellenecek alanlar kümesinden
+    # ayıklar. Ayıklamazsa `exclude_none` onu yazılacak bir alan sanardı.
+    expected_version: datetime | None = None
 
 
 class BrandOut(BaseModel):
