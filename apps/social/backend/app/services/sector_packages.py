@@ -1443,6 +1443,29 @@ async def _set_status(db, package_id: UUID, status: str, *, expected: str) -> No
         )
 
 
+def _require_same_sector(observed: UUID, locked: UUID, package_id: UUID) -> None:
+    """Kilitlenen sektör ile paketin GERÇEK sektörü aynı olmalı.
+
+    Sektör kilitsiz okunup kilitleniyor; hedef ancak ondan SONRA kilitlenebilir.
+    O pencerede paketin sektörü değişirse yanlış sektör serileştirilmiş olur:
+    A'nın aktif paketi arşivlenip B'ye ait hedef aktive edilebilir ve olay A'ya
+    yazılabilirdi (checkpoint 13, F4). Durum karşılaştır-ve-yaz'ı bunu GÖRMEZ,
+    çünkü yalnız duruma bakar, sektöre değil.
+
+    Bu kapı pencereyi kapatmaz — kapatılamaz, çünkü paket kilitlenmeden önce
+    okunmak zorunda. Yaptığı şey pencereyi FAIL-CLOSED yapmaktır: uyuşmazlık
+    görülürse geçiş reddedilir. Kalıcı çözüm `sector_packages.sector_id`'yi
+    yazımdan sonra DEĞİŞMEZ kılmaktır; o bir migration işidir ve bu görevin
+    kapsamında değildir (bugün hiçbir üretim yolu bu kolonu güncellemiyor —
+    ölçüldü: depo genelinde yazıcı yok).
+    """
+    if observed != locked:
+        raise LifecycleError(
+            f"paketin sektörü kilit alındıktan sonra değişti: {package_id} "
+            f"artık {observed} sektöründe, kilitlenen {locked} — geçiş reddedildi"
+        )
+
+
 async def _lock_sector(db, sector_id: UUID) -> None:
     """Sektör satırını kilitler — yaşam döngüsünün TEK serileştirme noktası.
 
@@ -1614,11 +1637,13 @@ async def activate_package(
         await _lock_sector(db, sector_id)
 
         target = await db.fetchrow(
-            "SELECT version, status FROM social.sector_packages WHERE id = $1 FOR UPDATE",
+            "SELECT sector_id, version, status FROM social.sector_packages "
+            "WHERE id = $1 FOR UPDATE",
             package_id,
         )
         if target is None:
             raise LifecycleError(f"paket bulunamadı: {package_id}")
+        _require_same_sector(target["sector_id"], sector_id, package_id)
         if target["status"] != "draft":
             raise LifecycleError(
                 f"yalnız 'draft' aktive edilebilir (görülen: {target['status']!r}); "
@@ -1736,12 +1761,13 @@ async def deactivate_package(db, *, package_id: UUID, actor: str) -> None:
         await _lock_sector(db, sector_id)
 
         row = await db.fetchrow(
-            "SELECT version, status FROM social.sector_packages "
+            "SELECT sector_id, version, status FROM social.sector_packages "
             "WHERE id = $1 FOR UPDATE",
             package_id,
         )
         if row is None:
             raise LifecycleError(f"paket bulunamadı: {package_id}")
+        _require_same_sector(row["sector_id"], sector_id, package_id)
         if row["status"] != "active":
             raise LifecycleError(
                 f"yalnız aktif paket geri çekilebilir (görülen: {row['status']!r})"

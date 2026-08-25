@@ -1028,3 +1028,130 @@ async def test_concurrent_activation_of_different_drafts_is_serializable(test_db
         if sector_id is not None:
             await _drop_committed_sector(setup, sector_id)
         await setup.close()
+
+
+# ═══ 10. Kilit ile hedef arasındaki sektör penceresi (checkpoint 13, F4) ════
+
+
+async def _race_sector_reassignment(test_db_setup, *, transition, seed_status, with_keeper):
+    """Kilit alındıktan SONRA hedefin sektörünü değiştirir, sonra geçişi dener.
+
+    Pencere gerçektir: sektör KİLİTSİZ okunuyor, o sektör kilitleniyor, sonra
+    hedef yeniden okunurken sektörü YENİDEN OKUNMUYORDU. Araya giren bir
+    yeniden-atama, A'nın aktif paketini arşivleyip B'ye ait hedefi aktive
+    ettirebiliyor ve olayı A'ya yazdırabiliyordu. Karşılaştır-ve-yaz bunu
+    görmez, çünkü sektöre bağlı değildir.
+
+    Araya girme monkeypatch ile DETERMİNİSTİK kurulur — yarışın rastlantısına
+    bırakmak bu sınıfı ölçmez.
+
+    `seed_status` hedefin geçişe UYGUN durumu olmalıdır; aksi hâlde fonksiyon
+    zaten başka bir gerekçeyle düşer ve test sektör penceresini hiç ölçmez
+    (ilk yazımda deaktivasyon dalı tam bunu yaptı — sahte yeşil).
+    """
+    import asyncpg as _asyncpg
+
+    from .conftest import _require_test_database
+
+    url = _require_test_database(test_db_setup)
+    setup = await _asyncpg.connect(url)
+    await _init_connection(setup)
+    worker = intruder = None
+    sector_a = sector_b = None
+    try:
+        sector_a = await _seed_committed_sector(setup)
+        sector_b = await _seed_committed_sector(setup)
+        keeper_id = None
+        if with_keeper:
+            keeper_id = await setup.fetchval(
+                "INSERT INTO social.sector_packages "
+                "(sector_id, version, status, schema_version, content) "
+                "VALUES ($1, 1, 'active', 1, $2) RETURNING id",
+                sector_a,
+                _valid_content(),
+            )
+        target_id = await setup.fetchval(
+            "INSERT INTO social.sector_packages "
+            "(sector_id, version, status, schema_version, content) "
+            "VALUES ($1, 2, $2, 1, $3) RETURNING id",
+            sector_a,
+            seed_status,
+            _valid_content(),
+        )
+
+        worker = await _asyncpg.connect(url)
+        await _init_connection(worker)
+        intruder = await _asyncpg.connect(url)
+        await _init_connection(intruder)
+
+        original = sector_packages._lock_sector
+        moved = {"done": False}
+
+        async def _lock_then_move(db, sector_id):
+            await original(db, sector_id)
+            if not moved["done"]:
+                moved["done"] = True
+                await intruder.execute(
+                    "UPDATE social.sector_packages SET sector_id = $2 WHERE id = $1",
+                    target_id,
+                    sector_b,
+                )
+
+        sector_packages._lock_sector = _lock_then_move
+        try:
+            with pytest.raises(LifecycleError):
+                await transition(worker, target_id)
+        finally:
+            sector_packages._lock_sector = original
+
+        assert moved["done"], "araya girme hiç koşmadı — test kendini ölçmüyor"
+        assert (
+            await setup.fetchval(
+                "SELECT status FROM social.sector_packages WHERE id = $1", target_id
+            )
+            == seed_status
+        ), "reddedilen geçiş yine de hedefin durumunu değiştirdi"
+        if keeper_id is not None:
+            assert (
+                await setup.fetchval(
+                    "SELECT status FROM social.sector_packages WHERE id = $1", keeper_id
+                )
+                == "active"
+            ), "yanlış sektörün aktif paketi arşivlendi"
+        for sector in (sector_a, sector_b):
+            assert (
+                await setup.fetchval(
+                    "SELECT count(*) FROM social.package_events WHERE sector_id = $1", sector
+                )
+                == 0
+            ), "reddedilen geçiş olay yazdı"
+    finally:
+        for conn in (worker, intruder):
+            if conn is not None:
+                await conn.close()
+        for sector in (sector_a, sector_b):
+            if sector is not None:
+                await _drop_committed_sector(setup, sector)
+        await setup.close()
+
+
+async def test_activation_rejects_sector_reassignment_under_lock(test_db_setup):
+    async def _transition(conn, target_id):
+        await activate_package(
+            conn, package_id=target_id, evidence=_activation_evidence(), actor=ACTOR
+        )
+
+    await _race_sector_reassignment(
+        test_db_setup, transition=_transition, seed_status="draft", with_keeper=True
+    )
+
+
+async def test_deactivation_rejects_sector_reassignment_under_lock(test_db_setup):
+    """Hedef GERÇEKTEN aktif olmalı — aksi hâlde fonksiyon başka gerekçeyle düşer."""
+
+    async def _transition(conn, target_id):
+        await deactivate_package(conn, package_id=target_id, actor=ACTOR)
+
+    await _race_sector_reassignment(
+        test_db_setup, transition=_transition, seed_status="active", with_keeper=False
+    )
