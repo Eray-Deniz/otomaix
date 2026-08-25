@@ -15,10 +15,11 @@ Spec §7.1-7.3'ün bağladığı üç iddia burada ölçülür:
 
 from __future__ import annotations
 
-import re
+import ast
 import uuid
 from pathlib import Path
 
+import asyncpg
 import pytest
 from fastapi import HTTPException
 
@@ -185,11 +186,13 @@ class _FakeResponse:
         self.content = [type("Block", (), {"text": text})()]
 
 
-def _fake_anthropic(monkeypatch, raw: str):
-    """`analyze_website` içindeki Anthropic çağrısını sabit metinle değiştirir."""
+def _fake_anthropic(monkeypatch, raw: str, captured: dict | None = None):
+    """Anthropic çağrısını sabit metinle değiştirir; istenirse argümanları yakalar."""
 
     class _Messages:
-        def create(self, **_kwargs):
+        def create(self, **kwargs):
+            if captured is not None:
+                captured["kwargs"] = kwargs
             return _FakeResponse(raw)
 
     class _Client:
@@ -428,22 +431,6 @@ async def test_brand_update_rejects_root_as_sub_sector(flow_db):
 # ─── 4. Üretim akışı aday kümesini okumaz ───────────────────────────────────
 
 
-# Aday sorgusunun İMZASI: alt-sektörlük sorusu ile AKTİF PAKET şartının aynı
-# ifadede birleşmesi. Yalnız `parent_sector_id` aramak yetmez — `brands.py`'deki
-# atanabilirlik kapısı da o soruyu sorar ve orada olması DOĞRUdur (K-08b'nin
-# uygulama ayağı); aday kümesi olan şey, ikinci yarısıdır.
-_CANDIDATE_QUERY_RE = re.compile(
-    r"parent_sector_id\s+IS\s+NOT\s+NULL.{0,400}?status\s*=\s*\'active\'",
-    re.DOTALL,
-)
-
-
-def _has_candidate_query(rel_path: str) -> bool:
-    return bool(
-        _CANDIDATE_QUERY_RE.search((BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
-    )
-
-
 def _files_referencing(needle: str) -> set[str]:
     """`app/` altında verilen adı GEÇEN dosyaların depo-göreli yolları."""
     hits: set[str] = set()
@@ -453,38 +440,240 @@ def _files_referencing(needle: str) -> set[str]:
     return hits
 
 
-async def test_generation_path_never_queries_candidates():
-    """Aday kümesi TEK yerde tanımlanır ve yalnız iki yüzeyden okunur.
+def _modules_importing(symbol: str, module: str) -> set[str]:
+    """`app/` altında `module`'dan `symbol`'ü İÇE AKTARAN dosyalar — AST ile.
 
-    Yapısal sweep — örneklem değil: `app/` altındaki HER python dosyası taranır.
-    Üretim yolu (caption / görsel / kısa video / post yazımı) aday kümesine
-    dokunursa üretim akışına soru eklenmiş olur (spec §7.1 sürtünme yasağı).
+    Metin araması değil ayrıştırılmış içe aktarma: yorumdaki ya da dizedeki
+    geçişler sayılmaz, `from x import y as z` yeniden adlandırması sayılır.
+    """
+    hits: set[str] = set()
+    for path in sorted(APP_DIR.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:  # pragma: no cover — ayrıştırılamayan dosya sweep'i durdurmasın
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module == module:
+                if any(alias.name == symbol for alias in node.names):
+                    hits.add(str(path.relative_to(BACKEND_ROOT)))
+            elif isinstance(node, ast.Import):
+                if any(alias.name == module for alias in node.names):
+                    hits.add(str(path.relative_to(BACKEND_ROOT)))
+    return hits
+
+
+async def test_generation_path_never_queries_candidates():
+    """Aday kümesinin okuyucu kümesi KAPALIdır (spec §7.1 sürtünme yasağı).
+
+    Kapı POZİTİF bir sözleşmedir: "şu iki modül içe aktarabilir", "hiçbir
+    üretim yolu benzeri sorgu yazmasın" değil. İkincisi semantik bir
+    olumsuzlamadır ve metin araması onu KANITLAYAMAZ.
+
+    **Kapsam sınırı — dürüstçe:** bu kapı (a) yardımcının içe aktarılmasını
+    ve (b) adının geçmesini görür. Bir üretim yolu AYNI SORGUYU elle yazsa
+    (yüklem sırası değişik, `IN ('active')`, görünüm arkasına saklı) bu kapı
+    onu GÖRMEZ. O sınıfın savunması review'dır, bu test değil. Kapının
+    yakaladığı şey, gerçekte olan şeydir: yardımcıyı yanlış yerden çağırmak.
     """
     readers = _files_referencing("fetch_sub_sector_candidates")
+    importers = _modules_importing("fetch_sub_sector_candidates", "app.routers.sectors")
 
     assert readers, "sweep hiçbir şey bulamadı — detektör bozuk"
     assert readers <= CANDIDATE_READER_PATHS, (
         "aday kümesi kapalı yüzey kümesi dışından okunuyor: "
         + ", ".join(sorted(readers - CANDIDATE_READER_PATHS))
     )
-    # Tanım gerçekten TEK evde: sorgunun kendisi kopyalanmamış.
+    assert importers <= CANDIDATE_READER_PATHS, (
+        "aday yardımcısı kapalı küme dışından içe aktarılıyor: "
+        + ", ".join(sorted(importers - CANDIDATE_READER_PATHS))
+    )
+    # Tanımın evi TEK: yardımcı yalnız bir modülde tanımlıdır.
     definitions = {
-        path for path in _files_referencing("parent_sector_id") if _has_candidate_query(path)
+        path
+        for path in _files_referencing("def fetch_sub_sector_candidates")
     }
     assert definitions == {"app/routers/sectors.py"}, (
-        "aday sorgusu birden fazla evde: " + ", ".join(sorted(definitions))
+        "aday yardımcısı birden fazla evde: " + ", ".join(sorted(definitions))
     )
 
-    # Pozitif kontroller — detektörün gerçekten ayrım yaptığını kanıtlar.
+    # Pozitif kontroller — detektörlerin gerçekten ölçtüğünü gösterir.
+    assert "app/routers/ai.py" in importers, "AST detektörü bilinen içe aktarmayı görmüyor"
     assert "app/routers/brands.py" not in readers
-    assert _files_referencing("assert_brand_owned"), "detektör bilinen bir adı bulamadı"
-    # (a) Aday sorgusunun KOPYASI yakalanır.
-    assert _CANDIDATE_QUERY_RE.search(
-        "WHERE s.parent_sector_id IS NOT NULL AND EXISTS ("
-        "SELECT 1 FROM social.sector_packages p WHERE p.status = \'active\')"
-    ), "detektör aday sorgusunun kopyasını görmüyor"
-    # (b) Alt-sektörlük sorusu TEK BAŞINA aday sorgusu SAYILMAZ — `brands.py`
-    #     atanabilirlik kapısı meşru olarak bunu sorar (K-08b uygulama ayağı).
-    assert not _CANDIDATE_QUERY_RE.search(
-        "SELECT parent_sector_id IS NOT NULL FROM social.sectors WHERE id = $1"
-    ), "detektör atanabilirlik kapısını aday sorgusu sanıyor"
+    assert _files_referencing("assert_brand_owned"), "metin detektörü bilinen bir adı bulamadı"
+
+
+# ─── 5. Checkpoint 15 bulguları — kapanış testleri ──────────────────────────
+
+
+async def test_db_error_gate_only_claims_its_own_constraints(flow_db):
+    """Hata çevirisi YALNIZ kendi kapılarını sahiplenir (F6).
+
+    Üç GERÇEK veritabanı hatası provoke edilir ve sınıflandırıcıya sorulur —
+    uydurma istisna nesnesi değil, canlı katalogdan gelen gerçeği.
+
+    **Ölçüldü:** eksik `sub_sector_id` yabancı anahtara HİÇ ulaşmaz; BEFORE
+    tetikleyicisi önce patlar (23000, kısıt adı YOK). Yabancı anahtar dalı yine
+    de tanınır — tetikleyici düşerse tek savunma o kalır.
+
+    Kritik ayak: `workspace_id` ve `sector_id` yarışları da 23503 üretir. Onları
+    "geçersiz alt sektör" diye etiketlemek gerçek bir tutarlılık arızasını
+    istemci girdisi hatası gibi gösterirdi.
+    """
+    root_id = await _root_id(flow_db)
+    cases: list[tuple[str, asyncpg.PostgresError]] = []
+
+    async def _capture(label, sql, *args):
+        tx = flow_db.transaction()
+        await tx.start()
+        try:
+            await flow_db.execute(sql, *args)
+            raise AssertionError(f"{label}: beklenen hata oluşmadı")
+        except asyncpg.PostgresError as exc:
+            cases.append((label, exc))
+        finally:
+            await tx.rollback()
+
+    await _capture(
+        "trigger",
+        "INSERT INTO social.brands (name, sub_sector_id) VALUES ('x', $1)",
+        root_id,
+    )
+    await _capture(
+        "sector_id_race",
+        "INSERT INTO social.brands (name, sector_id) VALUES ('x', $1)",
+        uuid.uuid4(),
+    )
+    await _capture(
+        "workspace_race",
+        "INSERT INTO social.brands (name, workspace_id) VALUES ('x', $1)",
+        uuid.uuid4(),
+    )
+
+    verdicts = {label: brands_router._is_sub_sector_write_error(exc) for label, exc in cases}
+
+    assert verdicts["trigger"] is True, "kendi tetikleyicisini tanımıyor"
+    assert verdicts["sector_id_race"] is False, "kök sektör yarışını alt sektör hatası sandı"
+    assert verdicts["workspace_race"] is False, "çalışma alanı yarışını alt sektör hatası sandı"
+
+    # Yabancı anahtar dalı doğru adlandırılmış olmalı — migration kısıtı
+    # yeniden adlandırırsa bu iddia kırmızıya döner (sessiz sapma yok).
+    fkeys = {
+        r["conname"]
+        for r in await flow_db.fetch(
+            "SELECT conname FROM pg_constraint "
+            "WHERE conrelid = 'social.brands'::regclass AND contype = 'f'"
+        )
+    }
+    assert brands_router._SUB_SECTOR_FK_CONSTRAINT in fkeys
+    assert {"brands_workspace_id_fkey", "brands_sector_id_fkey"} <= fkeys
+
+
+async def test_analyze_website_prompt_embeds_closed_candidate_list(flow_db, monkeypatch):
+    """Aday listesi prompt'a GERÇEKTEN gömülüyor mu (F4 kanıt boşluğu).
+
+    Doğrulama kapısının yeşil olması, listenin modele gösterildiğini KANITLAMAZ:
+    listede-yoksa-boş kuralı liste hiç gönderilmese de aynı sonucu verirdi.
+    Bu test modele giden argümanları yakalar.
+    """
+    sub_id = await _new_sub_sector(flow_db, slug="aday-prompt", display="Aday Prompt")
+    await _activate_package(flow_db, sub_id)
+
+    captured: dict = {}
+    _fake_website(monkeypatch)
+    _fake_anthropic(
+        monkeypatch,
+        '{"name": "X", "description": "", "sector": "", "colors": [], '
+        '"tonality": "professional", "sub_sector": "aday-prompt"}',
+        captured=captured,
+    )
+
+    await ai_router.analyze_website(
+        payload=ai_router.AnalyzeWebsiteRequest(url="example.test"),
+        user={"sub": "x"},
+        db=flow_db,
+    )
+
+    sent = str(captured["kwargs"])
+    assert "aday-prompt" in sent, "aday slug'ı modele hiç gösterilmemiş"
+    assert "Aday Prompt" in sent, "aday görünen adı modele hiç gösterilmemiş"
+
+    # Aday kümesi boşken liste bölümü HİÇ gönderilmez (modeli uydurmaya davet
+    # etmemek için) — karşı kontrol.
+    await flow_db.execute("DELETE FROM social.sector_packages")
+    captured.clear()
+    await ai_router.analyze_website(
+        payload=ai_router.AnalyzeWebsiteRequest(url="example.test"),
+        user={"sub": "x"},
+        db=flow_db,
+    )
+    assert "aday-prompt" not in str(captured["kwargs"])
+
+
+@pytest.mark.parametrize(
+    "model_field, expected",
+    [
+        ('"aday-sitesiz"', True),
+        ('"listede-olmayan"', False),
+        ('"serbest metin"', False),
+        ("null", False),
+    ],
+)
+async def test_website_less_suggestion_uses_same_closed_list(
+    flow_db, monkeypatch, model_field, expected
+):
+    """Web sitesiz geri düşüş AYNI kısıtla öneri üretir (spec §7.1, F3).
+
+    Site analizi olmayan kullanıcı da modelden öneri alır; kapalı liste kuralı
+    birebir aynıdır — ayrı bir gevşek yol açılmaz.
+    """
+    sub_id = await _new_sub_sector(flow_db, slug="aday-sitesiz", display="Aday Sitesiz")
+    await _activate_package(flow_db, sub_id)
+
+    captured: dict = {}
+    _fake_anthropic(monkeypatch, '{"sub_sector": ' + model_field + "}", captured=captured)
+
+    data = (
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(
+                name="Sitesiz Marka", description="Kuaför salonu", sector="Hizmet"
+            ),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+    ).data
+
+    if expected:
+        assert data["sub_sector_id"] == str(sub_id)
+        assert data["sub_sector_slug"] == "aday-sitesiz"
+    else:
+        assert data["sub_sector_id"] is None
+        assert data["sub_sector_slug"] is None
+
+    # Kapalı liste burada da modele gösterilir — yoksa "listeden seç" kuralı
+    # yalnız sunucu tarafında var olurdu.
+    assert "aday-sitesiz" in str(captured["kwargs"])
+
+
+async def test_website_less_suggestion_empty_when_no_candidates(flow_db, monkeypatch):
+    """Aday yokken sitesiz yol boş döner VE modeli hiç çağırmaz.
+
+    İkinci yarı ayrıca ölçülür: doğrulayıcı zaten boş döndüreceği için çıktı
+    tek başına kısa devrenin koştuğunu kanıtlamaz. Kısa devrenin amacı çıktı
+    değil, sorulacak şey yokken ücretli bir çağrı YAKMAMAKtır.
+    """
+    await flow_db.execute("DELETE FROM social.sector_packages")
+    captured: dict = {}
+    _fake_anthropic(monkeypatch, '{"sub_sector": "her-ne-olursa"}', captured=captured)
+
+    data = (
+        await ai_router.suggest_sub_sector(
+            payload=ai_router.SuggestSubSectorRequest(
+                name="Marka", description=None, sector=None
+            ),
+            user={"sub": "x"},
+            db=flow_db,
+        )
+    ).data
+
+    assert data["sub_sector_id"] is None
+    assert "kwargs" not in captured, "aday yokken model yine de çağrıldı (boşuna ücret)"

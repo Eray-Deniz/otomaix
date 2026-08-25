@@ -464,6 +464,10 @@ function MarkaAyarlariContent() {
   const [analyzingWebsite, setAnalyzingWebsite] = useState(false)
   const [sectors, setSectors] = useState<Sector[]>([])
   const [subSectorCandidates, setSubSectorCandidates] = useState<SubSectorCandidate[]>([])
+  // Modelin önerisi KAYDEDİLMEZ, teyide sunulur. Öneriyi doğrudan yazmak
+  // "son söz kullanıcınındır" sözleşmesini boşa çıkarırdı: öneriyi besleyen
+  // metin markanın kendi sitesinden gelir ve güvenilir girdi değildir.
+  const [suggestedSubSector, setSuggestedSubSector] = useState<SubSectorCandidate | null>(null)
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -477,7 +481,13 @@ function MarkaAyarlariContent() {
     })
   }, [])
 
+  // Marka ve kit kaydı AYRI zamanlayıcı kullanır. Tek zamanlayıcı
+  // paylaşıldığında art arda gelen `updateBrand` + `updateKit` çağrılarında
+  // İKİNCİSİ birincinin bekleyen PATCH'ini iptal ediyordu — site analizi tam
+  // olarak bu sırayı üretiyor, yani analizden gelen ad/açıklama/sektör
+  // sessizce kaydedilmeden kalıyordu.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const kitSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Handle OAuth callback result (?connected=platform or ?error=...)
   useEffect(() => {
@@ -551,8 +561,8 @@ function MarkaAyarlariContent() {
   }, [])
 
   const scheduleKitSave = useCallback((kit: BrandKit, brandId: string) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
+    if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
+    kitSaveTimer.current = setTimeout(async () => {
       setSaving(true)
       setSaved(false)
       await api.patch(`/brands/${brandId}/kit`, kit)
@@ -605,11 +615,14 @@ function MarkaAyarlariContent() {
         if (res.data.description) { brandFields.description = res.data.description; filled.push('açıklama') }
         if (res.data.sector) { brandFields.sector = res.data.sector; filled.push('sektör') }
         // Öneri sunucuda aday kümeye karşı doğrulanmıştır; gelen kimlik ya
-        // listededir ya `null`. Ön yüz ayrıca doğrulamaz, ÖNSEÇER — son söz
-        // kullanıcınındır (spec §7.1 teyit adımı).
+        // listededir ya `null`. Yine de YAZILMAZ — teyit kutusuna düşer.
         if (res.data.sub_sector_id) {
-          brandFields.sub_sector_id = res.data.sub_sector_id
-          filled.push('alt sektör önerisi')
+          setSuggestedSubSector({
+            id: res.data.sub_sector_id,
+            slug: '',
+            display_name: res.data.sub_sector_display_name ?? 'Önerilen alt sektör',
+          })
+          filled.push('alt sektör önerisi (teyit bekliyor)')
         }
         if (Object.keys(brandFields).length > 0) updateBrand(brandFields)
 
@@ -947,46 +960,82 @@ function MarkaAyarlariContent() {
           </div>
 
           {/* Alt sektör teyidi — mevcut sektör seçiminin YANINDA (K-19).
-              Yeni bir yüzey açılmaz; aday yoksa bileşen pasiftir. */}
-          <div className="space-y-1.5">
-            <Label>Alt Sektör</Label>
-            {subSectorCandidates.length === 0 ? (
+              Bileşen İKİ koşuldan biri sağlanınca görünür: seçilebilecek aday
+              varsa ya da markanın zaten bir ataması varsa. İkinci koşul şart:
+              paketi arşivlenen markanın ataması korunur (K-43) ve aday listesi
+              o anda boş olabilir — bileşeni gizlemek kullanıcıyı yanlış
+              atamasıyla baş başa bırakırdı (spec §7.5 düzeltme yolu). */}
+          {(subSectorCandidates.length > 0 || brand.sub_sector_id) && (
+            <div className="space-y-1.5">
+              <Label>Alt Sektör</Label>
+
+              {suggestedSubSector && suggestedSubSector.id !== brand.sub_sector_id && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
+                  <span className="text-sm">
+                    Site analizi <strong>{suggestedSubSector.display_name}</strong> öneriyor.
+                  </span>
+                  <span className="flex gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        updateBrand({ sub_sector_id: suggestedSubSector.id })
+                        setSuggestedSubSector(null)
+                      }}
+                    >
+                      Uygula
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSuggestedSubSector(null)}
+                    >
+                      Yoksay
+                    </Button>
+                  </span>
+                </div>
+              )}
+
+              <Select
+                value={brand.sub_sector_id ?? SUB_SECTOR_NONE}
+                onValueChange={(v) =>
+                  onSelect(v, (val) =>
+                    updateBrand({ sub_sector_id: val === SUB_SECTOR_NONE ? null : val })
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Alt sektör seç">
+                    {(value: string) =>
+                      subSectorCandidates.find((s) => s.id === value)?.display_name ??
+                      (value && value !== SUB_SECTOR_NONE
+                        ? 'Mevcut atama (paketi bakımda)'
+                        : 'Seçilmedi')
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SUB_SECTOR_NONE}>Seçilmedi</SelectItem>
+                  {/* Aday listesinde OLMAYAN mevcut atama da seçenek olarak
+                      durur; yoksa Select kendi değerini gösteremez ve
+                      kullanıcı onu değiştiremeden kaybederdi. */}
+                  {brand.sub_sector_id &&
+                    !subSectorCandidates.some((s) => s.id === brand.sub_sector_id) && (
+                      <SelectItem value={brand.sub_sector_id}>
+                        Mevcut atama (paketi bakımda)
+                      </SelectItem>
+                    )}
+                  {subSectorCandidates.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.display_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-gray-500">
-                Şu an sektörünüz için hazır bir alt sektör paketi yok. Hazır olduğunda
-                burada seçebileceksiniz.
+                {subSectorCandidates.length === 0
+                  ? 'Şu an seçilebilecek hazır alt sektör paketi yok. Mevcut atamanızı kaldırabilirsiniz.'
+                  : 'Alt sektör seçmek zorunlu değildir. Boş bırakırsanız gönderileriniz bugünkü genel modda üretilir.'}
               </p>
-            ) : (
-              <>
-                <Select
-                  value={brand.sub_sector_id ?? SUB_SECTOR_NONE}
-                  onValueChange={(v) =>
-                    onSelect(v, (val) =>
-                      updateBrand({ sub_sector_id: val === SUB_SECTOR_NONE ? null : val })
-                    )
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Alt sektör seç">
-                      {(value: string) =>
-                        subSectorCandidates.find((s) => s.id === value)?.display_name ??
-                        'Seçilmedi'
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SUB_SECTOR_NONE}>Seçilmedi</SelectItem>
-                    {subSectorCandidates.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.display_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500">
-                  Alt sektör seçmek zorunlu değildir. Boş bırakırsanız gönderileriniz
-                  bugünkü genel modda üretilir.
-                </p>
-              </>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Kanal envanteri — hangi kanallara sahipsiniz? İşaretlenmeyen kanalın
               çağrısı içeriklere KONULMAZ (spec §12.2 muhafazakâr davranış). */}

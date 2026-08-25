@@ -25,6 +25,40 @@ class AnalyzeWebsiteRequest(BaseModel):
     url: str
 
 
+class SuggestSubSectorRequest(BaseModel):
+    """Web sitesiz geri düşüşün girdisi (spec §7.1): ad + açıklama + kök sektör."""
+
+    name: str
+    description: str | None = None
+    sector: str | None = None
+
+
+def _candidate_prompt_block(candidates: list[dict]) -> str:
+    """Kapalı listenin prompt karşılığı — İKİ yol da bunu kullanır.
+
+    Aday yoksa BOŞ string döner ve çağıran alt sektörü hiç sormaz: boş listeden
+    seçim istemek modeli uydurmaya davet ederdi.
+    """
+    if not candidates:
+        return ""
+    lines = "\n".join(f"- {row['slug']}: {row['display_name']}" for row in candidates)
+    return (
+        "\n\nAlt sektör için YALNIZ şu listeden seç ve slug'ı AYNEN yaz:\n"
+        f"{lines}\n"
+        "Hiçbiri uymuyorsa `sub_sector` alanını boş string bırak. "
+        "Listede olmayan bir değer YAZMA."
+    )
+
+
+def _suggestion_fields(suggestion: dict | None) -> dict:
+    """Öneri alanlarının SABİT şekli — üç alan hep vardır, ya dolu ya `null`."""
+    return {
+        "sub_sector_id": suggestion["id"] if suggestion else None,
+        "sub_sector_slug": suggestion["slug"] if suggestion else None,
+        "sub_sector_display_name": suggestion["display_name"] if suggestion else None,
+    }
+
+
 def _resolve_sub_sector_suggestion(raw, candidates: list[dict]) -> dict | None:
     """Model önerisinin KAPALI doğrulaması (spec §7.1).
 
@@ -78,20 +112,12 @@ async def analyze_website(
     # (plan "bağladığı teknik kararlar" 7). Aday yoksa alt sektör hiç sorulmaz:
     # boş listeden seçim istemek modeli uydurmaya davet ederdi.
     candidates = await fetch_sub_sector_candidates(db)
-    if candidates:
-        candidate_lines = "\n".join(
-            f"- {row['slug']}: {row['display_name']}" for row in candidates
-        )
-        sub_sector_field = '"sub_sector": "aşağıdaki listeden TAM slug veya boş string"'
-        sub_sector_rule = (
-            "\n\nAlt sektör için YALNIZ şu listeden seç ve slug'ı AYNEN yaz:\n"
-            f"{candidate_lines}\n"
-            "Hiçbiri uymuyorsa `sub_sector` alanını boş string bırak. "
-            "Listede olmayan bir değer YAZMA."
-        )
-    else:
-        sub_sector_field = '"sub_sector": ""'
-        sub_sector_rule = ""
+    sub_sector_rule = _candidate_prompt_block(candidates)
+    sub_sector_field = (
+        '"sub_sector": "aşağıdaki listeden TAM slug veya boş string"'
+        if candidates
+        else '"sub_sector": ""'
+    )
 
     system_prompt = (
         "Sen bir marka analisti olarak web sitesi içeriğinden marka bilgilerini çıkarıyorsun. "
@@ -142,11 +168,77 @@ async def analyze_website(
     # aday-dışı öneri) ve yanıt şekli sabittir: üç alan hep vardır, ya doludur
     # ya `null`. Ham `sub_sector` değeri istemciye SIZMAZ.
     suggestion = _resolve_sub_sector_suggestion(data.pop("sub_sector", None), candidates)
-    data["sub_sector_id"] = suggestion["id"] if suggestion else None
-    data["sub_sector_slug"] = suggestion["slug"] if suggestion else None
-    data["sub_sector_display_name"] = suggestion["display_name"] if suggestion else None
+    data.update(_suggestion_fields(suggestion))
 
     return OkResponse(data=data)
+
+
+@router.post("/suggest-sub-sector", response_model=OkResponse)
+async def suggest_sub_sector(
+    payload: SuggestSubSectorRequest,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Web sitesiz geri düşüşün öneri ucu (spec §7.1).
+
+    Site analizi yapılamayan kullanıcı da modelden öneri alır; kısıt site
+    yolununkiyle AYNIdır — kapalı liste prompt'a gömülür ve dönüş aynı
+    doğrulayıcıdan geçer. Ayrı ve gevşek bir ikinci yol AÇILMAZ; bu yüzden
+    liste üretimi ve doğrulama iki uçta da tek kaynaktan gelir.
+
+    Aday kümesi boşsa model HİÇ çağrılmaz: sorulacak bir şey yoktur ve
+    boşuna bir model çağrısı ücret yakar.
+    """
+    candidates = await fetch_sub_sector_candidates(db)
+    if not candidates:
+        return OkResponse(data=_suggestion_fields(None))
+
+    system_prompt = (
+        "Sen bir marka analisti olarak marka bilgilerinden alt sektör seçiyorsun. "
+        "Yanıtını SADECE JSON olarak ver, başka hiçbir şey yazma."
+    )
+    user_prompt = (
+        "Bu marka bilgilerinden alt sektörü seç:\n"
+        f"Ad: {payload.name}\n"
+        f"Açıklama: {payload.description or '-'}\n"
+        f"Sektör: {payload.sector or '-'}\n\n"
+        'Şu JSON formatında döndür:\n{"sub_sector": "TAM slug veya boş string"}'
+        f"{_candidate_prompt_block(candidates)}"
+    )
+
+    raw_field = None
+    try:
+        import json
+
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model="claude-opus-4-7",
+            max_tokens=128,
+            cache_control={"type": "ephemeral"},
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        raw = message.content[0].text.strip()
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        parsed = json.loads(raw)
+        # Nesne olmayan gövde `raw_field`'ı None bırakır — doğrulayıcı onu
+        # zaten boşa düşürür, ayrı bir dal gerekmez.
+        if isinstance(parsed, dict):
+            raw_field = parsed.get("sub_sector")
+    except Exception:
+        # Model/ayrıştırma hatası öneriyi BOŞ bırakır. Öneri bir kolaylıktır;
+        # kullanıcı açılır listeden zaten seçebilir, o yüzden burada isteği
+        # düşürmek fayda değil sürtünme üretirdi.
+        raw_field = None
+
+    return OkResponse(
+        data=_suggestion_fields(_resolve_sub_sector_suggestion(raw_field, candidates))
+    )
 
 
 class IdeaRequest:

@@ -129,6 +129,7 @@ export default function OnboardingPage() {
   const [creating, setCreating] = useState(false)
   const [sectors, setSectors] = useState<Sector[]>([])
   const [subSectorCandidates, setSubSectorCandidates] = useState<SubSectorCandidate[]>([])
+  const [suggestingSubSector, setSuggestingSubSector] = useState(false)
 
   useEffect(() => { analytics.onboardingStarted() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -228,6 +229,40 @@ export default function OnboardingPage() {
       next()
     } finally {
       setAnalyzing(false)
+    }
+  }
+
+  // Web sitesiz geri düşüş (spec §7.1): site analizi yapılamayan kullanıcı da
+  // modelden öneri alır ve kısıt AYNIdır — sunucu aynı kapalı listeyi gömer,
+  // aynı doğrulayıcıdan geçirir.
+  //
+  // Çağrı OTOMATİK DEĞİL, açık düğmeyledir: adım açılır açılmaz çağırmak,
+  // markanın adı daha yazılmamışken bir model çağrısı yakardı.
+  async function suggestSubSector() {
+    if (!state.brand.name.trim()) {
+      toast.error('Önce marka adını gir')
+      return
+    }
+    setSuggestingSubSector(true)
+    try {
+      const res = await api.post<{
+        sub_sector_id: string | null
+        sub_sector_display_name: string | null
+      }>('/ai/suggest-sub-sector', {
+        name: state.brand.name,
+        description: state.brand.description || null,
+        sector: state.brand.sector || null,
+      })
+      if (res.success && res.data?.sub_sector_id) {
+        updateBrand({ subSectorId: res.data.sub_sector_id })
+        toast.success(`Öneri: ${res.data.sub_sector_display_name ?? 'alt sektör seçildi'} — değiştirebilirsin`)
+      } else {
+        toast.error('Uygun bir alt sektör önerisi çıkmadı, listeden seçebilirsin')
+      }
+    } catch {
+      toast.error('Öneri alınamadı, listeden seçebilirsin')
+    } finally {
+      setSuggestingSubSector(false)
     }
   }
 
@@ -434,9 +469,18 @@ export default function OnboardingPage() {
               yapamayacağı bir seçim sunardı. */}
           {subSectorCandidates.length > 0 && (
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-1.5">
-                Alt Sektör <span className="text-slate-500">(isteğe bağlı)</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-slate-300 text-sm font-medium">
+                  Alt Sektör <span className="text-slate-500">(isteğe bağlı)</span>
+                </label>
+                <button
+                  onClick={suggestSubSector}
+                  disabled={suggestingSubSector}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                >
+                  {suggestingSubSector ? 'Öneri alınıyor...' : 'Bana öner'}
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => updateBrand({ subSectorId: null })}

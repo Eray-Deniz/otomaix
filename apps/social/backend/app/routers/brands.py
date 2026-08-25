@@ -22,10 +22,32 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
 
 
-# K-08b tetikleyicisinin ve `sub_sector_id` yabancı anahtarının SQLSTATE'leri.
-# Tetikleyici `integrity_constraint_violation` (23000) ile RAISE eder; var
-# olmayan kimlik FK ihlaline (23503) düşer.
-_SUB_SECTOR_WRITE_SQLSTATES = frozenset({"23000", "23503"})
+# `brands.sub_sector_id`'nin yabancı anahtarı — ADIYLA tanınır.
+_SUB_SECTOR_FK_CONSTRAINT = "brands_sub_sector_id_fkey"
+
+# K-08b tetikleyicisinin SQLSTATE'i. Tetikleyici bir KISIT değildir, o yüzden
+# `constraint_name` taşımaz; `social.brands` üstünde bu kodu üreten başka bir
+# kaynak YOKTUR (tek 23000 kaynağı `require_sub_sector_reference`).
+_SUB_SECTOR_TRIGGER_SQLSTATE = "23000"
+
+
+def _is_sub_sector_write_error(exc: asyncpg.PostgresError) -> bool:
+    """Hata BİZİM kapılarımızdan mı geldi?
+
+    Kapı SQLSTATE sınıfına DEĞİL, kısıtın kendisine bakar. Ölçüldü (2026-08-25):
+    `brands` üstünde `workspace_id` ve `sector_id` yabancı anahtarları da 23503
+    üretir — yani "23503 + istek alt sektör yazıyordu" kuralı, eşzamanlı bir
+    çalışma alanı ya da kök sektör silinmesini "geçersiz alt sektör 400" diye
+    etiketlerdi. Gerçek bir tutarlılık arızası istemci girdisi hatası gibi
+    görünür, gözlemlenebilirlikten düşerdi.
+
+    Ayrıca ölçüldü: eksik `sub_sector_id` yabancı anahtara HİÇ ulaşmaz —
+    BEFORE tetikleyicisi önce patlar. FK dalı yine de tanınır, çünkü tetikleyici
+    düşerse tek kalan savunma odur.
+    """
+    if exc.sqlstate == _SUB_SECTOR_TRIGGER_SQLSTATE:
+        return getattr(exc, "constraint_name", None) is None
+    return getattr(exc, "constraint_name", None) == _SUB_SECTOR_FK_CONSTRAINT
 
 _SUB_SECTOR_WRITE_DETAIL = (
     "Geçersiz alt sektör: yalnız bir alt sektör satırı atanabilir "
@@ -117,12 +139,11 @@ async def create_brand(
         )
     except asyncpg.exceptions.IntegrityConstraintViolationError as exc:
         # Ön kontrol ile yazım arasında satır silinebilir (yarış). Backstop DAR:
-        # yalnız bu istek FİİLEN bir alt sektör yazdıysa ve hata o kapıların
-        # SQLSTATE'iyse çevrilir — başka bir bütünlük ihlali (benzersizlik,
-        # NOT NULL, başka FK) olduğu gibi yükselir, yoksa gerçek arıza 400 diye
-        # maskelenirdi. (`get_db` transaction AÇMAZ — ifadeler autocommit'tir,
-        # yani düşen tek ifade bağlantıyı zehirlemez; ölçüldü.)
-        if payload.sub_sector_id is None or exc.sqlstate not in _SUB_SECTOR_WRITE_SQLSTATES:
+        # yalnız bu istek FİİLEN bir alt sektör yazdıysa VE hata bizim kısıtımız
+        # ise çevrilir; başka her bütünlük ihlali olduğu gibi yükselir.
+        # (`get_db` transaction AÇMAZ — ifadeler autocommit'tir, yani düşen tek
+        # ifade bağlantıyı zehirlemez; ölçüldü.)
+        if payload.sub_sector_id is None or not _is_sub_sector_write_error(exc):
             raise
         raise _sub_sector_write_error() from exc
     await invalidate_pattern(f"otomaix:social:brands:{payload.workspace_id}")
@@ -279,7 +300,7 @@ async def update_brand(
         )
     except asyncpg.exceptions.IntegrityConstraintViolationError as exc:
         # create_brand ile aynı dar backstop (yarış penceresi).
-        if payload.sub_sector_id is None or exc.sqlstate not in _SUB_SECTOR_WRITE_SQLSTATES:
+        if payload.sub_sector_id is None or not _is_sub_sector_write_error(exc):
             raise
         raise _sub_sector_write_error() from exc
     if not row:
