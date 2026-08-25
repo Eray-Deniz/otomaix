@@ -1,0 +1,247 @@
+# Plan 1 Kapanış — Kabul Eşlemesi + Plan 2 Arayüz Teslimi
+
+> **Ne olduğu:** Plan 1'in (`docs/plans/2026-08-23-sektor-bilgi-paketi.md`) kapanış
+> raporu. Spec'in kabul kriterlerini onları KANITLAYAN test adlarına eşler, kapsam
+> dışında kalanları adlandırır, kabul edilen riskleri açıkça yazar.
+>
+> **Ne olmadığı:** "sistem doğrulandı" beyanı DEĞİLDİR. Aşağıdaki her satır bir
+> otomatik testin kapsadığı kadarını iddia eder. Arayüz yüzeyleri ve canlı ortam
+> adımları bu kapanışta DOĞRULANMAMIŞTIR — nedeni ve evi "Ertelenen doğrulamalar"
+> bölümündedir.
+
+- **Plan:** `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
+- **Spec:** `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
+- **Dal:** `feat/sektor-bilgi-paketi`
+- **Tarih:** 2026-08-25
+
+---
+
+## 0. Ölçüm — bu raporun dayandığı taze koşumlar
+
+| İddia | Komut | Çıktı |
+|---|---|---|
+| Tüm arka uç testleri geçiyor | `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` | `548 passed` |
+| Katman-1 byte-exact kapısı yeşil | `.venv/bin/python -m pytest tests/prompt_regression/ -q` | `121 passed` |
+| Marka → kök sektör sweep'i temiz | `scripts/sector_sweep.py --database-url <canlı> --dry-run` | `brands_total: 2 · brands_root_anchored: 2 · differences: 0` (rc=0) |
+
+Sweep CANLI veritabanına karşı koşuldu (salt-okunur transaction). Test koşumları
+`otomaix_test` üstünde.
+
+---
+
+## 1. Spec §14.1 — deterministik çekirdek (dört uçtan uca kriter + ekler)
+
+| # | Kriter | Kanıtlayan test |
+|---|---|---|
+| 1 | Ham artefakt `UPDATE`/`DELETE` → istisna | `test_artifacts_append_only_update_raises` · `test_artifacts_append_only_delete_raises` |
+| 2 | `INSERT` başarılı, `run_id` altında sorgulanabilir | `test_artifacts_insert_and_query_by_run_id` |
+| 3 | İkinci `active` → indeks hatası | `test_packages_single_active_partial_index` · `test_migration_raises_when_single_active_index_is_not_unique` · `test_migration_raises_when_single_active_index_is_invalid` |
+| 4 | Yazım-öncesi şema + boyut doğrulaması | `test_validator_accepts_reference_content` · `test_validator_rejects_unknown_field` · `test_validator_rejects_missing_field` · `test_validator_size_warning_not_rejection` (boyut UYARI'dır, kapı değil — İlke 9) · `test_insert_draft_requires_valid_content` |
+| E1 | `(sector_id, version)` ihlali hata verir | `test_packages_version_unique` · `test_migration_raises_when_sector_version_unique_is_missing` |
+| E2 | `sub_sector_id` NULL kalabilir; kök REDDEDİLİR | `test_sub_sector_id_accepts_child_and_null` · `test_sub_sector_id_rejects_root_sector` · `test_package_sector_id_rejects_root` |
+| E3 | Geri doldurma yok (mevcut satırlar dokunulmaz) | `test_sectors_list_unchanged_after_sub_sector_insert` · `test_brand_sector_mappings_full_sweep_unchanged` |
+| E4 | Migration geri alınabilir; sıra doğru | `test_rollback_clean_path_full_teardown` · `test_rollback_refuses_when_package_data_exists` · `test_rollback_refuses_data_committed_while_it_waits` · `test_runner_glob_covers_canonical_dir_in_order` · `test_runner_stops_on_sql_error` |
+| E5 | Marka kök-sektör TAM sweep'i (spot yetmez) | `test_sector_sweep_readonly_and_deterministic` · `test_sweep_baseline_detects_root_to_root_remap` · `test_sweep_rejects_baseline_from_another_target` · `test_sweep_target_distinguishes_physical_clone` (+ yukarıdaki canlı koşum) |
+
+**Kapsam notu (E4):** geri alma script'i YALNIZ 032 için var. 033 ve 034'ün geri alma
+script'i YOKTUR — plan istemedi, uydurulmadı. Bkz. "Kabul edilen riskler".
+
+---
+
+## 2. Spec §14.2 — test katmanları (Plan 1 kapsamındakiler)
+
+### Katman-1 (byte-exact prompt kapısı)
+
+| Sözleşme | Kanıtlayan test |
+|---|---|
+| Yüzey kümesi ölçümle kapalı; tek bayt = RED | `test_caption_single_no_special_day_matches_fixture` · `test_caption_single_special_day_matches_fixture` · `test_caption_carousel_matches_fixture` · `test_ideas_surface_matches_fixture` · `test_script_request_matches_fixture` · `test_still_prompt_*_matches_fixture` (4 mod) · `test_legacy_short_video_*` · `test_motion_pool_bytes_pinned` |
+| Re-runnable (dondurma kazara yeşil üretemez) | `test_update_flag_must_be_unset_for_verification` |
+| Yakalama sözleşmesi (blok biçimi kapalı küme) | `tests/prompt_regression/test_capture_contract.py` (9 test) |
+| Paketsiz marka bayt-değişmez kalır | `test_unpackaged_fixtures_still_byte_exact` · `test_unpackaged_still_untouched_in_every_branch` · `test_unpackaged_path_returns_no_package_motion` |
+
+### Veri/API regresyonu (spec §5.3 üçlüsü)
+
+`test_sectors_list_unchanged_after_sub_sector_insert` · `test_brand_sector_mappings_full_sweep_unchanged` ·
+`test_package_stamp_pair_is_never_half_written` · `tests/test_taxonomy_guards.py` (5 test: çözümleyici alt
+sektör satırlarını görmez, uç noktası alt sektörleri listelemez, trend taraması kök-only).
+
+### İş kuralı senaryoları
+
+| Senaryo | Kanıtlayan test |
+|---|---|
+| Yerine-geçme (paket kök rehberin YERİNE geçer) | `test_packaged_caption_replaces_sector_guidance` · `test_packaged_idea_prompt_replaces_guidance` |
+| Yan-yana yasağı | yukarıdaki ikisi + `test_usage_instruction_prefixes_package_block` |
+| Draft paket → mevcut yol sınırı (yalnız `active` okunur) | `test_resolver_none_for_non_active_with_stale_log` · `test_candidates_live_query_reflects_deactivation` |
+| Özel gün eşleşme / eşleşmezlik + log | `test_special_day_match_injects_period_block` · `test_special_day_mismatch_silent_fallthrough_with_log` · `test_special_day_mismatch_records_the_event` · `test_malformed_special_day_falls_through_silently` |
+| `anma` kısıtı (K-119: yasak kullanıcı isteğini de ezer) | `test_anma_sales_ban_overrides_user_request` |
+| Aday liste kapalılığı (boş liste → boş dönüş) | `test_empty_candidate_set_returns_empty_list` · `test_analyze_website_suggestion_empty_when_no_candidates` · `test_website_less_suggestion_empty_when_no_candidates` |
+| Öneri kapalı listeden çıkar | `test_analyze_website_suggestion_must_be_in_candidates` · `test_analyze_website_prompt_embeds_closed_candidate_list` · `test_website_less_suggestion_uses_same_closed_list` |
+| Sürtünmesizlik (üretim yolu aday sorgusu YAPMAZ) | `test_generation_path_never_queries_candidates` |
+| K-04 talimat varlığı | `test_usage_instruction_prefixes_package_block` |
+| K-05 etiket korunumu + kanal filtresi (§12.2) | `test_packaged_caption_cta_respects_channel_filter` · `test_special_day_cta_respects_channel_filter` · `test_non_ascii_bracket_tag_is_filtered_but_not_stripped` · `tests/test_channel_inventory.py` (43 test) |
+| Sürüm ilişkisi var/yok (K-07 damgası) | `test_persist_writes_recorded_stamp_verbatim` · `test_unpackaged_post_stamp_null` · `test_stamp_half_null_rejected` · `test_stamp_mismatched_version_rejected` |
+| Tek-aktif | `test_packages_single_active_partial_index` · `test_concurrent_activation_of_same_draft_single_winner` · `test_concurrent_activation_of_different_drafts_is_serializable` |
+
+### Yaşam döngüsü + kapı kanıtı (Task 13)
+
+`test_activate_rejects_unsatisfied_gate` (K-71 açık-soru sayısı + K-28'in Plan-1 ayağı; kanıt
+alanlarının her biri ayrı ayrı parametrelenir) · `test_raw_transition_not_publicly_exported` ·
+`test_rollback_rejects_activation_evidence` · `test_activate_rejects_lookalike_evidence` ·
+`test_rollback_rejects_lookalike_evidence` · `test_activation_rejects_sector_reassignment_under_lock` ·
+`test_deactivation_rejects_sector_reassignment_under_lock` · `test_event_insert_failure_rolls_back_transition`.
+
+> **Eşleme sapması (dürüst kayıt):** plan Task 16 Step 3, K-71 mekanik red kapısı için
+> `test_activate_rejects_open_questions` adını veriyor. Depoda BU ADLA bir test YOKTUR;
+> kapıyı kanıtlayan test `test_activate_rejects_unsatisfied_gate`'tir ve açık-soru sayısını
+> parametre olarak kapsar (docstring K-71'i adıyla anar). Ad sapmasıdır, kapsam boşluğu
+> değil — ama plan metni bu haliyle bayattır.
+
+### Bildirim (Task 14 — K-56 olay-bazlı + K-45 devre-dışı ayağı)
+
+`test_admin_event_committed_with_business_transaction` · `test_admin_event_every_occurrence_no_threshold`
+(eşik YOK — her olay tek başına uyarı) · `test_duplicate_dispatch_deduped_by_idempotency_key` ·
+`test_send_fails_closed_without_webhook_secret` · `test_workflow_webhook_requires_authentication` ·
+`test_concurrent_dispatchers_single_delivery` · `test_package_status_maintenance_message_exact`.
+
+---
+
+## 3. Plan 2'ye teslim edilen arayüzler — madde madde doğrulama
+
+Planın "Plan 2'ye teslim edilen arayüzler" bölümü KANONİK listedir. Her maddesi
+`apps/social/backend/tests/test_plan2_interface_contract.py` içinde belgelenen argümanlarla
+import edilip ÇAĞRILIR (10 test, hepsi PASS).
+
+| # | Teslim maddesi | Sözleşme testi |
+|---|---|---|
+| 1 | Migration 032 şeması (iki tablo + kolonlar + garantiler) | `test_migration_032_tables_and_columns_delivered` |
+| 1b | K-135: Plan 2 yalnız `draft` yazar, yalnız `insert_draft` üzerinden | `test_plan2_write_surface_produces_draft_only` |
+| 2 | `normalize_special_day_key(name) -> str` | `test_normalize_special_day_key_documented_signature` |
+| 3 | `validate_package_content(content, *, banned_brand_names, holiday_keys)` | `test_validate_package_content_documented_signature` |
+| 4 | `insert_draft(db, *, sector_id, content, schema_version, run_id=None, actor)` | `test_insert_draft_and_activate_chain_end_to_end` |
+| 5a | `activate_package(db, *, package_id, evidence, actor)` | `test_insert_draft_and_activate_chain_end_to_end` |
+| 5b | `rollback_package(db, *, sector_id, to_version, evidence, actor)` — AYRI kanıt | `test_rollback_package_takes_its_own_evidence` |
+| 5c | `deactivate_package(db, *, package_id, actor)` — kanıt istemez | `test_deactivate_package_documented_signature` |
+| 6 | `record_admin_event(db, *, kind, payload, idempotency_key) -> uuid` | `test_record_admin_event_documented_signature` |
+| 7 | Katman-1 harness (`tests/prompt_regression/`) | `test_katman1_harness_is_delivered_and_live` |
+| 8 | `video_kodlar` İKİ HAVUZ (`hareket` + `sahne`, ikisi de liste) | `test_video_kodlar_delivers_two_pools` |
+
+**Pozitif kontrol (sözleşme testinin gerçekten ölçtüğünün kanıtı).** Dört mutasyon
+uygulandı, dördü de ilgili testi DÜŞÜRDÜ ve sonra geri alındı:
+
+| Mutasyon | Sonuç |
+|---|---|
+| `VIDEO_POOL_KEYS` tek havuza indirildi | 6 failed (madde 8 dahil) |
+| Takvim anahtarı denetimi devre dışı | 1 failed (madde 3) |
+| Byte-exact kapısı no-op yapıldı | 1 failed (madde 7) |
+| `insert_draft` `draft` yerine `active` yazdı | 4 failed (madde 1b dahil) |
+
+**Kapsam sınırı (dürüst etiket):** bu testler arayüzlerin VAR ve ÇAĞRILABİLİR olduğunu
+kanıtlar; Plan 2'nin onları doğru KULLANACAĞINI kanıtlamaz.
+
+---
+
+## 4. Kapsam DIŞI — "Plan 2 / pilot" etiketiyle
+
+Bunlar eksik değil, **bilinçli olarak bu planın dışında**:
+
+- **Motor testleri (Faz 1)** — snapshot §13.2(b) maddeleri. Paketi ÜRETEN hat
+  (araştırma → hakemlik → sentez → motor → komut ailesi) Plan 2'nin kapsamı.
+- **Katman-2 (kör değerlendirme)** — örneklem, rubrik, çapraz sektör testi. Geçme eşiği
+  YOK (K-11 (b) açık). Pilot işi.
+- **K-71 açık-soru DURUMUNUN üretimi** — durumu üreten hat Plan 2'de. Mekanik RED kapısının
+  kendisi Plan 1'de kanıtlandı (yukarıda, §2 yaşam döngüsü).
+- **Kişisel-veri doğrulaması (spec §3.7)** — gerçek veri yazımı + ilk aktivasyondan ÖNCE
+  koşulur; bu planda gerçek paket yazılmadı.
+- **K-45 geri-dönüş bildirimi** — `recovered` bandı + atama-geçmişi kanıtı (F23 devri).
+  Devre-dışı ayağı ve olay altyapısı Plan 1'de kuruldu; geri-dönüş mesajı Plan 2'de.
+- **Brief/sentez hattının İKİ HAVUZ üretmesi** — sözleşme (şekil) Plan 1'de pinlendi;
+  havuzları gerçekten DOLDURAN hat Plan 2'de. Asgari eleman sayısı brief biçim
+  sözleşmesinin işidir ve ölçülmemiş bir sayı kapı yapılmaz (İlke 9).
+- **Alt sektör satırlarının AÇILMASI** — korumalar ve sweep mekanizması hazır; satır açma
+  pilot/Plan 2 adımı (spec §13.2 adım 4).
+
+---
+
+## 5. Ertelenen doğrulamalar — evi belli, "yapıldı" DEĞİL
+
+**Eray kararı (2026-08-25):** Plan 1'in tüm manuel doğrulamaları TEK bir turda, **Plan 2
+bittikten sonra** koşulacak. Bu kapanış raporu bu yüzden arayüz yüzeyleri için
+"doğrulandı" İDDİA ETMEZ.
+
+| Ertelenen | Ev / tetik |
+|---|---|
+| Task 15 arayüz doğrulaması (onayla/değiştir/boşalt · boş-aday hâli · kanal doldurma · sitesiz öneri düğmesi) | Plan 2 sonrası tek doğrulama turu |
+| Canlı n8n workflow importu + aktivasyon + TEK Telegram teslimi smoke'u | aynı tur |
+| Gerçek arayüzde uçtan uca üretim (gerçek sektör paketiyle) | aynı tur |
+| Öneri uçlarının GERÇEK model çağrısıyla koşulması (bugün hepsi sahte istemciyle) | aynı tur |
+
+---
+
+## 6. MANUEL ADIMLAR (koşulmadı — Plan 2 sonrası tura devredildi)
+
+Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin kendisidir.
+
+1. **Migration'ları canlıya uygula:** 032 · 033 · 034, psql ile ve
+   `-v ON_ERROR_STOP=1` bayrağıyla, numara sırasıyla.
+2. **`N8N_ADMIN_EVENT_SECRET` canlıya kurulmalı.** Ayrıca
+   `apps/social/backend/.env.example` dosyasına bu satır **ELLE** eklenmeli — sır-dosyası
+   yazma kapısı agent'ı engelliyor, bu yüzden depoda örnek satır YOK.
+3. **`OTOMAIX_ADMIN_TELEGRAM_BOT_TOKEN` + `OTOMAIX_ADMIN_TELEGRAM_CHAT_ID`** env'leri kurulmalı.
+4. **n8n workflow:** `shared/n8n-workflows/sector-package-admin-events.json` import edilir,
+   header-auth kimlik bilgisi yaratılır, workflow'daki yer tutucu gerçek kimlikle değiştirilir,
+   workflow aktive edilir, sentetik bir olayla TEK Telegram teslimi smoke'u koşulur.
+5. **Task 15 arayüz doğrulaması** (§5 tablosu).
+6. **Alt sektör satırı AÇILMAZ** — korumalar hazır, açma adımı pilot/Plan 2'ye ait.
+
+---
+
+## 7. Kabul edilen riskler (açıkça — İlke 3, mutlaklık iddiası YOK)
+
+- **F17 (Eray, 2026-08-23):** K-07 damgası **edited-lineage atfıdır** — düzenlenmiş bir
+  üretimin hangi paket sürümünden türediğini söyler, düzenlenmemiş olduğunu söylemez.
+  Yeniden açtırma kararı Eray'a aittir.
+- **On-prem PG16 ↔ 032'nin PG18 kolonu (Eray risk kabulü):** çözülmedi + park edildi.
+  `IS JSON OBJECT` ve `conenforced` yalnız PostgreSQL 18.3'te ÖLÇÜLDÜ; PG16'daki varlıkları
+  BELGEYE dayanıyor, ölçüme değil.
+- **033 ve 034 için geri alma script'i YOK** — plan istemedi, uydurulmadı.
+- **Migration 032/033'ün garanti blokları** kolon/tablo imzasını denetlemiyor (yalnız kısıt
+  ve indeks). 034'te kapatıldı; 032/033 önceden var olan borçtur. Ev: `CURRENT.md` →
+  `migration-guarantee-block-signature-gap`. Tetik: canlıya elle şema müdahalesi veya bu
+  tablolarda şema değişikliği.
+- **`sector_packages.sector_id` değişmez değil** — yaşam döngüsü geçişleri uyuşmazlıkta
+  fail-closed durur, ama kolonu değişmez kılan migration yazılmadı. Ölçüldü: depoda bu
+  kolonu güncelleyen üretim yolu YOK. Ev: `CURRENT.md` →
+  `sector-package-sector-id-immutability`.
+- **Öneri ucunun kota kapısı Redis yokken fail-open'dır** — ev kuralının belgeli kararı;
+  tek uç için ayrı politika uydurulmadı.
+- **Alt sektör YAZIM kapısı aktif paket ŞARTI ARAMAZ** — yalnız "alt sektör satırı mı" diye
+  sorar. K-43 gereği paketi arşivlenen markanın ataması korunur; paketsiz alt sektör meşru
+  bir kayıtlı değerdir. Bilinçli tasarım kararı, bulgu değil.
+- **Site analizi ucunun "model hatası → boş şablonla HTTP başarı" davranışı** bu partiden
+  ÖNCE de vardı ve değiştirilmedi. YENİ öneri ucunda aynı sınıf kapatıldı (arıza → 503).
+- **Senkron sağlayıcı çağrısı gerçekten kesilemiyor** — süre sınırı yalnız beklemeyi keser,
+  çalışan çağrı iş parçacığını tutmaya devam eder. Kod tabanı GENELİ bir desen, bu partinin
+  kusuru değil. Ev: `CURRENT.md` → `sync-provider-calls-not-cancellable`.
+- **Marka ayarları otomatik kaydetmesinin dört kayıp yolu açık** — MÜŞTERİ yüzeyi.
+  Ev: `CURRENT.md` → `brand-settings-save-integrity`. Tetik: bu kapanıştan sonra, canlıya
+  müşteri alınmadan ÖNCE. Önyüz test altyapısı bu işin ÖN KOŞULU.
+- **Sunucudaki koşullu yazım kapısı ve 5 testi depoda UYKUDA** — hiçbir çağıran sürüm
+  göndermiyor, davranış Task 15 sonrasıyla aynı. Uyanmadan tek başına bir şey garanti ETMEZ.
+- **Kütüphane yoklaması terminal başarısız satırları sınırsız yokluyor** (checkpoint 12).
+- **Test altyapısı:** eşzamanlı iki pytest oturumu `otomaix_test`'i düşürür · migration
+  keşfi tekrarlı numarayı reddetmiyor · `db` fixture geri sarma testi yok ·
+  `sector_research_artifacts` TRUNCATE regresyonu yok.
+- **Belgeli sınırlar (testle pinli, borç DEĞİL):** ayraçsız kanal işareti yakalanmaz ·
+  tam genişlikli ayraçlı etiket tanınır ama basımdan çıkarılamaz · CTA içinde serbest
+  köşeli ayraç yok · `brand_kit` anahtarı silinemez.
+- **Prompt enjeksiyonu savunması (K-10, Eray 2026-08-23):** Faz 1'de KURULMAZ — bilinçli
+  risk kabulü. Yeniden açılma tetiği: paket sayısı / kaynak çeşitliliği artışı.
+
+---
+
+## 8. Kapanış cümlesi
+
+Plan 1'in 16 görevinin 16'sı yazıldı. Otomatik kapılar yeşil (548 arka uç testi · 121
+byte-exact fixture · canlı sweep farkı 0). **Arayüz yüzeyleri ve canlı ortam adımları
+DOĞRULANMADI** — ertelendi, evi ve tetiği §5-6'da yazılı. Bu rapor "sistem çalışıyor"
+demez; "şu kapılar şu komutlarla ölçüldü ve şunlar ölçülmedi" der.
