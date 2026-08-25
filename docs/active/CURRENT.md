@@ -33,6 +33,21 @@
   bir yazıcı eklerse — o durumda migration ZORUNLU olur.
   Gövde: `docs/active/sektor-bilgi-paketi/HANDOFF.md` Risks + `_require_same_sector` docstring'i.
 
+- **migration-guarantee-block-signature-gap** (proposed, veri bütünlüğü; TETİKLİ — bugün aktif
+  borç DEĞİL) — Migration **032 ve 033**'ün garanti doğrulama blokları yalnız KISITLARI ve
+  İNDEKSLERİ denetliyor; kolon imzasını (tip · null'lanabilirlik · varsayılan), birincil anahtarı
+  ve tablonun kendi katalog özelliklerini (kalıcılık · satır güvenliği) denetleMİYOR.
+  **Ölçüldü (2026-08-25, checkpoint 14):** 034'ün ilk hâlinde aynı eksik vardı ve `payload`'ı
+  TEXT olan sahte bir tablo ile `UNLOGGED` bir tablo migration'dan **rc=0 ile geçti**. 034'te
+  kapatıldı (`tests/test_migration_034.py` 13 vaka); 032/033 kapatılMADI çünkü checkpoint 14
+  partisinin ürünü değiller — **önceden var olan borç**, ve sessiz geniş düzeltme İlke 6'ya
+  aykırı olurdu.
+  **Neden bugün acil değil:** her iki tablo da bu depoda migration'la yaratılıyor, aynı adda
+  yanlış tanımlı bir nesnenin önceden var olması yalnız ELLE müdahale sonrası mümkün.
+  **Yeniden açılma koşulu:** canlıya elle şema müdahalesi yapılırsa VEYA 032/033 tablolarında
+  şema değişikliği gerekirse — o durumda blokları 034 deseniyle hizalamak ZORUNLU olur.
+  Desen: `034_admin_events.sql` `DO $verify034$` bloğu (tablo imzası + kolon imzası + PK).
+
 - **codex-scan-substrate-preflight-guard** (proposed, araç güvenilirliği; global `~/.claude` işi) —
   `run_codex_scan` (`~/.claude/commands/blocks/codex-scan-substrate.sh`) `$COMPANION` ve
   `$PROMPT` değişkenlerini KULLANIR ama TANIMLAMAZ; ikisini de çağıran kurar. Kurulmazsa
