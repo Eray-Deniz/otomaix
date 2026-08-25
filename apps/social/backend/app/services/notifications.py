@@ -66,6 +66,10 @@ ADMIN_EVENT_CONTRACT_VERSION = 1
 # sector-package-admin-events.json
 ADMIN_EVENT_WEBHOOK_PATH = "sector-package-admin-events"
 
+# Kabul kontrolü başlığı. n8n tarafındaki `httpHeaderAuth` kimlik bilgisiyle
+# BİREBİR aynı olmalıdır — workflow artefaktı ve bu sabit birlikte versiyonlanır.
+ADMIN_EVENT_AUTH_HEADER = "X-Admin-Event-Key"
+
 # K-45 SABİT devre-dışı metni. Marka sahibine gösterilen bant bu tek kaynaktan
 # okunur; önyüz metni KOPYALAMAZ (kopya, iki yerde ıraksayan bir vaat üretir).
 MAINTENANCE_BANNER_MESSAGE = (
@@ -272,33 +276,38 @@ async def _send_to_n8n(envelope: dict) -> None:
 
     HTTP 4xx/5xx da başarısızlıktır: `raise_for_status` olmadan n8n'in
     reddettiği bir çağrı `sent` diye kayda geçerdi.
+
+    **Kabul kontrolü fail-closed'dır (checkpoint 14, F1):** sır yapılandırılmamışsa
+    çağrı HİÇ yapılmaz. Sırsız göndermek, kimlik doğrulamasız bir webhook'a
+    erişebilen herkesin sahte yönetici uyarısı üretebilmesi demekti; sessizce
+    kimliksiz göndermek de kapıyı boşa çıkarırdı. İstisna yolu satırı `pending`e
+    döndürür — bildirim kaybolmaz, yapılandırma düzelince gider.
     """
+    secret = settings.N8N_ADMIN_EVENT_SECRET
+    if not secret:
+        raise AdminEventContractError(
+            "N8N_ADMIN_EVENT_SECRET boş — kimliksiz webhook çağrısı YAPILMAZ "
+            "(fail-closed); sırrı yapılandırın, satır yeniden denenecek"
+        )
+
     url = f"{settings.N8N_BASE_URL}/webhook/{ADMIN_EVENT_WEBHOOK_PATH}"
     async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.post(url, json=envelope)
+        response = await client.post(
+            url, json=envelope, headers={ADMIN_EVENT_AUTH_HEADER: secret}
+        )
         response.raise_for_status()
 
 
-async def dispatch_pending_admin_events(
-    db,
-    *,
-    limit: int = DEFAULT_CLAIM_LIMIT,
-    lease_seconds: int = DEFAULT_LEASE_SECONDS,
-    send: Sender | None = None,
-) -> DispatchReport:
-    """Tek dispatch turu: süpür → kirala → (transaction DIŞINDA) gönder → kapat.
+async def _deliver_claimed(rows: list[dict], send: Sender, finalize) -> tuple[int, int, int]:
+    """Kiralanmış satırları gönderir ve kapatır; (sent, deferred, lost) döner.
 
-    Süpürme ÖNCE koşar: bütçesi bitmiş satır bu turda kiralanmaya çalışılmasın,
-    doğrudan terminal duruma gitsin diye.
+    `finalize` bir geri-çağrıdır (`async (row, success) -> bool`) çünkü tek
+    bağlantılı ve havuzlu iki dispatch biçiminin TEK farkı, kapatmanın hangi
+    bağlantıda koştuğudur. Döngüyü iki kez yazmak, gelecekteki bir düzeltmenin
+    yalnız bir kopyaya uygulanmasına davetiye olurdu.
     """
-    if send is None:
-        send = _send_to_n8n
-
-    failed = await sweep_exhausted_admin_events(db)
-    claimed = await claim_admin_events(db, limit=limit, lease_seconds=lease_seconds)
-
     sent = deferred = lost = 0
-    for row in claimed:
+    for row in rows:
         try:
             await send(build_envelope(row))
         except Exception as exc:  # noqa: BLE001 — kanal hatası tur'u bitirmez
@@ -308,24 +317,11 @@ async def dispatch_pending_admin_events(
                 row["attempt_count"],
                 exc,
             )
-            await finalize_admin_event(
-                db,
-                event_id=row["id"],
-                attempt_count=row["attempt_count"],
-                lease_expires_at=row["lease_expires_at"],
-                success=False,
-            )
+            await finalize(row, False)
             deferred += 1
             continue
 
-        accepted = await finalize_admin_event(
-            db,
-            event_id=row["id"],
-            attempt_count=row["attempt_count"],
-            lease_expires_at=row["lease_expires_at"],
-            success=True,
-        )
-        if accepted:
+        if await finalize(row, True):
             sent += 1
         else:
             # Kira kaybedildi (satır bu arada yeniden kiralanmış). Gönderim
@@ -338,7 +334,81 @@ async def dispatch_pending_admin_events(
                 row["id"],
                 row["attempt_count"],
             )
+    return sent, deferred, lost
 
+
+async def dispatch_pending_admin_events(
+    db,
+    *,
+    limit: int = DEFAULT_CLAIM_LIMIT,
+    lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    send: Sender | None = None,
+) -> DispatchReport:
+    """Tek dispatch turu TEK bağlantı üstünde: süpür → kirala → gönder → kapat.
+
+    Süpürme ÖNCE koşar: bütçesi bitmiş satır bu turda kiralanmaya çalışılmasın,
+    doğrudan terminal duruma gitsin diye.
+
+    **Bu biçim bağlantıyı gönderim boyunca ELİNDE TUTAR.** Çağıranın zaten bir
+    bağlantısı olduğu ve onu bırakamayacağı durumlar (testler, tek seferlik
+    script'ler) içindir. Uygulama yollarında `..._via_pool` kullanılır — orada
+    ağ süresi boyunca havuzdan bağlantı işgal edilmez.
+    """
+    if send is None:
+        send = _send_to_n8n
+
+    failed = await sweep_exhausted_admin_events(db)
+    claimed = await claim_admin_events(db, limit=limit, lease_seconds=lease_seconds)
+
+    async def _finalize(row: dict, success: bool) -> bool:
+        return await finalize_admin_event(
+            db,
+            event_id=row["id"],
+            attempt_count=row["attempt_count"],
+            lease_expires_at=row["lease_expires_at"],
+            success=success,
+        )
+
+    sent, deferred, lost = await _deliver_claimed(claimed, send, _finalize)
+    return DispatchReport(
+        claimed=len(claimed), sent=sent, deferred=deferred, failed=failed, lost=lost
+    )
+
+
+async def dispatch_pending_admin_events_via_pool(
+    pool,
+    *,
+    limit: int = DEFAULT_CLAIM_LIMIT,
+    lease_seconds: int = DEFAULT_LEASE_SECONDS,
+    send: Sender | None = None,
+) -> DispatchReport:
+    """Uygulama biçimi: DB bağlantısı ağ çağrısı boyunca TUTULMAZ.
+
+    Bağlantı yalnız iki KISA pencerede alınır — (süpür + kirala) ve her satırın
+    kapatılması. Aradaki gönderim havuzun dışındadır.
+
+    Neden önemli (checkpoint 14, F3): eski biçim bağlantıyı turun tamamı
+    boyunca tutuyordu. Yavaş bir n8n ile bu, dış bağımlılığın gecikmesini kendi
+    veritabanı havuzuna bulaştırır ve ALAKASIZ üretim isteklerini bekletir.
+    """
+    if send is None:
+        send = _send_to_n8n
+
+    async with pool.acquire() as conn:
+        failed = await sweep_exhausted_admin_events(conn)
+        claimed = await claim_admin_events(conn, limit=limit, lease_seconds=lease_seconds)
+
+    async def _finalize(row: dict, success: bool) -> bool:
+        async with pool.acquire() as conn:
+            return await finalize_admin_event(
+                conn,
+                event_id=row["id"],
+                attempt_count=row["attempt_count"],
+                lease_expires_at=row["lease_expires_at"],
+                success=success,
+            )
+
+    sent, deferred, lost = await _deliver_claimed(claimed, send, _finalize)
     return DispatchReport(
         claimed=len(claimed), sent=sent, deferred=deferred, failed=failed, lost=lost
     )
@@ -355,16 +425,34 @@ async def dispatch_pending_admin_events(
 # hızlı yol HİÇ ateşlenmez. Aksi hâlde bir test, uygulamanın CANLI veritabanına
 # bağlanmasını tetikleyebilirdi.
 
-_BACKGROUND_TASKS: set[asyncio.Task[Any]] = set()
+# Aynı anda EN FAZLA bir hızlı-yol işçisi koşar. Olay başına bir görev doğurmak
+# (ilk yazım) havuz tüketiminin kendisiydi (checkpoint 14, F3): her görev bir DB
+# bağlantısı tutuyordu ve bir olay patlaması havuzu boşaltabiliyordu. Bir tur
+# koşarken gelen olaylar KAYBOLMAZ — bir sonraki tetik ya da kurtarma turu
+# onları toplar (satır kalıcıdır; tetik yalnız gecikmeyi kısar).
+_fast_dispatch_task: asyncio.Task[Any] | None = None
 
 
 def _maybe_trigger_fast_dispatch(db) -> None:
     """Satır COMMIT'lenmişse arka planda tek dispatch turu ateşler.
 
-    Açık bir transaction içindeysek tetiklemeyiz: satır henüz commit edilmemiş
-    olabilir ve dispatcher onu ya göremez (boşuna tur) ya da — daha kötüsü —
-    geri alınacak bir işin bildirimini yollardı.
+    Üç kapı, hepsi fail-closed yönde:
+
+    1. Uygulama havuzu kurulu değilse (testler, script'ler) HİÇ ateşlenmez —
+       aksi hâlde bir test uygulamanın CANLI veritabanına bağlanmasını
+       tetikleyebilirdi.
+    2. Açık transaction içindeysek ateşlenmez: satır henüz commit edilmemiş
+       olabilir ve dispatcher ya boşuna dönerdi ya da — daha kötüsü — geri
+       alınacak bir işin bildirimini yollardı.
+    3. Zaten koşan bir işçi varsa yenisi doğmaz (birleştirme).
+
+    **DÜRÜST SINIR:** bu genel bir "commit sonrası" kancası DEĞİLDİR. Açık
+    transaction içinde yazan çağıranlar için hızlı yol hiç koşmaz; teslimi
+    kurtarma yolu (n8n schedule → `/internal/admin-events/dispatch-pending`)
+    üstlenir. Teslim garantisi hızlı yola DAYANMAZ — o yalnız gecikmeyi kısar.
     """
+    global _fast_dispatch_task
+
     if get_pool_if_ready() is None:
         return
     try:
@@ -372,19 +460,20 @@ def _maybe_trigger_fast_dispatch(db) -> None:
             return
     except AttributeError:  # pragma: no cover — bağlantı benzeri sahte nesne
         return
+    if _fast_dispatch_task is not None and not _fast_dispatch_task.done():
+        return
 
-    task = asyncio.create_task(_dispatch_in_background())
-    _BACKGROUND_TASKS.add(task)
-    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    # Kontrol ile atama arasında `await` YOK: asyncio tek görev döngüsünde
+    # çalıştığı için bu dizi bölünemez, yarış doğmaz.
+    _fast_dispatch_task = asyncio.create_task(_dispatch_in_background())
 
 
 async def _dispatch_in_background() -> None:
-    """Kendi bağlantısını alır; her hatayı yutar — üretim akışı etkilenmez."""
+    """Havuzlu biçimi koşar; her hatayı yutar — üretim akışı etkilenmez."""
     pool = get_pool_if_ready()
     if pool is None:  # pragma: no cover — havuz arada kapandıysa
         return
     try:
-        async with pool.acquire() as conn:
-            await dispatch_pending_admin_events(conn)
+        await dispatch_pending_admin_events_via_pool(pool)
     except Exception as exc:  # noqa: BLE001
         logger.warning("hızlı yol dispatch başarısız (kurtarma yolu kapsar): %s", exc)

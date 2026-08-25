@@ -105,6 +105,25 @@ DECLARE
 BEGIN
     WITH expected(label, want) AS (
         VALUES
+            -- KOLON İMZASI ÖNCE gelir ve TAM tabloyu tarif eder: ad · tip ·
+            -- null'lanabilirlik · kanonik varsayılan, attnum sırasında.
+            -- Yalnız kısıt ve indeks doğrulamak YETMEZ (checkpoint 14, F4):
+            -- ÖLÇÜLDÜ — `payload` TEXT olan, `id`'si PK'sız ve varsayılansız,
+            -- ama CHECK'leri ve indeksi birebir doğru olan sahte bir tablo
+            -- migration'dan rc=0 ile geçiyordu. Kısıtlar tablonun sözleşmesinin
+            -- TAMAMI değildir; eksik doğrulanan her alan sessiz bir atlatma
+            -- kapısıdır. Fazla kolon da yakalanır (imza tam eşleşmedir).
+            ('admin_events kolon imzası',
+             'id:uuid:nn:gen_random_uuid() && kind:text:nn:- &&'
+             ' payload:jsonb:nn:- && idempotency_key:text:nn:- &&'
+             ' delivery_state:text:nn:''pending''::text &&'
+             ' lease_expires_at:timestamp with time zone:null:- &&'
+             ' attempt_count:integer:nn:0 &&'
+             ' created_at:timestamp with time zone:nn:now()'),
+
+            ('admin_events PRIMARY KEY',
+             'p|PRIMARY KEY (id)|enforced=true validated=true'),
+
             ('admin_events.delivery_state CHECK',
              'c|CHECK ((delivery_state = ANY (ARRAY[''pending''::text,'
              ' ''sending''::text, ''sent''::text, ''failed''::text])))'
@@ -132,6 +151,34 @@ BEGIN
     ),
     observed(label, got) AS (
         VALUES
+            ('admin_events kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s',
+                                       a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull
+                                            THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid),
+                                                '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d
+                       ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.admin_events'::regclass
+                 AND a.attnum > 0
+                 AND NOT a.attisdropped)),
+
+            ('admin_events PRIMARY KEY',
+             (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
+                                       k.contype, pg_get_constraintdef(k.oid),
+                                       CASE WHEN k.conenforced
+                                            THEN 'true' ELSE 'false' END,
+                                       CASE WHEN k.convalidated
+                                            THEN 'true' ELSE 'false' END),
+                                ' && ' ORDER BY k.conname)
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.admin_events'::regclass
+                 AND k.contype = 'p')),
+
             ('admin_events.delivery_state CHECK',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),

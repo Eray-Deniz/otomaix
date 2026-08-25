@@ -59,6 +59,7 @@ R2_PUBLIC_URL=https://assets.otomaix.com
 UPLOAD_POST_API_KEY=
 ANTHROPIC_API_KEY=
 INTERNAL_API_KEY=
+N8N_ADMIN_EVENT_SECRET=  # Yönetici olay webhook'u kabul kontrolü — BOŞSA gönderim yapılmaz (fail-closed)
 
 # Opsiyonel
 OPENAI_API_KEY=          # RAG chunk embedding
@@ -201,6 +202,7 @@ spesifik `/products/{id}/images` path'leri generic `/products/{id}`'den önce ma
 - **Carousel text overlay:** Logo tüm slide'larda, text yalnızca ilk ve son slide'da
 - **Carousel R2 path:** `{post_id}_slide_{N}_logo.jpg` (tekli: `{post_id}_logo.jpg`)
 - **Stale-job sweeper:** `/internal/posts/fail-stale` — 10dk'dan eski `generating` post'ları `failed` yapar
+- **Yönetici bildirimi:** `social.admin_events` transactional outbox — satır tetikleyen iş transaction'ında yazılır, iletim commit sonrası ayrı adım. Kira jetonu `(attempt_count, lease_expires_at)`; bütçe CLAIM anında tükenir (≤3 gönderim). Kurtarma yolu `/internal/admin-events/dispatch-pending` (n8n schedule). Ağ gönderimi boyunca DB bağlantısı tutulmaz (`dispatch_pending_admin_events_via_pool`)
 - **n8n:** splitInBatches kullanma → Code node `$input.all().map()` pattern
 - **Ürün/Hizmet:** Tek tablo `brand_products`, `type IN ('product','service')` discriminator
 - **Media adapter:** Protocol tabanlı, env var ile model seçimi, yeni model = tek adapter sınıfı + registry satırı

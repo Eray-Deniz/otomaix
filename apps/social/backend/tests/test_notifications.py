@@ -474,6 +474,135 @@ async def test_concurrent_dispatchers_single_delivery(test_db_setup):
         await setup.close()
 
 
+# ─── 5b. Bağlantı sahipliği ve hızlı yol tetiği (checkpoint 14, F3) ─────────
+
+
+@pytest.fixture
+async def notif_pool(test_db_setup):
+    """TEK bağlantılık gerçek havuz — bağlantı sahipliğini ölçmenin tek yolu.
+
+    `max_size=1` bilinçlidir: dispatcher bağlantıyı gönderim boyunca ELİNDE
+    TUTUYORSA, gönderim sırasında havuzdan bağlantı isteyen herhangi bir iş
+    kilitlenir. Kilitlenme bir zamanlama ölçüsü değil, ikili bir gözlemdir.
+    """
+    url = _require_test_database(test_db_setup)
+    pool = await _asyncpg.create_pool(url, min_size=1, max_size=1, init=_init_connection)
+    try:
+        yield pool
+    finally:
+        await pool.close()
+
+
+async def test_pool_dispatch_releases_connection_during_send(notif_pool):
+    """Gönderim sırasında DB bağlantısı havuza GERİ VERİLİR.
+
+    Eski biçim bağlantıyı süpürme + kiralama + TÜM gönderimler + kapatma
+    boyunca tutuyordu. 20 bağlantılık havuzda, olay başına bir arka plan görevi
+    ve yavaş bir n8n ile bu havuzu tüketip ALAKASIZ üretim isteklerini
+    bekletirdi (checkpoint 14, F3). Ağ süresi boyunca bağlantı tutmak, dış
+    bağımlılığın yavaşlığını kendi veritabanına bulaştırmaktır.
+    """
+    key = _key()
+    async with notif_pool.acquire() as conn:
+        await record_admin_event(conn, kind=KIND, payload={"x": 1}, idempotency_key=key)
+
+    seen_during_send: list[int] = []
+
+    async def _sender(envelope: dict) -> None:
+        # Gönderim sırasında havuzdan bağlantı istiyoruz. Dispatcher tek
+        # bağlantıyı bırakmadıysa burası asla dönmez.
+        async with notif_pool.acquire() as conn:
+            seen_during_send.append(await conn.fetchval("SELECT 1"))
+
+    try:
+        report = await asyncio.wait_for(
+            notifications.dispatch_pending_admin_events_via_pool(
+                notif_pool, send=_sender, lease_seconds=600
+            ),
+            timeout=10,
+        )
+        assert report.sent == 1
+        assert seen_during_send == [1]
+        async with notif_pool.acquire() as conn:
+            assert await conn.fetchval(
+                "SELECT delivery_state FROM social.admin_events WHERE idempotency_key = $1",
+                key,
+            ) == "sent"
+    finally:
+        async with notif_pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM social.admin_events WHERE idempotency_key = $1", key
+            )
+
+
+async def test_fast_dispatch_coalesces_into_single_worker(test_db_setup, monkeypatch):
+    """Olay başına bir görev DEĞİL — aynı anda EN FAZLA bir dispatcher koşar.
+
+    Görev başına bir bağlantı tutulduğu için "olay başına görev" havuz
+    tüketiminin ta kendisiydi. Birleştirme bunu tek işçiye indirir; bir tur
+    koşarken gelen olayları bir SONRAKİ tur toplar.
+    """
+    started = 0
+    release = asyncio.Event()
+
+    async def _slow_worker():
+        nonlocal started
+        started += 1
+        await release.wait()
+
+    monkeypatch.setattr(notifications, "get_pool_if_ready", lambda: object())
+    monkeypatch.setattr(notifications, "_dispatch_in_background", _slow_worker)
+
+    url = _require_test_database(test_db_setup)
+    conn = await _asyncpg.connect(url)
+    await _init_connection(conn)
+    keys = [_key() for _ in range(3)]
+    try:
+        for key in keys:
+            await record_admin_event(conn, kind=KIND, payload={"x": 1}, idempotency_key=key)
+        await asyncio.sleep(0)  # görevlerin başlamasına izin ver
+        assert started == 1, f"olay başına görev doğdu: {started}"
+    finally:
+        release.set()
+        await asyncio.sleep(0)
+        await conn.execute(
+            "DELETE FROM social.admin_events WHERE idempotency_key = ANY($1::text[])", keys
+        )
+        await conn.close()
+
+
+async def test_fast_dispatch_not_triggered_inside_transaction(test_db_setup, monkeypatch):
+    """Açık transaction içinde tetik ATEŞLENMEZ — satır henüz commit değil.
+
+    DÜRÜST SINIR: bu, genel bir "commit sonrası" kancası DEĞİLDİR. Açık
+    transaction içinde yazan çağıranlar için hızlı yol hiç koşmaz ve teslimi
+    kurtarma yolu (n8n schedule) üstlenir. Hızlı yol yalnız gecikmeyi kısar;
+    teslim garantisi ona DAYANMAZ.
+    """
+    started = 0
+
+    async def _worker():
+        nonlocal started
+        started += 1
+
+    monkeypatch.setattr(notifications, "get_pool_if_ready", lambda: object())
+    monkeypatch.setattr(notifications, "_dispatch_in_background", _worker)
+
+    url = _require_test_database(test_db_setup)
+    conn = await _asyncpg.connect(url)
+    await _init_connection(conn)
+    key = _key()
+    try:
+        transaction = conn.transaction()
+        await transaction.start()
+        await record_admin_event(conn, kind=KIND, payload={"x": 1}, idempotency_key=key)
+        await asyncio.sleep(0)
+        assert started == 0, "commit edilmemiş satır için tetik ateşlendi"
+        await transaction.rollback()
+    finally:
+        await conn.close()
+
+
 # ─── 6. İç uç nokta ─────────────────────────────────────────────────────────
 
 
@@ -496,20 +625,194 @@ def test_internal_endpoint_requires_internal_key(monkeypatch):
 
 
 async def test_pending_events_reswept_via_internal_endpoint_after_crash(
-    notif_db, monkeypatch
+    notif_pool, monkeypatch
 ):
-    """Kurtarma yolu: çökmeden kalan `pending` satır iç uç noktayla süpürülür."""
-    event_id = await _seed_event(notif_db)
+    """Kurtarma yolu: çökmeden kalan `pending` satır iç uç noktayla süpürülür.
+
+    Uç nokta artık istek bağlantısı ALMAZ (checkpoint 14, F3) — havuzu kendisi
+    çözer. Test de bu yüzden gerçek bir havuz verir: sahte bir bağlantı
+    geçirmek, düzeltilen davranışın ta kendisini ölçmeden bırakırdı.
+    """
+    from app.core import database
+
     sender = _Sender()
     monkeypatch.setattr(notifications, "_send_to_n8n", sender)
 
-    response = await internal_router.dispatch_pending_admin_events_endpoint(
-        _=None, db=notif_db
+    async def _pool():
+        return notif_pool
+
+    monkeypatch.setattr(database, "get_pool", _pool)
+
+    key = _key()
+    try:
+        async with notif_pool.acquire() as conn:
+            await record_admin_event(
+                conn, kind=KIND, payload={"x": 1}, idempotency_key=key
+            )
+
+        response = await internal_router.dispatch_pending_admin_events_endpoint(_=None)
+
+        assert response.data["sent"] == 1
+        assert len(sender.calls) == 1
+        async with notif_pool.acquire() as conn:
+            assert await conn.fetchval(
+                "SELECT delivery_state FROM social.admin_events WHERE idempotency_key = $1",
+                key,
+            ) == "sent"
+    finally:
+        async with notif_pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM social.admin_events WHERE idempotency_key = $1", key
+            )
+
+
+# ─── 6b. Teslim kanalı: kabul kontrolü ve teslim semantiği (checkpoint 14) ──
+
+
+class _FakeResponse:
+    def __init__(self, status: int = 200):
+        self.status_code = status
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise RuntimeError(f"HTTP {self.status_code}")
+
+
+class _FakeClient:
+    """httpx.AsyncClient yerine geçen, isteği yakalayan sahte istemci."""
+
+    captured: dict = {}
+
+    def __init__(self, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def post(self, url, json=None, headers=None):
+        _FakeClient.captured = {"url": url, "json": json, "headers": headers or {}}
+        return _FakeResponse()
+
+
+async def test_send_fails_closed_without_webhook_secret(notif_db, monkeypatch):
+    """Sır yoksa gönderim YAPILMAZ — kimliksiz çağrı yola çıkmaz.
+
+    Kabul kontrolü olmayan bir webhook'a yollamak, o webhook'a erişebilen
+    herkesin sahte yönetici uyarısı üretebilmesi demekti (checkpoint 14, F1).
+    Sır eksikken sessizce kimliksiz göndermek kapıyı boşa çıkarırdı; satır
+    `pending`e döner ve yeniden denenir.
+    """
+    monkeypatch.setattr(notifications.settings, "N8N_ADMIN_EVENT_SECRET", "")
+    monkeypatch.setattr(notifications.httpx, "AsyncClient", _FakeClient)
+    _FakeClient.captured = {}
+
+    event_id = await _seed_event(notif_db)
+    report = await dispatch_pending_admin_events(notif_db, lease_seconds=600)
+
+    assert report.sent == 0
+    assert report.deferred == 1
+    assert _FakeClient.captured == {}, "sırsızken çağrı YAPILDI"
+    assert (await _row(notif_db, event_id))["delivery_state"] == "pending"
+
+
+async def test_send_includes_admin_event_auth_header(notif_db, monkeypatch):
+    """Sır varsa kabul başlığı isteğe EKLENİR ve zarf sözleşmeye uyar."""
+    monkeypatch.setattr(notifications.settings, "N8N_ADMIN_EVENT_SECRET", "gizli-anahtar")
+    monkeypatch.setattr(notifications.httpx, "AsyncClient", _FakeClient)
+    _FakeClient.captured = {}
+
+    event_id = await _seed_event(notif_db)
+    report = await dispatch_pending_admin_events(notif_db, lease_seconds=600)
+
+    assert report.sent == 1
+    captured = _FakeClient.captured
+    assert captured["headers"][notifications.ADMIN_EVENT_AUTH_HEADER] == "gizli-anahtar"
+    assert captured["json"]["event_id"] == str(event_id)
+    assert set(captured["json"]) == {"event_id", "kind", "payload", "contract_version"}
+
+
+def _admin_workflow() -> dict:
+    import json
+
+    path = (
+        infra_repo_root() / "shared" / "n8n-workflows" / "sector-package-admin-events.json"
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def infra_repo_root():
+    from .conftest import REPO_ROOT
+
+    return REPO_ROOT
+
+
+def _node(workflow: dict, name: str) -> dict:
+    for node in workflow["nodes"]:
+        if node["name"] == name:
+            return node
+    raise AssertionError(f"düğüm yok: {name}")
+
+
+def test_workflow_webhook_requires_authentication():
+    """Webhook kimlik doğrulaması İSTER — açık uç kabul edilmez (F1).
+
+    Bu artefaktın canlı importu manuel bir adım (Task 16); o yüzden sözleşme
+    burada YAPISAL olarak pinlenir. Aksi hâlde "kimlik doğrulaması var" iddiası
+    hiçbir yerde ölçülmemiş olurdu.
+    """
+    workflow = _admin_workflow()
+    webhook = _node(workflow, "Yönetici Olayı Webhook")
+
+    assert webhook["parameters"].get("authentication") == "headerAuth", (
+        "webhook kimlik doğrulamasız — herkes sahte yönetici uyarısı üretebilir"
+    )
+    assert "httpHeaderAuth" in (webhook.get("credentials") or {})
+
+
+def test_workflow_acknowledges_only_after_delivery():
+    """Yanıt teslimden SONRA verilir ve Telegram hatası YUTULMAZ (F2).
+
+    `onReceived` modunda n8n workflow BAŞLAR BAŞLAMAZ 200 döner; arka uç satırı
+    `sent` yazar ve sonraki bir Telegram hatası SESSİZCE kaybolur. Üstelik
+    tekrar-kaydı gönderimden önce yapılırsa yeniden teslim de bastırılır — yani
+    bildirim hem kaybolur hem bir daha denenmez.
+    """
+    workflow = _admin_workflow()
+    webhook = _node(workflow, "Yönetici Olayı Webhook")
+    telegram = _node(workflow, "Telegram Bildir")
+    sweeper = _node(workflow, "Bekleyenleri Süpür")
+
+    assert webhook["parameters"].get("responseMode") != "onReceived"
+    assert not telegram.get("continueOnFail"), (
+        "Telegram hatası yutuluyor — arka uç yanlışlıkla `sent` yazar"
+    )
+    assert not sweeper.get("continueOnFail"), (
+        "kurtarma turu hatası yutuluyor — n8n çalıştırma listesinde görünmez"
     )
 
-    assert response.data["sent"] == 1
-    assert len(sender.calls) == 1
-    assert (await _row(notif_db, event_id))["delivery_state"] == "sent"
+
+def test_workflow_records_dedupe_only_after_successful_send():
+    """Tekrar kaydı gönderimden SONRA yazılır — başarısız teslim bastırılmaz."""
+    workflow = _admin_workflow()
+    connections = workflow["connections"]
+
+    targets = [
+        target["node"]
+        for branch in connections["Telegram Bildir"]["main"]
+        for target in branch
+    ]
+    assert "Tekrarı Kaydet" in targets, (
+        "tekrar kaydı Telegram'dan SONRA gelmiyor — başarısız teslim yeniden "
+        "denendiğinde sessizce elenir"
+    )
+    # Gönderim ÖNCESİ düğüm yalnız KONTROL eder, kayıt YAPMAZ.
+    checker = _node(workflow, "Tekrarı Kontrol Et")
+    assert "seenEventIds.push" not in checker["parameters"]["jsCode"], (
+        "kontrol düğümü gönderimden önce kayıt yazıyor"
+    )
 
 
 # ─── 7. Marka durumu ucu (K-45) ─────────────────────────────────────────────

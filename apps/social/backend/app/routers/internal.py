@@ -350,7 +350,6 @@ async def fail_stale_posts(
 @router.post("/admin-events/dispatch-pending", response_model=OkResponse)
 async def dispatch_pending_admin_events_endpoint(
     _: None = Depends(get_service_auth),
-    db: asyncpg.Connection = Depends(get_db),
 ):
     """Yönetici bildirim outbox'ının KURTARMA yolu (plan Task 14).
 
@@ -363,10 +362,17 @@ async def dispatch_pending_admin_events_endpoint(
     Tur, hem süpürmeyi hem kiralamayı hem teslimi kapsar; sayılar dönüş
     gövdesinde görünür, böylece n8n tarafında "hiç iş çıkmadı" ile "iş çıktı
     ama düştü" ayırt edilebilir.
-    """
-    from app.services.notifications import dispatch_pending_admin_events
 
-    report = await dispatch_pending_admin_events(db)
+    **`get_db` bağımlılığı BİLEREK YOK** (checkpoint 14, F3): bu uç nokta
+    dakikalarca sürebilen ağ gönderimleri yapar. İstek boyunca bir havuz
+    bağlantısını rehin tutmak, dış bağımlılığın yavaşlığını kendi veritabanı
+    havuzuna bulaştırırdı. Havuzlu biçim bağlantıyı yalnız kısa DB
+    pencerelerinde alır.
+    """
+    from app.core import database
+    from app.services.notifications import dispatch_pending_admin_events_via_pool
+
+    report = await dispatch_pending_admin_events_via_pool(await database.get_pool())
     return OkResponse(data={
         "claimed": report.claimed,
         "sent": report.sent,
