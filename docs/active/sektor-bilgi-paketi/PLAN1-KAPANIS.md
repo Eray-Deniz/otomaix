@@ -163,8 +163,9 @@ import edilip ÇAĞRILIR (13 test, hepsi PASS).
 | 7 | Katman-1 harness (`tests/prompt_regression/`) | `test_katman1_harness_is_delivered_and_live` |
 | 8 | `video_kodlar` İKİ HAVUZ (`hareket` + `sahne`, ikisi de liste) | `test_video_kodlar_delivers_two_pools` |
 
-**Pozitif kontrol.** Dokuz mutasyonun HEPSİ, dosyanın SON hâline (13 test) karşı
-yeniden koşuldu — eski ölçümden taşınan sayı YOKTUR. Ortak komut:
+**Pozitif kontrol.** ON mutasyonun HEPSİ, `de04ede` commit'indeki SON hâle (13 test)
+karşı yeniden koşuldu — eski ölçümden taşınan sayı YOKTUR (bir önceki sürümde tablo ona
+çıkmışken metin dokuz diyordu; bağımsız hakem yakaladı). Ortak komut:
 `cd apps/social/backend && .venv/bin/python -m pytest tests/test_plan2_interface_contract.py -q`
 
 | # | Mutasyon (uygulanan tam değişiklik) | Sonuç | Yakalayan |
