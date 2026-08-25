@@ -647,7 +647,17 @@ export default function IcerikKutuphanesPage() {
     fetchPosts(1, true)
   }, [currentBrand?.id, activeTab, filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Generating olan postlar için polling — output_url gelince otomatik güncelle
+  // Generating olan postlar için polling.
+  //
+  // Durum değişimi de bitiş sayılır, yalnız `output_url` DEĞİL. Kısa video
+  // stage-1'i `generating` doğup `awaiting_approval`da bitiyor ve çıktı URL'si
+  // ÜRETMİYOR; yalnız `output_url`e bakan eski koşul o satırı sonsuza kadar
+  // `generating` gösterir ve her 3 saniyede bir istek atmaya devam ederdi
+  // (ölçüldü). Aynı boşluk `failed` için de vardı.
+  //
+  // Yeniden çizim döngüsü riskine karşı: `setPosts` YALNIZ gerçekten değişen
+  // bir alan varsa çağrılır. Koşulsuz birleştirme her turda yeni nesne kimliği
+  // üretir, bu efektin `posts` bağımlılığını tetikler ve sonsuz döngü kurardı.
   useEffect(() => {
     const generatingIds = posts
       .filter((p) => p.status === 'generating' && !p.output_url)
@@ -658,16 +668,17 @@ export default function IcerikKutuphanesPage() {
       const updates = await Promise.all(
         generatingIds.map((id) => api.get<Post>(`/posts/${id}`))
       )
-      let changed = false
-      updates.forEach((res) => {
-        if (res.success && res.data?.output_url) {
-          setPosts((prev) =>
-            prev.map((p) => (p.id === res.data!.id ? { ...p, ...res.data } : p))
-          )
+      setPosts((prev) => {
+        let changed = false
+        const next = prev.map((p) => {
+          const fresh = updates.find((res) => res.success && res.data?.id === p.id)?.data
+          if (!fresh) return p
+          if (fresh.status === p.status && fresh.output_url === p.output_url) return p
           changed = true
-        }
+          return { ...p, ...fresh }
+        })
+        return changed ? next : prev
       })
-      if (changed) clearInterval(interval)
     }, 3000)
 
     return () => clearInterval(interval)

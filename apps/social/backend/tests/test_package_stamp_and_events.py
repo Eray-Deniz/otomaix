@@ -1171,3 +1171,92 @@ async def test_stage1_publishes_and_stamps_atomically(pkg_db, monkeypatch):
     )
     assert row["status"] == "awaiting_approval"
     assert row["package_id"] == package_id and row["package_version"] == 3
+
+
+async def test_finalization_refuses_to_resurrect_a_swept_post(pkg_db, monkeypatch):
+    """Sonlandırma, süpürücünün TERMİNAL kararını geri alamaz (tur 3, M1).
+
+    Yeni `generating` başlangıcı postu bayat-iş süpürücüsünün 10 dakikalık
+    penceresine sokuyor. Sonlandırma koşulsuz `UPDATE ... WHERE id` yapsaydı,
+    süpürücü postu `failed` yaptıktan sonra stage-1 onu diriltip onaya açardı —
+    üstelik silinmiş bir postta güncelleme sessizce hiçbir satıra dokunmaz ve
+    makbuz KARŞILIĞI OLMAYAN bir kayıt için tüketilirdi (öksüz makbuz).
+
+    Kural: sonlandırma karşılaştır-ve-yaz'dır; satır `generating` değilse
+    transaction geri alınır ve makbuz yanmaz.
+    """
+    from app.services import short_video as sv
+
+    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=1)
+
+    async def _still_then_sweep(*_a, **_k):
+        # Süpürücünün araya girmesini temsil eder: still üretimi sürerken
+        # post terminal duruma çekilir.
+        await pkg_db.execute(
+            "UPDATE social.posts SET status = 'failed' WHERE brand_id = $1", brand_id
+        )
+        return "https://example.test/still.jpg"
+
+    async def _fake_tts(*_a, **_k):
+        return {"audio_url": "https://example.test/a.mp3"}
+
+    async def _fake_still_prompt(*_a, **_k):
+        return "A gold ring on velvet"
+
+    # `_run_stage1` yardımcısı KULLANILMIYOR: o, still üreticisini kendi sahtesiyle
+    # eziyor ve bu testin tam olarak oraya yerleştirdiği araya-girmeyi silerdi.
+    monkeypatch.setattr(sv, "text_to_speech", _fake_tts)
+    monkeypatch.setattr(sv, "_resolve_still_prompt", _fake_still_prompt)
+    monkeypatch.setattr(sv, "_generate_still_via_text", _still_then_sweep)
+
+    with pytest.raises(RuntimeError):
+        await sv.run_short_video_stage1(
+            brand_id=brand_id,
+            prompt="A gold ring on velvet",
+            script="Kısa bir senaryo metni.",
+            voice="qSeXEcewz7tA0Q0qk9fH",
+            aspect_ratio="9:16",
+            brand_kit={"sector": "Kuyumculuk"},
+            brand_name="Damga Markası",
+            db=pkg_db,
+            platform_captions={"instagram": {"caption": "x"}},
+            sub_sector_id=sub_id,
+            generation_id=stamp_id,
+        )
+
+    statuses = [
+        r["status"]
+        for r in await pkg_db.fetch(
+            "SELECT status FROM social.posts WHERE brand_id = $1", brand_id
+        )
+    ]
+    assert statuses == ["failed"], "süpürülmüş post diriltildi"
+    assert await pkg_db.fetchval(
+        "SELECT consumed_at FROM social.generation_stamps WHERE id = $1", stamp_id
+    ) is None, "karşılığı olmayan kayıt için makbuz tüketildi (öksüz makbuz)"
+
+
+def test_library_polling_stops_on_status_change():
+    """Kütüphane yoklaması durum değişimini de bitiş sayar (tur 3, M2).
+
+    Stage-1 postu artık `generating` doğuyor ve `awaiting_approval`da bitiyor —
+    çıktı URL'si ÜRETMEDEN. Yalnız `output_url`e bakan eski koşul o satırı
+    sonsuza kadar `generating` gösterip her 3 saniyede bir istek atıyordu
+    (ölçüldü). Bu, durum sözleşmesi değişince kaçırılan bir tüketiciydi.
+
+    **Dürüst etiket: YAPISAL kapı.** Gerçek yoklama davranışı bu suite'ten
+    ölçülemez (JS koşucusu yok); kapı yalnız değişim ölçüsünün `output_url`e
+    daralmadığını pinler.
+    """
+    import re
+
+    page = (FRONTEND_DIR / "app/(dashboard)/icerik-kutuphanesi/page.tsx").read_text("utf-8")
+    match = re.search(r"const generatingIds = posts.*?\}, 3000\)", page, re.S)
+    assert match, "yoklama efekti bulunamadı — yapısal sweep boşa koştu"
+    block = match.group(0)
+    assert "status" in block, (
+        "yoklama yalnız output_url'e bakıyor — çıktı üretmeden biten üretim "
+        "sonsuza kadar 'generating' görünür"
+    )

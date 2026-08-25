@@ -1173,16 +1173,29 @@ async def run_short_video_stage1(
         stamp_package_id, stamp_package_version = await resolve_persist_stamp(
             db, {"id": brand_id, "sub_sector_id": sub_sector_id}, generation_id
         )
-        await db.execute(
+        # KARŞILAŞTIR-VE-YAZ: satır hâlâ `generating` olmalı. Koşulsuz bir
+        # `WHERE id` güncellemesi iki sessiz hata üretirdi — (a) bayat-iş
+        # süpürücüsü postu `failed` yaptıysa stage-1 onun TERMİNAL kararını
+        # geri alıp postu onaya açardı; (b) post silinmişse güncelleme hiçbir
+        # satıra dokunmaz, ama makbuz yine de tüketilmiş olurdu (öksüz makbuz).
+        # `RETURNING` yoksa istisna atılır ve transaction geri alınır, yani
+        # makbuz da yanmaz.
+        finalized = await db.fetchval(
             """
             UPDATE social.posts
             SET status = 'awaiting_approval', package_id = $2, package_version = $3
-            WHERE id = $1
+            WHERE id = $1 AND status = 'generating'
+            RETURNING id
             """,
             post_id,
             stamp_package_id,
             stamp_package_version,
         )
+        if finalized is None:
+            raise RuntimeError(
+                f"Stage 1 sonlandırılamadı: post {post_id} artık 'generating' değil "
+                "(süpürülmüş ya da silinmiş olabilir)"
+            )
 
     return {
         "post_id": post_id,
