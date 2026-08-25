@@ -50,6 +50,38 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
+**2026-08-25 (on üçüncü oturum) — TASK 13 BİTTİ, CHECKPOINT 13 KAPANDI. Açık kapı YOK.**
+Üç tur; tur 3 `approve`, bulgu yok. `pytest tests/ -q` → **459 passed** (oturum başında 405);
+donmuş prompt + migration kapıları → **131 passed**. Çalışma alanı temiz, push YOK.
+Önyüze DOKUNULMADI, o yüzden derleme kapısı tetiklenmedi.
+
+**Task 13 bitti:** yaşam döngüsü servisleri (aktivasyon / rollback / acil geri çekme) ve
+`insert_draft` kuruldu. Ham iki-adım geçişi ÖZEL; public yüzeyden kanıtsız geçiş yolu yok.
+Geçiş ile olay kaydı tek transaction'da (F24) ve sıra sözleşmesi artık MEKANİK.
+
+**Yolda bir Task 12 kusuru düzeltildi.** Olay kaydının "devir teslim mi" ölçüsü "sektörde
+arşivlenmiş paket var mı" idi; acil geri çekme sonrası arşivlenmiş satır kalır ama aktif satır
+kalmaz, dolayısıyla "geri çek → bakım → yeniden aç" akışında yeni aktivasyon REDDEDİLİYORDU.
+Meşru bir yol kapalıydı. Ölçü tanımın kendisine bağlandı: yerine geçilen sürüm, geçiş anında
+AKTİF olandır.
+
+**Turların anlattığı hikâye — dördün üçü kendi ürünümdü.** Tur 1 iki high + bir medium buldu:
+kanıt sınıflarında çalışma-zamanı tip zorlaması yoktu (`"false"` metni DOĞRU sayılıyor, yani
+"aktive edilemez" işaretli aday aktive edilebiliyordu); aynı taslağı iki transaction birlikte
+aktive edip denetim izine iki aktivasyon yazabiliyordu. Medium advisory SAYILMADI — sıra
+bağımlılığını bu parti getirmişti.
+
+**Tur 2'nin dersi en pahalısı: düzeltmenin kendi yan etkisi.** F2'yi kapatmak için serileştirme
+çapasını sektör satırına taşımak YENİ bir high açtı (F4) — paket kilitlenmeden önce okunmak
+zorunda olduğu için sektör penceresi doğdu. Kilit altında sektör yeniden okunup bağlandı.
+**Pencere KAPANMADI, fail-closed yapıldı** — kapanması `sector_id`'yi değişmez kılan bir
+migration ister ve Task 13'ün dosya kapsamında değildi; tetikli kayıt olarak HANDOFF'ta duruyor.
+
+**Ölçülmemiş makine bırakılmadı.** Sektör kilidi ilk yazımda hiçbir testin ölçmediği bir
+katmandı (pozitif kontrol yeşil kaldı). Ölçülebilir farkı teste bağlandı: kilitsizken kaybeden
+taraf ham veritabanı kısıt ihlaliyle ölüyor. Ayrıca kendi testimde bir sahte yeşil yakalandı —
+F4 deaktivasyon yarış testi hedefi yanlış durumda kurduğu için ölçmesi gerekeni ölçmüyordu.
+
 **2026-08-25 (on ikinci oturum, ikinci yarı) — TASK 12 BİTTİ, CHECKPOINT 12 KAPANDI.**
 Beş tur; tur 3'ten itibaren `approve`. Tur 1'in dört high bulgusunun dördü de bağımsız
 sondajla doğrulandı ve düzeltildi. `pytest tests/ -q` → **405 passed**; donmuş prompt +
