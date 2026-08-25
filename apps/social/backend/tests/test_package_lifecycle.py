@@ -676,3 +676,355 @@ async def test_transition_failure_leaves_no_event(pkg_db, monkeypatch):
 
     assert await _status(pkg_db, package_id) == "draft"
     assert await _events(pkg_db, sector_id) == [], "geçişsiz olay kaldı"
+
+
+# ═══ 7. Kanıt sınıflarının çalışma-zamanı zorlaması (checkpoint 13, F1) ═════
+#
+# Açıklama satırı bir kapı DEĞİLDİR. `activation_eligible: bool` yalnız bir
+# not; Python onu zorlamaz. Doğruluk-değeriyle çalışan bir kapı, "false"
+# metnini DOĞRU sayar — yani "aktive edilemez" diye işaretlenmiş bir aday
+# aktive edilebilirdi. Sayısal alanda ayna vaka: `False == 0` ve `True == 1`.
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"activation_eligible": "false"},
+        {"katman1_passed": "false"},
+        {"checklist_approved": "false"},
+        {"activation_eligible": 1},
+        {"open_questions_count": False},
+        {"open_questions_count": "0"},
+        {"open_questions_count": -1},
+        {"expected_active_version": True},
+        {"expected_active_version": "1"},
+        {"expected_active_version": 0},
+    ],
+)
+def test_activation_evidence_rejects_loose_values(override):
+    """Doğru-görünen değer kanıt DEĞİLDİR — yapımda reddedilir."""
+    fields = dict(
+        activation_eligible=True,
+        open_questions_count=0,
+        katman1_passed=True,
+        checklist_approved=True,
+    )
+    fields.update(override)
+    with pytest.raises((TypeError, ValueError)):
+        ActivationGateEvidence(**fields)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [{"manager_approved": "false"}, {"katman1_passed": 1}, {"manager_approved": None}],
+)
+def test_rollback_evidence_rejects_loose_values(override):
+    fields = dict(manager_approved=True, katman1_passed=True)
+    fields.update(override)
+    with pytest.raises((TypeError, ValueError)):
+        RollbackGateEvidence(**fields)
+
+
+class _LookalikeEvidence:
+    """Aynı alan adlarını taşıyan ama kanıt sınıfı OLMAYAN nesne."""
+
+    activation_eligible = True
+    open_questions_count = 0
+    katman1_passed = True
+    checklist_approved = True
+    expected_active_version = None
+    manager_approved = True
+
+
+async def test_activate_rejects_lookalike_evidence(pkg_db):
+    """Ördek tiplemesi kanıt yerine geçmez — sınıfın kendisi istenir."""
+    sector_id = await _sub_sector(pkg_db)
+    package_id = await _seed_package(pkg_db, sector_id, version=1, status="draft")
+
+    with pytest.raises(GateNotSatisfied):
+        await activate_package(
+            pkg_db, package_id=package_id, evidence=_LookalikeEvidence(), actor=ACTOR
+        )
+    assert await _status(pkg_db, package_id) == "draft"
+
+
+async def test_rollback_rejects_lookalike_evidence(pkg_db):
+    sector_id = await _sub_sector(pkg_db)
+    await _seed_package(pkg_db, sector_id, version=1, status="archived")
+    current_id = await _seed_package(pkg_db, sector_id, version=2, status="active")
+
+    with pytest.raises(GateNotSatisfied):
+        await rollback_package(
+            pkg_db,
+            sector_id=sector_id,
+            to_version=1,
+            evidence=_LookalikeEvidence(),
+            actor=ACTOR,
+        )
+    assert await _status(pkg_db, current_id) == "active"
+
+
+async def test_rollback_rejects_activation_evidence(pkg_db):
+    """Aktivasyon kanıtı rollback kapısını açmaz (sınıflar paylaşılmaz)."""
+    sector_id = await _sub_sector(pkg_db)
+    await _seed_package(pkg_db, sector_id, version=1, status="archived")
+    await _seed_package(pkg_db, sector_id, version=2, status="active")
+
+    with pytest.raises(GateNotSatisfied):
+        await rollback_package(
+            pkg_db,
+            sector_id=sector_id,
+            to_version=1,
+            evidence=_activation_evidence(),
+            actor=ACTOR,
+        )
+
+
+# ═══ 8. Eşzamanlılık — gerçek iki bağlantı (checkpoint 13, F2) ══════════════
+#
+# Tek bağlantıda araya girmek bu sınıfı ÖLÇMEZ: soru tam olarak "iki ayrı
+# transaction aynı taslağı aynı anda aktive edebilir mi". Bu testler kendi
+# bağlantılarını açar ve GERÇEKTEN commit eder, o yüzden temizlik ellerindedir.
+
+
+async def _seed_committed_sector(conn) -> uuid.UUID:
+    root_id = await conn.fetchval(
+        "SELECT id FROM social.sectors WHERE parent_sector_id IS NULL LIMIT 1"
+    )
+    assert root_id is not None
+    return await conn.fetchval(
+        "INSERT INTO social.sectors (slug, display_name, parent_sector_id) "
+        "VALUES ($1, $2, $3) RETURNING id",
+        f"alt-{uuid.uuid4().hex[:8]}",
+        "Alt Sektör",
+        root_id,
+    )
+
+
+async def _drop_committed_sector(conn, sector_id) -> None:
+    await conn.execute("DELETE FROM social.package_events WHERE sector_id = $1", sector_id)
+    await conn.execute("DELETE FROM social.sector_packages WHERE sector_id = $1", sector_id)
+    await conn.execute("DELETE FROM social.sectors WHERE id = $1", sector_id)
+
+
+@pytest.mark.parametrize(
+    "with_previous_active", [False, True], ids=["first_activation", "handover"]
+)
+async def test_concurrent_activation_of_same_draft_single_winner(
+    test_db_setup, with_previous_active
+):
+    """Aynı taslağı iki transaction aynı anda aktive edemez.
+
+    Kaybeden taraf sessizce başarılı olmamalı; ve denetim izinde TEK bir
+    aktivasyon satırı kalmalı. İki olay satırı, olmamış bir devir teslimi
+    olmuş gösterir.
+    """
+    import asyncio
+
+    import asyncpg as _asyncpg
+
+    from .conftest import _require_test_database
+
+    url = _require_test_database(test_db_setup)
+    setup = await _asyncpg.connect(url)
+    await _init_connection(setup)
+    workers: list = []
+    sector_id = None
+    try:
+        sector_id = await _seed_committed_sector(setup)
+        if with_previous_active:
+            await setup.execute(
+                "INSERT INTO social.sector_packages "
+                "(sector_id, version, status, schema_version, content) "
+                "VALUES ($1, 1, 'active', 1, $2)",
+                sector_id,
+                _valid_content(),
+            )
+        draft_id = await setup.fetchval(
+            "INSERT INTO social.sector_packages "
+            "(sector_id, version, status, schema_version, content) "
+            "VALUES ($1, $2, 'draft', 1, $3) RETURNING id",
+            sector_id,
+            2 if with_previous_active else 1,
+            _valid_content(),
+        )
+
+        for _ in range(2):
+            worker = await _asyncpg.connect(url)
+            await _init_connection(worker)
+            workers.append(worker)
+
+        async def _try(conn):
+            try:
+                await activate_package(
+                    conn,
+                    package_id=draft_id,
+                    evidence=_activation_evidence(),
+                    actor=ACTOR,
+                )
+                return "ok"
+            except Exception as exc:  # kaybeden taraf AÇIKÇA düşmeli
+                return type(exc).__name__
+
+        results = await asyncio.gather(*[_try(worker) for worker in workers])
+
+        assert results.count("ok") == 1, f"tek kazanan bekleniyordu: {results}"
+        events = await setup.fetch(
+            "SELECT event_type FROM social.package_events WHERE sector_id = $1", sector_id
+        )
+        assert [e["event_type"] for e in events] == ["activation"], (
+            f"denetim izinde tek aktivasyon bekleniyordu: {[e['event_type'] for e in events]}"
+        )
+        assert await setup.fetchval(
+            "SELECT count(*) FROM social.sector_packages "
+            "WHERE sector_id = $1 AND status = 'active'",
+            sector_id,
+        ) == 1
+    finally:
+        for worker in workers:
+            await worker.close()
+        if sector_id is not None:
+            await _drop_committed_sector(setup, sector_id)
+        await setup.close()
+
+
+# ═══ 9. Olay yazıcısının gerçeğe bağlanması (checkpoint 13, F3) ═════════════
+
+
+async def test_activation_event_rejects_arbitrary_from_version(pkg_db):
+    """Uydurma kaynak sürüm, eksik kaynak sürüm kadar zararlıdır.
+
+    Eski kural asimetrikti: yalnız `from_version` YOKKEN itiraz ediyordu,
+    dolayısıyla alakasız bir sürüm numarası denetimsiz geçip denetim izine
+    olmamış bir devir teslim yazabiliyordu.
+    """
+    from app.services.package_events import PackageEventContractError, log_package_event
+
+    sector_id = await _sub_sector(pkg_db)
+    await _seed_package(pkg_db, sector_id, version=1, status="active")
+    target_id = await _seed_package(pkg_db, sector_id, version=2, status="draft")
+
+    with pytest.raises(PackageEventContractError, match="beklenen 1"):
+        await log_package_event(
+            pkg_db,
+            event_type="activation",
+            sector_id=sector_id,
+            package_id=target_id,
+            from_version=7,
+            to_version=2,
+            actor=ACTOR,
+        )
+
+
+async def test_activation_event_rejects_write_after_transition(pkg_db):
+    """Sıra sözleşmesi artık MEKANİK — yorum değil.
+
+    Olay geçişten SONRA yazılırsa devredilen paket çoktan arşivlenmiştir;
+    gerçek aktif sürüm ölçüsü `None` döner ve kaynak sürüm taşıyan olay
+    reddedilir. Eskiden bu yazım sessizce kabul ediliyordu.
+    """
+    from app.services.package_events import PackageEventContractError, log_package_event
+
+    sector_id = await _sub_sector(pkg_db)
+    old_id = await _seed_package(pkg_db, sector_id, version=1, status="active")
+    new_id = await _seed_package(pkg_db, sector_id, version=2, status="draft")
+
+    # Geçişi elle uygula, olayı SONRA yazmayı dene.
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET status = 'archived' WHERE id = $1", old_id
+    )
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET status = 'active' WHERE id = $1", new_id
+    )
+
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            pkg_db,
+            event_type="activation",
+            sector_id=sector_id,
+            package_id=new_id,
+            from_version=1,
+            to_version=2,
+            actor=ACTOR,
+        )
+
+
+async def test_concurrent_activation_of_different_drafts_is_serializable(test_db_setup):
+    """İki FARKLI taslağın eşzamanlı aktivasyonu, sırayla koşmuş gibi biter.
+
+    Bu, sektör kilidinin ölçüsüdür. Kilit olmadan iki transaction hiçbir yerde
+    karşılaşmaz (ilk aktivasyonda kilitlenecek aktif satır YOKTUR): ikisi de
+    kendi taslağını aktif yapar ve çakışmayı ancak COMMIT anında tek-aktif
+    kısmi indeksi yakalar — kaybeden taraf HAM bir kısıt ihlaliyle ölür.
+    Sektör satırı her durumda var olduğu için serileştirme çapası odur.
+
+    İddia dar tutuldu: kaybeden taraf düşebilir, ama ham `UniqueViolationError`
+    ile DEĞİL; ve son durum her koşulda tutarlı olmalı.
+    """
+    import asyncio
+
+    import asyncpg as _asyncpg
+
+    from .conftest import _require_test_database
+
+    url = _require_test_database(test_db_setup)
+    setup = await _asyncpg.connect(url)
+    await _init_connection(setup)
+    workers: list = []
+    sector_id = None
+    try:
+        sector_id = await _seed_committed_sector(setup)
+        drafts = [
+            await setup.fetchval(
+                "INSERT INTO social.sector_packages "
+                "(sector_id, version, status, schema_version, content) "
+                "VALUES ($1, $2, 'draft', 1, $3) RETURNING id",
+                sector_id,
+                version,
+                _valid_content(),
+            )
+            for version in (1, 2)
+        ]
+
+        for _ in range(2):
+            worker = await _asyncpg.connect(url)
+            await _init_connection(worker)
+            workers.append(worker)
+
+        async def _try(conn, draft_id):
+            try:
+                await activate_package(
+                    conn, package_id=draft_id, evidence=_activation_evidence(), actor=ACTOR
+                )
+                return "ok"
+            except LifecycleError:
+                return "lifecycle-error"
+            except Exception as exc:
+                return f"RAW:{type(exc).__name__}"
+
+        results = await asyncio.gather(
+            *[_try(worker, draft) for worker, draft in zip(workers, drafts)]
+        )
+
+        raw = [r for r in results if r.startswith("RAW:")]
+        assert raw == [], f"kaybeden taraf ham veritabanı hatasıyla düştü: {raw}"
+
+        assert await setup.fetchval(
+            "SELECT count(*) FROM social.sector_packages "
+            "WHERE sector_id = $1 AND status = 'active'",
+            sector_id,
+        ) == 1, "tek-aktif değişmezi bozuldu"
+
+        events = await setup.fetch(
+            "SELECT event_type FROM social.package_events WHERE sector_id = $1", sector_id
+        )
+        assert len(events) == results.count("ok"), (
+            f"olay sayısı başarılı geçiş sayısıyla eşleşmiyor: "
+            f"{len(events)} olay, {results.count('ok')} geçiş"
+        )
+    finally:
+        for worker in workers:
+            await worker.close()
+        if sector_id is not None:
+            await _drop_committed_sector(setup, sector_id)
+        await setup.close()

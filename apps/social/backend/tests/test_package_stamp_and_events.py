@@ -276,9 +276,16 @@ async def test_rollback_event_requires_source_and_target_versions(pkg_db, drop):
 
 
 async def test_deactivation_event_requires_from_null_to(pkg_db):
-    """Deaktivasyonun hedefi YOKTUR — `to_version` NULL kalmalı (F22)."""
-    sub_id, package_id = await _seed_sector_and_package(pkg_db)
+    """Deaktivasyonun hedefi YOKTUR — `to_version` NULL kalmalı (F22).
 
+    `from_version` ayrıca GERÇEĞE karşı doğrulanır: geri çekilen paketin
+    kendi sürümü olmalı. Eskiden boş olmayan herhangi bir değer denetimsiz
+    geçiyordu (checkpoint 13, F3) — uydurma bir kaynak sürüm, eksik kaynak
+    sürüm kadar zararlıdır.
+    """
+    sub_id, package_id = await _seed_sector_and_package(pkg_db, version=1)
+
+    # (a) kaynak sürüm hiç yok
     with pytest.raises(PackageEventContractError):
         await log_package_event(
             pkg_db,
@@ -288,12 +295,23 @@ async def test_deactivation_event_requires_from_null_to(pkg_db):
             actor="admin",
         )
 
+    # (b) kaynak sürüm var ama GERÇEK değil
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            pkg_db,
+            event_type="deactivation",
+            sector_id=sub_id,
+            package_id=package_id,
+            from_version=3,
+            actor="admin",
+        )
+
     event_id = await log_package_event(
         pkg_db,
         event_type="deactivation",
         sector_id=sub_id,
         package_id=package_id,
-        from_version=3,
+        from_version=1,
         actor="admin",
     )
     assert event_id is not None

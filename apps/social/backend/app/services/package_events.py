@@ -81,36 +81,31 @@ def _validate_detail(detail: Any) -> None:
             )
 
 
-async def _is_replacement_activation(db, *, sector_id: UUID, package_id: UUID) -> bool:
-    """Bu aktivasyon bir devir teslim mi, yoksa yerine geçtiği bir şey yok mu.
+async def _active_version_excluding(db, *, sector_id: UUID, package_id: UUID) -> int | None:
+    """Sektörde ŞU AN aktif olan BAŞKA paketin sürümü; yoksa `None`.
 
     Soru ÇAĞIRANA sorulmaz, paket tablosundan okunur. Ayrı bir "bu bir
     yerine-geçmedir" bayrağı ile `from_version` iki ayrı beyandır ve
     çelişebilirler; ikisini tek ölçüye bağlamak o sınıfı kapatır (K-01b
     disiplini).
 
-    **Ölçü: sektörde ŞU AN aktif olan başka bir paket var mı.** İlk yazımda
-    ölçü "arşivlenmiş satır var mı" idi ve o vekil ölçü yanlıştı: acil geri
-    çekme (K-38) sonrası sektörde arşivlenmiş satır KALIR ama aktif satır
-    kalmaz, dolayısıyla sonraki aktivasyon yerine geçtiği bir şey olmadan
-    "devir teslim" sayılıp reddediliyordu — meşru bir yol kapalıydı (Task 13
-    ölçtü). "Yerine geçilen sürüm" tanım gereği geçiş anında AKTİF olandır.
-
     **Sıra bağımlılığı — sözleşmenin parçası:** ölçü yalnız durum geçişi
     UYGULANMADAN ÖNCE doğrudur. Tek yazıcı `_apply_status_transition`'dır ve
-    olayı geçişten önce yazar; sıra tersine çevrilirse bu ölçü çöker.
+    olayı geçişten önce yazar.
+
+    İlk yazımda ölçü "arşivlenmiş satır var mı" idi ve o vekil ölçü yanlıştı:
+    acil geri çekme (K-38) sonrası sektörde arşivlenmiş satır KALIR ama aktif
+    satır kalmaz, dolayısıyla sonraki aktivasyon yerine geçtiği bir şey olmadan
+    "devir teslim" sayılıp reddediliyordu — meşru bir yol kapalıydı (Task 13
+    ölçtü). "Yerine geçilen sürüm" tanım gereği geçiş anında AKTİF olandır.
     """
-    return bool(
-        await db.fetchval(
-            """
-            SELECT EXISTS (
-                SELECT 1 FROM social.sector_packages
-                WHERE sector_id = $1 AND id <> $2 AND status = 'active'
-            )
-            """,
-            sector_id,
-            package_id,
-        )
+    return await db.fetchval(
+        """
+        SELECT version FROM social.sector_packages
+        WHERE sector_id = $1 AND id <> $2 AND status = 'active'
+        """,
+        sector_id,
+        package_id,
     )
 
 
@@ -124,20 +119,41 @@ async def _validate_version_shape(
     """
     if event_type == "activation":
         _require(to_version is not None, "activation: to_version zorunlu")
-        if from_version is None:
-            _require(
-                not await _is_replacement_activation(
-                    db, sector_id=sector_id, package_id=package_id
-                ),
-                "activation: yerine-geçme aktivasyonunda from_version zorunlu "
-                "(sektörde arşivlenmiş paket var)",
-            )
+        # TAM EŞLEŞME. Yalnız "from_version yoksa itiraz et" demek asimetrikti
+        # (checkpoint 13, F3): boş olmayan HERHANGİ bir değer — alakasız bir
+        # sürüm dahil — hiç denetlenmeden geçiyordu. Denetim izinde uydurma bir
+        # kaynak sürüm, eksik kaynak sürüm kadar zararlıdır.
+        actual = await _active_version_excluding(
+            db, sector_id=sector_id, package_id=package_id
+        )
+        _require(
+            from_version == actual,
+            f"activation: from_version gerçek aktif sürümle eşleşmeli "
+            f"(beklenen {actual!r}, verilen {from_version!r}) — "
+            "olay geçişten ÖNCE yazılır; bu uyuşmazlık ya yanlış kaynak sürüm "
+            "ya da bozulmuş yazım sırası demektir",
+        )
     elif event_type == "rollback":
-        _require(from_version is not None, "rollback: from_version (arşivlenen kaynak) zorunlu")
         _require(to_version is not None, "rollback: to_version (geri getirilen hedef) zorunlu")
+        actual = await _active_version_excluding(
+            db, sector_id=sector_id, package_id=package_id
+        )
+        _require(
+            from_version is not None and from_version == actual,
+            f"rollback: from_version arşivlenen aktif sürüm olmalı "
+            f"(beklenen {actual!r}, verilen {from_version!r})",
+        )
     elif event_type == "deactivation":
-        _require(from_version is not None, "deactivation: from_version zorunlu")
         _require(to_version is None, "deactivation: hedef sürüm YOKTUR, to_version NULL olmalı")
+        own = await db.fetchval(
+            "SELECT version FROM social.sector_packages WHERE id = $1 AND status = 'active'",
+            package_id,
+        )
+        _require(
+            from_version is not None and from_version == own,
+            f"deactivation: from_version geri çekilen aktif sürüm olmalı "
+            f"(beklenen {own!r}, verilen {from_version!r})",
+        )
 
 
 async def log_package_event(

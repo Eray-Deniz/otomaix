@@ -1315,6 +1315,38 @@ class GateNotSatisfied(RuntimeError):
     """Geçiş kapısının kanıtı sağlanmadı — geçiş YAPILMAZ."""
 
 
+def _require_flag(value: Any, label: str) -> None:
+    """Alan GERÇEKTEN `bool` olmalı — doğru-görünen değer kanıt değildir.
+
+    Açıklama satırı (`activation_eligible: bool`) bir kapı DEĞİLDİR; Python
+    onu zorlamaz. Doğruluk-değeriyle çalışan bir kapı `"false"` metnini DOĞRU
+    sayar (boş olmayan her metin doğrudur) — yani "aktive edilemez" diye
+    işaretlenmiş bir aday aktive edilebilirdi (checkpoint 13, F1: ölçüldü).
+    `isinstance` YETMEZ: `bool` bir `int` alt sınıfıdır, o yüzden tam tip
+    eşitliği aranır.
+    """
+    if type(value) is not bool:
+        raise TypeError(
+            f"{label} bool olmalı ({type(value).__name__} verildi) — "
+            "doğru-görünen değer kanıt sayılmaz"
+        )
+
+
+def _require_count(value: Any, label: str) -> None:
+    """Sayaç GERÇEKTEN `int` olmalı ve negatif olamaz.
+
+    Ayna vaka: `False == 0` ve `True == 1`. Bir bool sayaç alanına düşerse
+    "açık soru yok" kapısı sessizce açılırdı.
+    """
+    if type(value) is not int:
+        raise TypeError(
+            f"{label} int olmalı ({type(value).__name__} verildi) — "
+            "bool bir sayaç değildir"
+        )
+    if value < 0:
+        raise ValueError(f"{label} negatif olamaz: {value}")
+
+
 @dataclass(frozen=True)
 class ActivationGateEvidence:
     """Aktivasyon kapısının mekanik kanıtı (spec §2.3, K-71).
@@ -1323,6 +1355,9 @@ class ActivationGateEvidence:
     karşılığıdır: dolu gelirse geçiş anındaki gerçek aktif sürümle eşleşmeli
     (yetenek kurulu), `None` gelirse kontrol yapılmaz. Alanın onay akışında
     ZORUNLU olup olmayacağı kararın kendisidir ve burada yazılmaz.
+
+    Alan tipleri YAPIMDA zorlanır: geçersiz kanıt hiç var olamaz, dolayısıyla
+    "kapıya geçersiz kanıtla gelme" diye bir durum da doğmaz.
     """
 
     activation_eligible: bool
@@ -1330,6 +1365,19 @@ class ActivationGateEvidence:
     katman1_passed: bool
     checklist_approved: bool
     expected_active_version: int | None = None
+
+    def __post_init__(self) -> None:
+        _require_flag(self.activation_eligible, "activation_eligible")
+        _require_flag(self.katman1_passed, "katman1_passed")
+        _require_flag(self.checklist_approved, "checklist_approved")
+        _require_count(self.open_questions_count, "open_questions_count")
+        if self.expected_active_version is not None:
+            _require_count(self.expected_active_version, "expected_active_version")
+            if self.expected_active_version < 1:
+                raise ValueError(
+                    "expected_active_version 1'den küçük olamaz: "
+                    f"{self.expected_active_version} (sürümler 1'den başlar)"
+                )
 
 
 @dataclass(frozen=True)
@@ -1344,6 +1392,24 @@ class RollbackGateEvidence:
     manager_approved: bool
     katman1_passed: bool
 
+    def __post_init__(self) -> None:
+        _require_flag(self.manager_approved, "manager_approved")
+        _require_flag(self.katman1_passed, "katman1_passed")
+
+
+def _require_evidence(evidence: Any, expected: type) -> None:
+    """Kanıt SINIFIN KENDİSİ olmalı — ördek tiplemesi kabul edilmez.
+
+    Aynı alan adlarını taşıyan gelişigüzel bir nesne, yapımdaki tip kapısını
+    hiç görmeden kapıya ulaşırdı. İki kanıt sınıfının ayrı olması da ancak
+    burada gerçek olur: aktivasyon kanıtı rollback kapısını açamaz.
+    """
+    if type(evidence) is not expected:
+        raise GateNotSatisfied(
+            f"kanıt {expected.__name__} olmalı ({type(evidence).__name__} verildi) — "
+            "benzer alan taşıyan nesne kanıt yerine geçmez"
+        )
+
 
 def _require_actor(actor: Any) -> str:
     if not isinstance(actor, str) or not actor.strip():
@@ -1351,30 +1417,52 @@ def _require_actor(actor: Any) -> str:
     return actor.strip()
 
 
-async def _set_status(db, package_id: UUID, status: str) -> None:
-    """Tek satırın durumunu günceller.
+async def _set_status(db, package_id: UUID, status: str, *, expected: str) -> None:
+    """Durumu KARŞILAŞTIR-VE-YAZ ile günceller.
 
-    Ayrı bir fonksiyon olmasının iki sebebi var: geçişin her adımı AYNI kapıdan
-    geçsin (ikinci bir UPDATE yazımı doğmasın) ve atomiklik testi geçiş adımını
-    gerçekten düşürebilsin.
+    Koşulsuz `UPDATE ... WHERE id = $1` yetmiyordu (checkpoint 13, F2): iki
+    transaction aynı taslağı okuyup ikisi de yazınca ikinci güncelleme
+    `active → active` olarak geçiyor ve sessizce başarılı oluyordu. Beklenen
+    önceki durumu koşula koymak, kaybeden tarafı AÇIKÇA düşürür.
+
+    Ayrı bir fonksiyon olmasının ikinci sebebi: geçişin her adımı AYNI kapıdan
+    geçsin ve atomiklik testi geçiş adımını gerçekten düşürebilsin.
     """
-    await db.execute(
+    updated = await db.fetchval(
         "UPDATE social.sector_packages SET status = $2, "
         "activated_at = CASE WHEN $2 = 'active' THEN now() ELSE activated_at END "
-        "WHERE id = $1",
+        "WHERE id = $1 AND status = $3 RETURNING id",
         package_id,
         status,
+        expected,
     )
+    if updated is None:
+        raise LifecycleError(
+            f"durum geçişi reddedildi: {package_id} artık {expected!r} değil — "
+            "eşzamanlı bir geçiş önce davrandı"
+        )
 
 
-async def _lock_active_row(db, sector_id: UUID):
-    """Sektörün aktif satırını KİLİTLEYEREK okur.
+async def _lock_sector(db, sector_id: UUID) -> None:
+    """Sektör satırını kilitler — yaşam döngüsünün TEK serileştirme noktası.
 
-    `FOR UPDATE` olmadan iki eşzamanlı aktivasyon aynı "önceki aktif"i görür,
-    ikisi de onu arşivler ve ikisi de kendini aktif yapmaya çalışır; tek-aktif
-    kısmi indeksi birini reddeder ama denetim izi çoktan iki devir teslim
-    yazmış olur. Kilit o pencereyi kapatır.
+    Paket satırlarını kilitlemek yetmiyordu: ilk aktivasyonda kilitlenecek
+    aktif satır YOKTUR, dolayısıyla iki eşzamanlı ilk aktivasyon hiçbir yerde
+    karşılaşmıyor ve ikisi de olay yazıyordu (checkpoint 13, F2). Sektör satırı
+    her durumda vardır ve sabittir, o yüzden çapa odur.
+
+    **Kilit sırası (üç yaşam döngüsü fonksiyonunda da AYNI):** önce
+    `social.sectors` satırı, sonra paket satırları. Tek sıra = kilitlenme yok.
     """
+    locked = await db.fetchval(
+        "SELECT id FROM social.sectors WHERE id = $1 FOR UPDATE", sector_id
+    )
+    if locked is None:
+        raise LifecycleError(f"sektör bulunamadı: {sector_id}")
+
+
+async def _active_row(db, sector_id: UUID):
+    """Sektörün aktif satırı. Sektör kilidi ALINDIKTAN SONRA çağrılır."""
     return await db.fetchrow(
         "SELECT id, version FROM social.sector_packages "
         "WHERE sector_id = $1 AND status = 'active' FOR UPDATE",
@@ -1388,8 +1476,8 @@ async def _apply_status_transition(
     sector_id: UUID,
     event_type: str,
     actor: str,
-    activate: tuple[UUID, int] | None,
-    archive: UUID | None,
+    activate: tuple[UUID, int, str] | None,
+    archive: tuple[UUID, str] | None,
     from_version: int | None,
     to_version: int | None,
 ) -> None:
@@ -1408,7 +1496,7 @@ async def _apply_status_transition(
             db,
             event_type=event_type,
             sector_id=sector_id,
-            package_id=activate[0] if activate else archive,
+            package_id=activate[0] if activate else archive[0],
             from_version=from_version,
             to_version=to_version,
             actor=actor,
@@ -1419,9 +1507,9 @@ async def _apply_status_transition(
             )
 
         if archive is not None:
-            await _set_status(db, archive, "archived")
+            await _set_status(db, archive[0], "archived", expected=archive[1])
         if activate is not None:
-            await _set_status(db, activate[0], "active")
+            await _set_status(db, activate[0], "active", expected=activate[2])
 
 
 async def insert_draft(
@@ -1500,6 +1588,7 @@ async def activate_package(
     Kanıt alanlarından herhangi biri sağlanmazsa `GateNotSatisfied` ile
     REDDEDER — mekanik kontrol, yorum değil.
     """
+    _require_evidence(evidence, ActivationGateEvidence)
     owner = _require_actor(actor)
 
     unmet = []
@@ -1515,8 +1604,17 @@ async def activate_package(
         raise GateNotSatisfied("aktivasyon kapısı sağlanmadı: " + ", ".join(unmet))
 
     async with db.transaction():
+        # Kilitsiz ilk okuma YALNIZ sektörü bulmak içindir; durum kararı
+        # kilitten SONRAKİ okumaya dayanır (aradaki pencere F2'nin kaynağıydı).
+        sector_id = await db.fetchval(
+            "SELECT sector_id FROM social.sector_packages WHERE id = $1", package_id
+        )
+        if sector_id is None:
+            raise LifecycleError(f"paket bulunamadı: {package_id}")
+        await _lock_sector(db, sector_id)
+
         target = await db.fetchrow(
-            "SELECT sector_id, version, status FROM social.sector_packages WHERE id = $1",
+            "SELECT version, status FROM social.sector_packages WHERE id = $1 FOR UPDATE",
             package_id,
         )
         if target is None:
@@ -1527,8 +1625,7 @@ async def activate_package(
                 "arşivlenmiş sürümü geri getirmek rollback_package'ın işidir"
             )
 
-        sector_id = target["sector_id"]
-        current = await _lock_active_row(db, sector_id)
+        current = await _active_row(db, sector_id)
         current_version = current["version"] if current else None
 
         if evidence.expected_active_version is not None and (
@@ -1545,8 +1642,8 @@ async def activate_package(
             sector_id=sector_id,
             event_type="activation",
             actor=owner,
-            activate=(package_id, target["version"]),
-            archive=current["id"] if current else None,
+            activate=(package_id, target["version"], "draft"),
+            archive=(current["id"], "active") if current else None,
             from_version=current_version,
             to_version=target["version"],
         )
@@ -1565,6 +1662,7 @@ async def rollback_package(
     Hedef-sürüm kanıtı ÇAĞIRANDAN alınmaz, burada doğrulanır: hedef o sektörde
     var olmalı ve `archived` durumda olmalı.
     """
+    _require_evidence(evidence, RollbackGateEvidence)
     owner = _require_actor(actor)
 
     unmet = []
@@ -1576,6 +1674,7 @@ async def rollback_package(
         raise GateNotSatisfied("rollback kapısı sağlanmadı: " + ", ".join(unmet))
 
     async with db.transaction():
+        await _lock_sector(db, sector_id)
         has_archived = await db.fetchval(
             "SELECT EXISTS (SELECT 1 FROM social.sector_packages "
             "WHERE sector_id = $1 AND status = 'archived')",
@@ -1589,7 +1688,7 @@ async def rollback_package(
 
         target = await db.fetchrow(
             "SELECT id, status FROM social.sector_packages "
-            "WHERE sector_id = $1 AND version = $2",
+            "WHERE sector_id = $1 AND version = $2 FOR UPDATE",
             sector_id,
             to_version,
         )
@@ -1601,7 +1700,7 @@ async def rollback_package(
                 "rollback yalnız bir zamanlar aktif olmuş sürüme döner"
             )
 
-        current = await _lock_active_row(db, sector_id)
+        current = await _active_row(db, sector_id)
         if current is None:
             raise LifecycleError(
                 "bu sektörde aktif sürüm YOK — geri alınacak bir geçiş yok; "
@@ -1613,8 +1712,8 @@ async def rollback_package(
             sector_id=sector_id,
             event_type="rollback",
             actor=owner,
-            activate=(target["id"], to_version),
-            archive=current["id"],
+            activate=(target["id"], to_version, "archived"),
+            archive=(current["id"], "active"),
             from_version=current["version"],
             to_version=to_version,
         )
@@ -1629,8 +1728,15 @@ async def deactivate_package(db, *, package_id: UUID, actor: str) -> None:
     owner = _require_actor(actor)
 
     async with db.transaction():
+        sector_id = await db.fetchval(
+            "SELECT sector_id FROM social.sector_packages WHERE id = $1", package_id
+        )
+        if sector_id is None:
+            raise LifecycleError(f"paket bulunamadı: {package_id}")
+        await _lock_sector(db, sector_id)
+
         row = await db.fetchrow(
-            "SELECT sector_id, version, status FROM social.sector_packages "
+            "SELECT version, status FROM social.sector_packages "
             "WHERE id = $1 FOR UPDATE",
             package_id,
         )
@@ -1643,11 +1749,11 @@ async def deactivate_package(db, *, package_id: UUID, actor: str) -> None:
 
         await _apply_status_transition(
             db,
-            sector_id=row["sector_id"],
+            sector_id=sector_id,
             event_type="deactivation",
             actor=owner,
             activate=None,
-            archive=package_id,
+            archive=(package_id, "active"),
             from_version=row["version"],
             to_version=None,
         )
