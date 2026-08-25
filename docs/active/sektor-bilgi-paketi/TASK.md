@@ -30,9 +30,21 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 - ledger_window_ref: 5a9d5d4220d0a58db84dc23f274199491d91216b
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md
 - execute_branch: feat/sektor-bilgi-paketi
-- last_checkpoint_ref: 926e7c6865b147c298b347948b0eeaba9e6c81ee
-- cp_count: 13
-  <!-- Checkpoint 13: üç tur; tur 3 `approve`, bulgu YOK -> §8.6 Clean dalı.
+- last_checkpoint_ref: e85dd56c7328df358c8865a6756aea2595ef0432
+- cp_count: 14
+  <!-- Checkpoint 14: üç tur; tur 3 `approve`, bulgu YOK -> §8.6 Clean dalı.
+       Tur 1: DÖRT high (kimliksiz webhook · teslimden önce onay · havuz
+       tüketimi · migration kendi tablosunu doğrulamıyor). Tur 2: ilk üçü kapalı
+       doğrulandı, F4 YENİDEN AÇILDI — kapı kolon imzasını görüyordu ama
+       tablonun kendi katalog özelliklerini görmüyordu (UNLOGGED sonda rc=0 ile
+       geçiyordu; Codex "çıkarım" diye işaretledi, kabul edilmeden ÖNCE ölçüldü).
+       Tur 2 fix'i varyantı değil SINIFI kapattı (relkind/relpersistence/
+       relispartition/rls/force_rls) ve kapanışı iki vakalık matrisle kanıtladı.
+       Tur 3: bulgu yok. İki tur üst üste aynı sınıfa çarptığı için tur 3
+       prompt'una "bu sınıfın dar bir varyantı daha çıkarsa yama kalemi olarak
+       değil, sayarak-kapanmaz teşhisi olarak raporla" kısıtı yazıldı.
+       Ayrıntı: Codex defteri, 2026-08-25 çağrıları.
+       Checkpoint 13: üç tur; tur 3 `approve`, bulgu YOK -> §8.6 Clean dalı.
        Tur 1: iki high + bir medium. Tur 2: üçü de kapalı doğrulandı, bir YENİ
        high (F4) çıktı ve o da düzeltmenin KENDİ yan etkisiydi (serileştirme
        çapasını sektör satırına taşımak yeni bir pencere açtı). Tur 3: F4 kapalı,

@@ -15,11 +15,11 @@
 
 ## Current State
 - **Biten:** Task 1–13 (16'nın 13'ü). **Checkpoint 13 KAPANDI. Açık kapı YOK.**
-- **Checkpoint:** `cp_count: 13`, `last_checkpoint_ref` = `926e7c6`. §8.6 Clean dalı ateşlendi
-  (tur 3 `approve`, bulgu yok); ref ve sayaç birlikte ilerledi.
+- **Checkpoint:** sayaç ve ref TASK.md "Execution State"ten okunur — burada TEKRARLANMAZ
+  (türetilebilir değer iki yerde tutulunca ıraksar). Son checkpoint §8.6 Clean dalında kapandı.
 - **Mod:** inline. `execute_mode: subagent-driven` kaydı BİLEREK değiştirilmedi (Task 1-2'yi
   doğru anlatıyor). inline YALNIZ task yazımını kapsar; review/checkpoint kapıları normal koştu.
-- **Tavan:** 8; `cp_count` 13 olduğu için her riskli task `CEILING_RISK` dalına düşüyor.
+- **Tavan:** 8; sayaç tavanın ÜSTÜNDE olduğu için her riskli task `CEILING_RISK` dalına düşüyor.
   Eray bu oturumda tavan iznini AÇIKÇA verdi; **o izin BU OTURUMA aitti**, yeni oturumda
   tekrar sorulmalı.
 - **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
