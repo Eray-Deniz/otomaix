@@ -164,3 +164,70 @@ def test_wrong_index_definition_is_caught(index_name):
     )
     assert FAILURE_MARKER in result.stderr, result.stderr
     assert index_name in result.stderr
+
+
+# --- İmza TAMLIĞI (checkpoint 12 tur 2, F3) --------------------------------
+#
+# İlk yazımda indeks imzası elle kurulmuş alanlardan oluşuyordu (kolonlar +
+# predicate + uygulanma bayrakları) ve `indisunique`, erişim yöntemi ile sıralama
+# DIŞARIDA kalmıştı. Aynı adda UNIQUE bir indeks beklenen dizeyi ÜRETİYOR, yani
+# `CREATE INDEX IF NOT EXISTS` onu atlıyor ve migration başarıyla bitiyordu —
+# oysa o şema aynı markanın aynı zaman damgalı iki olayını REDDEDERDİ.
+#
+# Çözüm alan EKLEMEK değil, imzayı TAM tanıma bağlamak oldu: `pg_get_indexdef`
+# indeksin kanonik tanımının tamamını taşır, dolayısıyla unutulabilecek bir alan
+# KALMAZ. Aşağıdaki vakalar bunu ölçer.
+
+
+def test_unique_index_with_matching_columns_is_caught():
+    """Aynı ad + aynı kolon + aynı predicate, ama UNIQUE → yakalanmalı.
+
+    Bu, kısmi imzanın gerçek atlatma vakasıdır: eski kapı bu şemayı ONAYLIYORDU.
+    """
+    result = _reapply_033(
+        """
+        DROP INDEX social.idx_package_events_brand_created;
+        CREATE UNIQUE INDEX idx_package_events_brand_created
+            ON social.package_events (brand_id, created_at DESC)
+            WHERE brand_id IS NOT NULL;
+        """
+    )
+
+    assert result.returncode != 0, (
+        f"UNIQUE indeks sessizce kabul edildi — stdout:\n{result.stdout}"
+    )
+    assert FAILURE_MARKER in result.stderr, result.stderr
+    assert "idx_package_events_brand_created" in result.stderr
+
+
+def test_reversed_index_ordering_is_caught():
+    """Sıralama yönü (DESC → ASC) değişmişse yakalanmalı."""
+    result = _reapply_033(
+        """
+        DROP INDEX social.idx_package_events_sector_created;
+        CREATE INDEX idx_package_events_sector_created
+            ON social.package_events (sector_id, created_at ASC)
+            WHERE sector_id IS NOT NULL;
+        """
+    )
+
+    assert result.returncode != 0, (
+        f"ters sıralama sessizce kabul edildi — stdout:\n{result.stdout}"
+    )
+    assert FAILURE_MARKER in result.stderr, result.stderr
+
+
+def test_non_partial_index_is_caught():
+    """Kısmi olmayan (predicate'siz) indeks yakalanmalı."""
+    result = _reapply_033(
+        """
+        DROP INDEX social.idx_package_events_brand_created;
+        CREATE INDEX idx_package_events_brand_created
+            ON social.package_events (brand_id, created_at DESC);
+        """
+    )
+
+    assert result.returncode != 0, (
+        f"predicate kaybı sessizce kabul edildi — stdout:\n{result.stdout}"
+    )
+    assert FAILURE_MARKER in result.stderr, result.stderr

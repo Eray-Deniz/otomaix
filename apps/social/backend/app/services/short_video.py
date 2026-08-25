@@ -1089,17 +1089,26 @@ async def run_short_video_stage1(
 
     # Post INSERT — TTS R2 path'i post_id'ye bağlı.
     #
-    # Damga BURADA yazılmaz. Makbuz tek kullanımlıktır ve stage-1'in kalıcı
-    # başarısı bu satırda DEĞİL, TTS + still üretimi geçtikten sonra doğar:
-    # burada tüketilseydi TTS patladığında makbuz yanar, arayüz kullanıcıyı
-    # adım 2'ye geri atar (ölçüldü) ve AYNI makbuzla yapılan yeniden deneme
-    # damgasız kalırdı — damga başarısız postun üstünde asılı kalırken.
+    # Post `generating` olarak doğar, `awaiting_approval` OLARAK DEĞİL. İki
+    # sebep aynı yöne bakıyor:
+    #
+    # 1. Damga BURADA yazılmaz — makbuz tek kullanımlıktır ve stage-1'in kalıcı
+    #    başarısı bu satırda değil, TTS + still üretimi geçtikten sonra doğar.
+    #    Burada tüketilseydi TTS patladığında makbuz yanar, arayüz kullanıcıyı
+    #    adım 2'ye geri atar (ölçüldü) ve AYNI makbuzla yapılan yeniden deneme
+    #    damgasız kalırdı — damga başarısız postun üstünde asılı kalırken.
+    # 2. Stage-2'nin kapısı `status = 'awaiting_approval'`dır. Post o durumda
+    #    doğarsa, onaya açılma ile damga yazımı arasında bir çöküş stage-2'ye
+    #    UYGUN ama damgasız bir post bırakır ve makbuz hâlâ kullanılabilir olur
+    #    — aynı makbuz sonra BAŞKA bir postu damgalayabilirdi (sahte soyağacı).
+    #
+    # Onaya açılma ile damga yazımı bu yüzden TEK transaction'dadır (aşağıda).
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
             (brand_id, content_type, prompt, user_text, aspect_ratio, status,
              template_id, template_fields, platform_captions, product_id)
-        VALUES ($1, 'video', $2, $3, $4, 'awaiting_approval',
+        VALUES ($1, 'video', $2, $3, $4, 'generating',
                 $5, $6, $7, $8)
         RETURNING *
         """,
@@ -1150,26 +1159,30 @@ async def run_short_video_stage1(
         )
         raise RuntimeError(f"Still görsel üretimi başarısız: {exc}") from exc
 
-    await _patch({
-        "still_image_url": still_image_url,
-        "product_image_url": product_image_url,
-        "generation_stage": "awaiting_approval",
-    })
-
-    # K-07 damga — stage-1'in KALICI BAŞARI noktası burasıdır. Makbuz tüketimi
-    # ile damganın posta yazılması TEK transaction'dadır: ayrı olsalardı makbuz
-    # tüketilip damga yazılmayabilir (kayıp atıf) ya da tersi olabilirdi.
+    # SONLANDIRMA — stage-1'in kalıcı başarı noktası. Tek transaction'da dört
+    # şey birlikte olur: still alanlarının yazımı · makbuzun tüketimi · damganın
+    # posta yazımı · postun onaya AÇILMASI. Bunlardan biri ayrı commit'te olsaydı
+    # arada bir çöküş yarım bir gerçeklik bırakırdı — ya damgasız ama onaylanabilir
+    # bir post, ya tüketilmiş ama karşılığı olmayan bir makbuz.
     async with db.transaction():
+        await _patch({
+            "still_image_url": still_image_url,
+            "product_image_url": product_image_url,
+            "generation_stage": "awaiting_approval",
+        })
         stamp_package_id, stamp_package_version = await resolve_persist_stamp(
             db, {"id": brand_id, "sub_sector_id": sub_sector_id}, generation_id
         )
-        if stamp_package_id is not None:
-            await db.execute(
-                "UPDATE social.posts SET package_id = $2, package_version = $3 WHERE id = $1",
-                post_id,
-                stamp_package_id,
-                stamp_package_version,
-            )
+        await db.execute(
+            """
+            UPDATE social.posts
+            SET status = 'awaiting_approval', package_id = $2, package_version = $3
+            WHERE id = $1
+            """,
+            post_id,
+            stamp_package_id,
+            stamp_package_version,
+        )
 
     return {
         "post_id": post_id,

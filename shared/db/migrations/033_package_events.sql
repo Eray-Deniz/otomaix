@@ -115,12 +115,21 @@ BEGIN
              'f|ondelete=c|FOREIGN KEY (brand_id) REFERENCES social.brands(id)'
              ' ON DELETE CASCADE|enforced=true validated=true trig=4 enabled=4'),
 
+            -- İndeks imzası ELLE KURULMAZ: `pg_get_indexdef` kanonik tanımın
+            -- TAMAMINI taşır (benzersizlik · erişim yöntemi · kolon sırası ve
+            -- yönü · predicate). Elle kurulan imzada unutulan her alan sessiz
+            -- bir atlatma kapısıdır — ölçüldü (checkpoint 12 tur 2): aynı adda
+            -- UNIQUE bir indeks eksik imzayı birebir üretiyor, `IF NOT EXISTS`
+            -- onu atlıyor ve migration başarıyla bitiyordu. Uygulanma durumu
+            -- tanımda YOKTUR, o yüzden ayrıca eklenir.
             ('idx_package_events_brand_created',
-             'cols=brand_id,created_at pred=(brand_id IS NOT NULL)'
-             ' valid=true ready=true live=true'),
+             'CREATE INDEX idx_package_events_brand_created ON'
+             ' social.package_events USING btree (brand_id, created_at DESC)'
+             ' WHERE (brand_id IS NOT NULL)|valid=true ready=true live=true'),
             ('idx_package_events_sector_created',
-             'cols=sector_id,created_at pred=(sector_id IS NOT NULL)'
-             ' valid=true ready=true live=true')
+             'CREATE INDEX idx_package_events_sector_created ON'
+             ' social.package_events USING btree (sector_id, created_at DESC)'
+             ' WHERE (sector_id IS NOT NULL)|valid=true ready=true live=true')
     ),
     observed(label, got) AS (
         VALUES
@@ -161,13 +170,8 @@ BEGIN
                              AND a.attname = 'brand_id')]::int2[])),
 
             ('idx_package_events_brand_created',
-             (SELECT format('cols=%s pred=%s valid=%s ready=%s live=%s',
-                            (SELECT string_agg(a.attname, ',' ORDER BY k.ord)
-                               FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
-                               JOIN pg_attribute a
-                                 ON a.attrelid = i.indrelid AND a.attnum = k.attnum),
-                            coalesce(pg_get_expr(i.indpred, i.indrelid),
-                                     '<kismi degil>'),
+             (SELECT format('%s|valid=%s ready=%s live=%s',
+                            pg_get_indexdef(c.oid),
                             CASE WHEN i.indisvalid THEN 'true' ELSE 'false' END,
                             CASE WHEN i.indisready THEN 'true' ELSE 'false' END,
                             CASE WHEN i.indislive THEN 'true' ELSE 'false' END)
@@ -179,13 +183,8 @@ BEGIN
                  AND i.indrelid = 'social.package_events'::regclass)),
 
             ('idx_package_events_sector_created',
-             (SELECT format('cols=%s pred=%s valid=%s ready=%s live=%s',
-                            (SELECT string_agg(a.attname, ',' ORDER BY k.ord)
-                               FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
-                               JOIN pg_attribute a
-                                 ON a.attrelid = i.indrelid AND a.attnum = k.attnum),
-                            coalesce(pg_get_expr(i.indpred, i.indrelid),
-                                     '<kismi degil>'),
+             (SELECT format('%s|valid=%s ready=%s live=%s',
+                            pg_get_indexdef(c.oid),
                             CASE WHEN i.indisvalid THEN 'true' ELSE 'false' END,
                             CASE WHEN i.indisready THEN 'true' ELSE 'false' END,
                             CASE WHEN i.indislive THEN 'true' ELSE 'false' END)

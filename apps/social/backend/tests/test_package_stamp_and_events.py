@@ -1114,3 +1114,60 @@ async def test_stage1_failure_leaves_the_receipt_reusable(pkg_db, monkeypatch):
 
 async def _noop_prompt():
     return "A gold ring on velvet"
+
+
+async def test_stage1_publishes_and_stamps_atomically(pkg_db, monkeypatch):
+    """Onaya AÇILMA ile damga yazımı TEK transaction'dadır (tur 2, F4).
+
+    Post artık `generating` olarak yazılıyor ve `awaiting_approval`a YALNIZ damga
+    transaction'ında geçiyor. Aksi hâlde ikisi arasında bir çöküş, stage-2'ye
+    uygun ama damgasız bir post bırakır ve makbuz hâlâ kullanılabilir olurdu —
+    aynı makbuz sonra BAŞKA bir postu damgalayabilirdi (sahte soyağacı).
+    """
+    from app.services import short_video as sv
+    from app.services import sector_packages as sp
+
+    sub_id, package_id = await _seed_sector_and_package(pkg_db, version=3)
+    _, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+    stamp_id = await _write_stamp(pkg_db, brand_id=brand_id, package_id=package_id, version=3)
+
+    # (a) Sonlandırma patlarsa: post onaya AÇILMAZ, makbuz YANMAZ.
+    async def _boom(*_a, **_k):
+        raise RuntimeError("sonlandırma düştü")
+
+    monkeypatch.setattr(sv, "resolve_persist_stamp", _boom)
+    with pytest.raises(RuntimeError):
+        await _run_stage1(
+            pkg_db,
+            brand_id=brand_id,
+            sub_sector_id=sub_id,
+            generation_id=stamp_id,
+            monkeypatch=monkeypatch,
+        )
+
+    rows = await pkg_db.fetch(
+        "SELECT status, package_id FROM social.posts WHERE brand_id = $1", brand_id
+    )
+    assert [r["status"] for r in rows] == ["generating"], (
+        "sonlandırma patladı ama post stage-2'ye uygun kaldı"
+    )
+    assert rows[0]["package_id"] is None
+    assert await pkg_db.fetchval(
+        "SELECT consumed_at FROM social.generation_stamps WHERE id = $1", stamp_id
+    ) is None, "sonlandırma patladı ama makbuz yandı"
+
+    # (b) Başarılı koşum: onaya açılma ve damga BİRLİKTE gelir.
+    monkeypatch.setattr(sv, "resolve_persist_stamp", sp.resolve_persist_stamp)
+    result = await _run_stage1(
+        pkg_db,
+        brand_id=brand_id,
+        sub_sector_id=sub_id,
+        generation_id=stamp_id,
+        monkeypatch=monkeypatch,
+    )
+    row = await pkg_db.fetchrow(
+        "SELECT status, package_id, package_version FROM social.posts WHERE id = $1",
+        result["post_id"],
+    )
+    assert row["status"] == "awaiting_approval"
+    assert row["package_id"] == package_id and row["package_version"] == 3
