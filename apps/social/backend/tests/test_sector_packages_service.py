@@ -821,7 +821,7 @@ def test_validator_rejects_punctuation_only_leaf(junk):
 
 def test_resolver_drops_meaningless_pool_entries():
     """Okuma tarafı da aynı yüklemi uygular — eski paketler için savunma."""
-    from app.services.sector_packages import SectorPackageContext, _pool
+    from app.services.sector_packages import SectorPackageContext, _meaningful_video_pool
 
     content = _valid_content()
     content["video_kodlar"] = {
@@ -829,5 +829,5 @@ def test_resolver_drops_meaningless_pool_entries():
         "sahne": ["…", "Boutique interior, warm ambient light."],
     }
     ctx = SectorPackageContext(uuid.uuid4(), 1, content, "kuyumculuk")
-    assert _pool(ctx, "hareket") == ["Slow orbit around the display case."]
-    assert _pool(ctx, "sahne") == ["Boutique interior, warm ambient light."]
+    assert _meaningful_video_pool(ctx, "hareket") == ["Slow orbit around the display case."]
+    assert _meaningful_video_pool(ctx, "sahne") == ["Boutique interior, warm ambient light."]

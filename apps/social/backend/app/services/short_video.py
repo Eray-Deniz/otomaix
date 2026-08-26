@@ -17,8 +17,12 @@ import asyncpg
 import sentry_sdk
 
 from app.core.config import settings
-from app.services.sector_packages import resolve_motion_prompt, resolve_persist_stamp
-from app.services.sector_packages import scene_pool as package_scene_pool
+from app.services.sector_packages import (
+    SectorPackageContext,
+    resolve_motion_prompt,
+    resolve_persist_stamp,
+    scene_pool,
+)
 from app.services.media_adapters import (
     IMAGE_ADAPTERS,
     IMAGE_EDIT_ADAPTERS,
@@ -108,7 +112,7 @@ async def _build_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
-    scene_pool: list[str] | None = None,
+    sector_scene_pool: list[str] | None = None,
 ) -> str:
     """Sahne prompt'u üret (Claude Opus).
 
@@ -119,7 +123,7 @@ async def _build_still_prompt(
     Ürün tarif edilmez (model resmi zaten görüyor), sadece sahne yazılır.
     Çıktı max 60 kelime — image-edit kısa prompt sever.
 
-    `scene_pool`: paketin sahne havuzu (spec §4.3). İKİ modda da girer — tek
+    `sector_scene_pool`: paketin sahne havuzu (spec §4.3). İKİ modda da girer — tek
     moda uygulamak yarım ayrışmadır: aynı marka bazı videolarda sektörel,
     bazılarında genel görünürdü. Havuz EK BAĞLAMDIR: sahnenin NASIL göründüğünü
     (ışık, doku, malzeme dili) sektöre bağlar, NE göründüğünü kullanıcının
@@ -154,13 +158,13 @@ async def _build_still_prompt(
         context_parts.append(f"Video topic: {topic}")
     if color_str:
         context_parts.append(f"Brand colors: {color_str}")
-    if scene_pool:
+    if sector_scene_pool:
         context_parts.append(
             "SECTOR SCENE VOCABULARY (pick the entries that fit the topic; "
             "do not try to use them all, and do not invent sector language "
             "beyond this list — the user's scene request still governs WHAT "
             "is shown):\n"
-            + "\n".join(f"- {entry}" for entry in scene_pool)
+            + "\n".join(f"- {entry}" for entry in sector_scene_pool)
         )
 
     context = "\n\n".join(context_parts)
@@ -283,7 +287,7 @@ async def _build_still_prompt(
             "product showcase, no text, no logos, "
             "cinematic composition, professional lighting, 4K"
         )
-        return _enrich_with_scene(", ".join(parts), scene_pool)
+        return _enrich_with_scene(", ".join(parts), sector_scene_pool)
 
 
 # ─── 0b. Motion prompt çeşitliliği ────────────────────────────────────────────
@@ -301,7 +305,6 @@ _MOTION_PROMPTS = [
 
 def _pick_motion_prompt() -> str:
     """Her video için farklı kamera hareketi seç."""
-    import random
     return random.choice(_MOTION_PROMPTS)
 
 
@@ -866,7 +869,7 @@ def _enrich_with_scene(prompt: str, pool: list[str] | None) -> str:
     """
     if not pool:
         return prompt
-    # Aday kümesi savunma amaçlı süzülür: `scene_pool()` zaten anlamlı öğe
+    # Aday kümesi savunma amaçlı süzülür: havuzu üreten `scene_pool()` zaten anlamlı öğe
     # döndürüyor ama bu yardımcı doğrudan da çağrılabilir. Süzme YOKLUK yönünde
     # çalışır — aday kalmazsa istem bayt aynı döner.
     candidates = [
@@ -889,7 +892,7 @@ async def _resolve_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
-    scene_pool: list[str] | None = None,
+    sector_scene_pool: list[str] | None = None,
 ) -> str:
     """image_prompt'u still_prompt'a dönüştür.
 
@@ -921,7 +924,7 @@ async def _resolve_still_prompt(
             product_info=product_info,
             product_doc_context=product_doc_context,
             image_edit_mode=True,
-            scene_pool=scene_pool,
+            sector_scene_pool=sector_scene_pool,
         )
 
     if user_brief.strip():
@@ -934,7 +937,7 @@ async def _resolve_still_prompt(
             user_brief=user_brief.strip(),
             product_info=product_info,
             product_doc_context=product_doc_context,
-            scene_pool=scene_pool,
+            sector_scene_pool=sector_scene_pool,
         )
 
     still_prompt = (prompt or "").strip()
@@ -948,7 +951,7 @@ async def _resolve_still_prompt(
         # doğrudan çağrılabilir ve caption modeli patlarsa yedek dal
         # "social media post image" döndürür (ölçüldü) — o da İngilizcedir.
         # Kapı bu yüzden kökene değil HAVUZUN VARLIĞINA bakar.
-        return _enrich_with_scene(still_prompt, scene_pool)
+        return _enrich_with_scene(still_prompt, sector_scene_pool)
     return await _build_still_prompt(
         topic=prompt or script[:100],
         brand_name=brand_name,
@@ -957,7 +960,7 @@ async def _resolve_still_prompt(
         color_str=color_str,
         product_info=product_info,
         product_doc_context=product_doc_context,
-        scene_pool=scene_pool,
+        sector_scene_pool=sector_scene_pool,
     )
 
 
@@ -1010,10 +1013,10 @@ async def run_short_video_stage1(
     product_info: str = "",
     product_doc_context: str = "",
     scene_reference_image_url: str = "",
-    package_context=None,
+    package_context: SectorPackageContext | None = None,
     requested_motion_prompt: str | None = None,
-    sub_sector_id=None,
-    generation_id=None,
+    sub_sector_id: UUID | None = None,
+    generation_id: UUID | None = None,
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
@@ -1075,7 +1078,7 @@ async def run_short_video_stage1(
         product_info=product_info,
         product_doc_context=product_doc_context,
         image_edit_mode=use_image_edit,
-        scene_pool=package_scene_pool(package_context),
+        sector_scene_pool=scene_pool(package_context),
     )
     template_fields["still_prompt"] = still_prompt
 

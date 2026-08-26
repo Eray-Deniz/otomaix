@@ -111,7 +111,14 @@ SIZE_TARGET_CHARS = 6000
 # - **Şekil liste.** Tek cümle, sektöre özel olsa bile o sektörün HER videosunu
 #   aynı tipte üretirdi. Çoğulluk biçimsel bir ayrıntı değil, alanın işlevinin
 #   parçasıdır (spec §3.4'e eklenen not; input "havuz" / "alt liste" der).
-VIDEO_POOL_KEYS = ("hareket", "sahne")
+#
+# Anahtarlar TEK yerde adlandırılır: yazım kapısı (`VIDEO_POOL_KEYS`) ile okuma
+# tarafı (`MOTION_POOL_KEY` / `SCENE_POOL_KEY`) aynı dizeleri iki ayrı yerde
+# taşısaydı, birinin değişip diğerinin kalması tam da yukarıda kapatılan
+# yazım/okuma ayrışmasını geri açardı.
+MOTION_POOL_KEY = "hareket"
+SCENE_POOL_KEY = "sahne"
+VIDEO_POOL_KEYS = (MOTION_POOL_KEY, SCENE_POOL_KEY)
 
 # `cta_kaliplari` öğesinin TAM anahtar kümesi (spec §3.4: {kalıp, tür, gerekçe}).
 CTA_ITEM_KEYS = frozenset({"kalip", "tur", "gerekce"})
@@ -388,7 +395,7 @@ def _check_special_day_shapes(ozel_gun: Any, errors: list[str]) -> None:
                 _require_text(entry[slot], f"{label}.{slot}", errors)
 
 
-def has_meaningful_text(value: Any) -> bool:
+def _has_meaningful_text(value: Any) -> bool:
     """Yaprak, noktalama ve boşluk dışında İÇERİK taşıyor mu.
 
     **Yazım ve okuma bu TEK yüklemi paylaşır** — K-01b'nin tek-normalize
@@ -412,11 +419,11 @@ def _require_text(value: Any, label: str, errors: list[str]) -> None:
     "doldurulmamış" aynı değer olsaydı eksik iş dolu görünürdü. Mantıksal ve
     sayısal değerler metin DEĞİLDİR: `False`/`0` eskiden "dolu" sayılıyordu.
     Yalnız noktalamadan oluşan değerler de içerik DEĞİLDİR (bkz.
-    `has_meaningful_text`).
+    `_has_meaningful_text`).
     """
     if not isinstance(value, str):
         errors.append(f"{label} metin değil: {type(value).__name__}")
-    elif not has_meaningful_text(value):
+    elif not _has_meaningful_text(value):
         errors.append(
             f"{label} boş ya da yalnız noktalama — bilinçli boş bırakılacaksa "
             f"{DELIBERATELY_EMPTY!r} yazılır"
@@ -526,7 +533,8 @@ def _check_size_target(content: dict, result: ValidationResult) -> None:
     total = sum(len(s) for s in _walk_strings(content))
     if total > SIZE_TARGET_CHARS:
         result.warnings.append(
-            f"içerik {total} karakter — 6000 karakterlik tasarım hedefi aşıldı "
+            f"içerik {total} karakter — {SIZE_TARGET_CHARS} karakterlik tasarım "
+            "hedefi aşıldı "
             "(uyarıdır, kapı değil)"
         )
 
@@ -804,7 +812,7 @@ def _channel_tags(item: Any) -> frozenset[str]:
     return frozenset(tags)
 
 
-def filter_channel_dependent(items: Any, channels: Any) -> list[dict]:
+def filter_channel_dependent(items: Any, channels: Any) -> list[Any]:
     """`[kanal-bağımlı: X]` etiketli kalıpları marka gerçeğine göre eler.
 
     Sözleşme (spec §12.2 · plan Task 9):
@@ -820,6 +828,11 @@ def filter_channel_dependent(items: Any, channels: Any) -> list[dict]:
     Filtre SEÇER, değiştirmez: dönen öğeler girdideki nesnelerin ta kendisidir
     ve sıraları korunur. Etiket metni de silinmez (spec §3.4: "taşınır,
     silinmez") — basım biçimi enjeksiyon katmanının (Task 10) işidir.
+
+    Dönüş `list[Any]`'dir, `list[dict]` DEĞİL: öğeler girdiden AYNEN geçer ve
+    çağıranlardan biri tek bir düz metni de bu filtreden geçirir. `dict`
+    demek, basım katmanının bilerek yazdığı sözlük-olmayan dalı yok saymak
+    olurdu.
 
     Girdi savunması her dalda açıktır (liste değil → boş; sözlük değil →
     envantersiz sayılır), bu yüzden gövdede toptan bir `except` YOKTUR: burada
@@ -852,23 +865,23 @@ BLOCK_HEADER = "SEKTÖR PAKETİ"
 # Görsel/video dağarcığı (`gorsel_kodlar`, `video_kodlar`) bu yüzeylerde YOK —
 # spec §4.3 onları görsel director ve durağan kare yüzeylerine gönderir (Task
 # 11). Fazla basmak "doğru yüzey" kontrolünü (spec §5.4) delerdi.
+#
+# İki yüzey bugün AYNI alanları aynı sırayla basar. Sıra elle kopyalansaydı
+# birinde yapılan bir değişiklik diğerinde sessizce kalabilirdi; tek demet
+# paylaşmak o ayrışmayı imkânsız kılar. Yüzeyler yine bağımsızdır — biri
+# ayrışmak istediğinde kendi demetini yazar.
+_CORE_SURFACE_FIELDS: tuple[str, ...] = (
+    "kapsam",
+    "ton_ve_dil",
+    "kanca_kaliplari",
+    "cta_kaliplari",
+    "takvim_temalari",
+    "yasaklar_ve_hassasiyetler",
+)
+
 _SURFACE_FIELDS: dict[str, tuple[str, ...]] = {
-    "caption": (
-        "kapsam",
-        "ton_ve_dil",
-        "kanca_kaliplari",
-        "cta_kaliplari",
-        "takvim_temalari",
-        "yasaklar_ve_hassasiyetler",
-    ),
-    "idea": (
-        "kapsam",
-        "ton_ve_dil",
-        "kanca_kaliplari",
-        "cta_kaliplari",
-        "takvim_temalari",
-        "yasaklar_ve_hassasiyetler",
-    ),
+    "caption": _CORE_SURFACE_FIELDS,
+    "idea": _CORE_SURFACE_FIELDS,
 }
 
 _FIELD_LABELS = {
@@ -1092,12 +1105,12 @@ def render_special_day_lines(
 
 
 # ─── 6. Hareket havuzu (K-02 = A · K-113 = A — plan Task 11) ────────────────
+#
+# `MOTION_POOL_KEY` / `SCENE_POOL_KEY` yazım kapısıyla birlikte §1'de tanımlıdır
+# (tek ad, tek yer).
 
-MOTION_POOL_KEY = "hareket"
-SCENE_POOL_KEY = "sahne"
 
-
-def _pool(context: SectorPackageContext | None, key: str) -> list[str]:
+def _meaningful_video_pool(context: SectorPackageContext | None, key: str) -> list[str]:
     """Paketin adlı havuzunu dolu metinlere indirger; yoksa BOŞ liste.
 
     Yazım kapısı bu şekli zaten zorluyor (`VIDEO_POOL_KEYS`), ama okuma tarafı
@@ -1116,17 +1129,17 @@ def _pool(context: SectorPackageContext | None, key: str) -> list[str]:
     # Okuma tarafı da AYNI yüklemi uygular: kapı bugün anlamsız yaprağı
     # reddediyor ama eski bir paket ya da elle değiştirilmiş içerik hâlâ
     # taşıyabilir. Süzme burada da yapılır ki tüketiciler hep anlamlı öğe görsün.
-    return [item for item in pool if has_meaningful_text(item)]
+    return [item for item in pool if _has_meaningful_text(item)]
 
 
 def scene_pool(context: SectorPackageContext | None) -> list[str]:
     """Durağan kare yüzeyine giden sahne havuzu (spec §4.3, iki modda da)."""
-    return _pool(context, SCENE_POOL_KEY)
+    return _meaningful_video_pool(context, SCENE_POOL_KEY)
 
 
 def motion_pool(context: SectorPackageContext | None) -> list[str]:
     """Hareket yüzeyine giden havuz — modele SEÇTİRİLİR (K-02 = A)."""
-    return _pool(context, MOTION_POOL_KEY)
+    return _meaningful_video_pool(context, MOTION_POOL_KEY)
 
 
 def resolve_motion_prompt(
@@ -1181,19 +1194,19 @@ def special_day_visual_accent(
     Eşleşme yoksa `None`. Burada log ÜRETİLMEZ: aynı gün için eşleşme uyarısını
     `render_special_day_lines` zaten basıyor ve iki yüzeyden iki kez uyarmak
     aynı olayı çift sayardı.
+
+    Eşleşme sorusunu KENDİ ölçmez, `match_special_day`'e sorar: o yüklem
+    modülün tek eşleşme ölçüsüdür (K-01b disiplini) ve ikinci bir kopya, görsel
+    yüzeyin "eşleşti" derken metin yüzeyinin "eşleşmedi" diyebildiği bir
+    pencere açardı. Sebep alanı burada kullanılmaz — görsel yüzey için her
+    eşleşmeme aynı şeydir: vurgu yok.
     """
     if context is None or not day_name:
         return None
-    ozel_gun = context.content.get("ozel_gun")
-    if not isinstance(ozel_gun, dict):
+    key, reason = match_special_day(context, day_name)
+    if reason is not None:
         return None
-    try:
-        key = normalize_special_day_key(day_name)
-    except ValueError:
-        return None
-    entry = ozel_gun.get(key)
-    if not isinstance(entry, dict):
-        return None
+    entry = context.content["ozel_gun"][key]
     vurgu = entry.get("gorsel_vurgu")
     return vurgu if isinstance(vurgu, str) and vurgu.strip() else None
 
@@ -1484,6 +1497,37 @@ async def _lock_sector(db, sector_id: UUID) -> None:
         raise LifecycleError(f"sektör bulunamadı: {sector_id}")
 
 
+async def _lock_and_load(db, package_id: UUID):
+    """Sektör kilidini alıp paketi kilit ALTINDA okur — `(sector_id, satır)`.
+
+    İki okuma bilerek ayrıdır: kilitsiz ilk okuma YALNIZ hangi sektörü
+    kilitleyeceğimizi bulmak içindir; durum kararı kilitten SONRAKİ okumaya
+    dayanır. Aradaki pencere F2'nin kaynağıydı ve F4'ün fail-closed kapısı da
+    burada durur — protokol TEK kopya olduğu için iki yaşam döngüsü ucunun o
+    pencereyi farklı kapatması mümkün değildir.
+
+    **Durum kontrolü ÇAĞIRANDA kalır:** her uç kendi beklediği durumu ve o
+    durum tutmadığında kullanıcıya ne söyleneceğini bilir; buraya taşımak
+    farkı bir parametreye çevirip okunurluğu düşürürdü.
+    """
+    sector_id = await db.fetchval(
+        "SELECT sector_id FROM social.sector_packages WHERE id = $1", package_id
+    )
+    if sector_id is None:
+        raise LifecycleError(f"paket bulunamadı: {package_id}")
+    await _lock_sector(db, sector_id)
+
+    row = await db.fetchrow(
+        "SELECT sector_id, version, status FROM social.sector_packages "
+        "WHERE id = $1 FOR UPDATE",
+        package_id,
+    )
+    if row is None:
+        raise LifecycleError(f"paket bulunamadı: {package_id}")
+    _require_same_sector(row["sector_id"], sector_id, package_id)
+    return sector_id, row
+
+
 async def _active_row(db, sector_id: UUID):
     """Sektörün aktif satırı. Sektör kilidi ALINDIKTAN SONRA çağrılır."""
     return await db.fetchrow(
@@ -1499,12 +1543,17 @@ async def _apply_status_transition(
     sector_id: UUID,
     event_type: str,
     actor: str,
-    activate: tuple[UUID, int, str] | None,
+    activate: tuple[UUID, str] | None,
     archive: tuple[UUID, str] | None,
     from_version: int | None,
     to_version: int | None,
 ) -> None:
     """Ham iki-adım geçişi + olay kaydı — TEK transaction (F24, K-101/K-102).
+
+    `activate` ve `archive` aynı şekli taşır: `(paket_id, beklenen_durum)`.
+    Sürüm numarası bu demetlerde DURMAZ — olayın sürümleri zaten `from_version`
+    / `to_version` ile taşınıyor ve iki yerde taşımak, ikisinin ayrışabildiği
+    bir pencere açardı.
 
     ÖZELDİR ve modül dışına verilmez. Public yüzey (aktivasyon / rollback /
     deaktivasyon) kendi kapı kanıtını doğruladıktan SONRA buraya gelir.
@@ -1532,7 +1581,7 @@ async def _apply_status_transition(
         if archive is not None:
             await _set_status(db, archive[0], "archived", expected=archive[1])
         if activate is not None:
-            await _set_status(db, activate[0], "active", expected=activate[2])
+            await _set_status(db, activate[0], "active", expected=activate[1])
 
 
 async def insert_draft(
@@ -1627,23 +1676,7 @@ async def activate_package(
         raise GateNotSatisfied("aktivasyon kapısı sağlanmadı: " + ", ".join(unmet))
 
     async with db.transaction():
-        # Kilitsiz ilk okuma YALNIZ sektörü bulmak içindir; durum kararı
-        # kilitten SONRAKİ okumaya dayanır (aradaki pencere F2'nin kaynağıydı).
-        sector_id = await db.fetchval(
-            "SELECT sector_id FROM social.sector_packages WHERE id = $1", package_id
-        )
-        if sector_id is None:
-            raise LifecycleError(f"paket bulunamadı: {package_id}")
-        await _lock_sector(db, sector_id)
-
-        target = await db.fetchrow(
-            "SELECT sector_id, version, status FROM social.sector_packages "
-            "WHERE id = $1 FOR UPDATE",
-            package_id,
-        )
-        if target is None:
-            raise LifecycleError(f"paket bulunamadı: {package_id}")
-        _require_same_sector(target["sector_id"], sector_id, package_id)
+        sector_id, target = await _lock_and_load(db, package_id)
         if target["status"] != "draft":
             raise LifecycleError(
                 f"yalnız 'draft' aktive edilebilir (görülen: {target['status']!r}); "
@@ -1667,7 +1700,7 @@ async def activate_package(
             sector_id=sector_id,
             event_type="activation",
             actor=owner,
-            activate=(package_id, target["version"], "draft"),
+            activate=(package_id, "draft"),
             archive=(current["id"], "active") if current else None,
             from_version=current_version,
             to_version=target["version"],
@@ -1737,7 +1770,7 @@ async def rollback_package(
             sector_id=sector_id,
             event_type="rollback",
             actor=owner,
-            activate=(target["id"], to_version, "archived"),
+            activate=(target["id"], "archived"),
             archive=(current["id"], "active"),
             from_version=current["version"],
             to_version=to_version,
@@ -1753,21 +1786,7 @@ async def deactivate_package(db, *, package_id: UUID, actor: str) -> None:
     owner = _require_actor(actor)
 
     async with db.transaction():
-        sector_id = await db.fetchval(
-            "SELECT sector_id FROM social.sector_packages WHERE id = $1", package_id
-        )
-        if sector_id is None:
-            raise LifecycleError(f"paket bulunamadı: {package_id}")
-        await _lock_sector(db, sector_id)
-
-        row = await db.fetchrow(
-            "SELECT sector_id, version, status FROM social.sector_packages "
-            "WHERE id = $1 FOR UPDATE",
-            package_id,
-        )
-        if row is None:
-            raise LifecycleError(f"paket bulunamadı: {package_id}")
-        _require_same_sector(row["sector_id"], sector_id, package_id)
+        sector_id, row = await _lock_and_load(db, package_id)
         if row["status"] != "active":
             raise LifecycleError(
                 f"yalnız aktif paket geri çekilebilir (görülen: {row['status']!r})"

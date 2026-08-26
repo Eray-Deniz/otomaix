@@ -146,7 +146,7 @@ async def test_still_prompt_scene_language_in_both_modes(monkeypatch, image_edit
         sector="Kuyumculuk",
         color_str="#0A84FF",
         image_edit_mode=image_edit_mode,
-        scene_pool=SCENE_POOL,
+        sector_scene_pool=SCENE_POOL,
     )
 
     assert len(calls) == 1, "durağan kare modele hiç gitmedi"
@@ -410,7 +410,7 @@ async def test_english_passthrough_still_gets_scene_pool(english_prompt):
         brand_kit={"sector": "Kuyumculuk"},
         brand_name="Donuk",
         brand_description="takı",
-        scene_pool=SCENE_POOL,
+        sector_scene_pool=SCENE_POOL,
     )
     assert english_prompt.rstrip(". ") in out, "kullanıcının istemi kayboldu"
     assert any(entry.rstrip(". ") in out for entry in SCENE_POOL), (
@@ -459,7 +459,7 @@ async def test_scene_enrichment_never_silently_skips(prompt, pool):
         brand_kit={"sector": "Kuyumculuk"},
         brand_name="Donuk",
         brand_description="takı",
-        scene_pool=pool,
+        sector_scene_pool=pool,
     )
     assert out != prompt, "sektörel sahne dili sessizce atlandı"
     assert prompt.rstrip(". ") in out, "kullanıcının istemi kayboldu"
@@ -511,7 +511,7 @@ async def test_scene_pool_survives_every_still_branch(
         prompt=prompt,
         user_brief=user_brief,
         image_edit_mode=image_edit_mode,
-        scene_pool=SCENE_POOL,
+        sector_scene_pool=SCENE_POOL,
         **_STILL_BRAND,
     )
 
@@ -543,7 +543,7 @@ async def test_unpackaged_still_untouched_in_every_branch(
         prompt=prompt,
         user_brief=user_brief,
         image_edit_mode=image_edit_mode,
-        scene_pool=None,
+        sector_scene_pool=None,
         **_STILL_BRAND,
     )
 
@@ -565,7 +565,7 @@ async def test_unpackaged_model_failure_fallback_is_pinned(monkeypatch):
         prompt="",
         user_brief="",
         image_edit_mode=False,
-        scene_pool=None,
+        sector_scene_pool=None,
         **_STILL_BRAND,
     )
     assert out == (

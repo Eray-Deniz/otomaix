@@ -109,6 +109,11 @@ interface Sector {
 // kopyası tutulmaz (spec §7.2).
 type SubSectorCandidate = Sector
 
+// Site analizinin döndürdüğü öneri, aday satırın TAMAMI değildir: uç yalnız
+// kimlik ile görünen adı taşır. Tipi aday satırla eşitlemek, taşınmayan alanı
+// uydurmayı zorunlu kılardı.
+type SubSectorSuggestion = Pick<Sector, 'id' | 'display_name'>
+
 // Kanal envanterinin kapalı kümesi. Sunucu aynı dört anahtarı zorlar; buraya
 // beşinci bir satır eklemek tek başına hiçbir şeyi açmaz (istek 400 döner).
 const CHANNEL_OPTIONS = [
@@ -121,6 +126,11 @@ const CHANNEL_OPTIONS = [
 // Atamayı boşaltmanın açılır listedeki karşılığı. Boş string base-ui Select'te
 // "seçim yok" anlamına geldiği için ayrı bir gözle görülür seçenek gerekiyor.
 const SUB_SECTOR_NONE = '__none__'
+
+// Aday listesinde OLMAYAN mevcut atamanın etiketi. Kapalı düğmede ve açık
+// listede AYNI metin görünmek zorunda; iki kopya ayrışırsa kullanıcı aynı satırı
+// iki farklı adla görürdü.
+const SUB_SECTOR_ORPHAN_LABEL = 'Mevcut atama (paketi bakımda)'
 
 const TONALITIES = [
   { value: 'professional', label: 'Profesyonel' },
@@ -473,7 +483,7 @@ function MarkaAyarlariContent() {
   // Modelin önerisi KAYDEDİLMEZ, teyide sunulur. Öneriyi doğrudan yazmak
   // "son söz kullanıcınındır" sözleşmesini boşa çıkarırdı: öneriyi besleyen
   // metin markanın kendi sitesinden gelir ve güvenilir girdi değildir.
-  const [suggestedSubSector, setSuggestedSubSector] = useState<SubSectorCandidate | null>(null)
+  const [suggestedSubSector, setSuggestedSubSector] = useState<SubSectorSuggestion | null>(null)
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -648,7 +658,6 @@ function MarkaAyarlariContent() {
         if (res.data.sub_sector_id) {
           setSuggestedSubSector({
             id: res.data.sub_sector_id,
-            slug: '',
             display_name: res.data.sub_sector_display_name ?? 'Önerilen alt sektör',
           })
           filled.push('alt sektör önerisi (teyit bekliyor)')
@@ -1037,7 +1046,7 @@ function MarkaAyarlariContent() {
                     {(value: string) =>
                       subSectorCandidates.find((s) => s.id === value)?.display_name ??
                       (value && value !== SUB_SECTOR_NONE
-                        ? 'Mevcut atama (paketi bakımda)'
+                        ? SUB_SECTOR_ORPHAN_LABEL
                         : 'Seçilmedi')
                     }
                   </SelectValue>
@@ -1050,7 +1059,7 @@ function MarkaAyarlariContent() {
                   {brand.sub_sector_id &&
                     !subSectorCandidates.some((s) => s.id === brand.sub_sector_id) && (
                       <SelectItem value={brand.sub_sector_id}>
-                        Mevcut atama (paketi bakımda)
+                        {SUB_SECTOR_ORPHAN_LABEL}
                       </SelectItem>
                     )}
                   {subSectorCandidates.map((s) => (
@@ -1084,7 +1093,7 @@ function MarkaAyarlariContent() {
                     checked={kit.channels?.[channel.key] === true}
                     onCheckedChange={(checked) =>
                       updateKit({
-                        channels: { ...(kit.channels ?? {}), [channel.key]: checked === true },
+                        channels: { ...(kit.channels ?? {}), [channel.key]: checked },
                       })
                     }
                   />

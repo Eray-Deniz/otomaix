@@ -30,6 +30,7 @@ from app.services.document_processor import get_document_context, get_product_do
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
 from app.services.package_events import log_package_event
 from app.services.sector_packages import (
+    SectorPackageContext,
     match_special_day,
     resolve_package_context,
     resolve_persist_stamp,
@@ -198,7 +199,11 @@ class GenerateCaptionRequest(BaseModel):
 RECEIPTLESS_CONTENT_TYPES = frozenset({"quote"})
 
 
-async def _write_generation_stamp(db, brand_id, package_context) -> str | None:
+async def _write_generation_stamp(
+    db: asyncpg.Connection,
+    brand_id: UUID,
+    package_context: SectorPackageContext | None,
+) -> str | None:
     """K-07 üretim-anı makbuzu; paketsiz üretimde `None` döner.
 
     İstemciye YALNIZ bu opak kimlik gider; paket kimliği+sürümü sunucuda kalır
@@ -233,7 +238,6 @@ async def _write_generation_stamp(db, brand_id, package_context) -> str | None:
         )
         return None
     return str(stamp_id)
-
 
 
 @router.post(
@@ -516,9 +520,6 @@ async def generate_post(
         )
     post = dict(row)
 
-    import logging
-    _logger = logging.getLogger(__name__)
-
     # Edit ref kararı: ürün varsa ürün görselleri (Sprint 1: çoklu); yoksa Sprint 3'te
     # eklenen scene_reference_image_url varsa onu kullan; yoksa text-to-image.
     edit_ref_urls: list[str] = []
@@ -551,7 +552,7 @@ async def generate_post(
             if has_failure:
                 for i, jid in enumerate(job_ids):
                     if isinstance(jid, Exception):
-                        _logger.error(f"Carousel slide {i+1} fal.ai submit failed: {jid}", exc_info=jid)
+                        logger.error(f"Carousel slide {i+1} fal.ai submit failed: {jid}", exc_info=jid)
                 await db.execute(
                     "UPDATE social.posts SET status = 'failed', updated_at = now() WHERE id = $1",
                     post["id"],
@@ -565,7 +566,7 @@ async def generate_post(
                     slides_data,
                 )
         except Exception as e:
-            _logger.error(f"Carousel fal.ai submission failed for post {post['id']}: {e}", exc_info=True)
+            logger.error(f"Carousel fal.ai submission failed for post {post['id']}: {e}", exc_info=True)
     else:
         # Single image flow
         # Sprint 1 (Çoklu Görsel) — tek görsel modunda kullanıcı 5'e kadar görsel seçtiyse
@@ -584,7 +585,7 @@ async def generate_post(
             )
             post["fal_job_id"] = fal_job_id
         except Exception as e:
-            _logger.error(f"fal.ai generate_image failed for post {post['id']}: {e}", exc_info=True)
+            logger.error(f"fal.ai generate_image failed for post {post['id']}: {e}", exc_info=True)
 
     return OkResponse(data={
         "post_id": str(post["id"]),

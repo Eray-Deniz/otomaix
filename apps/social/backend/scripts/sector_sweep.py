@@ -360,7 +360,9 @@ async def sweep(
 ) -> tuple[str, int]:
     """Raporu ve ihlal sayısını döner. Yazma YOK — salt-okunur transaction."""
     # Belirsiz dize sunucuya HİÇ gitmez — doğrulama bağlantıdan ÖNCE.
-    canonical_endpoint(database_url)
+    # Sonuç saklanır: aşağıdaki hedef parmak izi AYNI değeri ister, ikinci kez
+    # hesaplamak iki çağrının ayrışabildiği bir pencere bırakırdı.
+    endpoint = canonical_endpoint(database_url)
 
     connection = await asyncpg.connect(database_url)
     try:
@@ -378,7 +380,7 @@ async def sweep(
 
     if not cluster_identity or not server_peer:
         raise ValueError("hedef kimliği okunamadı — karşılaştırma yapılamaz")
-    target = f"{cluster_identity}@{canonical_endpoint(database_url)}~{server_peer}"
+    target = f"{cluster_identity}@{endpoint}~{server_peer}"
 
     baseline_mapping = None
     if baseline is not None:

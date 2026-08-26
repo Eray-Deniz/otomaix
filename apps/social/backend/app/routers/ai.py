@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 # istekle işçiyi süresiz tutardı.
 _SUGGEST_TIMEOUT_SECONDS = 20.0
 
+# Öneri ucunun kullanıcıya dönen TEK arıza mesajı. İki ayrı arıza dalı (çağrı
+# düştü / yanıt sözleşmeye uymadı) aynı cümleyi gösterir — çünkü kullanıcı için
+# ikisi de aynı şeydir. Metin tek yerde durur: iki kopya ayrışırsa aynı durum
+# iki farklı cümleyle anlatılırdı.
+_SUGGEST_UNAVAILABLE_DETAIL = (
+    "Alt sektör önerisi şu an alınamıyor; listeden seçebilirsiniz."
+)
+
 
 from app.core.utils import parse_brand_kit as _parse_brand_kit
 
@@ -268,7 +276,7 @@ async def suggest_sub_sector(
         logger.error("suggest_sub_sector: sağlayıcı çağrısı başarısız: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Alt sektör önerisi şu an alınamıyor; listeden seçebilirsiniz.",
+            detail=_SUGGEST_UNAVAILABLE_DETAIL,
         ) from exc
 
     raw_field = None
@@ -293,7 +301,7 @@ async def suggest_sub_sector(
         logger.error("suggest_sub_sector: model yanıtı ayrıştırılamadı: %s", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Alt sektör önerisi şu an alınamıyor; listeden seçebilirsiniz.",
+            detail=_SUGGEST_UNAVAILABLE_DETAIL,
         ) from exc
 
     return OkResponse(

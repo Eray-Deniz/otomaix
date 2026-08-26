@@ -58,6 +58,18 @@ DEFAULT_LEASE_SECONDS = 300
 # aldığını sınırlar; kalanı bir sonraki tur alır.
 DEFAULT_CLAIM_LIMIT = 20
 
+# F20 uygunluk yüklemi — TEK yerde tanımlıdır. Kiralama ve süpürme AYNI "aday
+# satır" tanımını kullanmak ZORUNDADIR: iki kopya ayrışırsa biri aktif kirayı
+# süpürebilir (yolda olan teslimi `failed` yazmak), diğeri kirası dolmuş satırı
+# görmezden gelebilirdi (kurtarma hiç koşmaz). İkisi de sessiz olurdu.
+#
+# Sorgu metnine gömülür; SABİT metindir, hiçbir kullanıcı girdisi buraya
+# ulaşmaz — parametreler `$N` ile geçmeye devam eder.
+_ELIGIBLE_ROW_SQL = (
+    "(delivery_state = 'pending' "
+    "OR (delivery_state = 'sending' AND lease_expires_at < now()))"
+)
+
 # Webhook payload sözleşmesinin sürümü. n8n workflow JSON'ı ile BİRLİKTE
 # versiyonlanır; alan eklemek/çıkarmak bu sayıyı artırır.
 ADMIN_EVENT_CONTRACT_VERSION = 1
@@ -166,15 +178,12 @@ async def claim_admin_events(
     """
     async with db.transaction():
         rows = await db.fetch(
-            """
+            f"""
             WITH candidate AS (
                 SELECT id
                 FROM social.admin_events
                 WHERE attempt_count < $1
-                  AND (
-                        delivery_state = 'pending'
-                        OR (delivery_state = 'sending' AND lease_expires_at < now())
-                      )
+                  AND {_ELIGIBLE_ROW_SQL}
                 ORDER BY created_at
                 LIMIT $2
                 FOR UPDATE SKIP LOCKED
@@ -233,15 +242,12 @@ async def sweep_exhausted_admin_events(db) -> int:
     operatörü var olmayan bir arızayı kovalamaya iterdi.
     """
     rows = await db.fetch(
-        """
+        f"""
         UPDATE social.admin_events
            SET delivery_state = 'failed',
                lease_expires_at = NULL
          WHERE attempt_count >= $1
-           AND (
-                 delivery_state = 'pending'
-                 OR (delivery_state = 'sending' AND lease_expires_at < now())
-               )
+           AND {_ELIGIBLE_ROW_SQL}
         RETURNING id
         """,
         MAX_DELIVERY_ATTEMPTS,

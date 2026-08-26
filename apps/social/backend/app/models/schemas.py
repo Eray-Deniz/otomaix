@@ -1,8 +1,7 @@
+import logging
 from datetime import datetime
 from typing import Any
 from uuid import UUID
-
-import logging
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
