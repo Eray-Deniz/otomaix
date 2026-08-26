@@ -2,7 +2,7 @@
 
 ## Context
 - Task: sektor-bilgi-paketi — Plan 1 yürütmesi TAMAMLANDI, durum `waiting-review`
-- Last updated: 2026-08-26 (on sekizinci oturum — review zincirinin 2. adımı)
+- Last updated: 2026-08-26 (on dokuzuncu oturum — review zincirinin 3. adımı: güvenlik review'ı)
 - Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
 - Spec girdisi: `docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` — **karar sorusu
@@ -18,18 +18,21 @@
 
 ## Resume From
 
-**Sıradaki iş: `/security-review-claude-codex`.** Zincirin 2. adımı (`/review-claude-codex`) bitti;
-yedi yüksek bulgu da düzeltildi ve commit edildi. Çalışma ağacı TEMİZ, açık kapı YOK.
+**Sıradaki iş: ÜÇ YÜKSEK GÜVENLİK BULGUSUNUN DÜZELTİLMESİ** (plan-yürütme komutuyla; Eray kararı
+2026-08-26). Zincirin 3. adımı (`/security-review-claude-codex`) KOŞTU — ayrıntı bu belgenin sonundaki
+"Güvenlik review'ı koştu" bölümünde; bulgular `TASK.md` `# Open Problems`'ta. Kapı BLOKE, açık kapı VAR.
+Zincirin 2. adımı (`/review-claude-codex`) daha önce bitmişti; yedi yüksek bulgusu düzeltilip commit edildi.
 
 **Devralınan "ilk iş" borcu KAPANDI:** yürütmenin final turunda bağımsız hakem görmeden inen
 taşıyıcı-sözleşme fix'i (`17840c6`) bu review'da denetlendi — iki hakem de 032/033/034'ün
 doğrulama bloklarını okudu ve oradan H1 çıktı.
 
-Zincirin kalanı: `/security-review-claude-codex` → `/finish-branch-claude-codex`.
+Zincirin kalanı: üç high fix → attempt-2 kapanış turu (aynı pinli sözleşme) → `/finish-branch-claude-codex`.
 
-**Tetiği HENÜZ DOLMADI:** `sector-packages-mandatory-split` (`CURRENT.md`) — 1804 satırlık
-dosyanın zorunlu bölmesi. Tetik "review zinciri bittikten sonra"dır ve `/security-review-claude-codex`
-o zincirin parçası; yani sıra güvenlik review'ından SONRA, dal kapanışından ÖNCE gelir.
+**Tetiği DOLDU (ama sıra fix'lerden sonra):** `sector-packages-mandatory-split` (`CURRENT.md`) —
+1804 satırlık dosyanın zorunlu bölmesi. Tetik "review zinciri bittikten sonra"ydı; güvenlik review'ı
+koştu. Ama önce üç high fix + kapanış turu gelir — 490 satırlık taşımayı fix'lerin önüne koymak
+kapanış hakemine asıl işi değil taşımayı okuturdu (aynı gerekçe 2026-08-26'da bir kez verildi).
 
 **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
 Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
@@ -141,3 +144,35 @@ Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 - **Codex 480s'de kesiliyor** (attempt-1'de `rc=124`). Asılma değil, uzun koşum — log'da komutlar
   kesilme anına kadar `exit 0` veriyordu. 1200s dış timeout + prompt'a "keşfi genişletmeye devam
   edip kesilme, okumayı bitir ve çıktıyı ver" bütçe talimatıyla tamamlandı. Aynı deseni bekle.
+
+### Güvenlik review'ı koştu (2026-08-26, zincirin 3. adımı) — sıradaki iş DÜZELTME
+
+- **Sonuç: 3 high + 5 medium/low; kritik yok. Kapı BLOKE** (`security-risk`), `dual-review` tamam,
+  kapsam boşluğu yok. Rapor: `docs/security-reviews/2026-08-26-feat-sektor-bilgi-paketi.md`
+  (commit `e792ae9`). Üç high `# Open Problems`'a işlendi — **sıradaki executor'ın girdisi budur.**
+- **Eray kararı (2026-08-26): ÜÇÜ DE düzeltilecek**, plan-yürütme komutuyla (ara hakem kontrolleriyle).
+  Devralınan/bu-dalın-ürünü ayrımı raporda duruyor ama düzeltme kapsamı üçünü de içeriyor.
+- **Ledger (attempt-1, pinli):** `review_target_id`
+  `security-review:feat-sektor-bilgi-paketi:5a9d5d4220d0a58db84dc23f274199491d91216b` ·
+  `ledger_locator` `task:sektor-bilgi-paketi` · `pinned_contract_hash`
+  `0f9a7629fc2fa17dd8fbd212492902ce7f1b495b2ac681cf07f6d72ac7b93fbe` ·
+  `completed_evaluations=1` · `total_invocations=1` · `consecutive_degraded=0`.
+- **Fix'ler indikten SONRA attempt-2 kapanış turu ZORUNLU** (aynı pinli sözleşmeyle, dar kapsam:
+  dokunulan dosyalar + doğrudan çağıranları + komşu testler + etkilenen config). O tur koşmadan
+  `/finish-branch-claude-codex` ilerlemez; koşulmazsa kapanış raporu "fix re-review görmedi" satırı taşır.
+- **Politika dışı NOT (rapor gömmedi, buraya da geçiyor):** paket içeriğinin ham metni hata kaydına
+  → n8n → Telegram'a taşınıyor (`sector_packages.py:263/272/280` → `:656` → n8n `Detay:`). Politika
+  low'u `accepted_risk` sayıyor AMA bu, dalın kendi yazdığı sözleşmeyi (`033_package_events.sql:14`)
+  delen kendi gerilemesidir ve fix'i tek satır: ham metin yerine sınıf taşı. Düzeltme turuna dahil edilmeli.
+- **Codex bağımsızlığı — kirlenme (ölçüldü):** Codex her iki çağrıda da orkestratör vermeden
+  `docs/active/CURRENT.md` + `TASK.md` okudu. Bu yüzden "kesilemeyen senkron sağlayıcı çağrısı"
+  bulgusu bağımsız keşif SAYILMAZ — o madde zaten `CURRENT.md`'de park edilmişti.
+- **Codex bütçesi:** 480s'de yine `rc=124` (28 alt-komut, hepsi `exit 0` — asılma değil). 1200s'lik
+  ikinci çağrı byte-identical prompt'la `rc=0` verdi. Sentetik liveness-probe koşulmadı; gerekçe
+  raporda ve `$CODEX_LOG`'da. **Aynı deseni bekle: ilk turda 480s yetmiyor.**
+- **Ham kanıt (bu makinede, bu kökten):**
+  - Codex: `/root/.claude/logs/otomaix--ffc87809/2026-08-26-secreview-feat-sektor-bilgi-paketi-1.md`
+  - Claude alt-hakem: aynı dizinde `...-1.claude.md`
+- **Temizlik borcu:** `docs/reviews/.ledger-index/` bu turda oluştu ve **untracked**. Commit kapısı
+  yalnız rapor dosyasını eklemeye izin verdiği için tracked edilmedi. Kapanışta karar: izlensin mi
+  (oturumlar arası ledger kalıcılığı için gerekli) yoksa yok sayılsın mı.

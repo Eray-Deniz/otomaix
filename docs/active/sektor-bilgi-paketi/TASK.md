@@ -194,6 +194,42 @@ tanım gereği yakalayamaz. Arka uçta mutasyonla ölçülen her şey sağlam ç
 
 # Open Problems
 
+- **[YENİ, security review 2026-08-26 — HIGH, fix-required, BU DALIN ÜRÜNÜ] Kullanıcı metni paket
+  içeriğini modelden geri çektirebilir (K-16'nın prompt tarafındaki yan kanalı).** Üç yapı taşı da
+  ölçüldü: (a) `_SYSTEM_RULES` açıkça "KULLANICI İSTEĞİ ... sektör rehberini GEÇERSİZ KILAR" diyor
+  (`prompt_builder.py:51-57`); (b) paket metni (`brand_context`) ile kullanıcının serbest metni
+  (`dynamic_content` içindeki `user_prompt`) AYNI `role: "user"` mesajının iki bloğu
+  (`caption_generator.py:145-173`) — veri/talimat sınırı yok; (c) ne gizlilik kuralı ne çıktı filtresi
+  var (grep, sıfır ilgili eşleşme). Spec §3.7/K-16 paketi müşteriye KAPALI ilan ediyor ve API yüzeyi
+  bunu uyguluyor — prompt yüzeyi aynı kuralın kapatılmamış arka kapısı. Kiracı sınırı aşılmıyor;
+  sızan şey Otomaix'in kendi tescilli içeriği. **Sömürülebilirlik ayağı DOĞRULANMADI** (canlı model
+  çağrısı gerekirdi). Fix yönü: paket bloğunu sistem/geliştirici katmanına taşı + kullanıcı metnini
+  güvenilmeyen veri olarak işaretle + ifşa yasağı + üretim sonrası işaret-ifade kontrolü + caption ve
+  fikir yüzeylerine düşman çıkarma testi. Ayrıntı: `docs/security-reviews/2026-08-26-feat-sektor-bilgi-paketi.md` S3.
+
+- **[YENİ, security review 2026-08-26 — HIGH, fix-required, DEVRALINAN] Doküman kimlikleri marka
+  kapsamına bağlı değil → kiracılar arası RAG ifşası.** `document_processor.py::get_document_context`
+  sorguyu `WHERE id IN (...)` ile kuruyor, `brand_id` filtresi YOK; çağıranlar `assert_brand_owned`
+  ile MARKAYI doğruluyor ama `payload.document_ids`'i doğrulamadan geçiriyor. Başka kiracının doküman
+  UUID'sini bilen kimliği doğrulanmış kullanıcı, o dokümanın `raw_text`'ini kendi üretim bağlamına
+  enjekte edip modelden geri okutabilir. `get_product_document_context` (satır 318-337) aynı sınıfta.
+  **Ölçüldü:** dosya bu dalda hiç değişmedi (`git diff --stat 5a9d5d4..7a2a180 --` boş), taban da aynı
+  çağrıyı yapıyordu → devralınan borç. Doğru örnek aynı depoda: `documents.py:79-99`. Fix yönü:
+  doğrulanmış `brand_id`'yi zorunlu parametre yap + `AND brand_id = $2` + dönen küme istenenden
+  farklıysa tüm isteği 404 ile reddet (fail-closed). Çağrı yerleri: `ai.py:428`, `posts.py:115/301/305/936/1053`.
+  Regresyon testi BUGÜN YOK. Ayrıntı: security review S2.
+
+- **[YENİ, security review 2026-08-26 — HIGH, fix-required, DEVRALINAN] `POST /ai/analyze-website`
+  kimlik doğrulanmış SSRF'e açık.** İki hakem de bağımsız buldu. `payload.url` yalnız şema ön ekiyle
+  kabul ediliyor; host allow-list'i, DNS çözümlemesi sonrası özel-IP reddi (RFC1918 · loopback ·
+  `169.254.169.254`) ve port kısıtı yok, üstelik `follow_redirects=True`. Yanıtın ilk 8.000 karakteri
+  modele veriliyor ve model onu özetleyip çağırana döndürüyor → kör değil, içerik sızdıran SSRF.
+  **Ölçüldü:** savunmasız satırlar taban commit'te birebir aynı (`git show 5a9d5d4:.../ai.py`) →
+  devralınan; dal fonksiyona dokundu, açığı açmadı. Kardeş yüzey `competitor_analyzer.py:31` aynı
+  desende (gövdesi okunmadı — ÇIKARIM). Fix yönü: ortak SSRF-güvenli çekici — yönlendirmeyi elle ve
+  her adımda yeniden doğrulayarak izle, çözülen HER adresi özel-aralık kontrolünden geçir, bağlantıyı
+  doğrulanan IP'ye pinle. Ayrıntı: security review S1.
+
 - **[YENİ, review 2026-08-26 — `accepted_risk`, ama BU PARTİNİN ürünü] `resolve_sector`'ün
   dönüş sözleşmesi değişti, çağıranlar tam güncellenmedi.** Fonksiyon artık `tuple | None`
   değil `tuple` dönüyor ve taksonomi bozukken `TaxonomyUnavailableError` fırlatıyor — ama
