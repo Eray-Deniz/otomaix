@@ -130,12 +130,28 @@ fi
 # Kapı olmadan operatör README'nin güncelleme adımını izleyip yarı yolda sert
 # hatayla karşılaşıyordu. Şimdi dolu bir veritabanında ÖNCE ve AÇIKÇA duruyoruz.
 # Kaçış: bilinçli operatör için `ALLOW_EXISTING_DB=1`.
-EXISTING_TABLES=$(
+#
+# Sonda FAIL-CLOSED'dur. İlk yazımı `$(... || echo 0)` biçimindeydi ve kapanış
+# turu onu yakaladı: psql'in HER başarısızlığı "0 tablo"ya, yani "boş veritabanı,
+# devam et"e çeviriyordu — kapının kendisi tam korumak istediği duruma karşı
+# fail-open'dı (ÖLÇÜLDÜ: `set -e; X=$(false || echo 0)` -> X=0, akış devam eder).
+# Sonda düşerse ya da sayısal olmayan bir şey dönerse burada DURULUR.
+if ! EXISTING_TABLES=$(
     "${PG_CMD[@]}" -tAc \
-        "SELECT count(*) FROM pg_tables WHERE schemaname = 'social';" 2>/dev/null || echo 0
-)
-EXISTING_TABLES=${EXISTING_TABLES//[!0-9]/}
-if [ -n "$EXISTING_TABLES" ] && [ "$EXISTING_TABLES" -gt 0 ] && [ "${ALLOW_EXISTING_DB:-0}" != "1" ]; then
+        "SELECT count(*) FROM pg_tables WHERE schemaname = 'social';" 2>&1
+); then
+    echo "  ✗ Veritabanı sondası başarısız — koşucu DURDU (fail-closed)." >&2
+    echo "    Veritabanının dolu olup olmadığı BİLİNMİYOR; migration uygulanmadı." >&2
+    echo "    Sonda çıktısı: $EXISTING_TABLES" >&2
+    exit 1
+fi
+EXISTING_TABLES=$(printf '%s' "$EXISTING_TABLES" | tr -d '[:space:]')
+case "$EXISTING_TABLES" in
+    ''|*[!0-9]*)
+        echo "  ✗ Sonda sayısal olmayan çıktı verdi: '$EXISTING_TABLES' — DURDU (fail-closed)." >&2
+        exit 1 ;;
+esac
+if [ "$EXISTING_TABLES" -gt 0 ] && [ "${ALLOW_EXISTING_DB:-0}" != "1" ]; then
     echo "  ✗ Bu veritabanında zaten $EXISTING_TABLES tablo var — koşucu DURDU." >&2
     echo "" >&2
     echo "    Bu script yalnız SIFIRDAN kurulum içindir. Uygulanmış migration" >&2
