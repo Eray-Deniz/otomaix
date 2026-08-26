@@ -121,17 +121,13 @@ async def analyze_website(
     """Fetch a website and extract brand info using Claude."""
     import re
 
-    import httpx
+    from app.services.safe_fetch import fetch_public_url
 
-    url = payload.url.strip()
-    if not url.startswith(("http://", "https://")):
-        url = f"https://{url}"
-
-    html = ""
+    # Çekim TEK güvenli kapıdan geçer (SSRF — security review 2026-08-26, S1).
+    # Reddin SEBEBİ çağırana verilmez: "özel adrese çözülüyor" ile "isim yok"
+    # arasındaki fark, iç ağın haritasını dışarı sızdıran bir yan kanaldır.
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            html = resp.text[:8000]  # cap at 8k chars
+        html = (await fetch_public_url(payload.url, timeout=10))[:8000]
     except Exception:
         raise HTTPException(status_code=422, detail="Web sitesine ulaşılamadı")
 

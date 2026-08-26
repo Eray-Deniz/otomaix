@@ -207,10 +207,24 @@ def _fake_anthropic(monkeypatch, raw: str, captured: dict | None = None):
 
 
 def _fake_website(monkeypatch, html: str = "<html><body>Kuaför salonu</body></html>"):
-    """Site indirmeyi ağa çıkmadan sabitler."""
+    """Site indirmeyi ağa çıkmadan sabitler.
 
-    class _Resp:
-        text = html
+    Taklit, SSRF kapısının ARKASINA değil ALTINA konur: isim çözümlemesi ve HTTP
+    istemcisi sahtelenir, `fetch_public_url` sahtelenmez. Böylece bu uç testleri
+    kapının içinden geçmeye devam eder — kapıyı toptan taklit etseydik, biri ucu
+    yeniden ham `httpx`'e bağladığında hiçbir test kırmızıya dönmezdi
+    (security review 2026-08-26, S1).
+    """
+    import socket
+
+    import httpx
+
+    from app.services import safe_fetch
+
+    public_ip = "93.184.216.34"
+
+    def _fake_getaddrinfo(host, port, *_args, **_kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (public_ip, port))]
 
     class _Client:
         def __init__(self, **_kwargs):
@@ -222,12 +236,25 @@ def _fake_website(monkeypatch, html: str = "<html><body>Kuaför salonu</body></h
         async def __aexit__(self, *_args):
             return False
 
-        async def get(self, *_args, **_kwargs):
-            return _Resp()
+        async def get(self, url, headers=None, extensions=None):
+            # Kapıdan geçildiğinin KANITI: sabitlenmiş URL doğrulanan IP'yi taşır
+            # ve `Host` başlığı gerçek ismi taşır. Uç yeniden ham `httpx`'e
+            # bağlanırsa buraya orijinal URL gelir ve bu iddia DÜŞER. (Taklit
+            # modül-genelidir; kapıyı atlayan yol da aynı sahteye düşer, o yüzden
+            # ayrım "çağrıldı mı" ile değil "NASIL çağrıldı" ile kurulur —
+            # ölçüldü 2026-08-26: ayrım kurulmadan pozitif kontrol geçiyordu.)
+            assert public_ip in str(url), (
+                "site çekimi SSRF kapısından geçmedi — sabitlenmiş IP yok"
+            )
+            assert (headers or {}).get("Host"), "kapı Host başlığı koymamış"
+            return httpx.Response(
+                200,
+                content=html.encode(),
+                request=httpx.Request("GET", url),
+            )
 
-    import httpx
-
-    monkeypatch.setattr(httpx, "AsyncClient", _Client)
+    monkeypatch.setattr(safe_fetch.socket, "getaddrinfo", _fake_getaddrinfo)
+    monkeypatch.setattr(safe_fetch.httpx, "AsyncClient", _Client)
 
 
 @pytest.mark.parametrize(
