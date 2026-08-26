@@ -502,8 +502,23 @@ function MarkaAyarlariContent() {
   // İKİNCİSİ birincinin bekleyen PATCH'ini iptal ediyordu — site analizi tam
   // olarak bu sırayı üretiyor, yani analizden gelen ad/açıklama/sektör
   // sessizce kaydedilmeden kalıyordu.
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const kitSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Bekleyen gecikmeli yazım MARKAYA ANAHTARLIDIR (kapanış turu 2026-08-26).
+  // Bu sayfa marka değişiminde REMOUNT OLMAZ — `currentBrand?.id`'ye bağlı bir
+  // effect veriyi yerinde tazeler — dolayısıyla zamanlayıcı referansı markalar
+  // arası yaşar. Çıplak bir zamanlayıcıyı koşulsuz iptal etmek, BAŞKA bir
+  // markanın bekleyen düzenlemesini sessizce düşürürdü. Kimlik taşınınca yalnız
+  // AYNI markanın bekleyen yazımı birleştirilir; başka markanınki kendi anlık
+  // görüntüsüyle zamanında ateşlenmeye devam eder.
+  type Pending = { brandId: string; timer: ReturnType<typeof setTimeout> }
+  const saveTimer = useRef<Pending | null>(null)
+  const kitSaveTimer = useRef<Pending | null>(null)
+
+  const cancelPendingFor = (ref: React.MutableRefObject<Pending | null>, brandId: string) => {
+    if (ref.current && ref.current.brandId === brandId) {
+      clearTimeout(ref.current.timer)
+      ref.current = null
+    }
+  }
 
   // Handle OAuth callback result (?connected=platform or ?error=...)
   useEffect(() => {
@@ -613,21 +628,31 @@ function MarkaAyarlariContent() {
   // (her tuşta istek atmamak için). Ayrık onaylar bunu KULLANMAZ, bkz. commit*Now.
   const scheduleSave = useCallback(
     (updated: Brand) => {
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(() => {
-        if (!updated.id) return
-        void sendBrand(updated)
-      }, 1500)
+      if (!updated.id) return
+      cancelPendingFor(saveTimer, updated.id)
+      saveTimer.current = {
+        brandId: updated.id,
+        // Ateşlenen zamanlayıcı referansı SIFIRLAMAZ. Sıfırlasaydı, A markasının
+        // zamanlayıcısı ateşlendiğinde araya girmiş B kaydını da siler, sonraki bir
+        // B onayı bekleyen yazımı iptal EDEMEZ ve eski anlık görüntü yenisini ezerdi.
+        // Bayat kayıt zararsızdır: ateşlenmiş bir zamanlayıcıyı iptal etmek işlemsizdir.
+        timer: setTimeout(() => {
+          void sendBrand(updated)
+        }, 1500),
+      }
     },
     [sendBrand]
   )
 
   const scheduleKitSave = useCallback(
     (kit: BrandKit, brandId: string) => {
-      if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
-      kitSaveTimer.current = setTimeout(() => {
-        void sendKit(kit, brandId)
-      }, 1500)
+      cancelPendingFor(kitSaveTimer, brandId)
+      kitSaveTimer.current = {
+        brandId,
+        timer: setTimeout(() => {
+          void sendKit(kit, brandId)
+        }, 1500),
+      }
     },
     [sendKit]
   )
@@ -672,7 +697,9 @@ function MarkaAyarlariContent() {
     if (!brand) return
     const updated = { ...brand, ...fields }
     setBrand(updated)
-    if (saveTimer.current) clearTimeout(saveTimer.current)
+    // YALNIZ bu markanın bekleyen yazımı birleştirilir. Başka bir markanınki
+    // DOKUNULMADAN bırakılır: kendi anlık görüntüsünü taşır ve zamanında gider.
+    cancelPendingFor(saveTimer, updated.id)
     void sendBrand(updated)
   }
 
@@ -680,7 +707,7 @@ function MarkaAyarlariContent() {
     if (!brand) return
     const updatedKit = { ...brand.brand_kit, ...fields }
     setBrand({ ...brand, brand_kit: updatedKit })
-    if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
+    cancelPendingFor(kitSaveTimer, brand.id)
     void sendKit(updatedKit, brand.id)
   }
 
