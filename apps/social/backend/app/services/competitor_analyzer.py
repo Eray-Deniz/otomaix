@@ -1,7 +1,7 @@
 """Rakip analizi servisi.
 
 İki analiz kaynağı:
-1. analyze_website(url)     — httpx ile site çek + Claude ile analiz et (her zaman çalışır)
+1. analyze_website(url)     — siteyi SSRF kapısından çek + Claude ile analiz et (her zaman çalışır)
 2. analyze_instagram(handle) — APIFY_API_KEY varsa gerçek veri, yoksa yapısal placeholder döner
 
 generate_competitor_report() — birden fazla rakibin analizini Claude ile sentezler.
@@ -23,14 +23,12 @@ async def analyze_website(url: str) -> dict:
     if not url:
         return {}
 
-    if not url.startswith(("http://", "https://")):
-        url = f"https://{url}"
+    # Kardeş yüzey: rakip adresi de kullanıcıdan gelir, aynı kapıdan geçer
+    # (SSRF — security review 2026-08-26, S1). Sebep dışarı verilmez.
+    from app.services.safe_fetch import fetch_public_url
 
-    html = ""
     try:
-        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            html = resp.text[:10000]
+        html = (await fetch_public_url(url, timeout=12))[:10000]
     except Exception:
         return {"error": "Web sitesine ulaşılamadı", "url": url}
 

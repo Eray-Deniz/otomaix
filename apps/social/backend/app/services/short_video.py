@@ -9,6 +9,7 @@ ELEVENLABS_KEY yoksa TTS adımı atlanır; post kaydı yine de oluşturulur.
 """
 
 import os
+import random
 import re
 from uuid import UUID
 
@@ -16,6 +17,12 @@ import asyncpg
 import sentry_sdk
 
 from app.core.config import settings
+from app.services.sector_packages import (
+    SectorPackageContext,
+    resolve_motion_prompt,
+    resolve_persist_stamp,
+    scene_pool,
+)
 from app.services.media_adapters import (
     IMAGE_ADAPTERS,
     IMAGE_EDIT_ADAPTERS,
@@ -105,6 +112,7 @@ async def _build_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
+    sector_scene_pool: list[str] | None = None,
 ) -> str:
     """Sahne prompt'u üret (Claude Opus).
 
@@ -114,6 +122,12 @@ async def _build_still_prompt(
     image_edit_mode=True: Nano Banana edit için scene-only prompt.
     Ürün tarif edilmez (model resmi zaten görüyor), sadece sahne yazılır.
     Çıktı max 60 kelime — image-edit kısa prompt sever.
+
+    `sector_scene_pool`: paketin sahne havuzu (spec §4.3). İKİ modda da girer — tek
+    moda uygulamak yarım ayrışmadır: aynı marka bazı videolarda sektörel,
+    bazılarında genel görünürdü. Havuz EK BAĞLAMDIR: sahnenin NASIL göründüğünü
+    (ışık, doku, malzeme dili) sektöre bağlar, NE göründüğünü kullanıcının
+    isteği belirlemeye devam eder (spec §4.6 öncelik hiyerarşisi).
     """
     context_parts = []
     if user_brief:
@@ -144,6 +158,14 @@ async def _build_still_prompt(
         context_parts.append(f"Video topic: {topic}")
     if color_str:
         context_parts.append(f"Brand colors: {color_str}")
+    if sector_scene_pool:
+        context_parts.append(
+            "SECTOR SCENE VOCABULARY (pick the entries that fit the topic; "
+            "do not try to use them all, and do not invent sector language "
+            "beyond this list — the user's scene request still governs WHAT "
+            "is shown):\n"
+            + "\n".join(f"- {entry}" for entry in sector_scene_pool)
+        )
 
     context = "\n\n".join(context_parts)
 
@@ -242,6 +264,16 @@ async def _build_still_prompt(
         )
         return msg.content[0].text.strip()
     except Exception:
+        # Model susduğunda havuz bağlamla taşınamaz — bu dal hiç model görmez.
+        # Ölçüldü (checkpoint 11, tur 5): yedek metin yalnız marka/sektör/renk
+        # taşıyordu, yani geçici bir Anthropic kesintisi paketli markanın
+        # sektörel sinyalini SESSİZCE düşürüyor ve video başarıyla üretiliyordu.
+        #
+        # Kural bu yüzden yaprakta değil sınıfta kurulur: **model çağrısı
+        # yapmayan her durağan-kare yolu havuzdan bir kalıp EKLER.** İki yol
+        # var (buradaki yedek + `_resolve_still_prompt`'un İngilizce erken
+        # dönüşü) ve ikisi de aynı yardımcıdan geçer. Havuz yoksa metin
+        # bugünküyle BAYT AYNI kalır — paketsiz yol dokunulmaz.
         parts = []
         if brand_description:
             parts.append(brand_description)
@@ -255,7 +287,7 @@ async def _build_still_prompt(
             "product showcase, no text, no logos, "
             "cinematic composition, professional lighting, 4K"
         )
-        return ", ".join(parts)
+        return _enrich_with_scene(", ".join(parts), sector_scene_pool)
 
 
 # ─── 0b. Motion prompt çeşitliliği ────────────────────────────────────────────
@@ -273,8 +305,62 @@ _MOTION_PROMPTS = [
 
 def _pick_motion_prompt() -> str:
     """Her video için farklı kamera hareketi seç."""
-    import random
     return random.choice(_MOTION_PROMPTS)
+
+
+# `template_fields` İKİ SAHİPLİ bir isim uzayıdır: istemci kendi alanlarını
+# yollar, sunucu kendi hesapladıklarını aynı sözlüğe yazar, stage-2 ise sözlüğü
+# SUNUCU KAYDI sayıp güvenir. Koşullu yazılan her sunucu anahtarı bu yüzden
+# istemci tarafından uydurulabilir — ölçüldü (checkpoint 11): paketsiz markada
+# istemcinin koyduğu `motion_prompt` doğrulanmadan ücretli video modeline
+# gidiyordu.
+#
+# Küme tek anahtar değil SINIF olarak kapatılır: stage-1'in hesapladığı ve
+# stage-2'nin güvendiği HER anahtar burada listelenir ve istemci girdisinden
+# koşulsuz silinir. Yeni bir sunucu anahtarı eklenirse buraya da eklenmelidir;
+# aksi hâlde aynı sınıf yeni bir varyantla geri döner.
+SERVER_OWNED_TEMPLATE_FIELDS = frozenset(
+    {
+        "generation_stage",
+        "duration_estimate",
+        "still_strategy",
+        "still_prompt",
+        "still_image_url",
+        "product_image_url",
+        "audio_url",
+        "motion_prompt",
+    }
+)
+
+
+def strip_server_owned_fields(template_fields: dict | None) -> dict:
+    """İstemci girdisinden sunucuya ait anahtarları KOŞULSUZ ayıklar.
+
+    Kopya döner: çağıranın sözlüğü yan etkiyle değiştirilmez. Koşulsuzluk
+    şarttır — "yalnız geçerli bir değer üretebildiysek üzerine yaz" biçimi,
+    üretemediğimiz durumda istemcinin değerini hayatta bırakırdı.
+    """
+    cleaned = dict(template_fields or {})
+    for key in SERVER_OWNED_TEMPLATE_FIELDS:
+        cleaned.pop(key, None)
+    return cleaned
+
+
+def _effective_motion_prompt(template_fields: dict | None) -> str:
+    """Stage-2'nin hareket kaynağı: sunucunun KENDİ kaydı, yoksa bugünkü havuz.
+
+    Paketli yolda stage-1 seçimi havuz üyeliğine karşı doğrulayıp buraya yazar
+    (K-02 = A). Stage-2 istemciden gelen hiçbir şeye bakmaz — güven sınırı
+    stage-1'dedir ve kayıt sunucunundur.
+
+    Kayıt yok/boş/metin değilse bugünkü sabit havuza düşülür: paketsiz markanın
+    davranışı budur ve K-113 = A'nın (boş havuz) çalışma zamanı karşılığı da
+    aynı yere iner.
+    """
+    value = (template_fields or {}).get("motion_prompt")
+    if isinstance(value, str) and value.strip():
+        return value
+    return _pick_motion_prompt()
 
 
 # ─── 1. Script üretimi ──────────────────────────────────────────────────────
@@ -608,6 +694,39 @@ async def generate_background_video(
 
 # ─── Ana pipeline ────────────────────────────────────────────────────────────
 
+async def _owned_product_image(db, product_id: UUID, *, brand_id: UUID) -> str:
+    """Ürünün görselini YALNIZ markaya aitse döndürür (yoksa boş metin).
+
+    Security review 2026-08-26 / S2 kapanış turu: iki kısa video yolu da ürünü
+    `WHERE id = $1` ile, kiracı filtresi OLMADAN okuyordu. Ürün kimliğini bilen
+    başka bir kiracı, o ürünün görselinden türetilmiş video ürettirebiliyordu.
+    Sahiplik kapısı doküman yolunda kurulmuştu ama görsel yolunda kurulmamıştı —
+    aynı sınıfın ikinci ayağı.
+
+    Okuma tek yardımcıya alındı ki kapsam iki yerde ayrı ayrı yazılmasın; iki
+    kopya, birinde yapılan düzeltmenin diğerinde sessizce eksik kalmasının
+    olağan yoludur.
+
+    `brand_id` keyword-only: kardeş kapı (`get_document_context`) bilinçli olarak
+    öyle kuruldu ve gerekçesi aynı — yanlış sırayla verilen üç konumsal argüman
+    sessizce boş sonuç üretirdi. Aynı sınıfın iki ayağı aynı sertlikte olmalı
+    (attempt-3 hakemi bu asimetriyi işaretledi).
+
+    Bu yardımcı SAVUNMA DERİNLİĞİdir, tek kapı değil: uçlar yabancı ürünü zaten
+    404 ile önden reddediyor ve boru hatlarının uçlardan başka çağıranı yok
+    (ölçüldü). Yani buradaki filtre bugün ulaşılabilir bir yolu kapatmıyor —
+    uç kapısı kaldırılırsa kapatır.
+    """
+    row = await db.fetchrow(
+        "SELECT image_url FROM social.brand_products WHERE id = $1 AND brand_id = $2",
+        product_id,
+        brand_id,
+    )
+    if row and row["image_url"]:
+        return row["image_url"]
+    return ""
+
+
 async def run_short_video_pipeline(
     brand_id: UUID,
     prompt: str,
@@ -700,12 +819,7 @@ async def run_short_video_pipeline(
     # Ürün görseli varsa FLUX.2 still adımını atla, doğrudan Wan'a gönder
     product_image_url = ""
     if product_id:
-        product_row = await db.fetchrow(
-            "SELECT image_url FROM social.brand_products WHERE id = $1",
-            product_id,
-        )
-        if product_row and product_row["image_url"]:
-            product_image_url = product_row["image_url"]
+        product_image_url = await _owned_product_image(db, product_id, brand_id=brand_id)
 
     # prompt = image_prompt (caption generator tarafından üretilen İngilizce sahne açıklaması)
     # Eğer prompt boşsa veya Türkçe ise fallback olarak _build_still_prompt kullan
@@ -758,6 +872,44 @@ def _looks_turkish(text: str) -> bool:
 
 # ─── Stage 1 / Stage 2 split (onay gate'li pipeline) ────────────────────────
 
+def _enrich_with_scene(prompt: str, pool: list[str] | None) -> str:
+    """Hazır İngilizce istemi sektörel sahne diliyle zenginleştirir.
+
+    Havuz yoksa istem BAYT AYNI döner — paketsiz yolun değişmezliği burada
+    korunur. Havuz varsa ondan bir kalıp eklenir; ek model çağrısı YOKTUR,
+    çünkü havuz öğeleri zaten görsel modelin dilinde yazılmış betimleyici
+    İngilizce ifadelerdir (talimat cümlesi eklemek görsel modelde işe yaramaz).
+
+    **Yinelenme kontrolü BİLİNÇLE YOKTUR** ve bu, dört turluk bir dersin
+    sonucudur. Kalıbın "zaten var olup olmadığını" serbest metinden çıkarmaya
+    çalışan bir yüklem yakınsamıyor: alt dize içerme `"ring"`i `"spring"`in
+    içinde bulup zenginleştirmeyi atlıyor (ölçüldü), noktalama kırpması anlamsız
+    öğeyi boş dizeye indirip her metinde bulunmuş sayıyordu (ölçüldü). Her tur
+    daha dar bir varyant açtı; çıkış yüklemi inceltmek değil KALDIRMAKTI.
+
+    Takas açık ve yönü emniyetli: kalıp zaten varsa metin tekrar eder — görsel
+    modelde zararsız, hatta vurgu etkisi yapar. Alternatifi ise sektörel sinyalin
+    SESSİZCE düşmesiydi; paketli marka genel bir kare alıyor ve bunu kimse
+    görmüyordu. Tekrar görünür, eksiklik görünmezdi.
+
+    Seçim havuzdan rastgeledir: sabit bir öğeye bağlamak o markanın her karesini
+    aynı kalıba düşürürdü — K-02'yi kapatma sebebimizin tersi.
+    """
+    if not pool:
+        return prompt
+    # Aday kümesi savunma amaçlı süzülür: havuzu üreten `scene_pool()` zaten anlamlı öğe
+    # döndürüyor ama bu yardımcı doğrudan da çağrılabilir. Süzme YOKLUK yönünde
+    # çalışır — aday kalmazsa istem bayt aynı döner.
+    candidates = [
+        stripped
+        for stripped in (entry.rstrip(". ") for entry in pool)
+        if any(c.isalnum() for c in stripped)
+    ]
+    if not candidates:
+        return prompt
+    return f"{prompt.rstrip('. ')}, {random.choice(candidates)}"
+
+
 async def _resolve_still_prompt(
     prompt: str,
     script: str,
@@ -768,6 +920,7 @@ async def _resolve_still_prompt(
     product_info: str = "",
     product_doc_context: str = "",
     image_edit_mode: bool = False,
+    sector_scene_pool: list[str] | None = None,
 ) -> str:
     """image_prompt'u still_prompt'a dönüştür.
 
@@ -799,6 +952,7 @@ async def _resolve_still_prompt(
             product_info=product_info,
             product_doc_context=product_doc_context,
             image_edit_mode=True,
+            sector_scene_pool=sector_scene_pool,
         )
 
     if user_brief.strip():
@@ -811,11 +965,21 @@ async def _resolve_still_prompt(
             user_brief=user_brief.strip(),
             product_info=product_info,
             product_doc_context=product_doc_context,
+            sector_scene_pool=sector_scene_pool,
         )
 
     still_prompt = (prompt or "").strip()
     if still_prompt and not _looks_turkish(still_prompt):
-        return still_prompt
+        # Bu dal, caption modelinin ürettiği hazır İngilizce istemi AYNEN
+        # kullanır ve hiçbir model çağrısı yapmaz. Paketli markada bu, sektörel
+        # sahne dilinin hiç uygulanmadığı bir yol açıyordu (checkpoint 11 F3).
+        #
+        # İlk düzeltme "gelen istem caption modelinden gelmiştir, o da havuzu
+        # gördü" varsayımına dayanıyordu; varsayım DOĞRULANABİLİR DEĞİL: uç
+        # doğrudan çağrılabilir ve caption modeli patlarsa yedek dal
+        # "social media post image" döndürür (ölçüldü) — o da İngilizcedir.
+        # Kapı bu yüzden kökene değil HAVUZUN VARLIĞINA bakar.
+        return _enrich_with_scene(still_prompt, sector_scene_pool)
     return await _build_still_prompt(
         topic=prompt or script[:100],
         brand_name=brand_name,
@@ -824,6 +988,7 @@ async def _resolve_still_prompt(
         color_str=color_str,
         product_info=product_info,
         product_doc_context=product_doc_context,
+        sector_scene_pool=sector_scene_pool,
     )
 
 
@@ -876,6 +1041,10 @@ async def run_short_video_stage1(
     product_info: str = "",
     product_doc_context: str = "",
     scene_reference_image_url: str = "",
+    package_context: SectorPackageContext | None = None,
+    requested_motion_prompt: str | None = None,
+    sub_sector_id: UUID | None = None,
+    generation_id: UUID | None = None,
 ) -> dict:
     """Stage 1: post oluştur (status='awaiting_approval') + TTS + Nano Banana 2 still.
 
@@ -885,8 +1054,10 @@ async def run_short_video_stage1(
     if not script.strip():
         raise ValueError("Stage 1 için script boş olamaz (caption-step'ten gelmeli)")
 
-    if template_fields is None:
-        template_fields = {}
+    # Sunucuya ait anahtarlar istemci girdisinden KOŞULSUZ ayıklanır
+    # (checkpoint 11): bu sözlük istemciden gelir ama stage-2 onu sunucu kaydı
+    # sayıp güvenir. Legacy tek-atış uç bilinçle DIŞARIDA (K-06 bekletiliyor).
+    template_fields = strip_server_owned_fields(template_fields)
     template_fields["intro_position"] = intro_position
     template_fields["generation_stage"] = "stage1_started"
 
@@ -898,12 +1069,7 @@ async def run_short_video_stage1(
     # Ürün görseli kontrolü
     product_image_url = ""
     if product_id:
-        product_row = await db.fetchrow(
-            "SELECT image_url FROM social.brand_products WHERE id = $1",
-            product_id,
-        )
-        if product_row and product_row["image_url"]:
-            product_image_url = product_row["image_url"]
+        product_image_url = await _owned_product_image(db, product_id, brand_id=brand_id)
 
     has_brief = bool(user_brief.strip())
     has_product_image = bool(product_image_url)
@@ -935,16 +1101,40 @@ async def run_short_video_stage1(
         product_info=product_info,
         product_doc_context=product_doc_context,
         image_edit_mode=use_image_edit,
+        sector_scene_pool=scene_pool(package_context),
     )
     template_fields["still_prompt"] = still_prompt
 
-    # Post INSERT — TTS R2 path'i post_id'ye bağlı
+    # Hareket seçimi (K-02 = A): caption aşamasında model seçti, istemci taşıdı,
+    # doğrulama BURADA yapılır ve sonuç sunucunun kendi kaydına yazılır. Stage-2
+    # istemciden gelen hiçbir şeye bakmaz. Havuz yoksa/paketsizse anahtar hiç
+    # yazılmaz ve stage-2 bugünkü sabit havuza düşer (K-113 = A).
+    validated_motion = resolve_motion_prompt(package_context, requested_motion_prompt)
+    if validated_motion:
+        template_fields["motion_prompt"] = validated_motion
+
+    # Post INSERT — TTS R2 path'i post_id'ye bağlı.
+    #
+    # Post `generating` olarak doğar, `awaiting_approval` OLARAK DEĞİL. İki
+    # sebep aynı yöne bakıyor:
+    #
+    # 1. Damga BURADA yazılmaz — makbuz tek kullanımlıktır ve stage-1'in kalıcı
+    #    başarısı bu satırda değil, TTS + still üretimi geçtikten sonra doğar.
+    #    Burada tüketilseydi TTS patladığında makbuz yanar, arayüz kullanıcıyı
+    #    adım 2'ye geri atar (ölçüldü) ve AYNI makbuzla yapılan yeniden deneme
+    #    damgasız kalırdı — damga başarısız postun üstünde asılı kalırken.
+    # 2. Stage-2'nin kapısı `status = 'awaiting_approval'`dır. Post o durumda
+    #    doğarsa, onaya açılma ile damga yazımı arasında bir çöküş stage-2'ye
+    #    UYGUN ama damgasız bir post bırakır ve makbuz hâlâ kullanılabilir olur
+    #    — aynı makbuz sonra BAŞKA bir postu damgalayabilirdi (sahte soyağacı).
+    #
+    # Onaya açılma ile damga yazımı bu yüzden TEK transaction'dadır (aşağıda).
     row = await db.fetchrow(
         """
         INSERT INTO social.posts
             (brand_id, content_type, prompt, user_text, aspect_ratio, status,
              template_id, template_fields, platform_captions, product_id)
-        VALUES ($1, 'video', $2, $3, $4, 'awaiting_approval',
+        VALUES ($1, 'video', $2, $3, $4, 'generating',
                 $5, $6, $7, $8)
         RETURNING *
         """,
@@ -995,11 +1185,43 @@ async def run_short_video_stage1(
         )
         raise RuntimeError(f"Still görsel üretimi başarısız: {exc}") from exc
 
-    await _patch({
-        "still_image_url": still_image_url,
-        "product_image_url": product_image_url,
-        "generation_stage": "awaiting_approval",
-    })
+    # SONLANDIRMA — stage-1'in kalıcı başarı noktası. Tek transaction'da dört
+    # şey birlikte olur: still alanlarının yazımı · makbuzun tüketimi · damganın
+    # posta yazımı · postun onaya AÇILMASI. Bunlardan biri ayrı commit'te olsaydı
+    # arada bir çöküş yarım bir gerçeklik bırakırdı — ya damgasız ama onaylanabilir
+    # bir post, ya tüketilmiş ama karşılığı olmayan bir makbuz.
+    async with db.transaction():
+        await _patch({
+            "still_image_url": still_image_url,
+            "product_image_url": product_image_url,
+            "generation_stage": "awaiting_approval",
+        })
+        stamp_package_id, stamp_package_version = await resolve_persist_stamp(
+            db, {"id": brand_id, "sub_sector_id": sub_sector_id}, generation_id
+        )
+        # KARŞILAŞTIR-VE-YAZ: satır hâlâ `generating` olmalı. Koşulsuz bir
+        # `WHERE id` güncellemesi iki sessiz hata üretirdi — (a) bayat-iş
+        # süpürücüsü postu `failed` yaptıysa stage-1 onun TERMİNAL kararını
+        # geri alıp postu onaya açardı; (b) post silinmişse güncelleme hiçbir
+        # satıra dokunmaz, ama makbuz yine de tüketilmiş olurdu (öksüz makbuz).
+        # `RETURNING` yoksa istisna atılır ve transaction geri alınır, yani
+        # makbuz da yanmaz.
+        finalized = await db.fetchval(
+            """
+            UPDATE social.posts
+            SET status = 'awaiting_approval', package_id = $2, package_version = $3
+            WHERE id = $1 AND status = 'generating'
+            RETURNING id
+            """,
+            post_id,
+            stamp_package_id,
+            stamp_package_version,
+        )
+        if finalized is None:
+            raise RuntimeError(
+                f"Stage 1 sonlandırılamadı: post {post_id} artık 'generating' değil "
+                "(süpürülmüş ya da silinmiş olabilir)"
+            )
 
     return {
         "post_id": post_id,
@@ -1042,7 +1264,7 @@ async def run_short_video_stage2(
 
     # Stage 2 submission: ürün görseliyse motion-only, Nano Banana 2 ürettiyse motion-only,
     # legacy text-to-video adapter ise birleşik prompt
-    motion_prompt = _pick_motion_prompt()
+    motion_prompt = _effective_motion_prompt(tf)
     template_id = row["template_id"]
     target_adapter = _resolve_video_adapter(template_id)
     if product_image_url or target_adapter.requires_still_image:

@@ -1,11 +1,12 @@
 import asyncio
+import logging
 from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.core.caption_generator import generate_captions
+from app.core.caption_generator import PACKAGE_APPLIED_KEY, generate_captions
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.security import (
@@ -17,6 +18,7 @@ from app.core.security import (
 )
 from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
 from app.models.schemas import (
+    CaptionGenerationOut,
     OkResponse,
     PostCreate,
     PostGenerate,
@@ -26,6 +28,13 @@ from app.models.schemas import (
 from app.routers.billing import check_plan_limit
 from app.services.document_processor import get_document_context, get_product_document_context
 from app.services.fal_ai import SUPPORTED_ASPECT_RATIOS, generate_image, generate_image_edit
+from app.services.package_events import log_package_event
+from app.services.sector_packages import (
+    SectorPackageContext,
+    match_special_day,
+    resolve_package_context,
+    resolve_persist_stamp,
+)
 from app.services.short_video import (
     DEFAULT_MAX_DURATION,
     PLATFORM_MAX_DURATION,
@@ -35,6 +44,8 @@ from app.services.short_video import (
     run_short_video_stage1,
     run_short_video_stage2,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/posts", tags=["posts"])
 
@@ -101,7 +112,9 @@ async def _build_prompt_with_rag_legacy(
             return f"{category_tr} odaklı sosyal medya görseli"
         return base_prompt
 
-    doc_context = await get_document_context(payload.document_ids, base_prompt, db)
+    doc_context = await get_document_context(
+        payload.document_ids, base_prompt, db, brand_id=payload.brand_id
+    )
     if not doc_context:
         if category_tr and base_prompt:
             return f"{category_tr} odaklı görsel: {base_prompt}"
@@ -181,6 +194,54 @@ class GenerateCaptionRequest(BaseModel):
     scene_reference_image_url: str | None = None
 
 
+# Caption çağrısı YAPMAYAN içerik türleri — makbuz hiç doğmaz, yokluğu anomali
+# değildir. Küme KAPALI ve dar tutulur: yeni bir tür eklendiğinde varsayılan
+# "makbuz beklenir"dir, yani unutulan bir tür yanlış-pozitif olay üretir
+# (gürültü), sessiz bir denetim boşluğu DEĞİL.
+RECEIPTLESS_CONTENT_TYPES = frozenset({"quote"})
+
+
+async def _write_generation_stamp(
+    db: asyncpg.Connection,
+    brand_id: UUID,
+    package_context: SectorPackageContext | None,
+) -> str | None:
+    """K-07 üretim-anı makbuzu; paketsiz üretimde `None` döner.
+
+    İstemciye YALNIZ bu opak kimlik gider; paket kimliği+sürümü sunucuda kalır
+    ve kalıcı-kayıt isteğinde makbuzdan okunur (tüketici uç Task 12).
+
+    Yazım başarısızlığı üretimi DÜŞÜRMEZ: caption zaten üretildi, kredisi
+    harcandı; makbuz yazılamadıysa kaybedilen şey paket ATFIDIR, içerik değil.
+    Sessiz de değildir — başarısızlık log üretir. Ters yön (makbuzsuz bir kimlik
+    döndürmek) istemciye var olmayan bir kayda işaret ettirirdi, o yüzden hata
+    dalında kimlik ÜRETİLMEZ.
+    """
+    if package_context is None:
+        return None
+    try:
+        stamp_id = await db.fetchval(
+            """
+            INSERT INTO social.generation_stamps (brand_id, package_id, package_version)
+            VALUES ($1, $2, $3)
+            RETURNING id
+            """,
+            brand_id,
+            package_context.package_id,
+            package_context.version,
+        )
+    except Exception as exc:
+        logger.warning(
+            "üretim damgası yazılamadı, caption paket atfı olmadan dönüyor "
+            "(brand_id=%s package_id=%s): %s",
+            brand_id,
+            package_context.package_id,
+            exc,
+        )
+        return None
+    return str(stamp_id)
+
+
 @router.post(
     "/generate-caption",
     response_model=OkResponse,
@@ -207,6 +268,7 @@ async def generate_caption(
         raise HTTPException(status_code=404, detail="Brand not found")
 
     brand_kit = _parse_brand_kit(brand["brand_kit"])
+    package_context = await resolve_package_context(db, dict(brand))
 
     template = None
     if payload.template_id:
@@ -238,12 +300,14 @@ async def generate_caption(
 
     rag_parts: list[str] = []
     if payload.document_ids:
-        doc_context = await get_document_context(payload.document_ids, base_query, db)
+        doc_context = await get_document_context(
+            payload.document_ids, base_query, db, brand_id=payload.brand_id
+        )
         if doc_context:
             rag_parts.append(doc_context)
     if payload.product_id:
         product_doc_context = await get_product_document_context(
-            [payload.product_id], base_query, db
+            [payload.product_id], base_query, db, brand_id=payload.brand_id
         )
         if product_doc_context:
             rag_parts.append(product_doc_context)
@@ -262,9 +326,32 @@ async def generate_caption(
         special_day_name=payload.special_day_name,
         special_day_category=payload.special_day_category,
         scene_reference_image_url=payload.scene_reference_image_url,
+        package_context=package_context,
     )
 
-    return OkResponse(data=result)
+    # Özel gün EŞLEŞMEZLİĞİ burada kaydedilir: basım yolu (prompt_builder)
+    # eşzamanlıdır ve donmuş prompt kapısının içinden geçer — oraya bir
+    # veritabanı yazımı sokmak o kapıyı kirletirdi. Sahip, db'si olan ve günü
+    # isteyen TEK uçtur; yüklem basım yoluyla PAYLAŞILIR, kopyalanmaz.
+    if package_context is not None and payload.special_day_name:
+        matched_key, mismatch_reason = match_special_day(
+            package_context, payload.special_day_name
+        )
+        if mismatch_reason is not None:
+            await log_package_event(
+                db,
+                event_type="mismatch_fallthrough",
+                brand_id=payload.brand_id,
+                package_id=package_context.package_id,
+                detail={"reason": mismatch_reason, "key": matched_key},
+            )
+
+    # Bayrak yanıt sözleşmesinin parçası değil — okunur ve DÜŞÜRÜLÜR.
+    package_applied = result.pop(PACKAGE_APPLIED_KEY, False)
+    result["generation_id"] = await _write_generation_stamp(
+        db, payload.brand_id, package_context if package_applied else None
+    )
+    return OkResponse(data=CaptionGenerationOut(**result).model_dump())
 
 
 @router.post(
@@ -290,7 +377,8 @@ async def generate_post(
             ),
         )
     brand = await db.fetchrow(
-        "SELECT brand_kit, name, sector FROM social.brands WHERE id = $1", payload.brand_id
+        "SELECT id, brand_kit, name, sector, sub_sector_id FROM social.brands WHERE id = $1",
+        payload.brand_id,
     )
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
@@ -387,40 +475,54 @@ async def generate_post(
         template_fields_for_db = dict(payload.template_fields or {})
         template_fields_for_db["image_prompt"] = enriched_prompt
 
-    row = await db.fetchrow(
-        """
-        INSERT INTO social.posts
-            (brand_id, content_type, content_category, prompt, user_text,
-             document_ids, aspect_ratio, platforms, status,
-             template_id, template_fields, platform_captions,
-             caption, hashtags, use_logo_overlay, image_text_fields,
-             product_id, slides)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
-                $9, $10, $11, $12, $13, $14, $15, $16, $17)
-        RETURNING *
-        """,
-        payload.brand_id,
-        payload.content_type,
-        effective_category,
-        payload.prompt or payload.special_day_name or payload.quote_text,
-        payload.user_text,
-        [str(d) for d in payload.document_ids] if payload.document_ids else None,
-        payload.aspect_ratio,
-        payload.platforms,
-        payload.template_id,
-        template_fields_for_db,
-        payload.platform_captions,
-        caption_value,
-        hashtags_value,
-        payload.use_logo_overlay,
-        payload.image_text_fields,
-        payload.product_id,
-        slides_data,
-    )
+    # K-07: makbuz tüketimi ile post yazımı AYNI transaction'dadır (plan Task 12).
+    # Ayrı olsalardı makbuz tüketilip post yazılmayabilir (kayıp atıf) ya da post
+    # yazılıp makbuz tüketilmeyebilirdi (aynı makbuz ikinci posta da takılır).
+    async with db.transaction():
+        stamp_package_id, stamp_package_version = await resolve_persist_stamp(
+            db,
+            dict(brand),
+            payload.generation_id,
+            # Makbuz YALNIZ caption çağrısı yapan akışlarda doğar. Beklenti
+            # OPSİYONEL bir alandan türetilemez: `platform_captions`i düşürmek
+            # denetim izini susturmaya yeterdi (fail-open). İçerik türü akışı
+            # BELİRLER — düşürülmesi üretimi de bozar — ve bilinmeyen tür
+            # BEKLENİR tarafına düşer.
+            receipt_expected=payload.content_type not in RECEIPTLESS_CONTENT_TYPES,
+        )
+        row = await db.fetchrow(
+            """
+            INSERT INTO social.posts
+                (brand_id, content_type, content_category, prompt, user_text,
+                 document_ids, aspect_ratio, platforms, status,
+                 template_id, template_fields, platform_captions,
+                 caption, hashtags, use_logo_overlay, image_text_fields,
+                 product_id, slides, package_id, package_version)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'generating',
+                    $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            RETURNING *
+            """,
+            payload.brand_id,
+            payload.content_type,
+            effective_category,
+            payload.prompt or payload.special_day_name or payload.quote_text,
+            payload.user_text,
+            [str(d) for d in payload.document_ids] if payload.document_ids else None,
+            payload.aspect_ratio,
+            payload.platforms,
+            payload.template_id,
+            template_fields_for_db,
+            payload.platform_captions,
+            caption_value,
+            hashtags_value,
+            payload.use_logo_overlay,
+            payload.image_text_fields,
+            payload.product_id,
+            slides_data,
+            stamp_package_id,
+            stamp_package_version,
+        )
     post = dict(row)
-
-    import logging
-    _logger = logging.getLogger(__name__)
 
     # Edit ref kararı: ürün varsa ürün görselleri (Sprint 1: çoklu); yoksa Sprint 3'te
     # eklenen scene_reference_image_url varsa onu kullan; yoksa text-to-image.
@@ -454,7 +556,7 @@ async def generate_post(
             if has_failure:
                 for i, jid in enumerate(job_ids):
                     if isinstance(jid, Exception):
-                        _logger.error(f"Carousel slide {i+1} fal.ai submit failed: {jid}", exc_info=jid)
+                        logger.error(f"Carousel slide {i+1} fal.ai submit failed: {jid}", exc_info=jid)
                 await db.execute(
                     "UPDATE social.posts SET status = 'failed', updated_at = now() WHERE id = $1",
                     post["id"],
@@ -468,7 +570,7 @@ async def generate_post(
                     slides_data,
                 )
         except Exception as e:
-            _logger.error(f"Carousel fal.ai submission failed for post {post['id']}: {e}", exc_info=True)
+            logger.error(f"Carousel fal.ai submission failed for post {post['id']}: {e}", exc_info=True)
     else:
         # Single image flow
         # Sprint 1 (Çoklu Görsel) — tek görsel modunda kullanıcı 5'e kadar görsel seçtiyse
@@ -487,7 +589,7 @@ async def generate_post(
             )
             post["fal_job_id"] = fal_job_id
         except Exception as e:
-            _logger.error(f"fal.ai generate_image failed for post {post['id']}: {e}", exc_info=True)
+            logger.error(f"fal.ai generate_image failed for post {post['id']}: {e}", exc_info=True)
 
     return OkResponse(data={
         "post_id": str(post["id"]),
@@ -814,6 +916,19 @@ async def generate_short_video(
 ):
     """Kısa video pipeline: script → TTS → fal.ai arka plan videosu."""
     await assert_brand_owned(db, user, payload.brand_id)
+
+    # Ürün sahipliği YAZIMDAN ve kullanımdan ÖNCE. Marka sahipliği ürünü
+    # kapsamaz: doğrulanmamış ürün kimliği hem yabancı görseli video hattına
+    # sokuyor hem de `posts.product_id` olarak kaydediliyordu (security review
+    # 2026-08-26 / S2 kapanış turu). 404 — başkasının kaynağının varlığı sızmasın.
+    if payload.product_id:
+        owned = await db.fetchval(
+            "SELECT 1 FROM social.brand_products WHERE id = $1 AND brand_id = $2",
+            payload.product_id,
+            payload.brand_id,
+        )
+        if not owned:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
     if payload.aspect_ratio not in SUPPORTED_SHORT_VIDEO_RATIOS:
         raise HTTPException(
             status_code=400,
@@ -835,7 +950,9 @@ async def generate_short_video(
 
     rag_context: str | None = None
     if payload.document_ids:
-        rag_context = await get_document_context(payload.document_ids, payload.prompt, db)
+        rag_context = await get_document_context(
+            payload.document_ids, payload.prompt, db, brand_id=payload.brand_id
+        )
 
     # Seçili platformların en kısıtlayıcı süre limitini al
     max_duration = DEFAULT_MAX_DURATION
@@ -910,7 +1027,8 @@ async def generate_short_video_stage1(
     await check_plan_limit(user["sub"], "post", db)
 
     brand = await db.fetchrow(
-        "SELECT brand_kit, name, sector, description FROM social.brands WHERE id = $1",
+        "SELECT id, brand_kit, name, sector, description, sub_sector_id "
+        "FROM social.brands WHERE id = $1",
         payload.brand_id,
     )
     if not brand:
@@ -918,6 +1036,7 @@ async def generate_short_video_stage1(
 
     brand_kit = _parse_brand_kit(brand["brand_kit"])
     brand_kit["sector"] = brand["sector"] or ""
+    package_context = await resolve_package_context(db, dict(brand))
 
     max_duration = DEFAULT_MAX_DURATION
     if payload.platforms:
@@ -937,21 +1056,25 @@ async def generate_short_video_stage1(
             """,
             payload.product_id, payload.brand_id,
         )
-        if product_row:
-            parts: list[str] = []
-            if product_row["name"]:
-                parts.append(f"Name: {product_row['name']}")
-            if product_row["description"]:
-                parts.append(f"Description: {product_row['description']}")
-            tags = product_row["tags"] or []
-            if isinstance(tags, list) and tags:
-                parts.append(f"Tags: {', '.join(str(t) for t in tags)}")
-            product_info = "\n".join(parts)
+        # Sessiz geçiştirme KALDIRILDI: satır boş dönüyorsa ürün bu markanın
+        # değildir ve akış onu yine de aşağıya taşıyordu (security review
+        # 2026-08-26 / S2 kapanış turu). Kardeş uç (başlık üretimi) zaten 404 veriyor.
+        if not product_row:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+        parts: list[str] = []
+        if product_row["name"]:
+            parts.append(f"Name: {product_row['name']}")
+        if product_row["description"]:
+            parts.append(f"Description: {product_row['description']}")
+        tags = product_row["tags"] or []
+        if isinstance(tags, list) and tags:
+            parts.append(f"Tags: {', '.join(str(t) for t in tags)}")
+        product_info = "\n".join(parts)
 
         rag_query = (payload.visual_brief or payload.script or payload.prompt or "").strip()
         if rag_query:
             ctx = await get_product_document_context(
-                [payload.product_id], rag_query, db,
+                [payload.product_id], rag_query, db, brand_id=payload.brand_id,
             )
             if ctx:
                 product_doc_context = ctx
@@ -976,6 +1099,10 @@ async def generate_short_video_stage1(
             product_info=product_info,
             product_doc_context=product_doc_context,
             scene_reference_image_url=payload.scene_reference_image_url or "",
+            package_context=package_context,
+            requested_motion_prompt=payload.motion_prompt,
+            sub_sector_id=brand["sub_sector_id"],
+            generation_id=payload.generation_id,
             db=db,
         )
     except RuntimeError as exc:

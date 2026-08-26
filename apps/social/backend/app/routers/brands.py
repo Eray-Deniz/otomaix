@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from app.core.cache import get_cached, invalidate_pattern, set_cached
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, assert_workspace_owned, get_current_user
-from app.core.utils import parse_brand_kit
+from app.core.utils import brand_kit_merge_sql
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
+from app.services.notifications import MAINTENANCE_BANNER_MESSAGE
+from app.services.sector_packages import validate_channels
 from app.services.sector_resolver import resolve_sector
 from app.services.storage import r2
 
@@ -18,6 +20,93 @@ router = APIRouter(prefix="/brands", tags=["brands"])
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm"}
+
+
+# `brands.sub_sector_id`'nin yabancı anahtarı — ADIYLA tanınır.
+_SUB_SECTOR_FK_CONSTRAINT = "brands_sub_sector_id_fkey"
+
+# K-08b tetikleyicisinin SQLSTATE'i. Tetikleyici bir KISIT değildir, o yüzden
+# `constraint_name` taşımaz; `social.brands` üstünde bu kodu üreten başka bir
+# kaynak YOKTUR (tek 23000 kaynağı `require_sub_sector_reference`).
+_SUB_SECTOR_TRIGGER_SQLSTATE = "23000"
+
+
+def _is_sub_sector_write_error(exc: asyncpg.PostgresError) -> bool:
+    """Hata BİZİM kapılarımızdan mı geldi?
+
+    Kapı SQLSTATE sınıfına DEĞİL, kısıtın kendisine bakar. Ölçüldü (2026-08-25):
+    `brands` üstünde `workspace_id` ve `sector_id` yabancı anahtarları da 23503
+    üretir — yani "23503 + istek alt sektör yazıyordu" kuralı, eşzamanlı bir
+    çalışma alanı ya da kök sektör silinmesini "geçersiz alt sektör 400" diye
+    etiketlerdi. Gerçek bir tutarlılık arızası istemci girdisi hatası gibi
+    görünür, gözlemlenebilirlikten düşerdi.
+
+    Ayrıca ölçüldü: eksik `sub_sector_id` yabancı anahtara HİÇ ulaşmaz —
+    BEFORE tetikleyicisi önce patlar. FK dalı yine de tanınır, çünkü tetikleyici
+    düşerse tek kalan savunma odur.
+    """
+    if exc.sqlstate == _SUB_SECTOR_TRIGGER_SQLSTATE:
+        return getattr(exc, "constraint_name", None) is None
+    return getattr(exc, "constraint_name", None) == _SUB_SECTOR_FK_CONSTRAINT
+
+_SUB_SECTOR_WRITE_DETAIL = (
+    "Geçersiz alt sektör: yalnız bir alt sektör satırı atanabilir "
+    "(kök sektör ve bilinmeyen kimlik kabul edilmez)."
+)
+
+
+def _sub_sector_write_error() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail=_SUB_SECTOR_WRITE_DETAIL
+    )
+
+
+async def _assert_assignable_sub_sector(db: asyncpg.Connection, sub_sector_id) -> None:
+    """Atanabilirlik kapısının UYGULAMA ayağı (plan teknik karar 3).
+
+    Garanti DB'dedir (K-08b tetikleyicisi); bu kontrol onun yerine geçmez,
+    ÖNÜNE geçer: tetikleyici patladığında elimizde yalnız bir veritabanı
+    istisnası olur ve doğru istemci mesajını üretmek için hata metnini
+    ayrıştırmak gerekirdi.
+
+    Kapı YALNIZ "alt sektör satırı mı" sorar. Aktif paket şartı ARAMAZ:
+    K-43 gereği paketi arşivlenen markanın ataması KORUNUR, dolayısıyla
+    paketsiz bir alt sektör meşru bir kayıtlı değerdir ve onu yeniden
+    kaydetmek yasak olamaz. Aday kümesi neyin ÖNERİLECEĞİNİ belirler,
+    neyin saklanabileceğini değil.
+    """
+    if sub_sector_id is None:
+        return
+    is_sub_sector = await db.fetchval(
+        "SELECT parent_sector_id IS NOT NULL FROM social.sectors WHERE id = $1",
+        sub_sector_id,
+    )
+    # Satır yoksa değer NULL'dır — o da reddedilir (tetikleyiciyle aynı
+    # fail-closed yön).
+    if is_sub_sector is not True:
+        raise _sub_sector_write_error()
+
+
+def _assert_valid_channels(kit: dict | None) -> None:
+    """Kanal envanterinin kapalı anahtar uzayı kapısı (spec §12.2).
+
+    Çağıranın brand_kit içeriği verebildiği HER yüzeyde koşar — yalnız
+    `update_brand_kit`'i korumak yetmez, çünkü `update_brand` brand_kit'i
+    BÜTÜN olarak yazar ve tek başına bırakılsa kapalılık iddiası yalan olurdu.
+    Yüzey kümesinin tamlığını `tests/test_channel_inventory.py` yapısal olarak
+    tarar (yeni bir handler eklenirse test kırmızıya döner).
+
+    Kapı yalnız `channels` alanı GELDİĞİNDE konuşur; brand_kit'in geri kalanı
+    bugünkü gibi serbesttir.
+    """
+    if not isinstance(kit, dict) or "channels" not in kit:
+        return
+    errors = validate_channels(kit["channels"])
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Geçersiz kanal envanteri: " + "; ".join(errors),
+        )
 
 
 @router.post("", response_model=OkResponse, status_code=status.HTTP_201_CREATED)
@@ -31,19 +120,32 @@ async def create_brand(
     await check_plan_limit(user["sub"], "brand", db)
     resolved = await resolve_sector(db, payload.sector)
     sector_id, sector_display = resolved if resolved else (None, payload.sector)
-    row = await db.fetchrow(
-        """
-        INSERT INTO social.brands (workspace_id, name, description, website_url, sector, sector_id)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING *
-        """,
-        payload.workspace_id,
-        payload.name,
-        payload.description,
-        payload.website_url,
-        sector_display,
-        sector_id,
-    )
+    await _assert_assignable_sub_sector(db, payload.sub_sector_id)
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO social.brands
+                (workspace_id, name, description, website_url, sector, sector_id, sub_sector_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *
+            """,
+            payload.workspace_id,
+            payload.name,
+            payload.description,
+            payload.website_url,
+            sector_display,
+            sector_id,
+            payload.sub_sector_id,
+        )
+    except asyncpg.exceptions.IntegrityConstraintViolationError as exc:
+        # Ön kontrol ile yazım arasında satır silinebilir (yarış). Backstop DAR:
+        # yalnız bu istek FİİLEN bir alt sektör yazdıysa VE hata bizim kısıtımız
+        # ise çevrilir; başka her bütünlük ihlali olduğu gibi yükselir.
+        # (`get_db` transaction AÇMAZ — ifadeler autocommit'tir, yani düşen tek
+        # ifade bağlantıyı zehirlemez; ölçüldü.)
+        if payload.sub_sector_id is None or not _is_sub_sector_write_error(exc):
+            raise
+        raise _sub_sector_write_error() from exc
     await invalidate_pattern(f"otomaix:social:brands:{payload.workspace_id}")
     return OkResponse(data=dict(row))
 
@@ -76,6 +178,50 @@ async def list_brands(
     return OkResponse(data=data)
 
 
+@router.get("/{brand_id}/package-status", response_model=OkResponse)
+async def get_package_status(
+    brand_id: UUID,
+    user: dict = Depends(get_current_user),
+    db: asyncpg.Connection = Depends(get_db),
+):
+    """Marka sahibinin göreceği paket durumu — K-45 devre-dışı ayağı.
+
+    Yanıt YALNIZ durum ve mesaj taşır; paket içeriği bu uçtan ASLA sızmaz.
+    Üç mod:
+
+    * `unpackaged` — markanın alt sektör ataması yok. Normal yol, mesaj yok.
+    * `packaged` — atama var ve o sektörün aktif paketi var.
+    * `maintenance` — atama var ama aktif paket YOK (bayat atama). Marka
+      sahibinin gözünden bu bir arıza değil, geçici bir bakımdır; metin K-45'in
+      SABİT devre-dışı metnidir ve tek kaynağı `notifications` modülüdür.
+
+    Durum modeli kapalı bir enum DEĞİL, düz metindir: Plan 2 buraya
+    `recovered` modunu ekleyecek ve yeni bir mod şemayı kırmamalı.
+
+    **Rota sırası:** bu tanım `/{brand_id}` GET'inden ÖNCE gelmelidir; FastAPI
+    rotaları bildirim sırasına göre eşler ve sonra gelseydi bile yol farklı
+    olduğu için çakışmazdı — yine de dosyadaki mevcut konvansiyona uyulur.
+    """
+    await assert_brand_owned(db, user, brand_id)
+    sub_sector_id = await db.fetchval(
+        "SELECT sub_sector_id FROM social.brands WHERE id = $1", brand_id
+    )
+    if not sub_sector_id:
+        return OkResponse(data={"mode": "unpackaged", "message": None})
+
+    has_active = await db.fetchval(
+        "SELECT 1 FROM social.sector_packages "
+        "WHERE sector_id = $1 AND status = 'active' LIMIT 1",
+        sub_sector_id,
+    )
+    if has_active:
+        return OkResponse(data={"mode": "packaged", "message": None})
+
+    return OkResponse(
+        data={"mode": "maintenance", "message": MAINTENANCE_BANNER_MESSAGE}
+    )
+
+
 @router.get("/{brand_id}", response_model=OkResponse)
 async def get_brand(
     brand_id: UUID,
@@ -97,11 +243,30 @@ async def update_brand(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Partially update a brand."""
+    """Partially update a brand.
+
+    **Koşullu yazım (Task 15b).** `expected_version` doluysa yazım yalnız satır
+    o sürümdeyken uygulanır. Bunu sunucu yapmak ZORUNDADIR: iki sekme (ya da
+    iki cihaz) birbirini görmez, dolayısıyla istemci tarafındaki hiçbir sıraya
+    dizme aralarındaki yarışı kapatamaz.
+
+    Sürüm göndermeyen çağıran bugünkü davranışı aynen görür — kapı isteğe
+    bağlıdır ve başka yüzeyleri bozmaz.
+    """
     await assert_brand_owned(db, user, brand_id)
     updates = payload.model_dump(exclude_none=True)
+    # Sürüm bir SÜTUN değil, bir KOŞUL — güncellenecek alanlar kümesinden çıkar.
+    expected_version = updates.pop("expected_version", None)
+    # `exclude_none` açık `null`'ı da düşürür; atamayı boşaltmak ise tam olarak
+    # `null` göndermektir. Bu yüzden alan gönderildi mi sorusu değerden DEĞİL,
+    # `model_fields_set`'ten okunur: gönderilmediyse dokunulmaz, `null`
+    # gönderildiyse silinir (spec §7.5).
+    if "sub_sector_id" in payload.model_fields_set:
+        updates["sub_sector_id"] = payload.sub_sector_id
+        await _assert_assignable_sub_sector(db, payload.sub_sector_id)
     if not updates:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
+    _assert_valid_channels(updates.get("brand_kit"))
 
     # Phase 6 dual-write: frontend slug gönderir; TEXT kolona display_name yazılır,
     # sector_id UUID kanonik referans olur. AI/trend kodu hala TEXT okur (Türkçe ad).
@@ -112,14 +277,63 @@ async def update_brand(
             updates["sector"] = sector_display
             updates["sector_id"] = sector_id
 
-    fields = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(updates))
-    values = list(updates.values())
-    row = await db.fetchrow(
-        f"UPDATE social.brands SET {fields} WHERE id = $1 RETURNING *",
-        brand_id,
-        *values,
-    )
+    # `brand_kit` bu yüzeyde de BİRLEŞTİRİLİR, atanmaz. Eskiden istemcinin
+    # gönderdiği tam belge doğrudan yazılıyordu: istemci kiti okur, arada başka
+    # bir istek atomik olarak `channels` (ya da `avatar`) ekler, sonra bayat
+    # PATCH tüm belgeyi ezip yeni durumu silerdi (checkpoint 9, tur 2).
+    kit = updates.pop("brand_kit", None)
+    kit_channels = None
+    if isinstance(kit, dict) and "channels" in kit:
+        kit = dict(kit)
+        kit_channels = kit.pop("channels")
+
+    assignments: list[str] = []
+    values: list = []
+    for key, value in updates.items():
+        values.append(value)
+        assignments.append(f"{key} = ${len(values) + 1}")
+
+    if kit is not None:
+        values.append(kit)
+        kit_param = len(values) + 1
+        channels_param = None
+        if kit_channels is not None:
+            values.append(kit_channels)
+            channels_param = len(values) + 1
+        assignments.append("brand_kit = " + brand_kit_merge_sql(kit_param, channels_param))
+
+    fields = ", ".join(assignments)
+    version_clause = ""
+    if expected_version is not None:
+        values.append(expected_version)
+        version_clause = f" AND updated_at = ${len(values) + 1}"
+    try:
+        row = await db.fetchrow(
+            f"UPDATE social.brands SET {fields} WHERE id = $1{version_clause} RETURNING *",
+            brand_id,
+            *values,
+        )
+    except asyncpg.exceptions.IntegrityConstraintViolationError as exc:
+        # create_brand ile aynı dar backstop (yarış penceresi).
+        if payload.sub_sector_id is None or not _is_sub_sector_write_error(exc):
+            raise
+        raise _sub_sector_write_error() from exc
     if not row:
+        # "Satır güncellenmedi" iki AYRI şey olabilir ve istemci için sonuçları
+        # zıttır: marka silinmişse tazelemek işe yaramaz, çakışma varsa tam
+        # olarak tazelemek gerekir. Ayırmazsak istemci sonsuza dek yeniden
+        # dener. (Sahiplik kapısı silinmiş markayı zaten yukarıda karşılar;
+        # bu dal ikisi arasındaki yarış penceresi içindir.)
+        if expected_version is not None and await db.fetchval(
+            "SELECT 1 FROM social.brands WHERE id = $1", brand_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Bu marka başka bir yerde değiştirildi. En güncel hâli "
+                    "yükleyip değişikliğinizi tekrar uygulayın."
+                ),
+            )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
     await invalidate_pattern(f"otomaix:social:brands:{row['workspace_id']}")
     return OkResponse(data=dict(row))
@@ -149,22 +363,38 @@ async def update_brand_kit(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Update the brand_kit JSONB field for a brand."""
+    """Update the brand_kit JSONB field for a brand.
+
+    Birleştirme SUNUCU TARAFINDA, TEK ifadede yapılır — okundu-değiştir-geri-yaz
+    DEĞİL. Eski biçim `SELECT brand_kit` → Python'da birleştir →
+    `UPDATE brand_kit = <tam belge>` idi ve kayıp-güncelleme üretiyordu: dört
+    eşzamanlı PATCH ölçüldüğünde dört anahtardan ÜÇÜ kayboldu (checkpoint 9).
+    Kayıp sessizdi; filtre muhafazakâr olduğu için sonucu "CTA'lar sebepsiz
+    kayboldu" olurdu.
+
+    `channels` ANAHTAR BAZINDA birleşir (spec §12.2 "deep-merge"), kitin geri
+    kalanı üst düzeyde birleşir (bugünkü davranış). Kanalın ayrıcalığı tek
+    yönlüdür: düşen bir kanal anahtarı sessiz davranış değişikliğidir.
+
+    `jsonb_typeof` kapıları, kolonun NULL ya da nesne-olmayan bir JSON değeri
+    taşıdığı bozuk satırlarda `||` operatörünün patlamasını önler.
+    """
     await assert_brand_owned(db, user, brand_id)
-    row = await db.fetchrow("SELECT brand_kit FROM social.brands WHERE id = $1", brand_id)
-    if not row:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
-
-    # Merge incoming fields into existing brand_kit
-    existing = parse_brand_kit(row["brand_kit"])
     updates = payload.model_dump(exclude_none=True)
-    merged = {**existing, **updates}
+    _assert_valid_channels(updates)
+    channels = updates.pop("channels", None)
 
+    values: list = [updates] if channels is None else [updates, channels]
+    merge = brand_kit_merge_sql(2, None if channels is None else 3)
     updated = await db.fetchrow(
-        "UPDATE social.brands SET brand_kit = $2, updated_at = now() WHERE id = $1 RETURNING *",
+        f"UPDATE social.brands SET brand_kit = {merge}, updated_at = now() "
+        "WHERE id = $1 RETURNING *",
         brand_id,
-        merged,
+        *values,
     )
+
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
     await invalidate_pattern(f"otomaix:social:brands:{updated['workspace_id']}")
     return OkResponse(data=dict(updated))
 

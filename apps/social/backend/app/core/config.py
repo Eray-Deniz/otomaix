@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""        # Opsiyonel — Sentry error monitoring
     ENVIRONMENT: str = "production"  # development | production
     N8N_BASE_URL: str = "https://n8n.otomaix.com"  # n8n CRM webhook base URL
+    # Yönetici olay webhook'unun kabul kontrolü. BOŞSA gönderim YAPILMAZ
+    # (fail-closed): kimlik doğrulamasız bir webhook'a erişebilen herkes sahte
+    # yönetici uyarısı üretebilirdi (checkpoint 14, F1).
+    N8N_ADMIN_EVENT_SECRET: str = ""
     # Phase 6 — Trend sistemi
     YOUTUBE_API_KEY: str = ""        # Opsiyonel — YouTube Data API v3 (Layer A)
     REDDIT_USER_AGENT: str = "otomaix-social/1.0 (+https://otomaix.com)"

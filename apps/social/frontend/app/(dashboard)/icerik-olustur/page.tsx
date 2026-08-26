@@ -671,6 +671,8 @@ function IcerikOlusturInner() {
         product_image_ids: selectedProductImageIds.length > 0 ? selectedProductImageIds : null,
         visual_brief: prompt.trim(),
         scene_reference_image_url: imageSubType === 'general' ? selectedSceneReference?.image_url ?? null : null,
+        motion_prompt: captionData!.motion_prompt ?? null,
+        generation_id: captionData!.generation_id ?? null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -744,6 +746,7 @@ function IcerikOlusturInner() {
         special_day_name: contentType === 'special_day' ? selectedHoliday?.name_tr ?? null : null,
         special_day_category: contentType === 'special_day' ? selectedHoliday?.category ?? null : null,
         scene_reference_image_url: imageSubType === 'general' ? selectedSceneReference?.image_url ?? null : null,
+        generation_id: captionData!.generation_id ?? null,
       })
       setGenerating(false)
       if (res.success && res.data) {
@@ -842,6 +845,12 @@ function IcerikOlusturInner() {
         image_prompts: res.data.image_prompts,
         hashtags: res.data.hashtags ?? [],
         ...(res.data.script ? { script: res.data.script } : {}),
+        // Paketli videoda modelin seçtiği kamera hareketi burada korunmazsa
+        // stage-1'e hiç ulaşmaz ve sektörel seçim sessizce rastgeleye düşer.
+        ...(res.data.motion_prompt ? { motion_prompt: res.data.motion_prompt } : {}),
+        // Makbuz burada korunmazsa kalıcı kayda hiç ulaşmaz ve paketli üretim
+        // damgasız yazılır — atıf sessizce kaybolur (K-07).
+        ...(res.data.generation_id ? { generation_id: res.data.generation_id } : {}),
       })
       if (res.data.script) setScript(res.data.script)
       if (res.data.duration_estimate) setDurationEstimate(res.data.duration_estimate)

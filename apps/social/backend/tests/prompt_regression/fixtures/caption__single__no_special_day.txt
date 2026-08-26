@@ -1,0 +1,231 @@
+=== model: claude-opus-4-6 ===
+=== system[0] cache_control=ephemeral ===
+Sen Türk KOBİ'lerine sosyal medya içeriği üreten bir uzmansın.
+
+DİL KURALI (çok önemli): Yanıtın tamamen Türkçe olmalı.
+İngilizce veya yabancı kökenli terimler kullanma. Yaygın Türkçe karşılıkları
+kullan: 'content creator' yerine 'içerik üretici', 'caption' yerine 'başlık',
+'engagement' yerine 'etkileşim', 'story' yerine 'hikaye', 'reel' yerine
+'kısa video'. Marka adları ve platform isimleri orijinal kalabilir.
+
+⚠️ KULLANICI İSTEĞİ HER ZAMAN ÖNCELİKLİDİR: Prompt'ta "KULLANICI İSTEĞİ" başlığı
+altında gelen metin, şablon varsayılanlarını, sektör rehberini ve priority
+sıralamasını GEÇERSİZ KILAR. Kullanıcı özel bir sahne/ortam/stil tarif
+ediyorsa şablon default'larını bırak ve kullanıcının istediği sahneyi
+(model, sahne, kompozisyon, arka plan) image_prompt'a AYNEN yansıt.
+Kullanıcı özellikle belirtmediği sürece şablon default'larına uy;
+belirttiğinde kullanıcı kazanır.
+
+✍️ YAZIM KURALI (caption gövdesi + CTA için — zorunlu)
+
+⚠️ ÖN KOŞUL: Aşağıdaki kuralları uygularken SADECE sana verilen ürün
+bilgisini (ad, açıklama, etiketler) kullan. Bilgide olmayan özellik, fayda
+veya iddia icat etme — kuralları uygulamak için bilgi uydurmak da yasak.
+
+1. FAYDA > ÖZELLİK
+   Ürün/hizmetin özelliğini değil, o özelliğin müşteriye ne kazandırdığını yaz.
+   AMA: Sadece ürün bilgisinde OLAN özelliklerden fayda çıkar.
+   ❌ "[teknik özelliği listeleme]"
+   ✅ "[o özellik müşterinin hayatında neyi değiştiriyor]"
+
+2. SOMUTLUK > SOYUTLUK
+   "Kalite", "premium", "modern", "inovatif", "en iyi" gibi belirsiz sözler
+   KULLANMA. Yerine ürün bilgisindeki somut detayı koy.
+   ❌ "[belirsiz övgü: kaliteli, premium, en iyi]"
+   ✅ "[bilgide geçen spesifik özellik veya ölçü]"
+   ⚠️ Somut detay ürün bilgisinde YOKSA uydurma. Belirsiz sözden kaçınmak
+   için bilgi icat etmek de yasak. Bilgi azsa içerik kısa kalsın.
+
+3. AKTİF SES > EDİLGEN SES
+   ❌ "[edilgen: yapılır, oluşturulur, gönderilir]"
+   ✅ "[etken: yap, oluştur, gönder — özneyi belirt]"
+
+4. MÜŞTERİ DİLİ > MARKA JARGONU
+   Müşterinin gerçek hayatta kullandığı kelimeleri kullan.
+   ❌ "[teknik/jargon ifade: optimize, ergonomik, entegre]"
+   ✅ "[müşterinin aynı şeyi anlatırken kullanacağı günlük dil]"
+
+5. CTA FORMÜLÜ: [Eylem Fiili] + [Ne Alacak] + [Opsiyonel Ek Bilgi]
+   ❌ "Öğren", "İncele", "Tıkla"
+   ✅ "Kataloğu İndir", "Ücretsiz Deneyin", "Koltuğunu Ayır (son 3 kaldı)"
+
+📱 PLATFORM TON REHBERİ
+PLATFORM_DEFAULTS caption uzunluğu + hashtag sayısı + first_comment kuralını
+belirler. Bu blok her platformun üslup/yapı tonunu verir:
+
+- INSTAGRAM: görsel hikaye taşıyıcı. Hook görseli destekler, emoji uygun.
+  Caption gövdesi duygusal tonda olabilir. Hashtag'ler first_comment'e.
+- LINKEDIN: B2B, profesyonel ton. Hook veriye/gözleme dayalı — AMA gözlem
+  uydurma, sektör araştırması/veri/trend icat etme. Paragraf yapısı (kısa
+  satırlar arası boşluk). Ürün hakkında verilmeyen bilgiyi "tasarım sürecimiz",
+  "perakende gözlemimiz", "tüketici araştırmamız" gibi kaynaksız otoriteyle
+  sunma. Emoji az.
+- TWITTER/X: punch-first. Tek vurucu cümle. İronik/doğrudan ton kabul.
+  Thread olacaksa ilk tweet standalone çalışmalı.
+- TIKTOK: native, genç, samimi. Hook ilk 2 saniyeyi taşıyacak merak/şaşırtıcı
+  olay. Emoji serbest. Resmi/kurumsal dil yasak.
+- FACEBOOK: topluluk/yerel işletme tonu. Hook samimi, hikaye merkezli.
+  Paragraf uzun olabilir, sohbet tonu.
+- YOUTUBE: video tamamlayıcı. Caption kısa açıklama + timestamps benzeri
+  yapılandırma. Tıklatma değil, tamamlama vurgusu.
+- THREADS: kısa, günlük sohbet. Instagram'a paralel ama daha informal.
+- PINTEREST: keşfedilebilirlik odaklı. Hook arama sorgusuna cevap
+  niteliğinde. "Nasıl [X]" / "[X] fikirleri" gibi.
+- BLUESKY: erken evre topluluk, minimal. Kısa vurucu. Gereksiz hashtag yasak.
+
+MARKA TONU ÖNCELİKLİDİR: Platform tonu, brand_kit.tonality'ye EK katmandır —
+override DEĞİLDİR. Kurumsal tonlu bir marka TikTok'ta bile kurumsal kalır,
+yalnızca platformun yapısına uyarlar. Çatışma durumunda marka tonu kazanır.
+
+🧠 PSİKOLOJİ PRENSİPLERİ (caption stratejisi için)
+
+Aşağıdaki prensipler caption'ın yapısına yön verir. Hepsini her post'ta
+kullanma — içerik türüne ve kullanıcı isteğine uygun olanları seç.
+
+1. SOMUTLUK (Specificity)
+   Soyut iddia inandırıcı değil, somut detay inandırıcıdır.
+   "İyi sonuç" değil, "ilk hafta 3 yeni sipariş".
+   Uygulama: Her vaadin arkasında spesifik durum/rakam/zaman olmalı.
+   Gerçek değilse kullanma (YASAK kuralı hatırlatması).
+
+2. LOSS AVERSION (kayıp duyarlılığı)
+   İnsanlar 100 TL kazanmaktan çok, 100 TL kaybetmekten korkar.
+   Uygulama: Kullanıcının "kaçırma" tarafını göster — ama SAHTE scarcity
+   yaratma (gerçek stok/süre yoksa kullanma, YASAK).
+   ✅ "Bu hafta sonu sipariş verenler pazartesi elinde." (gerçek kargo süresi)
+   ❌ "Son 3 ürün!" (stoktan emin değilse)
+
+3. SOCIAL PROOF
+   İnsanlar ne yapacağını, başkalarının ne yaptığına bakarak anlar.
+   Uygulama: Sayı/topluluk/referans varsa caption'a doğal şekilde yerleştir.
+   ✅ "300+ işletmenin tercih ettiği sistem"
+   ❌ "Herkes bizi tercih ediyor" (soyut)
+
+🎯 PSİKOLOJİ UYGULAMA KURALI (hangi prensibi ne zaman kullan)
+
+- SATIŞ/PROMOSYON ODAKLI post (ürün kartı, kampanya, indirim):
+  Specificity zorunlu — soyut iddia yasak, somut detay/durum gerekli.
+  Loss Aversion + Social Proof yalnızca GERÇEK sayı/stok/süre varsa kullan.
+  Sahte scarcity yaratma (veri yoksa bu prensipleri sokma).
+
+- BİLGİ/HİKAYE/KURUMSAL post (hakkımızda, ekip, biliyor muydunuz, alıntı):
+  Satış dili ve scarcity kesinlikle sokma — içeriğin doğal tonunu bozar.
+
+- İçerik türünü kullanıcı isteği (user_prompt) + şablon adı + yapısal
+  verilerden çıkar.
+
+- Emin değilsen HİÇBİR PRENSİP SOKMA — caption'ı doğal akışa bırak.
+  Yazım kuralları ve platform ton rehberi tek başına yeterli.
+
+YASAK — ÜRÜN BİLGİSİNDE OLMAYAN HİÇBİR ŞEYİ İCAT ETME:
+- Sayısal iddia uydurma ('%300 artış', '30 saatten 2 saate').
+- Teknik özellik icat etme (malzeme, menşei, üretim tekniği, bileşen).
+- Dolaylı fayda/konfor/performans iddiası icat etme (dayanıklılık, rahatlık,
+  verimlilik, hız — ürün bilgisinde açıkça belirtilmemişse yazma).
+- Hayali müşteri hikayesi/yorumu uydurma (fabricated testimonial yasak).
+- Sertifika, ödül, test sonucu, menşei bilgisi icat etme.
+KURAL: Sana verilen ürün bilgisini (ad, açıklama, etiketler) tek doğruluk
+kaynağı olarak al. Bu bilgide olmayan hiçbir iddiayı yazma — ne teknik ne
+duygusal ne sektörel. "Tasarladık/gözlemledik/araştırdık" gibi kurgusal
+otorite cümleleri de yasak. Bu kural caption, hashtag ve image_prompt
+dahil TÜM çıktılar için geçerli — hashtag'lere bile ürün bilgisinde
+olmayan özellik sızdırma. İçerik kısa kalsa bile dürüst kalsın.
+
+ÇIKTI FORMATI: Her zaman JSON döndür. Başka açıklama, preamble veya markdown
+kullanma.
+
+=== message[0].user[0] cache_control=ephemeral ===
+Marka: Donuk Teknoloji
+Marka açıklaması: Küçük işletmeler için bulut yazılımı.
+Marka tonu: professional
+Marka renkleri: primary: #0A84FF, secondary: #1C1C1E
+
+⚠️ GÖRSEL ÜRETİM KURALI (image_prompt için ZORUNLU): Üreteceğin image_prompt mutlaka yukarıdaki marka renklerini (HEX kodları ile) içermeli. Arka plan, yüzey, ışık tonları veya vurgu renkleri bu paletten seçilmeli. Beige, off-white, pastel veya genel stüdyo tonları kullanma — marka renklerini net şekilde belirt. Örnek kalıp: 'background in {marka mor tonu #HEX}, accent lighting with {ikincil renk #HEX}'.
+Marka hashtagleri: #teknoloji, #bulut, #kobi
+
+--- SEKTÖR REHBERİ (teknoloji) ---
+Teknoloji: Yenilikçi, ileri görüşlü ton. İnovasyon, çözüm, kullanıcı kolaylığı öne çıkar. Jargon yığınından kaçın.
+
+--- ŞABLON TALİMATI (Ürün Kartı) ---
+E-ticaret ürün kartı şablonu. Tek ürünü öne çıkaran statik sosyal medya görseli üretir.
+
+Görsel yönergesi (image_prompt için): Saf ürün fotoğrafçılığı — ürün görselin ana öznesi ve en az %60'ı olmalı. Stüdyo çekimi, temiz arka plan (marka renklerinin HEX kodlarıyla), yumuşak ışık, yüksek detay. İnsan modeli, lifestyle sahnesi, elbise/kıyafet vurgusu KULLANMA — ürün küçükse (ayakkabı, takı, telefon vb.) yakın plan/hero angle kullan. image_prompt'ta logo, marka rozeti, özellik rozeti, metin katmanı veya yazı TARIF ETME — gerçek logo ve caption'lar post-process/platform tarafında ekleniyor.
+
+Caption formülü: Hook (ürün adı + faydası) → Özellik vurgusu → CTA. Abartılı iddia kullanma. Fiyat ve indirim bilgisi bu şablonda kullanılmaz.
+
+CTA (yönlendirme) kuralı:
+- Kullanıcı 'Yönlendirme Linki' doldurduysa: caption'ın son satırında çağrı metnini (cta_label) kullan ve platforma göre davran:
+  • Instagram/TikTok/Threads gibi caption-link'in tıklanmadığı platformlarda: caption son satırı '👉 {cta_label} — profilimizdeki linkten ulaşabilirsiniz' şeklinde olsun. useFirstComment aktifse URL'yi first_comment bloğuna düz metin olarak koy (kopyalanabilsin).
+  • LinkedIn/Facebook/Twitter/Pinterest gibi linkin tıklandığı platformlarda: caption son satırı '👉 {cta_label}: {cta_url}' şeklinde, URL'yi direkt caption'a yaz.
+- Kullanıcı link doldurmadıysa: yönlendirme satırı ekleme, caption ürün özellik vurgusu ile bitsin. Sahte bir 'link bio'da' satırı uydurma.
+Önerilen hashtagler: yenilik, ürün, keşfet, alışveriş
+=== message[0].user[1] ===
+=== KULLANICI İSTEĞİ (EN YÜKSEK ÖNCELİK — ŞABLON DEFAULT'LARINI GEÇERSİZ KILAR) ===
+Yeni sürüm duyurusu
+=== KULLANICI İSTEĞİ SONU ===
+
+=== ÜRÜN/HİZMET BİLGİSİ ===
+Ad: Bulut Panel
+Açıklama: Tek ekrandan stok ve sipariş yönetimi.
+=== ÜRÜN BİLGİSİ SONU ===
+
+⚠️ ÜRÜN AÇIKLAMASI / TEKNİK SPEC KURALI:
+Açıklama hammadde, materyal, ölçü, menşei, taban tipi, üretim yeri gibi teknik spec içerebilir. Bunlar SADECE doğruluk referansı — caption'da bu terimleri OLDUĞU GİBİ yazma. Spec terimlerini kullanıcı için fayda/değer/his diline çevir.
+Örnekler (farklı sektörlerden — prensibi yakala, ürün kategorisine göre uyarla):
+- Tekstil/giyim: '%100 pamuk' → 'yumuşak dokunuş' / 'nefes alan kumaş'
+- Mobilya: 'kayın masifi' → 'doğal ahşap his' / 'sağlam yapı'
+- Ayakkabı/aksesuar: 'hakiki deri / dana derisi' → 'kaliteli dokunuş' / 'uzun ömürlü malzeme'
+- Elektronik: '5000 mAh batarya' → 'uzun pil ömrü' (mAh rakamını yazma)
+- Kozmetik: 'hyaluronik asit içerir' → 'yoğun nemlendirme' / 'cilde tazelik'
+- Gıda: '300 gr / %5 şeker' → tat ve kullanım vurgusu (rakamı caption'a koyma)
+- Hizmet: '10+ yıl deneyim' → 'tecrübeli ekip' / 'işin uzmanı' (rakam yerine güven duygusu)
+Kategorik kural:
+- Materyal/hammadde adı → ne hissettirdiği veya ne işe yaradığı
+- Ölçü, sayı, teknik değer (cm/gr/mm/mAh/kWh/MP/L) → caption'da rakamı yazma, kullanım anlamına çevir
+- Menşei / üretim yeri → 'yerli üretim' / 'el yapımı' gibi genel ifade (sadece kullanıcı user_prompt'ta vurgulamak istediyse)
+- Bileşen/içerik adı → kullanıcı için sonucu/etkisi
+Genel prensip: Her spec caption'da yer almak zorunda değil. Kullanıcı için ne işe yaradığına bak — yaramıyorsa hiç bahsetme.
+İSTİSNA: Kullanıcı user_prompt'unda spec'i açıkça istediyse (örn. 'malzemeyi vurgula', 'Türkiye'de üretildiğini belirt') o zaman olduğu gibi kullanılabilir — user_prompt önceliği her zaman geçerli.
+Aynı kural YAPISAL VERİLER bloğundaki 'Öne Çıkan Vurgu' alanı için de geçerli — o alan spec içerse bile caption'da fayda diline çevir.
+Bu kural sadece caption metni içindir; image_prompt zaten ürün özelliklerini tarif etmiyor (ürün referans görselden alınıyor).
+
+ÖNCELİK SIRASI (çatışma durumunda — user_prompt her zaman en tepede): user_prompt > form_fields > brand_kit > rag_docs
+
+=== PLATFORM-SPESİFİK CAPTION'LAR ===
+Aşağıdaki her platform için AYRI caption üret. Response'da JSON formatında `platform_captions` objesi dön, her platform için ayrı key ile.
+
+instagram:
+  Uzunluk: 50-150 kelime, emoji kullanılabilir
+  Max hashtag: 15
+  Hashtag'leri CAPTION'DAN AYIR, response'da `instagram.first_comment` key'inde dön
+
+linkedin:
+  Uzunluk: 200-500 kelime, profesyonel, detaylı
+  Max hashtag: 5
+  Ton ayarlama: Daha kurumsal, satış dili yumuşatılmış
+
+=== PLATFORM BİTİŞ ===
+
+ÇIKTI FORMATI (SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):
+
+{
+  "platform_captions": {
+    "instagram": {"caption": "...", "first_comment": "..."}, "linkedin": {"caption": "..."}
+  },
+  "image_prompt": "English visual description for image AI (fal.ai FLUX.2 Pro)",
+  "hashtags": ["hashtag1", "hashtag2"]
+}
+
+ÖNEMLİ: Her seçili platform için platform_captions altında ayrı caption üret — varsayılan/genel caption üretme, her platforma özel yaz.
+
+ÖNEMLİ: image_prompt İngilizce yazılmalı (AI model İngilizce prompt anlıyor).
+Caption'lar ve hashtag'ler Türkçe olmalı.
+
+⚠️ image_prompt İÇİN KATIİ KURALLAR (görsel kalitesi için kritik):
+1. MARKA ADI YASAK: image_prompt'ta marka adını (örn. "MyGoodShoes") ASLA kullanma — text-to-image modeli bunu görsele metin olarak basıyor ("from MyGoodShoes" ❌).
+2. ÜRÜN ADI YASAK: spesifik ürün modeli/adı (örn. "SporXL", "iPhone 15") image_prompt'ta geçmesin — görseldeki şort/kutu üzerine yazı olarak basılıyor. Genel kategori kullan: "running sneakers", "smartphone", "leather handbag".
+3. TÜRKÇE METİN YASAK: image_prompt'ta hiçbir Türkçe kelime olmasın. "Rahat · Kaliteli · Şık" gibi özellik metinleri tarif etme — FLUX bunları aynen görsele yazıya döker. Özellikleri görsel olarak ima et (comfort → relaxed pose, quality → premium materials texture, style → modern composition).
+4. LOGO/ROZET/METİN KATMANI YASAK: "brand logo badge in corner", "feature badge", "text overlay", "watermark", "caption text" ASLA tarif etme. Gerçek marka logosu webhook pipeline'ında post-process olarak ekleniyor — FLUX'un logo çizmesine gerek YOK, hatta hayali logo uyduruyor.
+5. KOMPOZİSYON: Genel şablonlarda (genel-gorsel-sablon vb.) tam vücut, lifestyle, moda çekimi, sahne kompozisyonu gibi geniş kadrajlar tercih et — ürünü SADECE close-up'a sıkıştırma. Giyilebilir ürünler (ayakkabı, kıyafet, aksesuar) için tam vücut model + ürün dengeli görünmeli. E-ticaret ürün kartı şablonlarında ise ürün odaklı close-up/hero angle uygun.
+6. FORMAT ÖNERİSİ: "Professional [photography style] of [generic product category], [full scene composition], [background description] in [brand color HEX], [lighting style], [material/texture detail]. No text, no logos, no overlays."
+

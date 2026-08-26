@@ -16,6 +16,9 @@ interface BrandData {
   description: string
   websiteUrl: string
   sector: string
+  // Alt sektör ataması — varsayılan BOŞtur. Boş bırakmak bugünkü genel
+  // moddur; onboarding'i bu alan yüzünden bloklamayız (spec §7.3).
+  subSectorId: string | null
   colors: string[]
   tonality: string
 }
@@ -36,6 +39,9 @@ interface Sector {
   slug: string
   display_name: string
 }
+
+// Aday alt sektörler — aktif paketi olanlar (spec §7.2). Canlı uçtan gelir.
+type SubSectorCandidate = Sector
 
 const USER_TYPES = [
   { key: 'small_business', label: 'Küçük İşletme', icon: '🏪', desc: '1-10 çalışan' },
@@ -122,12 +128,18 @@ export default function OnboardingPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [sectors, setSectors] = useState<Sector[]>([])
+  const [subSectorCandidates, setSubSectorCandidates] = useState<SubSectorCandidate[]>([])
+  const [suggestingSubSector, setSuggestingSubSector] = useState(false)
 
   useEffect(() => { analytics.onboardingStarted() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     api.get<Sector[]>('/sectors').then((res) => {
       if (res.success && res.data) setSectors(res.data)
+    })
+    // Aday küme BOŞ dönebilir — o durumda alt sektör adımı hiç gösterilmez.
+    api.get<SubSectorCandidate[]>('/sectors/sub-sector-candidates').then((res) => {
+      if (res.success && res.data) setSubSectorCandidates(res.data)
     })
   }, [])
 
@@ -138,6 +150,7 @@ export default function OnboardingPage() {
       description: '',
       websiteUrl: '',
       sector: '',
+      subSectorId: null,
       colors: ['#3B82F6', '#10B981', '#F59E0B'],
       tonality: 'professional',
     },
@@ -189,6 +202,8 @@ export default function OnboardingPage() {
         sector: string
         colors: string[]
         tonality: string
+        sub_sector_id: string | null
+        sub_sector_display_name: string | null
       }>('/ai/analyze-website', { url: state.websiteUrl })
 
       if (res.success && res.data) {
@@ -196,6 +211,9 @@ export default function OnboardingPage() {
           name: res.data.name || state.brand.name,
           description: res.data.description || state.brand.description,
           sector: res.data.sector || state.brand.sector,
+          // Öneri sunucuda aday kümeye karşı doğrulandı: gelen değer ya
+          // listededir ya `null`. Burada ÖNSEÇİLİR, teyit kullanıcınındır.
+          subSectorId: res.data.sub_sector_id ?? state.brand.subSectorId,
           colors: res.data.colors?.length ? res.data.colors : state.brand.colors,
           tonality: res.data.tonality || state.brand.tonality,
           websiteUrl: state.websiteUrl,
@@ -214,6 +232,46 @@ export default function OnboardingPage() {
     }
   }
 
+  // Web sitesiz geri düşüş (spec §7.1): site analizi yapılamayan kullanıcı da
+  // modelden öneri alır ve kısıt AYNIdır — sunucu aynı kapalı listeyi gömer,
+  // aynı doğrulayıcıdan geçirir.
+  //
+  // Çağrı OTOMATİK DEĞİL, açık düğmeyledir: adım açılır açılmaz çağırmak,
+  // markanın adı daha yazılmamışken bir model çağrısı yakardı.
+  async function suggestSubSector() {
+    if (!state.brand.name.trim()) {
+      toast.error('Önce marka adını gir')
+      return
+    }
+    setSuggestingSubSector(true)
+    try {
+      const res = await api.post<{
+        sub_sector_id: string | null
+        sub_sector_display_name: string | null
+      }>('/ai/suggest-sub-sector', {
+        name: state.brand.name,
+        description: state.brand.description || null,
+        sector: state.brand.sector || null,
+      })
+      if (!res.success) {
+        // Sunucu arızası ile "uygun aday yok" AYNI mesaja düşemez: sunucu bu
+        // ikisini bilerek ayırıyor (arıza 503) ve burada birleştirmek o ayrımı
+        // son adımda yok ederdi — bozuk bir entegrasyon kullanıcıya normal bir
+        // sonuç gibi görünürdü.
+        toast.error(res.error || 'Öneri servisi şu an yanıt vermiyor, listeden seçebilirsin')
+      } else if (res.data?.sub_sector_id) {
+        updateBrand({ subSectorId: res.data.sub_sector_id })
+        toast.success(`Öneri: ${res.data.sub_sector_display_name ?? 'alt sektör seçildi'} — değiştirebilirsin`)
+      } else {
+        toast.error('Uygun bir alt sektör önerisi çıkmadı, listeden seçebilirsin')
+      }
+    } catch {
+      toast.error('Öneri alınamadı, listeden seçebilirsin')
+    } finally {
+      setSuggestingSubSector(false)
+    }
+  }
+
   // Final step — create brand and finish
   async function finishOnboarding() {
     if (!currentWorkspace?.id) {
@@ -228,6 +286,7 @@ export default function OnboardingPage() {
         description: state.brand.description || null,
         website_url: state.brand.websiteUrl || null,
         sector: state.brand.sector || null,
+        sub_sector_id: state.brand.subSectorId,
       })
 
       if (res.success && res.data?.id) {
@@ -410,6 +469,54 @@ export default function OnboardingPage() {
               })}
             </div>
           </div>
+
+          {/* Alt sektör teyidi — sektör seçiminin YANINDA (K-19). Aday yoksa
+              bölüm hiç görünmez: boş bir listeyi göstermek kullanıcıya
+              yapamayacağı bir seçim sunardı. */}
+          {subSectorCandidates.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-slate-300 text-sm font-medium">
+                  Alt Sektör <span className="text-slate-500">(isteğe bağlı)</span>
+                </label>
+                <button
+                  onClick={suggestSubSector}
+                  disabled={suggestingSubSector}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-50"
+                >
+                  {suggestingSubSector ? 'Öneri alınıyor...' : 'Bana öner'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => updateBrand({ subSectorId: null })}
+                  className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    state.brand.subSectorId === null
+                      ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
+                      : 'bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  Seçilmedi
+                </button>
+                {subSectorCandidates.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => updateBrand({ subSectorId: s.id })}
+                    className={`py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                      state.brand.subSectorId === s.id
+                        ? 'bg-emerald-500/20 border border-emerald-500 text-emerald-400'
+                        : 'bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    {s.display_name}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-1.5">
+                Boş bırakabilirsiniz — sonradan marka ayarlarından değiştirebilirsiniz.
+              </p>
+            </div>
+          )}
 
           {/* Colors preview */}
           {state.brand.colors.length > 0 && (

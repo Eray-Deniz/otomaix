@@ -43,6 +43,17 @@ async def get_pool() -> asyncpg.Pool:
     return _pool
 
 
+def get_pool_if_ready() -> asyncpg.Pool | None:
+    """Kurulu havuzu döner; YOKSA `None` — havuz KURMAZ.
+
+    `get_pool()` ile farkı bilinçlidir: bu fonksiyon yan etkisizdir. "Uygulama
+    ayakta mı" sorusunu, uygulamayı ayağa kaldırmadan sormak isteyen yollar
+    (bildirim hızlı yolu) bunu kullanır — aksi hâlde bir test ya da script
+    farkında olmadan CANLI veritabanına bağlanabilirdi.
+    """
+    return _pool
+
+
 async def close_pool():
     global _pool
     if _pool:

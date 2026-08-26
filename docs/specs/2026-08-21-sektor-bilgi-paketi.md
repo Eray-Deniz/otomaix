@@ -365,6 +365,23 @@ Brief çıktı sözleşmesiyle **aynı kapalı küme** (sekiz temel alan + `ozel
 | `yasaklar_ve_hassasiyetler` | dizi | Mevzuat maddeleri **yürürlük tarihiyle** |
 | `ozel_gun` | nesne {anahtar: {tür, mesaj ekseni, kanca, cta, görsel vurgu}} | Anahtarlar **sistem takvimine karşı doğrulanır** (K-01b); uydurma anahtar üretilmez; karşılıksız dönem pakete girmez, günlüğe notlanır; paket+özel gün **atomik sürümlenir** |
 
+> **[SONRADAN EKLENDİ — 2026-08-24; spec eksik yazıldığı için]** Tablodaki `video_kodlar`
+> satırı "iki alt yapı" der ve **şeklin çoğulluğunu taşımaz**. Input aynı alanı iki ayrı
+> yerde **liste/havuz** olarak yazar:
+>
+> - Brief çıktı sözleşmesi, GÖREV A (satır 817): *"`video_kodlar` sözleşmede **iki alt
+>   listeye ayrılmıştır** — hareket kodları ve sahne kodları; ikisi üretim hattında farklı
+>   yüzeylere gider."*
+> - Hareket akışı, ek girdiler (satır 1717): *"Paketin video kodları alanının **hareket alt
+>   listesi**; sahne alt listesi bu akışa değil durağan kare yüzeyine gider."*
+> - Enjeksiyon bileşen tablosu (satır 485) hareket kaynağını **"sektör havuzu"** diye anar.
+>
+> "Havuz"un tekil bir cümleye indirgenmesi ürün düzeyinde bir kayıptır: sektöre özel olsa
+> bile TEK hareket cümlesi, o sektörün her videosunu aynı tipte üretir. Çoğulluk bu yüzden
+> biçimsel bir ayrıntı değil, alanın işlevinin parçasıdır. Alt yapıların **nihai adları**
+> yine K-02'ye bağlıdır (input satır 3103: *"şablonun 6a/6b ayrımının nihai alan adlarına
+> bağlanması"*).
+
 Alan-başı karakter hedefleri ve ~6.000 karakter (≈2.000 token) toplam tavanı
 **tasarım hedefidir, ölçüm değildir** (K-12'deki uzlaştırılmamış ikinci tahminle
 birlikte); **kapı yapılmaz.** Asgari öğe sayıları brief biçim sözleşmesinde tanımlı
@@ -479,6 +496,13 @@ VİDEO   durağan kare: İKİ modda da (metinden-görsele + ürün referanslı) 
 SON     post kaydı paket kimliği+sürümüne bağlanır (K-07)
 ```
 
+> **[SONRADAN EKLENDİ — 2026-08-24; K-02 kapanışı]** Yukarıdaki `VİDEO` satırının "hareket:
+> K-02" ucu artık belirlidir: **hareket havuzu paketin `video_kodlar.hareket` listesinden
+> gelir; seçimi caption aşamasındaki mevcut model çağrısı yapar; sunucu seçimi havuz
+> üyeliğine karşı doğrular; havuz boşsa bugünkü sabit listeye düşülür (K-113 = A).**
+> Paketsiz yolda bu satırın tamamı devre dışıdır ve bugünkü davranış byte-exact korunur.
+> Ayrıntı §11.5 karar bloğunda.
+
 ## 4.4 Özel gün anahtar sözleşmesi (K-01b — burada bağlanır; teknik sınıf)
 
 - **Doğruluk kaynağı sistem takvimidir:** `social.public_holidays` (taze ölçüm
@@ -591,6 +615,12 @@ Ek iş-kuralı kontrolü: paketsiz üretimde geçerli paket ilişkisi **kurulmad
 Paket bloğu **var** · kök rehber **yok** · görsel dağarcığı **doğru yüzeyde** · özel
 gün bloğu **yalnız eşleşince** · anma/kutlama kısıtları doğru yerde · hareket kodları
 K-02 kararına göre paket havuzundan.
+
+> **[SONRADAN EKLENDİ — 2026-08-24; spec eksik yazıldığı için]** Sahne kodlarının yüzeyi
+> input'ta açıkça yazılıdır (satır 2768): *"**Video istenmişse** durağan kare istemi paketin
+> **sahne kodlarını** alır — **iki modda da** (metinden görsele ve ürün referanslı düzenleme).
+> ⚠️ **Hareket dili ayrı yüzeydir ve K-02'ye bağlıdır** ... **bu satır seçmez.**"*
+> Yani sahne ayağı K-02'ye bağlı DEĞİLDİR (alan adı dışında); yalnız hareket ayağı bağlıdır.
 
 ---
 
@@ -1109,6 +1139,79 @@ Seçenekler: (a) paketli markada paket havuzu / paketsizde mevcut liste aynen
 (c) sonraki faza bırak, video kodları yalnız durağan kareye. Havuzlar birlikte
 KULLANILMAZ. Paketsiz üretimde mevcut havuz byte-exact korunur (Katman-1 çekirdeği).
 (a) seçilirse boş-havuz fallback'i (mevcut listeye düşüş — tek hakem) ayrıca bağlanır.
+
+> **[SONRADAN EKLENDİ — 2026-08-24; spec eksik yazıldığı için]** Yukarıdaki üç seçenek
+> spec-input'tan taşınırken kararın **öneri · sahip · çözüm yolu** ayakları DÜŞTÜ ve
+> ayrı bir karar kalemi (**K-113**) hiç taşınmadı. Bu blok o eksiği kapatır; yukarıdaki
+> metin değiştirilmemiştir.
+>
+> **K-02'nin input'taki tam kaydı** (`docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md`
+> satır 2533, karar kartı):
+>
+> - **Öneri: A** — *"her iki kaynak katmanı da aynı yönü gösterir. Gerekçe: paketsiz
+>   üretimde modele giden prompt parçaları değişmez ve ek model çağrısı doğmaz."*
+> - **Sahip:** *"Teknik sahip (mekanizma) · Ürün sahibi (maliyet/kapsam ayağı — **yalnız
+>   (A) elenirse**)."* Yani K-02 ürün sahibine varsayılan olarak GİTMEZ.
+> - **Çözüm yolu:** *"**Spec içinde teknik olarak çözülür** — önce mevcut hareket
+>   listesinin enjeksiyon noktası taze doğrulanır. Paketsiz prompt değişmeden havuz
+>   beslenebiliyorsa **(A) seçenek tartışması düşer**; beslenemiyorsa ek model maliyeti ↔
+>   kapsam daraltması tercihi kullanıcıya çıkar."*
+>
+> Input aynı kararı "**Spec'te özellikle çözülmesi gereken teknik konular**" listesinin
+> 2. maddesi olarak da sayar (satır 3103): *"Hareket havuzunun paketten seçilmesi ve paket
+> yoluna girmeyen üretimde mevcut hareket listesinin **byte-exact** kalması; şablonun
+> **6a/6b** ayrımının nihai alan adlarına bağlanması."* Yani K-02, spec yazımından sonraya
+> bırakılacak bir kalem olarak DEĞİL, spec içinde kapanacak bir kalem olarak devredilmiştir.
+>
+> **Mekanizma input'ta zaten tarif edilmiş** (satır 485, enjeksiyon bileşen tablosu):
+> *"Motion havuzu seçici — paket yolunda **sektör havuzundan**, mevcut yolda **bugünkü
+> sabit listeden**."* Yani değişen **kaynaktır**, seçicinin kendisi değil; bu, A'nın
+> "ek model çağrısı doğmaz" gerekçesinin karşılığıdır.
+>
+> **K-113 — ayrı karar kalemi** (input satır 2576; bu spec'e HİÇ taşınmamıştı):
+> *"Hareket havuzu boşsa ne olacak? A) Mevcut listeye geri düşülür / B) Farklı bir davranış
+> tanımlanır. **[AÇIK]** — tek katmanda ele alınmıştır. **K-02'den ayrı seçilebilir:** havuz
+> yolu benimsense bile boş havuz dalı ayrıca karara bağlanmalıdır. Sahip: teknik sahip.
+> **Spec içinde teknik olarak çözülür** — geri düşüş yolu tanımıdır."*
+> Yukarıdaki paragrafın "(a) seçilirse boş-havuz fallback'i ... ayrıca bağlanır" cümlesi
+> bu kalemi ima ediyordu ama **K-ID'siz** taşımıştı; kimliği burada geri konur.
+
+> **[KARAR KAPANDI — 2026-08-24, Eray onayı] K-02 = A (seçici modelde) · K-113 = A.**
+> Yukarıdaki "açık, üç seçenek" başlığı tarihsel kayıt olarak DURUR; yürürlükteki hüküm
+> budur.
+>
+> **K-02 = A.** Hareket dili paketin `video_kodlar.hareket` havuzundan gelir ve sektöre
+> özeldir. Paket yoluna girmeyen üretimde bugünkü `_MOTION_PROMPTS` listesi ve bugünkü
+> seçim yolu **byte-exact aynen** korunur. Havuzlar birlikte kullanılmaz.
+>
+> **Seçimi model yapar — ama AYRI ÇAĞRI AÇILMAZ.** Ürün gerekçesi (Eray, 2026-08-24):
+> içeriğe uygun hareket seçimi ("mücevher yakın çekimiyse yavaş yörünge") kodda kural
+> yazarak çözülemez; kombinasyon çarpımı büyür ve bu, paketin ortadan kaldırmak için var
+> olduğu prompt cerrahisine geri dönmektir (§1.2 iş değeri hükmü). **Ölçüm (2026-08-24,
+> taze):** kısa video ucu script'siz istek KABUL ETMEZ — `posts.py` birebir *"Script boş —
+> önce /posts/generate-caption ile script üretin"* hatası döner. Yani video akışında caption
+> model çağrısı zaten ZORUNLU olarak önce koşar ve video tipinde JSON döner. Hareket seçimi
+> o çağrının çıktısına bir alan olarak biner. Dolayısıyla input'un A gerekçesi ("ek model
+> çağrısı doğmaz") ve (b)'ye biçtiği maliyet/gecikme yükü ikisi de korunur: yeni çağrı yok.
+>
+> **Taşıma güven sınırı (teknik — İlke 8: FYI, review zinciri doğrular).** Seçim caption
+> aşamasında yapılır, kullanım stage-1'de olur; arada istemci vardır. İstemcinin döndürdüğü
+> hareket metni **sunucuda havuz üyeliğine karşı doğrulanır**; üye değilse KULLANILMAZ.
+> İstemciye serbest metin emanet edilmez — bu, K-07 damgasının taşıma sözleşmesiyle aynı
+> ilkedir. Üye değilse ya da model alanı hiç döndürmediyse **uydurmaya düşülmez**: aynı
+> havuzdan belirleyici bir seçim yapılır.
+>
+> **K-113 = A.** Paketin hareket havuzu boşsa bugünkü `_MOTION_PROMPTS` listesine düşülür.
+> Bu, input'un "yalnız bir hakemde" diye işaretlediği dalın karara bağlanmasıdır.
+>
+> **Alan adları bağlandı** (input satır 3103'ün istediği "6a/6b ayrımının nihai alan adlarına
+> bağlanması"): `video_kodlar.hareket` (6a — hareket kodları) · `video_kodlar.sahne`
+> (6b — sahne kodları). **İkisi de LİSTEDİR** (§3.4'e eklenen nota bakınız); tek cümle,
+> sektöre özel olsa bile o sektörün her videosunu aynı tipte üretirdi.
+>
+> **Yürürlüğe soktuğu işler:** paket içerik doğrulayıcısı liste şeklini kabul eder (plan
+> Task 8 notu) · durağan kare ve hareket enjeksiyonu (plan Task 11 notu) · paketi ÜRETEN
+> brief hattı iki havuzu da üretmek zorundadır (Plan 2 teslim kalemi).
 
 ## 11.6 Tur dışı acil güncelleme
 

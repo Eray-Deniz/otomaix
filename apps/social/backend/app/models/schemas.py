@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Common response wrappers ───────────────────────────────────────────────
@@ -10,6 +13,51 @@ from pydantic import BaseModel, Field
 class OkResponse(BaseModel):
     success: bool = True
     data: Any = None
+
+
+# ─── K-07 damga taşıma sözleşmesi — üretici ucu (plan Task 10) ──────────────
+
+# İstemciye GİTMEYECEK paket kimlik alanları. Bunlar `social.generation_stamps`
+# ve `social.posts` kolon adlarıdır — damganın kendisi sunucuda durur, istemci
+# yalnız opak makbuz kimliğini taşır ve kalıcı-kayıt isteğinde geri verir.
+#
+# Küme `SectorPackageContext` alanlarından TÜRETİLMEDİ, bilinçle: o dataclass
+# `content` ve `version` gibi genel adlar taşıyor ve caption yanıtına bir gün
+# meşru bir `content`/`version` alanı eklenirse sessizce düşürülürdü. Burada
+# kapatılan sınıf "paket kimlik ÇİFTİ"dir; çiftin taşındığı ad kümesi kapalıdır.
+PACKAGE_IDENTITY_KEYS = frozenset({"package_id", "package_version"})
+
+
+class CaptionGenerationOut(BaseModel):
+    """Caption üretim yanıtı — ham paket çifti istemciye DÖNMEZ.
+
+    `extra="allow"`: caption üreticisinin alan kümesi şablona göre değişir
+    (tekli/carousel/video), bu şema onu daraltmaz. Daralttığı tek şey paket
+    kimliğidir.
+
+    Düşürme sessiz DEĞİLDİR (uyarı log'lanır) ama istisna da fırlatmaz: bir gün
+    yanlışlıkla eklenen bir alan yüzünden tüm caption ucunun ölmesi, sözleşmeyi
+    korumaktan daha pahalı bir sonuç olurdu. Deny-by-default yön korunur.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    generation_id: UUID | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_package_identity(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        leaked = PACKAGE_IDENTITY_KEYS & set(data)
+        if not leaked:
+            return data
+        logger.warning(
+            "caption yanıtından paket kimlik alanı düşürüldü: %s "
+            "(K-07: istemci yalnız opak generation_id taşır)",
+            sorted(leaked),
+        )
+        return {k: v for k, v in data.items() if k not in PACKAGE_IDENTITY_KEYS}
 
 
 class ErrResponse(BaseModel):
@@ -32,6 +80,11 @@ class BrandCreate(BaseModel):
     description: str | None = None
     website_url: str | None = None
     sector: str | None = None
+    # Alt sektör ataması (spec §7.3). Varsayılan BOŞtur — boş alan bugünkü
+    # paketsiz yoldur. Şemada tipli durması şart: Pydantic şemada olmayan alanı
+    # sessizce düşürür, yani alan burada yoksa istek router'a hiç ulaşmaz ve
+    # kullanıcının teyit ettiği atama sessizce kaybolurdu.
+    sub_sector_id: UUID | None = None
 
 
 class BrandKitUpdate(BaseModel):
@@ -44,6 +97,11 @@ class BrandKitUpdate(BaseModel):
     voiceover: str | None = None
     logo_overlay: dict | None = None
     intro_video: dict | None = None
+    # Kanal envanteri (spec §12.2). TİPLİ olması şart: Pydantic şemada olmayan
+    # alanı sessizce DÜŞÜRÜR, yani alan burada yoksa istek router'a hiç ulaşmaz
+    # ve yazım sessizce kaybolurdu. Anahtar uzayının kapalılığı router'daki
+    # `_assert_valid_channels` kapısında zorlanır (kapalı küme: sector_packages).
+    channels: dict | None = None
 
 
 class BrandUpdate(BaseModel):
@@ -56,6 +114,18 @@ class BrandUpdate(BaseModel):
     logo_dark_url: str | None = None
     intro_video_url: str | None = None
     is_active: bool | None = None
+    # Atamayı BOŞALTMAK açıkça `null` göndermekle olur. Router bu alanı
+    # `model_fields_set` ile okur: `exclude_none` serileştirmesi açık `null`'ı
+    # düşürürdü ve kullanıcı yanlış atamasını hiçbir zaman geri alamazdı
+    # (spec §7.5 düzeltme yolu).
+    sub_sector_id: UUID | None = None
+    # İstemcinin en son GÖRDÜĞÜ sürüm (satırın güncellenme anı). Doluysa yazım
+    # koşullu olur: satır o sürümden ilerlemişse yazım REDDEDİLİR. Boş
+    # bırakılabilir — sürüm göndermeyen çağıranlar bugünkü davranışı görür.
+    #
+    # Bu alan bir SÜTUN DEĞİLDİR; router onu güncellenecek alanlar kümesinden
+    # ayıklar. Ayıklamazsa `exclude_none` onu yazılacak bir alan sanardı.
+    expected_version: datetime | None = None
 
 
 class BrandOut(BaseModel):
@@ -66,6 +136,7 @@ class BrandOut(BaseModel):
     website_url: str | None
     sector: str | None
     sector_id: UUID | None = None
+    sub_sector_id: UUID | None = None
     sector_slug: str | None = None
     sector_display_name: str | None = None
     brand_kit: dict
@@ -170,6 +241,10 @@ class ProductOut(BaseModel):
 
 class PostGenerate(BaseModel):
     brand_id: UUID
+    # K-07 damga taşıma sözleşmesinin TÜKETİCİ ucu (plan Task 12). Üretici uç
+    # (`/generate-caption`) opak makbuzu döndürür; istemci onu buraya AYNEN geri
+    # verir. Ham paket çifti hiçbir yönde istemciye emanet edilmez.
+    generation_id: UUID | None = None
     content_type: str  # image | carousel | special_day | quote
     content_category: str | None = None  # product | service | corporate (legacy, template_id yoksa kullanılır)
     prompt: str | None = None
@@ -220,6 +295,9 @@ class PostGenerate(BaseModel):
 
 class ShortVideoGenerate(BaseModel):
     brand_id: UUID
+    # K-07 damga taşıma sözleşmesinin TÜKETİCİ ucu (plan Task 12) — kısa video
+    # kalıcı kaydı stage-1'de doğar, makbuz oraya taşınır.
+    generation_id: UUID | None = None
     prompt: str
     script: str = ""
     voice: str = "qSeXEcewz7tA0Q0qk9fH"
@@ -239,6 +317,10 @@ class ShortVideoGenerate(BaseModel):
     # tatil tonuna yönlendirme için kullanır.
     special_day_name: str | None = None
     special_day_category: str | None = None
+    # K-02 = A: caption aşamasındaki model çağrısının seçtiği kamera hareketi.
+    # İstemci TAŞIR, sunucu paketin havuzuna karşı DOĞRULAR (üye değilse
+    # kullanılmaz) — serbest metin video üreticisine geçemez.
+    motion_prompt: str | None = None
     # Sprint 3 — marka referans görseli (Stage 1 still'inde Nano Banana edit ref'i).
     # Doluysa scene_reference + brief senaryosu çalışır.
     scene_reference_image_url: str | None = None

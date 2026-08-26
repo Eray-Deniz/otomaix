@@ -30,8 +30,19 @@ from app.core.prompt_builder import (
     build_system_prompt,
 )
 from app.models.templates import Template
+from app.services.sector_packages import (
+    SectorPackageContext,
+    motion_pool,
+    scene_pool,
+    special_day_visual_accent,
+)
 
 logger = logging.getLogger(__name__)
+
+# İÇ bayrak — yanıt sözleşmesinin parçası DEĞİLDİR, çağıran onu `pop` eder.
+# Yedek (fallback) dalları bu anahtarı HİÇ koymaz; yokluğu "paket uygulanmadı"
+# demektir, yani varsayılan yön güvenli taraftadır.
+PACKAGE_APPLIED_KEY = "_package_applied"
 
 _HASHTAG_RE = re.compile(r"#[\wÇĞİÖŞÜçğıöşü]+", re.UNICODE)
 
@@ -95,6 +106,7 @@ async def generate_captions(
     special_day_name: str | None = None,
     special_day_category: str | None = None,
     scene_reference_image_url: str | None = None,
+    package_context: SectorPackageContext | None = None,
 ) -> dict[str, Any]:
     """Generate caption + image prompt + hashtags via Claude. Video ise script de üretir.
 
@@ -104,10 +116,16 @@ async def generate_captions(
     `scene_reference_image_url` doluysa Nano Banana 2 edit ref'i kullanılacak —
     image_prompt merkezdeki kişiyi/objeyi 'the reference subject' olarak bırakır,
     sahne kompozisyonunu tarif eder (Tier 3 REFERANS GÖRSEL BAĞLAMI bloğu).
+
+    `package_context` sektör paketi çözümleyicisinin sonucudur (spec §4.2).
+    Doluysa Tier 2'de paket bloğu kök sektör rehberinin YERİNE geçer ve eşleşen
+    özel günde Tier 3'e dönem kalıpları girer. Bu fonksiyon paketi kendisi
+    ÇÖZMEZ — tek kapı çağıranın elindedir (router), böylece ikinci bir koşul
+    yüzeye yazılamaz.
     """
 
     system_prompt = build_system_prompt()
-    brand_context = build_brand_context(brand, brand_kit, template)
+    brand_context = build_brand_context(brand, brand_kit, template, package_context)
     special_day = (
         {"name": special_day_name, "category": special_day_category}
         if special_day_name
@@ -117,11 +135,15 @@ async def generate_captions(
         template, template_fields, user_prompt, rag_context, platforms, product,
         special_day=special_day,
         subject_reference_provided=bool(scene_reference_image_url),
+        package_context=package_context,
+        channels=brand_kit.get("channels"),
     )
 
     output_format = _build_output_format_instruction(
         template, platforms, template_fields, content_type=content_type,
         product=product,
+        package_context=package_context,
+        special_day_name=special_day_name,
     )
 
     user_content = [
@@ -205,6 +227,12 @@ async def generate_captions(
                     if pcaption["caption"] and not pcaption["caption"].endswith(disclaimer):
                         pcaption["caption"] += f"\n\n{disclaimer}"
 
+        # K-07 kabul koşulu: damga YALNIZ paketin gerçekten şekillendirdiği bir
+        # ÇIKTIYA yazılır. Paket bağlamının çözülmüş olması bunu KANITLAMAZ —
+        # anahtar yoksa ya da çağrı patlarsa aşağıdaki yedek dal kullanıcı
+        # isteğini yankılar ve o metnin paketle hiçbir ilgisi olmaz. Bayrak bu
+        # yüzden burada, prompt kurulumunda değil, dönüş noktasında konur.
+        data[PACKAGE_APPLIED_KEY] = package_context is not None
         return data
 
     except Exception as e:
@@ -246,8 +274,19 @@ def _build_output_format_instruction(
     template_fields: dict | None = None,
     content_type: str | None = None,
     product: dict | None = None,
+    package_context: SectorPackageContext | None = None,
+    special_day_name: str | None = None,
 ) -> str:
-    """Instruct Claude on exact JSON output format."""
+    """Instruct Claude on exact JSON output format.
+
+    `package_context` doluysa iki şey eklenir (spec §4.3):
+
+    - **Görsel dil:** paketin `gorsel_kodlar` metni görsel director talimatına
+      girer; gün eşleşirse günün `gorsel_vurgu`'su KOŞULLU eklenir.
+    - **Hareket havuzu (yalnız video):** paketin `hareket` havuzu modele
+      gösterilir ve `motion_prompt` alanında İÇİNDEN seçmesi istenir (K-02 = A).
+      Ayrı çağrı açılmaz — bu çağrı video akışında zaten zorunlu olarak koşuyor.
+    """
 
     overrides = template.platformOverrides if template else None
     overrides = overrides or {}
@@ -336,6 +375,53 @@ def _build_output_format_instruction(
             "(insan, ürün, ortam, atmosfer) gerekiyorsa onları içer."
         )
 
+    # ─── Paket ekleri (spec §4.3) ───────────────────────────────────────────
+    # Görsel dili HER yüzeye, hareket havuzu YALNIZ videoya. Fazla basmak
+    # "doğru yüzey" kontrolünü (spec §5.4) delerdi.
+    sector_visual_rule = ""
+    motion_schema = ""
+    motion_rule = ""
+    if package_context is not None:
+        content = package_context.content
+        visual_lines: list[str] = []
+        gorsel = content.get("gorsel_kodlar")
+        if isinstance(gorsel, str) and gorsel.strip():
+            visual_lines.append(f"Sektörel görsel dil: {gorsel}")
+        vurgu = special_day_visual_accent(package_context, special_day_name)
+        if vurgu:
+            visual_lines.append(f"Bu özel günün görsel vurgusu: {vurgu}")
+        # Durağan kare isteminin İKİ üreticisi var: bu çağrı (caption modelinin
+        # `image_prompt`'i) ve `short_video._build_still_prompt`. Havuz İKİSİNE
+        # de verilir. Yalnız ikincisine verilseydi, caption'ın hazır İngilizce
+        # istemini aynen kullanan dal sahne dilini HİÇ görmezdi — ölçüldü
+        # (checkpoint 11): o dal `_build_still_prompt`'a hiç uğramıyor.
+        #
+        # Sahne satırları görsel dil listesinin İÇİNE girer, sonrasına
+        # eklenmez: ayrı eklenseydi ve paket `gorsel_kodlar` taşımasaydı blok
+        # başlıksız bir madde listesine dönerdi.
+        for entry in scene_pool(package_context) if is_video else []:
+            visual_lines.append(f"Sektörel sahne dağarcığı: {entry}")
+
+        if visual_lines:
+            sector_visual_rule = (
+                "\n8. SEKTÖREL GÖRSEL DİL (ek bağlam — kullanıcı isteğini ve ürün "
+                "bilgisini GEÇERSİZ KILMAZ; sahnenin NASIL göründüğünü bağlar, NE "
+                "göründüğünü değil; dağarcıktan içeriğe uyanları kullan, hepsini "
+                "kullanmaya çalışma):\n"
+                + "\n".join(f"   - {line}" for line in visual_lines)
+            )
+
+        pool = motion_pool(package_context) if is_video else []
+        if pool:
+            motion_schema = ',\n  "motion_prompt": "aşağıdaki havuzdan AYNEN seçtiğin bir kalıp"'
+            motion_rule = (
+                "\n9. KAMERA HAREKETİ (motion_prompt): Aşağıdaki sektörel havuzdan "
+                "içeriğe EN UYGUN olanı seç ve BİREBİR kopyala. Havuz dışında bir "
+                "şey yazma, birleştirme, çevirme veya kısaltma — havuz dışı değer "
+                "sunucuda reddedilir.\n"
+                + "\n".join(f"   - {entry}" for entry in pool)
+            )
+
     return f"""ÇIKTI FORMATI (SADECE JSON, BAŞKA HİÇBİR ŞEY YAZMA):
 
 {{
@@ -343,7 +429,7 @@ def _build_output_format_instruction(
     {platform_schema}
   }},
   {image_schema},
-  "hashtags": ["hashtag1", "hashtag2"]{script_schema}
+  "hashtags": ["hashtag1", "hashtag2"]{script_schema}{motion_schema}
 }}
 
 ÖNEMLİ: Her seçili platform için platform_captions altında ayrı caption üret — varsayılan/genel caption üretme, her platforma özel yaz.
@@ -356,5 +442,5 @@ def _build_output_format_instruction(
 3. TÜRKÇE METİN YASAK: {field_ref} hiçbir Türkçe kelime olmasın. "Rahat · Kaliteli · Şık" gibi özellik metinleri tarif etme — FLUX bunları aynen görsele yazıya döker. Özellikleri görsel olarak ima et (comfort → relaxed pose, quality → premium materials texture, style → modern composition).
 4. LOGO/ROZET/METİN KATMANI YASAK: "brand logo badge in corner", "feature badge", "text overlay", "watermark", "caption text" ASLA tarif etme. Gerçek marka logosu webhook pipeline'ında post-process olarak ekleniyor — FLUX'un logo çizmesine gerek YOK, hatta hayali logo uyduruyor.
 5. KOMPOZİSYON: Genel şablonlarda (genel-gorsel-sablon vb.) tam vücut, lifestyle, moda çekimi, sahne kompozisyonu gibi geniş kadrajlar tercih et — ürünü SADECE close-up'a sıkıştırma. Giyilebilir ürünler (ayakkabı, kıyafet, aksesuar) için tam vücut model + ürün dengeli görünmeli. E-ticaret ürün kartı şablonlarında ise ürün odaklı close-up/hero angle uygun.
-6. FORMAT ÖNERİSİ: "Professional [photography style] of [generic product category], [full scene composition], [background description] in [brand color HEX], [lighting style], [material/texture detail]. No text, no logos, no overlays."{video_scene_rule}
+6. FORMAT ÖNERİSİ: "Professional [photography style] of [generic product category], [full scene composition], [background description] in [brand color HEX], [lighting style], [material/texture detail]. No text, no logos, no overlays."{video_scene_rule}{sector_visual_rule}{motion_rule}
 """

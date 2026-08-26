@@ -29,6 +29,17 @@ import { SceneReferencePicker } from '@/components/SceneReferencePicker'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Paket durumu bandı (K-45). `mode` KAPALI bir birlik DEĞİL, düz metin:
+ * Plan 2 `recovered` modunu ekleyecek ve yeni bir mod bu tipi kırmamalı.
+ * `message` daima backend'den gelir — sabit metin ÖNYÜZDE tutulmaz, yoksa
+ * iki yerde ıraksayan bir vaat doğar.
+ */
+interface PackageStatus {
+  mode: string
+  message: string | null
+}
+
 interface StockAvatar {
   avatar_id: string
   avatar_name: string
@@ -67,6 +78,9 @@ interface BrandKit {
   voiceover: string
   logo_overlay: { enabled: boolean; position: string; opacity: number }
   intro_video: { position: string }
+  // Kanal envanteri — anahtar uzayı KAPALIdır (spec §12.2). Doğrulama
+  // sunucudadır; buradaki dört anahtar onun aynasıdır, kaynağı değil.
+  channels: Record<string, boolean>
   avatar?: ActiveAvatar
 }
 
@@ -76,6 +90,7 @@ interface Brand {
   description: string | null
   website_url: string | null
   sector: string | null
+  sub_sector_id: string | null
   brand_kit: BrandKit
   logo_light_url: string | null
   logo_dark_url: string | null
@@ -89,6 +104,33 @@ interface Sector {
   slug: string
   display_name: string
 }
+
+// Aday alt sektörler — aktif paketi olanlar. Liste CANLI uçtan gelir; sayfada
+// kopyası tutulmaz (spec §7.2).
+type SubSectorCandidate = Sector
+
+// Site analizinin döndürdüğü öneri, aday satırın TAMAMI değildir: uç yalnız
+// kimlik ile görünen adı taşır. Tipi aday satırla eşitlemek, taşınmayan alanı
+// uydurmayı zorunlu kılardı.
+type SubSectorSuggestion = Pick<Sector, 'id' | 'display_name'>
+
+// Kanal envanterinin kapalı kümesi. Sunucu aynı dört anahtarı zorlar; buraya
+// beşinci bir satır eklemek tek başına hiçbir şeyi açmaz (istek 400 döner).
+const CHANNEL_OPTIONS = [
+  { key: 'whatsapp_hatti', label: 'WhatsApp hattı' },
+  { key: 'fiziksel_magaza', label: 'Fiziksel mağaza' },
+  { key: 'randevu_sistemi', label: 'Randevu sistemi' },
+  { key: 'eticaret_sitesi', label: 'E-ticaret sitesi' },
+]
+
+// Atamayı boşaltmanın açılır listedeki karşılığı. Boş string base-ui Select'te
+// "seçim yok" anlamına geldiği için ayrı bir gözle görülür seçenek gerekiyor.
+const SUB_SECTOR_NONE = '__none__'
+
+// Aday listesinde OLMAYAN mevcut atamanın etiketi. Kapalı düğmede ve açık
+// listede AYNI metin görünmek zorunda; iki kopya ayrışırsa kullanıcı aynı satırı
+// iki farklı adla görürdü.
+const SUB_SECTOR_ORPHAN_LABEL = 'Mevcut atama (paketi bakımda)'
 
 const TONALITIES = [
   { value: 'professional', label: 'Profesyonel' },
@@ -123,19 +165,27 @@ const DEFAULT_BRAND_KIT: BrandKit = {
   voiceover: 'tr-TR-EmelNeural',
   logo_overlay: { enabled: false, position: 'bottom-right', opacity: 0.8 },
   intro_video: { position: 'none' },
+  channels: {},
 }
 
 // ─── Save indicator ───────────────────────────────────────────────────────────
 
-function SaveIndicator({ saving, saved }: { saving: boolean; saved: boolean }) {
-  if (saving) return (
+type SaveState = 'idle' | 'saving' | 'saved' | 'error'
+
+function SaveIndicator({ state }: { state: SaveState }) {
+  if (state === 'saving') return (
     <span className="flex items-center gap-1 text-xs text-gray-400">
       <Loader2 className="w-3 h-3 animate-spin" /> Kaydediliyor...
     </span>
   )
-  if (saved) return (
+  if (state === 'saved') return (
     <span className="flex items-center gap-1 text-xs text-emerald-600">
       <Check className="w-3 h-3" /> Kaydedildi
+    </span>
+  )
+  if (state === 'error') return (
+    <span className="flex items-center gap-1 text-xs text-red-600">
+      <X className="w-3 h-3" /> Kaydedilemedi
     </span>
   )
   return null
@@ -389,6 +439,7 @@ function deepMergeKit(defaults: BrandKit, incoming: any): BrandKit {
     intro_video: {
       position: incoming?.intro_video?.position ?? defaults.intro_video.position,
     },
+    channels: incoming?.channels ?? defaults.channels,
   }
 }
 
@@ -405,13 +456,13 @@ function MarkaAyarlariContent() {
 
   const [brand, setBrand] = useState<Brand | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [uploadingLogo, setUploadingLogo] = useState<'light' | 'dark' | null>(null)
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [removingLogo, setRemovingLogo] = useState<'light' | 'dark' | null>(null)
   const [removingVideo, setRemovingVideo] = useState(false)
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') ?? 'bilgiler')
+  const [packageStatus, setPackageStatus] = useState<PackageStatus | null>(null)
   const [documents, setDocuments] = useState<BrandDocument[]>([])
   const [loadingDocs, setLoadingDocs] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState(false)
@@ -428,15 +479,46 @@ function MarkaAyarlariContent() {
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
   const [analyzingWebsite, setAnalyzingWebsite] = useState(false)
   const [sectors, setSectors] = useState<Sector[]>([])
+  const [subSectorCandidates, setSubSectorCandidates] = useState<SubSectorCandidate[]>([])
+  // Modelin önerisi KAYDEDİLMEZ, teyide sunulur. Öneriyi doğrudan yazmak
+  // "son söz kullanıcınındır" sözleşmesini boşa çıkarırdı: öneriyi besleyen
+  // metin markanın kendi sitesinden gelir ve güvenilir girdi değildir.
+  const [suggestedSubSector, setSuggestedSubSector] = useState<SubSectorSuggestion | null>(null)
   const avatarPhotoRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     api.get<Sector[]>('/sectors').then((res) => {
       if (res.success && res.data) setSectors(res.data)
     })
+    // Aday küme ayrı bir istektir ve BOŞ dönebilir — o durumda bileşen pasif
+    // kalır (spec §7.1 "aday yoksa öneri yok").
+    api.get<SubSectorCandidate[]>('/sectors/sub-sector-candidates').then((res) => {
+      if (res.success && res.data) setSubSectorCandidates(res.data)
+    })
   }, [])
 
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Marka ve kit kaydı AYRI zamanlayıcı kullanır. Tek zamanlayıcı
+  // paylaşıldığında art arda gelen `updateBrand` + `updateKit` çağrılarında
+  // İKİNCİSİ birincinin bekleyen PATCH'ini iptal ediyordu — site analizi tam
+  // olarak bu sırayı üretiyor, yani analizden gelen ad/açıklama/sektör
+  // sessizce kaydedilmeden kalıyordu.
+  // Bekleyen gecikmeli yazım MARKAYA ANAHTARLIDIR (kapanış turu 2026-08-26).
+  // Bu sayfa marka değişiminde REMOUNT OLMAZ — `currentBrand?.id`'ye bağlı bir
+  // effect veriyi yerinde tazeler — dolayısıyla zamanlayıcı referansı markalar
+  // arası yaşar. Çıplak bir zamanlayıcıyı koşulsuz iptal etmek, BAŞKA bir
+  // markanın bekleyen düzenlemesini sessizce düşürürdü. Kimlik taşınınca yalnız
+  // AYNI markanın bekleyen yazımı birleştirilir; başka markanınki kendi anlık
+  // görüntüsüyle zamanında ateşlenmeye devam eder.
+  type Pending = { brandId: string; timer: ReturnType<typeof setTimeout> }
+  const saveTimer = useRef<Pending | null>(null)
+  const kitSaveTimer = useRef<Pending | null>(null)
+
+  const cancelPendingFor = (ref: React.MutableRefObject<Pending | null>, brandId: string) => {
+    if (ref.current && ref.current.brandId === brandId) {
+      clearTimeout(ref.current.timer)
+      ref.current = null
+    }
+  }
 
   // Handle OAuth callback result (?connected=platform or ?error=...)
   useEffect(() => {
@@ -474,36 +556,106 @@ function MarkaAyarlariContent() {
     load()
   }, [currentBrand?.id])
 
-  // Debounced auto-save for brand info
-  const scheduleSave = useCallback((updated: Brand) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      if (!updated.id) return
-      setSaving(true)
-      setSaved(false)
-      await api.patch(`/brands/${updated.id}`, {
-        name: updated.name,
-        description: updated.description,
-        website_url: updated.website_url,
-        sector: updated.sector,
-      })
-      setSaving(false)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    }, 1500)
+  // Paket durumu bandı — marka yüklemesinden BAĞIMSIZ bir istek.
+  // Bilerek ayrı: durum ucu düşerse marka ayarları sayfası çalışmaya devam
+  // etmeli (bant bir bilgilendirmedir, sayfanın koşulu değil).
+  useEffect(() => {
+    if (!currentBrand?.id) { setPackageStatus(null); return }
+    let cancelled = false
+    api.get<PackageStatus>(`/brands/${currentBrand.id}/package-status`).then((res) => {
+      if (cancelled) return
+      setPackageStatus(res.success && res.data ? res.data : null)
+    })
+    return () => { cancelled = true }
+  }, [currentBrand?.id])
+
+  // Kayıt eş güdümü — TEK yaşam döngüsü, iki yol.
+  //
+  // Marka ve kit kayıtları artık paralel uçabiliyor (ayrı zamanlayıcılar).
+  // "Kaydedildi" bir işlemin bitmesine bağlanırsa, ilk biten diğeri hâlâ
+  // uçarken başarı gösterir — kullanıcı sayfayı kapatabilir. Bayrak yerine
+  // SAYAÇ tutulur: başarı ancak uçuştaki HER kayıt bittiğinde ve hiçbiri
+  // düşmemişse gösterilir. `ApiResponse.success` de artık okunuyor; eskiden
+  // ağ/HTTP hatasından sonra da "Kaydedildi" yazıyordu.
+  const saveOps = useRef({ pending: 0, failed: false })
+
+  const runSave = useCallback(async (call: () => Promise<{ success: boolean }>) => {
+    if (saveOps.current.pending === 0) saveOps.current.failed = false
+    saveOps.current.pending += 1
+    setSaveState('saving')
+    let ok = false
+    try {
+      ok = (await call()).success
+    } catch {
+      ok = false
+    }
+    saveOps.current.pending -= 1
+    if (!ok) saveOps.current.failed = true
+    if (saveOps.current.pending > 0) return
+    if (saveOps.current.failed) {
+      setSaveState('error')
+      return
+    }
+    setSaveState('saved')
+    setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 2000)
   }, [])
 
-  const scheduleKitSave = useCallback((kit: BrandKit, brandId: string) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      setSaving(true)
-      setSaved(false)
-      await api.patch(`/brands/${brandId}/kit`, kit)
-      setSaving(false)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    }, 1500)
-  }, [])
+  // Gönderim gövdesi TEK yerde: gecikmeli yol da gecikmesiz yol da bunu çağırır.
+  // İki kopya olsaydı biri değişip diğeri kalırdı — bu dalda tam o ayrışma sınıfı
+  // başka bir yüzeyde bir kez ölçüldü (review 2026-08-26).
+  const sendBrand = useCallback(
+    (updated: Brand) =>
+      runSave(() =>
+        api.patch(`/brands/${updated.id}`, {
+          name: updated.name,
+          description: updated.description,
+          website_url: updated.website_url,
+          sector: updated.sector,
+          // Açık `null` atamayı BOŞALTIR; sunucu bu alanı `model_fields_set`
+          // üzerinden okuduğu için `null` sessizce düşmez.
+          sub_sector_id: updated.sub_sector_id,
+        })
+      ),
+    [runSave]
+  )
+
+  const sendKit = useCallback(
+    (kit: BrandKit, brandId: string) => runSave(() => api.patch(`/brands/${brandId}/kit`, kit)),
+    [runSave]
+  )
+
+  // Debounced auto-save for brand info — SERBEST METİN alanları içindir
+  // (her tuşta istek atmamak için). Ayrık onaylar bunu KULLANMAZ, bkz. commit*Now.
+  const scheduleSave = useCallback(
+    (updated: Brand) => {
+      if (!updated.id) return
+      cancelPendingFor(saveTimer, updated.id)
+      saveTimer.current = {
+        brandId: updated.id,
+        // Ateşlenen zamanlayıcı referansı SIFIRLAMAZ. Sıfırlasaydı, A markasının
+        // zamanlayıcısı ateşlendiğinde araya girmiş B kaydını da siler, sonraki bir
+        // B onayı bekleyen yazımı iptal EDEMEZ ve eski anlık görüntü yenisini ezerdi.
+        // Bayat kayıt zararsızdır: ateşlenmiş bir zamanlayıcıyı iptal etmek işlemsizdir.
+        timer: setTimeout(() => {
+          void sendBrand(updated)
+        }, 1500),
+      }
+    },
+    [sendBrand]
+  )
+
+  const scheduleKitSave = useCallback(
+    (kit: BrandKit, brandId: string) => {
+      cancelPendingFor(kitSaveTimer, brandId)
+      kitSaveTimer.current = {
+        brandId,
+        timer: setTimeout(() => {
+          void sendKit(kit, brandId)
+        }, 1500),
+      }
+    },
+    [sendKit]
+  )
 
   function updateBrand(fields: Partial<Brand>) {
     setBrand((prev) => {
@@ -523,6 +675,42 @@ function MarkaAyarlariContent() {
     })
   }
 
+  // ── AYRIK ONAYLAR: gecikme YOK (review 2026-08-26, H4) ────────────────────
+  //
+  // Alt sektör seçimi ve kanal anahtarları serbest metin DEĞİL, tek hareketlik
+  // onaylardır — 1,5 saniye beklemenin hiçbir faydası yok, tek etkisi kayıp
+  // penceresi açmak. Ölçüldü: bu önyüzde sayfadan-çıkışta-gönder koruması hiç
+  // yok (`beforeunload`/`visibilitychange` sıfır sonuç), yani kullanıcı seçip
+  // 1,5 saniye dolmadan çıkarsa istek HİÇ gitmiyordu ve paket ataması onun
+  // sandığı gibi olmuyordu. Bunlar bu dalın EKLEDİĞİ yüzeylerdir.
+  //
+  // Bekleyen gecikmeli yazım İPTAL EDİLİR ama KAYBOLMAZ: gönderilen gövde tam
+  // anlık görüntüdür, bekleyen metin düzenlemeleri de içindedir — yani bu bir
+  // düşürme değil, erken boşaltmadır.
+  //
+  // KAPSAM SINIRI — dürüst etiket: bu, otomatik kaydetmenin diğer kayıp
+  // yollarını (sıra bozulması · iki sekme · başarısız yazımın taslağı yok
+  // etmesi) KAPATMAZ. O alt sistemin evi `brand-settings-save-integrity`'dir ve
+  // ön koşulu önyüz test altyapısıdır; test altyapısı olmadan eşzamanlılık
+  // kodu yazmak 2026-08-25'te bir kez denendi ve beş yüksek bulguyla geri alındı.
+  function commitBrandNow(fields: Partial<Brand>) {
+    if (!brand) return
+    const updated = { ...brand, ...fields }
+    setBrand(updated)
+    // YALNIZ bu markanın bekleyen yazımı birleştirilir. Başka bir markanınki
+    // DOKUNULMADAN bırakılır: kendi anlık görüntüsünü taşır ve zamanında gider.
+    cancelPendingFor(saveTimer, updated.id)
+    void sendBrand(updated)
+  }
+
+  function commitKitNow(fields: Partial<BrandKit>) {
+    if (!brand) return
+    const updatedKit = { ...brand.brand_kit, ...fields }
+    setBrand({ ...brand, brand_kit: updatedKit })
+    cancelPendingFor(kitSaveTimer, brand.id)
+    void sendKit(updatedKit, brand.id)
+  }
+
   async function analyzeWebsite() {
     const url = (brand?.website_url ?? '').trim()
     if (!url) {
@@ -537,6 +725,8 @@ function MarkaAyarlariContent() {
         sector: string
         colors: string[]
         tonality: string
+        sub_sector_id: string | null
+        sub_sector_display_name: string | null
       }>('/ai/analyze-website', { url })
 
       if (res.success && res.data) {
@@ -545,6 +735,15 @@ function MarkaAyarlariContent() {
         if (res.data.name) { brandFields.name = res.data.name; filled.push('ad') }
         if (res.data.description) { brandFields.description = res.data.description; filled.push('açıklama') }
         if (res.data.sector) { brandFields.sector = res.data.sector; filled.push('sektör') }
+        // Öneri sunucuda aday kümeye karşı doğrulanmıştır; gelen kimlik ya
+        // listededir ya `null`. Yine de YAZILMAZ — teyit kutusuna düşer.
+        if (res.data.sub_sector_id) {
+          setSuggestedSubSector({
+            id: res.data.sub_sector_id,
+            display_name: res.data.sub_sector_display_name ?? 'Önerilen alt sektör',
+          })
+          filled.push('alt sektör önerisi (teyit bekliyor)')
+        }
         if (Object.keys(brandFields).length > 0) updateBrand(brandFields)
 
         const kitFields: Partial<BrandKit> = {}
@@ -789,8 +988,15 @@ function MarkaAyarlariContent() {
           <h1 className="text-xl font-bold text-gray-900">Marka Ayarları</h1>
           <p className="text-sm text-gray-500 mt-0.5">{brand.name}</p>
         </div>
-        <SaveIndicator saving={saving} saved={saved} />
+        <SaveIndicator state={saveState} />
       </div>
+
+      {/* Paket durumu bandı — metin BACKEND'den gelir (K-45 sabit metni). */}
+      {packageStatus?.message && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">{packageStatus.message}</p>
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6 flex-wrap w-full gap-y-1">
@@ -871,6 +1077,111 @@ function MarkaAyarlariContent() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Alt sektör teyidi — mevcut sektör seçiminin YANINDA (K-19).
+              Bileşen İKİ koşuldan biri sağlanınca görünür: seçilebilecek aday
+              varsa ya da markanın zaten bir ataması varsa. İkinci koşul şart:
+              paketi arşivlenen markanın ataması korunur (K-43) ve aday listesi
+              o anda boş olabilir — bileşeni gizlemek kullanıcıyı yanlış
+              atamasıyla baş başa bırakırdı (spec §7.5 düzeltme yolu). */}
+          {(subSectorCandidates.length > 0 || brand.sub_sector_id) && (
+            <div className="space-y-1.5">
+              <Label>Alt Sektör</Label>
+
+              {suggestedSubSector && suggestedSubSector.id !== brand.sub_sector_id && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
+                  <span className="text-sm">
+                    Site analizi <strong>{suggestedSubSector.display_name}</strong> öneriyor.
+                  </span>
+                  <span className="flex gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        commitBrandNow({ sub_sector_id: suggestedSubSector.id })
+                        setSuggestedSubSector(null)
+                      }}
+                    >
+                      Uygula
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSuggestedSubSector(null)}
+                    >
+                      Yoksay
+                    </Button>
+                  </span>
+                </div>
+              )}
+
+              <Select
+                value={brand.sub_sector_id ?? SUB_SECTOR_NONE}
+                onValueChange={(v) =>
+                  onSelect(v, (val) =>
+                    commitBrandNow({ sub_sector_id: val === SUB_SECTOR_NONE ? null : val })
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Alt sektör seç">
+                    {(value: string) =>
+                      subSectorCandidates.find((s) => s.id === value)?.display_name ??
+                      (value && value !== SUB_SECTOR_NONE
+                        ? SUB_SECTOR_ORPHAN_LABEL
+                        : 'Seçilmedi')
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SUB_SECTOR_NONE}>Seçilmedi</SelectItem>
+                  {/* Aday listesinde OLMAYAN mevcut atama da seçenek olarak
+                      durur; yoksa Select kendi değerini gösteremez ve
+                      kullanıcı onu değiştiremeden kaybederdi. */}
+                  {brand.sub_sector_id &&
+                    !subSectorCandidates.some((s) => s.id === brand.sub_sector_id) && (
+                      <SelectItem value={brand.sub_sector_id}>
+                        {SUB_SECTOR_ORPHAN_LABEL}
+                      </SelectItem>
+                    )}
+                  {subSectorCandidates.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.display_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">
+                {subSectorCandidates.length === 0
+                  ? 'Şu an seçilebilecek hazır alt sektör paketi yok. Mevcut atamanızı kaldırabilirsiniz.'
+                  : 'Alt sektör seçmek zorunlu değildir. Boş bırakırsanız gönderileriniz bugünkü genel modda üretilir.'}
+              </p>
+            </div>
+          )}
+
+          {/* Kanal envanteri — hangi kanallara sahipsiniz? İşaretlenmeyen kanalın
+              çağrısı içeriklere KONULMAZ (spec §12.2 muhafazakâr davranış). */}
+          <div className="space-y-2">
+            <Label>Sahip Olduğunuz Kanallar</Label>
+            <p className="text-xs text-gray-500">
+              Yalnız işaretlediğiniz kanallara yönlendiren çağrılar kullanılır.
+              İşaretlenmeyen kanal hiçbir gönderide geçmez.
+            </p>
+            <div className="space-y-2 pt-1">
+              {CHANNEL_OPTIONS.map((channel) => (
+                <div key={channel.key} className="flex items-center justify-between">
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {channel.label}
+                  </span>
+                  <Switch
+                    checked={kit.channels?.[channel.key] === true}
+                    onCheckedChange={(checked) =>
+                      commitKitNow({
+                        channels: { ...(kit.channels ?? {}), [channel.key]: checked },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </TabsContent>
 

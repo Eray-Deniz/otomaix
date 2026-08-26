@@ -347,6 +347,41 @@ async def fail_stale_posts(
     })
 
 
+@router.post("/admin-events/dispatch-pending", response_model=OkResponse)
+async def dispatch_pending_admin_events_endpoint(
+    _: None = Depends(get_service_auth),
+):
+    """Yönetici bildirim outbox'ının KURTARMA yolu (plan Task 14).
+
+    Periyodik n8n schedule'ından çağrılır (artefakt:
+    `shared/n8n-workflows/sector-package-admin-events.json`). Hızlı yol
+    (olayı yazan isteğin commit sonrası tetiği) yeterli DEĞİLDİR: yeniden
+    başlatma ya da çökme sonrası ortada kalan satırların — `pending` YA DA
+    kirası dolmuş `sending` — sahibi bu turdur.
+
+    Tur, hem süpürmeyi hem kiralamayı hem teslimi kapsar; sayılar dönüş
+    gövdesinde görünür, böylece n8n tarafında "hiç iş çıkmadı" ile "iş çıktı
+    ama düştü" ayırt edilebilir.
+
+    **`get_db` bağımlılığı BİLEREK YOK** (checkpoint 14, F3): bu uç nokta
+    dakikalarca sürebilen ağ gönderimleri yapar. İstek boyunca bir havuz
+    bağlantısını rehin tutmak, dış bağımlılığın yavaşlığını kendi veritabanı
+    havuzuna bulaştırırdı. Havuzlu biçim bağlantıyı yalnız kısa DB
+    pencerelerinde alır.
+    """
+    from app.core import database
+    from app.services.notifications import dispatch_pending_admin_events_via_pool
+
+    report = await dispatch_pending_admin_events_via_pool(await database.get_pool())
+    return OkResponse(data={
+        "claimed": report.claimed,
+        "sent": report.sent,
+        "deferred": report.deferred,
+        "failed": report.failed,
+        "lost": report.lost,
+    })
+
+
 @router.get("/posts/{post_id}", response_model=OkResponse)
 async def get_post_internal(
     post_id: str,

@@ -647,10 +647,32 @@ export default function IcerikKutuphanesPage() {
     fetchPosts(1, true)
   }, [currentBrand?.id, activeTab, filters]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Generating olan postlar için polling — output_url gelince otomatik güncelle
+  // Generating olan postlar için polling.
+  //
+  // Durum değişimi de bitiş sayılır, yalnız `output_url` DEĞİL. Kısa video
+  // stage-1'i `generating` doğup `awaiting_approval`da bitiyor ve çıktı URL'si
+  // ÜRETMİYOR; yalnız `output_url`e bakan eski koşul o satırı sonsuza kadar
+  // `generating` gösterir ve her 3 saniyede bir istek atmaya devam ederdi
+  // (ölçüldü).
+  //
+  // Yeniden çizim döngüsü riskine karşı: `setPosts` YALNIZ gerçekten değişen
+  // bir alan varsa çağrılır. Koşulsuz birleştirme her turda yeni nesne kimliği
+  // üretir, bu efektin `posts` bağımlılığını tetikler ve sonsuz döngü kurardı.
   useEffect(() => {
+    // Uzlaştırılacak satırlar: henüz çıktısı olmayan ve arka ucun KULLANICI
+    // MÜDAHALESİ OLMADAN hâlâ değiştirebileceği durumlar.
+    //
+    // `failed` bu kümede BİLEREK duruyor. Bayat-iş süpürücüsü 10 dakikayı aşan
+    // bir üretimi `failed` yapıyor, ama fal.ai webhook'u geç gelen bir başarıyı
+    // sonradan `ready` + `output_url` olarak yazabiliyor — arka uçta `failed`
+    // terminal DEĞİL. Bu satırları yoklamadan çıkarmak, kullanıcıya başarısız
+    // görünen ama aslında hazır olan bir içerik bırakırdı (bu, `status`
+    // ölçüsünü eklerken açtığım bir gerileme).
+    //
+    // `awaiting_approval` ise gerçekten terminal: kısa video stage-1 orada
+    // biter, çıktı URL'si üretmez ve devamı kullanıcının onayına bağlıdır.
     const generatingIds = posts
-      .filter((p) => p.status === 'generating' && !p.output_url)
+      .filter((p) => (p.status === 'generating' || p.status === 'failed') && !p.output_url)
       .map((p) => p.id)
     if (generatingIds.length === 0) return
 
@@ -658,16 +680,17 @@ export default function IcerikKutuphanesPage() {
       const updates = await Promise.all(
         generatingIds.map((id) => api.get<Post>(`/posts/${id}`))
       )
-      let changed = false
-      updates.forEach((res) => {
-        if (res.success && res.data?.output_url) {
-          setPosts((prev) =>
-            prev.map((p) => (p.id === res.data!.id ? { ...p, ...res.data } : p))
-          )
+      setPosts((prev) => {
+        let changed = false
+        const next = prev.map((p) => {
+          const fresh = updates.find((res) => res.success && res.data?.id === p.id)?.data
+          if (!fresh) return p
+          if (fresh.status === p.status && fresh.output_url === p.output_url) return p
           changed = true
-        }
+          return { ...p, ...fresh }
+        })
+        return changed ? next : prev
       })
-      if (changed) clearInterval(interval)
     }, 3000)
 
     return () => clearInterval(interval)
