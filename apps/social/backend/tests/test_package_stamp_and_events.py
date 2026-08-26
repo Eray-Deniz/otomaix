@@ -420,6 +420,113 @@ async def test_event_write_failure_inside_transaction_does_not_poison_it(pkg_db,
         assert wrote == "txn hayatta"
 
 
+async def test_savepoint_only_opens_inside_a_caller_transaction(pkg_db):
+    """Transaction DIŞINDA iç transaction AÇILMAZ (kapanış turu 2026-08-26, N1).
+
+    `db.transaction()` transaction dışında savepoint değil GERÇEK transaction
+    açar. `notifications._maybe_trigger_fast_dispatch` "açık transaction
+    içindeysem ateşleme" kapısını taşıdığı için, koşulsuz sarmak yönetici
+    bildiriminin hızlı gönderim yolunu bu yüzeyin TAMAMINDA sessizce öldürüyordu.
+    Teslim garantisi değil (onu kurtarma yolu üstlenir), tasarlanmış gecikme
+    kısaltması kaybolmuştu.
+
+    Mutasyon kontrolü: `_savepoint_if_in_tx` koşulsuz `db.transaction()` dönerse
+    ilk iddia DÜŞER.
+    """
+    from app.services.package_events import _savepoint_if_in_tx
+
+    class _Conn:
+        """`transaction()` çağrılıp çağrılmadığını kaydeden sahte bağlantı.
+
+        Gerçek bağlantı KULLANILMAZ: bu dosyanın `db` fixture'ı testi zaten bir
+        transaction'ın içinde koşturur (geri sarma fixture'ı), dolayısıyla
+        "transaction dışında" dalı gerçek bağlantıyla hiç gözlemlenemezdi.
+        """
+
+        def __init__(self, in_tx: bool):
+            self._in_tx = in_tx
+            self.opened = False
+
+        def is_in_transaction(self) -> bool:
+            return self._in_tx
+
+        def transaction(self):
+            conn = self
+
+            class _T:
+                async def __aenter__(self):
+                    conn.opened = True
+                    return self
+
+                async def __aexit__(self, *_exc):
+                    return False
+
+            return _T()
+
+    outside = _Conn(in_tx=False)
+    async with _savepoint_if_in_tx(outside):
+        pass
+    assert outside.opened is False, (
+        "transaction DIŞINDA iç transaction açıldı — `db.transaction()` orada "
+        "savepoint değil GERÇEK transaction açar ve hızlı gönderim kapısını tetikler"
+    )
+
+    inside = _Conn(in_tx=True)
+    async with _savepoint_if_in_tx(inside):
+        pass
+    assert inside.opened is True, "transaction İÇİNDE savepoint açılmadı — koruma yok"
+
+    # `is_in_transaction` taşımayan bağlantı benzeri nesne patlatmamalı.
+    class _Bare:
+        pass
+
+    async with _savepoint_if_in_tx(_Bare()):
+        pass
+
+    # Gerçek bağlantı, gerçekten transaction içindeyken: savepoint açılır ve
+    # dıştaki transaction ayakta kalır.
+    assert pkg_db.is_in_transaction()
+    async with _savepoint_if_in_tx(pkg_db):
+        assert await pkg_db.fetchval("SELECT 1") == 1
+
+
+async def test_admin_notify_failure_inside_transaction_does_not_poison_it(pkg_db, caplog):
+    """Yönetici bildirimi düşerse çağıranın transaction'ı YAŞAR (N3 kapısı).
+
+    `_notify_admin`in belgesi "ASLA akışı düşürmez" der, ama savepoint olmadan
+    bu söz yalnız transaction dışında doğruydu. Kapanış turu bu savepoint'in
+    hiçbir test tarafından bağlanmadığını mutasyonla ölçtü — bu test o boşluğu
+    kapatır.
+
+    Mutasyon kontrolü: `_notify_admin`deki savepoint kaldırılırsa bu test
+    `InFailedSQLTransactionError` ile DÜŞER.
+    """
+    sub_id, _package_id = await _seed_sector_and_package(pkg_db)
+    _account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    async with pkg_db.transaction():
+        # `mismatch_fallthrough` ADMIN_NOTIFIED_EVENTS içindedir → outbox yazımı
+        # denenir. Outbox tablosunu bu transaction içinde erişilemez kılıyoruz.
+        await pkg_db.execute(
+            "ALTER TABLE social.admin_events RENAME TO admin_events__unavailable"
+        )
+
+        with caplog.at_level(logging.ERROR):
+            event_id = await log_package_event(
+                pkg_db, event_type="mismatch_fallthrough", brand_id=brand_id
+            )
+
+        # Olay satırı YAZILDI (asıl denetim izi), yalnız bildirim düştü.
+        assert event_id is not None
+        assert any("yönetici bildirimi yazılamadı" in r.getMessage() for r in caplog.records)
+
+        # ASIL İDDİA: transaction hâlâ canlı.
+        assert await pkg_db.fetchval("SELECT 1") == 1
+        assert await pkg_db.fetchval(
+            "SELECT count(*) FROM social.package_events WHERE id = $1", event_id
+        ) == 1
+
+
 # ═══ 2. Damga tüketimi — GERÇEK kalıcı-kayıt ucundan ════════════════════════
 
 

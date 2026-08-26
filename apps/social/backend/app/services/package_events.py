@@ -18,6 +18,7 @@ cevaplar.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 from uuid import UUID
@@ -72,6 +73,27 @@ DETAIL_MAX_TEXT = 200
 
 class PackageEventContractError(ValueError):
     """Olay kaydı sözleşmesi ihlal edildi — çağıranın hatası."""
+
+
+def _savepoint_if_in_tx(db):
+    """İç transaction YALNIZ çağıranın transaction'ı VARSA açılır.
+
+    Savepoint'in tek işi DIŞTAKİ transaction'ı korumaktır; dışarıda transaction
+    yoksa korunacak bir şey de yoktur. Koşulsuz açmak zararsız GÖRÜNÜYORDU ama
+    değildi ve kapanış turu ölçtü: `db.transaction()` transaction DIŞINDA
+    savepoint değil GERÇEK transaction açar, o sırada `is_in_transaction()`
+    `True` döner, ve `notifications._maybe_trigger_fast_dispatch` tam da o
+    kapıyı taşır ("açık transaction içindeysek ateşleme"). Sonuç: yönetici
+    bildiriminin hızlı gönderim yolu bu yüzeyin TAMAMINDA sessizce ölmüştü —
+    teslim garantisi değil (onu kurtarma yolu üstlenir) ama tasarlanmış gecikme
+    kısaltması. Kendi düzeltmemin yan etkisiydi.
+
+    `getattr` geri düşüşü bilinçli: bağlantı benzeri sahte nesneler (testlerdeki
+    yazım-düşer sahtesi) `is_in_transaction` taşımaz ve transaction'ları da
+    yoktur — onlar için doğru cevap "savepoint açma"dır.
+    """
+    in_tx = getattr(db, "is_in_transaction", lambda: False)()
+    return db.transaction() if in_tx else contextlib.nullcontext()
 
 
 def _require(condition: bool, message: str) -> None:
@@ -207,7 +229,7 @@ async def log_package_event(
         # transaction bir SAVEPOINT'tir: hata yalnız buraya kadar geri sarılır,
         # dıştaki post yazımı ayakta kalır. İstisna akışı DEĞİŞMEZ — ne yakalanır
         # ne yutulur, yalnız dıştaki transaction zehirlenmez.
-        async with db.transaction():
+        async with _savepoint_if_in_tx(db):
             await _validate_version_shape(
                 db,
                 event_type=event_type,
@@ -222,7 +244,7 @@ async def log_package_event(
         # `None` döner ve sözleşmesi "çağıran akışı DÜŞÜRMEZ"dir. Savepoint
         # olmadan bu söz YALNIZ transaction dışında doğruydu: içeride yutulan
         # hata dıştaki INSERT'ü de düşürüyordu, yani koruma tersine çalışıyordu.
-        async with db.transaction():
+        async with _savepoint_if_in_tx(db):
             event_id = await db.fetchval(
                 """
                 INSERT INTO social.package_events
@@ -287,7 +309,7 @@ async def _notify_admin(
         # transaction'ı içinde savepoint OLMADAN tutmuyordu — yutulan hata dıştaki
         # yazımı da düşürüyordu. Aynı transaction'da kalma sözleşmesi korunur:
         # savepoint dıştakinin İÇİNDEDİR, olay geri alınırsa bildirim de yoktur.
-        async with db.transaction():
+        async with _savepoint_if_in_tx(db):
             await notifications.record_admin_event(
                 db,
                 kind=f"package_event.{event_type}",
