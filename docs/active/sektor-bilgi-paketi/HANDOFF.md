@@ -62,14 +62,11 @@ Yani migration atılsa bile paket sistemi bugün bağlanacak bir şey bulamaz; t
 **Zincirin 3. adımı (`/security-review-claude-codex`) BİTTİ. Güvenlik kapısı TEMİZ:
 çözülmemiş kritik/yüksek bulgu YOK, dual-review üç turda da tam, kapsam boşluğu yok.**
 
-Sıradaki iki iş, bu sırayla:
+Sıradaki iş:
 
-1. **`sector-packages-mandatory-split`** (`CURRENT.md`) — `sector_packages.py` 1804 satır, zorunlu
-   bölme eşiğinin üstünde. **Tetiği DOLDU** (tetik "review zinciri bittikten sonra, dal kapanışından
-   önce"ydi). Ayrım noktası daha önce ÖLÇÜLDÜ: yaşam döngüsü bölümü (`LifecycleError`'dan
-   `deactivate_package`'a, ~490 satır) tek yönlü bağımlı. Gövdenin kalanı çift yönlü bağlı; onu
-   bölmek üçüncü bir "ortak ilkeller" modülü ister, yani yapı değil dağılma olur. Üretimde dosya
-   dışı çağıran YOK; üç test dosyası yaşam döngüsü adlarını içe aktarıyor.
+1. ~~`sector-packages-mandatory-split`~~ — **BU OTURUMDA YAPILDI** (`39f283d`): yaşam döngüsü
+   `app/services/sector_package_lifecycle.py`'ye taşındı (1804 → 1310 + 524 satır); taşınan gövde
+   bayt-aynı, kapsülleme testi mutasyonla pozitif kontrol edildi.
 2. **`/finish-branch-claude-codex`** — dört seçenek (merge / PR / tut / sil).
 
 **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
@@ -120,10 +117,11 @@ Her mutasyondan sonra dosya geri yüklendi ve taze koşum yapıldı.
   de aşağıda Notes'ta kayıtlı.
 
 **Devralınan, DEĞİŞMEYEN kalemler:**
-- **[Manuel adım — Plan 2 sonrası tek tur]** Migration'ların canlıya uygulanması ·
-  `N8N_ADMIN_EVENT_SECRET` + Telegram env'leri · n8n workflow importu ve TEK teslim smoke'u ·
+- **[Manuel adım — komutlar yukarıda "Resume From"da]** Migration'ların canlıya uygulanması ·
+  `N8N_ADMIN_EVENT_SECRET` (sır üretildi) · n8n credential + workflow importu ve TEK teslim smoke'u ·
+  **Telegram env'i ARTIK GEREKMİYOR** — workflow mevcut credential'a bağlandı (`3561231`) ·
   `.env.example`'a satır eklenmesi (sır-dosyası kapısı agent'ı engelliyor) · Task 15'in UI doğrulaması.
-- **[TETİĞİ DOLDU — sıradaki iş]** `sector-packages-mandatory-split` (`CURRENT.md`).
+- ~~`sector-packages-mandatory-split`~~ — KAPANDI (`39f283d`); `CURRENT.md`'den çıkarıldı.
 - **[Eray tetikledi]** Süpürücü ↔ geç webhook terminallik çelişkisi. Ev: `CURRENT.md`.
 - **[TETİKLİ]** `sector_packages.sector_id` değişmez değil. Ev: `CURRENT.md`.
 - **[MÜŞTERİ yüzeyi]** Marka ayarları otomatik kaydetmesinin devralınmış kayıp yolları. Ev:
