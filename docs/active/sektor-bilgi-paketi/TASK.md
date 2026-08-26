@@ -102,8 +102,38 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-26 (on yedinci oturum) — REVIEW ZİNCİRİNİN 1. ADIMI BİTTİ: `/simplify-claude-codex`
-koştu ve commit edildi. Durum `waiting-review` olarak KALIYOR. Açık kapı YOK.**
+**2026-08-26 (on sekizinci oturum) — REVIEW ZİNCİRİNİN 2. ADIMI BİTTİ: `/review-claude-codex`
+koştu, YEDİ yüksek bulgu çıktı, yedisi de düzeltildi ve ölçüldü. Durum `waiting-review` olarak
+KALIYOR. Açık kapı YOK. Sıradaki: `/security-review-claude-codex`.**
+
+Tam dual review (iki bağımsız hakem: fresh Claude subagent + Codex `adversarial-review`), ardından
+odaklı kapanış turu — ikisi de dual, `total_invocations=2`, degrade YOK. Rapor:
+`docs/reviews/2026-08-26-feat-sektor-bilgi-paketi.md`.
+
+**Attempt-1'in dört yüksek bulgusu:**
+- **H1** — on-prem/yerel dağıtım 032'de kesin duruyordu (PG18 kolonu `conenforced`, PG16 imajı).
+  `TASK.md`'de 2026-08-24 tarihli Eray risk kabulü olarak duruyordu; iki hakem de bunu bilmeden
+  bağımsız buldu, kullanıcı kapatmayı seçti. Gerçek PG16 konteynerinde iki yönlü ölçüldü.
+- **H2** — yutulan olay yazımı hatası çağıranın transaction'ını öldürüyordu; paketli her üretim
+  500 alabiliyordu. Hakem "çıkarım" etiketiyle verdi, canlı veritabanında ölçüldü.
+- **H3** — migration koşucusu ikinci kez koşamıyordu (`42P07`), README "tekrar çalıştır" diyordu.
+- **H4** — bu dalın eklediği alt-sektör/kanal onayları kaybolabilen otomatik kaydetme yoluna
+  binmişti (müşteri yüzeyi).
+
+**Kapanış turunun üç yüksek bulgusu — hepsi DÜZELTMELERİN KENDİ yan etkisi, park EDİLMEDİ:**
+- **N1** — koşulsuz savepoint, yönetici bildiriminin hızlı gönderim yolunu bu yüzeyin TAMAMINDA
+  sessizce öldürmüştü (transaction dışında `db.transaction()` gerçek transaction açar).
+- **N-H3** — kurulum kapısının sondası fail-OPEN'dı: psql'in her hatası "boş veritabanı"ya
+  dönüşüyordu, yani kapı korumak için var olduğu duruma karşı geçiyordu.
+- **N-H4** — ayrık onay, BAŞKA markanın bekleyen düzenlemesini düşürüyordu (sayfa marka
+  değişiminde remount olmuyor). İkinci dereceden bir sıra-bozulması da aynı okumada bulundu.
+
+Ayrıca iki orta: komşu bir test sessizce boşa düşmüştü (yeşil kalıp hiçbir şey ölçmüyordu) ve üç
+savepoint'in ikisi hiçbir testle bağlı değildi. İkisi de kapatıldı.
+
+**Dört orta + altı düşük `accepted_risk`** olarak raporda duruyor. Üçü bu partinin ürünü ve
+görünür şekilde öyle etiketlendi (özellikle `resolve_sector` artık istisna fırlatıyor ama hiçbir
+çağıran yakalamıyor → taksonomi bozukken marka oluşturma 500 veriyor).
 
 Kapsam dalın üretim koduydu (23 dosya tarandı; testler, migration'lar, dokümanlar tarama
 DIŞINDA). 31 aday değerlendirildi, **20'si uygulandı**, 10 dosya değişti — 8 üretim + 2 test
@@ -163,6 +193,29 @@ tanım gereği yakalayamaz. Arka uçta mutasyonla ölçülen her şey sağlam ç
 ölçülemeyen tarafta oldu.
 
 # Open Problems
+
+- **[YENİ, review 2026-08-26 — `accepted_risk`, ama BU PARTİNİN ürünü] `resolve_sector`'ün
+  dönüş sözleşmesi değişti, çağıranlar tam güncellenmedi.** Fonksiyon artık `tuple | None`
+  değil `tuple` dönüyor ve taksonomi bozukken `TaxonomyUnavailableError` fırlatıyor — ama
+  `brands.py`'deki iki çağıranın hiçbiri yakalamıyor ve `main.py`'de handler yok, dolayısıyla
+  müşteri jenerik 500 görüyor (beklenen: 503). Ayrıca `brands.py:122`'de artık ulaşılamayan bir
+  geri-düşüş dalı kaldı ve okuyucuya "None dönebilir" diyor. Ölçüldü (grep + kod okuması).
+  Review politikası orta bulguyu fix-required saymadığı için düzeltilmedi; devralınan borç
+  DEĞİL, bu dalın ürünü olduğu için burada görünür kalıyor.
+
+- **[YENİ, review 2026-08-26 — `accepted_risk`] `schema_version` kolonu hiçbir yerde okunmuyor.**
+  Çalışma zamanı doğrulayıcısı kapalı alan kümesini sert uyguluyor ve `schema_version`'ı hiç
+  görmüyor; bir şema artışı tüm eski paketleri sessizce devre dışı bırakır (paketli markalar
+  paketsiz yola düşer, üretim durmaz, kimse fark etmez). Spec §3.4'ün "şema değişimi
+  `schema_version` ile taşınır" hükmünün kod karşılığı yok. Plan 2 şemayı hiç artırmayacaksa
+  en azından kolonun kullanılmadığı belgelenmeli.
+
+- **[YENİ, review 2026-08-26 — `accepted_risk`] K-04 kullanım talimatı üç metne ayrışmış.**
+  Normatif Türkçe metin yalnız caption/fikir yüzeylerinde birebir basılıyor; görsel ve
+  durağan-kare yüzeylerinde iki ayrı serbest İngilizce parafraz var, `_enrich_with_scene`'de
+  ise hiç yok. Spec §4.5 "HER enjeksiyon bloğunun başına" diyor. Tam olarak K-01b'de kapatılan
+  ayrışma sınıfı.
+
 
 - **[AÇIK KALEM — evi VAR, tetiği Eray verdi] Süpürücünün "başarısız"ı ile webhook'un
   "hazır"ı çelişiyor.** Süpürücü `generating`i 10 dakikada `failed` yapıyor; `fal_webhook`

@@ -2,112 +2,111 @@
 
 ## Context
 - Task: sektor-bilgi-paketi — Plan 1 yürütmesi TAMAMLANDI, durum `waiting-review`
-- Last updated: 2026-08-26 (on yedinci oturum — review zincirinin 1. adımı)
+- Last updated: 2026-08-26 (on sekizinci oturum — review zincirinin 2. adımı)
 - Plan: `docs/plans/2026-08-23-sektor-bilgi-paketi.md` (`plan-approved`)
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
 - Spec girdisi: `docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` — **karar sorusu
   çıkarsa ÖNCE buraya bak; spec bir özet, kanonik ayrıntı input'ta.**
 - Dal: `feat/sektor-bilgi-paketi` (**upstream YOK — hiç push edilmedi**)
-- Kapanış raporu: `docs/active/sektor-bilgi-paketi/PLAN1-KAPANIS.md`
+- Review raporu: `docs/reviews/2026-08-26-feat-sektor-bilgi-paketi.md`
+- Kapanış raporu (Plan 1): `docs/active/sektor-bilgi-paketi/PLAN1-KAPANIS.md`
 - Codex ham log'ları (bu makinede, bu kökten):
-  - yürütme: `/root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md`
+  - review attempt-1: `/root/.claude/logs/otomaix--ffc87809/2026-08-26-review-feat-sektor-bilgi-paketi-1.md`
+  - review closure: `/root/.claude/logs/otomaix--ffc87809/2026-08-26-review-feat-sektor-bilgi-paketi-2.md`
   - basitleştirme: `/root/.claude/logs/otomaix--ffc87809/2026-08-26-simplify-feat-sektor-bilgi-paketi-1.md`
+  - yürütme: `/root/.claude/logs/otomaix--ffc87809/2026-08-24-feat-sektor-bilgi-paketi-execute.md`
 
 ## Resume From
 
-**Sıradaki iş: `/review-claude-codex`.** Zincirin 1. adımı (`/simplify-claude-codex`) bitti ve
-commit edildi (`6407f89`); çalışma ağacı TEMİZ.
+**Sıradaki iş: `/security-review-claude-codex`.** Zincirin 2. adımı (`/review-claude-codex`) bitti;
+yedi yüksek bulgu da düzeltildi ve commit edildi. Çalışma ağacı TEMİZ, açık kapı YOK.
 
-**Review'in İLK işi hâlâ aynı:** yürütmenin final turunda düzeltilen taşıyıcı-sözleşme fix'i
-(`17840c6`) bağımsız hakem görmeden indi. Bu, basitleştirme turunda ele ALINMADI — o tur yalnız
-tekrar/ölü kod/adlandırma baktı, davranış bakmadı.
+**Devralınan "ilk iş" borcu KAPANDI:** yürütmenin final turunda bağımsız hakem görmeden inen
+taşıyıcı-sözleşme fix'i (`17840c6`) bu review'da denetlendi — iki hakem de 032/033/034'ün
+doğrulama bloklarını okudu ve oradan H1 çıktı.
 
-Zincirin kalanı: `/review-claude-codex` → `/security-review-claude-codex` →
-`/finish-branch-claude-codex`.
+Zincirin kalanı: `/security-review-claude-codex` → `/finish-branch-claude-codex`.
+
+**Tetiği HENÜZ DOLMADI:** `sector-packages-mandatory-split` (`CURRENT.md`) — 1804 satırlık
+dosyanın zorunlu bölmesi. Tetik "review zinciri bittikten sonra"dır ve `/security-review-claude-codex`
+o zincirin parçası; yani sıra güvenlik review'ından SONRA, dal kapanışından ÖNCE gelir.
 
 **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
 Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 
 ## Verification (bu oturum)
 
-**Koşan komutlar / taze çıktı (hepsi commit'ten ÖNCE, HEAD'de):**
-- `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **577 passed**
-  (oturum başındaki taban ile aynı — basitleştirme test sayısını değiştirmedi, değiştirmemeliydi)
+**Koşan komutlar / taze çıktı (hepsi son commit'te, `1e12af9`):**
+- `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **580 passed** (105s)
+  (oturum başı taban 577'ydi; +3 bu turda yazılan regresyon testleri)
 - `cd apps/social/backend && .venv/bin/python -m pytest tests/prompt_regression/ -q` → **121 passed**
   (bayt-değişmezlik kapısı; donmuş fixture'lar DEĞİŞMEDİ)
 - `cd apps/social/frontend && npx tsc --noEmit` → **rc=0**
-- Commit SONRASI defter kapısı: `ec_footer_parse HEAD` → rc=0;
-  `ec_ledger_view <merge-base> . - --post-window` → **rc=0**, stderr temiz, yeni satır
-  `T16-simplify | code` olarak doğru sınıflandı
+- `ec_footer_parse <sha> /root/otomaix` yedi düzeltme commit'i + rapor commit'inde → **rc=0**
 
-**Pozitif kontrol niteliğinde ölçümler (iddiaların gerçekten ölçüldüğünü gösterenler):**
-- Devralınan borç listesi ÖLÇÜLDÜ ve yanlış çıktı: `BrandOut` importu `main`'de birebir aynı
-  (`git show main:...` ile), yani devralınan borç; "kullanılmayan pytest importları" test
-  dosyalarında ve biri gerçekten kullanılıyor.
-- Codex'in eklediği dört adayın dördü de kod okunarak ayrı ayrı doğrulandı — hiçbiri körlemesine
-  uygulanmadı. Biri (`filter_channel_dependent` dönüş tipi) çağrı yerine bakılarak teyit edildi:
-  iki çağırandan biri düz metin geçiyor.
-- Ad değişikliğinin bir kaynak-yokluk kapısını (`assert "scene_pool" not in source`) bozup
-  bozmadığı ölçüldü: kapının denetlediği fonksiyon o adı hiç taşımıyor, ve yeni ad eski adı alt
-  dize olarak içerdiği için kapı hâlâ ateşlenir.
-- Hakemin verdiği iki doğrulama komutu da koşuldu (dosya satır sayısı + üç test dosyası;
-  ve geçersiz atfın kalmadığını gösteren arama).
+**Pozitif kontroller — her yüksek bulgu KENDİ ölçümüyle kapatıldı, hiçbiri okumaya bırakılmadı:**
+- **H1:** gerçek `pgvector/pgvector:pg16` (16.15) konteyneri. Düzeltme ÖNCESİ dosyalar
+  `column k.conenforced does not exist` ile düşüyor; SONRASI 001→034 tamamı geçiyor, beş tablo
+  oluşuyor. Zayıflatma kontrolü: PG18'de gerçekten `NOT ENFORCED` bir FK yaratıldı — jsonb yolu
+  da doğrudan okuma da `false` diyor, maskeleme yok. Hakem ayrıca PG16'da `NOT VALID` FK ile
+  pozitif kontrol koştu (`rc=3`, doğru etiketle reddetti).
+- **H2 / N1 / N3:** üç mutasyon kontrolü. Savepoint kaldırılınca `InFailedSQLTransactionError`;
+  sarmalayıcı koşulsuz yapılınca koşullu-açılma testi düşüyor; `_notify_admin` savepoint'i
+  kaldırılınca ikinci test düşüyor. Her mutasyondan sonra dosya geri yüklendi.
+- **H3 / N-H3:** koşucunun BEŞ dalı stub'lı `docker` ile ölçüldü — dolu→rc=1, boş→rc=0 (34 dosya),
+  kaçış→rc=0, sonda hatası→rc=1, sonda çöpü→rc=1. Son iki dal düzeltme öncesi GEÇİYORDU.
+  `003`'ün idempotent olmadığı canlı DB'de ölçüldü (`42P07`).
+- **H4 / N-H4:** premisler ölçüldü — önyüzde `beforeunload`/`visibilitychange` sıfır sonuç;
+  sayfa marka değişiminde remount olmuyor (`currentBrand?.id` effect'i + `switchBrand` state).
 
-**Codex:**
-- Ön-tarama: koştu (Standard mod).
-- Final adversarial review: **`verdict: approve`**, kritik/yüksek bulgu YOK.
-  - F1 (orta) → `accepted_risk`: ertelenen dosya bölmesinin adlandırılmış evi yoktu.
-    **Bu oturumda kapatıldı** — `CURRENT.md`'ye gerçek madde açıldı.
-  - F2 (düşük) → **DÜZELTİLDİ**, park edilmedi. Kendi ad değişikliğimin ürünüydü ve politika
-    düşüğü advisory saysa da o izin ÖNCEDEN VAR OLAN borç içindir.
+**Hakemler:** attempt-1 ve closure'ın ikisi de **dual** (claude_status: ran, codex_status: ran).
+`total_invocations=2`, `consecutive_degraded=0`. Degradasyon YOK, override kullanılmadı.
 
 **DENENMEYEN / kapsanmayan (bu oturum):**
-- **Önyüzde otomatik test YOK** (0 test dosyası, ölçüldü). Frontend'deki 4 düzeltme yalnız tip
-  denetimiyle doğrulandı. Hepsi mekanikti (sabit çıkarma, gereksiz karşılaştırma silme, tip
-  daraltma) — zamanlama/eşzamanlılık koduna DOKUNULMADI, bu bilinçliydi (Task 15b dersi).
-- **Hakem, değişen 10 dosyanın 3'ünü dosya sisteminden okuyamadı.** Değişiklikleri prompt'a
-  gömülerek denetlendi; **çevrelerindeki değişmemiş kod denetlenmedi.**
-- Bu oturumda hiçbir migration canlıya uygulanmadı; canlı veritabanına karşı sweep koşulmadı
-  (kod değişikliği veri yolunu etkilemiyor).
+- **Önyüzde otomatik test YOK.** İki önyüz düzeltmesi (H4, N-H4) okuma + `tsc` + lint ile
+  doğrulandı, KOŞAN bir testle değil. Çapraz-marka dizisi regresyon olarak çalıştırılamıyor.
+  Bu, `brand-settings-save-integrity`'nin ilan edilmiş ön koşuludur.
+- **Gerçek `docker compose` ile uçtan uca yerel kurulum** (`setup.sh`) denenmedi.
+- **Spec'in 7-17. bölümleri** hiçbir hakem tarafından okunmadı (Claude hakemi kapsama beyanında
+  açıkça yazdı). Kapsam boşluğudur.
+- **`rollback/032_down.sql`** (265 satır) hiçbir turda satır satır okunmadı.
+- **`onboarding/page.tsx`** (107 satır ekleme) okunmadı.
+- **034'ün DDL'i** servis koduyla karşılaştırılmadı (attempt-1'de yalnız grep'lendi).
+- **n8n workflow'unun Code düğümlerinin JS gövdeleri** okunmadı.
+- Testlerin ~15.000 satırının çoğu iki hakemde de satır satır okunmadı.
+- Canlıya hiçbir migration uygulanmadı; canlı veritabanına karşı sweep koşulmadı.
 - Devralınan tüm manuel doğrulamalar (arayüz · canlı n8n + Telegram · gerçek uçtan uca üretim ·
   gerçek model çağrıları) hâlâ Plan 2 sonrasındaki tek tura ertelenmiş durumda.
 
 ## Risks
 
 **Bu oturumun ürünü — açık kalemler:**
-- **[Kapsam sınırı, DÜZELTİLMEDİ]** Üç dosyanın çevre kodu bağımsız hakem görmedi. Ev:
-  `/review-claude-codex` — o komut TEMİZ ağaçta koşacağı için taban-tabanlı denetim kullanır ve
-  bu kısıt orada DOĞMAZ. Tetik: zincirin kendisi.
-- **[ÇÖZÜLMEDİ + evi açıldı]** 1785 satırlık dosyanın zorunlu bölmesi. Ayrım noktası ÖLÇÜLDÜ
-  (yaşam döngüsü bölümü, tek yönlü bağımlılık; üstteki hiçbir şey o adlara atıf yapmıyor).
-  Ev: `CURRENT.md` → `sector-packages-mandatory-split`. Tetik: review zinciri bittikten sonra.
-- **[ÇÖZÜLMEDİ, bilinçle]** İki modüldeki prompt bloğu tekrarı duruyor (Eray kararı).
-  Yeniden açılma koşulu: iki yüzeyden biri değişip diğeri kalırsa, ya da bayt kapısının
-  koruması gevşerse.
+- **[`accepted_risk`, ama BU PARTİNİN ürünü — TASK.md Open Problems'ta]** `resolve_sector`
+  istisnası yakalanmıyor (500 yerine 503 olmalıydı) + ölü geri-düşüş dalı · `schema_version`
+  hiç okunmuyor · K-04 talimatı üç metne ayrışmış. Üçü de devralınan borç DEĞİL.
+- **[Kapsam sınırı, DÜZELTİLMEDİ]** Önyüz düzeltmeleri koşan testle doğrulanmadı. Ev:
+  `brand-settings-save-integrity` (`CURRENT.md`), ön koşulu önyüz test altyapısı.
+- **[Ders — kayda değer]** Bu turda düzeltilen yedi yüksek bulgunun ÜÇÜ, ilk dört düzeltmenin
+  kendi yan etkisiydi ve hiçbiri mekanik doğrulamayla değil, bağımsız kapanış turuyla yakalandı.
+  Bir sınıfı kapatan düzeltme yeni sınıf açabilir; kapanış turu atlanamaz.
 
-**Devralınan, DEĞİŞMEYEN kalemler (basitleştirme bunlara dokunmadı):**
-- **[Bu partinin değil, yürütmenin ürünü — DENETLENMEMİŞ]** Taşıyıcı-sözleşme düzeltmesi
-  (`17840c6`) bağımsız hakem görmeden indi. Ev: `/review-claude-codex`, İLK iş.
+**Devralınan, DEĞİŞMEYEN kalemler:**
 - **[Manuel adım — Plan 2 sonrası tek tur]** Migration'ların canlıya uygulanması ·
   `N8N_ADMIN_EVENT_SECRET` + Telegram env'leri · n8n workflow importu ve TEK teslim smoke'u ·
   `.env.example`'a satır eklenmesi (sır-dosyası kapısı agent'ı engelliyor) · Task 15'in UI
   doğrulaması.
+- **[TETİK BEKLİYOR — güvenlik review'ından sonra, dal kapanışından önce]**
+  `sector-packages-mandatory-split` (`CURRENT.md`).
 - **[Eray tetikledi]** Süpürücü ↔ geç webhook terminallik çelişkisi. Ev: `CURRENT.md`.
+  Review bunu bağımsız olarak yeniden buldu (kütüphane yoklaması sınırsız — iki hakem de).
 - **[TETİKLİ]** `sector_packages.sector_id` değişmez değil. Ev: `CURRENT.md`.
-- **[MÜŞTERİ yüzeyi]** Marka ayarları otomatik kaydetmesinin dört kayıp yolu. Ev: `CURRENT.md` →
-  `brand-settings-save-integrity`. Tetik: canlıya müşteri alınmadan ÖNCE. Önyüz test altyapısı
-  ÖN KOŞUL.
-- **[Kod tabanı geneli]** Senkron sağlayıcı çağrısı gerçekten kesilemiyor. Ev: `CURRENT.md` →
-  `sync-provider-calls-not-cancellable`.
-- **[Yeni — bu oturumda ölçüldü]** İçerik kütüphanesinde yoklama döngüsünün sonu yok: kalıcı
-  başarısız bir satır sekme açık kaldıkça her 3 saniyede bir sorulmaya devam eder. Bu bir
-  **davranış** bulgusudur, basitleştirme adayı değil — bilerek düzeltilmedi. Ev:
-  `/review-claude-codex`. Kökü zaten adlandırılmış: süpürücü ↔ geç webhook çelişkisi.
-- **[Yeni — bu oturumda ölçüldü]** Aynı partide veritabanı bağlantısını uzun ağ çağrısı boyunca
-  tutma konusunda İKİ ZIT karar var: bir uç bağlantıyı bilerek bırakıyor ve gerekçesini yazıyor,
-  iki uç bilerek tutuyor. Davranış bulgusu. Ev: `/review-claude-codex`; kökü
-  `sync-provider-calls-not-cancellable`.
-- **[accepted_risk, checkpoint 12]** Kütüphane yoklaması terminal başarısız satırları sınırsız yokluyor.
+- **[MÜŞTERİ yüzeyi]** Marka ayarları otomatik kaydetmesinin devralınmış kayıp yolları (sıra
+  bozulması · iki sekme · başarısız yazımın taslağı yok etmesi). Ev: `CURRENT.md` →
+  `brand-settings-save-integrity`. Tetik: canlıya müşteri alınmadan ÖNCE.
+- **[Kod tabanı geneli]** Senkron sağlayıcı çağrısı gerçekten kesilemiyor. Ev: `CURRENT.md`.
+- **[Araç]** Kirli ağaçta Codex denetim ortamı kurulamıyor (`codex-substrate-dirty-secret-excluded-file`)
+  ve `run_codex_scan` önkoşul kapısı yok (`codex-scan-substrate-preflight-guard`). İkisi de
+  `CURRENT.md`'de; bu oturumda TEMİZ ağaçta çalışıldığı için ikisi de doğmadı.
 - **[Plan 2 teslim kalemi]** Brief/sentez hattı `video_kodlar` için İKİ HAVUZ üretmeli ·
   `recovered` modu + geri-dönüş mesajı (F23 kapanışı).
 - **[Residual]** 033 ve 034 için geri alma script'i YOK (plan istemedi).
@@ -115,42 +114,23 @@ Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
   `backup/pre-t3-kind-fix` · `backup/pre-t15b-footer-fix` · `backup/pre-t16-kind-fix`
   merge/PR kararından sonra silinir.
 - `accepted_risk` (checkpoint 9): CTA içinde serbest köşeli ayraç yok · `brand_kit` anahtarı silinemez.
-- `accepted_risk` (test altyapısı): **eşzamanlı iki pytest oturumu `otomaix_test`'i düşürür** ·
-  migration keşfi tekrarlı numarayı reddetmiyor (belgeli) · `db` fixture geri sarma testi yok ·
-  `sector_research_artifacts` TRUNCATE regresyonu yok.
-- **[Eray risk kabulü]** On-prem PG16 ↔ 032'nin PG18 kolonu: çözülmedi + park edildi.
-- **F17 (Eray):** damga = edited-lineage atfı. **Yeniden açtırma.**
+- `accepted_risk` (test altyapısı): **eşzamanlı iki pytest oturumu `otomaix_test`'i düşürür**
+  (bu oturumda GÖZLENDİ — kapanış hakemi kendi pytest'ini koşarken 20 test çöktü, tekrar koşumda
+  geçti) · migration keşfi tekrarlı numarayı reddetmiyor (belgeli) · `db` fixture geri sarma
+  testi yok · `sector_research_artifacts` TRUNCATE regresyonu yok.
 
-**Temizlik borcu — DÜZELTME (devralınan liste yanlıştı):** eski HANDOFF "iki dosyada kullanılmayan
-`pytest` importu · `brands.py`'de kullanılmayan `BrandOut`" diyordu ve bunları bu partinin borcu
-sayıyordu. ÖLÇÜLDÜ: `BrandOut` importu `main`'de de aynı (devralınan borç, kapsam dışı bırakıldı);
-`pytest` importları test dosyalarında (kapsam dışı) ve biri gerçekten kullanılıyor. Aynı ölçümde
-`avatar.py`'de kullanılmayan bir import daha bulundu — o da devralınan.
+## Notes For Claude/Codex
 
-## Notes For Claude
-
-- `next: /review-claude-codex → /security-review-claude-codex → /finish-branch-claude-codex`
-- `simplify_completed: 2026-08-26` · `simplify_commit: 6407f89` · `simplify_verdict: approve`
-- `branch_pushed: <push kapısında karara bağlanır>`
-- **ARAÇ TUZAĞI (bu oturumda ölçüldü, bir sonraki komutta da vurabilir):** sır taraması bir dosyayı
-  dışladıysa ve o dosyada KAYDEDİLMEMİŞ değişiklik varsa çalışma-ağacı denetim ortamı **hiç
-  kurulmaz** (rc=2, Codex çağrılmaz, stderr'de yalnız `No such file or directory` görünür).
-  Tetikleyen desen `api_key=<ifade>` — model çağıran her dosya. **Temiz ağaçta sorun YOK**, çünkü
-  taban-tabanlı denetim commit'lerden okur. Ayrıntı ve çözüm: memory
-  `feedback_substrate_dirty_secret_excluded_file`.
-- **Codex 480s'de timeout verirse** önce 120s canlılık yoklaması, sağlamsa `CSS_CALL_TIMEOUT=1200s`
-  ile BİR tekrar. Bu oturumda tam olarak bu gerekti ve işe yaradı.
-- **Bu dalda ETİKETSİZ COMMIT ATMA.** Defter penceresi merge-base'ten başlıyor, yani her commit
-  pencere içinde; footer'sız commit `ec_ledger_view --post-window`'u **rc=4** ile düşürür (ölçüldü).
-  Gramer: `Exec-Task` = `T<N>` veya `T<N>-<sonek>`; `Exec-Kind` ∈
-  code|docs-only|migration|red-only|green-only|merge; `code` kindi HEM test HEM üretim dosyası
-  gerektirir; `Exec-Plan` tarihli kanonik plan yolu olmalı ve aktif planla AYNI.
-- **Hakem önerisini körlemesine uygulama.** Bu oturumda dört öneriden dördü de doğru çıktı ama
-  dördü de ÖNCE ölçüldü; biri kaynak-metin üzerinden çalışan bir kapıya çok yakındı.
-- **Kendi düzeltmenin yan etkisini ÖLÇ.** Bu oturumda iki kez kendi düzeltmem kusur doğurdu:
-  biri anında tip denetiminde yakalandı (eksik import), biri hakem tarafından bulundu (yorumda
-  geçersiz atıf). İkincisi düşük seviyeydi ama park EDİLMEDİ — kendi ürünüm olduğu için.
-- **Tip denetleyicisi uyarılarını otomatik kendine mal etme.** Bu oturumda birçok uyarı "yeni"
-  diye göründü ama `HEAD`'deki satırlarla birebir aynıydı; ayrımı `git show HEAD:<yol>` ile
-  yapmak gerekti.
-- **Mutasyonu geri alırken `git checkout <dosya>` KULLANMA** — yedek kopyadan geri yaz.
+- **Güvenlik review'ı için hazır zemin:** bu review'ın güvenlik-yüzeyi sınıflaması `true` çıktı
+  (ölçüldü: 50 sır/hmac, 468 authz/sahiplik, 6 migration, 1 kabuk script'i eşleşmesi), yani
+  `/security-review-claude-codex` ATLANMAZ ve bu review güvenlik-checklist eki KOYMADI.
+- **Codex bağımsızlığı:** attempt-1'de Codex kendi inisiyatifiyle `docs/active/CURRENT.md` ve
+  `TASK.md`'yi okudu. Orkestratör vermedi. Güvenlik review'ında aynı şey olursa bulguların
+  bilinen-sorun listesinden etkilenmiş olabileceği not edilmeli.
+- **Sözleşme sapması (beyan, raporda da var):** gereksinim metninin iki hakemin prompt'una
+  GÖMÜLMESİ bu boyutta imkânsız — tek argüman sınırı 131.072 bayt (ölçüldü), gömülü prompt
+  180.619 bayttı. İkisi de aynı pinli worktree'deki aynı donmuş dosyayı okudu, hash doğrulandı.
+  Güvenlik review'ında aynı sınır çıkacaktır.
+- **Codex 480s'de kesiliyor** (attempt-1'de `rc=124`). Asılma değil, uzun koşum — log'da komutlar
+  kesilme anına kadar `exit 0` veriyordu. 1200s dış timeout + prompt'a "keşfi genişletmeye devam
+  edip kesilme, okumayı bitir ve çıktıyı ver" bütçe talimatıyla tamamlandı. Aynı deseni bekle.
