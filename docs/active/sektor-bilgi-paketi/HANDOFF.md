@@ -21,6 +21,44 @@
 
 ## Resume From
 
+### ⚠️ Canlıya elle koşulacak adımlar (izin katmanı agent'ı reddetti — Eray koşar)
+
+Sıra bağlayıcıdır. 1 ve 2 bugün koşulabilir; 3 ve 4 dal deploy edilmeden ANLAMSIZDIR
+(`/internal/admin-events/dispatch-pending` ucu canlıda YOK — canlıda `3e1617e` koşuyor, ölçüldü).
+
+**1. Migration'lar** (prova temiz, yedek `/root/otomaix-db-backups/otomaix-pre-032-*.dump`):
+```
+for f in 032_sector_packages 033_package_events 034_admin_events; do
+  docker exec -i wlg6ned4e72aty3pqhnxs0hg psql -U otomaix -d otomaix \
+    -v ON_ERROR_STOP=1 --single-transaction -q \
+    < /root/otomaix/shared/db/migrations/$f.sql && echo "$f OK"
+done
+```
+
+**2. n8n credential'ı** (sır üretildi: `/root/otomaix-admin-event-secret.txt`, chmod 600):
+```
+S=$(cut -d= -f2 /root/otomaix-admin-event-secret.txt)
+printf '[{"id":"otomaixAdminEvtKey","name":"Otomaix Admin Event Key","type":"httpHeaderAuth","data":{"name":"X-Admin-Event-Key","value":"%s"}}]' "$S" > /tmp/cred.json
+docker cp /tmp/cred.json n8n-py684zd3w0ktf75a1vg0d5hk:/tmp/cred.json && rm /tmp/cred.json
+docker exec n8n-py684zd3w0ktf75a1vg0d5hk n8n import:credentials --input=/tmp/cred.json
+docker exec n8n-py684zd3w0ktf75a1vg0d5hk rm -f /tmp/cred.json
+```
+
+**3. Backend env** (Coolify → backend servisi): `N8N_ADMIN_EVENT_SECRET` = aynı değer.
+Boşken sistem hiç gönderim yapmaz (bilinçli fail-closed), yani bu adım atlanırsa kanal sessizdir.
+
+**4. Workflow importu** — dal deploy EDİLDİKTEN sonra, pasif import + elle tek teslim smoke'u:
+```
+docker cp /root/otomaix/shared/n8n-workflows/sector-package-admin-events.json \
+  n8n-py684zd3w0ktf75a1vg0d5hk:/tmp/wf.json
+docker exec n8n-py684zd3w0ktf75a1vg0d5hk n8n import:workflow --input=/tmp/wf.json
+docker exec n8n-py684zd3w0ktf75a1vg0d5hk rm -f /tmp/wf.json
+```
+
+**Canlı ölçümü (2026-08-26):** 2 marka · 81 post · 12 sektör — **hepsi kök, alt sektör YOK**.
+Yani migration atılsa bile paket sistemi bugün bağlanacak bir şey bulamaz; taksonomi Plan 2'nin işi.
+
+
 **Zincirin 3. adımı (`/security-review-claude-codex`) BİTTİ. Güvenlik kapısı TEMİZ:
 çözülmemiş kritik/yüksek bulgu YOK, dual-review üç turda da tam, kapsam boşluğu yok.**
 
