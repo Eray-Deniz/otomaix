@@ -585,12 +585,12 @@ function MarkaAyarlariContent() {
     setTimeout(() => setSaveState((s) => (s === 'saved' ? 'idle' : s)), 2000)
   }, [])
 
-  // Debounced auto-save for brand info
-  const scheduleSave = useCallback((updated: Brand) => {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      if (!updated.id) return
-      await runSave(() =>
+  // Gönderim gövdesi TEK yerde: gecikmeli yol da gecikmesiz yol da bunu çağırır.
+  // İki kopya olsaydı biri değişip diğeri kalırdı — bu dalda tam o ayrışma sınıfı
+  // başka bir yüzeyde bir kez ölçüldü (review 2026-08-26).
+  const sendBrand = useCallback(
+    (updated: Brand) =>
+      runSave(() =>
         api.patch(`/brands/${updated.id}`, {
           name: updated.name,
           description: updated.description,
@@ -600,16 +600,37 @@ function MarkaAyarlariContent() {
           // üzerinden okuduğu için `null` sessizce düşmez.
           sub_sector_id: updated.sub_sector_id,
         })
-      )
-    }, 1500)
-  }, [runSave])
+      ),
+    [runSave]
+  )
 
-  const scheduleKitSave = useCallback((kit: BrandKit, brandId: string) => {
-    if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
-    kitSaveTimer.current = setTimeout(async () => {
-      await runSave(() => api.patch(`/brands/${brandId}/kit`, kit))
-    }, 1500)
-  }, [runSave])
+  const sendKit = useCallback(
+    (kit: BrandKit, brandId: string) => runSave(() => api.patch(`/brands/${brandId}/kit`, kit)),
+    [runSave]
+  )
+
+  // Debounced auto-save for brand info — SERBEST METİN alanları içindir
+  // (her tuşta istek atmamak için). Ayrık onaylar bunu KULLANMAZ, bkz. commit*Now.
+  const scheduleSave = useCallback(
+    (updated: Brand) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => {
+        if (!updated.id) return
+        void sendBrand(updated)
+      }, 1500)
+    },
+    [sendBrand]
+  )
+
+  const scheduleKitSave = useCallback(
+    (kit: BrandKit, brandId: string) => {
+      if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
+      kitSaveTimer.current = setTimeout(() => {
+        void sendKit(kit, brandId)
+      }, 1500)
+    },
+    [sendKit]
+  )
 
   function updateBrand(fields: Partial<Brand>) {
     setBrand((prev) => {
@@ -627,6 +648,40 @@ function MarkaAyarlariContent() {
       scheduleKitSave(updated.brand_kit, prev.id)
       return updated
     })
+  }
+
+  // ── AYRIK ONAYLAR: gecikme YOK (review 2026-08-26, H4) ────────────────────
+  //
+  // Alt sektör seçimi ve kanal anahtarları serbest metin DEĞİL, tek hareketlik
+  // onaylardır — 1,5 saniye beklemenin hiçbir faydası yok, tek etkisi kayıp
+  // penceresi açmak. Ölçüldü: bu önyüzde sayfadan-çıkışta-gönder koruması hiç
+  // yok (`beforeunload`/`visibilitychange` sıfır sonuç), yani kullanıcı seçip
+  // 1,5 saniye dolmadan çıkarsa istek HİÇ gitmiyordu ve paket ataması onun
+  // sandığı gibi olmuyordu. Bunlar bu dalın EKLEDİĞİ yüzeylerdir.
+  //
+  // Bekleyen gecikmeli yazım İPTAL EDİLİR ama KAYBOLMAZ: gönderilen gövde tam
+  // anlık görüntüdür, bekleyen metin düzenlemeleri de içindedir — yani bu bir
+  // düşürme değil, erken boşaltmadır.
+  //
+  // KAPSAM SINIRI — dürüst etiket: bu, otomatik kaydetmenin diğer kayıp
+  // yollarını (sıra bozulması · iki sekme · başarısız yazımın taslağı yok
+  // etmesi) KAPATMAZ. O alt sistemin evi `brand-settings-save-integrity`'dir ve
+  // ön koşulu önyüz test altyapısıdır; test altyapısı olmadan eşzamanlılık
+  // kodu yazmak 2026-08-25'te bir kez denendi ve beş yüksek bulguyla geri alındı.
+  function commitBrandNow(fields: Partial<Brand>) {
+    if (!brand) return
+    const updated = { ...brand, ...fields }
+    setBrand(updated)
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    void sendBrand(updated)
+  }
+
+  function commitKitNow(fields: Partial<BrandKit>) {
+    if (!brand) return
+    const updatedKit = { ...brand.brand_kit, ...fields }
+    setBrand({ ...brand, brand_kit: updatedKit })
+    if (kitSaveTimer.current) clearTimeout(kitSaveTimer.current)
+    void sendKit(updatedKit, brand.id)
   }
 
   async function analyzeWebsite() {
@@ -1016,7 +1071,7 @@ function MarkaAyarlariContent() {
                     <Button
                       size="sm"
                       onClick={() => {
-                        updateBrand({ sub_sector_id: suggestedSubSector.id })
+                        commitBrandNow({ sub_sector_id: suggestedSubSector.id })
                         setSuggestedSubSector(null)
                       }}
                     >
@@ -1037,7 +1092,7 @@ function MarkaAyarlariContent() {
                 value={brand.sub_sector_id ?? SUB_SECTOR_NONE}
                 onValueChange={(v) =>
                   onSelect(v, (val) =>
-                    updateBrand({ sub_sector_id: val === SUB_SECTOR_NONE ? null : val })
+                    commitBrandNow({ sub_sector_id: val === SUB_SECTOR_NONE ? null : val })
                   )
                 }
               >
@@ -1092,7 +1147,7 @@ function MarkaAyarlariContent() {
                   <Switch
                     checked={kit.channels?.[channel.key] === true}
                     onCheckedChange={(checked) =>
-                      updateKit({
+                      commitKitNow({
                         channels: { ...(kit.channels ?? {}), [channel.key]: checked },
                       })
                     }
