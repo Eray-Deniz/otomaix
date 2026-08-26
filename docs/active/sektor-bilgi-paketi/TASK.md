@@ -272,6 +272,13 @@ canlı internete karşı pozitif/negatif sondalandı.
 
 # Decisions Log
 
+- **2026-08-26 — Migration 032/033/034 CANLIYA UYGULANDI (Eray talimatı):**
+  Üçü de `rc=0`, dosya başına tek transaction. Uygulama öncesi yedek alındı ve okunabilirliği
+  doğrulandı (`otomaix-pre-032-20260826-185643.dump`). **Uygulama sonrası ölçüldü:** mevcut veri
+  değişmedi (2 marka · 81 post · 12 sektör, geri doldurma yok), beş tetikleyici kurulu, dört
+  negatif kontrol reddedildi, eski backend'in yazımları hâlâ geçiyor. Ayrıntı: HANDOFF.
+  **Not:** canlıda hâlâ alt sektör yok — şema hazır, veri Plan 2'nin işi.
+
 - **2026-08-26 — PR #2 açıldı** (`feat/sektor-bilgi-paketi` → `main`, HEAD `d8a6d5d`):
   https://github.com/Eray-Deniz/otomaix/pull/2 · task `waiting-review` olarak kalır.
 

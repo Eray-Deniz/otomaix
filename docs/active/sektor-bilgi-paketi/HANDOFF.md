@@ -23,12 +23,33 @@
 
 ## Resume From
 
+### ✅ Migration'lar canlıda (2026-08-26)
+
+032 · 033 · 034 uygulandı, üçü de `rc=0`, dosya başına tek transaction.
+Yedek (uygulama ÖNCESİ, okunabilirliği doğrulandı):
+`/root/otomaix-db-backups/otomaix-pre-032-20260826-185643.dump`
+
+**Uygulama sonrası ölçüm (iddia değil, koşum):**
+- Yeni nesneler: `sector_packages` · `package_events` · `admin_events` ·
+  `sector_research_artifacts` · `generation_stamps`
+- Mevcut veri: 2 marka · 81 post · 12 sektör — **değişmedi**; `brands.sub_sector_id` 2/2 NULL,
+  `posts.package_id` 81/81 NULL (geri doldurma YOK)
+- Beş tetikleyicinin hepsi kurulu; `uq_sector_packages_single_active` kısmi unique indeksi yerinde
+- **Negatif kontroller (hepsi ROLLBACK'li, canlı veri değişmedi):** markaya kök sektör ataması
+  REDDEDİLDİ · mevcut sektörün ebeveyn değişimi REDDEDİLDİ · ham artefaktta UPDATE REDDEDİLDİ ·
+  DELETE REDDEDİLDİ
+- **Pozitif kontrol:** canlıda koşan eski backend'in (`3e1617e`) yazımları hâlâ geçiyor —
+  marka güncelleme · paketsiz post ekleme
+- Artefakt tablosu kontrollerden sonra 0 satır (sızıntı yok)
+
+**Canlıda hâlâ alt sektör YOK** (12 sektörün hepsi kök) — şema hazır, bağlanacak veri Plan 2'nin işi.
+
 ### ⚠️ Canlıya elle koşulacak adımlar (izin katmanı agent'ı reddetti — Eray koşar)
 
 Sıra bağlayıcıdır. 1 ve 2 bugün koşulabilir; 3 ve 4 dal deploy edilmeden ANLAMSIZDIR
 (`/internal/admin-events/dispatch-pending` ucu canlıda YOK — canlıda `3e1617e` koşuyor, ölçüldü).
 
-**1. Migration'lar** (prova temiz, yedek `/root/otomaix-db-backups/otomaix-pre-032-*.dump`):
+**1. ~~Migration'lar~~ — ✅ UYGULANDI (2026-08-26 18:56).** Komut kayıt için duruyor:
 ```
 for f in 032_sector_packages 033_package_events 034_admin_events; do
   docker exec -i wlg6ned4e72aty3pqhnxs0hg psql -U otomaix -d otomaix \
