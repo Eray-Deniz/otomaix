@@ -102,95 +102,31 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
 
 # Current Status
 
-**2026-08-26 (on sekizinci oturum) — REVIEW ZİNCİRİNİN 2. ADIMI BİTTİ: `/review-claude-codex`
-koştu, YEDİ yüksek bulgu çıktı, yedisi de düzeltildi ve ölçüldü. Durum `waiting-review` olarak
-KALIYOR. Açık kapı YOK. Sıradaki: `/security-review-claude-codex`.**
+**2026-08-26 (on dokuzuncu oturum) — REVIEW ZİNCİRİ BİTTİ: `/security-review-claude-codex`
+üç turla koştu, güvenlik kapısı TEMİZ. Durum `waiting-review` olarak KALIYOR.
+Sıradaki: `sector-packages-mandatory-split` → `/finish-branch-claude-codex`.**
 
-Tam dual review (iki bağımsız hakem: fresh Claude subagent + Codex `adversarial-review`), ardından
-odaklı kapanış turu — ikisi de dual, `total_invocations=2`, degrade YOK. Rapor:
-`docs/reviews/2026-08-26-feat-sektor-bilgi-paketi.md`.
+Üç tur, her turunda iki bağımsız hakem (fresh Claude subagent + Codex `adversarial-review`),
+hiçbirinde degradasyon yok. `completed_evaluations=3`, `consecutive_degraded=0`.
+Rapor: `docs/security-reviews/2026-08-26-feat-sektor-bilgi-paketi.md` (başındaki düzeltme
+banner'ı ÖNCE okunmalı).
 
-**Attempt-1'in dört yüksek bulgusu:**
-- **H1** — on-prem/yerel dağıtım 032'de kesin duruyordu (PG18 kolonu `conenforced`, PG16 imajı).
-  `TASK.md`'de 2026-08-24 tarihli Eray risk kabulü olarak duruyordu; iki hakem de bunu bilmeden
-  bağımsız buldu, kullanıcı kapatmayı seçti. Gerçek PG16 konteynerinde iki yönlü ölçüldü.
-- **H2** — yutulan olay yazımı hatası çağıranın transaction'ını öldürüyordu; paketli her üretim
-  500 alabiliyordu. Hakem "çıkarım" etiketiyle verdi, canlı veritabanında ölçüldü.
-- **H3** — migration koşucusu ikinci kez koşamıyordu (`42P07`), README "tekrar çalıştır" diyordu.
-- **H4** — bu dalın eklediği alt-sektör/kanal onayları kaybolabilen otomatik kaydetme yoluna
-  binmişti (müşteri yüzeyi).
+**Attempt-1'in üç yüksek bulgusundan ikisi gerçekti ve düzeltildi:**
+- **SSRF** — kullanıcının verdiği URL iki yüzeyde de doğrudan `httpx`'e gidiyordu; şema ön eki
+  dışında kontrol yoktu, yönlendirmeler kör izleniyordu. Ortak bir kapı kuruldu: şema/port
+  allowlist'i, çözülen HER adres için pozitif `is_global` koşulu, yönlendirmenin elle ve her
+  adımda yeniden doğrulanarak izlenmesi, bağlantının doğrulanan IP'ye sabitlenmesi. Sonraki
+  turlar üç eksik daha buldu (taşıyıcı-NAT aralığı geçiyordu · bayt sınırı indirmeyi değil
+  sonucu kesiyordu · sıkıştırılmış gövde sınırı ~128× aşıyordu) — hepsi kapatıldı, kapanış
+  75 kombinasyonluk ÜRETİLMİŞ matrisle kanıtlandı.
+- **Kiracı kapsamı** — doküman ve ürün erişimi çağıranın doğrulanmış markasına bağlandı; kapsam
+  yardımcının İÇİNDE ve parametre zorunlu (unutan çağıran sızdırmaz, `TypeError` alır). Kapanış
+  turu ürün GÖRSELİ ayağının açık kaldığını buldu; o da kapatıldı, uçlar yabancı ürünü 404'lüyor.
 
-**Kapanış turunun üç yüksek bulgusu — hepsi DÜZELTMELERİN KENDİ yan etkisi, park EDİLMEDİ:**
-- **N1** — koşulsuz savepoint, yönetici bildiriminin hızlı gönderim yolunu bu yüzeyin TAMAMINDA
-  sessizce öldürmüştü (transaction dışında `db.transaction()` gerçek transaction açar).
-- **N-H3** — kurulum kapısının sondası fail-OPEN'dı: psql'in her hatası "boş veritabanı"ya
-  dönüşüyordu, yani kapı korumak için var olduğu duruma karşı geçiyordu.
-- **N-H4** — ayrık onay, BAŞKA markanın bekleyen düzenlemesini düşürüyordu (sayfa marka
-  değişiminde remount olmuyor). İkinci dereceden bir sıra-bozulması da aynı okumada bulundu.
+**Üçüncü bulgu GERÇEK DEĞİLDİ ve geri alındı** (`15692c1`) — ayrıntı ve kök neden Open Problems'ta.
 
-Ayrıca iki orta: komşu bir test sessizce boşa düşmüştü (yeşil kalıp hiçbir şey ölçmüyordu) ve üç
-savepoint'in ikisi hiçbir testle bağlı değildi. İkisi de kapatıldı.
-
-**Dört orta + altı düşük `accepted_risk`** olarak raporda duruyor. Üçü bu partinin ürünü ve
-görünür şekilde öyle etiketlendi (özellikle `resolve_sector` artık istisna fırlatıyor ama hiçbir
-çağıran yakalamıyor → taksonomi bozukken marka oluşturma 500 veriyor).
-
-Kapsam dalın üretim koduydu (23 dosya tarandı; testler, migration'lar, dokümanlar tarama
-DIŞINDA). 31 aday değerlendirildi, **20'si uygulandı**, 10 dosya değişti — 8 üretim + 2 test
-dosyası (testlere yalnız iki ad değişikliğinin mekanik yansıması girdi, hiçbir testin ne ölçtüğü
-değişmedi). Commit `6407f89`, footer `T16-simplify`/`code`. Push YOK.
-
-Codex ön-taraması BEŞ veto verdi; dördü kabul edilip düşürüldü, biri (prompt bloğu tekrarı)
-Eray kararıyla düşürüldü. Codex DÖRT bağımsız aday ekledi; dördü de ölçülüp uygulandı. Bir
-adayı Claude düşürdü: üç satırlık tekrar eşiğin altında ve fırlatan bir yardımcı denetim
-akışını görünmez kılardı.
-
-Final adversarial review: **`approve`, kritik/yüksek bulgu YOK.** İki bulgu — düşük olanı
-Claude'un kendi ad değişikliğinin bıraktığı geçersiz fonksiyon atfıydı, `accepted_risk`'e park
-EDİLMEDİ, düzeltildi ve hakemin verdiği komutla ölçüldü; orta olanı ertelenen dosya bölmesinin
-evsizliğiydi ve `accepted_risk` olarak kayda geçti (evi bu oturumda `CURRENT.md`'ye açıldı).
-
-**Ölçüldü — devralınan borç listesi YANLIŞTI.** HANDOFF'un "bu turun temizlik borcu" dediği iki
-kalem bu partinin ürünü DEĞİLDİ: kullanılmayan `BrandOut` importu `main`'de de birebir aynı
-(devralınan), "kullanılmayan `pytest` importları" test dosyalarında (kapsam dışı) ve biri
-gerçekten kullanılıyor. Buna karşılık gerçekten bu partinin ürünü olan iki ölü kod bulundu ve
-kapatıldı: dal iki dosyaya modül düzeyinde import ekleyince alttaki eski yerel kopyalar gölgeye
-dönüşmüştü.
-
-**Araç boşluğu ölçüldü (yeni).** Sır koruması, değişen 10 dosyanın 3'ünü hakemin dosya
-sisteminden dışlıyor (`api_key=<ifade>` biçimi — belgeli yanlış pozitif) ve o dosyalarda
-kaydedilmemiş değişiklik varsa çalışma-ağacı denetim ortamı **HİÇ kurulamıyor** (rc=2, Codex hiç
-çağrılmıyor). Bu koşum, Eray onayıyla, değişikliği prompt'a gömen farklı bir çağrı biçimiyle
-koştu. Ev: `CURRENT.md` → `codex-substrate-dirty-secret-excluded-file`.
-
----
-
-**2026-08-25 (on beşinci oturum) — TASK 15 BİTTİ. TASK 15b AÇILDI, DENETİMDE DÜŞTÜ, GERİ ALINDI.
-Açık kapı YOK.**
-
-**Task 15 (atama akışı) bitti.** Aday küme kanonik sorgudan (canlı, önbelleksiz) tek evde
-üretiliyor; iki tüketici yüzeyi kapalı, üretim akışı kümeye hiç uğramıyor. Model önerisi kapalı
-listeye karşı doğrulanıyor — üçüncü dönüş biçimi yok. `sub_sector_id` yazımı marka oluşturma ve
-marka ayarlarında açık, boşaltma açık `null` ile. Web sitesiz geri düşüşün öneri ucu da eklendi
-(spec §7.1'in denetimde fark edilen eksik ayağı).
-
-Checkpoint 15 ÜÇ tur koştu: tur 1'de bir high + beş medium, tur 2'de F1-F6 kapalı + bir yeni
-high + iki medium, tur 3'te iki sınıf "sayarak kapanmaz" teşhisiyle geri geldi. Sistemik-sınıf
-kuralı ateşlendi, otonom döngü tavan beklenmeden durdu. Eray kararı: kaydetme bütünlüğü ayrı
-görev (15b), sağlayıcı çağrısının kesilememesi kod tabanı geneli desen olarak kaydedildi.
-
-**Task 15b (kaydetme bütünlüğü) yazıldı ve GERİ ALINDI.** Denetim beş high buldu; beşi de o
-turun ürünüydü ve iki yolda kod, düzelttiği hatadan kötüydü. Eray kararı: önyüz geri alınır,
-otomatik kaydetme bugünkü hâlinde kalır, alt sistem adlandırılmış iş olur.
-
-**Premis düzeltmesi (Eray):** marka ayarları MÜŞTERİ yüzeyidir — abone kendi marka bilgisini
-orada doldurur. Bulgu ciddiyetini "tek operatör / 2 marka" ölçeğiyle küçültmek YANLIŞTI; ölçüt
-"müşteri kaydettiğini sanıp kaydetmemiş olabilir mi"dir.
-
-**Yöntem dersi (kayda geçti):** otomatik test altyapısı olmayan bir dosyada elle eşzamanlılık
-kodu yazıldı ve doğrulama "okundu + derlendi" ile yapıldı. Bu yöntem araya-girme hatalarını
-tanım gereği yakalayamaz. Arka uçta mutasyonla ölçülen her şey sağlam çıktı; kırılan her şey
-ölçülemeyen tarafta oldu.
+Test: **657 passed** (oturum başı 580). Her düzeltmenin mutasyon kontrolü var; SSRF kapısı ayrıca
+canlı internete karşı pozitif/negatif sondalandı.
 
 # Open Problems
 
