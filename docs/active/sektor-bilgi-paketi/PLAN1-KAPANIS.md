@@ -249,7 +249,11 @@ bittikten sonra** koşulacak. Bu kapanış raporu bu yüzden arayüz yüzeyleri 
 
 Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin kendisidir.
 
-1. **Migration'ları canlıya uygula:** 032 · 033 · 034, numara sırasıyla, DOSYA DOSYA:
+1. **Migration'ları canlıya uygula:** 032 · 033 · 034, numara sırasıyla, DOSYA DOSYA.
+   **2026-08-26'da canlı verinin birebir kopyasında PROVA EDİLDİ:** üçü de rc=0, idempotent,
+   mevcut veri (2 marka · 81 post · 12 sektör) bozulmadı, canlıda koşan `3e1617e` backend'inin
+   yazımları etkilenmedi, kapılar iki yönde de doğrulandı. Yedek:
+   `/root/otomaix-db-backups/otomaix-pre-032-*.dump`. Koşulabilir komut: `HANDOFF.md`.
 
    ```
    psql "<canlı DSN>" -v ON_ERROR_STOP=1 --single-transaction \
@@ -268,10 +272,19 @@ Aşağıdakilerin HİÇBİRİ bu oturumda yapılmadı. Liste, yapılacak işin k
 2. **`N8N_ADMIN_EVENT_SECRET` canlıya kurulmalı.** Ayrıca
    `apps/social/backend/.env.example` dosyasına bu satır **ELLE** eklenmeli — sır-dosyası
    yazma kapısı agent'ı engelliyor, bu yüzden depoda örnek satır YOK.
-3. **`OTOMAIX_ADMIN_TELEGRAM_BOT_TOKEN` + `OTOMAIX_ADMIN_TELEGRAM_CHAT_ID`** env'leri kurulmalı.
-4. **n8n workflow:** `shared/n8n-workflows/sector-package-admin-events.json` import edilir,
-   header-auth kimlik bilgisi yaratılır, workflow'daki yer tutucu gerçek kimlikle değiştirilir,
+3. ~~`OTOMAIX_ADMIN_TELEGRAM_BOT_TOKEN` + `OTOMAIX_ADMIN_TELEGRAM_CHAT_ID`~~ — **DÜŞTÜ (2026-08-26).**
+   Bu iki env HİÇ çalışamazdı: canlı n8n `N8N_BLOCK_ENV_ACCESS_IN_NODE=true` ile koşuyor,
+   node içinden ortam değişkeni okumak KAPALI (ölçüldü). Workflow artık mevcut `Telegram
+   account` credential'ına bağlı ve chat id'yi `social.workspaces`'ten okuyor (`3561231`).
+   Kurulacak env kalmadı.
+4. **n8n workflow:** header-auth kimlik bilgisi yaratılır (sır 2026-08-26'da üretildi:
+   `/root/otomaix-admin-event-secret.txt`), `sector-package-admin-events.json` import edilir,
    workflow aktive edilir, sentetik bir olayla TEK Telegram teslimi smoke'u koşulur.
+   **Yer tutucu kalmadı** — dosyadaki dört credential atıfı da gerçek kimliklere bağlandı
+   ve bir regresyon yer tutucu dönüşünü engelliyor (`3561231`).
+   **SIRA BAĞLAYICI:** süpürme düğümü `/internal/admin-events/dispatch-pending`'i çağırır ve
+   bu uç canlıda YOKTUR (canlıda `3e1617e` koşuyor, ölçüldü) — import dal deploy edildikten
+   SONRA yapılır. Komutlar: `HANDOFF.md` → Resume From.
 5. **Task 15 arayüz doğrulaması** (§5 tablosu).
 6. **Alt sektör satırı AÇILMAZ** — korumalar hazır, açma adımı pilot/Plan 2'ye ait.
 
