@@ -835,6 +835,23 @@ def test_workflow_reads_no_process_env():
     )
 
 
+def test_workflow_carries_a_stable_id():
+    """Artefakt SABİT bir `id` taşır — n8n CLI importu onsuz REDDEDER.
+
+    ÖLÇÜLDÜ (2026-08-26): `n8n import:workflow` id'siz dosyada
+    `null value in column "id" of relation "workflow_entity"` ile düşüyor —
+    yani artefakt canlıya HİÇ giremiyordu. Sabit id ayrıca tekrar import'u
+    idempotent yapar: aynı workflow güncellenir, ikinci bir kopya doğmaz.
+    """
+    workflow = _admin_workflow()
+
+    wid = workflow.get("id")
+    assert wid, "workflow `id` taşımıyor — n8n CLI importu reddeder"
+    assert isinstance(wid, str) and wid.isalnum(), (
+        f"workflow id alfanümerik tek parça olmalı (bulunan: {wid!r})"
+    )
+
+
 def test_workflow_credentials_are_bound():
     """Her credential atıfı GERÇEK bir kimliğe bağlı — yer tutucu kalmaz.
 

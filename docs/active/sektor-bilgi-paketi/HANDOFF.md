@@ -44,6 +44,27 @@ Yedek (uygulama ÖNCESİ, okunabilirliği doğrulandı):
 
 **Canlıda hâlâ alt sektör YOK** (12 sektörün hepsi kök) — şema hazır, bağlanacak veri Plan 2'nin işi.
 
+### ✅ n8n tarafı kuruldu (2026-08-26) — AKTİVASYON BEKLİYOR
+
+- Credential `Otomaix Admin Event Key` (`httpHeaderAuth`, başlık `X-Admin-Event-Key`) n8n'e
+  import edildi; kimlik **tam olarak** workflow dosyasının beklediği `otomaixAdminEvtKey`.
+  Sır: `/root/otomaix-admin-event-secret.txt` (chmod 600) — backend'e aynısı girilecek.
+- Workflow `sectorPkgAdminEv` import edildi ve **`active = false`** (ölçüldü). Hiçbir tetikleyici
+  koşmuyor; 5 dakikalık kurtarma zamanlayıcısı da sessiz.
+- Dört credential atıfının dördü de isimle çözüldü: `Otomaix Admin Event Key` ·
+  `Telegram account` · `Otomaix Internal API Key` · `Postgres account` (sarkan kimlik yok).
+- **Dosyaya sabit `id` eklendi** (`sectorPkgAdminEv`): id'siz import n8n CLI tarafından
+  `null value in column "id"` ile REDDEDİLİYORDU — artefakt canlıya hiç giremiyordu (ölçüldü).
+  Sabit id ayrıca tekrar import'u idempotent yapar. Regresyon eklendi + mutasyonla doğrulandı.
+
+**KALAN İKİ ADIM — ikisi de dal deploy'una bağlı, SIRA BAĞLAYICI:**
+1. Backend `N8N_ADMIN_EVENT_SECRET` (Coolify UI). **Agent yapamaz:** Coolify env değerlerini
+   Laravel `Crypt` ile ŞİFRELİ tutuyor (ölçüldü) ve API token tanımlı değil — DB'ye düz metin
+   yazmak bozuk kayıt üretirdi.
+2. Workflow'u AKTİVE et + sentetik olayla TEK teslim smoke'u. Aktivasyondan önce deploy şart:
+   kurtarma adımı `/internal/admin-events/dispatch-pending`'i çağırır ve o uç canlıda henüz YOK.
+   Sırayı bozarsan 5 dakikada bir 404 alan bir zamanlayıcı kurmuş olursun.
+
 ### ⚠️ Canlıya elle koşulacak adımlar (izin katmanı agent'ı reddetti — Eray koşar)
 
 Sıra bağlayıcıdır. 1 ve 2 bugün koşulabilir; 3 ve 4 dal deploy edilmeden ANLAMSIZDIR
@@ -58,7 +79,7 @@ for f in 032_sector_packages 033_package_events 034_admin_events; do
 done
 ```
 
-**2. n8n credential'ı** (sır üretildi: `/root/otomaix-admin-event-secret.txt`, chmod 600):
+**2. ~~n8n credential'ı~~ — ✅ İMPORT EDİLDİ (2026-08-26).** Komut kayıt için:
 ```
 S=$(cut -d= -f2 /root/otomaix-admin-event-secret.txt)
 printf '[{"id":"otomaixAdminEvtKey","name":"Otomaix Admin Event Key","type":"httpHeaderAuth","data":{"name":"X-Admin-Event-Key","value":"%s"}}]' "$S" > /tmp/cred.json
@@ -70,7 +91,7 @@ docker exec n8n-py684zd3w0ktf75a1vg0d5hk rm -f /tmp/cred.json
 **3. Backend env** (Coolify → backend servisi): `N8N_ADMIN_EVENT_SECRET` = aynı değer.
 Boşken sistem hiç gönderim yapmaz (bilinçli fail-closed), yani bu adım atlanırsa kanal sessizdir.
 
-**4. Workflow importu** — dal deploy EDİLDİKTEN sonra, pasif import + elle tek teslim smoke'u:
+**4. ~~Workflow importu~~ — ✅ PASİF İMPORT EDİLDİ (2026-08-26).** Aktive etme + smoke KALDI (aşağıda). Komut kayıt için:
 ```
 docker cp /root/otomaix/shared/n8n-workflows/sector-package-admin-events.json \
   n8n-py684zd3w0ktf75a1vg0d5hk:/tmp/wf.json

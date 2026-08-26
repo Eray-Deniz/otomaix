@@ -272,6 +272,17 @@ canlı internete karşı pozitif/negatif sondalandı.
 
 # Decisions Log
 
+- **2026-08-26 — n8n tarafı canlıya kuruldu (credential + pasif workflow):**
+  `Otomaix Admin Event Key` credential'ı import edildi (kimlik `otomaixAdminEvtKey`, dosyanın
+  beklediğiyle birebir); workflow `sectorPkgAdminEv` olarak import edildi ve **`active=false`**
+  (ölçüldü — hiçbir tetikleyici koşmuyor). Dört credential atıfı da isimle çözüldü.
+  **Dosyaya sabit `id` eklendi:** id'siz import n8n CLI tarafından reddediliyordu, yani artefakt
+  canlıya hiç giremiyordu; sabit id tekrar import'u da idempotent yapar. Regresyon + mutasyon
+  kontrolü eklendi (660 test).
+  **Backend env'i agent yapamaz:** Coolify env değerlerini Laravel `Crypt` ile şifreli tutuyor
+  ve API token tanımlı değil — UI işi. **Aktivasyon deploy'a bağlı:** kurtarma adımının çağırdığı
+  uç canlıda henüz yok, erken aktivasyon 5 dakikada bir 404 üretir.
+
 - **2026-08-26 — Migration 032/033/034 CANLIYA UYGULANDI (Eray talimatı):**
   Üçü de `rc=0`, dosya başına tek transaction. Uygulama öncesi yedek alındı ve okunabilirliği
   doğrulandı (`otomaix-pre-032-20260826-185643.dump`). **Uygulama sonrası ölçüldü:** mevcut veri
