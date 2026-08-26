@@ -4,21 +4,18 @@ _(aktif task yok)_
 
 ## Proposed (spun-off)
 
-- **sector-package-live-activation** (proposed, canlı teslim; TETİK: backend deploy'u) —
-  Plan 1 merge edildi (`cdb8eeb`, PR #2) ve canlı tarafın ÜÇ adımı bitti: migration'lar
-  uygulandı, n8n credential'ı import edildi, workflow **pasif** import edildi
-  (`sectorPkgAdminEv`, `active=false` ölçüldü). **İKİ adım kaldı ve ikisi de deploy'a bağlı:**
-  1. Backend `N8N_ADMIN_EVENT_SECRET` — değer `/root/otomaix-admin-event-secret.txt` (chmod 600),
-     n8n credential'ındakiyle aynı olmalı. **Agent yapamaz:** Coolify env değerleri Laravel
-     `Crypt` ile şifreli (ölçüldü) ve API token tanımlı değil → UI işi.
-  2. Workflow'u aktive et + sentetik olayla TEK teslim smoke'u.
-  **SIRA BAĞLAYICI:** kurtarma adımı `/internal/admin-events/dispatch-pending`'i çağırıyor ve o uç
-  yalnız yeni kodda var. Deploy'dan ÖNCE aktive edilirse 5 dakikada bir 404 alan bir zamanlayıcı
-  kurulmuş olur. Sır boşken sistem zaten hiç gönderim yapmaz (bilinçli fail-closed), yani 1. adım
-  atlanırsa kanal sessizce ölü kalır.
-  **Ayrıca burada bekleyen:** Task 15'in arayüz doğrulaması ve öneri uçlarının gerçek model
-  çağrısıyla koşulması — Eray kararıyla Plan 2 sonrası TEK tura ertelenmişti; o turun evi de burası.
-  Gövde: `docs/task-archive/2026/08/sektor-bilgi-paketi/HANDOFF.md`.
+- **n8n-credential-host-drift** (proposed, altyapı dayanıklılığı; DÜZELTİLDİ ama sınıf açık) —
+  n8n'in `Postgres account` credential'ı **sabit IP** (`10.0.1.8`) taşıyordu; veritabanı
+  konteyneri yeniden başlayınca adres `10.0.1.9` oldu ve credential güncellenmedi.
+  **Sessizce kırdığı iş (ölçüldü 2026-08-26):** CRM-4 Churn Taraması ve CRM-5 Deneme Bitiyor
+  günlük turları **14'er kez** `Connection refused` ile düştü, sonuncusu o gün — kimse fark
+  etmemişti. Sektör paketi teslim testi kazara ortaya çıkardı.
+  **Düzeltildi:** host artık konteyner **ismi** (`wlg6ned4e72aty3pqhnxs0hg`) — IP değişse de
+  bozulmaz. Doğrulandı: aynı credential'ı kullanan Postgres düğümü başarılı çalıştırmada koştu.
+  **Sınıf hâlâ açık:** başka credential'lar da sabit IP taşıyor olabilir ve **hiçbir uyarı yok** —
+  günlük bir otomasyon iki hafta sessizce düşebiliyor.
+  **Yeniden açılma koşulu / tetik:** (a) kalan credential'ların IP taraması, (b) başarısız n8n
+  çalıştırması için bildirim kurulması. İkisi de yapılmadı — **çözülmedi + park edildi.**
 
 - **s1-substrate-tracked-secret-scan** (proposed, güvenlik/defense-in-depth) — `CODEX-SCAN-SUBSTRATE` (byte-locked 4-way) tracked-dirty diff'i secret-scan ETMİYOR (yalnız untracked REQUIRED taranıyor; `git apply` execute-plan:1228-1231 vs `_css_secret_scan` 1233-1238). Dar (committed içerik zaten in-scope; yalnız tracked-dosyada-uncommitted-secret) ama düzeltmeli. Detay + structured fix: security-review **SF1** (`docs/security-reviews/2026-06-04-codex-review-scope-contract.md`). Kapsam: substrate bloğu (4 dosya) + `codex-scan-substrate-harness.sh` tracked-secret fixture.
 
