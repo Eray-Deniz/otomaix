@@ -117,6 +117,42 @@ if [ ${#MIGRATIONS[@]} -eq 0 ]; then
     exit 1
 fi
 
+# ── KURULUM-ÖZEL KAPI (review 2026-08-26, H3) ────────────────────────────────
+#
+# Bu koşucu SIFIRDAN KURULUM içindir ve TEKRAR KOŞULAMAZ. Uygulanmış-migration
+# defteri YOKTUR: her koşumda kanonik dizinin TAMAMI 001'den başlayarak yeniden
+# uygulanır. Migration'ların hepsi idempotent DEĞİL — ölçüldü (2026-08-26):
+# `003_social_account_unique.sql` koşulsuz `ADD CONSTRAINT` yapar ve ikinci
+# koşumda `42P07 ... already exists` verir. `ON_ERROR_STOP=1` + `set -e` ile bu
+# artık zinciri DURDURUR (eski hâlde hata basılır, çıkış kodu 0 dönerdi ve
+# koşucu "yeniden koşulabilir" GÖRÜNÜRDÜ — görünüş yanlıştı, davranış değil).
+#
+# Kapı olmadan operatör README'nin güncelleme adımını izleyip yarı yolda sert
+# hatayla karşılaşıyordu. Şimdi dolu bir veritabanında ÖNCE ve AÇIKÇA duruyoruz.
+# Kaçış: bilinçli operatör için `ALLOW_EXISTING_DB=1`.
+EXISTING_TABLES=$(
+    "${PG_CMD[@]}" -tAc \
+        "SELECT count(*) FROM pg_tables WHERE schemaname = 'social';" 2>/dev/null || echo 0
+)
+EXISTING_TABLES=${EXISTING_TABLES//[!0-9]/}
+if [ -n "$EXISTING_TABLES" ] && [ "$EXISTING_TABLES" -gt 0 ] && [ "${ALLOW_EXISTING_DB:-0}" != "1" ]; then
+    echo "  ✗ Bu veritabanında zaten $EXISTING_TABLES tablo var — koşucu DURDU." >&2
+    echo "" >&2
+    echo "    Bu script yalnız SIFIRDAN kurulum içindir. Uygulanmış migration" >&2
+    echo "    defteri yoktur, bu yüzden tekrar koşarsa 001'den başlar ve" >&2
+    echo "    idempotent olmayan bir migration'da (ör. 003) hata verir." >&2
+    echo "" >&2
+    echo "    MEVCUT kuruluma YENİ migration uygulamak için yalnız eksik" >&2
+    echo "    dosyaları elle koşun:" >&2
+    echo "" >&2
+    echo "      docker compose -f \"$COMPOSE_FILE\" exec -T postgres \\" >&2
+    echo "        psql -v ON_ERROR_STOP=1 -U otomaix -d otomaix \\" >&2
+    echo "        --single-transaction -f /dev/stdin < $MIGRATIONS_DIR/<dosya>.sql" >&2
+    echo "" >&2
+    echo "    (Kasıtlı olarak tümünü yeniden koşacaksanız: ALLOW_EXISTING_DB=1)" >&2
+    exit 1
+fi
+
 # social schema'yı oluştur (idempotent)
 "${PG_CMD[@]}" -c "CREATE SCHEMA IF NOT EXISTS social;"
 

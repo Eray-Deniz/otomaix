@@ -109,10 +109,21 @@ docker compose pull
 
 # Servisleri yeniden başlat
 docker compose up -d
-
-# Yeni migration varsa çalıştır
-bash migrations/run-migrations.sh
 ```
+
+**Yeni migration geldiyse:** `run-migrations.sh` burada KULLANILMAZ — o script yalnız
+sıfırdan kurulum içindir ve dolu bir veritabanında durur. Uygulanmış migration defteri
+tutmadığı için tekrar koşarsa 001'den başlar ve idempotent olmayan bir dosyada hata
+verir. Mevcut kuruluma yalnız EKSİK dosyaları elle uygulayın:
+
+```bash
+docker compose exec -T postgres \
+  psql -v ON_ERROR_STOP=1 -U otomaix -d otomaix \
+  --single-transaction -f /dev/stdin < ../../shared/db/migrations/<dosya>.sql
+```
+
+Hangi dosyaların eksik olduğunu `shared/db/migrations/` içeriğiyle veritabanındaki
+tabloları karşılaştırarak belirleyin. (Otomatik defter henüz yok.)
 
 ---
 
@@ -141,7 +152,8 @@ docker compose logs backend
 
 Sık karşılaşılan nedenler:
 - `DATABASE_URL` yanlış → `.env` dosyasındaki `POSTGRES_PASSWORD` kontrol edin
-- Migration eksik → `bash migrations/run-migrations.sh` tekrar çalıştırın
+- Migration eksik → yalnız eksik dosyayı elle uygulayın (yukarıdaki "Yeni migration
+  geldiyse" adımı). `run-migrations.sh` tekrar çalıştırılmaz — dolu veritabanında durur.
 
 ### Görsel üretimi çalışmıyor
 
