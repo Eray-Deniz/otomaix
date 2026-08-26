@@ -272,6 +272,15 @@ canlı internete karşı pozitif/negatif sondalandı.
 
 # Decisions Log
 
+- **2026-08-26 (yirminci oturum) — Dal kapanışı = PR yolu (Eray, `/finish-branch-claude-codex`):**
+  Closure-audit iki blocker buldu. Birincisi kapatıldı: 130 commit yalnız bu makinedeydi, PR yolu
+  uzak ref üretiyor. **İkincisi AÇIK ve PR review'ının işi:** zincir raporları kapanış aralığını
+  kapsamıyor — güvenlik kapanışından (`b15ab6e`) sonraki 10 commit'in İKİSİ KOD (`39f283d` modül
+  bölmesi, `3561231` n8n credential bağlaması) ve hiçbir hakem görmedi.
+  **Task `waiting-review` KALIR, arşivlenmez, vault promotion YAPILMAZ** (B yolunun matrisi).
+  `.ledger-index/` izlenmeye alındı — 25 baytlık locator, oturumlar arası defter sürekliliğinin
+  tek dayanağı; yok sayılsa mekanizma amacını kaybederdi (teknik karar, İlke 8).
+
 - **2026-08-26 (yirminci oturum) — n8n workflow'u gerçek altyapıya bağlandı (Eray onaylı):**
   `sector-package-admin-events.json` Telegram token'ını ve chat id'sini `$env`'den okuyordu.
   **ÖLÇÜLDÜ:** canlı n8n `N8N_BLOCK_ENV_ACCESS_IN_NODE=true` ile koşuyor — node içinden ortam

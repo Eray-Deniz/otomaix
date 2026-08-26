@@ -72,11 +72,27 @@ Sıradaki iş:
 **Ortam (yeni oturumda TEKRAR KURMA — duruyor):** `apps/social/backend/.venv`.
 Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 
-## Verification (bu oturum)
+## Verification
 
-**Koşan komutlar / taze çıktı (son commit `00bd771`):**
+> **Bu bölüm iki oturumu birlikte taşır.** Aşağıdaki ilk blok on dokuzuncu oturuma (güvenlik
+> zinciri) aittir ve kendi commit'ine pinlidir; yirminci oturumun ölçümleri ayrı blokta.
+
+### Yirminci oturum (kapanış) — son commit `0733cb0`
+
+- `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **659 passed** (106s)
+  (fark: n8n workflow'unun iki regresyonu)
+- Mutasyon pozitif kontrolleri: kapsülleme testi (ham geçiş public takma ad) · `$env` yasağı ·
+  yer tutucu credential yasağı — üçü de mutasyonda KIRMIZI, geri yüklemede YEŞİL
+- Modül bölmesi bayt karşılaştırmalı: taşınan gövde ile `git show HEAD:<eski yol>` arasındaki tek
+  fark kasıtlı başlık satırı; kalan dosyada tek fark kasıtlı yönlendirme notu
+- Canlı veritabanı prova koşumu: 032/033/034 canlı verinin kopyasında rc=0 + idempotent;
+  eski backend'in yazımları etkilenmedi; kapılar iki yönde doğrulandı
+- `ec_footer_parse` dört yeni commit'te → rc=0
+
+### On dokuzuncu oturum (güvenlik zinciri) — o günün son commit'i `00bd771`
+
 - `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **657 passed** (103s)
-  (oturum başı taban 580; fark bu oturumda yazılan güvenlik regresyonları)
+  (oturum başı taban 580; fark o oturumda yazılan güvenlik regresyonları)
 - `ec_footer_parse <sha> /root/otomaix` rapor commit'inde → **rc=0**
 - Canlı internet sondası (SSRF kapısı, düzeltme öncesi ve sonrası): `example.com` · `otomaix.com` ·
   `github.com` (yönlendirme zinciri) çekiliyor; bulut kimlik adresi · geri döngü · `localhost` ·
@@ -106,6 +122,31 @@ Her mutasyondan sonra dosya geri yüklendi ve taze koşum yapıldı.
 - Canlıya hiçbir migration uygulanmadı; canlı veritabanına karşı sweep koşulmadı.
 - Devralınan manuel doğrulamalar (arayüz · canlı n8n + Telegram · gerçek uçtan uca üretim ·
   gerçek model çağrıları) hâlâ Plan 2 sonrasındaki tek tura ertelenmiş.
+
+## Closure Audit (2026-08-26, `/finish-branch-claude-codex`)
+
+Codex closure-readiness audit'i `a11390d..0733cb0` aralığında koştu (pinli worktree).
+**Sonuç: 2 closure-blocker + 2 closure-warning.** Log:
+`/root/.claude/logs/otomaix--ffc87809/2026-08-26-finish-branch-sektor-bilgi-paketi-1.md`
+
+- **[BLOCKER — PR review'ının kapatması gereken]** Zincir raporları kapanış aralığını
+  KAPSAMIYOR. Kod review'ı `bf9e080`'de, güvenlik review'ı `b15ab6e`'de duruyor; ikisi de
+  `0733cb0` değil. **Güvenlik kapanış turundan sonra 10 commit var ve İKİSİ KOD:**
+  `39f283d` (yaşam döngüsü modül bölmesi) ve `3561231` (n8n workflow credential bağlaması).
+  **Hiçbir hakem bu ikisini görmedi.** Taban tarafında da audit aralığı daha geniş: rapor tabanı
+  `5a9d5d4`, audit tabanı `a11390d` — aradaki iki commit docs-only (plan onayı).
+- **[BLOCKER — KAPANDI]** 130 commit yalnız yerel depodaydı, upstream yoktu. PR yolu bunu kapattı.
+- **[WARNING]** Open Problems tümüyle kapalı DEĞİL: üç `accepted_risk` (bu partinin ürünü olan
+  `resolve_sector` dönüş sözleşmesi · okunmayan `schema_version` · K-04 talimat ayrışması) ve
+  bir tetikli açık kalem duruyor. **Özellikle `resolve_sector`:** politika orta bulguyu
+  fix-required saymadığı için park edildi ama bu devralınan borç değil, bu dalın ürünü.
+- **[WARNING — KAPANDI]** `docs/reviews/.ledger-index/` izlenmeye alındı (25 baytlık locator;
+  oturumlar arası defter sürekliliğinin tek dayanağı, yok sayılırsa mekanizma amacını kaybeder).
+
+**Codex bağımsızlığı — dürüst sınır:** ikinci blocker ve ikinci warning zaten bu dosyada
+yazılıydı ve Codex onu okudu; bağımsız keşif SAYILMAZ. Birinci blocker'ın ölçümünü de ben
+verdim, Codex teyit etti. **Gerçekten yeni olan tek bulgu birinci warning'dir** (Open Problems'ın
+kapalı olmadığını ben kaçırmıştım).
 
 ## Risks
 
