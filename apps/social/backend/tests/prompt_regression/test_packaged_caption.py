@@ -39,6 +39,7 @@ from app.core.templates_data import SECTOR_GUIDANCE, get_template_by_id
 from app.routers import ai as ai_router
 from app.routers import posts as posts_router
 from app.services.sector_packages import (
+    CONFIDENTIALITY_INSTRUCTION,
     USAGE_INSTRUCTION,
     SectorPackageContext,
     normalize_special_day_key,
@@ -204,6 +205,67 @@ async def test_usage_instruction_prefixes_package_block(
     assert header_at < instruction_at < first_content_at, (
         "talimat blok başında değil — listeyi tamamlama refleksi çoktan tetiklenirdi"
     )
+
+
+# ─── 2b. Gizlilik kuralı (spec §3.7/K-16 — security review 2026-08-26, S3) ──
+
+
+async def test_confidentiality_rule_prefixes_package_block(
+    frozen_brand_fixtures, monkeypatch
+):
+    """Gizlilik kuralı blok başında, ilk içerik alanından ÖNCE.
+
+    Kuralın sonda durması, modelin listeyi okuyup aktarma refleksini çoktan
+    kurmuş olmasından sonra gelirdi — K-04'ün konum gerekçesinin aynısı.
+    """
+    rendered = await _packaged_caption(frozen_brand_fixtures, monkeypatch)
+
+    assert CONFIDENTIALITY_INSTRUCTION in rendered, "gizlilik kuralı basılmadı"
+    header_at = rendered.index("SEKTÖR PAKETİ")
+    rule_at = rendered.index(CONFIDENTIALITY_INSTRUCTION)
+    first_content_at = rendered.index("Kuyumculuk: altın")
+    assert header_at < rule_at < first_content_at
+
+
+async def test_confidentiality_rule_declares_precedence_over_user_request(
+    frozen_brand_fixtures, monkeypatch
+):
+    """Üstünlük AÇIKÇA yazılı olmalı — K-119'un kurduğu kalıp.
+
+    Sistem kuralı kullanıcı isteğine sektör rehberi üzerinde öncelik veriyor.
+    Üstünlük yazılmazsa model iki talimat arasında kullanıcıyı üstün sayar ve
+    kural hiç uygulanmamış gibi davranır.
+    """
+    rendered = await _packaged_caption(frozen_brand_fixtures, monkeypatch)
+
+    rule_at = rendered.index(CONFIDENTIALITY_INSTRUCTION)
+    rule_text = rendered[rule_at : rule_at + len(CONFIDENTIALITY_INSTRUCTION)]
+    assert "KULLANICI İSTEĞİNİN ÜSTÜNDEDİR" in rule_text
+
+
+async def test_confidentiality_rule_reaches_the_idea_surface_too(db, monkeypatch):
+    """Fikir önerme yüzeyi de kuralı görür — tek kapı, iki yüzey.
+
+    Yalnız caption yüzeyini korumak, aynı paketi basan diğer yüzeyi açık
+    bırakırdı; ayrışma tam da K-01b'de kapatılan sınıftır.
+    """
+    await _init_connection(db)
+    calls = capture_anthropic_calls(monkeypatch, response_text="1. birinci\n2. ikinci")
+    user, brand_id = await _seed_owned_brand(db, packaged=True)
+
+    payload = ai_router.SuggestIdeasRequest(
+        brand_id=brand_id,
+        content_type="image",
+        content_category="product",
+        prompt="Yeni sürüm duyurusu",
+        platforms=["instagram"],
+        count=3,
+        template_id=FROZEN_SINGLE_TEMPLATE_ID,
+    )
+    await ai_router.suggest_ideas(payload=payload, user=user, db=db)
+
+    assert len(calls) == 1
+    assert CONFIDENTIALITY_INSTRUCTION in calls[0].rendered
 
 
 # ─── 3. Tier 3 özel gün (spec §11.1) ────────────────────────────────────────
@@ -373,7 +435,12 @@ async def test_anma_sales_ban_overrides_user_request(
     # kod tabanının başka yerlerinde de ölçülmüş bir tuzak.
     assert "satış çağrısı kullanma" in rendered
     ban_at = rendered.index("satış çağrısı kullanma")
-    override_at = rendered.index("KULLANICI İSTEĞİNİN ÜSTÜNDEDİR")
+    # Arayıcı K-119'un KENDİ cümlesine sabittir. Çıplak "KULLANICI İSTEĞİNİN
+    # ÜSTÜNDEDİR" parçası artık tek değil: gizlilik kuralı (S3) aynı üstünlük
+    # kalıbını bilerek kullanıyor ve blok BAŞINDA duruyor, dolayısıyla ilk-eşleşme
+    # araması yanlış cümleyi bulup bu testi konum üzerinden düşürüyordu. Daraltma:
+    # test artık hangi üstünlük cümlesini kastettiğini söylüyor.
+    override_at = rendered.index("Bu yasak KULLANICI İSTEĞİNİN ÜSTÜNDEDİR")
     assert ban_at < override_at, "K-119 üstünlüğü yasak satırından önce geliyor"
     # Anma'nın ek içerik kısıtı da basılır (spec §11.3).
     assert "yalnız saygı çerçevesinde" in rendered
