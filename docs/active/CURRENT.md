@@ -4,6 +4,22 @@ _(aktif task yok)_
 
 ## Proposed (spun-off)
 
+- **sector-package-unreviewed-merge-surface** (proposed, review borcu; DÜŞÜRÜLDÜ — koşullu) —
+  Plan 1 kapanışında iki kod commit'i **hiçbir bağımsız hakem görmeden** main'e girdi:
+  `39f283d` (yaşam döngüsünün `sector_package_lifecycle.py`'ye taşınması) ve `3561231`
+  (n8n workflow'unun credential'a bağlanması). Zincir raporları `bf9e080` ve `b15ab6e`'de
+  duruyordu; sonraki 10 commit'in ikisi koddu. Eray merge kararını bunu bilerek verdi.
+  **Neden yeniden review turu açılmıyor:** birincisi bayt-aynı bir taşıma (fark yalnız kasıtlı
+  başlık satırı, `git show` ile ölçüldü) ve kapsülleme testi mutasyonla doğrulandı; ikincisi üç
+  regresyonla bağlı, üçü de mutasyonla doğrulandı. Tek başına bir review zinciri koşturmak
+  (iki hakem, üç tur) bu yüzeyin taşıdığı riskle orantısız.
+  **Dürüst etiket: incelenmedi + bilinçle düşürüldü** — "incelendi" DEĞİL.
+  **Yeniden açılma koşulu:** (a) yaşam döngüsü modülünde veya yönetici-olay workflow'unda bir
+  kusur çıkarsa, ilk bakılacak yüzey bu iki commit'tir; (b) Plan 2 review zinciri tabanını
+  `a11390d`'ye çekerse bu aralık kendiliğinden kapsanır.
+  **Dikkat:** Plan 2 kendi aralığını inceler, bu commit'ler onun TABANINDA kalır — yani
+  kendiliğinden kapsanmazlar.
+
 - **n8n-credential-host-drift** (proposed, altyapı dayanıklılığı; DÜZELTİLDİ ama sınıf açık) —
   n8n'in `Postgres account` credential'ı **sabit IP** (`10.0.1.8`) taşıyordu; veritabanı
   konteyneri yeniden başlayınca adres `10.0.1.9` oldu ve credential güncellenmedi.
