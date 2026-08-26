@@ -84,5 +84,40 @@
   **Dikkat:** blok T5 sha256 pin'lidir; değişiklik `command-blocks-maint.sh repin <aile>` +
   `verify` ritüeli ister ve 7 komutu birden etkiler.
 
+- **sector-packages-mandatory-split** (proposed, kod sağlığı; TETİKLİ) —
+  `social/backend/app/services/sector_packages.py` 1804 satır ve zorunlu bölme eşiğinin
+  üstünde. **Ayrım noktası ÖLÇÜLDÜ:** yaşam döngüsü bölümü (`LifecycleError`'dan
+  `deactivate_package`'a, ~490 satır) tek yönlü bağımlıdır — dosyanın üst kısmındaki hiçbir
+  şey o adlara atıf yapmıyor (`head -1295 | grep` ile ölçüldü, çıktı boş). Geri kalan gövde
+  çift yönlü bağlı: doğrulayıcı ileri, basım geri atıf yapıyor; onu bölmek üçüncü bir
+  "ortak ilkeller" modülü ister, yani yapı değil dağılma olurdu. Üretim tarafında dosya dışı
+  çağıran YOK; üç test dosyası yaşam döngüsü adlarını içe aktarıyor.
+  **Neden şimdi yapılmadı (Eray, 2026-08-26):** 490 satırlık taşıma, hemen ardından gelecek
+  iki review komutunun önüne büyük ve gürültülü bir değişim koyar; hakemler asıl işi değil
+  taşımayı okur. **Dürüst etiket: çözülmedi + park edildi.** Basitleştirme turunun hakemi
+  bunu ayrı bir orta bulgu olarak işaretledi ("tetik ev değildir") — bu madde o bulgunun evi.
+  **Tetik: review zinciri (`/review-claude-codex` → `/security-review-claude-codex`) bittikten
+  sonra, dal kapanışından ÖNCE.**
+
+- **codex-substrate-dirty-secret-excluded-file** (proposed, araç güvenilirliği; global `~/.claude` işi) —
+  Codex denetim ortamı, sır taraması dışladığı bir dosyada **kaydedilmemiş değişiklik** varsa
+  **hiç kurulamıyor**: dosya kopyadan siliniyor, sonra overlay yamayı ona uygulamaya çalışıp
+  `No such file or directory` ile düşüyor → **rc=2, Codex hiç çağrılmıyor.** Semptom "Codex
+  bozuk" gibi görünür; stderr'de `[codex]` işareti hiç çıkmaz.
+  **Kapsam dar değil:** tetikleyen desen içerik tarayıcısının zayıf ailesindeki
+  `api_key=<ifade>` biçimi ve bu, model çağıran HER dosyayı dışlıyor — **ölçüldü (2026-08-26):**
+  altı üretim dosyası, üçü o gün değişmişti. Değerler ayar referansı, sır literali değil;
+  bloğun kendi yorumu bu sınıfı belgeli yanlış pozitif sayıyor.
+  **Bugünkü çözüm bir SAPMA:** değişikliği hakeme düz metin olarak gömmek + çağrı biçimini
+  değiştirmek + "hayalet silme satırlarını yoksay" talimatı eklemek. Çalışıyor ama komutun
+  ilan ettiği biçim değil ve her seferinde kullanıcı onayı istiyor.
+  **Temiz ağaçta sorun YOK** — taban-tabanlı denetim commit'lerden okur.
+  **Yeniden açılma koşulu / tetik:** kirli ağaçta denetim gerektiren bir sonraki komut
+  (`/simplify-claude-codex` tekrar koşarsa) VEYA `s1-substrate-tracked-secret-scan` maddesi
+  ele alınırken — ikisi aynı bloğa dokunuyor, birlikte yapılmalı.
+  **Dikkat:** blok sha256 pin'lidir; değişiklik `command-blocks-maint.sh repin` + `verify`
+  ritüeli ister ve 7 komutu birden etkiler (aynı uyarı `codex-scan-substrate-preflight-guard`
+  maddesinde de var).
+
 <!-- Son kapanan: codex-review-scope-contract → done 2026-06-04, arşiv docs/task-archive/2026/06/ -->
 

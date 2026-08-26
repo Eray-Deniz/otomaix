@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Runtime Çekirdek Uygulaması
 status: waiting-review
 started: 2026-07-12
-last-touched: 2026-08-25
+last-touched: 2026-08-26
 blocked-by: null
 source_plan: docs/plans/2026-08-23-sektor-bilgi-paketi.md
 ---
@@ -101,6 +101,39 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
        birlikte ilerledi. -->
 
 # Current Status
+
+**2026-08-26 (on yedinci oturum) — REVIEW ZİNCİRİNİN 1. ADIMI BİTTİ: `/simplify-claude-codex`
+koştu ve commit edildi. Durum `waiting-review` olarak KALIYOR. Açık kapı YOK.**
+
+Kapsam dalın üretim koduydu (23 dosya tarandı; testler, migration'lar, dokümanlar tarama
+DIŞINDA). 31 aday değerlendirildi, **20'si uygulandı**, 10 dosya değişti — 8 üretim + 2 test
+dosyası (testlere yalnız iki ad değişikliğinin mekanik yansıması girdi, hiçbir testin ne ölçtüğü
+değişmedi). Commit `6407f89`, footer `T16-simplify`/`code`. Push YOK.
+
+Codex ön-taraması BEŞ veto verdi; dördü kabul edilip düşürüldü, biri (prompt bloğu tekrarı)
+Eray kararıyla düşürüldü. Codex DÖRT bağımsız aday ekledi; dördü de ölçülüp uygulandı. Bir
+adayı Claude düşürdü: üç satırlık tekrar eşiğin altında ve fırlatan bir yardımcı denetim
+akışını görünmez kılardı.
+
+Final adversarial review: **`approve`, kritik/yüksek bulgu YOK.** İki bulgu — düşük olanı
+Claude'un kendi ad değişikliğinin bıraktığı geçersiz fonksiyon atfıydı, `accepted_risk`'e park
+EDİLMEDİ, düzeltildi ve hakemin verdiği komutla ölçüldü; orta olanı ertelenen dosya bölmesinin
+evsizliğiydi ve `accepted_risk` olarak kayda geçti (evi bu oturumda `CURRENT.md`'ye açıldı).
+
+**Ölçüldü — devralınan borç listesi YANLIŞTI.** HANDOFF'un "bu turun temizlik borcu" dediği iki
+kalem bu partinin ürünü DEĞİLDİ: kullanılmayan `BrandOut` importu `main`'de de birebir aynı
+(devralınan), "kullanılmayan `pytest` importları" test dosyalarında (kapsam dışı) ve biri
+gerçekten kullanılıyor. Buna karşılık gerçekten bu partinin ürünü olan iki ölü kod bulundu ve
+kapatıldı: dal iki dosyaya modül düzeyinde import ekleyince alttaki eski yerel kopyalar gölgeye
+dönüşmüştü.
+
+**Araç boşluğu ölçüldü (yeni).** Sır koruması, değişen 10 dosyanın 3'ünü hakemin dosya
+sisteminden dışlıyor (`api_key=<ifade>` biçimi — belgeli yanlış pozitif) ve o dosyalarda
+kaydedilmemiş değişiklik varsa çalışma-ağacı denetim ortamı **HİÇ kurulamıyor** (rc=2, Codex hiç
+çağrılmıyor). Bu koşum, Eray onayıyla, değişikliği prompt'a gömen farklı bir çağrı biçimiyle
+koştu. Ev: `CURRENT.md` → `codex-substrate-dirty-secret-excluded-file`.
+
+---
 
 **2026-08-25 (on beşinci oturum) — TASK 15 BİTTİ. TASK 15b AÇILDI, DENETİMDE DÜŞTÜ, GERİ ALINDI.
 Açık kapı YOK.**
@@ -211,6 +244,30 @@ tanım gereği yakalayamaz. Arka uçta mutasyonla ölçülen her şey sağlam ç
   Yeniden açılma: arşiv belgesi ileride yeniden canlı girdi olursa.
 
 # Decisions Log
+
+- **2026-08-26 (on yedinci oturum) — Basitleştirme kapsamı = yalnız üretim kodu (Eray):**
+  testler, migration'lar ve dokümanlar tarama dışında bırakıldı. Gerekçe: test dosyasına dokunmak
+  komutun kendi kuralıyla otomatik yüksek riske çıkıyor ve bayt-değişmezlik kapısını riske atıyor;
+  migration'lar canlıya hiç uygulanmadı ve testlerle bayt düzeyinde pinli.
+
+- **2026-08-26 (on yedinci oturum) — Prompt bloğu tekrarı ORTAKLAŞTIRILMADI (Eray, Codex vetosu
+  kabul):** iki modüldeki aynı dal tek yere indirilmedi. **Eray'ın gerekçesi:** kod, üretilen metnin
+  baytını sabitleyen kapının tam ortasında ve hakem ilgili dosyayı göremediği için "birleştirme
+  güvenli" diyemedi; riski şimdi almak yerine tekrar review zincirine taşınır.
+  **Dürüst etiket: çözülmedi, bilinçle bırakıldı** — tekrarın kendisi duruyor.
+
+- **2026-08-26 (on yedinci oturum) — 1785 satırlık dosya ŞİMDİ BÖLÜNMEDİ (Eray):** zorunlu bölme
+  eşiği aşılmış ve tek yönlü temiz bir ayrım noktası ÖLÇÜLDÜ (yaşam döngüsü bölümü, ~490 satır),
+  ama bölme review zincirinden sonraya bırakıldı. **Eray'ın gerekçesi:** 490 satırlık taşıma hemen
+  ardından gelecek iki review komutunun önüne büyük ve gürültülü bir değişim koyar, hakemler asıl
+  işi değil taşımayı okur. **Dürüst etiket: çözülmedi + park edildi.** Hakem bunu ayrı bir orta
+  bulgu olarak işaretledi ("tetik ev değildir"); bu yüzden `CURRENT.md`'de gerçek bir madde açıldı.
+
+- **2026-08-26 (on yedinci oturum) — Hakem üç dosyayı okuyamayınca değişiklik prompt'a gömüldü
+  (Eray):** komutun ilan ettiği çağrı biçiminden SAPILDI. **Eray'ın gerekçesi:** alternatif
+  "denetimi hiç koşturma + commit atma" idi; denetimin gerçekten koşması ve commit'in bir hakem
+  görüşüne dayanması tercih edildi. **Bedeli kayda geçti:** o üç dosyanın çevresindeki değişmemiş
+  kod denetlenmedi.
 
 - **2026-08-24 (on birinci oturum) — Spec eksikliğinin kapatılma biçimi (Eray):** spec ve planda
   HİÇBİR ŞEY SİLİNMEYECEK; eksik kayıtlar ilgili maddelerin ALTINA, "eksik yazıldığı için sonradan
