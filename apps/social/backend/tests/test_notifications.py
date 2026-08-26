@@ -815,6 +815,45 @@ def test_workflow_records_dedupe_only_after_successful_send():
     )
 
 
+def test_workflow_reads_no_process_env():
+    """Workflow node'ları `$env` OKUMAZ — canlı n8n bunu bloklar.
+
+    ÖLÇÜLDÜ (2026-08-26, canlı kurulum): n8n servisi
+    `N8N_BLOCK_ENV_ACCESS_IN_NODE=true` ile koşuyor, yani node içinden ortam
+    değişkeni okumak KAPALI. Bu artefaktın ilk hâli Telegram token'ını ve chat
+    id'sini `$env`'den okuyordu; import edilse canlıda HİÇ çalışamazdı ve hiçbir
+    test bunu görmüyordu — sır/yapılandırma n8n'in kendi credential deposunda
+    durmalı. Kapı `$env`'i yasaklar, alternatifi dikte ETMEZ.
+    """
+    import json
+
+    blob = json.dumps(_admin_workflow(), ensure_ascii=False)
+
+    assert "$env" not in blob, (
+        "workflow `$env` okuyor — canlı n8n `N8N_BLOCK_ENV_ACCESS_IN_NODE=true` "
+        "ile koşuyor, bu ifade orada çözülmez"
+    )
+
+
+def test_workflow_credentials_are_bound():
+    """Her credential atıfı GERÇEK bir kimliğe bağlı — yer tutucu kalmaz.
+
+    Yer tutucu bir id ile import edilen workflow n8n'de sessizce kimliksiz
+    bir node üretir; kusur ancak ilk tetiklemede görülür.
+    """
+    workflow = _admin_workflow()
+
+    seen = 0
+    for node in workflow["nodes"]:
+        for kind, ref in (node.get("credentials") or {}).items():
+            seen += 1
+            assert ref.get("id"), f"{node['name']}: {kind} credential id'si boş"
+            assert "REPLACE" not in ref["id"].upper(), (
+                f"{node['name']}: {kind} hâlâ yer tutucu id taşıyor ({ref['id']})"
+            )
+    assert seen >= 3, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
+
+
 # ─── 7. Marka durumu ucu (K-45) ─────────────────────────────────────────────
 
 

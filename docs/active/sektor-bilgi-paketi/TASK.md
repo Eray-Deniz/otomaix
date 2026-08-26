@@ -272,6 +272,28 @@ canlı internete karşı pozitif/negatif sondalandı.
 
 # Decisions Log
 
+- **2026-08-26 (yirminci oturum) — n8n workflow'u gerçek altyapıya bağlandı (Eray onaylı):**
+  `sector-package-admin-events.json` Telegram token'ını ve chat id'sini `$env`'den okuyordu.
+  **ÖLÇÜLDÜ:** canlı n8n `N8N_BLOCK_ENV_ACCESS_IN_NODE=true` ile koşuyor — node içinden ortam
+  değişkeni okumak KAPALI. Yani dosya import edilse canlıda HİÇ çalışamazdı. Hiçbir hakem
+  yakalayamazdı: review zinciri n8n'in içine bakmadı, artefakt canlıya bakılmadan yazılmıştı.
+  **Düzeltme:** Telegram düğümü `n8n-nodes-base.telegram` (tv 1.2) + mevcut `Telegram account`
+  credential'ı; chat id yeni bir Postgres düğümüyle `social.workspaces`'ten okunuyor (mevcut
+  `Postgres account` credential'ı). **Eray kararı:** ayrı admin botu kurulmadı, mevcut bot +
+  mevcut chat kullanılıyor — bugün 2 markalık sistemde ikinci kanalın karşılığı yok.
+  **Sır depoya GİRMEDİ:** token n8n'in şifreli credential deposunda kalır (kardeş
+  `turkey-calendar-update.json` canlı bot token'ını depoda taşıyor — ayrı temizlik borcu).
+  **Sınıf kapatıldı:** iki regresyon eklendi (`$env` yasağı + yer tutucu credential id yasağı),
+  ikisi de mutasyonla pozitif kontrol edildi.
+
+- **2026-08-26 (yirminci oturum) — Canlı durum ÖLÇÜLDÜ; migration uygulanmadı:**
+  Bu makine canlının kendisi (Coolify + n8n + veritabanı burada). Canlı DB: 2 marka · 81 post ·
+  12 sektör — **hepsi kök, tek alt sektör yok**, yani paket sistemi bugün bağlanacak bir şey
+  bulamaz. Üç migration canlı verinin birebir kopyasında prova edildi: üçü de rc=0, idempotent,
+  mevcut veri bozulmadı, canlıda koşan eski backend'in (`3e1617e`) yazımları etkilenmedi,
+  kapılar iki yönde de doğrulandı. Tam yedek: `/root/otomaix-db-backups/otomaix-pre-032-*.dump`.
+  **Canlıya yazma adımını izin katmanı reddetti** — uygulama Eray'a kaldı, komut HANDOFF'ta.
+
 - **2026-08-26 (yirminci oturum) — Yaşam döngüsü AYRI modüle taşındı:**
   `sector_packages.py` 1804 satırdı ve zorunlu bölme eşiğinin üstündeydi. Yaşam döngüsü bölümü
   (`LifecycleError`'dan `deactivate_package`'a) `app/services/sector_package_lifecycle.py`'ye

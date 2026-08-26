@@ -26,7 +26,7 @@
       "webhookId": "8f2b0a41-6c3d-4e57-9b12-7ad5c0e93f6a",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_ADMIN_EVENT_KEY_CREDENTIAL",
+          "id": "otomaixAdminEvtKey",
           "name": "Otomaix Admin Event Key"
         }
       }
@@ -92,19 +92,24 @@
     {
       "id": "http-telegram",
       "name": "Telegram Bildir",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
       "position": [
-        880,
+        1100,
         -80
       ],
       "parameters": {
-        "method": "POST",
-        "url": "=https://api.telegram.org/bot{{ $env.OTOMAIX_ADMIN_TELEGRAM_BOT_TOKEN }}/sendMessage",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $env.OTOMAIX_ADMIN_TELEGRAM_CHAT_ID, text: $('Mesaj Hazırla').item.json.message }) }}",
-        "options": {}
+        "chatId": "={{ $('Yönetici Chat\\'ini Oku').item.json.telegram_chat_id }}",
+        "text": "={{ $('Mesaj Hazırla').item.json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "VMbwUuFB8BzVhxEz",
+          "name": "Telegram account"
+        }
       }
     },
     {
@@ -171,11 +176,32 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1100,
+        1320,
         -80
       ],
       "parameters": {
         "jsCode": "// Kayıt YALNIZ başarılı Telegram teslimi sonrası yazılır (checkpoint 14, F2).\n// Pencere sınırlıdır (son 500 kimlik): kalıcı bir depo tutmak bu workflow'un işi\n// değil, sınırsız büyüyen bir static data ise kendi başına bir arıza olur.\n//\n// DÜRÜST SINIR: n8n static data'sı belgelerinde DENEYSEL olarak işaretlidir ve\n// yalnız başarılı workflow tamamlanmasında kalıcılaşır. Yani bu tekilleştirme\n// BEST-EFFORT'tur; tek teslim GARANTİSİ değildir. Yinelenen bir yönetici uyarısı\n// gürültüdür, veri kaybı değil — bu yönde hata yapmak bilinçli tercihtir.\nconst state = $getWorkflowStaticData('global');\nif (!Array.isArray(state.seenEventIds)) state.seenEventIds = [];\n\nconst eventId = $('Tekrarı Kontrol Et').item.json.event_id;\nif (eventId && !state.seenEventIds.includes(eventId)) {\n  state.seenEventIds.push(eventId);\n  if (state.seenEventIds.length > 500) {\n    state.seenEventIds = state.seenEventIds.slice(-500);\n  }\n}\n\nreturn [{ json: { delivered: true, event_id: eventId || null } }];"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT telegram_chat_id FROM social.workspaces WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id <> '' LIMIT 1;",
+        "options": {}
+      },
+      "id": "pg-admin-chat",
+      "name": "Yönetici Chat'ini Oku",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        880,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "LRCmorU07F9lRpjV",
+          "name": "Postgres account"
+        }
       }
     }
   ],
@@ -213,7 +239,7 @@
       "main": [
         [
           {
-            "node": "Telegram Bildir",
+            "node": "Yönetici Chat'ini Oku",
             "type": "main",
             "index": 0
           }
@@ -247,6 +273,17 @@
         [
           {
             "node": "Tekrarı Kaydet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yönetici Chat'ini Oku": {
+      "main": [
+        [
+          {
+            "node": "Telegram Bildir",
             "type": "main",
             "index": 0
           }
