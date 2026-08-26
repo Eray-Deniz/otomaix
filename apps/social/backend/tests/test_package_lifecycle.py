@@ -28,8 +28,8 @@ import uuid
 import pytest
 
 from app.core.database import _init_connection
-from app.services import sector_packages
-from app.services.sector_packages import (
+from app.services import sector_package_lifecycle
+from app.services.sector_package_lifecycle import (
     ActivationGateEvidence,
     GateNotSatisfied,
     LifecycleError,
@@ -253,11 +253,11 @@ async def test_raw_transition_not_publicly_exported():
     `__all__` listesine güvenmek yetmez (liste bayatlar). Ölçü doğrudan:
     modülde ham fonksiyonu işaret eden ALTÇİZGİSİZ bir ad var mı?
     """
-    raw = sector_packages._apply_status_transition
+    raw = sector_package_lifecycle._apply_status_transition
     aliases = [
         name
-        for name in dir(sector_packages)
-        if not name.startswith("_") and getattr(sector_packages, name, None) is raw
+        for name in dir(sector_package_lifecycle)
+        if not name.startswith("_") and getattr(sector_package_lifecycle, name, None) is raw
     ]
     assert aliases == [], f"ham geçiş public adla sızıyor: {aliases}"
 
@@ -645,7 +645,7 @@ async def test_event_insert_failure_rolls_back_transition(pkg_db, monkeypatch, f
             raise RuntimeError("olay tablosu erişilemiyor")
         return None
 
-    monkeypatch.setattr(sector_packages, "log_package_event", _broken)
+    monkeypatch.setattr(sector_package_lifecycle, "log_package_event", _broken)
 
     with pytest.raises(Exception):
         await activate_package(
@@ -667,7 +667,7 @@ async def test_transition_failure_leaves_no_event(pkg_db, monkeypatch):
     async def _broken(*args, **kwargs):
         raise RuntimeError("durum güncellemesi düştü")
 
-    monkeypatch.setattr(sector_packages, "_set_status", _broken)
+    monkeypatch.setattr(sector_package_lifecycle, "_set_status", _broken)
 
     with pytest.raises(RuntimeError):
         await activate_package(
@@ -1084,7 +1084,7 @@ async def _race_sector_reassignment(test_db_setup, *, transition, seed_status, w
         intruder = await _asyncpg.connect(url)
         await _init_connection(intruder)
 
-        original = sector_packages._lock_sector
+        original = sector_package_lifecycle._lock_sector
         moved = {"done": False}
 
         async def _lock_then_move(db, sector_id):
@@ -1097,12 +1097,12 @@ async def _race_sector_reassignment(test_db_setup, *, transition, seed_status, w
                     sector_b,
                 )
 
-        sector_packages._lock_sector = _lock_then_move
+        sector_package_lifecycle._lock_sector = _lock_then_move
         try:
             with pytest.raises(LifecycleError):
                 await transition(worker, target_id)
         finally:
-            sector_packages._lock_sector = original
+            sector_package_lifecycle._lock_sector = original
 
         assert moved["done"], "araya girme hiç koşmadı — test kendini ölçmüyor"
         assert (

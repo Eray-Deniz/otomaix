@@ -272,6 +272,20 @@ canlı internete karşı pozitif/negatif sondalandı.
 
 # Decisions Log
 
+- **2026-08-26 (yirminci oturum) — Yaşam döngüsü AYRI modüle taşındı:**
+  `sector_packages.py` 1804 satırdı ve zorunlu bölme eşiğinin üstündeydi. Yaşam döngüsü bölümü
+  (`LifecycleError`'dan `deactivate_package`'a) `app/services/sector_package_lifecycle.py`'ye
+  taşındı; kalan dosya 1310 satır, yeni modül 524 satır. **Ayrım noktası taze ölçüldü:** üst
+  yarıdan yaşam döngüsü adlarına tek atıf yok (yalnız kendi başlık yorumunda); yaşam döngüsü
+  üst yarıdan sadece `normalize_special_day_key` + `validate_package_content` + `log_package_event`
+  okuyor. Bağımlılık tek yönlü. **Gerekçe yalnız satır sayısı değil sözleşme farkı:** erişim
+  katmanı çalışma zamanında asla üretimi bloklamaz (hata → `None` + log), yaşam döngüsü ise
+  fail-closed'dur. İki zıt sözleşme aynı dosyada okuyucuyu yanıltıyordu.
+  **Gövdenin kalanı bölünMEDİ:** doğrulayıcı ileri, basım geri atıf yapıyor — üçüncü bir
+  "ortak ilkeller" modülü ister, yani yapı değil dağılma olurdu.
+  **Plan 2 arayüz listesi güncellendi** (`docs/plans/2026-08-23-...` YOL DÜZELTMESİ maddesi):
+  imzalar değişmedi, yalnız içe aktarma yolu.
+
 - **2026-08-26 (on yedinci oturum) — Basitleştirme kapsamı = yalnız üretim kodu (Eray):**
   testler, migration'lar ve dokümanlar tarama dışında bırakıldı. Gerekçe: test dosyasına dokunmak
   komutun kendi kuralıyla otomatik yüksek riske çıkıyor ve bayt-değişmezlik kapısını riske atıyor;

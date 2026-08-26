@@ -22,18 +22,20 @@ import pytest
 
 from app.core.database import _init_connection
 from app.services.notifications import record_admin_event
-from app.services.sector_packages import (
+from app.services.sector_package_lifecycle import (
     ActivationGateEvidence,
     GateNotSatisfied,
     RollbackGateEvidence,
-    SectorPackageContext,
-    ValidationResult,
     activate_package,
     deactivate_package,
     insert_draft,
+    rollback_package,
+)
+from app.services.sector_packages import (
+    SectorPackageContext,
+    ValidationResult,
     motion_pool,
     normalize_special_day_key,
-    rollback_package,
     scene_pool,
     validate_package_content,
 )

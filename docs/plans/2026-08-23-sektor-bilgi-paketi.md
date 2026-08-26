@@ -103,8 +103,15 @@ codex_plan_review_log: docs/reviews/codex/2026-08-23-sektor-bilgi-paketi-plan.md
 - Migration 032 şeması (iki tablo + kolonlar + garantiler) — Plan 2 koşusu yalnız `draft` yazar ve BUNU YALNIZ `insert_draft` üzerinden yapar (K-135 yazma-yüzeyi kuralının kod karşılığı; doğrudan SQL yazımı Plan 2'de yasak).
 - `app/services/sector_packages.py::normalize_special_day_key(name: str) -> str` — K-01b tek modül (yazım + okuma aynı fonksiyon).
 - `app/services/sector_packages.py::validate_package_content(content: dict, *, banned_brand_names: list[str], holiday_keys: set[str]) -> ValidationResult` — yazım kapısı.
-- `app/services/sector_packages.py::insert_draft(db, *, sector_id, content, schema_version, run_id=None, actor) -> uuid` — doğrulayıcı-arkalı TEK draft yazıcısı.
-- `app/services/sector_packages.py::activate_package(db, *, package_id, evidence: ActivationGateEvidence, actor)` / `rollback_package(db, *, sector_id, to_version, evidence: RollbackGateEvidence, actor)` / `deactivate_package(db, *, package_id, actor)` — durum geçişleri. Ham geçiş transaction'ı ÖZELDİR (`_apply_status_transition`); public API kendi kapı-kanıtı olmadan geçiş YAPMAZ — aktivasyon `ActivationGateEvidence`, rollback AYRI `RollbackGateEvidence` (yönetici onayı zorunlu) ister (Task 13 — K-71/K-28'in Plan-1 ayağı; K-103 yetkilendirme TEKNİĞİ ayrıca açık).
+- `app/services/sector_package_lifecycle.py::insert_draft(db, *, sector_id, content, schema_version, run_id=None, actor) -> uuid` — doğrulayıcı-arkalı TEK draft yazıcısı.
+- `app/services/sector_package_lifecycle.py::activate_package(db, *, package_id, evidence: ActivationGateEvidence, actor)` / `rollback_package(db, *, sector_id, to_version, evidence: RollbackGateEvidence, actor)` / `deactivate_package(db, *, package_id, actor)` — durum geçişleri. Ham geçiş transaction'ı ÖZELDİR (`_apply_status_transition`); public API kendi kapı-kanıtı olmadan geçiş YAPMAZ — aktivasyon `ActivationGateEvidence`, rollback AYRI `RollbackGateEvidence` (yönetici onayı zorunlu) ister (Task 13 — K-71/K-28'in Plan-1 ayağı; K-103 yetkilendirme TEKNİĞİ ayrıca açık).
+- **[YOL DÜZELTMESİ — 2026-08-26]** Yaşam döngüsü yüzeyi (`insert_draft` · `activate_package` ·
+  `rollback_package` · `deactivate_package` · `LifecycleError` · `GateNotSatisfied` ·
+  `ActivationGateEvidence` · `RollbackGateEvidence`) `sector_packages.py`'den
+  `sector_package_lifecycle.py`'ye TAŞINDI (zorunlu dosya bölme). **İmzalar değişmedi**,
+  yalnız içe aktarma yolu değişti. Bağımlılık tek yönlüdür: yaşam döngüsü modülü
+  `sector_packages`'tan `normalize_special_day_key` + `validate_package_content` okur, tersi yok.
+  `normalize_special_day_key` ve `validate_package_content` yerinde KALDI.
 - `app/services/notifications.py::record_admin_event(db, *, kind, payload, idempotency_key) -> uuid` — transactional outbox (Task 14); K-26 vade bildirimi (Plan 2 tur takibi) aynı altyapıyı çağırır.
 - Katman-1 harness (`tests/prompt_regression/`) — Plan 2 her turda yeniden koşturur.
 - **[SONRADAN EKLENDİ — 2026-08-24; K-02 kapanışının Plan 2 ayağı]** Brief/sentez hattı

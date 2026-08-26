@@ -84,21 +84,6 @@
   **Dikkat:** blok T5 sha256 pin'lidir; değişiklik `command-blocks-maint.sh repin <aile>` +
   `verify` ritüeli ister ve 7 komutu birden etkiler.
 
-- **sector-packages-mandatory-split** (proposed, kod sağlığı; TETİKLİ) —
-  `social/backend/app/services/sector_packages.py` 1804 satır ve zorunlu bölme eşiğinin
-  üstünde. **Ayrım noktası ÖLÇÜLDÜ:** yaşam döngüsü bölümü (`LifecycleError`'dan
-  `deactivate_package`'a, ~490 satır) tek yönlü bağımlıdır — dosyanın üst kısmındaki hiçbir
-  şey o adlara atıf yapmıyor (`head -1295 | grep` ile ölçüldü, çıktı boş). Geri kalan gövde
-  çift yönlü bağlı: doğrulayıcı ileri, basım geri atıf yapıyor; onu bölmek üçüncü bir
-  "ortak ilkeller" modülü ister, yani yapı değil dağılma olurdu. Üretim tarafında dosya dışı
-  çağıran YOK; üç test dosyası yaşam döngüsü adlarını içe aktarıyor.
-  **Neden şimdi yapılmadı (Eray, 2026-08-26):** 490 satırlık taşıma, hemen ardından gelecek
-  iki review komutunun önüne büyük ve gürültülü bir değişim koyar; hakemler asıl işi değil
-  taşımayı okur. **Dürüst etiket: çözülmedi + park edildi.** Basitleştirme turunun hakemi
-  bunu ayrı bir orta bulgu olarak işaretledi ("tetik ev değildir") — bu madde o bulgunun evi.
-  **Tetik: review zinciri (`/review-claude-codex` → `/security-review-claude-codex`) bittikten
-  sonra, dal kapanışından ÖNCE.**
-
 - **codex-substrate-dirty-secret-excluded-file** (proposed, araç güvenilirliği; global `~/.claude` işi) —
   Codex denetim ortamı, sır taraması dışladığı bir dosyada **kaydedilmemiş değişiklik** varsa
   **hiç kurulamıyor**: dosya kopyadan siliniyor, sonra overlay yamayı ona uygulamaya çalışıp
