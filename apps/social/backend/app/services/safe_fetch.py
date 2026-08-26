@@ -64,7 +64,27 @@ class UnsafeUrlError(ValueError):
 
 
 def _is_public_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    """Adres herkese açık internet adresi mi — sarmalanmış biçimler dâhil."""
+    """Adres herkese açık internet adresi mi — sarmalanmış biçimler dâhil.
+
+    Kapı POZİTİF kurulur: `is_global` olmayan hiçbir adres geçmez. İlk sürüm
+    yasak bayrakları TEK TEK sayıyordu ve taşıyıcı-NAT aralığı (100.64.0.0/10 —
+    CGNAT, Tailscale gibi ağların kullandığı alan) hiçbir bayrağa takılmadığı
+    için geçiyordu (ÖLÇÜLDÜ 2026-08-26, kapanış turu: `100.64.0.1` ve
+    `100.100.100.100` kabul ediliyordu). Sayarak kapatmak varyantı kapatır,
+    sınıfı kapatmaz — pozitif koşul sınıfı kapatır.
+
+    Yasak bayrakları YİNE DE kontrol ediliyor, çünkü `is_global` tek başına da
+    yetmiyor: ÖLÇÜLDÜ — `224.0.0.1` (multicast) için `is_global` True döner.
+    İki katman birlikte: önce "açıkça yasak mı", sonra "açıkça küresel mi".
+
+    Sarmalanmış biçimlerin AÇILMASI üçüncü katmandır ve bugünkü Python'da
+    (3.12, ÖLÇÜLDÜ) hiçbir sonucu DEĞİŞTİRMEZ: `::ffff:...` biçimi zaten
+    `is_reserved` ile, 6to4 (`2002::/16`) zaten `is_global` ile düşüyor. Yan
+    etkisi, herkese açık bir IPv4'ün sarmalanmış hâlinin de reddedilmesidir —
+    fail-closed yönde ve pratikte önemsiz, çünkü normal isim çözümlemesi bu
+    biçimi döndürmez. Katman, bayrak tanımları sürümler arasında değiştiğinde
+    sessiz bir açılma olmasın diye duruyor; kaldırılırsa o güvence gider.
+    """
     if (
         ip.is_private
         or ip.is_loopback
@@ -73,6 +93,9 @@ def _is_public_address(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> boo
         or ip.is_multicast
         or ip.is_unspecified
     ):
+        return False
+
+    if not ip.is_global:
         return False
 
     # IPv6 içinde IPv4 taşıyan biçimler: sarmalanan adres AYRICA kontrol edilir.
@@ -177,18 +200,33 @@ async def fetch_public_url(
             # her meşru HTTPS sitesi düşerdi.
             extensions = {"sni_hostname": host} if scheme == "https" else {}
 
-            response = await client.get(target, headers=headers, extensions=extensions)
+            # AKITARAK okunur. İlk sürüm `response.content[:max_bytes]` yapıyordu:
+            # o dilimleme SONUCU kesiyordu, İNDİRMEYİ değil — gövdenin tamamı önce
+            # belleğe alınıyordu, dolayısıyla sınır bir bellek koruması DEĞİLDİ.
+            # Saldırganın kontrolündeki herkese açık bir sunucu devasa ya da hiç
+            # bitmeyen gövde göndererek işçiyi doldurabilirdi (kapanış turu, 2026-08-26).
+            # Yönlendirme yanıtlarının gövdesi ise HİÇ okunmaz.
+            async with client.stream(
+                "GET", target, headers=headers, extensions=extensions
+            ) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise UnsafeUrlError("yönlendirme hedefi yok")
+                    # Göreli hedef, SABİTLENMİŞ URL'e değil gerçek URL'e göre çözülür.
+                    current = urljoin(current, location)
+                    continue
 
-            if response.is_redirect:
-                location = response.headers.get("location")
-                if not location:
-                    raise UnsafeUrlError("yönlendirme hedefi yok")
-                # Göreli hedef, SABİTLENMİŞ URL'e değil gerçek URL'e göre çözülür.
-                current = urljoin(current, location)
-                continue
+                chunks: list[bytes] = []
+                downloaded = 0
+                async for chunk in response.aiter_bytes():
+                    chunks.append(chunk)
+                    downloaded += len(chunk)
+                    if downloaded >= max_bytes:
+                        break
 
-            body = response.content[:max_bytes]
-            encoding = response.encoding or "utf-8"
-            return body.decode(encoding, errors="replace")
+                body = b"".join(chunks)[:max_bytes]
+                encoding = response.encoding or "utf-8"
+                return body.decode(encoding, errors="replace")
 
     raise UnsafeUrlError("çok fazla yönlendirme")

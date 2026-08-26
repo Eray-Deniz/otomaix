@@ -53,11 +53,51 @@ def dns(monkeypatch):
     return table
 
 
+class _ScriptedResponse:
+    """Akıtarak okunan sahte yanıt.
+
+    `produced` ÜRETİLEN parça sayısını tutar — gövdenin gerçekten erken kesilip
+    kesilmediğini ölçmenin tek yolu budur. Hazır bir gövdeyi dilimleyen bir sahte,
+    "indirme sınırlandı" iddiasını kanıtlayamaz (kapanış turunun haklı olduğu nokta).
+    """
+
+    def __init__(self, status, body=b"ok", location=None, chunk_size=64):
+        self.status_code = status
+        self.headers = httpx.Headers({"location": location} if location else {})
+        self.encoding = "utf-8"
+        self._body = body
+        self._chunk_size = chunk_size
+        self.produced = 0
+        self.closed = False
+
+    @property
+    def is_redirect(self):
+        return self.status_code in (301, 302, 303, 307, 308) and "location" in self.headers
+
+    async def aiter_bytes(self):
+        for start in range(0, len(self._body), self._chunk_size):
+            chunk = self._body[start : start + self._chunk_size]
+            self.produced += len(chunk)
+            yield chunk
+
+
 @pytest.fixture
 def http(monkeypatch):
     """Scriptli HTTP istemcisi. `requests` listesi gerçekten nereye gidildiğini tutar."""
-    script: list[httpx.Response] = []
+    script: list[_ScriptedResponse] = []
     requests: list[dict] = []
+    served: list[_ScriptedResponse] = []
+
+    class _StreamCtx:
+        def __init__(self, response):
+            self._response = response
+
+        async def __aenter__(self):
+            return self._response
+
+        async def __aexit__(self, *exc):
+            self._response.closed = True
+            return False
 
     class FakeClient:
         def __init__(self, **kwargs):
@@ -69,23 +109,22 @@ def http(monkeypatch):
         async def __aexit__(self, *exc):
             return False
 
-        async def get(self, url, headers=None, extensions=None):
+        def stream(self, method, url, headers=None, extensions=None):
             requests.append(
                 {"url": url, "headers": headers or {}, "extensions": extensions or {}}
             )
             if not script:
                 raise AssertionError("beklenenden fazla istek yapıldı")
-            return script.pop(0)
+            response = script.pop(0)
+            served.append(response)
+            return _StreamCtx(response)
 
     monkeypatch.setattr(safe_fetch.httpx, "AsyncClient", FakeClient)
-    return {"script": script, "requests": requests}
+    return {"script": script, "requests": requests, "served": served}
 
 
-def _response(status: int, *, body: bytes = b"ok", location: str | None = None):
-    headers = {"location": location} if location else {}
-    return httpx.Response(
-        status, content=body, headers=headers, request=httpx.Request("GET", "https://x/")
-    )
+def _response(status: int, *, body: bytes = b"ok", location: str | None = None, chunk_size: int = 64):
+    return _ScriptedResponse(status, body=body, location=location, chunk_size=chunk_size)
 
 
 # ── URL doğrulama: ağa hiç çıkmadan reddedilenler ───────────────────────────
@@ -139,6 +178,18 @@ async def test_empty_url_is_rejected(dns, http):
         "0.0.0.0",
         "192.168.1.1",
         "172.16.0.5",
+        # Kapanış turunda ÖLÇÜLEN kaçak: taşıyıcı-NAT alanı (CGNAT, Tailscale)
+        # hiçbir "yasak" bayrağına takılmıyor ve sayarak kurulmuş kapıdan
+        # geçiyordu. Pozitif `is_global` koşulu bu sınıfı kapatır.
+        "100.64.0.1",
+        "100.100.100.100",
+        # `is_global` TEK BAŞINA da yetmiyor: multicast için True döner.
+        "224.0.0.1",
+        "ff02::1",
+        # 6to4 sarmalayıcısı içinde özel adres.
+        "2002:0a00:0108::",
+        "fd00::1",
+        "fe80::1",
     ],
 )
 async def test_private_address_is_rejected(address, dns, http):
@@ -264,6 +315,40 @@ async def test_body_is_capped(dns, http):
     assert len(body) == 100
 
 
+async def test_download_stops_at_the_cap_instead_of_buffering(dns, http):
+    """Sınır İNDİRMEYİ kesmeli, sonucu değil.
+
+    İlk sürüm gövdenin tamamını belleğe alıp sonra dilimliyordu; sınır o hâliyle
+    bir bellek koruması değildi ve saldırganın sunucusu işçiyi doldurabilirdi.
+    Burada ÜRETİLEN bayt sayısı ölçülür — hazır gövdeyi dilimleyen bir sahte bu
+    farkı gösteremezdi (kapanış turu, 2026-08-26).
+    """
+    dns["public.test"] = [PUBLIC_IP]
+    http["script"].append(_response(200, body=b"a" * 100_000, chunk_size=64))
+
+    await fetch_public_url("http://public.test/", max_bytes=128)
+
+    response = http["served"][0]
+    assert response.produced < 1000, (
+        f"gövdenin tamamı okundu: {response.produced} bayt üretildi"
+    )
+    assert response.closed, "akış kapatılmadı"
+
+
+async def test_redirect_body_is_never_read(dns, http):
+    """Yönlendirme yanıtının gövdesi HİÇ okunmaz — o da bir tüketim yüzeyidir."""
+    dns["public.test"] = [PUBLIC_IP]
+    dns["other.test"] = [PUBLIC_IP]
+    http["script"].append(
+        _response(302, body=b"x" * 100_000, location="https://other.test/final")
+    )
+    http["script"].append(_response(200, body=b"tamam"))
+
+    await fetch_public_url("http://public.test/")
+
+    assert http["served"][0].produced == 0, "yönlendirme gövdesi okundu"
+
+
 async def test_schemeless_input_still_works(dns, http):
     """Bugünkü davranış korunur: şemasız adres `https://` ile tamamlanır."""
     dns["public.test"] = [PUBLIC_IP]
@@ -272,3 +357,24 @@ async def test_schemeless_input_still_works(dns, http):
     await fetch_public_url("public.test/yol")
 
     assert http["requests"][0]["extensions"]["sni_hostname"] == "public.test"
+
+
+async def test_public_address_is_still_accepted(dns, http):
+    """Pozitif kontrol: kapıyı sertleştirmek meşru adresleri kapatmadı.
+
+    `is_global` koşulu eklenirken asıl risk, her şeyi reddeden bir kapı kurup
+    testlerin yine yeşil kalmasıydı.
+    """
+    dns["public.test"] = [PUBLIC_IP]
+    http["script"].append(_response(200, body=b"tamam"))
+
+    assert await fetch_public_url("http://public.test/") == "tamam"
+
+
+async def test_public_ipv6_is_accepted(dns, http):
+    dns["v6.test"] = ["2001:4860:4860::8888"]
+    http["script"].append(_response(200, body=b"tamam"))
+
+    await fetch_public_url("http://v6.test/")
+
+    assert "[2001:4860:4860::8888]" in http["requests"][0]["url"]

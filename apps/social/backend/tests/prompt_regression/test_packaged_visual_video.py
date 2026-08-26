@@ -573,3 +573,44 @@ async def test_unpackaged_model_failure_fallback_is_pinned(monkeypatch):
         "product showcase, no text, no logos, cinematic composition, "
         "professional lighting, 4K"
     )
+
+
+# ─── Gizlilik kuralı — durağan kare yüzeyi (kapanış turu bulgusu N4) ────────
+
+
+@pytest.mark.parametrize("image_edit_mode", [False, True])
+async def test_still_prompt_carries_confidentiality_rule(monkeypatch, image_edit_mode):
+    """Durağan kare çağrısı AYRI bir model çağrısıdır ve paket bloğundan geçmez.
+
+    Gizlilik kuralı yalnız `render_package_block`'a eklenmişti; bu yüzey onu hiç
+    görmüyordu, üstelik aynı prompt kullanıcının metnine "highest priority"
+    veriyor. Kapanış turu bunu S3'ün kapanmamış ayağı olarak buldu.
+    """
+    calls = capture_anthropic_calls(monkeypatch, response_text="a scene")
+
+    await sv._build_still_prompt(
+        topic="Yeni koleksiyon",
+        brand_name="Donuk Kuyumculuk",
+        brand_description="Altın ve pırlanta takı.",
+        sector="Kuyumculuk",
+        color_str="#0A84FF",
+        image_edit_mode=image_edit_mode,
+        sector_scene_pool=SCENE_POOL,
+    )
+
+    rendered = calls[0].rendered
+    assert "This vocabulary is INTERNAL" in rendered
+    assert "OVERRIDES the user's request" in rendered
+
+
+async def test_still_prompt_without_pool_has_no_confidentiality_rule(monkeypatch):
+    """Paketsiz yol DEĞİŞMEDİ: kural havuza bağlı, koşulsuz değil."""
+    calls = capture_anthropic_calls(monkeypatch, response_text="a scene")
+    await sv._build_still_prompt(
+        topic="Yeni koleksiyon",
+        brand_name="Donuk Kuyumculuk",
+        brand_description="Altın ve pırlanta takı.",
+        sector="Kuyumculuk",
+        color_str="#0A84FF",
+    )
+    assert "This vocabulary is INTERNAL" not in calls[0].rendered

@@ -916,6 +916,19 @@ async def generate_short_video(
 ):
     """Kısa video pipeline: script → TTS → fal.ai arka plan videosu."""
     await assert_brand_owned(db, user, payload.brand_id)
+
+    # Ürün sahipliği YAZIMDAN ve kullanımdan ÖNCE. Marka sahipliği ürünü
+    # kapsamaz: doğrulanmamış ürün kimliği hem yabancı görseli video hattına
+    # sokuyor hem de `posts.product_id` olarak kaydediliyordu (security review
+    # 2026-08-26 / S2 kapanış turu). 404 — başkasının kaynağının varlığı sızmasın.
+    if payload.product_id:
+        owned = await db.fetchval(
+            "SELECT 1 FROM social.brand_products WHERE id = $1 AND brand_id = $2",
+            payload.product_id,
+            payload.brand_id,
+        )
+        if not owned:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
     if payload.aspect_ratio not in SUPPORTED_SHORT_VIDEO_RATIOS:
         raise HTTPException(
             status_code=400,
@@ -1043,6 +1056,11 @@ async def generate_short_video_stage1(
             """,
             payload.product_id, payload.brand_id,
         )
+        # Sessiz geçiştirme KALDIRILDI: satır boş dönüyorsa ürün bu markanın
+        # değildir ve akış onu yine de aşağıya taşıyordu (security review
+        # 2026-08-26 / S2 kapanış turu). Kardeş uç (başlık üretimi) zaten 404 veriyor.
+        if not product_row:
+            raise HTTPException(status_code=404, detail="Ürün bulunamadı")
         if product_row:
             parts: list[str] = []
             if product_row["name"]:

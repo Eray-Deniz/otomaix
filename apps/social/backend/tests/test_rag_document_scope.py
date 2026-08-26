@@ -216,3 +216,45 @@ async def test_own_product_without_documents_returns_empty(db):
     assert await get_product_document_context(
         [product], "her neyse", db, brand_id=brand
     ) == ""
+
+
+# ── Kısa video ürün görseli (kapanış turu bulgusu) ──────────────────────────
+
+
+async def _seed_product_with_image(db, brand_id, image_url: str):
+    return await db.fetchval(
+        """
+        INSERT INTO social.brand_products (brand_id, type, name, image_url)
+        VALUES ($1, 'product', $2, $3)
+        RETURNING id
+        """,
+        brand_id,
+        "Görselli Ürün",
+        image_url,
+    )
+
+
+async def test_foreign_product_image_is_not_used(db):
+    """Yabancı ürünün GÖRSELİ video hattına giremez.
+
+    Doküman yolu kapatılmıştı ama aynı sınıfın görsel ayağı açıktı: iki kısa
+    video yolu da ürünü `WHERE id = $1` ile okuyordu. Kimliği bilen kiracı,
+    başkasının ürün görselinden türetilmiş video ürettirebiliyordu.
+    """
+    from app.services.short_video import _owned_product_image
+
+    victim = await _seed_brand(db, "Kurban")
+    attacker = await _seed_brand(db, "Saldırgan")
+    foreign = await _seed_product_with_image(db, victim, "https://cdn.test/gizli.jpg")
+
+    assert await _owned_product_image(db, foreign, attacker) == ""
+
+
+async def test_own_product_image_is_used(db):
+    """Pozitif kontrol: kendi ürününün görseli hâlâ kullanılıyor."""
+    from app.services.short_video import _owned_product_image
+
+    brand = await _seed_brand(db, "Sahip")
+    product = await _seed_product_with_image(db, brand, "https://cdn.test/benim.jpg")
+
+    assert await _owned_product_image(db, product, brand) == "https://cdn.test/benim.jpg"

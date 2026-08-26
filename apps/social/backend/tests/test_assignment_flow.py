@@ -226,6 +226,27 @@ def _fake_website(monkeypatch, html: str = "<html><body>Kuaför salonu</body></h
     def _fake_getaddrinfo(host, port, *_args, **_kwargs):
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (public_ip, port))]
 
+    class _Body:
+        def __init__(self, body):
+            self._body = body
+            self.status_code = 200
+            self.headers = httpx.Headers({})
+            self.encoding = "utf-8"
+            self.is_redirect = False
+
+        async def aiter_bytes(self):
+            yield self._body
+
+    class _StreamCtx:
+        def __init__(self, body):
+            self._response = _Body(body)
+
+        async def __aenter__(self):
+            return self._response
+
+        async def __aexit__(self, *_exc):
+            return False
+
     class _Client:
         def __init__(self, **_kwargs):
             pass
@@ -236,7 +257,7 @@ def _fake_website(monkeypatch, html: str = "<html><body>Kuaför salonu</body></h
         async def __aexit__(self, *_args):
             return False
 
-        async def get(self, url, headers=None, extensions=None):
+        def stream(self, method, url, headers=None, extensions=None):
             # Kapıdan geçildiğinin KANITI: sabitlenmiş URL doğrulanan IP'yi taşır
             # ve `Host` başlığı gerçek ismi taşır. Uç yeniden ham `httpx`'e
             # bağlanırsa buraya orijinal URL gelir ve bu iddia DÜŞER. (Taklit
@@ -247,11 +268,7 @@ def _fake_website(monkeypatch, html: str = "<html><body>Kuaför salonu</body></h
                 "site çekimi SSRF kapısından geçmedi — sabitlenmiş IP yok"
             )
             assert (headers or {}).get("Host"), "kapı Host başlığı koymamış"
-            return httpx.Response(
-                200,
-                content=html.encode(),
-                request=httpx.Request("GET", url),
-            )
+            return _StreamCtx(html.encode())
 
     monkeypatch.setattr(safe_fetch.socket, "getaddrinfo", _fake_getaddrinfo)
     monkeypatch.setattr(safe_fetch.httpx, "AsyncClient", _Client)
