@@ -1,6 +1,6 @@
 ---
 title: Sektör Bilgi Paketi — Runtime Çekirdek Uygulaması
-status: waiting-review
+status: archived
 started: 2026-07-12
 last-touched: 2026-08-26
 blocked-by: null
@@ -101,6 +101,31 @@ Başarı ölçütü: spec §15 kriterleri — özellikle paketsiz markada prompt
        birlikte ilerledi. -->
 
 # Current Status
+
+**KAPANDI 2026-08-26 — PR #2 merge edildi (`cdb8eeb`), task arşivlendi.**
+
+Plan 1 runtime çekirdeği `main`'de. 16/16 görev, 660 test geçiyor (birleşmiş sonuç üzerinde
+taze koşum). Merge commit ile birleştirildi, squash DEĞİL: 132 commit `Exec-Task` footer'ı
+taşıyor ve türetilmiş defter bunları commit başına okuyor — squash defteri tek satıra ezerdi.
+Footer'ların 132'si de merge sonrası korundu (ölçüldü).
+
+**Canlı tarafın üçü bitti:** migration 032/033/034 uygulandı (yedekli, negatif+pozitif
+kontrollü) · n8n credential'ı import edildi · workflow **pasif** import edildi.
+**İki adım kaldı ve ikisi de deploy'a bağlı** — evi `docs/active/CURRENT.md` →
+`sector-package-live-activation`.
+
+**Kapanışa taşınan dürüst borç:** `39f283d` (modül bölmesi) ve `3561231` (n8n credential
+bağlaması) hiçbir hakem tarafından görülmeden main'e girdi — zincir raporları `bf9e080` ve
+`b15ab6e`'de duruyordu. İkisi de testli ve mutasyonla pozitif kontrollü, ama bağımsız hakem
+geçmedi. Eray merge kararını bunu bilerek verdi.
+
+**Vault promotion:** [[decisions/2026-08-26-n8n-credential-over-env]] — n8n'in
+`N8N_BLOCK_ENV_ACCESS_IN_NODE=true` olgusu ve artefakt sözleşmesi kalıcı eve taşındı.
+
+---
+
+## Kapanış öncesi son durum (tarihsel)
+
 
 **2026-08-26 (on dokuzuncu oturum) — REVIEW ZİNCİRİ BİTTİ: `/security-review-claude-codex`
 üç turla koştu, güvenlik kapısı TEMİZ. Durum `waiting-review` olarak KALIYOR.

@@ -23,6 +23,20 @@
 
 ## Resume From
 
+**BU TASK KAPANDI (2026-08-26).** PR #2 merge edildi (`cdb8eeb`), Plan 1 `main`'de.
+Devam eden iş için: `docs/active/CURRENT.md` → `sector-package-live-activation`.
+
+**Kapanış doğrulaması (taze koşum, birleşmiş sonuç üzerinde):**
+- `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → **660 passed** (105s)
+- Merge commit `cdb8eeb`, ebeveynler `a11390d` + `a13c776` — merge, squash DEĞİL
+- `Exec-Task` footer'ı: merge öncesi 132, merge sonrası **132** (defter korundu)
+- Uzak `main` = `cdb8eeb`, yerel `main` fast-forward edildi
+
+**Kapanışa taşınan dürüst borç:** `39f283d` ve `3561231` hiçbir hakem tarafından görülmeden
+main'e girdi. Zincir raporları `bf9e080` / `b15ab6e`'de duruyordu. Test ve mutasyon kontrolü var,
+bağımsız hakem yok.
+
+
 ### ✅ Migration'lar canlıda (2026-08-26)
 
 032 · 033 · 034 uygulandı, üçü de `rc=0`, dosya başına tek transaction.
