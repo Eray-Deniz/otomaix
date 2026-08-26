@@ -234,7 +234,7 @@ def _fake_website(monkeypatch, html: str = "<html><body>Kuaför salonu</body></h
             self.encoding = "utf-8"
             self.is_redirect = False
 
-        async def aiter_bytes(self):
+        async def aiter_raw(self):
             yield self._body
 
     class _StreamCtx:

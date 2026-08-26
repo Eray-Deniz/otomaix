@@ -1061,16 +1061,15 @@ async def generate_short_video_stage1(
         # 2026-08-26 / S2 kapanış turu). Kardeş uç (başlık üretimi) zaten 404 veriyor.
         if not product_row:
             raise HTTPException(status_code=404, detail="Ürün bulunamadı")
-        if product_row:
-            parts: list[str] = []
-            if product_row["name"]:
-                parts.append(f"Name: {product_row['name']}")
-            if product_row["description"]:
-                parts.append(f"Description: {product_row['description']}")
-            tags = product_row["tags"] or []
-            if isinstance(tags, list) and tags:
-                parts.append(f"Tags: {', '.join(str(t) for t in tags)}")
-            product_info = "\n".join(parts)
+        parts: list[str] = []
+        if product_row["name"]:
+            parts.append(f"Name: {product_row['name']}")
+        if product_row["description"]:
+            parts.append(f"Description: {product_row['description']}")
+        tags = product_row["tags"] or []
+        if isinstance(tags, list) and tags:
+            parts.append(f"Tags: {', '.join(str(t) for t in tags)}")
+        product_info = "\n".join(parts)
 
         rag_query = (payload.visual_brief or payload.script or payload.prompt or "").strip()
         if rag_query:

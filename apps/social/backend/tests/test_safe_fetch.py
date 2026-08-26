@@ -61,9 +61,11 @@ class _ScriptedResponse:
     "indirme sınırlandı" iddiasını kanıtlayamaz (kapanış turunun haklı olduğu nokta).
     """
 
-    def __init__(self, status, body=b"ok", location=None, chunk_size=64):
+    def __init__(self, status, body=b"ok", location=None, chunk_size=64, extra_headers=None):
         self.status_code = status
-        self.headers = httpx.Headers({"location": location} if location else {})
+        headers = {"location": location} if location else {}
+        headers.update(extra_headers or {})
+        self.headers = httpx.Headers(headers)
         self.encoding = "utf-8"
         self._body = body
         self._chunk_size = chunk_size
@@ -74,7 +76,13 @@ class _ScriptedResponse:
     def is_redirect(self):
         return self.status_code in (301, 302, 303, 307, 308) and "location" in self.headers
 
-    async def aiter_bytes(self):
+    async def aiter_raw(self):
+        """HAM bayt — `aiter_bytes` DEĞİL.
+
+        Üretim kodu ham baytı sayar; çözülmüş baytı saymak, aktarılanı değil
+        SONUCU sınırlamak olurdu (kapanış turu bunu ölçtü: 20 KB'lık sıkıştırılmış
+        gövde 512 KB sınıra rağmen 49 MiB tepe bellek üretiyordu).
+        """
         for start in range(0, len(self._body), self._chunk_size):
             chunk = self._body[start : start + self._chunk_size]
             self.produced += len(chunk)
@@ -123,8 +131,21 @@ def http(monkeypatch):
     return {"script": script, "requests": requests, "served": served}
 
 
-def _response(status: int, *, body: bytes = b"ok", location: str | None = None, chunk_size: int = 64):
-    return _ScriptedResponse(status, body=body, location=location, chunk_size=chunk_size)
+def _response(
+    status: int,
+    *,
+    body: bytes = b"ok",
+    location: str | None = None,
+    chunk_size: int = 64,
+    extra_headers: dict | None = None,
+):
+    return _ScriptedResponse(
+        status,
+        body=body,
+        location=location,
+        chunk_size=chunk_size,
+        extra_headers=extra_headers,
+    )
 
 
 # ── URL doğrulama: ağa hiç çıkmadan reddedilenler ───────────────────────────
@@ -378,3 +399,90 @@ async def test_public_ipv6_is_accepted(dns, http):
     await fetch_public_url("http://v6.test/")
 
     assert "[2001:4860:4860::8888]" in http["requests"][0]["url"]
+
+
+# ── Kaynak sınırı: ÜÇ eksen birden (attempt-3 bulgusu) ──────────────────────
+#
+# Bu eksende iki review turu harcandı ve ikisi de aynı sınıfın dar bir varyantını
+# buldu: önce "sınır sonucu kesiyor, indirmeyi değil", sonra "sınır açılmadan önce
+# uygulanmıyor". Üçüncü varyantı beklemek yerine sınıf kapatıldı ve kapanış ELLE
+# SEÇİLMİŞ örnekle değil ÜRETİLMİŞ matrisle kanıtlanıyor.
+
+
+@pytest.mark.parametrize("encoding", ["gzip", "deflate", "br", "zstd", "gzip, br"])
+async def test_compressed_response_is_rejected_before_reading(encoding, dns, http):
+    """Sıkıştırılmış yanıt TEK BAYT okunmadan reddedilir.
+
+    Açmayı denemek, 20 KB'lık bir gövdenin onlarca MB'a şişmesine izin vermekti
+    (ÖLÇÜLDÜ: 20.406 bayt → 49,4 MiB tepe bellek). Sınırı açma işleminden ÖNCE
+    uygulamanın tek yolu, açmayı hiç yapmamaktır.
+    """
+    dns["public.test"] = [PUBLIC_IP]
+    http["script"].append(
+        _response(200, body=b"x" * 100_000, extra_headers={"content-encoding": encoding})
+    )
+
+    with pytest.raises(UnsafeUrlError, match="sıkıştırılmış"):
+        await fetch_public_url("http://public.test/")
+
+    assert http["served"][0].produced == 0, "reddedilen yanıttan bayt okundu"
+
+
+async def test_identity_encoding_is_requested(dns, http):
+    """İstek sıkıştırma İSTEMEZ — reddetmek ikinci savunma, istememek birincisi."""
+    dns["public.test"] = [PUBLIC_IP]
+    http["script"].append(_response(200, body=b"tamam"))
+
+    await fetch_public_url("http://public.test/")
+
+    assert http["requests"][0]["headers"]["Accept-Encoding"] == "identity"
+
+
+@pytest.mark.parametrize("encoding", ["identity", None])
+@pytest.mark.parametrize("size_factor", [0.5, 1, 4, 64])
+@pytest.mark.parametrize("chunk", [64, 8192, 10_000_000])
+async def test_transferred_bytes_stay_bounded(encoding, size_factor, chunk, dns, http):
+    """ÜRETİLMİŞ MATRİS: kodlama x boyut x parça biçimi.
+
+    Sözleşme: sunucunun ürettiği ham bayt, sınırı EN FAZLA bir parça kadar aşar.
+    Tek dev parça vakası bilerek içeride: gerçek koşumda parça boyutunu sunucu
+    değil aktarım tamponu belirler (ÖLÇÜLDÜ 2026-08-26, canlı: en büyük parça
+    16.384 bayt), ama bu fonksiyon onu denetlemez ve sözleşme bunu söylemeli.
+    """
+    cap = 4096
+    body = b"a" * int(cap * size_factor)
+    headers = {"content-encoding": encoding} if encoding else None
+    dns["public.test"] = [PUBLIC_IP]
+    http["script"].append(
+        _response(200, body=body, chunk_size=min(chunk, max(len(body), 1)),
+                  extra_headers=headers)
+    )
+
+    out = await fetch_public_url("http://public.test/", max_bytes=cap)
+
+    served = http["served"][0]
+    assert len(out) <= cap
+    assert served.produced <= cap + min(chunk, max(len(body), 1))
+
+
+async def test_slow_drip_hits_the_total_deadline(dns, http):
+    """Damlatan sunucu işçiyi süresiz tutamaz.
+
+    httpx'in `timeout`'u işlem başına HAREKETSİZLİK süresidir: düzenli aralıklarla
+    bayt gönderen bir sunucu onu hiç tetiklemez. Bu yüzden ayrı bir toplam tavan var.
+    """
+    import asyncio
+
+    dns["public.test"] = [PUBLIC_IP]
+
+    class _Drip(_ScriptedResponse):
+        async def aiter_raw(self):
+            while True:
+                await asyncio.sleep(0.01)
+                self.produced += 1
+                yield b"a"
+
+    http["script"].append(_Drip(200, body=b"", chunk_size=1))
+
+    with pytest.raises(UnsafeUrlError, match="toplam süre"):
+        await fetch_public_url("http://public.test/", timeout=0.2, max_bytes=10_000_000)

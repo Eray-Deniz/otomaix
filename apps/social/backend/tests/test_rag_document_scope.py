@@ -247,7 +247,7 @@ async def test_foreign_product_image_is_not_used(db):
     attacker = await _seed_brand(db, "Saldırgan")
     foreign = await _seed_product_with_image(db, victim, "https://cdn.test/gizli.jpg")
 
-    assert await _owned_product_image(db, foreign, attacker) == ""
+    assert await _owned_product_image(db, foreign, brand_id=attacker) == ""
 
 
 async def test_own_product_image_is_used(db):
@@ -257,4 +257,71 @@ async def test_own_product_image_is_used(db):
     brand = await _seed_brand(db, "Sahip")
     product = await _seed_product_with_image(db, brand, "https://cdn.test/benim.jpg")
 
-    assert await _owned_product_image(db, product, brand) == "https://cdn.test/benim.jpg"
+    assert await _owned_product_image(db, product, brand_id=brand) == "https://cdn.test/benim.jpg"
+
+
+# ── Uçların KENDİSİ: yabancı ürün 404 (attempt-3 bulgusu F5) ────────────────
+#
+# Yukarıdaki iki test yalnız YARDIMCIYI çağırıyor. Attempt-3 hakemi bunu mutasyonla
+# ölçtü: boru hatları filtresiz SQL'e geri çevrildiğinde 656 testin hepsi yeşil
+# kalıyordu. Düzeltme doğruydu ama korumasızdı. Bağlayıcı olan, ulaşılabilir yolun
+# kendisidir — uç kapıları.
+
+
+async def _seed_owned_brand(db, label: str):
+    """Marka + onun sahibi olan kullanıcı kimliği."""
+    account_id = await db.fetchval(
+        "INSERT INTO social.accounts (email, name) VALUES ($1, $2) RETURNING id",
+        f"prod-gate-{uuid.uuid4()}@example.test",
+        f"{label} Sahibi",
+    )
+    workspace_id = await db.fetchval(
+        "INSERT INTO social.workspaces (account_id, name) VALUES ($1, $2) RETURNING id",
+        account_id,
+        f"{label} Çalışma Alanı",
+    )
+    await db.execute(
+        "INSERT INTO social.workspace_members (workspace_id, account_id) VALUES ($1, $2)",
+        workspace_id,
+        account_id,
+    )
+    brand_id = await db.fetchval(
+        "INSERT INTO social.brands (workspace_id, name) VALUES ($1, $2) RETURNING id",
+        workspace_id,
+        f"{label} Markası",
+    )
+    return {"sub": str(account_id)}, brand_id
+
+
+async def test_short_video_endpoint_rejects_foreign_product(db):
+    """Yabancı ürün kimliği taşıyan istek 404 alır — video hattı hiç koşmaz.
+
+    Mutasyon kontrolü: uçtaki kapı kaldırılırsa bu test düşer. Yardımcıyı sınayan
+    testler düşmez, çünkü onlar ulaşılabilir yolu değil yardımcıyı bağlar.
+
+    KAPSAM SINIRI (ölçüldü, gizlenmiyor): kardeş uç `generate_short_video_stage1`
+    burada sınanmıyor. Onun ürün kapısı kota kontrolünün ARKASINDA duruyor, bu
+    yüzden varsayılan planlı bir hesapla kapıya hiç ulaşılamıyor (ölçüm: 404 yerine
+    402 dönüyor). Güvenlik açısından sorun değil — kota da reddediyor, sızıntı yok —
+    ama o kapı test tarafından BAĞLANMIŞ DEĞİL. Bağlamak plan fixture'ı ister.
+    """
+    endpoint = "generate_short_video"
+    from app.models.schemas import ShortVideoGenerate
+    from app.routers import posts as posts_router
+
+    attacker_user, attacker_brand = await _seed_owned_brand(db, "Saldırgan")
+    _, victim_brand = await _seed_owned_brand(db, "Kurban")
+    foreign_product = await _seed_product_with_image(db, victim_brand, "https://cdn.test/gizli.jpg")
+
+    payload = ShortVideoGenerate(
+        brand_id=attacker_brand,
+        prompt="tanıtım",
+        script="Bir cümlelik senaryo.",
+        product_id=foreign_product,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await getattr(posts_router, endpoint)(payload=payload, user=attacker_user, db=db)
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "Ürün bulunamadı"

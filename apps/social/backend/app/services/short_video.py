@@ -694,7 +694,7 @@ async def generate_background_video(
 
 # ─── Ana pipeline ────────────────────────────────────────────────────────────
 
-async def _owned_product_image(db, product_id, brand_id) -> str:
+async def _owned_product_image(db, product_id: UUID, *, brand_id: UUID) -> str:
     """Ürünün görselini YALNIZ markaya aitse döndürür (yoksa boş metin).
 
     Security review 2026-08-26 / S2 kapanış turu: iki kısa video yolu da ürünü
@@ -706,6 +706,16 @@ async def _owned_product_image(db, product_id, brand_id) -> str:
     Okuma tek yardımcıya alındı ki kapsam iki yerde ayrı ayrı yazılmasın; iki
     kopya, birinde yapılan düzeltmenin diğerinde sessizce eksik kalmasının
     olağan yoludur.
+
+    `brand_id` keyword-only: kardeş kapı (`get_document_context`) bilinçli olarak
+    öyle kuruldu ve gerekçesi aynı — yanlış sırayla verilen üç konumsal argüman
+    sessizce boş sonuç üretirdi. Aynı sınıfın iki ayağı aynı sertlikte olmalı
+    (attempt-3 hakemi bu asimetriyi işaretledi).
+
+    Bu yardımcı SAVUNMA DERİNLİĞİdir, tek kapı değil: uçlar yabancı ürünü zaten
+    404 ile önden reddediyor ve boru hatlarının uçlardan başka çağıranı yok
+    (ölçüldü). Yani buradaki filtre bugün ulaşılabilir bir yolu kapatmıyor —
+    uç kapısı kaldırılırsa kapatır.
     """
     row = await db.fetchrow(
         "SELECT image_url FROM social.brand_products WHERE id = $1 AND brand_id = $2",
@@ -809,7 +819,7 @@ async def run_short_video_pipeline(
     # Ürün görseli varsa FLUX.2 still adımını atla, doğrudan Wan'a gönder
     product_image_url = ""
     if product_id:
-        product_image_url = await _owned_product_image(db, product_id, brand_id)
+        product_image_url = await _owned_product_image(db, product_id, brand_id=brand_id)
 
     # prompt = image_prompt (caption generator tarafından üretilen İngilizce sahne açıklaması)
     # Eğer prompt boşsa veya Türkçe ise fallback olarak _build_still_prompt kullan
@@ -1059,7 +1069,7 @@ async def run_short_video_stage1(
     # Ürün görseli kontrolü
     product_image_url = ""
     if product_id:
-        product_image_url = await _owned_product_image(db, product_id, brand_id)
+        product_image_url = await _owned_product_image(db, product_id, brand_id=brand_id)
 
     has_brief = bool(user_brief.strip())
     has_product_image = bool(product_image_url)
