@@ -8,7 +8,9 @@
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
 - Spec girdisi: `docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` — **karar sorusu
   çıkarsa ÖNCE buraya bak; spec bir özet, kanonik ayrıntı input'ta.**
-- Dal: `feat/sektor-bilgi-paketi` (**upstream YOK — hiç push edilmedi**; `main`'in ~118 commit önünde)
+- Dal: `feat/sektor-bilgi-paketi` @ `d8a6d5d` — **PUSH EDİLDİ**, upstream `origin/feat/sektor-bilgi-paketi`
+- **PR: https://github.com/Eray-Deniz/otomaix/pull/2** (açık, `feat/sektor-bilgi-paketi` → `main`)
+  PR gövdesi hakemi doğrudan incelenmemiş iki koda yönlendiriyor (`39f283d`, `3561231`).
 - Kod review raporu: `docs/reviews/2026-08-26-feat-sektor-bilgi-paketi.md`
 - Güvenlik review raporu: `docs/security-reviews/2026-08-26-feat-sektor-bilgi-paketi.md`
   (**başındaki düzeltme banner'ını ÖNCE oku** — bir bulgu geçersiz çıktı)

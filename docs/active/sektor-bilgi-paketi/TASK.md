@@ -272,6 +272,9 @@ canlı internete karşı pozitif/negatif sondalandı.
 
 # Decisions Log
 
+- **2026-08-26 — PR #2 açıldı** (`feat/sektor-bilgi-paketi` → `main`, HEAD `d8a6d5d`):
+  https://github.com/Eray-Deniz/otomaix/pull/2 · task `waiting-review` olarak kalır.
+
 - **2026-08-26 (yirminci oturum) — Dal kapanışı = PR yolu (Eray, `/finish-branch-claude-codex`):**
   Closure-audit iki blocker buldu. Birincisi kapatıldı: 130 commit yalnız bu makinedeydi, PR yolu
   uzak ref üretiyor. **İkincisi AÇIK ve PR review'ının işi:** zincir raporları kapanış aralığını
