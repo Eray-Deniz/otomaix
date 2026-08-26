@@ -425,7 +425,12 @@ async def suggest_ideas(
     doc_context = ""
     if payload.document_ids:
         base_query = payload.prompt or f"{brand['name']} sosyal medya içerik fikirleri"
-        doc_context = await get_document_context(payload.document_ids, base_query, db) or ""
+        doc_context = (
+            await get_document_context(
+                payload.document_ids, base_query, db, brand_id=payload.brand_id
+            )
+            or ""
+        )
 
     # System prompt: sabit talimatlar (prompt caching için ayrı blok)
     _STATIC_RULES = (

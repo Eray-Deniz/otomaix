@@ -15,6 +15,7 @@ import re
 from uuid import UUID
 
 import asyncpg
+from fastapi import HTTPException
 
 from app.core.config import settings
 from app.services.storage import r2
@@ -237,6 +238,7 @@ async def get_document_context(
     max_chars: int = 6_000,
     *,
     kind: str = "brand",
+    brand_id: UUID,
 ) -> str:
     """Build document context string for injection into AI prompt.
 
@@ -246,24 +248,41 @@ async def get_document_context(
     For small docs: include raw_text directly.
     For large docs (chunks): vector search if embeddings exist, otherwise first-N chunks.
     Returns combined context string (truncated to max_chars).
+
+    `brand_id` ZORUNLU ve keyword-only: çağıranın DOĞRULADIĞI marka. Kapsam burada
+    uygulanır, çağıranda değil — çağıranlar `payload.brand_id`'nin sahipliğini
+    doğruluyordu ama `document_ids`'i doğrulamadan geçiriyordu, dolayısıyla başka
+    kiracının doküman kimliğini bilen biri o dokümanın metnini kendi üretim bağlamına
+    enjekte ettirebiliyordu (security review 2026-08-26, S2). Parametrenin zorunlu
+    olması bilinçli: yeni bir çağıran kapsamı unutursa sessizce sızdırmaz, TypeError verir.
+
+    İstenen kimliklerden biri bile bu markaya ait değilse İSTEĞİN TAMAMI 404 ile
+    reddedilir — kısmi sonuç dönmek, saldırgana hangi kimliğin var olduğunu söyler.
     """
     if not document_ids:
         return ""
 
     if kind == "product":
-        docs_table = "social.product_documents"
         chunks_table = "social.product_document_chunks"
-        name_col = "filename"
+        docs_sql = """
+            SELECT d.id, d.filename AS name, d.raw_text
+            FROM social.product_documents d
+            JOIN social.brand_products p ON p.id = d.product_id
+            WHERE d.id = ANY($1::uuid[]) AND p.brand_id = $2
+        """
     else:
-        docs_table = "social.brand_documents"
         chunks_table = "social.brand_document_chunks"
-        name_col = "name"
+        docs_sql = """
+            SELECT id, name, raw_text
+            FROM social.brand_documents
+            WHERE id = ANY($1::uuid[]) AND brand_id = $2
+        """
 
-    placeholders = ", ".join(f"${i + 1}" for i in range(len(document_ids)))
-    docs = await db.fetch(
-        f"SELECT id, {name_col} AS name, raw_text FROM {docs_table} WHERE id IN ({placeholders})",
-        *document_ids,
-    )
+    # Tekrarları at ama sırayı koru — sayım karşılaştırması tekrarlı listede yanılmasın.
+    requested = list(dict.fromkeys(document_ids))
+    docs = await db.fetch(docs_sql, requested, brand_id)
+    if len(docs) != len(requested):
+        raise HTTPException(status_code=404, detail="Doküman bulunamadı")
 
     context_parts: list[str] = []
     remaining_chars = max_chars
@@ -318,20 +337,38 @@ async def get_product_document_context(
     prompt: str,
     db: asyncpg.Connection,
     max_chars: int = 6_000,
+    *,
+    brand_id: UUID,
 ) -> str:
     """Ürün ID listesinden RAG context derle. Her ürüne bağlı tüm dokümanlar çekilir.
 
     Sprint 7 caption-gen ürün doküman bağlamı için.
+
+    `brand_id` ZORUNLU: ürünün de dokümanlarının da bu markaya ait olması gerekir.
+    Çağıranlardan biri (kısa video 2. aşama) ürün satırını sahiplik filtresiyle çekip
+    sonucu KULLANMIYORDU — satır boş dönse bile doküman çağrısı koşuyordu, yani yabancı
+    ürünün dokümanları yine enjekte ediliyordu (security review 2026-08-26, S2).
+    Kapsamı çağırana bırakmak bu sınıfı kapatmıyor; kapı burada.
     """
     if not product_ids:
         return ""
 
-    placeholders = ", ".join(f"${i + 1}" for i in range(len(product_ids)))
+    requested = list(dict.fromkeys(product_ids))
+    owned = await db.fetch(
+        "SELECT id FROM social.brand_products WHERE id = ANY($1::uuid[]) AND brand_id = $2",
+        requested,
+        brand_id,
+    )
+    if len(owned) != len(requested):
+        raise HTTPException(status_code=404, detail="Ürün bulunamadı")
+
     rows = await db.fetch(
-        f"SELECT id FROM social.product_documents WHERE product_id IN ({placeholders})",
-        *product_ids,
+        "SELECT id FROM social.product_documents WHERE product_id = ANY($1::uuid[])",
+        requested,
     )
     doc_ids = [r["id"] for r in rows]
     if not doc_ids:
         return ""
-    return await get_document_context(doc_ids, prompt, db, max_chars=max_chars, kind="product")
+    return await get_document_context(
+        doc_ids, prompt, db, max_chars=max_chars, kind="product", brand_id=brand_id
+    )

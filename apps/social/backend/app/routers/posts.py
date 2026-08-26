@@ -112,7 +112,9 @@ async def _build_prompt_with_rag_legacy(
             return f"{category_tr} odaklı sosyal medya görseli"
         return base_prompt
 
-    doc_context = await get_document_context(payload.document_ids, base_prompt, db)
+    doc_context = await get_document_context(
+        payload.document_ids, base_prompt, db, brand_id=payload.brand_id
+    )
     if not doc_context:
         if category_tr and base_prompt:
             return f"{category_tr} odaklı görsel: {base_prompt}"
@@ -298,12 +300,14 @@ async def generate_caption(
 
     rag_parts: list[str] = []
     if payload.document_ids:
-        doc_context = await get_document_context(payload.document_ids, base_query, db)
+        doc_context = await get_document_context(
+            payload.document_ids, base_query, db, brand_id=payload.brand_id
+        )
         if doc_context:
             rag_parts.append(doc_context)
     if payload.product_id:
         product_doc_context = await get_product_document_context(
-            [payload.product_id], base_query, db
+            [payload.product_id], base_query, db, brand_id=payload.brand_id
         )
         if product_doc_context:
             rag_parts.append(product_doc_context)
@@ -933,7 +937,9 @@ async def generate_short_video(
 
     rag_context: str | None = None
     if payload.document_ids:
-        rag_context = await get_document_context(payload.document_ids, payload.prompt, db)
+        rag_context = await get_document_context(
+            payload.document_ids, payload.prompt, db, brand_id=payload.brand_id
+        )
 
     # Seçili platformların en kısıtlayıcı süre limitini al
     max_duration = DEFAULT_MAX_DURATION
@@ -1051,7 +1057,7 @@ async def generate_short_video_stage1(
         rag_query = (payload.visual_brief or payload.script or payload.prompt or "").strip()
         if rag_query:
             ctx = await get_product_document_context(
-                [payload.product_id], rag_query, db,
+                [payload.product_id], rag_query, db, brand_id=payload.brand_id,
             )
             if ctx:
                 product_doc_context = ctx
