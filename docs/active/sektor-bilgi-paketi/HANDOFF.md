@@ -18,16 +18,24 @@
 
 ## Resume From
 
-**Sıradaki iş: ÜÇ YÜKSEK GÜVENLİK BULGUSUNUN DÜZELTİLMESİ** (plan-yürütme komutuyla; Eray kararı
-2026-08-26). Zincirin 3. adımı (`/security-review-claude-codex`) KOŞTU — ayrıntı bu belgenin sonundaki
-"Güvenlik review'ı koştu" bölümünde; bulgular `TASK.md` `# Open Problems`'ta. Kapı BLOKE, açık kapı VAR.
-Zincirin 2. adımı (`/review-claude-codex`) daha önce bitmişti; yedi yüksek bulgusu düzeltilip commit edildi.
+**Sıradaki iş: dal kapanışı (`/finish-branch-claude-codex`) — AMA önce aşağıdaki tek karar.**
+Zincirin 3. adımı (`/security-review-claude-codex`) attempt-1 + kapanış turuyla birlikte BİTTİ.
+Üç yüksek bulgunun ikisi düzeltildi ve kapanış turunca teyit edildi; üçüncüsü **bulgu değildi,
+premisi çürütüldü** (paket müşteriden gizli değil — ayrıntı `TASK.md` Open Problems).
+Güvenlik kapısı artık **temiz**: unresolved critical/high YOK, dual-review tam, kapsam boşluğu yok.
+
+**Tek açık karar — "doğrulandı ama denetlenmedi":** kapanış turu `b15ab6e`'yi denetledi. Ondan
+SONRA inen üç düzeltme (taşıyıcı-NAT · akıtarak okuma · ürün görseli, `c5dcc5a`) ve geri alma
+(`15692c1`) bağımsız hakem GÖRMEDİ. Ölçümleri var (beş mutasyon kontrolü, canlı sonda, 625 test)
+ama bu depoda mekanik doğrulamanın bağımsız turun yerine geçmediği ÖLÇÜLMÜŞ bir derstir
+(geçen turda yedi yüksek bulgunun üçü, ilk dört düzeltmenin kendi yan etkisiydi). Kapanışta ya
+üçüncü bir dar tur koşulmalı ya da bu açıkça kabul edilmeli — sessizce geçilmemeli.
 
 **Devralınan "ilk iş" borcu KAPANDI:** yürütmenin final turunda bağımsız hakem görmeden inen
 taşıyıcı-sözleşme fix'i (`17840c6`) bu review'da denetlendi — iki hakem de 032/033/034'ün
 doğrulama bloklarını okudu ve oradan H1 çıktı.
 
-Zincirin kalanı: üç high fix → attempt-2 kapanış turu (aynı pinli sözleşme) → `/finish-branch-claude-codex`.
+Zincirin kalanı: (opsiyonel üçüncü dar tur) → `sector-packages-mandatory-split` → `/finish-branch-claude-codex`.
 
 **Tetiği DOLDU (ama sıra fix'lerden sonra):** `sector-packages-mandatory-split` (`CURRENT.md`) —
 1804 satırlık dosyanın zorunlu bölmesi. Tetik "review zinciri bittikten sonra"ydı; güvenlik review'ı
@@ -176,3 +184,28 @@ Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
 - **Temizlik borcu:** `docs/reviews/.ledger-index/` bu turda oluştu ve **untracked**. Commit kapısı
   yalnız rapor dosyasını eklemeye izin verdiği için tracked edilmedi. Kapanışta karar: izlensin mi
   (oturumlar arası ledger kalıcılığı için gerekli) yoksa yok sayılsın mı.
+
+
+### Güvenlik zinciri KAPANDI (2026-08-26, aynı oturum) — sonuç
+
+- **Düzeltilen ve kapanış turunca teyit edilen iki yüksek bulgu:**
+  - Kullanıcının verdiği URL'i çeken iki yüzey artık ortak bir SSRF kapısından geçiyor
+    (`safe_fetch.py`): şema/port allowlist'i, çözülen HER adres için pozitif `is_global` koşulu,
+    yönlendirmenin elle ve her adımda yeniden doğrulanarak izlenmesi, bağlantının doğrulanan IP'ye
+    sabitlenmesi, akıtarak okuma + bayt sınırı. Kapanış turu iki eksik buldu (taşıyıcı-NAT aralığı
+    kapıdan geçiyordu; bayt sınırı indirmeyi değil sonucu kesiyordu) — ikisi de düzeltildi.
+  - Doküman ve ürün erişimi doğrulanmış markaya bağlandı. Kapsam yardımcının İÇİNDE ve parametre
+    ZORUNLU: unutan çağıran sızdırmaz, `TypeError` alır. Kapanış turu ürün GÖRSELİ ayağının açık
+    kaldığını buldu (iki kısa video yolu ürünü kiracı filtresiz okuyordu, doğrulanmamış kimlik
+    kayıt satırına da yazılıyordu) — düzeltildi.
+- **Bulgu olmadığı anlaşılan üçüncü kalem:** paket gizliliği. Geri alındı; kök neden ve kalıcı
+  ders `TASK.md` Open Problems'ta ve memory'de.
+- **Test:** 625 geçiyor (oturum başı 580). Her düzeltmenin mutasyon kontrolü var; SSRF kapısı
+  ayrıca canlı internete karşı bir kez pozitif/negatif sondalandı.
+- **Rapor:** `docs/security-reviews/2026-08-26-feat-sektor-bilgi-paketi.md` — başında düzeltme
+  banner'ı var, sonunda kapanış turu bölümü.
+- **Ham kanıt (bu makinede, bu kökten):** `~/.claude/logs/otomaix--ffc87809/` altında
+  `2026-08-26-secreview-feat-sektor-bilgi-paketi-{1,2}.md` (Codex) ve `-{1,2}.claude.md` (Claude).
+- **Bir sonraki hakeme UYARI:** hakemlere verilen ortak bağlam metnine doğrulanmamış rol/kural
+  iddiası YAZMA. Bu oturumda yazdım, iki hakem de ona karşı doğrulama yaptı ve olmayan bir yüksek
+  bulgu iki tur harcattı. İki hakemin uyuşması, iddia orkestratörden geldiyse teyit DEĞİLDİR.

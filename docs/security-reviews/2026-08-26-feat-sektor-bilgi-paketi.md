@@ -1,5 +1,18 @@
 # Security Review (dual): sektör bilgi paketi Plan 1 runtime çekirdeği — 2026-08-26
 
+> **SONRADAN DÜZELTİLDİ — bu raporu okurken ÖNCE oku.** Aşağıdaki **S3 bir bulgu DEĞİLDİR**;
+> premisi çürütüldü (Eray, 2026-08-26). Paket metni müşteriden gizli değildir: paket üretimi
+> besler ve müşteri çıkan post'u görüp onaylar. Müşteriden gizli olan **ham araştırma katmanı**
+> (K-139: "yalnız operatör/yönetici okur") ve yönetici işlemleridir. K-16'nın "API'den
+> okunabilirlik: müşteriye KAPALI" hükmü, müşteriye paket listeleyen bir UÇ olup olmadığını
+> karara bağlar — "paketten türeyen hiçbir metin müşteriye ulaşmaz" demez.
+> **Kök neden bu raporun kendisindedir:** gizlilik iddiası, orkestratörün iki hakeme verdiği
+> ORTAK BAĞLAM metnine doğrulanmadan yazıldı; iki hakem de onu sorgulamak yerine ona karşı
+> doğrulama yaptı. Bu yüzden S3'ün `[single-source]`/`[both-agree]` sinyali GEÇERSİZDİR —
+> ortak-mod artefaktıdır. Düzeltmesi `15692c1` ile geri alındı, dosyalar bayt-bayt eski hâlinde.
+> Kapanış turunun S3 soyundan gelen bulguları (N3 · N4 · N5) aynı sebeple düşer.
+> Ayrıntı: bu belgenin sonundaki "Attempt-2 (kapanış turu)" bölümü.
+
 coverage_mode: `diff`
 - Review aralığı: `REVIEW_BASE_SHA..HEAD_SHA`
 - BASE_REF: `main` | BASE_SHA: `5a9d5d4` | HEAD_SHA: `7a2a180` | REVIEW_BASE_SHA (merge-base): `5a9d5d4`
@@ -23,8 +36,10 @@ Main tree at review: **clean** (0 uncommitted dosya)
 - `review_target_id`: `security-review:feat-sektor-bilgi-paketi:5a9d5d4220d0a58db84dc23f274199491d91216b`
 - `ledger_locator`: `task:sektor-bilgi-paketi`
 - `pinned_contract_hash` (TAM 7-alan): `0f9a7629fc2fa17dd8fbd212492902ce7f1b495b2ac681cf07f6d72ac7b93fbe`
-- `completed_evaluations`: 1 · `total_invocations`: 1 · `consecutive_degraded`: 0
-- attempt: 1 (dual). attempt-2 closure **koşulmadı** — bu oturumda hiçbir fix land etmedi (report-only).
+- `completed_evaluations`: 2 · `total_invocations`: 2 · `consecutive_degraded`: 0
+- attempt-1 (dual) + attempt-2 closure (dual) — ikisi de koştu. Ayrıntı: belgenin sonundaki
+  "Attempt-2 (kapanış turu)" bölümü. (Bu satır attempt-1 yazılırken "closure koşulmadı" diyordu;
+  fix'ler AYNI oturumda indiği için P5 tetiği ateşlendi ve tur koşuldu.)
 
 ## Sözleşme sapmaları (beyan)
 
@@ -348,3 +363,75 @@ contract ile attempt-2 closure turu), ya da explicit **security-risk override** 
 - Codex ham çıktısı: `/root/.claude/logs/otomaix--ffc87809/2026-08-26-secreview-feat-sektor-bilgi-paketi-1.md`
 - Claude alt-hakem ham çıktısı: `/root/.claude/logs/otomaix--ffc87809/2026-08-26-secreview-feat-sektor-bilgi-paketi-1.claude.md`
   (secret değerleri maskeli)
+
+
+---
+
+# Attempt-2 (kapanış turu) — 2026-08-26
+
+Üç yüksek bulgunun düzeltmeleri indikten SONRA koşuldu (P5 fix-kapanış tetiği). Dar kapsam:
+sabit closure prompt'u, aynı pinli sözleşme, etki zarfı = {dokunulan dosyalar} ∪ {doğrudan
+çağıranlar/çağrılanlar} ∪ {komşu testler} ∪ {dokunulan yüzeye bağlı config}.
+
+- Kapsam: `7a2a180..b15ab6e` (13 dosya)
+- Hakemler: fresh Claude subagent + Codex `adversarial-review` — **ikisi de koştu (dual)**
+- `total_invocations`: 2 · `completed_evaluations`: 2 · `consecutive_degraded`: 0
+- Ham kanıt: `2026-08-26-secreview-feat-sektor-bilgi-paketi-2.md` (Codex) ve `-2.claude.md` (Claude)
+
+## Kapanış verdictleri
+
+| Bulgu | Codex | Claude | Orkestratör ölçümü sonrası |
+|---|---|---|---|
+| S1 SSRF | still-open (bir adres sınıfı) | closed + iki yeni | **kapandı** (kapanışın bulduğu iki eksik düzeltildi) |
+| S2 kiracı kapsamı | still-open (ürün görseli) | closed | **kapandı** (ürün görseli ayağı düzeltildi) |
+| S3 paket gizliliği | still-open | still-open | **`rejected` — premis çürütüldü** (yukarıdaki banner) |
+
+## Kapanışın bulduğu ve DÜZELTİLEN eksikler
+
+- **Taşıyıcı-NAT aralığı (100.64.0.0/10) SSRF kapısından geçiyordu.** İki hakem de bağımsız buldu.
+  Kapı yasak bayrakları TEK TEK sayıyordu; o aralık hiçbirine takılmıyor (`is_private` False,
+  yalnız `is_global` False). Sayarak kurmak varyantı kapatır, sınıfı kapatmaz → pozitif
+  `is_global` koşuluna geçildi. **İkinci ölçüm:** `is_global` de tek başına yetmiyor —
+  `224.0.0.1` (multicast) için True döner; iki katman birlikte duruyor.
+- **Bayt sınırı indirmeyi değil sonucu kesiyordu.** Gövdenin tamamı belleğe alınıp sonra
+  dilimleniyordu; sınır bir bellek koruması DEĞİLDİ ve modül docstring'i sahip olmadığı bir
+  kontrolü iddia ediyordu (İlke 9 ihlali, kapanış turu yakaladı). Akıtarak okumaya geçildi,
+  sınırda duruluyor, yönlendirme gövdesi hiç okunmuyor.
+- **S2'nin ürün görseli ayağı açıktı.** İki kısa video yolu da ürünü `WHERE id = $1` ile,
+  kiracı filtresi olmadan okuyordu; üstelik doğrulanmamış ürün kimliği `posts` satırına da
+  yazılıyordu. Okuma tek kapsamlı yardımcıya alındı, iki router ürün sahipliğini önden 404'lüyor.
+- **[GERİ ALINDI]** Gizlilik kuralı kısa video durağan-kare çağrısına ulaşmıyordu (N4). Kural
+  premisi çürütülünce bu da düştü.
+
+## Kapanışın bulduğu, bulgu OLMAYANLAR
+
+- **N3 · N4 · N5** — hepsi S3 soyundan (paket içeriğinin müşteriye ulaşması). Premis çürütüldü
+  → `rejected`. `accepted_risk` ALMAZLAR: kabul edilecek bir risk değil, var olmayan bir bulgudur.
+- **N6 (low, davranış değişikliği)** — bayat/silinmiş doküman kimliği artık üretimi 404 ile
+  düşürüyor (eskiden sessizce atlanıyordu). Bu, S2 düzeltmesinin bilinçli fail-closed sonucudur:
+  kısmi sonuç dönmek hangi kimliğin var olduğunu sızdırır. Hata mesajı JENERİK kalmalı.
+  `accepted_risk`; müşteri yüzeyinde küçük bir UX pürüzü, evi dal kapanışı.
+
+## Kapanış turunun teyit ettiği, gerileme OLMAYANLAR
+
+- Paylaşılan yardımcının imza değişikliği: 6 çağıranın hepsi güncel, dışarıda çağıran yok,
+  unutan çağıran `TypeError` alır (fail-closed). Test bunu pinliyor.
+- Paketsiz markanın donmuş prompt'u bayt olarak DEĞİŞMEDİ (kapanış hakemi ayrıca ölçtü).
+- Değiştirilen iki test hiçbir şeyi zayıflatmıyor (iki hakem de ayrı ayrı değerlendirdi);
+  ikisi de S3 geri alınırken zaten eski hâline döndü.
+
+## Kapanış SONRASI düzeltmelerin durumu — dürüst etiket
+
+Kapanış turu `b15ab6e`'yi denetledi. Ondan sonra inen üç düzeltme (taşıyıcı-NAT · akıtarak okuma ·
+ürün görseli, `c5dcc5a`) ve geri alma (`15692c1`) **bağımsız hakem GÖRMEDİ.** Ölçümleri var
+(beş mutasyon kontrolü, canlı internette pozitif/negatif sonda, 625 test) ama bunlar mekanik
+doğrulamadır ve bu depoda mekanik doğrulamanın bağımsız turun yerine geçmediği ölçülmüş bir
+derstir. **Etiket: doğrulandı ama denetlenmedi.**
+
+## Güncel Deploy/Finish Gate
+
+- **security-risk: clean** — unresolved critical/high YOK. S1 ve S2 kapandı; S3 `rejected`.
+- **dual-review: complete** — attempt-1 ve attempt-2'de dört hakem koşumu, degradasyon yok.
+- **coverage: full-diff** — coverage_gap yok.
+- **Açık kalem (kapanışta karar):** yukarıdaki "denetlenmedi" etiketi — üçüncü bir dar tur mu
+  koşulacak, yoksa ölçümlerle kabul mü edilecek.
