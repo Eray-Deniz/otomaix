@@ -378,6 +378,48 @@ async def test_event_write_failure_does_not_block_caller(caplog):
     assert any("paket olayı yazılamadı" in r.getMessage() for r in caplog.records)
 
 
+async def test_event_write_failure_inside_transaction_does_not_poison_it(pkg_db, caplog):
+    """Yutulan olay hatası çağıranın transaction'ını ÖLDÜRMEZ (review 2026-08-26, H2).
+
+    Yukarıdaki test sahte bir bağlantı nesnesiyle koşar ve transaction YOKTUR —
+    o yüzden "üretim düşmez" sözünü gerçek yolda hiç sınamıyordu. Üretimde
+    `resolve_persist_stamp` post yazımıyla AYNI transaction'ın içindedir
+    (`routers/posts.py`, K-07). PostgreSQL'de başarısız bir ifade transaction'ı
+    abort durumuna sokar ve sonraki HER komut — `SELECT 1` dahil — reddedilir;
+    asyncpg kendiliğinden savepoint AÇMAZ. Savepoint olmadan bu sözleşme
+    transaction dışında doğru, içinde YANLIŞTI: yutulan hata post yazımını da
+    düşürüyor ve kullanıcı 500 alıyordu.
+
+    Mutasyon kontrolü: `log_package_event`'teki `async with db.transaction()`
+    kaldırılırsa bu test `InFailedSQLTransactionError` ile DÜŞER (ölçüldü).
+    """
+    sub_id, _package_id = await _seed_sector_and_package(pkg_db)
+    _account_id, brand_id = await _seed_brand(pkg_db, sub_sector_id=sub_id)
+
+    async with pkg_db.transaction():
+        # Olay tablosunu bu transaction içinde erişilemez kıl — altyapı hatasının
+        # gerçek karşılığı (033 uygulanmamış, izin çekilmiş, tablo taşınmış).
+        await pkg_db.execute(
+            "ALTER TABLE social.package_events RENAME TO package_events__unavailable"
+        )
+
+        with caplog.at_level(logging.ERROR):
+            result = await log_package_event(
+                pkg_db, event_type="stamp_invalid", brand_id=brand_id
+            )
+
+        assert result is None
+        assert any("paket olayı yazılamadı" in r.getMessage() for r in caplog.records)
+
+        # ASIL İDDİA: transaction hâlâ canlı — dıştaki iş devam edebilir.
+        assert await pkg_db.fetchval("SELECT 1") == 1
+        wrote = await pkg_db.fetchval(
+            "UPDATE social.brands SET name = 'txn hayatta' WHERE id = $1 RETURNING name",
+            brand_id,
+        )
+        assert wrote == "txn hayatta"
+
+
 # ═══ 2. Damga tüketimi — GERÇEK kalıcı-kayıt ucundan ════════════════════════
 
 

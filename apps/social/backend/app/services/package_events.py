@@ -200,33 +200,46 @@ async def log_package_event(
         _require(package_id is not None, f"{event_type}: yaşam döngüsü olayı package_id ister")
         _require(bool(actor), f"{event_type}: yaşam döngüsü olayı actor ister")
         assert sector_id is not None and package_id is not None  # yukarıdaki kapılar
-        await _validate_version_shape(
-            db,
-            event_type=event_type,
-            sector_id=sector_id,
-            package_id=package_id,
-            from_version=from_version,
-            to_version=to_version,
-        )
+        # SAVEPOINT (review 2026-08-26, H2). Bu okumalar çağıranın transaction'ı
+        # İÇİNDE koşabilir. Başarısız bir ifade PostgreSQL'de transaction'ı abort
+        # durumuna sokar ve sonraki HER komut `current transaction is aborted` ile
+        # düşer — asyncpg kendiliğinden savepoint AÇMAZ (ölçüldü 18.3'te). İç
+        # transaction bir SAVEPOINT'tir: hata yalnız buraya kadar geri sarılır,
+        # dıştaki post yazımı ayakta kalır. İstisna akışı DEĞİŞMEZ — ne yakalanır
+        # ne yutulur, yalnız dıştaki transaction zehirlenmez.
+        async with db.transaction():
+            await _validate_version_shape(
+                db,
+                event_type=event_type,
+                sector_id=sector_id,
+                package_id=package_id,
+                from_version=from_version,
+                to_version=to_version,
+            )
 
     try:
-        event_id = await db.fetchval(
-            """
-            INSERT INTO social.package_events
-                (event_type, sector_id, brand_id, package_id,
-                 from_version, to_version, actor, detail)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING id
-            """,
-            event_type,
-            sector_id,
-            brand_id,
-            package_id,
-            from_version,
-            to_version,
-            actor,
-            detail,
-        )
+        # SAVEPOINT (aynı gerekçe): aşağıdaki `except` altyapı hatasını yutup
+        # `None` döner ve sözleşmesi "çağıran akışı DÜŞÜRMEZ"dir. Savepoint
+        # olmadan bu söz YALNIZ transaction dışında doğruydu: içeride yutulan
+        # hata dıştaki INSERT'ü de düşürüyordu, yani koruma tersine çalışıyordu.
+        async with db.transaction():
+            event_id = await db.fetchval(
+                """
+                INSERT INTO social.package_events
+                    (event_type, sector_id, brand_id, package_id,
+                     from_version, to_version, actor, detail)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+                """,
+                event_type,
+                sector_id,
+                brand_id,
+                package_id,
+                from_version,
+                to_version,
+                actor,
+                detail,
+            )
     except Exception as exc:
         logger.error(
             "paket olayı yazılamadı (event_type=%s brand_id=%s package_id=%s): %s",
@@ -270,19 +283,24 @@ async def _notify_admin(
     sözlüktür (şekil kapısı yukarıda), buraya olduğu gibi geçer.
     """
     try:
-        await notifications.record_admin_event(
-            db,
-            kind=f"package_event.{event_type}",
-            payload={
-                "event_id": str(event_id),
-                "event_type": event_type,
-                "sector_id": str(sector_id) if sector_id else None,
-                "brand_id": str(brand_id) if brand_id else None,
-                "package_id": str(package_id) if package_id else None,
-                "detail": detail,
-            },
-            idempotency_key=f"package_event:{event_id}",
-        )
+        # SAVEPOINT (review 2026-08-26, H2): "ASLA akışı düşürmez" sözü, çağıranın
+        # transaction'ı içinde savepoint OLMADAN tutmuyordu — yutulan hata dıştaki
+        # yazımı da düşürüyordu. Aynı transaction'da kalma sözleşmesi korunur:
+        # savepoint dıştakinin İÇİNDEDİR, olay geri alınırsa bildirim de yoktur.
+        async with db.transaction():
+            await notifications.record_admin_event(
+                db,
+                kind=f"package_event.{event_type}",
+                payload={
+                    "event_id": str(event_id),
+                    "event_type": event_type,
+                    "sector_id": str(sector_id) if sector_id else None,
+                    "brand_id": str(brand_id) if brand_id else None,
+                    "package_id": str(package_id) if package_id else None,
+                    "detail": detail,
+                },
+                idempotency_key=f"package_event:{event_id}",
+            )
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "yönetici bildirimi yazılamadı (event_type=%s event_id=%s): %s",
