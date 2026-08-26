@@ -265,9 +265,15 @@ COMMENT ON TABLE social.generation_stamps IS
 --     yürüten iç tetikleyiciler (`pg_trigger.tgconstraint`, dördü de
 --     `tgenabled='O'`). `ALTER TABLE ... DISABLE TRIGGER ALL` kısıt tanımını
 --     DEĞİŞTİRMEDEN FK'yı kapatır; tanıma bakan bir kontrol bunu göremez.
--- `conenforced` PostgreSQL 18 kolonudur; bu sunucuda (18.3) varlığı
--- `pg_attribute` üstünden ÖLÇÜLDÜ. Daha eski bir sunucuda blok "column does
--- not exist" ile durur — fail-closed, sessiz geçiş yoktur.
+-- `conenforced` PostgreSQL 18 kolonudur ve DOĞRUDAN okunmaz: kolon adını
+-- ayrıştırma anında taşıyan bir sorgu PG16'da "column does not exist" ile
+-- düşerdi ve bu paket PG16 imajına pinlidir (review 2026-08-26, H1 — dağıtım
+-- yolu kesin bozuktu). Bunun yerine satır jsonb'ye çevrilip anahtar ADIYLA
+-- okunur: `COALESCE(to_jsonb(k)->>'conenforced', 'true')`.
+-- Anahtar YOKSA (PG<18) 'true' döner ve bu bir gevşetme DEĞİLDİR: `NOT
+-- ENFORCED` kısıtlar PostgreSQL 18'de geldi, öncesinde her kısıt zaten
+-- uygulanır. ÖLÇÜLDÜ (18.3): gerçekten `NOT ENFORCED` bir FK'da jsonb yolu da
+-- doğrudan okuma da 'false' verir — maskeleme yok.
 --
 -- ELLE UYGULARKEN: psql'i `-v ON_ERROR_STOP=1` ile çağırın. Ölçüldü — bayrak
 -- yokken hata mesajı yine basılır ama psql çıkış kodu 0 döner; sıfır-dışı çıkış
@@ -488,7 +494,7 @@ BEGIN
             ('brands_sub_sector_id_fkey',
              (SELECT format('%s|%s|enforced=%s validated=%s',
                             k.contype, pg_get_constraintdef(k.oid),
-                            CASE WHEN k.conenforced THEN 'true' ELSE 'false' END,
+                            COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                             CASE WHEN k.convalidated THEN 'true' ELSE 'false' END)
                 FROM pg_constraint k
                WHERE k.conrelid = 'social.brands'::regclass
@@ -641,8 +647,7 @@ BEGIN
             ('sector_research_artifacts PRIMARY KEY',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ')
@@ -680,8 +685,7 @@ BEGIN
             ('sector_packages PRIMARY KEY',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ')
@@ -719,8 +723,7 @@ BEGIN
             ('generation_stamps PRIMARY KEY',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ')
@@ -774,7 +777,7 @@ BEGIN
                             ' trig=%s enabled=%s',
                             k.contype, k.confmatchtype,
                             pg_get_constraintdef(k.oid),
-                            CASE WHEN k.conenforced THEN 'true' ELSE 'false' END,
+                            COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                             CASE WHEN k.convalidated THEN 'true' ELSE 'false' END,
                             (SELECT count(*) FROM pg_trigger t
                               WHERE t.tgconstraint = k.oid),
@@ -789,7 +792,7 @@ BEGIN
                             ' trig=%s enabled=%s',
                             k.contype, k.confmatchtype,
                             pg_get_constraintdef(k.oid),
-                            CASE WHEN k.conenforced THEN 'true' ELSE 'false' END,
+                            COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                             CASE WHEN k.convalidated THEN 'true' ELSE 'false' END,
                             (SELECT count(*) FROM pg_trigger t
                               WHERE t.tgconstraint = k.oid),
@@ -808,8 +811,7 @@ BEGIN
                                        k.contype,
                                        k.confdeltype,
                                        pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END,
                                        (SELECT count(*) FROM pg_trigger t

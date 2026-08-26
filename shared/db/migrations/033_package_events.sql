@@ -89,9 +89,16 @@ COMMENT ON COLUMN social.package_events.sector_id IS
 --
 -- TANIM ≠ UYGULANMA: imzanın yanında uygulanma durumu da okunur — indekslerde
 -- `indisvalid/indisready/indislive`, FK'da `conenforced`/`convalidated` ve
--- kısıtı fiilen yürüten iç tetikleyiciler. `conenforced` PostgreSQL 18
--- kolonudur; daha eski sunucuda blok "column does not exist" ile DURUR
--- (fail-closed, sessiz geçiş yok) — 032 ile aynı belgeli sınır.
+-- kısıtı fiilen yürüten iç tetikleyiciler.
+-- `conenforced` PostgreSQL 18 kolonudur ve DOĞRUDAN okunmaz: kolon adını
+-- ayrıştırma anında taşıyan bir sorgu PG16'da "column does not exist" ile
+-- düşerdi ve bu paket PG16 imajına pinlidir (review 2026-08-26, H1 — dağıtım
+-- yolu kesin bozuktu). Bunun yerine satır jsonb'ye çevrilip anahtar ADIYLA
+-- okunur: `COALESCE(to_jsonb(k)->>'conenforced', 'true')`.
+-- Anahtar YOKSA (PG<18) 'true' döner ve bu bir gevşetme DEĞİLDİR: `NOT
+-- ENFORCED` kısıtlar PostgreSQL 18'de geldi, öncesinde her kısıt zaten
+-- uygulanır. ÖLÇÜLDÜ (18.3): gerçekten `NOT ENFORCED` bir FK'da jsonb yolu da
+-- doğrudan okuma da 'false' verir — maskeleme yok.
 --
 -- Otomatik adlandırılan kısıtlar KOLONLA aranır; kolon bazlı arama birden çok
 -- eşleşmeyi tek imzada birleştirir, böylece eksik VEYA fazla kısıt yakalanır.
@@ -249,8 +256,7 @@ BEGIN
             ('package_events PRIMARY KEY',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ')
@@ -275,8 +281,7 @@ BEGIN
                                        k.contype,
                                        k.confdeltype,
                                        pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END,
                                        (SELECT count(*) FROM pg_trigger t

@@ -93,9 +93,15 @@ COMMENT ON COLUMN social.admin_events.idempotency_key IS
 --
 -- TANIM ≠ UYGULANMA: imzanın yanında uygulanma durumu da okunur — indekste
 -- `indisvalid/indisready/indislive`, kısıtta `conenforced`/`convalidated`.
--- `conenforced` PostgreSQL 18 kolonudur; daha eski sunucuda blok "column does
--- not exist" ile DURUR (fail-closed, sessiz geçiş yok) — 032/033 ile aynı
--- belgeli sınır.
+-- `conenforced` PostgreSQL 18 kolonudur ve DOĞRUDAN okunmaz: kolon adını
+-- ayrıştırma anında taşıyan bir sorgu PG16'da "column does not exist" ile
+-- düşerdi ve bu paket PG16 imajına pinlidir (review 2026-08-26, H1 — dağıtım
+-- yolu kesin bozuktu). Bunun yerine satır jsonb'ye çevrilip anahtar ADIYLA
+-- okunur: `COALESCE(to_jsonb(k)->>'conenforced', 'true')`.
+-- Anahtar YOKSA (PG<18) 'true' döner ve bu bir gevşetme DEĞİLDİR: `NOT
+-- ENFORCED` kısıtlar PostgreSQL 18'de geldi, öncesinde her kısıt zaten
+-- uygulanır. ÖLÇÜLDÜ (18.3): gerçekten `NOT ENFORCED` bir FK'da jsonb yolu da
+-- doğrudan okuma da 'false' verir — maskeleme yok.
 --
 -- ELLE UYGULARKEN: psql'i `-v ON_ERROR_STOP=1` ile çağırın.
 
@@ -199,8 +205,7 @@ BEGIN
             ('admin_events PRIMARY KEY',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ' ORDER BY k.conname)
@@ -211,8 +216,7 @@ BEGIN
             ('admin_events.delivery_state CHECK',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ' ORDER BY k.conname)
@@ -227,8 +231,7 @@ BEGIN
             ('admin_events lease/state CHECK',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ' ORDER BY k.conname)
@@ -243,8 +246,7 @@ BEGIN
             ('admin_events.attempt_count CHECK',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ' ORDER BY k.conname)
@@ -259,8 +261,7 @@ BEGIN
             ('admin_events.idempotency_key UNIQUE',
              (SELECT string_agg(format('%s|%s|enforced=%s validated=%s',
                                        k.contype, pg_get_constraintdef(k.oid),
-                                       CASE WHEN k.conenforced
-                                            THEN 'true' ELSE 'false' END,
+                                       COALESCE(to_jsonb(k)->>'conenforced', 'true'),
                                        CASE WHEN k.convalidated
                                             THEN 'true' ELSE 'false' END),
                                 ' && ' ORDER BY k.conname)
