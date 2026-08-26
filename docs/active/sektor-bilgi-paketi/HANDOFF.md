@@ -86,6 +86,13 @@ Komut daima `.venv/bin/python`; makinede `python` komutu YOK.
   hiç okunmuyor · K-04 talimatı üç metne ayrışmış. Üçü de devralınan borç DEĞİL.
 - **[Kapsam sınırı, DÜZELTİLMEDİ]** Önyüz düzeltmeleri koşan testle doğrulanmadı. Ev:
   `brand-settings-save-integrity` (`CURRENT.md`), ön koşulu önyüz test altyapısı.
+- **[KAPANIŞTA KARAR GEREKTİRİR — evi `/finish-branch-claude-codex`]** Bağımsız review'ın
+  BEŞ kapsama boşluğu var ve hiçbiri "denetlendi" sayılamaz: spec'in 7-17. bölümleri ·
+  `rollback/032_down.sql` (265 satır) · `onboarding/page.tsx` (107 satır) · 034'ün DDL'inin
+  servis koduyla uyumu · n8n workflow'unun Code düğümlerinin JS gövdeleri. Güvenlik review'ı
+  bunların bir kısmına DEĞECEK ama merceği güvenliktir, spec-uyumu değil. Dal birleştirmeye
+  giderken bu, "kabul ediyorum" ya da "ek tur" diye AÇIKÇA kararlaştırılmalı — sessizce
+  kapanmamalı. Dürüst etiket: denetlenmedi, evi kapanış adımı.
 - **[Ders — kayda değer]** Bu turda düzeltilen yedi yüksek bulgunun ÜÇÜ, ilk dört düzeltmenin
   kendi yan etkisiydi ve hiçbiri mekanik doğrulamayla değil, bağımsız kapanış turuyla yakalandı.
   Bir sınıfı kapatan düzeltme yeni sınıf açabilir; kapanış turu atlanamaz.
