@@ -20,7 +20,8 @@ _(aktif task yok)_
   **Dikkat:** Plan 2 kendi aralığını inceler, bu commit'ler onun TABANINDA kalır — yani
   kendiliğinden kapsanmazlar.
 
-- **n8n-credential-host-drift** (proposed, altyapı dayanıklılığı; DÜZELTİLDİ ama sınıf açık) —
+- **n8n-credential-host-drift** (proposed; iki örnek DÜZELTİLDİ, sınıf TARANDI, geriye yalnız
+  uyarısızlık kaldı) —
   n8n'in `Postgres account` credential'ı **sabit IP** (`10.0.1.8`) taşıyordu; veritabanı
   konteyneri yeniden başlayınca adres `10.0.1.9` oldu ve credential güncellenmedi.
   **Sessizce kırdığı iş (ölçüldü 2026-08-26):** CRM-4 Churn Taraması ve CRM-5 Deneme Bitiyor
@@ -28,10 +29,53 @@ _(aktif task yok)_
   etmemişti. Sektör paketi teslim testi kazara ortaya çıkardı.
   **Düzeltildi:** host artık konteyner **ismi** (`wlg6ned4e72aty3pqhnxs0hg`) — IP değişse de
   bozulmaz. Doğrulandı: aynı credential'ı kullanan Postgres düğümü başarılı çalıştırmada koştu.
-  **Sınıf hâlâ açık:** başka credential'lar da sabit IP taşıyor olabilir ve **hiçbir uyarı yok** —
-  günlük bir otomasyon iki hafta sessizce düşebiliyor.
-  **Yeniden açılma koşulu / tetik:** (a) kalan credential'ların IP taraması, (b) başarısız n8n
-  çalıştırması için bildirim kurulması. İkisi de yapılmadı — **çözülmedi + park edildi.**
+  **Sınıfın asıl zararı uyarısızlık:** günlük bir otomasyon iki hafta sessizce düşebiliyor ve
+  kimse haberdar olmuyor. Sabit-IP taraması yapıldı (aşağıda), uyarı mekanizması hâlâ yok.
+  **(a) Tarama YAPILDI — sınıfın kapsamı ölçüldü, n8n'in dışına taşmış:**
+  - n8n credential'ları (2026-08-26, altı credential, çözülmüş değerler üzerinde): hiçbirinde
+    sabit IP yok — ya adres alanı taşımıyorlar ya isim kullanıyorlar.
+  - n8n workflow gövdeleri (2026-08-27 tekrar koşuldu, 18 workflow / 13 aktif): sabit IP taşıyan
+    workflow YOK.
+  - **İkinci kurban bulundu ve düzeltildi:** `crm.otomaix.com` uygulamasının kendi `DATABASE_URL`'ü
+    de `10.0.1.8`'e bakıyordu. Uygulamanın kendi kütüphanesiyle ölçüldü: `ECONNREFUSED`. Adres
+    Coolify katmanından konteyner ismine çevrildi (şifreleme bozulmadı, ham kayıt hâlâ şifreli),
+    deploy tetiklendi, sonra tekrar ölçüldü: `BAĞLANDI ✓ accounts=1`, site HTTP 200.
+  - **Kök tarih:** üç kopuşun üçü de 2026-08-11 15:06'da konteynerler yeniden başladığında oldu —
+    Coolify SSH anahtarı olayıyla aynı an ([[reference_coolify_ssh_key]]).
+
+  **(b) Bildirim HÂLÂ YOK — çözülmedi + park edildi.** Ölçüldü (2026-08-27): 18 workflow'un
+  **hiçbirinde** `errorWorkflow` ayarı yok. Yani bugün de başarısız bir n8n turu kimseye
+  ulaşmıyor; bu maddeyi doğuran sessizlik aynen duruyor.
+  **Bugün neden hâlâ önemli:** bu kalem CRM yüzünden doğdu ama CRM'e ait değil — sektör paketi
+  yönetici bildirim zinciri CANLI ve aynı sessizliğin altında koşuyor. Düşürülmüyor.
+  **Yeniden açılma koşulu / tetik:** n8n'e dokunan bir sonraki iş — hata-bildirimi workflow'u
+  o turda kurulur.
+  **(c) CRM ayağı DÜŞÜRÜLDÜ — Eray kararı 2026-08-27:** CRM henüz kullanılmıyor (Otomaix'in
+  kendisi bitmedi) ve CRM bütün olarak ayrı bir turda ele alınacak. Dolayısıyla CRM-4/CRM-5
+  turlarının bugün `success` dönmesini beklemek aktif borç DEĞİL. Bilinen durum kayda geçsin:
+  düzeltme yapıldı ve tek dolaylı kanıtı var (aynı credential'ı kullanan Postgres düğümü
+  başarılı bir çalıştırmada koştu, 2026-08-26) — **zamanlanmış turla doğrulanmadı.**
+  **Yeniden açılma koşulu:** CRM'in bütün olarak ele alınacağı tur — ilk iş o iki günlük turun
+  gerçekten koştuğunu ölçmektir.
+
+- **sector-package-assignment-ui-live-verification** (proposed, doğrulama borcu; EVSİZ KALMIŞTI —
+  şimdi ikiye bölündü) —
+  Task 15'in **elle arayüz doğrulaması** (plandaki Step 5) ile öneri ucunun gerçek model
+  çağrısıyla koşulması, Eray kararıyla "Plan 2 sonrası tek tura" ertelenmişti; evi
+  `sector-package-live-activation` maddesiydi ve o madde 2026-08-26'da kapanırken bu kalem
+  **beraberinde silindi** — hiçbir yerde kalmamıştı. Yeniden ev veriliyor.
+  **Koşullar değişti:** frontend artık canlıda (image `6534051` = main, ölçüldü 2026-08-26 20:48),
+  yani arayüz gözle görülebilir durumda. Ama canlıda **aday küme BOŞ** (ölçüldü 2026-08-27:
+  alt sektör 0 · aktif paket 0 · atanmış marka 0).
+  **(i) BUGÜN doğrulanabilir — Eray'ın gözü gerekir, ~10 dakika:** boş-aday hâlinde bileşenin
+  pasif/boş görünmesi (planın bağlayıcı invariantı) + kanal envanteri alanlarının doldurulması.
+  Marka ayarları ve onboarding sayfalarında.
+  **(ii) Plan 2'ye kadar doğrulanamaz — ölçülmüş sebep:** onayla/değiştir/boşalt üçlüsü aday küme
+  ister, öneri ucu ise boş aday kümesinde tanım gereği HER ZAMAN boş döner (Task 15 invariantı).
+  Yani bugün gerçek model çağrısı yakmak hiçbir şey kanıtlamaz — yalnız para harcar.
+  **Ev:** Plan 2'nin planı yazılırken pilot görevinin kabul adımına bu doğrulama YAZILACAK
+  (ilk paket aktive edildiği anda üçlü + gerçek öneri koşulur). Plan 2'nin planı henüz yazılmadı,
+  yani bu evin **tarihi yok** — dürüst etiket: *çözülmedi, evi Plan 2 planına bağlı.*
 
 - **s1-substrate-tracked-secret-scan** (proposed, güvenlik/defense-in-depth) — `CODEX-SCAN-SUBSTRATE` (byte-locked 4-way) tracked-dirty diff'i secret-scan ETMİYOR (yalnız untracked REQUIRED taranıyor; `git apply` execute-plan:1228-1231 vs `_css_secret_scan` 1233-1238). Dar (committed içerik zaten in-scope; yalnız tracked-dosyada-uncommitted-secret) ama düzeltmeli. Detay + structured fix: security-review **SF1** (`docs/security-reviews/2026-06-04-codex-review-scope-contract.md`). Kapsam: substrate bloğu (4 dosya) + `codex-scan-substrate-harness.sh` tracked-secret fixture.
 
