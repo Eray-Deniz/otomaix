@@ -1,6 +1,6 @@
 # Active Tasks
 
-_(aktif task yok)_
+- **sektor-bilgi-paketi-plan2** — Plan 2 işletim hattı; hazırlık (boşluk taraması + 13 kararlık tur) bitti, planın kendisi yazılacak
 
 ## Proposed (spun-off)
 
