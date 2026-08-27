@@ -14,12 +14,16 @@ bağlamda taşınmaz.
   **`plan-approved` + `approved-by-iteration-limit`**, `unresolved_high_severity_override: true`.
 - Tahkim kaydı: `docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md`
   (tur özeti · disposition ledger · DUR notu · bağımsız hakem itirazları).
-- Dal: `feat/sektor-bilgi-paketi-plan2`, son commit `f18e389`.
-  Onay ve tüm hakem düzeltmeleri commit'lendi.
+- Dal: `feat/sektor-bilgi-paketi-plan2`, son commit **`367d059`** (onay + tüm hakem
+  düzeltmeleri). **Hiçbir şey push EDİLMEDİ** (ölçüldü 2026-08-27): dal yerel `main`'in
+  2 commit önünde (`f18e389`, `367d059`); yerel `main` de `origin/main`'in 4 commit önünde
+  (`origin/main` = `38ea98f`).
 
-**Oturum kuralı (bu oturumda konuldu):** hakem turlarını **Eray koşuyor**, Claude koşmuyor.
-Claude gelen bulguları tek tek ölçer, doğrular ya da reddeder, düzeltir.
-Yürütme sırasındaki checkpoint review'ları bu kuralın DIŞINDA — onlar komutun kendi akışıdır.
+**Oturum kuralı — KAPSAMI YALNIZ O OTURUMDU, YENİ OTURUMDA TEYİT ET.** 2026-08-27'de Eray
+"hakem turlarını ben koşarım" dedi ve bunun kalıcı hafızaya yazılmamasını istedi. Yani bu
+kural **otomatik devredilmez**: yeni oturumda bir hakem turu gerekirse önce sor —
+"ben mi koşayım, sen mi koşacaksın?". Yürütme sırasındaki checkpoint review'ları bu sorunun
+dışındadır; onlar komutun kendi akışıdır.
 
 # Verification
 
@@ -38,6 +42,19 @@ Yürütme sırasındaki checkpoint review'ları bu kuralın DIŞINDA — onlar k
   düzeltiyor → "ezme" kuralı canlı davranışla çelişiyordu, düzeltildi.
 - n8n ölçümü: 18 workflow · 13 aktif · `errorWorkflow` taşıyan 0.
 
+**Kapanış turu (2026-08-27, bağlantı koptuktan sonra tamamlandı):**
+- Push durumu ölçüldü (`git branch -vv`, `git rev-list`): dal yerel `main`'in 2 commit,
+  yerel `main` de `origin/main`'in 4 commit önünde. Hiçbir şey push edilmedi.
+- Bayat-kayıt taraması: 4 çelişki bulundu ve düzeltildi — HANDOFF'ta yanlış push cümlesi ·
+  "plan onaylı değil" (artık onaylı) · "commit onayı bekliyor" (işlendi) · devralınmış
+  hakem-turu kuralı; TASK.md'de Task 15'in "plan onaylı değil" gerekçesi.
+- Evsiz-kova sweep (İlke 7), CURRENT.md'nin 10 proposed kalemi tek tek: 8'i sağlam tetikliydi.
+  İkisinin evi plan onaylanınca somutlaştı → **Task 16 Step 7/7b** (n8n hata bildirimi) ve
+  **Task 19 Step 11** (atama arayüzü elle doğrulaması) olarak adlandırıldı.
+  Biri (`s1-substrate-tracked-secret-scan`) **tetiksizdi** → kardeş iki `~/.claude` kalemiyle
+  aynı pin'li bloğa bağlandı, üçü tek turda.
+- `git diff --check` → temiz. CURRENT.md'de statü sızıntısı taraması → 0.
+
 **Denenmemiş senaryolar:**
 - **Hiçbir kod yazılmadı, hiçbir test koşulmadı** — bu oturum tamamen doküman işiydi.
   Plandaki tüm test adları henüz var olmayan dosyalara aittir.
@@ -49,7 +66,7 @@ Yürütme sırasındaki checkpoint review'ları bu kuralın DIŞINDA — onlar k
 
 # Risks
 
-- **Plan onaylı değil ve bir kez yanlışlıkla onaylı sayıldı.** Zincir tur 6'da `approve`
+- **Onay bir kez ERKEN verildi ve geri alındı** (tarihçe; plan bugün onaylı). Zincir tur 6'da `approve`
   verdi; sonra bağımsız hakem 10 itiraz getirdi, onu da doğrulandı. Onay geri alındı.
   **Ders:** tek hakem zincirinin yakınsaması kapsama kanıtı değildir — altı tur tek eksende
   (köken/kapı zinciri) daralırken diğer eksenler hiç taranmadı.
@@ -66,7 +83,9 @@ Yürütme sırasındaki checkpoint review'ları bu kuralın DIŞINDA — onlar k
 
 # Notes For Claude/Codex
 
-- **Hakem turunu Claude başlatmaz** (Eray kararı, bu oturum).
+- **Hakem turu kimin? ÖNCE SOR.** 2026-08-27 oturumunda "Claude başlatmaz" kuralı
+  konmuştu; kapsamı o oturumdu (bkz. Resume From). Yeni oturumda bir hakem turu gerekirse
+  teyit al — devralınmış kural gibi davranma.
 - Bulgu geldiğinde: **önce ölç, sonra kabul et.** Bu oturumda 24 + 10 + 9 bulgunun hepsi
   ölçülerek doğrulandı, hiçbiri reddedilmedi; ama iki kez yanlış şeyi ölçüp sıfırları
   "yok" diye sunmaya yaklaştım — komutun gerçekten o soruyu ölçtüğünü doğrula.
@@ -74,4 +93,4 @@ Yürütme sırasındaki checkpoint review'ları bu kuralın DIŞINDA — onlar k
   alanı · K-145'in üç kuralı · `kirp` semantiği).
 - Plan hiçbir açık ürün kararını kapatmıyor: K-85 · K-153 · K-128 · K-52 · K-11(a/b) ·
   K-32…K-37. Belirsiz vakalar açık soruya düşüp aktivasyonu blokluyor.
-- Commit onayı bekliyor: diskteki düzeltmeler henüz işlenmedi.
+- Diskte bekleyen düzeltme YOK: onay ve tüm hakem düzeltmeleri `367d059`'de işlendi.

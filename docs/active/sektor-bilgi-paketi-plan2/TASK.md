@@ -101,7 +101,9 @@ Sıradaki adım: **yürütme** (`/execute-plan-claude-codex`). Henüz KOD YAZILM
 - **§8.7'nin sözleşme düzeltmeleri planın ilk görevidir** (altı kalem: beşi spec'ten, altıncısı
   kanal anahtar uzayının kapatılması). Resmî turu hâlâ bloklarlar — plan onları Task 2'de kapatır.
 - **Task 15'in elle arayüz doğrulaması EV BULDU:** planın pilot görevinde, ilk paket aktive
-  edildikten sonraki kabul adımı. **Tarihi yok** — plan onaylı değil.
+  edildikten sonraki kabul adımı. Plan onaylandı (2026-08-27) ama **tarih hâlâ YOK** —
+  yürütme başlamadı, pilot koşulmadı. Dürüst etiket: *çözülmedi; evi var, tarihi pilot
+  görevinin koşmasına bağlı.*
 - **n8n hata bildirimi planda:** hem workflow tarafı hem yerel tur arızası bildirimi bağlandı;
   kapsam bilinçle dar (yalnız sektör paketi zinciri), kalan workflow'lar CRM turunda.
 - **KABUL EDİLMİŞ RİSK — onay temiz zincirle alınmadı.** Ardışık bağımsız turlar her

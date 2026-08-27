@@ -48,8 +48,12 @@
   ulaşmıyor; bu maddeyi doğuran sessizlik aynen duruyor.
   **Bugün neden hâlâ önemli:** bu kalem CRM yüzünden doğdu ama CRM'e ait değil — sektör paketi
   yönetici bildirim zinciri CANLI ve aynı sessizliğin altında koşuyor. Düşürülmüyor.
-  **Yeniden açılma koşulu / tetik:** n8n'e dokunan bir sonraki iş — hata-bildirimi workflow'u
-  o turda kurulur.
+  **EV VERİLDİ (2026-08-27, plan onaylandı):** Plan 2 → **Task 16, Step 7 + 7b** —
+  `n8n-error-notifier.json` yazılır ve `sector-package-admin-events.json`'a `errorWorkflow`
+  olarak bağlanır, üç sözleşme testiyle birlikte.
+  **Kapsam bilinçle DAR:** yalnız sektör paketi yönetici olay workflow'u. Kalan 17 workflow
+  (CRM-4/CRM-5 dâhil) o turda da sessiz kalmaya devam eder — onların evi CRM turudur.
+  **Tarih:** Task 16 koşana kadar yok; yürütme başlamadı.
   **(c) CRM ayağı DÜŞÜRÜLDÜ — Eray kararı 2026-08-27:** CRM henüz kullanılmıyor (Otomaix'in
   kendisi bitmedi) ve CRM bütün olarak ayrı bir turda ele alınacak. Dolayısıyla CRM-4/CRM-5
   turlarının bugün `success` dönmesini beklemek aktif borç DEĞİL. Bilinen durum kayda geçsin:
@@ -73,13 +77,17 @@
   **(ii) Plan 2'ye kadar doğrulanamaz — ölçülmüş sebep:** onayla/değiştir/boşalt üçlüsü aday küme
   ister, öneri ucu ise boş aday kümesinde tanım gereği HER ZAMAN boş döner (Task 15 invariantı).
   Yani bugün gerçek model çağrısı yakmak hiçbir şey kanıtlamaz — yalnız para harcar.
-  **Ev VERİLDİ (2026-08-27):** Plan 2 planının pilot görevinde, ilk paket aktive edildikten
-  hemen sonraki kabul adımı — atama arayüzünün üçlüsü + öneri ucunun gerçek model çağrısıyla
-  koşulması + boş-aday hâlinde bileşenin pasif görünmesi ve kanal envanteri alanları.
+  **Ev VERİLDİ (2026-08-27):** Plan 2 → **Task 19, Step 11** — ilk paket aktive edildikten
+  hemen sonraki kabul adımı. Hem (i) hem (ii) aynı adımda: atama arayüzünün üçlüsü + öneri
+  ucunun gerçek model çağrısıyla koşulması + boş-aday hâlinde bileşenin pasif görünmesi ve
+  kanal envanteri alanları.
   **Plan ONAYLANDI (2026-08-27), ama tarih hâlâ YOK:** yürütme başlamadı, pilot koşulmadı.
   Dürüst etiket: *çözülmedi; evi var, tarihi pilot görevinin koşmasına bağlı.*
 
 - **s1-substrate-tracked-secret-scan** (proposed, güvenlik/defense-in-depth) — `CODEX-SCAN-SUBSTRATE` (byte-locked 4-way) tracked-dirty diff'i secret-scan ETMİYOR (yalnız untracked REQUIRED taranıyor; `git apply` execute-plan:1228-1231 vs `_css_secret_scan` 1233-1238). Dar (committed içerik zaten in-scope; yalnız tracked-dosyada-uncommitted-secret) ama düzeltmeli. Detay + structured fix: security-review **SF1** (`docs/security-reviews/2026-06-04-codex-review-scope-contract.md`). Kapsam: substrate bloğu (4 dosya) + `codex-scan-substrate-harness.sh` tracked-secret fixture.
+  **Yeniden açılma koşulu / tetik (2026-08-27'de eklendi — bu kalem tetiksiz kalmıştı):**
+  substrat bloğuna dokunan bir sonraki iş; `codex-scan-substrate-preflight-guard` ve
+  `codex-substrate-dirty-secret-excluded-file` ile **aynı pin'li blok**, üçü tek turda.
 
 - **stale-sweeper-vs-late-webhook-terminality** (proposed, ürün kararı + arka uç tutarlılığı) —
   Süpürücü `generating`i **10 dakikada** `failed` yapıyor (`internal.py`
@@ -159,6 +167,11 @@
   fail-closed kapıları (mevcut `CODEX_LOG` kapısının birebir eşi — simetri zaten yazılı).
   **Dikkat:** blok T5 sha256 pin'lidir; değişiklik `command-blocks-maint.sh repin <aile>` +
   `verify` ritüeli ister ve 7 komutu birden etkiler.
+  **Yeniden açılma koşulu / tetik (2026-08-27'de eklendi — bu kalem tetiksiz kalmıştı):**
+  substrat bloğuna dokunan bir sonraki iş. Üç `~/.claude` kalemi
+  (`s1-substrate-tracked-secret-scan` · bu · `codex-substrate-dirty-secret-excluded-file`)
+  **aynı pin'li bloğa** dokunuyor — tek turda birlikte yapılırlar, ayrı ayrı repin ritüeli
+  koşturmak israftır.
 
 - **codex-substrate-dirty-secret-excluded-file** (proposed, araç güvenilirliği; global `~/.claude` işi) —
   Codex denetim ortamı, sır taraması dışladığı bir dosyada **kaydedilmemiş değişiklik** varsa
