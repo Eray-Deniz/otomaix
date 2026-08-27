@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **planın kendisi henüz yazılmadı.** Hazırlık (boşluk taraması + karar turu)
-tamamlandı.
+Şu anki aşama: **plan ONAYLI, yürütme bekliyor.** Onay hakem zinciriyle değil **Eray'ın risk
+kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
 
 # References
 
@@ -32,11 +32,17 @@ tamamlandı.
 
 # Current Status
 
-**Plan yazıldı ve onaylandı** (2026-08-27):
-`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md` — 20 görev, `plan-approved`.
-Codex adversarial review 6 turda kapandı (son tur: approve, contract-level bulgu yok);
-tahkim kaydı `docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md`.
-Sıradaki adım: yürütme (`/execute-plan-claude-codex`). Henüz KOD YAZILMADI.
+**Plan ONAYLANDI — risk kabulüyle** (Eray, 2026-08-27):
+`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md` — 20 görev,
+**`plan-approved` + `approved-by-iteration-limit`**, `unresolved_high_severity_override: true`,
+7 zincir turu + 4 bağımsız hakem turu.
+
+Dört bağımsız hakem turu koşuldu (10 + 9 + 6 + 3 bulgu); hepsi ölçülerek doğrulandı ve
+düzeltildi. **Son iki düzeltme partisi incelenmedi** ve zincirin son yargısı `needs-attention`'dı.
+Eray bu bilgiyle onayladı. Kabul edilen riskler hakem kaydında tek tek yazılı.
+
+Tahkim kaydı: `docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md`.
+Sıradaki adım: **yürütme** (`/execute-plan-claude-codex`). Henüz KOD YAZILMADI.
 
 - Eksik-aktarma taraması koşuldu: girdideki 162 karar kartından **32'si spec'e hiç
   geçmemiş**; ayrıca 3 düşen öneri ve 9 "teknik olarak çözülecekti, çözülmedi" kalemi.
@@ -80,17 +86,28 @@ Sıradaki adım: yürütme (`/execute-plan-claude-codex`). Henüz KOD YAZILMADI.
 - **2026-08-27 — Komut ailesi: iş mantığı repoda CLI, `~/.claude/commands/` ince çağırıcı.**
   Kaynak sözleşmeler araştırma deposunda kalır; monorepo tarafında pin manifesti.
 
+- **2026-08-27 — Genel review turu DURDURULDU.** Plan yeni bir kapsamlı hakem turuna
+  sokulmuyor; yalnız iki kök tasarım sorunu (K-145 sözleşmesi · Task 12/13 sonuç sahipliği)
+  uçtan uca kapatıldı. **Kalan risk ölçülmedi, bilinçle kabul edildi** — durdurmak kapanmak
+  değildir.
+- **2026-08-27 — Plan RİSK KABULÜYLE ONAYLANDI (Eray).** Son iki düzeltme partisi hiçbir
+  hakem görmedi; zincirin son yargısı `needs-attention`'dı. Onay bu bilgiyle verildi.
+  Frontmatter bunu yansıtır: `approved-by-iteration-limit` + `unresolved_high_severity_override: true`.
+
 # Open Problems
 
-- **Plan yazılırken 30 teknik kalem plan tarafından bağlanacak** (K-151 · K-152 · K-86 ·
-  K-154 · K-100 · K-106 · K-17 · K-14 · K-24 mekanizması · K-74 · K-75 · K-76 · K-78 ·
-  K-83 · K-87 · K-88 · K-89 · K-90…K-99 · K-103 · K-107 · K-108). Liste karar turu
-  dosyasının sonunda.
-- **§8.7'nin beş sözleşme düzeltmesi resmî turu BLOKLUYOR**; Codex altıncısını buldu
-  (spec §12.2 kanal anahtar uzayının dört değerle kapatılması). Plan'ın ilk görevi.
-- **Task 15'in elle arayüz doğrulaması** (`sector-package-assignment-ui-live-verification`,
-  CURRENT.md) Plan 2 planının pilot görevinin kabul adımına YAZILACAK — evi burası.
-- **n8n hata bildirimi hâlâ yok** (`n8n-credential-host-drift` (b)); Plan 2 n8n'e
-  dokunuyorsa o turda kurulur.
+- **30 teknik kalem BAĞLANDI** (plan yazımında); bağlanma yerleri ve kanıtlayan test adları
+  planın kendisinde. Kapanış görevi (Task 20) 30 teknik + 13 ürün kararını tek tek sweep eder.
+- **§8.7'nin sözleşme düzeltmeleri planın ilk görevidir** (altı kalem: beşi spec'ten, altıncısı
+  kanal anahtar uzayının kapatılması). Resmî turu hâlâ bloklarlar — plan onları Task 2'de kapatır.
+- **Task 15'in elle arayüz doğrulaması EV BULDU:** planın pilot görevinde, ilk paket aktive
+  edildikten sonraki kabul adımı. **Tarihi yok** — plan onaylı değil.
+- **n8n hata bildirimi planda:** hem workflow tarafı hem yerel tur arızası bildirimi bağlandı;
+  kapsam bilinçle dar (yalnız sektör paketi zinciri), kalan workflow'lar CRM turunda.
+- **KABUL EDİLMİŞ RİSK — onay temiz zincirle alınmadı.** Ardışık bağımsız turlar her
+  seferinde kalan teknik boşluk buldu; yakınsama gözlenmedi, durma sebebi karardı.
+  Son iki parti incelenmedi. **Kalan kusurlar yazım anında çıkacak** — yürütmede
+  kırmızı-yeşil döngüsü bunları yakalamalı. Tekrarlayan kusur sınıfı: bir invariantı yazıp
+  onu TÜKETEN görevleri güncellememek; yürütmede de aynı disiplin gerekir.
 - Plan 1 bölümlerinin kart geçişi taranmadı (boşluk raporu kapsam sınırı) — Plan 1 alanında
   kusur çıkarsa koşulur.

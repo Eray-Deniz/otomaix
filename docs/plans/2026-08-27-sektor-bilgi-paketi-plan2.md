@@ -5,9 +5,9 @@ date: 2026-08-27
 source_spec: docs/specs/2026-08-21-sektor-bilgi-paketi.md
 source_spec_unapproved_override: false
 noisy_review_override: false
-unresolved_high_severity_override: false
-codex_plan_review_status: approved
-codex_plan_review_iterations: 5
+unresolved_high_severity_override: true
+codex_plan_review_status: approved-by-iteration-limit
+codex_plan_review_iterations: 7
 codex_plan_review_log: docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
 
@@ -60,7 +60,8 @@ bulamazsan girdiye dön.
   sınırı (≤10, K-74), denetçi öneri sınırı (≤5, K-75), alan boyut hedefleri ve ~6.000
   karakter tavanı **kapı DEĞİLDİR**. Mekanizma kurulur, değer boş kalır, pilot kalibre eder.
 - **Katman-1 kapısı:** enjeksiyon yüzeyine dokunan HER görevin sonunda
-  `python -m pytest tests/prompt_regression/ -v` taze koşulur; tek bayt fark = RED.
+  `cd apps/social/backend && python -m pytest tests/prompt_regression/ -v` taze koşulur;
+  tek bayt fark = RED.
 - **Migration geri alma:** her yeni migration `shared/db/migrations/rollback/<n>_down.sql`
   ile birlikte iner. "git revert" DB için geri alma DEĞİLDİR.
 - **Dış depo sınırı:** `_SABLON.md` · `hakem-denetci-gorevi.md` · `hakem-sentez-gorevi.md`
@@ -217,16 +218,36 @@ Karar turu 30 teknik kalemi plana devretti. Bağlanan hükümler:
     `durum='tamamlandi'` iken doludur. Yarım koşuda dosya EZİLMEZ.
 25. **K-24 ölçüm mekanizması:** motor her koşuda ham dağılımı (değişim sayıları/oranları)
     koşu kaydına yazar. **Değer üretmez** — kalibrasyon bu kayıtları okumaktır.
-26. **K-112 takvim erişilemezliği:** özel gün bloğu **sessizce düşer + zorunlu log** (eşleşmeyen
-    gün davranışıyla aynı yön). Uydurma anahtar hiçbir koşulda üretilmez. Bugünkü davranış
-    Task 5 Step 1'de ÖLÇÜLÜR, sonra bağlanır.
+26. **K-112 takvim erişilemezliği — İKİ AYRI YOL, ikisi de bağlanır** (bağımsız hakem
+    itirazı, 2026-08-27: ilk yazım yalnız ölçüm yapıyordu, hangi kod yolunun değişeceğini
+    ve hata-enjeksiyon testini bağlamıyordu).
+    **(a) Üretim yolu (kararın asıl konusu):** takvim okunamazsa özel gün bloğu **sessizce
+    düşer + zorunlu log**; uydurma anahtar hiçbir koşulda üretilmez. Dikiş: özel gün
+    eşleştirme/enjeksiyon yolu (`sector_packages.py::match_special_day` çağıranı).
+    **(b) Yazım kapısı (ölçülmüş ikinci maruziyet):** `sector_package_lifecycle.py::insert_draft`
+    takvim listesini doğrulayıcıya beslemek için okuyor ve **hata yakalanmıyor** — takvim
+    erişilemezse taslak yazımı doğrudan kesilir. Bu yolda sessiz düşüş YANLIŞ olurdu
+    (anahtar doğrulaması yapılamadan yazım, uydurma anahtarı içeri alırdı): doğru davranış
+    **fail-closed durup açık hata vermektir** — ama bugün bu bilinçli bir karar değil,
+    kazara. Plan onu bilinçli hâle getirir ve **hata enjeksiyonuyla test eder**.
+    Bugünkü davranışın ölçümü Task 5 Step 1'de; bağlama Task 12'de.
 27. **K-117 web sitesiz marka:** ayrı uç AÇILMAZ — mevcut öneri ucu boş aday kümesinde boş
     döner (Plan 1 Task 15 invariantı).
 28. **K-111 / K-114:** fiilen Plan 1'de çözüldü (`validate_package_content` ·
     `sub-sector-candidates`); bu plan yalnız karar olarak kayda geçirir, kod değiştirmez.
-29. **K-145 geri alma teknik kabulü:** koşu kaydı hangi motor kuralının hangi karar satırını
-    ürettiğini taşır → etki alanı türetilebilir. Türetilemeyen durumda o kural sürümünün
-    ürettiği TÜM satırlar geri alınır.
+29. **K-145 geri alma — ÜÇ KURAL, provenanstan ibaret DEĞİL** (bağımsız hakem itirazı,
+    2026-08-27). İlk yazım kararı "koşu kaydı kural sürümünü taşır"a indirgemişti; kanonik
+    kayıt fazlasını istiyor: *(a)* **etkisi kanıtlanan** paketler geri alınır · *(b)* **etki
+    alanı güvenilir biçimde ayrılamıyorsa** kuralın uygulandığı **BÜTÜN** paketler etkilenmiş
+    kabul edilir ve geri alınır · *(c)* **etkilenmediği kanıtlanan** paketler gereksiz yere
+    geri alınmaz. **Belirsizlik güvenli tarafa düşer** — ayrım yapılamadığı anda davranış
+    koşulsuz toplu geri almayla AYNIdır.
+    **Ölçütler ("etkisi kanıtlanan" · "güvenilir ayrılabilen") hiçbir katmanda tanımlı değil
+    ve uydurulmadı** — kanonik kayıt bunu *teknik kabul sözleşmesi* sayıp evini olay müdahale
+    yordamına veriyor, kullanıcı kararına çevirmiyor. Bu plan o sözleşmeyi Task 13'te yazar.
+    **Mekanizma sınırı, dürüst etiket:** birden çok paketi TEK işlemde geri alan mekanizma
+    hiçbir katmanda tarif edilmemiştir; aksiyon **her etkilenen pakete ayrı ayrı** mevcut
+    geri alma yordamının uygulanmasıdır. Yeni toplu mekanizma icat EDİLMEZ.
 30. **K-72:** düzeltme turu otomatik BAŞLAMAZ; yönetici elle tetikler (komut ailesi ucu).
 
 ---
@@ -444,7 +465,9 @@ iki alt LİSTE: `hareket` · `sahne`).
 - [ ] **Step 4:** Dış depoda commit et: `docs(contracts): close six blocking drifts + reflection sweep`
 - [ ] **Step 5:** `shared/contracts/research-contracts.pin.json`'ı yeni commit + hash'lerle
   doldur; `tests/test_contract_pin.py`'a `test_real_pin_verifies_clean` ekle.
-- [ ] **Step 6:** Koş: `cd apps/social/backend && python -m pytest tests/test_contract_pin.py -v` — Beklenen: PASS.
+- [ ] **Step 6:** **Monorepo'ya dön** ve koş:
+  `cd /root/otomaix/apps/social/backend && python -m pytest tests/test_contract_pin.py -v`
+  — Beklenen: PASS. (Bu görev dış depoda başlar; göreli yol oradan çözülmez.)
 - [ ] **Step 7:** Commit: `chore: pin research contracts after blocking drift closure`
 
 ---
@@ -463,14 +486,66 @@ iki alt LİSTE: `hareket` · `sahne`).
 - Produces:
   - `identity.new_unit_id() -> str` — `ku-` + 12 hex, rastgele.
   - `identity.validate_decision_log(rows: list[dict]) -> list[str]` — hata listesi.
-  - `identity.decision_units(content: dict) -> dict[str, dict]` — aktif paketin karar
-    birimlerini `unit_id` → birim eşlemesi olarak döner (motorun karar-kapsamı kontrolünün girdisi).
+  - `identity.decision_units(content: dict, decision_log: list[dict]) -> dict[str, dict]` —
+    aktif paketin karar birimlerini `unit_id` → birim eşlemesi olarak döner (motorun
+    karar-kapsamı kontrolünün ve K-100 envanterinin girdisi).
+  - `identity.check_unit_integrity(content: dict, decision_log: list[dict]) -> list[str]` —
+    eşlemenin gerçekten kapsayıcı olduğunu doğrular (aşağıdaki invariant).
+  - **`identity.canonical_sha(value) -> str`** — K-92'nin kanonik hash kuralı (sıralı
+    anahtar · boşluksuz · NFC). **Burada doğar, Task 13'te DEĞİL** (bağımsız hakem
+    itirazı: Task 3 onu Task 13'ten önce kullanmak zorundaydı). Task 13'ün
+    `engine.canonical_content_sha`'sı bunu ÇAĞIRIR, kendi kuralını yazmaz.
+  - **`identity.enumerate_content_units(content: dict) -> dict[str, dict]`** — içeriği
+    kanonik **yol**larına ayırır: `<alan>[<sıra>]` · `video_kodlar/<havuz>[<sıra>]` ·
+    `ozel_gun/<anahtar>/<yuva>` · düz metin alanları için `<alan>`. **Sıra ordinali
+    zorunludur** — aynı listede birebir aynı metin iki kez geçebilir ve yalnız hash ile
+    ayırt edilemez (çokluk sorunu).
   - `insert_draft(..., decision_log: list[dict] | None = None)` — genişletilmiş imza.
+
+**Kimlik NEREDE yaşıyor — bağımsız hakem itirazının kapanışı (2026-08-27).**
+İlk yazım kimlikleri `content`'ten okumayı öngörüyordu. **Ölçüldü ki bunun yeri yok:**
+`sector_packages.py::_check_cta_items` CTA öğesinin anahtar kümesini `{kalip, tur, gerekce}`
+ile **eşitlik** olarak doğruluyor, `_check_special_day_shapes` aynısını beş yuvayla yapıyor,
+`_check_field_shapes` ise diğer liste öğelerini ve iki video havuzunu **düz metin** olmaya
+zorluyor. Yani içeriğe `unit_id` eklemek doğrulayıcı tarafından REDDEDİLİR. Kimliği yalnız
+karar günlüğüne yazmak da yetmezdi: kapsam kontrolü "aktif paketin HER birimi" der, birim
+kümesi bir yerden türetilebilmelidir.
+
+**Bağlanan çözüm — içerik şeması DEĞİŞMEZ, birim kümesi karar günlüğünden TÜRETİLİR:**
+- Karar günlüğü satırı `unit_id` yanında **`oge_yolu`** ve **`oge_sha`** taşır:
+  `oge_yolu` kimliğin ÇAPASI (kanonik yol, sıra ordinali dahil), `oge_sha` ise bütünlük
+  kontrolü (o öğenin kanonik hash'i). **Yalnız hash yetmez** — aynı listede iki özdeş metin
+  aynı hash'i taşır ve eşleme bire bir olmaz.
+- **Yaşayan küme (`kirp` DÜZELTİLDİ — bağımsız hakem itirazı, ölçüldü):** yeni paketin
+  karar birimleri `koru` + `guncelle` + `ekle` satırlarıdır. **`kirp` ve `cikar` birimi
+  kümeden DÜŞÜRÜR.** İlk yazım `kirp`'i yaşayan saymıştı; kanonik kayıt bunu çürütüyor —
+  *"kırpma **paketten çıkarır, kayıttan çıkarmaz**"* (spec-input satır 1160): kırpılan öğe
+  aday pakete GİRMEZ, yalnız karar günlüğünde ve ham katmanda durur. Eski tanım her gerçek
+  kırpmada zorunlu olarak hayalet birim üretirdi.
+- **Karar kapsamı hangi küme üzerinde ölçülür:** kanonik kayıt (satır 1187) kapsamı
+  **AKTİF paketin** her birimi için tam bir sonuç (`koru`/`guncelle`/`cikar`/`kirp`) diye
+  tanımlar; `ekle` yeni birim doğurur. Motor kontrolü bu ayrımı kullanır.
+- **Bütünlük invariantı (`check_unit_integrity`) — YOL üzerinden, bire bir:**
+  `enumerate_content_units(content)` ile yaşayan satırların `oge_yolu` kümesi **birebir
+  aynı** olmalı (fazlası hayalet birim, eksiği sahipsiz öğe) **ve** her satırın `oge_sha`'sı
+  o yoldaki öğenin taze hash'iyle eşleşmeli. İki yönlü küme eşitliği + hash eşleşmesi;
+  tek yönlü kontrol yetmez.
+- **Neden sürüklenmiyor:** içerik ve karar günlüğü yalnız yaşam döngüsü modülünden ve
+  **aynı işlemde** hash'leriyle birlikte yazılır (K-135 + F19). Dışarıdan içerik
+  düzenleyen bir yol olmadığı için eşleme bayatlayamaz.
+- **`schema_version` ARTIRILMAZ, Plan 1 doğrulayıcısına DOKUNULMAZ** — bu, ilk yazımın
+  gerektireceği şema göçünü ve Plan 1 testlerinin kırılmasını gereksiz kılar.
 
 **Bağlayıcı invariantlar (seam: `identity.py::validate_decision_log`):**
 - `tur` ∈ {`karar`, `not`} — kapalı.
-- `tur="karar"` satırı: `alan` · `unit_id` · `karar` ∈ {`koru`,`guncelle`,`cikar`,`ekle`,`kirp`}
-  (BEŞ değer, kapalı) · `gerekce` · `kanit` · `aktor` ∈ {`sentez`,`motor`,`insan`}.
+- `tur="karar"` satırı: `alan` · `oge_yolu` · `unit_id` · `oge_sha` · `karar` ∈ {`koru`,`guncelle`,`cikar`,`ekle`,`kirp`}
+  (BEŞ değer, kapalı) · `gerekce` · `kanit` · `aktor` ∈ {`sentez`,`motor`,`insan`}
+  · **`kural_kimligi` + `kural_surumu`** — `aktor="motor"` satırlarında ZORUNLU, diğerlerinde
+  boş. **Bağımsız hakem itirazı:** kural provenansı yalnız `engine_diff`'e yazılıyordu ama
+  K-145'in tüketicisi `final_decision_log`'da arıyordu — üretici ve tüketici FARKLI
+  artefaktlara bakıyordu, yani sınıflandırma hiçbir zaman `kanitli` üretemezdi.
+  Damga artık uygulanan karar satırının kendisinde; `engine_diff` reddedilenlerin izini
+  taşımaya devam eder.
 - `karar="cikar"` satırı **pozitif kanıt satırı olmadan GEÇERSİZDİR** (spec §3.5).
 - `karar="ekle"` satırı `yerine_gecer` alanı taşıyabilir (K-154, `cikar`+`ekle` çifti).
 - `tur="not"` satırı: `sinif` ∈ {`reddedilen-aday`,`eslesmeyen-ozel-gun`} — **İKİ değer,
@@ -489,7 +564,20 @@ iki alt LİSTE: `hareket` · `sahne`).
   `test_note_row_classes_are_closed` (İKİ değer) ·
   `test_kismi_tur_tasima_as_note_rejected` (K-107 kapısı — eski biçim geçmemeli) ·
   `test_kismi_tur_tasima_as_koru_field_accepted` (pozitif kontrol) ·
-  `test_decision_units_maps_active_package_units`.
+  `test_decision_units_derived_from_living_log_rows` ·
+  `test_cikar_row_drops_unit_from_set` ·
+  `test_integrity_rejects_orphan_content_item` (sahipsiz öğe — kapsam kaçağı) ·
+  `test_integrity_rejects_ghost_unit` (içerikte karşılığı olmayan birim) ·
+  `test_kirp_row_is_not_a_living_unit` (kanonik kırpma hayalet üretmemeli) ·
+  `test_duplicate_identical_text_gets_distinct_paths` (çokluk — iki özdeş metin) ·
+  `test_two_special_days_with_identical_body_do_not_collide` ·
+  `test_first_package_assigns_new_id_to_every_enumerated_unit` ·
+  `test_integrity_rejects_stale_sha_on_correct_path` ·
+  `test_motor_row_without_rule_id_rejected` (K-145 damgası) ·
+  `test_motor_row_without_rule_version_rejected` ·
+  `test_non_motor_row_carrying_rule_stamp_rejected` ·
+  `test_integrity_passes_on_consistent_package` (pozitif kontrol) ·
+  `test_content_schema_unchanged_plan1_validator_still_passes` (şema göçü YOK).
 - [ ] **Step 2:** `tests/test_plan2_interface_contract.py`'a
   `test_insert_draft_accepts_decision_log` ve `test_insert_draft_without_decision_log_keeps_plan1_behavior`
   ekle (geriye uyum pozitif kontrolü).
@@ -530,8 +618,11 @@ iki alt LİSTE: `hareket` · `sahne`).
   görünürdü.)
 - **Denetçi çıktı sözleşmesi:** dört bölüm → **beş bölüm** (yeniden doğrulama eklendi).
   Biçim kapısı (Task 9) bu beşi arar.
-- **Sentez sözleşmesi:** her karar satırı `unit_id` + `aktor` taşır; `guncelle` kararında
-  kimlik KORUNUR, `cikar`+`ekle` çiftinde `ekle` satırı `yerine_gecer` taşır.
+- **Sentez sözleşmesi:** her karar satırı `unit_id` + **`oge_yolu`** + **`oge_sha`** +
+  `aktor` taşır; `guncelle` kararında kimlik KORUNUR, `cikar`+`ekle` çiftinde `ekle` satırı
+  `yerine_gecer` taşır. **Yol ve hash üretimi sözleşmenin işidir** (bağımsız hakem itirazı:
+  ilk sürüm yalnız kimliği istiyordu, dolayısıyla doğrulayıcının aradığı alanları hiçbir
+  üretici doldurmuyordu).
 - **Sentez sözleşmesi:** `tur: "not"` satır türü ve İKİ `sinif` değeri tanımlanır
   (`reddedilen-aday` = K-87 · `eslesmeyen-ozel-gun` = K-108).
 - **Sentez sözleşmesi — K-107 (kısmi tur):** yalnız-özel-gün / tek-alan turunda değişmeyen
@@ -546,7 +637,8 @@ iki alt LİSTE: `hareket` · `sahne`).
 - [ ] **Step 1:** Denetçi sözleşmesine yeniden doğrulama adımını + beşinci çıktı bölümünü yaz.
 - [ ] **Step 2:** Sentez sözleşmesine kimlik taşıması + not satırı türünü yaz.
 - [ ] **Step 3:** Dış depoda commit: `docs(contracts): add re-verification inventory and unit identity carriage`
-- [ ] **Step 4:** Pin manifestini yenile; `python -m pytest tests/test_contract_pin.py -v`
+- [ ] **Step 4:** **Monorepo'ya dön**, pin manifestini yenile ve koş:
+  `cd /root/otomaix/apps/social/backend && python -m pytest tests/test_contract_pin.py -v`
   — Beklenen: PASS (yeni hash'lerle).
 - [ ] **Step 5:** Commit: `chore: repin research contracts at v2`
 
@@ -573,7 +665,24 @@ iki alt LİSTE: `hareket` · `sahne`).
 - `normalize_special_day_key` davranışı DEĞİŞMEZ — eşleşme ada dayanır, tarihe değil;
   dönem desteği paket eşleşmesini etkilemez, yalnız takvim beslemesini ve gün seçimini.
 - Üç yeni satır: **10 Kasım** (`anma`) · **24 Kasım Öğretmenler Günü** · **okula dönüş**
-  (dönem — `end_date` dolu).
+  (dönem — bitiş tarihi dolu).
+- **Seed değerleri UYDURULMAZ — operatör kararıdır (bağımsız hakem itirazı, 2026-08-27).**
+  Ölçüldü: takvim kaydı yıl alanını ZORUNLU tutuyor ve `(yıl, tarih)` ikilisi benzersiz.
+  Plan üç satırın **adını** veriyordu ama yıl · kategori · kanonik ad · "okula dönüş"ün
+  başlangıç/bitiş tarihlerini vermiyordu; uygulayıcı bunları icat etmek zorunda kalırdı —
+  ve kategori değeri tür↔kategori çatışması kuralını (§11.2) doğrudan etkiler.
+  **Bağlanan hüküm:** bu beş değer Step 1b'de operatöre sorulur (K-04a–d ile aynı sınıf:
+  DB'ye yazımdan önce kapanan içerik kararı), karar `docs/active/`'e işlenir, migration
+  onları **sabit** yazar.
+- **Yıllık işin tekrar koşumu — CANLI DAVRANIŞLA ÇELİŞMEZ (bağımsız hakem itirazı,
+  ölçüldü).** İlk yazım "mevcut satırı ezme" diyordu; **ölçüm** canlı yıllık işin bugün
+  `ON CONFLICT (year, date) DO UPDATE SET name_tr, name_en, category` kullandığını gösterdi —
+  yani ad/kategori düzeltmelerini **bilinçli olarak** güncelliyor. Benim kuralım o
+  düzeltmeleri sessizce durdururdu.
+  **Bağlanan hüküm:** mevcut ezme davranışı **AYNEN KORUNUR** (takvim beslemesi kanonik
+  kaynaktır, düzeltme hakkı onundur). Migration'ın eklediği üç satır da aynı yoldan geçer;
+  değişen tek şey **dönem alanının korunmasıdır** — güncelleme dönem bilgisini SIFIRLAMAZ.
+  Yani kural "ezme" değil, "ezerken dönemi düşürme"dir.
 - **Geri alma anlamı bozmaz (review turu düzeltmesi):** ilk yazım "kolon gider, mevcut
   satırlar durur" diyordu — ama *"okula dönüş"* satırının ANLAMI `end_date`'e bağlıdır;
   kolon düşünce o satır **035 öncesinde var olmayan** bir hâle, "tek günlük okula dönüş"e
@@ -586,13 +695,19 @@ iki alt LİSTE: `hareket` · `sahne`).
 - [ ] **Step 1:** **ÖLÇ (K-112, açık kalem):** takvim erişilemezken özel gün bloğunun
   bugünkü davranışını fixture ile ölç ve `docs/research/`'e tek paragraf not düş. Bulguya
   göre Task 12'nin özel gün kontrolü hizalanır. Ölçmeden bağlama.
+- [ ] **Step 1b:** **Operatör kararı — seed değerleri (DB'ye yazımdan ÖNCE):** üç satırın
+  yılı · kategorisi · kanonik adı; "okula dönüş" döneminin başlangıç ve bitiş tarihi.
+  Uydurulmaz; karar `docs/active/`'e işlenir ve migration'a sabit girer.
 - [ ] **Step 2:** Testleri yaz — `tests/test_migration_035.py`:
   `test_end_date_column_exists_and_nullable` · `test_check_rejects_end_before_start` ·
   `test_period_row_roundtrip` · `test_three_new_rows_present_and_normalize`
   (üç yeni satırın `normalize_special_day_key` çıktısı benzersiz) ·
   `test_rollback_removes_migration_owned_seed_rows` ·
   `test_rollback_preserves_pre_existing_rows` ·
-  `test_up_down_up_on_mixed_row_set` (önceden var olan + migration'ın eklediği satırlar bir arada).
+  `test_up_down_up_on_mixed_row_set` (önceden var olan + migration'ın eklediği satırlar bir arada) ·
+  `test_annual_job_still_corrects_name_and_category` (mevcut ezme davranışı korunuyor) ·
+  `test_annual_job_update_preserves_period_field` (dönem sıfırlanmıyor) ·
+  `test_reseeding_is_conflict_free`.
 - [ ] **Step 3:** Koş: `cd apps/social/backend && python -m pytest tests/test_migration_035.py -v` — Beklenen: FAIL.
 - [ ] **Step 4:** `035_holiday_periods.sql` + `rollback/035_down.sql` yaz; `calendar.py::get_holidays`
   SELECT listesine `end_date` ekle; n8n takvim işine üç kalemi işle.
@@ -628,7 +743,13 @@ iki alt LİSTE: `hareket` · `sahne`).
     `durum text NOT NULL` (`calisiyor` · `tamamlandi` · `tamamlanmadi` — K-82) ·
     `sonuc text NULL` (`activation_eligible` · `no_change` · `blocked` — yalnız
     `durum='tamamlandi'` iken dolu) · `sebep text NULL` (K-90) · `engine_version text` ·
-    `engine_config_sha text` (K-97) · `policy_report jsonb` (K-95) · `final_candidate jsonb`
+    `engine_config_sha text` (K-97) · `policy_report jsonb` (K-95) ·
+    `barrier_report jsonb NULL` (**K-24** — motorun ham değişim sayı/oranları) ·
+    **CHECK: `durum='tamamlandi'` ise `barrier_report` NULL OLAMAZ** — üç sonucun üçünde de
+    (`activation_eligible`·`no_change`·`blocked`) zorunlu. Bağımsız hakem itirazı: kolon
+    yalnız nullable'dı ve servis parametresi varsayılan `None`'dı, yani tamamlanmış bir koşu
+    hiç metrik yazmadan kaydedilebilirdi; mevcut testler verilen değerin saklandığını
+    kanıtlıyordu, EKSİK değerin reddedildiğini değil · `final_candidate jsonb`
     (K-96) · `final_decision_log jsonb` (**F19** — motorun uyguladığı KANONİK karar günlüğü) ·
     `decision_log_sha text` (**F19** — günlüğün bütünlük hash'i) ·
     `engine_diff jsonb` (K-96) · `content_sha text` (K-92) ·
@@ -636,11 +757,20 @@ iki alt LİSTE: `hareket` · `sahne`).
     `approved_at timestamptz NULL` · `approval_seconds int NULL` (K-42) ·
     `katman1_attestation jsonb NULL` (**F18** — hangi Katman-1 koşumu, sonucu, ne zaman) ·
     `readiness_attestation jsonb NULL` (**F18** — K-69 listesinin operatör onayı, kim/ne zaman) ·
+    `katman2_attestation jsonb NULL` (**koşuldu + sunuldu kanıtı** — sonucu KAPI DEĞİL;
+    spec §10.2: *"koşulması ve sunulması ön koşul, sonucu kapı değil"*) ·
     `snapshot_sha text NULL` (**F18** — onayın bağlandığı dondurulmuş görüntünün hash'i) ·
     `package_id uuid NULL` FK → `sector_packages(id)` (**benzersiz DEĞİL** — bkz. düzeltme
     soyağacı) · `duzeltilen_run_id uuid NULL` (**K-106 düzeltme hedefi**) ·
     `kosu_turu text NOT NULL` (`ilk` · `periyodik` · `duzeltme` — kapalı) ·
     `created_at`.
+  - `social.package_rollback_plans` (**K-145**) — `incident_id` · `package_id` ·
+    `observed_active_version` · `target_version int NULL` · `evidence_class` · `reason` ·
+    `durum` (`bekliyor`/`tamamlandi`/`hata`/**`hedefsiz`**) · `created_at`.
+    `UNIQUE (incident_id, package_id)` — tekrar güvenliğinin veri karşılığı.
+    **`hedefsiz`in AÇIK veri karşılığı (iki yönlü CHECK):** `durum='hedefsiz'` ⇔
+    `target_version IS NULL`. Hedefsizlik KALICI bir kayıttır, çalışma zamanı sezgisi
+    DEĞİL — tekrar koşumda korunur ve yeniden hedef aranmaz.
   - `social.brand_sub_sector_history` — `brand_id` · `sub_sector_id` · `assigned_at` ·
     `unassigned_at NULL` (K-45 maruziyet kanıtı) **+ satırı YAZAN tetikleyici**.
   - `UNIQUE (run_id, source, kind)` on `sector_research_artifacts` (K-09).
@@ -733,6 +863,10 @@ iki alt LİSTE: `hareket` · `sahne`).
   **F19:** `test_final_decision_log_and_sha_written_atomically` ·
   `test_content_written_without_decision_log_rejected` ·
   **F18:** `test_attestation_columns_present_and_nullable` ·
+  **K-24:** `test_barrier_report_column_present` ·
+  **K-145:** `test_rollback_plan_unique_incident_package` ·
+  `test_hedefsiz_requires_null_target_version` (CHECK, iki yönlü) ·
+  `test_non_hedefsiz_requires_target_version` ·
   `test_snapshot_sha_column_present` ·
   **K-99 üretici:** `test_log_package_event_accepts_approval_and_rejection` (Python kapısı) ·
   `test_log_package_event_still_rejects_unknown_type` ·
@@ -821,12 +955,26 @@ iki alt LİSTE: `hareket` · `sahne`).
 - Produces:
   - `runs.open_run(db, *, sector_id, run_id, parent_run_id=None) -> UUID`
   - `runs.record_artifact(db, *, run_id, sector_slug, kind, source, content_md, brief_ref=None) -> UUID`
-  - `runs.mark_incomplete(db, *, run_id, sebep) -> None` (K-82 — `durum='tamamlanmadi'`)
+  - `runs.mark_incomplete(db, *, run_id, asama, sebep) -> None` (K-82 — `durum='tamamlanmadi'`)
+    **`asama` kapalı kümedir:** `brief-doctor` · `kaynak-tabani` · `denetim` · `sentez` ·
+    `motor`. Parametre ZORUNLUDUR (bağımsız hakem itirazı: bildirim anahtarı "koşu + aşama"
+    diye tanımlanmıştı ama imzada aşama yoktu — anahtar üretilemezdi).
+    **+ YÖNETİCİ BİLDİRİMİ:** aynı işlemde `record_admin_event`
+    ile `sektor_paketi.tur_arizasi` olayı yazar; `idempotency_key` = `run_id` + `asama`.
+    n8n `errorWorkflow` yalnız **workflow'un kendi** arızasını yakalar — yerel CLI
+    zaman aşımı, sıfırdan farklı çıkış ya da K-127 kaynak-tabanı duruşu ORAYA HİÇ ULAŞMAZ.
+    Bu yol olmadan yarım tur yalnız veritabanında ve günlükte kalırdı.
+    Olay yükü **maskeleme süzgecinden** geçer (K-136).
   - `runs.new_retry_run_id(db, *, parent_run_id) -> str` — YENİ bir `run_id` üretir ve
     `parent_run_id` ile ilkine bağlar (K-83). Sonek üreten `next_attempt` KALDIRILDI:
     ikinci bir kimlik uzayı açıyordu.
-  - `runs.record_result(db, *, run_id, sonuc, sebep=None, final_candidate=None,
-    final_decision_log=None, **report_fields) -> None`
+  - `runs.record_result(db, *, run_id, sonuc, barrier_report, sebep=None,
+    final_candidate=None, final_decision_log=None, **report_fields) -> None`
+    **`barrier_report` ZORUNLU** (varsayılanı YOK — K-24 kapısı).
+    **K-24 eşlemesi AÇIK:** `engine.decide` çıktısındaki `barrier_report` buraya adı konmuş
+    bir parametreyle geçer ve koşu satırına yazılır (bağımsız hakem itirazı: ilk yazımda
+    yalnız genel `**report_fields`'e düşüyordu, yani hangi alanın nereye gittiği tanımsızdı
+    ve kalıcılığı hiçbir test kanıtlamıyordu).
     — **`no_change`/`blocked` dahil HER koşu satır yazar** (K-93), paket satırı üretmeden.
     **F19:** `activation_eligible` sonuçta içerik ve karar günlüğü ile hash'leri
     **aynı işlemde** yazılır; biri eksikse yazım REDDEDİLİR (yarım köken kaydı yok).
@@ -838,6 +986,69 @@ iki alt LİSTE: `hareket` · `sahne`).
   - **`runs.open_correction_run(db, *, parent_run_id, actor) -> str`** (**K-106/K-72**) —
     reddedilmiş ana koşuyu kilitler, `approval_karar='ret'` değilse REDDEDER, `package_id`'sini
     kopyalar, `kosu_turu='duzeltme'` + `duzeltilen_run_id` yazar ve YENİ bir `run_id` döndürür.
+  - **`runs.mask_secrets(text: str) -> str`** ve maskeleme süzgeçli günlük yazıcısı
+    (**K-136**) — bağımsız hakem itirazı (2026-08-27): karar yalnız evrensel kısıt olarak
+    duruyordu, onu uygulayan dosya · arayüz · test YOKTU. Süzgeç **hata mesajlarını ve alt
+    süreç stderr'ini de** kapsar (sızıntının en olası yeri orasıdır) ve günlüğe yazan HER
+    yol ondan geçer.
+  - **`runs.affected_packages(db, *, engine_version, engine_config_sha, kural_kimligi,
+    kural_surumu) -> AffectedSet`** (**K-145**) — bir kural SÜRÜMÜNÜN etkilediği **aktif**
+    paketleri döner; **sektör başına en fazla bir satır.** **Motorda DEĞİL burada**: motor saf kalır, bu fonksiyon koşu kayıtlarını okur.
+    **Olay girdisi kapalı DÖRTLÜDÜR:** `engine_version` · `engine_config_sha` ·
+    `kural_kimligi` · `kural_surumu`. Dördü de zorunludur — sürüm olmadan aynı kuralın iki
+    sürümü ayrışmaz ve doğru sürümle üretilmiş paketler de geri alınırdı.
+    **EVREN — AKTİF paketler üzerinden kurulur (iki kusur birden düzeltildi).**
+    İlk yazım evreni *"motor damgasını taşıyan HER paket"* diye tanımlıyordu; iki ayrı şekilde
+    kırıktı:
+    *(a) Kendi kendiyle çelişiyordu:* evren "koşu satırı olan ve `package_id` dolu" paketlerle
+    sınırlıydı, ama `ayrilamaz` sınıfı tam da *"koşu satırı yok"* ve *"`package_id` boş"*
+    vakalarını sayıyordu. O vakalar evrene hiç giremediği için `ayrilamaz` asla dolmuyordu —
+    yani **güvenli genişleme, var olduğu durumda hiç ateşlenmiyordu.**
+    *(b) Paket durumunu sınırlamıyordu:* damgalı her paket (aktif · arşivlenmiş · taslak)
+    evrene giriyordu. Oysa geri alma **mevcut aktif sürüm** üzerinde çalışır; aynı sektörün
+    birden çok tarihî sürümü ayrı plan satırlarına dönüşür ve ilk geri almadan sonra
+    kalanlar sürüm karşılaştırmasında düşerdi.
+
+    **Bağlanan tanım:** aday küme = **aktif paketi olan HER sektörün o aktif paketi**
+    (sektör başına tam bir satır; arşivlenmiş ve taslak sürümler evrene GİRMEZ — onlar hedef
+    olabilir, konu olamaz). Her aday paket için köken, kendi `run_id` bağından okunur:
+
+    · **`kanitli`** — köken okunabilir (koşu satırı var · `durum='tamamlandi'` · günlük
+      okunabilir), koşu arızalı motor damgasını taşıyor **ve** uygulanmış motor kararlarından
+      en az biri `kural_kimligi` + `kural_surumu` ikilisiyle damgalı (karar türü fark etmez).
+    · **`kanitli_etkilenmemis`** — köken okunabilir **ve** ya koşu o motor damgasını hiç
+      taşımıyor ya da o ikiliyle damgalı hiçbir uygulanmış motor kararı yok.
+    · **`ayrilamaz`** — **köken okunamıyor:** paketin `run_id` bağı yok · koşu satırı yok ·
+      `durum != 'tamamlandi'` · günlük okunamıyor. Bu vakalar artık evrenin İÇİNDE, çünkü
+      evren kökene değil **aktif olmaya** dayanıyor. Etkilenmediği KANITLANAMADIĞI için
+      güvenli tarafa düşer.
+
+    **`ayrilamaz` boş DEĞİLSE küme ADAY KÜMENİN TAMAMINA genişler** — yani her sektörün aktif
+    paketi. Kanonik kayıt bunu böyle bağlıyor: *"ayrım yapılamadığı anda davranış koşulsuz
+    toplu geri almayla AYNIdır"* (spec-input satır 2895). Faz 1'de aday küme küçüktür.
+  - **`runs.build_rollback_plan(db, *, affected: AffectedSet, actor) -> str`** — DEĞİŞMEZ
+    bir geri alma planı yazar ve **olay kimliğini** döner. **Sektör başına TEK giriş** —
+    aday küme aktif paketlerden kurulduğu için tarihî sürümler ayrı satır üretmez. Her giriş:
+    `{package_id, observed_active_version, target_version, evidence_class, reason}`.
+    **Hedef sürüm plan anında SABİTLENİR** (tekrar denemede yeniden hesaplanırsa ikinci kez
+    geri alma riski doğar).
+    **GÜVENLİ HEDEF — iki koşul birden:** hedef, o sektörün (1) `status='archived'` olan **ve**
+    (2) arızalı kural sürümüyle damgalanmamış **en yüksek** sürümüdür.
+    ⚠️ **Arşivlenmişlik koşulunun gerçek riski (ölçüldü):** onaylanmamış bir taslağın aktive
+    edilmesi bu yoldan MÜMKÜN DEĞİL — Plan 1'in geri alma yordamı hedefin durumunu okuyup
+    `archived` değilse hata veriyor (`sector_package_lifecycle.py::rollback_package`).
+    Buradaki kusur daha küçük ama gerçek: **planlayıcı hedefi kısıtlamazsa yürütme anında
+    ölecek bir plan satırı yazar.** Koşulamayan plan üreten planlayıcı kabul edilmez.
+    **Güvenli sürüm YOKSA satır `hedefsiz` yazılır** — `target_version` NULL, `evidence_class`
+    korunur, `reason` sebebi taşır. Geri alma UYDURULMAZ; tek çıkış deaktivasyondur (K-38).
+  - **`runs.execute_rollback_plan(db, *, incident_id, actor) -> RollbackReport`** — planı
+    **paket paket** yürütür (toplu-atomik mekanizma YOK). Her paket kendi işleminde,
+    `observed_active_version` karşılaştır-ve-uygula ile; sonucu plan satırına yazılır.
+    **Tekrar güvenli:** tamamlanmış satır atlanır, hedef YENİDEN HESAPLANMAZ.
+    **`hedefsiz` satır HATA ÜRETMEDEN atlanır** ve `durum='hedefsiz'` olarak kalır; tekrar
+    koşumda aynı sonucu korur (yeniden hedef aranmaz). Rapor onu ayrı sayar.
+  - **`runs.attest_katman2(db, *, run_id, kosum_kimligi, ozet, actor) -> None`** —
+    Katman-2'nin koşulduğu ve sunulduğu kanıtı; sonucu kapı DEĞİL.
   - **`runs.attest_katman1(db, *, run_id, kosum_kimligi, sonuc, actor) -> None`** (**F18**) —
     Katman-1 tasdikinin ADLANDIRILMIŞ üreticisi. Tur 3'te bu üreticinin adı yoktu, yani
     tasdik alanını kimin dolduracağı belirsizdi. CLI'nin Katman-1 adımı bunu çağırır.
@@ -860,6 +1071,39 @@ iki alt LİSTE: `hareket` · `sahne`).
   `test_load_verified_run_rejects_each_of_seven_gates` (kapı başına bir vaka) ·
   `test_load_verified_run_takes_row_lock` ·
   `test_attest_katman1_persists_run_and_result` (F18) ·
+  `test_attest_katman2_persists_run_and_presentation` ·
+  **K-24:** `test_barrier_report_persisted_for_all_three_outcomes` ·
+  `test_completed_run_without_barrier_report_is_rejected` (eksik değer kapısı) ·
+  `test_barrier_report_round_trip_matches_engine_output` ·
+  **K-145 — evren ve sınıflandırma:** `test_universe_is_active_packages_only` ·
+  `test_archived_and_draft_versions_not_in_universe` ·
+  `test_mixed_active_draft_archived_fixture_yields_one_row_per_sector` ·
+  `test_package_without_run_link_is_ayrilamaz` (evrene GİRER — eski tanımda giremiyordu) ·
+  `test_package_with_missing_run_row_is_ayrilamaz` ·
+  `test_incomplete_run_is_ayrilamaz` ·
+  `test_unseparable_expands_to_all_active_packages` ·
+  `test_cikar_decision_makes_package_kanitli` (yaşayan kümede YOK ama etkilenmiş) ·
+  `test_kirp_decision_makes_package_kanitli` ·
+  `test_same_rule_different_version_not_matched` (dörtlünün sürüm ayağı) ·
+  `test_affected_set_separates_proven_and_unprovable` ·
+  `test_proven_unaffected_not_in_any_rollback_set` ·
+  **K-145 — hedef seçimi ve hedefsiz:** `test_rollback_plan_freezes_target_version` ·
+  `test_target_is_highest_archived_version_without_faulty_stamp` ·
+  `test_clean_draft_is_never_chosen_as_target` (planlayıcı koşulamayan satır yazmaz) ·
+  `test_no_safe_archived_version_yields_persisted_hedefsiz_row` ·
+  `test_executor_skips_hedefsiz_without_error` ·
+  `test_rerun_preserves_hedefsiz_outcome` (yeniden hedef aranmaz) ·
+  `test_execute_plan_skips_completed_entries_on_retry` (ikinci geri alma YOK) ·
+  `test_execute_plan_cas_rejects_when_active_version_moved` ·
+  **yerel arıza bildirimi:** `test_mark_incomplete_writes_admin_event` ·
+  `test_admin_event_idempotent_per_run_and_stage` ·
+  `test_mark_incomplete_requires_stage` · `test_stage_values_are_closed` ·
+  `test_admin_event_payload_is_masked` ·
+  **K-136:** `test_mask_filter_redacts_secret_shaped_values` ·
+  `test_mask_filter_applies_to_error_messages` ·
+  `test_mask_filter_applies_to_subprocess_stderr` ·
+  `test_log_writer_cannot_bypass_mask_filter` (yapısal) ·
+  `test_mask_filter_preserves_event_trace` (olay izi korunur — aşırı maskeleme yok) ·
   `test_open_correction_run_copies_package_target` (K-106 pozitif kontrol) ·
   `test_open_correction_run_refuses_non_rejected_parent` ·
   `test_open_correction_run_refuses_parent_without_decision` ·
@@ -870,7 +1114,10 @@ iki alt LİSTE: `hareket` · `sahne`).
   `test_crashed_correction_retry_updates_same_draft` (NEW-2 uçtan uca) ·
   `test_blocked_run_recorded_with_reason` (K-90).
 - [ ] **Step 2:** Koş: `cd apps/social/backend && python -m pytest tests/test_pipeline_runs.py -v` — Beklenen: FAIL.
-- [ ] **Step 3:** `runs.py` yaz.
+- [ ] **Step 3:** `runs.py`'yi yaz — koşu/artefakt yüzeyleri · `load_verified_run` ·
+  `mask_secrets` + maskeleme süzgeçli günlük yazıcısı · `attest_katman1` · `attest_katman2` ·
+  `open_correction_run` · **`affected_packages`** · **`build_rollback_plan`** ·
+  **`execute_rollback_plan`** · `mark_incomplete`'in yönetici bildirimi ayağı.
 - [ ] **Step 4:** Koş: `cd apps/social/backend && python -m pytest tests/test_pipeline_runs.py -v` — Beklenen: PASS.
 - [ ] **Step 5:** Commit: `feat: add run and artifact service with append-only guarantees`
 
@@ -936,10 +1183,36 @@ iki alt LİSTE: `hareket` · `sahne`).
 **Interfaces:**
 - Consumes: Task 9 yüzeyleri.
 - Produces:
-  - `auditors.run_audit_round(packet: PacketRef, *, runner: Runner) -> AuditRound` —
+  - `auditors.run_audit_round(db, packet: PacketRef, *, runner: Runner, run_id: str) -> AuditRound` —
     `AuditRound(reports: list[AuditReport], gecerli: bool, sebep: str | None)`.
-  - `Runner` protokolü: `run(tool: str, cwd: Path, prompt_path: Path) -> str` —
+    **`db` ve `run_id` public imzada ZORUNLU** (bağımsız hakem itirazı: alt açıklama
+    `run_id` ekliyor ve `runs.mark_incomplete(db, ...)` çağırıyordu, ama imzada ikisi de
+    yoktu — sözleşme kendi kendiyle çelişiyordu).
+  - `Runner` protokolü: `run(tool: str, cwd: Path, prompt_path: Path) -> RunnerOutcome` —
     **test edilebilirlik dikişi**; gerçek koşumda yerel CLI alt süreci, testte sahte runner.
+  - `RunnerOutcome(durum, stdout, stderr, exit_code)` — `durum` ∈ {`tamam`, `zaman-asimi`,
+    `hata`}, kapalı. **Ham metin DÖNMEZ** (ilk yazım `-> str` diyordu, hemen ardından tipli
+    sonuç istiyordu).
+  - **`auditors.SubprocessRunner`** — protokolün GERÇEK uygulaması (bağımsız hakem itirazı,
+    2026-08-27: ilk yazımda yalnız protokol ve sahte runner vardı; hiçbir görev gerçek
+    çalıştırıcıyı üstlenmiyordu, yani resmî hat uygulanamazdı). Sözleşmesi:
+    araç başına **kesin komut satırı**, kapalı bir `ToolSpec` eşlemesinde SABİT:
+    `denetci-1` → Claude Code · `denetci-2` → Codex · **`sentez`** → sentez oturumu
+    (Task 11 aynı `Runner`'ı kullanıyor; ilk yazım yalnız iki denetçiyi sayıyordu).
+    **Argüman listeleri UYDURULMAZ — Step 3a'da KURULU CLI'lardan ölçülür ve dondurulur**
+    (İlke 9: ölçülmemiş değer yazılmaz; bayrak adları sürümle değişir).
+    **Test beklentisi eşlemeden OKUNMAZ** (bağımsız hakem itirazı: okusaydı yanlış bir
+    eşlemeyi de geçirirdi — totolojik test). Test, ölçüm anında yazılmış **bağımsız
+    sabitlere** karşı doğrular ·
+    **dış zaman aşımı** (aşılırsa koşu `tamamlanmadi`, dosya EZİLMEZ — K-82) ·
+    **çıkış kodu ayrımı** — runner **tipli sonuç** döner (`tamam` / `zaman-asimi` /
+    `hata`), ham metin değil ·
+    **DURUM SAHİPLİĞİ ORKESTRATÖRDE (bağımsız hakem itirazı):** runner imzasında koşu
+    kimliği ya da veritabanı YOKTUR, dolayısıyla `tamamlanmadi` işaretini runner ATAMAZ.
+    `run_audit_round(db, packet, *, runner, run_id)` denetim turunda, `synthesis.run(db, …)`
+    sentezde — **her terminal hatada** `runs.mark_incomplete` çağıran yerler bunlardır ·
+    stdout rapor gövdesidir, **stderr rapora KARIŞTIRILMAZ** (ayrı yakalanır, maskeleme
+    süzgecinden geçirilip günlüğe yazılır — K-136) · çıktı boşsa **sessiz başarı YOK**, hata.
 
 **Bağlayıcı invariantlar (seam: `auditors.py::run_audit_round`):**
 - **K-76:** denetçiler yerel CLI alt süreci olarak koşar (ağ servisi yok, K-77 lokal tek kullanıcı).
@@ -960,12 +1233,28 @@ iki alt LİSTE: `hareket` · `sahne`).
   `test_crash_mid_round_marks_incomplete_and_preserves_files` (K-82).
 - [ ] **Step 2:** Koş: `cd apps/social/backend && python -m pytest tests/test_auditor_orchestration.py -v` — Beklenen: FAIL.
 - [ ] **Step 3:** `run_audit_round` + `Runner` protokolünü yaz.
+- [ ] **Step 3a:** **ÖLÇ — üç aracın gerçek komut satırı.** Kurulu Claude Code ve Codex
+  CLI'larının yardım çıktısından koşum biçimini, çıktı yönlendirmesini ve zaman aşımı
+  davranışını ölç; sonucu `docs/research/`'e yaz. `ToolSpec` bu ölçümden doldurulur.
+- [ ] **Step 3b:** **`SubprocessRunner` + `ToolSpec` eşlemesini yaz** (gerçek çalıştırıcı)
+  ve testlerini ekle:
+  `test_toolspec_covers_all_three_tools` (iki denetçi + sentez) ·
+  `test_runner_argv_matches_independent_literals` (beklenti eşlemeden DEĞİL, ölçüm anında
+  yazılmış sabitlerden okunur) ·
+
+  `test_runner_returns_typed_outcome_not_raw_text` ·
+  `test_orchestrator_marks_incomplete_on_timeout` (durum sahibi orkestratör — K-82) ·
+  `test_orchestrator_marks_incomplete_on_nonzero` ·
+  `test_runner_nonzero_exit_is_error_not_empty_report` ·
+  `test_runner_empty_stdout_is_failure` (sessiz başarı yok) ·
+  `test_runner_stderr_not_mixed_into_report` ·
+  `test_runner_stderr_is_masked_before_logging` (K-136).
 - [ ] **Step 4:** Koş: `cd apps/social/backend && python -m pytest tests/test_auditor_orchestration.py -v` — Beklenen: PASS.
 - [ ] **Step 5:** Commit: `feat: add sequential blind two-auditor orchestration`
 
 ---
 
-### Task 11: Sentez koşumu + çıktı doğrulayıcı — DB yazımı YOK
+### Task 11: Sentez koşumu + çıktı doğrulayıcı — pakete YAZMAZ
 
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/synthesis.py`
@@ -974,20 +1263,29 @@ iki alt LİSTE: `hareket` · `sahne`).
 **Interfaces:**
 - Consumes: Task 10 `AuditRound`; Task 3 `identity`; Task 4 sözleşme v2.
 - Produces:
-  - `synthesis.run(round: AuditRound, *, active_package, removed_history, holiday_keys, runner: Runner) -> SynthesisResult`
+  - `synthesis.run(db, round: AuditRound, *, run_id: str, active_package, removed_history,
+    holiday_keys, runner: Runner) -> SynthesisResult` — **`db` + `run_id` ZORUNLU:** sentez
+    aynı `Runner`'ı kullanıyor, dolayısıyla terminal hatada `runs.mark_incomplete` çağıran
+    üst orkestratör BURASIDIR (denetim turunda `run_audit_round`, sentezde `synthesis.run`).
+    İlk yazımda sentez tarafında durum sahibi yoktu — zaman aşımı K-82 kaydı üretmezdi.
   - `SynthesisResult(aday_json, karar_gunlugu, acik_sorular, onay_ozeti, tasma: bool)`
   - `synthesis.validate(result: SynthesisResult) -> list[str]`
 
 **Bağlayıcı invariantlar (seam: `synthesis.py::validate`):**
-- **DB'ye YAZMAZ.** `synthesis.py` `insert_draft`'ı import ETMEZ — yapısal test bunu kanıtlar.
-  Kanonik sıra `sentez → motor → draft` kod düzeyinde zorlanır.
+- **PAKET tablosuna YAZMAZ** (bağımsız hakem itirazı: eski cümle düz "DB'ye YAZMAZ" diyordu
+  ve hemen üstündeki `db` alan imzayla çelişiyordu). Kesin sınır: sentez **yalnız koşu
+  DURUMUNU** (`runs.mark_incomplete`) ve **ham artefaktı** yazabilir; `social.sector_packages`
+  tablosuna hiçbir şey yazamaz. `synthesis.py` `insert_draft`'ı import ETMEZ — yapısal test
+  bunu kanıtlar. Kanonik sıra `sentez → motor → draft` kod düzeyinde zorlanır.
 - Aday JSON `validate_package_content` şemasına birebir uyar (Plan 1 doğrulayıcısı yeniden
   kullanılır, kopyalanmaz).
 - **K-02/K-113:** `video_kodlar` İKİ havuz üretir — `hareket` ve `sahne`, ikisi de LİSTE.
 - **K-74/K-75 taşma:** açık soru sayısı 10'u, denetçi önerisi 5'i aşarsa maddeler
   DÜŞÜRÜLMEZ; `tasma=True` işaretlenir. **Kesme kapısı YOKTUR** (İlke 9).
-- Her karar satırı `unit_id` + `aktor="sentez"` taşır; `guncelle` kimliği korur,
-  `cikar`+`ekle` çiftinde `ekle` satırı `yerine_gecer` taşır (K-86/K-154).
+- Her karar satırı `unit_id` + `oge_yolu` + `oge_sha` + `aktor="sentez"` taşır; `guncelle`
+  kimliği korur, `cikar`+`ekle` çiftinde `ekle` satırı `yerine_gecer` taşır (K-86/K-154).
+  Yol ve hash `identity.enumerate_content_units` + `identity.canonical_sha` ile üretilir —
+  sentez kendi kuralını yazmaz.
 - **K-122 churn koruması:** yeni-zayıf öğe salt yeniliğiyle doğrulanmış kalıbı çıkaramaz.
 - **K-124:** `cikar` için normal bilgide ≥1 doğrulanmış kaynaklı kanıt satırı; mevzuat/
   güvenlik bilgisinde ek olarak iki denetçi mutabakatı — yoksa çıkarma YAPILMAZ, madde
@@ -1000,7 +1298,12 @@ iki alt LİSTE: `hareket` · `sahne`).
   `test_cikar_without_evidence_becomes_open_question` (K-124) ·
   `test_cikar_of_legislation_requires_both_auditors` (K-124) ·
   `test_churn_guard_blocks_weak_new_over_verified` (K-122) ·
-  `test_guncelle_preserves_unit_id` · `test_cikar_ekle_pair_links_via_yerine_gecer`.
+  `test_guncelle_preserves_unit_id` · `test_cikar_ekle_pair_links_via_yerine_gecer` ·
+  `test_every_decision_row_carries_path_and_sha` ·
+  `test_produced_log_passes_check_unit_integrity` (üretici ↔ doğrulayıcı uçtan uca) ·
+  `test_synthesis_timeout_marks_incomplete` (sentez tarafında da durum sahibi var —
+  bağımsız hakem itirazı: bu test Task 10'un kapısındaydı ama sentez modülü BURADA doğuyor,
+  yani Task 10 mevcut sırayla tamamlanamazdı).
 - [ ] **Step 2:** Koş: `cd apps/social/backend && python -m pytest tests/test_synthesis.py -v` — Beklenen: FAIL.
 - [ ] **Step 3:** `synthesis.py` yaz.
 - [ ] **Step 4:** Koş: `cd apps/social/backend && python -m pytest tests/test_synthesis.py -v` — Beklenen: PASS.
@@ -1008,11 +1311,24 @@ iki alt LİSTE: `hareket` · `sahne`).
 
 ---
 
-### Task 12: Politika motoru — zorunlu kontroller (§9.2)
+### Task 12: Politika motoru — zorunlu kontroller (§9.2) + K-112 takvim erişilemezliği
+
+**Working directory:** `apps/social/backend`
 
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/engine.py`
+- **Modify: özel gün enjeksiyon çağıranı** (Task 5 Step 1 ölçümünün ADLANDIRDIĞI yol;
+  `sector_packages.py::match_special_day` saf eşleştiricidir, takvime erişmez — erişim
+  hatasını yalnız çağıran görebilir) — **K-112 (a):** takvim okunamazsa özel gün bağlamı
+  BOŞ döner, blok sessizce düşer, **zorunlu maskeli log** yazılır.
+- **Modify: `apps/social/backend/app/services/sector_package_lifecycle.py::insert_draft`** —
+  **K-112 (b):** takvim okunamazsa yazım **açık ve tipli bir hatayla fail-closed durur**
+  (bugün hata yakalanmıyor, yani davranış doğru ama KAZARA; plan onu bilinçli kılar).
+  Sessiz düşüş burada YANLIŞ olurdu — anahtar doğrulaması yapılmadan yazım, uydurma
+  anahtarı içeri alırdı.
 - Test: `apps/social/backend/tests/test_policy_engine_checks.py`
+- Test: `apps/social/backend/tests/test_package_lifecycle.py` (yazım kapısı hata enjeksiyonu)
+- Test: `apps/social/backend/tests/prompt_regression/` (üretim yolu hata enjeksiyonu)
 
 **Interfaces:**
 - Consumes: Task 11 `SynthesisResult`; Task 3 `identity.decision_units`; Task 10 `AuditRound`.
@@ -1030,13 +1346,15 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 **Bağlayıcı invariantlar (seam: `engine.py::run_checks`):**
 - **Karar kapsamı:** aktif pakette karşılığı olmayan `unit_id` veya sonucu olmayan birim →
-  kapsam ihlali → koşu `blocked`. Bu K-84=A'nın gerçek gerekçesidir. **Kısmi turda da
+  kapsam ihlali → **`kapsam_ihlali` bulgusu** (sonuca `decide` çevirir, Task 13).
+  Bu K-84=A'nın gerçek gerekçesidir. **Kısmi turda da
   geçerlidir:** değişmeyen birimler `koru` satırı taşıdığı için (K-107) kapsam tamdır —
   not satırı kapsamı KARŞILAMAZ.
 - **K-125 mutabakat:** `guncelle`/`cikar` için **iki denetçi uyumu** aranır; girdi yalnız
   Task 9'un **doğrulanmış** envanteridir (biçim kapısını geçmiş rapor yetmez).
   Uyuşmazlıkta normal içerikte kalıp KORUNUR; mevzuat/güvenlik alanında (K-129 sabit
-  listesi) koşu `blocked` — **bu, benimsenen K-125 kararının sonucudur, K-128'in DEĞİL.**
+  listesi) **`mevzuat_uyusmazligi` bulgusu** üretilir. Onu `blocked`'a çeviren `decide`'dır
+  ve **her zaman** çevirir — **bu, benimsenen K-125 kararının sonucudur, K-128'in DEĞİL.**
 - **K-129 listesi kodda sabittir:** `yasaklar_ve_hassasiyetler` alanının tamamı + mevzuat/
   tarih/sayı iddiası içeren tüm maddeler.
 - **K-128 ile karışma YASAK (review turu düzeltmesi):** ilk yazımda `run_checks` mevzuat
@@ -1050,31 +1368,48 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 - **K-126 tek-kaynak istisnası:** yalnız (1) kaynak resmî (K-123 ölçütü) **VE** (2) en az
   bir denetçinin canlı URL doğrulaması birlikteyken çalışır.
 - **`2-3` kuralı ölçülmüş eşik DEĞİL, yapısal çoğunluktur** — motor onu uygular, koymaz.
-- **Regresyon kapısı zorunludur:** Katman-1 geçmeden koşu `activation_eligible` OLAMAZ.
-- **K-128 pasif:** mevzuat/güvenlik bloklaması kapısı yapılandırmada kapalı gelir; kod
-  yeteneği taşır, karar kapanınca açılır.
+- **Regresyon kapısı zorunludur:** Katman-1 geçmemişse `regresyon_kapisi` bulgusu üretilir;
+  `decide` onu gördüğü koşuyu `activation_eligible` YAPAMAZ.
+- **K-128 pasif:** bu görev yalnız `mevzuat_dogrulanamadi` bulgusunu ÜRETİR; onu bloklamaya
+  çeviren yapılandırma bayrağı Task 13'tedir ve varsayılanı kapalıdır.
 
 - [ ] **Step 1:** Testleri yaz — `tests/test_policy_engine_checks.py`, kontrol başına en az
-  bir pozitif + bir negatif: `test_full_coverage_passes` (pozitif kontrol) ·
-  `test_missing_unit_result_blocks_run` · `test_unknown_unit_id_blocks_run` ·
+  bir pozitif + bir negatif. **Bu görev SONUÇ beklemez — `run_checks` tipli BULGU üretir;
+  bulguyu `blocked`'a çeviren `decide` Task 13'te doğar.** İlk yazımda aynı listede hem
+  "hiçbir zaman bloklamaz" hem "bloklar" testleri vardı; ikisi aynı anda doğru olamaz.
+  `test_full_coverage_passes` (pozitif kontrol) ·
+  `test_run_checks_never_returns_a_run_outcome` (sözleşme kapısı — yalnız bulgu döner) ·
+  `test_missing_unit_result_emits_kapsam_ihlali_finding` ·
+  `test_unknown_unit_id_emits_kapsam_ihlali_finding` ·
   `test_guncelle_without_evidence_is_not_applied` ·
   `test_cikar_without_two_auditor_agreement_keeps_pattern` (K-125) ·
-  `test_run_checks_never_blocks_only_emits_typed_findings` (K-128 ayrımının kapısı) ·
-  `test_legislation_disagreement_emits_k125_finding` (K-129 alan listesi) ·
-  `test_unverified_legislation_emits_k128_finding_separately` ·
+  `test_legislation_disagreement_emits_mevzuat_uyusmazligi_finding` (K-129 alan listesi) ·
+  `test_unverified_legislation_emits_mevzuat_dogrulanamadi_finding` ·
   `test_engine_consumes_only_validated_inventory` (ham rapor kabul edilmez) ·
   `test_partial_run_with_koru_rows_has_full_coverage` (K-107) ·
-  `test_partial_run_missing_one_unit_blocks` ·
+  `test_partial_run_missing_one_unit_emits_finding` ·
   `test_single_source_exception_requires_official_and_live_url` (K-126) ·
   `test_new_item_needs_two_of_three` · `test_flag_consumption_applied` ·
-  `test_readd_conflict_becomes_open_question` ·
+  `test_readd_conflict_emits_acik_soru_finding` ·
   `test_category_conflict_package_type_wins` (K-03) ·
   `test_unmatched_holiday_key_not_written` ·
-  `test_regression_gate_failure_prevents_activation_eligible` ·
-  `test_second_active_precheck_blocks`.
-- [ ] **Step 2:** Koş: `cd apps/social/backend && python -m pytest tests/test_policy_engine_checks.py -v` — Beklenen: FAIL.
-- [ ] **Step 3:** `engine.py` kontrol kümesini yaz (saf fonksiyon; DB erişimi YOK).
-- [ ] **Step 4:** Koş: `cd apps/social/backend && python -m pytest tests/test_policy_engine_checks.py -v` — Beklenen: PASS.
+  **K-112 hata enjeksiyonu (eşleşmeme DEĞİL, erişilemezlik):**
+  `test_calendar_unavailable_yields_empty_special_day_context_and_logs` (üretim yolu) ·
+  `test_calendar_unavailable_fails_draft_write_closed` (yazım kapısı) ·
+  `test_calendar_unavailable_log_is_masked` (K-136) ·
+  `test_regression_gate_failure_emits_finding` ·
+  `test_second_active_precheck_emits_finding`.
+- [ ] **Step 2:** Koş — **üç yüzeyin ÜÇÜ de** (kırmızı tarafı da kanıtlanmalı; bağımsız
+  hakem itirazı: yalnız PASS tarafı üç yüzeyi koşuyordu, yani yaşam döngüsü ve üretim yolu
+  testlerinin değişiklikten ÖNCE gerçekten kırıldığı hiç gösterilmiyordu):
+  `cd apps/social/backend && python -m pytest tests/test_policy_engine_checks.py tests/test_package_lifecycle.py tests/prompt_regression/ -v`
+  — Beklenen: FAIL (üç yüzeyde de yeni testler kırmızı).
+- [ ] **Step 3:** `engine.py` kontrol kümesini yaz (saf fonksiyon; DB erişimi YOK) +
+  K-112'nin iki dikişini bağla (üretim çağıranı · yazım kapısı).
+- [ ] **Step 4:** Koş — **üç yüzeyin ÜÇÜ de** (bağımsız hakem itirazı: dosya listesinde üç
+  yüzey vardı, adımlar yalnız birini koşuyordu):
+  `cd apps/social/backend && python -m pytest tests/test_policy_engine_checks.py tests/test_package_lifecycle.py tests/prompt_regression/ -v`
+  — Beklenen: PASS ve Katman-1'de tek bayt fark YOK.
 - [ ] **Step 5:** **Mutasyon doğrulaması:** her kontrolü tek tek devre dışı bırakıp ilgili
   testin GERÇEKTEN kırıldığını ölç (kontrol başına bir mutasyon). Sonucu commit mesajında
   değil `docs/research/2026-08-27-motor-mutasyon-olcumu.md`'ye yaz. Kırılmayan kontrol =
@@ -1103,7 +1438,11 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
     `abs_limits: dict | None = None` · `block_on_legislation: bool = False` (K-128 pasif —
     **yalnız `mevzuat_dogrulanamadi` dalını yönetir**; K-125'in uyuşmazlık bloklaması bu
     bayraktan bağımsız ve her zaman açıktır).
-  - `engine.canonical_content_sha(content: dict) -> str` (K-92).
+  - `engine.canonical_content_sha(content: dict) -> str` (K-92) — **`identity.canonical_sha`'yı
+    ÇAĞIRIR**, ikinci bir hash kuralı yazmaz (tek kanonik kural).
+  *(K-145'in `affected_packages`'ı BURADA DEĞİL — `runs.py`'de. Bağımsız hakem itirazı:
+  bu plan motoru "saf fonksiyon, DB'ye dokunmaz" diye tanımlıyor, `db` alan bir fonksiyonu
+  ona koymak kendi kuralını çiğnerdi. Kabul ölçütleri Task 8'de.)*
 
 **Bağlayıcı invariantlar (seam: `engine.py::decide`):**
 - **K-23=B güvenli varsayılan:** motorun karar veremediği madde **mevcut kalıbı korur**,
@@ -1124,8 +1463,9 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   `sebep="ilk-kosuda-degisiklik-yok-gecersiz"`.
 - **K-96:** `final_candidate` sentez adayından AYRIdır; motorun reddettikleri `engine_diff`'e
   yazılır — sentez raporu YERİNDE DEĞİŞTİRİLMEZ.
-- **K-145 teknik kabulü:** `engine_diff` her karar satırının hangi kontrol/kural sürümünden
-  geldiğini taşır.
+- **K-145 teknik kabulü:** UYGULANAN her karar satırı `kural_kimligi` + `kural_surumu`
+  taşır (karar günlüğünde — tüketicinin baktığı yer); `engine_diff` ise motorun
+  REDDETTİKLERİNİN izini taşır. İkisi ayrı sorulara cevap verir.
 
 - [ ] **Step 1:** Testleri yaz — `tests/test_policy_engine_outcome.py`:
   `test_undecided_item_keeps_pattern_and_does_not_block` (K-23=B çekirdeği) ·
@@ -1139,12 +1479,17 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   `test_canonical_sha_stable_across_key_order` (K-92) ·
   `test_canonical_sha_changes_on_list_order` (sıra içeriğin parçası) ·
   `test_engine_diff_preserves_original_synthesis` (K-96) ·
-  `test_engine_diff_records_rule_provenance` (K-145) ·
-  `test_k125_disagreement_blocks_regardless_of_config` (benimsenen karar bayrağa bağlı değil) ·
-  `test_k128_unverified_does_not_block_by_default` (kapı gerçekten pasif) ·
-  `test_k128_unverified_blocks_when_flag_enabled` (yetenek gerçekten kurulu — pozitif kontrol).
+  `test_engine_diff_records_rule_provenance` (K-145 — reddedilenlerin izi) ·
+  `test_applied_motor_rows_carry_rule_stamp` (K-145 — uygulananların izi karar günlüğünde) ·
+  **bulgu → sonuç dönüşümü (Task 12 bulgu üretir, BURASI sonuca çevirir):**
+  `test_kapsam_ihlali_finding_becomes_blocked` ·
+  `test_mevzuat_uyusmazligi_always_becomes_blocked` (K-125 benimsendi) ·
+  `test_mevzuat_dogrulanamadi_does_not_block_by_default` (K-128 pasif) ·
+  `test_mevzuat_dogrulanamadi_blocks_when_flag_enabled` (yetenek kurulu — pozitif kontrol) ·
+  `test_regression_gate_finding_prevents_activation_eligible` ·
+  `test_second_active_finding_becomes_blocked`.
 - [ ] **Step 2:** Koş: `cd apps/social/backend && python -m pytest tests/test_policy_engine_outcome.py -v` — Beklenen: FAIL.
-- [ ] **Step 3:** `decide` + `policy_config.py` + `canonical_content_sha` yaz.
+- [ ] **Step 3:** `decide` + `policy_config.py` + `canonical_content_sha` yaz (motor SAF kalır).
 - [ ] **Step 4:** Koş: `cd apps/social/backend && python -m pytest tests/test_policy_engine_outcome.py -v` — Beklenen: PASS.
 - [ ] **Step 5:** Commit: `feat: add engine outcome, safe fallback and inert barriers`
 
@@ -1287,7 +1632,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   olmadan aktive edilebilirdi (K-69/K-28 atlatılırdı). **Bağlanan hüküm:**
   `activate_from_snapshot(db, *, run_id, actor)` aynı işlem içinde koşu satırından şunları
   yükler ve doğrular: koşu→paket bağı · `approval_karar='onay'` (ret veya karar yoksa RED) ·
-  `katman1_attestation` PASS · `readiness_attestation` onaylı · K-94 taban durumu.
+  `katman1_attestation` PASS · `readiness_attestation` onaylı · **`katman2_attestation`
+  koşuldu+sunuldu (SONUCU OKUNMAZ — spec §10.2)** · K-94 taban durumu.
   **+ İÇERİK BAĞI (tur 5 düzeltmesi):** taslak satırı kilitlenir ve o anki `content` ile
   `decision_log`'un hash'leri onaylanan görüntüdekilerle KARŞILAŞTIRILIR; uyuşmazsa
   aktivasyon REDDEDİLİR. Sebep: onaydan sonra taslağı değiştiren herhangi bir yol
@@ -1338,6 +1684,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   `test_activation_refused_after_rejection` (F18) ·
   `test_activation_refused_when_katman1_attestation_missing_or_failed` (F18) ·
   `test_activation_refused_when_readiness_not_approved` (F18) ·
+  `test_activation_refused_when_katman2_attestation_missing` ·
+  `test_activation_succeeds_with_negative_katman2_result` (sonuç kapı DEĞİL — pozitif kontrol) ·
   `test_activation_succeeds_with_full_attestation_chain` (F18 pozitif kontrol) ·
   `test_first_activation_uses_expected_no_active` (K-94 ilk aktivasyon) ·
   `test_expected_no_active_rejected_when_active_row_exists` ·
@@ -1378,6 +1726,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 - Modify: `apps/social/backend/app/routers/brands.py`
   (`GET /brands/{brand_id}/package-status` → `recovered` durumu + sabit mesaj)
 - Modify: frontend marka paneli bandı (Plan 1'in K-45 devre-dışı bandının kardeşi)
+- **Modify: `apps/social/backend/tests/test_notifications.py`** (yeni workflow'un sözleşme
+  testleri buraya eklenir — Step 7b)
 - Test: `apps/social/backend/tests/test_pipeline_cli.py`
 
 **Working directory:** `apps/social/backend`
@@ -1386,9 +1736,20 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 - Consumes: Task 1-15'in tüm servis yüzeyleri.
 - Produces: CLI alt komutları — `tur-ac` · `brief-doctor` · `denetim` · `sentez` · `motor` ·
   **`katman1`** (koşar + `runs.attest_katman1` ile tasdik yazar) ·
-  **`hazirlik-onayla`** (K-69 listesini sunar + `readiness.attest` ile onayı yazar) ·
+  **`katman2`** (kör örneklemi koşar, sonucu yöneticiye SUNAR ve `runs.attest_katman2` ile
+  koşuldu+sunuldu tasdikini yazar; sonucu kapı DEĞİL) ·
   **`duzeltme-baslat`** (K-72 — reddedilmiş koşudan `runs.open_correction_run` ile düzeltme
   turu açar; otomatik tetik YOK) ·
+  **`etki-analizi`** (K-145 — bir kural sürümünün etkilediği paket kümesini raporlar;
+  ayrım yapılamıyorsa kümenin TÜM paketlere genişlediğini açıkça gösterir) ·
+  **`olay-plani`** (K-145 — `runs.build_rollback_plan` ile DEĞİŞMEZ plan yazar, hedef
+  sürümleri sabitler, olay kimliğini basar. **"Hiçbir şeyi değiştirmez" YANLIŞ bir ifadeydi**
+  — komut plan satırları YAZAR; değiştirmediği şey **paket durumu ve paket olay kaydıdır**) ·
+  **`olay-geri-al`** (K-145 — **olay kimliğiyle** çağrılır, planı paket paket yürütür;
+  `hedefsiz` satırları **ayrı bir başlık altında** raporlar — sessizce başarı sayılmaz,
+  tek çıkışları deaktivasyondur;
+  toplu-atomik yeni mekanizma YOK, her paket kendi işlemi ve kendi olay kaydı;
+  yarıda kalırsa aynı komut kaldığı yerden devam eder, hedefi yeniden hesaplamaz) ·
   `onay` · `aktive-et` · `geri-al` · `durum`. **F18:** iki tasdiğin de ADLANDIRILMIŞ bir
   operatör komutu vardır — tasdik alanlarının nasıl dolacağı belirsiz bırakılmaz. Her biri
   `scripts/sector_sweep.py` desenini izler: argparse · açık `--database-url` · deterministik
@@ -1428,6 +1789,16 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   `test_recovered_state_exposed_on_package_status_endpoint` (müşteri yüzeyi — K-45) ·
   `test_recovered_only_for_brands_with_maintenance_overlap` ·
   `test_recovered_skipped_when_history_unknown` ·
+  **K-145:** `test_etki_analizi_reports_expanded_set_when_unseparable` ·
+  `test_olay_plani_writes_plan_without_touching_package_state` ·
+  `test_olay_plani_does_not_emit_package_events` ·
+  `test_olay_geri_al_requires_incident_id` ·
+  `test_olay_geri_al_rolls_back_each_package_separately` ·
+  `test_olay_geri_al_logs_event_per_package` ·
+  `test_olay_geri_al_resumes_without_double_rollback` ·
+  `test_olay_geri_al_reports_hedefsiz_separately` ·
+  `test_etki_analizi_requires_full_quad` (dört alan da zorunlu) ·
+  **yerel arıza:** `test_cli_terminal_failure_produces_admin_event` ·
   `test_package_status_owner_scoped` (başka markanın durumu okunamaz).
 - [ ] **Step 2:** Koş: `cd apps/social/backend && python -m pytest tests/test_pipeline_cli.py -v`
   — Beklenen: FAIL.
@@ -1441,15 +1812,32 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   OLMADIĞINI gözle doğrula (yalnız CLI çağrısı + argüman geçişi).
 - [ ] **Step 7:** `shared/n8n-workflows/n8n-error-notifier.json` yaz ve
   `sector-package-admin-events.json`'a `errorWorkflow` olarak bağla.
+- [ ] **Step 7b:** **Yeni workflow'u mevcut sözleşme testlerine SOK** (bağımsız hakem
+  itirazı, 2026-08-27: bu kurallar bugün yalnız eski workflow üzerinde koşuyor —
+  `tests/test_notifications.py`'daki sabit-kimlik · `$env` yasağı · credential bağı
+  testleri). Yeni workflow için aynı üçlü: `test_error_notifier_carries_stable_id` ·
+  `test_error_notifier_reads_no_process_env` · `test_error_notifier_credentials_are_bound`.
+  Gerekçe ölçülü: canlı kurulumda `$env` kapalı ve import sabit kimlik istiyor
+  ([[decisions/2026-08-26-n8n-credential-over-env]]).
+- [ ] **Step 7c:** Koş: `cd apps/social/backend && python -m pytest tests/test_notifications.py -v`
+  — Beklenen: PASS. (Bağımsız hakem itirazı: testler ekleniyordu ama bu görev içinde
+  koşulmuyordu; dağıtım öncesi tam suite yakalardı, ama görev kendisi doğrulanmadan
+  commit edilirdi.)
 - [ ] **Step 8:** Commit: `feat: add operator CLI, thin command adapter and error notifier`
 
 ---
 
 ### Task 17: İşletime hazırlık kontrol listesi kapısı (K-69/K-70)
 
+**Working directory:** `apps/social/backend`
+
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/readiness.py`
+- **Modify: `apps/social/backend/scripts/sector_pipeline_cli.py`** — `hazirlik-onayla`
+  alt komutu BU görevde eklenir (bağımsız hakem itirazı: komut Task 16'dan buraya taşınmıştı
+  ama dosya listesine ve adımlara yansımamıştı).
 - Test: `apps/social/backend/tests/test_readiness_checklist.py`
+- Test: `apps/social/backend/tests/test_pipeline_cli.py` (komut testi eklenir)
 
 **Interfaces:**
 - Consumes: Task 16 CLI; Task 1 `contracts`.
@@ -1457,31 +1845,58 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   - `readiness.CHECKLIST: tuple[Item, ...]` — spec §13.4'ün 20 maddesi.
   - `readiness.evaluate(db) -> ReadinessReport` — otomatik ön-kontrolle işaretlenebilenler
     ölçülür, kalanlar operatör onayı bekler.
+  - **CLI alt komutu `hazirlik-onayla`** — listeyi sunar ve operatörün TEK onayını yazar.
+    **Komut BU görevde üretilir, Task 16'da DEĞİL** (bağımsız hakem itirazı, 2026-08-27):
+    ilk yazımda Task 16 bu komutu vaat ediyordu ama tükettiği işlev Task 17'de doğuyordu —
+    Task 16 mevcut sırayla uygulanıp doğrulanamazdı. Komut, üreticisiyle aynı görevde durur.
   - `readiness.attest(db, *, run_id, report, actor) -> None` — **F18:** operatörün TEK onayını
     koşu satırındaki `readiness_attestation` alanına kalıcı yazar (kim · ne zaman · hangi
     maddeler). Aktivasyon bu kaydı okur; boolean uydurulamaz.
 
 **Bağlayıcı invariantlar (seam: `readiness.py::evaluate`):**
 - **K-69:** liste **ilk aktivasyon öncesi KAPIDIR** — tamamlanmadan
-  `ActivationGateEvidence.checklist_approved` doldurulamaz.
+  `ActivationGateEvidence.checklist_approved` doldurulamaz. **Ama kapı yalnız `kapi`
+  sınıfındaki maddeleri sayar:** sonuç iddia eden maddeler (bugün 15. madde — kör
+  değerlendirmede ayrışma) `sinyal` sınıfındadır ve tamamlanma şartına girmez (İlke 9 +
+  K-11 (b) açık).
 - **K-70:** işaretleme sorumlusu operatördür; otomatik ön-kontrol yalnız **işaretler**,
   operatörün yerine ONAYLAMAZ. Yöneticiye özet + TEK onay düşer.
 - Otomatik ölçülemeyen madde `elle` işaretlidir ve raporda öyle görünür — "ölçüldü" gibi
   sunulmaz (İlke 9).
-- **F18 üretici zinciri:** hazırlık onayı ve Katman-1 sonucu **kalıcı tasdiklerdir**, geçici
-  boolean değil. Katman-1 tasdikini koşu komutu yazar (hangi koşum, sonucu, ne zaman);
-  hazırlık tasdikini `readiness.attest` yazar. Aktivasyon ikisini de DB'den doğrular.
+- **F18 üretici zinciri:** hazırlık onayı, Katman-1 ve Katman-2 sonuçları **kalıcı
+  tasdiklerdir**, geçici boolean değil. Katman-1 ve Katman-2 tasdiklerini koşu komutları
+  yazar; hazırlık tasdikini `readiness.attest` yazar. Aktivasyon üçünü de DB'den doğrular.
+- **KATMAN-2 AYRIMI — bağımsız hakem itirazının kapanışı (2026-08-27).** Spec §10.2 ve
+  spec-input Katman-2 için iki AYRI şey söyler: **koşulması ve sunulması ÖN KOŞULDUR**,
+  **sonucu KAPI DEĞİLDİR** (*"Bu katman başarısızlık koşulu üretmez"* — eşik K-11 (b)'de
+  açık). İlk yazım ikisini de kaçırmıştı: kanıt zincirinde Katman-2 hiç yoktu, üstelik
+  hazırlık listesinin **15. maddesi** (*"kör değerlendirmede sektörel ayrışma gözlendi"*)
+  bir SONUÇ iddiasıdır ve listenin tamamı bloklayıcı sayılınca fiilen sert kapıya dönerdi —
+  girdi bunu açıkça yasaklıyor: *"bu belgede kapıya çevrilmez."*
+  **Bağlanan hüküm:** (a) `katman2_attestation` koşum kimliği · sunum zamanı · özet sonucu
+  taşır; aktivasyon **yalnız koşulmuş+sunulmuş olmasını** arar, sonucuna BAKMAZ.
+  (b) Hazırlık listesinde sonuç iddia eden maddeler `sinyal` olarak işaretlenir ve
+  **tamamlanma kapısına GİRMEZ** — operatöre gösterilir, kararı etkiler, bloklamaz.
+  (c) Eşik konulması K-11 (b)'ye bağlıdır ve bu plan onu KAPATMAZ.
 
 - [ ] **Step 1:** Testleri yaz — `tests/test_readiness_checklist.py`:
   `test_checklist_has_twenty_items` · `test_incomplete_checklist_blocks_activation` (K-69) ·
   `test_complete_checklist_allows_activation` (pozitif kontrol) ·
   `test_manual_items_labelled_as_manual` (otomatik ölçüm iddiası yok) ·
+  `test_signal_items_do_not_block_completion` (md.15 kapıya dönmüyor) ·
+  `test_gate_items_still_block_completion` (pozitif kontrol) ·
+  `test_activation_requires_katman2_run_and_presented` ·
+  `test_activation_does_not_read_katman2_result` (sonuç kapı DEĞİL) ·
   `test_auto_precheck_does_not_self_approve` (K-70) ·
   `test_attest_persists_actor_and_time` (F18) ·
   `test_activation_reads_persisted_attestation_not_caller_flag` (F18).
 - [ ] **Step 2:** Koş: `cd apps/social/backend && python -m pytest tests/test_readiness_checklist.py -v`
   — Beklenen: FAIL.
 - [ ] **Step 3:** `readiness.py` yaz.
+- [ ] **Step 3b:** `hazirlik-onayla` alt komutunu CLI'ye ekle; testi:
+  `test_hazirlik_onayla_writes_attestation` (komut gerçekten tasdik yazıyor) ·
+  `test_hazirlik_onayla_requires_run_id`. Koş:
+  `cd apps/social/backend && python -m pytest tests/test_pipeline_cli.py -v` — Beklenen: PASS.
 - [ ] **Step 4:** Koş: `cd apps/social/backend && python -m pytest tests/test_readiness_checklist.py -v`
   — Beklenen: PASS.
 - [ ] **Step 5:** Commit: `feat: add operational readiness checklist gate`
@@ -1524,6 +1939,15 @@ bağımlılığıdır**, uygulama ayrıntısı değil.
   olayları) ve yeni hata-bildirimi workflow'u da import + aktive edilir; global adaptör
   kurulur ve bir kez çağrılarak sınanır.
 
+- [ ] **Step 0 — DAĞITIM ÖNCESİ KALİTE KAPISI (bağımsız hakem itirazı, 2026-08-27).**
+  İlk yazımda canlı ortam, son tam test ve güvenlik incelemesinden ÖNCE değişiyordu: tam
+  test kümesi ve kabul eşlemesi kapanış görevindeydi, kalite zinciri de ondan sonra.
+  Dağıtım geri alınması pahalı bir dış-dünya işlemidir; kapı ondan ÖNCE koşar.
+  (a) Tam test kümesi taze: `cd apps/social/backend && python -m pytest tests/ -v` —
+  çıktı raporlanır (geçen/kalan sayısı; "geçmeli" DEĞİL). (b) Katman-1 tam sweep: tek bayt
+  fark YOK. (c) Sözleşme pin'i doğrulanır. (d) `/review-claude-codex` ve
+  `/security-review-claude-codex` bu görevden ÖNCE koşulmuş olmalı; critical/high açık
+  bulgu varsa dağıtım BAŞLAMAZ. Dördü de geçmeden Step 1'e geçilmez.
 - [ ] **Step 1:** Canlı klonda prova: 035 ve 036'yı `psql -v ON_ERROR_STOP=1 --single-transaction`
   ile dosya dosya uygula; ardından `036_down` → `035_down` → tekrar ileri koş (up-down-up).
   **Bu prova YALNIZ pilot-öncesi rejimi kanıtlar** (F20 (a)); veri varken aynı yolun fail-closed
@@ -1630,6 +2054,13 @@ Operatörün yargısı motor koşmadan ÖNCE kaydedilir; `onay` bir kez, en sond
 - [ ] **Step 5:** **30 devredilen teknik kalemin tek tek sweep'i:** karar turunun plana
   devrettiği K-ID listesinin her biri için "nerede bağlandı + hangi test kanıtlıyor"
   eşlemesi. Bağlanmamış çıkan varsa dürüst etiketle raporda kalır, sessizce düşmez.
+- [ ] **Step 5b:** **13 kapalı ÜRÜN kararının sweep'i (bağımsız hakem itirazı, 2026-08-27).**
+  İlk yazımda kapanış yalnız teknik kalemleri sayıyordu; ürün kararları eşlenmiyordu ve
+  ölçüldü ki 13'ün 12'si planda kimlikle izlenebilirken **K-133 hiç geçmiyordu**. Sebep
+  masum ama kontrolsüz: K-133'ün kararı *"kuru mod KURULMAZ"* — yani doğru uygulama
+  **yokluktur** ve yokluk sessizce doğru görünür. **Bağlanan hüküm:** 13 karar tek tek
+  eşlenir; K-133 için **yapısal yokluk kontrolü** koşulur — kod tabanında ayrı bir kuru
+  koşu kipi, bayrağı ya da dalı YOK (grep-tabanlı, raporlanabilir). Yokluk da kanıtlanır.
 - [ ] **Step 6:** `PLAN2-KAPANIS.md`'yi yaz: ne yapıldı · ne kalmadı · **kabul edilen
   riskler açıkça** · **hâlâ açık ürün kararları** (K-85 · K-153 · K-128 · K-52 · K-11 ·
   K-32…K-37) · evsiz kalan hiçbir kalem YOK (İlke 7 — her kalan iş ya tarihli bir eve gider
@@ -1679,6 +2110,26 @@ K-09 indeksinin 032'nin donmuş manifestini düşürmesi · K-100'ün `gerekce` 
 kapısını kaybetmesi · K-107'nin `koru` satırı yerine nota bağlanması · K-85/K-153'ün
 gereksiz ilan edilmesi · K-134 kalibrasyon körlüğünün bozulması · K-45'in üreticisiz ve
 müşteri yüzeysiz kalması · 035 geri almasının dönem satırını bozması.
+
+**Bağımsız ikinci hakem turu (2026-08-27, Codex zinciri DIŞINDA).** Onaylanmış plan ayrı
+bir hakeme verildi ve **10 itiraz** geldi; **onu da ölçülerek doğrulandı, hiçbiri
+reddedilmedi.** En ağırı planın kendi temelindeydi: kalıcı kalıp kimliğinin **saklanacağı
+yer yoktu** — ölçüldü ki içerik doğrulayıcısı CTA ve özel gün girdilerini tam anahtar
+eşitliğiyle, diğer liste öğelerini düz metin olarak zorluyor; kimlik eklemek reddedilirdi.
+Kimlik artık karar günlüğünden türetiliyor ve çift yönlü bütünlük kontrolüyle içeriğe
+bağlanıyor (şema göçü YOK). Diğer dokuz: Katman-2'nin kanıt zincirinde olmaması ve hazırlık
+listesinin 15. maddesinin sessizce sert kapıya dönmesi · gerçek denetçi çalıştırıcısının
+hiçbir göreve yazılmamış olması · bir komutun kendinden SONRAKİ görevde doğan işlevi
+kullanması · sır maskeleme kararının uygulayıcısız kalması · yeni n8n artefaktının sözleşme
+testlerine sokulmaması · K-145'in üç kuralının provenansa indirgenmesi · canlı dağıtımın
+tam test ve güvenlik incelemesinden önce koşması · K-112'nin dikişsiz kalması · takvim seed
+değerlerinin uygulayıcıya icat ettirilmesi · kapanış sweep'inin ürün kararlarını
+kapsamaması (K-133'ün yokluğu sessizce doğru görünüyordu).
+
+**Bunun kendi review zincirim hakkında söylediği şey:** altı Codex turu tek eksende —
+koşu/yazım/onay köken zinciri — daralarak yakınsadı. Daralmayı sağlıklı saydım ve doğruydu;
+ama o eksende yakınsamak **diğer eksenlerde körleşmek** demekti. Tek hakem zincirinin
+yakınsaması kapsama kanıtı değildir.
 
 **Review turu 5 — düzeltme yaşam döngüsünün kapanışı.** Tur 4'ün düzeltmesi iki çocuk
 doğurdu, ikisi de kabul edildi: (a) koyduğum karşılıklı-dışlama kısıtı **yarıda kalmış bir

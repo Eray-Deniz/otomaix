@@ -2,8 +2,9 @@
 title: Plan 2 — Codex adversarial plan review (disposition ledger)
 date: 2026-08-27
 plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
-turns: 6 (biri kanıtsız — aşağıda)
-verdict: approve (tur 6)
+turns: 7 (biri kanıtsız — aşağıda) + 2 bağımsız hakem turu
+verdict: RİSK KABULÜYLE ONAY (Eray, 2026-08-27) — hakem zinciri onayı DEĞİL
+plan_status: plan-approved / approved-by-iteration-limit
 ham_kanit: /root/.claude/logs/otomaix--ffc87809/2026-08-27-sektor-bilgi-paketi-plan2-plan.md
   (bu makinede, bu kökten — MUTLAK yol; ham Codex çıktısı byte-exact orada)
 ---
@@ -97,3 +98,131 @@ K-128 (doğrulanamayan mevzuat bloklaması) · K-52 (DNA verisi motora girsin mi
 K-11(a/b) · K-32…K-37 (genişleme kapıları).
 Plan bunların hiçbirini kapatmaz; belirsiz vakalar açık soruya düşer ve K-71 gereği
 aktivasyonu bloklar.
+
+
+---
+
+# DUR — otonom döngü durduruldu (2026-08-27, tur 7)
+
+**Durum:** `plan-draft` + `pending`. Tur 6'daki `approve` GEÇERSİZ — bağımsız hakemin 10
+itirazı onaydan sonra işlendi, tur 7 bunların **dördünü kapanmamış** buldu.
+
+| itiraz | tur 7 |
+|---|---|
+| O1 kimlik modeli | **kapanmadı** — `kirp` semantiği, aynı metnin iki kez geçmesi, özel gün anahtarı ve ilk paket eşlenmiyor |
+| O2 Katman-2 | **kapanmadı** — kolon ve üretici var; aktivasyon kapısı, komut ve pilot sırası bağlanmamış |
+| O3 gerçek çalıştırıcı | **kapanmadı** — sınıf adlandırıldı; komut satırı ve hata→durum sahipliği tanımsız |
+| O5 K-145 | **kapanmadı** — kanıt ölçütleri hâlâ ileriye dönük vaat; hedef sürüm ve tekrar güvenliği yok |
+| O4 · O6 · O8 · O9 · O10 | kapandı |
+| O7 | kapanmadı (orta) — davranış anlatılıyor, uygulayan görev yok |
+| yeni (orta) | yerel tur arızası bildirimi üreticisiz · K-24 ölçüm zinciri kalıcı değil |
+
+**Narrowing-vs-spawning yargısı: SAÇILIYOR.** Tur 3-6 tek eksende daralıyordu; tur 7 iki
+YENİ eksende bulgu üretti (bildirim zinciri, K-24 kalıcılığı). Daralma bitti.
+
+**Çerçeve teşhisi.** Kalan dört kalem artık *karar* değil *uygulama mekaniği*: birim
+sayım sözleşmesi (konum/çokluk anahtarları), alt süreç komut satırı eşlemesi, olay geri
+alma planlayıcısı (hedef sürüm sabitleme + tekrar güvenliği). Bunlar koşturulabilen bir
+ortamda tek başarısız testle 20 dakikada kapanır; kâğıt üstünde beş turda kapanmaz.
+Tekrarlanan kusur da bunu gösteriyor: **karar katmanını yazıp tüketicilerini bağlamamak** —
+aynı hata O2/O3/O5/O7'de bir arada.
+
+**Maliyet (ölçülü):** bu plan için 8 Codex çağrısı; biri kanıtsız (substrat dışlaması).
+
+**Karar Eray'a gitti.**
+
+
+---
+
+# Kök tasarım turu (2026-08-27) — genel review DURDURULDU
+
+**Kapsam kararı (Eray):** plan yeni bir genel review turuna sokulmadı. Yalnız iki kök
+tasarım sorunu uçtan uca kapatıldı. **Dürüst etiket: durdurmak KAPANMAK DEĞİL** — son üç
+bağımsız tur her seferinde yeni eksende bulgu çıkarmıştı; kalan risk ölçülmedi, **bilinçle
+kabul edildi**. Bu, tur 6'daki hatanın (bir "dur" işaretini "onay" diye okumak) tekrarı
+olmasın diye buraya yazılıyor.
+
+## 1. K-145 tek ve kapalı sözleşme hâline getirildi
+
+| Kalem | Kapanış |
+|---|---|
+| Olay girdisi kapalı dörtlü | `affected_packages(engine_version, engine_config_sha, kural_kimligi, kural_surumu)`; CLI `etki-analizi` aynı dörtlüyü ister · `test_etki_analizi_requires_full_quad` |
+| Sınıflandırma yalnız yaşayan satırlara bakıyordu | **Kök kusur.** Küme artık *uygulanmış motor kararlarının TAMAMI*; `cikar` ve `kirp` dahil · `test_cikar_decision_makes_package_kanitli` · `test_kirp_decision_makes_package_kanitli` |
+| İki "yaşayan" kümesinin karışması | Ayrı adlandırıldı: **karar birimi kümesi** (`cikar`/`kirp` düşürür) ≠ **uygulanmış motor kararı kümesi** (hepsi dahil); plan metnine uyarı kondu |
+| Sürüm ayrımı | `test_same_rule_different_version_not_matched` |
+| Uygulanan ↔ reddedilen kaynak ayrımı | Uygulanan → `final_decision_log` · reddedilen → `engine_diff` · `test_applied_motor_rows_carry_rule_stamp` |
+| Hedef yalnız arşivlenmiş + güvenli | `test_target_is_highest_archived_version_without_faulty_stamp` · `test_clean_draft_is_never_chosen_as_target` |
+| `hedefsiz` kalıcı temsil | Migration: `durum='hedefsiz'` + `target_version NULL` + **iki yönlü CHECK** · `test_hedefsiz_requires_null_target_version` · `test_non_hedefsiz_requires_target_version` |
+| Planlayıcı hedefsiz satırı yazar | `test_no_safe_archived_version_yields_persisted_hedefsiz_row` |
+| Yürütücü hatasız atlar | `test_executor_skips_hedefsiz_without_error` |
+| Tekrar koşumda korunur | `test_rerun_preserves_hedefsiz_outcome` |
+| CLI ayrı raporlar | `test_olay_geri_al_reports_hedefsiz_separately` |
+| Task 13'teki artık testler | Task 8'e taşındı; Task 13'te sıfır kaldı |
+| Doğrulayıcı damga testleri | `test_motor_row_without_rule_id_rejected` · `test_motor_row_without_rule_version_rejected` · `test_non_motor_row_carrying_rule_stamp_rejected` |
+
+**Ölçülmüş düzeltme (hakemin ciddiyeti abartılıydı):** "temiz görünen taslak hedef seçilemez"
+maddesi onaylanmamış içeriğin aktive edilebileceğini ima ediyordu. **Edilemez** —
+`sector_package_lifecycle.py::rollback_package` hedefin durumunu okuyup `archived` değilse
+hata veriyor. Gerçek kusur daha küçük: planlayıcı kısıtlamazsa **yürütmede ölecek** bir plan
+satırı yazar. Plana bu ayrım doğru yazıldı; yanlış risk iddiası içeri alınmadı.
+
+## 2. Task 12 / Task 13 sonuç sahipliği ayrıldı
+
+- **Task 12 (`run_checks`) yalnız TİPLİ BULGU üretir**; hiçbir testi `blocked` beklemez.
+  Sözleşme kapısı: `test_run_checks_never_returns_a_run_outcome`.
+- **Task 13 (`decide`) bulguyu sonuca çevirir:** `test_kapsam_ihlali_finding_becomes_blocked` ·
+  `test_mevzuat_uyusmazligi_always_becomes_blocked` (K-125 — bayraktan bağımsız) ·
+  `test_mevzuat_dogrulanamadi_does_not_block_by_default` (K-128 pasif) ·
+  `test_mevzuat_dogrulanamadi_blocks_when_flag_enabled` · `test_regression_gate_finding_prevents_activation_eligible` ·
+  `test_second_active_finding_becomes_blocked`.
+- Task 12'nin **invariant metni** de düzeltildi — testleri düzeltip gövdeyi bırakmak bu
+  oturumun tekrarlayan kusuruydu; kardeş taraması onu yakaladı.
+
+## Kardeş taraması (12 kavram + 1 ekleme)
+
+`kural_kimligi` · `kural_surumu` · `affected_packages` · `AffectedSet` · `final_decision_log` ·
+`engine_diff` · `hedefsiz` · `target_version` · `archived` · `run_checks` · `decide` ·
+`blocked` — **artı** "yaşayan" (iki farklı kümeyi adlandırıyordu).
+Yakaladığı iki kalıntı: Task 12 invariant metninde `run_checks`'in bloklaması (iki yerde).
+Düzeltildi; taramanın son hâlinde kalıntı yok.
+
+
+---
+
+# ONAY — risk kabulüyle (2026-08-27, Eray kararı)
+
+**Bu bir hakem zinciri onayı DEĞİLDİR.** Kayda geçen gerçek durum:
+
+- Zincirin son yargısı `needs-attention`'dı (tur 7).
+- Ondan sonra üç bağımsız hakem turu daha koşuldu (10 + 9 + 6 bulgu); hepsi ölçülerek
+  doğrulandı ve düzeltildi.
+- **Son iki düzeltme partisi (kök tasarım turu + K-145 evren düzeltmesi) hiçbir hakem
+  tarafından İNCELENMEDİ.**
+- Genel review turu Eray kararıyla durdurulmuştu; kalan risk **ölçülmedi**.
+
+**Eray bu bilgiyle planı onayladı ve yürütmeye açtı (2026-08-27).**
+
+Frontmatter bunu yansıtır:
+`status: plan-approved` · `codex_plan_review_status: approved-by-iteration-limit`
+(gerçek residual var — düz `approved` yanlış olurdu) ·
+`unresolved_high_severity_override: true` (onay, temiz zincirle değil risk kabulüyle alındı) ·
+`codex_plan_review_iterations: 7`.
+
+## Kabul edilen riskler (açıkça)
+
+1. **Son iki parti incelenmedi.** K-145'in kapalı sözleşmesi, `hedefsiz` kalıcı temsili,
+   Task 12/13 sonuç sahipliği ayrımı ve evrenin aktif-paket üzerinden yeniden tanımı —
+   hiçbiri bağımsız bir hakem görmedi.
+2. **Yakınsama gözlenmedi.** Dört ardışık bağımsız tur da "gerçek düzeltme var ama eksik"
+   dedi; her düzeltme yeni bir kalan boşluk doğurdu. Durma sebebi yakınsama değil, karar.
+3. **Kalan alan uygulama mekaniğidir** (birim sayımı · komut satırı · geri alma
+   planlayıcısı · kanıt sınıflandırması). Kusurlar yazım anında çıkacaktır.
+4. **Hiçbir kod yazılmadı, hiçbir test koşulmadı.** Plandaki 300+ test adı henüz var olmayan
+   dosyalara aittir; kırmızı-yeşil döngüsü yürütmede kurulacak.
+5. Plan hiçbir açık ÜRÜN kararını kapatmıyor: K-85 · K-153 · K-128 · K-52 · K-11(a/b) ·
+   K-32…K-37. Belirsiz vakalar açık soruya düşüp aktivasyonu blokluyor.
+
+## Yürütmede ilk kapı
+
+Task 2'nin altı sözleşme düzeltmesi resmî turu BLOKLAR; Task 18'in Step 0 kalite kapısı
+(tam test · Katman-1 · pin · review + security zinciri) canlı dağıtımdan ÖNCE koşar.

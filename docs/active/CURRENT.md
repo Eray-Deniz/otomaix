@@ -1,6 +1,6 @@
 # Active Tasks
 
-- **sektor-bilgi-paketi-plan2** — Plan 2 işletim hattı; hazırlık (boşluk taraması + 13 kararlık tur) bitti, planın kendisi yazılacak
+- **sektor-bilgi-paketi-plan2** — Plan 2 işletim hattı; plan ONAYLI (20 görev, risk kabulüyle — son iki düzeltme partisi incelenmedi), sıradaki adım yürütme
 
 ## Proposed (spun-off)
 
@@ -73,9 +73,11 @@
   **(ii) Plan 2'ye kadar doğrulanamaz — ölçülmüş sebep:** onayla/değiştir/boşalt üçlüsü aday küme
   ister, öneri ucu ise boş aday kümesinde tanım gereği HER ZAMAN boş döner (Task 15 invariantı).
   Yani bugün gerçek model çağrısı yakmak hiçbir şey kanıtlamaz — yalnız para harcar.
-  **Ev:** Plan 2'nin planı yazılırken pilot görevinin kabul adımına bu doğrulama YAZILACAK
-  (ilk paket aktive edildiği anda üçlü + gerçek öneri koşulur). Plan 2'nin planı henüz yazılmadı,
-  yani bu evin **tarihi yok** — dürüst etiket: *çözülmedi, evi Plan 2 planına bağlı.*
+  **Ev VERİLDİ (2026-08-27):** Plan 2 planının pilot görevinde, ilk paket aktive edildikten
+  hemen sonraki kabul adımı — atama arayüzünün üçlüsü + öneri ucunun gerçek model çağrısıyla
+  koşulması + boş-aday hâlinde bileşenin pasif görünmesi ve kanal envanteri alanları.
+  **Plan ONAYLANDI (2026-08-27), ama tarih hâlâ YOK:** yürütme başlamadı, pilot koşulmadı.
+  Dürüst etiket: *çözülmedi; evi var, tarihi pilot görevinin koşmasına bağlı.*
 
 - **s1-substrate-tracked-secret-scan** (proposed, güvenlik/defense-in-depth) — `CODEX-SCAN-SUBSTRATE` (byte-locked 4-way) tracked-dirty diff'i secret-scan ETMİYOR (yalnız untracked REQUIRED taranıyor; `git apply` execute-plan:1228-1231 vs `_css_secret_scan` 1233-1238). Dar (committed içerik zaten in-scope; yalnız tracked-dosyada-uncommitted-secret) ama düzeltmeli. Detay + structured fix: security-review **SF1** (`docs/security-reviews/2026-06-04-codex-review-scope-contract.md`). Kapsam: substrate bloğu (4 dosya) + `codex-scan-substrate-harness.sh` tracked-secret fixture.
 
