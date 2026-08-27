@@ -4,7 +4,7 @@ status: active
 started: 2026-08-27
 last-touched: 2026-08-27
 blocked-by: null
-source_plan: null
+source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
 
 # Goal
@@ -32,7 +32,11 @@ tamamlandı.
 
 # Current Status
 
-Karar turu kapandı. Plan yazımına hazır.
+**Plan yazıldı ve onaylandı** (2026-08-27):
+`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md` — 20 görev, `plan-approved`.
+Codex adversarial review 6 turda kapandı (son tur: approve, contract-level bulgu yok);
+tahkim kaydı `docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md`.
+Sıradaki adım: yürütme (`/execute-plan-claude-codex`). Henüz KOD YAZILMADI.
 
 - Eksik-aktarma taraması koşuldu: girdideki 162 karar kartından **32'si spec'e hiç
   geçmemiş**; ayrıca 3 düşen öneri ve 9 "teknik olarak çözülecekti, çözülmedi" kalemi.
