@@ -259,3 +259,36 @@ K-86 · K-154 (kalıp kimliği ailesi, K-84=A ile doğdu) · K-100 (denetçi env
 K-106 (yerinde güncelleme — kuru modun yerine) · K-17 · K-14 · K-24 (ölçüm mekanizması,
 değer değil) · K-74 · K-75 · K-76 · K-78 · K-83 · K-87 · K-88 · K-89 · K-90 · K-91 · K-92 ·
 K-93 · K-94 · K-95 · K-96 · K-97 · K-98 · K-99 · K-103 · K-107 · K-108
+
+---
+
+# Plan 2 kapsam kararları (Eray, 2026-08-27)
+
+## Plan 2 TEK PLANDA yazılır — ikinci bölme YOK
+
+**Karar:** Kapsam ikiye bölünmez. Sözleşme düzeltmeleri → brief-doctor → denetçi
+orkestrasyonu → sentez → motor → onay yüzeyi → komut ailesi → migration'lar → pilot,
+hepsi tek planda.
+
+**Gerekçe (Eray):** İş zaten Plan 1 / Plan 2 diye bir kez bölündü; ikinci bölme bitiş
+tarihini belirsizleştirir.
+
+**Reddedilen öneri:** Codex kademeli bölme öneriyordu (Plan 2A = sentez adayına kadar,
+Plan 3 = motor + aktivasyon + pilot), kesme noktası "motorsuz `insert_draft` olmasın"
+kuralıydı. **Kesme noktası reddedildi ama KURAL korunur:** kanonik sıra
+`sentez → motor → draft`tır; sentez çıktısı tek başına DB'ye `draft` yazamaz.
+
+## Komut ailesinin evi — iş mantığı repoda, `~/.claude` ince çağırıcı
+
+**Karar:** İş mantığı otomaix deposunda CLI olarak yaşar. `~/.claude/commands/` altında
+yalnız ince çağırıcı adaptör durur — orada iş mantığı BULUNMAZ.
+
+**Gerekçe:** Slash komutları yalnız `~/.claude/commands/` altından yükleniyor (proje
+`.claude/commands/` taranmıyor — ölçüldü), yani o katman versiyonlanmıyor. İş mantığı
+repoda durursa test edilebilir, review'dan geçer, migration'larla birlikte sürümlenir.
+
+**Kaynak sözleşme dosyalarının evi (Codex önerisi, benimsendi):** `_SABLON.md`,
+`hakem-denetci-gorevi.md`, `hakem-sentez-gorevi.md` ve ham araştırmalar kanonik olarak
+`/root/otomaix-sosyal-medya-arastirmasi/` deposunda KALIR; otomaix'e düzenlenebilir ikinci
+kopya alınmaz. Monorepo tarafında yalnız bir pin manifesti tutulur (dış depo commit'i +
+dosya hash'leri); uyuşmazlıkta resmî koşu fail-closed durur.
