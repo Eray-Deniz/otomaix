@@ -53,11 +53,12 @@ bulamazsan girdiye dön.
 ## Global Constraints
 
 - **BAĞLAYICI ARAYÜZ EKİ — ÖNCELİKLİDİR:** [`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`](2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md)
-  bu planın ayrılmaz parçasıdır; 14 hükmün (R1–R14) ve **AÇIK-1 ile AÇIK-2 kararlarının**
-  sözleşme metnini — imzalar, tip tanımları, kapalı değer kümeleri, test sahipliği — taşır.
-  (AÇIK-2 fix turu 1'de açılıp aynı turda kapandı; bu sayım fix turu 2'de düzeltildi —
-  eski metin yalnız AÇIK-1'i sayıyordu ve yalnız görevine listelenen hükümleri okuyan bir
-  uygulayıcı AÇIK-2'yi hiç görmeyecekti.)
+  bu planın ayrılmaz parçasıdır; **ON YEDİ** hükmün — 14 hüküm (R1–R14) + **AÇIK-1 ·
+  AÇIK-2 · AÇIK-3 kararları** — sözleşme metnini (imzalar, tip tanımları, kapalı değer
+  kümeleri, test sahipliği) taşır.
+  (AÇIK-2 fix turu 1'de açılıp aynı turda kapandı; AÇIK-3 fix turu 2'de açılıp aynı turda
+  kapandı. Sayım fix turu 2'de AÇIK-2 için, fix turu 3'te AÇIK-3 için düzeltildi — yalnız
+  görevine listelenen hükümleri okuyan bir uygulayıcı eksik sayılan hükmü hiç görmezdi.)
   **Ek ile plan gövdesi çeliştiğinde EK GEÇERLİDİR** ve gövde satırı geçersizdir; ek hiçbir
   yeni kapsam açmaz. Her görev, başlığının altındaki *"Arayüz eki bağlar"* satırında kendisini
   bağlayan hükümleri sayar — o görev **uygulanmadan ve gözden geçirilmeden ÖNCE** ekin ilgili
@@ -979,10 +980,26 @@ kümesi bir yerden türetilebilmelidir.
 
 ### Task 8: Koşu ve artefakt servisi (K-09/K-17/K-80/K-82/K-83/K-93)
 
-> **Arayüz eki bağlar: R1 · R2 · R4 · R8 · R9 · R11 · AÇIK-1** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+> **Arayüz eki bağlar: R1 · R2 · R4 · R6 · R7 · R8 · R9 · R11 · AÇIK-1 · AÇIK-3** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/runs.py`
+- **Modify: `apps/social/backend/app/services/sector_package_lifecycle.py`** — **AÇIK-3
+  (arayüz eki kararı, gövdeye fix turu 3'te süpürüldü):** bu görevde o dosyaya YALNIZ şunlar
+  yazılır — dört parmak izi/yük yardımcısı (`activation_evidence_payload` ·
+  `rollback_evidence_payload` · `_evidence_fingerprint` ·
+  `_evidence_fingerprint_from_payload`), dayandıkları yerel görünüm tipi
+  (`KilitliKosuGorunumu` · `_require_kosu_gorunumu`), şekil kapıları (`_require_token` ·
+  `_require_kapsam_sha`), `EvidenceMintRefused` ve iki kanıt sınıfının **köken alanları**
+  (`ActivationGateEvidence.run_id` · `.provenance_token`; `RollbackGateEvidence.incident_id`
+  · `.package_id` · `.onay_kapsam_sha` · `.provenance_token`) ile o alanların kapıları.
+  `_consume_provenance`, `EvidenceProvenanceInvalid`, `expected_no_active` ve geçiş
+  fonksiyonlarının jeton doğrulaması bu görevin DEĞİL, **Task 15'in** kalemidir.
+  Bölünme R9 gereğidir: `runs.build_rollback_evidence` ve `runs.mint_evidence_token`
+  (ikisi de bu görevde) o alanları KURAR ve `EvidenceMintRefused`'u FIRLATIR; Task 15'te
+  doğsalardı Task 8 kendi sırasında tamamlanamazdı.
+  Yardımcılar `runs.VerifiedRun`'ı IMPORT ETMEZ — döngüsel import yasağı; `runs.py` bu
+  adları oradan import eder ve kendi kopyasını TANIMLAMAZ.
 - Test: `apps/social/backend/tests/test_pipeline_runs.py`
 
 **Interfaces:**
@@ -1062,7 +1079,16 @@ kümesi bir yerden türetilebilmelidir.
     paketi. Kanonik kayıt bunu böyle bağlıyor: *"ayrım yapılamadığı anda davranış koşulsuz
     toplu geri almayla AYNIdır"* (spec-input satır 2895). Faz 1'de aday küme küçüktür.
   - **`runs.build_rollback_plan(db, *, affected: AffectedSet, actor) -> str`** — DEĞİŞMEZ
-    bir geri alma planı yazar ve **olay kimliğini** döner. **Sektör başına TEK giriş** —
+    bir geri alma planı yazar ve **olay kimliğini** döner. **Bu fonksiyon YALNIZ olay AÇAR;
+    mevcut bir olayın üyeliğini DEĞİŞTİRMEZ** (imzasında `incident_id` yoktur). Üyelik
+    değişikliğinin yüzeyi ayrıdır: **`runs.amend_rollback_plan(db, *, incident_id: str,
+    affected: AffectedSet, actor: str) -> tuple[int, int]`** — arayüz eki AÇIK-1/A1(a);
+    yürütme başladıysa `IncidentMembershipLocked` ile fail-closed düşer, `onay_*`
+    kolonlarına DOKUNMAZ.
+    Her ikisi de, `approve_incident_rollback`, `build_rollback_evidence` ve
+    `execute_rollback_plan` ile birlikte **TEK olay kilidini** (`runs._lock_incident`,
+    işlem ömürlü danışma kilidi) HERHANGİ bir durum/kapsam okumasından ÖNCE alır — arayüz
+    eki A1(b). **Sektör başına TEK giriş** —
     aday küme aktif paketlerden kurulduğu için tarihî sürümler ayrı satır üretmez. Her giriş:
     `{package_id, observed_active_version, target_version, evidence_class, reason}`.
     **Hedef sürüm plan anında SABİTLENİR** (tekrar denemede yeniden hesaplanırsa ikinci kez
@@ -1152,7 +1178,9 @@ kümesi bir yerden türetilebilmelidir.
 - [ ] **Step 3:** `runs.py`'yi yaz — koşu/artefakt yüzeyleri · `load_verified_run` ·
   `mask_secrets` + maskeleme süzgeçli günlük yazıcısı · `attest_katman1` · `attest_katman2` ·
   `open_correction_run` · **`affected_packages`** · **`build_rollback_plan`** ·
-  **`execute_rollback_plan`** · `mark_incomplete`'in yönetici bildirimi ayağı.
+  **`amend_rollback_plan`** · **`_lock_incident`** · **`execute_rollback_plan`** ·
+  `mark_incomplete`'in yönetici bildirimi ayağı; ayrıca **`sector_package_lifecycle.py`'ye
+  AÇIK-3'ün dört yardımcısı** (bkz. Files).
 - [ ] **Step 4:** Koş: `cd apps/social/backend && python -m pytest tests/test_pipeline_runs.py -v` — Beklenen: PASS.
 - [ ] **Step 5:** Commit: `feat: add run and artifact service with append-only guarantees`
 
@@ -1213,7 +1241,7 @@ kümesi bir yerden türetilebilmelidir.
 
 ### Task 10: İki kör denetçi orkestrasyonu (K-76/K-78/K-150)
 
-> **Arayüz eki bağlar: R6** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+> **Arayüz eki bağlar: R5 · R6** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Modify: `apps/social/backend/app/services/sector_pipeline/auditors.py`
@@ -1616,13 +1644,20 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 15: Draft yazımı · yerinde güncelleme (K-106) · aktivasyon zinciri · yetki zorlaması (K-103)
 
-> **Arayüz eki bağlar: R4 · R8 · R9** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+> **Arayüz eki bağlar: R4 · R8 · R9 · AÇIK-1 · AÇIK-3** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Working directory:** `apps/social/backend`
 
 **Files:**
 - Modify: `apps/social/backend/app/services/sector_package_lifecycle.py`
-  (`_update_draft_row` ÖZEL ilkel + `ActivationGateEvidence.expected_no_active`)
+  (`_update_draft_row` ÖZEL ilkel + `ActivationGateEvidence.expected_no_active`
+  + arayüz eki R8(c): `_consume_provenance` · `EvidenceProvenanceInvalid` ·
+  `activate_package`/`rollback_package` gövdelerine jeton doğrulaması).
+  **AÇIK-3 + R9 sınırı:** dört parmak izi/yük yardımcısı, `KilitliKosuGorunumu`,
+  `_require_token`, `_require_kapsam_sha`, `EvidenceMintRefused` ve iki kanıt sınıfının
+  **köken alanları** (`run_id` · `provenance_token` · `incident_id` · `package_id` ·
+  `onay_kapsam_sha`) bu görevin DEĞİL, **Task 8'in** kalemidir; bu görev onları yalnız
+  ÇAĞIRIR/OKUR, yeniden TANIMLAMAZ.
 - Create: `apps/social/backend/app/services/sector_pipeline/writeback.py`
 - **Modify (DAVRANIŞ DEĞİŞİKLİĞİ — Plan 1 testleri):**
   `apps/social/backend/tests/test_package_lifecycle.py` ve
@@ -1640,6 +1675,9 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   - `writeback.write_draft_from_run(db, *, run_id, actor) -> UUID`
   - `writeback.update_draft_from_run(db, *, run_id, actor) -> None` (K-106)
   - `writeback.activate_from_snapshot(db, *, run_id, actor) -> None`
+  - `writeback.build_activation_evidence(db, *, run_id) -> ActivationGateEvidence`
+    (arayüz eki R8(c) — kanıtın TEK kurulum yeri; `activate_from_snapshot`'ın işleminden
+    çağrılır, imzasında `evidence`/`snapshot`/`dict` parametresi YOKTUR)
   - `sector_package_lifecycle._update_draft_row(...)` — **ÖZEL**, public API değil.
 
 **Bağlayıcı invariantlar (seam: `writeback.py::write_draft_from_run`):**
@@ -1679,12 +1717,19 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   olmadan aktive edilebilirdi (K-69/K-28 atlatılırdı). **Bağlanan hüküm:**
   `activate_from_snapshot(db, *, run_id, actor)` aynı işlem içinde koşu satırından şunları
   yükler ve doğrular: koşu→paket bağı · `approval_karar='onay'` (ret veya karar yoksa RED) ·
-  `katman1_attestation` PASS · **`readiness_attestation` onaylı VE
-  `readiness_attestation["madde_kumesi_sha"]` boş DEĞİL ve
-  `readiness_items.MADDE_KUMESI_SHA`'ya BİREBİR EŞİT** (arayüz eki A4, fix turu 2:
-  hash yazılıyor ama hiçbir kapı OKUMUYORDU — zorunlu bir hazırlık maddesi eklendiğinde
-  eski `True` tasdikler yeni listenin altında kullanılmaya devam ederdi. Eksik, boş ya da
-  eski sürüm → RED; **geriye uyum yedeği YOKTUR**, fail-closed) · **`katman2_attestation`
+  `katman1_attestation` PASS · **`readiness_attestation` DÖRT koşulu birden geçer**
+  (arayüz eki A4; yüklem BİREBİR şudur, fix turu 3'te keskinleştirildi):
+  `_att = run.readiness_attestation` **bir kez** okunur, `_sha = _att["madde_kumesi_sha"]`
+  (anahtar yoksa RED), sonra
+  `_att is not None` **ve** `_att["onaylandi"] is True` **ve** `type(_sha) is str` **ve**
+  `_sha.strip() != ""` **ve** `_sha == readiness_items.MADDE_KUMESI_SHA`.
+  **Karşılaştırma NORMALİZASYONSUZDUR:** `strip()` yalnız boşluk KAPISIDIR, karşılaştırılan
+  değere UYGULANMAZ — fix turu 2'nin `….strip() == KANONİK` yazımı boşluk-sarmalı bir
+  değeri geçiriyordu ve "BİREBİR EŞİT" metniyle çelişiyordu.
+  (Fix turu 2 bulgusu: hash yazılıyor ama hiçbir kapı OKUMUYORDU — zorunlu bir hazırlık
+  maddesi eklendiğinde eski `True` tasdikler yeni listenin altında kullanılmaya devam
+  ederdi. Eksik, boş, yanlış tipte, boşluk-sarmalı ya da eski sürüm → RED; **geriye uyum
+  yedeği YOKTUR**, fail-closed) · **`katman2_attestation`
   koşuldu+sunuldu (SONUCU OKUNMAZ — spec §10.2)** · K-94 taban durumu.
   **+ İÇERİK BAĞI (tur 5 düzeltmesi):** taslak satırı kilitlenir ve o anki `content` ile
   `decision_log`'un hash'leri onaylanan görüntüdekilerle KARŞILAŞTIRILIR; uyuşmazsa
@@ -1811,8 +1856,12 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   turu açar; otomatik tetik YOK) ·
   **`etki-analizi`** (K-145 — bir kural sürümünün etkilediği paket kümesini raporlar;
   ayrım yapılamıyorsa kümenin TÜM paketlere genişlediğini açıkça gösterir) ·
-  **`olay-plani`** (K-145 — `runs.build_rollback_plan` ile DEĞİŞMEZ plan yazar, hedef
-  sürümleri sabitler, olay kimliğini basar. **"Hiçbir şeyi değiştirmez" YANLIŞ bir ifadeydi**
+  **`olay-plani [--incident-id <id>]`** (K-145 — `--incident-id` VERİLMEZSE
+  `runs.build_rollback_plan` ile DEĞİŞMEZ plan yazar, hedef sürümleri sabitler, olay
+  kimliğini basar; **VERİLİRSE `runs.amend_rollback_plan` ile MEVCUT olayın üyeliğini
+  değiştirir** — arayüz eki AÇIK-1/A1(a); yürütme başladıysa `IncidentMembershipLocked`
+  ile sıfırdan farklı çıkış kodu döner ve hiçbir satır yazılmaz. İkinci bir alt komut adı
+  AÇILMAZ. **"Hiçbir şeyi değiştirmez" YANLIŞ bir ifadeydi**
   — komut plan satırları YAZAR; değiştirmediği şey **paket durumu ve paket olay kaydıdır**) ·
   **`olay-geri-al`** (K-145 — **olay kimliğiyle** çağrılır, planı paket paket yürütür;
   `hedefsiz` satırları **ayrı bir başlık altında** raporlar — sessizce başarı sayılmaz,

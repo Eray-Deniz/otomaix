@@ -166,7 +166,8 @@ async def record_result(
     db,
     *,
     run_id: str,
-    result: EngineResult,            # Task 13'ün KAPALI tipi — TEK motor-türevi girdi
+    result: EngineResult,            # KAPALI tip: TANIMI Task 8 (`engine_contract.py`),
+                                     # ÜRETİMİ Task 13 (`decide`) — TEK motor-türevi girdi
 ) -> None: ...
 ```
 
@@ -312,6 +313,44 @@ class PolicyReport:
     acik_soru_kimlikleri: tuple[str, ...]   # R7: `acik_soru` bulgusunu doğuran birimler;
                                             # sayaç DEĞİL, iz — K-71 kapısı R8'in yolunda
 
+    _OGE_TIPLERI = {                        # KAPALI eşleme — dört alan, beşincisi YOK
+        "kararsizlar": KararsizMadde,
+        "bulgular": BulguIzi,
+        "uygulanmayan_kararlar": UygulanmayanKarar,
+        "acik_soru_kimlikleri": str,
+    }
+
+    def __post_init__(self) -> None:
+        """A3 (fix turu 3, orta, KABUL) — DEMET ANOTASYONU ZORLAMA DEĞİLDİR.
+
+        Fix turu 2'nin süpürme tablosu bu sınıfı *"temiz — dört alan da DEMET"* diye
+        işaretlemişti. **Ölçüldü ve bu YANLIŞTI:** `tuple[...]` bir ANOTASYONDUR; çağıran
+        `PolicyReport(kararsizlar=[…], …)` yazarsa alan bir LİSTE olur, donmuşluk onu
+        engellemez ve çağıranla takma ad PAYLAŞILIR — R6(e)'nin `ValidatedReport`'ta
+        kapattığı sınıfın ta kendisi. Alan `record_result` üzerinden koşu satırına
+        yazıldığı için içeriği KİMLİK taşır.
+
+        **`identity.donmus` BURADA KULLANILAMAZ — ölçülmüş tuzak.** `donmus`'un dönüşüm
+        kümesi KAPALIDIR (R6(e), BEŞ kural) ve `KararsizMadde` · `BulguIzi` ·
+        `UygulanmayanKarar` o kümenin DIŞINDADIR: donmuş dataclass ne `Mapping`, ne dizi,
+        ne küme, ne de değişmez skaler listesinin üyesidir → kural (5) gereği `TypeError`.
+        Onları `donmus`'a vermek, alanı dondurmak yerine YAPIMI DÜŞÜRÜRDÜ. Bu yüzden
+        kural burada `tuple(...)` KOPYASI + ÖĞE TİPİ kontrolüdür; öğeler zaten kendi
+        `frozen=True` sınıflarıdır ve `str` değişmezdir, dolayısıyla derinlik gerekmez.
+        (`acik_soru_kimlikleri` `str` öğe taşır ve `donmus`'un kapalı skaler listesinde
+        VARDIR; buna rağmen dört alanın hepsine AYNI kural uygulanır — iki alanı iki
+        kuralla dondurmak, tam olarak ekin yasakladığı ikinci-kural sınıfıdır.)
+        """
+        for _alan, _tip in PolicyReport._OGE_TIPLERI.items():
+            _deger = tuple(getattr(self, _alan))          # KOPYA — takma ad kapanır
+            for _oge in _deger:
+                if type(_oge) is not _tip:
+                    raise TypeError(
+                        f"PolicyReport.{_alan} yalnız {_tip.__name__} taşır "
+                        f"({type(_oge).__name__} verildi) — benzeyen nesne kabul edilmez"
+                    )
+            object.__setattr__(self, _alan, _deger)
+
 @dataclass(frozen=True)
 class EngineResult:
     sonuc: str                       # SONUCLAR — KAPALI
@@ -334,6 +373,12 @@ class EngineResult:
         başka olan bir sonuç nesnesi üretirdi (`record_result` onu olduğu gibi basar)."""
         for _alan in ("final_candidate", "final_decision_log", "engine_diff", "barrier_report"):
             object.__setattr__(self, _alan, identity.donmus(getattr(self, _alan)))
+        # A3 (fix turu 3): `policy_report` bu döngüye GİRMEZ ve girmesi HATA olurdu —
+        # `donmus`'un kapalı dönüşüm kümesi donmuş dataclass'ı REDDEDER (kural 5,
+        # `TypeError`). `PolicyReport` kendi `__post_init__`'inde zaten kopyalanmış ve
+        # öğe tipleri sınanmıştır; ikinci bir dondurma YAZILMAZ.
+        if type(self.policy_report) is not PolicyReport:
+            raise TypeError("policy_report PolicyReport olmalı — serbest sözlük KABUL EDİLMEZ")
 ```
 
 - **`kararsizlar: list[dict]` alanı `EngineResult`'tan SİLİNDİ** (plan 1471 geçersiz).
@@ -533,6 +578,22 @@ class AuditReport:
         # küme `validate_report`'un kapısıdır; yapımdan sonra anahtar eklemek/silmek o
         # kapıyı geçmiş bir raporu kapıdan geçmemiş hâle çevirirdi.
         object.__setattr__(self, "bolumler", identity.donmus(self.bolumler))
+        # A3 (fix turu 3, orta, KABUL): iki dizi alanı DA kopyalanır ve öğe tipleri
+        # sınanır. Fix turu 2 bunları yalnız `tuple[...]` ANOTASYONUNA bırakmıştı;
+        # anotasyon çalışma zamanında hiçbir şey yapmaz — çağıran liste verirse takma ad
+        # paylaşılır ve `validate_report`'un "her `unit_id` tam bir kez" kapısından geçmiş
+        # bir envanter yapımdan SONRA değiştirilebilirdi. `identity.donmus` burada da
+        # KULLANILAMAZ: `InventoryRow`/`UrlCheck` donmuş dataclass'tır ve `donmus`'un
+        # KAPALI dönüşüm kümesinin dışındadır (kural 5 → `TypeError`).
+        for _alan, _tip in (("yeniden_dogrulama", InventoryRow), ("url_orneklem", UrlCheck)):
+            _deger = tuple(getattr(self, _alan))          # KOPYA — takma ad kapanır
+            for _oge in _deger:
+                if type(_oge) is not _tip:
+                    raise TypeError(
+                        f"AuditReport.{_alan} yalnız {_tip.__name__} taşır "
+                        f"({type(_oge).__name__} verildi) — benzeyen nesne kabul edilmez"
+                    )
+            object.__setattr__(self, _alan, _deger)
 
 @dataclass(frozen=True)
 class PacketRef:
@@ -633,8 +694,9 @@ class EngineInputs:
 - **`PolicyConfig` `EngineInputs`'a GİRMEZ** — `decide(inputs, config)` onu ayrı alır
   (plan 1469); tek kanonik yer korunur.
 - `mevcut_birim_sayisi == len(aktif_birimler)` invariantı yapımda zorlanır. **A1
-  (fix turu 2):** bu invariantın anlamlı kalabilmesi için `aktif_paket` ·
-  `aktif_birimler` · `son_turlarin_cikarmalari` `__post_init__`'te `identity.donmus`'tan
+  (fix turu 2; KODA fix turu 3'te indi — A3):** bu invariantın anlamlı kalabilmesi için
+  `aktif_paket` · `aktif_birimler` · `son_turlarin_cikarmalari` (ve `takvim_anahtarlari`)
+  `__post_init__`'te `identity.donmus`'tan
   geçirilir (`object.__setattr__`), invariant kontrolü ondan SONRA koşar — aksi hâlde
   yapımdan sonra `aktif_birimler`'e bir birim eklemek, bariyer paydasını sessizce
   bozardı ve motor kendi kontrol ettiği sayıya güvenemezdi.
@@ -643,6 +705,18 @@ class EngineInputs:
 
 ```python
     def __post_init__(self) -> None:
+        # A3 (fix turu 3, orta, KABUL) — NORMALİZASYON ARTIK KODDA.
+        # Fix turu 2 bu üç koleksiyonun `identity.donmus`'tan geçtiğini yalnız PROSE'da
+        # söylüyordu; blok hiç normalize etmiyor, doğrudan `len()` okuyordu. Anotasyon
+        # çalışma zamanı zorlaması DEĞİLDİR: çağıran değiştirilebilir bir `dict` verirse
+        # takma ad paylaşılır ve `mevcut_birim_sayisi == len(aktif_birimler)` invariantı
+        # yapımdan SONRA sessizce bozulurdu. Sıra bağlayıcıdır: ÖNCE dondur, SONRA kontrol.
+        for _alan in ("aktif_paket", "aktif_birimler", "son_turlarin_cikarmalari"):
+            object.__setattr__(self, _alan, identity.donmus(getattr(self, _alan)))
+        # `takvim_anahtarlari` ZATEN değişmezdir (`frozenset`), ama çağıran `set` verebilir;
+        # `donmus` onu da `frozenset`'e çevirir — aynı TEK kural, ikinci kural YOK.
+        object.__setattr__(self, "takvim_anahtarlari",
+                           identity.donmus(self.takvim_anahtarlari))
         if type(self.denetci_envanterleri) is not ValidatedAuditPair:
             raise TypeError(
                 "denetci_envanterleri ValidatedAuditPair olmalı "
@@ -886,14 +960,14 @@ değiştirilebilir bir `list`/`dict` tutuyor mu?*
 | 2 | `KararsizMadde` (`engine_contract.py` · Task 8) | yok (iki `str`) | temiz |
 | 3 | `BulguIzi` (`engine_contract.py` · Task 8) | yok | temiz |
 | 4 | `UygulanmayanKarar` (`engine_contract.py` · Task 8) | yok | temiz |
-| 5 | `PolicyReport` (`engine_contract.py` · Task 8) | yok — dört alan da DEMET, öğeleri donmuş dataclass | temiz |
+| 5 | `PolicyReport` (`engine_contract.py` · Task 8) | dört alanın DÖRDÜ de (yalnız ANOTASYON demetti) | **KUSURLU → DÜZELTİLDİ (fix turu 3, A3)** — fix turu 2 bunu "temiz" saymıştı; ölçüldü ki `tuple[...]` anotasyonu çalışma zamanında hiçbir şey yapmaz, liste geçirilirse takma ad korunur. Kopya + öğe tipi kontrolü eklendi (`donmus` KULLANILAMAZ — kapalı küme donmuş dataclass'ı reddeder) |
 | 6 | `EngineResult` (`engine_contract.py` · Task 8) | `final_candidate` · `final_decision_log` · `engine_diff` · `barrier_report` | **KUSURLU → DÜZELTİLDİ** — ilk ikisi `content_sha`/`decision_log_sha`'nın konusudur |
 | 7 | `InventoryRow` (`auditors.py` · Task 9) | yok (dört `str`) | temiz |
 | 8 | `UrlCheck` (`auditors.py` · Task 9) | yok | temiz |
-| 9 | `AuditReport` (`auditors.py` · Task 9) | `bolumler` | **KUSURLU → DÜZELTİLDİ** — anahtar kümesi `BOLUM_ANAHTARLARI` kapısıdır |
+| 9 | `AuditReport` (`auditors.py` · Task 9) | `bolumler` **+ `yeniden_dogrulama` · `url_orneklem`** | **KUSURLU → DÜZELTİLDİ (ikinci ayak fix turu 3, A3)** — `bolumler` `BOLUM_ANAHTARLARI` kapısıdır; iki dizi alanı fix turu 2'de yalnız anotasyonla korunuyordu, şimdi kopyalanıyor ve öğe tipleri sınanıyor |
 | 10 | `PacketRef` (`auditors.py` · Task 9) | `kopyalar` · `kopya_shalari` · `unit_snapshot` | **KUSURLU → DÜZELTİLDİ** — K-79 eşitlik invariantı + `unit_snapshot_sha` kimliği |
 | 11 | `GateResults` (`engine.py` · Task 12) | yok (iki `bool`) | temiz |
-| 12 | `EngineInputs` (`engine.py` · Task 12) | `aktif_paket` · `aktif_birimler` · `son_turlarin_cikarmalari` | **KUSURLU → DÜZELTİLDİ** — `mevcut_birim_sayisi == len(aktif_birimler)` invariantı |
+| 12 | `EngineInputs` (`engine.py` · Task 12) | `aktif_paket` · `aktif_birimler` · `son_turlarin_cikarmalari` (+ `takvim_anahtarlari`) | **KUSURLU → DÜZELTİLDİ (kodda ancak fix turu 3'te, A3)** — `mevcut_birim_sayisi == len(aktif_birimler)` invariantı; fix turu 2 normalizasyonu yalnız PROSE'da söylüyordu, `__post_init__` bloğu `len()`'i doğrudan okuyordu |
 | 13 | `ValidatedReport` (`auditors.py` · Task 9) | `errors` | **KUSURLU → DÜZELTİLDİ** — hükmün ana vakası |
 | 14 | `ValidatedAuditPair` (`auditors.py` · Task 10) | yok — iki `AuditReport` + `str`; #9 düzeltilince derinlemesine donmuş | temiz (türev) |
 | 15 | `SnapshotAgreement` (`auditors.py` · Task 10) | `errors` | **KUSURLU → DÜZELTİLDİ** — ikinci ana vaka |
@@ -901,9 +975,25 @@ değiştirilebilir bir `list`/`dict` tutuyor mu?*
 | 17 | `RollbackGateEvidence` (`sector_package_lifecycle.py` · Task 15) | yok | temiz |
 | 18 | `ChecklistItem` (`readiness_items.py` · Task 8) | yok | temiz |
 
-**Sonuç: on sekizin YEDİsi kusurlu, yedisi de bu turda düzeltildi.** Düzeltme her birinin
-KENDİ tanım bloğunda yazılıdır (yukarıda ve R2 · R5); burada tekrarlanmaz — çift kayıt
-yasağı (R14) tip tanımları için de geçerlidir.
+**Sonuç (fix turu 3'te GÜNCELLENDİ): on sekizin SEKİZİ kusurlu, sekizi de düzeltildi.**
+Fix turu 2 yediyi sayıyordu; fix turu 3'te `PolicyReport` (#5) yanlış "temiz"likten
+çıkarıldı ve #9 ile #12'nin düzeltmeleri **prose'dan koda** indirildi. Ölçüt fix turu
+3'te KESKİNLEŞTİ: *anotasyon değil, `__post_init__` bloğunun KENDİSİ kopyalıyor ve
+öğe tipini sınıyor mu?* Düzeltme her birinin KENDİ tanım bloğunda yazılıdır (yukarıda ve
+R2 · R5); burada tekrarlanmaz — çift kayıt yasağı (R14) tip tanımları için de geçerlidir.
+
+**`identity.donmus`'un KAPALI kümesi — hangi alan hangi kuralla dondurulur (A3, fix turu 3).**
+`donmus` yalnız `Mapping` · dizi · küme · değişmez skaler alır; **donmuş dataclass öğesi
+kuralın DIŞINDADIR ve `TypeError` ile düşer** (R6(e), kural 5). Bu yüzden iki ayrı ve
+BİRBİRİNİ DIŞLAYAN uygulama vardır, üçüncüsü YOKTUR:
+- Öğeleri `Mapping`/dizi/skaler olan alan → `identity.donmus(...)` (ör. `VerifiedRun`'ın
+  dokuz yükü, `EngineResult`'ın dört yükü, `EngineInputs`'ın dört koleksiyonu,
+  `AuditReport.bolumler`, `PacketRef`'in üç eşlemesi).
+- Öğeleri **donmuş dataclass** olan alan → `tuple(...)` KOPYASI + `type(öge) is <Sınıf>`
+  kontrolü (`PolicyReport`'un dört alanı, `AuditReport.yeniden_dogrulama` ve
+  `.url_orneklem`). `donmus`'a verilmez.
+Hangi alanın hangi kola düştüğü tanım bloğunda yazılıdır; ikinci bir normalizasyon kuralı
+YAZILMAZ.
 
 **Etkilenen görev (A1):** **Task 3** — `identity.donmus` Produces listesine EKLENİR
 (`identity.py`, plan 508-524 aralığındaki Produces listesi). **Task 8** — `VerifiedRun` ve
@@ -938,6 +1028,28 @@ salt-okunurluk testinin sahibi (üretici görev, R4).
   `test_engine_inputs_unit_count_cannot_drift_after_construction` (yapımdan sonra
   `aktif_birimler`'e birim eklenemez) — **Sahip: Task 12**,
   `tests/test_policy_engine_checks.py`.
+
+**A3'ün EKSİK KALAN testleri (fix turu 3) — normalizasyon PROSE'da vardı, KODDA yoktu:**
+- `test_engine_inputs_normalises_before_the_count_check` (çağıran `aktif_birimler`'i
+  değiştirilebilir bir `dict` olarak verir; yapımdan sonra ona birim eklemek
+  `mevcut_birim_sayisi` invariantını BOZMAZ — dondurma kontrolden ÖNCE koştuğunun ispatı) ·
+  `test_engine_inputs_does_not_alias_caller_collections` (üç koleksiyonun üçü de) ·
+  `test_engine_inputs_accepts_a_plain_set_for_takvim_anahtarlari` (pozitif kontrol:
+  `set` → `frozenset`) — **Sahip: Task 12**, `tests/test_policy_engine_checks.py`.
+- `test_policy_report_sequences_are_tuples_when_lists_are_passed` ·
+  `test_policy_report_does_not_alias_caller_lists` (çağıranın listesi sonradan
+  boşaltılınca rapor DEĞİŞMEZ) ·
+  `test_policy_report_rejects_foreign_element_type` (`bulgular=(<KararsizMadde>,)` →
+  `TypeError`; alan-başına öğe tipi zorlanır) ·
+  `test_policy_report_rejects_lookalike_element` (aynı alan adlarını taşıyan sahte nesne
+  → RED) — **Sahip: Task 13**, `tests/test_policy_engine_outcome.py` (üretici görev, R4).
+- `test_audit_report_sequences_are_tuples_and_unaliased` ·
+  `test_audit_report_rejects_foreign_row_type` (`yeniden_dogrulama=(<UrlCheck>,)` →
+  `TypeError`) — **Sahip: Task 9**, `tests/test_auditor_packaging.py`.
+- **Tuzağın kendi kapısı:** `test_donmus_rejects_a_frozen_dataclass_element`
+  (`identity.donmus((KararsizMadde("u", "s"),))` → `TypeError`) — donmuş dataclass öğeli
+  alanların NEDEN `donmus`'a verilmediğinin ölçülmüş ispatı. **Sahip: Task 3**,
+  `tests/test_unit_identity.py`.
 
 **Etkilenen görev · geçersiz kılınan satırlar:** **Task 9** — plan 1170-1171 (dönüş tipi
 `list[str]`) GEÇERSİZ; plan 1165 satırındaki Consumes satırı **`Task 3 identity.decision_units +
@@ -1108,11 +1220,21 @@ async def activate_from_snapshot(db, *, run_id: str, actor: str) -> None:
         activation_eligible = (run.sonuc == "activation_eligible")
         open_questions_count = len(run.approval_snapshot["acik_sorular"])
         katman1_passed       = run.katman1_attestation["sonuc"] == "PASS"
-        checklist_approved   = (run.readiness_attestation["onaylandi"] is True
-                                and isinstance(run.readiness_attestation.get(
-                                    "madde_kumesi_sha"), str)
-                                and run.readiness_attestation["madde_kumesi_sha"].strip()
-                                    == readiness_items.MADDE_KUMESI_SHA)   # A4 — yedek yol YOK
+        # A4 (fix turu 3, düzeltme) — ÖNCEKİ YAZIM `….strip() == KANONİK` yazıyordu;
+        # ölçüldü ki bu, `" <kanonik> "` gibi boşluk-sarmalı bir değeri GEÇİRİR — oysa
+        # bağlayıcı metin "BİREBİR EŞİT" diyor. Kural: alan BİR KEZ okunur, tipi
+        # `type(...) is str` ile sınanır, boş-olmama ayrı bir kapıdır ve KARŞILAŞTIRMA
+        # NORMALİZASYONSUZDUR (`strip`/`lower`/`casefold` YOK).
+        _att = run.readiness_attestation
+        _sha = _att["madde_kumesi_sha"] if (
+            _att is not None and "madde_kumesi_sha" in _att) else None
+        checklist_approved   = (
+            _att is not None
+            and _att["onaylandi"] is True          # anahtar yoksa KeyError — sessiz False YOK
+            and type(_sha) is str                  # `bool`/alt sınıf/`None` RED
+            and _sha.strip() != ""                 # boş ya da yalnız-boşluk RED (boşluk kapısı)
+            and _sha == readiness_items.MADDE_KUMESI_SHA   # NORMALİZASYONSUZ — yedek yol YOK
+        )
         expected_active_version / expected_no_active  = K-94 taban durumu (plan 1685-1687)
 
     Hiçbir alan parametreden gelmez; fonksiyonun imzasında `evidence`, `snapshot`
@@ -1186,27 +1308,143 @@ Jeton **türü kolonu YOKTUR**: jetonun türünü taşıdığı TABLO belirler
 (`sector_package_runs` → aktivasyon, `package_rollback_plans` → geri alma). İkinci bir
 enum açmak, R2'nin kapattığı isimsiz-değer sınıfını geri getirirdi.
 
-**Tip ayağı — Plan 1 arayüzünde BEYAN EDİLEN değişiklik (Task 15).** Bu değişiklik planın
+**Tip ayağı — Plan 1 arayüzünde BEYAN EDİLEN değişiklik (Task 8 + Task 15; görev
+bölünmesi hemen aşağıda).** Bu değişiklik planın
 *"Bu planın Plan 1 arayüzünde yaptığı DEĞİŞİKLİKLER"* bölümüne, `expected_no_active` ve
 `_update_draft_row` kalemlerinin YANINA yazılır — gizli bir arayüz kırılması bırakılmaz.
 
+**GÖREV BÖLÜNMESİ — AÇIK-3'ün gövdeye SÜPÜRÜLMÜŞ hâli (fix turu 3).** Bu tek dosya İKİ
+görev arasında bölünür ve bölünme AÇIK-3'ün kararının aynısıdır:
+
+- **Task 8 MODIFY** — DÖRT yardımcı + yerel görünüm tipi + **jeton ALANLARI ve onların
+  şekil kapıları**: `activation_evidence_payload` · `rollback_evidence_payload` ·
+  `_evidence_fingerprint` · `_evidence_fingerprint_from_payload` · `KilitliKosuGorunumu` ·
+  `_require_kosu_gorunumu` · `_require_token` · `_require_kapsam_sha` ·
+  `EvidenceMintRefused` · iki kanıt sınıfının köken alanları
+  (`ActivationGateEvidence.run_id` · `.provenance_token`; `RollbackGateEvidence.incident_id`
+  · `.package_id` · `.onay_kapsam_sha` · `.provenance_token`) ve YALNIZ o alanların
+  `__post_init__` kapıları.
+- **Task 15 MODIFY** — `EvidenceProvenanceInvalid` · `_consume_provenance` · iki geçiş
+  fonksiyonunun jeton doğrulaması · `_update_draft_row` · `ActivationGateEvidence.
+  expected_no_active` (planın zaten beyan ettiği alan) ve onun `_require_flag` kapısı.
+
+**Alan düzeyinde bölünmenin sebebi R9'dur (fix turu 3'te ölçüldü ve düzeltildi).**
+`runs.build_rollback_evidence` (**Task 8**) `RollbackGateEvidence(**payload,
+provenance_token=token)` KURAR ve `runs.mint_evidence_token` (**Task 8**)
+`EvidenceMintRefused` FIRLATIR. Fix turu 2 hem alanları hem istisnayı Task 15'e
+yazıyordu; Task 8 < Task 15 olduğu için bu, **R9'un yasakladığı ileri-tüketimdi** —
+Task 8 kendi sırasında tamamlanamazdı. Alanlar ve istisna Task 8'e, kapı gövdeleri ve
+tüketim Task 15'e ait olunca her görev kendi sırasında kapanır. `expected_no_active`
+Task 15'te KALIR: onu yalnız Task 15'in `activate_from_snapshot`'ı üretir.
+
+**Fix turu 2'nin yazımı İKİ YÜK yardımcısını (`activation_evidence_payload` ·
+`rollback_evidence_payload`) `runs.py`'de TANIMLIYOR ve `build_activation_evidence`'ı
+`runs.activation_evidence_payload` çağırır diye yazıyordu** (aşağıdaki üretici bloğu) —
+AÇIK-3 kararı verildi ama gövdeye işlenmedi. Fix turu 3'te dört yardımcının TANIMI da,
+TÜM çağrıları da buraya taşındı; `runs.py`'de yardımcıların NE TANIMI NE İKİNCİ
+KOPYASI kalır (yalnız import + çağrı).
+
 ```python
-# apps/social/backend/app/services/sector_package_lifecycle.py   (Task 15 MODIFY)
+# apps/social/backend/app/services/sector_package_lifecycle.py
+#   Task 8 MODIFY  → KilitliKosuGorunumu · _require_kosu_gorunumu ·
+#                    activation_evidence_payload · rollback_evidence_payload ·
+#                    _evidence_fingerprint · _evidence_fingerprint_from_payload ·
+#                    _require_token · _require_kapsam_sha · EvidenceMintRefused ·
+#                    iki kanıt sınıfının KÖKEN ALANLARI + o alanların kapıları
+#   Task 15 MODIFY → EvidenceProvenanceInvalid · _consume_provenance ·
+#                    expected_no_active + kapısı · geçiş fonksiyonlarının doğrulaması
+# Her tanımın başında hangi görevin yazdığı ayrıca işaretlidir.
 from dataclasses import dataclass, field
+from typing import Any, Mapping, Protocol
 
-class EvidenceProvenanceInvalid(GateNotSatisfied):
-    """Kanıtın köken jetonu kilitli satırda YOK, eşleşmiyor ya da ZATEN harcanmış."""
+# ---------------------------------------------------------------- Task 8 MODIFY
+
+class KilitliKosuGorunumu(Protocol):
+    """`runs.VerifiedRun`'ın bu modülün GÖRDÜĞÜ yüzeyi — YEREL tip, KAPALI alan kümesi.
+
+    **Neden var (AÇIK-3'ün ölçülmüş teknik kusuru, fix turu 3, KABUL).** AÇIK-3 kararı
+    harfiyen uygulanınca `activation_evidence_payload(run: VerifiedRun)` bu modülü
+    `runs.py`'ye bağımlı kılardı; oysa `runs.py` ZATEN bu modülden `_require_actor`'ı
+    alıyor (AÇIK-1 ayak (b)) — yani **döngüsel import**. Karar doğru, uygulaması bu tiple
+    yapılır: yardımcılar `VerifiedRun`'ı IMPORT ETMEZ, yalnız bu protokole yazılır.
+    `VerifiedRun` protokolü **yapısal olarak** karşılar; nominal bir bağ KURULMAZ ve
+    `runs.py` bu tipi import etmek ZORUNDA DEĞİLDİR.
+
+    Alan kümesi KAPALIDIR — SEKİZ alan, dokuzuncusu YOKTUR (hepsi `VerifiedRun`'da
+    aynı adla ve aynı tiple vardır):
+    """
+    run_id: str
+    sector_id: UUID
+    package_id: UUID | None
+    durum: str
+    sonuc: str
+    approval_snapshot: Mapping[str, Any] | None
+    katman1_attestation: Mapping[str, Any] | None
+    readiness_attestation: Mapping[str, Any] | None
 
 
-class EvidenceMintRefused(RuntimeError):
-    """Jeton BASILAMADI — satır yok ya da jeton basmaya uygun durumda değil."""
+_KOSU_GORUNUM_ALANLARI: tuple[str, ...] = (
+    "run_id", "sector_id", "package_id", "durum", "sonuc",
+    "approval_snapshot", "katman1_attestation", "readiness_attestation",
+)   # KAPALI — SEKİZ ad; `KilitliKosuGorunumu` ile BİREBİR
 
 
-def _require_token(value: Any, label: str) -> None:
-    """Jeton 64 karakterlik küçük harf hex `str` olmalı — boş/whitespace/`None` RED."""
-    if (type(value) is not str or len(value) != 64
-            or any(c not in "0123456789abcdef" for c in value)):
-        raise TypeError(f"{label} 64 karakterlik hex jeton olmalı — köken kanıtı uydurulamaz")
+def _require_kosu_gorunumu(value: Any, label: str) -> None:
+    """Ördek tiplemesi kabul edilmez ama nominal bağ da kurulamaz (döngüsel import).
+    Aradaki tek dürüst kapı: SEKİZ alanın SEKİZİ de VAR mı? Biri eksikse `TypeError`
+    (fail-closed) — sessizce `None` üretilmez."""
+    eksik = [ad for ad in _KOSU_GORUNUM_ALANLARI if not hasattr(value, ad)]
+    if eksik:
+        raise TypeError(
+            f"{label} kilitli koşu görünümü değil — eksik alanlar: {sorted(eksik)}"
+        )
+
+
+def activation_evidence_payload(
+    kosu: KilitliKosuGorunumu,
+    aktif_paket_satiri: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    """`ActivationGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ satırlardan TÜRETİR.
+
+    İki girdinin İKİSİ de aynı işlemde `FOR UPDATE` ile kilitlenmiş satırlardır:
+    `kosu` doğrulanmış koşu satırı, `aktif_paket_satiri` o sektörün o an AKTİF paket
+    satırı (aktif paket yoksa `None` — K-94 ilk aktivasyon hâli). Çağıranın serbestçe
+    ürettiği hiçbir değer GİRMEZ; ikinci parametre bir "çağıran girdisi" değil, mint
+    fonksiyonunun kendi kilitli okumasıdır (aşağıda).
+
+    Anahtar kümesi KAPALI ve TAM — YEDİ anahtar, sekizincisi YOKTUR:
+      `activation_eligible: bool` = `kosu.sonuc == "activation_eligible"`
+      `open_questions_count: int` = `len(kosu.approval_snapshot["acik_sorular"])`
+      `katman1_passed: bool`      = `kosu.katman1_attestation["sonuc"] == "PASS"`
+      `checklist_approved: bool`  = R8 gövdesindeki DÖRT koşullu A4 kapısı (aynen)
+      `expected_active_version: int | None` = `aktif_paket_satiri["version"]`
+                                             (aktif satır `None` ise `None`)
+      `expected_no_active: bool`  = `aktif_paket_satiri is None`
+      `run_id: str`               = `kosu.run_id`
+    İlk iş `_require_kosu_gorunumu(kosu, "kosu")`; sonra türetme.
+
+    **TEK türetici:** hem `runs.mint_evidence_token` hem `writeback.build_activation_evidence`
+    BUNU çağırır. İki yerde iki türetme yazılsaydı, basılan parmak izi ile kurulan kanıtın
+    parmak izi sessizce ayrışabilirdi.
+    """
+
+
+def rollback_evidence_payload(
+    plan_satiri: Mapping[str, Any],
+    hedef_kosu: KilitliKosuGorunumu,
+) -> Mapping[str, Any]:
+    """`RollbackGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ plan satırından ve hedef
+    sürümü üreten KİLİTLİ koşudan TÜRETİR.
+
+    Anahtar kümesi KAPALI ve TAM — **BEŞ anahtar** (A1(c), fix turu 3: `onay_kapsam_sha`
+    EKLENDİ; eski küme DÖRT idi):
+      `manager_approved: bool` · `katman1_passed: bool` · `incident_id: str` ·
+      `package_id: UUID` · `onay_kapsam_sha: str`
+    Değerlerin hepsi `plan_satiri`nin ve `hedef_kosu`nun alanlarından okunur; türetme
+    kuralı R11'in `build_rollback_evidence` gövdesinde yazılıdır. İlk iş
+    `_require_kosu_gorunumu(hedef_kosu, "hedef_kosu")`. **TEK türetici** kuralı
+    yukarıdakinin aynısıdır.
+    """
 
 
 def _evidence_fingerprint(evidence: Any) -> str:
@@ -1222,44 +1460,95 @@ def _evidence_fingerprint_from_payload(cls: type, payload: Mapping[str, Any]) ->
     `_evidence_fingerprint_from_payload(type(e), <e'nin `provenance_token` DIŞINDAKİ tüm
     alanları>)`. İki fonksiyon TEK kuralı paylaşır; ikinci bir hash kuralı YAZILMAZ.
     `payload` anahtar kümesi sınıfın jeton-dışı alan kümesiyle **birebir** olmalıdır;
-    eksik ya da fazla anahtar `ValueError`'dır (fail-closed)."""
+    eksik ya da fazla anahtar `ValueError`'dır (fail-closed). `RollbackGateEvidence` için
+    bu küme BEŞ anahtardır (A1(c)) — `onay_kapsam_sha` parmak izine GİRER."""
+
+
+# `identity.canonical_sha` bağımlılığı — DÜRÜST ETİKET, gizlenmiş kenar YOK.
+# Bu iki yardımcı `sector_pipeline/identity.py`'nin `canonical_sha`'sını çağırır; yani
+# `sector_package_lifecycle` (Plan 1) → `sector_pipeline` (Plan 2) yönünde BİR import
+# kenarı vardır. AÇIK-3'ün gerekçesi "yönü hiç açma"ydı; ölçüldü ki bu kenar AÇIK-3
+# kararıyla DEĞİL, fix turu 2'nin `_evidence_fingerprint` yazımıyla ZATEN açılmıştı —
+# hüküm "ikinci bir hash kuralı YAZILMAZ" olduğu için `hashlib`'e inmek de yol değildir.
+# Bağlanan sınır: kenar TEKTİR ve YAPRAK bir modüle gider.
+#   (a) İzin verilen TEK import: `from app.services.sector_pipeline import identity`;
+#       kullanılan TEK ad `identity.canonical_sha`.
+#   (b) `identity.py` hiçbir Plan 1 modülünü ve hiçbir DB yüzeyini IMPORT ETMEZ
+#       (Task 3'ün kendi sözleşmesi: "YALNIZ kimlik + hash"), dolayısıyla DÖNGÜ YOKTUR.
+#   (c) `sector_package_lifecycle` `sector_pipeline` altından BAŞKA hiçbir modülü
+#       (`runs` · `writeback` · `engine*` · `auditors` · `readiness*` · `contracts`)
+#       IMPORT ETMEZ. Kapısı yapısal testtir (aşağıda, Sahip: Task 8).
+
+
+class EvidenceMintRefused(RuntimeError):        # Task 8 MODIFY — `mint_evidence_token`
+    """Jeton BASILAMADI — satır yok ya da jeton basmaya uygun durumda değil.
+    R9: `runs.mint_evidence_token` (Task 8) bunu fırlatır, bu yüzden Task 8'de doğar."""
+
+
+def _require_token(value: Any, label: str) -> None:        # Task 8 MODIFY
+    """Jeton 64 karakterlik küçük harf hex `str` olmalı — boş/whitespace/`None` RED."""
+    if (type(value) is not str or len(value) != 64
+            or any(c not in "0123456789abcdef" for c in value)):
+        raise TypeError(f"{label} 64 karakterlik hex jeton olmalı — köken kanıtı uydurulamaz")
+
+
+def _require_kapsam_sha(value: Any, label: str) -> None:    # Task 8 MODIFY
+    """A4 süpürmesi #6 · A1(c): kapsam parmak izi de 64 karakterlik küçük harf hex `str`.
+    `_require_token` ile AYNI şekil kuralıdır, ayrı bir mesajla — ikinci bir NORMALİZASYON
+    kuralı DEĞİLDİR; hiçbir yerde `strip()`/`lower()` uygulanmaz."""
+    if (type(value) is not str or len(value) != 64
+            or any(c not in "0123456789abcdef" for c in value)):
+        raise TypeError(f"{label} 64 karakterlik hex sha olmalı — kapsam mührü uydurulamaz")
 
 
 @dataclass(frozen=True)
 class ActivationGateEvidence:
-    activation_eligible: bool
-    open_questions_count: int
-    katman1_passed: bool
-    checklist_approved: bool
-    expected_active_version: int | None = None
-    expected_no_active: bool = False                  # planın zaten beyan ettiği alan
-    run_id: str = field(kw_only=True)                 # YENİ — jetonun basıldığı koşu
-    provenance_token: str = field(kw_only=True)       # YENİ — 64 hex, TEK KULLANIMLIK
+    activation_eligible: bool                         # Plan 1 — mevcut
+    open_questions_count: int                         # Plan 1 — mevcut
+    katman1_passed: bool                              # Plan 1 — mevcut
+    checklist_approved: bool                          # Plan 1 — mevcut
+    expected_active_version: int | None = None        # Plan 1 — mevcut
+    expected_no_active: bool = False                  # Task 15 (planın zaten beyan ettiği alan)
+    run_id: str = field(kw_only=True)                 # Task 8 — jetonun basıldığı koşu
+    provenance_token: str = field(kw_only=True)       # Task 8 — 64 hex, TEK KULLANIMLIK
 
     def __post_init__(self) -> None:
         ...                                           # mevcut dört `_require_*` kapısı AYNEN
-        _require_flag(self.expected_no_active, "expected_no_active")
-        if not isinstance(self.run_id, str) or not self.run_id.strip():
+        _require_flag(self.expected_no_active, "expected_no_active")   # Task 15
+        # Task 8 · A4 süpürmesi #4 (fix turu 3): `isinstance` → `type(...) is not str`;
+        # `str` alt sınıfı da RED. Boşluk kapısı AYRI kalır, karşılaştırma değil.
+        if type(self.run_id) is not str or self.run_id.strip() == "":
             raise ValueError("run_id zorunlu — kökensiz kanıt kurulamaz")
-        _require_token(self.provenance_token, "provenance_token")
+        _require_token(self.provenance_token, "provenance_token")      # Task 8
 
 
 @dataclass(frozen=True)
 class RollbackGateEvidence:
-    manager_approved: bool
-    katman1_passed: bool
-    incident_id: str = field(kw_only=True)            # YENİ — jetonun basıldığı olay
-    package_id: UUID = field(kw_only=True)            # YENİ — geri alınan paket
-    provenance_token: str = field(kw_only=True)       # YENİ — 64 hex, TEK KULLANIMLIK
+    manager_approved: bool                            # Plan 1 — mevcut
+    katman1_passed: bool                              # Plan 1 — mevcut
+    incident_id: str = field(kw_only=True)            # Task 8 — jetonun basıldığı olay
+    package_id: UUID = field(kw_only=True)            # Task 8 — geri alınan paket
+    onay_kapsam_sha: str = field(kw_only=True)        # Task 8 (A1(c)) — onaylanan ÜYELİĞİN
+                                                      # parmak izi; parmak izine GİRER
+    provenance_token: str = field(kw_only=True)       # Task 8 — 64 hex, TEK KULLANIMLIK
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:                  # tamamı Task 8
         _require_flag(self.manager_approved, "manager_approved")
         _require_flag(self.katman1_passed, "katman1_passed")
-        if not isinstance(self.incident_id, str) or not self.incident_id.strip():
+        # A4 süpürmesi #5 (fix turu 3): `isinstance` → `type(...) is not str`.
+        if type(self.incident_id) is not str or self.incident_id.strip() == "":
             raise ValueError("incident_id zorunlu")
         if type(self.package_id) is not UUID:
             raise TypeError("package_id UUID olmalı")
+        _require_kapsam_sha(self.onay_kapsam_sha, "onay_kapsam_sha")   # A4 #6
         _require_token(self.provenance_token, "provenance_token")
+
+
+# --------------------------------------------------------------- Task 15 MODIFY
+
+class EvidenceProvenanceInvalid(GateNotSatisfied):
+    """Kanıtın köken jetonu kilitli satırda YOK, eşleşmiyor ya da ZATEN harcanmış.
+    YALNIZ `_consume_provenance` fırlatır; o da Task 15'in kalemidir."""
 ```
 
 `field(kw_only=True)` seçilmesinin sebebi ölçülmüştür: yeni alanlar **varsayılansız**
@@ -1271,33 +1560,26 @@ kurulumun kalkması mevcut hiçbir çağrıyı kırmaz.
 
 **Üretici ayağı (jeton basımı).**
 
+**Yardımcıların TANIMI BURADA DEĞİLDİR (AÇIK-3, gövdeye süpürüldü — fix turu 3).**
+`activation_evidence_payload` · `rollback_evidence_payload` · `_evidence_fingerprint` ·
+`_evidence_fingerprint_from_payload` **`sector_package_lifecycle.py`'de, Task 8 MODIFY
+kaleminde** tanımlıdır (yukarıdaki blok). `runs.py` onları **yalnız çağırır**; bu dosyada
+NE TANIMLARI NE İKİNCİ BİR KOPYALARI bulunur. Fix turu 2'nin metni tanımları burada
+tutuyordu ve AÇIK-3 kararıyla çelişiyordu — bu tur o çelişkiyi kapatır.
+
 ```python
-# runs.py  (Task 8) — kanıt yükünün TEK türeticileri (A2(d), fix turu 2)
-def activation_evidence_payload(run: VerifiedRun) -> Mapping[str, Any]:
-    """`ActivationGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ koşu satırından TÜRETİR.
-
-    Anahtar kümesi KAPALI ve TAM — YEDİ anahtar, sekizincisi YOKTUR:
-      `activation_eligible: bool` · `open_questions_count: int` · `katman1_passed: bool` ·
-      `checklist_approved: bool` · `expected_active_version: int | None` ·
-      `expected_no_active: bool` · `run_id: str`
-    Değerlerin hepsi `run`'dan okunur (R8'in gövdesindeki türetme kuralı); çağıranın
-    verdiği hiçbir değer GİRMEZ.
-
-    **TEK türetici:** hem `mint_evidence_token` hem `writeback.build_activation_evidence`
-    BUNU çağırır. İki yerde iki türetme yazılsaydı, basılan parmak izi ile kurulan kanıtın
-    parmak izi sessizce ayrışabilirdi.
-    """
-
-def rollback_evidence_payload(
-    plan_row: Mapping[str, Any], target_run: VerifiedRun
-) -> Mapping[str, Any]:
-    """`RollbackGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ plan satırından ve hedef
-    sürümü üreten KİLİTLİ koşudan TÜRETİR. Anahtar kümesi KAPALI ve TAM — DÖRT anahtar:
-      `manager_approved: bool` · `katman1_passed: bool` · `incident_id: str` ·
-      `package_id: UUID`
-    Türetme kuralı R11'in `build_rollback_evidence` gövdesinde yazılıdır; **TEK türetici**
-    kuralı yukarıdakinin aynısıdır.
-    """
+# runs.py  (Task 8) — yardımcıları ÇAĞIRIR, TANIMLAMAZ (AÇIK-3)
+from app.services.sector_package_lifecycle import (
+    ActivationGateEvidence,
+    RollbackGateEvidence,
+    activation_evidence_payload,
+    rollback_evidence_payload,
+    _evidence_fingerprint_from_payload,
+)
+# `runs.py` ZATEN bu modülden `_require_actor`'ı alıyor (AÇIK-1 ayak (b)); yön
+# değişmez, yalnız alınan ad sayısı artar. Ters yönde import YOKTUR:
+# `sector_package_lifecycle` `runs`'ı IMPORT ETMEZ — yardımcılar `runs.VerifiedRun`'a
+# değil, orada tanımlı `KilitliKosuGorunumu` protokolüne yazılmıştır.
 
 async def mint_evidence_token(
     db,
@@ -1315,15 +1597,27 @@ async def mint_evidence_token(
     doktrininin, kapatmak için var olduğu yolda yeniden açılmış hâli. **Parmak izi artık
     BURADA, KİLİTLİ SATIRDAN TÜRETİLİR:**
 
-        satir       = <bu işlemde ZATEN kilitli olan hedef satır, tekrar okunur>
-        payload     = activation_evidence_payload(satir)      # table == "sector_package_runs"
-                      # ya da rollback_evidence_payload(satir, <hedef koşu>)
-        fingerprint = _evidence_fingerprint_from_payload(<ilgili kanıt sınıfı>, payload)
+        # aktivasyon yolu (table == "sector_package_runs"):
+        kosu        = <bu işlemde ZATEN kilitli koşu satırı, tekrar okunur>
+        aktif       = <o sektörün AKTİF paket satırı, aynı işlemde FOR UPDATE; yoksa None>
+        payload     = activation_evidence_payload(kosu, aktif)
+        fingerprint = _evidence_fingerprint_from_payload(ActivationGateEvidence, payload)
+
+        # geri alma yolu (table == "package_rollback_plans"):
+        plan_satiri = <bu işlemde ZATEN kilitli plan satırı, tekrar okunur>
+        hedef_kosu  = <plan satırının target_version'ını üreten KİLİTLİ koşu>
+        payload     = rollback_evidence_payload(plan_satiri, hedef_kosu)
+        fingerprint = _evidence_fingerprint_from_payload(RollbackGateEvidence, payload)
+
+    Her iki yolda da yardımcılar `sector_package_lifecycle`'dan gelir (AÇIK-3); `runs.py`
+    kendi türetmesini ya da kendi parmak izi hesabını YAZMAZ.
 
     Satır ÇAĞIRAN tarafından ZATEN kilitlenmiş olmalıdır (`FOR UPDATE`); fonksiyon kendi
-    kilidini ALMAZ — kilit · basım · tüketim aynı işlemde kalsın diye. Basılamazsa
-    (satır yok · koşu `durum != 'tamamlandi'` · plan satırı `durum != 'bekliyor'`)
-    `EvidenceMintRefused` fırlatır; **boş dönüş YOKTUR.**
+    SATIR kilidini ALMAZ — kilit · basım · tüketim aynı işlemde kalsın diye. Geri alma
+    yolunda **olay danışma kilidi (A1(b)) ZATEN TUTULUYOR olmalıdır**; fonksiyon
+    `_lock_incident`'ı yeniden çağırır (yeniden-girişli) ve kilidi TUTMADAN basım
+    YAPILMAZ. Basılamazsa (satır yok · koşu `durum != 'tamamlandi'` · plan satırı
+    `durum != 'bekliyor'`) `EvidenceMintRefused` fırlatır; **boş dönüş YOKTUR.**
     """
 ```
 
@@ -1333,13 +1627,17 @@ async def build_activation_evidence(db, *, run_id: str) -> ActivationGateEvidenc
     """`activate_from_snapshot`'ın İÇİNDEN, onun işleminde çağrılır. Sırayla:
 
       1. `run = await runs.load_verified_run(db, run_id=run_id, for_update=True)`
-      2. `payload = runs.activation_evidence_payload(run)` — dört boolean/sayaç + K-94
-         taban durumu + `run_id`; **TEK türetici** (A2(d)), yukarıdaki gövdedeki kural
-      3. `token = await runs.mint_evidence_token(db, table="sector_package_runs",
+      2. `aktif = <o sektörün AKTİF paket satırı, aynı işlemde FOR UPDATE; yoksa None>`
+      3. `payload = sector_package_lifecycle.activation_evidence_payload(run, aktif)` —
+         dört boolean/sayaç + K-94 taban durumu + `run_id`; **TEK türetici** (A2(d)).
+         **Yardımcı `runs.py`'de DEĞİL, `sector_package_lifecycle.py`'dedir (AÇIK-3,
+         fix turu 3'te gövdeye süpürüldü);** `runs.activation_evidence_payload` adı
+         ARTIK YOKTUR.
+      4. `token = await runs.mint_evidence_token(db, table="sector_package_runs",
              run_id=run_id, incident_id=None, package_id=None)`
-         — parmak izini **fonksiyonun kendisi** kilitli satırdan türetir; buradan
+         — parmak izini **fonksiyonun kendisi** kilitli satırlardan türetir; buradan
          `fingerprint` GEÇİLMEZ
-      4. `return ActivationGateEvidence(**payload, provenance_token=token)`
+      5. `return ActivationGateEvidence(**payload, provenance_token=token)`
 
     İmzasında `evidence`, `snapshot` ya da herhangi bir `dict` parametresi YOKTUR.
     """
@@ -1479,8 +1777,25 @@ koşuyor; kapsam o kalemin altında genişler:
   fabrikanın kurduğu kanıtın `_evidence_fingerprint`'iyle BİREBİR; pozitif kontrol) ·
   `test_minted_fingerprint_tracks_the_locked_row_not_the_caller` (satır alanı değişince
   parmak izi değişir; çağıranın elinde parmak izini etkileyecek hiçbir girdi yoktur) ·
-  `test_evidence_payload_key_set_is_closed` (aktivasyonda YEDİ, geri almada DÖRT anahtar;
-  fazlası da eksiği de RED) — **Sahip: Task 8**, `tests/test_pipeline_runs.py`.
+  `test_evidence_payload_key_set_is_closed` (aktivasyonda YEDİ, geri almada **BEŞ**
+  anahtar — A1(c) `onay_kapsam_sha`'yı ekledi; fazlası da eksiği de RED) — **Sahip: Task 8**,
+  `tests/test_pipeline_runs.py`.
+- **AÇIK-3'ün gövdeye süpürüldüğünün kapıları (fix turu 3) — Sahip: Task 8,
+  `tests/test_pipeline_runs.py`:**
+  `test_runs_module_defines_no_evidence_payload_or_fingerprint_helper` (yapısal: `runs.py`
+  kaynağında `def activation_evidence_payload` · `def rollback_evidence_payload` ·
+  `def _evidence_fingerprint` · `def _evidence_fingerprint_from_payload` **YOK**; dördü de
+  `sector_package_lifecycle`'dan import edilir — AÇIK-3'ün ana ispatı) ·
+  `test_lifecycle_imports_no_pipeline_module_other_than_identity` (yapısal:
+  `sector_package_lifecycle.py` `app.services.sector_pipeline` altından YALNIZ `identity`
+  import eder; `runs` · `writeback` · `engine*` · `auditors` · `readiness*` · `contracts`
+  adları GEÇMEZ — döngüsel import yasağının kapısı) ·
+  `test_payload_helpers_do_not_import_verified_run` (yapısal: yardımcılar
+  `runs.VerifiedRun`'a değil `KilitliKosuGorunumu`'ne yazılmıştır) ·
+  `test_kosu_gorunumu_field_set_is_closed` (SEKİZ ad birebir; `VerifiedRun` protokolü
+  KARŞILAR — pozitif kontrol) ·
+  `test_payload_helper_refuses_object_missing_a_view_field` (bir alanı eksik sahte nesne →
+  `TypeError`, fail-closed).
 - `test_evidence_token_minted_only_inside_the_two_factories` (yapısal depo-geneli tarama:
   `mint_evidence_token(` çağrısı YALNIZ `writeback.build_activation_evidence` ve
   `runs.build_rollback_evidence` gövdelerinde; `tests/` muaf) — **Sahip: Task 15**,
@@ -1506,11 +1821,21 @@ Task 14'ün düzeltilmiş Consumes satırı:
 **Etkilenen görev · geçersiz kılınan satırlar:** **Task 14** — plan 1545 (Consumes) ve plan
 1560-1563 (`to_activation_evidence`) GEÇERSİZ. **Task 15** — plan 1669-1684 aralığındaki F18
 zinciri aynen geçerli, üstüne "tek kurulum yeri" hükmü EKLENİR; Files listesindeki
-`Modify: sector_package_lifecycle.py` kalemi (plan 1619-1620) **kanıt sınıflarının köken
-jetonu alanları + `_consume_provenance` + `EvidenceProvenanceInvalid`** ile genişler;
+`Modify: sector_package_lifecycle.py` kalemi (plan 1619-1620) **`_consume_provenance` +
+`EvidenceProvenanceInvalid` + iki geçiş fonksiyonunun jeton doğrulaması** ile genişler.
+**Bu listede OLMAYANLAR (hepsi Task 8'in kalemidir, R9 + AÇIK-3):** dört parmak izi/yük
+yardımcısı · `KilitliKosuGorunumu` · `_require_kosu_gorunumu` · `_require_token` ·
+`_require_kapsam_sha` · `EvidenceMintRefused` · iki kanıt sınıfının köken alanları.
 Produces listesine `writeback.build_activation_evidence` EKLENİR.
 **Task 6** — 036 şemasına iki tabloya birden DÖRT jeton kolonu + bir CHECK eklenir.
-**Task 8** — Produces listesine `mint_evidence_token` + `EvidenceMintRefused` EKLENİR.
+**Task 8** — Produces listesine `mint_evidence_token` + `EvidenceMintRefused` EKLENİR
+(ikisi de Task 8'de doğar; `EvidenceMintRefused`'un TANIM YERİ `sector_package_lifecycle.py`
+ama YAZAN GÖREV Task 8'dir — R9: onu `runs.mint_evidence_token` fırlatır ve Task 8 <
+Task 15). Task 8 Files listesine
+`Modify: apps/social/backend/app/services/sector_package_lifecycle.py` EKLENİR; Produces
+listesine **DÖRT yardımcı + `KilitliKosuGorunumu` + `_require_kosu_gorunumu` +
+`_require_token` + `_require_kapsam_sha` + iki kanıt sınıfının KÖKEN ALANLARI** girer
+(AÇIK-3 + R8(c)'nin alan düzeyi bölünmesi, fix turu 3).
 **Plan gövdesi** — *"Bu planın Plan 1 arayüzünde yaptığı DEĞİŞİKLİKLER"* bölümüne köken
 jetonu kalemi `expected_no_active`'in yanına yazılmıştır (bu fix turunda uygulandı).
 
@@ -1583,7 +1908,10 @@ MADDE_KUMESI_SHA: str = identity.canonical_sha(MADDELER)
 **Bağlayıcı sözleşme — DÜZELTİLMİŞ yazıcı (tam imza):**
 
 ```python
-# runs.py  (Task 8'de doğar, Task 15 MODIFY eder) — attest_katman1/attest_katman2'nin kardeşi
+# runs.py  (Task 8 — TEK doğum görevi) — attest_katman1/attest_katman2'nin kardeşi
+# Task 15 bu yüzeyi yalnız TÜKETİR; ikinci bir yazıcı ya da ikinci bir tanım YOKTUR.
+# (Fix turu 3: başlık önce "Task 15 MODIFY eder" diyordu ve R9 bölümünün gövdesiyle
+#  çelişiyordu — gövde Task 15'i tüketici sayıyor. Doğum görevi TEKTİR: Task 8.)
 class ReadinessAttestationRefused(ValueError):
     """Onay TÜRETİLEMEDİ — verilen kapı kümesi kanonik kümeyle örtüşmüyor. Kayıt YAZILMAZ."""
 
@@ -1643,10 +1971,53 @@ async def attest_readiness(
 - Parametreler **ilkel tiplerdir**, `ReadinessReport` DEĞİL: `ReadinessReport` Task 17'de
   doğar ve Task 15'in ona bağımlı olması bağımlılığı yine ters çevirirdi. `readiness_items`
   ise Task 8'de doğduğu için ileri-bağımlılık YOKTUR (R9'un kendi kuralı).
-- `activate_from_snapshot` (Task 15) İKİ koşulu birden arar (A4): `onaylandi is True`
-  **VE** `madde_kumesi_sha` boş değil ve `readiness_items.MADDE_KUMESI_SHA`'ya EŞİT.
-  Herhangi biri düşerse — tasdik eksik, `onaylandi` `False`, `madde_kumesi_sha` yok/boş
-  ya da farklı — aktivasyon REDDEDİLİR.
+- `activate_from_snapshot` (Task 15) DÖRT koşulu birden arar (A4, fix turu 3'te
+  KESKİNLEŞTİRİLDİ): (1) `onaylandi is True`; (2) `madde_kumesi_sha` anahtarı VAR ve
+  değeri `type(...) is str`; (3) `strip()` sonrası BOŞ DEĞİL; (4) değerin KENDİSİ —
+  kırpılmamış, küçültülmemiş hâliyle — `readiness_items.MADDE_KUMESI_SHA`'ya EŞİT.
+  **Karşılaştırma NORMALİZASYONSUZDUR:** `strip()` yalnız (3)'ün boşluk kapısında,
+  karşılaştırılan değerin ÜZERİNDE DEĞİL, ayrı bir kapı olarak kullanılır. Fix turu 2'nin
+  yazımı `….strip() == KANONİK` diyordu ve ölçüldü ki `" <kanonik> "` biçiminde
+  boşluk-sarmalı bir değer o kapıdan GEÇİYORDU — "BİREBİR EŞİT" metni ile kodun kendisi
+  çelişiyordu. Herhangi bir koşul düşerse — tasdik eksik, `onaylandi` `False`,
+  `madde_kumesi_sha` yok/boş/yanlış tipte/boşluk-sarmalı ya da farklı — aktivasyon
+  REDDEDİLİR.
+
+**A4 SÜPÜRMESİ — bu ekin GETİRDİĞİ her sha/jeton karşılaştırması tek tek okundu
+(fix turu 3, DOKUZ nokta).** Ölçüt: *karşılaştırılan değer, karşılaştırmadan önce
+normalize ediliyor mu (`strip`/`lower`/`casefold`/varsayılan düşüşü)?*
+
+| # | Nokta | Bulgu · yapılan |
+|---|---|---|
+| 1 | `activate_from_snapshot` → `madde_kumesi_sha` | **KUSURLU → DÜZELTİLDİ** (yukarıdaki dört koşul; hükmün ana vakası) |
+| 2 | `_consume_provenance` SQL: `kanit_jetonu = $n` · `kanit_jetonu_parmakizi = $n` | temiz — SQL `=` metin eşitliği; `btrim`/`lower` YOK ve EKLENMEZ |
+| 3 | `_require_token` (64 küçük-harf hex) | temiz — `type(value) is not str` + uzunluk + karakter kümesi; normalizasyon YOK |
+| 4 | `ActivationGateEvidence.__post_init__` → `run_id` | **GEVŞEKTİ → SIKILDI:** `isinstance(..., str)` yerine `type(...) is not str` (alt sınıf da RED); boşluk kapısı ayrı kalır |
+| 5 | `RollbackGateEvidence.__post_init__` → `incident_id` | **GEVŞEKTİ → SIKILDI:** aynı düzeltme |
+| 6 | `RollbackGateEvidence.__post_init__` → `onay_kapsam_sha` (A1(c), YENİ) | `_require_kapsam_sha` — `type(...) is str` + 64 küçük-harf hex; normalizasyon YOK |
+| 7 | `build_rollback_evidence` → satırdaki `onay_kapsam_sha` ile bugünkü `incident_scope_sha` | **PROSE'DU → BAĞLANDI:** `type(...) is str` + boş-olmama + NORMALİZASYONSUZ `==` |
+| 8 | `approve_incident_rollback` idempotans karşılaştırması (`onay_kapsam_sha` EŞİTSE dokunma) | **PROSE'DU → BAĞLANDI:** aynı kural; `strip()`'li karşılaştırma bayat mührü taze sanardı |
+| 9 | `check_snapshot_agreement` (3) ve (4) — `unit_snapshot_sha` eşitlikleri | **PROSE'DU → BAĞLANDI:** `type(...) is str` + NORMALİZASYONSUZ `==` (K-79/K-100) |
+
+**Sonuç: dokuz noktanın BİRİ kusurluydu (#1), İKİSİ gevşek tip kapısı taşıyordu (#4 · #5),
+ÜÇÜ yalnız prose'du ve bağlandı (#7 · #8 · #9), BİRİ bu turda doğdu ve doğarken bağlandı
+(#6), İKİSİ zaten temizdi (#2 · #3).** Yeni bir normalizasyon kuralı hiçbir noktaya
+EKLENMEDİ.
+
+**Kanıt testi · sahibi (A4 süpürmesi):**
+- `test_activation_refused_when_madde_kumesi_sha_is_whitespace_padded`
+  (`" " + MADDE_KUMESI_SHA + " "` → aktivasyon RED; #1'in ana ispatı) — **Sahip: Task 15**,
+  `tests/test_pipeline_writeback.py`.
+- `test_evidence_run_id_rejects_str_subclass` · `test_evidence_incident_id_rejects_str_subclass`
+  (#4 · #5) — **Sahip: Task 8**, `tests/test_pipeline_runs.py` (alanları ve kapılarını
+  yazan görev Task 8'dir — R9 bölünmesi + R4).
+- `test_rollback_evidence_rejects_non_hex_scope_sha` (#6) — **Sahip: Task 8**,
+  `tests/test_pipeline_runs.py`.
+- `test_build_rollback_evidence_refuses_whitespace_padded_scope_sha` (#7) ·
+  `test_approve_incident_treats_whitespace_padded_scope_sha_as_stale` (#8) — **Sahip: Task 8**,
+  `tests/test_pipeline_runs.py`.
+- `test_snapshot_agreement_rejects_whitespace_padded_snapshot_sha` (#9) — **Sahip: Task 10**,
+  `tests/test_auditor_orchestration.py`.
 
 **KALAN yüzeyler (Task 17, değişmez):** `readiness.CHECKLIST: tuple[Item, ...]` (plan 1891) ·
 `readiness.evaluate(db) -> ReadinessReport` (plan 1892) · `kapi`/`sinyal` sınıflandırması
@@ -1663,9 +2034,10 @@ YOKTUR; yerine `runs.attest_readiness` geçer.
 `Create: apps/social/backend/app/services/sector_pipeline/readiness_items.py` EKLENİR
 (plan 979-981); Produces listesine `MADDELER` · `MADDE_SINIFLARI` · `KAPI_MADDELERI` ·
 `SINYAL_MADDELERI` · **`MADDE_KUMESI_SHA`** (A4) · `ChecklistItem` · `attest_readiness` ·
-`ReadinessAttestationRefused` girer. **Task 15** — Files listesine
-`Modify: apps/social/backend/app/services/sector_pipeline/runs.py` EKLENİR (plan 1618-1629);
-Task 15 yazıcıyı **tüketir**, türetme mantığı Task 8'de doğar.
+`ReadinessAttestationRefused` girer. **Task 15** — Consumes satırına `Task 8 runs.attest_readiness` EKLENİR (plan 1618-1629);
+Task 15 yazıcıyı **yalnız tüketir**. **Files listesine `Modify: runs.py` EKLENMEZ**
+(fix turu 3 düzeltmesi: önceki metin hem "Modify" diyor hem "tüketir" diyordu; tüketen
+görev dosyayı değiştirmez — yazıcının TEK doğum görevi Task 8'dir).
 **Task 17** — plan 1898-1900 GEÇERSİZ; Produces listesinden çıkar, Step 3b'nin komut testi
 aynen kalır ama tasdik yazıcısı olarak `runs.attest_readiness` çağrılır; `readiness.py`
 `readiness_items`'ı IMPORT eder.
@@ -1782,11 +2154,20 @@ async def build_rollback_evidence(
 ) -> RollbackGateEvidence:
     """İki boolean'ı da OKUR, hiçbirini kabul etmez; jetonu da BURADA basar.
 
-    Çağıran, plan satırını `FOR UPDATE` ile ZATEN kilitlemiş olmalıdır.
+    **İLK İŞ: `await _lock_incident(db, incident_id)`** (A1(b), yol #3) — plan satırı
+    `FOR UPDATE` ile okunmadan, `onay_*` alanları ve bugünkü kapsam hesaplanmadan ÖNCE.
+    Kilit yeniden-giriş serbesttir; çağıran (yürütücü) onu zaten almış olsa bile bu çağrı
+    KOŞULSUZ alır. Çağıran, plan satırını `FOR UPDATE` ile ZATEN kilitlemiş olmalıdır;
+    satır kilidi olay kilidinin YERİNE GEÇMEZ — yeni satır eklenmesini yalnız olay kilidi
+    serileştirir.
 
     manager_approved — bu olay kimliği için kayıtlı yönetici onayı VAR MI (AÇIK-1'in
         ÜÇ koşulu: `onay_actor` · `onaylandi_at` · `onay_kapsam_sha` dolu VE kapsam
         parmak izi bugünkü satır kümesiyle EŞLEŞİYOR).
+        **Kapsam karşılaştırması NORMALİZASYONSUZDUR (A4 süpürmesi #7):** satırdaki
+        `onay_kapsam_sha` `type(...) is str` olmalı, `strip()` sonrası boş olmamalı ve
+        `incident_scope_sha(<olayın BUGÜNKÜ TÜM satırları>)` ile **ham hâliyle** EŞİT
+        olmalıdır; `strip()`/`lower()` UYGULANMAZ.
         Herhangi biri düşerse → RollbackEvidenceUnavailable.
 
     katman1_passed — plan satırının HEDEF sürümünü (`target_version`) üreten koşunun
@@ -1796,18 +2177,28 @@ async def build_rollback_evidence(
 
     Köken jetonu (R8(c)) — iki boolean türetildikten SONRA (A2(d) ile GÜNCELLENDİ:
     parmak izi ARTIK BURADAN GEÇİLMEZ, `mint_evidence_token` onu kilitli plan satırından
-    kendisi türetir):
-        payload = rollback_evidence_payload(<kilitli plan satırı>, <hedef koşu>)
+    kendisi türetir; **yardımcı `sector_package_lifecycle`'dan gelir — AÇIK-3**):
+        payload = sector_package_lifecycle.rollback_evidence_payload(
+                      <kilitli plan satırı>, <hedef koşu>)
+        # payload BEŞ anahtar taşır (A1(c)): manager_approved · katman1_passed ·
+        # incident_id · package_id · onay_kapsam_sha
         token = await mint_evidence_token(db, table="package_rollback_plans",
                     run_id=None, incident_id=incident_id, package_id=package_id)
         return RollbackGateEvidence(**payload, provenance_token=token)
+    `onay_kapsam_sha` kanıtın alanı olduğu için `_evidence_fingerprint`'e GİRER; bayat
+    kapsamla basılmış bir jeton harcanamaz (A1(c), ikinci savunma).
     Basım başarısızsa `EvidenceMintRefused` → çağıran onu `RollbackEvidenceUnavailable`
     gibi ele alır ve plan satırını `durum='hata'` ile kapatır.
     """
 ```
 
-- `execute_rollback_plan` (plan 1074-1079) her paket için ÖNCE `build_rollback_evidence`
-  çağırır; `RollbackEvidenceUnavailable` yakalanır ve o plan satırı **`durum='hata'`**
+- `execute_rollback_plan` (plan 1074-1079) her paket için **kendi işlemini açar, İLK
+  ifade olarak `await _lock_incident(db, incident_id)` çağırır** (A1(b), yol #4) ve o
+  işlemi kanıt kurulumu ile jeton harcamasının İKİSİNİ de kapsayacak biçimde açık tutar:
+  ÖNCE `build_rollback_evidence`, SONRA aynı işlemde
+  `sector_package_lifecycle.rollback_package`. İkisi ayrı işlemlere bölünürse kilit
+  "doğrula → harca" aralığını kapatmaz ve A1(b)'nin kapattığı yarış geri açılır.
+  `RollbackEvidenceUnavailable` yakalanır ve o plan satırı **`durum='hata'`**
   (036'nın mevcut kapalı kümesinden — plan 797) + `reason` ile kapanır. **Yeni durum değeri
   ÜRETİLMEZ**; `hedefsiz` bu vaka için KULLANILMAZ (`hedefsiz` yalnız güvenli sürüm yokluğu
   demektir, plan 1072).
@@ -1817,7 +2208,11 @@ async def build_rollback_evidence(
 
 **Etkilenen görev · geçersiz kılınan satırlar:** **Task 8** — Produces listesine
 `build_rollback_evidence` + `RollbackEvidenceUnavailable` EKLENİR (plan 1074-1079 civarı);
-`execute_rollback_plan`'ın gövde sözleşmesi bağlanır. **Task 16** — `deaktive-et` eklenir
+`execute_rollback_plan`'ın gövde sözleşmesi bağlanır (A1(b): olay kilidi + tek işlem).
+**Task 6** — `build_rollback_evidence`'ın OKUDUĞU kolonlar (`onay_*` üçlüsü ve jeton
+dörtlüsü) 036'da doğar; R11'in kanıt üreticisi o şema olmadan yazılamaz, bu yüzden Task 6
+bu hükme bağlıdır (fix turu 3'te açıkça yazıldı — Task 6'nın bağlayıcı satırında R11
+zaten vardı, karşılığı burada yoktu). **Task 16** — `deaktive-et` eklenir
 (plan 1781-1797).
 
 **DÜZELTME (fix turu 1):** ilk yazımın *"Plan 1 arayüzü DEĞİŞMEZ; `RollbackGateEvidence`
@@ -2017,6 +2412,13 @@ Tek ek hüküm — **çift kayıt yasağı:** aynı invariant için ikinci bir t
 `verify_pin`'in kapı kümesi (plan 423-426, DÖRT kapı) **genişletilmez**; negatif invariant
 bir kapı değil, kapı kümesinin **kapalılığının** ifadesidir.
 
+**Etkilenen görev · geçersiz kılınan satırlar (fix turu 3'te AÇIKÇA YAZILDI):** **Task 1** —
+`verify_pin`'in negatif invariantı ve `test_verify_passes_with_dirty_external_worktree`
+sahipliği. **Task 2** — `kosu/` `.gitignore` kalemi ve
+`test_external_repo_gitignores_run_folder` sahipliği. Metin R1'de durur; bu satır yalnız
+**hangi görevlerin bağlandığını** adıyla sayar, çünkü iki görevin de bağlayıcı satırında
+R14 yazılıdır ve karşılığının ekte adı konmuş olması gerekir (süpürme kuralı 2).
+
 ---
 
 ## AÇIK-1 KAPANDI — kontrolör kararı, 2026-08-30
@@ -2085,13 +2487,121 @@ def incident_scope_sha(rows: Sequence[Mapping]) -> str:
     BAĞIMSIZ** (`bekliyor` · `tamamlandi` · `hata` · `hedefsiz` hepsi dâhil). Her satırdan
     yalnız **kimlik ve hedef** alanları alınır:
     `(package_id, observed_active_version, target_version, evidence_class)`.
-    **`durum` ve `reason` hash'e GİRMEZ** — onlar yürütme durumudur, üyelik değil; zaten
-    032 desenli değişmezlik tetikleyicisi de tam bu beş alanı kilitler (aşağıda, ayak (d)),
-    yani hash'lenen küme ile kilitlenen küme AYNIDIR.
+    **`durum` ve `reason` hash'e GİRMEZ** — onlar yürütme durumudur, üyelik değil.
+    032 desenli değişmezlik tetikleyicisi (aşağıda, ayak (d)) bu DÖRT alana `incident_id`'yi
+    de ekleyerek BEŞ alanı kilitler; `incident_id` hash'e ayrıca girmez çünkü hash'lenen
+    küme zaten TEK bir olaya aittir. Yani kilitlenen küme, hash'lenen kümenin üstünde
+    yalnız kümeyi TANIMLAYAN alanı taşır.
     Satırlar `package_id` metnine göre ARTAN sıralanır ve `identity.canonical_sha`
     (Task 3, K-92) ile hash'lenir. İkinci bir hash kuralı YAZILMAZ.
     """
 ```
+
+**A1(a) — ÜYELİK DEĞİŞİKLİĞİNİN ADI KONMUŞ SÖZLEŞMESİ (fix turu 3, yüksek, KABUL).**
+
+```python
+# runs.py  (Task 8)
+async def amend_rollback_plan(
+    db,
+    *,
+    incident_id: str,          # DEĞİŞTİRİLECEK olayın kimliği — `build_rollback_plan`'ın döndürdüğü değer
+    affected: AffectedSet,     # olayın YENİ TAM üyeliği (delta DEĞİL — mutlak küme)
+    actor: str,                # `require_actor` (Plan 1 kanonik kapısı) ile doğrulanır
+) -> tuple[int, int]:
+    """MEVCUT bir olayın üyeliğini YENİDEN YAZAR; olay AÇMAZ. `(eklenen, silinen)` döner.
+
+    **`build_rollback_plan`'dan FARKI — iki fonksiyon karıştırılamaz:**
+      | | `build_rollback_plan` | `amend_rollback_plan` |
+      |---|---|---|
+      | olay kimliği | ÜRETİR (döner) | PARAMETRE olarak ALIR |
+      | mevcut satırlar | yoktur | okunur, karşılaştırılır |
+      | dönüş | `str` (yeni olay kimliği) | `tuple[int, int]` (eklenen, silinen) |
+      | pencere kapısı | uygulanmaz (olay yeni) | ZORUNLU (`IncidentMembershipLocked`) |
+
+    Adımlar — SIRA BAĞLAYICIDIR ve hepsi TEK işlemdedir:
+
+      1. `owner = require_actor(actor)`  — boş/`str` olmayan kimlik → `ValueError`,
+         hiçbir satır yazılmaz.
+      2. `await _lock_incident(db, incident_id)`  — **olay danışma kilidi; HERHANGİ bir
+         `durum` ya da kapsam OKUMASINDAN ÖNCE** (A1(b)). Kilitsiz okunan pencere kararı
+         yarışa açıktır.
+      3. Olayın TÜM satırları `FOR UPDATE` ile okunur.
+      4. **Pencere kapısı:** en az bir satır `durum ∈ ('tamamlandi', 'hata')` ise
+         `IncidentMembershipLocked` — **hiçbir satır yazılmaz** (fail-closed).
+      5. `affected`'tan hedef satır kümesi kurulur (hedef sürüm seçimi
+         `build_rollback_plan`'ın GÜVENLİ HEDEF kuralının aynısıdır; ikinci bir kural
+         YAZILMAZ). Kümede olup satırı olmayanlar EKLENİR; satırı olup kümede olmayanlar
+         SİLİNİR. Hem eklenen hem silinen satırlar yalnız `durum='bekliyor'` ya da
+         `durum='hedefsiz'` olabilir; başka durumdaki satır adım 4'te zaten yakalanmıştır.
+      6. **Mühürlere DOKUNULMAZ.** `amend_rollback_plan` `onay_*` kolonlarını YAZMAZ;
+         üyelik değişince kalan damgalar kendiliğinden BAYATLAR (`onay_kapsam_sha` artık
+         yeni üyeliğin sha'sına eşit değildir) ve olay yürütülemez hâle gelir. Yeniden
+         mühürleme operatörün ayrı ve GÖRÜNÜR adımıdır: `olay-onayla` (madde 3).
+      7. Eklenen/silinen satır sayısı 0/0 ise fonksiyon yine de başarıyla döner
+         (`(0, 0)`); çağıran bunu "değişiklik yok" diye raporlar, hata SAYMAZ.
+    """
+```
+
+**A1(b) — TEK OLAY KİLİDİ: dördü de AYNI kilidi, AYNI noktada alır (fix turu 3, yüksek, KABUL).**
+
+**Kusur (ölçüldü, fix turu 2 metni):** üyelik değişimi, onay/yeniden mühürleme, kanıt
+kurulumu ve yürütme için **paylaşılan tek bir kilit adı yoktu**; her yol yalnız kendi
+satırlarını `FOR UPDATE` ediyordu. Bu, satır-yerel kilitlerin kapatamadığı bir aralık
+bırakır: yürütücü olayın BUGÜNKÜ kapsamını doğrulayıp kanıt basarken, planlayıcı aynı
+olaya **başka bir satır** ekleyebilir (yeni satır kimsenin kilidinde değildir). Kanıt zaten
+basılmıştır ve — fix turu 2'de `onay_kapsam_sha` parmak izine GİRMEDİĞİ için — bayat
+kapsamla basılmış o kanıt hâlâ HARCANABİLİRDİ. **Sıralı testler bu aralığı göremez.**
+
+```python
+# runs.py  (Task 8)
+_OLAY_KILIT_ONEKI: str = "sektor_paketi.olay:"     # KAPALI — tek önek, ikincisi YOKTUR
+
+async def _lock_incident(db, incident_id: str) -> None:
+    """Olay kapsamlı, İŞLEM ÖMÜRLÜ danışma kilidi. TEK kilit adı budur.
+
+        await db.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            _OLAY_KILIT_ONEKI + incident_id,
+        )
+
+    - **İşlem ömürlüdür:** `COMMIT`/`ROLLBACK` ile kendiliğinden bırakılır; elle
+      `unlock` YOKTUR ve yazılmaz.
+    - **Yeniden giriş serbesttir:** aynı işlem içinde ikinci kez çağrılması anında
+      döner. Bu yüzden aşağıdaki DÖRT yol da kilidi KOŞULSUZ alır — "acaba çağıran
+      almış mıydı" diye sorulmaz (o soru sessiz atlamanın kapısıdır).
+    - **İkinci bir kilit adı YAZILMAZ:** satır düzeyi `FOR UPDATE` kilitleri AYNEN kalır,
+      ama üyelik/kapsam kararlarının serileştirilmesi YALNIZ bu kilidin işidir.
+    """
+```
+
+**Kilidi ALAN DÖRT yol — her biri için "nerede" ayrı ayrı yazılıdır:**
+
+| # | Yol (modül · görev) | Kilidi ALDIĞI NOKTA |
+|---|---|---|
+| 1 | `runs.amend_rollback_plan` (Task 8) | Adım 2 — `require_actor`'dan hemen SONRA, olayın satırları ve `durum`'ları OKUNMADAN ÖNCE |
+| 2 | `runs.approve_incident_rollback` (Task 8) | İşlemin İLK ifadesi (`require_actor`'dan sonra), `durum='bekliyor'` satırlar ve `incident_scope_sha` girdisi OKUNMADAN ÖNCE |
+| 3 | `runs.build_rollback_evidence` (Task 8) | Gövdesinin İLK ifadesi — plan satırı `FOR UPDATE` ile okunmadan, `onay_*` alanları ve bugünkü kapsam hesaplanmadan ÖNCE (`mint_evidence_token` de içeride yeniden çağırır; yeniden-girişli) |
+| 4 | `runs.execute_rollback_plan` (Task 8) | Her paket için açtığı işlemin İLK ifadesi — o paketin plan satırı okunmadan ÖNCE; kilit `build_rollback_evidence` **ve** `sector_package_lifecycle.rollback_package` çağrılarının İKİSİNİ de kapsayacak biçimde işlem sonuna kadar TUTULUR |
+
+**Kapsama BAĞLAYICI kuralı (4. satırın gerçek anlamı):** kanıt kurulumu ile jeton
+harcaması **AYNI bağlantıda ve AYNI dış işlemde** koşar. `rollback_package`'ın kendi
+`async with db.transaction()` bloğu bu dış işlemin İÇİNDE bir savepoint'tir; ayrı bir
+işlem AÇMAZ. Bu, kilidin "doğrula → harca" aralığının tamamını kapsamasının tek yoludur ve
+bu ekte **bağlayıcı olan budur** — iç içe işlem bloğunun savepoint'e karşılık gelmesi
+sürücü davranışıdır, kapının kendisi değil. Tek paketlik yol (`geri-al --incident-id
+--package-id`, AÇIK-2) aynı sarmalayıcıyı kullanır: kilidi alır, kanıtı kurar, harcar,
+commit eder.
+
+**A1(c) — KEMER VE ASKI: `onay_kapsam_sha` parmak izine BAĞLANIR (fix turu 3, yüksek, KABUL).**
+Kilit doğru kurulursa (b) tek başına yeterlidir. Buna rağmen `RollbackGateEvidence`
+**`onay_kapsam_sha` alanını taşır** ve o alan `_evidence_fingerprint`'e GİRER
+(geri alma yükü DÖRT değil **BEŞ** anahtar — R8(c) bloğu). **Bunun açıkça
+ikinci-savunma olduğunu beyan ediyoruz:** kilit uçtan uca tutulmazsa — ileride bir
+çağıran onu almayı unutursa, ya da yürütme yolu bölünürse — bayat kapsamla basılmış bir
+jeton `_consume_provenance`'ın `kanit_jetonu_parmakizi = $n` koşulunda DÜŞER, çünkü satırdaki
+parmak izi eski kapsam sha'sıyla, kanıttaki yeni kapsam sha'sıyla hesaplanmıştır.
+**İddia edilmeyen:** bu, kilidin yerini TUTMAZ; yarışın kendisini engellemez, yalnız
+yarışın ÇIKTISININ harcanmasını engeller.
 
 - **Damgalanan küme ile KAPSAM kümesi AYRIDIR (A3'ün özü).** `approve_incident_rollback`
   damgayı yalnız `durum='bekliyor'` satırlara yazar (tamamlanmış/hatalı/hedefsiz iş geriye
@@ -2109,10 +2619,19 @@ def incident_scope_sha(rows: Sequence[Mapping]) -> str:
 1. **Pencere:** üyelik YALNIZ **yürütme başlamadan önce** değişebilir. Ölçüt mekaniktir:
    *yürütme başlamış sayılır ⇔ o olayın en az bir satırı `durum ∈ ('tamamlandi', 'hata')`.*
    (`hedefsiz` yürütme değil, plan yazımının çıktısıdır — pencereyi KAPATMAZ.)
-2. **Değişikliğin yolu:** üyelik yalnız `runs.build_rollback_plan` üzerinden değişir
-   (`olay-plani`). Pencere kapalıyken satır eklemek/çıkarmak `IncidentMembershipLocked`
-   fırlatır ve **hiçbir satır yazılmaz** (fail-closed, tek işlem). Kimlik/hedef alanlarının
-   değiştirilmesi onaylanmış satırlarda zaten veri katmanında reddedilir (ayak (d)).
+2. **Değişikliğin yolu — `amend_rollback_plan` (A1(a), fix turu 3, yüksek, KABUL).**
+   Fix turu 2 bu yolu `runs.build_rollback_plan`'a veriyordu. **Ölçüldü ve bu YANLIŞTI:**
+   o fonksiyonun bağlayıcı imzası `build_rollback_plan(db, *, affected: AffectedSet,
+   actor: str) -> str`'dir (plan 1064) — **YENİ bir olay MİNTLER ve olay kimliği
+   PARAMETRE OLARAK ALMAZ.** Yani mevcut bir olayın üyeliğini büyütmenin/küçültmenin
+   API'si HİÇ YOKTU; üyelik-büyümesi, bayat mühür ve yeniden mühürleme geçişleri
+   **erişilemezdi** ve onlar için adı konmuş sekiz test hiçbir şeyi koşamazdı.
+   Bağlanan hüküm: üyelik yalnız **`runs.amend_rollback_plan`** üzerinden değişir
+   (`olay-plani --incident-id`). `build_rollback_plan` imzası ve anlamı DEĞİŞMEZ — o
+   yalnız olay AÇAR. Pencere kapalıyken satır eklemek/çıkarmak
+   `IncidentMembershipLocked` fırlatır ve **hiçbir satır yazılmaz** (fail-closed, tek
+   işlem). Kimlik/hedef alanlarının değiştirilmesi onaylanmış satırlarda zaten veri
+   katmanında reddedilir (ayak (d)).
 3. **Onaya ne olur — MÜHÜR YENİLENİR (reseal), ve nasıl olduğu tam olarak şudur:**
    üyelik değişince tüm damgalı satırların `onay_kapsam_sha`'sı BAYATLAR ve o olay
    yürütülemez hâle gelir. Operatör `olay-onayla`'yı TEKRAR çalıştırır;
@@ -2182,13 +2701,18 @@ etkilediği TÜM paketleri geri alır; paket başına ayrı onay istemek tek ope
 Bu yüzden:
 
 ```python
-# sector_pipeline_cli.py  (Task 16) — yeni alt komut
+# sector_pipeline_cli.py  (Task 16) — yeni alt komut + genişleyen alt komut
 #   olay-onayla --incident-id <id> --actor <kimlik>
+#   olay-plani  [--incident-id <id>] --actor <kimlik>      (A1(a), fix turu 3)
+#       --incident-id YOK  → runs.build_rollback_plan  (olay AÇAR, kimliği basar)
+#       --incident-id VAR  → runs.amend_rollback_plan  (üyeliği DEĞİŞTİRİR)
 # runs.py  (Task 8)
 async def approve_incident_rollback(db, *, incident_id: str, actor: str) -> int:
     """O olay kimliğine ait BEKLEYEN plan satırlarının TAMAMINI tek işlemde damgalar
     (`onay_actor`, `onaylandi_at`, `onay_kapsam_sha`); damgalanan satır sayısını döner.
 
+    - **İLK İŞ: `await _lock_incident(db, incident_id)`** (A1(b), yol #2) — `require_actor`
+      çağrısından hemen sonra, HİÇBİR `durum` ya da kapsam okumasından ÖNCE.
     - `actor` **Plan 1'in kanonik kapısından** geçer: `require_actor` (yani
       `sector_package_lifecycle._require_actor`, satır 147-150). Boş/whitespace/`str`
       olmayan kimlikte `ValueError` fırlar ve **HİÇBİR satır damgalanmaz** (fail-closed;
@@ -2202,6 +2726,11 @@ async def approve_incident_rollback(db, *, incident_id: str, actor: str) -> int:
       `onay_kapsam_sha` bu koşumda hesaplanan değere **EŞİTSE** dokunulmaz — ilk onay ve
       ilk onaylayan korunur (idempotans). **FARKLIYSA** satır yeniden mühürlenir: üç onay
       kolonu birden yeni değerlerle yazılır. Bayat mühür sessizce BIRAKILMAZ.
+      **Karşılaştırma NORMALİZASYONSUZDUR (A4 süpürmesi #8):** satırdaki değer
+      `type(...) is str` değilse ya da `strip()` sonrası boşsa BAYAT sayılır ve satır
+      yeniden mühürlenir; eşitlik `strip()`/`lower()` uygulanmadan, ham değerler
+      üzerinde kurulur. `strip()`'li bir karşılaştırma boşluk-sarmalı bayat bir mührü
+      TAZE sanardı.
     - Hiç satır damgalanmadıysa 0 döner; çağıran bunu hata olarak raporlar.
     """
 ```
@@ -2222,10 +2751,19 @@ varsayılan/`.get` düşüşü KULLANILMAZ. Boş/whitespace kimlik veri katmanı
 şemasına ÜÇ onay kolonu + İKİ CHECK + BİR değişmezlik tetikleyicisi, ve (R8(c) gereği)
 DÖRT jeton kolonu + BİR CHECK eklenir (plan 795-800 aralığını genişletir). **Task 8** —
 `approve_incident_rollback` · `incident_scope_sha` · **`IncidentMembershipLocked`**
-(A3, fix turu 2) Produces listesine eklenir; `build_rollback_evidence`'ın
-`manager_approved` kaynağı bu kolonlardır ve `build_rollback_plan` A3'ün üyelik
-penceresini zorlar. **Task 16** — `olay-onayla` alt komutu eklenir (plan 1781-1797) ve
-`olay-plani` A3'ün pencere kapısına tabidir.
+(A3, fix turu 2) · **`amend_rollback_plan`** · **`_lock_incident`** ·
+**`_OLAY_KILIT_ONEKI`** (A1, fix turu 3) Produces listesine eklenir;
+`build_rollback_evidence`'ın `manager_approved` kaynağı bu kolonlardır ve **üyelik
+penceresini `amend_rollback_plan` zorlar — `build_rollback_plan` DEĞİL** (A1(a);
+`build_rollback_plan`'ın imzası ve anlamı plan 1064'teki hâliyle DEĞİŞMEZ, o yalnız olay
+AÇAR). **Task 16** — `olay-onayla` alt komutu eklenir (plan 1781-1797) ve **`olay-plani`
+isteğe bağlı `--incident-id` parametresi kazanır:** verilmezse `build_rollback_plan`
+(olay AÇ), verilirse `amend_rollback_plan` (üyelik DEĞİŞTİR) çağrılır; ikinci hâlde A3'ün
+pencere kapısı uygulanır. İkinci bir alt komut adı AÇILMAZ — R10'un "her operatör adımının
+CLI girişi olur" hükmü bu parametreyle karşılanır.
+**Task 15** (A1(c), fix turu 3) — `RollbackGateEvidence` `onay_kapsam_sha` alanını kazanır
+ve alan `_evidence_fingerprint`'e girer; sınıf Task 15'in Modify kaleminde yaşadığı için bu
+hüküm Task 15'i de bağlar.
 
 **Kanıt testi · sahibi:**
 - **Şema kapıları — Sahip: Task 6, `tests/test_migration_036.py`:**
@@ -2261,30 +2799,84 @@ penceresini zorlar. **Task 16** — `olay-onayla` alt komutu eklenir (plan 1781-
   olayın üyeliğinden ÇIKARILDI/silindi → RED; A3: satırın `tamamlandi`'ya geçmesi
   küçülme SAYILMAZ) ·
   `test_build_rollback_evidence_accepts_unchanged_scope` (pozitif kontrol).
-- **A3'ün uçtan uca kapıları (fix turu 2) — Sahip: Task 8, `tests/test_pipeline_runs.py`:**
-  **`test_incident_scope_sha_ignores_durum`** (aynı üyelik, farklı `durum` değerleri →
-  AYNI sha; hükmün ana ispatı) ·
-  `test_incident_scope_sha_covers_rows_outside_bekliyor` (`tamamlandi` · `hata` ·
-  `hedefsiz` satırlar da hash'e girer) ·
-  **`test_two_row_incident_completes_end_to_end`** (iki satırlı olay: birincisi geri
-  alınıp `tamamlandi`'ya geçtikten SONRA ikincisinin kanıtı da KURULUR ve geri alma
-  tamamlanır — eski tanımla bu senaryo imkânsızdı) ·
-  **`test_partial_failure_then_retry_reuses_the_same_approval`** (birinci satır `hata`
-  ile kapandı; aynı komut tekrar koşunca kalan satır AYNI onayla yürür — yeni onay
-  İSTENMEZ) ·
-  **`test_membership_growth_before_execution_then_reapproval_completes`** (yürütme
-  başlamadan satır eklendi → mevcut damgalar bayatladı ve kanıt REDDEDİLDİ; `olay-onayla`
-  tekrar koşunca TÜM bekleyen satırlar yeni sha ile YENİDEN MÜHÜRLENDİ ve olay tamamlandı) ·
-  `test_reapproval_restamps_stale_rows_and_leaves_fresh_rows_untouched` (yeniden mühürleme
-  yalnız bayat satırlara dokunur) ·
-  **`test_membership_growth_after_execution_started_is_rejected`**
-  (`build_rollback_plan` → `IncidentMembershipLocked`; hiçbir satır yazılmaz) ·
-  `test_membership_lock_window_opens_only_on_tamamlandi_or_hata` (`hedefsiz` satır
-  pencereyi KAPATMAZ — sınır vakası).
+- **A3'ün uçtan uca kapıları — SEKİZİ DE A1(a)'ya göre YENİDEN YAZILDI (fix turu 3).**
+  Fix turu 2'nin sekiz testi `build_rollback_plan` üzerinden üyelik değiştirmeye
+  dayanıyordu; o fonksiyon olay kimliği ALMADIĞI için testlerin beşi (üyelik büyümesi ·
+  bayat mühür · yeniden mühürleme · pencere kapısı · sınır vakası) hiçbir şeyi
+  koşamıyordu. Hepsi `amend_rollback_plan` sözleşmesine bağlandı. **Sahip: Task 8,
+  `tests/test_pipeline_runs.py`:**
+  1. **`test_incident_scope_sha_ignores_durum`** — aynı üyelik, farklı `durum` değerleri
+     → AYNI sha. (Kapsam tanımının ana ispatı; A1(a)'dan bağımsız, DEĞİŞMEDİ.)
+  2. `test_incident_scope_sha_covers_rows_outside_bekliyor` — `tamamlandi` · `hata` ·
+     `hedefsiz` satırlar da hash'e girer. (DEĞİŞMEDİ.)
+  3. **`test_two_row_incident_completes_end_to_end`** — `build_rollback_plan` iki satırlı
+     olay açar, `approve_incident_rollback` mühürler, `execute_rollback_plan` koşar;
+     birinci satır `tamamlandi`'ya geçtikten SONRA ikincisinin kanıtı da KURULUR ve olay
+     biter. **Yeni kapı:** ikinci satırın kanıtındaki `onay_kapsam_sha`, birincininkiyle
+     AYNIdır (A1(c): tamamlanma kapsamı değiştirmez).
+  4. **`test_partial_failure_then_retry_reuses_the_same_approval`** — birinci satır `hata`
+     ile kapandı; aynı komut tekrar koşunca kalan satır AYNI onayla yürür, yeni onay
+     İSTENMEZ. **Yeni kapı:** ikinci koşumda `approve_incident_rollback` HİÇ çağrılmaz
+     (yapısal: yürütücü onay yüzeyini çağırmaz).
+  5. **`test_membership_growth_before_execution_then_reapproval_completes`** —
+     `amend_rollback_plan(incident_id=…, affected=<bir paket DAHA geniş küme>, actor=…)`
+     `(1, 0)` döner; mevcut damgalar BAYATLAR ve `build_rollback_evidence`
+     `RollbackEvidenceUnavailable` fırlatır; `approve_incident_rollback` tekrar koşunca
+     TÜM bekleyen satırlar yeni sha ile YENİDEN MÜHÜRLENİR ve olay tamamlanır.
+  6. `test_reapproval_restamps_stale_rows_and_leaves_fresh_rows_untouched` — `amend`
+     sonrası yeniden onayda **bayat** satırların üç onay kolonu da yenilenir; aynı
+     koşumda zaten taze olan (yeni eklenmiş, hiç mühürlenmemiş) satır ilk kez mühürlenir
+     ve **iki kez mühürlenen satır YOKTUR**.
+  7. **`test_membership_growth_after_execution_started_is_rejected`** — bir satır
+     `tamamlandi`'ya geçtikten SONRA `amend_rollback_plan` → `IncidentMembershipLocked`;
+     **hiçbir satır yazılmaz** (öncesi/sonrası satır sayısı ve sha AYNI).
+     (Fix turu 2 bu testi `build_rollback_plan`'a dosyalamıştı — o çağrı yeni bir olay
+     açardı ve pencere kapısına hiç uğramazdı.)
+  8. `test_membership_lock_window_opens_only_on_tamamlandi_or_hata` — yalnız `hedefsiz`
+     satır içeren olayda `amend_rollback_plan` BAŞARILI (pencere AÇIK); tek bir `hata`
+     satırı eklenince aynı çağrı `IncidentMembershipLocked` (pencere KAPALI). Sınır vakası.
+- **A1(a)'nın kendi kapıları (fix turu 3) — Sahip: Task 8, `tests/test_pipeline_runs.py`:**
+  **`test_amend_rollback_plan_takes_incident_id_and_build_does_not`** (yapısal,
+  `inspect.signature`: `amend_rollback_plan`'da `incident_id` VAR, `build_rollback_plan`'da
+  YOK ve dönüş tipleri farklıdır — A1(a)'nın ana ispatı) ·
+  `test_amend_rollback_plan_adds_and_removes_rows` (`(eklenen, silinen)` sayıları) ·
+  `test_amend_rollback_plan_leaves_approval_columns_untouched` (madde 6: `onay_*`
+  YAZILMAZ) · `test_amend_rollback_plan_is_a_no_op_for_unchanged_membership` (`(0, 0)`,
+  hata DEĞİL) · `test_amend_rollback_plan_refuses_blank_actor`.
+- **A1(b)'nin kapıları — KİLİT (fix turu 3), Sahip: Task 8,
+  `tests/test_pipeline_runs.py`:**
+  **`test_evidence_and_spend_are_serialised_by_the_incident_lock`** — **DETERMİNİSTİK
+  ARALIK TESTİ, hükmün ana ispatı.** İki bağlantı kullanılır. Bağlantı A
+  `execute_rollback_plan`'ın yolunu koşar ama **kapsam doğrulaması ile jeton harcaması
+  ARASINDA bir `asyncio.Event` ile DURDURULUR** (duraklama noktası test kancasıyla
+  enjekte edilir; uyku/zamanlama YOK — bu yüzden deterministiktir). Bağlantı B o sırada
+  `amend_rollback_plan` ile olaya YENİ bir satır eklemeye çalışır. **Beklenen:** B, A'nın
+  işlemi bitene kadar olay kilidinde BEKLER; A geçişini tamamlar; B sonra koşar ve
+  (A'nın yürütmeyi başlatmış olması nedeniyle) `IncidentMembershipLocked` alır. Kilit
+  kaldırılırsa test DÜŞER — yani test kilidin varlığını ölçer, prose'u değil. ·
+  `test_incident_lock_is_reentrant_within_one_transaction` (aynı işlemde ikinci
+  `_lock_incident` çağrısı anında döner — dört yolun koşulsuz almasının önkoşulu) ·
+  `test_incident_lock_name_is_the_single_prefix` (yapısal: `runs.py` içinde
+  `pg_advisory_xact_lock` yalnız `_lock_incident` gövdesinde geçer; ikinci bir kilit adı
+  YOK) ·
+  `test_evidence_construction_and_spend_share_one_transaction` (yapısal:
+  `execute_rollback_plan` gövdesinde `build_rollback_evidence` ve `rollback_package`
+  AYNI `async with db.transaction()` bloğunun içindedir).
+- **A1(c)'nin kapıları — KEMER VE ASKI (fix turu 3), Sahip: Task 15,
+  `tests/test_package_lifecycle.py`:**
+  **`test_stale_scope_token_cannot_be_spent_even_without_the_lock`** — jeton eski kapsamla
+  basılır, sonra üyelik değiştirilir ve kanıt yeni `onay_kapsam_sha` ile kurulur;
+  `_consume_provenance` parmak izi uyuşmazlığından RED verir (kilit hiç alınmamış olsa
+  bile). ·
+  `test_rollback_evidence_payload_has_five_keys` (**Sahip: Task 8** — BEŞ anahtar; DÖRT
+  anahtarlı eski küme RED).
 - `test_olay_onayla_subcommand_stamps_incident` ·
   `test_olay_onayla_subcommand_refuses_blank_actor` ·
   **`test_olay_onayla_reseals_incident_after_membership_growth`** (A3) ·
-  **`test_olay_plani_refuses_new_rows_after_execution_started`** (A3) — **Sahip: Task 16**,
+  **`test_olay_plani_with_incident_id_calls_amend_not_build`** (A1(a): `--incident-id`
+  verilince `amend_rollback_plan`, verilmeyince `build_rollback_plan` çağrılır) ·
+  **`test_olay_plani_refuses_new_rows_after_execution_started`** (A3 — komut
+  `IncidentMembershipLocked`'ı sıfırdan farklı çıkış koduyla raporlar) — **Sahip: Task 16**,
   `tests/test_pipeline_cli.py`.
 
 ---
@@ -2326,13 +2918,36 @@ okumadan yazmaya genişliyor.
 **Bağlanan hüküm:**
 
 - **Task 8** Files listesine `apps/social/backend/app/services/sector_package_lifecycle.py`
-  **Modify** olarak eklenir; o görevde YALNIZ dört yardımcı yazılır
-  (`activation_evidence_payload` · `rollback_evidence_payload` · `_evidence_fingerprint` ·
-  `_evidence_fingerprint_from_payload`). Jeton alanlarına, `_require_evidence`'a ve
-  kapı gövdelerine Task 8'de DOKUNULMAZ.
-- **Task 15** aynı dosyada jeton alanlarını, `_consume_provenance`'ı ve iki geçiş
-  fonksiyonunun jeton doğrulamasını yazar — Task 8'in yazdığı yardımcıları ÇAĞIRIR,
-  yeniden tanımlamaz.
+  **Modify** olarak eklenir; o görevde YALNIZ dört yardımcı + onların yazıldığı yerel
+  görünüm tipi yazılır (`activation_evidence_payload` · `rollback_evidence_payload` ·
+  `_evidence_fingerprint` · `_evidence_fingerprint_from_payload` · `KilitliKosuGorunumu` ·
+  `_require_kosu_gorunumu`). Jeton alanlarına, `_require_evidence`'a ve kapı gövdelerine
+  Task 8'de DOKUNULMAZ.
+- **DÖNGÜSEL IMPORT — kararın ÖLÇÜLMÜŞ teknik kusuru ve çözümü (fix turu 3, KABUL).**
+  Karar harfiyen uygulanınca `activation_evidence_payload(run: VerifiedRun)` bu Plan 1
+  modülünü `runs.py`'ye bağımlı kılıyordu; oysa `runs.py` ZATEN buradan `_require_actor`'ı
+  alıyor (AÇIK-1 ayak (b)) — **döngü**. Karar GEÇERLİ KALIR; uygulaması şudur: yardımcılar
+  `runs.VerifiedRun`'ı IMPORT ETMEZ, modülün KENDİ içinde tanımlı **`KilitliKosuGorunumu`**
+  protokolüne yazılır (tam tanımı R8(c)'nin sözleşme bloğunda; SEKİZ alan, KAPALI).
+  `VerifiedRun` protokolü yapısal olarak karşılar, nominal bağ KURULMAZ.
+- **Yardımcıların imzaları AÇIK-3 nedeniyle tamamlandı (mekanik sonuç, yeni hüküm DEĞİL):**
+  `activation_evidence_payload(kosu: KilitliKosuGorunumu, aktif_paket_satiri: Mapping[str, Any] | None)`
+  — K-94 taban durumu (`expected_active_version` / `expected_no_active`) koşu satırından
+  türetilemez, o sektörün AKTİF paket satırından okunur ve o satır aynı işlemde
+  `FOR UPDATE` ile kilitlenir; ikinci parametre bir "çağıran girdisi" değil, kilitli
+  okumadır. `rollback_evidence_payload(plan_satiri: Mapping[str, Any], hedef_kosu: KilitliKosuGorunumu)`
+  — anahtar kümesi A1(c) ile BEŞ'e çıktı.
+- **Task 15** aynı dosyada `_consume_provenance`'ı, `EvidenceProvenanceInvalid`'i,
+  `expected_no_active`'i ve iki geçiş fonksiyonunun jeton doğrulamasını yazar — Task 8'in
+  yazdığı yardımcıları ÇAĞIRIR, yeniden tanımlamaz.
+  **Fix turu 3 düzeltmesi:** bu satır önce *"jeton alanlarını"* da Task 15'e veriyordu;
+  R9 gereği köken ALANLARI (`run_id` · `provenance_token` · `incident_id` · `package_id` ·
+  `onay_kapsam_sha`), şekil kapıları (`_require_token` · `_require_kapsam_sha`) ve
+  `EvidenceMintRefused` **Task 8'e** taşındı — çünkü onları KURAN/FIRLATAN iki fonksiyon
+  (`build_rollback_evidence` · `mint_evidence_token`) Task 8'dedir ve Task 8 < Task 15.
+  Aşağıdaki seçenek tablosunun B satırındaki *"jeton alanları Task 15'te kalır"* ifadesi
+  bu düzeltmeyle **DARALTILMIŞTIR**: Task 15'te kalan, alanlar değil **tüketim ve kapı
+  gövdeleridir**.
 - **Tek hash kuralı tek yerdedir:** parmak izi yalnız bu dört yardımcıdan üretilir;
   başka hiçbir modül kendi parmak izi hesabını yazmaz.
 
@@ -2342,7 +2957,8 @@ okumadan yazmaya genişliyor.
   `test_fingerprint_differs_on_any_field_change` — **Sahip: Task 8**,
   `tests/test_pipeline_runs.py`.
 - `test_no_module_other_than_lifecycle_computes_evidence_fingerprint` (yapısal: depo
-  genelinde parmak izi hesabı TEK yerde) — **Sahip: Task 15**,
+  genelinde parmak izi hesabı TEK yerde — `runs.py` ve `writeback.py` dâhil hiçbir modül
+  kendi hesabını yazmaz) — **Sahip: Task 15**,
   `tests/test_write_surface_authorization.py`.
 
 **Etkilenen görev · geçersiz kılınan satırlar:** **Task 8** — Files listesine Plan 1 modülü
