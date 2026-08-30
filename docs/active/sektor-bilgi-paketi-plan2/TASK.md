@@ -60,7 +60,17 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
   manifest, fail-closed doğrulayıcıyı geçirebiliyordu (üç yol: hata-işareti commit değeri ·
   mutlak yol anahtarı · `..` gezinmesi). Üçü de ölçümle doğrulandı ve `72f5744` ile kapatıldı;
   kapanış turu **approve** verdi. Kalan tek medium kabul edilmiş risk (aşağıda).
-- **Sıradaki: Task 3** — kalıp kimliği + karar günlüğü şeması (K-84 ailesi).
+- **Task 3 KODU İNDİ, KAPANMADI** — kalıp kimliği + karar günlüğü şeması (K-84 ailesi).
+  `1dd8c5e` (ana) + `411c767` (düzeltme 1) + `a34d3f6` (düzeltme 2). Hakem turu spec ❌ verdi,
+  üç Important düzeltme turu 1'de kapandı, yeniden inceleme altısını da ADDRESSED verdi ama
+  **kendi sınıfından yeni bir Important açtı** (yanlış K-56 gerekçesi). Düzeltme turu 2 indi.
+  **EKSİK OLAN: düzeltme turu 2'nin kapsamlı yeniden incelemesi HİÇ KOŞMADI.**
+  Bu, sonraki oturumun ilk işidir — Task 4'e geçmeden önce.
+- **Commit etiketleri düzeltildi (`f79f28f`, Eray onayı).** Defter denetimi iki MECH-FAIL
+  veriyordu; altı yerel commit aynı içerikle doğru etiketle yeniden yazıldı, denetim `rc=0`.
+  Yedek etiket: `backup/pre-footer-fix-20260830`.
+- **Sıradaki: Task 3'ün son yeniden incelemesi, sonra Task 4** (sözleşme v2 — denetçi
+  yeniden-doğrulama envanteri + sentez kimlik taşıması).
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
@@ -175,3 +185,37 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   zinciri), kalan workflow'lar CRM turunda.
 - Plan 1 bölümlerinin kart geçişi taranmadı (boşluk raporu kapsam sınırı) — Plan 1 alanında
   kusur çıkarsa koşulur.
+
+## Task 3'ün doğurduğu evler (2026-08-30 kapanış sweep'i — hepsi TARİHLİ)
+
+- **Taslağın yaratıcısı kayboluyor — EŞLİ yükümlülük, Task 6 + Task 15.** Karar günlüğü
+  verildiğinde `insert_draft` artık Plan 1'in `draft_created` satırını yazmıyor ve aktör
+  hiçbir yerde kalmıyor. Ölçüldü: olay türü kümesi hem Python'da hem veritabanı kısıtında
+  kapalı (dokuz değer), `sector_packages` tablosunda aktör kolonu yok, koşu kaydı tablosunda
+  da operatör alanı yok. **Task 6** olay TÜRÜNÜ açar (zaten migration yazan ve olay
+  üreticisine dokunan tek görev), **Task 15** çağrıyı ekler (taslak yazma yüzeyinin sahibi).
+  İkisi ayrı ayrı inemez — yarım iniş görünür olsun diye eşli yazıldı.
+  Dürüst etiket: *çözülmedi; evi ve iki adımı var, tarihi o görevlerin koşmasına bağlı.*
+  Kodun kendi belgesinde de "ÇÖZÜLMEDİ + PARK EDİLDİ" etiketiyle duruyor.
+- **`GIT_DIR`/`GIT_WORK_TREE` ezilmesi ekseni — Task 18 Step 8b, İKİ örnek birden.** Üretim
+  tarafı (`contracts.py::_head_commit`) ve test tarafı
+  (`test_external_repo_gitignores_run_folder`). Tek süpürme ikisini kapatır; ayrı ayrı
+  yapmak yarım sınıf kapatır.
+- **Yol sıra numaraları KONUMSAL.** Bir liste öğesi silinince ya da sırası değişince sonraki
+  her öğenin `oge_yolu`'su kayar; kimlik `unit_id` ile yaşar. **Sürümler arasında yol
+  karşılaştıran her tüketici `unit_id`'ye anahtarlamalı, `oge_yolu`'na ASLA.**
+  Task 9, 12 ve 13 dispatch'lerine taşınır.
+- **"Not" satırının alan kümesi bir ÇIKARIMDIR ve kanonik dayanağı yok.** Ölçüldü: `sinif`
+  spec-input'ta ve spec'te HİÇ geçmiyor; yalnız plan 579-580 iki kapalı değeri sabitliyor.
+  Hakem kapalı tutmayı doğru yön saydı (reddedilen satır sesli patlar). Ama içinde gerçek bir
+  boşluk var: iki not sınıfının da *not edilen şeyi* koyacak alanı yok ve bu, spec-input
+  728/1099'da **K-87 ve K-108 olarak hâlâ AÇIK**. Yukarıda kapanmamış, burada kapatılamaz.
+  Task 9 ve Task 13 dispatch'lerine taşınır; uyarı: `gerekce`'ye tıkıştırmak fiilî cevap
+  hâline GELMESİN.
+- **Dış deponun İÇİNDE dışarıyı gösteren sembolik bağ — çözülmedi, park edildi, koşulu var.**
+  Kapatmak `verify_pin`'e içerilik çözümlemesi eklemeyi gerektirir; bu, ekin R14 hükmünün
+  yasakladığı beşinci kapıdır. Modül belgesinde dürüst etiketiyle ve yeniden açılma
+  koşuluyla duruyor. **"Ele alındı" DEĞİL.**
+- **Yedek etiket `backup/pre-footer-fix-20260830` süresiz durmaz.** Silinme koşulu: dal
+  main'e merge edildiğinde VEYA final inceleme temiz geçtiğinde. O ana kadar commit etiketi
+  yeniden yazımının geri dönüş yolu.
