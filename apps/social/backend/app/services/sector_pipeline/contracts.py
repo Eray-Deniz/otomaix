@@ -10,7 +10,11 @@ Kapı kümesi TAM OLARAK dörttür (plan 423-426):
   2. pinlenen dosya yok
   3. hash uyuşmuyor
   4. commit uyuşmuyor
-"Uyarıp devam" dalı YOKTUR.
+"Uyarıp devam" dalı YOKTUR ve bu küme GENİŞLETİLMEZ (arayüz eki R14).
+
+Manifestin ŞEKLİ kapı değildir, okuma koşuludur: `load_pin` hiçbir sözleşme
+dosyası adlandırmayan manifesti reddeder. Kapı sayısı yine dörttür — boş bir
+manifest zaten doğrulanacak bir şey vermez.
 
 NEGATİF invariant (arayüz eki R1 · R14): **kirli çalışma ağacı tek başına pini
 DÜŞÜRMEZ.** Manifestte adı geçmeyen hiçbir dosya veya dizin — izlenmeyen
@@ -55,9 +59,21 @@ class ContractPin:
 
 
 def load_pin(pin_path: Path) -> ContractPin:
-    """Manifesti diskten okur. Bozuk/eksik manifest hata fırlatır (fail-closed)."""
+    """Manifesti diskten okur. Bozuk/eksik manifest hata fırlatır (fail-closed).
+
+    Manifest en az bir sözleşme dosyası adlandırmak ZORUNDADIR. Boş `files`
+    ile `verify_pin` hiçbir dosyaya bakmadan geçerdi: commit'i tutan her depo
+    pinli sayılırdı. Bu bir doğrulama değil, doğrulama görüntüsüdür — ve
+    kapıyı genişletmeden burada, manifest okunurken kapanır (arayüz eki R14:
+    `verify_pin`'in DÖRT kapılık kümesi değişmez).
+    """
     data = json.loads(Path(pin_path).read_text(encoding="utf-8"))
-    return ContractPin(commit=data["commit"], files=data["files"])
+    files = data["files"]
+    if not isinstance(files, dict) or not files:
+        raise ContractDriftError(
+            f"pin manifesti hiçbir sözleşme dosyası adlandırmıyor: {pin_path}"
+        )
+    return ContractPin(commit=data["commit"], files=files)
 
 
 def verify_pin(pin: ContractPin, repo_root: Path) -> list[str]:
@@ -98,7 +114,17 @@ def require_pin(pin_path: Path, repo_root: Path) -> None:
 
 
 def _head_commit(repo_root: Path) -> str:
-    """Deponun HEAD commit sha'sı. SALT-OKUNUR: yalnız `git rev-parse HEAD`."""
+    """Deponun HEAD commit sha'sı. SALT-OKUNUR: yalnız `git rev-parse HEAD`.
+
+    Çözümleme VERİLEN köke sabitlenir. `git rev-parse` kendi başına dizin
+    ağacında YUKARI yürür: git deposu olmayan bir kök verilirse KAPSAYAN
+    deponun HEAD'ini rc=0 ile döndürür (Task 1 review'ında ölçüldü). Bu, pin'i
+    yabancı bir deponun commit'iyle onaylatabilirdi. `.git` girdisi (dizin ya
+    da worktree'deki dosya) kökün kendisinde yoksa yürüyüş hiç başlamaz,
+    sentinel döner ve commit kapısı düşer.
+    """
+    if not (Path(repo_root) / ".git").exists():
+        return _HEAD_OKUNAMADI
     try:
         result = subprocess.run(
             ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
