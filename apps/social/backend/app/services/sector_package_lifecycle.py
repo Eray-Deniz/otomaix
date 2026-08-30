@@ -359,10 +359,35 @@ async def insert_draft(
     kolonu YOKTUR (migration 032). Yani `actor` şu ana kadar YALNIZ Plan 1'in
     `draft_created` satırında yaşıyordu; günlük verildiğinde o satır yazılmaz
     ve yaratıcı hiçbir yerde durmaz. Bu bir kabul edilmiş risk DEĞİL, açık bir
-    kayıptır ve burada çözülemez: çözümü ya kapalı olay enum'unu genişletmek
-    (K-56 bildirim bağı nedeniyle bedeli var) ya da bir kolon eklemek
-    (migration) demektir — ikisi de bu görevin kapsamı dışındadır. Sahibi
-    kontrolör tarafından atanacaktır; burada uydurma bir ev VERİLMEZ.
+    kayıptır ve burada çözülemez.
+
+    **Yolların ÖLÇÜLMÜŞ bedeli (fix turu 2'de DÜZELTİLDİ).** Önceki yazım
+    "K-56 bildirim bağı" diyordu; bu YANLIŞTI ve ölçümle çürüdü: K-56 yorumu
+    `ADMIN_NOTIFIED_EVENTS`'in üstündedir ve "bu üç olay" derken kendi kümesini
+    kastediyor (`mismatch_fallthrough` · `package_read_error` ·
+    `stale_assignment_fallback`); bildirim kapısı tek koşuldur
+    (`event_type in ADMIN_NOTIFIED_EVENTS`, `package_events.py:275`) ve
+    `LIFECYCLE_EVENTS`'in HİÇBİR üyesi o kümede DEĞİLDİR. Yani yeni bir olay
+    türü eklemek bildirim davranışına DOKUNMAZ. Gerçek bedel şudur:
+
+    * **Olay türü yolu:** `033_package_events.sql:40-50` `event_type` CHECK'ini
+      TAM DOKUZ değerle pinler → yeni tür için migration + rollback şart.
+      Üstelik 033 kendi doğrulama bloğunda (satır 114-119) CHECK tanımının
+      BİREBİR metnini bekler; genişletme 033'ün beklentisini de güncellemeyi
+      gerektirir (`tests/test_migration_033.py::test_widened_event_type_check_is_caught`
+      genişletilmiş CHECK'i yakalamak için VARDIR). Ayrıca
+      `package_events.EVENT_TYPES` (bu görevin Files listesi DIŞINDA) ve
+      `tests/test_package_stamp_and_events.py:118-122`'deki pinli enum testi.
+      Not: `package_events` tablosunda `actor` kolonu ZATEN var ve yaşam
+      döngüsü olayları onu ZORUNLU kılıyor (`package_events.py:223`) — yani
+      taşıyıcı hazır, kapalı olan yalnız türün kendisi.
+    * **Kolon yolu:** `sector_packages`'a `created_by` — yine migration +
+      rollback.
+    * **Üçüncü `tur` yolu:** karar günlüğü şemasını (ek ile pinli K-84)
+      değiştirmek.
+
+    Üçü de bu görevin kapsamı DIŞINDADIR. Sahibi kontrolör tarafından
+    atanacaktır; burada uydurma bir ev VERİLMEZ.
     """
     owner = _require_actor(actor)
 
@@ -391,6 +416,13 @@ async def insert_draft(
     if not result.ok:
         raise ValueError("paket içeriği yazım kapısını geçmedi: " + "; ".join(result.errors))
 
+    # SIRA: içerik uyarıları ÖNCE (fix turu 2, Minor). Bütünlük kapısı fix
+    # turu 1'de bu döngünün ÖNÜNE girmişti; reddedilen bir çift, içeriğin
+    # kendi uyarılarını da sessizce yutuyordu. Yazım her iki hâlde de olmuyor
+    # ama gözlemlenebilirlik farkı gerçekti ve sessizce değişmişti.
+    for warning in result.warnings:
+        logger.warning("paket taslağı uyarısı (sector_id=%s): %s", sector_id, warning)
+
     if decision_log:
         # Yaşamayan satırlar (`kirp` · `cikar` · notlar) bu kapıda SAYILMAZ:
         # kırpılan öğe aday pakete girmez, yani yolu içerikte olmayacaktır.
@@ -401,8 +433,6 @@ async def insert_draft(
             raise ValueError(
                 "içerik ile karar günlüğü tutarsız: " + "; ".join(pair_errors)
             )
-    for warning in result.warnings:
-        logger.warning("paket taslağı uyarısı (sector_id=%s): %s", sector_id, warning)
 
     return await db.fetchval(
         """
