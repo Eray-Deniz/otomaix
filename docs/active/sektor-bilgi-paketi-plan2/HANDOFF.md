@@ -84,9 +84,10 @@ döner — göreli yollar oradan çözülmez, bu planın kendi kısıtı.
 
 # Notes For Claude/Codex
 
-- **Hakem turunu kim koşar? ÖNCE SOR.** 2026-08-30 oturumunda Eray "eskisi gibi sen koşabilirsin"
-  dedi ve bunun **o oturuma özgü** olduğunu belirtti; kalıcı hafızaya yazılmadı. Yeni oturumda
-  teyit al.
+- **Hakem turlarını Claude koşar — SORMA.** Eray 2026-08-30'da bunu kalıcı kural yaptı
+  ([[feedback_claude_runs_reviewer_rounds]]). Checkpoint, final, bağımsız hakem: hepsi doğrudan
+  koşulur. Maliyet tek satır bilgilendirmedir, izin sorusu değil. Zincir yakınsamazsa DURMA
+  kararı yine Eray'a taşınır — koşma izni ile durma kararı ayrı şeylerdir.
 - **Kontrolör düzeltme YAPMAZ.** Bulgular uygulayıcıya gider; kontrolör düzeltirse review atlanır
   ve kontrolörün bağlamı kirlenir.
 - **Minor bulgular döngüye girmez** — deftere yazılır ve adı konmuş bir sonraki göreve bağlanır.
