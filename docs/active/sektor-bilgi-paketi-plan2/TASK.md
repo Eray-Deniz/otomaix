@@ -25,7 +25,8 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 0
+- cp_count: 1
+- last_checkpoint_ref: c7be18fb523118ea9d9d0ea90d4152ecdd2a74a2
 
 # References
 
@@ -50,8 +51,16 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
   Üç Codex karşıt-hakem turundan geçti (high sayısı 7 → 4 → 2); doktrin delikleri kapandı,
   zincir kontrolör kararıyla bitirildi (dördüncü tur AÇILMADI).
 - **Task 1 TAMAM** — sözleşme pin doğrulayıcısı, commit `32791b1`. Hakem: spec ✅, kalite onaylı.
-- **Sıradaki: Task 2** — dış depodaki altı bloklayıcı sözleşme düzeltmesi + yansıma sweep'i
-  + gerçek pin. Task 1'in üç Minor bulgusu Task 2'ye bağlandı (aşağıda Open Problems).
+- **Task 2 TAMAM** — dış depodaki altı bloklayıcı sözleşme düzeltmesi + 13 kalemlik yansıma
+  sweep'i + gerçek pin. Monorepo `1186d44` + `cf7ee31`; **dış depo** (`/root/otomaix-sosyal-
+  medya-arastirmasi`) `6d2a033` + `d901eb4`. Hakem: spec ✅; bir Important + beş Minor düzeltme
+  turunda kapandı, yeniden inceleme altısını da ADDRESSED verdi. Task 1'in üç Minor bulgusu
+  burada kapandı.
+- **Checkpoint 1 KOŞTU** (Codex karşıt-hakem, taban `a806e29`): bir **high** buldu — bozuk
+  manifest, fail-closed doğrulayıcıyı geçirebiliyordu (üç yol: hata-işareti commit değeri ·
+  mutlak yol anahtarı · `..` gezinmesi). Üçü de ölçümle doğrulandı ve `c7be18f` ile kapatıldı;
+  kapanış turu **approve** verdi. Kalan tek medium kabul edilmiş risk (aşağıda).
+- **Sıradaki: Task 3** — kalıp kimliği + karar günlüğü şeması (K-84 ailesi).
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
@@ -124,13 +133,9 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
 
 # Open Problems
 
-- **Task 1'in üç Minor bulgusu Task 2'ye BAĞLI** (park değil, evi ve sırası var — Task 2 aynı
-  test dosyasına dokunuyor ve gerçek pin doğrulamasının sahibi):
-  (a) depo-yok kapısının ayırt edici testi YOK — hakem kapıyı koddan sildi, yedi test de yeşil
-  kaldı; dört kapının biri kanıtsız. (b) `git rev-parse` üst dizine yürüyor, git kökü olmayan
-  yol kapsayan deponun commit'ini raporluyor; kapı kapanıyor ama sebep yabancı depoyu
-  adlandırabiliyor. (c) manifest şekli zorlanmıyor — boş dosya listesi doğrulamayı sessizce
-  commit-only'ye düşürüyor.
+- **Task 1'in üç Minor bulgusu Task 2'de KAPANDI** (`1186d44`): depo-yok kapısı artık kendi
+  sebebine assert ediyor · `_head_commit` çözümlemeyi verilen köke sabitliyor · hiçbir sözleşme
+  dosyası adlandırmayan manifest `load_pin`'de reddediliyor (kapı kümesi DÖRT kaldı — ek R14).
 - **Hakemin doğrulayamadığı iki durum EV BULDU (2026-08-30 kapanış sweep'i): Task 18 Step 8b.**
   `git` ikilisi olmayan ortamda davranış ve `GIT_DIR`/`GIT_WORK_TREE` ezilmesi. Neden orası:
   pin doğrulayıcısı commit'i `git rev-parse` ile okur, yani ikili yoksa resmî koşuyu başlatan
@@ -149,7 +154,21 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   operatör kararı.
 - **30 teknik kalem BAĞLANDI** (plan yazımında); kapanış görevi (Task 20) 30 teknik + 13 ürün
   kararını tek tek sweep eder.
-- **§8.7'nin sözleşme düzeltmeleri Task 2'nin işidir** (altı kalem). Resmî turu hâlâ bloklarlar.
+- **§8.7'nin sözleşme düzeltmeleri KAPANDI** (Task 2, dış depo `6d2a033`+`d901eb4`): altı kalem
+  + yedi yansıma kalemi, sweep 13/13 "var". Resmî turu artık bloklamıyorlar.
+- **Task 2'den Task 4'e devredilen üç sözleşme kalemi** (park değil — Task 4 aynı dosyalara
+  dokunuyor ve sürümlerini zaten artırıyor): (a) iki farklı bayt kümesi aynı sürüm damgasını
+  taşıyor (`6d2a033` ve `d901eb4` ikisi de "Sürüm 1.3"/"Sürüm 1.2") — kapı sha256'ya baktığı
+  için mekanik risk yok, izlenebilirlik pürüzü; (b) iki genel hüküm kanal-bayrağı maddesinin
+  içine yerleşmiş (28 satırlık madde), içerik doğru yer yanıltıcı; (c) `hakem-sentez-gorevi.md`
+  satır 100 `[muhtemel-uydurma]`yı bayrak biçiminde anıyor ama kapalı bayrak kümesi sekiz üye
+  ve onu içermiyor.
+- **CTA köşeli ayraç çelişkisi — ÇÖZÜLMEDİ, park edildi, tetiği var:** yazım kapısı
+  `cta_kaliplari` ve `ozel_gun[*].cta` içinde bayrak olmayan HER ayracı reddediyor, ama
+  `_SABLON.md` araştırmacıya CTA kalıplarını ayraçlı değişkenlerle soyutlatıyor. Task 2 bunu
+  sözleşme metninde **açıkça açık** bıraktı ("BİLİNEN ve AÇIK bir kalem"), gizlice çözmedi.
+  Task 2'nin ürünü DEĞİL, önceden var. Tetik: ilk kuru koşum (Task 11 veya Task 19), ya da
+  `_check_channel_markers`'a dokunan herhangi bir değişiklik.
 - **Task 15'in elle arayüz doğrulaması** Task 19 Step 11'de; plan onaylı, tarih pilot görevinin
   koşmasına bağlı. Dürüst etiket: *çözülmedi; evi var.*
 - **n8n hata bildirimi** Task 16 Step 7/7b'de; kapsam bilinçle dar (yalnız sektör paketi
