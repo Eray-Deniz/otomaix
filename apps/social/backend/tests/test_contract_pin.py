@@ -301,14 +301,135 @@ def test_real_pin_verifies_clean() -> None:
 
 
 def test_external_repo_gitignores_run_folder() -> None:
-    """Dış deponun `.gitignore`'u `kosu/` satırını taşır (arayüz eki R1).
+    """Dış deponun COMMIT EDİLMİŞ `.gitignore`'u `kosu/` satırını taşır (R1).
 
     Negatif invariant izlenmeyen koşu klasörünün pini DÜŞÜRMEDİĞİNİ söyler;
     onu düşürecek olan tek şey klasörün COMMIT EDİLMESİDİR (HEAD kayar →
     commit uyuşmazlığı). Bu satır o yolu kapatır.
+
+    Ölçüm COMMIT EDİLMİŞ içeriğe bakar, çalışma ağacına değil: invariant
+    "bu depoya koşu klasörü commit edilemez"dir ve onu kapatan şey de
+    commit'lenmiş satırdır. Çalışma ağacını okumak, yalnız yerelde duran
+    (henüz commit edilmemiş) bir satırı da geçerli sayardı.
     """
-    satirlar = (GERCEK_ARASTIRMA_DEPOSU / ".gitignore").read_text(
-        encoding="utf-8"
-    ).splitlines()
+    satirlar = subprocess.run(
+        ["git", "-C", str(GERCEK_ARASTIRMA_DEPOSU), "show", "HEAD:.gitignore"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
 
     assert "kosu/" in satirlar, satirlar
+
+
+# ─── H1: bozuk manifest fail-closed'ı bozamaz (checkpoint bulgusu) ──────────
+
+
+def _plain_dir_case(tmp_path: Path) -> tuple[str, dict[str, str], Path]:
+    """(1) `commit` = HEAD-okunamadı işareti · kök git deposu DEĞİL.
+
+    İşaret "hiçbir gerçek sha'ya eşit olamaz" diye seçilmişti; ama manifestte
+    GÖRÜNMESİ engellenmemişti. Görününce `_head_commit`'in her başarısızlık
+    yolu (git yok · depo değil · bozuk depo) uyuşmazlık değil EŞLEŞME olur.
+    """
+    kok = tmp_path / "depo-degil"
+    kok.mkdir()
+    for name in CONTRACT_FILES:
+        (kok / name).write_text(f"# {name}\n", encoding="utf-8")
+    files = {name: _sha256(kok / name) for name in CONTRACT_FILES}
+    return _HEAD_OKUNAMADI, files, kok
+
+
+def _absolute_key_case(tmp_path: Path) -> tuple[str, dict[str, str], Path]:
+    """(2) Manifest anahtarı MUTLAK yol → `repo_root` tamamen devre dışı.
+
+    `Path(kok) / "/mutlak"` == `Path("/mutlak")` — pathlib'de mutlak sağ
+    taraf tabanı EZER. Manifest böylece diskin herhangi bir yerindeki bir
+    dosyayı "sözleşme dosyası" diye hash'letebilir.
+    """
+    repo = _make_fake_repo(tmp_path)
+    disarida = tmp_path / "disarida.md"
+    disarida.write_text("depo DIŞINDAKİ dosya\n", encoding="utf-8")
+    files = {name: _sha256(repo / name) for name in CONTRACT_FILES}
+    files[str(disarida)] = _sha256(disarida)
+    return _git(repo, "rev-parse", "HEAD"), files, repo
+
+
+def _traversal_key_case(tmp_path: Path) -> tuple[str, dict[str, str], Path]:
+    """(3) Manifest anahtarı `..` ile depo sınırının DIŞINA çıkar."""
+    repo = _make_fake_repo(tmp_path)
+    disarida = tmp_path / "disarida.md"
+    disarida.write_text("depo DIŞINDAKİ dosya\n", encoding="utf-8")
+    files = {name: _sha256(repo / name) for name in CONTRACT_FILES}
+    files["../disarida.md"] = _sha256(disarida)
+    return _git(repo, "rev-parse", "HEAD"), files, repo
+
+
+@pytest.mark.parametrize(
+    "kurulum, aciklama",
+    [
+        (_plain_dir_case, "HEAD-okunamadı işareti commit olarak"),
+        (_absolute_key_case, "mutlak manifest anahtarı"),
+        (_traversal_key_case, "`..` ile depo dışına çıkan anahtar"),
+    ],
+)
+def test_malformed_pin_can_never_verify_clean(
+    tmp_path: Path, kurulum, aciklama: str
+) -> None:
+    """Bozuk manifest TEMİZ doğrulama üretemez — üç delik de kapalı.
+
+    Fail-closed'ın önermesi şudur: sözleşme sapmışsa resmî koşu BAŞLAMAZ.
+    Aşağıdaki üç girdi, düzeltmeden önce koşuyu BAŞLATIYORDU: `verify_pin`
+    boş liste, yani "pinli ve temiz" döndürüyordu.
+
+    Kapanış YÜKLEME katmanındadır: böyle bir pin nesnesi hiç KURULAMAZ.
+    Bu, arayüz eki R14'ü korur — `verify_pin`'in kapı kümesi DÖRT kalır,
+    beşinci kapı eklenmez; bozuk girdi kapıya hiç ulaşmaz.
+    """
+    commit, files, kok = kurulum(tmp_path)
+
+    with pytest.raises(ContractDriftError):
+        pin = ContractPin(commit=commit, files=files)
+        # Düzeltmeden ÖNCE akış buraya düşer: nesne kurulur ve doğrulama
+        # sessizce geçer. Assert o hâli görünür kılar (RED kanıtı).
+        assert verify_pin(pin, kok) != [], f"{aciklama}: bozuk manifest TEMİZ doğrulandı"
+
+
+def test_pin_rejects_head_sentinel_as_commit() -> None:
+    """İşaret değeri manifeste YAZILAMAZ — sebep adıyla söylenir."""
+    with pytest.raises(ContractDriftError) as hata:
+        ContractPin(commit=_HEAD_OKUNAMADI, files={"_SABLON.md": "a" * 64})
+
+    assert "işaret" in str(hata.value)
+
+
+@pytest.mark.parametrize(
+    "bozuk_anahtar",
+    ["/etc/passwd", "../disarida.md", "alt/../../disarida.md", "", "C:/x.md"],
+)
+def test_pin_rejects_file_key_escaping_repo_root(bozuk_anahtar: str) -> None:
+    """Anahtar depo kökünün İÇİNDE kalmalı: mutlak yok, `..` yok, boş yok."""
+    with pytest.raises(ContractDriftError) as hata:
+        ContractPin(commit="a" * 40, files={bozuk_anahtar: "b" * 64})
+
+    assert "depo kökü" in str(hata.value)
+
+
+@pytest.mark.parametrize(
+    "bozuk_commit", ["", "xyz", "a" * 39, "a" * 41, "A" * 40, "  " + "a" * 38]
+)
+def test_pin_rejects_malformed_commit(bozuk_commit: str) -> None:
+    """`commit` gerçek bir git nesne kimliği biçiminde olmalı."""
+    with pytest.raises(ContractDriftError) as hata:
+        ContractPin(commit=bozuk_commit, files={"_SABLON.md": "c" * 64})
+
+    assert "commit" in str(hata.value)
+
+
+@pytest.mark.parametrize("bozuk_hash", ["", "abc", "d" * 63, "d" * 65, "D" * 64])
+def test_pin_rejects_malformed_hash(bozuk_hash: str) -> None:
+    """Her değer 64 haneli KÜÇÜK harf onaltılık sha256 olmalı."""
+    with pytest.raises(ContractDriftError) as hata:
+        ContractPin(commit="e" * 40, files={"_SABLON.md": bozuk_hash})
+
+    assert "sha256" in str(hata.value)

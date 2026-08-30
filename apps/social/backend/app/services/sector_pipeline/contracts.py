@@ -12,9 +12,26 @@ Kapı kümesi TAM OLARAK dörttür (plan 423-426):
   4. commit uyuşmuyor
 "Uyarıp devam" dalı YOKTUR ve bu küme GENİŞLETİLMEZ (arayüz eki R14).
 
-Manifestin ŞEKLİ kapı değildir, okuma koşuludur: `load_pin` hiçbir sözleşme
-dosyası adlandırmayan manifesti reddeder. Kapı sayısı yine dörttür — boş bir
-manifest zaten doğrulanacak bir şey vermez.
+Manifestin ŞEKLİ kapı değildir, okuma koşuludur. Kapı sayısı yine dörttür;
+bozuk girdi kapıya HİÇ ULAŞMAZ, çünkü ondan bir `ContractPin` kurulamaz.
+Doğrulama iki katmana ayrılmıştır:
+
+* `ContractPin.__post_init__` — pin'in KENDİ yapısal değişmezleri (bir depo
+  kökü bilmeden karara bağlanabilen her şey): `commit` biçimi, dosya
+  anahtarlarının depo kökü içinde kalan göreli yollar olması, sha256
+  değerlerinin biçimi, kümenin boş olmaması. Buraya konmasının nedeni,
+  `load_pin`'i atlayıp doğrudan `ContractPin(...)` kuran çağrıcıların da
+  kapsanmasıdır — bozuk pin TEMSİL EDİLEMEZ hâle gelir.
+* `load_pin` — manifest DOSYASINA özgü olan: okunabilir JSON mu, `files`
+  bir nesne mi ve en az bir sözleşme dosyası adlandırıyor mu (hata mesajı
+  manifest yolunu da söyleyebilsin diye burada durur).
+
+Neden `verify_pin` DEĞİL: arayüz eki R14 kapı kümesini genişletmeyi
+yasaklar. Anahtarın depo kökü içinde kalması `repo_root`'tan bağımsız bir
+manifest özelliğidir (mutlak yol yok · `..` yok · kanonik göreli yazım), bu
+yüzden `repo_root` bilinmeden zorlanabilir ve `verify_pin`'e yalnız zaten
+güvenli anahtarlar ulaşır. Kapsam sınırı dürüstçe: depo İÇİNDEKİ bir
+sembolik bağın dışarı işaret etmesi bu katmanda ELE ALINMAZ.
 
 NEGATİF invariant (arayüz eki R1 · R14): **kirli çalışma ağacı tek başına pini
 DÜŞÜRMEZ.** Manifestte adı geçmeyen hiçbir dosya veya dizin — izlenmeyen
@@ -28,15 +45,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Mapping
+from typing import Any, Mapping
 
 # HEAD çözülemediğinde (depo git deposu değil, git yok, bozuk depo) kullanılan
-# işaret. Pin'deki commit sha'sına asla eşit olamaz → commit kapısı düşer.
+# işaret. Gerçek bir sha'ya benzemez, bu yüzden commit kapısı düşer — AMA bu
+# tek başına yetmiyordu: işaretin MANİFESTE yazılması engellenmedikçe her
+# okuma-başarısızlığı eşleşmeye dönüyordu. `_validate_commit` o yolu kapatır.
 _HEAD_OKUNAMADI = "<HEAD okunamadı>"
+
+# Git nesne kimliği: sha1 (40) ya da sha256 (64), küçük harf onaltılık.
+_GIT_OBJECT_ID_RE = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 
 class ContractDriftError(RuntimeError):
@@ -54,8 +78,88 @@ class ContractPin:
     files: Mapping[str, str]
 
     def __post_init__(self) -> None:
+        files = dict(self.files)
+        _validate_commit(self.commit)
+        if not files:
+            raise ContractDriftError(
+                "pin hiçbir sözleşme dosyası adlandırmıyor — boş küme "
+                "doğrulamayı sessizce commit-only kapıya düşürürdü"
+            )
+        for rel_path, sha in files.items():
+            _validate_rel_path(rel_path)
+            _validate_sha256(rel_path, sha)
         # Donmuş sarmalayıcının içinde değiştirilebilir sözlük bırakılmaz.
-        object.__setattr__(self, "files", MappingProxyType(dict(self.files)))
+        object.__setattr__(self, "files", MappingProxyType(files))
+
+
+def _validate_commit(commit: Any) -> None:
+    """`commit` gerçek bir git nesne kimliği olmalı — ve İŞARET olmamalı.
+
+    `_HEAD_OKUNAMADI` "hiçbir gerçek sha'ya eşit olamaz" diye seçilmişti ve o
+    akıl yürütme doğrudur; eksik olan, işaretin MANİFESTTE görünmesinin
+    engellenmemesiydi. Göründüğü anda `_head_commit`'in her başarısızlık yolu
+    (git yok · dizin depo değil · bozuk depo) uyuşmazlık değil EŞLEŞME üretir
+    ve fail-closed kapı fail-open'a döner. İşaret bu yüzden ADIYLA reddedilir
+    (biçim kontrolü zaten yakalar; bu satır niyeti sabitler ve işaretin ileride
+    değişmesine karşı da dayanır).
+    """
+    if not isinstance(commit, str):
+        raise ContractDriftError(
+            f"pin commit değeri metin değil: {type(commit).__name__}"
+        )
+    if commit == _HEAD_OKUNAMADI:
+        raise ContractDriftError(
+            f"pin commit değeri HEAD-okunamadı işareti ({_HEAD_OKUNAMADI!r}) — "
+            "bu değer manifeste yazılamaz: yazılırsa git'in okunamadığı her "
+            "durum uyuşmazlık yerine EŞLEŞME sayılırdı"
+        )
+    if not _GIT_OBJECT_ID_RE.fullmatch(commit):
+        raise ContractDriftError(
+            f"pin commit değeri git nesne kimliği biçiminde değil: {commit!r} "
+            "(40 ya da 64 haneli küçük harf onaltılık beklenir)"
+        )
+
+
+def _validate_rel_path(rel_path: Any) -> None:
+    """Anahtar, depo kökünün İÇİNDE kalan kanonik göreli bir yol olmalı.
+
+    Eksik olan, `repo_root / rel_path` birleşimine hiç güvenlik sorulmamasıydı:
+    pathlib'de MUTLAK bir sağ taraf tabanı tamamen EZER (`Path("/a") / "/b"`
+    → `/b`), `..` ise sınırın dışına yürür. İkisi de manifeste diskin herhangi
+    bir yerindeki dosyayı "sözleşme dosyası" diye hash'letme yetkisi verirdi.
+    """
+    if not isinstance(rel_path, str):
+        raise ContractDriftError(
+            f"pin dosya anahtarı metin değil: {type(rel_path).__name__}"
+        )
+    kusur: str | None = None
+    if "\\" in rel_path or ":" in rel_path:
+        kusur = "sürücü harfi ya da ters bölü içeriyor"
+    else:
+        posix = PurePosixPath(rel_path)
+        parcalar = posix.parts
+        if posix.is_absolute():
+            kusur = "mutlak yol"
+        elif not parcalar:
+            kusur = "boş"
+        elif any(parca in ("..", ".") for parca in parcalar):
+            kusur = "`..`/`.` parçası içeriyor"
+        elif str(posix) != rel_path:
+            kusur = "kanonik göreli yazımda değil"
+    if kusur is not None:
+        raise ContractDriftError(
+            f"pin dosya anahtarı depo kökü içinde kalmıyor ({kusur}): "
+            f"{rel_path!r}"
+        )
+
+
+def _validate_sha256(rel_path: str, sha: Any) -> None:
+    """Beklenen değer 64 haneli küçük harf onaltılık sha256 olmalı."""
+    if not isinstance(sha, str) or not _SHA256_RE.fullmatch(sha):
+        raise ContractDriftError(
+            f"pin sha256 değeri biçimsiz: {rel_path!r} -> {sha!r} "
+            "(64 haneli küçük harf onaltılık beklenir)"
+        )
 
 
 def load_pin(pin_path: Path) -> ContractPin:
