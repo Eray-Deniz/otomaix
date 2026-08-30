@@ -53,8 +53,11 @@ bulamazsan girdiye dön.
 ## Global Constraints
 
 - **BAĞLAYICI ARAYÜZ EKİ — ÖNCELİKLİDİR:** [`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`](2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md)
-  bu planın ayrılmaz parçasıdır; 14 hükmün (R1–R14) ve AÇIK-1 kararının sözleşme metnini —
-  imzalar, tip tanımları, kapalı değer kümeleri, test sahipliği — taşır.
+  bu planın ayrılmaz parçasıdır; 14 hükmün (R1–R14) ve **AÇIK-1 ile AÇIK-2 kararlarının**
+  sözleşme metnini — imzalar, tip tanımları, kapalı değer kümeleri, test sahipliği — taşır.
+  (AÇIK-2 fix turu 1'de açılıp aynı turda kapandı; bu sayım fix turu 2'de düzeltildi —
+  eski metin yalnız AÇIK-1'i sayıyordu ve yalnız görevine listelenen hükümleri okuyan bir
+  uygulayıcı AÇIK-2'yi hiç görmeyecekti.)
   **Ek ile plan gövdesi çeliştiğinde EK GEÇERLİDİR** ve gövde satırı geçersizdir; ek hiçbir
   yeni kapsam açmaz. Her görev, başlığının altındaki *"Arayüz eki bağlar"* satırında kendisini
   bağlayan hükümleri sayar — o görev **uygulanmadan ve gözden geçirilmeden ÖNCE** ekin ilgili
@@ -495,6 +498,8 @@ iki alt LİSTE: `hareket` · `sahne`).
 ---
 
 ### Task 3: Kalıp kimliği + karar günlüğü şeması (K-84 ailesi)
+
+> **Arayüz eki bağlar: R6** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/identity.py`
@@ -1347,7 +1352,7 @@ kümesi bir yerden türetilebilmelidir.
 
 ### Task 12: Politika motoru — zorunlu kontroller (§9.2) + K-112 takvim erişilemezliği
 
-> **Arayüz eki bağlar: R5 · R7 · R13** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+> **Arayüz eki bağlar: R2 · R5 · R6 · R7 · R13** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Working directory:** `apps/social/backend`
 
@@ -1456,7 +1461,7 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 13: Motor — güvenli fallback (K-23=B) · üç bariyer (eşikler pasif) · sonuç tipleri
 
-> **Arayüz eki bağlar: R2 · R5 · R7** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+> **Arayüz eki bağlar: R2 · R5 · R6 · R7** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Modify: `apps/social/backend/app/services/sector_pipeline/engine.py`
@@ -1674,7 +1679,12 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   olmadan aktive edilebilirdi (K-69/K-28 atlatılırdı). **Bağlanan hüküm:**
   `activate_from_snapshot(db, *, run_id, actor)` aynı işlem içinde koşu satırından şunları
   yükler ve doğrular: koşu→paket bağı · `approval_karar='onay'` (ret veya karar yoksa RED) ·
-  `katman1_attestation` PASS · `readiness_attestation` onaylı · **`katman2_attestation`
+  `katman1_attestation` PASS · **`readiness_attestation` onaylı VE
+  `readiness_attestation["madde_kumesi_sha"]` boş DEĞİL ve
+  `readiness_items.MADDE_KUMESI_SHA`'ya BİREBİR EŞİT** (arayüz eki A4, fix turu 2:
+  hash yazılıyor ama hiçbir kapı OKUMUYORDU — zorunlu bir hazırlık maddesi eklendiğinde
+  eski `True` tasdikler yeni listenin altında kullanılmaya devam ederdi. Eksik, boş ya da
+  eski sürüm → RED; **geriye uyum yedeği YOKTUR**, fail-closed) · **`katman2_attestation`
   koşuldu+sunuldu (SONUCU OKUNMAZ — spec §10.2)** · K-94 taban durumu.
   **+ İÇERİK BAĞI (tur 5 düzeltmesi):** taslak satırı kilitlenir ve o anki `content` ile
   `decision_log`'un hash'leri onaylanan görüntüdekilerle KARŞILAŞTIRILIR; uyuşmazsa
@@ -1726,6 +1736,9 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   `test_activation_refused_after_rejection` (F18) ·
   `test_activation_refused_when_katman1_attestation_missing_or_failed` (F18) ·
   `test_activation_refused_when_readiness_not_approved` (F18) ·
+  `test_activation_refused_when_madde_kumesi_sha_missing_or_blank` (A4) ·
+  `test_activation_refused_when_madde_kumesi_sha_differs_from_current` (A4) ·
+  `test_activation_succeeds_when_madde_kumesi_sha_matches_current` (A4 pozitif kontrol) ·
   `test_activation_refused_when_katman2_attestation_missing` ·
   `test_activation_succeeds_with_negative_katman2_result` (sonuç kapı DEĞİL — pozitif kontrol) ·
   `test_activation_succeeds_with_full_attestation_chain` (F18 pozitif kontrol) ·
@@ -1745,13 +1758,25 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   — Beklenen: PASS. (Bu kırılma bilinçlidir; K-94'ün zorunlu hâle gelmesinin bedeli.)
 - [ ] **Step 6:** **K-103 (b) ETKİN YETKİ ÖLÇÜMÜ — bağlamadan önce ölç.** `role_table_grants`
   TEK BAŞINA yetersizdir: üyelikle miras, sahiplik, `PUBLIC` grant'ı ve superuser görünmez,
-  yani "zaten yetki yok" diye YANLIŞ kapanış üretebilir. Ölçüm: (a) API'nin gerçek
-  `session_user`/`current_user` değeri; (b)
-  `has_table_privilege(<rol>,'social.sector_packages','INSERT'|'UPDATE'|'DELETE'|'TRUNCATE')`;
-  (c) rol üyeliği · tablo sahipliği · superuser · `PUBLIC` grant'ı; (d) **negatif yazma
-  denemesi** — API kimliğiyle gerçekten reddediliyor mu. Sonucu `docs/research/`'e yaz.
-  Yetki VARSA kaldırma MANUEL ADIM olarak Task 18 dağıtım listesine girer. **Rol adı
-  ölçülmeden migration'a yazılmaz.**
+  yani "zaten yetki yok" diye YANLIŞ kapanış üretebilir.
+  **KAPSAM — ÜÇ TABLO (arayüz eki A2, fix turu 2'de genişletildi).** Önceki metin yalnız
+  `social.sector_packages`'ı ölçüyordu; oysa R8(c)'nin köken jetonu
+  `social.sector_package_runs` ve `social.package_rollback_plans` satırlarına yazılır ve
+  o iki tabloya UPDATE edebilen kod kendi kanıtı için jeton basabilir. O kalan risk,
+  bugünkü hâliyle **hiçbir ölçümün kapsamında değildi.** Ölçüm artık şu ÜÇ tabloyu birden
+  kapsar: `social.sector_packages` · `social.sector_package_runs` ·
+  `social.package_rollback_plans`.
+  Ölçüm: (a) API'nin gerçek `session_user`/`current_user` değeri; (b) **her üç tablo için**
+  `has_table_privilege(<rol>,<tablo>,'INSERT'|'UPDATE'|'DELETE'|'TRUNCATE')`; (b2) **jeton
+  kolonları özelinde** `has_column_privilege(<rol>,<tablo>,<kolon>,'UPDATE')` — `kanit_jetonu`
+  · `kanit_jetonu_parmakizi` · `kanit_jetonu_basildi_at` · `kanit_jetonu_harcandi_at`
+  (iki jeton tablosunda da dörder kolon); (c) rol üyeliği · tablo sahipliği · superuser ·
+  `PUBLIC` grant'ı — **üç tablo için ayrı ayrı**; (d) **negatif yazma denemesi** — API
+  kimliğiyle her üç tabloya ve jeton kolonlarına yazma gerçekten reddediliyor mu.
+  Sonucu `docs/research/`'e yaz — komut + taze çıktı (İlke 9). Yetki VARSA kaldırma MANUEL
+  ADIM olarak Task 18 dağıtım listesine girer. **Rol adı ölçülmeden migration'a yazılmaz.**
+  **Dürüst etiket:** bu ölçüm koşana kadar jetonun *"aynı veritabanı kimliğiyle koşan kod
+  kendi jetonunu basabilir"* kalanı **açıktır ve kapatıldığı İDDİA EDİLMEZ.**
 - [ ] **Step 7:** Koş: `cd apps/social/backend && python -m pytest tests/prompt_regression/ -v`
   — Beklenen: tek bayt fark YOK.
 - [ ] **Step 8:** Commit: `feat: add provenance-gated draft writeback and update path`
@@ -1760,7 +1785,7 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 16: Komut ailesi — repo CLI + ince adaptörler + bildirim ayakları
 
-> **Arayüz eki bağlar: R10 · R11 · AÇIK-1** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+> **Arayüz eki bağlar: R10 · R11 · AÇIK-1 · AÇIK-2** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Create: `apps/social/backend/scripts/sector_pipeline_cli.py`
@@ -1794,12 +1819,23 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   tek çıkışları deaktivasyondur;
   toplu-atomik yeni mekanizma YOK, her paket kendi işlemi ve kendi olay kaydı;
   yarıda kalırsa aynı komut kaldığı yerden devam eder, hedefi yeniden hesaplamaz) ·
-  `onay` · `aktive-et` · `geri-al` · `durum`. **F18:** iki tasdiğin de ADLANDIRILMIŞ bir
+  `onay` · `aktive-et` ·
+  **`geri-al --incident-id <id> --package-id <id> --actor <kimlik>`** ·
+  `durum`. **F18:** iki tasdiğin de ADLANDIRILMIŞ bir
   operatör komutu vardır — tasdik alanlarının nasıl dolacağı belirsiz bırakılmaz. Her biri
   `scripts/sector_sweep.py` desenini izler: argparse · açık `--database-url` · deterministik
   çıktı · anlamlı çıkış kodu.
 
 **Bağlayıcı invariantlar (seam: `sector_pipeline_cli.py::main`):**
+- **AÇIK-2 — `geri-al` OLAY KİMLİĞİ İSTER (arayüz eki kararı, 2026-08-30; fix turu 2'de
+  buraya bağlandı).** Tam imza: **`geri-al --incident-id <id> --package-id <id>
+  --actor <kimlik>`** — üç argüman da ZORUNLUDUR. Komut kanıtını R8(c) köken jetonundan,
+  yani `social.package_rollback_plans`'in **onaylanmış** satırından alır; **olay kimliği
+  olmayan geri alma yolu YOKTUR.** Tek paketlik geri alma da bir olay planı satırı ister
+  (`olay-plani` tek paketle çağrılabilir) ve `olay-onayla` onayı HER ölçekte zorunludur.
+  **`deaktive-et` bu hükümden ETKİLENMEZ** (K-38 acil kolu): kanıt zinciri istemez, tek
+  komuttur. Gerekçe: bu satır fix turu 1'de yalnız ekte kapanmıştı; görevine listelenen
+  hükümleri okuyan bir uygulayıcı çıplak `geri-al`'ı görüp yeni şartı KAÇIRIRDI.
 - Resmî koşu başlatan HER alt komut **ilk iş olarak** `contracts.require_pin` çağırır —
   sözleşme drift'inde koşu BAŞLAMAZ (fail-closed).
 - `~/.claude/commands/sektor-paket.md` yalnız CLI'yi çağırır; karar mantığı, eşik, sıra
@@ -1841,6 +1877,11 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   `test_olay_geri_al_logs_event_per_package` ·
   `test_olay_geri_al_resumes_without_double_rollback` ·
   `test_olay_geri_al_reports_hedefsiz_separately` ·
+  **AÇIK-2 (`geri-al` imzası — arayüz eki):** `test_geri_al_requires_incident_id`
+  (olay kimliğisiz çağrı REDDEDİLİR) ·
+  `test_geri_al_refuses_when_plan_row_unapproved` (negatif kontrol) ·
+  `test_geri_al_succeeds_on_approved_single_row_incident` (pozitif kontrol) ·
+  `test_deaktive_et_needs_no_incident_and_no_evidence` (acil kolun etkilenmediğinin kanıtı) ·
   `test_etki_analizi_requires_full_quad` (dört alan da zorunlu) ·
   **yerel arıza:** `test_cli_terminal_failure_produces_admin_event` ·
   `test_package_status_owner_scoped` (başka markanın durumu okunamaz).
@@ -2013,7 +2054,13 @@ bağımlılığıdır**, uygulama ayrıntısı değil.
   `n8n-error-notifier.json`. Sentetik bir olayla TEK teslim smoke'u, sentetik bir hatayla
   TEK hata-bildirimi smoke'u koş.
 - [ ] **Step 7:** Task 15 Step 6'nın etkin-yetki ölçümü "yetki var" dediyse API rolünün
-  `sector_packages` yazma yetkisini kaldır ve **negatif yazma denemesiyle** doğrula (K-103 (b)).
+  yazma yetkisini kaldır ve **negatif yazma denemesiyle** doğrula (K-103 (b)).
+  **KAPSAM — ÜÇ TABLO (arayüz eki A2, fix turu 2'de genişletildi):** `social.sector_packages`
+  · `social.sector_package_runs` · `social.package_rollback_plans`; son ikisinde **jeton
+  kolonları** (`kanit_jetonu` · `kanit_jetonu_parmakizi` · `kanit_jetonu_basildi_at` ·
+  `kanit_jetonu_harcandi_at`) özellikle sınanır. Negatif deneme her tablo için AYRI koşulur
+  ve çıktısı runbook'a yazılır. Ölçüm "yetki yok" dediyse kaldıracak bir şey yoktur; bu da
+  **ölçülmüş çıktı olarak** kaydedilir ("varsayıldı" DEĞİL).
 - [ ] **Step 8:** Takvim ucunun dönem alanını döndürdüğünü ve önbelleğin bayat kalmadığını ölç.
 - [ ] **Step 9:** Runbook'a **iki geri alma rejimini ayrı başlıkta** yaz (F20): pilot-öncesi
   şema geri alması · pilot-sonrası veri-koruyan ileri düzeltme. İkincisinde "şema geri alma
