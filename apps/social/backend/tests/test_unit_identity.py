@@ -1,0 +1,552 @@
+"""Kalıp kimliği + karar günlüğü şeması (Plan 2 Task 3).
+
+Ölçülen sözleşme TEK cümleyle: **içerik şeması DEĞİŞMEZ, birim kümesi karar
+günlüğünden TÜRETİLİR.** Plan 1'in yazım kapısı (`sector_packages.py`) CTA
+öğesinin anahtar kümesini, özel gün girdisinin beş yuvasını ve diğer liste
+öğelerinin düz metin oluşunu EŞİTLİK olarak doğrular; içeriğe `unit_id`
+eklemek bu kapıdan geçemez. Bu yüzden kimlik karar günlüğünde yaşar ve
+içeriğe **kanonik yolu** (sıra ordinali dâhil) üzerinden bağlanır.
+
+Bu dosyanın kanıtlamak zorunda olduğu iki zor nokta:
+
+* **İki yönlü bütünlük.** Yalnız "her günlük satırının içerikte karşılığı var"
+  demek yetmez (sahipsiz öğe kaçar), yalnız "her içerik öğesinin satırı var"
+  demek de yetmez (hayalet birim kaçar). Her iki yön AYRI testle ölçülür ve
+  tek yönlü bir uygulama ikisini birden geçemez.
+* **Çokluk.** Aynı listede birebir aynı metin iki kez geçebilir; iki öğenin
+  hash'i AYNIdır. Eşlemeyi yapan şey hash değil, yoldaki SIRA ORDİNALİDİR.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+import pytest
+
+from app.services.sector_packages import structural_errors
+from app.services.sector_pipeline import identity
+
+from .test_sector_packages_service import CUMHURIYET_KEY, _valid_content
+
+UNIT_ID_RE = re.compile(r"^ku-[0-9a-f]{12}$")
+
+
+# ─── Ortak kurgu ────────────────────────────────────────────────────────────
+
+
+def _karar_row(**overrides) -> dict:
+    """Şemayı GEÇEN asgari karar satırı — testler tek alanını bozar."""
+    row = {
+        "tur": "karar",
+        "alan": "kanca_kaliplari",
+        "oge_yolu": "kanca_kaliplari[0]",
+        "unit_id": "ku-0123456789ab",
+        "oge_sha": "a" * 64,
+        "karar": "koru",
+        "gerekce": "Kalıp sektörde hâlâ karşılık buluyor.",
+        "kanit": "",
+        "aktor": "sentez",
+    }
+    row.update(overrides)
+    return row
+
+
+def _not_row(**overrides) -> dict:
+    row = {
+        "tur": "not",
+        "sinif": "reddedilen-aday",
+        "gerekce": "Kaynak pinlenmemiş, aday pakete alınmadı.",
+    }
+    row.update(overrides)
+    return row
+
+
+def _log_for(content: dict, *, karar: str = "koru") -> list[dict]:
+    """İçeriğin HER kanonik yolu için bir yaşayan karar satırı üretir."""
+    return [
+        _karar_row(
+            alan=unit["alan"],
+            oge_yolu=path,
+            unit_id=identity.new_unit_id(),
+            oge_sha=unit["oge_sha"],
+            karar=karar,
+        )
+        for path, unit in identity.enumerate_content_units(content).items()
+    ]
+
+
+# ─── 1. Kimlik biçimi ───────────────────────────────────────────────────────
+
+
+def test_new_unit_id_format_and_uniqueness():
+    """`ku-` + 12 onaltılık, rastgele — metin özetinden TÜRETİLMEZ."""
+    ids = [identity.new_unit_id() for _ in range(200)]
+    for value in ids:
+        assert UNIT_ID_RE.match(value), f"biçim ihlali: {value!r}"
+    assert len(set(ids)) == 200, "kimlikler çakıştı — rastgelelik yok"
+
+
+def test_unit_id_format_violation_is_rejected():
+    """Biçim kapısı: kimlik metin özetinden türetilemez, dayatılır."""
+    errors = identity.validate_decision_log([_karar_row(unit_id="kanca-1")])
+    assert any("unit_id biçimi" in e for e in errors), errors
+
+
+# ─── 2. Karar günlüğü şeması ────────────────────────────────────────────────
+
+
+def test_decision_log_accepts_valid_rows():
+    """POZİTİF KONTROL — geçerli karar + not satırı hiç hata üretmez."""
+    assert identity.validate_decision_log([_karar_row(), _not_row()]) == []
+
+
+def test_rejects_sixth_enum_value():
+    """Karar enum'u BEŞ değer — altıncısı yok (K-107 düzeltmesi)."""
+    errors = identity.validate_decision_log([_karar_row(karar="birlestir")])
+    assert any("karar değeri kapalı kümenin dışında" in e for e in errors), errors
+
+
+def test_rejects_cikar_without_evidence():
+    """`cikar` POZİTİF KANIT olmadan GEÇERSİZ (spec §3.5)."""
+    errors = identity.validate_decision_log([_karar_row(karar="cikar", kanit="")])
+    assert any("pozitif kanıt" in e for e in errors), errors
+
+
+def test_cikar_with_evidence_is_accepted():
+    """POZİTİF KONTROL — kanıtlı `cikar` geçer; kapı `cikar`'ı topyekûn yasaklamaz."""
+    assert (
+        identity.validate_decision_log(
+            [_karar_row(karar="cikar", kanit="TDK 2025 yazım kılavuzu s.14")]
+        )
+        == []
+    )
+
+
+def test_rejects_duplicate_unit_id_decisions():
+    """Aynı `unit_id` bir günlükte İKİ karar satırı taşıyamaz."""
+    errors = identity.validate_decision_log(
+        [
+            _karar_row(unit_id="ku-0123456789ab", oge_yolu="kanca_kaliplari[0]"),
+            _karar_row(unit_id="ku-0123456789ab", oge_yolu="kanca_kaliplari[1]"),
+        ]
+    )
+    assert any("birden fazla karar satırı" in e for e in errors), errors
+
+
+def test_rejects_unknown_actor():
+    """`aktor` ∈ {sentez, motor, insan} — kapalı."""
+    errors = identity.validate_decision_log([_karar_row(aktor="robot")])
+    assert any("aktor değeri kapalı kümenin dışında" in e for e in errors), errors
+
+
+def test_note_row_classes_are_closed():
+    """`sinif` İKİ değer taşır; üçüncüsü RED."""
+    errors = identity.validate_decision_log([_not_row(sinif="uydurma-sinif")])
+    assert any("sinif değeri kapalı kümenin dışında" in e for e in errors), errors
+
+
+def test_kismi_tur_tasima_as_note_rejected():
+    """K-107 kapısı: kısmi tür taşıması NOT olarak yazılamaz.
+
+    Geçseydi doğrulayıcıdan çıkardı ama motorun birim-başına kapsam kontrolünü
+    karşılamazdı — sessiz taşıma geri gelirdi.
+    """
+    errors = identity.validate_decision_log([_not_row(sinif="kismi-tur-tasima")])
+    assert any("kismi-tur-tasima" in e and "K-107" in e for e in errors), errors
+
+
+def test_kismi_tur_tasima_as_koru_field_accepted():
+    """POZİTİF KONTROL — doğru temsil: `koru` satırında `kapsam` ek alanı."""
+    assert (
+        identity.validate_decision_log(
+            [_karar_row(karar="koru", kapsam="kismi-tur-tasima")]
+        )
+        == []
+    )
+
+
+def test_motor_row_without_rule_id_rejected():
+    """K-145 damgası: `motor` satırı kural kimliği TAŞIMAK ZORUNDA."""
+    errors = identity.validate_decision_log(
+        [_karar_row(aktor="motor", kural_surumu="2026-08-27")]
+    )
+    assert any("kural_kimligi" in e for e in errors), errors
+
+
+def test_motor_row_without_rule_version_rejected():
+    errors = identity.validate_decision_log(
+        [_karar_row(aktor="motor", kural_kimligi="K-130")]
+    )
+    assert any("kural_surumu" in e for e in errors), errors
+
+
+def test_motor_row_with_full_stamp_accepted():
+    """POZİTİF KONTROL — damgalı motor satırı geçer."""
+    assert (
+        identity.validate_decision_log(
+            [_karar_row(aktor="motor", kural_kimligi="K-130", kural_surumu="2026-08-27")]
+        )
+        == []
+    )
+
+
+def test_non_motor_row_carrying_rule_stamp_rejected():
+    """Damga YALNIZ motor satırında; sentez satırı kural provenansı uyduramaz."""
+    errors = identity.validate_decision_log(
+        [_karar_row(aktor="sentez", kural_kimligi="K-130", kural_surumu="2026-08-27")]
+    )
+    assert any("kural damgası TAŞIYAMAZ" in e for e in errors), errors
+
+
+def test_ekle_row_may_carry_yerine_gecer():
+    """POZİTİF KONTROL — K-154 `cikar`+`ekle` çifti bağı `ekle` satırında yaşar."""
+    assert (
+        identity.validate_decision_log(
+            [
+                _karar_row(
+                    karar="ekle",
+                    unit_id="ku-aaaaaaaaaaaa",
+                    yerine_gecer="ku-bbbbbbbbbbbb",
+                )
+            ]
+        )
+        == []
+    )
+
+
+# ─── 3. Yaşayan birim kümesi ────────────────────────────────────────────────
+
+
+def test_decision_units_derived_from_living_log_rows():
+    """Yaşayan küme = `koru` + `guncelle` + `ekle`."""
+    content = _valid_content()
+    paths = list(identity.enumerate_content_units(content))
+    rows = [
+        _karar_row(
+            oge_yolu=paths[0],
+            unit_id="ku-000000000001",
+            karar="koru",
+            oge_sha=identity.enumerate_content_units(content)[paths[0]]["oge_sha"],
+        ),
+        _karar_row(
+            oge_yolu=paths[1],
+            unit_id="ku-000000000002",
+            karar="guncelle",
+            oge_sha=identity.enumerate_content_units(content)[paths[1]]["oge_sha"],
+        ),
+        _karar_row(
+            oge_yolu=paths[2],
+            unit_id="ku-000000000003",
+            karar="ekle",
+            oge_sha=identity.enumerate_content_units(content)[paths[2]]["oge_sha"],
+        ),
+    ]
+    units = identity.decision_units(content, rows)
+    assert set(units) == {"ku-000000000001", "ku-000000000002", "ku-000000000003"}
+    assert units["ku-000000000002"]["oge_yolu"] == paths[1]
+    assert units["ku-000000000002"]["karar"] == "guncelle"
+
+
+def test_cikar_row_drops_unit_from_set():
+    """`cikar` birimi yaşayan kümeden DÜŞÜRÜR."""
+    content = _valid_content()
+    path = next(iter(identity.enumerate_content_units(content)))
+    rows = [
+        _karar_row(
+            oge_yolu=path,
+            unit_id="ku-000000000009",
+            karar="cikar",
+            kanit="Mevzuat 2026-01-01'de yürürlükten kalktı.",
+        )
+    ]
+    assert identity.decision_units(content, rows) == {}
+
+
+def test_kirp_row_is_not_a_living_unit():
+    """Kanonik kayıt: kırpma **paketten çıkarır, kayıttan çıkarmaz**.
+
+    Kırpılan öğe aday pakete GİRMEZ; yalnız karar günlüğünde durur. `kirp`
+    yaşayan sayılsaydı her gerçek kırpma zorunlu olarak hayalet birim üretirdi
+    — aşağıdaki bütünlük kontrolü o hâlde hata verirdi.
+    """
+    content = _valid_content()
+    rows = _log_for(content)
+    rows.append(
+        _karar_row(
+            alan="kanca_kaliplari",
+            oge_yolu="kanca_kaliplari[7]",
+            unit_id="ku-000000000077",
+            karar="kirp",
+            oge_sha="b" * 64,
+        )
+    )
+    yasayanlar = identity.decision_units(content, rows)
+    assert len(yasayanlar) == 16, sorted(yasayanlar)  # boş küme bu testi kandırırdı
+    assert "ku-000000000077" not in yasayanlar
+    assert identity.check_unit_integrity(content, rows) == []
+
+
+def test_decision_units_refuses_an_invalid_log():
+    """Fail-closed: şemayı geçmeyen günlükten anlık görüntü TÜRETİLMEZ.
+
+    R6 bu eşlemeyi Task 9'un `validate_report(unit_snapshot=...)` girdisi
+    yapıyor; geçersiz günlükten üretilmiş bir görüntü sessizce oraya akardı.
+    """
+    with pytest.raises(ValueError, match="karar günlüğü şemayı geçmedi"):
+        identity.decision_units(_valid_content(), [_karar_row(karar="birlestir")])
+
+
+# ─── 4. Kanonik yol grameri + çokluk ────────────────────────────────────────
+
+
+def test_enumerate_covers_every_content_shape():
+    """Yol grameri Plan 1 doğrulayıcısının izin verdiği HER şekli karşılar."""
+    content = _valid_content()
+    paths = set(identity.enumerate_content_units(content))
+    assert "kapsam" in paths
+    assert "cta_kaliplari[0]" in paths
+    assert "kanca_kaliplari[0]" in paths
+    assert "video_kodlar/hareket[0]" in paths
+    assert "video_kodlar/sahne[1]" in paths
+    assert f"ozel_gun/{CUMHURIYET_KEY}/mesaj_ekseni" in paths
+    assert len(paths) == 16, sorted(paths)
+
+
+def test_duplicate_identical_text_gets_distinct_paths():
+    """ÇOKLUK: iki özdeş metin AYNI hash'i taşır; ayıran şey SIRA ORDİNALİDİR."""
+    content = _valid_content(kanca_kaliplari=["Aynı metin", "Aynı metin"])
+    units = identity.enumerate_content_units(content)
+    assert "kanca_kaliplari[0]" in units and "kanca_kaliplari[1]" in units
+    assert (
+        units["kanca_kaliplari[0]"]["oge_sha"] == units["kanca_kaliplari[1]"]["oge_sha"]
+    ), "iki özdeş metin farklı hash aldı — kurgu bozuk"
+
+    # Ordinal olmasaydı iki satır AYNI yola bağlanırdı: bir öğe sahipsiz kalır.
+    rows = _log_for(content)
+    for row in rows:
+        if row["oge_yolu"] == "kanca_kaliplari[1]":
+            row["oge_yolu"] = "kanca_kaliplari[0]"
+    errors = identity.check_unit_integrity(content, rows)
+    assert any("kanca_kaliplari[1]" in e for e in errors), errors
+
+
+def test_two_special_days_with_identical_body_do_not_collide():
+    """İki özel gün gövdesi birebir aynı olsa bile yollar ANAHTARLA ayrışır."""
+    body = {
+        "tur": "kutlama",
+        "mesaj_ekseni": "Ortak sevinç",
+        "kanca": "Bayram vitrinimiz hazır",
+        "cta": "Mağazada görün",
+        "gorsel_vurgu": "Warm accents",
+    }
+    content = _valid_content(
+        ozel_gun={CUMHURIYET_KEY: dict(body), "ramazan-bayrami": dict(body)}
+    )
+    units = identity.enumerate_content_units(content)
+    special = [p for p in units if p.startswith("ozel_gun/")]
+    assert len(special) == 10, sorted(special)
+    assert f"ozel_gun/{CUMHURIYET_KEY}/kanca" in units
+    assert "ozel_gun/ramazan-bayrami/kanca" in units
+    assert (
+        units[f"ozel_gun/{CUMHURIYET_KEY}/kanca"]["oge_sha"]
+        == units["ozel_gun/ramazan-bayrami/kanca"]["oge_sha"]
+    ), "kurgu bozuk: gövdeler özdeş değil"
+
+
+# ─── 5. İki yönlü bütünlük ──────────────────────────────────────────────────
+
+
+def test_integrity_passes_on_consistent_package():
+    """POZİTİF KONTROL — tutarlı paket hiç hata üretmez."""
+    content = _valid_content()
+    rows = _log_for(content)
+    assert len(rows) == 16, rows  # boş günlük bu testi kandırırdı
+    assert identity.check_unit_integrity(content, rows) == []
+
+
+def test_integrity_rejects_orphan_content_item():
+    """İÇERİK → GÜNLÜK yönü: sahipsiz öğe kapsam kaçağıdır.
+
+    Tek yönlü (yalnız günlük → içerik) bir kontrol bunu GÖREMEZ.
+    """
+    content = _valid_content()
+    rows = [r for r in _log_for(content) if r["oge_yolu"] != "kanca_kaliplari[0]"]
+    errors = identity.check_unit_integrity(content, rows)
+    assert any(
+        "sahipsiz öğe" in e and "kanca_kaliplari[0]" in e for e in errors
+    ), errors
+
+
+def test_integrity_rejects_ghost_unit():
+    """GÜNLÜK → İÇERİK yönü: içerikte karşılığı olmayan birim hayalettir.
+
+    Tek yönlü (yalnız içerik → günlük) bir kontrol bunu GÖREMEZ.
+    """
+    content = _valid_content()
+    rows = _log_for(content)
+    rows.append(
+        _karar_row(
+            alan="kanca_kaliplari",
+            oge_yolu="kanca_kaliplari[42]",
+            unit_id="ku-00000000dead",
+            oge_sha="c" * 64,
+        )
+    )
+    errors = identity.check_unit_integrity(content, rows)
+    assert any(
+        "hayalet birim" in e and "kanca_kaliplari[42]" in e for e in errors
+    ), errors
+
+
+def test_integrity_rejects_stale_sha_on_correct_path():
+    """Yol doğru, içerik kaymış: `oge_sha` taze hash'le eşleşmek ZORUNDA."""
+    content = _valid_content()
+    rows = _log_for(content)
+    rows[0]["oge_sha"] = "d" * 64
+    errors = identity.check_unit_integrity(content, rows)
+    assert any("bayat oge_sha" in e and rows[0]["oge_yolu"] in e for e in errors), errors
+
+
+def test_integrity_rejects_two_units_claiming_one_path():
+    """Eşleme BİRE BİRDİR — iki birim aynı yolu sahiplenemez."""
+    content = _valid_content()
+    rows = _log_for(content)
+    rows.append(
+        _karar_row(
+            alan=rows[0]["alan"],
+            oge_yolu=rows[0]["oge_yolu"],
+            unit_id="ku-00000000beef",
+            oge_sha=rows[0]["oge_sha"],
+        )
+    )
+    errors = identity.check_unit_integrity(content, rows)
+    assert any("aynı yolu iki yaşayan birim" in e for e in errors), errors
+
+
+def test_integrity_refuses_a_log_that_fails_the_schema():
+    """Fail-closed: geçersiz günlükte bütünlük ÖLÇÜLMEZ, şema hatası döner."""
+    content = _valid_content()
+    rows = _log_for(content)
+    rows[0]["aktor"] = "robot"
+    errors = identity.check_unit_integrity(content, rows)
+    assert any("aktor değeri kapalı kümenin dışında" in e for e in errors), errors
+
+
+def test_first_package_assigns_new_id_to_every_enumerated_unit():
+    """İlk paket: her sayılan birim YENİ kimlik alır, hiçbiri boşta kalmaz."""
+    content = _valid_content()
+    units = identity.enumerate_content_units(content)
+    assert len(units) == 16, sorted(units)  # boş sayım bu testi kandırırdı
+    rows = _log_for(content, karar="ekle")
+    derived = identity.decision_units(content, rows)
+    assert len(derived) == len(units)
+    assert {u["oge_yolu"] for u in derived.values()} == set(units)
+    assert all(UNIT_ID_RE.match(uid) for uid in derived)
+    assert identity.check_unit_integrity(content, rows) == []
+
+
+# ─── 6. Şema göçü YOK ───────────────────────────────────────────────────────
+
+
+def test_content_schema_unchanged_plan1_validator_still_passes():
+    """Kimlik NEDEN günlükte yaşıyor: içeriğe yazılamıyor da ondan.
+
+    Plan 1 doğrulayıcısı CTA öğesinin anahtar kümesini EŞİTLİK ile ölçer;
+    `unit_id` eklenmiş öğe REDDEDİLİR. Bu test hem şemanın değişmediğini
+    (pozitif kontrol) hem de değiştirilemeyeceğini (negatif kontrol) ölçer.
+    """
+    assert structural_errors(_valid_content()) == []
+
+    kirli = _valid_content()
+    kirli["cta_kaliplari"][0]["unit_id"] = identity.new_unit_id()
+    errors = structural_errors(kirli)
+    assert any("anahtar kümesi" in e for e in errors), errors
+
+
+# ─── 7. Kanonik hash (K-92) ─────────────────────────────────────────────────
+
+
+def test_canonical_sha_is_key_order_and_whitespace_independent():
+    """Sıralı anahtar · boşluksuz — aynı değer AYNI hash."""
+    a = identity.canonical_sha({"b": "iki", "a": "bir"})
+    b = identity.canonical_sha({"a": "bir", "b": "iki"})
+    assert a == b
+    assert re.match(r"^[0-9a-f]{64}$", a), a
+
+
+def test_canonical_sha_normalises_unicode_to_nfc():
+    """NFC: aynı görünen iki kodlama AYNI hash üretir."""
+    nfc = "\u00e7"  # tek kod noktası: ç
+    nfd = "c\u0327"  # c + birleşen çengel
+    assert nfc != nfd
+    assert identity.canonical_sha(nfc) == identity.canonical_sha(nfd)
+
+
+def test_canonical_sha_separates_different_values():
+    """Negatif kontrol — farklı değer farklı hash."""
+    assert identity.canonical_sha("a") != identity.canonical_sha("b")
+
+
+# ─── 8. `donmus` — donmuş dataclass alanlarının TEK normalizasyon kuralı ────
+
+
+@dataclass(frozen=True)
+class _DonmusOge:
+    """R6(e)'nin tuzağı: donmuş dataclass öğesi `donmus`'un KAPALI kümesinde YOK."""
+
+    unit_id: str
+    sebep: str
+
+
+def test_donmus_returns_read_only_mapping():
+    donduruldu = identity.donmus({"a": 1})
+    with pytest.raises(TypeError):
+        donduruldu["a"] = 2
+
+
+def test_donmus_freezes_nested_values():
+    donduruldu = identity.donmus({"dis": {"ic": [1, 2]}})
+    assert donduruldu["dis"]["ic"] == (1, 2)
+    with pytest.raises(TypeError):
+        donduruldu["dis"]["ic2"] = 3
+
+
+def test_donmus_does_not_alias_caller_object():
+    """Takma ad kapanır: çağıranın nesnesi sonradan değişince dönen değer DEĞİŞMEZ."""
+    kaynak = {"a": [1]}
+    donduruldu = identity.donmus(kaynak)
+    kaynak["a"].append(2)
+    kaynak["b"] = 3
+    assert donduruldu == {"a": (1,)}
+
+
+def test_donmus_rejects_unknown_type():
+    """Kapalı kümenin dışı → `TypeError` (fail-closed, sessiz geçiş YOK)."""
+    with pytest.raises(TypeError):
+        identity.donmus(object())
+
+
+def test_donmus_rejects_a_frozen_dataclass_element():
+    """Donmuş dataclass öğeli alanlar `donmus`'a VERİLMEZ — kural 5 düşürür."""
+    with pytest.raises(TypeError):
+        identity.donmus((_DonmusOge("ku-0123456789ab", "sebep"),))
+
+
+def test_donmus_is_idempotent():
+    """POZİTİF KONTROL — iki kez çağrılması hata DEĞİLDİR."""
+    deger = {"a": [1, {"b": {2, 3}}]}
+    bir = identity.donmus(deger)
+    assert identity.donmus(bir) == bir
+
+
+def test_donmus_accepts_the_closed_scalar_set():
+    """POZİTİF KONTROL — kapalı skaler kümesi olduğu gibi döner."""
+    from datetime import date, datetime
+    from decimal import Decimal
+    from pathlib import Path
+    from uuid import uuid4
+
+    for value in (None, True, 3, 1.5, "x", b"x", Decimal("1.5"), uuid4(),
+                  Path("/tmp"), datetime(2026, 1, 1), date(2026, 1, 1)):
+        assert identity.donmus(value) == value

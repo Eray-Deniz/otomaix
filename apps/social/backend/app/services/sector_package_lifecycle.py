@@ -8,6 +8,12 @@ statü uyuşmuyorsa ya da sektör kilidi kaymışsa geçiş YAPILMAZ ve istisna 
 
 İki sözleşme aynı dosyada yaşarsa "hata durumunda ne olmalı" sorusunun cevabı
 okuyucuya göre değişir; ayrı dosyada her modülün tek bir cevabı vardır.
+
+**Plan 2'ye TEK bağımlılık kenarı (kontrolör kararı).** `sector_pipeline.identity`
+buradan import edilir: karar günlüğünün şema kapısı ve (Task 8'de) parmak izi
+kuralı orada TEK yerde yaşar, buraya kopyalanmaz. Kenar tek yönlüdür —
+`identity` bu modülü import ETMEZ ve etmeyecektir (döngü olurdu); `identity`
+yalnız Plan 1'in erişim katmanından (`sector_packages`) okur.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from app.services.sector_packages import (
     normalize_special_day_key,
     validate_package_content,
 )
+from app.services.sector_pipeline.identity import validate_decision_log
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +319,7 @@ async def insert_draft(
     schema_version: int,
     run_id: str | None = None,
     actor: str,
+    decision_log: list[dict] | None = None,
 ) -> UUID:
     """Doğrulayıcı-arkalı TEK draft yazıcısı (spec §3.6; K-135 yazma yüzeyi).
 
@@ -322,8 +330,27 @@ async def insert_draft(
     `version` sektör içinde son + 1'dir. Eşzamanlı iki yazımda ikisi de aynı
     numarayı görebilir; `UNIQUE (sector_id, version)` birini reddeder
     (fail-closed).
+
+    **`decision_log` (Plan 2 Task 3).** Verilmezse Plan 1 davranışı AYNEN
+    korunur: günlüğe tek bir `draft_created` izi yazılır. Verilirse
+    `identity.validate_decision_log` kapısından GEÇİRİLİR ve boş değilse
+    yazılan günlük ODUR — Plan 1'in olay satırı ÖNÜNE eklenmez: o satır
+    şemayı geçmez ve karar günlüğünü okuyan her kapı (`check_unit_integrity`
+    dâhil) onu geçersiz sayardı. Aktör izi `package_events` katmanında
+    zaten yaşıyor.
+
+    Kimlik günlükte, içerik şemasında DEĞİL: içeriğe `unit_id` eklemek yazım
+    kapısından geçmez (`_check_cta_items` anahtar kümesini eşitlikle ölçer).
+    İkisi AYNI işlemde yazıldığı için eşleme bayatlayamaz.
     """
     owner = _require_actor(actor)
+
+    if decision_log is not None:
+        log_errors = validate_decision_log(decision_log)
+        if log_errors:
+            raise ValueError(
+                "karar günlüğü şemayı geçmedi: " + "; ".join(log_errors)
+            )
 
     holiday_rows = await db.fetch(
         "SELECT name_tr FROM social.public_holidays WHERE name_tr IS NOT NULL"
@@ -363,7 +390,7 @@ async def insert_draft(
         sector_id,
         schema_version,
         content,
-        [{"event": "draft_created", "actor": owner}],
+        decision_log if decision_log else [{"event": "draft_created", "actor": owner}],
         run_id,
     )
 

@@ -39,6 +39,7 @@ from app.services.sector_packages import (
     scene_pool,
     validate_package_content,
 )
+from app.services.sector_pipeline import identity
 
 from .prompt_regression.capture import (
     FIXTURES_DIR,
@@ -421,6 +422,108 @@ async def test_plan2_write_surface_produces_draft_only(pkg_db):
     )
     assert row["status"] == "draft"
     assert row["version"] == 1
+
+
+# ─── Task 3: `insert_draft` karar günlüğünü kabul eder ──────────────────────
+
+
+async def test_insert_draft_accepts_decision_log(pkg_db):
+    """Genişletilmiş imza: verilen karar günlüğü DOĞRULANIR ve YAZILIR.
+
+    K-135 gereği `sector_packages`'a yazan tek yüzey burasıdır; karar günlüğü
+    için ikinci bir yazma yolu AÇILMAZ. Günlük içerikle AYNI işlemde yazıldığı
+    için eşleme bayatlayamaz.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    content = _valid_content()
+    decision_log = [
+        {
+            "tur": "karar",
+            "alan": unit["alan"],
+            "oge_yolu": path,
+            "unit_id": identity.new_unit_id(),
+            "oge_sha": unit["oge_sha"],
+            "karar": "ekle",
+            "gerekce": "İlk paket: birim yeni doğdu.",
+            "kanit": "",
+            "aktor": "sentez",
+        }
+        for path, unit in identity.enumerate_content_units(content).items()
+    ]
+
+    package_id = await insert_draft(
+        pkg_db,
+        sector_id=sector_id,
+        content=content,
+        schema_version=1,
+        actor=ACTOR,
+        decision_log=decision_log,
+    )
+    row = await pkg_db.fetchrow(
+        "SELECT content, decision_log FROM social.sector_packages WHERE id = $1",
+        package_id,
+    )
+    assert row["decision_log"] == decision_log
+    assert identity.check_unit_integrity(row["content"], row["decision_log"]) == []
+
+
+async def test_insert_draft_rejects_a_decision_log_that_fails_the_schema(pkg_db):
+    """Kapı GERÇEKTEN koşuyor: şemayı geçmeyen günlükle yazım YAPILMAZ."""
+    sector_id = await _sub_sector(pkg_db)
+    with pytest.raises(ValueError, match="karar günlüğü şemayı geçmedi"):
+        await insert_draft(
+            pkg_db,
+            sector_id=sector_id,
+            content=_valid_content(),
+            schema_version=1,
+            actor=ACTOR,
+            decision_log=[{"tur": "karar", "karar": "birlestir"}],
+        )
+    assert (
+        await pkg_db.fetchval(
+            "SELECT count(*) FROM social.sector_packages WHERE sector_id = $1",
+            sector_id,
+        )
+        == 0
+    ), "reddedilen günlükte satır yazılmış"
+
+
+async def test_insert_draft_without_decision_log_keeps_plan1_behavior(pkg_db):
+    """GERİYE UYUM: parametre verilmezse Plan 1 davranışı AYNEN kalır."""
+    sector_id = await _sub_sector(pkg_db)
+    package_id = await insert_draft(
+        pkg_db,
+        sector_id=sector_id,
+        content=_valid_content(),
+        schema_version=1,
+        actor=ACTOR,
+    )
+    row = await pkg_db.fetchrow(
+        "SELECT status, decision_log FROM social.sector_packages WHERE id = $1",
+        package_id,
+    )
+    assert row["status"] == "draft"
+    assert row["decision_log"] == [{"event": "draft_created", "actor": ACTOR}]
+
+
+async def test_insert_draft_with_an_empty_decision_log_keeps_the_plan1_trace(pkg_db):
+    """BOŞ günlük yazılmaz: Plan 1'in `draft_created` izi korunur.
+
+    Boş liste yazılsaydı taslak hiç izi olmayan bir günlükle doğardı — "kim
+    yazdı" sorusu cevapsız kalırdı.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    package_id = await insert_draft(
+        pkg_db,
+        sector_id=sector_id,
+        content=_valid_content(),
+        schema_version=1,
+        actor=ACTOR,
+        decision_log=[],
+    )
+    assert await pkg_db.fetchval(
+        "SELECT decision_log FROM social.sector_packages WHERE id = $1", package_id
+    ) == [{"event": "draft_created", "actor": ACTOR}]
 
 
 # ─── Madde 2: normalize_special_day_key ─────────────────────────────────────
