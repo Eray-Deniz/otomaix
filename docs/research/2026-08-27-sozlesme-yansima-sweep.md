@@ -37,7 +37,8 @@ Sözleşme dosyaları kısaltmaları: **S** = `hakem-sentez-gorevi.md` · **D** 
 
 ### Adım 1'de bilinçli olarak DOKUNULMAYACAK bulunan bir yer (dürüst kayıt)
 
-`_SABLON.md:53-55` brief katmanının önem sırasını yazar: *"(1) sektöre özgülük, (2) kaynak sayısı
+`_SABLON.md:53-55` (fix turu 1 sonrası aynı metin **T:73-75**) brief katmanının önem
+sırasını yazar: *"(1) sektöre özgülük, (2) kaynak sayısı
 ve gücü, (3) Türkiye yerelliği"*. Bu **K-121'in kapsamı DEĞİLDİR** ve düzeltilmeyecektir. Kanonik
 gerekçe — spec girdisi (K-121 bölümü): *"Önem sırasının iki katmanda farklı olması çelişki
 değildir… Yukarıdaki açık karar **yalnız kırpma katmanının sırasını** ilgilendirir."* Tek bir
@@ -49,28 +50,30 @@ saymamıştır.
 
 ## Adım 3 — SONRA ölçümü (aynı 13 kalem, düzeltmeler yazıldıktan sonra)
 
-Ölçüm 2026-08-30'da, Adım 2 düzenlemeleri diske yazıldıktan sonra yeniden koşuldu.
-Satır numaraları **düzeltilmiş** dosyalara aittir (S:226 · D:139 · T:207 satır).
+Ölçüm 2026-08-30'da koşuldu; **fix turu 1'den sonra (F1-F4 sözleşme düzeltmeleri) tüm
+satır aralıkları YENİDEN TÜRETİLDİ.** Aralıklar aşağıdaki dosyaların O ANKİ hâline aittir:
+`_SABLON.md` **216** · `hakem-denetci-gorevi.md` **141** · `hakem-sentez-gorevi.md` **248**
+satır. Kısaltmalar: **S** = sentez · **D** = denetçi · **T** = şablon.
 
 | # | Kalem | Durum | İniş yeri (dosya:satır) |
 |---|---|---|---|
-| 1 | K-03 yansıması | **VAR** | S:190-203 — "POLİTİKA UYGULANIR — açık soruya DÜŞÜRME" + kapanışın istediği **beş adım** (a) algıla · (b) paket türü üstün, kategori korunur · (c) `tur` alanını paketin değeriyle doldur · (d) decision_log'a yaz · (e) açık soru olarak sunma. Kapsam darlığı (mevzuat/kapsam çatışmaları etkilenmez) ayrıca yazıldı. |
-| 2 | Kök sektör rehberi | **VAR** | S:53-58 — GİRDİLER listesine **EK-K** olarak eklendi; nüans kaybı kontrolü ve "yan yana basılmaz" sınırı da yazıldı. |
-| 3 | `[kopya-şüphesi]` tüketim satırı | **VAR** | S:117-124 — bayrak artık ADIM 2 "Kurallar" bloğunda tüketiliyor: değişmeden giremez · soyutlanarak uyarlanabilir · soyutlanamıyorsa alınmaz. |
-| 4 | Rol hükmü (K-22=A) | **VAR** | S:27-41 — "Karar mercii DEĞİLSİN — ADAY DEĞİŞİKLİK SETİ ÜRETİCİSİSİN"; kanonik sıra `sentez → motor → draft` ve DB'ye yazmama hükmü. **Kardeş site süpürüldü:** S:221-226 kapanış paragrafı ve S:182 çıktı başlığı (`DRAFT PAKET` → `ADAY PAKET`) da düzeltildi — eski hâlleri sentezi doğrudan `draft` yazıcısı gösteriyordu. |
-| 5 | URL örneklem satır sayısı | **VAR** | D:125-131 — "kaynak başına 3 satır… denetime giren kaynak sayısı × 3 (3→9, 2→6, 1→3)"; bölüm başında sayının beyanı zorunlu; ortam kısıtı dalı korundu. |
-| 6 | Kanal anahtar uzayı KAPALI | **VAR — üç iniş yerinin üçü de** | **T:54-64** · **S:124-138** · **D:88-98**. Üçünde de dört anahtar aynen kod tarafındaki yazımla: `whatsapp_hatti` · `fiziksel_magaza` · `randevu_sistemi` · `eticaret_sitesi` (`sector_packages.CHANNEL_KEYS` ile birebir). T'ye ayrıca biçim kuralı (T:205-207), D'ye "dördüne oturmuyorsa etiketi kaldır" dalı eklendi. |
-| 7 | K-120 `içerik-önerilmez` | **VAR** | T:146-152 (`anma` dalı: içerik önermeme seçeneği; `içerik-önerilmez` bir tür etiketi DEĞİLDİR, tür kümesi dörtte kapalı kalır) · **T:166-175** (ADIM 3'ün altında BİLİNÇLİ BOŞ muafiyeti: dört başlığın hepsine aynı değer; alt sınırlar o dönem için uygulanmaz; serbest cümle kabul edilmez) · T:203-204 (yazım kuralı). Kod tarafıyla birebir: `sector_packages.DELIBERATELY_EMPTY == "içerik-önerilmez"`, `_require_text` onu geçerli sayar. |
-| 8 | K-121 altılı kırpma sırası | **VAR** | S:162-174 — mevzuat/güvenlik 1., doğrulanmış sektöre özgü 2., 3-3 → 2-3 → tek güçlü kaynak → genel-geçer/zayıf. Terk edilen üçlü sıra kaldırıldı; katman ayrımı ("brief katmanının sırası ayrıdır") açıkça yazıldı. |
-| 9 | K-122 churn koruması | **VAR** | S:141-149 — kırpmanın ve `cikar` kararının SONUCUNA konan kısıt olarak; sıralama ölçütü olmadığı açıkça belirtildi. |
-| 10 | K-123 "güçlü kaynak" ölçütü | **VAR** | D:64-74 — iki koşul BİRLİKTE: (1) kaynağın aslı olması (resmî/birincil; aktaran değil) + (2) tarihli güncellik. Sentez tarafı ölçüte atıfla bağlandı (S:99-102) — **tek tanım, tek yer**. |
-| 11 | K-124 kanıt yeterliliği eşiği | **VAR** | S:92-99 — normal bilgide ≥1 doğrulanmış kaynaklı kanıt satırı; mevzuat/güvenlikte ek olarak iki denetçi mutabakatı, yoksa çıkarma yok → açık soru. |
-| 12 | K-126 tek-kaynak istisnası | **VAR** | S:103-110 — (1) resmî/birincil kaynak (K-123 ölçütü) VE (2) en az bir denetçinin canlı URL doğrulaması (`DOĞRULANDI`). İki denetçi de açamadıysa istisna işlemez. |
-| 13 | K-02/K-113 `video_kodlar` iki alt LİSTE | **VAR** | T:107-118 (nihai adlar `video_kodlar.hareket` / `video_kodlar.sahne`, "İKİSİ DE LİSTEDİR") · S:175-179 (aynı bağ, erteleme cümlesi kaldırıldı) · S:184 (çıktı JSON şeması `video_kodlar{hareket[], sahne[]}`). |
+| 1 | K-03 yansıması | **VAR** | S:215-227 — "POLİTİKA UYGULANIR — açık soruya DÜŞÜRME" + kapanışın istediği **beş adım** (a) algıla · (b) paket türü üstün, kategori korunur · (c) `tur` alanını paketin değeriyle doldur · (d) decision_log'a yaz · (e) açık soru olarak sunma. Kapsam darlığı (mevzuat/kapsam çatışmaları etkilenmez) S:225-227'de. |
+| 2 | Kök sektör rehberi | **VAR** | S:53-58 — GİRDİLER listesine **EK-K = markanın kök sektörünün `SECTOR_GUIDANCE` metni** olarak eklendi; nüans kaybı kontrolü ve "yan yana basılmaz" sınırı da yazıldı. |
+| 3 | `[kopya-şüphesi]` tüketim satırı | **VAR** | S:117-123 — bayrak artık ADIM 2 "Kurallar" bloğunda tüketiliyor: değişmeden giremez · soyutlanarak uyarlanabilir · soyutlanamıyorsa alınmaz. |
+| 4 | Rol hükmü (K-22=A) | **VAR** | S:27-41 — "Karar mercii DEĞİLSİN — ADAY DEĞİŞİKLİK SETİ ÜRETİCİSİSİN"; kanonik sıra `sentez → motor → draft` ve DB'ye yazmama hükmü. **Kardeş siteler süpürüldü:** S:199 çıktı başlığı (`DRAFT PAKET` → `ADAY PAKET`) ve S:243-248 kapanış paragrafı — ikisi de sentezi doğrudan `draft` yazıcısı gösteriyordu. |
+| 5 | URL örneklem satır sayısı | **VAR** | D:125-133 — "kaynak başına 3 satır… denetime giren kaynak sayısı × 3 (3→9, 2→6)"; bölüm başında sayının beyanı zorunlu; ortam kısıtı dalı korundu. **Fix turu 1:** "iki kaynak elendiyse → 3" dalı KALDIRILDI — K-127 (asgari kaynak tabanı 2) gereği o durumda koşu durur, örneklem hiç doldurulmaz (D:127-130). |
+| 6 | Kanal anahtar uzayı KAPALI | **VAR — üç iniş yerinin üçü de** | **T:54-72** · **S:124-151** · **D:89-98**. Üçünde de dört anahtar aynen kod tarafındaki yazımla: `whatsapp_hatti` · `fiziksel_magaza` · `randevu_sistemi` · `eticaret_sitesi` (`sector_packages.CHANNEL_KEYS` ile birebir). T'ye ayrıca biçim kuralı (T:214-216), D'ye "dördüne oturmuyorsa etiketi kaldır" dalı (D:95-98). **Fix turu 1:** T:63-72'deki geri-düşüş yolu her yüzeyde uygulanabilir hâle getirildi (gerekçe yuvası olmayan alanlar için Bölüm D — EK BULGULAR); S:135-151'deki ayraç kuralı paket genelinden bayrağa + CTA yüzeylerine daraltıldı. |
+| 7 | K-120 `içerik-önerilmez` | **VAR** | T:155-160 (`anma` dalı: içerik önermeme seçeneği; `içerik-önerilmez` bir tür etiketi DEĞİLDİR, tür kümesi dörtte kapalı kalır) · **T:175-183** (ADIM 3'ün altında BİLİNÇLİ BOŞ muafiyeti: dört başlığın hepsine aynı değer; alt sınırlar o dönem için uygulanmaz; serbest cümle kabul edilmez) · T:212-213 (yazım kuralı). Kod tarafıyla birebir: `sector_packages.DELIBERATELY_EMPTY == "içerik-önerilmez"`, `_require_text` onu geçerli sayar. |
+| 8 | K-121 altılı kırpma sırası | **VAR** | S:179-188 — mevzuat/güvenlik 1., doğrulanmış sektöre özgü 2., 3-3 → 2-3 → tek güçlü kaynak → genel-geçer/zayıf. Terk edilen üçlü sıra kaldırıldı; katman ayrımı ("brief katmanının sırası ayrıdır") S:187-188'de. |
+| 9 | K-122 churn koruması | **VAR** | S:158-165 — kırpmanın ve `cikar` kararının SONUCUNA konan kısıt olarak; sıralama ölçütü olmadığı açıkça belirtildi. |
+| 10 | K-123 "güçlü kaynak" ölçütü | **VAR (çekirdek — kapsam sınırı 4. dürüstlük kaydında)** | D:64-73 — iki koşul BİRLİKTE: (1) kaynağın aslı olması (resmî/birincil; aktaran değil) + (2) tarihli güncellik. Sentez tarafı ölçüte atıfla bağlandı (S:101-102) — **tek tanım, tek yer**. |
+| 11 | K-124 kanıt yeterliliği eşiği | **VAR** | S:92-98 — normal bilgide ≥1 doğrulanmış kaynaklı kanıt satırı; mevzuat/güvenlikte ek olarak iki denetçi mutabakatı, yoksa çıkarma yok → açık soru. |
+| 12 | K-126 tek-kaynak istisnası | **VAR** | S:103-109 — (1) resmî/birincil kaynak (K-123 ölçütü) VE (2) en az bir denetçinin canlı URL doğrulaması (`DOĞRULANDI`). İki denetçi de açamadıysa istisna işlemez. |
+| 13 | K-02/K-113 `video_kodlar` iki alt LİSTE | **VAR** | T:116-126 (nihai adlar `video_kodlar.hareket` / `video_kodlar.sahne`, "İKİSİ DE LİSTEDİR") · S:192-195 (aynı bağ, erteleme cümlesi kaldırıldı) · S:201 (çıktı JSON şeması `video_kodlar{hareket[], sahne[]}`). |
 
 ### Adım 3 sayımı — **13/13 VAR**
 
-Kısmi kalan kalem YOKTUR. Aşağıdaki üç nokta dürüstlük kaydıdır; kalem eksikliği değildir:
+Kısmi kalan kalem YOKTUR. Aşağıdaki **dört** nokta dürüstlük kaydıdır; kalem eksikliği değildir:
 
 1. **R12(c) satır ölçümü doğrulandı, kaymamıştır.** Kalem 6'nın üç iniş yeri düzeltme
    ÖNCESİNDE tam olarak ekin yazdığı yerlerdeydi: `_SABLON.md:49-51` (madde 49'da başlar,
@@ -90,6 +93,17 @@ Kısmi kalan kalem YOKTUR. Aşağıdaki üç nokta dürüstlük kaydıdır; kale
    ya da hakeme verilecek bir talimat değildir. Sözleşmeye giren ayak, alan adlarının
    bağlanması ve iki alt yapının LİSTE olmasıdır (kalem 13). Kod ayağının evi plan
    Task 11'dir.
+4. **Kalem 10 ÇEKİRDEĞİ taşır, "tam metni" DEĞİL — ve bu bilinçlidir.** Spec girdisi
+   K-123'ün karar kartında (satır 2598) ölçüt için **dört boyut** sayar: resmî/birincil
+   kaynak önceliği · **bağımsız kaynak sayısı** · güncellik · **Türkiye yerelliği ağırlığı**.
+   Kapanış (spec satır 811-814) bunlardan yalnız **ikisini** bağlar — *"çekirdek: kaynağın
+   aslı (resmî/birincil — aktaran değil) + tarihli güncellik"* — ve kalanı *"tam metin
+   sözleşme revizyonunda (teknik iş kalemi)"* diye bırakır. Sözleşmeye **yalnız kapanmış
+   çekirdek** yazıldı; bağımsız kaynak sayısı ve yerellik ağırlığı **yazılmadı**, çünkü
+   hiçbir kapanış onları bağlamıyor — yazmak yeni karar açmak olurdu. Kalemin "VAR"ı bu
+   yüzden *kapanmış hükmün tamamı yansıdı* demektir, *ölçüt her boyutuyla tanımlandı*
+   demek DEĞİLDİR. Kalan iki boyutun kapanışı ayrı bir karar kalemidir ve bu turda
+   **açılmamıştır**; açılırsa evi K-123'ün kendi karar kartıdır.
 
 ### Adım 2'de dokunulan ek yer (kalem sayımına girmez, ama diff'te görünür)
 
