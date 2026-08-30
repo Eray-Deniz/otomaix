@@ -1,98 +1,99 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-08-27
+written: 2026-08-30
 ---
 
-> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-30) — bu anlatı yürütme öncesine aittir; güncel durum TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-30) — bu anlatı yürütme öncesine değil, **Task 1 bitişine**
+> aittir; güncel durum TASK.md + yürütme defteri + git defterinden okunur, çelişkide onlar esastır.
 
 # Resume From
 
-**Plan ONAYLANDI (Eray, risk kabulüyle) — sıradaki adım YÜRÜTME.**
+**Sıradaki adım: Task 2.** Yürütme devam ediyor, komut:
 `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
-Önerilen kip: **subagent'lı** (her görev taze bağlam, aralarda review) — 20 görev tek
-bağlamda taşınmaz.
+→ resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam** seçilir.
 
-- Plan: `docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md` — 20 görev,
-  **`plan-approved` + `approved-by-iteration-limit`**, `unresolved_high_severity_override: true`.
-- Tahkim kaydı: `docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md`
-  (tur özeti · disposition ledger · DUR notu · bağımsız hakem itirazları).
-- Dal: `feat/sektor-bilgi-paketi-plan2`, son commit **`367d059`** (onay + tüm hakem
-  düzeltmeleri). **Hiçbir şey push EDİLMEDİ** (ölçüldü 2026-08-27): dal yerel `main`'in
-  2 commit önünde (`f18e389`, `367d059`); yerel `main` de `origin/main`'in 4 commit önünde
-  (`origin/main` = `38ea98f`).
+**ÖNCE OKU — kanonik ilerleme burada, bu dosyada DEĞİL:**
+`.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
+Her görevin commit aralığı, her hakem bulgusu, her kontrolör kararı ve gerekçesi orada.
+Bağlam kaybolursa **defter + `git log`** esastır, anlatı değil.
 
-**Oturum kuralı — KAPSAMI YALNIZ O OTURUMDU, YENİ OTURUMDA TEYİT ET.** 2026-08-27'de Eray
-"hakem turlarını ben koşarım" dedi ve bunun kalıcı hafızaya yazılmamasını istedi. Yani bu
-kural **otomatik devredilmez**: yeni oturumda bir hakem turu gerekirse önce sor —
-"ben mi koşayım, sen mi koşacaksın?". Yürütme sırasındaki checkpoint review'ları bu sorunun
-dışındadır; onlar komutun kendi akışıdır.
+**Yürütme durumu (TASK.md "Execution State"):** kip alt-ajanlı · başlangıç çapası `a806e29` ·
+defter penceresi `a806e29` · `cp_count: 0` (checkpoint henüz koşmadı) ·
+Codex log `~/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md`.
+
+**Dal:** `feat/sektor-bilgi-paketi-plan2`. **Push EDİLMEDİ** (ölçüldü 2026-08-30):
+yürütme commit'leri yereldedir. `main` = `origin/main` = `d5d72e1`.
+
+**Task 2 dispatch'inde ZORUNLU olarak taşınacaklar** (Task 1'de bunlar işe yaradı):
+1. Arayüz eki **bağlayıcıdır**, çelişkide EK geçerlidir; Task 2'yi bağlayan hükümler planın
+   Task 2 başlığındaki "Arayüz eki bağlar" satırında yazılı — uygulayıcı onları okumadan
+   koda başlamaz.
+2. Test komutu **sanal ortam aktifleştirilerek** koşar (aşağıda Verification).
+3. Taban **667**; bu sayı düşmeyecek.
+4. Task 1'den devredilen üç Minor bulgu (TASK.md Open Problems ilk maddesi) Task 2'nin işidir.
+5. Test önce yazılır, **kırmızı düştüğü gözle görülür**, kırmızı çıktı rapora yazılır.
+6. Uygulayıcı **kendi alt-ajanını çağırmaz**; review kontrolörden gelir.
+
+**Task 2 dış depoda çalışır** (`/root/otomaix-sosyal-medya-arastirmasi/`) ve bitiminde monorepo'ya
+döner — göreli yollar oradan çözülmez, bu planın kendi kısıtı.
 
 # Verification
 
-**Koşulan komutlar ve taze çıktıları:**
-- Task başlık kapısı (`_ec_plan_headers`) → bozuk başlık YOK, dizi `1..20` kesintisiz.
-- `plan-lint.sh` → temiz (karar-katmanı sözleşmesine uygun).
-- `command-blocks-maint.sh verify` → PASS.
-- Placeholder taraması (`TBD|TODO|implement here`) → 0.
-- Sır deseni taraması → 0. (Bir tur bu yüzden yanmıştı: plana yazdığım ölçüm komutu bir
-  kimlik başlığı adı içeriyordu, substrat plan dosyasını dışladı, hakem planı hiç görmedi.)
-- Çalışma dizini taraması → `cd`'siz pytest komutu 0.
-- İçerik şeması ölçümü → CTA ve özel gün girdileri **tam anahtar eşitliğiyle**, diğer liste
-  öğeleri **düz metin** olarak doğrulanıyor → kimlik içerikte SAKLANAMAZ (tasarımı bu belirledi).
-- `kirp` kanonik anlamı ölçüldü (spec-input:1160): *"paketten çıkarır, kayıttan çıkarmaz"*.
-- Canlı takvim workflow'u ölçüldü: `ON CONFLICT (year,date) DO UPDATE` ile ad/kategori
-  düzeltiyor → "ezme" kuralı canlı davranışla çelişiyordu, düzeltildi.
-- n8n ölçümü: 18 workflow · 13 aktif · `errorWorkflow` taşıyan 0.
+**Koşulan komutlar ve TAZE çıktıları (2026-08-30):**
+- `cd apps/social/backend && source .venv/bin/activate && python -m pytest tests/ -q`
+  → **667 passed in 105.52s.** (Yürütme öncesi taban 660; Task 1 yedi test ekledi, regresyon yok.)
+  Bu ölçümü kontrolör uygulayıcıdan bağımsız olarak kendisi koştu.
+- Task 1 kırmızı turu: `ModuleNotFoundError: No module named 'app.services.sector_pipeline'`
+  — modülün yokluğu yakalandı, testin kendi yazım hatası değil.
+- Ortam ölçümü: `python` PATH'te **YOK**; `.venv` requirements sürümlerini birebir taşıyor
+  (pytest 9.1.1 · pytest-asyncio 1.4.0 · asyncpg 0.29.0 · fastapi 0.115.0).
+- Veritabanı: `127.0.0.1:5433` erişilebilir, `social.sector_packages` okundu (0 satır).
+- Dış sözleşme deposu: temiz, `master`, HEAD `b356033`, üç sözleşme dosyası yerinde.
+- En yüksek mevcut migration **034** (plan 035/036 yazacak).
+- Mekanik öz-denetim (kontrolörün kendi betiği, ajan sayılarından bağımsız):
+  **50 hüküm→görev çifti, 50'si görev satırında, 0 eksik**; genel liste 17 hüküm diyor, 17 bulundu.
 
-**Kapanış turu (2026-08-27, bağlantı koptuktan sonra tamamlandı):**
-- Push durumu ölçüldü (`git branch -vv`, `git rev-list`): dal yerel `main`'in 2 commit,
-  yerel `main` de `origin/main`'in 4 commit önünde. Hiçbir şey push edilmedi.
-- Bayat-kayıt taraması: 4 çelişki bulundu ve düzeltildi — HANDOFF'ta yanlış push cümlesi ·
-  "plan onaylı değil" (artık onaylı) · "commit onayı bekliyor" (işlendi) · devralınmış
-  hakem-turu kuralı; TASK.md'de Task 15'in "plan onaylı değil" gerekçesi.
-- Evsiz-kova sweep (İlke 7), CURRENT.md'nin 10 proposed kalemi tek tek: 8'i sağlam tetikliydi.
-  İkisinin evi plan onaylanınca somutlaştı → **Task 16 Step 7/7b** (n8n hata bildirimi) ve
-  **Task 19 Step 11** (atama arayüzü elle doğrulaması) olarak adlandırıldı.
-  Biri (`s1-substrate-tracked-secret-scan`) **tetiksizdi** → kardeş iki `~/.claude` kalemiyle
-  aynı pin'li bloğa bağlandı, üçü tek turda.
-- `git diff --check` → temiz. CURRENT.md'de statü sızıntısı taraması → 0.
-
-**Denenmemiş senaryolar:**
-- **Hiçbir kod yazılmadı, hiçbir test koşulmadı** — bu oturum tamamen doküman işiydi.
-  Plandaki tüm test adları henüz var olmayan dosyalara aittir.
-- Plan 1 bölümlerinin kart geçişi hâlâ koşulmadı (boşluk raporu kapsam sınırı).
-- **Son parti hiçbir hakem tarafından görülmedi.** Sıra: bağımsız hakem 10 itiraz →
-  düzeltildi → 9 kalan boşluk → düzeltildi → 6 kalan boşluk → düzeltildi → **kök tasarım
-  turu** (K-145 sözleşmesi + Task 12/13 sahipliği). Bu son parti incelenmedi ve
-  **genel review turu bilinçle DURDURULDU** — kalan risk ölçülmedi, kabul edildi.
+**Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
+- **Task 2–20 hiç yazılmadı.** Plandaki test adlarının çoğu henüz var olmayan dosyalara ait.
+- **Hiç checkpoint review'ı koşmadı** (`cp_count: 0`) — Task 1 riskli sınıflamaya girmedi.
+- `git` ikilisi olmayan ortamda ve `GIT_DIR`/`GIT_WORK_TREE` ezildiğinde pin davranışı
+  **ölçülmedi** (hakem ortam bulamadı).
+- Arayüz ekinin kalan medium/low sınıfı (annotation ≠ çalışma zamanı zorlaması; kimlik
+  karşılaştırmasında hoşgörülü normalleştirme) **dördüncü turla kovalanmadı** — kabul edildi.
+- Canlıya hiçbir şey dağıtılmadı, hiçbir migration uygulanmadı, pilot koşulmadı.
 
 # Risks
 
-- **Onay bir kez ERKEN verildi ve geri alındı** (tarihçe; plan bugün onaylı). Zincir tur 6'da `approve`
-  verdi; sonra bağımsız hakem 10 itiraz getirdi, onu da doğrulandı. Onay geri alındı.
-  **Ders:** tek hakem zincirinin yakınsaması kapsama kanıtı değildir — altı tur tek eksende
-  (köken/kapı zinciri) daralırken diğer eksenler hiç taranmadı.
-- **Tekrarlayan kusur sınıfı: karar katmanını yazıp tüketicilerini bağlamamak.** Bu oturumda
-  en az beş kez tekrarladı (kapı listesi · kimlik alanları · Katman-2 · CLI komutu · K-145).
-  Bir invariant yazarken **onu tüketen HER görevi** aynı turda güncelle.
-- **KABUL EDİLMİŞ RİSK: onay temiz hakem zinciriyle alınmadı.** Dört ardışık bağımsız tur
-  "gerçek düzeltme var ama eksik" dedi; yakınsama gözlenmedi. **Son iki düzeltme partisi
-  hiçbir hakem görmedi.** Eray bunu bilerek onayladı. **Kalan kusurlar yazım anında
-  çıkacak** — yürütmedeki kırmızı-yeşil döngüsü ve checkpoint review'ları asıl ağı budur.
-- Plan 1 arayüzünde bir **davranış değişikliği** var (aktivasyon kanıtının taban durumu artık
-  açıkça ifade ediliyor); Plan 1'in ilgili testleri bilinçli olarak kırılacak, Task 15'te
-  güncelleniyor.
+- **Plan, hakem görmeden onaylanmıştı** (risk kabulüyle, `approved-by-iteration-limit`). Yürütme
+  öncesi ön-tarama bunun bedelini ölçtü: 8 çelişki · 12 boşluk. Arayüz eki bunları kapattı ama
+  **Plan 1 alanındaki kart geçişi hâlâ taranmadı** — Plan 1 yüzeyinde kusur çıkarsa ilk bakılacak yer.
+- **Tekrarlayan kusur sınıfı — bu oturumda ÜÇ kez tekrarladı:** bir hüküm yazılıp onu tüketen
+  yerler süpürülmüyor. Deftere süreç kuralı olarak yazıldı: *bir karar, süpürülene kadar
+  uygulanmış sayılmaz*; aynı düzenlemede çelişen her kod bloğu, genel liste ve kararın adını
+  andığı her görev satırı güncellenir. **Yeni oturum bu kuralı devralmalı.**
+- **Kanıt doktrini kod düzeyinde HENÜZ zorlanmıyor.** Arayüz eki jetonu savunma katmanı olarak
+  tanımlar; gerçek sınır bir veritabanı yetki sınırıdır ve ancak canlı ölçümle kurulur.
+  Evi: Task 15 Step 6 + Task 18 Step 7 (üç tabloyu ve jeton kolonlarını kapsayacak şekilde
+  genişletildi). Bugün **açık**, tarihi belli.
+- **Hakem bulgusunu ölçmeden kabul etme.** Bu oturumda Codex'in iki bulgusu (pytest sürümleri,
+  veritabanı erişimi) **yanlış çıktı** — sanitize edilmiş kopyada koştuğu için `.venv` ve `.env`
+  göremiyor. Ölçmeden düzeltmeye başlansaydı ortam boşuna kurcalanacaktı.
+- **Codex maliyeti:** bu oturumda 4 çağrı (1 ön-değerlendirme + 3 arayüz eki turu). Kota
+  başlangıçta tazeydi. Uzun turlar **arka planda** koşulmalı — ön planda kabuk 10 dakikada keser
+  ve tur boşa gider (bu oturumda bir kez oldu).
 
 # Notes For Claude/Codex
 
-- **Hakem turu kimin? ÖNCE SOR.** 2026-08-27 oturumunda "Claude başlatmaz" kuralı
-  konmuştu; kapsamı o oturumdu (bkz. Resume From). Yeni oturumda bir hakem turu gerekirse
-  teyit al — devralınmış kural gibi davranma.
-- Bulgu geldiğinde: **önce ölç, sonra kabul et.** Bu oturumda 24 + 10 + 9 bulgunun hepsi
-  ölçülerek doğrulandı, hiçbiri reddedilmedi; ama iki kez yanlış şeyi ölçüp sıfırları
-  "yok" diye sunmaya yaklaştım — komutun gerçekten o soruyu ölçtüğünü doğrula.
-- **Spec değil, spec-input kanonik.** Bu oturumda üç kez fark yarattı (K-100'ün dördüncü
-  alanı · K-145'in üç kuralı · `kirp` semantiği).
-- Plan hiçbir açık ürün kararını kapatmıyor: K-85 · K-153 · K-128 · K-52 · K-11(a/b) ·
-  K-32…K-37. Belirsiz vakalar açık soruya düşüp aktivasyonu blokluyor.
-- Diskte bekleyen düzeltme YOK: onay ve tüm hakem düzeltmeleri `367d059`'de işlendi.
+- **Hakem turunu kim koşar? ÖNCE SOR.** 2026-08-30 oturumunda Eray "eskisi gibi sen koşabilirsin"
+  dedi ve bunun **o oturuma özgü** olduğunu belirtti; kalıcı hafızaya yazılmadı. Yeni oturumda
+  teyit al.
+- **Kontrolör düzeltme YAPMAZ.** Bulgular uygulayıcıya gider; kontrolör düzeltirse review atlanır
+  ve kontrolörün bağlamı kirlenir.
+- **Minor bulgular döngüye girmez** — deftere yazılır ve adı konmuş bir sonraki göreve bağlanır.
+  Park etmek yasak; ev ya vardır ya bulgu düşürülür.
+- **Spec değil, spec-input kanoniktir.** Bu oturumda da fark yarattı (koşu klasörü / K-17 ve
+  "kanıt yoksa karar uygulanmaz" hükmü).
+- **Süpürme sayıları ölçüldü, hatırlanmadı:** ek atıflarının %12'si kaymıştı (222'nin 26'sı);
+  dondurulmuş tiplerin 18'inden 8'i kusurluydu — hakem yalnız 2 bildirmişti. **Bildirilen
+  örneği değil sınıfı kapat.**
+- Diskte bekleyen düzeltme YOK; her şey commit'li, çalışma ağacı temiz.

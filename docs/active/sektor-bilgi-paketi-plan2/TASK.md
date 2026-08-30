@@ -42,24 +42,19 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
 
 # Current Status
 
-**Plan ONAYLANDI — risk kabulüyle** (Eray, 2026-08-27):
-`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md` — 20 görev,
-**`plan-approved` + `approved-by-iteration-limit`**, `unresolved_high_severity_override: true`,
-7 zincir turu + 4 bağımsız hakem turu.
+**YÜRÜTME BAŞLADI (2026-08-30).** Plan onaylıydı; yürütme öncesi ön-tarama planda kapatılmamış
+çapraz-görev sözleşmeleri buldu, onlar bir **arayüz eki** ile kapatıldı, sonra Task 1 indi.
 
-Dört bağımsız hakem turu koşuldu (10 + 9 + 6 + 3 bulgu); hepsi ölçülerek doğrulandı ve
-düzeltildi. **Son iki düzeltme partisi incelenmedi** ve zincirin son yargısı `needs-attention`'dı.
-Eray bu bilgiyle onayladı. Kabul edilen riskler hakem kaydında tek tek yazılı.
+- **Arayüz eki KAPANDI:** `docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`
+  (bağlayıcı; çelişkide EK geçerlidir). 17 hüküm — R1–R14 + AÇIK-1 · AÇIK-2 · AÇIK-3.
+  Üç Codex karşıt-hakem turundan geçti (high sayısı 7 → 4 → 2); doktrin delikleri kapandı,
+  zincir kontrolör kararıyla bitirildi (dördüncü tur AÇILMADI).
+- **Task 1 TAMAM** — sözleşme pin doğrulayıcısı, commit `32791b1`. Hakem: spec ✅, kalite onaylı.
+- **Sıradaki: Task 2** — dış depodaki altı bloklayıcı sözleşme düzeltmesi + yansıma sweep'i
+  + gerçek pin. Task 1'in üç Minor bulgusu Task 2'ye bağlandı (aşağıda Open Problems).
 
-Tahkim kaydı: `docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md`.
-Sıradaki adım: **yürütme** (`/execute-plan-claude-codex`). Henüz KOD YAZILMADI.
-
-- Eksik-aktarma taraması koşuldu: girdideki 162 karar kartından **32'si spec'e hiç
-  geçmemiş**; ayrıca 3 düşen öneri ve 9 "teknik olarak çözülecekti, çözülmedi" kalemi.
-- **13 Eray-seviyesi karar kapandı** (aşağıda Decisions Log).
-- 6 karar sorulmadı çünkü cevabı kaynakta bağlı; 6'sı Plan 2'yi etkilemiyor (genişleme
-  kapıları, pilot sonrası).
-- Plan 2 **tek planda** yazılacak; ikinci bölme reddedildi.
+Yürütme defteri (kanonik ilerleme + tüm kararlar):
+`.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
 
 # Decisions Log
 
@@ -104,22 +99,56 @@ Sıradaki adım: **yürütme** (`/execute-plan-claude-codex`). Henüz KOD YAZILM
   hakem görmedi; zincirin son yargısı `needs-attention`'dı. Onay bu bilgiyle verildi.
   Frontmatter bunu yansıtır: `approved-by-iteration-limit` + `unresolved_high_severity_override: true`.
 
+- **2026-08-30 — Yürütme öncesi ön-tarama koşuldu ve arayüz eki yazıldı (Eray onayı).**
+  66 görev çifti tarandı: 8 çelişki · 12 boşluk · 20 görevin 18'inde iç tutarsızlık. Sebep
+  yapısal: her görev KENDİ brief'ine karşı incelenir, komşusuna karşı değil — iki görevin
+  farklı icat edeceği bir sözleşme görev-başı review'a görünmez. Eray "ek + tek hakem turu"
+  seçti (ben karara bağlayıp yürütmek ve planı tam onarım turuna sokmak reddedildi).
+- **2026-08-30 — AÇIK-1: geri alma onayı, onayladığı plan satırının yanında saklanır.**
+  Bildirim kuyruğu seçilmedi (kuyruğun temizlik döngüsü onayı silebilir; yürütücü zaten
+  kilitlediği satırın yanında ikinci tablo okumak zorunda kalırdı). Onay OLAY düzeyindedir,
+  paket düzeyinde değil — K-145 N paketi birden geri alır, paket başına onay tek operatörde
+  taşınamaz. Maliyet ölçüldü: migration henüz yazılmadığı için alanlar bedava.
+- **2026-08-30 — AÇIK-2: tek-paketlik geri alma da olay kimliği ister.** İlk içgüdüm "acilde
+  üç komut fazla" diye tersiydi; ölçünce döndüm — acil kol (deaktive-et) kanıt zinciri
+  istemez ve bu karardan ETKİLENMEZ. Kapanan tek şey "önceki sürüme kanıtsız dönme", ki o
+  acil değil düşünülmüş bir hamledir. Örtük olay üretmek kalıcı kirlilik yaratırdı.
+- **2026-08-30 — AÇIK-3: parmak izi yardımcıları Task 8'de, Plan 1 modülünde doğar.**
+  **Verdiğim gerekçe YANLIŞTI ve düzeltildi:** "bağımlılık yönü hiç ters çevrilmedi" dedim,
+  ölçüldü ki bir tur önceki kendi metnim onu zaten çevirmişti. Karar geçerli, sebep düzeltildi,
+  tek izinli kenar açıkça yazılı ve yapısal testi var.
+- **2026-08-30 — Hakem zinciri kontrolör kararıyla BİTİRİLDİ (dördüncü tur yok).** Doktrin
+  delikleri kapandı; kalan bulgular henüz var olmayan kodun davranışı. Bir belge çalışma
+  zamanı kuralını uygulayamaz, yalnız anlatır — devamı Türkçe kod yazmak olurdu. Çıkış
+  koşulu olarak mekanik öz-denetim koşuldu (50 hüküm→görev çifti, 0 eksik).
+
 # Open Problems
 
-- **30 teknik kalem BAĞLANDI** (plan yazımında); bağlanma yerleri ve kanıtlayan test adları
-  planın kendisinde. Kapanış görevi (Task 20) 30 teknik + 13 ürün kararını tek tek sweep eder.
-- **§8.7'nin sözleşme düzeltmeleri planın ilk görevidir** (altı kalem: beşi spec'ten, altıncısı
-  kanal anahtar uzayının kapatılması). Resmî turu hâlâ bloklarlar — plan onları Task 2'de kapatır.
-- **Task 15'in elle arayüz doğrulaması EV BULDU:** planın pilot görevinde, ilk paket aktive
-  edildikten sonraki kabul adımı. Plan onaylandı (2026-08-27) ama **tarih hâlâ YOK** —
-  yürütme başlamadı, pilot koşulmadı. Dürüst etiket: *çözülmedi; evi var, tarihi pilot
-  görevinin koşmasına bağlı.*
-- **n8n hata bildirimi planda:** hem workflow tarafı hem yerel tur arızası bildirimi bağlandı;
-  kapsam bilinçle dar (yalnız sektör paketi zinciri), kalan workflow'lar CRM turunda.
-- **KABUL EDİLMİŞ RİSK — onay temiz zincirle alınmadı.** Ardışık bağımsız turlar her
-  seferinde kalan teknik boşluk buldu; yakınsama gözlenmedi, durma sebebi karardı.
-  Son iki parti incelenmedi. **Kalan kusurlar yazım anında çıkacak** — yürütmede
-  kırmızı-yeşil döngüsü bunları yakalamalı. Tekrarlayan kusur sınıfı: bir invariantı yazıp
-  onu TÜKETEN görevleri güncellememek; yürütmede de aynı disiplin gerekir.
+- **Task 1'in üç Minor bulgusu Task 2'ye BAĞLI** (park değil, evi ve sırası var — Task 2 aynı
+  test dosyasına dokunuyor ve gerçek pin doğrulamasının sahibi):
+  (a) depo-yok kapısının ayırt edici testi YOK — hakem kapıyı koddan sildi, yedi test de yeşil
+  kaldı; dört kapının biri kanıtsız. (b) `git rev-parse` üst dizine yürüyor, git kökü olmayan
+  yol kapsayan deponun commit'ini raporluyor; kapı kapanıyor ama sebep yabancı depoyu
+  adlandırabiliyor. (c) manifest şekli zorlanmıyor — boş dosya listesi doğrulamayı sessizce
+  commit-only'ye düşürüyor.
+- **Hakemin doğrulayamadığı iki durum** (ortam yok, kayda geçti — kapsandı DEĞİL):
+  `git` ikilisi olmayan ortamda davranış; `GIT_DIR`/`GIT_WORK_TREE` ile ezildiğinde davranış.
+- **KABUL EDİLMİŞ RİSK (arayüz eki, tur 3 sonrası):** "annotation çalışma zamanı zorlaması
+  değildir" sınıfının kalıntısı ve kimlik karşılaştırmalarındaki hoşgörülü normalleştirme.
+  Dördüncü hakem turuyla kovalanmadı; kod yazılırken kırmızı-yeşil döngüsüne ve görev-başı
+  review'a devredildi. Bu bir **kabul**, sınıfın kapandığı iddiası DEĞİL.
+- **Ortam gerçeği (ölçüldü, plandan farklı):** planın yazdığı `python -m pytest` bu makinede
+  çalışmaz — `python` PATH'te yok. Her test komutu
+  `cd apps/social/backend && source .venv/bin/activate && python -m pytest …` biçiminde koşar.
+- **Task 5 ve Task 19 Eray kararı bekliyor** (o görevlere gelindiğinde sorulacak, şimdi değil):
+  takvim satırlarının yılı · kategorisi · kanonik adı · "okula dönüş" tarihleri; ve dört
+  operatör kararı.
+- **30 teknik kalem BAĞLANDI** (plan yazımında); kapanış görevi (Task 20) 30 teknik + 13 ürün
+  kararını tek tek sweep eder.
+- **§8.7'nin sözleşme düzeltmeleri Task 2'nin işidir** (altı kalem). Resmî turu hâlâ bloklarlar.
+- **Task 15'in elle arayüz doğrulaması** Task 19 Step 11'de; plan onaylı, tarih pilot görevinin
+  koşmasına bağlı. Dürüst etiket: *çözülmedi; evi var.*
+- **n8n hata bildirimi** Task 16 Step 7/7b'de; kapsam bilinçle dar (yalnız sektör paketi
+  zinciri), kalan workflow'lar CRM turunda.
 - Plan 1 bölümlerinin kart geçişi taranmadı (boşluk raporu kapsam sınırı) — Plan 1 alanında
   kusur çıkarsa koşulur.
