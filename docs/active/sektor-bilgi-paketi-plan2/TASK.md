@@ -26,7 +26,7 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
 - cp_count: 1
-- last_checkpoint_ref: c7be18fb523118ea9d9d0ea90d4152ecdd2a74a2
+- last_checkpoint_ref: 72f57443ed22dd8b40e4b551e91cee67b26dca30
 
 # References
 
@@ -52,13 +52,13 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
   zincir kontrolör kararıyla bitirildi (dördüncü tur AÇILMADI).
 - **Task 1 TAMAM** — sözleşme pin doğrulayıcısı, commit `32791b1`. Hakem: spec ✅, kalite onaylı.
 - **Task 2 TAMAM** — dış depodaki altı bloklayıcı sözleşme düzeltmesi + 13 kalemlik yansıma
-  sweep'i + gerçek pin. Monorepo `1186d44` + `cf7ee31`; **dış depo** (`/root/otomaix-sosyal-
+  sweep'i + gerçek pin. Monorepo `1186d44` + `77dd268`; **dış depo** (`/root/otomaix-sosyal-
   medya-arastirmasi`) `6d2a033` + `d901eb4`. Hakem: spec ✅; bir Important + beş Minor düzeltme
   turunda kapandı, yeniden inceleme altısını da ADDRESSED verdi. Task 1'in üç Minor bulgusu
   burada kapandı.
 - **Checkpoint 1 KOŞTU** (Codex karşıt-hakem, taban `a806e29`): bir **high** buldu — bozuk
   manifest, fail-closed doğrulayıcıyı geçirebiliyordu (üç yol: hata-işareti commit değeri ·
-  mutlak yol anahtarı · `..` gezinmesi). Üçü de ölçümle doğrulandı ve `c7be18f` ile kapatıldı;
+  mutlak yol anahtarı · `..` gezinmesi). Üçü de ölçümle doğrulandı ve `72f5744` ile kapatıldı;
   kapanış turu **approve** verdi. Kalan tek medium kabul edilmiş risk (aşağıda).
 - **Sıradaki: Task 3** — kalıp kimliği + karar günlüğü şeması (K-84 ailesi).
 

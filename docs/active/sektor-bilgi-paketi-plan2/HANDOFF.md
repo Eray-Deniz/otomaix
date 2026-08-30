@@ -18,7 +18,7 @@ Her görevin commit aralığı, her hakem bulgusu, her kontrolör kararı ve ger
 Bağlam kaybolursa **defter + `git log`** esastır, anlatı değil.
 
 **Yürütme durumu (TASK.md "Execution State"):** kip alt-ajanlı · başlangıç çapası `a806e29` ·
-defter penceresi `a806e29` · `cp_count: 1` · `last_checkpoint_ref: c7be18f`.
+defter penceresi `a806e29` · `cp_count: 1` · `last_checkpoint_ref: 72f5744`.
 
 **Dal:** `feat/sektor-bilgi-paketi-plan2`. **Push EDİLMEDİ** — yürütme commit'leri yereldedir.
 **Dış sözleşme deposu da yereldedir:** `/root/otomaix-sosyal-medya-arastirmasi`, `master`,
