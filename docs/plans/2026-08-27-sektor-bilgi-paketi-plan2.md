@@ -9,6 +9,7 @@ unresolved_high_severity_override: true
 codex_plan_review_status: approved-by-iteration-limit
 codex_plan_review_iterations: 7
 codex_plan_review_log: docs/reviews/codex/2026-08-27-sektor-bilgi-paketi-plan2.md
+binding_addendum: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md
 ---
 
 # Sektör Bilgi Paketi — Plan 2/2: İşletim Hattı Implementation Plan
@@ -50,6 +51,14 @@ bulamazsan girdiye dön.
 ---
 
 ## Global Constraints
+
+- **BAĞLAYICI ARAYÜZ EKİ — ÖNCELİKLİDİR:** [`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`](2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md)
+  bu planın ayrılmaz parçasıdır; 14 hükmün (R1–R14) ve AÇIK-1 kararının sözleşme metnini —
+  imzalar, tip tanımları, kapalı değer kümeleri, test sahipliği — taşır.
+  **Ek ile plan gövdesi çeliştiğinde EK GEÇERLİDİR** ve gövde satırı geçersizdir; ek hiçbir
+  yeni kapsam açmaz. Her görev, başlığının altındaki *"Arayüz eki bağlar"* satırında kendisini
+  bağlayan hükümleri sayar — o görev **uygulanmadan ve gözden geçirilmeden ÖNCE** ekin ilgili
+  hükümleri okunur. Görev-başına review, eki okumadan tamamlanmış sayılmaz.
 
 - **Kanonik sıra:** `sentez → motor → draft`. Sentez çıktısı DB'ye `draft` YAZAMAZ;
   yalnız dosya + ham artefakt katmanına yazılır (spec §8.1, karar turu "Plan 2 kapsam").
@@ -282,6 +291,15 @@ imza genişletilmek ZORUNDADIR:
   bkz. teknik karar 12). **Task 14/15.**
 - `_update_draft_row(...)` — lifecycle modülünde **ÖZEL** karşılaştır-ve-güncelle ilkeli
   (K-106'nın ham mekaniği). **Public API DEĞİLDİR.** **Task 15.**
+- **Kanıt köken jetonu — her iki kanıt sınıfı ve her iki geçiş:** `ActivationGateEvidence`
+  `run_id` + `provenance_token`, `RollbackGateEvidence` `incident_id` + `package_id` +
+  `provenance_token` alanlarını kazanır (üçü de **anahtar-zorunlu**, varsayılansız);
+  `activate_package` ve `rollback_package` bu jetonu **kendi işlemleri içinde** kilitli
+  satırdan **tek kullanımlık** olarak tüketir. Ölçülmüş gerekçe: `_require_evidence`
+  (`sector_package_lifecycle.py`, satır 133-144) yalnız `type(evidence) is expected`
+  kontrolü yapıyor, yani literal kurulmuş kanıt bugün kapıdan GEÇİYOR (Plan 1'in kendi
+  testleri bunu yapıyor ve geçişleri tamamlıyor). Tam imzalar, jeton üretici/tüketici
+  sözleşmesi ve ispat testleri arayüz ekinin **R8** hükmündedir. **Task 15.**
 
 Bu değişiklikler `tests/test_plan2_interface_contract.py` dosyasına eklenir; Plan 1'in
 mevcut satırları SİLİNMEZ.
@@ -384,6 +402,8 @@ Bu ayrım motoru mutasyon testine açık tutar (Task 12-13'ün TDD'si buna dayan
 
 ### Task 1: Dış sözleşme pin altyapısı + fail-closed doğrulayıcı
 
+> **Arayüz eki bağlar: R1 · R14** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/__init__.py`
 - Create: `apps/social/backend/app/services/sector_pipeline/contracts.py`
@@ -420,6 +440,8 @@ Bu ayrım motoru mutasyon testine açık tutar (Task 12-13'ün TDD'si buna dayan
 ---
 
 ### Task 2: Sözleşme düzeltmeleri — altı zorunlu kalem + kapanış yansıma sweep'i
+
+> **Arayüz eki bağlar: R1 · R12(c) · R14** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 Bu görev **dış depoda** (`/root/otomaix-sosyal-medya-arastirmasi/`) çalışır ve resmî turu
 bloklayan drift'leri kapatır. Spec §8.7 beş kalem sayıyor; **altıncısı** Codex ön-analizinde
@@ -595,6 +617,8 @@ kümesi bir yerden türetilebilmelidir.
 
 ### Task 4: Sözleşme v2 — denetçi yeniden-doğrulama envanteri + sentez kimlik taşıması
 
+> **Arayüz eki bağlar: R5** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Files:**
 - Modify: `/root/otomaix-sosyal-medya-arastirmasi/hakem-denetci-gorevi.md`
 - Modify: `/root/otomaix-sosyal-medya-arastirmasi/hakem-sentez-gorevi.md`
@@ -645,6 +669,8 @@ kümesi bir yerden türetilebilmelidir.
 ---
 
 ### Task 5: Migration 035 — takvim dönem desteği + üç takvim kalemi (K-147/K-01a/K-146)
+
+> **Arayüz eki bağlar: R12(b) · R13** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Create: `shared/db/migrations/035_holiday_periods.sql`
@@ -718,6 +744,8 @@ kümesi bir yerden türetilebilmelidir.
 ---
 
 ### Task 6: Migration 036 — koşu kaydı · politika raporu · onay anlık görüntüsü · atama geçmişi
+
+> **Arayüz eki bağlar: R4 · R8 · R11 · R12(a) · AÇIK-1** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Working directory:** `apps/social/backend` (test komutları); migration dosyaları repo kökünden.
 
@@ -946,6 +974,8 @@ kümesi bir yerden türetilebilmelidir.
 
 ### Task 8: Koşu ve artefakt servisi (K-09/K-17/K-80/K-82/K-83/K-93)
 
+> **Arayüz eki bağlar: R1 · R2 · R4 · R8 · R9 · R11 · AÇIK-1** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/runs.py`
 - Test: `apps/social/backend/tests/test_pipeline_runs.py`
@@ -1125,6 +1155,8 @@ kümesi bir yerden türetilebilmelidir.
 
 ### Task 9: Denetçi girdi paketleyici — anonimleştirme · biçim kapısı · ön kontrol
 
+> **Arayüz eki bağlar: R5 · R6** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/auditors.py`
 - Test: `apps/social/backend/tests/test_auditor_packaging.py`
@@ -1175,6 +1207,8 @@ kümesi bir yerden türetilebilmelidir.
 ---
 
 ### Task 10: İki kör denetçi orkestrasyonu (K-76/K-78/K-150)
+
+> **Arayüz eki bağlar: R6** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Modify: `apps/social/backend/app/services/sector_pipeline/auditors.py`
@@ -1313,6 +1347,8 @@ kümesi bir yerden türetilebilmelidir.
 
 ### Task 12: Politika motoru — zorunlu kontroller (§9.2) + K-112 takvim erişilemezliği
 
+> **Arayüz eki bağlar: R5 · R7 · R13** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Working directory:** `apps/social/backend`
 
 **Files:**
@@ -1420,6 +1456,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 13: Motor — güvenli fallback (K-23=B) · üç bariyer (eşikler pasif) · sonuç tipleri
 
+> **Arayüz eki bağlar: R2 · R5 · R7** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Files:**
 - Modify: `apps/social/backend/app/services/sector_pipeline/engine.py`
 - Create: `apps/social/backend/app/services/sector_pipeline/policy_config.py`
@@ -1497,6 +1535,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 14: Onay yüzeyi — değişmez anlık görüntü · sinyal sıralaması · onay olayı
 
+> **Arayüz eki bağlar: R3 · R8** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Files:**
 - Create: `apps/social/backend/app/services/sector_pipeline/approval.py`
 - Test: `apps/social/backend/tests/test_approval_surface.py`
@@ -1570,6 +1610,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 ---
 
 ### Task 15: Draft yazımı · yerinde güncelleme (K-106) · aktivasyon zinciri · yetki zorlaması (K-103)
+
+> **Arayüz eki bağlar: R4 · R8 · R9** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Working directory:** `apps/social/backend`
 
@@ -1718,6 +1760,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 16: Komut ailesi — repo CLI + ince adaptörler + bildirim ayakları
 
+> **Arayüz eki bağlar: R10 · R11 · AÇIK-1** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Files:**
 - Create: `apps/social/backend/scripts/sector_pipeline_cli.py`
 - Create: `~/.claude/commands/sektor-paket.md` (ince çağırıcı — iş mantığı YOK)
@@ -1829,6 +1873,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 17: İşletime hazırlık kontrol listesi kapısı (K-69/K-70)
 
+> **Arayüz eki bağlar: R9** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Working directory:** `apps/social/backend`
 
 **Files:**
@@ -1905,6 +1951,8 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
 
 ### Task 18: Ön-pilot dağıtım — şema · arka uç · CLI · adaptör · workflow'lar
 
+> **Arayüz eki bağlar: R1** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 **Bu görev review turunda EKLENDİ.** İlk yazımda dağıtım KAPANIŞ görevine konmuştu, yani
 pilot **kendi şemasından ve kodundan ÖNCE** koşacaktı: pilot, kuyumculuğun ilk `active`
 paketini 035/036 tablolarıyla ve yeni CLI'yle üretmek zorunda, oysa ikisi de o noktada
@@ -1976,6 +2024,8 @@ bağımlılığıdır**, uygulama ayrıntısı değil.
 
 ### Task 19: Kuyumculuk pilotu — resmî tur
 
+> **Arayüz eki bağlar: R1 · R10** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
+
 Bu görev **koda değil, koşuma** aittir. Kapsam: dört operatör kararının kapanması, test
 markası, araştırmaların K-18 gereği yeniden üretilmesi, resmî zincirin uçtan uca koşması.
 
@@ -2036,6 +2086,8 @@ Operatörün yargısı motor koşmadan ÖNCE kaydedilir; `onay` bir kez, en sond
 ---
 
 ### Task 20: Kapanış — kabul eşlemesi · final sweep
+
+> **Arayüz eki bağlar: R12(a)** — bkz. `2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`. Çelişkide EK GEÇERLİDİR.
 
 **Files:**
 - Create: `docs/plans/PLAN2-KAPANIS.md`
