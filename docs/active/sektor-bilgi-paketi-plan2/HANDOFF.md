@@ -3,6 +3,8 @@ task: sektor-bilgi-paketi-plan2
 written: 2026-08-27
 ---
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-30) — bu anlatı yürütme öncesine aittir; güncel durum TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+
 # Resume From
 
 **Plan ONAYLANDI (Eray, risk kabulüyle) — sıradaki adım YÜRÜTME.**
