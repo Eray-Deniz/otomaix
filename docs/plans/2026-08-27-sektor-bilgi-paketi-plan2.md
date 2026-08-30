@@ -2110,6 +2110,13 @@ bağımlılığıdır**, uygulama ayrıntısı değil.
   `kanit_jetonu_harcandi_at`) özellikle sınanır. Negatif deneme her tablo için AYRI koşulur
   ve çıktısı runbook'a yazılır. Ölçüm "yetki yok" dediyse kaldıracak bir şey yoktur; bu da
   **ölçülmüş çıktı olarak** kaydedilir ("varsayıldı" DEĞİL).
+- [ ] **Step 8b:** **`git` ikilisinin dağıtım ortamında VAR olduğunu ölç** (Task 1 hakeminin
+  "doğrulayamadım" dediği kalem; evi burasıdır). `contracts.verify_pin` dış deponun commit'ini
+  `git rev-parse` ile okur — ikili yoksa **resmî koşuyu başlatan HER CLI alt komutu** ilk
+  adımda patlar. Ölç: dağıtılmış ortamda `git --version` ve pin doğrulayıcısının gerçek bir
+  çağrısı. İkili yoksa bu bir dağıtım blokerıdır, sessizce geçilmez.
+  Aynı adımda `GIT_DIR`/`GIT_WORK_TREE` ortam değişkenlerinin dağıtım ortamında **set OLMADIĞINI**
+  doğrula — set iseler `rev-parse` yanlış depoyu okur ve pin yabancı bir commit'e karşı karşılaştırılır.
 - [ ] **Step 8:** Takvim ucunun dönem alanını döndürdüğünü ve önbelleğin bayat kalmadığını ölç.
 - [ ] **Step 9:** Runbook'a **iki geri alma rejimini ayrı başlıkta** yaz (F20): pilot-öncesi
   şema geri alması · pilot-sonrası veri-koruyan ileri düzeltme. İkincisinde "şema geri alma

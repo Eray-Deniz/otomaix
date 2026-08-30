@@ -1,6 +1,6 @@
 # Active Tasks
 
-- **sektor-bilgi-paketi-plan2** — Plan 2 işletim hattı; plan ONAYLI (20 görev, risk kabulüyle — son iki düzeltme partisi incelenmedi), sıradaki adım yürütme
+- **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
 
 ## Proposed (spun-off)
 

@@ -131,8 +131,12 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   yol kapsayan deponun commit'ini raporluyor; kapı kapanıyor ama sebep yabancı depoyu
   adlandırabiliyor. (c) manifest şekli zorlanmıyor — boş dosya listesi doğrulamayı sessizce
   commit-only'ye düşürüyor.
-- **Hakemin doğrulayamadığı iki durum** (ortam yok, kayda geçti — kapsandı DEĞİL):
-  `git` ikilisi olmayan ortamda davranış; `GIT_DIR`/`GIT_WORK_TREE` ile ezildiğinde davranış.
+- **Hakemin doğrulayamadığı iki durum EV BULDU (2026-08-30 kapanış sweep'i): Task 18 Step 8b.**
+  `git` ikilisi olmayan ortamda davranış ve `GIT_DIR`/`GIT_WORK_TREE` ezilmesi. Neden orası:
+  pin doğrulayıcısı commit'i `git rev-parse` ile okur, yani ikili yoksa resmî koşuyu başlatan
+  HER CLI alt komutu ilk adımda patlar — bu bir **dağıtım** sorusudur, kod sorusu değil.
+  Tarih: Task 18 koşana kadar yok; yürütme oraya varmadı. Dürüst etiket: *doğrulanmadı; evi ve
+  adımı var.*
 - **KABUL EDİLMİŞ RİSK (arayüz eki, tur 3 sonrası):** "annotation çalışma zamanı zorlaması
   değildir" sınıfının kalıntısı ve kimlik karşılaştırmalarındaki hoşgörülü normalleştirme.
   Dördüncü hakem turuyla kovalanmadı; kod yazılırken kırmızı-yeşil döngüsüne ve görev-başı
