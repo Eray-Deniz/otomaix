@@ -436,20 +436,7 @@ async def test_insert_draft_accepts_decision_log(pkg_db):
     """
     sector_id = await _sub_sector(pkg_db)
     content = _valid_content()
-    decision_log = [
-        {
-            "tur": "karar",
-            "alan": unit["alan"],
-            "oge_yolu": path,
-            "unit_id": identity.new_unit_id(),
-            "oge_sha": unit["oge_sha"],
-            "karar": "ekle",
-            "gerekce": "İlk paket: birim yeni doğdu.",
-            "kanit": "",
-            "aktor": "sentez",
-        }
-        for path, unit in identity.enumerate_content_units(content).items()
-    ]
+    decision_log = _kapsayici_log(content)
 
     package_id = await insert_draft(
         pkg_db,
@@ -504,6 +491,114 @@ async def test_insert_draft_without_decision_log_keeps_plan1_behavior(pkg_db):
     )
     assert row["status"] == "draft"
     assert row["decision_log"] == [{"event": "draft_created", "actor": ACTOR}]
+
+
+def _kapsayici_log(content: dict, *, karar: str = "ekle") -> list[dict]:
+    """İçeriğin HER kanonik yolunu sahiplenen karar günlüğü."""
+    return [
+        {
+            "tur": "karar",
+            "alan": unit["alan"],
+            "oge_yolu": path,
+            "unit_id": identity.new_unit_id(),
+            "oge_sha": unit["oge_sha"],
+            "karar": karar,
+            "gerekce": "İlk paket: birim yeni doğdu.",
+            "kanit": "",
+            "aktor": "sentez",
+        }
+        for path, unit in identity.enumerate_content_units(content).items()
+    ]
+
+
+async def test_insert_draft_rejects_a_log_that_does_not_cover_the_content(pkg_db):
+    """F2: TEK yazma yüzeyi tutarsız çifti KALICI HÂLE GETİRMEZ.
+
+    Şema kapısı satırın kendi biçimini ölçer; kapsamayı ölçmez. Bu satır
+    olmadan K-135 yüzeyi on altı birim iddia eden bir günlüğü on dokuz öğelik
+    bir içerikle yan yana yazabilirdi ve tutarsızlık ancak denetçi turunda
+    ortaya çıkardı.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    content = _valid_content()
+    eksik = [r for r in _kapsayici_log(content) if r["oge_yolu"] != "kapsam"]
+    with pytest.raises(ValueError, match="içerik ile karar günlüğü tutarsız"):
+        await insert_draft(
+            pkg_db,
+            sector_id=sector_id,
+            content=content,
+            schema_version=1,
+            actor=ACTOR,
+            decision_log=eksik,
+        )
+    assert (
+        await pkg_db.fetchval(
+            "SELECT count(*) FROM social.sector_packages WHERE sector_id = $1",
+            sector_id,
+        )
+        == 0
+    ), "tutarsız çiftte satır yazılmış"
+
+
+async def test_insert_draft_accepts_a_log_carrying_kirp_and_cikar_rows(pkg_db):
+    """F2 aşırı-red kontrolü: yaşamayan satırlar MEŞRUDUR, kapı onları saymaz.
+
+    `kirp` ve `cikar` satırlarının yolu tanım gereği içerikte YOKTUR (kırpma
+    paketten çıkarır, kayıttan çıkarmaz). Kapı "her satırın yolu içerikte
+    olsun" diye yazılsaydı gerçek bir kırpma taşıyan HER paket reddedilirdi.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    content = _valid_content()
+    decision_log = _kapsayici_log(content)
+    decision_log.append(
+        {
+            "tur": "karar",
+            "alan": "kanca_kaliplari",
+            "oge_yolu": "kanca_kaliplari[9]",
+            "unit_id": identity.new_unit_id(),
+            "oge_sha": "e" * 64,
+            "karar": "kirp",
+            "gerekce": "Uzunluk tavanı aşıldı, aday pakete alınmadı.",
+            "kanit": "",
+            "aktor": "motor",
+            "kural_kimligi": "K-130",
+            "kural_surumu": "2026-08-27",
+        }
+    )
+    decision_log.append(
+        {
+            "tur": "karar",
+            "alan": "yasaklar_ve_hassasiyetler",
+            "oge_yolu": "yasaklar_ve_hassasiyetler[4]",
+            "unit_id": identity.new_unit_id(),
+            "oge_sha": "f" * 64,
+            "karar": "cikar",
+            "gerekce": "Mevzuat yürürlükten kalktı.",
+            "kanit": "Resmî Gazete 2026-01-01, mülga.",
+            "aktor": "insan",
+        }
+    )
+    decision_log.append(
+        {
+            "tur": "not",
+            "sinif": "reddedilen-aday",
+            "gerekce": "Kaynak pinlenmemiş.",
+        }
+    )
+    package_id = await insert_draft(
+        pkg_db,
+        sector_id=sector_id,
+        content=content,
+        schema_version=1,
+        actor=ACTOR,
+        decision_log=decision_log,
+    )
+    row = await pkg_db.fetchrow(
+        "SELECT content, decision_log FROM social.sector_packages WHERE id = $1",
+        package_id,
+    )
+    assert row["decision_log"] == decision_log
+    assert identity.check_unit_integrity(row["content"], row["decision_log"]) == []
 
 
 async def test_insert_draft_with_an_empty_decision_log_keeps_the_plan1_trace(pkg_db):

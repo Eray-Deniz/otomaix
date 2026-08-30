@@ -399,8 +399,13 @@ def _check_special_day_shapes(ozel_gun: Any, errors: list[str]) -> None:
                 _require_text(entry[slot], f"{label}.{slot}", errors)
 
 
-def _has_meaningful_text(value: Any) -> bool:
+def has_meaningful_text(value: Any) -> bool:
     """Yaprak, noktalama ve boşluk dışında İÇERİK taşıyor mu.
+
+    **PUBLIC (Plan 2 fix turu 1).** Bu yüklem artık modül dışından da
+    çağrılıyor (`sector_pipeline.identity` karar günlüğü alanlarını AYNI
+    ölçüyle sınar); alt çizgili ad "modül içi" diye yalan söylüyordu. Özel
+    takma ad aşağıda korunuyor, çağrı yerleri kırılmıyor.
 
     **Yazım ve okuma bu TEK yüklemi paylaşır** — K-01b'nin tek-normalize
     kuralıyla aynı disiplin. İkisi ayrı ölçü kullanırsa kabulden geçen bir değer
@@ -414,6 +419,11 @@ def _has_meaningful_text(value: Any) -> bool:
     tek yerde yaşar ve iki taraf da onu çağırır.
     """
     return isinstance(value, str) and any(ch.isalnum() for ch in value)
+
+
+# Geriye uyum: modül içi çağrı yerleri (ve onları çiviyen testler) bu adı
+# kullanmaya devam eder.
+_has_meaningful_text = has_meaningful_text
 
 
 def _require_text(value: Any, label: str, errors: list[str]) -> None:

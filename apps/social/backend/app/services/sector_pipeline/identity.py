@@ -54,7 +54,7 @@ from app.services.sector_packages import (
     SPECIAL_DAY_SLOTS,
     TEXT_FIELDS,
     VIDEO_POOL_KEYS,
-    _has_meaningful_text,
+    has_meaningful_text,
     structural_errors,
 )
 
@@ -227,14 +227,14 @@ def enumerate_content_units(content: dict) -> dict[str, dict]:
 
 
 def _require_meaningful(value: Any, label: str, errors: list[str]) -> None:
-    """Alan ANLAMLI bir METİN mi — ölçü Plan 1 ile AYNI (`_has_meaningful_text`).
+    """Alan ANLAMLI bir METİN mi — ölçü Plan 1 ile AYNI (`has_meaningful_text`).
 
     Ayrı bir ölçü yazılsaydı yazım kapısından geçen bir değer burada hiçe
     inebilir ya da tersi olurdu; iki taraf aynı yüklemi çağırır.
     """
     if not isinstance(value, str):
         errors.append(f"{label} metin değil: {type(value).__name__}")
-    elif not _has_meaningful_text(value):
+    elif not has_meaningful_text(value):
         errors.append(f"{label} boş ya da yalnız noktalama")
 
 
@@ -294,7 +294,7 @@ def _validate_karar_row(
     kanit = row.get("kanit")
     if "kanit" in row and not isinstance(kanit, str):
         errors.append(f"{label}.kanit metin değil: {type(kanit).__name__}")
-    elif karar == "cikar" and not _has_meaningful_text(kanit):
+    elif karar == "cikar" and not has_meaningful_text(kanit):
         errors.append(
             f"{label} karar='cikar' satırı pozitif kanıt olmadan GEÇERSİZ (spec §3.5)"
         )
@@ -313,11 +313,11 @@ def _validate_karar_row(
             )
 
     damgalar = [
-        name for name in KURAL_DAMGA_ALANLARI if _has_meaningful_text(row.get(name))
+        name for name in KURAL_DAMGA_ALANLARI if has_meaningful_text(row.get(name))
     ]
     if aktor == "motor":
         for name in KURAL_DAMGA_ALANLARI:
-            if not _has_meaningful_text(row.get(name)):
+            if not has_meaningful_text(row.get(name)):
                 errors.append(
                     f"{label} aktor='motor' satırı {name} taşımak ZORUNDA (K-145) — "
                     "kural provenansı uygulanan kararın KENDİSİNDE yaşar"
@@ -412,27 +412,39 @@ def decision_units(content: dict, decision_log: list[dict]) -> dict[str, dict]:
     Geçseydi bozuk bir günlükten üretilmiş "görüntü" sessizce denetçi zincirine
     akardı.
 
-    Kapsam sınırı DÜRÜSTÇE: burası eşlemenin İÇERİKLE tutarlı olduğunu
-    kanıtlamaz — o `check_unit_integrity`'nin işidir. İçerikte karşılığı
-    olmayan bir yolun `deger`'i `None` gelir; çağıran ÖNCE bütünlük kapısını
-    koşturur.
+    Fail-closed İÇERİK konusunda da (fix turu 1, F2): bütünlük kapısını
+    geçmeyen bir çiftten görüntü TÜRETİLMEZ. Önceki yazım hayalet yolu
+    `deger=None` ile sessizce geçiriyor ve yükümlülüğü docstring'de çağırana
+    devrediyordu — yani kapı değil RİCA idi. Üretici ile tüketicinin farklı
+    şeye bakması K-145'in saldırdığı sınıfın ta kendisidir.
     """
+    # Üç kapı, ÜÇ AYRI mesaj: düşen kapının adı hata metninden okunabilmeli.
+    # Hepsi tek başlık altında toplansaydı bozuk bir içerik "günlük tutarsız"
+    # diye anılırdı ve okuyucu yanlış artefaktı incelerdi.
+    errors = structural_errors(content)
+    if errors:
+        raise ValueError("içerik yazım kapısını geçmedi: " + "; ".join(errors))
     errors = validate_decision_log(decision_log)
     if errors:
         raise ValueError("karar günlüğü şemayı geçmedi: " + "; ".join(errors))
+    errors = check_unit_integrity(content, decision_log)
+    if errors:
+        raise ValueError("içerik ile karar günlüğü tutarsız: " + "; ".join(errors))
 
     units = enumerate_content_units(content)
     derived: dict[str, dict] = {}
     for row in _yasayan_satirlar(decision_log):
         yol = row["oge_yolu"]
-        oge = units.get(yol)
+        # Bütünlük kapısı yukarıda geçtiği için yol MUTLAKA vardır ve
+        # satırın `alan`'ı öğenin alanıyla uzlaşmıştır.
+        oge = units[yol]
         derived[row["unit_id"]] = {
             "unit_id": row["unit_id"],
             "alan": row["alan"],
             "oge_yolu": yol,
             "karar": row["karar"],
             "oge_sha": row["oge_sha"],
-            "deger": oge["deger"] if oge is not None else None,
+            "deger": oge["deger"],
         }
     return derived
 
@@ -480,7 +492,17 @@ def check_unit_integrity(content: dict, decision_log: list[dict]) -> list[str]:
                 f"hayalet birim: {row['unit_id']!r} — {yol!r} yolunun içerikte "
                 "karşılığı YOK"
             )
-        elif row["oge_sha"] != oge["oge_sha"]:
+            continue
+        # `alan` zorunlu, dışa verilen ve `decision_units`'in denetçi anlık
+        # görüntüsüne KOPYALADIĞI bir alandır. Yolla uzlaştırılmazsa satır bir
+        # alanı iddia edip başkasının yolunu sahiplenebilir; uyuşmazlık her
+        # kapıdan geçip envantere olduğu gibi akardı (fix turu 1, F3).
+        if row["alan"] != oge["alan"]:
+            errors.append(
+                f"alan uyuşmazlığı: {yol!r} yolu {oge['alan']!r} alanına ait, "
+                f"satır {row['alan']!r} diyor ({row['unit_id']!r})"
+            )
+        if row["oge_sha"] != oge["oge_sha"]:
             errors.append(
                 f"bayat oge_sha: {yol!r} — günlükte {row['oge_sha']}, "
                 f"içerikte {oge['oge_sha']}"
@@ -529,7 +551,18 @@ def donmus(value: Any) -> Any:
     if isinstance(value, _DEGISMEZ_SKALERLER):
         return value
     if isinstance(value, Mapping):
-        return MappingProxyType({key: donmus(value[key]) for key in sorted(value)})
+        try:
+            anahtarlar = sorted(value)
+        except TypeError as exc:
+            # Mesaj KURALIN kendisinden gelsin: `sorted`'ın iç hatası
+            # ("'<' not supported...") okuyucuya hangi kuralın düştüğünü
+            # söylemiyordu.
+            raise TypeError(
+                "donmus eşleme anahtarları karşılaştırılamıyor: "
+                f"{sorted(type(key).__name__ for key in value)} — sıralı "
+                "kanonik kopya üretilemez"
+            ) from exc
+        return MappingProxyType({key: donmus(value[key]) for key in anahtarlar})
     if isinstance(value, (list, tuple)):
         return tuple(donmus(item) for item in value)
     if isinstance(value, (set, frozenset)):

@@ -31,6 +31,14 @@ from .test_sector_packages_service import CUMHURIYET_KEY, _valid_content
 
 UNIT_ID_RE = re.compile(r"^ku-[0-9a-f]{12}$")
 
+# `_valid_content()`'in ürettiği kanonik yol sayısı. Dökümü: 3 düz metin alanı
+# (kapsam · ton_ve_dil · gorsel_kodlar) + 4 liste alanının birer öğesi + 4 video
+# havuzu öğesi (2 hareket + 2 sahne) + 1 özel günün 5 yuvası = 16.
+#
+# Adı olmadan dört testte çıplak `16` duruyordu: `_valid_content` değişince
+# dördü birden opak bir sayıyla kırılırdı.
+BEKLENEN_BIRIM_SAYISI = 16
+
 
 # ─── Ortak kurgu ────────────────────────────────────────────────────────────
 
@@ -219,48 +227,50 @@ def test_ekle_row_may_carry_yerine_gecer():
 
 
 def test_decision_units_derived_from_living_log_rows():
-    """Yaşayan küme = `koru` + `guncelle` + `ekle`."""
+    """Yaşayan küme = `koru` + `guncelle` + `ekle`.
+
+    Kurgu KAPSAYICIDIR: günlük içeriğin HER yolunu sahiplenir ve her satırın
+    `alan`'ı yolunun alanıyla uyuşur. Eski kurgu üç satırı üç ayrı yola
+    bağlıyor ama `alan`'ı `_karar_row` varsayılanında (`kanca_kaliplari`)
+    bırakıyordu — yani F3'ün kusurunu SERGİLİYORDU (hakem yakaladı).
+    """
     content = _valid_content()
-    paths = list(identity.enumerate_content_units(content))
-    rows = [
-        _karar_row(
-            oge_yolu=paths[0],
-            unit_id="ku-000000000001",
-            karar="koru",
-            oge_sha=identity.enumerate_content_units(content)[paths[0]]["oge_sha"],
-        ),
-        _karar_row(
-            oge_yolu=paths[1],
-            unit_id="ku-000000000002",
-            karar="guncelle",
-            oge_sha=identity.enumerate_content_units(content)[paths[1]]["oge_sha"],
-        ),
-        _karar_row(
-            oge_yolu=paths[2],
-            unit_id="ku-000000000003",
-            karar="ekle",
-            oge_sha=identity.enumerate_content_units(content)[paths[2]]["oge_sha"],
-        ),
-    ]
+    rows = _log_for(content)
+    paths = [row["oge_yolu"] for row in rows]
+    rows[0].update(unit_id="ku-000000000001", karar="koru")
+    rows[1].update(unit_id="ku-000000000002", karar="guncelle")
+    rows[2].update(unit_id="ku-000000000003", karar="ekle")
+
     units = identity.decision_units(content, rows)
-    assert set(units) == {"ku-000000000001", "ku-000000000002", "ku-000000000003"}
+    assert len(units) == BEKLENEN_BIRIM_SAYISI
+    assert {"ku-000000000001", "ku-000000000002", "ku-000000000003"} <= set(units)
     assert units["ku-000000000002"]["oge_yolu"] == paths[1]
     assert units["ku-000000000002"]["karar"] == "guncelle"
+    for unit in units.values():
+        assert unit["alan"] == unit["oge_yolu"].split("/")[0].split("[")[0]
 
 
 def test_cikar_row_drops_unit_from_set():
-    """`cikar` birimi yaşayan kümeden DÜŞÜRÜR."""
+    """`cikar` birimi yaşayan kümeden DÜŞÜRÜR — çıkarılan öğe içerikte YOKTUR.
+
+    Çıkarılan birim aday pakete girmediği için yolu da içerikte bulunmaz;
+    kurgu bu yüzden kapsayıcı günlüğün ÜSTÜNE bir `cikar` satırı ekler.
+    """
     content = _valid_content()
-    path = next(iter(identity.enumerate_content_units(content)))
-    rows = [
+    rows = _log_for(content)
+    rows.append(
         _karar_row(
-            oge_yolu=path,
+            alan="kanca_kaliplari",
+            oge_yolu="kanca_kaliplari[9]",
             unit_id="ku-000000000009",
             karar="cikar",
+            oge_sha="e" * 64,
             kanit="Mevzuat 2026-01-01'de yürürlükten kalktı.",
         )
-    ]
-    assert identity.decision_units(content, rows) == {}
+    )
+    units = identity.decision_units(content, rows)
+    assert len(units) == BEKLENEN_BIRIM_SAYISI  # boş küme bu testi kandırırdı
+    assert "ku-000000000009" not in units
 
 
 def test_kirp_row_is_not_a_living_unit():
@@ -282,9 +292,52 @@ def test_kirp_row_is_not_a_living_unit():
         )
     )
     yasayanlar = identity.decision_units(content, rows)
-    assert len(yasayanlar) == 16, sorted(yasayanlar)  # boş küme bu testi kandırırdı
+    assert len(yasayanlar) == BEKLENEN_BIRIM_SAYISI, sorted(yasayanlar)  # boş küme kandırırdı
     assert "ku-000000000077" not in yasayanlar
     assert identity.check_unit_integrity(content, rows) == []
+
+
+def test_decision_units_refuses_an_inconsistent_pair():
+    """F2: TEK ÜRETİCİ içerik konusunda da fail-closed'dur.
+
+    R6(b) bu dönüşü denetçi zincirinin `unit_snapshot` girdisi yapıyor.
+    Hayalet yol taşıyan bir çift sessizce `deger=None` ile akarsa, "çağıran
+    önce bütünlüğü koşturur" cümlesi bir KAPI değil bir RİCA olur — planın her
+    yerde reddettiği kalıp (K-145'in saldırdığı üretici/tüketici ayrışması).
+    """
+    content = _valid_content()
+    rows = _log_for(content)
+    rows.append(
+        _karar_row(
+            alan="kanca_kaliplari",
+            oge_yolu="kanca_kaliplari[42]",
+            unit_id="ku-00000000feed",
+            oge_sha="f" * 64,
+        )
+    )
+    with pytest.raises(ValueError, match="içerik ile karar günlüğü tutarsız"):
+        identity.decision_units(content, rows)
+
+
+def test_decision_units_refuses_a_log_that_leaves_content_unowned():
+    """F2: eksik yön de kapalı — sahipsiz öğe de görüntü ÜRETTİRMEZ."""
+    content = _valid_content()
+    rows = [r for r in _log_for(content) if r["oge_yolu"] != "kapsam"]
+    with pytest.raises(ValueError, match="içerik ile karar günlüğü tutarsız"):
+        identity.decision_units(content, rows)
+
+
+def test_decision_units_names_the_content_gate_when_content_is_malformed():
+    """Mesaj DÜŞEN KAPIYI adlandırır: bozuk içerik "tutarsızlık" diye anılmaz.
+
+    `check_unit_integrity` Plan 1 yazım kapısını da koşturduğu için şekil
+    hataları "içerik ile karar günlüğü tutarsız" başlığı altında çıkıyordu —
+    okuyucu günlüğü suçlardı. (Öz-inceleme, fix turu 1.)
+    """
+    bozuk = _valid_content()
+    del bozuk["kapsam"]
+    with pytest.raises(ValueError, match="içerik yazım kapısını geçmedi"):
+        identity.decision_units(bozuk, [])
 
 
 def test_decision_units_refuses_an_invalid_log():
@@ -310,7 +363,7 @@ def test_enumerate_covers_every_content_shape():
     assert "video_kodlar/hareket[0]" in paths
     assert "video_kodlar/sahne[1]" in paths
     assert f"ozel_gun/{CUMHURIYET_KEY}/mesaj_ekseni" in paths
-    assert len(paths) == 16, sorted(paths)
+    assert len(paths) == BEKLENEN_BIRIM_SAYISI, sorted(paths)
 
 
 def test_duplicate_identical_text_gets_distinct_paths():
@@ -361,7 +414,7 @@ def test_integrity_passes_on_consistent_package():
     """POZİTİF KONTROL — tutarlı paket hiç hata üretmez."""
     content = _valid_content()
     rows = _log_for(content)
-    assert len(rows) == 16, rows  # boş günlük bu testi kandırırdı
+    assert len(rows) == BEKLENEN_BIRIM_SAYISI, rows  # boş günlük bu testi kandırırdı
     assert identity.check_unit_integrity(content, rows) == []
 
 
@@ -397,6 +450,21 @@ def test_integrity_rejects_ghost_unit():
     assert any(
         "hayalet birim" in e and "kanca_kaliplari[42]" in e for e in errors
     ), errors
+
+
+def test_integrity_rejects_row_claiming_the_wrong_field():
+    """F3: satır bir alanı iddia edip BAŞKA alanın yolunu sahiplenemez.
+
+    `alan` zorunlu, dışa verilen ve denetçi anlık görüntüsüne kopyalanan bir
+    alandır; yolla uzlaştırılmazsa satır `kanca_kaliplari` der, `kapsam`'ı
+    sahiplenir ve bu uyuşmazlık envantere olduğu gibi geçerdi.
+    """
+    content = _valid_content()
+    rows = _log_for(content)
+    hedef = next(r for r in rows if r["oge_yolu"] == "kapsam")
+    hedef["alan"] = "kanca_kaliplari"
+    errors = identity.check_unit_integrity(content, rows)
+    assert any("alan uyuşmazlığı" in e and "kapsam" in e for e in errors), errors
 
 
 def test_integrity_rejects_stale_sha_on_correct_path():
@@ -437,7 +505,7 @@ def test_first_package_assigns_new_id_to_every_enumerated_unit():
     """İlk paket: her sayılan birim YENİ kimlik alır, hiçbiri boşta kalmaz."""
     content = _valid_content()
     units = identity.enumerate_content_units(content)
-    assert len(units) == 16, sorted(units)  # boş sayım bu testi kandırırdı
+    assert len(units) == BEKLENEN_BIRIM_SAYISI, sorted(units)  # boş sayım kandırırdı
     rows = _log_for(content, karar="ekle")
     derived = identity.decision_units(content, rows)
     assert len(derived) == len(units)
@@ -531,6 +599,12 @@ def test_donmus_rejects_a_frozen_dataclass_element():
     """Donmuş dataclass öğeli alanlar `donmus`'a VERİLMEZ — kural 5 düşürür."""
     with pytest.raises(TypeError):
         identity.donmus((_DonmusOge("ku-0123456789ab", "sebep"),))
+
+
+def test_donmus_rejects_uncomparable_mapping_keys():
+    """Hata KURALIN kendisinden gelir, `sorted`'ın iç mesajından değil."""
+    with pytest.raises(TypeError, match="anahtarları karşılaştırılamıyor"):
+        identity.donmus({1: "a", "b": "c"})
 
 
 def test_donmus_is_idempotent():

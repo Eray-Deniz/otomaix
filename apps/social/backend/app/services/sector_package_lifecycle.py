@@ -28,7 +28,10 @@ from app.services.sector_packages import (
     normalize_special_day_key,
     validate_package_content,
 )
-from app.services.sector_pipeline.identity import validate_decision_log
+from app.services.sector_pipeline.identity import (
+    check_unit_integrity,
+    validate_decision_log,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -332,16 +335,34 @@ async def insert_draft(
     (fail-closed).
 
     **`decision_log` (Plan 2 Task 3).** Verilmezse Plan 1 davranışı AYNEN
-    korunur: günlüğe tek bir `draft_created` izi yazılır. Verilirse
-    `identity.validate_decision_log` kapısından GEÇİRİLİR ve boş değilse
-    yazılan günlük ODUR — Plan 1'in olay satırı ÖNÜNE eklenmez: o satır
-    şemayı geçmez ve karar günlüğünü okuyan her kapı (`check_unit_integrity`
-    dâhil) onu geçersiz sayardı. Aktör izi `package_events` katmanında
-    zaten yaşıyor.
+    korunur: günlüğe tek bir `draft_created` izi yazılır. Verilirse İKİ
+    kapıdan geçer — `identity.validate_decision_log` (satır şeması) ve
+    `identity.check_unit_integrity` (içerikle iki yönlü örtüşme) — ve boş
+    değilse yazılan günlük ODUR. Plan 1'in olay satırı ÖNÜNE eklenmez: o
+    satır şemayı geçmez ve karar günlüğünü okuyan her kapı onu geçersiz
+    sayardı.
+
+    Bütünlük kapısının BURADA olması zorunludur: K-135 tek yazma yüzeyidir,
+    yani tutarsız bir çiftin kalıcı hâle gelebileceği tek kapı da burasıdır.
+    Sonraki bir göreve bırakılsaydı, bu görevin ürettiği "iki yönlü örtüşme"
+    garantisini hiçbir şey denetlemiyor olurdu.
 
     Kimlik günlükte, içerik şemasında DEĞİL: içeriğe `unit_id` eklemek yazım
     kapısından geçmez (`_check_cta_items` anahtar kümesini eşitlikle ölçer).
     İkisi AYNI işlemde yazıldığı için eşleme bayatlayamaz.
+
+    **ÇÖZÜLMEDİ + PARK EDİLDİ — taslağın yaratıcısı bu yolda KAYBOLUYOR
+    (fix turu 1, F1; evi YOK).** Ölçüldü: `insert_draft` hiç olay yazmaz
+    (`log_package_event`'in bu modüldeki tek çağrısı `_apply_status_transition`
+    içindedir), `package_events.EVENT_TYPES` kapalıdır ve `draft_created`
+    diye bir tür TAŞIMAZ, `sector_packages` tablosunda da `actor`/`created_by`
+    kolonu YOKTUR (migration 032). Yani `actor` şu ana kadar YALNIZ Plan 1'in
+    `draft_created` satırında yaşıyordu; günlük verildiğinde o satır yazılmaz
+    ve yaratıcı hiçbir yerde durmaz. Bu bir kabul edilmiş risk DEĞİL, açık bir
+    kayıptır ve burada çözülemez: çözümü ya kapalı olay enum'unu genişletmek
+    (K-56 bildirim bağı nedeniyle bedeli var) ya da bir kolon eklemek
+    (migration) demektir — ikisi de bu görevin kapsamı dışındadır. Sahibi
+    kontrolör tarafından atanacaktır; burada uydurma bir ev VERİLMEZ.
     """
     owner = _require_actor(actor)
 
@@ -369,6 +390,17 @@ async def insert_draft(
     )
     if not result.ok:
         raise ValueError("paket içeriği yazım kapısını geçmedi: " + "; ".join(result.errors))
+
+    if decision_log:
+        # Yaşamayan satırlar (`kirp` · `cikar` · notlar) bu kapıda SAYILMAZ:
+        # kırpılan öğe aday pakete girmez, yani yolu içerikte olmayacaktır.
+        # Kapı "her satırın yolu içerikte olsun" diye yazılsaydı gerçek bir
+        # kırpma taşıyan her paket reddedilirdi.
+        pair_errors = check_unit_integrity(content, decision_log)
+        if pair_errors:
+            raise ValueError(
+                "içerik ile karar günlüğü tutarsız: " + "; ".join(pair_errors)
+            )
     for warning in result.warnings:
         logger.warning("paket taslağı uyarısı (sector_id=%s): %s", sector_id, warning)
 
