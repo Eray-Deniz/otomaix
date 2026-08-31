@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-08-30
+last-touched: 2026-08-31
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -60,17 +60,21 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
   manifest, fail-closed doğrulayıcıyı geçirebiliyordu (üç yol: hata-işareti commit değeri ·
   mutlak yol anahtarı · `..` gezinmesi). Üçü de ölçümle doğrulandı ve `72f5744` ile kapatıldı;
   kapanış turu **approve** verdi. Kalan tek medium kabul edilmiş risk (aşağıda).
-- **Task 3 KODU İNDİ, KAPANMADI** — kalıp kimliği + karar günlüğü şeması (K-84 ailesi).
-  `1dd8c5e` (ana) + `411c767` (düzeltme 1) + `a34d3f6` (düzeltme 2). Hakem turu spec ❌ verdi,
-  üç Important düzeltme turu 1'de kapandı, yeniden inceleme altısını da ADDRESSED verdi ama
-  **kendi sınıfından yeni bir Important açtı** (yanlış K-56 gerekçesi). Düzeltme turu 2 indi.
-  **EKSİK OLAN: düzeltme turu 2'nin kapsamlı yeniden incelemesi HİÇ KOŞMADI.**
-  Bu, sonraki oturumun ilk işidir — Task 4'e geçmeden önce.
+- **Task 3 TAMAM (2026-08-31)** — kalıp kimliği + karar günlüğü şeması (K-84 ailesi).
+  `1dd8c5e` (ana) + `411c767` (düzeltme 1) + `a34d3f6` (düzeltme 2) + `ad95846` (düzeltme 3).
+  Zincir: hakem turu spec ❌ (3 Important + 5 Minor) → düzeltme 1 → yeniden inceleme (hepsi
+  ADDRESSED ama **kendi sınıfından yeni bir Important**) → düzeltme 2 → yeniden inceleme
+  (iki kalemin ikisi de KISMEN kapanmış: 2 Important + 2 Minor) → düzeltme 3 → kontrolör
+  **sınıfı mekanik kapattı** (47 atıflık üretilmiş matris, 0 hata), dördüncü yargı turu
+  AÇILMADI. Test tabanı 744 → 745.
+  **Dürüst etiket:** son tur bağımsız bir hakemin "kusursuz" yargısını almadı; kapanış
+  kontrolör kararıdır. Gerekçe: üç tur da AYNI ekseni buluyordu (düzeltme metninin kendi
+  içinde ölçülmemiş atıf), ve o eksen örnekle değil matrisle kapatıldı.
 - **Commit etiketleri düzeltildi (`f79f28f`, Eray onayı).** Defter denetimi iki MECH-FAIL
   veriyordu; altı yerel commit aynı içerikle doğru etiketle yeniden yazıldı, denetim `rc=0`.
   Yedek etiket: `backup/pre-footer-fix-20260830`.
-- **Sıradaki: Task 3'ün son yeniden incelemesi, sonra Task 4** (sözleşme v2 — denetçi
-  yeniden-doğrulama envanteri + sentez kimlik taşıması).
+- **Sıradaki: Task 4** (sözleşme v2 — denetçi yeniden-doğrulama envanteri + sentez kimlik
+  taşıması). Task 3'ün açık döngüsü kalmadı.
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
@@ -186,6 +190,14 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
 - Plan 1 bölümlerinin kart geçişi taranmadı (boşluk raporu kapsam sınırı) — Plan 1 alanında
   kusur çıkarsa koşulur.
 
+- **Düzeltme turu 3 bağımsız hakem GÖRMEDİ — kabul, evi VAR.** Kapanış kontrolör kararıdır
+  (sınıf 47 atıflık üretilmiş matrisle kapatıldı; dördüncü yargı turu açılmadı çünkü üç tur
+  da aynı ekseni buluyordu). **Ev uydurulmadı:** dal kapanışındaki final inceleme tabanı
+  `a806e29` olduğu için bu commit (`ad95846`) o incelemenin aralığına ZATEN giriyor —
+  kendiliğinden kapsanır. **Yeniden açılma koşulu:** Task 3 yüzeyinde (`insert_draft`,
+  `check_unit_integrity`, kimlik modülü) bir kusur çıkarsa ilk bakılacak yer bu turdur.
+  Dürüst etiket: *bağımsız yargı alınmadı; kapsanma yolu adlandırılmış.*
+
 ## Task 3'ün doğurduğu evler (2026-08-30 kapanış sweep'i — hepsi TARİHLİ)
 
 - **Taslağın yaratıcısı kayboluyor — EŞLİ yükümlülük, Task 6 + Task 15.** Karar günlüğü
@@ -216,6 +228,13 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   Kapatmak `verify_pin`'e içerilik çözümlemesi eklemeyi gerektirir; bu, ekin R14 hükmünün
   yasakladığı beşinci kapıdır. Modül belgesinde dürüst etiketiyle ve yeniden açılma
   koşuluyla duruyor. **"Ele alındı" DEĞİL.**
+- **033'ün geri alma dosyası YOK — çözülmedi, evi var, tarihi Task 6'ya bağlı.** Ölçüldü
+  (2026-08-31): `shared/db/migrations/rollback/` yalnız `032_down.sql` taşıyor. Hem kod
+  belgesi hem rapor, olay türü yolunun bedelini "migration + rollback" diye yazıyor; o yol
+  seçilirse `033_down.sql` sıfırdan yazılacak. Ev: **Task 6** — zaten olay türü genişletmesini
+  ve migration'ını F1 eşli yükümlülüğü altında sahipleniyor.
+  Dürüst etiket: *çözülmedi; evi ve adımı var.*
+
 - **Yedek etiket `backup/pre-footer-fix-20260830` süresiz durmaz.** Silinme koşulu: dal
   main'e merge edildiğinde VEYA final inceleme temiz geçtiğinde. O ana kadar commit etiketi
   yeniden yazımının geri dönüş yolu.

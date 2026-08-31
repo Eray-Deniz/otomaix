@@ -1,32 +1,18 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-08-30
+written: 2026-08-31
 ---
 
-> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-30) — bu anlatı **Task 3'ün ortasına** aittir; güncel
-> durum TASK.md + yürütme defteri + git defterinden okunur, çelişkide onlar esastır.
+> ⚠️ YÜRÜTME AÇIK — bu anlatı **Task 3 kapandıktan sonra, Task 4'ten önce** yazıldı. Güncel
+> durum TASK.md + yürütme defteri + git defterinden okunur; çelişkide onlar esastır.
 
 # Resume From
 
-**İlk iş: Task 3 düzeltme turu 2'nin kapsamlı yeniden incelemesi. KOŞMADI.**
-Task 4'e geçmeden önce bu kapatılır. Kod indi (`a34d3f6`), testler yeşil, ama düzeltmenin
-kendisi hiçbir hakem görmedi — ve bu oturumda tam olarak bu sınıf bir kez daha kendini
-gösterdi: düzeltme turu 1'in yeniden incelemesi, düzeltmenin *kendi* içinde yeni bir Important
-buldu. Yani "düzeltme küçüktü, incelemeyi atlayalım" burada ölçülmüş biçimde yanlış.
+**Task 3 KAPANDI. Açık döngü YOK. Sıradaki iş Task 4** (sözleşme v2 — denetçi
+yeniden-doğrulama envanteri + sentez kimlik taşıması).
 
-Yeniden inceleme kapsamı: `411c767..a34d3f6`. Doğrulanacak iki kalem:
-1. **F4** — yanlış K-56 gerekçesi hem `sector_package_lifecycle.py` belgesinden hem
-   `task-3-report.md`'nin iki F1 bölümünden silindi mi, ve yerine yazılan maliyet ölçüme
-   uyuyor mu. Uygulayıcı, ne kontrolörün ne hakemin saydığı bir kalem daha bulduğunu
-   bildiriyor: migration 033'ün kendi doğrulama bloğu kısıtın tanımını **birebir** bekliyor,
-   dolayısıyla genişletme o beklentiyi de günceller. Uygulayıcı bunun bir yarısını
-   "okudum, ölçmedim" diye dürüstçe etiketlemiş — **o etiket doğrulanmalı, kabul edilmemeli.**
-2. **Minor** — uyarı günlükleme sırası geri alındı mı ve neden öyle olduğu yazıldı mı.
-   Uygulayıcı bu değişiklik için gerçek bir kırmızı üretilemeyeceğini söylüyor (uyarı yolunu
-   sabitleyen test yok) ve sahte kanıt üretmeyi reddetmiş — doğru davranış, ama demek ki o yol
-   test edilmiyor.
-
-Sonra **Task 4** (sözleşme v2 — denetçi yeniden-doğrulama envanteri + sentez kimlik taşıması).
+Geçen oturumun tek açık döngüsü — düzeltme turu 2'nin yeniden incelemesi — bu oturumda
+koşuldu, iki Important buldu, düzeltme turu 3 ile kapandı (`ad95846`).
 
 Komut: `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
 → resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam** seçilir.
@@ -41,105 +27,111 @@ Bağlam kaybolursa **defter + `git log`** esastır, anlatı değil.
 **Yürütme durumu (TASK.md "Execution State"):** kip alt-ajanlı · başlangıç çapası `a806e29` ·
 defter penceresi `a806e29` · `cp_count: 1` · `last_checkpoint_ref: 72f5744`.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, origin'in 17 commit önünde. **Push EDİLMEDİ** —
-uzak dal hâlâ `a806e29`'da. **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`:
+**Dal:** `feat/sektor-bilgi-paketi-plan2`. **Push EDİLMEDİ** — uzak dal hâlâ `a806e29`'da
+(kaç commit önde olduğu `git log origin/feat/...^..HEAD` ile okunur; buraya yazılmaz, drift eder). **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`:
 `master`, HEAD `d901eb4`, temiz, uzak deposu yok.
 
 **Yedek etiket `backup/pre-footer-fix-20260830`** commit etiketi yeniden yazımının geri dönüş
-yoludur. Silinme koşulu TASK.md'de yazılı.
+yoludur. Silinme koşulu TASK.md'de yazılı (dal merge edilince VEYA final inceleme temiz geçince).
 
-**Her görev dispatch'inde ZORUNLU olarak taşınacaklar** (hepsi bu oturumda işe yaradı):
+**Her görev dispatch'inde ZORUNLU olarak taşınacaklar:**
 1. Arayüz eki **bağlayıcıdır**. Uygulayıcı brief'e, ekin ilgili hükümleri **harfiyen
    kopyalanmış** olarak gider — plan metni tek başına yetmez, "eki oku" demek de yetmez.
 2. Test komutu **sanal ortam aktifleştirilerek** koşar (aşağıda Verification).
-3. **Taban 744**; bu sayı düşmeyecek.
-4. **`Exec-Kind` sınıflandırıcıya karşı seçilir, uzantıya karşı DEĞİL.** Bu oturumda bir
-   history rewrite'a mal oldu. Beyaz liste altı değerlidir: `code` (hem test hem impl) ·
-   `red-only` (yalnız test) · `green-only` (yalnız impl) · `docs-only` (hiç çalıştırılabilir
-   yol yok) · `migration` (kapısız) · `merge`. **`shared/contracts/*.json` çalıştırılabilir
-   sayılır** — davranış belirleyen veri. Yazmadan önce commit'in gerçek path kümesine bak.
-5. Test önce yazılır, **kırmızı düştüğü gözle görülür**, kırmızı çıktı rapora yazılır.
-6. Uygulayıcı **kendi alt-ajanını çağırmaz**; review kontrolörden gelir.
-7. **Codex çağrılarına tam 40 karakterlik SHA verilir.** Kısa SHA substrat kurulumunda
-   `rc=2` üretir — Codex hiç çağrılmaz, tur boşa gider (bu oturumda bir kez oldu).
+3. **Taban 745**; bu sayı düşmeyecek.
+4. **`Exec-Kind` sınıflandırıcıya karşı seçilir, uzantıya karşı DEĞİL.** Beyaz liste altı
+   değerli: `code` · `red-only` · `green-only` · `docs-only` · `migration` · `merge`.
+   `shared/contracts/*.json` çalıştırılabilir sayılır.
+5. **`Exec-*` bloğu mesajın SON PARAGRAFI olmalı**, ve `Co-Authored-By` / `Claude-Session`
+   satırları **aynı paragrafın içinde** durmalı — araya boş satır girerse defter kapısı
+   `rc=4` verir. Bu oturumda bir kez oldu, amend ile düzeldi (ayrıntı defterde).
+6. **Her commit'ten SONRA defter kapısı koşulur** — finalde değil. İki footer dersinin ikisi
+   de bu kapıdan çıktı; geç fark edilen biri altı commit'lik yeniden yazıma mal olmuştu.
+7. Test önce yazılır, **kırmızı düştüğü gözle görülür**, kırmızı çıktı rapora yazılır.
+8. Uygulayıcı **kendi alt-ajanını çağırmaz**; review kontrolörden gelir.
+9. **Codex çağrılarına tam 40 karakterlik SHA verilir.** Kısa SHA substrat kurulumunda `rc=2`
+   üretir — Codex hiç çağrılmaz, tur boşa gider.
 
 **Devir pointer'ları — hangi görev neyi devralıyor:** TASK.md'nin "Task 3'ün doğurduğu evler"
 bölümü. Task 6 · Task 9 · Task 11 · Task 12 · Task 13 · Task 15 · Task 18 dispatch'lerinde
-ilgili maddeler taşınır. Task 4 ayrıca Task 2'den üç sözleşme kalemi devralır.
+ilgili maddeler taşınır. **Task 4 ayrıca Task 2'den üç sözleşme kalemi devralır.**
+**Task 6 bu oturumda bir kalem daha devraldı:** `033_down.sql` yok (aşağıda).
 
 # Verification
 
-**Koşulan komutlar ve TAZE çıktıları (2026-08-30, kontrolörün kendi koşumları — hiçbiri
-uygulayıcının sözüne dayanmıyor):**
+**Koşulan komutlar ve TAZE çıktıları (2026-08-31, hepsi kontrolörün kendi koşumları —
+hiçbiri uygulayıcının ya da hakemin sözüne dayanmıyor):**
 - `cd apps/social/backend && source .venv/bin/activate && python -m pytest tests/ -q`
-  → **744 passed in 106.65s** (yeniden yazım sonrası tekrar koşuldu).
-  Oturum içi seyir: 667 → 672 (Task 2) → 692 (checkpoint düzeltmesi) → 737 (Task 3) → 744.
-- `ec_ledger_view <çapa> <kök> - --post-window` → **rc=0**, her satır temiz.
-  (Düzeltmeden önce rc=2, iki MECH-FAIL.)
-- `git diff backup/pre-footer-fix-20260830 HEAD` → **0 satır**; iki aralıkta da 6 commit.
-  Yeniden yazımın içeriği değiştirmediğinin kanıtı.
-- Pin manifesti bayt bayt: `commit` = dış depo HEAD `d901eb4`, üç sha256 = diskteki dosyalar.
-  Canlı `verify_pin` → boş liste.
-- Checkpoint high bulgusunun üç senaryosu düzeltme öncesi/sonrası koşuldu: öncesinde üçü de
-  geçiyordu, sonrasında üçü de gerekçeli hata veriyor.
-- `git branch -r --contains 77dd268` → boş; `origin/feat/...` = `a806e29`. Yeniden yazılan
-  geçmiş hiçbir uzak dalda yoktu.
-- Codex: checkpoint 1 `needs-attention` (1 high + 2 medium) → düzeltme → kapanış turu
-  `approve` (1 medium kabul edilmiş risk).
+  → **745 passed in 108.50s**. Oturum seyri: 744 (giriş) → 745 (yeni regresyon testi).
+- `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**; T3-fix3 satırı
+  `code` kind ile hem test hem impl yolu taşıyor.
+- **Yeni testin AYIRT EDİCİLİĞİ ölçüldü, varlığı değil:** `411c767`'nin modülü `git show` ile
+  takas edilip `test_insert_draft_logs_content_warnings_before_pair_gate` koşuldu →
+  **1 failed** (`test_package_lifecycle.py:287`); dosya geri yüklendi ve `cmp` ile
+  byte-aynı doğrulandı, `git status` temiz.
+- **Üst-küme senaryosu ampirik koşuldu** (geçici test, sonra silindi): dokuz değere onuncu
+  eklenmiş CHECK ile 033 yeniden uygulanınca **rc=3**, hata İKİ pinli beklentiden birden
+  geldi (`033:114-119` ve `033:183-184`) ve şema kalıcı değişmedi.
+- **Kolon yolu ampirik koşuldu:** `sector_packages`'a `created_by` eklenip 032 yeniden
+  uygulanınca **rc=3**, düşen etiket `sector_packages kolon imzası` (`032:377`).
+- **Atıf matrisi üretildi:** üç teslimat metnindeki (docstring + task-3-report +
+  task-3-fix3-report) **47 atıf**, 0 aralık-dışı; bu turda yeni giren beş kritik atıf ayrıca
+  içerik olarak kontrol edildi (satır gerçekten iddia edileni söylüyor mu).
+- `ls shared/db/migrations/rollback/` → yalnız `032_down.sql`; `033_down.sql` YOK.
 
 **Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
-- **Task 3 düzeltme turu 2'nin yeniden incelemesi KOŞMADI.** Bu oturumun tek açık döngüsü.
+- **Düzeltme turu 3 bağımsız hakem GÖRMEDİ.** Kapanış kontrolör kararıdır; sınıf mekanik
+  matrisle kapatıldı. Atıf aralığı + beş içerik kontrolü, her cümleyi anlam için yeniden
+  okumakla AYNI ŞEY DEĞİLDİR.
 - **Task 4–20 hiç yazılmadı.**
 - **Sözleşme metinlerinin ÇALIŞMA ZAMANI tüketimi hiç ölçülmedi.** Sweep'in "var" yargıları
   metin varlığını ölçer, davranışı değil; ilk kuru koşumda (Task 11/19) görülür.
-- Uyarı günlükleme yolu hiçbir testle sabitlenmemiş (yukarıda).
+- `test_plan2_interface_contract.py`'nin `created_by` eklendiğinde FAIL ettiği **pytest
+  üzerinden görülmedi** — oturum şemayı her koşumda yeniden kuruyor. Yerine testin kendi
+  manifest çifti bozuk şemaya karşı koşuldu (`columns` yüzeyi eşit çıkmıyor). Bu sınır
+  docstring'de ve raporda dürüst etiketiyle yazılı.
 - `git` ikilisi olmayan ortamda ve git ortam değişkenleri ezildiğinde pin davranışı
   ölçülmedi — evi Task 18 Step 8b.
-- Migration 033'ün doğrulama bloğunun **üst-küme** durumunda ne yapacağı ölçülmedi; uygulayıcı
-  "okudum, ölçmedim" diye etiketledi.
 - Canlıya hiçbir şey dağıtılmadı, hiçbir migration uygulanmadı, pilot koşulmadı.
+- **Dal push EDİLMEDİ.**
 
 # Risks
 
-- **Bu oturumun en pahalı dersi: etiket uzantıya göre seçilmez.** İki yanlış `Exec-Kind` final
-  kapısını bloklayan iki MECH-FAIL üretti; birini kontrolör kendisi onaylamıştı. Ödemesi altı
-  commit'lik bir yeniden yazım oldu — **on yedi görev sonra fark edilseydi ödenemezdi.**
-  Defter kapısı artık her checkpoint'te koşulmalı, sadece finalde değil.
-- **Kontrolör de ölçmeden kabul edebiliyor.** Uygulayıcının "K-56 bildirim bağı var" iddiasını
-  ölçmeden kendi kararına yazdı; yeniden inceleme yakaladı, ölçüldü, yanlıştı. Aynı oturumda
-  üç alt-ajana "ölçmeden kabul etme" diye dayatılmıştı. **İddia bir düzeltme raporundan
-  geliyorsa da ölçülür.** Ayrıca hakemin düzeltmesi de yarı yanlıştı — iki tarafı da ölçmek
-  gerekti.
+- **Aynı sınıf üç tur üst üste tekrarladı:** düzeltme metninin KENDİ içinde ölçülmemiş atıf.
+  Tur 1 kapattığı bulgunun sınıfından yeni bir Important açtı; tur 2 iki tane açtı. Bu, bu
+  görevin en ısrarlı hata modu — **Task 4'ün düzeltme turlarında aynı şey beklenmeli.**
+  Ucuz karşı önlem ölçüldü: atıf matrisini üretip koşmak (47 atıf, saniyeler).
+- **Kontrolör de ölçmeden kabul edebiliyor** — geçen oturumda bir uygulayıcı iddiası ölçmeden
+  karara yazıldı, yanlıştı. Bu oturumda tersi de görüldü: bir "yok" iddiasını dar bir grep'e
+  dayanarak kurmak üzereydim, ikinci arama etiketin metinde DURDUĞUNU gösterdi. **Tek
+  kontrolle "yok" deme.**
+- **"Test yazılamaz" savunması bir kez ölçümle çürüdü.** "Şu an test yok" ile "test
+  yazılamaz" aynı şey değil; TDD zaten yeni kırmızı yazmayı ister. Bir uygulayıcı bu ayrımı
+  karıştırıp zorunlu kapıyı atladı.
+- **KABUL EDİLMİŞ RİSK (arayüz eki, tur 3 sonrası):** "annotation çalışma zamanı zorlaması
+  değildir" sınıfının kalıntısı ve kimlik karşılaştırmalarındaki hoşgörülü normalleştirme.
 - **KABUL EDİLMİŞ RİSK (checkpoint 1):** `test_external_repo_gitignores_run_folder` git ortam
-  değişkenleriyle sahte bir depoya yönlendirilebilir. Üretim pin yolu etkilenmiyor; saldırı
-  tam pinlenen commit'te bir sahte depo + zehirli ortam ister. Evi Task 18 Step 8b.
-- **KABUL EDİLMİŞ RİSK (uygulayıcının bildirdiği kalıntı):** dış deponun içinde dışarıyı
-  gösteren sembolik bağ ele alınmıyor; kapatmak ekin R14 hükmünün yasakladığı beşinci kapıyı
-  gerektirir. Modül belgesinde dürüst etiketiyle duruyor. **"Ele alındı" DEĞİL.**
+  değişkenleriyle sahte bir depoya yönlendirilebilir. Üretim pin yolu etkilenmiyor.
+  Evi Task 18 Step 8b.
+- **KABUL EDİLMİŞ RİSK:** dış deponun içinde dışarıyı gösteren sembolik bağ ele alınmıyor;
+  kapatmak ekin R14 hükmünün yasakladığı beşinci kapıyı gerektirir. **"Ele alındı" DEĞİL.**
 - **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`). Arayüz eki 8 çelişki
-  + 12 boşluğu kapattı ama **Plan 1 alanındaki kart geçişi hâlâ taranmadı** — Plan 1 yüzeyinde
-  kusur çıkarsa ilk bakılacak yer.
-- **"Bildirilen örneği değil sınıfı kapat" bu oturumda İKİ kez kendini ödedi.** Task 2'de atıf
-  sweep'inin ikinci tablosunda 25 atıfın 25'i yanlıştı, hakem yalnız 5'ini bildirmişti.
-- **Küçük düzeltmenin kendi kusuru olabiliyor.** Task 3'ün düzeltme turu 1, kapattığı bulgunun
-  *kendi sınıfından* yeni bir Important açtı. Düzeltme sonrası yeniden inceleme atlanamaz.
-- **Codex maliyeti:** bu oturumda 3 çağrı (checkpoint · substrat hatasıyla hiç kurulamayan ·
-  kapanış turu). Uzun turlar **arka planda** koşulur — ön planda kabuk 10 dakikada keser.
+  + 12 boşluğu kapattı ama **Plan 1 alanındaki kart geçişi hâlâ taranmadı**.
+- **Codex maliyeti:** bu oturumda **sıfır** Codex çağrısı yapıldı — iki tur da Claude
+  alt-ajanıyla koşuldu (hakem + uygulayıcı). Checkpoint 2 henüz gelmedi.
 
 # Notes For Claude/Codex
 
-- **Hakem turlarını Claude koşar — SORMA.** Eray'ın kalıcı kuralı
-  ([[feedback_claude_runs_reviewer_rounds]]). Maliyet tek satır bilgilendirmedir.
+- **Hakem turlarını Claude koşar — SORMA.** Eray'ın kalıcı kuralı.
 - **Kontrolör düzeltme YAPMAZ.** Tek istisna `docs/active/` — orası kontrolörün kendi yüzeyi.
-- **Minor bulgular döngüye girmez** — ama bu oturumda beş Minor bilinçle turun içine alındı
-  ve her seferinde gerekçe deftere yazıldı: aynı dosyaya dokunuyorlardı ve pin zaten yeniden
-  hesaplanıyordu, yani kapatmak bir tur yerine sıfır tur maliyetindeydi.
-- **Spec değil, spec-input kanoniktir.** Bu oturumda yine fark yarattı: uygulayıcı `EK-K`'yı
-  üç dosyalık dar bir aramaya dayanarak "kanonda yok" ilan etti, yanıldı, kendi düzeltti
-  ([[feedback_dont_declare_absence_from_one_check]]).
+- **Minor bulgular döngüye girmez** — ama aynı dosyaya dokunuyorlarsa turun içine alınırlar
+  (maliyet sıfır tur), ve gerekçe deftere yazılır. Bu oturumda iki Minor böyle bindi.
+- **Spec değil, spec-input kanoniktir.**
 - **Uygulayıcı raporunu doğrulanmamış iddia say** — ama iyi uygulayıcı kendi kusurunu da
-  bildirir: bu oturumda biri testlerinin boş taslağa karşı *hiçbir şey kanıtlamadan* geçtiğini
-  fark edip implementasyondan önce sertleştirdi, biri kapatamadığı kalıntıyı dürüst etiketle
-  belgeye yazdı, biri kontrolörün yanlış test tahminine testi uydurmayı reddetti. Üçü de doğru
-  davranış — raporu şüpheyle okumak, uygulayıcıyı düşman saymak demek değil.
+  bildirir: bu oturumdaki uygulayıcı, hakemin "ölçemedim" dediği kalemi ölçmeyi başardı,
+  ölçemediği kırıntıyı dürüst etiketle bıraktı ve kapsam dışı iki şeyi görüp DOKUNMADAN
+  bildirdi (biri gerçek bir eksikti: `033_down.sql`).
+- **Yargı turu yerine mekanik kapanış ne zaman meşrudur:** turlar aynı eksenin dar
+  varyantlarını bulmaya başladığında. O noktada kapanış elle seçilmiş örnekle değil
+  ÜRETİLMİŞ matrisle kanıtlanır — ve bunun kontrolör kararı olduğu dürüstçe etiketlenir.
 - Diskte bekleyen düzeltme YOK; her iki çalışma ağacı da temiz.
