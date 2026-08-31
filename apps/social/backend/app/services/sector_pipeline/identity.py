@@ -52,6 +52,7 @@ import json
 import math
 import re
 import secrets
+import sys
 import unicodedata
 from datetime import date, datetime
 from decimal import Decimal
@@ -179,7 +180,9 @@ def _kanonik_json_degeri(value: Any) -> Any:
 
     Dönüşüm kümesi KAPALIDIR:
 
-      (1) `None` · `bool` · `str` · `int`    → OLDUĞU GİBİ
+      (1) `None` · `bool` · `str` · `int`    → OLDUĞU GİBİ (tamsayı için
+                                               büyüklük sınırı SÜREÇ ayarıdır,
+                                               bkz. `canonical_sha`)
       (2) `float`                            → OLDUĞU GİBİ, ama SONLU olmak zorunda
       (3) `UUID` · `Path` · `Decimal`        → `str(...)`
       (4) `datetime` · `date`                → `isoformat()`
@@ -222,6 +225,11 @@ def _kanonik_json_degeri(value: Any) -> Any:
         # eski kural o değer için özet ÜRETİYORDU (`7fe8362b13128003…`) ve
         # `OverflowError` docstring'in vadettiği `TypeError` DEĞİLDİR. Python
         # tamsayısı zaten sonsuz olamaz; ölçülecek bir şey yoktu.
+        #
+        # Büyüklük yine de SINIRSIZ DEĞİLDİR ve sınır BURADA yaşamaz: Python'un
+        # süreç düzeyindeki ondalık dönüşüm sınırını (`sys.get_int_max_str_digits()`)
+        # aşan tamsayı `json.dumps` içinde metne çevrilemez. O yolun istisna
+        # SINIFINI sözleşmeye uyduran yer `canonical_sha`'dır.
         return value
     if isinstance(value, float):
         if not math.isfinite(value):
@@ -278,13 +286,35 @@ def canonical_sha(value: Any) -> str:
     "hash'i alınamadı, boş geç" dalı YOKTUR. Ön-serileştirme bu vaadi GENİŞLETMEZ:
     kapalı kümenin dışı yine `TypeError`'dır, yalnız hata artık kuralın kendisinden
     gelir.
+
+    **Tamsayı büyüklüğü sınırsız DEĞİLDİR** ve bu vaadin ikinci yarısı oradadır:
+    Python'un süreç düzeyindeki ondalık dönüşüm sınırını
+    (`sys.get_int_max_str_digits()`, ölçüldü: 3.12.3'te 4300 basamak) aşan bir
+    tamsayı `json.dumps` içinde `ValueError` ile düşer. `ValueError` `TypeError`
+    DEĞİLDİR; sözleşme tek istisna sınıfı söz verdiği için o hata burada
+    `TypeError`'a ÇEVRİLİR. Sınırın kendisi CPU/bellek korumasıdır ve
+    YÜKSELTİLMEZ — `sys.set_int_max_str_digits` çağrılsaydı vaat tutar ama yeni
+    bir tehlike açılırdı.
     """
-    metin = json.dumps(
-        _kanonik_json_degeri(value),
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
+    try:
+        metin = json.dumps(
+            _kanonik_json_degeri(value),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+    except ValueError as exc:
+        # Ön-serileştirmeden geçen ağaç yalnız düz JSON tiplerinden oluşur;
+        # bu yolda ÖLÇÜLEN tek `ValueError` sebebi tamsayı ondalık dönüşüm
+        # sınırıdır. Sebep yine de tahmin edilmez: özgün hata metni olduğu gibi
+        # taşınır, değişen tek şey istisna SINIFIDIR.
+        raise TypeError(
+            f"canonical_sha kanonik JSON metni üretemedi: {exc} — bu yolda "
+            "bilinen tek sebep tamsayının süreç düzeyindeki ondalık dönüşüm "
+            f"sınırını (`sys.get_int_max_str_digits()` = "
+            f"{sys.get_int_max_str_digits()} basamak) aşmasıdır; sınır "
+            "CPU/bellek korumasıdır ve hash onu YÜKSELTMEZ"
+        ) from exc
     return hashlib.sha256(
         unicodedata.normalize("NFC", metin).encode("utf-8")
     ).hexdigest()

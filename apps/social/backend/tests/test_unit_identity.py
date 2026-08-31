@@ -20,6 +20,7 @@ Bu dosyanın kanıtlamak zorunda olduğu iki zor nokta:
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 
 import pytest
@@ -781,9 +782,16 @@ def test_canonical_sha_keeps_big_integer_digests_byte_for_byte(deger, beklenen):
     assert identity.canonical_sha(deger) == beklenen
 
 
-# Kabul edilen tamsayı büyüklükleri × onları taşıyan KAPSAYICILAR — üretilmiş
+# KABUL EDİLEN tamsayı büyüklükleri × onları taşıyan KAPSAYICILAR — üretilmiş
 # çarpım. Elle seçilmiş tek bir örnek tam da bu sınıfı kaçırmıştı: `10**308`
 # geçiyor, `10**309` patlıyordu ve tek örnek yanlış tarafa düşebilirdi.
+#
+# **Büyüklük SINIRSIZ DEĞİLDİR.** Python'un süreç düzeyindeki ondalık dönüşüm
+# sınırı (`sys.get_int_max_str_digits()`) aşıldığında tamsayı metne
+# çevrilemez — ölçüldü (3.12.3, sınır 4300): 4300 basamaklı `10**4299` özet
+# üretir, 4301 basamaklı `10**4300` düşer. Buradaki büyüklüklerin HEPSİ
+# sınırın altındadır (en büyüğü 401 basamak) ve aşağıdaki kapsam testi bunu
+# ölçerek bağlar; sınırın kendisi ayrı bir testle yoklanır.
 _BUYUKLUKLER = (
     0,
     -1,
@@ -825,10 +833,10 @@ _BUYUKLUK_MATRISI = [
     _BUYUKLUK_MATRISI,
     ids=[h[0] for h in _BUYUKLUK_MATRISI],
 )
-def test_canonical_sha_accepts_integers_of_any_magnitude(
+def test_canonical_sha_accepts_integers_below_the_process_digit_limit(
     kimlik, kapsayici_adi, sira, deger
 ):
-    """Tamsayı büyüklüğü hiçbir özyineleme yolunda REDDEDİLMEZ."""
+    """Süreç basamak sınırının ALTINDAKİ tamsayı hiçbir yolda REDDEDİLMEZ."""
     ozet = identity.canonical_sha(deger)
     assert re.fullmatch(r"[0-9a-f]{64}", ozet), (kimlik, ozet)
 
@@ -844,6 +852,30 @@ def test_the_integer_magnitude_matrix_covers_the_full_product():
         "donmus-veri-sinifi",
         "ic-ice",
     }
+    # Matrisin adı "sınırın ALTI" diyor — ölç, iddia etme.
+    sinir = sys.get_int_max_str_digits()
+    assert all(len(f"{deger:d}".lstrip("-")) <= sinir for deger in _BUYUKLUKLER)
+
+
+def test_canonical_sha_integer_digit_limit_is_the_process_setting():
+    """Sınır SÜREÇ ayarından okunur (sabit gömülmez); iki yanı da ölçülür.
+
+    Eşik `sys.get_int_max_str_digits()` BASAMAK sayısıdır: tam o kadar
+    basamaklı tamsayı özet üretir, bir fazlası `TypeError` ile düşer. Sınır
+    CPU/bellek korumasıdır ve YÜKSELTİLMEZ — test onu değiştirmeden yoklar.
+    """
+    sinir = sys.get_int_max_str_digits()
+
+    tam_sinirda = 10 ** (sinir - 1)
+    assert len(str(tam_sinirda)) == sinir
+    ozet = identity.canonical_sha(tam_sinirda)
+    assert re.fullmatch(r"[0-9a-f]{64}", ozet), ozet
+
+    # Bir basamak fazlası: `str()` bile düşer, o yüzden basamak sayısı
+    # doğrudan ölçülemez — üsten TÜRETİLİR (10**n → n+1 basamak).
+    bir_ustu = 10**sinir
+    with pytest.raises(TypeError):
+        identity.canonical_sha(bir_ustu)
 
 
 # ─── İstisna tipi SÖZLEŞMESİ — reddedilen her girdi sınıfı `TypeError` verir ──
@@ -871,6 +903,10 @@ def _reddedilen_degerler():
         ("bayt", b"bayt"),
         ("taninmayan-nesne", object()),
         ("karmasik-sayi", complex(1, 2)),
+        # Süreç basamak sınırını AŞAN tamsayı: `json.dumps` bunu `ValueError`
+        # ile düşürür ve `ValueError` `TypeError` DEĞİLDİR — vaat o yolda
+        # sessizce başka bir istisna sınıfına kayıyordu.
+        ("basamak-sinirini-asan-tamsayi", 10 ** sys.get_int_max_str_digits()),
     ]
 
 
@@ -892,5 +928,5 @@ def test_canonical_sha_rejection_paths_raise_typeerror_and_nothing_else(kimlik, 
 
 def test_the_rejection_matrix_covers_the_full_product():
     """Bir ret sınıfı ya da bir kapsayıcı sessizce düşerse burası DÜŞER."""
-    assert len(_RET_MATRISI) == 9 * 6 == 54
-    assert len({h[0].split("-icinde-")[0] for h in _RET_MATRISI}) == 9
+    assert len(_RET_MATRISI) == 10 * 6 == 60
+    assert len({h[0].split("-icinde-")[0] for h in _RET_MATRISI}) == 10
