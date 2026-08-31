@@ -818,3 +818,84 @@ def test_video_kodlar_delivers_two_pools():
     )
     assert len(motion_pool(context)) == 2
     assert len(scene_pool(context)) == 2
+
+
+# ─── Madde 9: Plan 1 ↔ Plan 2 bağımlılık sınırı (yapısal kapı) ──────────────
+#
+# Ek (`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1467-1480)
+# sınırı harfiyen bağlar ve kapısının "yapısal test" olduğunu söyler. Kapı buradadır.
+#
+# Test ELLE SEÇİLMİŞ bir örneğe bakmaz: kaynağı `ast` ile ayrıştırır ve modülün TÜM
+# import düğümlerinin ÜRETİLMİŞ listesini kapalı bir izin kümesiyle karşılaştırır.
+# Tek bir yasak adı aramak, bir sonraki turda ikinci yasak adı davet ederdi.
+#
+# DÜRÜST ETİKET — kapanmayan ayak. Hüküm (a) "kullanılan TEK ad
+# `identity.canonical_sha`" der. Bu test import BİÇİMİNİ (modül import edilir, ad
+# değil) ve hüküm (c)'yi (başka `sector_pipeline` modülü YOK) kapatır; hüküm (a)'nın
+# AD KÜMESİ ayağını KAPATMAZ: `sector_package_lifecycle` bugün gerçekten
+# `identity.validate_decision_log` ve `identity.check_unit_integrity`'yi de çağırıyor
+# (Task 3'ün şema kapısı orada koşar). Ad kümesinin daraltılması ekin hükmünün
+# revizyonunu gerektirir — tasarım katmanının işidir, burada sessizce genişletilmez.
+
+import ast
+from pathlib import Path
+
+from app.services import sector_package_lifecycle as _lifecycle_module
+
+# Yaprak: bağımlılık-yönünden yansız şema modülü. Hem Plan 1'in erişim katmanı hem
+# `identity` buradan tüketir; ikinci bir kopya YOKTUR.
+_YAPRAK = "app.services.sector_content_schema"
+
+# Üçüncü parti DB yüzeyleri — hüküm (b)'nin "hiçbir DB yüzeyi" ayağı.
+_DB_YUZEYLERI = frozenset({"asyncpg", "psycopg", "psycopg2", "sqlalchemy", "databases"})
+
+
+def _import_edilen_moduller(path: Path) -> list[str]:
+    """Kaynaktaki HER import düğümünün hedef modülü — üretilmiş liste."""
+    agac = ast.parse(path.read_text(encoding="utf-8"))
+    moduller: list[str] = []
+    for node in ast.walk(agac):
+        if isinstance(node, ast.Import):
+            moduller.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            moduller.append("." * node.level + (node.module or ""))
+    return moduller
+
+
+def _from_importlar(path: Path) -> list[tuple[str, list[str]]]:
+    """`from X import a, b` düğümleri — (modül, alınan adlar)."""
+    agac = ast.parse(path.read_text(encoding="utf-8"))
+    return [
+        ("." * node.level + (node.module or ""), sorted(a.name for a in node.names))
+        for node in ast.walk(agac)
+        if isinstance(node, ast.ImportFrom)
+    ]
+
+
+def test_identity_imports_no_plan1_module_and_no_db_surface():
+    """Hüküm (b): `identity.py` YALNIZ yapraktan okur — Plan 1 modülü YOK, DB YOK."""
+    moduller = _import_edilen_moduller(Path(identity.__file__))
+    app_importlari = sorted({m for m in moduller if m.split(".")[0] == "app"})
+    assert app_importlari == [_YAPRAK], app_importlari
+    db = sorted({m for m in moduller if m.split(".")[0] in _DB_YUZEYLERI})
+    assert db == [], db
+
+
+def test_the_leaf_is_actually_a_leaf():
+    """İzin kümesi kaçamak OLMASIN: yaprağın kendisi hiçbir `app` modülü import etmez."""
+    from app.services import sector_content_schema
+
+    moduller = _import_edilen_moduller(Path(sector_content_schema.__file__))
+    assert [m for m in moduller if m.split(".")[0] == "app"] == []
+    assert [m for m in moduller if m.split(".")[0] in _DB_YUZEYLERI] == []
+
+
+def test_lifecycle_touches_plan2_through_the_identity_module_only():
+    """Hüküm (a)'nın BİÇİM ayağı + hüküm (c): tek kenar, modül olarak import edilir."""
+    path = Path(_lifecycle_module.__file__)
+    pipeline = [m for m in _import_edilen_moduller(path) if "sector_pipeline" in m]
+    assert pipeline == ["app.services.sector_pipeline"], pipeline
+    from_pipeline = [
+        (m, adlar) for m, adlar in _from_importlar(path) if "sector_pipeline" in m
+    ]
+    assert from_pipeline == [("app.services.sector_pipeline", ["identity"])], from_pipeline

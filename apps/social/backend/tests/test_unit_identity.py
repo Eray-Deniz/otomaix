@@ -1,7 +1,7 @@
 """Kalıp kimliği + karar günlüğü şeması (Plan 2 Task 3).
 
 Ölçülen sözleşme TEK cümleyle: **içerik şeması DEĞİŞMEZ, birim kümesi karar
-günlüğünden TÜRETİLİR.** Plan 1'in yazım kapısı (`sector_packages.py`) CTA
+günlüğünden TÜRETİLİR.** Yapısal yazım kapısı (`sector_content_schema.py`) CTA
 öğesinin anahtar kümesini, özel gün girdisinin beş yuvasını ve diğer liste
 öğelerinin düz metin oluşunu EŞİTLİK olarak doğrular; içeriğe `unit_id`
 eklemek bu kapıdan geçemez. Bu yüzden kimlik karar günlüğünde yaşar ve
@@ -624,3 +624,125 @@ def test_donmus_accepts_the_closed_scalar_set():
     for value in (None, True, 3, 1.5, "x", b"x", Decimal("1.5"), uuid4(),
                   Path("/tmp"), datetime(2026, 1, 1), date(2026, 1, 1)):
         assert identity.donmus(value) == value
+
+
+# ─── 9. Kanonik hash — ÖN-SERİLEŞTİRME kuralı (ekin bağladığı girdiler) ─────
+#
+# Ek (`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`) `canonical_sha`'ya
+# iki girdi sınıfı BAĞLIYOR ve ikisi de düz `json.dumps`'tan geçmez:
+#   * ek satır 1901 — `MADDE_KUMESI_SHA: str = identity.canonical_sha(MADDELER)`;
+#     `MADDELER` donmuş `ChecklistItem` veri sınıflarından oluşan bir demettir
+#     (ek satır 1884-1890);
+#   * ek satır 1450-1464 — kanıt parmak izi yardımcıları `UUID` alanı taşıyan yükleri
+#     aynı kurala verir (`package_id: UUID`, ek satır 1442).
+
+
+@dataclass(frozen=True)
+class _MaddeBenzeri:
+    """Ekin `ChecklistItem`'ıyla AYNI şekil (ek satır 1884-1888): üç alan, donmuş."""
+
+    madde_id: str
+    sinif: str
+    otomatik: bool
+
+
+def test_canonical_sha_hashes_a_frozen_dataclass_tuple():
+    """Ek satır 1901'in ta kendisi: donmuş veri sınıflarından oluşan demet."""
+    maddeler = (
+        _MaddeBenzeri("m-01", "kapi", True),
+        _MaddeBenzeri("m-15", "sinyal", False),
+    )
+    sha = identity.canonical_sha(maddeler)
+    assert re.match(r"^[0-9a-f]{64}$", sha), sha
+
+
+def test_canonical_sha_of_a_dataclass_reads_field_names_not_positions():
+    """Alan ADI kanonik dizinin parçasıdır — alan yeniden adlandırılırsa hash DEĞİŞİR."""
+
+    @dataclass(frozen=True)
+    class _BaskaAd:
+        madde_kimligi: str
+        sinif: str
+        otomatik: bool
+
+    assert identity.canonical_sha(
+        _MaddeBenzeri("m-01", "kapi", True)
+    ) != identity.canonical_sha(_BaskaAd("m-01", "kapi", True))
+
+
+def test_canonical_sha_hashes_a_uuid_bearing_payload():
+    """Ek satır 1442'nin kanıt yükü: `package_id: UUID` taşır."""
+    from uuid import UUID as _UUID
+
+    pid = _UUID("11111111-2222-3333-4444-555555555555")
+    sha = identity.canonical_sha({"package_id": pid, "manager_approved": True})
+    assert sha == identity.canonical_sha(
+        {"package_id": str(pid), "manager_approved": True}
+    )
+
+
+def test_canonical_sha_hashes_path_decimal_and_temporal_scalars():
+    """Kapalı kümenin geri kalanı: `Path` · `Decimal` · `date` · `datetime`."""
+    from datetime import date as _date, datetime as _datetime
+    from decimal import Decimal as _Decimal
+    from pathlib import Path as _Path
+
+    yuk = {
+        "yol": _Path("/tmp/x"),
+        "tutar": _Decimal("1.50"),
+        "gun": _date(2026, 8, 31),
+        "an": _datetime(2026, 8, 31, 12, 0, 0),
+    }
+    assert identity.canonical_sha(yuk) == identity.canonical_sha(
+        {
+            "yol": "/tmp/x",
+            "tutar": "1.50",
+            "gun": "2026-08-31",
+            "an": "2026-08-31T12:00:00",
+        }
+    )
+
+
+def test_canonical_sha_rejects_non_finite_numbers():
+    """`nan`/`inf` geçerli JSON DEĞİLDİR — `json.dumps` onları sessizce yazardı."""
+    for deger in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(TypeError):
+            identity.canonical_sha({"x": deger})
+
+
+def test_canonical_sha_rejects_outside_the_closed_set():
+    """Fail-closed KORUNUR: kapalı kümenin dışı `TypeError` (docstring vaadi)."""
+    for deger in (object(), b"bayt", {1, 2}, frozenset({1, 2})):
+        with pytest.raises(TypeError):
+            identity.canonical_sha(deger)
+
+
+def test_canonical_sha_rejects_a_mutable_dataclass():
+    """Donmamış veri sınıfı REDDEDİLİR — hash'lendikten sonra içi değişebilirdi."""
+
+    @dataclass
+    class _Degisken:
+        a: str
+
+    with pytest.raises(TypeError):
+        identity.canonical_sha(_Degisken("x"))
+
+
+# Bugünkü (HEAD 3d08db6) uygulamanın ÜRETTİĞİ özetler — ölçülerek alındı:
+#   python -c "from app.services.sector_pipeline import identity; print(identity.canonical_sha(...))"
+# Ön-serileştirme kuralı bunları DEĞİŞTİREMEZ; değiştirirse depodaki her
+# `oge_sha` bir gecede bayatlar.
+_PINLI_OZETLER = (
+    (
+        {"b": "iki", "a": ["bir", 2, True, None], "c": {"ic": "ç"}},
+        "cc74e37e3b888e805b7fe689687a454036b6203b0bcd1f6640c89de9573d7972",
+    ),
+    ("kapsam", "18e70e0f8e727313a629dcc1a2671c5f0caf4c06fde1e33e902efea05061c019"),
+    (["a", "b"], "0473ef2dc0d324ab659d3580c1134e9d812035905c4781fdd6d529b0c6860e13"),
+)
+
+
+@pytest.mark.parametrize("deger,beklenen", _PINLI_OZETLER)
+def test_canonical_sha_keeps_existing_digests_byte_for_byte(deger, beklenen):
+    """GERİLEME KAPISI — bugün çalışan girdiler için hash BİREBİR aynı kalır."""
+    assert identity.canonical_sha(deger) == beklenen

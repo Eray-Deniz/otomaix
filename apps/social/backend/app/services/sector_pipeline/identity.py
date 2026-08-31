@@ -3,7 +3,7 @@
 **İçerik şeması DEĞİŞMEZ; birim kümesi karar günlüğünden TÜRETİLİR.**
 
 İlk yazım kimlikleri `content`'ten okumayı öngörüyordu. Ölçüldü ki bunun yeri
-yok: `sector_packages.py::_check_cta_items` CTA öğesinin anahtar kümesini
+yok: `sector_content_schema.py::_check_cta_items` CTA öğesinin anahtar kümesini
 `{kalip, tur, gerekce}` ile **eşitlik** olarak doğrular,
 `_check_special_day_shapes` aynısını beş yuvayla yapar, `_check_field_shapes`
 ise diğer liste öğelerini ve iki video havuzunu **düz metin** olmaya zorlar.
@@ -27,18 +27,29 @@ Bağlanan çözüm:
   yoldaki öğenin taze hash'iyle eşleşmeli. Tek yönlü kontrol YETMEZ.
 * `schema_version` ARTIRILMAZ, Plan 1 doğrulayıcısına DOKUNULMAZ.
 
-**Bağımlılık yönü.** Bu modül Plan 1'in erişim katmanından (`sector_packages`)
-yalnız OKUR: alan adları, yuva adları ve "anlamlı metin" ölçüsü orada TEK
-yerde yaşar; buraya kopyalansaydı biri değişip diğeri kalırdı — Plan 1'in
-K-01b'de kapattığı yazım/okuma ayrışmasının ta kendisi. Yaşam döngüsü modülü
-(`sector_package_lifecycle`) buradan import eder; ters yön YOKTUR ve
-yazılmayacaktır (döngü olurdu).
+**Bağımlılık yönü.** Bu modül alan adlarını, yuva adlarını, "anlamlı metin"
+ölçüsünü ve yapısal yazım kapısını ortak YAPRAK modülden (`sector_content_schema`)
+okur. Ölçü TEK yerde yaşar; buraya kopyalansaydı biri değişip diğeri kalırdı —
+Plan 1'in K-01b'de kapattığı yazım/okuma ayrışmasının ta kendisi.
+
+Kural daha önce Plan 1'in erişim katmanında (`sector_packages`) yaşıyordu ve
+buradan oraya bir import kenarı vardı. Plan 2 arayüz eki
+(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1476-1477)
+bunu yasaklar: *"`identity.py` hiçbir Plan 1 modülünü ve hiçbir DB yüzeyini
+IMPORT ETMEZ"*. Kural yaprağa taşındı; iki taraf da yapraktan tüketir, kopya YOK.
+Kapısı yapısal testtir
+(`tests/test_plan2_interface_contract.py::test_identity_imports_no_plan1_module_and_no_db_surface`).
+
+Yaşam döngüsü modülü (`sector_package_lifecycle`) buradan import eder; ters yön
+YOKTUR ve yazılmayacaktır (döngü olurdu).
 """
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
+import math
 import re
 import secrets
 import unicodedata
@@ -49,7 +60,7 @@ from types import MappingProxyType
 from typing import Any, Mapping
 from uuid import UUID
 
-from app.services.sector_packages import (
+from app.services.sector_content_schema import (
     LIST_FIELDS,
     SPECIAL_DAY_SLOTS,
     TEXT_FIELDS,
@@ -104,6 +115,27 @@ _NOT_ZORUNLU_ALANLAR = ("sinif", "gerekce")
 _KARAR_ISTEGE_BAGLI = frozenset(KURAL_DAMGA_ALANLARI)
 _NOT_ISTEGE_BAGLI = frozenset({"alan", "kanit"})
 
+# ── İKİ kapalı küme, İKİ AYRI soru — bilinçli olarak BİRLEŞTİRİLMEDİ ───────
+#
+# Aşağıdaki `_DEGISMEZ_SKALERLER` (R6(e), `donmus`) şunu sorar: *"bu değer olduğu
+# gibi döndürülebilir mi, yani yapımından sonra İÇİ değiştirilebilir mi?"* Cevabı
+# değişmezliktir; `bytes` orada VARDIR çünkü değişmezdir.
+#
+# `canonical_sha`'nın ön-serileştirme kuralı (aşağıda, bölüm 2) BAŞKA bir şey sorar:
+# *"bu değerin DETERMİNİSTİK bir JSON metni var mı?"* İki küme çakışır ama eşit
+# DEĞİLDİR ve eşitlenirlerse iki yönde de zarar verirler:
+#   * `bytes` değişmezdir ama JSON'da bayt dizisi YOKTUR — bir kodlama seçmek ikinci
+#     bir normalizasyon kuralı yazmak olurdu, o yüzden hash onu REDDEDER;
+#   * `float` değişmezdir ama `nan`/`inf` DEĞERLERİ geçerli JSON değildir — hash
+#     tipi değil o değerleri reddeder;
+#   * donmuş bir veri sınıfı örneği `donmus`'un kümesinde YOKTUR (kural 5 düşürür)
+#     ama kanonik JSON karşılığı vardır (alan adı → değer) ve hash onu KABUL EDER.
+# Kümeler birleştirilseydi ya `donmus` deterministik olmayan bir değeri kabul eder,
+# ya hash değişmez bir değeri gereksiz yere reddederdi.
+
+# `canonical_sha`'nın METNE çevirdiği skalerler — her birinin TEK kanonik yazımı var.
+_METNE_CEVRILEN_SKALERLER = (UUID, Path, Decimal)
+
 # `donmus`'un KAPALI skaler kümesi (R6(e), kural 4).
 _DEGISMEZ_SKALERLER = (
     type(None),
@@ -135,6 +167,82 @@ def new_unit_id() -> str:
 # ─── 2. Kanonik hash (K-92) ─────────────────────────────────────────────────
 
 
+def _kanonik_json_degeri(value: Any) -> Any:
+    """`canonical_sha`'nın ÖN-SERİLEŞTİRME kuralı — KAPALI küme, fail-closed.
+
+    `json.dumps` tek başına yetmiyordu: kural iki girdi sınıfına BAĞLIDIR ve ikisi
+    de düz `json.dumps`'tan `TypeError` ile düşerdi — donmuş veri sınıfı örnekleri
+    (arayüz eki satır 1901: `MADDE_KUMESI_SHA: str = identity.canonical_sha(MADDELER)`,
+    `MADDELER` donmuş `ChecklistItem` demeti) ve `UUID` alanı taşıyan kanıt yükleri
+    (aynı ek, satır 1450-1464). Bu fonksiyon o girdileri JSON'un anlayacağı kanonik
+    karşılıklarına çevirir; kural TEK yerdedir, ikinci bir hash kuralı YAZILMAZ.
+
+    Dönüşüm kümesi KAPALIDIR:
+
+      (1) `None` · `bool` · `str`            → OLDUĞU GİBİ
+      (2) `int` · `float`                    → OLDUĞU GİBİ, ama SONLU olmak zorunda
+      (3) `UUID` · `Path` · `Decimal`        → `str(...)`
+      (4) `datetime` · `date`                → `isoformat()`
+      (5) donmuş veri sınıfı örneği          → {alan adı: kural(değer)}
+      (6) `Mapping`                          → {anahtar: kural(değer)}
+      (7) `list` · `tuple`                   → [kural(öğe), ...]
+      (8) bunların DIŞINDA her şey           → `TypeError` (fail-closed)
+
+    Üç sınır bilerek dar tutuldu:
+
+    * **Sonlu olmayan sayı REDDEDİLİR.** `json.dumps` `nan`/`inf` için varsayılan
+      olarak `NaN`/`Infinity` yazar; bu geçerli JSON DEĞİLDİR ve hash sessizce
+      taşınmaz hâle gelirdi.
+    * **Küme (`set`/`frozenset`) REDDEDİLİR.** Kümenin sırası yoktur; bir sıralama
+      seçmek ikinci bir normalizasyon kuralı yazmak olurdu. Çağıran sıralı bir
+      diziye kendisi çevirir ve o sıranın sorumluluğunu üstlenir.
+    * **Donmamış veri sınıfı REDDEDİLİR.** Hash'lendikten sonra içi değişebilen bir
+      nesnenin parmak izi, temsil ettiği şeye bağlı kalmaz.
+
+    Veri sınıfının ADI kanonik diziye GİRMEZ: sınıf kimliğine ihtiyaç duyan çağıran
+    onu kendi yüküne yazar (arayüz eki satır 1451-1453 `_evidence_fingerprint`'i tam
+    olarak böyle tarif eder: "SINIF ADI + (alan adı, değer) çiftleri"). Burada
+    yazılsaydı o yükte iki kez görünürdü.
+
+    **Anahtarlara DOKUNULMAZ.** Eşleme anahtarları `json.dumps`'a olduğu gibi geçer;
+    böylece bugün çalışan girdilerin ürettiği hash BİREBİR korunur ve anahtar tipi
+    için ikinci bir kural doğmaz — JSON'un kabul etmediği bir anahtar yine
+    `TypeError` ile düşer.
+    """
+    if value is None or isinstance(value, (bool, str)):
+        return value
+    if isinstance(value, (int, float)):
+        if not math.isfinite(value):
+            raise TypeError(
+                f"canonical_sha sonlu olmayan sayı aldı: {value!r} — `NaN`/`Infinity` "
+                "geçerli JSON değildir, hash sessizce taşınmaz olurdu"
+            )
+        return value
+    if isinstance(value, _METNE_CEVRILEN_SKALERLER):
+        return str(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        if not value.__dataclass_params__.frozen:
+            raise TypeError(
+                f"canonical_sha donmamış veri sınıfı aldı: {type(value).__name__} — "
+                "hash'lendikten sonra içi değişebilen nesnenin parmak izi bağlayıcı "
+                "değildir"
+            )
+        return {
+            alan.name: _kanonik_json_degeri(getattr(value, alan.name))
+            for alan in dataclasses.fields(value)
+        }
+    if isinstance(value, Mapping):
+        return {key: _kanonik_json_degeri(value[key]) for key in value}
+    if isinstance(value, (list, tuple)):
+        return [_kanonik_json_degeri(item) for item in value]
+    raise TypeError(
+        f"canonical_sha kapalı kümenin dışında bir tip aldı: {type(value).__name__} — "
+        "deterministik JSON karşılığı olmayan değere sessiz geçiş YOKTUR"
+    )
+
+
 def canonical_sha(value: Any) -> str:
     """K-92'nin kanonik hash kuralı: sıralı anahtar · boşluksuz · NFC.
 
@@ -143,15 +251,28 @@ def canonical_sha(value: Any) -> str:
     diğeri sıralamaz, aynı içerik iki farklı hash alır ve sürüm karşılaştırması
     sessizce yalan söylerdi.
 
+    Değer önce `_kanonik_json_degeri`'nin KAPALI ön-serileştirme kuralından geçer
+    (donmuş veri sınıfı · `UUID` · `Path` · `Decimal` · `date` · `datetime`), sonra
+    `json.dumps`'a verilir. Ön-serileştirme düz sözlük · dize · sayı · iç içe liste
+    girdilerini DEĞİŞTİRMEZ, dolayısıyla mevcut hash değerleri birebir korunur
+    (`test_canonical_sha_keeps_existing_digests_byte_for_byte` bunu pinler).
+
     NFC serileştirilmiş METNİN tamamına uygulanır. Bu, her dizeyi tek tek
     normalize etmekle EŞDEĞERDİR: JSON'da her dize ASCII tırnakla sınırlıdır
     ve birleşen bir işaret tırnakla birleşemez, yani sınır ötesi birleşme
     OLUŞAMAZ.
 
     JSON'a çevrilemeyen bir değer `TypeError` ile düşer (fail-closed) —
-    "hash'i alınamadı, boş geç" dalı YOKTUR.
+    "hash'i alınamadı, boş geç" dalı YOKTUR. Ön-serileştirme bu vaadi GENİŞLETMEZ:
+    kapalı kümenin dışı yine `TypeError`'dır, yalnız hata artık kuralın kendisinden
+    gelir.
     """
-    metin = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    metin = json.dumps(
+        _kanonik_json_degeri(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
     return hashlib.sha256(
         unicodedata.normalize("NFC", metin).encode("utf-8")
     ).hexdigest()

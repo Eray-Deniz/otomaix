@@ -9,11 +9,22 @@ statü uyuşmuyorsa ya da sektör kilidi kaymışsa geçiş YAPILMAZ ve istisna 
 İki sözleşme aynı dosyada yaşarsa "hata durumunda ne olmalı" sorusunun cevabı
 okuyucuya göre değişir; ayrı dosyada her modülün tek bir cevabı vardır.
 
-**Plan 2'ye TEK bağımlılık kenarı (kontrolör kararı).** `sector_pipeline.identity`
-buradan import edilir: karar günlüğünün şema kapısı ve (Task 8'de) parmak izi
-kuralı orada TEK yerde yaşar, buraya kopyalanmaz. Kenar tek yönlüdür —
-`identity` bu modülü import ETMEZ ve etmeyecektir (döngü olurdu); `identity`
-yalnız Plan 1'in erişim katmanından (`sector_packages`) okur.
+**Plan 2'ye TEK bağımlılık kenarı.** Sınırı Plan 2 arayüz eki bağlar
+(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1467-1480):
+kenar TEKTİR ve yaprak bir modüle gider. İzin verilen biçim MODÜL importudur —
+`from app.services.sector_pipeline import identity` — ve `sector_pipeline` altından
+BAŞKA hiçbir modül import edilmez. Kenar tek yönlüdür: `identity` bu modülü import
+ETMEZ ve etmeyecektir (döngü olurdu); `identity` ortak yaprak `sector_content_schema`
+dışında hiçbir `app` modülünü import etmez. İkisinin de kapısı yapısal testtir
+(`tests/test_plan2_interface_contract.py`, "Madde 9").
+
+**DÜRÜST ETİKET — kapanmayan ayak.** Ekin (a) hükmü "kullanılan TEK ad
+`identity.canonical_sha`" der. Burada import BİÇİMİ o hükme çevrildi, ama AD KÜMESİ
+hâlâ geniş: bu modül `identity.validate_decision_log` ve `identity.check_unit_integrity`
+adlarını da gerçekten kullanıyor (Task 3'ün şema kapısı `insert_draft` içinde koşar ve
+kuralın ikinci bir kopyası YAZILMAZ). Yani (a)'nın ad-kümesi ayağı KAPANMADI; kapanması
+ekin hükmünün revizyonunu gerektirir ve bu tasarım katmanının işidir — burada sessizce
+genişletilmez.
 """
 
 from __future__ import annotations
@@ -28,10 +39,7 @@ from app.services.sector_packages import (
     normalize_special_day_key,
     validate_package_content,
 )
-from app.services.sector_pipeline.identity import (
-    check_unit_integrity,
-    validate_decision_log,
-)
+from app.services.sector_pipeline import identity
 
 logger = logging.getLogger(__name__)
 
@@ -409,7 +417,7 @@ async def insert_draft(
     owner = _require_actor(actor)
 
     if decision_log is not None:
-        log_errors = validate_decision_log(decision_log)
+        log_errors = identity.validate_decision_log(decision_log)
         if log_errors:
             raise ValueError(
                 "karar günlüğü şemayı geçmedi: " + "; ".join(log_errors)
@@ -449,7 +457,7 @@ async def insert_draft(
         # kırpılan öğe aday pakete girmez, yani yolu içerikte olmayacaktır.
         # Kapı "her satırın yolu içerikte olsun" diye yazılsaydı gerçek bir
         # kırpma taşıyan her paket reddedilirdi.
-        pair_errors = check_unit_integrity(content, decision_log)
+        pair_errors = identity.check_unit_integrity(content, decision_log)
         if pair_errors:
             raise ValueError(
                 "içerik ile karar günlüğü tutarsız: " + "; ".join(pair_errors)
