@@ -372,17 +372,34 @@ async def insert_draft(
 
     * **Olay türü yolu:** `033_package_events.sql:40-50` `event_type` CHECK'ini
       TAM DOKUZ değerle pinler → yeni tür için migration + rollback şart.
-      Üstelik 033 kendi doğrulama bloğunda (satır 114-119) CHECK tanımının
-      BİREBİR metnini bekler; genişletme 033'ün beklentisini de güncellemeyi
-      gerektirir (`tests/test_migration_033.py::test_widened_event_type_check_is_caught`
-      genişletilmiş CHECK'i yakalamak için VARDIR). Ayrıca
-      `package_events.EVENT_TYPES` (bu görevin Files listesi DIŞINDA) ve
-      `tests/test_package_stamp_and_events.py:118-122`'deki pinli enum testi.
-      Not: `package_events` tablosunda `actor` kolonu ZATEN var ve yaşam
-      döngüsü olayları onu ZORUNLU kılıyor (`package_events.py:223`) — yani
-      taşıyıcı hazır, kapalı olan yalnız türün kendisi.
+      Üstelik 033 kendi doğrulama bloğunda CHECK tanımının birebir metnini
+      **İKİ AYRI YERDE** bekler ve genişletme İKİSİNİ BİRDEN düşürür:
+      `033:114-119` (`package_events.event_type CHECK` etiketi) ve
+      `033:183-184` (`package_events kısıt kümesi (kapalı)` etiketi — kapalı
+      manifest, CHECK metnini ayrıca taşır). ÖLÇÜLDÜ: dokuz değere onuncu bir
+      değer (`draft_created`) eklenmiş CHECK'le 033 yeniden uygulanınca
+      `rc=3` ve hata mesajı İKİ etiketi birden basıyor. (Bu ikinci kalem fix
+      turu 2'de sayılmamıştı.) `tests/test_migration_033.py::
+      test_widened_event_type_check_is_caught` genişletilmiş CHECK'i
+      yakalamak için VARDIR. Ayrıca `package_events.EVENT_TYPES` (bu görevin
+      Files listesi DIŞINDA) ve `tests/test_package_stamp_and_events.py:118-122`
+      pinli enum testi. Not: `package_events` tablosunda `actor` kolonu ZATEN
+      var ve yaşam döngüsü olayları onu ZORUNLU kılıyor
+      (`package_events.py:223`) — yani taşıyıcı hazır, kapalı olan yalnız
+      türün kendisi.
     * **Kolon yolu:** `sector_packages`'a `created_by` — yine migration +
-      rollback.
+      rollback, ve bu yol da PİNLİ BEKLENTİ güncellemesi taşır (ilk yazım
+      yalnız "migration + rollback" diyordu, eksikti). `032_sector_packages.sql:377`
+      `sector_packages kolon imzası`nı KAPALI küme olarak pinler. ÖLÇÜLDÜ:
+      `sector_packages`'a `created_by TEXT` eklenip 032 yeniden uygulanınca
+      `rc=3`, düşen tek etiket `sector_packages kolon imzası`. Ek olarak
+      `tests/test_plan2_interface_contract.py:366-367` kolon kümesini sözlük
+      EŞİTLİĞİYLE karşılaştırır; ÖLÇÜLDÜ: aynı kolon eklendiğinde `columns`
+      yüzeyi eşit ÇIKMIYOR (`yalnız gözlenende: ['created_by']`), diğer üç
+      yüzey (kısıt · indeks · tetikleyici) eşit kalıyor. (Ölçüm yöntemi:
+      testin KENDİ `_relation_manifest` + `EXPECTED_032_MANIFEST` çifti
+      bozulmuş bir şemaya karşı koşuldu; pytest oturumu şemayı her koşumda
+      yeniden kurduğu için testin kendisi bu yolda koşturulamıyor.)
     * **Üçüncü `tur` yolu:** karar günlüğü şemasını (ek ile pinli K-84)
       değiştirmek.
 
@@ -420,6 +437,10 @@ async def insert_draft(
     # turu 1'de bu döngünün ÖNÜNE girmişti; reddedilen bir çift, içeriğin
     # kendi uyarılarını da sessizce yutuyordu. Yazım her iki hâlde de olmuyor
     # ama gözlemlenebilirlik farkı gerçekti ve sessizce değişmişti.
+    # Sırayı YORUM değil TEST tutar (fix turu 3, B2):
+    # `tests/test_package_lifecycle.py::
+    #  test_insert_draft_logs_content_warnings_before_pair_gate` — kapı bu
+    # döngünün önüne geçerse KIRMIZI düşer (411c767'ye karşı ölçüldü).
     for warning in result.warnings:
         logger.warning("paket taslağı uyarısı (sector_id=%s): %s", sector_id, warning)
 

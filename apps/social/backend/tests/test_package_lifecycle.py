@@ -23,6 +23,7 @@ Dört sözleşme burada pinlenir:
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 import pytest
@@ -41,6 +42,7 @@ from app.services.sector_package_lifecycle import (
 )
 
 from .test_sector_packages_service import _valid_content  # noqa: E402
+from .test_unit_identity import _karar_row  # noqa: E402
 
 ACTOR = "admin@otomaix"
 
@@ -242,6 +244,59 @@ async def test_insert_draft_rejects_missing_actor(pkg_db):
         await insert_draft(
             pkg_db, sector_id=sector_id, content=_valid_content(), schema_version=1, actor=" "
         )
+
+
+async def test_insert_draft_logs_content_warnings_before_pair_gate(pkg_db, caplog):
+    """Reddedilen bir çiftte içeriğin KENDİ uyarıları yine de günlüklenir.
+
+    Sıra sözleşmesi: yazım kapısının uyarıları ÖNCE basılır, içerik↔günlük
+    bütünlük kapısı SONRA koşar. Fix turu 1'de bütünlük kapısı uyarı
+    döngüsünün ÖNÜNE girmişti ve reddedilen bir çift içeriğin uyarılarını
+    sessizce yutuyordu; fix turu 2 sırayı geri aldı ama onu tutan bir test
+    YAZILMAMIŞTI — bu test o boşluğu kapatır (fix turu 3, B2).
+
+    Ayırt edici olması için iki koşul AYNI anda kurulur: içerik yazım
+    kapısını GEÇER ama boyut hedefi uyarısı üretir, çift ise tutarsızdır ve
+    bütünlük kapısı `ValueError` fırlatır. Sıra tersine dönerse uyarı hiç
+    basılmaz ve bu test düşer.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    # Boyut hedefi (6000 karakter) UYARI üretir, RED üretmez — yazım kapısı
+    # `ok` döner ve akış bütünlük kapısına kadar gelir.
+    content = _valid_content(
+        kapsam=_valid_content()["kapsam"]
+        + " "
+        + ("Kuyumcu vitrin dili ayrıntılı anlatım. " * 160)
+    )
+    # Şemayı GEÇEN ama içerikte karşılığı OLMAYAN tek satır: hayalet birim.
+    decision_log = [
+        _karar_row(oge_yolu="kanca_kaliplari[7]", unit_id="ku-ffffffffffff")
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(ValueError, match="içerik ile karar günlüğü tutarsız"):
+            await insert_draft(
+                pkg_db,
+                sector_id=sector_id,
+                content=content,
+                schema_version=1,
+                decision_log=decision_log,
+                actor=ACTOR,
+            )
+
+    assert any(
+        "tasarım hedefi aşıldı" in record.getMessage() for record in caplog.records
+    ), (
+        "reddedilen çiftte içerik uyarısı YUTULDU — bütünlük kapısı uyarı "
+        f"döngüsünün önüne geçmiş: {[r.getMessage() for r in caplog.records]!r}"
+    )
+
+    assert (
+        await pkg_db.fetchval(
+            "SELECT count(*) FROM social.sector_packages WHERE sector_id = $1", sector_id
+        )
+        == 0
+    ), "bütünlük kapısı düşerken satır yazıldı"
 
 
 # ═══ 2. Ham geçişin kapatılması ═════════════════════════════════════════════
