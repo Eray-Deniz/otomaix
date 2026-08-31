@@ -4,6 +4,24 @@
 
 ## Proposed (spun-off)
 
+- **plan2-ek-bagimlilik-hukmu-ad-kumesi** (proposed, TASARIM KARARI — yürütücü çözemez;
+  TETİKLİ) — Plan 2'nin bağlayıcı arayüz eki, yaşam döngüsü modülünün kimlik modülünden
+  **yalnız kanonik hash adını** kullanmasını şart koşuyor. Ölçüldü (2026-08-31): modül
+  gerçekte **üç** ad kullanıyor — kanonik hash artı karar günlüğünün şema kapısı ve birim
+  bütünlüğü kontrolü. İkisi de `insert_draft`'ın içinde koşuyor ve ekin kendi hükmü "ikinci
+  bir kural YAZILMAZ" dediği için kopyalanamıyorlar.
+  **Yürütmede kapatıldı sanılmasın:** import BİÇİMİ hükme çevrildi (o ayak kapandı ve
+  yapısal kapı üretilmiş matrisle bunu zorluyor), **ad kümesi ayağı AÇIK**.
+  **Neden yürütücü kapatamaz:** kapanışın iki yolu var ve ikisi de tasarım kararıdır —
+  (a) ek hükmü ölçülen gerçeğe göre revize edilir (üç ada izin verilir, gerekçesiyle),
+  (b) şema kapısı yaşam döngüsünden çıkarılıp başka bir yere taşınır (bu, Plan 1'in yazım
+  kapısı mimarisini değiştirir). Yürütücü bağlayıcı ek metnini yeniden yazmaz.
+  **Dürüst etiket: çözülmedi + park edildi; sapma kodda, testte ve commit mesajında etiketli.
+  "Ele alındı" DEĞİL.**
+  **Tetik:** Task 8 dispatch'i — ek, o göreve bir yapısal test sözü veriyor ve o testin
+  hangi hükme karşı koşacağı bu kararla belirlenir. Task 8'e gelinmeden karara bağlanmazsa
+  görev orada durur.
+
 - **sector-package-unreviewed-merge-surface** (proposed, review borcu; DÜŞÜRÜLDÜ — koşullu) —
   Plan 1 kapanışında iki kod commit'i **hiçbir bağımsız hakem görmeden** main'e girdi:
   `39f283d` (yaşam döngüsünün `sector_package_lifecycle.py`'ye taşınması) ve `3561231`
