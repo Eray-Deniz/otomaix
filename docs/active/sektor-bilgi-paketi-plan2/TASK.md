@@ -73,8 +73,29 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
 - **Commit etiketleri düzeltildi (`f79f28f`, Eray onayı).** Defter denetimi iki MECH-FAIL
   veriyordu; altı yerel commit aynı içerikle doğru etiketle yeniden yazıldı, denetim `rc=0`.
   Yedek etiket: `backup/pre-footer-fix-20260830`.
-- **Sıradaki: Task 4** (sözleşme v2 — denetçi yeniden-doğrulama envanteri + sentez kimlik
-  taşıması). Task 3'ün açık döngüsü kalmadı.
+- **Task 4 İNDİ (2026-08-31)** — sözleşme v2. Dış depo `6d5d90db9537b516413d31f091b4d475526bcb73`
+  (`master`; önceki `d901eb4` ARTIK ANA HÂL DEĞİL), monorepo `3d08db6` (pin yenilemesi).
+  Devralınan üç sözleşme kalemi de kapandı: sürüm damgası çakışması ayrıştırıldı, iki genel
+  hüküm kanal maddesinden çıkarılıp kendi başlıklarına taşındı, `[muhtemel-uydurma]`nın bayrak
+  sanılması ölçülerek düzeltildi (kapalı bayrak kümesi 8 üye, o küme içinde değil).
+- **Checkpoint 2 KOŞTU** (Codex karşıt-hakem, taban `72f5744`): **needs-attention** — 3 high,
+  1 medium, 1 low. Kapsam Task 3'ün TAMAMINI da içeriyordu, yani aşağıdaki "düzeltme turu 3
+  bağımsız hakem görmedi" borcu bu turda KAPANDI: hakem o aralıkta yeni kusur bulmadı.
+- **Düzeltme turu 1 İNDİ (`f15e640`)** — iki high kapatıldı:
+  (1) kanonik hash, ekin ileride BAĞLADIĞI girdi biçimlerini (donmuş veri sınıfı demeti,
+  kimlik taşıyan yük) kabul edemiyordu; kapalı bir ön-serileştirme kuralı eklendi, eski
+  hash'lerin kaymadığı ölçüldü, fail-closed vaadi korundu.
+  (2) Bağımlılık sınırı: ekin iki hükmü de ihlal ediliyordu. İçerik şeması + yazım kapısı
+  `sector_content_schema.py` yaprağına ÇIKARILDI (kopya değil, taşıma — 27 üst düzey adın
+  27'si bayt-aynı ölçüldü) ve üç yapısal AST kapısı ŞİMDİ yazıldı (Task 8'e ertelenmedi).
+  Test tabanı 745 → 758.
+  **KAPANMAYAN AYAK — dürüst etiket:** ekin "kullanılan TEK ad `identity.canonical_sha`"
+  hükmü kapanmadı; yaşam döngüsü gerçekten iki adı daha kullanıyor (şema kapısı orada koşar
+  ve kural kopyalanamaz). İmport BİÇİMİ hükme çevrildi, ad kümesi ayağı AÇIK. Kapanması ek
+  belgesinin revizyonunu ister — **tasarım katmanının işi, yürütücü ek metnini yeniden
+  yazmaz.** Sapma kodda, testte ve commit mesajında etiketli.
+- **Sıradaki: checkpoint 2'nin yeniden inceleme turu**, sonra Task 5 (migration 035 — takvim
+  dönem desteği). **Task 5 Eray kararı bekliyor** (aşağıda).
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
@@ -190,6 +211,11 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
 - Plan 1 bölümlerinin kart geçişi taranmadı (boşluk raporu kapsam sınırı) — Plan 1 alanında
   kusur çıkarsa koşulur.
 
+- **KAPANDI (2026-08-31, checkpoint 2).** Aşağıdaki borç artık açık DEĞİL: checkpoint 2'nin
+  tabanı `72f5744` olduğu için `ad95846` o incelemenin aralığına girdi ve bağımsız hakem o
+  aralıkta yeni kusur bulmadı. Adlandırılmış kapsanma yolu gerçekleşti — tahmin değil, ölçüm.
+  Kayıt tarihsel bağlam olarak duruyor:
+
 - **Düzeltme turu 3 bağımsız hakem GÖRMEDİ — kabul, evi VAR.** Kapanış kontrolör kararıdır
   (sınıf 47 atıflık üretilmiş matrisle kapatıldı; dördüncü yargı turu açılmadı çünkü üç tur
   da aynı ekseni buluyordu). **Ev uydurulmadı:** dal kapanışındaki final inceleme tabanı
@@ -209,6 +235,14 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   İkisi ayrı ayrı inemez — yarım iniş görünür olsun diye eşli yazıldı.
   Dürüst etiket: *çözülmedi; evi ve iki adımı var, tarihi o görevlerin koşmasına bağlı.*
   Kodun kendi belgesinde de "ÇÖZÜLMEDİ + PARK EDİLDİ" etiketiyle duruyor.
+  **BAĞIMSIZ DOĞRULAMA (checkpoint 2, 2026-08-31):** hakem bunu kendiliğinden **high** olarak
+  buldu ve "kanıt sağlayıcılığı için fail-open" dedi. Kontrolör tahkimi: **kusur onaylandı,
+  "şimdi düzelt" REDDEDİLDİ** — ölçüldü ki `insert_draft`'ın üretimde tek çağıranı YOK
+  (depo geneli tarandı: yalnız testler çağırıyor), yani yol bugün erişilebilir değil ve
+  çağrıyı ekleyecek görev zaten aktörü taşımakla yükümlü. Hakemin önerdiği "aktör taşıyıcısı
+  inene kadar dolu karar günlüğü yazımını reddet" seçeneği fail-closed olurdu ama Task 15'in
+  tasarlanmış yolunu kırar ve sonra geri alınırdı. **Bu bir ERTELEME DEĞİL, evi olan bir
+  borçtur** — ve bağımsız doğrulama kaydı güçlendirir, "halledildi"ye çevirmez.
 - **`GIT_DIR`/`GIT_WORK_TREE` ezilmesi ekseni — Task 18 Step 8b, İKİ örnek birden.** Üretim
   tarafı (`contracts.py::_head_commit`) ve test tarafı
   (`test_external_repo_gitignores_run_folder`). Tek süpürme ikisini kapatır; ayrı ayrı
