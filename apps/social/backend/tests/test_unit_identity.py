@@ -746,3 +746,151 @@ _PINLI_OZETLER = (
 def test_canonical_sha_keeps_existing_digests_byte_for_byte(deger, beklenen):
     """GERİLEME KAPISI — bugün çalışan girdiler için hash BİREBİR aynı kalır."""
     assert identity.canonical_sha(deger) == beklenen
+
+
+# ─── Tamsayı büyüklüğü: ön-serileştirme kuralının AÇTIĞI gerileme (fix turu 2, F1)
+#
+# Ortak `isinstance(value, (int, float))` dalı `math.isfinite`'ı TAMSAYIYA da
+# uyguluyordu. `math.isfinite` argümanını float'a çevirir, yani `10**309`
+# `OverflowError` ile patlıyordu — ölçüldü:
+#     10**308 -> OK          10**309 -> OverflowError    10**400 -> OverflowError
+# Bu iki sözleşmeyi birden kırıyordu:
+#   (1) **uyumluluk:** eski kural `10**309` için özet ÜRETİYORDU
+#       (`7fe8362b13128003…`), yani depodaki bir `oge_sha` bir gecede
+#       hesaplanamaz hâle gelirdi;
+#   (2) **istisna tipi:** `canonical_sha` docstring'i "JSON'a çevrilemeyen bir
+#       değer `TypeError` ile düşer (fail-closed)" der. `OverflowError`
+#       `TypeError` DEĞİLDİR (`ArithmeticError` soyundandır) — fail-closed vaadi
+#       sessizce başka bir istisna sınıfına kaydı.
+# Kural: `bool` dalından sonra TAMSAYI değiştirilmeden geçer; sonluluk ölçüsü
+# YALNIZ `float`'a uygulanır.
+
+# `10**309` ve `10**400` için ön-serileştirme kuralından ÖNCEKİ (f15e640^)
+# uygulamanın ürettiği özetler — ölçülerek alındı:
+#   json.dumps(v, sort_keys=True, separators=(",",":"), ensure_ascii=False)
+#   → NFC → sha256
+_BUYUK_TAMSAYI_PINLERI = (
+    (10**309, "7fe8362b13128003e89ec608904a096e71fefbfca5387afea114bd8f865f2dc6"),
+    (10**400, "397fc6671f9e77a223078bf9d335b890a1f4cabb25d4aec954f70ef3a84788ee"),
+)
+
+
+@pytest.mark.parametrize("deger,beklenen", _BUYUK_TAMSAYI_PINLERI)
+def test_canonical_sha_keeps_big_integer_digests_byte_for_byte(deger, beklenen):
+    """GERİLEME KAPISI — float'a sığmayan tamsayı için özet ESKİSİYLE aynı."""
+    assert identity.canonical_sha(deger) == beklenen
+
+
+# Kabul edilen tamsayı büyüklükleri × onları taşıyan KAPSAYICILAR — üretilmiş
+# çarpım. Elle seçilmiş tek bir örnek tam da bu sınıfı kaçırmıştı: `10**308`
+# geçiyor, `10**309` patlıyordu ve tek örnek yanlış tarafa düşebilirdi.
+_BUYUKLUKLER = (
+    0,
+    -1,
+    2**53,
+    10**308,
+    10**309,
+    -(10**309),
+    10**400,
+    2**1024,
+)
+
+
+def _kapsayicilar(deger):
+    """Bir değeri her özyineleme yolundan geçiren KAPSAYICI biçimleri."""
+
+    @dataclass(frozen=True)
+    class _Donmus:
+        x: object
+
+    return {
+        "ciplak": deger,
+        "liste": [deger],
+        "demet": (deger,),
+        "esleme": {"a": deger},
+        "donmus-veri-sinifi": _Donmus(deger),
+        "ic-ice": {"a": [{"b": (deger,)}]},
+    }
+
+
+_BUYUKLUK_MATRISI = [
+    (f"{ad}-{sira}", ad, sira, kap)
+    for sira, deger in enumerate(_BUYUKLUKLER)
+    for ad, kap in _kapsayicilar(deger).items()
+]
+
+
+@pytest.mark.parametrize(
+    "kimlik,kapsayici_adi,sira,deger",
+    _BUYUKLUK_MATRISI,
+    ids=[h[0] for h in _BUYUKLUK_MATRISI],
+)
+def test_canonical_sha_accepts_integers_of_any_magnitude(
+    kimlik, kapsayici_adi, sira, deger
+):
+    """Tamsayı büyüklüğü hiçbir özyineleme yolunda REDDEDİLMEZ."""
+    ozet = identity.canonical_sha(deger)
+    assert re.fullmatch(r"[0-9a-f]{64}", ozet), (kimlik, ozet)
+
+
+def test_the_integer_magnitude_matrix_covers_the_full_product():
+    """Bir büyüklük ya da bir kapsayıcı sessizce düşerse burası DÜŞER."""
+    assert len(_BUYUKLUK_MATRISI) == len(_BUYUKLUKLER) * 6 == 48
+    assert {h[1] for h in _BUYUKLUK_MATRISI} == {
+        "ciplak",
+        "liste",
+        "demet",
+        "esleme",
+        "donmus-veri-sinifi",
+        "ic-ice",
+    }
+
+
+# ─── İstisna tipi SÖZLEŞMESİ — reddedilen her girdi sınıfı `TypeError` verir ──
+#
+# `canonical_sha` docstring'i tek bir istisna sınıfı vadeder. Vaat elle seçilmiş
+# bir örnekle değil, ret yollarının ÜRETİLMİŞ listesiyle sınanır: `OverflowError`
+# gerilemesi tam da "başka bir istisna sınıfına sessiz kayma"ydı ve tek örnek
+# onu görmezdi.
+
+
+def _reddedilen_degerler():
+    """Bugünkü RET yollarının üretilmiş listesi: (ad, değer)."""
+
+    @dataclass
+    class _Degisken:
+        a: str
+
+    return [
+        ("nan", float("nan")),
+        ("inf", float("inf")),
+        ("-inf", float("-inf")),
+        ("kume", {1, 2}),
+        ("donmus-kume", frozenset({1, 2})),
+        ("donmamis-veri-sinifi", _Degisken("x")),
+        ("bayt", b"bayt"),
+        ("taninmayan-nesne", object()),
+        ("karmasik-sayi", complex(1, 2)),
+    ]
+
+
+_RET_MATRISI = [
+    (f"{deger_adi}-icinde-{kap_adi}", kap)
+    for deger_adi, deger in _reddedilen_degerler()
+    for kap_adi, kap in _kapsayicilar(deger).items()
+]
+
+
+@pytest.mark.parametrize(
+    "kimlik,deger", _RET_MATRISI, ids=[h[0] for h in _RET_MATRISI]
+)
+def test_canonical_sha_rejection_paths_raise_typeerror_and_nothing_else(kimlik, deger):
+    """Fail-closed vaadi TİP düzeyinde: her ret yolu `TypeError`, başkası DEĞİL."""
+    with pytest.raises(TypeError):
+        identity.canonical_sha(deger)
+
+
+def test_the_rejection_matrix_covers_the_full_product():
+    """Bir ret sınıfı ya da bir kapsayıcı sessizce düşerse burası DÜŞER."""
+    assert len(_RET_MATRISI) == 9 * 6 == 54
+    assert len({h[0].split("-icinde-")[0] for h in _RET_MATRISI}) == 9

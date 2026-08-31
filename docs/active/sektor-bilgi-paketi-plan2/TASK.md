@@ -14,8 +14,11 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **plan ONAYLI, yürütme bekliyor.** Onay hakem zinciriyle değil **Eray'ın risk
-kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
+Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-4 indi, checkpoint 2 koştu, yeniden inceleme turu
+koştu ve düzeltme turu 2 indi — ayrıntı "Current Status".
+
+**Onay tarihçesi (değişmez kayıt, silinmez):** plan onayı hakem zinciriyle değil **Eray'ın
+risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenmemişti.
 
 # Execution State
 
@@ -94,8 +97,24 @@ kabulüyle** alındı (2026-08-27); son iki düzeltme partisi incelenmedi.
   ve kural kopyalanamaz). İmport BİÇİMİ hükme çevrildi, ad kümesi ayağı AÇIK. Kapanması ek
   belgesinin revizyonunu ister — **tasarım katmanının işi, yürütücü ek metnini yeniden
   yazmaz.** Sapma kodda, testte ve commit mesajında etiketli.
-- **Sıradaki: checkpoint 2'nin yeniden inceleme turu**, sonra Task 5 (migration 035 — takvim
-  dönem desteği). **Task 5 Eray kararı bekliyor** (aşağıda).
+- **Checkpoint 2'nin yeniden inceleme turu KOŞTU (2026-08-31)** ve ÜÇ bulgu onaylandı;
+  üçü de kontrolörün kendi ölçümüyle doğrulandı, hakemin sözüne dayanmadı.
+- **Düzeltme turu 2 İNDİ (2026-08-31).** Üç bulgu TDD ile kapatıldı:
+  (F4, high) yapısal bağımlılık kapısı GÖRECELİ ve DOLAYLI import biçimlerini kaçırıyordu —
+  `from .. import sector_packages` ve `from app.services import sector_pipeline` mutasyonları
+  kapıyı düşürmüyordu (ölçüldü: 3 passed). Çözümleyici artık her düğümü TAM NİTELİKLİ kenara
+  çevirir (import EDİLEN ADLAR dâhil; göreceli seviye modülün kendi paket yoluyla
+  mutlaklaştırılır; çözülemeyen seviye fail-closed düşer) ve kapanış 44 hücrelik ÜRETİLMİŞ
+  sözdizimi matrisiyle kanıtlandı, elle seçilmiş örnekle değil.
+  (F3, high) aktif katmanın kendi içindeki çelişkili durum iddiaları — bu sweep.
+  (F1, high'a yükseltilmiş medium) `canonical_sha` ortak `int`/`float` dalı `math.isfinite`'ı
+  tamsayıya da uyguluyordu; `10**309` `OverflowError` ile patlıyordu. Bu hem eski özeti
+  (`7fe8362b13128003…`) hesaplanamaz kılıyor hem de docstring'in `TypeError` vaadini kırıyordu.
+  Tamsayı artık değiştirilmeden geçer; sonluluk yalnız `float`'a uygulanır.
+  Test tabanı 758 → 914.
+  **Dürüst etiket:** düzeltme turu 2 henüz bağımsız yargı GÖRMEDİ; tur açık.
+- **Sıradaki: düzeltme turu 2'nin yeniden inceleme turu**, sonra Task 5 (migration 035 —
+  takvim dönem desteği). **Task 5 Eray kararı bekliyor** (aşağıda).
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
@@ -191,8 +210,11 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   kararını tek tek sweep eder.
 - **§8.7'nin sözleşme düzeltmeleri KAPANDI** (Task 2, dış depo `6d2a033`+`d901eb4`): altı kalem
   + yedi yansıma kalemi, sweep 13/13 "var". Resmî turu artık bloklamıyorlar.
-- **Task 2'den Task 4'e devredilen üç sözleşme kalemi** (park değil — Task 4 aynı dosyalara
-  dokunuyor ve sürümlerini zaten artırıyor): (a) iki farklı bayt kümesi aynı sürüm damgasını
+- **Task 2'den Task 4'e devredilen üç sözleşme kalemi — Task 4'te KAPANDI (2026-08-31).**
+  Ölçüldü (dış depo `6d5d90d`): sürüm damgası düzeltmesi `hakem-sentez-gorevi.md` satır 18 ve
+  `hakem-denetci-gorevi.md` satır 12'de yazılı; `muhtemel-uydurma`nın bayrak OLMADIĞI
+  `hakem-sentez-gorevi.md` satır 129 ve 133'te açıkça duruyor. Kayıt tarihsel bağlam olarak
+  kalıyor — devralınan hâlleri şunlardı: (a) iki farklı bayt kümesi aynı sürüm damgasını
   taşıyor (`6d2a033` ve `d901eb4` ikisi de "Sürüm 1.3"/"Sürüm 1.2") — kapı sha256'ya baktığı
   için mekanik risk yok, izlenebilirlik pürüzü; (b) iki genel hüküm kanal-bayrağı maddesinin
   içine yerleşmiş (28 satırlık madde), içerik doğru yer yanıltıcı; (c) `hakem-sentez-gorevi.md`

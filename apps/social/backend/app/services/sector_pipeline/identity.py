@@ -179,8 +179,8 @@ def _kanonik_json_degeri(value: Any) -> Any:
 
     Dönüşüm kümesi KAPALIDIR:
 
-      (1) `None` · `bool` · `str`            → OLDUĞU GİBİ
-      (2) `int` · `float`                    → OLDUĞU GİBİ, ama SONLU olmak zorunda
+      (1) `None` · `bool` · `str` · `int`    → OLDUĞU GİBİ
+      (2) `float`                            → OLDUĞU GİBİ, ama SONLU olmak zorunda
       (3) `UUID` · `Path` · `Decimal`        → `str(...)`
       (4) `datetime` · `date`                → `isoformat()`
       (5) donmuş veri sınıfı örneği          → {alan adı: kural(değer)}
@@ -190,9 +190,13 @@ def _kanonik_json_degeri(value: Any) -> Any:
 
     Üç sınır bilerek dar tutuldu:
 
-    * **Sonlu olmayan sayı REDDEDİLİR.** `json.dumps` `nan`/`inf` için varsayılan
+    * **Sonlu olmayan FLOAT REDDEDİLİR.** `json.dumps` `nan`/`inf` için varsayılan
       olarak `NaN`/`Infinity` yazar; bu geçerli JSON DEĞİLDİR ve hash sessizce
-      taşınmaz hâle gelirdi.
+      taşınmaz hâle gelirdi. Ölçü YALNIZ `float`'a uygulanır: `math.isfinite`
+      argümanını float'a çevirir, dolayısıyla tamsayıya uygulanması `10**309`'u
+      `OverflowError` ile düşürürdü — hem eski özeti (`7fe8362b13128003…`)
+      hesaplanamaz kılan hem de aşağıdaki `TypeError` vaadini kıran bir gerileme
+      (fix turu 2, F1). Python tamsayısı sonsuz OLAMAZ; ölçülecek bir şey yoktur.
     * **Küme (`set`/`frozenset`) REDDEDİLİR.** Kümenin sırası yoktur; bir sıralama
       seçmek ikinci bir normalizasyon kuralı yazmak olurdu. Çağıran sıralı bir
       diziye kendisi çevirir ve o sıranın sorumluluğunu üstlenir.
@@ -211,7 +215,15 @@ def _kanonik_json_degeri(value: Any) -> Any:
     """
     if value is None or isinstance(value, (bool, str)):
         return value
-    if isinstance(value, (int, float)):
+    if isinstance(value, int):
+        # Tamsayı OLDUĞU GİBİ geçer — sonluluk ÖLÇÜLMEZ. `int` ve `float` ortak
+        # bir dalda toplanıp `math.isfinite`'a verilseydi (fix turu 1'in yazımı)
+        # argüman float'a çevrilirdi ve `10**309` `OverflowError` ile patlardı:
+        # eski kural o değer için özet ÜRETİYORDU (`7fe8362b13128003…`) ve
+        # `OverflowError` docstring'in vadettiği `TypeError` DEĞİLDİR. Python
+        # tamsayısı zaten sonsuz olamaz; ölçülecek bir şey yoktu.
+        return value
+    if isinstance(value, float):
         if not math.isfinite(value):
             raise TypeError(
                 f"canonical_sha sonlu olmayan sayı aldı: {value!r} — `NaN`/`Infinity` "

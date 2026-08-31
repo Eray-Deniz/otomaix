@@ -850,34 +850,120 @@ _YAPRAK = "app.services.sector_content_schema"
 _DB_YUZEYLERI = frozenset({"asyncpg", "psycopg", "psycopg2", "sqlalchemy", "databases"})
 
 
-def _import_edilen_moduller(path: Path) -> list[str]:
-    """Kaynaktaki HER import düğümünün hedef modülü — üretilmiş liste."""
-    agac = ast.parse(path.read_text(encoding="utf-8"))
-    moduller: list[str] = []
-    for node in ast.walk(agac):
+# ─── Kenar çözümleyici: her import düğümü TAM NİTELİKLİ kenarlara ───────────
+#
+# İlk yazım yalnız `ImportFrom.module` alanını kaydediyordu ve İKİ sınıfı birden
+# kaçırıyordu (fix turu 2, F4 — ölçüldü, varsayılmadı):
+#   * **göreceli biçim:** `from .. import sector_packages` yalnız `..` kenarını
+#     üretiyordu; yasaklı hedef hiç görünmüyordu (kapı 3 passed veriyordu).
+#   * **dolaylı biçim:** `from app.services import sector_pipeline` yalnız
+#     `app.services` üretiyordu; `sector_pipeline` süzgeci onu görmüyordu.
+# Yani kapı bugünkü kodu doğru onaylıyor ama REGRESYON kapısı olarak fail-closed
+# DEĞİLDİ: sıradan bir göreceli import yasaklı bağımlılığı sessizce geri getirirdi.
+#
+# Kural — her düğüm MUTLAK kenarlara çözülür:
+#   `import a.b.c`          → `a.b.c`
+#   `from a.b import c, d`  → `a.b` · `a.b.c` · `a.b.d`
+#       İmport EDİLEN AD da kenardır: bir ad modül OLABİLİR ve `from paket import
+#       altmodul` gerçek bir modül kenarıdır. Yalnız `.module` alanına bakmak bu
+#       biçimi görmez.
+#   `from .. import x`      → `node.level` + modülün KENDİ paket yolu ile
+#                             mutlaklaştırılır
+#   `as` takma adı hedefi DEĞİŞTİRMEZ — kenar hedef ad üzerinden kaydedilir.
+# Çözülemeyen göreceli seviye SESSİZCE atlanmaz: `_COZULEMEYEN` sentinel'i üretilir
+# ve `_kenarlar` kapısı onu görünce DÜŞER (fail-closed).
+
+_COZULEMEYEN = "<cozulemeyen-goreceli-import>"
+
+
+def _paket_adi(path: Path) -> str:
+    """Modülün MUTLAK paket yolu — `__init__.py` zinciri yürünerek ÖLÇÜLÜR.
+
+    Göreceli import'u mutlaklaştırmak için ZORUNLU: `node.level` tek başına
+    hangi modülü gösterdiğini söylemez, ancak modülün kendi paket yoluyla
+    anlam kazanır.
+    """
+    parcalar: list[str] = []
+    dizin = path.parent
+    while (dizin / "__init__.py").exists():
+        parcalar.append(dizin.name)
+        dizin = dizin.parent
+    return ".".join(reversed(parcalar))
+
+
+def _kaynaktan_kenarlar(kaynak: str, paket: str) -> list[str]:
+    """Kaynak METNİNDEKİ her import düğümünün TAM NİTELİKLİ kenarları.
+
+    Dosya değil METİN alır: ayırt edicilik matrisi mutasyonlarını BELLEKTE
+    koşturabilsin diye — gerçek dosyaya dokunulmaz, diske hiçbir şey yazılmaz.
+    """
+    kenarlar: list[str] = []
+    for node in ast.walk(ast.parse(kaynak)):
         if isinstance(node, ast.Import):
-            moduller.extend(alias.name for alias in node.names)
+            kenarlar.extend(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            moduller.append("." * node.level + (node.module or ""))
-    return moduller
+            if node.level == 0:
+                taban = node.module or ""
+            else:
+                parcalar = paket.split(".") if paket else []
+                kalan = len(parcalar) - (node.level - 1)
+                if kalan < 1:
+                    kenarlar.append(_COZULEMEYEN)
+                    continue
+                taban = ".".join(parcalar[:kalan])
+                if node.module:
+                    taban = f"{taban}.{node.module}"
+            if not taban:
+                kenarlar.append(_COZULEMEYEN)
+                continue
+            kenarlar.append(taban)
+            kenarlar.extend(f"{taban}.{alias.name}" for alias in node.names)
+    return kenarlar
 
 
-def _from_importlar(path: Path) -> list[tuple[str, list[str]]]:
-    """`from X import a, b` düğümleri — (modül, alınan adlar)."""
-    agac = ast.parse(path.read_text(encoding="utf-8"))
-    return [
-        ("." * node.level + (node.module or ""), sorted(a.name for a in node.names))
-        for node in ast.walk(agac)
-        if isinstance(node, ast.ImportFrom)
-    ]
+def _kenarlar(path: Path) -> list[str]:
+    """Dosyanın TAM NİTELİKLİ kenarları + fail-closed kapısı.
+
+    Çözülemeyen bir göreceli seviye sessizce GEÇMEZ: burada düşer. Sessiz
+    geçseydi kapı tam da kaçırdığı sınıfı yeniden davet ederdi.
+    """
+    kenarlar = _kaynaktan_kenarlar(path.read_text(encoding="utf-8"), _paket_adi(path))
+    assert _COZULEMEYEN not in kenarlar, (
+        f"{path.name}: çözülemeyen göreceli import — kenar kümesi EKSİK, "
+        "yapısal kapı fail-closed düşer"
+    )
+    return kenarlar
+
+
+# Yaprağın `identity`'ye verdiği adlar — KAPALI liste. `from X import a, b` artık
+# `X.a`/`X.b` kenarlarını da ürettiği için izin listesi bu adları İSİMLEYEREK
+# taşır; yaprağa yedinci bir ad eklenirse liste BİLEREK büyütülür, kaçak alan
+# büyütmez.
+_YAPRAKTAN_ALINAN_ADLAR = (
+    "LIST_FIELDS",
+    "SPECIAL_DAY_SLOTS",
+    "TEXT_FIELDS",
+    "VIDEO_POOL_KEYS",
+    "has_meaningful_text",
+    "structural_errors",
+)
+_IDENTITY_IZINLI_APP_KENARLARI = sorted(
+    {_YAPRAK, *(f"{_YAPRAK}.{ad}" for ad in _YAPRAKTAN_ALINAN_ADLAR)}
+)
+
+# Yaşam döngüsünün `sector_pipeline` yüzeyine attığı KAPALI kenar kümesi.
+_LIFECYCLE_IZINLI_PIPELINE_KENARLARI = [
+    "app.services.sector_pipeline",
+    "app.services.sector_pipeline.identity",
+]
 
 
 def test_identity_imports_no_plan1_module_and_no_db_surface():
     """Hüküm (b): `identity.py` YALNIZ yapraktan okur — Plan 1 modülü YOK, DB YOK."""
-    moduller = _import_edilen_moduller(Path(identity.__file__))
-    app_importlari = sorted({m for m in moduller if m.split(".")[0] == "app"})
-    assert app_importlari == [_YAPRAK], app_importlari
-    db = sorted({m for m in moduller if m.split(".")[0] in _DB_YUZEYLERI})
+    kenarlar = _kenarlar(Path(identity.__file__))
+    app_kenarlari = sorted({k for k in kenarlar if k.split(".")[0] == "app"})
+    assert app_kenarlari == _IDENTITY_IZINLI_APP_KENARLARI, app_kenarlari
+    db = sorted({k for k in kenarlar if k.split(".")[0] in _DB_YUZEYLERI})
     assert db == [], db
 
 
@@ -885,17 +971,154 @@ def test_the_leaf_is_actually_a_leaf():
     """İzin kümesi kaçamak OLMASIN: yaprağın kendisi hiçbir `app` modülü import etmez."""
     from app.services import sector_content_schema
 
-    moduller = _import_edilen_moduller(Path(sector_content_schema.__file__))
-    assert [m for m in moduller if m.split(".")[0] == "app"] == []
-    assert [m for m in moduller if m.split(".")[0] in _DB_YUZEYLERI] == []
+    kenarlar = _kenarlar(Path(sector_content_schema.__file__))
+    assert [k for k in kenarlar if k.split(".")[0] == "app"] == []
+    assert [k for k in kenarlar if k.split(".")[0] in _DB_YUZEYLERI] == []
 
 
 def test_lifecycle_touches_plan2_through_the_identity_module_only():
-    """Hüküm (a)'nın BİÇİM ayağı + hüküm (c): tek kenar, modül olarak import edilir."""
-    path = Path(_lifecycle_module.__file__)
-    pipeline = [m for m in _import_edilen_moduller(path) if "sector_pipeline" in m]
-    assert pipeline == ["app.services.sector_pipeline"], pipeline
-    from_pipeline = [
-        (m, adlar) for m, adlar in _from_importlar(path) if "sector_pipeline" in m
-    ]
-    assert from_pipeline == [("app.services.sector_pipeline", ["identity"])], from_pipeline
+    """Hüküm (a)'nın BİÇİM ayağı + hüküm (c): tek kenar, modül olarak import edilir.
+
+    Karşılaştırma SIRALI LİSTE üzerinden yapılır, küme üzerinden DEĞİL: ikinci bir
+    `from app.services import sector_pipeline` satırı kümede eriyip kaybolurdu
+    (aynı kenarı üretir), listede ÇOKLUK olarak görünür.
+    """
+    kenarlar = _kenarlar(Path(_lifecycle_module.__file__))
+    pipeline = sorted(k for k in kenarlar if "sector_pipeline" in k)
+    assert pipeline == _LIFECYCLE_IZINLI_PIPELINE_KENARLARI, pipeline
+
+
+# ─── Ayırt edicilik: ÜRETİLMİŞ import biçimi matrisi ────────────────────────
+#
+# Kapanış ELLE SEÇİLMİŞ örnekle kanıtlanmaz. Önceki turda tam olarak bu yapılmıştı:
+# TEK bir mutlak import enjekte edildi, kapı düştü, "ayırt edici" denildi — oysa
+# göreceli ve dolaylı biçimler kaçıyordu ve ölçüm bunu göstermedi çünkü ölçülmedi.
+#
+# Matris sözdizimi boyutlarının ÇARPIMIDIR:
+#   seviye   : mutlak · göreceli 1 · göreceli 2 · göreceli 3
+#   biçim    : düz `import` (yalnız mutlak) · `from <taban> import <ad>` ·
+#              `from <tam> import <alt ad>` · çok adlı `from`
+#   takma ad : var · yok  (`as` hedefi değiştirmemeli)
+#   yerleşim : modül üstü · fonksiyon gövdesi (`ast.walk` ikisini de görmeli)
+#
+# Her hücrenin BEKLENEN kenarı matrisin KENDİSİNDE, çözümleyiciden BAĞIMSIZ dize
+# aritmetiğiyle hesaplanır; test çözümleyicinin o kenarı GÖRDÜĞÜNÜ sınar. Enjeksiyon
+# BELLEK İÇİ kaynak metnine yapılır — gerçek dosyaya DOKUNULMAZ.
+
+_MATRIS_PAKET = "app.services.sector_pipeline"
+_MATRIS_YASAKLI_AD = "sector_packages"
+_MATRIS_MUTLAK_TABAN = "app.services"
+# Göreceli seviye → o seviyenin `_MATRIS_PAKET` içinden çözüldüğü MUTLAK taban.
+_MATRIS_GORECELI_TABANLAR = {
+    1: "app.services.sector_pipeline",
+    2: "app.services",
+    3: "app",
+}
+_MATRIS_YERLESIMLER = ("modul-ustu", "fonksiyon-govdesi")
+
+
+def _matris_kaynagi(satir: str, yerlesim: str) -> str:
+    """Tek bir import satırını BELLEK İÇİ bir modül metnine yerleştirir."""
+    if yerlesim == "modul-ustu":
+        return f'"""bellek ici mutasyon."""\n{satir}\n'
+    return f'"""bellek ici mutasyon."""\n\n\ndef _gecici():\n    {satir}\n'
+
+
+def _import_matrisi_uret() -> list[tuple[str, str, str, str]]:
+    """(kimlik, kaynak satırı, yerleşim, BEKLENEN mutlak kenar) çarpımı."""
+    ad = _MATRIS_YASAKLI_AD
+    hucreler: list[tuple[str, str, str, str]] = []
+    seviyeler: list[tuple[int, str, list[str]]] = []
+
+    kok = _MATRIS_MUTLAK_TABAN
+    tam = f"{kok}.{ad}"
+    seviyeler.append(
+        (
+            0,
+            tam,
+            [
+                f"import {tam}",
+                f"import {tam} as _ta",
+                f"from {kok} import {ad}",
+                f"from {kok} import {ad} as _ta",
+                f"from {tam} import bir_sey",
+                f"from {tam} import bir_sey as _ta",
+                f"from {kok} import baska_sey, {ad}",
+            ],
+        )
+    )
+    for seviye, taban in sorted(_MATRIS_GORECELI_TABANLAR.items()):
+        nokta = "." * seviye
+        seviyeler.append(
+            (
+                seviye,
+                f"{taban}.{ad}",
+                [
+                    f"from {nokta} import {ad}",
+                    f"from {nokta} import {ad} as _ta",
+                    f"from {nokta}{ad} import bir_sey",
+                    f"from {nokta}{ad} import bir_sey as _ta",
+                    f"from {nokta} import baska_sey, {ad}",
+                ],
+            )
+        )
+
+    for seviye, beklenen, satirlar in seviyeler:
+        for sira, satir in enumerate(satirlar):
+            for yerlesim in _MATRIS_YERLESIMLER:
+                hucreler.append(
+                    (f"s{seviye}-b{sira}-{yerlesim}", satir, yerlesim, beklenen)
+                )
+    return hucreler
+
+
+_IMPORT_MATRISI = _import_matrisi_uret()
+
+# 7 mutlak biçim + 3 göreceli seviye × 5 biçim = 22 biçim; × 2 yerleşim = 44 hücre.
+# Sayı PİNLİDİR: bir biçim sessizce düşerse aşağıdaki kapsama testi DÜŞER.
+_IMPORT_MATRISI_HUCRE_SAYISI = 44
+
+
+def test_the_import_form_matrix_covers_the_full_product():
+    """Matris bir BİÇİMİ ya da bir SEVİYEYİ sessizce düşürürse burası düşer."""
+    assert len(_IMPORT_MATRISI) == _IMPORT_MATRISI_HUCRE_SAYISI, len(_IMPORT_MATRISI)
+    assert {h[0].split("-")[0] for h in _IMPORT_MATRISI} == {"s0", "s1", "s2", "s3"}
+    assert {h[2] for h in _IMPORT_MATRISI} == set(_MATRIS_YERLESIMLER)
+    # Takma adlı biçim GERÇEKTEN üretilmiş olsun — `as` boyutu kâğıt üstünde kalmasın.
+    # DOKUZ takma adlı biçim ÖLÇÜLDÜ (mutlakta 3, üç göreceli seviyenin her birinde 2).
+    assert len({h[1] for h in _IMPORT_MATRISI if " as _ta" in h[1]}) == 9
+    # Yirmi iki AYRIK biçim; hücre sayısı bunun yerleşim boyutuyla çarpımıdır.
+    assert len({h[1] for h in _IMPORT_MATRISI}) * len(_MATRIS_YERLESIMLER) == len(
+        _IMPORT_MATRISI
+    )
+
+
+@pytest.mark.parametrize(
+    "kimlik,satir,yerlesim,beklenen",
+    _IMPORT_MATRISI,
+    ids=[h[0] for h in _IMPORT_MATRISI],
+)
+def test_edge_resolver_sees_the_forbidden_edge_in_every_import_form(
+    kimlik, satir, yerlesim, beklenen
+):
+    """ÜRETİLMİŞ çarpımın HER hücresinde yasaklı kenar GÖRÜLMELİ."""
+    kenarlar = _kaynaktan_kenarlar(_matris_kaynagi(satir, yerlesim), _MATRIS_PAKET)
+    assert beklenen in kenarlar, (kimlik, satir, kenarlar)
+    assert _COZULEMEYEN not in kenarlar, (kimlik, satir, kenarlar)
+
+
+@pytest.mark.parametrize("yerlesim", _MATRIS_YERLESIMLER)
+@pytest.mark.parametrize("seviye", (4, 5))
+def test_unresolvable_relative_levels_are_fail_closed(seviye, yerlesim):
+    """Paket kökünün ÜSTÜNE çıkan seviye sessizce atlanmaz — sentinel üretilir."""
+    satir = f"from {'.' * seviye} import {_MATRIS_YASAKLI_AD}"
+    kenarlar = _kaynaktan_kenarlar(_matris_kaynagi(satir, yerlesim), _MATRIS_PAKET)
+    assert _COZULEMEYEN in kenarlar, kenarlar
+
+
+def test_the_edge_gate_fails_closed_on_an_unresolvable_relative_import(tmp_path):
+    """Sentinel yalnız üretilmez, KAPIYI da düşürür: `_kenarlar` `AssertionError` atar."""
+    dosya = tmp_path / "sahte_modul.py"
+    dosya.write_text("from ... import sector_packages\n", encoding="utf-8")
+    with pytest.raises(AssertionError):
+        _kenarlar(dosya)
