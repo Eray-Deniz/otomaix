@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-4 indi, checkpoint 2 koştu, yeniden inceleme turu
-koştu ve düzeltme turu 2 indi — ayrıntı "Current Status".
+Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-4 indi; checkpoint 1 ve checkpoint 2 KAPANDI
+(ikisi de hakem `approve`'uyla). Sıradaki iş Task 5 — ayrıntı "Current Status".
 
 **Onay tarihçesi (değişmez kayıt, silinmez):** plan onayı hakem zinciriyle değil **Eray'ın
 risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenmemişti.
@@ -28,8 +28,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 1
-- last_checkpoint_ref: 72f57443ed22dd8b40e4b551e91cee67b26dca30
+- cp_count: 2
+- last_checkpoint_ref: a6e053f32000259ccc1e4e94d49f977eff120192
 
 # References
 
@@ -112,9 +112,24 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
   (`7fe8362b13128003…`) hesaplanamaz kılıyor hem de docstring'in `TypeError` vaadini kırıyordu.
   Tamsayı artık değiştirilmeden geçer; sonluluk yalnız `float`'a uygulanır.
   Test tabanı 758 → 914.
-  **Dürüst etiket:** düzeltme turu 2 henüz bağımsız yargı GÖRMEDİ; tur açık.
-- **Sıradaki: düzeltme turu 2'nin yeniden inceleme turu**, sonra Task 5 (migration 035 —
-  takvim dönem desteği). **Task 5 Eray kararı bekliyor** (aşağıda).
+- **Checkpoint 2 KAPANDI — tur 3 verdict `approve` (2026-08-31).** Zincir üç tur sürdü ve her
+  tur FARKLI bir eksende bulgu verdi (aynı şeyin dar varyantları değil — o olsaydı yeni tur
+  açılmaz, çerçeve teşhisi raporlanırdı):
+  tur 1 → 3 high + 1 medium + 1 low · tur 2 → 3 high · tur 3 → **approve** + 1 medium.
+- **Düzeltme turu 3 İNDİ (`a6e053f`)** — tur 3'ün medium'u kapatıldı. Ölçüm bir ayrım gösterdi:
+  `10**4300` **eski kuralda da** düşüyordu (Python'un süreç düzeyindeki basamak sınırı, 4300),
+  yani davranış gerileme DEĞİL; **fazla-geniş İDDİA** yeniydi — düzeltme turu 2'de yazılan
+  testin adı "her büyüklükte tamsayı kabul edilir" diyordu. İddia ölçülene daraltıldı, eşik
+  koddan OKUNUYOR (`4300` hiçbir yere gömülmedi) ve sınır üstü artık docstring'in vaat ettiği
+  istisna tipiyle düşüyor. **Süreç güvenlik sınırı YÜKSELTİLMEDİ** (kaynak taraması: yalnız
+  "neden çağırmıyoruz" açıklaması var). Test tabanı 914 → 921.
+  **Dürüst etiket:** bu son düzeltme bağımsız yargı GÖRMEDİ. **Ev uydurulmadı:** dal
+  kapanışındaki final incelemenin tabanı `a806e29` olduğu için bu commit o incelemenin
+  aralığına ZATEN giriyor — kendiliğinden kapsanır. Aynı kapsanma yolu bu oturumda bir kez
+  ölçümle gerçekleşti (Task 3'ün düzeltme turu 3'ü checkpoint 2 tarafından kapsandı), yani
+  bu bir tahmin değil, işlediği görülmüş bir yol.
+- **Sıradaki: Task 5** (migration 035 — takvim dönem desteği + üç takvim kalemi).
+  **Task 5 Eray kararı bekliyor — dispatch'ten ÖNCE sorulur** (aşağıda).
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
