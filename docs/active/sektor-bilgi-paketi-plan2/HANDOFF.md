@@ -72,7 +72,8 @@ hiçbiri uygulayıcının ya da hakemin sözüne dayanmıyor):**
   → **914 passed in 109.92s**. Oturum seyri: 745 (giriş) → 745 (Task 4) → 758 (düzeltme 1)
   → 914 (düzeltme 2).
 - `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**. `T4` satırı
-  `green-only` (yalnız pin manifesti), `T4-fix1` satırı `code` (hem test hem uygulama).
+  `green-only` (yalnız pin manifesti), `T4-fix1` satırı `code` (hem test hem uygulama),
+  `T4-fix1` docs satırı `docs-only`, `T4-fix2` satırı `code`.
 - **Pin doğruluğu ölçüldü:** manifest üç dosyanın disk `sha256sum` çıktısıyla birebir; dış
   depo HEAD == pinlenen commit.
 - **Modül çıkarımının SADAKATİ ölçüldü, iddia edilmedi:** kaynak modülden kaybolan 27 üst
