@@ -844,15 +844,47 @@ _SEQUENCES: dict[str, tuple[str, ...]] = {
 # testin, uygulamanın ad seçimine bağımlı olmaması için (eski tekil ad da dahil).
 _MANIFEST_NAMES = ("m035_seed", "m035_seed_up", "m035_seed_down")
 
-_SQUATTERS: dict[str, str | None] = {
-    "yok": None,
-    "temp_tablo_ayni_sekil": (
+# Adı tutan nesne: DDL + o kindin ELE ALINIP alınmadığı.
+#
+# ÖLÇÜLDÜ (PG 18.3, `pg_temp`te gerçekten yaratılabilen kindler): r · p · v · m ·
+# S · c · i yaratılabiliyor; `f` (foreign table) bu kurulumda yaratılamıyor
+# (FDW sunucusu yok). Kapı bu yüzden TAM OLARAK yaratılabilir ve sahiplenilmesi
+# meşru olan altısını ele alır — her `WHEN` dalının bir hücresi vardır, yani
+# hiçbiri ölçülmemiş değildir. `i` (indeks) BİLEREK ele alınmaz: o adı taşıyan
+# bir indeks BİZİM olmayan bir tabloya aittir ve onu düşürmek ad rezervasyonunun
+# ötesine, başkasının nesnesine uzanırdı. Ret oradan gelir.
+_SQUATTERS: dict[str, tuple[str | None, bool]] = {
+    # ad: (DDL şablonu, ret_bekleniyor_mu)
+    "yok": (None, False),
+    "r_ayni_sekil": (
         "CREATE TEMP TABLE {n} (year INTEGER, date DATE, name_tr TEXT, "
-        "name_en TEXT, category TEXT, end_date DATE);"
+        "name_en TEXT, category TEXT, end_date DATE);",
+        False,
     ),
-    "temp_tablo_farkli_sekil": "CREATE TEMP TABLE {n} (x int);",
-    "tablo_olmayan_view": "CREATE TEMP VIEW {n} AS SELECT 1 AS x;",
+    "r_farkli_sekil": ("CREATE TEMP TABLE {n} (x int);", False),
+    "r_bagimli_view_ile": (
+        # F2/ikinci vaka: ELE ALINAN bir kind, ama bağımlısı olduğu için
+        # CASCADE'siz `DROP TABLE` patlıyordu.
+        "CREATE TEMP TABLE {n} (x int);"
+        "CREATE TEMP VIEW {n}_bagimli AS SELECT * FROM {n};",
+        False,
+    ),
+    "v_view": ("CREATE TEMP VIEW {n} AS SELECT 1 AS x;", False),
+    "p_bolumlu_tablo": ("CREATE TEMP TABLE {n} (x int) PARTITION BY RANGE (x);", False),
+    "m_matview": ("CREATE MATERIALIZED VIEW pg_temp.{n} AS SELECT 1 AS x;", False),
+    "S_sequence": ("CREATE TEMP SEQUENCE {n};", False),
+    "c_composite_type": ("CREATE TYPE pg_temp.{n} AS (x int);", False),
+    "i_index": (
+        # ELE ALINMAYAN kind → kapının KENDİ mesajıyla reddetmesi beklenir.
+        "CREATE TEMP TABLE {n}_sahibi (x int); CREATE INDEX {n} ON {n}_sahibi (x);",
+        True,
+    ),
 }
+
+# Kapının kendi ret imzası. Ayrı tutulur: mutasyon testinde `RAISE`i `RETURN`a
+# çevirmek bu imzayı yok eder ama başka bir hata (`already exists`) doğurur —
+# yalnız "bir hata oldu" demek o mutasyonu YAKALAMAZDI.
+GUARD_REFUSAL_MARKER = "adini beklenmeyen turde bir nesne tutuyor"
 
 # Geri almanın iki meşru ret yolu; ikisi de FAIL-CLOSED'dır.
 _REFUSAL_SIGNS = (
@@ -928,6 +960,7 @@ def _cell_script(sequence: tuple[str, ...], squatter: str | None) -> str:
     lines: list[str] = []
     if squatter is not None:
         lines += [squatter.format(n=name) for name in _MANIFEST_NAMES]
+    # `\i` satırları çağıran tarafından eklenir.
     for step in sequence:
         lines.append(f"\\i {MIGRATION_035 if step == 'up' else ROLLBACK_035}")
     return "\n".join(lines) + "\n"
@@ -968,7 +1001,9 @@ def test_manifest_lifetime_matrix(scratch_db_migrated, capsys):
 
     for inv_name, (error_stop, wrapped) in _INVOCATIONS.items():
         for seq_name, sequence in _SEQUENCES.items():
-            for squat_name, squatter in _SQUATTERS.items():
+            for squat_name, (squatter, _) in _SQUATTERS.items():
+                if squat_name != "yok":
+                    continue  # Grid A yalnız dizi × çağrı eksenini tarar
                 _normalise_to_applied(url)
 
                 argv, env = (
@@ -1041,6 +1076,227 @@ def test_manifest_lifetime_matrix(scratch_db_migrated, capsys):
         print(f"\n{len(rows)} hucre, {len(failures)} sapma")
 
     assert not failures, "MATRIS SAPMALARI:\n  - " + "\n  - ".join(failures)
+
+
+def _ensure_not_applied(url: str) -> None:
+    if _has_end_date_column(url):
+        result = _apply_down(url)
+        assert result.returncode == 0, f"normalizasyon DURDU:\n{result.stderr}"
+    assert not _has_end_date_column(url)
+
+
+def _run_cell(url: str, script: str, *, error_stop: bool, wrapped: bool):
+    argv, env = (
+        infra.psql_argv(url) if error_stop else _psql_argv_without_error_stop(url)
+    )
+    if wrapped:
+        argv = argv + ["--single-transaction"]
+    return subprocess.run(
+        argv, input=script, env=env, capture_output=True, text=True
+    )
+
+
+def test_manifest_squatter_matrix(scratch_db_migrated, capsys):
+    """Adı TUTAN nesne × çağrı biçimi × dosya — her `WHEN` dalının kendi hücresi.
+
+    NİÇİN AYRI BİR GRID (fix turu 4). Turun 3'teki matris kapanışın KANITI diye
+    sunulmuştu ama iki özelliğinden hiçbirini düşürememişti: hakem `m035_seed_down`u
+    `m035_seed_up`a geri adlandırdı (turun 1'in kök-neden kusuru, harfiyen geri
+    getirildi) → matris 96/0 ile GEÇTİ; kapının dört `WHEN` dalını sildi → GEÇTİ;
+    bilinmeyen-tür `RAISE`ini `RETURN`a çevirdi → GEÇTİ. Kanıtladığı şeyin
+    silinmesinden sağ çıkan bir kanıt, kanıt değildir.
+
+    Sebebi: eski squatter ekseni yalnız İKİ relkind taşıyordu (r ve v) ve her ikisi
+    de zaten ele alınan kindlerdi. Bu grid, `pg_temp`te GERÇEKTEN yaratılabilen
+    her kindi taşır (ölçüldü: r · p · v · m · S · c · i), yani kapının her dalı
+    silinince KIRMIZI düşer.
+
+    BAŞLANGIÇ DURUMU BURADA ANLAMLI. Turun 3'teki matris hep "035 uygulanmış"
+    durumundan koşuyordu; orada yarım uygulama GÖRÜNMEZ, çünkü kolon zaten
+    vardır. `up` hücreleri bu yüzden "035 UYGULANMAMIŞ"tan başlar — F2'nin
+    ölçtüğü fail-open şekli ("kolon commit, sıfır seed") ancak orada görünür.
+    """
+    url = scratch_db_migrated
+    rows: list[tuple[str, ...]] = []
+    failures: list[str] = []
+
+    for file_label, migration_step in (("up", "up"), ("down", "down")):
+        for inv_name, (error_stop, wrapped) in _INVOCATIONS.items():
+            for squat_name, (squatter, squat_refuses) in _SQUATTERS.items():
+                if file_label == "up":
+                    _ensure_not_applied(url)
+                else:
+                    _normalise_to_applied(url)
+
+                result = _run_cell(
+                    url,
+                    _cell_script((migration_step,), squatter),
+                    error_stop=error_stop,
+                    wrapped=wrapped,
+                )
+
+                # ── Beklenti TÜRETİLİR ──────────────────────────────────────
+                if file_label == "up":
+                    if not squat_refuses:
+                        exp_column, exp_seed, exp_sign = True, 3, None
+                    elif wrapped:
+                        # Sarmalayıcı her şeyi geri alır → dokunulmamış.
+                        exp_column, exp_seed, exp_sign = False, 0, GUARD_REFUSAL_MARKER
+                    else:
+                        # Sarmalanmamış: kolon kapıdan ÖNCE eklenmiştir ve
+                        # commit'lidir; seed yazılamaz. DAR EDİLMİŞ iddia.
+                        exp_column, exp_seed, exp_sign = True, 0, GUARD_REFUSAL_MARKER
+                else:
+                    if wrapped:
+                        # Sarmalayıcı-transaction kapısı HER ZAMAN önce konuşur.
+                        exp_column, exp_seed = True, 3
+                        exp_sign = "invalid transaction termination"
+                    elif squat_refuses:
+                        # Geri alma kendi transaction'ını sahiplenir → tam geri alınır.
+                        exp_column, exp_seed, exp_sign = True, 3, GUARD_REFUSAL_MARKER
+                    else:
+                        exp_column, exp_seed, exp_sign = False, 0, None
+
+                got_column = _has_end_date_column(url)
+                got_seed = _seed_row_count(url)
+
+                cell = f"{file_label}/{inv_name}/{squat_name}"
+                problems: list[str] = []
+                if got_column != exp_column:
+                    problems.append(f"kolon={got_column} (beklenen {exp_column})")
+                if got_seed != exp_seed:
+                    problems.append(f"seed={got_seed} (beklenen {exp_seed})")
+                if exp_sign is None:
+                    if "ERROR" in result.stderr:
+                        problems.append(
+                            "beklenmeyen hata: "
+                            + " ".join(
+                                l for l in result.stderr.split("\n") if "ERROR" in l
+                            )[:180]
+                        )
+                    if result.returncode != 0:
+                        problems.append(f"rc={result.returncode} (retsiz hücre)")
+                elif exp_sign not in result.stderr:
+                    problems.append(
+                        f"ret imzası YOK ({exp_sign!r}); stderr: "
+                        + result.stderr.strip().replace("\n", " ")[:180]
+                    )
+
+                rows.append((
+                    file_label,
+                    inv_name,
+                    squat_name,
+                    str(result.returncode),
+                    "ret" if exp_sign else "-",
+                    "var" if got_column else "yok",
+                    str(got_seed),
+                    "OK" if not problems else "SAPMA",
+                ))
+                if problems:
+                    failures.append(f"{cell}: " + "; ".join(problems))
+
+    header = ("dosya", "cagri", "adi-tutan", "rc", "ret", "kolon", "seed", "sonuc")
+    widths = [
+        max(len(header[i]), max(len(r[i]) for r in rows)) for i in range(len(header))
+    ]
+    line = lambda cols: "| " + " | ".join(  # noqa: E731
+        c.ljust(widths[i]) for i, c in enumerate(cols)
+    ) + " |"
+    with capsys.disabled():
+        print("\n" + line(header))
+        print("|" + "|".join("-" * (w + 2) for w in widths) + "|")
+        for row in rows:
+            print(line(row))
+        print(f"\n{len(rows)} hucre, {len(failures)} sapma")
+
+    assert not failures, "SQUATTER MATRIS SAPMALARI:\n  - " + "\n  - ".join(failures)
+
+
+def test_manifest_names_are_not_shared(scratch_db_migrated):
+    """İki dosya AYNI oturumda AYRI manifestler bırakır — kaynak paylaşılmaz.
+
+    Bu, kapanışın BİRİNCİ özelliğinin bağımsız kanıtıdır. Turun 3'te o özellik
+    yalnız İKİNCİ özelliğin (tür-farkında kapı) bir sonucu olarak yaşıyordu:
+    adlar yeniden aynılaştırıldığında kapı diğerinin manifestini düşürüp kendini
+    kuruyordu, yani davranış "çalışıyor" görünüyordu ve hiçbir hücre bunu
+    göremiyordu (ölçüldü: hakemin yeniden adlandırma mutasyonu 96/0 ile geçti).
+
+    Burada iddia doğrudan ölçülür: aynı psql oturumunda önce geri alma, sonra
+    ileri migration koştuktan SONRA `pg_temp`te İKİ AYRI manifest durur. Adlar
+    tekrar paylaşılırsa biri diğerini düşürür ve bu test KIRMIZI düşer.
+    """
+    url = scratch_db_migrated
+    _normalise_to_applied(url)
+
+    argv, env = _psql_argv_without_error_stop(url)
+    script = (
+        f"\\i {ROLLBACK_035}\n"
+        f"\\i {MIGRATION_035}\n"
+        "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        "WHERE n.nspname LIKE 'pg_temp%' AND c.relname LIKE 'm035_seed%' ORDER BY c.relname;\n"
+    )
+    result = subprocess.run(
+        argv + ["--tuples-only", "--no-align"],
+        input=script,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "ERROR" not in result.stderr, result.stderr
+    seen = {l.strip() for l in result.stdout.splitlines() if l.strip().startswith("m035_")}
+    assert seen == {"m035_seed_up", "m035_seed_down"}, (
+        "iki dosya AYNI manifest adını paylaşıyor — biri diğerininkini düşürdü. "
+        f"pg_temp'te görülen: {sorted(seen)}"
+    )
+
+
+def test_manifest_is_read_from_pg_temp_not_search_path(scratch_db_migrated):
+    """Manifest `pg_temp`ten okunur — `search_path` onu KAÇIRAMAZ.
+
+    Ölçülen kusur (fix turu 4, F3 — M1'den beri var, yani bu yürütmenin kendi
+    ürünü): sahiplik `pg_temp.` ile kanıtlanıyordu ama KULLANIM yerleri niteliksiz
+    yazılmıştı. `search_path = public, pg_temp` ve kalıcı bir `public.m035_seed_up`
+    varken migration manifestini KALICI tabloya yazıp oradan okuyor; yarattığı
+    geçici tabloya hiç dokunmuyor. Sonuç: yabancı satırlar `social.public_holidays`e
+    giriyor. Yabancı bir `search_path` gerektirdiği için hakem Minor dedi; yine de
+    ÜRETİM tablosuna çöp yazıyor.
+    """
+    url = scratch_db_migrated
+    _ensure_not_applied(url)
+
+    _run_sql(
+        url,
+        "CREATE TABLE public.m035_seed_up (year INTEGER, date DATE, name_tr TEXT, "
+        "name_en TEXT, category TEXT, end_date DATE)",
+    )
+    _run_sql(
+        url,
+        "INSERT INTO public.m035_seed_up VALUES "
+        "(2026, '2026-03-03', 'Yabanci Bir', 'Foreign One', 'commercial', NULL), "
+        "(2026, '2026-03-04', 'Yabanci Iki', 'Foreign Two', 'commercial', NULL), "
+        "(2026, '2026-03-05', 'Yabanci Uc', 'Foreign Three', 'commercial', NULL)",
+    )
+
+    argv, env = _psql_argv_without_error_stop(url)
+    result = subprocess.run(
+        argv + ["-f", str(MIGRATION_035)],
+        env={**env, "PGOPTIONS": "-c search_path=public,pg_temp"},
+        capture_output=True,
+        text=True,
+    )
+
+    intruders = _scalar(
+        url,
+        "SELECT count(*) FROM social.public_holidays WHERE name_tr LIKE 'Yabanci %'",
+    )
+    assert intruders == "0", (
+        f"düşman `search_path` altında {intruders} yabancı satır ÜRETİM tablosuna "
+        f"yazıldı — manifest `pg_temp`ten değil `public`ten okundu.\n{result.stderr}"
+    )
+    assert {row[2] for row in SEED_ROWS} <= _names(url), (
+        f"operatör kararı yazılmadı:\n{result.stderr}"
+    )
 
 
 def test_reseeding_is_conflict_free():
