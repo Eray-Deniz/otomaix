@@ -211,5 +211,30 @@
   ritüeli ister ve 7 komutu birden etkiler (aynı uyarı `codex-scan-substrate-preflight-guard`
   maddesinde de var).
 
+- **n8n-workflow-sir-hijyeni** (proposed, güvenlik; EVSİZ — Eray kararı bekliyor, uydurma ev
+  VERİLMEDİ) — Task 5 yürütülürken üstüne denk gelindi; **Task 5'in ürünü DEĞİL, ikisi de
+  önceden vardı.** İki ayrı kalem, aynı sınıf:
+  **(a) Çıplak Telegram bot token'ı.** `shared/n8n-workflows/turkey-calendar-update.json`
+  bildirim URL'inin içinde bot token'ı ve chat_id'yi düz metin taşıyor. Kontrolör sınıfı taradı
+  (uygulayıcının raporuna güvenmeden): **aynı token İKİ izlenen dosyada** —
+  `turkey-calendar-update.json` ve `crm-automations.json`. Yönetici workflow'u ise doğru deseni
+  kullanıyor (`telegramApi` credential referansı), yani doğrusu depoda zaten var.
+  **Task 5'in yazdığı sözleşme testi bunu YAKALAYAMAZ** — çıplak token bir credential referansı
+  değil, dolayısıyla `test_calendar_workflow_credentials_are_bound` geçerken sır git'te kalıyor.
+  Token'ı döndürmek **operatör işlemidir** (Telegram tarafında), Claude yapamaz.
+  **(b) Kaçışsız tarih enterpolasyonu.** Aynı dosyanın `SQL Oluştur` düğümünde `${h.year}` ve
+  `'${h.date}'::date` INSERT metnine **`escape()` uygulanmadan** gömülüyor; ad ve kategori
+  alanlarına uygulanıyor. `h.date` üçüncü taraf HTTP yanıtından (`date.nager.at`) geliyor.
+  Bozuk ya da düşmanca bir besleme değeri tırnaktan çıkabilir. Task 5'in eklediği `end_date`
+  alanı kaçışlı; bu kalem `main`'de duruyor.
+  **Dürüst etiket: çözülmedi + park edildi, EVİ YOK.** Eray'a iki kez soruldu (2026-09-02),
+  cevap gelmedi; reflekssel ev vermek kova döngüsünü beslerdi.
+  **Karara bağlanacak iki soru:** token döndürülsün mü · iki workflow credential desenine
+  çevrilsin mi (ve (b) ayrı bir düzeltme turu mu, yoksa aynı turda mı).
+  **Yeniden açılma koşulu / tetik:** (i) Eray karar verdiğinde, VEYA (ii) n8n workflow'larına
+  dokunan bir sonraki iş — Plan 2'de bu **Task 16 Step 7/7b**'dir (hata bildirim workflow'u
+  yazılıyor ve credential'a bağlanıyor), yani o görev bu iki kalemin doğal komşusudur.
+  **Dikkat:** (ii) bir ev DEĞİL, bir tetiktir — Task 16 bugün bu kalemleri kapsamıyor.
+
 <!-- Son kapanan: codex-review-scope-contract → done 2026-06-04, arşiv docs/task-archive/2026/06/ -->
 

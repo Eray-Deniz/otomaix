@@ -128,10 +128,31 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
   aralığına ZATEN giriyor — kendiliğinden kapsanır. Aynı kapsanma yolu bu oturumda bir kez
   ölçümle gerçekleşti (Task 3'ün düzeltme turu 3'ü checkpoint 2 tarafından kapsandı), yani
   bu bir tahmin değil, işlediği görülmüş bir yol.
-- **Sıradaki: Task 5** (migration 035 — takvim dönem desteği + üç takvim kalemi).
-  **Step 1b'nin operatör kararı ALINDI (2026-09-02)** — beş seed değeri Decisions Log'da
-  sabit; dispatch'i bloklayan karar KALMADI. Task 5 artık doğrudan dispatch edilebilir ve
-  brief'e o tablo harfiyen kopyalanır (uygulayıcı değer icat ETMEZ).
+- **Task 5 YÜRÜTMEDE — KAPANMADI (2026-09-02).** Kod indi ve çalışıyor, ama görev-başı
+  hakem zinciri dört tur sürdü ve **hâlâ açık bulgu var**; ayrıca bir zorunlu kapı
+  koşulmadı (aşağıda). Commit'ler: `331fe7a` (Step 1b kararı) · `39379c8` (K-112 taban
+  notu) · `16a8ab1`+`a3dd22f` (ana iniş) · `d4adea3`+`fc1df7f` (tur 1) ·
+  `8d227d2`+`44bd8e2` (tur 2) · `8f596d8`+`389d5e0` (tur 3) · `6120962`+`468be6a` (tur 4).
+  Test tabanı **921 → 950** (her tur ölçüldü, hiç düşmedi). Defter kapısı her commit'ten
+  sonra koşuldu, hepsi rc=0.
+  **Spec uyumu ✅ ve kalite onaylı** (tur 0 hakem raporu): beş seed değeri dört ayrı yüzeyde
+  bayt-aynı, ek hükümleri (R13/R12b) harfiyen uygulanmış, önyüz sıfır dosya.
+  **Açık kalanlar — "halledildi" DEĞİL:** (a) sınıf-kapanış aracı hâlâ gösterildiği
+  mutasyonlara ayarlı; hakemin uydurduğu iki mutasyon suite tamamen yeşilken gerçek kusur
+  geri getiriyor. (b) İki migration dosyasına **yanlış bir "ölçüldü" iddiası** yazılmış
+  (yabancı tablo dalı) — İlke 9'un tam sınıfı, üstelik rapor değil sevk edilen SQL içinde.
+  (c) İki küçük iddia-sapması (hücre sayısı, tür listesi).
+  **Tur tavanı 5; dörtte kalındı.** Sonraki oturumda bir tur daha varsa o SON turdur.
+
+- **ZORUNLU KAPI KOŞULMADI — Codex checkpoint (ölçüldü, 2026-09-02).** Task 5'in on iki
+  commit'inin **onu riskli sınıfta** (dokuz RISKY + bir UNKNOWN) ve kadans kararı
+  `RUN_RISK` veriyor. Protokol gereği ilk riskli commit'te Codex karşıt-hakem turu
+  koşmalıydı; kontrolör dört turluk SDD hakem zincirini koşup kadans kararını hiç
+  çalıştırmadı. **İkisi birbirinin yerine geçmez:** SDD hakemi taze bir Claude alt-ajanı,
+  checkpoint ise Codex — bağımsız ikinci model, ki iki-hakem tasarımının bütün amacı bu.
+  Yani Task 5 dört tur aynı aileden inceleme gördü, bağımsız modelden **sıfır**.
+  Dürüst etiket: *kapı koşulmadı; feragat edilmedi, kararla atlanmadı — kaçırıldı.*
+  **Sonraki oturumun İLK işi budur.**
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
