@@ -144,13 +144,24 @@ def _apply_up_unwrapped(url: str, *, error_stop: bool) -> subprocess.CompletedPr
     `docs/archive/CLAUDE_crm_pre_cleanup.md:212`). Atılabilir-veritabanı kapısı
     korunur, yalnız `ON_ERROR_STOP` bayrağı isteğe göre düşürülür.
     """
-    argv, env = infra.psql_argv(url)
-    if not error_stop:
-        flag = argv.index("-v")
-        argv = argv[:flag] + argv[flag + 2 :]
+    argv, env = _psql_argv_without_error_stop(url) if not error_stop else infra.psql_argv(url)
     return subprocess.run(
         argv + ["-f", str(MIGRATION_035)], env=env, capture_output=True, text=True
     )
+
+
+def _psql_argv_without_error_stop(url: str) -> tuple[list[str], dict[str, str]]:
+    """`-v ON_ERROR_STOP=1` çiftini ADINA göre düşürür, KONUMUNA göre değil.
+
+    İlk yazım `argv.index("-v")` kullanıyordu; conftest argv'ye daha erken bir
+    `-v` eklerse o kod sessizce YANLIŞ çifti düşürür ve test artık ölçtüğünü
+    sandığı şeyi ölçmez (bağımsız hakem, fix turu 3).
+    """
+    argv, env = infra.psql_argv(url)
+    assert "ON_ERROR_STOP=1" in argv, f"conftest sözleşmesi değişmiş: {argv}"
+    value = argv.index("ON_ERROR_STOP=1")
+    assert argv[value - 1] == "-v", f"`ON_ERROR_STOP` bayrağı `-v` taşımıyor: {argv}"
+    return argv[: value - 1] + argv[value + 1 :], env
 
 
 def _names(url: str) -> set[str]:
@@ -685,7 +696,15 @@ def test_bare_psql_apply_is_complete(scratch_db_migrated, error_stop: bool, labe
     )
 
 
-def test_seed_report_survives_a_hostile_client_min_messages(scratch_db_migrated):
+@pytest.mark.parametrize("wrapped", [True, False], ids=["sarmali", "ciplak"])
+@pytest.mark.parametrize(
+    "vector",
+    ["pgoptions", "alter_database"],
+    ids=["PGOPTIONS", "ALTER_DATABASE"],
+)
+def test_seed_report_survives_a_hostile_client_min_messages(
+    scratch_db_migrated, vector: str, wrapped: bool
+):
     """Atlama uyarısı `client_min_messages` kısılmışken de GÖRÜNÜR.
 
     Ölçülen boşluk (fix turu 2, N2): Q2'nin tüm görünürlüğü bir NOTICE'e
@@ -697,9 +716,38 @@ def test_seed_report_survives_a_hostile_client_min_messages(scratch_db_migrated)
     sıkılaştırmasıdır — yani kapattığımız Q2 koşulu, kontrol etmediğimiz bir
     ortam tarafından sessizce geri açılabilirdi.
 
-    Bu test o ortamı taklit eder ve uyarının yine de çıkmasını ister.
+    İKİ VEKTÖR × İKİ ÇAĞRI BİÇİMİ (fix turu 3, kapsam borcu). İlk yazım yalnız
+    sarmalı yolu ve yalnız `PGOPTIONS`u pinliyordu; kalan üç hücre elle bir kez
+    ölçülmüştü. Tek seferlik ölçüm KAPI DEĞİLDİR — doğrulama kapısı tekrar
+    koşturulabilir bir regresyon olmak zorundadır, yoksa sonraki bir değişiklik
+    onu sessizce çözebilir.
+
+    Her hücre önce KONTROL uyarısıyla düşman ayarın gerçekten yürürlükte
+    olduğunu kanıtlar: sıradan bir `RAISE NOTICE` görünmüyorsa ayar tutmuştur.
+    Kontrol olmadan "uyarımız çıktı" cümlesi hiçbir şey ölçmezdi — ayar hiç
+    uygulanmamış olabilirdi.
     """
     url = scratch_db_migrated
+    env_extra: dict[str, str] = {}
+
+    if vector == "pgoptions":
+        env_extra = {"PGOPTIONS": "-c client_min_messages=warning"}
+    else:
+        # Rol/veritabanı düzeyi sıkılaştırma — hakemin elle ölçtüğü vektör.
+        _run_sql(url, "ALTER DATABASE otomaix_test_scratch SET client_min_messages = 'error'")
+
+    # KONTROL: düşman ayar gerçekten yürürlükte mi?
+    argv, env = infra.psql_argv(url)
+    control = subprocess.run(
+        argv + ["-c", "DO $$ BEGIN RAISE NOTICE 'kontrol-uyarisi'; END $$;"],
+        env={**env, **env_extra},
+        capture_output=True,
+        text=True,
+    )
+    assert control.returncode == 0, control.stderr
+    assert "kontrol-uyarisi" not in control.stderr, (
+        f"düşman ayar YÜRÜRLÜKTE DEĞİL — bu hücre hiçbir şey ölçmüyor: {control.stderr!r}"
+    )
 
     assert _apply_down(url).returncode == 0
     _run_sql(
@@ -708,14 +756,21 @@ def test_seed_report_survives_a_hostile_client_min_messages(scratch_db_migrated)
         "VALUES (2026, '2026-11-10', 'Baskasinin Satiri', 'Someone Elses Row', 'commercial')",
     )
 
-    result = _apply_up(
-        url, env_extra={"PGOPTIONS": "-c client_min_messages=warning"}
-    )
+    if wrapped:
+        result = _apply_up(url, env_extra=env_extra)
+    else:
+        argv, env = _psql_argv_without_error_stop(url)
+        result = subprocess.run(
+            argv + ["-f", str(MIGRATION_035)],
+            env={**env, **env_extra},
+            capture_output=True,
+            text=True,
+        )
 
     assert result.returncode == 0, f"migration DURDU:\n{result.stderr}"
     assert SKIPPED_SEED_MARKER in result.stderr, (
         "düşman `client_min_messages` altında atlama uyarısı KAYBOLDU — Q2'nin "
-        f"düzeltmesi bir ortam değişkeniyle kapatılabiliyor. stderr:\n{result.stderr!r}"
+        f"düzeltmesi bir ortam ayarıyla kapatılabiliyor. stderr:\n{result.stderr!r}"
     )
 
 
@@ -751,6 +806,241 @@ def test_guarantee_block_asserts_its_own_denominator(scratch_db_migrated, tmp_pa
     assert not _has_end_date_column(url), (
         "reddeden koşum şemayı yine de ilerletti (tek transaction bekleniyordu)"
     )
+
+
+# ─── 3b. ÜRETİLMİŞ MATRİS — manifest ömrü × oturum paylaşımı × ad çakışması ──
+#
+# NEDEN MATRİS, NEDEN ÖRNEK DEĞİL (fix turu 3). Arka arkaya iki tur AYNI eksende
+# kusur üretti: M1 manifesti `ON COMMIT DROP` ile kurdu (sarmalanmamış yolda
+# kendi kendini yok etti), N1 onu oturum ömürlü yaptı (dosyalar arasında
+# çakıştı). Her tur eksenin BAŞKA bir noktasını seçti, hiçbiri ekseni SAYMADI.
+# Üçüncü bir nokta-düzeltmesi dördüncü kusuru davet ederdi. Kapanış iki bağımsız
+# özellikle sağlanır — kaynak PAYLAŞILMAZ (her dosyanın kendi adı) ve kurulum
+# ÖMÜRDEN BAĞIMSIZ olarak idempotenttir — ve kanıtı elle seçilmiş örnek değil,
+# üretilmiş bir çapraz çarpımdır.
+#
+# Beklentiler EL İLE YAZILMAZ, TÜRETİLİR (`_expected_cell`): psql'in
+# hata/transaction anlambilimi modellenir ve her hücre modele karşı ölçülür.
+# Elle yazılmış 96 beklenti, ölçtüğünü sandığın şeyin kopyası olurdu.
+
+_INVOCATIONS: dict[str, tuple[bool, bool]] = {
+    # ad: (ON_ERROR_STOP, --single-transaction)
+    "ciplak": (False, False),
+    "on_error_stop": (True, False),
+    "single_tx": (False, True),
+    "sarmali_stop": (True, True),
+}
+
+_SEQUENCES: dict[str, tuple[str, ...]] = {
+    "up": ("up",),
+    "down": ("down",),
+    "up_down": ("up", "down"),
+    "down_up": ("down", "up"),
+    "up_up": ("up", "up"),
+    "down_down": ("down", "down"),
+}
+
+# Manifest adını TUTAN önceden var olan nesne. Aday adların HEPSİ doldurulur —
+# testin, uygulamanın ad seçimine bağımlı olmaması için (eski tekil ad da dahil).
+_MANIFEST_NAMES = ("m035_seed", "m035_seed_up", "m035_seed_down")
+
+_SQUATTERS: dict[str, str | None] = {
+    "yok": None,
+    "temp_tablo_ayni_sekil": (
+        "CREATE TEMP TABLE {n} (year INTEGER, date DATE, name_tr TEXT, "
+        "name_en TEXT, category TEXT, end_date DATE);"
+    ),
+    "temp_tablo_farkli_sekil": "CREATE TEMP TABLE {n} (x int);",
+    "tablo_olmayan_view": "CREATE TEMP VIEW {n} AS SELECT 1 AS x;",
+}
+
+# Geri almanın iki meşru ret yolu; ikisi de FAIL-CLOSED'dır.
+_REFUSAL_SIGNS = (
+    REFUSAL_MARKER,                      # preflight: 035 zaten geri alınmış
+    "invalid transaction termination",   # sarmalayıcı-transaction kapısı
+)
+
+
+def _expected_cell(sequence: tuple[str, ...], error_stop: bool, wrapped: bool):
+    r"""(kolon_var_mı, ret_bekleniyor_mu) — psql anlambiliminden TÜRETİLİR.
+
+    Ön koşul: 035 UYGULANMIŞ bir veritabanı (kolon var, üç seed satırı yerinde).
+
+    Modelin kuralları, hepsi dosyaların yazılı sözleşmesinden gelir:
+      * `up` her zaman başarılıdır (idempotent).
+      * `down`, sarmalayıcı bir transaction'ın İÇİNDEyse REDDEDER — dosya kendi
+        transaction'ını sahiplenir, sarmalanmayı kapı saptar.
+      * `down`, kolon zaten yoksa REDDEDER (035 uygulanmamış/zaten geri alınmış).
+      * Sarmalayıcı varsa ilk hata TÜM koşumu geri alır: son durum = ön koşul.
+
+    RET HÜCRELERİNDE `rc` İDDİA EDİLMEZ — ÖLÇÜLDÜ, MODELLENMEDİ. İki model
+    denendi ve matris İKİSİNİ DE çürüttü. Ölçülen psql anlambilimi (dört
+    kontrollü koşum, hepsi aynı reddeden geri alma dosyasıyla):
+
+      1. `\i down` tek başına, komut satırında bayrak YOK          → rc=0
+      2. `\i down` tek başına, `-v ON_ERROR_STOP=1`                → rc=3
+      3. `\i down`, `--single-transaction`, bayrak YOK             → rc=0
+      4. `\i down` + ARDINDAN bir deyim, bayrak YOK                → rc=3
+
+    Yani: sourced bir dosyanın İÇİNDE doğan ret, psql'in çıkış kodunu kendi
+    başına KURMAZ; kodu belirleyen şey komut satırı bayrağı (2) ya da dosyadan
+    SONRA dış script'te patlayan bir deyimdir (4 — geri alma kendi
+    `\set ON_ERROR_STOP on`unu çağıranın oturumuna sızdırdığı ve aborte
+    transaction'ı açık bıraktığı için). Bunların hiçbiri migration'ın kontrol
+    ettiği bir şey değil; psql'in script iç içeliğinin özelliği.
+
+    Bu yüzden ret hücrelerinde `rc` TABLOYA YAZILIR ama İDDİA EDİLMEZ: yanlış
+    tahmin edilmiş bir rc modeli testi iki yönde de yalancı yapardı. İddia
+    edilen şey ESASLI olandır — son durum türetilen duruma eşit (yarım uygulama
+    YOK) ve ret stderr'de GÖRÜNÜR. Retsiz hücrelerde `rc=0` iddia EDİLİR.
+
+    (`\set` sızıntısı `032_down.sql`den devralınan desendir ve davranışı
+    SIKILAŞTIRIR, gevşetmez; bu görevin kapsamı değil, raporda bildirildi.)
+    """
+    column = True
+    refused = False
+
+    if wrapped:
+        for step in sequence:
+            if step == "up":
+                column = True
+                continue
+            refused = True
+            break
+        if refused:
+            column = True  # sarmalayıcı her şeyi geri aldı → ön koşul durumu
+        return column, refused
+
+    for step in sequence:
+        if step == "up":
+            column = True
+            continue
+        if not column:
+            refused = True
+            if error_stop:
+                break
+            continue
+        column = False
+    return column, refused
+
+
+def _cell_script(sequence: tuple[str, ...], squatter: str | None) -> str:
+    lines: list[str] = []
+    if squatter is not None:
+        lines += [squatter.format(n=name) for name in _MANIFEST_NAMES]
+    for step in sequence:
+        lines.append(f"\\i {MIGRATION_035 if step == 'up' else ROLLBACK_035}")
+    return "\n".join(lines) + "\n"
+
+
+def _normalise_to_applied(url: str) -> None:
+    """Hücreden önce veritabanını "035 uygulanmış" durumuna getirir."""
+    if not _has_end_date_column(url):
+        result = _apply_up(url)
+        assert result.returncode == 0, f"normalizasyon DURDU:\n{result.stderr}"
+    assert _has_end_date_column(url)
+
+
+def _seed_row_count(url: str) -> int:
+    return int(
+        _scalar(
+            url,
+            "SELECT count(*) FROM social.public_holidays WHERE (year, date) IN "
+            "((2026, '2026-11-10'), (2026, '2026-11-24'), (2026, '2026-08-15'))",
+        )
+    )
+
+
+def test_manifest_lifetime_matrix(scratch_db_migrated, capsys):
+    """Çağrı biçimi × oturum dizisi × ad çakışması — 96 hücre, TÜRETİLMİŞ beklenti.
+
+    Kapanış iddiası: manifestin ÖMRÜ artık yük taşımıyor. Hangi biçimde
+    çağrılırsa çağrılsın, aynı oturumda hangi sırayla koşulursa koşulsun ve adı
+    önceden ne tutuyorsa tutsun, iki dosya da ya doğru sonucu üretir ya da
+    FAIL-CLOSED reddeder — yarım uygulama yoktur.
+
+    "Reddetmesi gereken" hücreler yeşile boyanmaz; reddin KENDİSİ ölçülür
+    (`_REFUSAL_SIGNS`) ve son durumun ön koşuldan sapmadığı doğrulanır.
+    """
+    url = scratch_db_migrated
+    rows: list[tuple[str, ...]] = []
+    failures: list[str] = []
+
+    for inv_name, (error_stop, wrapped) in _INVOCATIONS.items():
+        for seq_name, sequence in _SEQUENCES.items():
+            for squat_name, squatter in _SQUATTERS.items():
+                _normalise_to_applied(url)
+
+                argv, env = (
+                    infra.psql_argv(url)
+                    if error_stop
+                    else _psql_argv_without_error_stop(url)
+                )
+                if wrapped:
+                    argv = argv + ["--single-transaction"]
+                result = subprocess.run(
+                    argv,
+                    input=_cell_script(sequence, squatter),
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                )
+
+                exp_column, exp_refused = _expected_cell(sequence, error_stop, wrapped)
+                got_column = _has_end_date_column(url)
+                got_seed = _seed_row_count(url)
+                got_refused = any(sign in result.stderr for sign in _REFUSAL_SIGNS)
+                exp_seed = 3 if exp_column else 0
+
+                cell = f"{inv_name}/{seq_name}/{squat_name}"
+                problems: list[str] = []
+                if got_column != exp_column:
+                    problems.append(f"kolon={got_column} (beklenen {exp_column})")
+                if got_seed != exp_seed:
+                    problems.append(f"seed={got_seed} (beklenen {exp_seed})")
+                if got_refused != exp_refused:
+                    problems.append(f"ret={got_refused} (beklenen {exp_refused})")
+                if not exp_refused:
+                    # Retsiz hücre TEMİZ koşmalı: hata metni de sıfır-dışı çıkış
+                    # da burada sessiz yarım uygulamanın habercisidir.
+                    if "ERROR" in result.stderr:
+                        problems.append(
+                            "beklenmeyen hata: "
+                            + " ".join(
+                                l for l in result.stderr.split("\n") if "ERROR" in l
+                            )[:200]
+                        )
+                    if result.returncode != 0:
+                        problems.append(f"rc={result.returncode} (retsiz hücre)")
+
+                rows.append((
+                    inv_name,
+                    seq_name,
+                    squat_name,
+                    str(result.returncode),
+                    "ret" if got_refused else "-",
+                    "var" if got_column else "yok",
+                    str(got_seed),
+                    "OK" if not problems else "SAPMA",
+                ))
+                if problems:
+                    failures.append(f"{cell}: " + "; ".join(problems))
+
+    header = ("cagri", "dizi", "onceden-tutan", "rc", "ret", "kolon", "seed", "sonuc")
+    widths = [
+        max(len(header[i]), max(len(r[i]) for r in rows)) for i in range(len(header))
+    ]
+    line = lambda cols: "| " + " | ".join(  # noqa: E731
+        c.ljust(widths[i]) for i, c in enumerate(cols)
+    ) + " |"
+    with capsys.disabled():
+        print("\n" + line(header))
+        print("|" + "|".join("-" * (w + 2) for w in widths) + "|")
+        for row in rows:
+            print(line(row))
+        print(f"\n{len(rows)} hucre, {len(failures)} sapma")
+
+    assert not failures, "MATRIS SAPMALARI:\n  - " + "\n  - ".join(failures)
 
 
 def test_reseeding_is_conflict_free():
