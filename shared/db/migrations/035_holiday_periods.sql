@@ -89,7 +89,7 @@ $end_date_check$;
 -- anahtarları NOTICE ile duyurur. NOTICE'tir, EXCEPTION değil: dolu anahtar bir
 -- şema hatası değil, insan gözü isteyen bir veri durumudur.
 --
--- Değerler `m035_seed`de TEK KEZ tanımlanır; hem yazım hem karşılaştırma oradan
+-- Değerler `m035_seed_up`de TEK KEZ tanımlanır; hem yazım hem karşılaştırma oradan
 -- okur, yani ikisi ayrışamaz.
 
 -- MANİFESTİN ÖMRÜ OTURUMDUR, TRANSACTION DEĞİL (fix turu 2, N1 — bu yürütmenin
@@ -97,26 +97,63 @@ $end_date_check$;
 -- bu dosya kendi transaction'ını taşımadığı için autocommit altında her deyim
 -- kendi transaction'ıdır ve manifest KENDİ `CREATE`inin commit'inde düşerdi.
 -- ÖLÇÜLDÜ (çıplak `psql -f`, taze veritabanı): `rc=0`, stderr'de üç kez
--- `relation "m035_seed" does not exist`, kolon + CHECK commit edilmiş, SIFIR
+-- `relation "m035_seed_up" does not exist`, kolon + CHECK commit edilmiş, SIFIR
 -- seed satırı — üstelik hata fail-closed garanti bloğunun İÇİNDE de patladığı
 -- için tam da bunu yakalaması gereken kapı hiç değerlendirilemedi. Fail-OPEN.
 --
 -- Geçici tablo zaten oturumla birlikte ölür; psql süreci bittiğinde gider.
 -- Önden düşürme, aynı oturumda dosyanın ikinci kez `\i` edilmesini destekler.
+--
+-- AD BU DOSYAYA ÖZELDİR (fix turu 3): `m035_seed_up` — geri alma dosyası
+-- `m035_seed_down` kullanır. İlk yazımda İKİSİ DE `m035_seed` idi ve N1'in
+-- oturum-ömrü düzeltmesinden sonra aynı oturumda `up` ardından `down`
+-- koşmak geri almayı `relation already exists` ile düşürüyordu. İki bağımsız
+-- özellik birden kapatır: kaynak PAYLAŞILMAZ (ayrı adlar) ve kurulum
+-- ÖMÜRDEN BAĞIMSIZ İDEMPOTENTTİR (aşağıdaki tür-farkında kapı). Kanıt:
+-- `tests/test_migration_035.py::test_manifest_lifetime_matrix` (96 hücre).
 -- `to_regclass` KULLANILIR, `DROP TABLE IF EXISTS pg_temp.…` DEĞİL: ölçüldü,
 -- ikincisi henüz temp şeması olmayan taze bir oturumda her koşumda
 -- `NOTICE: schema "pg_temp" does not exist, skipping` basar ve aşağıdaki
 -- ANLAMLI uyarının sinyalini gürültüye boğardı. `to_regclass` sessizdir.
 
-DO $drop_stale_manifest$
+DO $prepare_manifest$
+DECLARE
+    held_kind "char";
+    drop_verb TEXT;
 BEGIN
-    IF to_regclass('pg_temp.m035_seed') IS NOT NULL THEN
-        EXECUTE 'DROP TABLE pg_temp.m035_seed';
-    END IF;
-END
-$drop_stale_manifest$;
+    SELECT c.relkind INTO held_kind
+      FROM pg_class c
+     WHERE c.oid = to_regclass('pg_temp.m035_seed_up');
 
-CREATE TEMP TABLE m035_seed (
+    IF held_kind IS NULL THEN
+        RETURN;                       -- ad boş: yapacak bir şey yok
+    END IF;
+
+    drop_verb := CASE held_kind
+                     WHEN 'r' THEN 'TABLE'
+                     WHEN 'p' THEN 'TABLE'
+                     WHEN 'f' THEN 'FOREIGN TABLE'
+                     WHEN 'v' THEN 'VIEW'
+                     WHEN 'm' THEN 'MATERIALIZED VIEW'
+                     WHEN 'S' THEN 'SEQUENCE'
+                 END;
+
+    IF drop_verb IS NULL THEN
+        -- Bilinmeyen tür: TAHMİN ETME, DUR. Yanlış `DROP` fiili ya patlar ya
+        -- da başka bir nesneyi hedefler; ikisi de sessiz olmamalı.
+        RAISE EXCEPTION
+            'migration 035: pg_temp.m035_seed_up adini beklenmeyen turde bir nesne tutuyor (relkind=%)',
+            held_kind
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Bu ad bu migration a ayrilmistir; nesneyi elle kaldirip '
+                         'yeniden kosturun.';
+    END IF;
+
+    EXECUTE format('DROP %s pg_temp.m035_seed_up', drop_verb);
+END
+$prepare_manifest$;
+
+CREATE TEMP TABLE m035_seed_up (
     year     INTEGER NOT NULL,
     date     DATE    NOT NULL,
     name_tr  TEXT    NOT NULL,
@@ -125,7 +162,7 @@ CREATE TEMP TABLE m035_seed (
     end_date DATE
 );
 
-INSERT INTO m035_seed (year, date, name_tr, name_en, category, end_date) VALUES
+INSERT INTO m035_seed_up (year, date, name_tr, name_en, category, end_date) VALUES
   (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
   (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
   (2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
@@ -161,13 +198,13 @@ BEGIN
         INSERT INTO social.public_holidays
             (year, date, name_tr, name_en, category, end_date)
         SELECT s.year, s.date, s.name_tr, s.name_en, s.category, s.end_date
-          FROM m035_seed s
+          FROM m035_seed_up s
         ON CONFLICT (year, date) DO NOTHING
         RETURNING 1
     )
     SELECT count(*) INTO written FROM ins;
 
-    IF written < (SELECT count(*) FROM m035_seed) THEN
+    IF written < (SELECT count(*) FROM m035_seed_up) THEN
         -- Sessiz kalınacak tek durum: anahtar dolu AMA içerik operatör
         -- kararıyla AYNI (yani bu migration'ın ikinci koşumu). Farklıysa
         -- duyurulur; "içerik farklı" ifadesi beslemenin meşru düzeltmesini de
@@ -178,7 +215,7 @@ BEGIN
                           s.year, s.date, h.name_tr, h.name_en, h.category),
                    E'\n  - ' ORDER BY s.date)
           INTO occupied_count, occupied
-          FROM m035_seed s
+          FROM m035_seed_up s
           JOIN social.public_holidays h
             ON h.year = s.year AND h.date = s.date
          WHERE (h.name_tr, h.name_en, h.category, h.end_date)
@@ -213,12 +250,12 @@ DECLARE
     manifest_rows INT;
 BEGIN
     -- PAYDA ÖNCE (fix turu 2, N3). Anahtar kontrolü artık literal bir liste
-    -- yerine `m035_seed` üzerinde dönüyor; manifest boşsa blok hiçbir sorun
+    -- yerine `m035_seed_up` üzerinde dönüyor; manifest boşsa blok hiçbir sorun
     -- BULAMAZ ve migration hiçbir şey seed etmemiş olarak "başarılı" raporlar.
     -- Veriye dayalı bir payda kendini doğrulamak zorundadır, yoksa garanti boş
     -- kümede vakum olarak sağlanır. (Sarmalayıcı altında boş manifeste giden bir
     -- yol ÖLÇÜLMEDİ — kapı yine de konur, çünkü maliyeti bir satır.)
-    SELECT count(*) INTO manifest_rows FROM m035_seed;
+    SELECT count(*) INTO manifest_rows FROM m035_seed_up;
     IF manifest_rows <> 3 THEN
         RAISE EXCEPTION
             'migration 035 garanti dogrulamasi BASARISIZ: seed manifesti % satir '
@@ -258,10 +295,10 @@ BEGIN
                AND contype = 'c'
          )
         UNION ALL
-        -- Anahtarlar da `m035_seed`den okunur: dosyada seed değerlerinin TEK
+        -- Anahtarlar da `m035_seed_up`den okunur: dosyada seed değerlerinin TEK
         -- tanımı vardır, doğrulama kendi kopyasını taşımaz.
         SELECT 'takvim kalemi YOK: (' || s.year || ', ' || s.date || ')'
-          FROM m035_seed s
+          FROM m035_seed_up s
          WHERE NOT EXISTS (
             SELECT 1 FROM social.public_holidays h
              WHERE h.year = s.year AND h.date = s.date

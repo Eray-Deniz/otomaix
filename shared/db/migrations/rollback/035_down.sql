@@ -9,10 +9,26 @@
 --            düz `psql -f` → rc=0, `psql -1 -f` → rc=3).
 --
 -- SEED MANİFESTİ TEK YERDE (fix turu 1, M1): üç satırın değerleri aşağıda
--- `m035_seed` geçici tablosunda BİR KEZ tanımlanır; silme, muafiyet ve kalıntı
--- doğrulaması üçü de o tablodan okur. Önceki yazımda aynı literal blok iki kez
--- kopyalanmıştı ve birini düzeltip diğerini unutmak, kalıntı doğrulamasının
--- silmenin sildiğinden BAŞKA bir şeyi denetlemesine yol açardı — sessizce.
+-- `m035_seed_down` geçici tablosunda BİR KEZ tanımlanır; silme, muafiyet ve
+-- kalıntı doğrulaması üçü de o tablodan okur. Önceki yazımda aynı literal blok
+-- iki kez kopyalanmıştı ve birini düzeltip diğerini unutmak, kalıntı
+-- doğrulamasının silmenin sildiğinden BAŞKA bir şeyi denetlemesine yol
+-- açardı — sessizce.
+--
+-- MANİFEST ADI BU DOSYAYA ÖZELDİR VE KURULUMU İDEMPOTENTTİR (fix turu 3).
+-- Arka arkaya iki tur AYNI eksende kusur üretti — manifest ömrü × oturum
+-- paylaşımı × ad çakışması — çünkü her tur eksenin başka bir NOKTASINI seçti.
+-- Eksen artık yük taşımıyor, çünkü iki bağımsız özellik birden sağlanıyor:
+--   (1) KAYNAK PAYLAŞILMAZ: ileri dosya `m035_seed_up`, bu dosya
+--       `m035_seed_down` kullanır. İki dosya tek ad için yarışmaz; hangi
+--       sırayla, aynı oturumda kaç kez koşulursa koşulsun.
+--   (2) KURULUM ÖMÜRDEN BAĞIMSIZ İDEMPOTENTTİR: aşağıdaki kapı adı tutan
+--       nesneyi TÜRÜNE göre düşürür (tablo · view · materialized view ·
+--       sequence · foreign table), bilinmeyen türde ise TAHMİN ETMEZ, DURur.
+-- Bu yüzden `ON COMMIT DROP` de KALDIRILDI: manifestin ömrü artık hiçbir
+-- şeyin doğruluk koşulu değil, iki dosya da aynı kuralla çalışıyor.
+-- Kanıt elle seçilmiş örnek değil, üretilmiş çapraz çarpım:
+-- `tests/test_migration_035.py::test_manifest_lifetime_matrix` (96 hücre).
 --
 -- SAHİPLİK SINIRI (planın geri-alma hükmü):
 --
@@ -88,19 +104,56 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 -- 0. SEED MANİFESTİ — üç satırın değerleri, TEK tanım
 -- ---------------------------------------------------------------------------
 --
--- `ON COMMIT DROP`: manifest transaction'la birlikte yaşar ve ölür; script
--- yarıda kalırsa arkada kalıntı bırakmaz.
+-- Ömür OTURUMdur (bkz. başlık): kapı adı tutan her nesneyi türüne göre
+-- düşürdüğü için manifestin ne zaman öldüğü doğruluk koşulu DEĞİLDİR.
 
-CREATE TEMP TABLE m035_seed (
+DO $prepare_manifest$
+DECLARE
+    held_kind "char";
+    drop_verb TEXT;
+BEGIN
+    SELECT c.relkind INTO held_kind
+      FROM pg_class c
+     WHERE c.oid = to_regclass('pg_temp.m035_seed_down');
+
+    IF held_kind IS NULL THEN
+        RETURN;                       -- ad boş: yapacak bir şey yok
+    END IF;
+
+    drop_verb := CASE held_kind
+                     WHEN 'r' THEN 'TABLE'
+                     WHEN 'p' THEN 'TABLE'
+                     WHEN 'f' THEN 'FOREIGN TABLE'
+                     WHEN 'v' THEN 'VIEW'
+                     WHEN 'm' THEN 'MATERIALIZED VIEW'
+                     WHEN 'S' THEN 'SEQUENCE'
+                 END;
+
+    IF drop_verb IS NULL THEN
+        -- Bilinmeyen tür: TAHMİN ETME, DUR. Yanlış `DROP` fiili ya patlar ya
+        -- da başka bir nesneyi hedefler; ikisi de sessiz olmamalı.
+        RAISE EXCEPTION
+            'migration 035: pg_temp.m035_seed_down adini beklenmeyen turde bir nesne tutuyor (relkind=%)',
+            held_kind
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Bu ad bu migration a ayrilmistir; nesneyi elle kaldirip '
+                         'yeniden kosturun.';
+    END IF;
+
+    EXECUTE format('DROP %s pg_temp.m035_seed_down', drop_verb);
+END
+$prepare_manifest$;
+
+CREATE TEMP TABLE m035_seed_down (
     year     INTEGER NOT NULL,
     date     DATE    NOT NULL,
     name_tr  TEXT    NOT NULL,
     name_en  TEXT,
     category TEXT,
     end_date DATE
-) ON COMMIT DROP;
+);
 
-INSERT INTO m035_seed (year, date, name_tr, name_en, category, end_date) VALUES
+INSERT INTO m035_seed_down (year, date, name_tr, name_en, category, end_date) VALUES
   (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
   (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
   (2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
@@ -151,7 +204,7 @@ BEGIN
          WHERE h.end_date IS NOT NULL
            AND NOT EXISTS (
                  SELECT 1
-                   FROM m035_seed s
+                   FROM m035_seed_down s
                   WHERE s.end_date IS NOT NULL
                     AND h.name_tr = s.name_tr
                     AND h.name_en IS NOT DISTINCT FROM s.name_en
@@ -180,7 +233,7 @@ $preflight$;
 
 DELETE FROM social.public_holidays h
  WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-        SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed s
+        SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed_down s
        );
 
 -- ---------------------------------------------------------------------------
@@ -221,7 +274,7 @@ BEGIN
         SELECT '035 seed satiri ' || h.name_tr
           FROM social.public_holidays h
          WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-                SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed s
+                SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed_down s
                )
       ) AS remaining;
 
