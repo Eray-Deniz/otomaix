@@ -28,6 +28,13 @@
 -- açan dosyalar `SELF_MANAGED_TX` / `NON_TRANSACTIONAL_MIGRATIONS` listelerine
 -- girmek zorundadır ve 035'in buna ihtiyacı yoktur.
 --
+--   Sarmalanmış koşum ATOMİKLİK için ÖNERİLİR (yarım uygulanan bir şema
+--   istemezsiniz), ama DOĞRULUK için ŞART DEĞİLDİR: dosya sarmalanmamış
+--   `psql -f` altında da tam uygulanır ve bu iki biçimde de ÖLÇÜLÜR
+--   (`tests/test_migration_035.py::test_bare_psql_apply_is_complete`, çıplak ve
+--   `ON_ERROR_STOP=1` varyantları). Aşağıdaki seed manifestinin ömrü bu yüzden
+--   OTURUMdur, transaction değil — ayrıntı ve ölçüm manifestin başında.
+--
 -- GERİ ALMA: `rollback/035_down.sql`. Geri alma sahiplik sınırı taşır — YALNIZ
 -- bu migration'ın yazdığı üç satırı kaldırır. Üretici (n8n takvim işi) şemayla
 -- BİRLİKTE sürümlenir: geri alma o workflow'un önceki sürümüne dönmeyi de
@@ -85,6 +92,30 @@ $end_date_check$;
 -- Değerler `m035_seed`de TEK KEZ tanımlanır; hem yazım hem karşılaştırma oradan
 -- okur, yani ikisi ayrışamaz.
 
+-- MANİFESTİN ÖMRÜ OTURUMDUR, TRANSACTION DEĞİL (fix turu 2, N1 — bu yürütmenin
+-- KENDİ ürettiği gerilemenin düzeltmesi). İlk yazım `ON COMMIT DROP` taşıyordu;
+-- bu dosya kendi transaction'ını taşımadığı için autocommit altında her deyim
+-- kendi transaction'ıdır ve manifest KENDİ `CREATE`inin commit'inde düşerdi.
+-- ÖLÇÜLDÜ (çıplak `psql -f`, taze veritabanı): `rc=0`, stderr'de üç kez
+-- `relation "m035_seed" does not exist`, kolon + CHECK commit edilmiş, SIFIR
+-- seed satırı — üstelik hata fail-closed garanti bloğunun İÇİNDE de patladığı
+-- için tam da bunu yakalaması gereken kapı hiç değerlendirilemedi. Fail-OPEN.
+--
+-- Geçici tablo zaten oturumla birlikte ölür; psql süreci bittiğinde gider.
+-- Önden düşürme, aynı oturumda dosyanın ikinci kez `\i` edilmesini destekler.
+-- `to_regclass` KULLANILIR, `DROP TABLE IF EXISTS pg_temp.…` DEĞİL: ölçüldü,
+-- ikincisi henüz temp şeması olmayan taze bir oturumda her koşumda
+-- `NOTICE: schema "pg_temp" does not exist, skipping` basar ve aşağıdaki
+-- ANLAMLI uyarının sinyalini gürültüye boğardı. `to_regclass` sessizdir.
+
+DO $drop_stale_manifest$
+BEGIN
+    IF to_regclass('pg_temp.m035_seed') IS NOT NULL THEN
+        EXECUTE 'DROP TABLE pg_temp.m035_seed';
+    END IF;
+END
+$drop_stale_manifest$;
+
 CREATE TEMP TABLE m035_seed (
     year     INTEGER NOT NULL,
     date     DATE    NOT NULL,
@@ -92,12 +123,33 @@ CREATE TEMP TABLE m035_seed (
     name_en  TEXT,
     category TEXT,
     end_date DATE
-) ON COMMIT DROP;
+);
 
 INSERT INTO m035_seed (year, date, name_tr, name_en, category, end_date) VALUES
   (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
   (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
   (2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
+
+-- UYARI SEVİYESİ PİNLENİR (fix turu 2, N2). Q2'nin tüm görünürlüğü aşağıdaki
+-- NOTICE'e dayanıyor ve onun yayınlanıp yayınlanmayacağını bu depoda YAŞAMAYAN
+-- bir ayar belirliyor. ÖLÇÜLDÜ: sunucu varsayılanı `notice` ve mesaj çıkıyor;
+-- `PGOPTIONS='-c client_min_messages=warning'` altında AYNI `RAISE NOTICE` boş
+-- stderr + `rc=0` üretiyor. Rol/veritabanı düzeyinde
+-- `ALTER … SET client_min_messages='warning'` sıradan bir üretim
+-- sıkılaştırmasıdır — yani kapattığımız Q2 koşulu, kontrol etmediğimiz bir
+-- ortamca sessizce geri açılabilirdi.
+--
+-- `SET LOCAL` DEĞİL, düz `SET`: `SET LOCAL` transaction bloğu dışında
+-- `WARNING: SET LOCAL can only be used in transaction blocks` verir ve HİÇBİR
+-- ŞEY yapmaz — yani tam da N1'in kurtardığı çıplak `psql -f` yolunda pini
+-- düşürürdü. Düz `SET`in sızma yüzeyi bu psql sürecinin geri kalanıdır ve
+-- dosya hemen ardından biter.
+--
+-- DÜRÜST SINIR: bu pin sunucunun mesajı YAYINLAMASINI garanti eder, operatörün
+-- onu GÖRMESİNİ değil (çıktı yönlendirilmiş olabilir). Sunucu tarafındaki yarıyı
+-- kapatır; kalan yarı işletim disiplinidir.
+
+SET client_min_messages = 'notice';
 
 DO $seed_035$
 DECLARE
@@ -158,7 +210,24 @@ $seed_035$;
 DO $verify_035$
 DECLARE
     problems TEXT;
+    manifest_rows INT;
 BEGIN
+    -- PAYDA ÖNCE (fix turu 2, N3). Anahtar kontrolü artık literal bir liste
+    -- yerine `m035_seed` üzerinde dönüyor; manifest boşsa blok hiçbir sorun
+    -- BULAMAZ ve migration hiçbir şey seed etmemiş olarak "başarılı" raporlar.
+    -- Veriye dayalı bir payda kendini doğrulamak zorundadır, yoksa garanti boş
+    -- kümede vakum olarak sağlanır. (Sarmalayıcı altında boş manifeste giden bir
+    -- yol ÖLÇÜLMEDİ — kapı yine de konur, çünkü maliyeti bir satır.)
+    SELECT count(*) INTO manifest_rows FROM m035_seed;
+    IF manifest_rows <> 3 THEN
+        RAISE EXCEPTION
+            'migration 035 garanti dogrulamasi BASARISIZ: seed manifesti % satir '
+            'tasiyor (beklenen 3)', manifest_rows
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Manifest bu dosyanin TEK seed tanimidir; bos/eksik '
+                         'manifest butun kapilari vakuma cevirir.';
+    END IF;
+
     SELECT string_agg(label, E'\n  - ' ORDER BY label)
       INTO problems
       FROM (
