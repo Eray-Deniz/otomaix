@@ -219,13 +219,13 @@ async def test_check_rejects_end_before_start(db):
     meşrudur) · ileri tarih KABUL. Tek ayak ölçülseydi "her şeyi reddeden" bir
     kısıt da yeşil görünürdü.
     """
-    async def _insert(day: str, end: str | None):
+    async def _insert(day: date, end: date | None):
         nested = db.transaction()
         await nested.start()
         try:
             await db.execute(
                 "INSERT INTO social.public_holidays (year, date, name_tr, end_date) "
-                "VALUES (2099, $1::date, $2, $3::date)",
+                "VALUES (2099, $1, $2, $3)",
                 day,
                 f"probe-{uuid.uuid4().hex[:8]}",
                 end,
@@ -234,12 +234,12 @@ async def test_check_rejects_end_before_start(db):
             await nested.rollback()
 
     with pytest.raises(asyncpg.exceptions.CheckViolationError) as excinfo:
-        await _insert("2099-05-10", "2099-05-09")
+        await _insert(date(2099, 5, 10), date(2099, 5, 9))
     assert "end_date" in str(excinfo.value), str(excinfo.value)
 
-    await _insert("2099-05-11", "2099-05-11")  # aynı gün — tek günlük dönem
-    await _insert("2099-05-12", "2099-06-12")  # ileri bitiş
-    await _insert("2099-05-13", None)  # tek gün
+    await _insert(date(2099, 5, 11), date(2099, 5, 11))  # aynı gün — tek günlük dönem
+    await _insert(date(2099, 5, 12), date(2099, 6, 12))  # ileri bitiş
+    await _insert(date(2099, 5, 13), None)  # tek gün
 
 
 async def test_period_row_roundtrip(db, monkeypatch):

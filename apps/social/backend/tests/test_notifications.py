@@ -871,6 +871,66 @@ def test_workflow_credentials_are_bound():
     assert seen >= 3, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
 
 
+# ─── 6b. Takvim workflow'u — AYNI üçlü sözleşme (plan Task 5, R12(b)) ───────
+#
+# `turkey-calendar-update.json` migration 035 ile birlikte DEĞİŞTİ (dönem-farkında
+# yazım + üç yeni takvim kalemi). Değişen artefakt canlıya elle import edilir;
+# üstteki üçlü yalnız yönetici workflow'unu ölçüyordu, yani takvim işi aynı
+# tuzaklara açıktı. Gerekçe ÖLÇÜLÜ: canlı n8n `N8N_BLOCK_ENV_ACCESS_IN_NODE=true`
+# ile koşuyor ve `n8n import:workflow` id'siz dosyayı reddediyor
+# ([[decisions/2026-08-26-n8n-credential-over-env]], 2026-08-26 ölçümleri).
+
+
+def _calendar_workflow() -> dict:
+    import json
+
+    path = infra_repo_root() / "shared" / "n8n-workflows" / "turkey-calendar-update.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_calendar_workflow_carries_stable_id():
+    """Takvim artefaktı SABİT bir `id` taşır — n8n CLI importu onsuz REDDEDER."""
+    workflow = _calendar_workflow()
+
+    wid = workflow.get("id")
+    assert wid, "takvim workflow'u `id` taşımıyor — n8n CLI importu reddeder"
+    assert isinstance(wid, str) and wid.isalnum(), (
+        f"workflow id alfanümerik tek parça olmalı (bulunan: {wid!r})"
+    )
+
+
+def test_calendar_workflow_reads_no_process_env():
+    """Takvim workflow'u `$env` OKUMAZ — canlı n8n bu ifadeyi çözmez."""
+    import json
+
+    blob = json.dumps(_calendar_workflow(), ensure_ascii=False)
+
+    assert "$env" not in blob, (
+        "takvim workflow'u `$env` okuyor — canlı n8n "
+        "`N8N_BLOCK_ENV_ACCESS_IN_NODE=true` ile koşuyor, bu ifade orada çözülmez"
+    )
+
+
+def test_calendar_workflow_credentials_are_bound():
+    """Her credential atıfı GERÇEK bir kimliğe bağlı — yer tutucu kalmaz.
+
+    Eşik yönetici workflow'undan FARKLI (`>= 1`, orada `>= 3`): takvim işinin
+    tek credential tüketicisi Postgres düğümüdür. Yönetici dosyasının sayısını
+    buraya kopyalamak, ölçülmemiş bir beklentiyi kapı yapmak olurdu.
+    """
+    workflow = _calendar_workflow()
+
+    seen = 0
+    for node in workflow["nodes"]:
+        for kind, ref in (node.get("credentials") or {}).items():
+            seen += 1
+            assert ref.get("id"), f"{node['name']}: {kind} credential id'si boş"
+            assert "REPLACE" not in ref["id"].upper(), (
+                f"{node['name']}: {kind} hâlâ yer tutucu id taşıyor ({ref['id']})"
+            )
+    assert seen >= 1, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
+
+
 # ─── 7. Marka durumu ucu (K-45) ─────────────────────────────────────────────
 
 

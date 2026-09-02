@@ -100,7 +100,12 @@ async def get_holidays(
     user: dict = Depends(get_current_user),
     db: asyncpg.Connection = Depends(get_db),
 ):
-    """Return Turkish public holidays for the given year."""
+    """Return Turkish public holidays for the given year.
+
+    `end_date` dolu ise satır bir DÖNEMdir (`date`..`end_date`), boş ise tek
+    gündür (migration 035). Alan SELECT listesinde olmazsa kolon şemada var ama
+    önyüze hiç ulaşmaz — dönem desteği yalnız veritabanında kalırdı.
+    """
     cache_key = f"otomaix:social:holidays:{year}"
     cached = await get_cached(cache_key)
     if cached is not None:
@@ -108,7 +113,7 @@ async def get_holidays(
 
     try:
         rows = await db.fetch(
-            "SELECT date, name_tr, name_en, category FROM social.public_holidays WHERE year = $1 ORDER BY date",
+            "SELECT date, name_tr, name_en, category, end_date FROM social.public_holidays WHERE year = $1 ORDER BY date",
             year,
         )
         data = [dict(r) for r in rows]
