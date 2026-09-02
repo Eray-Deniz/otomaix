@@ -89,6 +89,9 @@ REFUSAL_MARKER = "migration 035 geri alma REDDEDILDI"
 # Hata değildir: migration `rc=0` döner, `ON CONFLICT DO NOTHING` sözleşmesi durur.
 SKIPPED_SEED_MARKER = "migration 035: takvim anahtari ZATEN DOLU"
 
+# Seed manifestinin KENDİ paydasını doğrulayan kapının imzası (fix turu 2, N3).
+MANIFEST_DENOMINATOR_MARKER = "seed manifesti"
+
 
 # ─── psql yardımcıları (şema-yıkıcı yol: `otomaix_test_scratch`) ────────────
 
@@ -118,14 +121,35 @@ def _apply_down(url: str) -> subprocess.CompletedProcess:
     return _psql(url, "-f", str(ROLLBACK_035))
 
 
-def _apply_up(url: str) -> subprocess.CompletedProcess:
+def _apply_up(
+    url: str, *, env_extra: dict[str, str] | None = None, sql_file=None
+) -> subprocess.CompletedProcess:
     """035'i dağıtım runner'ının anlambilimiyle (tek transaction) uygular."""
     argv, env = infra.psql_argv(url)
+    if env_extra:
+        env = {**env, **env_extra}
     return subprocess.run(
-        argv + ["--single-transaction", "-f", str(MIGRATION_035)],
+        argv + ["--single-transaction", "-f", str(sql_file or MIGRATION_035)],
         env=env,
         capture_output=True,
         text=True,
+    )
+
+
+def _apply_up_unwrapped(url: str, *, error_stop: bool) -> subprocess.CompletedProcess:
+    """035'i SARMALAYICI TRANSACTION OLMADAN uygular — operatörün elle koştuğu biçim.
+
+    Deponun kendi elle-uygulama alışkanlığı çıplak `psql -f`tir
+    (`docs/_archive/01-social-phase1.md:195` · `07-social-template-system.md:752` ·
+    `docs/archive/CLAUDE_crm_pre_cleanup.md:212`). Atılabilir-veritabanı kapısı
+    korunur, yalnız `ON_ERROR_STOP` bayrağı isteğe göre düşürülür.
+    """
+    argv, env = infra.psql_argv(url)
+    if not error_stop:
+        flag = argv.index("-v")
+        argv = argv[:flag] + argv[flag + 2 :]
+    return subprocess.run(
+        argv + ["-f", str(MIGRATION_035)], env=env, capture_output=True, text=True
     )
 
 
@@ -613,6 +637,120 @@ def test_seed_reports_when_a_key_is_already_occupied(scratch_db_migrated):
     )
     # Boş olan iki anahtara operatör kararı YAZILDI.
     assert {"24 Kasım Öğretmenler Günü", "Okula Dönüş"} <= _names(url)
+
+
+@pytest.mark.parametrize(
+    "error_stop, label",
+    [
+        (False, "çıplak `psql -f` (bayraksız)"),
+        (True, "`-v ON_ERROR_STOP=1`, sarmalayıcı YOK"),
+    ],
+    ids=["ciplak", "on_error_stop"],
+)
+def test_bare_psql_apply_is_complete(scratch_db_migrated, error_stop: bool, label: str):
+    """SARMALANMAMIŞ `psql -f` de migration'ı TAM uygular — yarım bırakmaz.
+
+    Ölçülen gerileme (fix turu 2, N1 — **bu yürütmenin kendi ürünü**, devralınan
+    borç değil): M1 düzeltmesi seed manifestini `CREATE TEMP TABLE …
+    ON COMMIT DROP` ile kurdu. Bu dosya KENDİ transaction'ını taşımaz; autocommit
+    altında her deyim kendi transaction'ıdır, yani manifest KENDİ `CREATE`inin
+    commit'inde düşer ve sonraki her deyim onu bulamaz.
+
+    Ölçüldü (düzeltmeden önce, taze scratch veritabanı):
+      * çıplak: `rc=0`, stderr'de `relation "m035_seed" does not exist`,
+        kolon + CHECK commit edilmiş, **0 seed satırı** — ve hata fail-closed
+        garanti bloğunun İÇİNDE de tekrarlandığı için tam da bunu yakalaması
+        gereken kapı hiç değerlendirilemedi. Fail-OPEN: yarım şema, sıfır seed,
+        çıkış 0.
+      * `ON_ERROR_STOP=1` ama sarmalayıcısız: `rc=3`, yine 0 seed satırı,
+        kolon commit edilmiş.
+
+    Bugünkü onaylı yolların hepsi dosyayı sarmalıyor (`run-migrations.sh` ·
+    `conftest._apply_migrations` · plan Task 18 Adım 1-2), ama deponun elle
+    uygulama alışkanlığı çıplak biçimdir ve yeni arıza SESSİZDİR. İki
+    sarmalanmamış biçim de burada ölçülür — sınıf kapatılır, tek varyant değil.
+    """
+    url = scratch_db_migrated
+    assert _apply_down(url).returncode == 0, "ön koşul: 035 geri alınamadı"
+
+    result = _apply_up_unwrapped(url, error_stop=error_stop)
+
+    assert "ERROR" not in result.stderr, (
+        f"{label}: migration hata bastı — yarım uygulama:\n{result.stderr}"
+    )
+    assert result.returncode == 0, f"{label}: rc={result.returncode}\n{result.stderr}"
+    assert _has_end_date_column(url), f"{label}: kolon uygulanmadı"
+    assert {row[2] for row in SEED_ROWS} <= _names(url), (
+        f"{label}: seed satırları YAZILMADI — şema ilerledi, veri ilerlemedi"
+    )
+
+
+def test_seed_report_survives_a_hostile_client_min_messages(scratch_db_migrated):
+    """Atlama uyarısı `client_min_messages` kısılmışken de GÖRÜNÜR.
+
+    Ölçülen boşluk (fix turu 2, N2): Q2'nin tüm görünürlüğü bir NOTICE'e
+    dayanıyor ve NOTICE'in yayınlanıp yayınlanmayacağını bu depoda YAŞAMAYAN bir
+    ayar belirliyor. Ölçüldü: sunucu varsayılanı `notice` ve mesaj çıkıyor; ama
+    `PGOPTIONS='-c client_min_messages=warning'` altında AYNI `RAISE NOTICE`
+    boş stderr + `rc=0` üretiyor. Rol ya da veritabanı düzeyinde
+    `ALTER … SET client_min_messages='warning'` sıradan bir üretim
+    sıkılaştırmasıdır — yani kapattığımız Q2 koşulu, kontrol etmediğimiz bir
+    ortam tarafından sessizce geri açılabilirdi.
+
+    Bu test o ortamı taklit eder ve uyarının yine de çıkmasını ister.
+    """
+    url = scratch_db_migrated
+
+    assert _apply_down(url).returncode == 0
+    _run_sql(
+        url,
+        "INSERT INTO social.public_holidays (year, date, name_tr, name_en, category) "
+        "VALUES (2026, '2026-11-10', 'Baskasinin Satiri', 'Someone Elses Row', 'commercial')",
+    )
+
+    result = _apply_up(
+        url, env_extra={"PGOPTIONS": "-c client_min_messages=warning"}
+    )
+
+    assert result.returncode == 0, f"migration DURDU:\n{result.stderr}"
+    assert SKIPPED_SEED_MARKER in result.stderr, (
+        "düşman `client_min_messages` altında atlama uyarısı KAYBOLDU — Q2'nin "
+        f"düzeltmesi bir ortam değişkeniyle kapatılabiliyor. stderr:\n{result.stderr!r}"
+    )
+
+
+def test_guarantee_block_asserts_its_own_denominator(scratch_db_migrated, tmp_path):
+    """Garanti bloğu KENDİ paydasını doğrular — boş manifestle sessizce geçmez.
+
+    Ölçülen zayıflık (fix turu 2, N3): M1'den önce anahtar doğrulaması boş
+    olamayacak bir literal `VALUES` listesi üzerinde dönüyordu; sonra
+    `FROM m035_seed` oldu. Manifest boşsa blok hiçbir sorun bulamaz ve migration
+    HİÇBİR ŞEY seed etmemiş olarak "başarılı" raporlar. Sarmalayıcı transaction
+    altında boş manifeste giden bir yol ÖLÇÜLMEDİ (hakem dürüstçe "erişilebilirliği
+    ölçülmedi" etiketi koydu) — ama veriye dayalı bir payda kendini doğrulamalıdır,
+    yoksa garanti boş kümede vakuum olarak sağlanır.
+
+    Pozitif kontrol: manifest INSERT'i çıkarılmış bir KOPYA koşulur. Kapı yoksa
+    o kopya `rc=0` ile geçer; kapı varsa DURur.
+    """
+    url = scratch_db_migrated
+    source = MIGRATION_035.read_text(encoding="utf-8")
+    start = source.index("INSERT INTO m035_seed")
+    end = source.index(";", start) + 1
+    decoy = tmp_path / "035_bos_manifest.sql"
+    decoy.write_text(source[:start] + source[end:], encoding="utf-8")
+
+    assert _apply_down(url).returncode == 0
+    result = _apply_up(url, sql_file=decoy)
+
+    assert result.returncode != 0, (
+        "boş manifestli migration sessizce GEÇTİ — payda kendini doğrulamıyor. "
+        f"stdout:\n{result.stdout}"
+    )
+    assert MANIFEST_DENOMINATOR_MARKER in result.stderr, result.stderr
+    assert not _has_end_date_column(url), (
+        "reddeden koşum şemayı yine de ilerletti (tek transaction bekleniyordu)"
+    )
 
 
 def test_reseeding_is_conflict_free():
