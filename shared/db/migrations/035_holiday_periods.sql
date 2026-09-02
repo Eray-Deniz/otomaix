@@ -66,15 +66,84 @@ $end_date_check$;
 -- 3. Üç takvim kalemi (emsal: `002_autoposting.sql:29-40`)
 -- ---------------------------------------------------------------------------
 --
--- `DO NOTHING` bilinçlidir: aynı `(year, date)` anahtarında ZATEN bir satır
--- varsa o satır bu migration'ın DEĞİLDİR ve ezilmez. Ad/kategori düzeltme hakkı
--- takvim beslemesinindir (yıllık n8n işi), bir seed bloğunun değil.
+-- `DO NOTHING` bilinçlidir ve DEĞİŞMEDİ: aynı `(year, date)` anahtarında ZATEN
+-- bir satır varsa o satır bu migration'ın DEĞİLDİR ve ezilmez. Ad/kategori
+-- düzeltme hakkı takvim beslemesinindir (yıllık n8n işi), bir seed bloğunun
+-- değil.
+--
+-- ATLAMA ARTIK GÖRÜNÜR (fix turu 1, Q2). Ölçülen boşluk: aşağıdaki fail-closed
+-- doğrulama üç anahtarın yalnızca VAR OLDUĞUNU ölçüyor — bilinçli olarak, çünkü
+-- içeriği pinlemek beslemenin meşru düzeltmesini migration hatasına çevirirdi.
+-- Sonucu şuydu: hedef veritabanı o anahtarlardan birini zaten tutuyorsa
+-- migration BAŞARILI rapor ediyor, operatör kararındaki değerler hiç yazılmıyor
+-- ve kimse haberdar olmuyordu — yani "migration bu değerleri SABİT yazar"
+-- hükmü tam da önemli olduğu vakada ölçüsüz kalıyordu. Aşağıdaki blok gerçekten
+-- kaç satır yazıldığını sayar ve içeriği operatör kararından FARKLI olan dolu
+-- anahtarları NOTICE ile duyurur. NOTICE'tir, EXCEPTION değil: dolu anahtar bir
+-- şema hatası değil, insan gözü isteyen bir veri durumudur.
+--
+-- Değerler `m035_seed`de TEK KEZ tanımlanır; hem yazım hem karşılaştırma oradan
+-- okur, yani ikisi ayrışamaz.
 
-INSERT INTO social.public_holidays (year, date, name_tr, name_en, category, end_date) VALUES
-  (2026, '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
-  (2026, '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
-  (2026, '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', '2026-09-15')
-ON CONFLICT (year, date) DO NOTHING;
+CREATE TEMP TABLE m035_seed (
+    year     INTEGER NOT NULL,
+    date     DATE    NOT NULL,
+    name_tr  TEXT    NOT NULL,
+    name_en  TEXT,
+    category TEXT,
+    end_date DATE
+) ON COMMIT DROP;
+
+INSERT INTO m035_seed (year, date, name_tr, name_en, category, end_date) VALUES
+  (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
+  (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
+  (2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
+
+DO $seed_035$
+DECLARE
+    written INT := 0;
+    occupied_count INT := 0;
+    occupied TEXT;
+BEGIN
+    WITH ins AS (
+        INSERT INTO social.public_holidays
+            (year, date, name_tr, name_en, category, end_date)
+        SELECT s.year, s.date, s.name_tr, s.name_en, s.category, s.end_date
+          FROM m035_seed s
+        ON CONFLICT (year, date) DO NOTHING
+        RETURNING 1
+    )
+    SELECT count(*) INTO written FROM ins;
+
+    IF written < (SELECT count(*) FROM m035_seed) THEN
+        -- Sessiz kalınacak tek durum: anahtar dolu AMA içerik operatör
+        -- kararıyla AYNI (yani bu migration'ın ikinci koşumu). Farklıysa
+        -- duyurulur; "içerik farklı" ifadesi beslemenin meşru düzeltmesini de
+        -- kapsar ve mesaj bunu söyler.
+        SELECT count(*),
+               string_agg(
+                   format('(%s, %s) anahtarini tutan satir: %L / %L / %L',
+                          s.year, s.date, h.name_tr, h.name_en, h.category),
+                   E'\n  - ' ORDER BY s.date)
+          INTO occupied_count, occupied
+          FROM m035_seed s
+          JOIN social.public_holidays h
+            ON h.year = s.year AND h.date = s.date
+         WHERE (h.name_tr, h.name_en, h.category, h.end_date)
+               IS DISTINCT FROM (s.name_tr, s.name_en, s.category, s.end_date);
+
+        IF occupied_count > 0 THEN
+            RAISE NOTICE
+                'migration 035: takvim anahtari ZATEN DOLU (% adet), operator karari YAZILMADI:%',
+                occupied_count, E'\n  - ' || occupied
+                USING HINT = 'Hata degildir: ON CONFLICT DO NOTHING sozlesmesi geregi '
+                             'mevcut satir EZILMEDI. Satiri takvim beslemesi duzeltmis '
+                             'olabilir; degilse operator karari (2026-09-02) bu '
+                             'veritabaninda yururlukte DEGIL, gozden gecirin.';
+        END IF;
+    END IF;
+END
+$seed_035$;
 
 -- ---------------------------------------------------------------------------
 -- 4. Garanti doğrulaması — fail-closed
@@ -120,13 +189,13 @@ BEGIN
                AND contype = 'c'
          )
         UNION ALL
-        SELECT 'takvim kalemi YOK: (' || k.year || ', ' || k.day || ')'
-          FROM (VALUES (2026, DATE '2026-11-10'),
-                       (2026, DATE '2026-11-24'),
-                       (2026, DATE '2026-08-15')) AS k(year, day)
+        -- Anahtarlar da `m035_seed`den okunur: dosyada seed değerlerinin TEK
+        -- tanımı vardır, doğrulama kendi kopyasını taşımaz.
+        SELECT 'takvim kalemi YOK: (' || s.year || ', ' || s.date || ')'
+          FROM m035_seed s
          WHERE NOT EXISTS (
             SELECT 1 FROM social.public_holidays h
-             WHERE h.year = k.year AND h.date = k.day
+             WHERE h.year = s.year AND h.date = s.date
          )
       ) AS findings;
 

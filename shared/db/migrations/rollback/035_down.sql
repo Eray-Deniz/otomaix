@@ -8,6 +8,12 @@
 --            `rollback/032_down.sql`de de yazılı; ölçüldü PG 18.3:
 --            düz `psql -f` → rc=0, `psql -1 -f` → rc=3).
 --
+-- SEED MANİFESTİ TEK YERDE (fix turu 1, M1): üç satırın değerleri aşağıda
+-- `m035_seed` geçici tablosunda BİR KEZ tanımlanır; silme, muafiyet ve kalıntı
+-- doğrulaması üçü de o tablodan okur. Önceki yazımda aynı literal blok iki kez
+-- kopyalanmıştı ve birini düzeltip diğerini unutmak, kalıntı doğrulamasının
+-- silmenin sildiğinden BAŞKA bir şeyi denetlemesine yol açardı — sessizce.
+--
 -- SAHİPLİK SINIRI (planın geri-alma hükmü):
 --
 --   Bu script YALNIZ 035'in KENDİ yazdığı üç satırı siler. "Kendi yazdığı" =
@@ -26,11 +32,33 @@
 --
 --   Kolon düşünce `end_date` taşıyan her satırın ANLAMI değişir: bir dönem,
 --   035 ÖNCESİNDE VAR OLMAYAN bir hâle — "tek günlük" bir kayda — dönüşür.
---   035'in kendi üç satırı için bu bedel yoktur (onlar zaten siliniyor). Başka
---   birinin dönem satırı için sessiz bir ANLAM KAYBI olurdu. Bu yüzden kapı
---   fail-closed'dır: yabancı dönem satırı varsa HİÇBİR ŞEY yapmadan durur.
---   İşletim yolu açık: o satırların dönemini önce elle boşaltın, sonra geri
---   almayı koşturun.
+--   Başka birinin (elle girilmiş, başka bir sistemin yazdığı) dönem satırı için
+--   bu sessiz ve GERİ ALINAMAZ bir anlam kaybıdır. Kapı fail-closed'dır:
+--   böyle bir satır varsa HİÇBİR ŞEY yapmadan durur. İşletim yolu açık: o
+--   satırların dönemini önce elle boşaltın, sonra geri almayı koşturun.
+--
+-- MUAFİYET ÜRETİCİYE GÖRE TANIMLANIR, YILA GÖRE DEĞİL (fix turu 1, Q1):
+--
+--   İlk yazımda muafiyet `year = 2026 AND date = '2026-08-15' AND end_date =
+--   '2026-09-15'` diye çivilenmişti. Oysa bu migration'la BİRLİKTE sürümlenen
+--   yıllık iş `Okula Dönüş`ü KOŞTUĞU YILA göre yazar (`${year}-08-15` ..
+--   `${year}-09-15`). 1 Ocak 2027'de iş 2027 dönem satırını yazar, o satır
+--   tanım gereği "yabancı" olurdu ve geri alma o günden sonra bir operatör elle
+--   müdahale edene kadar REDDEDERDİ — yani kapı, koruduğu migration'ın kendi
+--   üreticisi tarafından bir takvim yılı içinde tetiklenirdi. "Her migration
+--   kendi geri almasıyla iner" hükmü o hâliyle okunduğundan zayıftı.
+--
+--   Doğrusu: muafiyet ÜRETİCİNİN YAZDIĞI ŞEKLE bakar. Bir satır, seed
+--   manifestindeki dönem kaleminin ad/İngilizce ad/kategori üçlüsünü taşıyor VE
+--   başlangıç/bitişi manifestin gün-ay desenini kendi yılına kaydırılmış hâliyle
+--   tutuyorsa, onu bu migration'ın üreticisi yazmıştır. Desen manifestten
+--   TÜRETİLİR (yıl farkı kadar kaydırma), ikinci bir yerde tekrarlanmaz.
+--
+--   BEDELİ DÜRÜSTÇE: muaf satır SİLİNMEZ (035 onun sahibi değil) ama kolon
+--   düştüğü için dönem bilgisini kaybeder. Bu kayıp GERİ ALINABİLİRDİR —
+--   üretici bir sonraki turunda dönemi yeniden yazar, üstelik geri alma zaten
+--   workflow'un önceki sürümüne dönmeyi de kapsıyor. Yabancı satırdaki kayıp
+--   ise geri alınamaz; ayrımın tamamı budur.
 --
 -- ÜRETİCİ DE SÜRÜMLENİR: `shared/n8n-workflows/turkey-calendar-update.json`
 -- dönem-farkında yazıma geçti. Geri alma o workflow'un ÖNCEKİ sürümüne dönmeyi
@@ -57,7 +85,28 @@ BEGIN;
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 -- ---------------------------------------------------------------------------
--- 0. PREFLIGHT — tabloyu kilitle, sonra oku; yabancı dönem varsa DUR
+-- 0. SEED MANİFESTİ — üç satırın değerleri, TEK tanım
+-- ---------------------------------------------------------------------------
+--
+-- `ON COMMIT DROP`: manifest transaction'la birlikte yaşar ve ölür; script
+-- yarıda kalırsa arkada kalıntı bırakmaz.
+
+CREATE TEMP TABLE m035_seed (
+    year     INTEGER NOT NULL,
+    date     DATE    NOT NULL,
+    name_tr  TEXT    NOT NULL,
+    name_en  TEXT,
+    category TEXT,
+    end_date DATE
+) ON COMMIT DROP;
+
+INSERT INTO m035_seed (year, date, name_tr, name_en, category, end_date) VALUES
+  (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
+  (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
+  (2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
+
+-- ---------------------------------------------------------------------------
+-- 1. PREFLIGHT — tabloyu kilitle, sonra oku; yabancı dönem varsa DUR
 -- ---------------------------------------------------------------------------
 --
 -- Kilit ÖNCE, okuma SONRA: sayımdan sonra araya giren bir yazar olamaz. Kilit
@@ -92,16 +141,26 @@ BEGIN
                          'Geri alma ikinci kez kosturulmaz.';
     END IF;
 
-    -- Yabancı dönem = `end_date` dolu VE 035'in üç satırından biri DEĞİL.
+    -- Yabancı dönem = `end_date` dolu VE bu migration'ın üreticisinin yazdığı
+    -- şekle UYMAYAN satır. Şekil manifestten türetilir: aynı ad üçlüsü + aynı
+    -- gün-ay deseni, satırın kendi yılına kaydırılmış hâli.
     EXECUTE $q$
-        SELECT count(*), string_agg(DISTINCT format('(%s, %s, %L)', year, date, name_tr), ', ')
+        SELECT count(*),
+               string_agg(DISTINCT format('(%s, %s, %L)', h.year, h.date, h.name_tr), ', ')
           FROM social.public_holidays h
          WHERE h.end_date IS NOT NULL
-           AND NOT (h.year = 2026 AND h.date = DATE '2026-08-15'
-                    AND h.name_tr = 'Okula Dönüş'
-                    AND h.name_en IS NOT DISTINCT FROM 'Back to School'
-                    AND h.category IS NOT DISTINCT FROM 'commercial'
-                    AND h.end_date = DATE '2026-09-15')
+           AND NOT EXISTS (
+                 SELECT 1
+                   FROM m035_seed s
+                  WHERE s.end_date IS NOT NULL
+                    AND h.name_tr = s.name_tr
+                    AND h.name_en IS NOT DISTINCT FROM s.name_en
+                    AND h.category IS NOT DISTINCT FROM s.category
+                    AND h.date =
+                        (s.date + make_interval(years => h.year - s.year))::date
+                    AND h.end_date =
+                        (s.end_date + make_interval(years => h.year - s.year))::date
+               )
     $q$ INTO foreign_periods, sample;
 
     IF foreign_periods > 0 THEN
@@ -116,21 +175,16 @@ END
 $preflight$;
 
 -- ---------------------------------------------------------------------------
--- 1. YALNIZ 035'in yazdığı üç satır — beş alan BİREBİR eşleşmeli
+-- 2. YALNIZ 035'in yazdığı üç satır — beş alan BİREBİR eşleşmeli
 -- ---------------------------------------------------------------------------
 
 DELETE FROM social.public_holidays h
  WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-        (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü',
-         'Atatürk Memorial Day', 'national'),
-        (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',
-         'Teachers'' Day', 'commercial'),
-        (2026, DATE '2026-08-15', 'Okula Dönüş',
-         'Back to School', 'commercial')
+        SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed s
        );
 
 -- ---------------------------------------------------------------------------
--- 2. Kısıt + kolon
+-- 3. Kısıt + kolon
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE social.public_holidays
@@ -138,11 +192,12 @@ ALTER TABLE social.public_holidays
 ALTER TABLE social.public_holidays DROP COLUMN IF EXISTS end_date;
 
 -- ---------------------------------------------------------------------------
--- 3. Kalıntı doğrulaması — fail-closed
+-- 4. Kalıntı doğrulaması — fail-closed
 -- ---------------------------------------------------------------------------
 --
 -- `DROP ... IF EXISTS` bir nesneyi ADIYLA arar; ad tutmuyorsa sessizce geçer.
--- Bu blok katalogtan GERÇEK durumu okur.
+-- Bu blok katalogtan GERÇEK durumu okur. Seed satırı sorgusu yukarıdaki
+-- silmeyle AYNI manifestten okur — ikisi ayrışamaz.
 
 DO $verify_down$
 DECLARE
@@ -163,15 +218,10 @@ BEGIN
          WHERE conrelid = 'social.public_holidays'::regclass
            AND conname = 'public_holidays_end_date_check'
         UNION ALL
-        SELECT '035 seed satiri ' || name_tr
+        SELECT '035 seed satiri ' || h.name_tr
           FROM social.public_holidays h
          WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-                (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü',
-                 'Atatürk Memorial Day', 'national'),
-                (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',
-                 'Teachers'' Day', 'commercial'),
-                (2026, DATE '2026-08-15', 'Okula Dönüş',
-                 'Back to School', 'commercial')
+                SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed s
                )
       ) AS remaining;
 
