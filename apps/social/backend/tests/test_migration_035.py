@@ -85,6 +85,10 @@ EXPECTED_KEYS = {
 # sıfır-dışı çıkışı değil.
 REFUSAL_MARKER = "migration 035 geri alma REDDEDILDI"
 
+# Seed anahtarı DOLU olduğu için operatör kararının yazılamadığını duyuran NOTICE.
+# Hata değildir: migration `rc=0` döner, `ON CONFLICT DO NOTHING` sözleşmesi durur.
+SKIPPED_SEED_MARKER = "migration 035: takvim anahtari ZATEN DOLU"
+
 
 # ─── psql yardımcıları (şema-yıkıcı yol: `otomaix_test_scratch`) ────────────
 
@@ -143,7 +147,7 @@ def _has_end_date_column(url: str) -> bool:
 
 _NODE_HARNESS = r"""
 const fs = require('fs');
-const [wfPath, nodeName, itemsJson] = process.argv.slice(1);
+const [wfPath, nodeName, itemsJson, nowYear] = process.argv.slice(1);
 const wf = JSON.parse(fs.readFileSync(wfPath, 'utf8'));
 const node = wf.nodes.find((n) => n.name === nodeName);
 if (!node) { throw new Error('dugum yok: ' + nodeName); }
@@ -154,6 +158,22 @@ console.log = () => {};
 // Ağ KAPALI: dış servise bağımlı bir test ölçüm değil, kumar olurdu. Düğümün
 // kendi try/catch'i bu hatayı zaten yutuyor — statik kalemler yine üretilir.
 globalThis.fetch = async () => { throw new Error('ag kapali (olcum)'); };
+// SAHTE SAAT: yıllık iş "içinde bulunduğu yılı" `new Date().getFullYear()` ile
+// okur. Bir sonraki yılın satırlarını ÜRETİCİNİN KENDİSİNE ürettirmenin tek
+// yolu saati kaydırmaktır — yıl numarasını elle metne gömmek, üreticinin
+// yazdığı satırı değil onun taklidini ölçerdi. YALNIZ argümansız `new Date()`
+// kaydırılır; `new Date(yr, ay, gun)` biçimleri aynen gerçek Date'e gider.
+if (nowYear) {
+  const RealDate = Date;
+  const fixed = RealDate.UTC(Number(nowYear), 5, 15, 12, 0, 0);
+  class FakeDate extends RealDate {
+    constructor(...args) {
+      if (args.length === 0) { super(fixed); } else { super(...args); }
+    }
+    static now() { return fixed; }
+  }
+  globalThis.Date = FakeDate;
+}
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const fn = new AsyncFunction('$input', node.parameters.jsCode);
 fn($input).then((out) => {
@@ -162,7 +182,9 @@ fn($input).then((out) => {
 """
 
 
-def _run_workflow_node(node_name: str, items: list[dict] | None = None) -> list[dict]:
+def _run_workflow_node(
+    node_name: str, items: list[dict] | None = None, now_year: int | None = None
+) -> list[dict]:
     """Takvim workflow'unun bir Code düğümünü node ile koşar, çıktısını döner."""
     result = subprocess.run(
         [
@@ -172,6 +194,7 @@ def _run_workflow_node(node_name: str, items: list[dict] | None = None) -> list[
             str(CALENDAR_WORKFLOW),
             node_name,
             json.dumps(items or [], ensure_ascii=False),
+            "" if now_year is None else str(now_year),
         ],
         capture_output=True,
         text=True,
@@ -350,8 +373,13 @@ def test_rollback_preserves_pre_existing_rows(scratch_db_migrated):
     """035 ÖNCESİNDE var olan satırlar geri almadan sağ çıkar.
 
     İki sınıf ayrı ayrı ölçülür: (a) migration seed'inin dokunmadığı satırlar,
-    (b) 035'in üç anahtarından BİRİNDE oturan ama içeriği FARKLI bir satır —
-    o satırı 035 yazmadı (`ON CONFLICT DO NOTHING`), dolayısıyla sahibi de değil.
+    (b) 035'in üç anahtarından BİRİNDE oturan, migration'dan ÖNCE yazılmış satır.
+
+    (b) satırı GERÇEKTEN önce yaratılır — 035 geri alınır, satır yazılır, 035
+    yeniden uygulanır. İlk yazımda bu satır 035'in yazdığı satırı `UPDATE`
+    ederek üretiliyordu; o senaryo "içeriği kaymış satır" senaryosuydu ve
+    docstring'in söylediği şeyi ölçmüyordu (bağımsız hakem yakaladı). O ayrı
+    iddia artık kendi testinde: `test_rollback_spares_a_content_drifted_seed_row`.
     """
     url = scratch_db_migrated
     _run_sql(
@@ -359,7 +387,42 @@ def test_rollback_preserves_pre_existing_rows(scratch_db_migrated):
         "INSERT INTO social.public_holidays (year, date, name_tr, name_en, category) "
         "VALUES (2030, '2030-06-01', 'Onceden Var Olan', 'Pre Existing', 'commercial')",
     )
-    # 035'in bir anahtarını ELDE TUTAN, ama başka içerikli satır (sahibi 035 değil).
+
+    # (b) — 035'i geri al, anahtarı BAŞKASI doldursun, 035'i yeniden uygula.
+    # `ON CONFLICT DO NOTHING` o satırı gerçekten atlar; sahibi 035 değildir.
+    assert _apply_down(url).returncode == 0
+    _run_sql(
+        url,
+        "INSERT INTO social.public_holidays (year, date, name_tr, name_en, category) "
+        "VALUES (2026, '2026-11-24', 'Baskasinin Yazdigi', 'Someone Elses Row', 'national')",
+    )
+    reapply = _apply_up(url)
+    assert reapply.returncode == 0, f"yeniden uygulama DURDU:\n{reapply.stderr}"
+
+    result = _apply_down(url)
+    assert result.returncode == 0, f"geri alma DURDU:\n{result.stderr}"
+
+    after = _names(url)
+    assert "Onceden Var Olan" in after, "önceden var olan satır SİLİNDİ"
+    assert "Baskasinin Yazdigi" in after, (
+        "035'in YAZMADIĞI bir satır, yalnız anahtarı çakıştığı için silindi — "
+        "sahiplik sınırı ihlali"
+    )
+    assert "Yılbaşı" in after, "002 seed'i silindi"
+
+
+def test_rollback_spares_a_content_drifted_seed_row(scratch_db_migrated):
+    """035'in yazdığı satırın içeriği SONRADAN kaydıysa artık 035'in değildir.
+
+    Takvim beslemesinin ad/kategori düzeltme hakkı vardır (`DO UPDATE`); o
+    düzeltmeden sonra satır operatör kararının birebir kopyası olmaktan çıkar.
+    Geri alma beş alan eşitliğine baktığı için satırı BIRAKIR — bu bilinçlidir
+    ve `035_down.sql`in sahiplik bölümünde yazılıdır.
+
+    Bu, üstteki testten FARKLI bir iddiadır (o: hiç yazılmamış satır; bu:
+    yazılmış ama kaymış satır) ve o yüzden ayrı isim taşır.
+    """
+    url = scratch_db_migrated
     _run_sql(
         url,
         "UPDATE social.public_holidays SET name_tr = 'Yerel Duzeltme' "
@@ -370,12 +433,9 @@ def test_rollback_preserves_pre_existing_rows(scratch_db_migrated):
     assert result.returncode == 0, f"geri alma DURDU:\n{result.stderr}"
 
     after = _names(url)
-    assert "Onceden Var Olan" in after, "önceden var olan satır SİLİNDİ"
     assert "Yerel Duzeltme" in after, (
-        "035'in yazmadığı bir satır, yalnız anahtarı çakıştığı için silindi — "
-        "sahiplik sınırı ihlali"
+        "içeriği kaymış satır silindi — geri alma anahtara göre siliyor demektir"
     )
-    assert "Yılbaşı" in after, "002 seed'i silindi"
 
 
 def test_rollback_refuses_when_a_foreign_period_row_exists(scratch_db_migrated):
@@ -404,6 +464,70 @@ def test_rollback_refuses_when_a_foreign_period_row_exists(scratch_db_migrated):
     assert {r[2] for r in SEED_ROWS} <= _names(url), (
         "reddeden koşum seed satırlarını yine de sildi — 'hiçbir şey yapmadan durur' YALAN"
     )
+
+
+def test_rollback_runs_after_the_annual_job_wrote_a_later_year_period(scratch_db_migrated):
+    """Geri alma, KENDİ üreticisinin yazdığı sonraki yıl dönemine TAKILMAZ.
+
+    Ölçülen arıza (bağımsız hakem, Q1): yabancı-dönem kapısının muafiyeti
+    2026'ya çivilenmişti. Oysa aynı commit'in gönderdiği yıllık iş `Okula
+    Dönüş`ü KOŞTUĞU YILA göre yazar (`${year}-08-15`..`${year}-09-15`). 1 Ocak
+    2027'de iş 2027 dönem satırını yazar; o satır tanım gereği "yabancı dönem"
+    olur ve geri alma o günden sonra bir operatör elle `end_date` boşaltana
+    kadar REDDEDER. Kapı, korumaya çalıştığı migration'ın kendi üreticisi
+    tarafından bir takvim yılı içinde tetikleniyordu.
+
+    Sonraki yılın satırı ÜRETİCİYE ürettirilir (sahte saat), elle yazılmaz —
+    yoksa üreticinin yazdığı satırı değil onun taklidini ölçerdik.
+
+    Muafiyetin BEDELİ dürüstçe ölçülür: üreticinin satırı SİLİNMEZ (035 onun
+    sahibi değil), ama kolon düştüğü için dönem bilgisi gider. Bu geri
+    alınabilir bir kayıptır — üretici bir sonraki turunda dönemi yeniden yazar
+    ve geri alma zaten workflow'un önceki sürümüne dönmeyi de kapsar.
+    """
+    from datetime import datetime
+
+    url = scratch_db_migrated
+    next_year = datetime.now().year + 1
+
+    items = _run_workflow_node("Tatilleri Topla", now_year=next_year)
+    period = [item for item in items if item["name_tr"] == "Okula Dönüş"]
+    assert period, "üretici dönem kalemini hiç üretmedi (prob bozuk)"
+    assert period[0]["date"] == f"{next_year}-08-15", period[0]
+    assert period[0]["end_date"] == f"{next_year}-09-15", period[0]
+
+    _run_sql(url, _annual_job_sql(items))
+    assert (
+        _scalar(
+            url,
+            "SELECT end_date FROM social.public_holidays "
+            f"WHERE year = {next_year} AND date = '{next_year}-08-15'",
+        )
+        == f"{next_year}-09-15"
+    ), "üreticinin dönem satırı veritabanına hiç girmedi (prob bozuk)"
+
+    result = _apply_down(url)
+
+    assert result.returncode == 0, (
+        "geri alma KENDİ üreticisinin yazdığı satıra takıldı:\n" + result.stderr
+    )
+    assert not _has_end_date_column(url)
+    assert (
+        _scalar(
+            url,
+            "SELECT count(*) FROM social.public_holidays "
+            f"WHERE year = {next_year} AND date = '{next_year}-08-15'",
+        )
+        == "1"
+    ), "geri alma üreticinin satırını SİLDİ — sahiplik sınırı ihlali"
+    assert (
+        _scalar(
+            url,
+            "SELECT count(*) FROM social.public_holidays "
+            "WHERE year = 2026 AND date = '2026-08-15'",
+        )
+        == "0"
+    ), "035 kendi seed satırını kaldırmadı"
 
 
 def test_up_down_up_on_mixed_row_set(scratch_db_migrated):
@@ -446,6 +570,51 @@ def test_up_down_up_on_mixed_row_set(scratch_db_migrated):
     ), "okula dönüş satırı dönem bilgisi OLMADAN geri geldi"
 
 
+def test_seed_reports_when_a_key_is_already_occupied(scratch_db_migrated):
+    """Anahtar DOLUYSA migration bunu SÖYLER — sessizce atlamaz.
+
+    Ölçülen boşluk (bağımsız hakem, Q2): seed `ON CONFLICT DO NOTHING` ile
+    yazılıyor ve fail-closed doğrulama yalnız üç anahtarın VAR OLDUĞUNU
+    ölçüyordu. Hedef veritabanı o anahtarlardan birini zaten tutuyorsa migration
+    BAŞARILI rapor ediyor, operatör kararındaki değerler hiç yazılmıyor ve kimse
+    haberdar olmuyordu — ekin en sert hükmü ("migration BU DEĞERLERİ SABİT
+    yazar") tam da önemli olduğu vakada ölçüsüz kalıyordu.
+
+    Sözleşme DEĞİŞMEZ (`DO NOTHING` durur, ad/kategori düzeltme hakkı takvim
+    beslemesinindir); değişen şey atlamanın GÖRÜNÜR olmasıdır: NOTICE, hata
+    değil. Migration yine `rc=0` döner.
+    """
+    url = scratch_db_migrated
+
+    assert _apply_down(url).returncode == 0
+    _run_sql(
+        url,
+        "INSERT INTO social.public_holidays (year, date, name_tr, name_en, category) "
+        "VALUES (2026, '2026-11-10', 'Baskasinin Satiri', 'Someone Elses Row', 'commercial')",
+    )
+
+    result = _apply_up(url)
+
+    assert result.returncode == 0, f"migration DURDU:\n{result.stderr}"
+    assert SKIPPED_SEED_MARKER in result.stderr, (
+        "dolu anahtar SESSİZCE atlandı — operatör kararı yazılmadı ve kimse "
+        f"haberdar olmadı. stderr:\n{result.stderr}"
+    )
+    assert "2026-11-10" in result.stderr, result.stderr
+
+    # Mevcut satır EZİLMEDİ (DO NOTHING sözleşmesi korunuyor).
+    assert (
+        _scalar(
+            url,
+            "SELECT name_tr FROM social.public_holidays "
+            "WHERE year = 2026 AND date = '2026-11-10'",
+        )
+        == "Baskasinin Satiri"
+    )
+    # Boş olan iki anahtara operatör kararı YAZILDI.
+    assert {"24 Kasım Öğretmenler Günü", "Okula Dönüş"} <= _names(url)
+
+
 def test_reseeding_is_conflict_free():
     """035 ikinci kez uygulanınca çakışmaz ve satırları ikizlemez.
 
@@ -470,6 +639,12 @@ def test_reseeding_is_conflict_free():
     assert result.returncode == 0, f"yeniden uygulama DURDU:\n{result.stderr}"
     assert "3" in result.stdout.split("seed_rows")[-1], (
         f"seed satırları ikizlendi ya da kayboldu — çıktı:\n{result.stdout}"
+    )
+    # Atlama uyarısının KARŞI ayağı: üç satır da yerinde ve içerikleri operatör
+    # kararıyla aynıysa uyarı ÇIKMAZ. Bu ayak olmadan uyarı "her koşumda bağıran"
+    # bir gürültü olabilirdi ve hiçbir şey ölçmezdi.
+    assert SKIPPED_SEED_MARKER not in result.stderr, (
+        f"temiz yeniden uygulama atlama uyarısı bastı:\n{result.stderr}"
     )
 
 
