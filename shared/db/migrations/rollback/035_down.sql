@@ -110,7 +110,7 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 DO $prepare_manifest$
 DECLARE
     held_kind "char";
-    drop_verb TEXT;
+    drop_stmt TEXT;
 BEGIN
     SELECT c.relkind INTO held_kind
       FROM pg_class c
@@ -120,18 +120,28 @@ BEGIN
         RETURN;                       -- ad boş: yapacak bir şey yok
     END IF;
 
-    drop_verb := CASE held_kind
-                     WHEN 'r' THEN 'TABLE'
-                     WHEN 'p' THEN 'TABLE'
-                     WHEN 'f' THEN 'FOREIGN TABLE'
-                     WHEN 'v' THEN 'VIEW'
-                     WHEN 'm' THEN 'MATERIALIZED VIEW'
-                     WHEN 'S' THEN 'SEQUENCE'
-                 END;
+    -- ELE ALINAN KİNDLER = `pg_temp`te YARATILABİLDİĞİ ÖLÇÜLENLER (PG 18.3).
+    -- Enumerasyon ölçüme eşittir: her dalın kendi test hücresi vardır
+    -- (`test_manifest_squatter_matrix`), yani hiçbir dal ölçülmemiş değildir.
+    -- `CASCADE` ZORUNLU: bağımlısı olan bir tabloda `DROP TABLE` CASCADE'siz
+    -- patlıyordu (ölçüldü, bağımsız hakem F2). Bağımlı nesne bizim ayrılmış
+    -- adımıza dayanmayı seçmiştir; onunla birlikte gider.
+    drop_stmt := CASE held_kind
+        WHEN 'r' THEN 'DROP TABLE pg_temp.m035_seed_down CASCADE'
+        WHEN 'p' THEN 'DROP TABLE pg_temp.m035_seed_down CASCADE'
+        WHEN 'v' THEN 'DROP VIEW pg_temp.m035_seed_down CASCADE'
+        WHEN 'm' THEN 'DROP MATERIALIZED VIEW pg_temp.m035_seed_down CASCADE'
+        WHEN 'S' THEN 'DROP SEQUENCE pg_temp.m035_seed_down CASCADE'
+        WHEN 'c' THEN 'DROP TYPE pg_temp.m035_seed_down CASCADE'
+    END;
 
-    IF drop_verb IS NULL THEN
-        -- Bilinmeyen tür: TAHMİN ETME, DUR. Yanlış `DROP` fiili ya patlar ya
-        -- da başka bir nesneyi hedefler; ikisi de sessiz olmamalı.
+    IF drop_stmt IS NULL THEN
+        -- ELE ALINMAYANLAR, BİLEREK: `i`/`I` (indeks) o adı taşısa bile BİZİM
+        -- OLMAYAN bir tabloya aittir — düşürmek ad rezervasyonunun ötesine,
+        -- başkasının nesnesine uzanırdı. `f` (foreign table) bu kurulumda
+        -- yaratılamıyor (ölçüldü: FDW sunucusu yok), yani ele alındığı
+        -- KANITLANAMAZ; ölçülmemiş dal enumerasyona YAZILMAZ. Kalanı tahmin
+        -- etmek yerine DUR.
         RAISE EXCEPTION
             'migration 035: pg_temp.m035_seed_down adini beklenmeyen turde bir nesne tutuyor (relkind=%)',
             held_kind
@@ -140,7 +150,7 @@ BEGIN
                          'yeniden kosturun.';
     END IF;
 
-    EXECUTE format('DROP %s pg_temp.m035_seed_down', drop_verb);
+    EXECUTE drop_stmt;
 END
 $prepare_manifest$;
 
@@ -153,7 +163,7 @@ CREATE TEMP TABLE m035_seed_down (
     end_date DATE
 );
 
-INSERT INTO m035_seed_down (year, date, name_tr, name_en, category, end_date) VALUES
+INSERT INTO pg_temp.m035_seed_down (year, date, name_tr, name_en, category, end_date) VALUES
   (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
   (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
   (2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
@@ -204,7 +214,7 @@ BEGIN
          WHERE h.end_date IS NOT NULL
            AND NOT EXISTS (
                  SELECT 1
-                   FROM m035_seed_down s
+                   FROM pg_temp.m035_seed_down s
                   WHERE s.end_date IS NOT NULL
                     AND h.name_tr = s.name_tr
                     AND h.name_en IS NOT DISTINCT FROM s.name_en
@@ -233,7 +243,7 @@ $preflight$;
 
 DELETE FROM social.public_holidays h
  WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-        SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed_down s
+        SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
        );
 
 -- ---------------------------------------------------------------------------
@@ -274,7 +284,7 @@ BEGIN
         SELECT '035 seed satiri ' || h.name_tr
           FROM social.public_holidays h
          WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-                SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM m035_seed_down s
+                SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
                )
       ) AS remaining;
 

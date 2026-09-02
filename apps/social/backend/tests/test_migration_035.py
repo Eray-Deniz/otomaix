@@ -92,6 +92,11 @@ SKIPPED_SEED_MARKER = "migration 035: takvim anahtari ZATEN DOLU"
 # Seed manifestinin KENDİ paydasını doğrulayan kapının imzası (fix turu 2, N3).
 MANIFEST_DENOMINATOR_MARKER = "seed manifesti"
 
+# İleri migration'ın manifest tablosunun TAM adı (şema nitelemesi dahil).
+# Kullanım yerleri `pg_temp.` ile nitelenmek ZORUNDA (fix turu 4, F3): niteliksiz
+# bir ad `search_path` ile kaçırılabilir ve manifest kalıcı bir tablodan okunur.
+MANIFEST_TABLE = "pg_temp.m035_seed_up"
+
 
 # ─── psql yardımcıları (şema-yıkıcı yol: `otomaix_test_scratch`) ────────────
 
@@ -790,7 +795,13 @@ def test_guarantee_block_asserts_its_own_denominator(scratch_db_migrated, tmp_pa
     """
     url = scratch_db_migrated
     source = MIGRATION_035.read_text(encoding="utf-8")
-    start = source.index("INSERT INTO m035_seed")
+    # Manifest INSERT'i ADIYLA bulunur, sabit metinle değil: fix turu 4'te
+    # kullanım yerleri `pg_temp.` ile nitelenince eski sabit metin eşleşmeyi
+    # bıraktı ve bu test `ValueError` ile düştü — testin kendi kırılganlığıydı,
+    # kapının değil. `MANIFEST_TABLE` tek gerçek kaynağıdır.
+    needle = f"INSERT INTO {MANIFEST_TABLE} ("
+    assert needle in source, f"manifest INSERT'i bulunamadı ({needle!r})"
+    start = source.index(needle)
     end = source.index(";", start) + 1
     decoy = tmp_path / "035_bos_manifest.sql"
     decoy.write_text(source[:start] + source[end:], encoding="utf-8")
