@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-08-31
+last-touched: 2026-09-02
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -129,7 +129,9 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
   ölçümle gerçekleşti (Task 3'ün düzeltme turu 3'ü checkpoint 2 tarafından kapsandı), yani
   bu bir tahmin değil, işlediği görülmüş bir yol.
 - **Sıradaki: Task 5** (migration 035 — takvim dönem desteği + üç takvim kalemi).
-  **Task 5 Eray kararı bekliyor — dispatch'ten ÖNCE sorulur** (aşağıda).
+  **Step 1b'nin operatör kararı ALINDI (2026-09-02)** — beş seed değeri Decisions Log'da
+  sabit; dispatch'i bloklayan karar KALMADI. Task 5 artık doğrudan dispatch edilebilir ve
+  brief'e o tablo harfiyen kopyalanır (uygulayıcı değer icat ETMEZ).
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
@@ -200,6 +202,45 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   zamanı kuralını uygulayamaz, yalnız anlatır — devamı Türkçe kod yazmak olurdu. Çıkış
   koşulu olarak mekanik öz-denetim koşuldu (50 hüküm→görev çifti, 0 eksik).
 
+- **2026-09-02 — Task 5 Step 1b: takvim seed değerleri KAPANDI (Eray kararı).** Plan bu beş
+  değeri uydurmayı YASAKLIYOR; operatöre soruldu ve karara bağlandı. Migration üç satırı
+  **sabit** yazar:
+
+  | tarih | `name_tr` | `name_en` | `category` | `end_date` |
+  |---|---|---|---|---|
+  | 2026-11-10 | 10 Kasım Atatürk'ü Anma Günü | Atatürk Memorial Day | `national` | — |
+  | 2026-11-24 | 24 Kasım Öğretmenler Günü | Teachers' Day | `commercial` | — |
+  | 2026-08-15 | Okula Dönüş | Back to School | `commercial` | 2026-09-15 |
+
+  **Yıl = 2026 (mekanik):** tabloda tek yıl bu (ölçüldü: 22 satırın 22'si 2026); yıllık n8n
+  işi her 1 Ocak yalnız içinde bulunduğu yılı yazar, yani 2027 kendi turunda doğar.
+  **10 Kasım → `national` (emsal ölçüldü):** "Çanakkale Şehitlerini Anma Günü" de `national`;
+  ton talimatı (vatan/gurur + uydurma alıntı yasağı) birebir uyuyor.
+  **Öğretmenler Günü → `commercial` (Eray kararı):** hediye/teşekkür günü olarak Anneler ve
+  Babalar Günü kovasına konur; milli ton ("vatan/gurur/birlik") bu güne oturmuyor.
+  **Okula Dönüş → `commercial`:** kalan iki kova (milli, dini) hiç uymuyor.
+  **Anahtar çakışması YOK (ölçüldü):** `10-kasim-ataturk-u-anma-gunu` · `24-kasim-ogretmenler-gunu`
+  · `okula-donus` — üçü de mevcut 22 satırın hiçbiriyle çakışmıyor.
+  **Yanlış bir çerçeve düzeltildi:** kategorinin satış diliyle ilgisi YOK. Üretimdeki
+  "satış formülü uygulanmaz" hükmü **özel gün akışının kendisine** ait ve her kategoride
+  basılıyor (ölçüldü: `prompt_builder` özel gün bloğunun kapanış cümlesi + üç özel gün
+  şablonunun ortak metni). Üç kova yalnız **ton**u ayırır. Satışın meşru yolu `cta_url` +
+  `cta_label`. Bu yüzden "dördüncü kategori açalım mı" seçeneği konusuz kaldı.
+
+- **2026-09-02 — Okula dönüş satırının 2026'da seçilemez olması KABUL EDİLDİ (Eray kararı).**
+  Ölçüldü: içerik oluşturma ekranı her özel gün satırı için `isPast = başlangıç < bugün`
+  testi yapar ve geçmiş satırı `disabled` basar. Bugün 2 Eylül olduğu için 15 Ağustos
+  başlangıçlı satır oluştuğu anda bu yıl tıklanamaz.
+  **Kontrolörün ilk çerçevesi FAZLA GENİŞTİ ve daraltıldı:** "her yıl dönemin ortasında
+  kapanır, 2027'de düzelmez" dedim; ekranın modeli **planlama** olduğu için (içerik gün
+  gelmeden hazırlanır — tek günlük bayramlarda da aynı) davranış tutarlıdır ve satır yılın
+  büyük kısmında seçilebilir. Kalıcı kusur DEĞİL.
+  **Karar:** önyüze DOKUNULMAZ, Task 5'in dosya kapsamı genişletilmez; 2026 için satır ölü
+  kalır, 2027'den itibaren aynı dönemle (15 Ağustos – 15 Eylül) normal koşar.
+  **Yeniden açılma koşulu:** operatörün SÜREN bir dönem içinde içerik üretmesi gerekirse —
+  o zaman "geçti mi" testinin bitiş tarihini okuması gerekir.
+  **Dürüst etiket:** dönem kolonunun bugün önyüzde tüketicisi YOK; bu bilinçli, gizlenmiyor.
+
 # Open Problems
 
 - **Task 1'in üç Minor bulgusu Task 2'de KAPANDI** (`1186d44`): depo-yok kapısı artık kendi
@@ -218,9 +259,9 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
 - **Ortam gerçeği (ölçüldü, plandan farklı):** planın yazdığı `python -m pytest` bu makinede
   çalışmaz — `python` PATH'te yok. Her test komutu
   `cd apps/social/backend && source .venv/bin/activate && python -m pytest …` biçiminde koşar.
-- **Task 5 ve Task 19 Eray kararı bekliyor** (o görevlere gelindiğinde sorulacak, şimdi değil):
-  takvim satırlarının yılı · kategorisi · kanonik adı · "okula dönüş" tarihleri; ve dört
-  operatör kararı.
+- **Task 5'in operatör kararı KAPANDI (2026-09-02)** — beş seed değeri Decisions Log'da
+  tablo hâlinde sabit. **Task 19'un dört operatör kararı hâlâ açık** (o göreve gelindiğinde
+  sorulur, şimdi değil).
 - **30 teknik kalem BAĞLANDI** (plan yazımında); kapanış görevi (Task 20) 30 teknik + 13 ürün
   kararını tek tek sweep eder.
 - **§8.7'nin sözleşme düzeltmeleri KAPANDI** (Task 2, dış depo `6d2a033`+`d901eb4`): altı kalem
