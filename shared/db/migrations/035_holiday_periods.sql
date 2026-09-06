@@ -88,7 +88,8 @@
 -- koşmak geri almayı `relation already exists` ile düşürüyordu. İki bağımsız
 -- özellik birden kapatır: kaynak PAYLAŞILMAZ (ayrı adlar) ve kurulum
 -- ÖMÜRDEN BAĞIMSIZ İDEMPOTENTTİR (aşağıdaki tür-farkında kapı). Kanıt:
--- `tests/test_migration_035.py::test_manifest_squatter_matrix`.
+-- `tests/test_migration_035.py::test_manifest_squatter_matrix` (136 hücre:
+-- 2 dosya × 4 çağrı biçimi × 17 adı-tutan-nesne; ölçüldü, çarpılmadı).
 -- `to_regclass` KULLANILIR, `DROP TABLE IF EXISTS pg_temp.…` DEĞİL: ölçüldü,
 -- ikincisi henüz temp şeması olmayan taze bir oturumda her koşumda
 -- `NOTICE: schema "pg_temp" does not exist, skipping` basar ve aşağıdaki
@@ -154,6 +155,21 @@ $prepare_manifest$;
 -- "önceden var olan satırlara dokunmaz" hükmünün doğrudan ihlali.
 -- Sabit `id` bu belirsizliği kaldırır: satır bu id'yi taşıyorsa onu bu
 -- migration'ın `INSERT`i yaratmıştır, taşımıyorsa yaratmamıştır.
+--
+-- BU DÜZELTMENİN KENDİ YAN ETKİSİ, ÖLÇÜLDÜ. Sabit `id` yeni bir çakışma yüzeyi
+-- açar: bir seed satırının TARİHİ elle değiştirilirse (id sabit kalarak),
+-- ikinci koşumun `INSERT`i o id'yi yeni bir `(year, date)` için yazmaya çalışır
+-- ve `ON CONFLICT (year, date)` arbiter'ı bir BİRİNCİL ANAHTAR çakışmasını
+-- yakalamaz. Ölçüldü (035 uygulanmış scratch veritabanı, seed satırının tarihi
+-- 2026-11-11'e kaydırıldı, sonra `--single-transaction` ile ikinci koşum):
+--   * bu dosya (arbiter `(year, date)`) → `rc=3`,
+--     `ERROR: duplicate key value violates unique constraint
+--     "public_holidays_pkey"`, hiçbir şey uygulanmadı.
+--   * arbiter'sız (`ON CONFLICT DO NOTHING`) alternatif → yine `rc=3`, bu kez
+--     `migration 035 garanti dogrulamasi BASARISIZ` (anahtar gerçekten YOK).
+-- Yani senaryo İKİ biçimde de FAIL-CLOSED ve GÜRÜLTÜLÜdür; fark yalnız mesajın
+-- okunaklığıdır. Arbiter DEĞİŞTİRİLMEDİ, çünkü `ON CONFLICT (year, date)`
+-- sözleşmesi plan ve testlerde adıyla yazılıdır ve ölçülen davranış farkı yok.
 CREATE TEMP TABLE m035_seed_up (
     id       UUID    NOT NULL,
     year     INTEGER NOT NULL,

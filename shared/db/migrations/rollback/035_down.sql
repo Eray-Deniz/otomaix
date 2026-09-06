@@ -32,8 +32,9 @@
 -- Bu yüzden `ON COMMIT DROP` de KALDIRILDI: manifestin ömrü artık hiçbir
 -- şeyin doğruluk koşulu değil, iki dosya da aynı kuralla çalışıyor.
 -- Kanıt elle seçilmiş örnek değil, üretilmiş çapraz çarpım:
--- `tests/test_migration_035.py::test_manifest_squatter_matrix` (dosya × çağrı
--- biçimi × adı tutan nesne) ve `::test_manifest_lifetime_matrix` (24 hücre).
+-- `tests/test_migration_035.py::test_manifest_squatter_matrix` (136 hücre:
+-- 2 dosya × 4 çağrı biçimi × 17 adı-tutan-nesne) ve
+-- `::test_manifest_lifetime_matrix` (24 hücre: 4 × 6 × 1). İki sayı da ölçüldü.
 --
 -- SAHİPLİK SINIRI (planın geri-alma hükmü) — KÖKENDEN, ŞEKİLDEN DEĞİL:
 --
