@@ -108,6 +108,54 @@ async def _sub_sector(db) -> uuid.UUID:
 # kolon imzasında denetleniyor; bu satırları dışlamak kapsam kaybetmeden sürüm
 # bağımlılığını kaldırır (bu depo PG16 ↔ PG18 farkını kabul edilmiş risk olarak taşıyor).
 
+# ─── R12(a2): 032 MANİFESTİ SÜRÜM-FARKINDADIR — sahibi Task 6'dır ──────────
+#
+# 036 aynı tabloya K-09 için ÜÇÜNCÜ bir indeks (ve onu doğuran UNIQUE kısıtı)
+# ekler. SQL doğrulayıcısını sürüm-farkında yapmak bu PYTHON manifestini
+# DÜZELTMEZ — ayrı iki artefakttır ve bu test kümeleri KAPALI karşılaştırır.
+#
+# Muafiyet TEK ADA ve TEK TANIMA yazılır:
+#   (a) manifest İKİ indeks · İKİ kısıt ile KALIR — 032 tek başına
+#       uygulandığında beklenen küme budur ve değişmez;
+#   (b) 036 uygulanmışsa aşağıdaki ADI GEÇEN kısıt/indeks EK OLARAK kabul edilir;
+#   (c) başka HERHANGİ bir fazla nesne hâlâ REDDEDİLİR — "036 sonrası her şey
+#       serbest" DEĞİL;
+#   (d) diğer üç yüzey (`columns` · `triggers` · `relation`) hiç gevşemez.
+#
+# `constraints` yüzeyi de muafiyet taşır ÇÜNKÜ K-09 sözleşmesi bir KISITTIR
+# (`CONSTRAINT sector_research_artifacts_run_source_kind_key UNIQUE (...)`) ve
+# PostgreSQL aynı adla HEM kısıt HEM indeks üretir. Arayüz eki yalnız indeks
+# yüzeyini saymıştı; ölçüldü ki kısıt yüzeyi de kaçınılmaz olarak genişliyor.
+# Kapalılık vaadi zayıflamaz: muafiyet iki yüzeyde de TEK ada + TAM TANIMA
+# bağlıdır.
+K09_CONSTRAINT_NAME = "sector_research_artifacts_run_source_kind_key"
+
+POST_036_ARTIFACT_EXEMPTIONS = {
+    "sector_research_artifacts": {
+        "constraints": {K09_CONSTRAINT_NAME: "UNIQUE (run_id, source, kind)"},
+        "indexes": {
+            K09_CONSTRAINT_NAME: (
+                "CREATE UNIQUE INDEX sector_research_artifacts_run_source_kind_key ON "
+                "social.sector_research_artifacts USING btree (run_id, source, kind)"
+            )
+        },
+    }
+}
+
+
+def _accepted_facet_sets(table: str, facet: str) -> list[dict]:
+    """Bir yüzey için KABUL EDİLEN kümeler: 036 öncesi ve (varsa) 036 sonrası.
+
+    Karşılaştırma EXACT-MATCH POZİTİF SÖZLEŞMEdir, "şunu içeriyor mu" değil:
+    listede olmayan her sapma — eksik de fazla da — bulgudur.
+    """
+    base = EXPECTED_032_MANIFEST[table][facet]
+    exemption = POST_036_ARTIFACT_EXEMPTIONS.get(table, {}).get(facet)
+    if not exemption:
+        return [base]
+    return [base, {**base, **exemption}]
+
+
 EXPECTED_032_MANIFEST = {
     "sector_research_artifacts": {
         # 034'ün tablo-imzası standardı (aynı beş alan).
@@ -364,7 +412,8 @@ async def test_migration_032_relation_manifest_is_closed(db, table):
         f"güvenliği): {observed['relation']} != {expected['relation']}"
     )
     for facet in ("columns", "constraints", "indexes", "triggers"):
-        assert observed[facet] == expected[facet], (
+        accepted = _accepted_facet_sets(table, facet)
+        assert observed[facet] in accepted, (
             f"social.{table} '{facet}' manifestten SAPTI\n"
             f"yalnız gözlenende: {sorted(set(observed[facet]) - set(expected[facet]))}\n"
             f"yalnız beklenende: {sorted(set(expected[facet]) - set(observed[facet]))}\n"
@@ -1122,3 +1171,55 @@ def test_the_edge_gate_fails_closed_on_an_unresolvable_relative_import(tmp_path)
     dosya.write_text("from ... import sector_packages\n", encoding="utf-8")
     with pytest.raises(AssertionError):
         _kenarlar(dosya)
+
+
+# ─── R12(a2) kanıt testleri (sahibi Task 6) ────────────────────────────────
+
+
+def test_032_manifest_alone_expects_exactly_two_artifact_indexes():
+    """(a) Manifestin KENDİSİ gevşemedi: 032 tek başına İKİ indeks · İKİ kısıt.
+
+    036 sonrası kabul, manifesti DEĞİŞTİREREK değil, adı geçen tek nesneyi EK
+    OLARAK kabul ederek sağlanır — 032'nin kendi sözleşmesi olduğu yerde durur.
+    """
+    artifacts = EXPECTED_032_MANIFEST["sector_research_artifacts"]
+    assert len(artifacts["indexes"]) == 2, sorted(artifacts["indexes"])
+    assert len(artifacts["constraints"]) == 2, sorted(artifacts["constraints"])
+    assert K09_CONSTRAINT_NAME not in artifacts["indexes"]
+    assert K09_CONSTRAINT_NAME not in artifacts["constraints"]
+
+
+async def test_032_manifest_accepts_named_k09_index_after_036(db):
+    """(b) 036 uygulanmış şemada ADI GEÇEN K-09 nesnesi EK OLARAK kabul edilir."""
+    observed = await _relation_manifest(db, "sector_research_artifacts")
+    for facet in ("constraints", "indexes"):
+        assert K09_CONSTRAINT_NAME in observed[facet], (
+            f"K-09 {facet} yüzeyinde yok — 036 uygulanmamış?"
+        )
+        assert observed[facet] in _accepted_facet_sets(
+            "sector_research_artifacts", facet
+        ), f"036 sonrası {facet} kümesi kabul edilmedi: {sorted(observed[facet])}"
+
+
+@pytest.mark.parametrize("facet", ["constraints", "indexes"])
+async def test_032_manifest_still_rejects_unnamed_extra_index(db, facet):
+    """(c) Adı geçmeyen fazladan nesne hâlâ REDDEDİLİR — muafiyet TEK ADADIR.
+
+    Ölçüm gerçek şemada yapılır: fazladan bir benzersiz indeks kurulur (test
+    kendi transaction'ında koşar, geri alınır) ve kapalı karşılaştırmanın onu
+    KABUL ETMEDİĞİ ölçülür.
+    """
+    await db.execute(
+        "CREATE UNIQUE INDEX artifacts_sinsi_unique "
+        "ON social.sector_research_artifacts (run_id, kind)"
+    )
+    observed = await _relation_manifest(db, "sector_research_artifacts")
+    assert "artifacts_sinsi_unique" in observed["indexes"], "kurulum tutmadı"
+    assert observed["indexes"] not in _accepted_facet_sets(
+        "sector_research_artifacts", "indexes"
+    ), "adı geçmeyen fazladan indeks KABUL edildi"
+
+    # Ve adı DOĞRU olsa bile TANIMI farklıysa reddedilir.
+    sahte = dict(EXPECTED_032_MANIFEST["sector_research_artifacts"][facet])
+    sahte[K09_CONSTRAINT_NAME] = "UYDURMA TANIM"
+    assert sahte not in _accepted_facet_sets("sector_research_artifacts", facet)

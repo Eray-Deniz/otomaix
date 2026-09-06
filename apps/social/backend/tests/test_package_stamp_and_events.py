@@ -28,6 +28,7 @@ import pytest
 from app.core.database import _init_connection
 from app.services.sector_packages import resolve_package_context
 from app.services.package_events import (
+    APPROVAL_EVENTS,
     BRAND_SCOPED_EVENTS,
     EVENT_TYPES,
     LIFECYCLE_EVENTS,
@@ -116,10 +117,21 @@ async def pkg_db(db):
 
 
 async def test_event_types_are_a_closed_set():
-    """Olay kümesi kapalı ve iki kapsam sınıfı ÖRTÜŞMEZ."""
-    assert EVENT_TYPES == BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS
+    """Olay kümesi kapalı ve ÜÇ kapsam sınıfı ÖRTÜŞMEZ.
+
+    K-99 (migration 036) `approval`/`rejection` türlerini ekledi. Bunlar
+    `LIFECYCLE_EVENTS`e KATILMADI: yaşam döngüsü olayları paketin DURUM
+    GEÇİŞLERİDİR (sürüm alanları F22 ile o türlere özgü doğrulanır), onay/ret
+    ise bir koşunun kapı kararıdır ve sürüm değiştirmez. Kapsam gereksinimi
+    (sector_id + package_id + actor) aynıdır; ayrım anlamsaldır ve
+    `_validate_version_shape`in tür-özgü dallarını kirletmez.
+    """
+    assert EVENT_TYPES == BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
     assert not (BRAND_SCOPED_EVENTS & LIFECYCLE_EVENTS)
+    assert not (BRAND_SCOPED_EVENTS & APPROVAL_EVENTS)
+    assert not (LIFECYCLE_EVENTS & APPROVAL_EVENTS)
     assert LIFECYCLE_EVENTS == {"activation", "rollback", "deactivation"}
+    assert APPROVAL_EVENTS == {"approval", "rejection"}
 
 
 async def test_unknown_event_type_rejected(pkg_db):
