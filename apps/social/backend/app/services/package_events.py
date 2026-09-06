@@ -45,7 +45,20 @@ BRAND_SCOPED_EVENTS = frozenset({
 # atamasından ÖNCE meşru olduğu için `brand_id` burada opsiyoneldir.
 LIFECYCLE_EVENTS = frozenset({"activation", "rollback", "deactivation"})
 
-EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS
+# ONAY kapsamı (K-99, migration 036). `LIFECYCLE_EVENTS`e KATILMADI ve bu
+# bilinçlidir: yaşam döngüsü olayları paketin DURUM GEÇİŞLERİDİR ve sürüm
+# alanları onlara ÖZGÜ doğrulanır (F22 — `_validate_version_shape`). Onay/ret
+# bir koşunun kapı kararıdır, sürüm değiştirmez; `LIFECYCLE_EVENTS`e eklemek
+# ya o kümenin "üçü de sürüm taşır" sözleşmesini bozardı ya da tür-özgü
+# dalların hiçbirine uymayan iki sessiz üye bırakırdı.
+#
+# KAPSAM GEREKSİNİMİ AYNIDIR (sector_id + package_id + actor): aşağıdaki kapı
+# marka-kapsamlı OLMAYAN her türe onu uygular. Kim onayladı ve HANGİ paketi
+# onayladı sorularının cevabı olmayan bir onay kaydı, modülün başında
+# reddedilen "yarım denetim izi"nin ta kendisidir.
+APPROVAL_EVENTS = frozenset({"approval", "rejection"})
+
+EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 
 # K-56: bu üç olay HER OLUŞTA bir yönetici bildirimi (outbox satırı) üretir —
 # eşik/oran YOKTUR (olay-bazlı, spec §14.4). Damga olayları (`stamp_*`) bu
