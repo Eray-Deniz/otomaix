@@ -50,6 +50,12 @@
 --     CHECK (`(onay_actor IS NULL) = (onaylandi_at IS NULL)`) ölçüldü ki
 --     `onay_actor = ''` değerini KABUL EDER; `onay_kapsam_sha` onayı onayladığı
 --     satır KÜMESİNE bağlar.
+--   * **AYAK (d) — ONAYLANMIŞ plan satırının kimlik/hedef alanları
+--     DEĞİŞMEZDİR.** Tetikleyici, `onay_actor` DOLUYKEN `incident_id` ·
+--     `package_id` · `observed_active_version` · `target_version` ·
+--     `evidence_class` değişimini reddeder. AŞIRI KİLİTLEME YOKTUR: `durum` ·
+--     `reason` · `onay_*` · `kanit_jetonu_*` onaydan sonra da güncellenir
+--     (yeniden mühürleme dahil).
 --   * **R8(c) — jeton dörtlüsü İKİ tabloda da AYNI.** Jetonun TÜRÜ kolonda
 --     taşınmaz, türünü taşıdığı TABLO belirler; ikinci bir enum AÇILMAZ.
 --   * **K-45 üretici ZORUNLU.** Geçmiş tablosunu hiçbir şey yazmıyorsa Task 16
@@ -438,6 +444,60 @@ BEGIN
             FOR EACH ROW EXECUTE FUNCTION social.reject_approval_snapshot_mutation()
     $ddl$;
 
+    -- ── 4b. AYAK (d) — ONAYLANMIŞ geri alma planı satırı DEĞİŞMEZ ───────────
+    -- Onay, onayladığı satır KÜMESİNE mühürlenir (`onay_kapsam_sha`). Mühür
+    -- basıldıktan sonra satırın kimlik/hedef alanları değişirse "yönetici bunu
+    -- onayladı" iddiası sessizce BAŞKA bir işe taşınırdı — R11'in yasakladığı
+    -- uydurulmuş boolean'ın veri katmanından gelen hâli. Servis yolu üyeliği
+    -- zaten kapatıyor (`amend_rollback_plan` penceresi); bu tetikleyici servis
+    -- DIŞI yazımın (elle SQL, gelecekteki ikinci çağıran) son savunmasıdır.
+    --
+    -- AŞIRI KİLİTLEME YOK (ekin bağlayıcı sınırı): `durum` · `reason` ·
+    -- `onay_*` · `kanit_jetonu_*` onaydan SONRA da güncellenebilir — yürütücü
+    -- onları yazar. Üyelik değiştiğinde YENİDEN MÜHÜRLEME (`onay_actor` ·
+    -- `onaylandi_at` · `onay_kapsam_sha` üçünün YENİDEN yazılması) MEŞRUDUR ve
+    -- burası onu engellemez; engelleseydi kapsamı değişen bir olay bir daha
+    -- asla onaylanamaz, acil geri alma kolu ölürdü. Kilitlenen yalnız NEYİN
+    -- onaylandığını tanımlayan alanlardır — kümesi aşağıdaki koşulda YAZILIDIR
+    -- ve bağlayıcı ekten türetilen kapıyla karşılaştırılır (sayı burada
+    -- tekrarlanmaz: tekrarlanan sayı bayatlar).
+    --
+    -- `IS DISTINCT FROM` ZORUNLUDUR, `<>` DEĞİL: `target_version` `hedefsiz`
+    -- durumda NULL'dır ve `<>` NULL karşılaştırmasını yakalamazdı — hedefi
+    -- NULL'a çekmek de bir DEĞİŞTİRMEdir.
+    EXECUTE $ddl$
+        CREATE OR REPLACE FUNCTION social.reject_approved_rollback_plan_mutation()
+        RETURNS trigger AS $reject_rollback_plan$
+        BEGIN
+            IF OLD.onay_actor IS NOT NULL AND (
+                   NEW.incident_id             IS DISTINCT FROM OLD.incident_id
+                OR NEW.package_id              IS DISTINCT FROM OLD.package_id
+                OR NEW.observed_active_version IS DISTINCT FROM OLD.observed_active_version
+                OR NEW.target_version          IS DISTINCT FROM OLD.target_version
+                OR NEW.evidence_class          IS DISTINCT FROM OLD.evidence_class
+            ) THEN
+                RAISE EXCEPTION
+                    'onaylanmış geri alma planı satırının kimlik/hedef alanları değiştirilemez'
+                    USING ERRCODE = 'integrity_constraint_violation',
+                          HINT = 'durum / reason / onay_* / kanit_jetonu_* '
+                                 'guncellenebilir (yeniden muhurleme dahil); '
+                                 'onayin TANIMLADIGI kimlik/hedef alanlari '
+                                 'hayir. Hedef degisecekse once yeni bir plan '
+                                 'satiri yazin.';
+            END IF;
+            RETURN NEW;
+        END
+        $reject_rollback_plan$ LANGUAGE plpgsql
+    $ddl$;
+
+    EXECUTE 'DROP TRIGGER IF EXISTS package_rollback_plans_approved_immutable '
+            'ON social.package_rollback_plans';
+    EXECUTE $ddl$
+        CREATE TRIGGER package_rollback_plans_approved_immutable
+            BEFORE UPDATE ON social.package_rollback_plans
+            FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()
+    $ddl$;
+
     -- ── 5. K-09 — artefakt benzersizliği ────────────────────────────────────
     -- Ad SÖZLEŞMEYLE SABİTTİR (katalogdan tahmin edilmez): 032 manifestinin
     -- muafiyeti tam da bu ada yazılıdır.
@@ -529,7 +589,7 @@ BEGIN
             ('package_rollback_plans indeks kümesi (kapalı)',
              'CREATE UNIQUE INDEX package_rollback_plans_incident_id_package_id_key ON social.package_rollback_plans USING btree (incident_id, package_id)|t|live'),
             ('package_rollback_plans tetikleyici kümesi (kapalı)',
-             '<yok>'),
+             'package_rollback_plans_approved_immutable|enabled'),
 
             ('brand_sub_sector_history tablo imzası',
              'relkind=r relpersistence=p partition=f rls=f force_rls=f'),

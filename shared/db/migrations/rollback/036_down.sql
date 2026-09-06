@@ -33,7 +33,8 @@
 --   Bu yüzden başta ATOMİK bir ön kontrol koşar: Plan 2 verisi VARSA `rc≠0` ile
 --   DURur ve hiçbir şeye dokunmaz. Kilit ÖNCE, sayım SONRA — sayımdan sonra
 --   araya giren bir yazar OLAMAZ (032'nin ölçülmüş dersi). Kilit sırası
---   SABİTTİR, iki koşum birbirini kilitlemez.
+--   SABİTTİR (iki koşum birbirini kilitlemez) ve ÜRETİCİ bağımlılık yönünü
+--   izler, ad sırasını değil — gerekçe §0'da, kapı testtedir.
 --
 --   Pilot sonrası geri dönüş ŞEMA GERİ ALMASI DEĞİL, veri-koruyan İLERİ
 --   DÜZELTME migration'ıdır; runbook (Task 18) ikisini ayrı başlıkta yazar.
@@ -44,7 +45,7 @@
 --      olmayan tabloya INSERT denerdi. Sebep KOLON BAĞIMLILIĞI DEĞİLDİR:
 --      ölçüldü ki 036'nın tetikleyicisi kolon listesi taşımadığı için
 --      `brands.sub_sector_id` üstünde katalog bağımlılığı KURMAZ.)
---   2. koşu tetikleyicisi + üç tablo
+--   2. koşu + geri alma planı tetikleyicileri, sonra üç tablo
 --   3. K-09 kısıtı  →  4. `package_events` CHECK'i daraltılır
 --   5. fonksiyonlar  →  6. kalıntı doğrulaması
 --
@@ -132,10 +133,27 @@ BEGIN
                          'ikinci kez kosturulmaz.';
     END IF;
 
-    -- Kilit ÖNCE, sayım SONRA. Sıra SABİT (ad sırası), kilitler transaction
-    -- sonuna kadar tutulur — yani yıkım boyunca.
-    EXECUTE 'LOCK TABLE social.brand_sub_sector_history IN ACCESS EXCLUSIVE MODE';
+    -- Kilit ÖNCE, sayım SONRA. Kilitler transaction sonuna kadar tutulur —
+    -- yani yıkım boyunca.
+    --
+    -- SIRA ÜRETİCİ BAĞIMLILIK YÖNÜNDEDİR, AD SIRASINDA DEĞİL (Codex
+    -- checkpoint, F3). Ad sırası `brand_sub_sector_history`yi ÖNCE, `brands`ı
+    -- SONRA kilitliyordu; oysa normal yazım yolu TERS yöndedir: `brands`
+    -- güncellenir, `brands_sub_sector_history` tetikleyicisi AYNI işlemde
+    -- geçmiş tablosuna yazar (036, `track_brand_sub_sector_history`). İki
+    -- işlem kilitleri zıt yönlerde alırsa deadlock penceresi açılır;
+    -- PostgreSQL birini abort eder — tutarlılık için güvenli, ama ACİL geri
+    -- almanın koşabilirliği belirsizleşir ve operatör "neden düştü"yü geri
+    -- alma script'inde arar.
+    --
+    -- Sıra hâlâ SABİTTİR (iki geri alma koşumu birbirini kilitlemez): önce
+    -- üretici tablolar bağımlılık yönünde, sonra kalanlar ad sırasında. Kalan
+    -- tablolar arasında tetikleyici-yazım kenarı YOKTUR (ölçüldü: 036'da
+    -- yalnız `brands` tetikleyicisi başka bir tabloya yazıyor; kapı
+    -- `test_down_lock_order_follows_the_producer_direction`, kenarlar ve sıra
+    -- dosyalardan TÜRETİLİR).
     EXECUTE 'LOCK TABLE social.brands IN ACCESS EXCLUSIVE MODE';
+    EXECUTE 'LOCK TABLE social.brand_sub_sector_history IN ACCESS EXCLUSIVE MODE';
     EXECUTE 'LOCK TABLE social.package_events IN ACCESS EXCLUSIVE MODE';
     EXECUTE 'LOCK TABLE social.package_rollback_plans IN ACCESS EXCLUSIVE MODE';
     EXECUTE 'LOCK TABLE social.sector_package_runs IN ACCESS EXCLUSIVE MODE';
@@ -211,6 +229,8 @@ $preflight$;
 DROP TRIGGER IF EXISTS brands_sub_sector_history ON social.brands;
 DROP TRIGGER IF EXISTS sector_package_runs_approval_snapshot_immutable
     ON social.sector_package_runs;
+DROP TRIGGER IF EXISTS package_rollback_plans_approved_immutable
+    ON social.package_rollback_plans;
 
 DROP TABLE IF EXISTS social.brand_sub_sector_history;
 DROP TABLE IF EXISTS social.package_rollback_plans;
@@ -258,6 +278,7 @@ $narrow_events$;
 
 DROP FUNCTION IF EXISTS social.track_brand_sub_sector_history();
 DROP FUNCTION IF EXISTS social.reject_approval_snapshot_mutation();
+DROP FUNCTION IF EXISTS social.reject_approved_rollback_plan_mutation();
 
 -- ---------------------------------------------------------------------------
 -- 4. Kalıntı doğrulaması — fail-closed
@@ -291,13 +312,15 @@ BEGIN
           FROM pg_trigger
          WHERE NOT tgisinternal
            AND tgname IN ('brands_sub_sector_history',
-                          'sector_package_runs_approval_snapshot_immutable')
+                          'sector_package_runs_approval_snapshot_immutable',
+                          'package_rollback_plans_approved_immutable')
         UNION ALL
         SELECT 'fonksiyon social.' || p.proname
           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
          WHERE n.nspname = 'social'
            AND p.proname IN ('track_brand_sub_sector_history',
-                             'reject_approval_snapshot_mutation')
+                             'reject_approval_snapshot_mutation',
+                             'reject_approved_rollback_plan_mutation')
         UNION ALL
         SELECT 'kisit ' || conname
           FROM pg_constraint

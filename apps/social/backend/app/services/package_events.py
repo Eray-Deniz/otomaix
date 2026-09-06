@@ -255,6 +255,51 @@ def _require(condition: bool, message: str) -> None:
         raise PackageEventContractError(message)
 
 
+def require_actor(actor: Any) -> str:
+    """KANONİK kimlik kapısı — kırpılmış kimliği döner, boş/`str` olmayanı REDDEDER.
+
+    TANIM BURADADIR ama SAHİBİ yaşam döngüsüdür: `sector_package_lifecycle`
+    onu `_require_actor` adıyla alır ve Plan 2 `runs.py` (bağlayıcı ek, AÇIK-1
+    ayak (b)) oradan `require_actor` olarak çağırır. **İKİ KAPI = İKİ
+    DAVRANIŞ** olduğu için ikinci bir kural YAZILMAZ; ekin kapattığı sınıf tam
+    olarak budur.
+
+    NEDEN BU MODÜL: kural yaşam döngüsü modülünde kalsaydı `log_package_event`
+    onu import etmek zorundaydı; oysa BAĞIMLILIK ZATEN TERS YÖNDE KURULU —
+    `sector_package_lifecycle` bu modülü import ediyor. Ölçüldü: iki yönlü
+    import DÖNGÜdür ve `ImportError` ile düşer. Tanımı yaprak tarafa taşımak
+    yönü DEĞİŞTİRMEZ, tek kopyayı korur.
+
+    `ValueError` fırlatır, `PackageEventContractError` DEĞİL: bu kapı olay
+    kaydına özgü bir sözleşme değil, Plan 1'in yaşam döngüsü kuralıdır ve
+    `activate`/`rollback`/`deactivate` çağıranları onu `ValueError` olarak
+    görür. Olay kaydı dalı hatayı KENDİ sözleşme türüne çevirir (aşağıda).
+    """
+    if not isinstance(actor, str) or not actor.strip():
+        raise ValueError("actor zorunlu — sahipsiz yaşam döngüsü işlemi yazılmaz")
+    return actor.strip()
+
+
+def _require_lifecycle_actor(event_type: str, actor: Any) -> str:
+    """Kanonik kapıyı olay-kaydı sözleşmesine bağlar; kırpılmış kimliği döner.
+
+    ÖLÇÜLEN KUSUR (Codex checkpoint, F2): kapı `_require(bool(actor), ...)` idi.
+    `"   "` truthy olduğu için GEÇİYOR ve değer KALICI denetim satırına olduğu
+    gibi yazılıyordu — `social.package_events.actor` `TEXT`tir, `NOT NULL` da
+    `CHECK` de yoktur (033_package_events.sql), yani tek kapı buydu. `str`
+    OLMAYAN bir kimlik (`123`) de truthy'dir: eski kapıyı geçiyor, yazım SQL'de
+    düşüyor ve aşağıdaki `except` onu ALTYAPI hatası sayıp YUTUYORdu — olay
+    sessizce kayboluyordu. Kusur bu partiden ÖNCE de vardı; bu parti onu
+    kimliğin en çok önemli olduğu yüzeye (`approval`/`rejection`) genişletti.
+    """
+    try:
+        return require_actor(actor)
+    except ValueError as exc:
+        raise PackageEventContractError(
+            f"{event_type}: yaşam döngüsü olayı actor ister — {exc}"
+        ) from exc
+
+
 def _validate_detail(detail: Any) -> None:
     if detail is None:
         return
@@ -435,7 +480,10 @@ async def log_package_event(
     else:
         _require(sector_id is not None, f"{event_type}: yaşam döngüsü olayı sector_id ister")
         _require(package_id is not None, f"{event_type}: yaşam döngüsü olayı package_id ister")
-        _require(bool(actor), f"{event_type}: yaşam döngüsü olayı actor ister")
+        # YAZILAN DEĞER NORMALİZE EDİLMİŞ OLANDIR: kapı yalnız reddetseydi
+        # `" yonetici@otomaix "` kabul edilir ve denetim izinde aynı kimlik iki
+        # farklı görünen değerle dururdu.
+        actor = _require_lifecycle_actor(event_type, actor)
         assert sector_id is not None and package_id is not None  # yukarıdaki kapılar
 
     # SÜRÜM ŞEKLİ KAPSAM SINIFINDAN BAĞIMSIZDIR (fix turu 2, N2). Çağrı eskiden

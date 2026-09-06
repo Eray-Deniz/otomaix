@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from app.services.package_events import log_package_event
+from app.services.package_events import log_package_event, require_actor as _require_actor
 from app.services.sector_packages import (
     normalize_special_day_key,
     validate_package_content,
@@ -162,10 +162,13 @@ def _require_evidence(evidence: Any, expected: type) -> None:
         )
 
 
-def _require_actor(actor: Any) -> str:
-    if not isinstance(actor, str) or not actor.strip():
-        raise ValueError("actor zorunlu — sahipsiz yaşam döngüsü işlemi yazılmaz")
-    return actor.strip()
+# `_require_actor` TANIMI BURADA DEĞİL, `package_events.require_actor`tadır —
+# davranışı DEĞİŞMEDİ (aynı `ValueError`, aynı mesaj, aynı kırpılmış dönüş) ve
+# bu modüldeki adı da değişmedi. Taşımanın tek sebebi ÖLÇÜLMÜŞ bir döngüdür:
+# olay kaydı dalı da aynı kapıyı kullanmak zorundaydı (Codex checkpoint, F2),
+# ama bu modül `package_events`i ZATEN import ediyor — ters yönde ikinci bir
+# import `ImportError` ile düşerdi. Kuralın İKİNCİ BİR KOPYASI yazılmadı:
+# iki kapı iki davranış demektir (bağlayıcı ek, AÇIK-1 ayak (b)).
 
 
 async def _set_status(db, package_id: UUID, status: str, *, expected: str) -> None:
