@@ -1501,13 +1501,13 @@ def test_import_time_gate_rejects_a_mistyped_contract_value(tmp_path):
 
 # ─── SAYI İDDİALARI KAPI HÂLİNE GETİRİLİR (fix turu 5) ─────────────────────
 #
-# Bu görev beş turda DÖRT kez aynı kusuru üretti: gönderilen bir artefakta,
+# Bu görev beş turda YEDİ kez aynı kusuru üretti: gönderilen bir artefakta,
 # koşulmamış bir sayı yazmak. Dördü de disiplinle düzeltildi, ama disiplin
 # tekrarlanabilir bir kapı DEĞİLDİR. Aşağıdaki iki test, sayıları ELLE
 # denetlenen prose'dan ÇALIŞTIRILAN sözleşmeye çevirir:
 #
 #   * docstring'lerde yazan `N hücre` iddiası ↔ GERÇEKTEN toplanan parametre
-#     sayısı (16 iddia, tek kapı);
+#     sayısı (11 iddia, tek kapı);
 #   * gerekçe bloğundaki ÖLÇÜM-SATIRI ↔ CANLI modülün sözleşme sayıları.
 #
 # Bundan sonra bir sayı bayatlarsa test düşer; kimsenin fark etmesi gerekmez.
