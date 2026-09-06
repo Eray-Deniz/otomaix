@@ -39,7 +39,7 @@
       "position": [720, 300],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const items = $input.all();\nif (items.length === 0) {\n  return [{ json: { sql: 'SELECT 1', count: 0, year: new Date().getFullYear() } }];\n}\n\nconst escape = (s) => String(s || '').replace(/'/g, \"''\");\n\n// `end_date` ISTEGE BAGLIDIR: tasiyan kalem DONEM, tasimayan kalem tek gundur.\nconst values = items.map(item => {\n  const h = item.json;\n  const endDate = h.end_date ? `'${escape(h.end_date)}'::date` : 'NULL';\n  return `(${h.year}, '${h.date}'::date, '${escape(h.name_tr)}', '${escape(h.name_en)}', '${escape(h.category)}', ${endDate})`;\n}).join(',\\n');\n\n// EZME DAVRANISI AYNEN KORUNUR: takvim beslemesi kanonik kaynaktir, ad/kategori\n// duzeltme hakki onundur. Degisen TEK sey donem alanidir — guncelleme onu\n// SIFIRLAMAZ. COALESCE iki yonu de tasir: donem tasimayan kalem mevcut donemi\n// KORUR, donem tasiyan kalem onu DUZELTIR.\nconst sql = `INSERT INTO social.public_holidays (year, date, name_tr, name_en, category, end_date)\\nVALUES ${values}\\nON CONFLICT (year, date) DO UPDATE SET\\n  name_tr = EXCLUDED.name_tr,\\n  name_en = EXCLUDED.name_en,\\n  category = EXCLUDED.category,\\n  end_date = COALESCE(EXCLUDED.end_date, social.public_holidays.end_date)`;\n\nconst year = items[0].json.year;\nreturn [{ json: { sql, count: items.length, year } }];"
+        "jsCode": "const items = $input.all();\nif (items.length === 0) {\n  return [{ json: { sql: 'SELECT 1', count: 0, year: new Date().getFullYear() } }];\n}\n\nconst escape = (s) => String(s || '').replace(/'/g, \"''\");\n\n// `end_date` ISTEGE BAGLIDIR: tasiyan kalem DONEM, tasimayan kalem tek gundur.\nconst values = items.map(item => {\n  const h = item.json;\n  const endDate = h.end_date ? `'${escape(h.end_date)}'::date` : 'NULL';\n  return `(${Number(h.year)}, '${escape(h.date)}'::date, '${escape(h.name_tr)}', '${escape(h.name_en)}', '${escape(h.category)}', ${endDate})`;\n}).join(',\\n');\n\n// EZME DAVRANISI AYNEN KORUNUR: takvim beslemesi kanonik kaynaktir, ad/kategori\n// duzeltme hakki onundur. Degisen TEK sey donem alanidir — guncelleme onu\n// SIFIRLAMAZ. COALESCE iki yonu de tasir: donem tasimayan kalem mevcut donemi\n// KORUR, donem tasiyan kalem onu DUZELTIR.\nconst sql = `INSERT INTO social.public_holidays (year, date, name_tr, name_en, category, end_date)\\nVALUES ${values}\\nON CONFLICT (year, date) DO UPDATE SET\\n  name_tr = EXCLUDED.name_tr,\\n  name_en = EXCLUDED.name_en,\\n  category = EXCLUDED.category,\\n  end_date = COALESCE(EXCLUDED.end_date, social.public_holidays.end_date)`;\n\nconst year = items[0].json.year;\nreturn [{ json: { sql, count: items.length, year } }];"
       }
     },
     {
@@ -62,15 +62,22 @@
     {
       "id": "node5",
       "name": "Telegram Bildirimi",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
       "position": [1200, 300],
       "parameters": {
-        "method": "POST",
-        "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": \"1634464595\",\n  \"text\": \"✅ {{ $('SQL Oluştur').item.json.year }} yılı Türkiye takvimi güncellendi. {{ $('SQL Oluştur').item.json.count }} özel gün eklendi.\",\n  \"parse_mode\": \"HTML\"\n}"
+        "chatId": "1634464595",
+        "text": "=✅ {{ $('SQL Oluştur').item.json.year }} yılı Türkiye takvimi güncellendi. {{ $('SQL Oluştur').item.json.count }} özel gün eklendi.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "VMbwUuFB8BzVhxEz",
+          "name": "Telegram account"
+        }
       }
     }
   ],

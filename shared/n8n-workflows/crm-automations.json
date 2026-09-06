@@ -48,34 +48,25 @@
       {
         "id": "f1a2b3c4-0001-0001-0001-000000000003",
         "name": "Send Telegram",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
         "position": [
           650,
           300
         ],
         "parameters": {
-          "method": "POST",
-          "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "chat_id",
-                "value": "1634464595"
-              },
-              {
-                "name": "text",
-                "value": "={{ $json.text }}"
-              },
-              {
-                "name": "parse_mode",
-                "value": "HTML"
-              }
-            ]
-          },
-          "options": {}
+          "chatId": "1634464595",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "HTML"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "VMbwUuFB8BzVhxEz",
+            "name": "Telegram account"
+          }
         }
       }
     ],
@@ -156,34 +147,25 @@
       {
         "id": "f2a2b3c4-0002-0002-0002-000000000003",
         "name": "Send Telegram",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
         "position": [
           650,
           300
         ],
         "parameters": {
-          "method": "POST",
-          "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "chat_id",
-                "value": "1634464595"
-              },
-              {
-                "name": "text",
-                "value": "={{ $json.text }}"
-              },
-              {
-                "name": "parse_mode",
-                "value": "HTML"
-              }
-            ]
-          },
-          "options": {}
+          "chatId": "1634464595",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "HTML"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "VMbwUuFB8BzVhxEz",
+            "name": "Telegram account"
+          }
         }
       }
     ],
@@ -303,34 +285,25 @@
       {
         "id": "f3a2b3c4-0003-0003-0003-000000000004",
         "name": "Send Alert",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
         "position": [
           850,
           300
         ],
         "parameters": {
-          "method": "POST",
-          "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "chat_id",
-                "value": "1634464595"
-              },
-              {
-                "name": "text",
-                "value": "={{ $json.text }}"
-              },
-              {
-                "name": "parse_mode",
-                "value": "HTML"
-              }
-            ]
-          },
-          "options": {}
+          "chatId": "1634464595",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "HTML"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "VMbwUuFB8BzVhxEz",
+            "name": "Telegram account"
+          }
         }
       },
       {
@@ -376,34 +349,25 @@
       {
         "id": "f3a2b3c4-0003-0003-0003-000000000007",
         "name": "Send Reminder",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
         "position": [
           1450,
           300
         ],
         "parameters": {
-          "method": "POST",
-          "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "chat_id",
-                "value": "1634464595"
-              },
-              {
-                "name": "text",
-                "value": "={{ $json.text }}"
-              },
-              {
-                "name": "parse_mode",
-                "value": "HTML"
-              }
-            ]
-          },
-          "options": {}
+          "chatId": "1634464595",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "HTML"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "VMbwUuFB8BzVhxEz",
+            "name": "Telegram account"
+          }
         }
       }
     ],
@@ -607,34 +571,25 @@
       {
         "id": "f4a2b3c4-0004-0004-0004-000000000007",
         "name": "Send Churn Alert",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
         "position": [
           1450,
           200
         ],
         "parameters": {
-          "method": "POST",
-          "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "chat_id",
-                "value": "1634464595"
-              },
-              {
-                "name": "text",
-                "value": "={{ $json.text }}"
-              },
-              {
-                "name": "parse_mode",
-                "value": "HTML"
-              }
-            ]
-          },
-          "options": {}
+          "chatId": "1634464595",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "HTML"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "VMbwUuFB8BzVhxEz",
+            "name": "Telegram account"
+          }
         }
       }
     ],
@@ -818,34 +773,25 @@
       {
         "id": "f5a2b3c4-0005-0005-0005-000000000006",
         "name": "Send Trial Alert",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
         "position": [
           1250,
           200
         ],
         "parameters": {
-          "method": "POST",
-          "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "chat_id",
-                "value": "1634464595"
-              },
-              {
-                "name": "text",
-                "value": "={{ $json.text }}"
-              },
-              {
-                "name": "parse_mode",
-                "value": "HTML"
-              }
-            ]
-          },
-          "options": {}
+          "chatId": "1634464595",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "HTML"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "VMbwUuFB8BzVhxEz",
+            "name": "Telegram account"
+          }
         }
       }
     ],
@@ -972,34 +918,25 @@
       {
         "id": "f6a2b3c4-0006-0006-0006-000000000004",
         "name": "Send Monthly Report",
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.2,
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
         "position": [
           850,
           300
         ],
         "parameters": {
-          "method": "POST",
-          "url": "https://api.telegram.org/bot8604791076:AAGxu_XtypVCcr7fX1HxDlbIceRXbP_8JPY/sendMessage",
-          "sendBody": true,
-          "specifyBody": "keypair",
-          "bodyParameters": {
-            "parameters": [
-              {
-                "name": "chat_id",
-                "value": "1634464595"
-              },
-              {
-                "name": "text",
-                "value": "={{ $json.text }}"
-              },
-              {
-                "name": "parse_mode",
-                "value": "HTML"
-              }
-            ]
-          },
-          "options": {}
+          "chatId": "1634464595",
+          "text": "={{ $json.text }}",
+          "additionalFields": {
+            "appendAttribution": false,
+            "parse_mode": "HTML"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "VMbwUuFB8BzVhxEz",
+            "name": "Telegram account"
+          }
         }
       }
     ],

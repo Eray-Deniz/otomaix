@@ -931,6 +931,85 @@ def test_calendar_workflow_credentials_are_bound():
     assert seen >= 1, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
 
 
+# ─── 6c. n8n artefaktlarının sır hijyeni — SINIF kapısı ─────────────────────
+#
+# Üçlü sözleşme (`..._credentials_are_bound`) yalnız credential ATIFLARINI
+# ölçer. Credential kullanmayan bir düğüm sırrı doğrudan URL'ine gömerse o kapı
+# YEŞİL kalır — ölçüldü 2026-09-06: `turkey-calendar-update.json` ve
+# `crm-automations.json` sekiz yerde çıplak bot token'ı taşıyordu ve üçlü
+# sözleşme bunu görmedi. Aşağıdaki iki kapı sınıfı elle seçilmiş örnekle değil
+# ÜRETİLMİŞ matrisle kapatır: dizindeki her dosya · kaynak metindeki her
+# enterpolasyon.
+
+
+def _workflow_files() -> list:
+    root = infra_repo_root() / "shared" / "n8n-workflows"
+    files = sorted(root.glob("*.json"))
+    assert files, f"n8n artefakt dizini boş görünüyor ({root}) — test yanlış yere bakıyor"
+    return files
+
+
+def test_no_workflow_file_carries_a_bare_secret():
+    """HİÇBİR n8n artefaktı çıplak sır taşımaz — dizin genelinde üretilmiş matris.
+
+    Sırrın dosyada durması onu depo geçmişine yazar; depo herkese açık olduğunda
+    (ölçüldü 2026-09-06) iptal etmekten başka çare kalmaz. Doğru desen zaten
+    depoda: `sector-package-admin-events.json` token'ı n8n credential'ından okur.
+    """
+    import re
+
+    patterns = {
+        "çıplak telegram bot token'ı": re.compile(r"\d{6,}:[A-Za-z0-9_-]{30,}"),
+        "gömülü telegram uç noktası": re.compile(r"api\.telegram\.org/bot(?!\{)"),
+    }
+
+    hits = []
+    for path in _workflow_files():
+        blob = path.read_text(encoding="utf-8")
+        for label, pattern in patterns.items():
+            if pattern.search(blob):
+                hits.append(f"{path.name}: {label}")
+
+    assert not hits, (
+        "n8n artefaktında çıplak sır: "
+        + " · ".join(hits)
+        + " — token n8n credential'ından okunmalı (bkz. `Telegram Bildir` düğümü)"
+    )
+
+
+def test_calendar_sql_escapes_every_interpolated_feed_value():
+    """Beslemeden gelen HER değer SQL metnine kaçışlı girer — üretilmiş matris.
+
+    `SQL Oluştur` düğümü üçüncü taraf bir HTTP yanıtından (`date.nager.at`)
+    gelen alanları INSERT metnine gömüyor. Kaçışsız tek alan bile tırnaktan
+    çıkabilir. Matris kaynak metindeki `${...}` ifadelerinin TAMAMINI tarar;
+    elle seçilmiş örnek yok, yani yeni bir alan eklendiğinde kapı kendiliğinden
+    onu da kapsar.
+    """
+    import re
+
+    code = _node(_calendar_workflow(), "SQL Oluştur")["parameters"]["jsCode"]
+
+    feed_refs = [
+        expr.strip()
+        for expr in re.findall(r"\$\{([^}]*)\}", code)
+        if re.search(r"\bh\.", expr)
+    ]
+    assert len(feed_refs) >= 6, (
+        f"beslemeden gelen enterpolasyon beklenenden az ({len(feed_refs)}) — "
+        "düğüm budanmış olabilir, matris boşa koşuyor"
+    )
+
+    safe = re.compile(r"^(escape|Number)\(\s*h\.[A-Za-z_][A-Za-z0-9_]*\s*\)$")
+    unsafe = [expr for expr in feed_refs if not safe.match(expr)]
+
+    assert not unsafe, (
+        "besleme değeri SQL'e kaçışsız giriyor: "
+        + " · ".join(f"${{{expr}}}" for expr in unsafe)
+        + " — metin alanı `escape(...)`, sayısal alan `Number(...)` ile sarılmalı"
+    )
+
+
 # ─── 7. Marka durumu ucu (K-45) ─────────────────────────────────────────────
 
 
