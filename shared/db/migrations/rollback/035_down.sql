@@ -9,11 +9,10 @@
 --            düz `psql -f` → rc=0, `psql -1 -f` → rc=3).
 --
 -- SEED MANİFESTİ TEK YERDE (fix turu 1, M1): üç satırın değerleri aşağıda
--- `m035_seed_down` geçici tablosunda BİR KEZ tanımlanır; silme, muafiyet ve
--- kalıntı doğrulaması üçü de o tablodan okur. Önceki yazımda aynı literal blok
--- iki kez kopyalanmıştı ve birini düzeltip diğerini unutmak, kalıntı
--- doğrulamasının silmenin sildiğinden BAŞKA bir şeyi denetlemesine yol
--- açardı — sessizce.
+-- `m035_seed_down` geçici tablosunda BİR KEZ tanımlanır; silme ve kalıntı
+-- doğrulaması ikisi de o tablodan okur. Önceki yazımda aynı literal blok iki kez
+-- kopyalanmıştı ve birini düzeltip diğerini unutmak, kalıntı doğrulamasının
+-- silmenin sildiğinden BAŞKA bir şeyi denetlemesine yol açardı — sessizce.
 --
 -- MANİFEST ADI BU DOSYAYA ÖZELDİR VE KURULUMU İDEMPOTENTTİR (fix turu 3).
 -- Arka arkaya iki tur AYNI eksende kusur üretti — manifest ömrü × oturum
@@ -23,58 +22,74 @@
 --       `m035_seed_down` kullanır. İki dosya tek ad için yarışmaz; hangi
 --       sırayla, aynı oturumda kaç kez koşulursa koşulsun.
 --   (2) KURULUM ÖMÜRDEN BAĞIMSIZ İDEMPOTENTTİR: aşağıdaki kapı adı tutan
---       nesneyi TÜRÜNE göre düşürür (tablo · view · materialized view ·
---       sequence · foreign table), bilinmeyen türde ise TAHMİN ETMEZ, DURur.
+--       nesneyi TÜRÜNE göre düşürür (tablo · bölümlenmiş tablo · view ·
+--       materialized view · sequence · bileşik tür · foreign table), bilinmeyen
+--       türde ise TAHMİN ETMEZ, DURur. Bu enumerasyon fix turu 5'te
+--       DÜZELTİLDİ (F4): önceki yazım "tablo · view · materialized view ·
+--       sequence · foreign table" diyordu; gerçekte `f` REDDEDİLİYOR, buna
+--       karşılık sayılmayan `p` ve `c` ELE ALINIYORDU. Bugün `f` de ele alınır
+--       ve liste `CASE` dallarıyla birebir aynıdır.
 -- Bu yüzden `ON COMMIT DROP` de KALDIRILDI: manifestin ömrü artık hiçbir
 -- şeyin doğruluk koşulu değil, iki dosya da aynı kuralla çalışıyor.
 -- Kanıt elle seçilmiş örnek değil, üretilmiş çapraz çarpım:
--- `tests/test_migration_035.py::test_manifest_lifetime_matrix` (96 hücre).
+-- `tests/test_migration_035.py::test_manifest_squatter_matrix` (dosya × çağrı
+-- biçimi × adı tutan nesne) ve `::test_manifest_lifetime_matrix` (24 hücre).
 --
--- SAHİPLİK SINIRI (planın geri-alma hükmü):
+-- SAHİPLİK SINIRI (planın geri-alma hükmü) — KÖKENDEN, ŞEKİLDEN DEĞİL:
 --
 --   Bu script YALNIZ 035'in KENDİ yazdığı üç satırı siler. "Kendi yazdığı" =
---   beş alanın da (year, date, name_tr, name_en, category) seed değerine
---   BİREBİR eşit olması. Aynı `(year, date)` anahtarında oturan ama içeriği
---   farklı bir satır 035'in DEĞİLDİR (`ON CONFLICT DO NOTHING` onu ezmedi) ve
---   dokunulmaz. Anahtara göre silmek, sahibi başkası olan bir satırı yok
---   ederdi.
+--   satırın `id`si 035'in bastığı SABİT köken izini taşıyor VE beş alan
+--   (year, date, name_tr, name_en, category) seed değerine birebir eşit.
 --
---   Bir de TERS yön var: seed satırı sonradan yıllık takvim işi tarafından
---   düzeltilmişse (ad/kategori) artık beş-alan eşitliği tutmaz ve satır
---   BURADA KALIR. Bu bilinçlidir — düzeltilmiş satır artık 035'in yazdığı
---   satır değil, takvim beslemesinin bakımını üstlendiği bir satırdır.
+--   KÖKEN İZİ NEDEN GEREKTİ (fix turu 5, F1). Önceki yazım sahipliği YALNIZ
+--   beş-alan eşitliğinden türetiyordu, yani "içeriği seed'e benzeyen" her satır
+--   035'in sayılıyordu. ÖLÇÜLDÜ: 035'ten ÖNCE aynı içerikle var olan bir satırı
+--   `up` atlıyor (`ON CONFLICT DO NOTHING`; satırın `id`si değişmiyor, yani 035
+--   yazmadı) ama bu dosyanın silmesi onu SİLİYORDU — planın "önceden var olan
+--   satırlara dokunmaz" hükmünün doğrudan ihlali. `INSERT` gerçekten satırı
+--   yarattıysa köken izi basılır, atladıysa BASILMAZ; belirsizlik kalmaz.
 --
--- NEDEN YABANCI DÖNEM SATIRI GERİ ALMAYI DURDURUR:
+--   İÇERİK EŞİTLİĞİ DE KORUNUR (daraltıcıdır, genişletici değil): seed satırı
+--   sonradan yıllık takvim işi tarafından düzeltilmişse (ad/kategori) artık
+--   beş-alan eşitliği tutmaz ve satır BURADA KALIR. Bu bilinçlidir — düzeltilmiş
+--   satır artık 035'in yazdığı satır değil, takvim beslemesinin bakımını
+--   üstlendiği bir satırdır.
+--
+-- DÖNEM SATIRI SESSİZCE DÜZLEŞEMEZ — ŞEKİL SEZGİSELİ KALDIRILDI:
 --
 --   Kolon düşünce `end_date` taşıyan her satırın ANLAMI değişir: bir dönem,
 --   035 ÖNCESİNDE VAR OLMAYAN bir hâle — "tek günlük" bir kayda — dönüşür.
---   Başka birinin (elle girilmiş, başka bir sistemin yazdığı) dönem satırı için
---   bu sessiz ve GERİ ALINAMAZ bir anlam kaybıdır. Kapı fail-closed'dır:
---   böyle bir satır varsa HİÇBİR ŞEY yapmadan durur. İşletim yolu açık: o
---   satırların dönemini önce elle boşaltın, sonra geri almayı koşturun.
+--   035'in kendi üç satırı için bu bir sorun değil; onları zaten siliyoruz.
+--   BAŞKASININ dönem satırı için sessiz ve GERİ ALINAMAZ bir anlam kaybıdır.
 --
--- MUAFİYET ÜRETİCİYE GÖRE TANIMLANIR, YILA GÖRE DEĞİL (fix turu 1, Q1):
+--   Kapı artık "bu satır kimin?" sorusunu satırın GÖRÜNÜŞÜNDEN cevaplamıyor.
+--   Ölçülen kusur (fix turu 5, F1-b): tur 1'de muafiyet `year = 2026`e
+--   çivilenmişti; aynı tur onu "üreticinin yazdığı ŞEKLE" bakan bir muafiyete
+--   çevirdi ki geri alma kendi üreticisi tarafından tetiklenmesin (Q1). O
+--   muafiyetin bedeli ÖLÇÜLDÜ ve SESSİZDİ: üretici şekline uyan 2027 dönemi
+--   MUAF tutuluyor, geri alma `rc=0` ile geçiyor, kolon düşüyor ve satır
+--   hiçbir uyarı olmadan tek günlük kayda dönüşüyordu — dosyanın kendi HINT'i
+--   tam da bunu önlemeyi vaat ederken.
 --
---   İlk yazımda muafiyet `year = 2026 AND date = '2026-08-15' AND end_date =
---   '2026-09-15'` diye çivilenmişti. Oysa bu migration'la BİRLİKTE sürümlenen
---   yıllık iş `Okula Dönüş`ü KOŞTUĞU YILA göre yazar (`${year}-08-15` ..
---   `${year}-09-15`). 1 Ocak 2027'de iş 2027 dönem satırını yazar, o satır
---   tanım gereği "yabancı" olurdu ve geri alma o günden sonra bir operatör elle
---   müdahale edene kadar REDDEDERDİ — yani kapı, koruduğu migration'ın kendi
---   üreticisi tarafından bir takvim yılı içinde tetiklenirdi. "Her migration
---   kendi geri almasıyla iner" hükmü o hâliyle okunduğundan zayıftı.
+--   Yerine KAPANIŞ ÖZELLİĞİ konur, silmeden SONRA ölçülür ve şekilden
+--   bağımsızdır:
 --
---   Doğrusu: muafiyet ÜRETİCİNİN YAZDIĞI ŞEKLE bakar. Bir satır, seed
---   manifestindeki dönem kaleminin ad/İngilizce ad/kategori üçlüsünü taşıyor VE
---   başlangıç/bitişi manifestin gün-ay desenini kendi yılına kaydırılmış hâliyle
---   tutuyorsa, onu bu migration'ın üreticisi yazmıştır. Desen manifestten
---   TÜRETİLİR (yıl farkı kadar kaydırma), ikinci bir yerde tekrarlanmaz.
+--       Silme bittiğinde `end_date` taşıyan HİÇBİR satır kalmamalıdır.
 --
---   BEDELİ DÜRÜSTÇE: muaf satır SİLİNMEZ (035 onun sahibi değil) ama kolon
---   düştüğü için dönem bilgisini kaybeder. Bu kayıp GERİ ALINABİLİRDİR —
---   üretici bir sonraki turunda dönemi yeniden yazar, üstelik geri alma zaten
---   workflow'un önceki sürümüne dönmeyi de kapsıyor. Yabancı satırdaki kayıp
---   ise geri alınamaz; ayrımın tamamı budur.
+--   Kalıyorsa kolon düşürülmez; transaction geri alınır ve script hangi
+--   satırların zarar göreceğini ADLANDIRARAK durur. Kapı fail-closed'dır ve
+--   ikinci bir sahiplik kopyası taşımaz — silmenin BIRAKTIĞINI okur.
+--
+--   BEDELİ DÜRÜSTÇE: 1 Ocak'ta yıllık iş koştuktan sonra 035'i geri almak bir
+--   OPERATÖR ADIMI ister — ilgili `end_date`leri elle boşaltmak. Bilinçli bir
+--   takastır: sessiz ve geri alınamaz bir kayıp yerine görünür ve elle
+--   çözülebilir bir duraklama. Zaten 035'i geri almak dönem yeteneğini tümden
+--   kaldırır; dönem verisiyle ne yapılacağı operatörün kararıdır.
+--
+-- KISIT KİMLİĞİ ADdan DEĞİL TANIMdan (fix turu 5, F2): `DROP CONSTRAINT IF
+-- EXISTS` nesneyi yalnız ADIYLA arar, yani aynı adı taşıyan İLGİSİZ bir kısıtı
+-- sessizce düşürürdü. Aşağıdaki ön kontrol kısıtın GERÇEK tanımını okur ve
+-- kanonik değilse hiçbir şey yapmadan DURur.
 --
 -- ÜRETİCİ DE SÜRÜMLENİR: `shared/n8n-workflows/turkey-calendar-update.json`
 -- dönem-farkında yazıma geçti. Geri alma o workflow'un ÖNCEKİ sürümüne dönmeyi
@@ -101,7 +116,7 @@ BEGIN;
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 -- ---------------------------------------------------------------------------
--- 0. SEED MANİFESTİ — üç satırın değerleri, TEK tanım
+-- 0. SEED MANİFESTİ — üç satırın değerleri + köken izi, TEK tanım
 -- ---------------------------------------------------------------------------
 --
 -- Ömür OTURUMdur (bkz. başlık): kapı adı tutan her nesneyi türüne göre
@@ -123,9 +138,14 @@ BEGIN
     -- ELE ALINAN KİNDLER = `pg_temp`te YARATILABİLDİĞİ ÖLÇÜLENLER (PG 18.3).
     -- Enumerasyon ölçüme eşittir: her dalın kendi test hücresi vardır
     -- (`test_manifest_squatter_matrix`), yani hiçbir dal ölçülmemiş değildir.
-    -- `CASCADE` ZORUNLU: bağımlısı olan bir tabloda `DROP TABLE` CASCADE'siz
-    -- patlıyordu (ölçüldü, bağımsız hakem F2). Bağımlı nesne bizim ayrılmış
-    -- adımıza dayanmayı seçmiştir; onunla birlikte gider.
+    -- `f` (foreign table) DE ele alınır (fix turu 5, F4): önceki yazım "bu
+    -- kurulumda yaratılamıyor (ölçüldü: FDW sunucusu yok)" diyordu, oysa
+    -- ölçülen şey "şu an tanımlı FDW SUNUCUSU yok"tu. Ölçüldü ki yaratılabilir:
+    -- `CREATE EXTENSION file_fdw` → `CREATE SERVER …` → `CREATE FOREIGN TABLE
+    -- pg_temp.m035_seed_down (…)` → `relkind='f'`.
+    -- `CASCADE` ZORUNLU: bağımlısı olan bir nesnede CASCADE'siz `DROP`
+    -- patlıyordu (ölçüldü, bağımsız hakem F2; fix turu 5'te yedi kindin
+    -- yedisinde de ölçüldü ve her birinin bağımlı-nesne hücresi var).
     drop_stmt := CASE held_kind
         WHEN 'r' THEN 'DROP TABLE pg_temp.m035_seed_down CASCADE'
         WHEN 'p' THEN 'DROP TABLE pg_temp.m035_seed_down CASCADE'
@@ -133,15 +153,13 @@ BEGIN
         WHEN 'm' THEN 'DROP MATERIALIZED VIEW pg_temp.m035_seed_down CASCADE'
         WHEN 'S' THEN 'DROP SEQUENCE pg_temp.m035_seed_down CASCADE'
         WHEN 'c' THEN 'DROP TYPE pg_temp.m035_seed_down CASCADE'
+        WHEN 'f' THEN 'DROP FOREIGN TABLE pg_temp.m035_seed_down CASCADE'
     END;
 
     IF drop_stmt IS NULL THEN
-        -- ELE ALINMAYANLAR, BİLEREK: `i`/`I` (indeks) o adı taşısa bile BİZİM
+        -- ELE ALINMAYAN, BİLEREK: `i`/`I` (indeks) o adı taşısa bile BİZİM
         -- OLMAYAN bir tabloya aittir — düşürmek ad rezervasyonunun ötesine,
-        -- başkasının nesnesine uzanırdı. `f` (foreign table) bu kurulumda
-        -- yaratılamıyor (ölçüldü: FDW sunucusu yok), yani ele alındığı
-        -- KANITLANAMAZ; ölçülmemiş dal enumerasyona YAZILMAZ. Kalanı tahmin
-        -- etmek yerine DUR.
+        -- başkasının nesnesine uzanırdı. Kalanı tahmin etmek yerine DUR.
         RAISE EXCEPTION
             'migration 035: pg_temp.m035_seed_down adini beklenmeyen turde bir nesne tutuyor (relkind=%)',
             held_kind
@@ -155,6 +173,7 @@ END
 $prepare_manifest$;
 
 CREATE TEMP TABLE m035_seed_down (
+    id       UUID    NOT NULL,
     year     INTEGER NOT NULL,
     date     DATE    NOT NULL,
     name_tr  TEXT    NOT NULL,
@@ -163,13 +182,13 @@ CREATE TEMP TABLE m035_seed_down (
     end_date DATE
 );
 
-INSERT INTO pg_temp.m035_seed_down (year, date, name_tr, name_en, category, end_date) VALUES
-  (2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
-  (2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
-  (2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
+INSERT INTO pg_temp.m035_seed_down (id, year, date, name_tr, name_en, category, end_date) VALUES
+  ('03500000-0000-4035-8035-000000000001', 2026, DATE '2026-11-10', '10 Kasım Atatürk''ü Anma Günü', 'Atatürk Memorial Day', 'national',   NULL),
+  ('03500000-0000-4035-8035-000000000002', 2026, DATE '2026-11-24', '24 Kasım Öğretmenler Günü',     'Teachers'' Day',       'commercial', NULL),
+  ('03500000-0000-4035-8035-000000000003', 2026, DATE '2026-08-15', 'Okula Dönüş',                   'Back to School',       'commercial', DATE '2026-09-15');
 
 -- ---------------------------------------------------------------------------
--- 1. PREFLIGHT — tabloyu kilitle, sonra oku; yabancı dönem varsa DUR
+-- 1. PREFLIGHT — tabloyu kilitle, sonra oku; kısıt kimliğini doğrula
 -- ---------------------------------------------------------------------------
 --
 -- Kilit ÖNCE, okuma SONRA: sayımdan sonra araya giren bir yazar olamaz. Kilit
@@ -180,8 +199,10 @@ INSERT INTO pg_temp.m035_seed_down (year, date, name_tr, name_en, category, end_
 
 DO $preflight$
 DECLARE
-    foreign_periods BIGINT := 0;
-    sample TEXT;
+    canonical CONSTANT TEXT := 'CHECK (((end_date IS NULL) OR (end_date >= date)))';
+    found_def TEXT;
+    found_type "char";
+    found_valid BOOLEAN;
 BEGIN
     IF to_regclass('social.public_holidays') IS NULL THEN
         RAISE EXCEPTION 'migration 035 geri alma REDDEDILDI: social.public_holidays tablosu YOK'
@@ -204,50 +225,72 @@ BEGIN
                          'Geri alma ikinci kez kosturulmaz.';
     END IF;
 
-    -- Yabancı dönem = `end_date` dolu VE bu migration'ın üreticisinin yazdığı
-    -- şekle UYMAYAN satır. Şekil manifestten türetilir: aynı ad üçlüsü + aynı
-    -- gün-ay deseni, satırın kendi yılına kaydırılmış hâli.
-    EXECUTE $q$
-        SELECT count(*),
-               string_agg(DISTINCT format('(%s, %s, %L)', h.year, h.date, h.name_tr), ', ')
-          FROM social.public_holidays h
-         WHERE h.end_date IS NOT NULL
-           AND NOT EXISTS (
-                 SELECT 1
-                   FROM pg_temp.m035_seed_down s
-                  WHERE s.end_date IS NOT NULL
-                    AND h.name_tr = s.name_tr
-                    AND h.name_en IS NOT DISTINCT FROM s.name_en
-                    AND h.category IS NOT DISTINCT FROM s.category
-                    AND h.date =
-                        (s.date + make_interval(years => h.year - s.year))::date
-                    AND h.end_date =
-                        (s.end_date + make_interval(years => h.year - s.year))::date
-               )
-    $q$ INTO foreign_periods, sample;
+    -- KISIT KİMLİĞİ (fix turu 5, F2): aynı adı taşıyan İLGİSİZ bir kısıt
+    -- düşürülmez. Yoksa sorun değil — `DROP … IF EXISTS` zaten sessiz geçer.
+    SELECT pg_get_constraintdef(c.oid), c.contype, c.convalidated
+      INTO found_def, found_type, found_valid
+      FROM pg_constraint c
+     WHERE c.conrelid = 'social.public_holidays'::regclass
+       AND c.conname = 'public_holidays_end_date_check';
 
-    IF foreign_periods > 0 THEN
+    IF found_def IS NOT NULL
+       AND (found_type <> 'c' OR NOT found_valid OR found_def <> canonical) THEN
         RAISE EXCEPTION
-            'migration 035 geri alma REDDEDILDI: sahibi 035 OLMAYAN % donem satiri var: %',
-            foreign_periods, sample
+            'migration 035 geri alma REDDEDILDI: public_holidays_end_date_check adini KANONIK OLMAYAN bir kisit tutuyor (contype=%, convalidated=%, tanim=%)',
+            found_type, found_valid, found_def
             USING ERRCODE = 'integrity_constraint_violation',
-                  HINT = 'Kolon dusunce o satirlar sessizce tek gunluk kayda donusurdu. '
-                         'Once end_date lerini elle bosaltin, sonra geri almayi kosturun.';
+                  HINT = 'Beklenen tanim: CHECK (((end_date IS NULL) OR (end_date >= date))). '
+                         'Bu kisit 035 in DEGILDIR; dusurmek baskasinin nesnesini '
+                         'yok etmek olurdu.';
     END IF;
 END
 $preflight$;
 
 -- ---------------------------------------------------------------------------
--- 2. YALNIZ 035'in yazdığı üç satır — beş alan BİREBİR eşleşmeli
+-- 2. YALNIZ 035'in yazdığı üç satır — köken izi + beş alan BİREBİR eşleşmeli
 -- ---------------------------------------------------------------------------
 
 DELETE FROM social.public_holidays h
- WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-        SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
+ WHERE (h.id, h.year, h.date, h.name_tr, h.name_en, h.category) IN (
+        SELECT s.id, s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
        );
 
 -- ---------------------------------------------------------------------------
--- 3. Kısıt + kolon
+-- 3. KAPANIŞ ÖZELLİĞİ — silmeden SONRA hiçbir dönem satırı kalmamalı
+-- ---------------------------------------------------------------------------
+--
+-- Bu kapı ikinci bir sahiplik kopyası TAŞIMAZ: silmenin BIRAKTIĞINI okur. Bir
+-- satır burada duruyorsa 035 onun sahibi değildir; kolon düşerse dönemi sessizce
+-- yok olurdu. Fail-closed.
+
+DO $period_flattening_guard$
+DECLARE
+    doomed BIGINT := 0;
+    sample TEXT;
+BEGIN
+    EXECUTE $q$
+        SELECT count(*),
+               string_agg(format('(%s, %s, %L)', h.year, h.date, h.name_tr),
+                          ', ' ORDER BY h.year, h.date)
+          FROM social.public_holidays h
+         WHERE h.end_date IS NOT NULL
+    $q$ INTO doomed, sample;
+
+    IF doomed > 0 THEN
+        RAISE EXCEPTION
+            'migration 035 geri alma REDDEDILDI: % donem satiri sessizce tek gune donusurdu: %',
+            doomed, sample
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Bu satirlarin sahibi 035 DEGILDIR (yillik takvim isi ya da '
+                         'elle giris). Kolon dusunce donem bilgileri GERI ALINAMAZ '
+                         'sekilde kaybolurdu. Once end_date lerini elle bosaltin, '
+                         'sonra geri almayi kosturun.';
+    END IF;
+END
+$period_flattening_guard$;
+
+-- ---------------------------------------------------------------------------
+-- 4. Kısıt + kolon
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE social.public_holidays
@@ -255,7 +298,7 @@ ALTER TABLE social.public_holidays
 ALTER TABLE social.public_holidays DROP COLUMN IF EXISTS end_date;
 
 -- ---------------------------------------------------------------------------
--- 4. Kalıntı doğrulaması — fail-closed
+-- 5. Kalıntı doğrulaması — fail-closed
 -- ---------------------------------------------------------------------------
 --
 -- `DROP ... IF EXISTS` bir nesneyi ADIYLA arar; ad tutmuyorsa sessizce geçer.
@@ -283,8 +326,8 @@ BEGIN
         UNION ALL
         SELECT '035 seed satiri ' || h.name_tr
           FROM social.public_holidays h
-         WHERE (h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-                SELECT s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
+         WHERE (h.id, h.year, h.date, h.name_tr, h.name_en, h.category) IN (
+                SELECT s.id, s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
                )
       ) AS remaining;
 
