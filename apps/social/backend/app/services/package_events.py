@@ -27,6 +27,20 @@ from app.services import notifications
 
 logger = logging.getLogger(__name__)
 
+
+# TANIM, KULLANIMDAN ÖNCE — ve bu bir DÜZELTMEDİR (fix turu 2, N1). Sınıf
+# eskiden dosyanın ortasındaydı ama modül gövdesindeki bütünlük kapısı ondan
+# ÖNCE koşuyordu (satır 122 < 150). Kapı fail-closed'dı — import yine düşüyordu
+# — ama operatörün gördüğü şey ÖLÇÜLDÜ:
+#     NameError: name 'PackageEventContractError' is not defined
+# Yani NEYİN beyan edilmediğini söyleyen cümle import anında HİÇ görünmüyordu,
+# fonksiyonun docstring'i fırlatılamayan bir tür vaat ediyordu ve import'u
+# `except PackageEventContractError` ile sarmak işe yaramazdı. Sınıfın buraya
+# taşınması tek hamlede üçünü birden kapatır.
+class PackageEventContractError(ValueError):
+    """Olay kaydı sözleşmesi ihlal edildi — çağıranın hatası."""
+
+
 # ─── Kapalı olay kümesi ve iki kapsam sınıfı (F21) ──────────────────────────
 
 # MARKA-kapsamlı: hangi markanın üretimi etkilendiğini söylerler. Markasız bir
@@ -93,24 +107,39 @@ EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 # yerde açıkça kaçındığı "iki ölçü ıraksayabilir" kusurunu (K-01b) üretirdi.
 # Kalan risk dürüstçe: ham SQL bu kapıyı atlar — diğer üç tür için de öyle.
 EVENT_VERSION_CONTRACT: dict[str, str] = {
+    # Yaşam döngüsü — sürüm GEÇİŞİ; alanlar türe özgü doğrulanır (F22).
     "activation": "gecis",
     "rollback": "gecis",
     "deactivation": "gecis",
+    # Onay kapısı — geçiş YOK.
     "approval": "surumsuz",
     "rejection": "surumsuz",
+    # Marka-kapsamlı tanı olayları — geçiş YOK (fix turu 2, N2).
+    "mismatch_fallthrough": "surumsuz",
+    "package_read_error": "surumsuz",
+    "stale_assignment_fallback": "surumsuz",
+    "stamp_missing": "surumsuz",
+    "stamp_invalid": "surumsuz",
+    "stamp_stale_at_persist": "surumsuz",
 }
 
 
-def assert_version_contract_is_total(event_types, brand_scoped, contract) -> None:
-    """Paket-kapsamlı HER tür sürüm sözleşmesini BEYAN ETMİŞ olmalı.
+def assert_version_contract_is_total(event_types, contract) -> None:
+    """`EVENT_TYPES`in HER üyesi sürüm sözleşmesini BEYAN ETMİŞ olmalı.
 
-    Kapanış sayarak değil YAPIYLA: eşleme, `EVENT_TYPES`in marka-kapsamlı
-    olmayan yarısıyla BİREBİR aynı olmak zorundadır. Eksik beyan da (yeni tür
-    doğrulamadan kaçar) ölü beyan da (kümeden çıkmış tür için kural durur)
-    bulgudur. Aşağıda MODÜL YÜKLENİRKEN koşar: beyansız bir tür eklemek
-    import'u düşürür, yani kusur çalışma zamanına kadar bekleyemez.
+    Kapanış sayarak değil YAPIYLA: eşleme kümenin TAMAMIYLA birebir aynı olmak
+    zorundadır. Eksik beyan da (yeni tür doğrulamadan kaçar) ölü beyan da
+    (kümeden çıkmış tür için kural durur) bulgudur. MODÜL YÜKLENİRKEN koşar:
+    beyansız bir tür eklemek import'u düşürür, kusur çalışma zamanına kadar
+    bekleyemez.
+
+    `brand_scoped` PARAMETRESİ KALDIRILDI (fix turu 2, N2). Kıyas eskiden
+    `event_types - brand_scoped` idi, yani sınıfın YARISI kapalıydı ve
+    "kapanış yapıyla" iddiası yarı doğruydu. Muafiyeti bir parametre olarak
+    taşımak, onu yanlışlıkla geri vermeyi de mümkün kılıyordu; bugün kapıya bir
+    ALT KÜME geçirilemez.
     """
-    beklenen = set(event_types) - set(brand_scoped)
+    beklenen = set(event_types)
     if set(contract) != beklenen:
         raise PackageEventContractError(
             "surum sozlesmesi BEYAN EDILMEMIS tur(ler) var — "
@@ -119,9 +148,7 @@ def assert_version_contract_is_total(event_types, brand_scoped, contract) -> Non
         )
 
 
-assert_version_contract_is_total(
-    EVENT_TYPES, BRAND_SCOPED_EVENTS, EVENT_VERSION_CONTRACT
-)
+assert_version_contract_is_total(EVENT_TYPES, EVENT_VERSION_CONTRACT)
 
 # K-56: bu üç olay HER OLUŞTA bir yönetici bildirimi (outbox satırı) üretir —
 # eşik/oran YOKTUR (olay-bazlı, spec §14.4). Damga olayları (`stamp_*`) bu
@@ -145,10 +172,6 @@ ADMIN_NOTIFIED_EVENTS = frozenset({
 # ANLAMINA hiç bakmadan dışarıda tutar.
 DETAIL_VALUE_TYPES = (str, int, float, bool, type(None))
 DETAIL_MAX_TEXT = 200
-
-
-class PackageEventContractError(ValueError):
-    """Olay kaydı sözleşmesi ihlal edildi — çağıranın hatası."""
 
 
 def _savepoint_if_in_tx(db):
@@ -225,7 +248,13 @@ async def _active_version_excluding(db, *, sector_id: UUID, package_id: UUID) ->
 
 
 async def _validate_version_shape(
-    db, *, event_type: str, sector_id: UUID, package_id: UUID, from_version, to_version
+    db,
+    *,
+    event_type: str,
+    sector_id: UUID | None,
+    package_id: UUID | None,
+    from_version,
+    to_version,
 ) -> None:
     """Sürüm alanları OLAY TÜRÜNE ÖZGÜdür (F22).
 
@@ -235,6 +264,11 @@ async def _validate_version_shape(
     TÜR BAŞINA SÖZLEŞME `EVENT_VERSION_CONTRACT`ten OKUNUR (fix turu 1, I2).
     Beyansız bir tür buraya kadar gelirse SQL'e VARMADAN reddedilir; önceki
     `else`siz zincir onu sessizce geçiriyordu.
+
+    KAPSAM SINIFINDAN BAĞIMSIZ ÇAĞRILIR (fix turu 2, N2): marka-kapsamlı türler
+    de buradan geçer. `sector_id`/`package_id` onlar için `None` olabilir ve bu
+    güvenlidir — `surumsuz` kolu ikisine de DOKUNMADAN döner; imza o yüzden
+    `None`u da kabul eder.
     """
     kontrat = EVENT_VERSION_CONTRACT.get(event_type)
     _require(
@@ -324,22 +358,29 @@ async def log_package_event(
         _require(package_id is not None, f"{event_type}: yaşam döngüsü olayı package_id ister")
         _require(bool(actor), f"{event_type}: yaşam döngüsü olayı actor ister")
         assert sector_id is not None and package_id is not None  # yukarıdaki kapılar
-        # SAVEPOINT (review 2026-08-26, H2). Bu okumalar çağıranın transaction'ı
-        # İÇİNDE koşabilir. Başarısız bir ifade PostgreSQL'de transaction'ı abort
-        # durumuna sokar ve sonraki HER komut `current transaction is aborted` ile
-        # düşer — asyncpg kendiliğinden savepoint AÇMAZ (ölçüldü 18.3'te). İç
-        # transaction bir SAVEPOINT'tir: hata yalnız buraya kadar geri sarılır,
-        # dıştaki post yazımı ayakta kalır. İstisna akışı DEĞİŞMEZ — ne yakalanır
-        # ne yutulur, yalnız dıştaki transaction zehirlenmez.
-        async with _savepoint_if_in_tx(db):
-            await _validate_version_shape(
-                db,
-                event_type=event_type,
-                sector_id=sector_id,
-                package_id=package_id,
-                from_version=from_version,
-                to_version=to_version,
-            )
+
+    # SÜRÜM ŞEKLİ KAPSAM SINIFINDAN BAĞIMSIZDIR (fix turu 2, N2). Çağrı eskiden
+    # yukarıdaki `else`in İÇİNDEYDİ, yani marka-kapsamlı altı tür hiç
+    # doğrulanmıyordu; ölçüldü ki `stamp_missing` uydurma sürüm numaralarıyla
+    # KALICI bir denetim satırı yazabiliyordu. Kapsam gereksinimleri (yukarıda)
+    # sınıfa özgü KALIR; değişen tek şey, sürüm kapısının her tür için koşması.
+    #
+    # SAVEPOINT (review 2026-08-26, H2). Bu okumalar çağıranın transaction'ı
+    # İÇİNDE koşabilir. Başarısız bir ifade PostgreSQL'de transaction'ı abort
+    # durumuna sokar ve sonraki HER komut `current transaction is aborted` ile
+    # düşer — asyncpg kendiliğinden savepoint AÇMAZ (ölçüldü 18.3'te). İç
+    # transaction bir SAVEPOINT'tir: hata yalnız buraya kadar geri sarılır,
+    # dıştaki post yazımı ayakta kalır. İstisna akışı DEĞİŞMEZ — ne yakalanır
+    # ne yutulur, yalnız dıştaki transaction zehirlenmez.
+    async with _savepoint_if_in_tx(db):
+        await _validate_version_shape(
+            db,
+            event_type=event_type,
+            sector_id=sector_id,
+            package_id=package_id,
+            from_version=from_version,
+            to_version=to_version,
+        )
 
     try:
         # SAVEPOINT (aynı gerekçe): aşağıdaki `except` altyapı hatasını yutup

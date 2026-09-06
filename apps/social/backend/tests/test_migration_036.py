@@ -27,8 +27,10 @@ listelenmez. Böylece "şu kombinasyon denenmemiş" hücresi doğamaz.
 
 from __future__ import annotations
 
+import importlib.util
 import itertools
 import json
+import pathlib
 import subprocess
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -1345,40 +1347,173 @@ async def test_approval_events_reject_invented_versions(
     ), "reddedilen olay satır bıraktı"
 
 
-def test_every_package_scoped_event_declares_a_version_contract():
-    """SINIF KAPANIŞI: paket-kapsamlı HER tür sürüm sözleşmesini BEYAN EDER.
+@pytest.mark.parametrize(
+    "event_type, from_version, to_version",
+    [
+        (t, f, v)
+        for t in sorted(BRAND_SCOPED_EVENTS)
+        for f in (None, 999)
+        for v in (None, -5)
+    ],
+)
+async def test_brand_scoped_events_reject_invented_versions(
+    db, event_type, from_version, to_version
+):
+    """SINIFIN İKİNCİ YARISI (fix turu 2, N2) — 6 tür × 2 × 2 = 24 hücre.
 
-    Kapanış sayarak değil YAPIYLA: eşleme `EVENT_TYPES`in marka-kapsamlı
-    olmayan yarısıyla BİREBİR aynı olmak zorundadır. Yarın eklenen dördüncü bir
-    tür, burada beyan edilmediği sürece modül IMPORT ANINDA düşer — çalışma
-    zamanında sessizce sürüm doğrulamasından kaçamaz.
+    ÖLÇÜLEN KUSUR: `log_package_event`in marka-kapsamlı dalı
+    `_validate_version_shape`i HİÇ çağırmıyordu, dolayısıyla I2'de kapatılan
+    tehlike altı tür üzerinden AYNEN erişilebilir kalmıştı. Canlı ölçüm:
+
+        stamp_missing, from_version=999, to_version=-5  → KABUL
+        yazılan satır: {'event_type': 'stamp_missing',
+                        'from_version': 999, 'to_version': -5}
+
+    Marka-kapsamlı türler sürüm GEÇİŞİ taşımaz — sürüm bilgisi `detail`e yazılır
+    (`stamp_stale_at_persist` → `detail={"stamped_version": ...}`). Bu ölçüldü:
+    depodaki HİÇBİR çağrı yeri marka-kapsamlı bir türle sürüm kolonu geçirmiyor,
+    yani kapı hiçbir çağıranı kırmıyor.
     """
-    beklenen = set(EVENT_TYPES) - set(BRAND_SCOPED_EVENTS)
-    assert set(EVENT_VERSION_CONTRACT) == beklenen, (
-        f"beyan edilmemiş: {sorted(beklenen - set(EVENT_VERSION_CONTRACT))}\n"
-        f"fazladan beyan: {sorted(set(EVENT_VERSION_CONTRACT) - beklenen)}"
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    brand_id = await _brand(db)
+    kabul_edilmeli = from_version is None and to_version is None
+
+    async def _yaz():
+        return await log_package_event(
+            db,
+            event_type=event_type,
+            brand_id=brand_id,
+            from_version=from_version,
+            to_version=to_version,
+        )
+
+    if kabul_edilmeli:
+        assert await _yaz() is not None
+        return
+
+    with pytest.raises(PackageEventContractError, match="sürüm"):
+        await _yaz()
+    assert (
+        await db.fetchval(
+            "SELECT count(*) FROM social.package_events WHERE brand_id = $1", brand_id
+        )
+        == 0
+    ), "reddedilen olay satır bıraktı"
+
+
+def test_every_event_type_declares_a_version_contract():
+    """SINIF KAPANIŞI: `EVENT_TYPES`in HER üyesi sürüm sözleşmesini BEYAN EDER.
+
+    Fix turu 2 (N2) düzeltmesi: önceki hâl eşlemeyi `EVENT_TYPES` EKSİ
+    `BRAND_SCOPED_EVENTS` ile karşılaştırıyordu, yani sınıfın YARISI kapalıydı
+    ve "kapanış sayarak değil YAPIYLA" iddiası yarı doğruydu. Yarım sınıf,
+    kapalı sınıf DEĞİLDİR. Muafiyet KALDIRILDI; kıyas artık kümenin TAMAMIdır.
+    """
+    assert set(EVENT_VERSION_CONTRACT) == set(EVENT_TYPES), (
+        f"beyan edilmemiş: {sorted(set(EVENT_TYPES) - set(EVENT_VERSION_CONTRACT))}\n"
+        f"ölü beyan: {sorted(set(EVENT_VERSION_CONTRACT) - set(EVENT_TYPES))}"
     )
     assert set(EVENT_VERSION_CONTRACT.values()) <= {"gecis", "surumsuz"}
+    # Marka-kapsamlı altı tür sürüm TAŞIMAZ: sürüm bilgisi `detail`e yazılır
+    # (`stamp_stale_at_persist` → `detail={"stamped_version": ...}`), sürüm
+    # kolonlarına DEĞİL. Kolonlar yaşam döngüsü geçişlerinin dilidir.
+    for event_type in BRAND_SCOPED_EVENTS:
+        assert EVENT_VERSION_CONTRACT[event_type] == "surumsuz", event_type
 
 
 def test_version_contract_totality_gate_rejects_an_undeclared_type():
-    """Bütünlük kapısının KENDİSİ ölçülür — pozitif kontrol + negatif kontrol."""
-    # Gerçek küme geçer.
-    assert_version_contract_is_total(
-        EVENT_TYPES, BRAND_SCOPED_EVENTS, EVENT_VERSION_CONTRACT
+    """Bütünlük kapısının KENDİSİ ölçülür — pozitif kontrol + iki negatif kol.
+
+    İmza İKİ argümanlıdır (fix turu 2): `brand_scoped` parametresi KALDIRILDI.
+    Muafiyeti parametre olarak taşımak, onu yanlışlıkla geri vermeyi mümkün
+    kılardı; bugün kapıya bir ALT KÜME geçirilemez.
+    """
+    assert_version_contract_is_total(EVENT_TYPES, EVENT_VERSION_CONTRACT)
+
+    with pytest.raises(PackageEventContractError, match="beyan"):
+        assert_version_contract_is_total(
+            EVENT_TYPES | {"uydurma_gecis"}, EVENT_VERSION_CONTRACT
+        )
+    with pytest.raises(PackageEventContractError, match="beyan"):
+        assert_version_contract_is_total(
+            EVENT_TYPES - {"activation"}, EVENT_VERSION_CONTRACT
+        )
+
+
+# ─── Import kapısının TÜRÜ ve MESAJI (fix turu 2, N1) ──────────────────────
+#
+# ÖLÇÜLEN KUSUR: `assert_version_contract_is_total(...)` modül gövdesinde
+# `class PackageEventContractError` TANIMINDAN ÖNCE koşuyordu (122 < 150). Yük
+# taşıyan yarısı sağlamdı — import yine düşüyordu, yani kapı fail-closed'dı —
+# ama operatörün gördüğü şey `NameError: name 'PackageEventContractError' is
+# not defined` oluyordu. Yani NEYİN beyan edilmediğini söyleyen cümle
+# (`eksik: [...] / olu beyan: [...]`) import anında HİÇ görünmüyordu ve
+# `except PackageEventContractError` ile sarmak da işe yaramazdı.
+#
+# Bu yüzden test "import düştü mü" diye SORMAZ: fırlatılan TÜRÜ ve MESAJI ölçer.
+
+
+def _load_doctored_package_events(tmp_path, old: str, new: str):
+    """`package_events.py`nin bozulmuş bir KOPYASINI import eder.
+
+    Kopya kendi `PackageEventContractError` sınıfını tanımlar (ayrı modül, ayrı
+    sınıf nesnesi), o yüzden tür kimliği `isinstance` ile DEĞİL ADIYLA ölçülür —
+    ve ayrıca `ValueError` mirasının korunduğu doğrulanır.
+    """
+    src = pathlib.Path(package_events_module.__file__).read_text()
+    assert src.count(old) == 1, f"bozma deseni {src.count(old)} kez bulundu"
+    target = tmp_path / "package_events_bozuk.py"
+    target.write_text(src.replace(old, new, 1))
+    spec = importlib.util.spec_from_file_location("package_events_bozuk", target)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # kapı BURADA patlamalı
+    return module
+
+
+@pytest.mark.parametrize(
+    "bozulma, old, new",
+    [
+        (
+            "eksik_beyan",
+            '    "rejection": "surumsuz",\n',
+            "",
+        ),
+        (
+            "yeni_tur_beyansiz",
+            'APPROVAL_EVENTS = frozenset({"approval", "rejection"})',
+            'APPROVAL_EVENTS = frozenset({"approval", "rejection", "uydurma_onay"})',
+        ),
+        (
+            "olu_beyan",
+            'APPROVAL_EVENTS = frozenset({"approval", "rejection"})',
+            'APPROVAL_EVENTS = frozenset({"approval"})',
+        ),
+    ],
+)
+def test_import_time_totality_gate_raises_the_declared_error(
+    tmp_path, bozulma, old, new
+):
+    """Import kapısı SÖZLEŞME HATASI fırlatır — `NameError` DEĞİL.
+
+    Üç hücre, kümelerin ıraksayabileceği üç yol: beyan silindi · küme büyüdü,
+    beyan büyümedi · küme küçüldü, beyan küçülmedi. Üçünde de operatörün
+    gördüğü metin NEYİN eksik/ölü olduğunu ADIYLA söylemek zorunda.
+    """
+    with pytest.raises(Exception) as excinfo:
+        _load_doctored_package_events(tmp_path, old, new)
+
+    hata = excinfo.value
+    assert type(hata).__name__ == "PackageEventContractError", (
+        f"{bozulma}: import kapısı YANLIŞ TÜR fırlattı — "
+        f"{type(hata).__name__}: {hata}"
     )
-    # Beyan edilmemiş bir tür eklenince DÜŞER.
-    with pytest.raises(PackageEventContractError, match="beyan"):
-        assert_version_contract_is_total(
-            EVENT_TYPES | {"uydurma_gecis"},
-            BRAND_SCOPED_EVENTS,
-            EVENT_VERSION_CONTRACT,
-        )
-    # Ölü bir beyan da bulgudur (küme küçüldü, eşleme küçülmedi).
-    with pytest.raises(PackageEventContractError, match="beyan"):
-        assert_version_contract_is_total(
-            EVENT_TYPES - {"activation"}, BRAND_SCOPED_EVENTS, EVENT_VERSION_CONTRACT
-        )
+    assert isinstance(hata, ValueError), "sözleşme hatası ValueError olmalı"
+    assert "beyan" in str(hata), str(hata)
+    assert ("rejection" in str(hata)) or ("uydurma_onay" in str(hata)), (
+        f"{bozulma}: mesaj NEYİN beyan edilmediğini söylemiyor: {hata}"
+    )
 
 
 async def test_undeclared_package_scoped_event_is_rejected_at_runtime(db, monkeypatch):
