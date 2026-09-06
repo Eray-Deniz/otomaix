@@ -280,7 +280,7 @@ def require_actor(actor: Any) -> str:
     return actor.strip()
 
 
-def _require_lifecycle_actor(event_type: str, actor: Any) -> str:
+def _normalize_actor(event_type: str, actor: Any) -> str:
     """Kanonik kapıyı olay-kaydı sözleşmesine bağlar; kırpılmış kimliği döner.
 
     ÖLÇÜLEN KUSUR (Codex checkpoint, F2): kapı `_require(bool(actor), ...)` idi.
@@ -291,6 +291,12 @@ def _require_lifecycle_actor(event_type: str, actor: Any) -> str:
     düşüyor ve aşağıdaki `except` onu ALTYAPI hatası sayıp YUTUYORdu — olay
     sessizce kayboluyordu. Kusur bu partiden ÖNCE de vardı; bu parti onu
     kimliğin en çok önemli olduğu yüzeye (`approval`/`rejection`) genişletti.
+
+    KAPSAM SINIFINDAN BAĞIMSIZ ÇAĞRILIR — marka-kapsamlı dalda kimlik
+    OPSİYONELDİR (olay otomatiktir; ölçüldü: `posts.py` ve `sector_packages.py`
+    çağrıları kimlik GEÇİRMEZ) ama VERİLDİĞİNDE aynı kapıdan geçer. Kapıyı
+    yalnız yaşam döngüsü dalına koymak, aynı kolonun aynı çöpü kabul ettiği
+    ikinci bir yolu açık bırakırdı — sınıf kapatılır, varyant değil.
     """
     try:
         return require_actor(actor)
@@ -475,15 +481,20 @@ async def log_package_event(
     _require(event_type in EVENT_TYPES, f"bilinmeyen olay türü: {event_type!r}")
     _validate_detail(detail)
 
+    # KİMLİK KAPISI KAPSAM SINIFINDAN BAĞIMSIZDIR: `None` yalnız marka-kapsamlı
+    # dalda meşrudur (aşağıdaki `_require` onu yaşam döngüsü dalında keser), ama
+    # VERİLEN her kimlik aynı kanonik kapıdan geçer ve YAZILAN DEĞER NORMALİZE
+    # EDİLMİŞ OLANDIR — kapı yalnız reddetseydi `" yonetici@otomaix "` kabul
+    # edilir ve denetim izinde aynı kimlik iki farklı görünen değerle dururdu.
+    if actor is not None:
+        actor = _normalize_actor(event_type, actor)
+
     if event_type in BRAND_SCOPED_EVENTS:
         _require(brand_id is not None, f"{event_type}: marka-kapsamlı olay brand_id ister (F21)")
     else:
         _require(sector_id is not None, f"{event_type}: yaşam döngüsü olayı sector_id ister")
         _require(package_id is not None, f"{event_type}: yaşam döngüsü olayı package_id ister")
-        # YAZILAN DEĞER NORMALİZE EDİLMİŞ OLANDIR: kapı yalnız reddetseydi
-        # `" yonetici@otomaix "` kabul edilir ve denetim izinde aynı kimlik iki
-        # farklı görünen değerle dururdu.
-        actor = _require_lifecycle_actor(event_type, actor)
+        _require(actor is not None, f"{event_type}: yaşam döngüsü olayı actor ister")
         assert sector_id is not None and package_id is not None  # yukarıdaki kapılar
 
     # SÜRÜM ŞEKLİ KAPSAM SINIFINDAN BAĞIMSIZDIR (fix turu 2, N2). Çağrı eskiden

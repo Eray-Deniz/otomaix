@@ -1674,6 +1674,55 @@ async def test_package_scoped_event_rejects_ownerless_actor(db, event_type, acto
     assert yazilan == 0, f"{event_type}/{actor!r}: sahipsiz olay YAZILDI ({yazilan} satır)"
 
 
+# Marka-kapsamlı dalda kimlik OPSİYONELDİR (olay otomatiktir, insan işlemi
+# değil) — ama VERİLDİĞİNDE aynı kapıdan geçer. KISMİ FİX YOK: "kapı yalnız
+# yaşam döngüsü dalında" demek, aynı kolonun aynı çöpü kabul ettiği ikinci bir
+# yolu açık bırakmak olurdu. `None` hücresi bu matriste YOKTUR: orada `None`
+# MEŞRUDUR ve ayrı bir pozitif kontrol testiyle ölçülür.
+BRAND_SCOPED_INVALID_ACTORS = tuple(a for a in INVALID_ACTORS if a is not None)
+
+
+@pytest.mark.parametrize("actor", BRAND_SCOPED_INVALID_ACTORS, ids=repr)
+@pytest.mark.parametrize("event_type", sorted(BRAND_SCOPED_EVENTS))
+async def test_brand_scoped_event_rejects_a_given_but_blank_actor(db, event_type, actor):
+    """Kimlik kapısı KAPSAM SINIFINDAN BAĞIMSIZDIR — ve satır yazılmaz."""
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    brand_id = await _brand(db)
+
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            db, event_type=event_type, brand_id=brand_id, actor=actor
+        )
+
+    yazilan = await db.fetchval(
+        "SELECT count(*) FROM social.package_events WHERE brand_id = $1", brand_id
+    )
+    assert yazilan == 0, f"{event_type}/{actor!r}: sahipsiz olay YAZILDI"
+
+
+@pytest.mark.parametrize("event_type", sorted(BRAND_SCOPED_EVENTS))
+async def test_brand_scoped_event_still_accepts_a_missing_actor(db, event_type):
+    """POZİTİF KONTROL: marka-kapsamlı olay OTOMATİKTİR, kimliği olmayabilir.
+
+    Bu ayak olmadan yukarıdaki matris, `actor`ı zorunlu kılan bir kapıyla da
+    yeşil olurdu — ve depodaki gerçek çağrı yerleri (`posts.py`,
+    `sector_packages.py`) kimlik GEÇİRMEZ; kapı onları kırardı.
+    """
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    brand_id = await _brand(db)
+
+    event_id = await log_package_event(db, event_type=event_type, brand_id=brand_id)
+    assert event_id is not None
+    stored = await db.fetchval(
+        "SELECT actor FROM social.package_events WHERE id = $1", event_id
+    )
+    assert stored is None
+
+
 @pytest.mark.parametrize("event_type", sorted(APPROVAL_EVENTS))
 async def test_package_scoped_event_stores_the_normalized_actor(db, event_type):
     """POZİTİF KONTROL: kimlik KIRPILMIŞ hâliyle yazılır.
