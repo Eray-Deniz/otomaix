@@ -5,6 +5,9 @@ written: 2026-09-06
 
 # Resume From
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-09-06 — Task 6) — bu anlatı yürütme öncesine aittir;
+> güncel durum TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+
 **Task 5 KAPANDI. Sıradaki iş Task 6.**
 
 Task 6 = migration 036 (koşu kaydı · politika raporu · onay anlık görüntüsü · atama geçmişi)
