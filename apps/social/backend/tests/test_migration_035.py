@@ -483,8 +483,10 @@ def test_rollback_spares_a_content_drifted_seed_row(scratch_db_migrated):
 
     Takvim beslemesinin ad/kategori düzeltme hakkı vardır (`DO UPDATE`); o
     düzeltmeden sonra satır operatör kararının birebir kopyası olmaktan çıkar.
-    Geri alma beş alan eşitliğine baktığı için satırı BIRAKIR — bu bilinçlidir
-    ve `035_down.sql`in sahiplik bölümünde yazılıdır.
+    Geri alma sahipliği manifestin TÜM kolonlarından türeyen yüklemle okuduğu
+    için (`pg_attribute`, dinamik SQL — sayı burada tekrarlanmaz, tekrarlanan
+    sayı bayatlar) satırı BIRAKIR; bu bilinçlidir ve `035_down.sql`in sahiplik
+    bölümünde yazılıdır.
 
     Bu, üstteki testten FARKLI bir iddiadır (o: hiç yazılmamış satır; bu:
     yazılmış ama kaymış satır) ve o yüzden ayrı isim taşır.
