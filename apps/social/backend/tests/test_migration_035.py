@@ -585,6 +585,212 @@ def test_rollback_spares_pre_existing_rows_with_identical_content(scratch_db_mig
     )
 
 
+# ─── 3a-0. SAHİPLİK YÜKLEMİ — manifestin HER alanı, KATALOGDAN türetilmiş ───
+#
+# ÖLÇÜLEN KUSUR (fix turu 6, F1): silme yüklemi altı alanı elle sayıyordu
+# (`id, year, date, name_tr, name_en, category`) ve 035'in KENDİ yazdığı
+# `end_date`i ATLIYORDU. Ölçüldü (kontrolör probu, iki kollu):
+#   * KOL A (pozitif kontrol) besleme `name_tr`yi düzeltti → `down_rc=3`,
+#     REDDETTİ, satır duruyor.
+#   * KOL B (iddia) besleme YALNIZ `end_date`i düzeltti → `down_rc=0`,
+#     REDDETMEDİ, satır SESSİZCE SİLİNDİ.
+# Yani yüklem "yazdığımızdan beri değişmemişse sil" kuralını kuruyor ama kendi
+# yazdığı bir alanı denetlemiyordu — kuralın kendi içinde tutarsızlığı.
+#
+# NİÇİN SAYARAK DEĞİL YAPIYLA KAPANIR. "Bir alan daha eklendi, yüklem
+# güncellenmedi" hücresi elle yazılmış bir listeyle her zaman yeniden doğabilir.
+# Bu yüzden (a) üretim yüklemi manifestin KOLON KÜMESİNDEN türetilir (dinamik
+# SQL, `pg_attribute`), (b) bu test o kümeyi KATALOGDAN okur ve her kolon için
+# bir hücre ÜRETİR. Yarın manifeste bir alan eklenirse hücresi kendiliğinden
+# doğar; yüklem onu kapsamıyorsa KIRMIZI düşer.
+#
+# Manifest oturum ömürlüdür, yani başka bir bağlantıdan görünmez: katalog
+# okuması dosyayı koşan psql oturumunun İÇİNDE yapılır (`-f dosya -c sorgu`).
+
+# Mutasyon hücresinin `id` kolonuna bastığı köken izi — seed id'lerinden farklı.
+MUTASYON_UUID = "03500000-0000-4035-8035-0000000009ff"
+
+# Kolon TİPİNE göre "bu değeri DEĞİŞTİR" ifadesi. Tip katalogdan okunur; eşleme
+# bulunamazsa test DURur (sessizce atlamaz) — kapsanmayan tip, ölçülmemiş kolon
+# demektir.
+_MUTATION_BY_TYPE: dict[str, str] = {
+    "uuid": f"'{MUTASYON_UUID}'::uuid",
+    "integer": "{col} + 3",
+    "date": "coalesce({col} + 21, DATE '2026-12-01')",
+    "text": "coalesce({col}, '') || ' MUTASYON'",
+}
+
+
+def _manifest_catalog(url: str, *, sql_file, table: str) -> list[tuple[str, str, bool]]:
+    """`(attname, tip, NOT NULL)` üçlüleri — dosyayı koşan oturumun KATALOĞUNDAN.
+
+    Manifest `pg_temp`tedir: ayrı bir bağlantıdan okunamaz. Bu yüzden aynı psql
+    çağrısında önce dosya (`-f`), sonra sorgu (`-c`) koşar.
+    """
+    argv, env = infra.psql_argv(url)
+    query = (
+        "SELECT 'KOLON|' || a.attname || '|' || format_type(a.atttypid, a.atttypmod) "
+        "|| '|' || CASE WHEN a.attnotnull THEN 'NOTNULL' ELSE 'NULLABLE' END "
+        "FROM pg_attribute a "
+        f"WHERE a.attrelid = '{table}'::regclass AND a.attnum > 0 "
+        "AND NOT a.attisdropped ORDER BY a.attnum"
+    )
+    result = subprocess.run(
+        argv + ["--tuples-only", "--no-align", "-f", str(sql_file), "-c", query],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, f"{table} katalog okuması DURDU:\n{result.stderr}"
+    parsed: list[tuple[str, str, bool]] = []
+    for line in result.stdout.splitlines():
+        if not line.startswith("KOLON|"):
+            continue
+        _, name, typ, notnull = line.split("|")
+        assert notnull in ("NOTNULL", "NULLABLE"), f"katalog okuması bozuk: {line!r}"
+        parsed.append((name, typ, notnull == "NOTNULL"))
+    assert parsed, f"{table} manifesti oturumda YOK — katalog okuması boş"
+    return parsed
+
+
+def _restore_seed_rows(url: str) -> None:
+    """Hücreler arası sıfırlama: 035'in üç satırı ÜRETİM YOLUYLA yeniden yazılır."""
+    ids = ", ".join(f"'{i}'::uuid" for i in (*SEED_IDS, MUTASYON_UUID))
+    _run_sql(url, f"DELETE FROM social.public_holidays WHERE id IN ({ids})")
+    result = _apply_up(url)
+    assert result.returncode == 0, f"sıfırlama DURDU:\n{result.stderr}"
+    assert _seed_row_count(url) == 3, "sıfırlama üç satırı geri getirmedi"
+
+
+def test_ownership_predicate_covers_every_manifest_column(scratch_db_migrated, capsys):
+    """Manifestin HER kolonu sahiplik yükleminde — hücreler KATALOGDAN üretilir.
+
+    İki iddia ölçülür:
+
+    1. İleri ve geri dosyanın manifest KOLON KÜMELERİ birebir aynıdır (ikisi de
+       katalogdan okunur). 035'in yazdığı alan kümesi = geri almanın sahiplik
+       için karşılaştırdığı alan kümesi.
+    2. Her kolon için: o alanı DEĞİŞTİREN bir düzeltme satırı 035'in satırı
+       olmaktan ÇIKARIR — geri alma onu SİLEMEZ. NULL yapılabilen kolonlar için
+       ayrıca "değer → NULL" hücresi üretilir (yüklem NULL-güvenli olmak
+       zorunda: `IS NOT DISTINCT FROM`).
+
+    Kontrol hücresi (`degismedi`) ters yönü ölçer: hiçbir alan değişmediyse üç
+    satır da GİDER. Yüklem NULL-güvenli değilse (`=` ile yazılırsa) `end_date`i
+    NULL olan iki satır eşleşmez ve bu hücre KIRMIZI düşer — yani NULL-güvenlik
+    süs değil, kontrol hücresinin koşuludur.
+    """
+    url = scratch_db_migrated
+
+    _ensure_not_applied(url)
+    up_cols = _manifest_catalog(
+        url, sql_file=MIGRATION_035, table="pg_temp.m035_seed_up"
+    )
+    down_cols = _manifest_catalog(
+        url, sql_file=ROLLBACK_035, table="pg_temp.m035_seed_down"
+    )
+    assert up_cols == down_cols, (
+        "iki dosyanın manifest kolon kümesi AYRIŞMIŞ — 035'in yazdığı alanla "
+        f"geri almanın denetlediği alan aynı değil:\n  up:   {up_cols}\n  down: {down_cols}"
+    )
+
+    cells: list[tuple[str, str | None, str | None]] = [("degismedi", None, None)]
+    for name, typ, notnull in down_cols:
+        expression = _MUTATION_BY_TYPE.get(typ)
+        assert expression is not None, (
+            f"manifest kolonu {name!r} ({typ}) için mutasyon ifadesi YOK — bu "
+            "matris yeni bir tipi kapsamıyor; `_MUTATION_BY_TYPE`ı genişletin. "
+            "Sessizce atlamak, ölçülmemiş bir kolon bırakırdı."
+        )
+        cells.append((f"{name}_farkli", name, expression.format(col=name)))
+        if not notnull:
+            cells.append((f"{name}_null", name, "NULL"))
+
+    rows: list[tuple[str, ...]] = []
+    failures: list[str] = []
+
+    for label, column, value_sql in cells:
+        _restore_seed_rows(url)
+        seed_list = ", ".join(f"'{i}'::uuid" for i in SEED_IDS)
+
+        if column is None:
+            target = expected_id = "-"
+        else:
+            extra = f" AND {column} IS NOT NULL" if value_sql == "NULL" else ""
+            target = _scalar(
+                url,
+                f"SELECT id::text FROM social.public_holidays WHERE id IN ({seed_list})"
+                f"{extra} ORDER BY id LIMIT 1",
+            )
+            assert target, (
+                f"{label}: mutasyon için hedef satır bulunamadı — bu hücre "
+                "hiçbir şey ölçmezdi"
+            )
+            _run_sql(
+                url,
+                f"UPDATE social.public_holidays SET {column} = {value_sql} "
+                f"WHERE id = '{target}'::uuid",
+            )
+            expected_id = MUTASYON_UUID if column == "id" else target
+
+        result = _apply_down(url)
+        refused = REFUSAL_MARKER in result.stderr
+
+        if column is None:
+            alive = _scalar(
+                url,
+                f"SELECT count(*) FROM social.public_holidays WHERE id IN ({seed_list})",
+            )
+            problems = []
+            if result.returncode != 0:
+                problems.append(f"rc={result.returncode}: {result.stderr.strip()[-160:]}")
+            if alive != "0":
+                problems.append(
+                    f"{alive} seed satırı AYAKTA — geri alma kendi yazdığını silemiyor"
+                )
+            survivor = f"{alive}/3 duruyor"
+        else:
+            alive = _scalar(
+                url,
+                "SELECT count(*) FROM social.public_holidays WHERE id = "
+                f"'{expected_id}'::uuid",
+            )
+            problems = []
+            if alive != "1":
+                problems.append(
+                    f"{column} DEĞİŞTİRİLDİ ama satır SİLİNDİ — sahiplik yüklemi "
+                    "bu alanı denetlemiyor (planın 'önceden var olan/düzeltilmiş "
+                    "satırlara dokunmaz' hükmü ihlal)"
+                )
+            survivor = "duruyor" if alive == "1" else "SILINDI"
+
+        rows.append((
+            label,
+            str(result.returncode),
+            "ret" if refused else "-",
+            survivor,
+            "OK" if not problems else "SAPMA",
+        ))
+        if problems:
+            failures.append(f"{label}: " + "; ".join(problems))
+
+    header = ("hucre", "rc", "ret", "hedef-satir", "sonuc")
+    widths = [
+        max(len(header[i]), max(len(r[i]) for r in rows)) for i in range(len(header))
+    ]
+    line = lambda cols: "| " + " | ".join(  # noqa: E731
+        c.ljust(widths[i]) for i, c in enumerate(cols)
+    ) + " |"
+    with capsys.disabled():
+        print("\n" + line(header))
+        print("|" + "|".join("-" * (w + 2) for w in widths) + "|")
+        for row in rows:
+            print(line(row))
+        print(f"\n{len(rows)} hucre ({len(down_cols)} manifest kolonu), {len(failures)} sapma")
+
+    assert not failures, "SAHİPLİK MATRİS SAPMALARI:\n  - " + "\n  - ".join(failures)
+
+
 # ─── 3a. KAPANIŞ ÖZELLİĞİ — dönem satırı sessizce düzleşemez ────────────────
 #
 # NEDEN ÖZELLİK, NEDEN ÖRNEK DEĞİL (fix turu 5). Üç tur boyunca bu eksende
@@ -1098,6 +1304,205 @@ def test_no_permanent_ddl_lands_before_the_droppable_gate(scratch_db_migrated):
         "kapı REDDETTİ ama CHECK kısıtı COMMIT edildi — yarım şema"
     )
     assert _seed_row_count(url) == 0, "kapı reddettiği hâlde seed yazıldı"
+
+
+# ─── 3c. ÜRETİLMİŞ MATRİS — çağrı biçimi × arıza enjeksiyonu ────────────────
+#
+# ÖLÇÜLEN KUSUR (fix turu 6, F3 — **bir önceki turun KENDİ çözümünün açtığı
+# yol**): fix turu 5 şema kapılarını ve kalıcı DDL'i tek `DO` deyimine aldı, ama
+# seed `INSERT`i AYRI bir deyimde bıraktı. Sabit köken izi (aynı turun F1
+# çözümü) yeni bir düşme yolu açtı: ayrılmış UUID'lerden biri BAŞKA bir tatil
+# satırında duruyorsa seed BİRİNCİL ANAHTARDA düşer — ve şema DDL'i çoktan
+# commit edilmiştir. Ölçüldü (kontrolör probu):
+#   * KOL C (pozitif kontrol) çakışma yok, çıplak psql → rc=0, kolon=1,
+#     kısıt=1, seed=3 (tam uygulama).
+#   * KOL D (iddia) ayrılmış UUID başka satırda, çıplak psql → rc=0, kolon=1,
+#     kısıt=1, seed=1 → YARIM UYGULAMA.
+#
+# NİÇİN SAYARAK DEĞİL YAPIYLA KAPANIR. "Şu kapıyı da yukarı taşı" üç turdur
+# aynı ekseni besliyor: her tur DÜŞEBİLEN yeni bir adım keşfediyor ve onu tek
+# tek yukarı taşıyor. Kapanış artık bir SAYIM değil bir YAPI: kalıcı DDL, seed
+# ve garanti doğrulaması TEK `DO` deyiminin içindedir. Bir `DO` bloğu tek
+# deyimdir — autocommit altında bile ya tamamı uygulanır ya hiçbiri — yani
+# bloğun İÇİNDE nerede düşerse düşsün kalıcı iz kalmaz. Yeni bir düşebilen adım
+# eklemek artık yeni bir yarım-uygulama yolu AÇMAZ, çünkü eklenecek yer zaten
+# atomik birimin içidir.
+#
+# Kanıt elle seçilmiş örnek değil çapraz çarpımdır: 4 çağrı biçimi × 5 arıza.
+# İddia her hücrede AYNI: ret geldiyse kolon · kısıt · seed satırlarının HİÇBİRİ
+# kalıcı olmamalı — yani sonrası, öncesine BİREBİR eşit.
+
+# Kalıcı arızalar veritabanına ayrı bir oturumdan kurulur; oturum-ömürlü olan
+# (`pg_temp` squatter'ı) migration'la AYNI script'e önek olarak girer.
+_UP_FAULTS: dict[str, tuple[str | None, str]] = {
+    # ad: (kalıcı kurulum SQL'i, aynı-oturum öneki)
+    "yok": (None, ""),
+    "ayrilmis_uuid_baska_satirda": (
+        "INSERT INTO social.public_holidays (id, year, date, name_tr, name_en, category) "
+        f"VALUES ('{SEED_IDS[0]}', 2024, '2024-04-23', 'Baska Bir Tatil', "
+        "'Another Holiday', 'national')",
+        "",
+    ),
+    "manifest_adini_indeks_tutuyor": (
+        None,
+        "CREATE TEMP TABLE m035_seed_up_sahibi (x int);\n"
+        "CREATE INDEX m035_seed_up ON m035_seed_up_sahibi (x);\n",
+    ),
+    "kanonik_olmayan_ayni_adli_kisit": (
+        "ALTER TABLE social.public_holidays "
+        "ADD CONSTRAINT public_holidays_end_date_check CHECK (true)",
+        "",
+    ),
+    "garanti_dogrulamasi_dusurulur": (
+        # Seed `INSERT`ini SESSİZCE yutan tetik: üç anahtar hiç yazılmaz, garanti
+        # doğrulaması "takvim kalemi YOK" ile DURur. Kalıcı kapıların hiçbirine
+        # dokunmaz — düşen adım en SONdakidir, yani yarım uygulama tam da burada
+        # görünür.
+        "CREATE FUNCTION social.m035_ariza() RETURNS trigger LANGUAGE plpgsql AS "
+        "$f$ BEGIN RETURN NULL; END $f$; "
+        "CREATE TRIGGER m035_ariza_tetigi BEFORE INSERT ON social.public_holidays "
+        "FOR EACH ROW EXECUTE FUNCTION social.m035_ariza()",
+        "",
+    ),
+}
+
+CANONICAL_END_DATE_CHECK = "CHECK (((end_date IS NULL) OR (end_date >= date)))"
+
+
+def _clear_up_faults(url: str) -> None:
+    """Enjekte edilen kalıcı arızaları idempotent olarak kaldırır."""
+    _run_sql(url, "DROP TRIGGER IF EXISTS m035_ariza_tetigi ON social.public_holidays")
+    _run_sql(url, "DROP FUNCTION IF EXISTS social.m035_ariza()")
+    _run_sql(
+        url,
+        "DO $temizle$ BEGIN IF EXISTS (SELECT 1 FROM pg_constraint c "
+        "WHERE c.conrelid = 'social.public_holidays'::regclass "
+        "AND c.conname = 'public_holidays_end_date_check' "
+        f"AND pg_get_constraintdef(c.oid) <> $k${CANONICAL_END_DATE_CHECK}$k$) THEN "
+        "EXECUTE 'ALTER TABLE social.public_holidays DROP CONSTRAINT "
+        "public_holidays_end_date_check'; END IF; END $temizle$;",
+    )
+    _run_sql(
+        url,
+        f"DELETE FROM social.public_holidays WHERE id = '{SEED_IDS[0]}'::uuid "
+        "AND year = 2024",
+    )
+
+
+def _permanent_state(url: str) -> tuple[str, str, str]:
+    """Migration'ın DOKUNABİLECEĞİ kalıcı durumun tamamı: kolon · kısıt · seed."""
+    column = _scalar(
+        url,
+        "SELECT coalesce((SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a "
+        "WHERE a.attrelid = 'social.public_holidays'::regclass AND a.attname = 'end_date' "
+        "AND a.attnum > 0 AND NOT a.attisdropped), '<yok>')",
+    )
+    constraint = _scalar(
+        url,
+        "SELECT coalesce((SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+        "WHERE c.conrelid = 'social.public_holidays'::regclass "
+        "AND c.conname = 'public_holidays_end_date_check'), '<yok>')",
+    )
+    seeds = ", ".join(f"'{i}'::uuid" for i in SEED_IDS)
+    rows = _scalar(
+        url,
+        "SELECT coalesce(string_agg(id::text || '@' || year || '/' || date, ',' "
+        f"ORDER BY id), '<yok>') FROM social.public_holidays WHERE id IN ({seeds})",
+    )
+    return column, constraint, rows
+
+
+def test_no_partial_apply_under_any_invocation(scratch_db_migrated, capsys):
+    """Çağrı biçimi × arıza — 20 hücre. Ret geldiyse KALICI HİÇBİR İZ yok.
+
+    Çağrı biçimleri `_INVOCATIONS`ten gelir (çıplak · `ON_ERROR_STOP=1` ·
+    `--single-transaction` · ikisi birlikte); arızalar dosyanın düşebilen HER
+    adımını temsil eder: manifest kapısı (en baş) · kısıt kimliği kapısı ·
+    seed `INSERT`i (birincil anahtar) · garanti doğrulaması (en son).
+
+    `rc` RET HÜCRELERİNDE İDDİA EDİLMEZ, TABLOYA YAZILIR: çıplak psql hatadan
+    sonra devam eder ve `rc=0` ile biter — kodun kendisi migration'ın kontrol
+    ettiği bir şey değil. İDDİA EDİLEN ESASLI OLANDIR: `ERROR` görünür ve kalıcı
+    durum ÖNCESİNE eşittir.
+    """
+    url = scratch_db_migrated
+    rows: list[tuple[str, ...]] = []
+    failures: list[str] = []
+
+    for inv_name, (error_stop, wrapped) in _INVOCATIONS.items():
+        for fault_name, (setup_sql, prelude) in _UP_FAULTS.items():
+            _clear_up_faults(url)
+            _ensure_not_applied(url)
+            if setup_sql:
+                _run_sql(url, setup_sql)
+
+            before = _permanent_state(url)
+            result = _run_cell(
+                url,
+                prelude + f"\\i {MIGRATION_035}\n",
+                error_stop=error_stop,
+                wrapped=wrapped,
+            )
+            after = _permanent_state(url)
+
+            problems: list[str] = []
+            if fault_name == "yok":
+                if result.returncode != 0:
+                    problems.append(f"rc={result.returncode}")
+                if "ERROR" in result.stderr:
+                    problems.append(
+                        "arızasız hücrede hata: "
+                        + " ".join(
+                            l for l in result.stderr.split("\n") if "ERROR" in l
+                        )[:160]
+                    )
+                if after[0] != "date":
+                    problems.append(f"kolon={after[0]} (beklenen date)")
+                if after[1] != CANONICAL_END_DATE_CHECK:
+                    problems.append(f"kısıt={after[1]}")
+                if _seed_row_count(url) != 3:
+                    problems.append(f"seed={_seed_row_count(url)} (beklenen 3)")
+            else:
+                if "ERROR" not in result.stderr:
+                    problems.append(
+                        "arıza enjekte edildi ama migration hiç konuşmadı — "
+                        "bu hücre hiçbir şey ölçmüyor"
+                    )
+                if after != before:
+                    problems.append(
+                        "YARIM UYGULAMA: ret geldi ama kalıcı durum DEĞİŞTİ\n"
+                        f"      once: {before}\n      sonra: {after}"
+                    )
+
+            rows.append((
+                inv_name,
+                fault_name,
+                str(result.returncode),
+                "var" if after[0] != "<yok>" else "yok",
+                "var" if after[1] != "<yok>" else "yok",
+                str(_seed_row_count(url)),
+                "OK" if not problems else "SAPMA",
+            ))
+            if problems:
+                failures.append(f"{inv_name}/{fault_name}: " + "; ".join(problems))
+
+    _clear_up_faults(url)
+
+    header = ("cagri", "ariza", "rc", "kolon", "kisit", "seed", "sonuc")
+    widths = [
+        max(len(header[i]), max(len(r[i]) for r in rows)) for i in range(len(header))
+    ]
+    line = lambda cols: "| " + " | ".join(  # noqa: E731
+        c.ljust(widths[i]) for i, c in enumerate(cols)
+    ) + " |"
+    with capsys.disabled():
+        print("\n" + line(header))
+        print("|" + "|".join("-" * (w + 2) for w in widths) + "|")
+        for row in rows:
+            print(line(row))
+        print(f"\n{len(rows)} hucre, {len(failures)} sapma")
+
+    assert not failures, "ATOMİKLİK MATRİS SAPMALARI:\n  - " + "\n  - ".join(failures)
 
 
 @pytest.mark.parametrize("wrapped", [True, False], ids=["sarmali", "ciplak"])
