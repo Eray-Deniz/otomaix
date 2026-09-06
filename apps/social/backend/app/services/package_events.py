@@ -113,6 +113,11 @@ EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 #       print(len(pe.EVENT_VERSION_CONTRACT), dict(Counter(pe.EVENT_VERSION_CONTRACT.values())))"
 #     → 11 {'gecis': 3, 'surumsuz': 8}                       (2026-09-06)
 #
+# ÖLÇÜM-SATIRI: toplam=11 gecis=3 surumsuz=8
+# (Aşağıdaki prose bu satırdan okur. Satırın kendisi CANLI modüle karşı
+#  test edilir: `test_rationale_measurement_line_matches_the_live_module`.
+#  Sayı bir daha sessizce bayatlayamaz — modül değişince test düşer.)
+#
 # Çapraz kontrol (aynı gün): 6 marka-kapsamlı + 3 yaşam döngüsü + 2 onay = 11;
 # `036_package_runs.sql`in `package_events_type_check`i de tam 11 değer listeler.
 # Tarihsel çapa:
@@ -125,10 +130,10 @@ EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 # TAM EŞLEŞMEK zorundadır — ve bu bir CHECK'te İFADE EDİLEMEZ.
 #
 # İlk yazım "yalnız YARISI ifade edilebilir" diyordu; o oran İKİ tür
-# `surumsuz`ken doğruydu, dokuz türken değil.
+# `surumsuz`ken doğruydu, SEKİZ türken değil.
 #
 # Karar oranın büyüklüğünden DEĞİL, BÖLÜNMENİN KENDİSİNDEN gelir: ifade
-# edilebilen dokuzu DB'ye, edilemeyen üçü Python'a koymak AYNI sözleşmeyi iki
+# edilebilen SEKİZİ DB'ye, edilemeyen ÜÇÜ Python'a koymak AYNI sözleşmeyi iki
 # katmana böler ve iki ölçünün ıraksamasına izin verir (K-01b) — sözleşme
 # değişince biri güncellenir, diğeri unutulur. Üstelik bütünlük kapısı
 # eksik/ölü bir PYTHON beyanını yakalar; bayat bir DB CHECK'ini yakalayan

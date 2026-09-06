@@ -1499,6 +1499,94 @@ def test_import_time_gate_rejects_a_mistyped_contract_value(tmp_path):
     assert "approval" in str(hata), str(hata)
 
 
+# ─── SAYI İDDİALARI KAPI HÂLİNE GETİRİLİR (fix turu 5) ─────────────────────
+#
+# Bu görev beş turda DÖRT kez aynı kusuru üretti: gönderilen bir artefakta,
+# koşulmamış bir sayı yazmak. Dördü de disiplinle düzeltildi, ama disiplin
+# tekrarlanabilir bir kapı DEĞİLDİR. Aşağıdaki iki test, sayıları ELLE
+# denetlenen prose'dan ÇALIŞTIRILAN sözleşmeye çevirir:
+#
+#   * docstring'lerde yazan `N hücre` iddiası ↔ GERÇEKTEN toplanan parametre
+#     sayısı (16 iddia, tek kapı);
+#   * gerekçe bloğundaki ÖLÇÜM-SATIRI ↔ CANLI modülün sözleşme sayıları.
+#
+# Bundan sonra bir sayı bayatlarsa test düşer; kimsenin fark etmesi gerekmez.
+
+
+def _parametrize_hucre_sayisi(func) -> int:
+    """Bir testin ÜRETTİĞİ hücre sayısı — yığılmış `parametrize`lerin ÇARPIMI."""
+    toplam = 1
+    for mark in getattr(func, "pytestmark", []):
+        if mark.name == "parametrize":
+            toplam *= len(mark.args[1])
+    return toplam
+
+
+def test_docstring_cell_counts_match_the_collected_matrix():
+    """Docstring'de yazan `N hücre`, GERÇEKTEN üretilen hücre sayısına eşit.
+
+    Sayı artık iddia değil ÖLÇÜM: kaynağı `parametrize` argüman listelerinin
+    kendisidir. Bir eksen eklenip docstring güncellenmezse — ya da tersi — bu
+    test düşer.
+
+    Kapsam otomatiktir: bu modüldeki `N hücre` yazan HER test. Liste elle
+    tutulmaz, yoksa kapının kendisi bayatlardı.
+    """
+    import re as _re
+    import sys as _sys
+
+    modul = _sys.modules[__name__]
+    denetlenen = {}
+    for ad in dir(modul):
+        if not ad.startswith("test_"):
+            continue
+        func = getattr(modul, ad)
+        doc = getattr(func, "__doc__", None) or ""
+        eslesme = _re.findall(r"(\d+)\s*hücre", doc)
+        if not eslesme:
+            continue
+        denetlenen[ad] = (int(eslesme[-1]), _parametrize_hucre_sayisi(func))
+
+    assert denetlenen, "hiç `N hücre` iddiası bulunamadı — kapı boşa koşuyor"
+    sapan = {a: v for a, v in denetlenen.items() if v[0] != v[1]}
+    assert not sapan, (
+        "docstring hücre sayısı GERÇEK matrisle uyuşmuyor "
+        "(iddia, gerçek): " + repr(sapan)
+    )
+
+
+def test_rationale_measurement_line_matches_the_live_module():
+    """`package_events.py`nin ÖLÇÜM-SATIRI canlı modülle birebir aynı.
+
+    Gerekçe bloğu üç sayıya dayanıyor (toplam · `gecis` · `surumsuz`) ve o
+    sayılar iki kez sessizce bayatladı. Satır artık makine-okunur ve burada
+    CANLI modüle karşı ölçülüyor; prose de o satırdan okuyor.
+    """
+    import re as _re
+    from collections import Counter as _Counter
+
+    kaynak = pathlib.Path(package_events_module.__file__).read_text()
+    satir = _re.search(
+        r"ÖLÇÜM-SATIRI: toplam=(\d+) gecis=(\d+) surumsuz=(\d+)", kaynak
+    )
+    assert satir, "ÖLÇÜM-SATIRI bulunamadı — gerekçe bloğunun dayanağı yok"
+    yazilan = tuple(int(g) for g in satir.groups())
+
+    dagilim = _Counter(EVENT_VERSION_CONTRACT.values())
+    olculen = (
+        len(EVENT_VERSION_CONTRACT),
+        dagilim.get("gecis", 0),
+        dagilim.get("surumsuz", 0),
+    )
+    assert yazilan == olculen, (
+        f"ÖLÇÜM-SATIRI bayat: yazılan {yazilan}, ölçülen {olculen}"
+    )
+    # Çapraz kontrol: üç kapsam sınıfının toplamı da aynı sayıyı vermeli.
+    assert olculen[0] == len(BRAND_SCOPED_EVENTS) + len(LIFECYCLE_EVENTS) + len(
+        APPROVAL_EVENTS
+    ), "kapsam sınıflarının toplamı sözleşme sayısıyla uyuşmuyor"
+
+
 def test_contract_values_are_a_closed_pair():
     """İki değer TEK yerde tanımlıdır ve eşlemenin tamamı o kümededir."""
     assert VERSION_CONTRACT_VALUES == {"gecis", "surumsuz"}
@@ -1644,7 +1732,7 @@ def test_import_time_totality_gate_raises_the_declared_error(
 ):
     """Import kapısı SÖZLEŞME HATASI fırlatır — `NameError` DEĞİL.
 
-    Üç hücre, kümelerin ıraksayabileceği üç yol: beyan silindi · küme büyüdü,
+    3 hücre, kümelerin ıraksayabileceği üç yol: beyan silindi · küme büyüdü,
     beyan büyümedi · küme küçüldü, beyan küçülmedi. Üçünde de operatörün
     gördüğü metin NEYİN eksik/ölü olduğunu ADIYLA söylemek zorunda.
     """
@@ -1908,7 +1996,7 @@ def test_history_producer_fails_loudly_when_its_column_is_missing(
 ):
     """Dayandığı kolon yoksa üretici SESSİZ KALMAZ, DURur.
 
-    Matris üç hücre: sağlıklı (pozitif kontrol — yazım geçer VE satır doğar),
+    Matris 3 hücre: sağlıklı (pozitif kontrol — yazım geçer VE satır doğar),
     kolon yeniden adlandırıldı, kolon düşürüldü. Beklenti hücre hücre elle
     yazılmaz, TEK kuraldan türetilir: kolon yerinde mi?
 
