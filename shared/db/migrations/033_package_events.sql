@@ -189,6 +189,30 @@ BEGIN
             ('package_events indeks kümesi (kapalı)',
              'CREATE INDEX idx_package_events_brand_created ON social.package_events USING btree (brand_id, created_at DESC) WHERE (brand_id IS NOT NULL)|f|live && CREATE INDEX idx_package_events_sector_created ON social.package_events USING btree (sector_id, created_at DESC) WHERE (sector_id IS NOT NULL)|f|live && CREATE UNIQUE INDEX package_events_pkey ON social.package_events USING btree (id)|t|live')
     ),
+    -- ───────────────────────────────────────────────────────────────────────
+    -- SÜRÜM-FARKINDA EK (migration 036, K-99)
+    --
+    -- 036 `package_events` olay kümesini `approval` ve `rejection` ile
+    -- genişletir. Aşağıdaki tablo, 036 UYGULANMIŞSA geçerli olan İKİNCİ kabul
+    -- edilebilir metni taşır; adı burada GEÇMEYEN her label için karşılaştırma
+    -- `expected.want`e düşer (`coalesce`), yani 033'ün geri kalan sözleşmesi
+    -- hiç gevşemez.
+    --
+    -- 033 TEK BAŞINA uygulandığında beklenen küme DEĞİŞMEDİ: `expected.want`
+    -- dokuz değerli DAR kümedir ve öyle KALIR.
+    --
+    -- Kabul EXACT-MATCH bir POZİTİF SÖZLEŞMEdir, "şunu içeriyor mu" değil:
+    -- yalnız bu İKİ metin geçer. Tanınmayan bir olay türü eklenmiş ÜÇÜNCÜ bir
+    -- metin hâlâ REDDEDİLİR — kapalılık vaadi ZAYIFLAMAZ (ölçüm:
+    -- `tests/test_migration_036.py::test_unrecognized_event_type_still_rejected`).
+    -- ───────────────────────────────────────────────────────────────────────
+    expected_036(label, want) AS (
+        VALUES
+            ('package_events.event_type CHECK',
+             'c|CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text, ''package_read_error''::text, ''stale_assignment_fallback''::text, ''stamp_missing''::text, ''stamp_invalid''::text, ''stamp_stale_at_persist''::text, ''activation''::text, ''rollback''::text, ''deactivation''::text, ''approval''::text, ''rejection''::text])))'),
+            ('package_events kısıt kümesi (kapalı)',
+             'package_events_brand_id_fkey|FOREIGN KEY (brand_id) REFERENCES social.brands(id) ON DELETE CASCADE && package_events_pkey|PRIMARY KEY (id) && package_events_type_check|CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text, ''package_read_error''::text, ''stale_assignment_fallback''::text, ''stamp_missing''::text, ''stamp_invalid''::text, ''stamp_stale_at_persist''::text, ''activation''::text, ''rollback''::text, ''deactivation''::text, ''approval''::text, ''rejection''::text])))')
+    ),
     observed(label, got) AS (
         VALUES
             ('package_events kısıt kümesi (kapalı)',
@@ -331,7 +355,9 @@ BEGIN
       INTO failures
       FROM expected e
       LEFT JOIN observed o ON o.label = e.label
-     WHERE o.got IS DISTINCT FROM e.want;
+      LEFT JOIN expected_036 x ON x.label = e.label
+     WHERE o.got IS DISTINCT FROM e.want
+       AND o.got IS DISTINCT FROM coalesce(x.want, e.want);
 
     IF failures IS NOT NULL THEN
         RAISE EXCEPTION 'migration 033 garanti dogrulamasi BASARISIZ:%',

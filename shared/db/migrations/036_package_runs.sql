@@ -1,0 +1,684 @@
+-- Migration 036 — koşu kaydı · politika raporu · onay anlık görüntüsü · atama geçmişi
+--
+-- NE EKLİYOR:
+--   * `social.sector_package_runs` — bir denemenin KANONİK kaydı (K-82 · K-83 ·
+--     K-90 · K-92 · K-95 · K-96 · K-97 · K-98 · K-106 · F18 · F19 · K-24).
+--   * `social.package_rollback_plans` (K-145) — olay başına geri alma planı;
+--     kimliği BİLEŞİKtir (`incident_id`, `package_id`), `id` kolonu YOKTUR.
+--   * `social.brand_sub_sector_history` (K-45) + onu YAZAN tetikleyici.
+--   * `sector_research_artifacts` üstünde `UNIQUE (run_id, source, kind)` (K-09).
+--   * `package_events` olay kümesi `approval` ve `rejection` ile genişler (K-99).
+--
+-- BAĞLAYICI INVARIANTLAR (plan Task 6 + bağlayıcı arayüz eki):
+--
+--   * **`run_id` deneme başına KANONİK ve BENZERSİZDİR.** Koşu satırı, artefakt,
+--     klasör adı ve paket `run_id` bağı hep aynı değeri taşır. İkinci bir
+--     `attempt` kimlik uzayı YOKTUR; yeniden koşum yeni `run_id` +
+--     `parent_run_id` alır (teknik karar 23).
+--   * **`durum` ve `sonuc` AYRI kolonlardır:** `durum` yürütmenin hâli, `sonuc`
+--     motorun çıktısı. `durum != 'tamamlandi'` iken `sonuc` NULL olmak ZORUNDA.
+--     `sonuc` üç değerle kapalıdır (K-90 birleştirmesi — dördüncü değer yok).
+--   * **K-24:** `durum='tamamlandi'` ise `barrier_report` NULL OLAMAZ — üç
+--     sonucun ÜÇÜNDE de. Kolon yalnız nullable olsaydı tamamlanmış bir koşu hiç
+--     metrik yazmadan kaydedilebilirdi; mevcut testler verilen değerin
+--     saklandığını kanıtlıyordu, EKSİK değerin reddedildiğini değil.
+--   * **F19 — karar günlüğü kökeninden okunur.** `final_decision_log` ve
+--     `decision_log_sha` BİRLİKTE dolar, BİRLİKTE boşalır; `final_candidate`
+--     günlüksüz YAZILAMAZ. İki CHECK, iki ayrı kusuru kapatır: kopuk hash ve
+--     günlüksüz içerik.
+--   * **F18 — kapı tasdikleri KANITTIR, boolean değil.** `katman1_attestation` ·
+--     `readiness_attestation` · `katman2_attestation` "hangi koşum, hangi sonuç,
+--     kim, ne zaman" sorusunu kalıcı kılar. Katman-2'nin SONUCU kapı DEĞİLDİR
+--     (spec §10.2: koşulması ve sunulması ön koşul); şema o yüzden onun
+--     içeriğini kısıtlamaz, yalnız varlığını kaydeder.
+--   * **K-98 — `approval_snapshot` DEĞİŞMEZDİR.** Tetikleyici, kolon DOLUYKEN
+--     onun değiştirilmesini (ve NULL'lanmasını) reddeder; `approval_karar` ·
+--     `approved_at` · `approval_seconds` güncellenebilir.
+--   * **`package_id` BENZERSİZ DEĞİLDİR (tur 4 düzeltmesi).** Bir koşu satırı
+--     zaten en fazla bir `package_id` taşır; `UNIQUE` "bir koşu → bir taslak"
+--     değil "bir TASLAK → bir koşu" demek olurdu ve K-106'yı İMKÂNSIZ kılardı
+--     (düzeltme turu yeni bir koşudur, yeni `run_id` alır, ama AYNI taslağı
+--     günceller). Tekilliği kısıt değil KİLİT + DOLU KOLON sağlar (Task 15).
+--   * **Düzeltme soyağacı:** `kosu_turu='duzeltme'` ⇔ `duzeltilen_run_id` dolu.
+--     `parent_run_id` ile KARŞILIKLI DIŞLAMA YOKTUR (tur 5 düzeltmesi): yarıda
+--     kalmış bir düzeltmenin yeniden koşumu İKİ bağı da taşımak zorundadır.
+--   * **K-145 `hedefsiz`in AÇIK veri karşılığı:** `durum='hedefsiz'` ⇔
+--     `target_version IS NULL`, İKİ YÖNLÜ. Hedefsizlik KALICI bir kayıttır,
+--     çalışma zamanı sezgisi değil.
+--   * **AÇIK-1 (kontrolör kararı 2026-08-30):** onay üçlüsü BİRLİKTE dolar
+--     (`num_nonnulls ∈ {0,3}`) ve boş/yalnız-boşluk kimlik onay SAYILMAZ. Tek
+--     CHECK (`(onay_actor IS NULL) = (onaylandi_at IS NULL)`) ölçüldü ki
+--     `onay_actor = ''` değerini KABUL EDER; `onay_kapsam_sha` onayı onayladığı
+--     satır KÜMESİNE bağlar.
+--   * **R8(c) — jeton dörtlüsü İKİ tabloda da AYNI.** Jetonun TÜRÜ kolonda
+--     taşınmaz, türünü taşıdığı TABLO belirler; ikinci bir enum AÇILMAZ.
+--   * **K-45 üretici ZORUNLU.** Geçmiş tablosunu hiçbir şey yazmıyorsa Task 16
+--     onu maruziyet kanıtı olarak tüketemez. Tetikleyici `brands.sub_sector_id`
+--     değişimini AYNI İŞLEMDE yakalar — atama yolu hangi koddan geçerse geçsin.
+--     GERİ DOLDURMA YOKTUR: bilinmeyen geçmiş retroaktif "bakım tamamlandı"
+--     üretmez, geçmişsiz marka bildirim almaz.
+--
+-- DONMUŞ SÖZLEŞMELERE DOKUNUŞ — ölçülmüş ve bilinçli:
+--   032 `sector_research_artifacts` kısıt/indeks kümesini, 033 `package_events`
+--   CHECK metnini TAM METİNLE pinliyor. Her ikisi de SÜRÜM-FARKINDA hâle
+--   getirildi: eski beklenti (o migration TEK BAŞINA uygulandığında) geçerli
+--   KALIR, 036 sonrası genişlemiş hâl de kabul edilir. Kabul EXACT-MATCH bir
+--   POZİTİF SÖZLEŞMEdir, "şunu içeriyor mu" değil — adı geçmeyen fazladan
+--   indeks ve tanınmayan olay türü hâlâ REDDEDİLİR.
+--
+-- TRANSACTION SAHİPLİĞİ: bu dosya KENDİ `BEGIN/COMMIT`ini TAŞIMAZ (035 ile aynı
+-- sözleşme). Dağıtım runner'ı ve testler her migration'ı `--single-transaction`
+-- ile uygular.
+--
+--   ATOMİKLİK SARMALAYICIYA BAĞLI DEĞİLDİR (035 fix turu 6, F3'ün taşınması):
+--   `ON_ERROR_STOP` olmadan psql hatadan SONRA devam eder, yani AYRI bir
+--   deyimdeki her şey kendi transaction'ında commit edilir ve düşen bir adım
+--   şemayı YARIM UYGULANMIŞ bırakır. Bu yüzden KALICI olan her şey — kapılar,
+--   fonksiyonlar, tablolar, indeksler, tetikleyiciler, `ALTER`ler ve garanti
+--   doğrulaması — TEK `DO $apply_036$` deyiminin İÇİNDEDİR. Bir `DO` bloğu tek
+--   deyimdir: autocommit altında bile ya tamamı uygulanır ya hiçbiri.
+--
+-- GERİ ALMA: `rollback/036_down.sql`. F20 gereği Plan 2 verisi VARKEN
+-- fail-closed durur; pilot sonrası dönüş şema geri alması değil, veri-koruyan
+-- ileri düzeltme migration'ıdır.
+
+DO $apply_036$
+DECLARE
+    -- Kanonik tanımlar TEK YERDE: hem kapı hem garanti doğrulaması buradan okur,
+    -- yani ıraksayamazlar (035'in `canonical` deseni).
+    olay_check_dar CONSTANT TEXT :=
+        'CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text,'
+        ' ''package_read_error''::text, ''stale_assignment_fallback''::text,'
+        ' ''stamp_missing''::text, ''stamp_invalid''::text,'
+        ' ''stamp_stale_at_persist''::text, ''activation''::text,'
+        ' ''rollback''::text, ''deactivation''::text])))';
+    olay_check_genis CONSTANT TEXT :=
+        'CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text,'
+        ' ''package_read_error''::text, ''stale_assignment_fallback''::text,'
+        ' ''stamp_missing''::text, ''stamp_invalid''::text,'
+        ' ''stamp_stale_at_persist''::text, ''activation''::text,'
+        ' ''rollback''::text, ''deactivation''::text, ''approval''::text,'
+        ' ''rejection''::text])))';
+    k09_kanonik CONSTANT TEXT := 'UNIQUE (run_id, source, kind)';
+
+    bagimli TEXT;
+    mevcut_def TEXT;
+    mevcut_tur "char";
+    mevcut_valid BOOLEAN;
+    problems TEXT;
+BEGIN
+    -- ── KAPI 1 — ÖNKOŞUL İLİŞKİLER ──────────────────────────────────────────
+    -- 036 üç ilişkiye yaslanır (`sectors` · `sector_packages` · `brands`) ve
+    -- ikisinin sözleşmesini genişletir (`sector_research_artifacts` ·
+    -- `package_events`). Biri yoksa yabancı anahtar ya da `ALTER` sessizce
+    -- BAŞKA bir hata üretirdi; girişte adıyla DURur.
+    SELECT string_agg(ad, ', ' ORDER BY ad) INTO bagimli
+      FROM unnest(ARRAY['social.sectors', 'social.sector_packages',
+                        'social.brands', 'social.sector_research_artifacts',
+                        'social.package_events']) AS t(ad)
+     WHERE to_regclass(ad) IS NULL;
+
+    IF bagimli IS NOT NULL THEN
+        RAISE EXCEPTION
+            'migration 036: onkosul iliskiler EKSIK (%)', bagimli
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = '036, 032 ve 033 uygulanmis bir sema uzerinde kosar. '
+                         'Migration lari numara sirasinda uygulayin.';
+    END IF;
+
+    -- ── KAPI 2 — OLAY CHECK'İNİN KİMLİĞİ ADdan DEĞİL TANIMdan ────────────────
+    -- `DROP CONSTRAINT` nesneyi yalnız ADIYLA arar. Aynı adı taşıyan İLGİSİZ
+    -- (ya da elle gevşetilmiş) bir kısıt sessizce düşürülüp yerine bizimki
+    -- konsaydı, 033'ün kapalı-küme vaadi bu migration'ın eliyle kaybolurdu.
+    -- Kabul edilen İKİ tanım vardır: 036 öncesi dar küme ve 036 sonrası geniş
+    -- küme (ikinci koşum). Üçüncü bir metin fail-closed reddedilir.
+    SELECT pg_get_constraintdef(c.oid), c.contype, c.convalidated
+      INTO mevcut_def, mevcut_tur, mevcut_valid
+      FROM pg_constraint c
+     WHERE c.conrelid = 'social.package_events'::regclass
+       AND c.conname = 'package_events_type_check';
+
+    IF mevcut_def IS NULL
+       OR mevcut_tur <> 'c'
+       OR NOT mevcut_valid
+       OR mevcut_def NOT IN (olay_check_dar, olay_check_genis) THEN
+        RAISE EXCEPTION
+            'migration 036: package_events_type_check adini KANONIK OLMAYAN bir kisit tutuyor (contype=%, convalidated=%, tanim=%)',
+            coalesce(mevcut_tur::text, '<yok>'),
+            coalesce(mevcut_valid::text, '<yok>'),
+            coalesce(mevcut_def, '<yok>')
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Beklenen: 033 un dar kumesi ya da 036 nin genis kumesi. '
+                         'Baska bir metni genisletmek kapali-kume vaadini yok '
+                         'ederdi; kisiti elle cozup migration i yeniden kosturun.';
+    END IF;
+
+    -- ── KAPI 3 — K-09 KISIT KİMLİĞİ ─────────────────────────────────────────
+    -- `ADD CONSTRAINT`in `IF NOT EXISTS` biçimi YOKTUR; varlık katalogdan
+    -- okunur. Ad DOLU ama tanım BAŞKAysa ekleme `duplicate_object` ile düşer;
+    -- burada anlaşılır bir mesajla DURulur.
+    SELECT pg_get_constraintdef(c.oid), c.contype, c.convalidated
+      INTO mevcut_def, mevcut_tur, mevcut_valid
+      FROM pg_constraint c
+     WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+       AND c.conname = 'sector_research_artifacts_run_source_kind_key';
+
+    IF mevcut_def IS NOT NULL
+       AND (mevcut_tur <> 'u' OR NOT mevcut_valid OR mevcut_def <> k09_kanonik) THEN
+        RAISE EXCEPTION
+            'migration 036: sector_research_artifacts_run_source_kind_key adini KANONIK OLMAYAN bir kisit tutuyor (contype=%, convalidated=%, tanim=%)',
+            mevcut_tur, mevcut_valid, mevcut_def
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Beklenen tanim: UNIQUE (run_id, source, kind).';
+    END IF;
+
+    -- ═══ BURADAN SONRASI KALICI — ve hepsi BU deyimin içinde ════════════════
+
+    -- ── 1. Koşu kaydı ───────────────────────────────────────────────────────
+    EXECUTE $ddl$
+        CREATE TABLE IF NOT EXISTS social.sector_package_runs (
+            id                       UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+            run_id                   TEXT        NOT NULL,
+            parent_run_id            TEXT,
+            sector_id                UUID        NOT NULL,
+            durum                    TEXT        NOT NULL,
+            sonuc                    TEXT,
+            sebep                    TEXT,
+            engine_version           TEXT,
+            engine_config_sha        TEXT,
+            policy_report            JSONB,
+            barrier_report           JSONB,
+            final_candidate          JSONB,
+            final_decision_log       JSONB,
+            decision_log_sha         TEXT,
+            engine_diff              JSONB,
+            content_sha              TEXT,
+            approval_snapshot        JSONB,
+            approval_karar           TEXT,
+            approved_at              TIMESTAMPTZ,
+            approval_seconds         INT,
+            katman1_attestation      JSONB,
+            readiness_attestation    JSONB,
+            katman2_attestation      JSONB,
+            snapshot_sha             TEXT,
+            package_id               UUID,
+            duzeltilen_run_id        UUID,
+            kosu_turu                TEXT        NOT NULL,
+            kanit_jetonu             TEXT,
+            kanit_jetonu_parmakizi   TEXT,
+            kanit_jetonu_basildi_at  TIMESTAMPTZ,
+            kanit_jetonu_harcandi_at TIMESTAMPTZ,
+            created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+            CONSTRAINT sector_package_runs_run_id_key UNIQUE (run_id),
+            CONSTRAINT sector_package_runs_sector_id_fkey
+                FOREIGN KEY (sector_id) REFERENCES social.sectors(id),
+            -- BENZERSİZ DEĞİL (tur 4): bkz. başlık.
+            CONSTRAINT sector_package_runs_package_id_fkey
+                FOREIGN KEY (package_id) REFERENCES social.sector_packages(id),
+
+            CONSTRAINT sector_package_runs_durum_check
+                CHECK (durum IN ('calisiyor', 'tamamlandi', 'tamamlanmadi')),
+            CONSTRAINT sector_package_runs_sonuc_check
+                CHECK (sonuc IS NULL
+                       OR sonuc IN ('activation_eligible', 'no_change', 'blocked')),
+            CONSTRAINT sector_package_runs_sonuc_yalniz_tamamlandi
+                CHECK (sonuc IS NULL OR durum = 'tamamlandi'),
+            CONSTRAINT sector_package_runs_barrier_report_zorunlu
+                CHECK (durum <> 'tamamlandi' OR barrier_report IS NOT NULL),
+            CONSTRAINT sector_package_runs_approval_karar_check
+                CHECK (approval_karar IS NULL OR approval_karar IN ('onay', 'ret')),
+            CONSTRAINT sector_package_runs_kosu_turu_check
+                CHECK (kosu_turu IN ('ilk', 'periyodik', 'duzeltme')),
+            CONSTRAINT sector_package_runs_duzeltme_soyagaci
+                CHECK ((kosu_turu = 'duzeltme') = (duzeltilen_run_id IS NOT NULL)),
+            CONSTRAINT sector_package_runs_karar_gunlugu_cifti
+                CHECK ((final_decision_log IS NULL) = (decision_log_sha IS NULL)),
+            CONSTRAINT sector_package_runs_icerik_gunluksuz_yazilmaz
+                CHECK (final_candidate IS NULL OR final_decision_log IS NOT NULL),
+            CONSTRAINT sector_package_runs_kanit_jetonu_butun
+                CHECK (kanit_jetonu IS NULL
+                       OR (kanit_jetonu_parmakizi IS NOT NULL
+                           AND kanit_jetonu_basildi_at IS NOT NULL))
+        )
+    $ddl$;
+
+    EXECUTE $ddl$
+        CREATE INDEX IF NOT EXISTS idx_sector_package_runs_sector_created
+            ON social.sector_package_runs (sector_id, created_at DESC)
+    $ddl$;
+
+    -- ── 2. Geri alma planları (K-145) ───────────────────────────────────────
+    -- `id` kolonu YOKTUR: kimlik bileşiktir. İkinci bir vekil anahtar, aynı
+    -- olay+paket için iki satır yazılabilmesi demek olurdu ve tekrar
+    -- güvenliğinin VERİ karşılığı kaybolurdu.
+    EXECUTE $ddl$
+        CREATE TABLE IF NOT EXISTS social.package_rollback_plans (
+            incident_id              TEXT        NOT NULL,
+            package_id               UUID        NOT NULL,
+            observed_active_version  INT         NOT NULL,
+            target_version           INT,
+            evidence_class           TEXT        NOT NULL,
+            reason                   TEXT        NOT NULL,
+            durum                    TEXT        NOT NULL,
+            onay_actor               TEXT,
+            onaylandi_at             TIMESTAMPTZ,
+            onay_kapsam_sha          TEXT,
+            kanit_jetonu             TEXT,
+            kanit_jetonu_parmakizi   TEXT,
+            kanit_jetonu_basildi_at  TIMESTAMPTZ,
+            kanit_jetonu_harcandi_at TIMESTAMPTZ,
+            created_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+            CONSTRAINT package_rollback_plans_incident_id_package_id_key
+                UNIQUE (incident_id, package_id),
+            CONSTRAINT package_rollback_plans_durum_check
+                CHECK (durum IN ('bekliyor', 'tamamlandi', 'hata', 'hedefsiz')),
+            CONSTRAINT package_rollback_plans_hedefsiz_butun
+                CHECK ((durum = 'hedefsiz') = (target_version IS NULL)),
+            CONSTRAINT package_rollback_plans_onay_butun
+                CHECK (num_nonnulls(onay_actor, onaylandi_at, onay_kapsam_sha)
+                       IN (0, 3)),
+            CONSTRAINT package_rollback_plans_onay_actor_dolu
+                CHECK (onay_actor IS NULL OR btrim(onay_actor) <> ''),
+            CONSTRAINT package_rollback_plans_kanit_jetonu_butun
+                CHECK (kanit_jetonu IS NULL
+                       OR (kanit_jetonu_parmakizi IS NOT NULL
+                           AND kanit_jetonu_basildi_at IS NOT NULL))
+        )
+    $ddl$;
+
+    -- ── 3. Atama geçmişi + ÜRETİCİSİ (K-45) ────────────────────────────────
+    -- `sub_sector_id` üstünde yabancı anahtar YOKTUR ve bu bilinçlidir
+    -- (`package_events.sector_id` ile aynı gerekçe): maruziyet kanıtı, işaret
+    -- ettiği satır silinse bile AYAKTA kalmalıdır. `brand_id` ise FK +
+    -- CASCADE'dir — F18 marka silme sözleşmesi korunur.
+    EXECUTE $ddl$
+        CREATE TABLE IF NOT EXISTS social.brand_sub_sector_history (
+            id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+            brand_id      UUID        NOT NULL,
+            sub_sector_id UUID        NOT NULL,
+            assigned_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+            unassigned_at TIMESTAMPTZ,
+
+            CONSTRAINT brand_sub_sector_history_brand_id_fkey
+                FOREIGN KEY (brand_id) REFERENCES social.brands(id) ON DELETE CASCADE,
+            CONSTRAINT brand_sub_sector_history_aralik_check
+                CHECK (unassigned_at IS NULL OR unassigned_at >= assigned_at)
+        )
+    $ddl$;
+
+    -- Marka başına EN FAZLA BİR açık aralık — kısmi benzersiz indeks. Kapanış
+    -- SAYARAK değil YAPIYLA: "iki açık aralık" hücresi doğamaz, tetikleyicinin
+    -- doğru davrandığını ayrıca saymak gerekmez.
+    EXECUTE $ddl$
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_brand_sub_sector_history_acik
+            ON social.brand_sub_sector_history (brand_id)
+         WHERE unassigned_at IS NULL
+    $ddl$;
+
+    EXECUTE $ddl$
+        CREATE INDEX IF NOT EXISTS idx_brand_sub_sector_history_brand
+            ON social.brand_sub_sector_history (brand_id, assigned_at DESC)
+    $ddl$;
+
+    -- ALAN OKUMASI `to_jsonb` İLE, `NEW.sub_sector_id` İLE DEĞİL — ve bu
+    -- ÖLÇÜLMÜŞ bir tercihtir. Doğrudan alan erişimi ya `UPDATE OF sub_sector_id`
+    -- kolon listesi ya statik ifade üstünden KATALOG BAĞIMLILIĞI kurar; o
+    -- bağımlılık `rollback/032_down.sql`in `ALTER TABLE social.brands DROP
+    -- COLUMN sub_sector_id` adımını kırardı (032 geri alması 036'dan bağımsız
+    -- koşabilmeli). `to_jsonb(NEW) ->> 'sub_sector_id'` kolon yoksa NULL döner:
+    -- tetikleyici o durumda sessiz bir no-op'a düşer, patlamaz.
+    EXECUTE $ddl$
+        CREATE OR REPLACE FUNCTION social.track_brand_sub_sector_history()
+        RETURNS trigger AS $track_history$
+        DECLARE
+            yeni UUID;
+            eski UUID;
+        BEGIN
+            yeni := (to_jsonb(NEW) ->> 'sub_sector_id')::uuid;
+            IF TG_OP = 'UPDATE' THEN
+                eski := (to_jsonb(OLD) ->> 'sub_sector_id')::uuid;
+            END IF;
+
+            -- Değişmeyen atama yeni aralık ÜRETMEZ: maruziyet kanıtı, her
+            -- marka güncellemesinde tekrarlanan bir gürültü olamaz.
+            IF yeni IS NOT DISTINCT FROM eski THEN
+                RETURN NULL;
+            END IF;
+
+            UPDATE social.brand_sub_sector_history
+               SET unassigned_at = now()
+             WHERE brand_id = NEW.id AND unassigned_at IS NULL;
+
+            IF yeni IS NOT NULL THEN
+                INSERT INTO social.brand_sub_sector_history (brand_id, sub_sector_id)
+                VALUES (NEW.id, yeni);
+            END IF;
+
+            RETURN NULL;
+        END
+        $track_history$ LANGUAGE plpgsql
+    $ddl$;
+
+    EXECUTE 'DROP TRIGGER IF EXISTS brands_sub_sector_history ON social.brands';
+    EXECUTE $ddl$
+        CREATE TRIGGER brands_sub_sector_history
+            AFTER INSERT OR UPDATE ON social.brands
+            FOR EACH ROW EXECUTE FUNCTION social.track_brand_sub_sector_history()
+    $ddl$;
+
+    -- ── 4. K-98 — onay anlık görüntüsü DEĞİŞMEZ ─────────────────────────────
+    -- `IS DISTINCT FROM` ZORUNLUDUR, `<>` DEĞİL: kolonu NULL'a çekmek de bir
+    -- DEĞİŞTİRMEdir ve `<>` onu yakalamazdı (NULL karşılaştırması NULL'dır).
+    -- Kanıtı silmek, kanıtı değiştirmekten daha zararsız değildir.
+    EXECUTE $ddl$
+        CREATE OR REPLACE FUNCTION social.reject_approval_snapshot_mutation()
+        RETURNS trigger AS $reject_snapshot$
+        BEGIN
+            IF OLD.approval_snapshot IS NOT NULL
+               AND NEW.approval_snapshot IS DISTINCT FROM OLD.approval_snapshot THEN
+                RAISE EXCEPTION
+                    'approval_snapshot DEGISMEZDIR (K-98): dolu bir anlik goruntu '
+                    'degistirilemez ve silinemez (run_id=%)', OLD.run_id
+                    USING ERRCODE = 'integrity_constraint_violation',
+                          HINT = 'approval_karar / approved_at / approval_seconds '
+                                 'guncellenebilir; anlik goruntunun kendisi hayir.';
+            END IF;
+            RETURN NEW;
+        END
+        $reject_snapshot$ LANGUAGE plpgsql
+    $ddl$;
+
+    EXECUTE 'DROP TRIGGER IF EXISTS sector_package_runs_approval_snapshot_immutable '
+            'ON social.sector_package_runs';
+    EXECUTE $ddl$
+        CREATE TRIGGER sector_package_runs_approval_snapshot_immutable
+            BEFORE UPDATE ON social.sector_package_runs
+            FOR EACH ROW EXECUTE FUNCTION social.reject_approval_snapshot_mutation()
+    $ddl$;
+
+    -- ── 5. K-09 — artefakt benzersizliği ────────────────────────────────────
+    -- Ad SÖZLEŞMEYLE SABİTTİR (katalogdan tahmin edilmez): 032 manifestinin
+    -- muafiyeti tam da bu ada yazılıdır.
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint c
+         WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+           AND c.conname = 'sector_research_artifacts_run_source_kind_key'
+    ) THEN
+        EXECUTE 'ALTER TABLE social.sector_research_artifacts '
+                'ADD CONSTRAINT sector_research_artifacts_run_source_kind_key '
+                'UNIQUE (run_id, source, kind)';
+    END IF;
+
+    -- ── 6. K-99 — olay kümesi genişler ──────────────────────────────────────
+    -- Yalnız DB CHECK'ini genişletmek onay/ret olayını YAZILABİLİR YAPMAZ:
+    -- `app/services/package_events.py` bilinmeyen türü SQL'e VARMADAN reddeder.
+    -- Python üreticisi aynı görevde `APPROVAL_EVENTS` ile genişletildi; iki
+    -- kapının tek küme olduğu `test_db_check_and_python_gate_agree` ile ölçülür.
+    IF (SELECT pg_get_constraintdef(c.oid)
+          FROM pg_constraint c
+         WHERE c.conrelid = 'social.package_events'::regclass
+           AND c.conname = 'package_events_type_check') = olay_check_dar THEN
+        EXECUTE 'ALTER TABLE social.package_events '
+                'DROP CONSTRAINT package_events_type_check';
+        EXECUTE 'ALTER TABLE social.package_events '
+                'ADD CONSTRAINT package_events_type_check CHECK (event_type IN ('
+                '''mismatch_fallthrough'', ''package_read_error'', '
+                '''stale_assignment_fallback'', ''stamp_missing'', '
+                '''stamp_invalid'', ''stamp_stale_at_persist'', ''activation'', '
+                '''rollback'', ''deactivation'', ''approval'', ''rejection''))';
+    END IF;
+
+    -- ── 7. Belgeleme ────────────────────────────────────────────────────────
+    EXECUTE $ddl$
+        COMMENT ON TABLE social.sector_package_runs IS
+            'Sektor bilgi paketi KOSU kaydi (plan Task 6). run_id deneme basina KANONIK ve BENZERSIZ; yeniden kosum yeni run_id + parent_run_id alir. durum yurutmenin hali, sonuc motorun ciktisi — AYRI kolonlar. package_id BENZERSIZ DEGIL (K-106 duzeltme turu ayni taslagi hedefler).'
+    $ddl$;
+    EXECUTE $ddl$
+        COMMENT ON COLUMN social.sector_package_runs.barrier_report IS
+            'K-24 — motorun ham degisim sayi/oranlari. durum=tamamlandi iken NULL OLAMAZ (sonucun ucunde de).'
+    $ddl$;
+    EXECUTE $ddl$
+        COMMENT ON COLUMN social.sector_package_runs.approval_snapshot IS
+            'K-98 — DEGISMEZ. Dolu iken degistirilemez ve silinemez (tetikleyici). Onay karari/zamani/suresi ayri kolonlardadir ve guncellenebilir.'
+    $ddl$;
+    EXECUTE $ddl$
+        COMMENT ON COLUMN social.sector_package_runs.katman2_attestation IS
+            'F18 — KOSULDU + SUNULDU kanitidir; sonucu KAPI DEGILDIR (spec 10.2).'
+    $ddl$;
+    EXECUTE $ddl$
+        COMMENT ON TABLE social.package_rollback_plans IS
+            'K-145 — olay basina geri alma plani. Kimlik BILESIK: (incident_id, package_id); id kolonu YOKTUR. hedefsiz durumu ile target_version IS NULL IKI YONLU esdegerdir; hedefsizlik KALICI kayittir.'
+    $ddl$;
+    EXECUTE $ddl$
+        COMMENT ON TABLE social.brand_sub_sector_history IS
+            'K-45 maruziyet kanidi. Satirlari brands_sub_sector_history TETIKLEYICISI yazar — atama yolu hangi koddan gecerse gecsin. GERI DOLDURMA YOKTUR: gecmissiz marka bildirim almaz.'
+    $ddl$;
+
+    -- ── 8. GARANTİ DOĞRULAMASI — fail-closed ────────────────────────────────
+    --
+    -- `CREATE ... IF NOT EXISTS` yalnız o ADDA bir nesne var mı diye bakar,
+    -- TANIMINI doğrulamaz: aynı adda yanlış tanımlı bir tablo önceden duruyorsa
+    -- DDL sessizce atlanır ve migration BAŞARIYLA biter. 032/033 bu modu zaten
+    -- tehlikeli sayıp katalogdan doğruluyor; 036 aynı sınıftadır.
+    --
+    -- Kısıt · tetikleyici · indeks kümeleri TAM eşleşmedir (KAPALI MANİFEST):
+    -- eksik olan da FAZLA olan da bulgudur. `NOT NULL` kısıtları (contype='n')
+    -- DIŞARIDA — PG17+ onları satır olarak gösterir, PG16 göstermez;
+    -- null'lanabilirlik zaten kolon imzasında denetleniyor.
+    WITH expected(label, want) AS (
+        VALUES
+            ('sector_package_runs tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+            ('sector_package_runs kolon imzası',
+             'id:uuid:nn:gen_random_uuid() && run_id:text:nn:- && parent_run_id:text:null:- && sector_id:uuid:nn:- && durum:text:nn:- && sonuc:text:null:- && sebep:text:null:- && engine_version:text:null:- && engine_config_sha:text:null:- && policy_report:jsonb:null:- && barrier_report:jsonb:null:- && final_candidate:jsonb:null:- && final_decision_log:jsonb:null:- && decision_log_sha:text:null:- && engine_diff:jsonb:null:- && content_sha:text:null:- && approval_snapshot:jsonb:null:- && approval_karar:text:null:- && approved_at:timestamp with time zone:null:- && approval_seconds:integer:null:- && katman1_attestation:jsonb:null:- && readiness_attestation:jsonb:null:- && katman2_attestation:jsonb:null:- && snapshot_sha:text:null:- && package_id:uuid:null:- && duzeltilen_run_id:uuid:null:- && kosu_turu:text:nn:- && kanit_jetonu:text:null:- && kanit_jetonu_parmakizi:text:null:- && kanit_jetonu_basildi_at:timestamp with time zone:null:- && kanit_jetonu_harcandi_at:timestamp with time zone:null:- && created_at:timestamp with time zone:nn:now()'),
+            ('sector_package_runs kısıt kümesi (kapalı)',
+             'sector_package_runs_approval_karar_check|CHECK (((approval_karar IS NULL) OR (approval_karar = ANY (ARRAY[''onay''::text, ''ret''::text])))) && sector_package_runs_barrier_report_zorunlu|CHECK (((durum <> ''tamamlandi''::text) OR (barrier_report IS NOT NULL))) && sector_package_runs_durum_check|CHECK ((durum = ANY (ARRAY[''calisiyor''::text, ''tamamlandi''::text, ''tamamlanmadi''::text]))) && sector_package_runs_duzeltme_soyagaci|CHECK (((kosu_turu = ''duzeltme''::text) = (duzeltilen_run_id IS NOT NULL))) && sector_package_runs_icerik_gunluksuz_yazilmaz|CHECK (((final_candidate IS NULL) OR (final_decision_log IS NOT NULL))) && sector_package_runs_kanit_jetonu_butun|CHECK (((kanit_jetonu IS NULL) OR ((kanit_jetonu_parmakizi IS NOT NULL) AND (kanit_jetonu_basildi_at IS NOT NULL)))) && sector_package_runs_karar_gunlugu_cifti|CHECK (((final_decision_log IS NULL) = (decision_log_sha IS NULL))) && sector_package_runs_kosu_turu_check|CHECK ((kosu_turu = ANY (ARRAY[''ilk''::text, ''periyodik''::text, ''duzeltme''::text]))) && sector_package_runs_package_id_fkey|FOREIGN KEY (package_id) REFERENCES social.sector_packages(id) && sector_package_runs_pkey|PRIMARY KEY (id) && sector_package_runs_run_id_key|UNIQUE (run_id) && sector_package_runs_sector_id_fkey|FOREIGN KEY (sector_id) REFERENCES social.sectors(id) && sector_package_runs_sonuc_check|CHECK (((sonuc IS NULL) OR (sonuc = ANY (ARRAY[''activation_eligible''::text, ''no_change''::text, ''blocked''::text])))) && sector_package_runs_sonuc_yalniz_tamamlandi|CHECK (((sonuc IS NULL) OR (durum = ''tamamlandi''::text)))'),
+            ('sector_package_runs indeks kümesi (kapalı)',
+             'CREATE INDEX idx_sector_package_runs_sector_created ON social.sector_package_runs USING btree (sector_id, created_at DESC)|f|live && CREATE UNIQUE INDEX sector_package_runs_pkey ON social.sector_package_runs USING btree (id)|t|live && CREATE UNIQUE INDEX sector_package_runs_run_id_key ON social.sector_package_runs USING btree (run_id)|t|live'),
+            ('sector_package_runs tetikleyici kümesi (kapalı)',
+             'sector_package_runs_approval_snapshot_immutable|enabled'),
+
+            ('package_rollback_plans tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+            ('package_rollback_plans kolon imzası',
+             'incident_id:text:nn:- && package_id:uuid:nn:- && observed_active_version:integer:nn:- && target_version:integer:null:- && evidence_class:text:nn:- && reason:text:nn:- && durum:text:nn:- && onay_actor:text:null:- && onaylandi_at:timestamp with time zone:null:- && onay_kapsam_sha:text:null:- && kanit_jetonu:text:null:- && kanit_jetonu_parmakizi:text:null:- && kanit_jetonu_basildi_at:timestamp with time zone:null:- && kanit_jetonu_harcandi_at:timestamp with time zone:null:- && created_at:timestamp with time zone:nn:now()'),
+            ('package_rollback_plans kısıt kümesi (kapalı)',
+             'package_rollback_plans_durum_check|CHECK ((durum = ANY (ARRAY[''bekliyor''::text, ''tamamlandi''::text, ''hata''::text, ''hedefsiz''::text]))) && package_rollback_plans_hedefsiz_butun|CHECK (((durum = ''hedefsiz''::text) = (target_version IS NULL))) && package_rollback_plans_incident_id_package_id_key|UNIQUE (incident_id, package_id) && package_rollback_plans_kanit_jetonu_butun|CHECK (((kanit_jetonu IS NULL) OR ((kanit_jetonu_parmakizi IS NOT NULL) AND (kanit_jetonu_basildi_at IS NOT NULL)))) && package_rollback_plans_onay_actor_dolu|CHECK (((onay_actor IS NULL) OR (btrim(onay_actor) <> ''''::text))) && package_rollback_plans_onay_butun|CHECK ((num_nonnulls(onay_actor, onaylandi_at, onay_kapsam_sha) = ANY (ARRAY[0, 3])))'),
+            ('package_rollback_plans indeks kümesi (kapalı)',
+             'CREATE UNIQUE INDEX package_rollback_plans_incident_id_package_id_key ON social.package_rollback_plans USING btree (incident_id, package_id)|t|live'),
+            ('package_rollback_plans tetikleyici kümesi (kapalı)',
+             '<yok>'),
+
+            ('brand_sub_sector_history tablo imzası',
+             'relkind=r relpersistence=p partition=f rls=f force_rls=f'),
+            ('brand_sub_sector_history kolon imzası',
+             'id:uuid:nn:gen_random_uuid() && brand_id:uuid:nn:- && sub_sector_id:uuid:nn:- && assigned_at:timestamp with time zone:nn:now() && unassigned_at:timestamp with time zone:null:-'),
+            ('brand_sub_sector_history kısıt kümesi (kapalı)',
+             'brand_sub_sector_history_aralik_check|CHECK (((unassigned_at IS NULL) OR (unassigned_at >= assigned_at))) && brand_sub_sector_history_brand_id_fkey|FOREIGN KEY (brand_id) REFERENCES social.brands(id) ON DELETE CASCADE && brand_sub_sector_history_pkey|PRIMARY KEY (id)'),
+            ('brand_sub_sector_history indeks kümesi (kapalı)',
+             'CREATE UNIQUE INDEX brand_sub_sector_history_pkey ON social.brand_sub_sector_history USING btree (id)|t|live && CREATE INDEX idx_brand_sub_sector_history_brand ON social.brand_sub_sector_history USING btree (brand_id, assigned_at DESC)|f|live && CREATE UNIQUE INDEX uq_brand_sub_sector_history_acik ON social.brand_sub_sector_history USING btree (brand_id) WHERE (unassigned_at IS NULL)|t|live'),
+            ('brand_sub_sector_history tetikleyici kümesi (kapalı)',
+             '<yok>'),
+
+            ('brands_sub_sector_history tetikleyicisi',
+             'CREATE TRIGGER brands_sub_sector_history AFTER INSERT OR UPDATE ON social.brands FOR EACH ROW EXECUTE FUNCTION social.track_brand_sub_sector_history()|enabled=O'),
+            ('sector_research_artifacts K-09 kısıtı',
+             'u|UNIQUE (run_id, source, kind)|enforced=true validated=true'),
+            ('package_events.event_type CHECK (genişlemiş)',
+             'c|CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text, ''package_read_error''::text, ''stale_assignment_fallback''::text, ''stamp_missing''::text, ''stamp_invalid''::text, ''stamp_stale_at_persist''::text, ''activation''::text, ''rollback''::text, ''deactivation''::text, ''approval''::text, ''rejection''::text])))')
+    ),
+    observed(label, got) AS (
+        VALUES
+            ('sector_package_runs tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'sector_package_runs')),
+            ('sector_package_runs kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s', a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid), '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.sector_package_runs'::regclass
+                 AND a.attnum > 0 AND NOT a.attisdropped)),
+            ('sector_package_runs kısıt kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', k.conname,
+                                                pg_get_constraintdef(k.oid)),
+                                         ' && ' ORDER BY k.conname), '<yok>')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_package_runs'::regclass
+                 AND k.contype <> 'n')),
+            ('sector_package_runs indeks kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s|%s',
+                                                pg_get_indexdef(i.indexrelid),
+                                                i.indisunique,
+                                                CASE WHEN i.indisvalid AND i.indisready
+                                                      AND i.indislive
+                                                     THEN 'live' ELSE 'BROKEN' END),
+                                         ' && ' ORDER BY c.relname), '<yok>')
+                FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = 'social.sector_package_runs'::regclass)),
+            ('sector_package_runs tetikleyici kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', t.tgname,
+                                                CASE WHEN t.tgenabled = 'O'
+                                                     THEN 'enabled' ELSE 'DISABLED' END),
+                                         ' && ' ORDER BY t.tgname), '<yok>')
+                FROM pg_trigger t
+               WHERE t.tgrelid = 'social.sector_package_runs'::regclass
+                 AND NOT t.tgisinternal)),
+
+            ('package_rollback_plans tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'package_rollback_plans')),
+            ('package_rollback_plans kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s', a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid), '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.package_rollback_plans'::regclass
+                 AND a.attnum > 0 AND NOT a.attisdropped)),
+            ('package_rollback_plans kısıt kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', k.conname,
+                                                pg_get_constraintdef(k.oid)),
+                                         ' && ' ORDER BY k.conname), '<yok>')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.package_rollback_plans'::regclass
+                 AND k.contype <> 'n')),
+            ('package_rollback_plans indeks kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s|%s',
+                                                pg_get_indexdef(i.indexrelid),
+                                                i.indisunique,
+                                                CASE WHEN i.indisvalid AND i.indisready
+                                                      AND i.indislive
+                                                     THEN 'live' ELSE 'BROKEN' END),
+                                         ' && ' ORDER BY c.relname), '<yok>')
+                FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = 'social.package_rollback_plans'::regclass)),
+            ('package_rollback_plans tetikleyici kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', t.tgname,
+                                                CASE WHEN t.tgenabled = 'O'
+                                                     THEN 'enabled' ELSE 'DISABLED' END),
+                                         ' && ' ORDER BY t.tgname), '<yok>')
+                FROM pg_trigger t
+               WHERE t.tgrelid = 'social.package_rollback_plans'::regclass
+                 AND NOT t.tgisinternal)),
+
+            ('brand_sub_sector_history tablo imzası',
+             (SELECT format('relkind=%s relpersistence=%s partition=%s rls=%s force_rls=%s',
+                            c.relkind, c.relpersistence,
+                            CASE WHEN c.relispartition THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relrowsecurity THEN 't' ELSE 'f' END,
+                            CASE WHEN c.relforcerowsecurity THEN 't' ELSE 'f' END)
+                FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'social' AND c.relname = 'brand_sub_sector_history')),
+            ('brand_sub_sector_history kolon imzası',
+             (SELECT string_agg(format('%s:%s:%s:%s', a.attname,
+                                       format_type(a.atttypid, a.atttypmod),
+                                       CASE WHEN a.attnotnull THEN 'nn' ELSE 'null' END,
+                                       coalesce(pg_get_expr(d.adbin, d.adrelid), '-')),
+                                ' && ' ORDER BY a.attnum)
+                FROM pg_attribute a
+                LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+               WHERE a.attrelid = 'social.brand_sub_sector_history'::regclass
+                 AND a.attnum > 0 AND NOT a.attisdropped)),
+            ('brand_sub_sector_history kısıt kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', k.conname,
+                                                pg_get_constraintdef(k.oid)),
+                                         ' && ' ORDER BY k.conname), '<yok>')
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.brand_sub_sector_history'::regclass
+                 AND k.contype <> 'n')),
+            ('brand_sub_sector_history indeks kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s|%s',
+                                                pg_get_indexdef(i.indexrelid),
+                                                i.indisunique,
+                                                CASE WHEN i.indisvalid AND i.indisready
+                                                      AND i.indislive
+                                                     THEN 'live' ELSE 'BROKEN' END),
+                                         ' && ' ORDER BY c.relname), '<yok>')
+                FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+               WHERE i.indrelid = 'social.brand_sub_sector_history'::regclass)),
+            ('brand_sub_sector_history tetikleyici kümesi (kapalı)',
+             (SELECT coalesce(string_agg(format('%s|%s', t.tgname,
+                                                CASE WHEN t.tgenabled = 'O'
+                                                     THEN 'enabled' ELSE 'DISABLED' END),
+                                         ' && ' ORDER BY t.tgname), '<yok>')
+                FROM pg_trigger t
+               WHERE t.tgrelid = 'social.brand_sub_sector_history'::regclass
+                 AND NOT t.tgisinternal)),
+
+            ('brands_sub_sector_history tetikleyicisi',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.brands'::regclass
+                 AND t.tgname = 'brands_sub_sector_history')),
+            ('sector_research_artifacts K-09 kısıtı',
+             (SELECT format('%s|%s|enforced=%s validated=%s',
+                            k.contype, pg_get_constraintdef(k.oid),
+                            COALESCE(to_jsonb(k)->>'conenforced', 'true'),
+                            CASE WHEN k.convalidated THEN 'true' ELSE 'false' END)
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_research_artifacts'::regclass
+                 AND k.conname = 'sector_research_artifacts_run_source_kind_key')),
+            ('package_events.event_type CHECK (genişlemiş)',
+             (SELECT format('%s|%s', k.contype, pg_get_constraintdef(k.oid))
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.package_events'::regclass
+                 AND k.conname = 'package_events_type_check'))
+    )
+    SELECT string_agg(
+               format('%s -> beklenen [%s] · gorulen [%s]',
+                      e.label, e.want, coalesce(o.got, '<nesne yok>')),
+               E'\n  - ' ORDER BY e.label)
+      INTO problems
+      FROM expected e
+      LEFT JOIN observed o ON o.label = e.label
+     WHERE o.got IS DISTINCT FROM e.want;
+
+    IF problems IS NOT NULL THEN
+        RAISE EXCEPTION 'migration 036 garanti dogrulamasi BASARISIZ:%',
+            E'\n  - ' || problems
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Ayni adda YANLIS TANIMLI bir nesne var; IF NOT EXISTS '
+                         'onu DEGISTIRMEZ. Nesneyi elle dusurup migration i '
+                         'yeniden uygulayin.';
+    END IF;
+END
+$apply_036$;

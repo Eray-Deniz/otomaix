@@ -459,6 +459,34 @@ BEGIN
             ('idx_brands_sub_sector_id',
              'CREATE INDEX idx_brands_sub_sector_id ON social.brands USING btree (sub_sector_id)|f|live')
     ),
+    -- ───────────────────────────────────────────────────────────────────────
+    -- SÜRÜM-FARKINDA EK (migration 036, K-09)
+    --
+    -- 036 `sector_research_artifacts`e
+    -- `CONSTRAINT sector_research_artifacts_run_source_kind_key
+    --  UNIQUE (run_id, source, kind)` ekler; PostgreSQL aynı ADLA hem KISIT hem
+    -- İNDEKS üretir, yani iki kapalı küme de kaçınılmaz olarak genişler.
+    --
+    -- Aşağıdaki tablo 036 UYGULANMIŞSA geçerli olan İKİNCİ kabul edilebilir
+    -- metni taşır; adı burada GEÇMEYEN her label için karşılaştırma
+    -- `expected.want`e düşer (`coalesce`) — 032'nin geri kalan sözleşmesi hiç
+    -- gevşemez.
+    --
+    -- 032 TEK BAŞINA uygulandığında beklenen küme DEĞİŞMEDİ: İKİ kısıt, İKİ
+    -- indeks (ölçüm: `test_clean_001_to_032_expectations_unchanged`).
+    --
+    -- Muafiyet TEK ADA ve TAM TANIMA yazılıdır. Adı GEÇMEYEN fazladan bir
+    -- indeks de, adı doğru ama TANIMI başka olan bir kısıt da hâlâ REDDEDİLİR
+    -- (ölçüm: `tests/test_migration_036.py::test_unnamed_extra_index_still_rejected`,
+    -- iki hücre). "036 sonrası her şey serbest" DEĞİLDİR.
+    -- ───────────────────────────────────────────────────────────────────────
+    expected_036(label, want) AS (
+        VALUES
+            ('sector_research_artifacts kısıt kümesi (kapalı)',
+             'sector_research_artifacts_kind_check|CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text, ''synthesis''::text]))) && sector_research_artifacts_pkey|PRIMARY KEY (id) && sector_research_artifacts_run_source_kind_key|UNIQUE (run_id, source, kind)'),
+            ('sector_research_artifacts indeks kümesi (kapalı)',
+             'CREATE INDEX idx_sector_research_artifacts_slug_run ON social.sector_research_artifacts USING btree (sector_slug, run_id)|f|live && CREATE UNIQUE INDEX sector_research_artifacts_pkey ON social.sector_research_artifacts USING btree (id)|t|live && CREATE UNIQUE INDEX sector_research_artifacts_run_source_kind_key ON social.sector_research_artifacts USING btree (run_id, source, kind)|t|live')
+    ),
     observed(label, got) AS (
         VALUES
             ('brands.sub_sector_id kolon imzası',
@@ -892,7 +920,9 @@ BEGIN
       INTO failures
       FROM expected e
       LEFT JOIN observed o ON o.label = e.label
-     WHERE o.got IS DISTINCT FROM e.want;
+      LEFT JOIN expected_036 x ON x.label = e.label
+     WHERE o.got IS DISTINCT FROM e.want
+       AND o.got IS DISTINCT FROM coalesce(x.want, e.want);
 
     IF failures IS NOT NULL THEN
         RAISE EXCEPTION 'migration 032 garanti dogrulamasi BASARISIZ:%',
