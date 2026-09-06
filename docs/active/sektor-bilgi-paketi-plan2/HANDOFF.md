@@ -1,173 +1,137 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-09-02
+written: 2026-09-06
 ---
-
-> ⚠️ YÜRÜTME AÇIK — bu anlatı **Task 5'in dördüncü düzeltme turundan sonra, görev KAPANMADAN**
-> yazıldı. Güncel durum TASK.md + yürütme defteri + git defterinden okunur; çelişkide onlar esastır.
 
 # Resume From
 
-**Task 5 KAPANMADI.** Kod indi, çalışıyor, test tabanı 921 → 950 çıktı — ama görev-başı hakem
-zinciri dört tur sürdü ve hâlâ açık bulgu var. Üstelik bir zorunlu kapı hiç koşulmadı.
+**Task 5 KAPANDI. Sıradaki iş Task 6.**
 
-**Sonraki oturumun İLK işi, tartışmasız: Task 5 için Codex checkpoint turu.**
-
-Ölçüldü (2026-09-02): Task 5'in on iki commit'inin **onu riskli sınıfta** — dokuz `RISKY`,
-bir `UNKNOWN` (`389d5e0`) — ve kadans kararı `ec_should_checkpoint 1 2 9` → **`RUN_RISK`**.
-Protokol gereği ilk riskli commit'te (`16a8ab1`) Codex karşıt-hakem turu koşmalıydı. Kontrolör
-dört turluk SDD hakem zincirini koştu ve kadans kararını hiç çalıştırmadı.
-**Bu ikisi birbirinin yerine geçmez** — SDD hakemi taze bir Claude alt-ajanı, checkpoint ise
-Codex, yani bağımsız ikinci model. Task 5 dört tur aynı aileden inceleme gördü, bağımsız
-modelden sıfır. Dürüst etiket: *kapı koşulmadı; feragat edilmedi, kararla atlanmadı — kaçırıldı.*
-
-Koşum: `§8.2` ile taban `ec_state_base_ref` (bugün `a6e053f`), sonra `§8.4`
-`run_codex_scan "base-review" adversarial-review --base <taban>`. Kapanışta `§8.6` mutasyon
-protokolü `last_checkpoint_ref` + `cp_count`'u ilerletir — **ikisi aynı commit'te**.
-
-**Sonra: Task 5'in son turu (tur 5/5).** Tavan beştir, dörtte kalındı. Bir tur daha varsa o
-SON turdur; sonrasında açık kalan bulgular dispatch edilmez, **kontrolör karara bağlar**.
-Açık bulgular aşağıda "Risks" altında tek tek yazılı.
+Task 6 = migration 036 (koşu kaydı · politika raporu · onay anlık görüntüsü · atama geçmişi)
+ve `033_down.sql` / `034_down.sql` geri alma dosyaları. Devralınan iki yükümlülüğü var,
+ikisi de TASK.md'de yazılı: (a) **F1 eşli yükümlülük** — `draft_created` olay türünü açar,
+çağrıyı Task 15 ekler, yarım iniş görünür olsun diye eşli yazıldı; (b) **`033_down.sql` YOK**
+(ölçüldü: `rollback/` yalnız `032_down.sql` ve `035_down.sql` taşıyor).
 
 Komut: `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
 → resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam**.
 
 **ÖNCE OKU — kanonik ilerleme burada, bu dosyada DEĞİL:**
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
-Task 5'in dört turu, her turun ölçümleri, verilen tüm `Ruling:` satırları ve kontrolörün kendi
-hataları orada. **Bu dosya git'e girmiyor** — kaybolursa git defteri ve commit mesajları esastır.
+**Bu dosya git'e girmiyor** — kaybolursa git defteri ve commit mesajları esastır.
 
 **Yürütme durumu:** kip alt-ajanlı · başlangıç çapası `a806e29` · defter penceresi `a806e29` ·
-**`cp_count: 2`** · **`last_checkpoint_ref: a6e053f`** (Task 5 boyunca ilerlemedi — checkpoint
-koşmadığı için ilerlememesi doğru).
+**`cp_count: 2`** · **`last_checkpoint_ref: a6e053f`**.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, HEAD **`468be6a`**. **Push EDİLMEDİ.**
+> **İkisi de BİLEREK ilerletilmedi.** Checkpoint 3 koştu (iki Codex turu) ama `approve`
+> almadan kapatıldı, yani §8.6 mutasyon protokolünün Clean/Accepted-risk dalına hiç
+> girilmedi. Sonuç fail-safe: sonraki checkpoint'in tabanı `a6e053f` kalır ve **hakem
+> görmemiş tur 5/6 commit'lerini kendiliğinden kapsar.** Bunu "unutulmuş" sanıp elle
+> ilerletme.
+
+**Dal:** `feat/sektor-bilgi-paketi-plan2`, HEAD **`412a895`**. **Push EDİLMEDİ.**
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: `master`, HEAD
-`6d5d90db9537b516413d31f091b4d475526bcb73`, temiz. Task 5 ona dokunmadı.
+`6d5d90db9537b516413d31f091b4d475526bcb73`, temiz. Bu oturum ona dokunmadı.
 
 **Yedek etiket `backup/pre-footer-fix-20260830`** duruyor; silinme koşulu TASK.md'de.
 
-**Her görev dispatch'inde ZORUNLU olarak taşınacaklar** (önceki oturumdan devam, sayılar taze):
+**Her görev dispatch'inde ZORUNLU olarak taşınacaklar** (sayılar taze):
 1. Arayüz eki **bağlayıcıdır**; ilgili hükümler brief'e **harfiyen kopyalanır**.
 2. Test komutu sanal ortam aktifleştirilerek koşar (aşağıda Verification).
-3. **Taban 950**; bu sayı düşmeyecek. (921 → 936 → 939 → 943 → 947 → 950.)
+3. **Taban 963**; bu sayı düşmeyecek. (921 → 936 → 939 → 943 → 947 → 950 → 961 → 963.)
 4. `Exec-Kind` **sınıflandırıcıya** karşı seçilir. `.sql` çalıştırılabilir sınıfa GİRMEZ —
-   SQL-only commit `migration` alır (kapısız kind), `code` alırsa impl kümesi boş kalır ve düşer.
+   SQL-only commit `migration` alır.
 5. `Exec-*` bloğu mesajın SON PARAGRAFI, `Co-Authored-By` / `Claude-Session` **aynı paragrafta**.
-6. **Commit başlığı ≤72 karakter** — bu oturumda bir commit 88 karakterle indi ve amend gerekti.
+6. **Commit başlığı ≤72 karakter.**
 7. Her commit'ten SONRA defter kapısı koşulur.
 8. Uygulayıcı kendi alt-ajanını çağırmaz.
 9. Codex çağrılarına tam 40 karakterlik SHA verilir.
-10. Kapanış elle seçilmiş örnekle değil **üretilmiş matrisle** kanıtlanır — ve bu oturum bir
-    adım daha öğretti: **matris de mutasyonla sınanır.** Üretilmiş olması yetmiyor.
+10. Kapanış **üretilmiş matrisle** kanıtlanır, matris de **mutasyonla** sınanır.
+11. **YENİ (bu oturumun dersi):** kapanışı *sayarak* değil *yapıyla* kur. Tur 5'te üç kusur
+    kapatıldı ama ikisi eksik süpürüldü ve tur 6'da geri geldi; tur 6 aynı şeyleri yüklemi
+    katalogdan türeterek ve kalıcı işi tek deyime alarak kapattı — o hücreler artık DOĞAMIYOR.
 
 **Devir pointer'ları — Task 5'in doğurduğu evler:**
-- **Task 6:** `035_down.sql`'in `\set ON_ERROR_STOP on` ayarını çağıran psql oturumuna sızdırması
-  (`032_down.sql`'den devralındı, davranışı sıkılaştırıyor). Task 6 sıradaki geri alma
-  dosyalarını (`033_down.sql`, `034_down.sql`) yazan görev — konvansiyon orada benimsenir ya da
-  kapsanır.
-- **Task 18:** (a) `get_holidays` yıl başına 24 saat önbellekliyor, yazımda geçersizleştirme yok
-  → dağıtım sonrası önyüz bir güne kadar `end_date`siz yanıt alabilir. (b) Migration'lar kendi
-  transaction'ını mı sahiplensin sorusu — tek ulaşılabilir ret yolunda sarmalanmamış `up` yarım
-  uygulanmış kalıyor. İkisi de dağıtım/geri alma sırası kararıdır; (b) Task 6'ya giden kalemle
-  aynı aileden, tek kararda ele alınabilir.
-- Önceki oturumdan devam: Task 9 · Task 11 · Task 12 · Task 13 · Task 15 · Task 18 pointer'ları
-  TASK.md "Task 3'ün doğurduğu evler" bölümünde.
+- **Task 6:** `035_down.sql`'in `\set ON_ERROR_STOP on` ayarını çağıran psql oturumuna
+  sızdırması (`032_down.sql`'den devralındı). Task 6 sıradaki geri alma dosyalarını yazan
+  görev — konvansiyon orada benimsenir ya da kapsanır.
+- **Task 18:** (a) `get_holidays` yıl başına 24 saat önbellekliyor, yazımda geçersizleştirme
+  yok → dağıtım sonrası önyüz bir güne kadar `end_date`siz yanıt alabilir. (b) Step 9 runbook'u
+  geri alma sırasını yazarken **operatör adımını** içermek zorunda (TASK.md Open Problems).
+- Önceki oturumdan devam: Task 9 · 11 · 12 · 13 · 15 · 18 pointer'ları TASK.md "Task 3'ün
+  doğurduğu evler" bölümünde.
 
 # Verification
 
-**Koşulan komutlar ve TAZE çıktıları (2026-09-02, hepsi kontrolörün kendi koşumları):**
+**Koşulan komutlar ve TAZE çıktıları (2026-09-06, hepsi kontrolörün KENDİ koşumları):**
 - `cd apps/social/backend && source .venv/bin/activate && python -m pytest tests/ -q`
-  → **950 passed in 197.45s**. Seyir: 921 (giriş) → 936 (ana iniş) → 939 (tur 1) → 943 (tur 2)
-  → 947 (tur 3) → 950 (tur 4). Hiç düşmedi; her tur ayrı ölçüldü.
-- `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**, her commit'ten sonra.
-  Task 5'in on iki satırının hepsi etiketli.
-- **Risk sınıflandırması:** on iki commit → 2 LOW, 9 RISKY, 1 UNKNOWN.
-  `ec_should_checkpoint 1 2 9` → **RUN_RISK** (kapı borcu, yukarıda).
-- **Commit başlığı uzunlukları:** on ikisi de ölçüldü; tek ihlal (`164fb09`, 88 karakter)
-  amend'lendi → `fc1df7f`, 54 karakter.
-- **Seed değerleri:** hakem dört yüzeyde bayt-aynı doğruladı — migration seed bloğu, geri alma
-  silme bloğu, geri alma kalıntı denetimi, test sabitleri. Ayrıca üretici workflow.
-- **Canlı takvim tablosu:** 22 satır, hepsi 2026; kategori kümesi `{national, religious,
-  commercial}`; üç yeni tarihin **hiçbiri dolu değil** (anahtar çakışması yok).
-- **İsim ayrımı:** `m035_seed_up` / `m035_seed_down`; her dosyada kardeşinin adı tam bir kez ve
-  ikisi de yorum satırı — çalışan SQL'de sıfır çapraz referans.
-- **Sızıntı taraması:** aynı Telegram bot token'ı **iki** workflow dosyasında (`grep` ile).
+  → **963 passed in 272.97s** (final commit'li, temiz ağaçta). Seyir: 950 (giriş) → 961
+  (tur 5) → 963 (tur 6). Hiç düşmedi.
+- `ec_should_checkpoint 1 2 9` → **`RUN_RISK`** (taze; 15 commit'in 11'i RISKY/UNKNOWN).
+- `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**, altı yeni commit'in
+  hepsinden sonra.
+- **Codex çağrısı: 2** (checkpoint 3 tur 1 + tur 2), ikisi de `rc=0`, ham çıktı
+  `/root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md`.
+- **Kontrolörün kendi probları** (hepsi POZİTİF KONTROL kollu; kontrol yeşil olmadan yargı
+  verilmedi), `/tmp/.../scratchpad/` altında: `probe_h2_constraint.py` · `probe_h1_h3.py` ·
+  `probe_r2.py`. Beş bulgunun **beşi de** önce kusurlu, fix'ten sonra kapalı ölçüldü.
+- **FDW ölçümü:** `pg_available_extensions` → `file_fdw`, `postgres_fdw` **kurulabilir**;
+  `pg_foreign_server` → 0; PG 18.3. Eski "bu kurulumda yaratılamıyor" iddiası bununla çürüdü.
+- **Otomatik geri alma taraması:** depo genelinde `035_down`/`rollback/` çağıran betik,
+  uygulama yolu veya n8n işi **YOK** (ölçüldü) — geri alma yalnız elle koşulur.
 
 **Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
-- **Task 5 hiçbir bağımsız MODEL görmedi.** Dört tur da taze Claude alt-ajanıydı; Codex sıfır.
-- **Tur 4'ün düzeltmesi hakem gördü ama tur 5 yapılmadı** — açık bulgular kapanmadı.
-- **Kanıt aracının kendisi hâlâ eksik:** hakemin uydurduğu iki mutasyon (doğrulama bloğundaki
-  niteliksiz okumalar · beş daldan `CASCADE` kaldırma) suite tamamen yeşilken gerçek kusur geri
-  getiriyor. Yani "sınıf kapandı" **kanıtlanmadı**.
-- **İki migration dosyasında yanlış bir "ölçüldü" iddiası duruyor** (yabancı tablo dalı).
-  Hakem aynı sunucuda çürüttü: FDW eklentileri mevcut, `pg_temp`'te yabancı tablo yaratılabiliyor.
-  Doğru ölçüm "şu an FDW sunucu nesnesi yok"tu — kurulumun değil, veritabanının o anki içeriğinin
-  özelliği. Sevk edilen SQL'in içinde duruyor, raporda değil.
-- **Hücre sayısı iddiaları bayat:** Grid A 96 → 24'e indi, üç yerde hâlâ "96 hücre" yazıyor
-  (ikisi sevk edilen SQL yorumu).
+- **Tur 6 (son düzeltme) bağımsız hakem GÖRMEDİ.** Üçüncü tur Eray kararıyla açılmadı.
+  Kapsanma yolu adlandırılmış (final inceleme tabanı `a806e29`), ama bugün alınmış bir
+  `approve` YOK.
+- **Checkpoint 3'ün son verdict'i `needs-attention`** (tur 2). Sonraki tur koşulmadığı için
+  bu verdict yürürlükte kaldı.
+- PG 18.3 dışında sürüm denenmedi; **gerçek çok-oturumlu eşzamanlılık denenmedi** (kilit
+  davranışı yalnız koddan okundu, süre ölçülmedi).
 - Canlıya hiçbir şey dağıtılmadı, **035 hiçbir gerçek ortama uygulanmadı**, pilot koşulmadı.
 - **Dal push EDİLMEDİ.**
 - Task 6–20 hiç yazılmadı.
 
 # Risks
 
-- **AÇIK BULGU (tur 5'in konusu) — kanıt aracı hâlâ gösterildiğine ayarlı.** Talep ettiğim üç
-  mutasyon artık kırmızı düşüyor ve dal varlığı + fiil doğruluğu falsifiye edilebilir durumda.
-  Ama hakemin **kendi uydurduğu** iki mutasyon kaçıyor:
-  (B) yalnız `DO $verify_035$` bloğundaki manifest okumalarını niteliksiz bırakmak → `26 passed`,
-  ama canlıda güvenlik kapısı kalıcı tabloyu okuyup uydurma şikâyetle düşüyor; mevcut pin sadece
-  **yazma** yolunu ölçüyor.
-  (C) `'r'` dışındaki beş daldan `CASCADE` kaldırmak → `26 passed`, ama bileşik-tür squatter'ı
-  fail-open şeklini birebir geri getiriyor; bağımlı-nesne ekseni tek hücre (`'r'`) hâlinde.
-- **AÇIK BULGU — İlke 9 ihlali sevk edilen dosyada.** Yukarıda yazılı yabancı-tablo iddiası.
-  Bu, bu projenin en çok kovaladığı sınıfın ta kendisi ve rapor katmanında değil SQL'de.
-- **AÇIK BULGU (Minor) — iddia sapması:** hücre sayısı (3 yer) ve geri alma dosyasındaki tür
-  listesi (yabancı tabloyu sayıyor, bölümlenmiş tablo ile bileşik türü saymıyor).
-- **KABUL EDİLMİŞ RİSK (kontrolör kararı):** tek ulaşılabilir ret yolunda sarmalanmamış `up`
-  yarım uygulanmış kalıyor. Üretim koşturucusu ölçülerek fail-closed. Evi Task 18.
-  **"Ele alındı" DEĞİL.**
-- **KABUL EDİLMİŞ RİSK:** `'f'` dalının kaldırılması, FDW'li bir ortamda önceden ele alınan bir
-  türü rette bırakıyor. Yön fail-closed, ama gerekçesi çürütülen ölçüme dayanıyor — tur 5'te
-  gerekçe ya düzeltilir ya dal geri gelir.
-- **KABUL EDİLMİŞ RİSK:** `CASCADE` bizim rezerve ismimiz üzerine kurulmuş bağımlı nesneyi sessizce
-  düşürüyor. Hakem ölçtü: PostgreSQL'in kendi temp temizliği aynı nesneyi zaten yok ediyor, yani
-  koruma başka türlü hayatta kalacak bir şeyi yok etmiyor.
-- **KONTROLÖRÜN ÜÇ YANLIŞ ÖNERİSİ — en taze ders.** Bu oturumda uygulayıcıya ilettiğim üç çözüm
-  önerisinin üçü de ölçümde yanlış çıktı ve uygulayıcı üçünü de gerekçesiyle reddetti:
-  (1) hakemin `DROP TABLE IF EXISTS pg_temp…` önerisi her oturumda gürültü basıp az önce
-  sabitlenen anlamlı uyarıyı gömecekti; (2) `SET LOCAL` transaction dışında hiçbir şey yapmıyor,
-  yani tam da onarılan çıplak yolda sabitlemeyi düşürecekti; (3) "ret hücreleri sıfır dışı çıkış
-  kodu doğrulasın" talebim psql'i sabitlemek olurdu, migration'ı değil.
-  **Ders: dispatch'e taşınan öneri test edilmemiş bir iddiadır — aday olarak etiketle, cevap
-  olarak değil.**
-- **Kontrolörün kanıt şartnamesi kusurluydu.** Sınıf kapanışı için matris dayattım ve matrisin
-  girdilerini kendi elimle seçtim; seçtiğim her tür korumanın zaten tanıdığı türdü ve "iki isim
-  farklı" özelliğini doğrulayan hücre hiç istemedim. Hollow proof benim şartnamemin ürünü.
-- **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`); Plan 1 alanındaki kart
-  geçişi hâlâ taranmadı.
-- **Codex maliyeti:** bu oturumda **sıfır** Codex çağrısı yapıldı. Final için ≥3 tur rezerve
-  kuralı yerinde; oturum tavanı 8.
+- **KABUL EDİLMİŞ RİSK — tur 6 hakem görmedi** (yukarıda). "Ele alındı" DEĞİL.
+- **EVSİZ PARK (İlke 7, uydurma ev VERİLMEDİ) — atomiklik sınıfı depo GENELİ.** 035 artık
+  her çağrı biçiminde atomik, ama bu **tek başına atomik olan tek migration dosyası**.
+  Diğerlerinin hepsi çok deyimli (ölçüldü: 032'de 24 üst düzey DDL) ve çıplak elle
+  `psql -f` altında yarım kalabilir. **Bugün zararsız çünkü onaylı koşum yolu
+  (`run-migrations.sh`) her dosyayı `--single-transaction` ile sarıyor** — ölçüldü, satır 206.
+  Kapatmak runner/politika işidir, tek dosyanın işi değil; Task 5'e sıkıştırmak yanlış olurdu.
+  **Yeniden açılma koşulu:** onaylı koşum yolu sarmalayıcısız hâle gelirse VEYA elle uygulama
+  bir olayda kök sebep çıkarsa. **Dürüst etiket: çözülmedi + park edildi, EVİ YOK.**
+- **KABUL EDİLMİŞ RİSK — sabit seed id'lerinin yan etkisi.** Bir seed satırının tarihi elle
+  kaydırılırsa ikinci koşumda birincil anahtar çakışır. Ölçüldü: **fail-closed** (`rc=3`,
+  hiçbir şey uygulanmadı). Ayrıca "manifestte olup tabloda olmayan alan" yolu da ölçüldü ve
+  fail-closed (`rc=3`). İkisi de SQL'in kendi yorumunda yazılı.
+- **KABUL EDİLMİŞ RİSK — kilit süresi.** Çıplak `psql` altında ACCESS EXCLUSIVE kilidi artık
+  blok sonuna kadar tutuluyor (eskiden `ALTER` sonrası bırakılıyordu). Yapısal sonuç koddan
+  okundu; **süre olarak ÖLÇÜLMEDİ.**
+- **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`); Plan 1 alanındaki
+  kart geçişi hâlâ taranmadı.
+- **Codex maliyeti:** bu oturumda 2 çağrı. Final için ≥3 tur rezerve kuralı yerinde.
 
 # Notes For Claude/Codex
 
 - **Hakem turlarını Claude koşar — SORMA.** Eray'ın kalıcı kuralı.
-- **Kontrolör düzeltme YAPMAZ.** Bu oturumda iki istisna kullanıldı ve ikisi de gerekçesiyle
-  deftere yazıldı: (a) 88 karakterlik commit başlığının amend'lenmesi — kod taşımıyor, hakem aynı
-  diff'i görüyor; (b) rapordaki bayat SHA'nın düzeltilmesi — o bayatlığı amend'im yaratmıştı.
-- **Hakemin severity'si bağlayıcı DEĞİL, ölçüm bağlayıcı.** Bu oturumda bir Minor Important'a
-  yükseltildi (`client_min_messages`: hakem Minor demişti, kendi ölçümü sıradan bir üretim
-  sertleştirmesinin düzeltmeyi tamamen sustureceğini gösteriyordu).
-- **Kendi ürettiğin gerilemeyi park etme.** Medium-advisory izni ÖNCEDEN VAR OLAN borç içindir.
-  Bu oturumda iki gerileme bu kuralla döngüye alındı (`ON COMMIT DROP` fail-open'ı ve
-  niteliksiz manifest okumaları).
-- **Uygulayıcı raporunu doğrulanmamış iddia say** — ama bu uygulayıcı iyiydi: kendi kusurunu
-  bildirdi, benim üç yanlış önerimi ölçümle reddetti, bir kalemi "tahmin etmektense sen karara
-  bağla" diye bana bıraktı, ve kaldırdığı bir dalın "yetenek kaybı gibi okunduğunu" kendisi
-  söyledi. Aynı uygulayıcıyı sürdürmek (tur 4-5'te taze uygulayıcı kuralına rağmen) bu yüzden
-  seçildi; gerekçe defterde.
-- **Alt-ajan model alanını HİÇ GEÇME.** `model: opus` gibi çıplak takma ad hook tarafından
-  reddediliyor (hangi sürüme çözüleceği harness'e ait, sessiz düşürme koruması). Alan
-  geçilmezse config varsayılanı miras alınıyor.
+- **SÜREÇ AĞIRLIĞI ≈ RİSK AĞIRLIĞI — bu oturumun en pahalı dersi.** Otonom fix döngüsü
+  kuralca onay istemiyor, ben de tur 1 → fix → tur 2 → fix diye zincirledim ve Eray haklı
+  olarak "saatlerdir bitiremedin" dedi. **Turlar gerçek kusur buldu** (beşi de ölçüldü, ikisi
+  sessiz veri kaybıydı) — yani zincir boş değildi. Hata **maliyeti görünür kılmamaktı**:
+  ilk tur bittiğinde "bu uzayacak, devam edeyim mi" diye SORMALIYDIM. Tek başına ilk düzeltme
+  turu 69 dakika sürdü. **Bundan sonra: çok turlu zincire girmeden önce maliyeti tek satırla
+  bildir, sonra devam et.**
+- **Kontrolör düzeltme YAPMAZ.** Bu oturumda istisna kullanılmadı.
+- **Kendi ürettiğin gerilemeyi park etme.** Bu oturumda iki medium (`F4` ölçülmemiş "ölçüldü"
+  iddiaları · `F5` mutasyon altında yeşil kalan kapanış testleri) politika gereği advisory'ydi
+  ama **bu yürütmenin kendi ürünüydü**, o yüzden döngüye alındı ve kapatıldı.
+- **Uygulayıcı raporunu doğrulanmamış iddia say** — ama iki uygulayıcı da iyiydi: kontrolörün
+  toplam **beş** önerisini ölçümle reddettiler ve her seferinde haklı çıktılar; biri kendi
+  ölçüm aracının yalan söylediğini fark edip düzeltti (mutasyon "yeşil" görünüyordu çünkü
+  sınıflandırıcı pytest `error`ünü `failed` saymıyordu).
+- **Alt-ajan model alanını HİÇ GEÇME.** Çıplak takma ad hook tarafından reddediliyor.
 - **Spec değil, spec-input kanoniktir.**
 - Diskte bekleyen düzeltme YOK; çalışma ağacı temiz.

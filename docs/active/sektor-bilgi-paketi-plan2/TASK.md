@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-02
+last-touched: 2026-09-06
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -14,8 +14,9 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-4 indi; checkpoint 1 ve checkpoint 2 KAPANDI
-(ikisi de hakem `approve`'uyla). Sıradaki iş Task 5 — ayrıntı "Current Status".
+Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-5 indi. Checkpoint 1 ve 2 hakem `approve`'uyla
+kapandı; **checkpoint 3 koştu ve iki tur sürdü ama `approve` ALMADAN kapatıldı** (Eray
+kararı — ayrıntı "Current Status"). Sıradaki iş **Task 6**.
 
 **Onay tarihçesi (değişmez kayıt, silinmez):** plan onayı hakem zinciriyle değil **Eray'ın
 risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenmemişti.
@@ -128,31 +129,53 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
   aralığına ZATEN giriyor — kendiliğinden kapsanır. Aynı kapsanma yolu bu oturumda bir kez
   ölçümle gerçekleşti (Task 3'ün düzeltme turu 3'ü checkpoint 2 tarafından kapsandı), yani
   bu bir tahmin değil, işlediği görülmüş bir yol.
-- **Task 5 YÜRÜTMEDE — KAPANMADI (2026-09-02).** Kod indi ve çalışıyor, ama görev-başı
-  hakem zinciri dört tur sürdü ve **hâlâ açık bulgu var**; ayrıca bir zorunlu kapı
-  koşulmadı (aşağıda). Commit'ler: `331fe7a` (Step 1b kararı) · `39379c8` (K-112 taban
-  notu) · `16a8ab1`+`a3dd22f` (ana iniş) · `d4adea3`+`fc1df7f` (tur 1) ·
-  `8d227d2`+`44bd8e2` (tur 2) · `8f596d8`+`389d5e0` (tur 3) · `6120962`+`468be6a` (tur 4).
-  Test tabanı **921 → 950** (her tur ölçüldü, hiç düşmedi). Defter kapısı her commit'ten
-  sonra koşuldu, hepsi rc=0.
-  **Spec uyumu ✅ ve kalite onaylı** (tur 0 hakem raporu): beş seed değeri dört ayrı yüzeyde
-  bayt-aynı, ek hükümleri (R13/R12b) harfiyen uygulanmış, önyüz sıfır dosya.
-  **Açık kalanlar — "halledildi" DEĞİL:** (a) sınıf-kapanış aracı hâlâ gösterildiği
-  mutasyonlara ayarlı; hakemin uydurduğu iki mutasyon suite tamamen yeşilken gerçek kusur
-  geri getiriyor. (b) İki migration dosyasına **yanlış bir "ölçüldü" iddiası** yazılmış
-  (yabancı tablo dalı) — İlke 9'un tam sınıfı, üstelik rapor değil sevk edilen SQL içinde.
-  (c) İki küçük iddia-sapması (hücre sayısı, tür listesi).
-  **Tur tavanı 5; dörtte kalındı.** Sonraki oturumda bir tur daha varsa o SON turdur.
+- **Task 5 KAPANDI (2026-09-06).** Kod indi, çalışıyor; test tabanı **921 → 963**.
+  Commit'ler: `331fe7a` · `39379c8` · `16a8ab1`+`a3dd22f` · `d4adea3`+`fc1df7f` ·
+  `8d227d2`+`44bd8e2` · `8f596d8`+`389d5e0` · `6120962`+`468be6a` (tur 1-4) ·
+  `8add7df`+`bf615aa`+`94eb6a2` (tur 5) · `5c26493`+`60fc75a`+`412a895` (tur 6).
+  Defter kapısı her commit'ten sonra koşuldu, hepsi `rc=0`.
 
-- **ZORUNLU KAPI KOŞULMADI — Codex checkpoint (ölçüldü, 2026-09-02).** Task 5'in on iki
-  commit'inin **onu riskli sınıfta** (dokuz RISKY + bir UNKNOWN) ve kadans kararı
-  `RUN_RISK` veriyor. Protokol gereği ilk riskli commit'te Codex karşıt-hakem turu
-  koşmalıydı; kontrolör dört turluk SDD hakem zincirini koşup kadans kararını hiç
-  çalıştırmadı. **İkisi birbirinin yerine geçmez:** SDD hakemi taze bir Claude alt-ajanı,
-  checkpoint ise Codex — bağımsız ikinci model, ki iki-hakem tasarımının bütün amacı bu.
-  Yani Task 5 dört tur aynı aileden inceleme gördü, bağımsız modelden **sıfır**.
-  Dürüst etiket: *kapı koşulmadı; feragat edilmedi, kararla atlanmadı — kaçırıldı.*
-  **Sonraki oturumun İLK işi budur.**
+- **CHECKPOINT 3 KOŞTU (2026-09-06) — kaçırılan kapı kapatıldı ve karşılığını verdi.**
+  Önceki oturum bu kapıyı atlamıştı; kadans kararı taze koşuldu (`ec_should_checkpoint 1 2 9`
+  → `RUN_RISK`, 15 commit'in 11'i riskli sınıfta) ve iki Codex turu yapıldı.
+  **Tur 1 — 3 high + 3 medium, `needs-attention`.** Dört turluk Claude-ailesi zincirinin
+  bulamadığı üç kusur; üçü de kontrolörün KENDİ probuyla, pozitif kontrollü olarak ölçüldü:
+  (F1) geri alma sahipliği içerik/şekil eşitliğinden türetiliyordu — 035'ten önce var olan
+  birebir satır siliniyordu VE üretici şekilli sonraki-yıl dönemi sessizce düzleşiyordu;
+  (F2) kısıt kimliği yalnız ADdan okunuyordu — aynı adla `CHECK (true)` konursa migration
+  `rc=0` ile başarılı dönüyor ve ters dönem yazılabiliyordu; (F3) kalıcı DDL düşebilen
+  kapıdan ÖNCE koşuyordu — çıplak `psql` + indeks squatter'ı `rc=0` ile yarım şema bırakıyordu.
+  **Tur 2 (kapanış-doğrulama) — F2/F4/F5 KAPALI, F1/F3 AÇIK (yeni alt-vakalar).** İkisi de
+  yine ölçümle doğrulandı: (F1) silme yüklemi 035'in kendi yazdığı `end_date`'i atlıyordu →
+  besleme yalnız dönemi düzeltirse satır sessizce siliniyordu; (F3) **tur 1'in kendi çözümü
+  (sabit id) yeni bir yol açtı** → ayrılmış UUID başka satırdaysa şema commit edilip seed
+  düşüyordu.
+  **Tur 6 ikisini de YAPIYLA kapattı** (sayarak değil): silme yüklemi artık `pg_attribute`den
+  türetiliyor ve `IS NOT DISTINCT FROM` ile NULL-güvenli — "bir alan daha unutulmuş" hücresi
+  DOĞAMAZ; kalıcı olan her şey tek `DO $apply_035$` deyimine alındı — "şu kapıyı da yukarı
+  taşı" ekseni kapandı. Kontrolör ikisinin de kapandığını kendi probuyla ölçtü
+  (pozitif kontroller yeşil).
+  **Hakemin F6'sı ÖLÇÜMLE REDDEDİLDİ:** "commit'ler tek-commit TDD modelini ihlal ediyor"
+  dedi; ölçüldü ki yürürlükteki S1 footer grameri `Exec-Kind: red-only`/`green-only` ayrımını
+  AÇIKÇA meşru sayıyor, commit'ler tam o kind'leri taşıyor ve defter kapısı `rc=0` veriyor.
+  Önerisi (squash) incelenmiş commit'leri yeniden yazardı.
+
+- **DÜRÜST ETİKET — tur 6 bağımsız hakem yargısı ALMADI.** Üçüncü inceleme turu **Eray
+  kararıyla açılmadı** (2026-09-06: zincirin süresi maliyetli bulundu). Kapanış kontrolör
+  kararıdır, hakem `approve`'u DEĞİLDİR. **Ev uydurulmadı:** dal kapanışındaki final
+  incelemenin tabanı `a806e29` olduğu için tur 5 ve tur 6 commit'leri o incelemenin aralığına
+  ZATEN giriyor. Aynı kapsanma yolu bu görevde iki kez ölçümle gerçekleşti.
+  **`cp_count` ve `last_checkpoint_ref` BİLEREK İLERLETİLMEDİ** — §8.6 mutasyon protokolü
+  yalnız Clean/Accepted-risk dallarında koşar, bu koşum onlardan biri değil. Sonuç fail-safe
+  yöndedir: sonraki checkpoint'in tabanı `a6e053f` kalır, yani hakem görmemiş tur 5/6
+  commit'lerini kendiliğinden kapsar.
+
+- **KONTROLÖRÜN ÖNERİLERİ YİNE ÖLÇÜMDE YANLIŞ ÇIKTI (bu oturumda 2 kez daha).**
+  (1) F1 için kalıcı `m035_seed_provenance` tablosu önerdim; uygulayıcı reddetti — satırlara
+  sabit `id` vermek aynı ayrımı yeni kalıcı nesne açmadan kuruyor, şema yüzeyi büyümüyor.
+  (2) F3 için "düşebilen kapıyı yukarı taşı" önerdim; uygulayıcı ölçtü ve reddetti —
+  `ON_ERROR_STOP` yokken psql hatadan sonra devam ediyor ve sonraki `ALTER TABLE` yine
+  commit ediliyor. **Ders sabit: dispatch'e taşınan öneri aday'dır, cevap değil.**
 
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
@@ -309,6 +332,17 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   zinciri), kalan workflow'lar CRM turunda.
 - Plan 1 bölümlerinin kart geçişi taranmadı (boşluk raporu kapsam sınırı) — Plan 1 alanında
   kusur çıkarsa koşulur.
+
+- **Geri alma artık bir OPERATÖR ADIMI isteyebilir — bilinçli, evi VAR (Task 18 Step 9).**
+  Tur 6 öncesinde: yıllık takvim işi bir 035 dönem satırını düzeltmişse geri alma o satırı
+  sessizce siliyordu (ölçüldü). Şimdi **fail-closed durur** ve etkilenen satırları adıyla
+  söyler; operatör `end_date`leri boşaltıp geri almayı tekrar koşar. Alternatifi sessiz veri
+  kaybıydı. **Ölçüldü (2026-09-06): geri almayı OTOMATİK çağıran hiçbir yol yok** — depo
+  genelinde ne betik, ne uygulama, ne n8n işi. Yani günlük iş yükü YARATMAZ; yalnız biri
+  bilerek geri alma koşarsa görünür. **Ev:** Task 18 Step 9 dağıtım runbook'u
+  (`docs/plans/PLAN2-DAGITIM-RUNBOOK.md`, planda `Create:` kalemi — doğrulandı) geri alma
+  sırasını yazarken bu adımı içermek ZORUNDA. Tarihi Task 18'in koşmasına bağlı.
+  Dürüst etiket: *çözülmedi değil — bilinçli tasarım kararı; runbook'a yazılması borç.*
 
 - **KAPANDI (2026-08-31, checkpoint 2).** Aşağıdaki borç artık açık DEĞİL: checkpoint 2'nin
   tabanı `72f5744` olduğu için `ad95846` o incelemenin aralığına girdi ve bağımsız hakem o

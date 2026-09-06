@@ -236,5 +236,24 @@
   yazılıyor ve credential'a bağlanıyor), yani o görev bu iki kalemin doğal komşusudur.
   **Dikkat:** (ii) bir ev DEĞİL, bir tetiktir — Task 16 bugün bu kalemleri kapsamıyor.
 
+- **migration-atomicity-outside-035** (proposed, dağıtım dayanıklılığı; **EVSİZ — uydurma ev
+  VERİLMEDİ**) — Task 5 kapanışında ölçüldü: `035_holiday_periods.sql` artık desteklenen HER
+  çağrı biçiminde atomik (kalıcı olan her şey tek `DO` deyiminde), ama **bu özelliği taşıyan
+  tek migration dosyası o.** Diğerlerinin hepsi çok deyimli — ölçüldü: `032_sector_packages.sql`
+  üst düzeyde 24 DDL taşıyor — ve **çıplak elle `psql -f` altında yarıda kalabilir**; hata
+  sonrası psql `ON_ERROR_STOP` olmadan devam ettiği için çıkış kodu `0` bile dönebilir.
+  **Bugün zararsız, çünkü ölçüldü:** onaylı koşum yolu `shared/local-deployment/migrations/
+  run-migrations.sh` her migration'ı `--single-transaction` ile sarıyor (satır 206) ve
+  `-v ON_ERROR_STOP=1` taşıyor. Yani risk yalnız **betiği atlayıp komutu elle yazan** yolda.
+  **Neden Task 5'e sıkıştırılmadı:** kapsam tek dosya değil, dağıtım politikası + runner —
+  35 migration'ı tek tek atomik yapmak ya da runner'ı tek meşru yol ilan edip elle koşumu
+  kapatmak ayrı bir karardır. Reflekssel olarak Task 18'e yapıştırmak sahte ev olurdu:
+  Task 18 kendi dosya kapsamıyla dağıtım runbook'unu yazıyor, 35 migration'ı yeniden
+  yazmıyor.
+  **Dürüst etiket: çözülmedi + park edildi, EVİ YOK. "Ele alındı" DEĞİL.**
+  **Yeniden açılma koşulu:** (a) onaylı koşum yolu sarmalayıcısız hâle gelirse, VEYA
+  (b) elle uygulanmış bir migration bir olayda kök sebep çıkarsa — o zaman ilk bakılacak
+  yer bu kalemdir.
+
 <!-- Son kapanan: codex-review-scope-contract → done 2026-06-04, arşiv docs/task-archive/2026/06/ -->
 
