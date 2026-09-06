@@ -1222,19 +1222,25 @@ IMMUTABLE_MARKER = "kimlik/hedef alanları değiştirilemez"
 
 _NEW_OLD_PAIR = re.compile(r"NEW\.(\w+)\s+IS DISTINCT FROM\s+OLD\.\1\b")
 
+# Kapı, KENDİ KOŞULUYLA bulunur: "onaylı satırda değişmesi yasak alanlar"
+# yüklemi `OLD.onay_actor IS NOT NULL AND (...)` ile başlar. Fonksiyonun ADIYLA
+# ya da dosyadaki YERİYLE aranmaz — F7 turunda gövdeler `DECLARE`'e taşındı ve
+# ada dayalı dilim kapıyı ıskaladı (boş-küme kontrol kolu yakaladı). Kavramdan
+# türeyen bu desen taşınmadan etkilenmez ve ekte de aynen çalışır.
+_GUARD_CONDITION = re.compile(
+    r"OLD\.onay_actor IS NOT NULL AND \((.*?)\)\s*THEN", re.DOTALL
+)
+
 
 def _guard_body(text: str) -> str:
-    """Değişmezlik fonksiyonunun gövdesi — dosyadaki BAŞKA fonksiyonlar hariç.
+    """Değişmezlik yükleminin KOŞULU — dosyadaki BAŞKA yüklemler hariç.
 
-    Fonksiyon HİÇ YOKSA boş gövde döner: eksiklik toplama (collection) hatası
-    değil, kümenin BOŞ çıkması olarak raporlanır — kapı o zaman kendi
-    boş-küme kolunda düşer ve dosyanın kalan testleri koşmaya devam eder.
+    Koşul HİÇ YOKSA boş metin döner: eksiklik toplama (collection) hatası değil,
+    kümenin BOŞ çıkması olarak raporlanır — kapı o zaman kendi boş-küme kolunda
+    düşer ve dosyanın kalan testleri koşmaya devam eder.
     """
-    start = text.find(IMMUTABLE_FUNCTION)
-    if start < 0:
-        return ""
-    end = text.index("LANGUAGE plpgsql", start)
-    return text[start:end]
+    eslesme = _GUARD_CONDITION.search(text)
+    return eslesme.group(1) if eslesme else ""
 
 
 def _locked_fields(text: str) -> tuple[str, ...]:
@@ -2737,11 +2743,24 @@ _TRIGGER_RE = re.compile(
     r"\bON\s+(social\.\w+)\b[^;$]*?EXECUTE FUNCTION\s+(social\.\w+)\(\)",
     re.DOTALL,
 )
-_FUNCTION_RE = re.compile(
-    r"CREATE (?:OR REPLACE )?FUNCTION\s+(social\.\w+)\(\)(.*?)LANGUAGE plpgsql",
-    re.DOTALL,
-)
+# Gövdeler F7 turunda kanonik SABİTLERE taşındı (tek kaynak: kapı da yazım da
+# aynı metni okur). Bağ, kimlik kapısının kendi VALUES listesinden türetilir:
+#   ('social.<fonksiyon>', <sabit_adi>)
+# ve sabit `<ad> CONSTANT TEXT := $tag$...$tag$;` olarak çözülür. Ada göre
+# `CREATE FUNCTION` metni aramak artık HİÇBİR gövde bulmaz — dosya o metni
+# `format()` şablonunda tutuyor.
+_CONST_RE = re.compile(r"(\w+) CONSTANT TEXT := \$(\w+)\$(.*?)\$\2\$;", re.DOTALL)
+_FN_BINDING_RE = re.compile(r"\('(social\.\w+)',\s*(\w+)\)")
 _WRITE_RE = re.compile(r"(?:INSERT INTO|UPDATE|DELETE FROM)\s+(social\.\w+)")
+
+
+def _function_bodies(text: str) -> dict:
+    sabitler = {ad: govde for ad, _tag, govde in _CONST_RE.findall(text)}
+    return {
+        fonksiyon: sabitler[degisken]
+        for fonksiyon, degisken in _FN_BINDING_RE.findall(text)
+        if degisken in sabitler
+    }
 
 
 def _lock_order(text: str) -> tuple[str, ...]:
@@ -2750,7 +2769,7 @@ def _lock_order(text: str) -> tuple[str, ...]:
 
 def _trigger_write_edges(text: str) -> tuple[tuple[str, str], ...]:
     """(ÜRETİCİ tablo, tetikleyicinin YAZDIĞI tablo) kenarları — katalog yönü."""
-    bodies = {ad: govde for ad, govde in _FUNCTION_RE.findall(text)}
+    bodies = _function_bodies(text)
     edges: list[tuple[str, str]] = []
     for _, uretici, fonksiyon in _TRIGGER_RE.findall(text):
         for yazilan in _WRITE_RE.findall(bodies.get(fonksiyon, "")):
