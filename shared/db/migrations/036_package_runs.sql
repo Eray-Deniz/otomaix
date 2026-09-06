@@ -322,13 +322,40 @@ BEGIN
             ON social.brand_sub_sector_history (brand_id, assigned_at DESC)
     $ddl$;
 
-    -- ALAN OKUMASI `to_jsonb` İLE, `NEW.sub_sector_id` İLE DEĞİL — ve bu
-    -- ÖLÇÜLMÜŞ bir tercihtir. Doğrudan alan erişimi ya `UPDATE OF sub_sector_id`
-    -- kolon listesi ya statik ifade üstünden KATALOG BAĞIMLILIĞI kurar; o
-    -- bağımlılık `rollback/032_down.sql`in `ALTER TABLE social.brands DROP
-    -- COLUMN sub_sector_id` adımını kırardı (032 geri alması 036'dan bağımsız
-    -- koşabilmeli). `to_jsonb(NEW) ->> 'sub_sector_id'` kolon yoksa NULL döner:
-    -- tetikleyici o durumda sessiz bir no-op'a düşer, patlamaz.
+    -- ÜRETİCİ SESSİZCE DURAMAZ — ve buradaki gerekçe bir DÜZELTMEDİR (fix turu
+    -- 1, I1). Önceki yazım kolonu `to_jsonb(NEW) ->> 'sub_sector_id'` ile
+    -- okuyor ve bunu "doğrudan alan erişimi kolona KATALOG BAĞIMLILIĞI kurar,
+    -- o bağımlılık `032_down.sql`in `DROP COLUMN` adımını kırardı" diye
+    -- gerekçelendiriyordu. O cümle `ÖLÇÜLDÜ` etiketi taşıyordu ama
+    -- ÇALIŞTIRILMAMIŞTI ve YANLIŞTI. Bugün ölçüldü (PG 18.3, üç kollu prob):
+    --   * gövdede `NEW.sub_sector_id` + tetikleyicide kolon listesi YOK
+    --     → `ALTER TABLE ... DROP COLUMN` **rc=0**. plpgsql gövdesi GEÇ BAĞLANIR;
+    --       katalog bağımlılığı YARATMAZ.
+    --   * tetikleyici `AFTER UPDATE OF sub_sector_id` (KOLON LİSTESİ)
+    --     → `rc=1`, `cannot drop column ... depends on column`.
+    -- Yani iddianın yalnız İKİNCİ yarısı doğrudur: bağımlılığı kolon listesi
+    -- kurar, gövde kurmaz. Bu 036'nın tetikleyicisinde zaten kolon listesi
+    -- olmadığı için kısıtlayıcı değildir (ölçüm:
+    -- `test_column_dependency_is_created_only_by_a_trigger_column_list`).
+    --
+    -- YANLIŞ ÖNCÜLÜN BEDELİ FAIL-OPEN'DI, ölçüldü: `->>` kolon YOKSA ya da
+    -- YENİDEN ADLANDIRILMIŞSA `NULL` döner, `yeni IS NOT DISTINCT FROM eski`
+    -- doğru olur, tetikleyici `RETURN NULL` ile çıkar ve K-45 üreticisi
+    -- SESSİZCE yazmayı bırakır — marka yazımları `rc=0` ile geçmeye devam eder.
+    -- Ölçüm (taze scratch, tüm migration'lar): kolon `sub_sector_id_v2`ye
+    -- yeniden adlandırıldı → INSERT `rc=0`, geçmiş satırı 1'de KALDI. Aynısı
+    -- kolon düşürüldüğünde. Sessizlik, K-45'in var olma sebebinin KARŞITIDIR
+    -- (plan: "geçmiş tablosunu hiçbir şey yazmıyorsa Task 16 onu maruziyet
+    -- kanıtı olarak tüketemez").
+    --
+    -- BUGÜNKÜ YAPI: önce YAPISAL KAPI (`to_jsonb(NEW) ? 'sub_sector_id'` —
+    -- kolonun VARLIĞINI sorar, DEĞERİNİ değil), sonra DOĞRUDAN alan okuması.
+    -- Kapı `?` ile kurulur çünkü doğrudan erişimin kendi hatası
+    -- (`record "new" has no field ...`) gürültülüdür ama K-45'ten hiç söz
+    -- etmez; kapı, operatöre neyin kırıldığını söyler. Doğrudan okuma ayrıca
+    -- metin→uuid dönüşümünü ortadan kaldırır ve kapı atlansa bile ikinci bir
+    -- gürültülü savunma bırakır. Kapı katalog bağımlılığı KURMAZ (ölçüldü:
+    -- kapı yerindeyken `DROP COLUMN` hâlâ `rc=0`).
     EXECUTE $ddl$
         CREATE OR REPLACE FUNCTION social.track_brand_sub_sector_history()
         RETURNS trigger AS $track_history$
@@ -336,9 +363,22 @@ BEGIN
             yeni UUID;
             eski UUID;
         BEGIN
-            yeni := (to_jsonb(NEW) ->> 'sub_sector_id')::uuid;
+            IF NOT (to_jsonb(NEW) ? 'sub_sector_id') THEN
+                RAISE EXCEPTION
+                    'K-45 uretici KIRIK: social.brands.sub_sector_id kolonu YOK '
+                    '(dusurulmus ya da yeniden adlandirilmis). Atama gecmisi '
+                    'yazilamaz; sessizce devam etmek maruziyet kanitini bos '
+                    'birakirdi.'
+                    USING ERRCODE = 'integrity_constraint_violation',
+                          HINT = 'Kolonu eski adiyla geri getirin ya da '
+                                 'rollback/036_down.sql ile ureticiyi kaldirin. '
+                                 'Kolon adi degistiyse bu fonksiyon da '
+                                 'guncellenmelidir.';
+            END IF;
+
+            yeni := NEW.sub_sector_id;
             IF TG_OP = 'UPDATE' THEN
-                eski := (to_jsonb(OLD) ->> 'sub_sector_id')::uuid;
+                eski := OLD.sub_sector_id;
             END IF;
 
             -- Değişmeyen atama yeni aralık ÜRETMEZ: maruziyet kanıtı, her

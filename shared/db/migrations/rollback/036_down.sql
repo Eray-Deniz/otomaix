@@ -39,7 +39,11 @@
 --   DÜZELTME migration'ıdır; runbook (Task 18) ikisini ayrı başlıkta yazar.
 --
 -- SIRA (036'nın açılış sırasının TERSİ):
---   1. `brands` tetikleyicisi (kolon bağımlılığından ÖNCE gider)
+--   1. `brands` tetikleyicisi (geçmiş tablosundan ÖNCE gider — tablo
+--      düşerken tetikleyici ayakta kalsaydı bir sonraki marka yazımı
+--      olmayan tabloya INSERT denerdi. Sebep KOLON BAĞIMLILIĞI DEĞİLDİR:
+--      ölçüldü ki 036'nın tetikleyicisi kolon listesi taşımadığı için
+--      `brands.sub_sector_id` üstünde katalog bağımlılığı KURMAZ.)
 --   2. koşu tetikleyicisi + üç tablo
 --   3. K-09 kısıtı  →  4. `package_events` CHECK'i daraltılır
 --   5. fonksiyonlar  →  6. kalıntı doğrulaması

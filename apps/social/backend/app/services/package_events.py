@@ -60,6 +60,69 @@ APPROVAL_EVENTS = frozenset({"approval", "rejection"})
 
 EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 
+# ─── Sürüm sözleşmesi TÜR BAŞINA BEYAN EDİLİR (fix turu 1, I2) ──────────────
+#
+# ÖLÇÜLEN KUSUR: `_validate_version_shape` kapalı bir
+# `if activation / elif rollback / elif deactivation` zinciriydi ve `else`
+# TAŞIMIYORDU. `EVENT_TYPES`e giren `approval`/`rejection` hiçbir dala uymuyor,
+# doğrulamadan SESSİZCE geçiyordu:
+#
+#     log_package_event(..., event_type="approval", from_version=999, to_version=-5)
+#
+# UYDURMA sürüm numaraları taşıyan KALICI bir denetim satırı yazıyordu. Aynı
+# çağrı `activation` ile gerçek aktif sürüme karşı TAM EŞLEŞME ile
+# reddediliyordu — asimetri tam da denetim izindeydi. 033'te sürüm kolonlarına
+# DB CHECK'i de YOKTUR, yani ikinci bir kapı da devrede değildi.
+#
+# DÜZELTİLEN ŞEY VARYANT DEĞİL SINIFTIR: sorun iki türün unutulması değil,
+# `else`siz zincirin yarın eklenecek DÖRDÜNCÜ türü de aynı sessizlikle
+# geçirecek olmasıydı. Bu yüzden dal eklenmedi, SÖZLEŞME BEYANI zorunlu kılındı.
+#
+# İki değer:
+#   * `gecis`     — tür bir sürüm geçişidir; alanlar TÜRE ÖZGÜ doğrulanır (F22).
+#   * `surumsuz`  — tür sürüm taşımaz; İKİ alan da NULL olmak ZORUNDA.
+#
+# Onay/ret `surumsuz`dur: onay bir koşunun kapı kararıdır, paketin sürümünü
+# DEĞİŞTİRMEZ. "Boş bırakılabilir" değil "boş olmak zorunda": nullable bir alan
+# uydurma bir değeri kabul eder ve denetim izi yalan söyler — modülün başındaki
+# "yarım iz, izin hiç olmamasından daha kötüdür" hükmünün doğrudan karşılığı.
+#
+# DB CHECK'İ EKLENMEDİ, bilinçli: üç `gecis` türünün sözleşmesi İLİŞKİSELDİR
+# (canlı aktif sürümle karşılaştırma) ve bir CHECK'te İFADE EDİLEMEZ. Yalnız
+# yarısı ifade edilebilen bir sözleşmeyi iki katmana bölmek, bu modülün başka
+# yerde açıkça kaçındığı "iki ölçü ıraksayabilir" kusurunu (K-01b) üretirdi.
+# Kalan risk dürüstçe: ham SQL bu kapıyı atlar — diğer üç tür için de öyle.
+EVENT_VERSION_CONTRACT: dict[str, str] = {
+    "activation": "gecis",
+    "rollback": "gecis",
+    "deactivation": "gecis",
+    "approval": "surumsuz",
+    "rejection": "surumsuz",
+}
+
+
+def assert_version_contract_is_total(event_types, brand_scoped, contract) -> None:
+    """Paket-kapsamlı HER tür sürüm sözleşmesini BEYAN ETMİŞ olmalı.
+
+    Kapanış sayarak değil YAPIYLA: eşleme, `EVENT_TYPES`in marka-kapsamlı
+    olmayan yarısıyla BİREBİR aynı olmak zorundadır. Eksik beyan da (yeni tür
+    doğrulamadan kaçar) ölü beyan da (kümeden çıkmış tür için kural durur)
+    bulgudur. Aşağıda MODÜL YÜKLENİRKEN koşar: beyansız bir tür eklemek
+    import'u düşürür, yani kusur çalışma zamanına kadar bekleyemez.
+    """
+    beklenen = set(event_types) - set(brand_scoped)
+    if set(contract) != beklenen:
+        raise PackageEventContractError(
+            "surum sozlesmesi BEYAN EDILMEMIS tur(ler) var — "
+            f"eksik: {sorted(beklenen - set(contract))}, "
+            f"olu beyan: {sorted(set(contract) - beklenen)}"
+        )
+
+
+assert_version_contract_is_total(
+    EVENT_TYPES, BRAND_SCOPED_EVENTS, EVENT_VERSION_CONTRACT
+)
+
 # K-56: bu üç olay HER OLUŞTA bir yönetici bildirimi (outbox satırı) üretir —
 # eşik/oran YOKTUR (olay-bazlı, spec §14.4). Damga olayları (`stamp_*`) bu
 # kümede DEĞİLDİR: onlar atıf muhasebesidir, "paketli üretim beklendiği gibi
@@ -168,7 +231,33 @@ async def _validate_version_shape(
 
     Sınır geçişleri sentinel değerle temsil edilmez: "kaynak yok" NULL'dır,
     "hedef yok" NULL'dır. Uydurma bir `0` ya da `-1` denetim izini bozardı.
+
+    TÜR BAŞINA SÖZLEŞME `EVENT_VERSION_CONTRACT`ten OKUNUR (fix turu 1, I2).
+    Beyansız bir tür buraya kadar gelirse SQL'e VARMADAN reddedilir; önceki
+    `else`siz zincir onu sessizce geçiriyordu.
     """
+    kontrat = EVENT_VERSION_CONTRACT.get(event_type)
+    _require(
+        kontrat is not None,
+        f"{event_type}: sürüm sözleşmesi BEYAN EDİLMEMİŞ — paket-kapsamlı her "
+        "tür `EVENT_VERSION_CONTRACT`te `gecis` ya da `surumsuz` olarak "
+        "beyan edilmek ZORUNDA (doğrulanmamış tür denetim izine uydurma sürüm "
+        "yazar)",
+    )
+
+    if kontrat == "surumsuz":
+        _require(
+            from_version is None,
+            f"{event_type}: sürüm GEÇİŞİ taşımaz, from_version NULL olmalı "
+            f"(verilen {from_version!r})",
+        )
+        _require(
+            to_version is None,
+            f"{event_type}: sürüm GEÇİŞİ taşımaz, to_version NULL olmalı "
+            f"(verilen {to_version!r})",
+        )
+        return
+
     if event_type == "activation":
         _require(to_version is not None, "activation: to_version zorunlu")
         # TAM EŞLEŞME. Yalnız "from_version yoksa itiraz et" demek asimetrikti

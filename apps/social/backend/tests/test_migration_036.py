@@ -36,12 +36,15 @@ from datetime import datetime, timedelta, timezone
 import asyncpg
 import pytest
 
+from app.services import package_events as package_events_module
 from app.services.package_events import (
     APPROVAL_EVENTS,
     BRAND_SCOPED_EVENTS,
     EVENT_TYPES,
+    EVENT_VERSION_CONTRACT,
     LIFECYCLE_EVENTS,
     PackageEventContractError,
+    assert_version_contract_is_total,
     log_package_event,
 )
 
@@ -72,6 +75,10 @@ FAILURE_MARKER_033 = "migration 033 garanti dogrulamasi BASARISIZ"
 
 # K-09 kısıtının ADI SÖZLEŞMEYLE SABİTTİR — katalogdan tahmin edilmez.
 K09_CONSTRAINT = "sector_research_artifacts_run_source_kind_key"
+
+# K-45 üreticisinin YAPISAL kapısının imzası. Üretici, dayandığı kolonu
+# bulamazsa SESSİZ KALMAZ — bu metinle DURur.
+HISTORY_PRODUCER_MARKER = "K-45 uretici KIRIK"
 
 # Kapalı değer kümeleri — matrislerin ÜRETİCİSİ. Testler bu demetlerden
 # çarpım alır; hücre listesi elle yazılmaz.
@@ -1281,6 +1288,124 @@ async def test_log_package_event_still_rejects_unknown_type(db):
         )
 
 
+@pytest.mark.parametrize(
+    "event_type, from_version, to_version",
+    [
+        (t, f, v)
+        for t in sorted(APPROVAL_EVENTS)
+        for f in (None, 999)
+        for v in (None, -5)
+    ],
+)
+async def test_approval_events_reject_invented_versions(
+    db, event_type, from_version, to_version
+):
+    """Onay/ret SÜRÜM GEÇİŞİ TAŞIMAZ — iki alan da NULL olmak ZORUNDA.
+
+    ÖLÇÜLEN KUSUR (fix turu 1, I2): `_validate_version_shape` kapalı bir
+    `if activation / elif rollback / elif deactivation` zinciriydi ve `else`
+    TAŞIMIYORDU. `EVENT_TYPES`e giren iki yeni tür hiçbir dala uymuyor, sessizce
+    geçiyordu; `from_version=999, to_version=-5` taşıyan KALICI bir denetim
+    satırı yazılabiliyordu. Aynı çağrı `activation` ile gerçek aktif sürüme
+    karşı TAM EŞLEŞME ile reddediliyordu — yani asimetri denetim izindeydi.
+
+    Matris 2 tür × 2 `from_version` × 2 `to_version` = 8 hücre; beklenti tek
+    kuraldan türetilir.
+    """
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    sector_id = await _sub_sector(db)
+    package_id = await _package(db, sector_id)
+    kabul_edilmeli = from_version is None and to_version is None
+
+    async def _yaz():
+        return await log_package_event(
+            db,
+            event_type=event_type,
+            sector_id=sector_id,
+            package_id=package_id,
+            actor="yonetici@otomaix",
+            from_version=from_version,
+            to_version=to_version,
+        )
+
+    if kabul_edilmeli:
+        assert await _yaz() is not None
+        return
+
+    with pytest.raises(PackageEventContractError, match="sürüm"):
+        await _yaz()
+    assert (
+        await db.fetchval(
+            "SELECT count(*) FROM social.package_events WHERE package_id = $1",
+            package_id,
+        )
+        == 0
+    ), "reddedilen olay satır bıraktı"
+
+
+def test_every_package_scoped_event_declares_a_version_contract():
+    """SINIF KAPANIŞI: paket-kapsamlı HER tür sürüm sözleşmesini BEYAN EDER.
+
+    Kapanış sayarak değil YAPIYLA: eşleme `EVENT_TYPES`in marka-kapsamlı
+    olmayan yarısıyla BİREBİR aynı olmak zorundadır. Yarın eklenen dördüncü bir
+    tür, burada beyan edilmediği sürece modül IMPORT ANINDA düşer — çalışma
+    zamanında sessizce sürüm doğrulamasından kaçamaz.
+    """
+    beklenen = set(EVENT_TYPES) - set(BRAND_SCOPED_EVENTS)
+    assert set(EVENT_VERSION_CONTRACT) == beklenen, (
+        f"beyan edilmemiş: {sorted(beklenen - set(EVENT_VERSION_CONTRACT))}\n"
+        f"fazladan beyan: {sorted(set(EVENT_VERSION_CONTRACT) - beklenen)}"
+    )
+    assert set(EVENT_VERSION_CONTRACT.values()) <= {"gecis", "surumsuz"}
+
+
+def test_version_contract_totality_gate_rejects_an_undeclared_type():
+    """Bütünlük kapısının KENDİSİ ölçülür — pozitif kontrol + negatif kontrol."""
+    # Gerçek küme geçer.
+    assert_version_contract_is_total(
+        EVENT_TYPES, BRAND_SCOPED_EVENTS, EVENT_VERSION_CONTRACT
+    )
+    # Beyan edilmemiş bir tür eklenince DÜŞER.
+    with pytest.raises(PackageEventContractError, match="beyan"):
+        assert_version_contract_is_total(
+            EVENT_TYPES | {"uydurma_gecis"},
+            BRAND_SCOPED_EVENTS,
+            EVENT_VERSION_CONTRACT,
+        )
+    # Ölü bir beyan da bulgudur (küme küçüldü, eşleme küçülmedi).
+    with pytest.raises(PackageEventContractError, match="beyan"):
+        assert_version_contract_is_total(
+            EVENT_TYPES - {"activation"}, BRAND_SCOPED_EVENTS, EVENT_VERSION_CONTRACT
+        )
+
+
+async def test_undeclared_package_scoped_event_is_rejected_at_runtime(db, monkeypatch):
+    """Çalışma zamanı arka durağı: beyansız tür SQL'e VARMADAN reddedilir.
+
+    Import kapısı yapısal kapanıştır; bu test onun ÇALIŞMA ZAMANI eşini ölçer
+    (kümeler süreç içinde değiştirilirse kapı yine kapalı kalır). İkisi olmadan
+    `else`siz zincirin açtığı sınıf tam kapanmazdı.
+    """
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    sector_id = await _sub_sector(db)
+    package_id = await _package(db, sector_id)
+    monkeypatch.setattr(
+        package_events_module, "EVENT_TYPES", EVENT_TYPES | {"uydurma_gecis"}
+    )
+    with pytest.raises(PackageEventContractError, match="beyan"):
+        await log_package_event(
+            db,
+            event_type="uydurma_gecis",
+            sector_id=sector_id,
+            package_id=package_id,
+            actor="yonetici@otomaix",
+        )
+
+
 def test_event_sets_stay_disjoint_and_closed():
     """Üç kapsam sınıfı ÖRTÜŞMEZ ve birleşimleri `EVENT_TYPES`e EŞİTTİR."""
     assert APPROVAL_EVENTS == {"approval", "rejection"}
@@ -1447,6 +1572,120 @@ async def test_history_trigger_fires_regardless_of_writing_code_path(db, path_la
     acik = [r for r in rows if r["unassigned_at"] is None]
     assert len(acik) == 1, f"{path_label}: tam olarak BİR açık aralık olmalı — {rows}"
     assert acik[0]["sub_sector_id"] == beklenen_acik, f"{path_label}: {rows}"
+
+
+# ─── K-45 üreticisi SESSİZCE DURAMAZ (fix turu 1, I1) ──────────────────────
+#
+# ÖLÇÜLEN KUSUR: üretici kolonu `to_jsonb(NEW) ->> 'sub_sector_id'` ile
+# okuyordu ve bu okuma kolon YOKSA ya da YENİDEN ADLANDIRILMIŞSA `NULL` döner.
+# `yeni IS NOT DISTINCT FROM eski` o durumda DOĞRU olur, tetikleyici `RETURN
+# NULL` ile çıkar ve K-45 üreticisi SESSİZCE yazmayı bırakır — marka yazımları
+# `rc=0` ile geçmeye devam ederken maruziyet kanıtı birikmez. Ölçüm (taze
+# scratch, tüm migration'lar):
+#   * kolon `sub_sector_id_v2`ye yeniden adlandırıldı → marka INSERT `rc=0`,
+#     geçmiş satırı 1'de KALDI (yeni satır YOK).
+#   * kolon düşürüldü → marka INSERT `rc=0`, geçmiş satırı yine 1.
+# Sessizlik, tam da K-45'in var olma sebebinin karşıtıdır.
+
+
+def _brands_write_probe(kolon: str | None) -> str:
+    """Alt sektör kur, sonra markayı YAZ — kolon adı hücreye göre değişir."""
+    atama = "" if kolon is None else f", {kolon}"
+    deger = "" if kolon is None else ", (SELECT id FROM social.sectors WHERE slug = 't6fix-alt')"
+    return f"""
+        INSERT INTO social.brands (name{atama}) VALUES ('t6fix-marka'{deger});
+    """
+
+
+_HISTORY_SETUP = """
+    INSERT INTO social.sectors (slug, display_name) VALUES ('t6fix-kok', 't6fix-kok');
+    INSERT INTO social.sectors (slug, display_name, parent_sector_id)
+         SELECT 't6fix-alt', 't6fix-alt', id
+           FROM social.sectors WHERE slug = 't6fix-kok';
+"""
+
+
+@pytest.mark.parametrize(
+    "bozulma, bozan_sql, yazma_kolonu",
+    [
+        ("saglikli", "", "sub_sector_id"),
+        (
+            "yeniden_adlandirildi",
+            "ALTER TABLE social.brands RENAME COLUMN sub_sector_id TO sub_sector_id_v2;",
+            "sub_sector_id_v2",
+        ),
+        (
+            "dusuruldu",
+            "ALTER TABLE social.brands DROP COLUMN sub_sector_id;",
+            None,
+        ),
+    ],
+)
+def test_history_producer_fails_loudly_when_its_column_is_missing(
+    scratch_db_migrated, bozulma, bozan_sql, yazma_kolonu
+):
+    """Dayandığı kolon yoksa üretici SESSİZ KALMAZ, DURur.
+
+    Matris üç hücre: sağlıklı (pozitif kontrol — yazım geçer VE satır doğar),
+    kolon yeniden adlandırıldı, kolon düşürüldü. Beklenti hücre hücre elle
+    yazılmaz, TEK kuraldan türetilir: kolon yerinde mi?
+
+    Sağlıklı hücre olmadan bu matris "her koşulda düşen" bir tetikleyiciyle de
+    yeşil olurdu ve hiçbir şey ölçülmemiş olurdu.
+    """
+    url = scratch_db_migrated
+    _run_sql(url, _HISTORY_SETUP)
+    if bozan_sql:
+        _run_sql(url, bozan_sql)
+
+    result = _psql(url, "-c", _brands_write_probe(yazma_kolonu))
+    gecmis = _scalar(url, "SELECT count(*) FROM social.brand_sub_sector_history")
+
+    if bozulma == "saglikli":
+        assert result.returncode == 0, f"sağlıklı yol DURDU:\n{result.stderr}"
+        assert gecmis == "1", f"sağlıklı yolda aralık AÇILMADI (gecmis={gecmis})"
+        return
+
+    assert result.returncode != 0, (
+        f"{bozulma}: kolon yokken marka yazımı SESSİZCE geçti — üretici durdu "
+        f"ama kimse duymadı:\n{result.stdout}"
+    )
+    assert HISTORY_PRODUCER_MARKER in result.stderr, result.stderr
+    assert gecmis == "0", f"{bozulma}: reddedilen yazım satır bıraktı ({gecmis})"
+
+
+def test_column_dependency_is_created_only_by_a_trigger_column_list(scratch_db_migrated):
+    """DÜZELTİLEN İDDİA — artık AKIL YÜRÜTME değil, ÖLÇÜM.
+
+    Önceki yazım "`NEW.sub_sector_id` gövdede kolona KATALOG BAĞIMLILIĞI kurar"
+    diyordu ve bunu `ÖLÇÜLDÜ` diye etiketliyordu. YANLIŞTI: plpgsql gövdesi geç
+    bağlanır, katalog bağımlılığı YARATMAZ. İddianın yalnız İKİNCİ yarısı
+    doğrudur — bağımlılığı TETİKLEYİCİNİN KOLON LİSTESİ (`UPDATE OF <kolon>`)
+    kurar.
+
+    Bu test o bilgiyi çalıştırılabilir hâle getirir: aynı veritabanında iki kol,
+    ikisi de ölçülür.
+    """
+    url = scratch_db_migrated
+
+    # (a) Kolon listeli bir tetikleyici VARKEN kolon düşürülemez.
+    _run_sql(
+        url,
+        "CREATE TRIGGER t6fix_kolon_listeli AFTER UPDATE OF sub_sector_id "
+        "ON social.brands FOR EACH ROW "
+        "EXECUTE FUNCTION social.track_brand_sub_sector_history();",
+    )
+    engelli = _psql(url, "-c", "ALTER TABLE social.brands DROP COLUMN sub_sector_id")
+    assert engelli.returncode != 0, "kolon listeli tetikleyici düşürmeyi ENGELLEMEDİ"
+    assert "depends on column" in engelli.stderr, engelli.stderr
+
+    # (b) 036'nın KENDİ tetikleyicisi (kolon listesi YOK) düşürmeyi engellemez.
+    _run_sql(url, "DROP TRIGGER t6fix_kolon_listeli ON social.brands;")
+    serbest = _psql(url, "-c", "ALTER TABLE social.brands DROP COLUMN sub_sector_id")
+    assert serbest.returncode == 0, (
+        "036'nın tetikleyicisi kolona katalog bağımlılığı kuruyor:\n"
+        f"{serbest.stderr}"
+    )
 
 
 async def test_history_has_no_backfill(db):
