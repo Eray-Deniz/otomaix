@@ -64,6 +64,25 @@ def _scalar(url: str, sql: str) -> str:
     return result.stdout.strip()
 
 
+def _rollback_036_first(url: str) -> None:
+    """Geri alma SIRASINI uygular: 036 → 032 (Task 18 runbook'u).
+
+    Migration 036 `sector_package_runs.package_id`i `sector_packages(id)`e
+    yabancı anahtarla bağlar (plan Task 6 hükmü). O bağ ayaktayken 032'nin
+    `DROP TABLE social.sector_packages` adımı PostgreSQL tarafından REDDEDİLİR —
+    ölçüldü: `rc=3`, "cannot drop table ... because other objects depend on it",
+    hiçbir şey değişmeden. Yani 032 geri alması SIRA-BAĞIMLI hâle geldi ve bu
+    coupling gerçektir, test kurulumu değil.
+
+    Sıranın kendisi ayrıca pinlenir:
+    `tests/test_migration_036.py::test_032_down_is_fail_closed_while_036_is_applied`
+    — sıra dışı çağrının fail-closed olduğunu (bayt-bayt izsiz) ölçer.
+    """
+    down_036 = infra.MIGRATIONS_DIR / "rollback" / "036_down.sql"
+    result = _psql(url, "-f", str(down_036))
+    assert result.returncode == 0, f"036 geri alması başarısız:\n{result.stderr}"
+
+
 def _apply_rollback(url: str) -> subprocess.CompletedProcess:
     """`032_down.sql`i transaction sarmalayıcısı OLMADAN uygular.
 
@@ -377,6 +396,7 @@ def test_rollback_refuses_data_committed_while_it_waits(scratch_db_migrated, iso
 def test_rollback_clean_path_full_teardown(scratch_db_migrated):
     """Veri boşken geri alma 032'nin TÜM nesnelerini kaldırır; kök seed durur."""
     url = scratch_db_migrated
+    _rollback_036_first(url)
     _run_sql(url, _SEED_SQL)
 
     root_count_before = _scalar(
@@ -429,6 +449,7 @@ def test_rollback_refuses_when_protected_tables_are_absent(scratch_db_migrated):
     checkpoint 3, tur 3 — kritik). Giriş kapısı bu yolu tamamen kapatır.
     """
     url = scratch_db_migrated
+    _rollback_036_first(url)
 
     first = _apply_rollback(url)
     assert first.returncode == 0, f"ilk geri alma başarısız:\n{first.stderr}"

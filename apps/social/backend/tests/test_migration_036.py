@@ -165,12 +165,12 @@ def _apply_range(url: str, *, upto: int) -> None:
 
 _SCHEMA_FINGERPRINT_SQL = """
 SELECT coalesce(string_agg(line, E'\n' ORDER BY line), '<bos>') FROM (
-    SELECT 'rel|' || c.relname || '|' || c.relkind || '|' || c.relpersistence AS line
+    SELECT 'rel|' || c.relname || '|' || c.relkind::text || '|' || c.relpersistence::text AS line
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
      WHERE n.nspname = 'social'
     UNION ALL
     SELECT 'col|' || c.relname || '|' || a.attname || '|'
-           || format_type(a.atttypid, a.atttypmod) || '|' || a.attnotnull || '|'
+           || format_type(a.atttypid, a.atttypmod) || '|' || a.attnotnull::text || '|'
            || coalesce(pg_get_expr(d.adbin, d.adrelid), '-')
       FROM pg_attribute a
       JOIN pg_class c ON c.oid = a.attrelid
@@ -187,7 +187,7 @@ SELECT coalesce(string_agg(line, E'\n' ORDER BY line), '<bos>') FROM (
     SELECT 'idx|' || i.indexname || '|' || i.indexdef
       FROM pg_indexes i WHERE i.schemaname = 'social'
     UNION ALL
-    SELECT 'trg|' || t.tgname || '|' || pg_get_triggerdef(t.oid) || '|' || t.tgenabled
+    SELECT 'trg|' || t.tgname || '|' || pg_get_triggerdef(t.oid) || '|' || t.tgenabled::text
       FROM pg_trigger t
       JOIN pg_class c ON c.oid = t.tgrelid
       JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -1663,17 +1663,21 @@ def test_036_down_succeeds_on_empty_plan2_data(scratch_db_migrated):
 
 
 def _source_in_session(url: str, script, prior: str | None) -> subprocess.CompletedProcess:
-    """Script'i bir psql OTURUMUNDA `\\i` ile kaynaklar; öncesi/sonrası basılır."""
+    """Script'i bir psql OTURUMUNDA `\\i` ile kaynaklar; SONRAKİ değeri basar.
+
+    ÖLÇÜLDÜ (psql 16.15): `ON_ERROR_STOP` YERLEŞİK bir değişkendir ve her zaman
+    TANIMLIdır — bayrak verilmemiş taze bir oturumda bile `:{?ON_ERROR_STOP}`
+    DOĞRU döner ve değeri `off`tur. Yani "tanımsız" diye bir başlangıç durumu
+    yoktur; `prior=None` hücresi "çağıran hiç dokunmadı" (varsayılan `off`)
+    anlamına gelir.
+    """
     argv, env = _argv_without_error_stop(url)
     lines = []
     if prior is not None:
         lines.append(f"\\set ON_ERROR_STOP {prior}")
+    lines.append(r"\echo ONCE=:ON_ERROR_STOP")
     lines.append(f"\\i {script}")
-    lines.append(r"\if :{?ON_ERROR_STOP}")
     lines.append(r"\echo SONRA=:ON_ERROR_STOP")
-    lines.append(r"\else")
-    lines.append(r"\echo SONRA=<unset>")
-    lines.append(r"\endif")
     return subprocess.run(
         argv, input="\n".join(lines) + "\n", env=env, capture_output=True, text=True
     )
@@ -1687,16 +1691,21 @@ _DOWN_SCRIPT_IDS = {DOWN_033: "033", DOWN_034: "034", DOWN_036: "036"}
     [
         (script, prior)
         for script in NEW_DOWN_SCRIPTS
-        for prior in (None, "on", "off")
+        for prior in (None, "on", "1")
     ],
     ids=[
-        f"{_DOWN_SCRIPT_IDS[script]}-{prior or 'unset'}"
+        f"{_DOWN_SCRIPT_IDS[script]}-{prior or 'dokunulmamis'}"
         for script in NEW_DOWN_SCRIPTS
-        for prior in (None, "on", "off")
+        for prior in (None, "on", "1")
     ],
 )
 def test_down_scripts_restore_caller_on_error_stop(scratch_db_migrated, script, prior):
-    """3 script × 3 önceki durum = 9 hücre; oturum ayarı DEĞİŞMEDEN döner."""
+    """3 script × 3 önceki durum = 9 hücre; oturum ayarı DEĞİŞMEDEN döner.
+
+    Üçüncü hücre (`1`) bilinçlidir: `on` ile `1` psql için aynı ANLAMI taşır ama
+    aynı METİN değildir. Script değeri "doğruysa `on` yaz" diye normalize etseydi
+    bu hücre kırmızı düşerdi — çağıranın yazdığı metin korunur.
+    """
     url = scratch_db_migrated
     if script is DOWN_033:
         # 033 geri alması 036'nın genişlettiği CHECK'i taşıyan tabloyu düşürür;
@@ -1706,7 +1715,8 @@ def test_down_scripts_restore_caller_on_error_stop(scratch_db_migrated, script, 
     result = _source_in_session(url, script, prior)
 
     assert result.returncode == 0, f"kaynaklama DURDU:\n{result.stderr}"
-    beklenen = "SONRA=<unset>" if prior is None else f"SONRA={prior}"
+    # `prior=None` = çağıran hiç dokunmadı → psql varsayılanı `off`.
+    beklenen = "SONRA=off" if prior is None else f"SONRA={prior}"
     assert beklenen in result.stdout, (
         f"çağıranın ON_ERROR_STOP'u BOZULDU (beklenen {beklenen!r}):\n{result.stdout}"
     )
@@ -1797,6 +1807,34 @@ def test_unnamed_extra_index_still_rejected(scratch_db_migrated, extra, marker, 
     result = _apply_file(url, MIGRATION_032)
     assert result.returncode != 0, f"{label} sessizce geçti:\n{result.stdout}"
     assert marker in result.stderr, result.stderr
+
+
+def test_032_down_is_fail_closed_while_036_is_applied(scratch_db_migrated):
+    """DÜZELTMENİN KENDİ YAN ETKİSİ — ölçüldü ve PİNLENDİ.
+
+    036, `sector_package_runs.package_id`i `sector_packages(id)`e yabancı
+    anahtarla bağlar (plan Task 6 hükmü, harfiyen). Bunun ÖLÇÜLEN yan etkisi:
+    032'nin geri alması artık SIRA-BAĞIMLIdır — 036 ayaktayken
+    `DROP TABLE social.sector_packages` PostgreSQL tarafından reddedilir.
+
+    Yan etki SESSİZ DEĞİLDİR ve zararsızdır: script kendi transaction'ını
+    sahiplendiği için ret KALICI İZ BIRAKMAZ. Burada iki şey birden ölçülür —
+    sıfır-dışı çıkış VE bayt-bayt değişmemiş şema. Doğru sıra (Task 18
+    runbook'u) 036 → 034 → 033 → 032'dir.
+    """
+    url = scratch_db_migrated
+    down_032 = ROLLBACK_DIR / "032_down.sql"
+
+    schema_before = _schema_fingerprint(url)
+    result = _apply_down(url, down_032)
+
+    assert result.returncode != 0, f"sıra dışı 032 geri alması KOŞTU:\n{result.stdout}"
+    assert "sector_package_runs" in result.stderr, result.stderr
+    assert _schema_fingerprint(url) == schema_before, "sıra dışı çağrı iz bıraktı"
+
+    # POZİTİF KONTROL: doğru sırada aynı script GEÇER.
+    assert _apply_down(url, DOWN_036).returncode == 0
+    assert _apply_down(url, down_032).returncode == 0, "doğru sırada da düştü"
 
 
 def test_unrecognized_event_type_still_rejected(scratch_db_migrated):
