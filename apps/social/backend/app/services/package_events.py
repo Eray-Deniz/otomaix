@@ -104,7 +104,22 @@ EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 # DB CHECK'İ EKLENMEDİ, bilinçli. GEREKÇE DEĞİŞMEDİ; ARİTMETİĞİ fix turu 2'den
 # sonra bayatlamıştı ve burada düzeltildi (fix turu 3, R2).
 #
-# Bugün on iki türün DOKUZU `surumsuz`dur ve onların sözleşmesi ("iki sürüm
+# SAYILAR SAYILMADI, ÖLÇÜLDÜ — ve üreten komut burada durur ki bir sonraki okur
+# yeniden saymak yerine KOŞSUN (fix turu 4; önceki iki yazım da elde sayılmıştı
+# ve ikisi de yanlıştı):
+#
+#     python -c "from collections import Counter; \
+#       from app.services import package_events as pe; \
+#       print(len(pe.EVENT_VERSION_CONTRACT), dict(Counter(pe.EVENT_VERSION_CONTRACT.values())))"
+#     → 11 {'gecis': 3, 'surumsuz': 8}                       (2026-09-06)
+#
+# Çapraz kontrol (aynı gün): 6 marka-kapsamlı + 3 yaşam döngüsü + 2 onay = 11;
+# `036_package_runs.sql`in `package_events_type_check`i de tam 11 değer listeler.
+# Tarihsel çapa:
+#     git show d1a1091:apps/social/backend/app/services/package_events.py
+#     → 5 {'gecis': 3, 'surumsuz': 2}
+#
+# Bugün on bir türün SEKİZİ `surumsuz`dur ve onların sözleşmesi ("iki sürüm
 # alanı da NULL") bir CHECK'te İFADE EDİLEBİLİR. Kalan ÜÇÜ (`gecis`)
 # İLİŞKİSELDİR — `from_version`, olayın yazıldığı ANDA canlı olan aktif sürümle
 # TAM EŞLEŞMEK zorundadır — ve bu bir CHECK'te İFADE EDİLEMEZ.
@@ -117,10 +132,12 @@ EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 # katmana böler ve iki ölçünün ıraksamasına izin verir (K-01b) — sözleşme
 # değişince biri güncellenir, diğeri unutulur. Üstelik bütünlük kapısı
 # eksik/ölü bir PYTHON beyanını yakalar; bayat bir DB CHECK'ini yakalayan
-# HİÇBİR ŞEY olmazdı. Oranın 2/5'ten 9/12'ye çıkması bu riski AZALTMAZ,
+# HİÇBİR ŞEY olmazdı. Oranın 2/5'ten 8/11'e çıkması bu riski AZALTMAZ,
 # sözleşmenin daha BÜYÜK bir kısmını ikizlenmiş hâle getirir.
 #
-# Kalan risk dürüstçe: ham SQL bu kapıyı atlar — on iki türün HEPSİ için.
+# Kalan risk dürüstçe: ham SQL bu kapıyı atlar — on bir türün HEPSİ için.
+VERSION_CONTRACT_VALUES = frozenset({"gecis", "surumsuz"})
+
 EVENT_VERSION_CONTRACT: dict[str, str] = {
     # Yaşam döngüsü — sürüm GEÇİŞİ; alanlar türe özgü doğrulanır (F22).
     "activation": "gecis",
@@ -139,8 +156,13 @@ EVENT_VERSION_CONTRACT: dict[str, str] = {
 }
 
 
-def assert_version_contract_is_total(event_types, contract) -> None:
-    """`EVENT_TYPES`in HER üyesi sürüm sözleşmesini BEYAN ETMİŞ olmalı.
+def assert_version_contract_is_wellformed(event_types, contract) -> None:
+    """Sözleşme eşlemesi ANAHTARINDA ve DEĞERİNDE iyi biçimli olmalı.
+
+    ADI `..._is_total` DEĞİL (fix turu 4): kapı artık yalnız bütünlüğü değil
+    değer kümesini de denetliyor ve "total" o işi anlatmıyordu. Yaptığını
+    söylemeyen bir ad, bu görevin dört kez ürettiği sınıfın kendisidir.
+
 
     Kapanış sayarak değil YAPIYLA: eşleme kümenin TAMAMIYLA birebir aynı olmak
     zorundadır. Eksik beyan da (yeni tür doğrulamadan kaçar) ölü beyan da
@@ -162,8 +184,21 @@ def assert_version_contract_is_total(event_types, contract) -> None:
             f"olu beyan: {sorted(set(contract) - beklenen)}"
         )
 
+    # DEĞER de kapalı bir kümedir (fix turu 4). Yazım hatası (`surumsuzz`)
+    # eskiden import'tan GEÇİYOR, sonra `_validate_version_shape`in `else`
+    # koluna düşüyordu; etki fail-closed'dı ama o kolun mesajı türün `gecis`
+    # BEYAN EDİLDİĞİNİ söylüyordu — edilmemişti. Kusurun DOĞMASINI burada
+    # engellemek, mesajı yamamaktan daha ucuz ve daha kapalıdır.
+    hatali = {t: v for t, v in contract.items() if v not in VERSION_CONTRACT_VALUES}
+    if hatali:
+        raise PackageEventContractError(
+            "surum sozlesmesi TANINMAYAN deger tasiyor — "
+            f"gecerli degerler: {sorted(VERSION_CONTRACT_VALUES)}; "
+            f"hatali beyan(lar): {sorted(hatali.items())}"
+        )
 
-assert_version_contract_is_total(EVENT_TYPES, EVENT_VERSION_CONTRACT)
+
+assert_version_contract_is_wellformed(EVENT_TYPES, EVENT_VERSION_CONTRACT)
 
 # K-56: bu üç olay HER OLUŞTA bir yönetici bildirimi (outbox satırı) üretir —
 # eşik/oran YOKTUR (olay-bazlı, spec §14.4). Damga olayları (`stamp_*`) bu
@@ -346,7 +381,7 @@ async def _validate_version_shape(
         )
     else:
         # DAĞITIM SEVİYESİ fix turu 1-2'de kapandı; bu `else` KOLUN KENDİ
-        # zincirini kapatır (fix turu 3, R1). Bugünkü on iki tür için
+        # zincirini kapatır (fix turu 3, R1). Bugünkü on bir tür için
         # ATEŞLENEMEZ — üç `gecis` türünün üçünün de dalı var — ama açık bırakılan
         # bir eksendi: ölçüldü ki dördüncü bir `gecis` türü beyan edilip
         # `from_version=999, to_version=-5` ile çağrıldığında Python kapısı KABUL
@@ -355,11 +390,18 @@ async def _validate_version_shape(
         # için dayanıklı bir ikinci hat DEĞİLDİR — yani tür eklendiği gün kapı
         # sessizce açılırdı. I2'nin gereği "yarın eklenen tür doğrulamadan
         # KAÇAMASIN"dı; bu satır onu bu seviyede de bitirir.
+        # MESAJ, OKUDUĞU DEĞERİ BİLDİRİR — sabit bir değeri İDDİA ETMEZ
+        # (fix turu 4). Önceki metin "`gecis` BEYAN EDİLDİ" diyordu; import
+        # kapısı atlanmış bir yazım hatasında (çalışma zamanında eşlemenin
+        # değiştirilmesi) bu YANLIŞTI ve tam da düzeltmeye çalıştığımız sınıfa
+        # giriyordu. İki kapı iki ayrı yarıyı kapatır: import kapısı kusurun
+        # doğmasını, bu satır mesajın yalan söylemesini.
         raise PackageEventContractError(
-            f"{event_type}: `gecis` BEYAN EDİLDİ ama SÜRÜM DALI YOK — geçiş "
-            "türlerinin sürüm alanları TÜRE ÖZGÜ doğrulanır (F22) ve dalı "
-            "olmayan bir tür, denetim izine doğrulanmadan yazılırdı. Türü "
-            "`surumsuz` olarak beyan edin ya da bu zincire kendi dalını ekleyin."
+            f"{event_type}: sürüm sözleşmesi {kontrat!r} beyan edilmiş ama bu "
+            "türün SÜRÜM DALI YOK — geçiş türlerinin sürüm alanları TÜRE ÖZGÜ "
+            "doğrulanır (F22) ve dalı olmayan bir tür, denetim izine "
+            "doğrulanmadan yazılırdı. Türü `surumsuz` beyan edin ya da bu "
+            "zincire kendi dalını ekleyin."
         )
 
 

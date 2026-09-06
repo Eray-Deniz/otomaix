@@ -45,8 +45,9 @@ from app.services.package_events import (
     EVENT_TYPES,
     EVENT_VERSION_CONTRACT,
     LIFECYCLE_EVENTS,
+    VERSION_CONTRACT_VALUES,
     PackageEventContractError,
-    assert_version_contract_is_total,
+    assert_version_contract_is_wellformed,
     log_package_event,
 )
 
@@ -1430,21 +1431,21 @@ def test_version_contract_totality_gate_rejects_an_undeclared_type():
     Muafiyeti parametre olarak taşımak, onu yanlışlıkla geri vermeyi mümkün
     kılardı; bugün kapıya bir ALT KÜME geçirilemez.
     """
-    assert_version_contract_is_total(EVENT_TYPES, EVENT_VERSION_CONTRACT)
+    assert_version_contract_is_wellformed(EVENT_TYPES, EVENT_VERSION_CONTRACT)
 
     with pytest.raises(PackageEventContractError, match="beyan"):
-        assert_version_contract_is_total(
+        assert_version_contract_is_wellformed(
             EVENT_TYPES | {"uydurma_gecis"}, EVENT_VERSION_CONTRACT
         )
     with pytest.raises(PackageEventContractError, match="beyan"):
-        assert_version_contract_is_total(
+        assert_version_contract_is_wellformed(
             EVENT_TYPES - {"activation"}, EVENT_VERSION_CONTRACT
         )
 
 
 # ─── Import kapısının TÜRÜ ve MESAJI (fix turu 2, N1) ──────────────────────
 #
-# ÖLÇÜLEN KUSUR: `assert_version_contract_is_total(...)` modül gövdesinde
+# ÖLÇÜLEN KUSUR: `assert_version_contract_is_wellformed(...)` modül gövdesinde
 # `class PackageEventContractError` TANIMINDAN ÖNCE koşuyordu (122 < 150). Yük
 # taşıyan yarısı sağlamdı — import yine düşüyordu, yani kapı fail-closed'dı —
 # ama operatörün gördüğü şey `NameError: name 'PackageEventContractError' is
@@ -1460,7 +1461,8 @@ def test_version_contract_totality_gate_rejects_an_undeclared_type():
 # Dağıtım seviyesi fix turu 1-2'de kapandı: her tür `gecis` ya da `surumsuz`
 # beyan eder, bütünlük import anında zorlanır. Ama `gecis` KOLUNUN İÇİ hâlâ
 # `if activation / elif rollback / elif deactivation` idi ve sonunda `else`
-# YOKTU. Bugün var olan on iki tür için ATEŞLENEMEZ (üçünün üçü de dala sahip)
+# YOKTU. Bugün var olan on bir tür için ATEŞLENEMEZ (üç `gecis` türünün üçü de
+# dala sahip; sayım: `test_contract_values_are_a_closed_pair` ile aynı kaynaktan)
 # — yani canlı bir tehlike değil, AÇIK BIRAKILMIŞ BİR EKSENDİ.
 #
 # Neden yine de kapatılıyor: I2'nin gereği "yarın eklenecek bir tür doğrulamadan
@@ -1469,6 +1471,73 @@ def test_version_contract_totality_gate_rejects_an_undeclared_type():
 # KABUL ediyor, yazım SQL'e ulaşıyor ve yalnız veritabanının kendi kapalı tür
 # CHECK'i durduruyordu — o CHECK ise gerçek bir yeni türle BİRLİKTE
 # genişletileceği için dayanıklı bir ikinci hat DEĞİLDİR.
+
+
+def test_import_time_gate_rejects_a_mistyped_contract_value(tmp_path):
+    """Sözleşme DEĞERİ de kapalı bir kümedir — yazım hatası import'ta DURur.
+
+    ÖLÇÜLEN KUSUR (fix turu 4, Minor): bütünlük kapısı yalnız ANAHTARLARI
+    denetliyordu. `"approval": "surumsuzz"` gibi bir yazım hatası import'tan
+    GEÇİYOR, sonra `_validate_version_shape`in `else` koluna düşüyor ve o kolun
+    mesajı türün `gecis` BEYAN EDİLDİĞİNİ söylüyordu — beyan edilmemişti.
+    Etkisi fail-closed ve gürültülüydü, ama mesaj kodun durumu hakkında YANLIŞ
+    bir şey söylüyordu; bu görevin dört kez ürettiği sınıfın ta kendisi.
+
+    Kapı ANAHTAR + DEĞER kümesini birlikte denetler; adı da bunu söylesin diye
+    `..._is_total` → `..._is_wellformed` oldu.
+    """
+    with pytest.raises(Exception) as excinfo:
+        _load_doctored_package_events(
+            tmp_path, ('    "approval": "surumsuz",\n', '    "approval": "surumsuzz",\n')
+        )
+    hata = excinfo.value
+    assert type(hata).__name__ == "PackageEventContractError", (
+        f"yazım hatası import'tan GEÇTİ ya da yanlış tür fırlattı: "
+        f"{type(hata).__name__}: {hata}"
+    )
+    assert "surumsuzz" in str(hata), str(hata)
+    assert "approval" in str(hata), str(hata)
+
+
+def test_contract_values_are_a_closed_pair():
+    """İki değer TEK yerde tanımlıdır ve eşlemenin tamamı o kümededir."""
+    assert VERSION_CONTRACT_VALUES == {"gecis", "surumsuz"}
+    assert set(EVENT_VERSION_CONTRACT.values()) <= VERSION_CONTRACT_VALUES
+
+
+async def test_unknown_contract_value_message_does_not_claim_gecis(db, monkeypatch):
+    """`else` kolunun mesajı BEYAN EDİLMEMİŞ bir şeyi İDDİA ETMEZ.
+
+    Import kapısı yazım hatasının VAR OLMASINI engeller; bu test kapının
+    atlandığı yolu (çalışma zamanında eşlemenin değiştirilmesi) ölçer ve
+    mesajın GERÇEKTEN OKUDUĞU değeri bildirdiğini doğrular. İki kapı iki ayrı
+    yarıyı kapatır: biri kusurun doğmasını, diğeri mesajın yalan söylemesini.
+    """
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    sector_id = await _sub_sector(db)
+    package_id = await _package(db, sector_id)
+    monkeypatch.setattr(
+        package_events_module,
+        "EVENT_VERSION_CONTRACT",
+        {**EVENT_VERSION_CONTRACT, "approval": "surumsuzz"},
+    )
+
+    with pytest.raises(PackageEventContractError) as excinfo:
+        await log_package_event(
+            db,
+            event_type="approval",
+            sector_id=sector_id,
+            package_id=package_id,
+            actor="yonetici@otomaix",
+        )
+
+    mesaj = str(excinfo.value)
+    assert "'surumsuzz'" in mesaj, f"mesaj OKUDUĞU değeri bildirmiyor: {mesaj}"
+    assert "'gecis'" not in mesaj, (
+        f"mesaj yapılmamış bir `gecis` beyanını İDDİA EDİYOR: {mesaj}"
+    )
 
 
 async def test_a_fourth_gecis_type_is_rejected_by_the_python_gate(db, tmp_path):
