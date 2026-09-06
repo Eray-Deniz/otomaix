@@ -180,6 +180,18 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 Yürütme defteri (kanonik ilerleme + tüm kararlar):
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
 
+- **Task 6 TAMAM (2026-09-06)** — migration 036 (koşu kaydı · politika raporu · onay anlık
+  görüntüsü · atama geçmişi) + `033_down.sql` / `034_down.sql` / `036_down.sql` + iki donmuş
+  sözleşmenin sürüm-farkında yapılması. Sekiz commit: `6694b0b` `d1edd51` `c53ec9d` `1fb98d6`
+  (ana) + `d1a1091` `93c8120` `c73f9b0` `5db07b1` `7b0bc86` (beş düzeltme turu).
+  Hakem turu: **spec ✅, kalite onaylı**, Critical yok, 2 Important + 7 Minor.
+  Zincir: Important'lar → tur 1 → yeniden inceleme (ikisi de ADDRESSED, **iki yeni Important**)
+  → tur 2 → yeniden inceleme (ikisi de ADDRESSED, iki küçük kalem) → tur 3 → yeniden inceleme
+  (biri ADDRESSED, biri **yeni bir şekilde yanlış**) → tur 4 → kontrolör iki örnek daha buldu →
+  tur 5 → yeniden inceleme (**S1 ADDRESSED**, bir yeni Important) → **KAPAK, kesici çalıştı.**
+  Test tabanı: 963 → 965 → 1133 → 1175 → 1176 → 1179 → **1181**, hiç düşmeden. Her sayı
+  kontrolörün KENDİ taze koşumundan, sessiz veritabanında.
+
 # Decisions Log
 
 - **2026-08-27 — K-84 = A:** kalıp kimliği sürümler arası korunur. Değeri eşleştirmek
@@ -285,6 +297,31 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   o zaman "geçti mi" testinin bitiş tarihini okuması gerekir.
   **Dürüst etiket:** dönem kolonunun bugün önyüzde tüketicisi YOK; bu bilinçli, gizlenmiyor.
 
+- **2026-09-06 — R12(a2)(d) AMENDE EDİLDİ (kontrolör kararı, ölçümle):** manifest muafiyeti
+  `indexes` yanında `constraints` yüzeyine de uzanır. Ek kendi içinde çelişiyordu — adın
+  `CONSTRAINT ... UNIQUE` biçiminde yazılmasını şart koşarken `constraints` yüzeyinin hiç
+  gevşememesini de istiyordu. Canlı PG 18.3'te ölçüldü: adlandırılmış UNIQUE kısıt HEM bir
+  `pg_constraint` satırı HEM bir indeks üretir; `CREATE UNIQUE INDEX` yalnız indeks üretir.
+  Sözleşmedeki ad `_key` ile bitiyor (PostgreSQL'in KISIT son eki), yani yazar kısıt istemiş.
+  Muafiyet tek ada + tam tanıma bağlı; `columns`/`triggers`/`relation` kapalı kaldı.
+  **Ek metni artık kodla uyumsuz — kapanışta düzeltilmeli, "çözüldü" DEĞİL.**
+- **2026-09-06 — sürüm sözleşmesi için DB CHECK EKLENMEZ (kontrolör kararı):** üç geçiş
+  sözleşmesi ilişkiseldir (olay yazıldığı ANDA canlı olan aktif sürümle tam eşleşme) ve bir
+  CHECK'te ifade edilemez; yalnız ifade edilebilir kısmı kodlamak aynı sözleşmeyi iki katmana
+  böler ve iki ölçünün ıraksamasına izin verir. Asimetri ölçüldü: eksik/ölü bir PYTHON beyanını
+  import kapısı yakalar, bayat bir DB CHECK'ini hiçbir şey yakalamaz. Kalan risk açıkça duruyor:
+  ham SQL kapıyı atlar — on bir türün hepsi için. Geri alma maliyeti adlandırıldı (bir CHECK +
+  bir muafiyet satırı + bir düşürme adımı).
+- **2026-09-06 — `ON_ERROR_STOP` konvansiyonu (kontrolör kararı):** yeni geri alma dosyaları
+  çağıranın psql oturumunu değiştirmeden bırakır (ayarla, sonunda geri koy). `032_down`/
+  `035_down` bu turda DEĞİŞMEDİ; tutarsızlık kayda geçti. **Ölçülmüş sınır:** ret yolunda psql
+  dosyayı okumayı bırakır, o yüzden geri koyma satırına ULAŞILMAZ ve çağıran `on` ile kalır —
+  kapatılamaz, çünkü `rc=3` yalnız `ON_ERROR_STOP` açıkken üretilir. Üç dosyanın başlığında yazılı.
+- **2026-09-06 — tur 4-5'te model yükseltmesi YAPILMADI (kontrolör kararı):** SDD kuralı "üç
+  turdur takılan uygulayıcı kendi sorununu göremiyor" gerekçesine dayanır; bu döngü takılmadı —
+  her tur kendi bulgularını kapattı, her yeni bulgu tazeydi. Model tabanı zaten mevcut en
+  güçlüsü, yani "yükseltme" karar kılığında bir no-op olurdu.
+
 # Open Problems
 
 - **Task 1'in üç Minor bulgusu Task 2'de KAPANDI** (`1186d44`): depo-yok kapısı artık kendi
@@ -356,6 +393,44 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   kendiliğinden kapsanır. **Yeniden açılma koşulu:** Task 3 yüzeyinde (`insert_draft`,
   `check_unit_integrity`, kimlik modülü) bir kusur çıkarsa ilk bakılacak yer bu turdur.
   Dürüst etiket: *bağımsız yargı alınmadı; kapsanma yolu adlandırılmış.*
+
+## Task 6'nın doğurduğu kalemler (2026-09-06 kapağında karara bağlandı)
+
+- **YAPISAL BULGU — düzyazıdaki sayı iddiaları review turlarıyla doğru tutulamıyor.**
+  Tek görevde **yedi** örnek: (1) yanlış `ÖLÇÜLMÜŞ` etiketli katalog-bağımlılığı yorumu ·
+  (2) yarısı kapalı bir sınıf "kapandı" diye sunuldu · (3) bayatlamış "yalnız yarısı çevrilebilir" ·
+  (4) 9/12 yerine 8/11 · (5) uygulayıcının kendi mutasyon etiketi · (6) düzeltme paragrafının
+  içinde iki `dokuz` daha · (7) tur 5'in kendi yorumu kapı kapsamını 16 diyor, kapı 11 kapsıyor.
+  **Yedisinin de çalışma zamanı etkisi SIFIR.** Bağımsız hakemin ölçümü: yedi arızanın yedisi de
+  korumasız düzyazı bölgesinde; tur 5'in kurduğu iki kapı **hiç arıza çıkmamış** bir bölgeyi
+  koruyor ve yedi örneğin hiçbirini yakalayamazdı.
+  **İKİYE BÖLÜNDÜ (İlke 7 lighter-version testi — ilk park etme over-bundling'di):**
+  - **(A) ŞİMDİ, maliyeti sıfır — HANDOFF'ta bağlayıcı taşınıyor:** kalan 14 görevin her dispatch
+    brief'ine ve her hakem prompt'una tek paragraflık kural — *gönderilen düzyazıya sayı yazma;
+    ya üreten komutu yanına koy, ya "doğrulanmadı" etiketle.* Akan borcu bu yarı durdurur.
+    **Dürüst sınır: bu bir KURAL, kapı değil — davranış katmanında, testle zorlanmıyor.**
+  - **(B) PARK — çözülmedi, evi var, tarihi yok:** mevcut düzyazı yüzeyinin geriye dönük taranması
+    (ölçüldü: Task 6'nın dokunduğu 11 dosyada sayı+sayılan-isim taşıyan **303** aday yorum satırı)
+    **ve** politikanın seçilmesi (düzyazıda sayı yazma / sayıları üret / "doğrulanmadı" etiketle).
+    **Ev: dal-sonu bütün-dal incelemesinin triage listesi.** O ev bir **KARAR** noktasıdır,
+    düzeltme değil; düzeltme kararı orada verilirse ayrı iş olarak planlanır.
+    Uydurma bir görev numarasına yapıştırılmadı.
+- **F1 (Important, park edildi — sessizce DEĞİL):** `tests/test_migration_036.py:1510`
+  "(16 iddia, tek kapı)" diyor; kapı AST ile ölçüldü, **11** iddia kapsıyor — kapsamı %45 abartıyor.
+  Beş satırlık fark, `N hücre` docstring'i taşımayan testler; elle ölçülmüşler, kapının dışındalar.
+  **Codex checkpoint dispatch'inde ÖNDEN bildirilecek** (hakemin takılıp bulması beklenmiyor) ve
+  dal-sonu triage listesine düzeltmesi yazılmış hâlde gidiyor (16 → 11).
+- **F2 (Minor, park edildi):** `:1504` "beş turda DÖRT kez aynı kusuru üretti" — doğru sayı **yedi**.
+  Üreten komutu olamayacak bir sayı; bu turun kendi kuralıyla ölçüm değil düzyazı.
+- **İlk hakem turunun YEDİ Minor'u** dal-sonu incelemesine ertelendi (defterde tek tek yazılı).
+  İçlerinden biri operasyonel: **036 uygulandıktan sonra tek bir atama geçmişi satırı bile varsa
+  `032_down.sql` kalıcı olarak erişilemez** — fail-closed, tehlikeli değil, ama **Task 18
+  runbook'una bir satır gerekiyor**.
+- **Devir — Task 18:** (a) `get_holidays` önbelleği (Task 5'ten) · (b) geri alma sırası +
+  operatör adımı · (c) yukarıdaki `032_down` erişilemezliği · (d) düzeltilmiş iki n8n workflow'unun
+  canlıya import edilmesi (CURRENT.md `n8n-workflow-sir-hijyeni`).
+- **İki commit mesajı geri çekilmiş iddia taşıyor ve DEĞİŞTİRİLEMEZ:** `d1edd51` (katalog
+  bağımlılığı) ve `c73f9b0` ("twelve types that exist today"). Raporda kayıtlı.
 
 ## Task 3'ün doğurduğu evler (2026-08-30 kapanış sweep'i — hepsi TARİHLİ)
 
