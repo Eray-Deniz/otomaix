@@ -2808,6 +2808,244 @@ def test_every_locked_table_of_the_down_script_is_locked_exactly_once():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 9c. AD ≠ SAHİPLİK — aynı adı taşıyan YABANCI fonksiyon/tetikleyici EZİLMEZ
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ÖLÇÜLEN KUSUR (Codex kapanış-doğrulama turu, F7): 036 kalıcı DDL'inde üç
+# fonksiyon/tetikleyici çifti KOŞULSUZ yazılıyordu (`CREATE OR REPLACE
+# FUNCTION` + `DROP TRIGGER IF EXISTS` + `CREATE TRIGGER`), yani nesnenin ADI
+# var diye SAHİPLİK varsayılıyordu. Kayan bir şemada aynı adlı YABANCI bir
+# fonksiyon sessizce EZİLİR; ona bağlı başka bir tetikleyici, fonksiyon
+# kimliği (oid) korunduğu için ANINDA bizim gövdemizi çalıştırmaya başlar.
+# Kapalı manifest bunu YAKALAYAMAZ: manifest ezme İŞLEMİNDEN SONRAKİ
+# (kanonik görünen) durumu okur.
+#
+# Bu, dosyanın KENDİ standardının açık kalmış varyantıydı — kısıtlar için
+# KAPI 2 / KAPI 3 tam bu disiplini uyguluyor (`pg_get_constraintdef` +
+# `contype` + `convalidated`). Sınıf kapatıldı, varyant değil: ÜÇ çiftin ÜÇÜ.
+#
+# ÇİFTLER ELLE YAZILMAZ: kanonik tetikleyici tanımlarından TÜRETİLİR — tek bir
+# metin hem tetikleyici adını, hem tabloyu, hem fonksiyonu taşır.
+
+_TRIGGER_TRIPLE_RE = re.compile(
+    r"CREATE TRIGGER (\w+)\s+(?:BEFORE|AFTER|INSTEAD OF)[\s\S]*?"
+    r"\bON (social\.\w+)[\s\S]*?EXECUTE FUNCTION (social\.\w+)\(\)"
+)
+
+IDENTITY_TRIPLES = tuple(
+    dict.fromkeys(_TRIGGER_TRIPLE_RE.findall(MIGRATION_036.read_text(encoding="utf-8")))
+)
+IDENTITY_IDS = [trg for trg, _, _ in IDENTITY_TRIPLES]
+
+IDENTITY_MARKER = "KANONIK OLMAYAN"
+
+# Mutasyon kolunun kestiği sınırlar — dosyadaki bölüm başlıkları.
+IDENTITY_GATE_BEGIN = "-- ── KAPI 4 — FONKSİYON VE TETİKLEYİCİ KİMLİĞİ"
+IDENTITY_GATE_END = "-- ═══ BURADAN SONRASI KALICI"
+
+# Yabancı gövdenin parmak izi: ezilip ezilmediği BU metinle ölçülür.
+FOREIGN_BODY_MARKER = "YABANCI GOVDE 036 TESTI"
+
+
+def _foreign_function_sql(fonksiyon: str) -> str:
+    return (
+        f"CREATE OR REPLACE FUNCTION {fonksiyon}() RETURNS trigger AS $yabanci$ "
+        f"BEGIN RAISE EXCEPTION '{FOREIGN_BODY_MARKER}'; END $yabanci$ LANGUAGE plpgsql;"
+    )
+
+
+def _foreign_trigger_sql(tetikleyici: str, tablo: str) -> str:
+    """Adı BİZİM, tanımı BAŞKA bir tetikleyici (farklı olay, farklı fonksiyon)."""
+    return (
+        "CREATE OR REPLACE FUNCTION social.yabanci_036_test_fn() RETURNS trigger AS "
+        "$yt$ BEGIN RETURN NEW; END $yt$ LANGUAGE plpgsql;"
+        f"DROP TRIGGER IF EXISTS {tetikleyici} ON {tablo};"
+        f"CREATE TRIGGER {tetikleyici} BEFORE DELETE ON {tablo} "
+        "FOR EACH ROW EXECUTE FUNCTION social.yabanci_036_test_fn();"
+    )
+
+
+def _function_body(url: str, fonksiyon: str) -> str:
+    return _scalar(
+        url,
+        "SELECT coalesce((SELECT p.prosrc FROM pg_proc p "
+        f"WHERE p.oid = to_regprocedure('{fonksiyon}()')), '<yok>')",
+    )
+
+
+def _trigger_def(url: str, tetikleyici: str, tablo: str) -> str:
+    return _scalar(
+        url,
+        "SELECT coalesce((SELECT pg_get_triggerdef(t.oid) FROM pg_trigger t "
+        f"WHERE t.tgrelid = '{tablo}'::regclass AND t.tgname = '{tetikleyici}' "
+        "AND NOT t.tgisinternal), '<yok>')",
+    )
+
+
+def test_identity_triples_are_derived_and_non_empty():
+    """BOŞ-KÜME KONTROL KOLU: çift kümesi boşsa aşağıdaki matris hiç koşmazdı."""
+    assert IDENTITY_TRIPLES, (
+        "036'dan HİÇ (tetikleyici, tablo, fonksiyon) üçlüsü türetilemedi — "
+        "kimlik matrisi boş koşardı"
+    )
+    for tetikleyici, tablo, fonksiyon in IDENTITY_TRIPLES:
+        assert tablo.startswith("social."), tablo
+        assert fonksiyon.startswith("social."), fonksiyon
+    assert len(set(IDENTITY_IDS)) == len(IDENTITY_IDS), IDENTITY_IDS
+
+
+@pytest.mark.parametrize("triple", IDENTITY_TRIPLES, ids=IDENTITY_IDS)
+def test_036_refuses_a_foreign_function_with_our_name(scratch_db_migrated, triple):
+    """Aynı adlı YABANCI fonksiyon EZİLMEZ: migration fail-closed durur.
+
+    İki iddia birden: ret geldi mi, VE yabancı gövde yerinde mi (bizimki
+    yazılmadı). İkincisi olmadan test, "ezip sonra hata veren" bir migration'la
+    da yeşil olurdu.
+    """
+    _tetikleyici, _tablo, fonksiyon = triple
+    url = scratch_db_migrated
+    _run_sql(url, _foreign_function_sql(fonksiyon))
+    assert FOREIGN_BODY_MARKER in _function_body(url, fonksiyon), "kurulum tutmadı"
+
+    result = _apply_file(url, MIGRATION_036, single_transaction=False)
+
+    assert result.returncode != 0, (
+        f"{fonksiyon}: yabancı fonksiyon varken migration GEÇTİ:\n{result.stdout}"
+    )
+    assert IDENTITY_MARKER in result.stderr, result.stderr
+    assert fonksiyon in result.stderr, result.stderr
+    assert FOREIGN_BODY_MARKER in _function_body(url, fonksiyon), (
+        f"{fonksiyon}: yabancı gövde EZİLDİ — kapı ret verdi ama yazımdan SONRA"
+    )
+
+
+@pytest.mark.parametrize("triple", IDENTITY_TRIPLES, ids=IDENTITY_IDS)
+def test_036_refuses_a_foreign_trigger_with_our_name(scratch_db_migrated, triple):
+    """Aynı adlı YABANCI tetikleyici DÜŞÜRÜLMEZ: migration fail-closed durur."""
+    tetikleyici, tablo, _fonksiyon = triple
+    url = scratch_db_migrated
+    _run_sql(url, _foreign_trigger_sql(tetikleyici, tablo))
+    yabanci_def = _trigger_def(url, tetikleyici, tablo)
+    assert "BEFORE DELETE" in yabanci_def, f"kurulum tutmadı: {yabanci_def}"
+
+    result = _apply_file(url, MIGRATION_036, single_transaction=False)
+
+    assert result.returncode != 0, (
+        f"{tetikleyici}: yabancı tetikleyici varken migration GEÇTİ:\n{result.stdout}"
+    )
+    assert IDENTITY_MARKER in result.stderr, result.stderr
+    assert tetikleyici in result.stderr, result.stderr
+    assert _trigger_def(url, tetikleyici, tablo) == yabanci_def, (
+        f"{tetikleyici}: yabancı tetikleyici DEĞİŞTİ"
+    )
+
+
+def test_036_reapply_after_036_passes(scratch_db_migrated):
+    """POZİTİF KONTROL — İDEMPOTANS: kanonik nesneler kimlik kapısından GEÇER.
+
+    Bu ayak olmadan yukarıdaki ret testleri "her koşulda reddeden" bir kapıyla
+    da yeşil olurdu ve ikinci koşum imkânsız hâle gelirdi.
+    """
+    result = _apply_file(scratch_db_migrated, MIGRATION_036)
+    assert result.returncode == 0, f"036 yeniden uygulama DURDU:\n{result.stderr}"
+    assert IDENTITY_MARKER not in result.stderr, result.stderr
+
+
+def test_identity_gate_is_load_bearing(scratch_db_migrated, tmp_path):
+    """MUTASYON KOLU: kapı SİLİNİRSE yabancı gövde gerçekten EZİLİR.
+
+    Kapının varlığı değil, ETKİSİ ölçülür: doktorlanmış dosyada aynı kurulum
+    `rc=0` ile geçer ve yabancı gövde bizimkiyle DEĞİŞTİRİLİR. Kapı ölü olsaydı
+    bu kol da ret alır ve test kırmızı düşerdi.
+    """
+    url = scratch_db_migrated
+    ham = MIGRATION_036.read_text(encoding="utf-8")
+    bas = ham.index(IDENTITY_GATE_BEGIN)
+    son = ham.index(IDENTITY_GATE_END)
+    assert bas < son, "kapı sınırları dosyada beklenen sırada değil"
+    doktorlu = ham[:bas] + ham[son:]
+    assert len(doktorlu) < len(ham), "mutasyon hiçbir şey silmedi"
+
+    hedef = tmp_path / "036_kapisiz.sql"
+    hedef.write_text(doktorlu, encoding="utf-8")
+
+    _tetikleyici, _tablo, fonksiyon = IDENTITY_TRIPLES[0]
+    _run_sql(url, _foreign_function_sql(fonksiyon))
+    result = _apply_file(url, hedef, single_transaction=False)
+
+    assert result.returncode == 0, (
+        f"kapısız mutant BAŞKA bir sebeple durdu — mutasyon ölçtüğünü ölçmüyor:\n"
+        f"{result.stderr}"
+    )
+    assert FOREIGN_BODY_MARKER not in _function_body(url, fonksiyon), (
+        "kapısız mutant yabancı gövdeyi EZMEDİ — kapı zaten gereksizmiş demektir"
+    )
+
+
+@pytest.mark.parametrize("triple", IDENTITY_TRIPLES, ids=IDENTITY_IDS)
+def test_036_down_refuses_a_foreign_function_with_our_name(scratch_db_migrated, triple):
+    """Geri alma da ADIN gördüğünü düşürmez: yabancı gövde varsa fail-closed."""
+    _tetikleyici, _tablo, fonksiyon = triple
+    url = scratch_db_migrated
+    _run_sql(url, _foreign_function_sql(fonksiyon))
+
+    result = _apply_down(url, DOWN_036)
+
+    assert result.returncode != 0, (
+        f"{fonksiyon}: yabancı gövde varken geri alma GEÇTİ:\n{result.stdout}"
+    )
+    assert REFUSAL_MARKER_036 in result.stderr, result.stderr
+    assert FOREIGN_BODY_MARKER in _function_body(url, fonksiyon), (
+        f"{fonksiyon}: yabancı fonksiyon DÜŞÜRÜLDÜ"
+    )
+
+
+@pytest.mark.parametrize("triple", IDENTITY_TRIPLES, ids=IDENTITY_IDS)
+def test_036_down_refuses_a_foreign_trigger_with_our_name(scratch_db_migrated, triple):
+    """Aynı asimetri geri almada da kapalı: yabancı tetikleyici düşürülmez."""
+    tetikleyici, tablo, _fonksiyon = triple
+    url = scratch_db_migrated
+    _run_sql(url, _foreign_trigger_sql(tetikleyici, tablo))
+    yabanci_def = _trigger_def(url, tetikleyici, tablo)
+
+    result = _apply_down(url, DOWN_036)
+
+    assert result.returncode != 0, (
+        f"{tetikleyici}: yabancı tetikleyici varken geri alma GEÇTİ:\n{result.stdout}"
+    )
+    assert REFUSAL_MARKER_036 in result.stderr, result.stderr
+    assert _trigger_def(url, tetikleyici, tablo) == yabanci_def, (
+        f"{tetikleyici}: yabancı tetikleyici DEĞİŞTİ"
+    )
+
+
+def test_down_function_pins_match_the_live_catalog(scratch_db_migrated):
+    """İKİ DOSYA ARASINDA IRAKSAMA KAPISI — ölçüm katalogtan, liste dosyadan.
+
+    `036_down.sql` fonksiyon kimliğini gövdenin ÖZETİYLE (`md5(prosrc)`) pinler:
+    ileri dosyanın gövde sabitlerinin ikinci bir KOPYASINI taşımaz. Özet, ileri
+    dosya değiştiği gün bayatlar — bu test o bayatlığı yakalar ve pinin
+    ÖLÇÜLMÜŞ kalmasını zorunlu kılar.
+    """
+    url = scratch_db_migrated
+    down_metni = DOWN_036.read_text(encoding="utf-8")
+    olculen = {}
+    for _tetikleyici, _tablo, fonksiyon in IDENTITY_TRIPLES:
+        olculen[fonksiyon] = _scalar(
+            url, f"SELECT md5(p.prosrc) FROM pg_proc p WHERE p.oid = to_regprocedure('{fonksiyon}()')"
+        )
+
+    assert olculen, "hiç fonksiyon ölçülemedi — kapı boş kümede yeşil düşerdi"
+    eksik = {
+        ad: ozet for ad, ozet in olculen.items() if ozet not in down_metni
+    }
+    assert not eksik, (
+        "036_down.sql'in gövde özeti CANLI katalogla uyuşmuyor (ileri dosya "
+        f"değişti, pin güncellenmedi): {eksik}"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 10. `ON_ERROR_STOP` çağıranın oturumunda BOZULMAZ
 # ═══════════════════════════════════════════════════════════════════════════
 #
