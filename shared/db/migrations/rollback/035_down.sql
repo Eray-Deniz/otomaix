@@ -283,8 +283,13 @@ $preflight$;
 -- alma KENDİ yazdığını silemezdi. Ölçüm: matrisin `degismedi` kontrol hücresi
 -- (`=` mutasyonunda KIRMIZI düşer).
 --
--- MANİFESTTE OLUP TABLODA OLMAYAN bir alan yüklemi PATLATIR (`column h.x does
--- not exist`) — sessizce daraltmaz. Fail-closed.
+-- MANİFESTTE OLUP TABLODA OLMAYAN bir alan yüklemi PATLATIR — sessizce
+-- daraltmaz. ÖLÇÜLDÜ (fix turu 6, iki kollu; taze scratch veritabanı):
+--   * pozitif kontrol, dokunulmamış şema      → `down rc=0`.
+--   * `ALTER TABLE … DROP COLUMN category`    → `down rc=3`,
+--     `ERROR: column h.category does not exist`, `end_date` kolonu YERİNDE,
+--     satır sayısı 13 → 13 (hiçbir şey silinmedi).
+-- Dosya kendi transaction'ını sahiplendiği için ret KALICI İZ bırakmaz.
 --
 -- KALINTI DOĞRULAMASI BURADA, §5'te DEĞİL: yüklem `end_date`e dokunur ve o
 -- kolon §4'te DÜŞER. Ölçüm silmeden hemen sonra, kolon hâlâ dururken ve ACCESS
