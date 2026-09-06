@@ -81,8 +81,9 @@ bu devir commit'inin kendisidir (`docs-only`, kod taşımaz). **Push EDİLMEDİ.
 
 **Koşulan komutlar ve TAZE çıktıları (2026-09-06, hepsi kontrolörün KENDİ koşumları):**
 - `cd apps/social/backend && source .venv/bin/activate && python -m pytest tests/ -q`
-  → **1181 passed in 401.28s**, temiz ağaçta, **sessiz veritabanında**. Seyir: 965 (giriş) →
-  1133 → 1175 → 1176 → 1179 → 1181. Hiç düşmedi.
+  → **1181 passed in 399.39s**, temiz ağaçta, **sessiz veritabanında**, HEAD `100a6d7`'de
+  (yani F1/F2 düzeltmesinden SONRA). Seyir: 965 (giriş) → 1133 → 1175 → 1176 → 1179 → 1181.
+  Hiç düşmedi.
 - `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**, sıfır kırmızı satır,
   her Task 6 commit'inden sonra tekrar koşuldu.
 - Dört commit'in `Exec-Kind`'ı sınıflandırıcıya karşı tek tek doğrulandı; başlıklar 61-69 karakter.
