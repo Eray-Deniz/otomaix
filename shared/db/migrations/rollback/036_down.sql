@@ -39,6 +39,11 @@
 --   Pilot sonrası geri dönüş ŞEMA GERİ ALMASI DEĞİL, veri-koruyan İLERİ
 --   DÜZELTME migration'ıdır; runbook (Task 18) ikisini ayrı başlıkta yazar.
 --
+-- KİMLİK KAPISI (F7): `DROP` ADIN gördüğünü düşürür. Preflight, düşürülecek
+-- HER fonksiyon ve tetikleyici için katalogdan tanım okur; YOK ya da BİREBİR
+-- KANONİK dışındaki her durumda fail-closed DURur. İleri dosyadaki KAPI 4'ün
+-- aynadaki eşidir.
+--
 -- SIRA (036'nın açılış sırasının TERSİ):
 --   1. `brands` tetikleyicisi (geçmiş tablosundan ÖNCE gider — tablo
 --      düşerken tetikleyici ayakta kalsaydı bir sonraki marka yazımı
@@ -101,6 +106,26 @@ DECLARE
         ' ''rollback''::text, ''deactivation''::text, ''approval''::text,'
         ' ''rejection''::text])))';
     k09_kanonik CONSTANT TEXT := 'UNIQUE (run_id, source, kind)';
+
+    -- KİMLİK SABİTLERİ (F7). Tetikleyici tanımı `pg_get_triggerdef` biçiminde,
+    -- ÖLÇÜLEREK pinlenmiştir — ileri dosyadaki sabitlerle AYNI metin.
+    trg_brands_kanonik CONSTANT TEXT :=
+        'CREATE TRIGGER brands_sub_sector_history AFTER INSERT OR UPDATE ON social.brands FOR EACH ROW EXECUTE FUNCTION social.track_brand_sub_sector_history()';
+    trg_kosu_kanonik CONSTANT TEXT :=
+        'CREATE TRIGGER sector_package_runs_approval_snapshot_immutable BEFORE UPDATE ON social.sector_package_runs FOR EACH ROW EXECUTE FUNCTION social.reject_approval_snapshot_mutation()';
+    trg_plan_kanonik CONSTANT TEXT :=
+        'CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE UPDATE ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()';
+
+    -- FONKSİYON KİMLİĞİ GÖVDENİN ÖZETİYLE pinlenir, gövdenin İKİNCİ BİR
+    -- KOPYASIYLA değil (SQL dosyaları birbirini içeremez; ileri dosyanın
+    -- gövde sabitleri buraya kopyalansaydı iki metin sessizce ıraksardı).
+    -- Özet CANLI katalogtan ölçülür ve `test_down_function_pins_match_the_live_catalog`
+    -- ileri dosya değiştiği gün bu pini KIRMIZI düşürür.
+    fn_track_ozet CONSTANT TEXT := 'acbbdd0d3cd2909368002b2a1e658c21';      -- len=1583
+    fn_snapshot_ozet CONSTANT TEXT := '6b35399e0c93667855d214accb485d00';   -- len=641
+    fn_plan_ozet CONSTANT TEXT := 'ed12ac9a70491e686620af7c7a6b687f';       -- len=1124
+
+    kayit RECORD;
 
     eksik TEXT;
     kosu BIGINT := 0;
@@ -216,6 +241,65 @@ BEGIN
             USING ERRCODE = 'integrity_constraint_violation',
                   HINT = 'Beklenen: 033 un dar kumesi ya da 036 nin genis kumesi.';
     END IF;
+
+    -- ── KİMLİK KAPISI (F7) — `DROP` ADIN gördüğünü düşürür ──────────────────
+    -- İleri dosyadaki KAPI 4'ün aynadaki eşi. `DROP FUNCTION IF EXISTS` ve
+    -- `DROP TRIGGER IF EXISTS` nesneyi yalnız ADIYLA arar; aynı adı taşıyan
+    -- YABANCI bir fonksiyonu düşürmek, ona bağlı başka bir tetikleyiciyi
+    -- sessizce kırardı. Kabul edilen iki durum: nesne YOK, ya da tanımı
+    -- BİREBİR kanonik. Üçüncü her durum fail-closed reddedilir.
+    FOR kayit IN
+        SELECT * FROM (VALUES
+            ('social.track_brand_sub_sector_history', fn_track_ozet),
+            ('social.reject_approval_snapshot_mutation', fn_snapshot_ozet),
+            ('social.reject_approved_rollback_plan_mutation', fn_plan_ozet)
+        ) AS t(ad, ozet)
+    LOOP
+        SELECT format('%s|%s|%s', l.lanname, format_type(p.prorettype, NULL),
+                      CASE WHEN md5(p.prosrc) = kayit.ozet THEN 'kanonik'
+                           ELSE 'YABANCI-GOVDE' END)
+          INTO mevcut_def
+          FROM pg_proc p
+          JOIN pg_language l ON l.oid = p.prolang
+         WHERE p.oid = to_regprocedure(kayit.ad || '()');
+
+        IF mevcut_def IS NOT NULL AND mevcut_def <> 'plpgsql|trigger|kanonik' THEN
+            RAISE EXCEPTION
+                'migration 036 geri alma REDDEDILDI: %() adini KANONIK OLMAYAN bir fonksiyon tutuyor (%)',
+                kayit.ad, mevcut_def
+                USING ERRCODE = 'integrity_constraint_violation',
+                      HINT = 'Ad SAHIPLIK DEGILDIR. Bu fonksiyon 036 nin '
+                             'yazdigi degildir; dusurmek baskasinin nesnesini '
+                             'yok etmek olurdu.';
+        END IF;
+    END LOOP;
+
+    FOR kayit IN
+        SELECT * FROM (VALUES
+            ('social.brands', 'brands_sub_sector_history', trg_brands_kanonik),
+            ('social.sector_package_runs', 'sector_package_runs_approval_snapshot_immutable', trg_kosu_kanonik),
+            ('social.package_rollback_plans', 'package_rollback_plans_approved_immutable', trg_plan_kanonik)
+        ) AS t(tablo, ad, tanim)
+    LOOP
+        CONTINUE WHEN to_regclass(kayit.tablo) IS NULL;
+
+        SELECT format('%s|%s', pg_get_triggerdef(t.oid), t.tgenabled)
+          INTO mevcut_def
+          FROM pg_trigger t
+         WHERE t.tgrelid = kayit.tablo::regclass
+           AND t.tgname = kayit.ad
+           AND NOT t.tgisinternal;
+
+        IF mevcut_def IS NOT NULL AND mevcut_def <> kayit.tanim || '|O' THEN
+            RAISE EXCEPTION
+                'migration 036 geri alma REDDEDILDI: % adini KANONIK OLMAYAN bir tetikleyici tutuyor (%)',
+                kayit.ad, mevcut_def
+                USING ERRCODE = 'integrity_constraint_violation',
+                      HINT = 'Bu tetikleyici 036 nin yazdigi degildir; '
+                             'dusurmek baskasinin tablosunu sessizce '
+                             'korumasiz birakirdi.';
+        END IF;
+    END LOOP;
 END
 $preflight$;
 

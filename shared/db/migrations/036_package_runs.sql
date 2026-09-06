@@ -107,6 +107,102 @@ DECLARE
         ' ''rejection''::text])))';
     k09_kanonik CONSTANT TEXT := 'UNIQUE (run_id, source, kind)';
 
+    -- TETİKLEYİCİ TANIMLARI `pg_get_triggerdef`in ÜRETTİĞİ BİÇİMDEDİR ve
+    -- ÖLÇÜLEREK pinlenmiştir (tahmin değil). Tek metin ÜÇ işi birden görür:
+    -- (1) KAPI 4 kimlik karşılaştırması, (2) tetikleyicinin YARATILMASI
+    -- (`EXECUTE <sabit>` — `pg_get_triggerdef` çıktısı geçerli DDL'dir),
+    -- (3) kapalı manifestin beklentisi. İkinci bir kopya YOKTUR, dolayısıyla
+    -- ıraksama da yoktur; biçim sürümle değişirse manifest AYNI koşumda
+    -- gürültüyle düşer.
+    trg_brands_kanonik CONSTANT TEXT :=
+        'CREATE TRIGGER brands_sub_sector_history AFTER INSERT OR UPDATE ON social.brands FOR EACH ROW EXECUTE FUNCTION social.track_brand_sub_sector_history()';
+    trg_kosu_kanonik CONSTANT TEXT :=
+        'CREATE TRIGGER sector_package_runs_approval_snapshot_immutable BEFORE UPDATE ON social.sector_package_runs FOR EACH ROW EXECUTE FUNCTION social.reject_approval_snapshot_mutation()';
+    trg_plan_kanonik CONSTANT TEXT :=
+        'CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE UPDATE ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()';
+
+    -- FONKSİYON GÖVDELERİ BURADA — çünkü kimlik kapısı kalıcı DDL'den ÖNCE
+    -- koşmak ZORUNDA ve aynı metni okumalı. `prosrc` bu sabitin BİREBİR
+    -- kendisidir (`%L` ile yazılır), yani karşılaştırma bayt-bayttır.
+    fn_track_govde CONSTANT TEXT := $track_history$
+        DECLARE
+            yeni UUID;
+            eski UUID;
+        BEGIN
+            IF NOT (to_jsonb(NEW) ? 'sub_sector_id') THEN
+                RAISE EXCEPTION
+                    'K-45 uretici KIRIK: social.brands.sub_sector_id kolonu YOK '
+                    '(dusurulmus ya da yeniden adlandirilmis). Atama gecmisi '
+                    'yazilamaz; sessizce devam etmek maruziyet kanitini bos '
+                    'birakirdi.'
+                    USING ERRCODE = 'integrity_constraint_violation',
+                          HINT = 'Kolonu eski adiyla geri getirin ya da '
+                                 'rollback/036_down.sql ile ureticiyi kaldirin. '
+                                 'Kolon adi degistiyse bu fonksiyon da '
+                                 'guncellenmelidir.';
+            END IF;
+
+            yeni := NEW.sub_sector_id;
+            IF TG_OP = 'UPDATE' THEN
+                eski := OLD.sub_sector_id;
+            END IF;
+
+            -- Değişmeyen atama yeni aralık ÜRETMEZ: maruziyet kanıtı, her
+            -- marka güncellemesinde tekrarlanan bir gürültü olamaz.
+            IF yeni IS NOT DISTINCT FROM eski THEN
+                RETURN NULL;
+            END IF;
+
+            UPDATE social.brand_sub_sector_history
+               SET unassigned_at = now()
+             WHERE brand_id = NEW.id AND unassigned_at IS NULL;
+
+            IF yeni IS NOT NULL THEN
+                INSERT INTO social.brand_sub_sector_history (brand_id, sub_sector_id)
+                VALUES (NEW.id, yeni);
+            END IF;
+
+            RETURN NULL;
+        END
+        $track_history$;
+    fn_snapshot_govde CONSTANT TEXT := $reject_snapshot$
+        BEGIN
+            IF OLD.approval_snapshot IS NOT NULL
+               AND NEW.approval_snapshot IS DISTINCT FROM OLD.approval_snapshot THEN
+                RAISE EXCEPTION
+                    'approval_snapshot DEGISMEZDIR (K-98): dolu bir anlik goruntu '
+                    'degistirilemez ve silinemez (run_id=%)', OLD.run_id
+                    USING ERRCODE = 'integrity_constraint_violation',
+                          HINT = 'approval_karar / approved_at / approval_seconds '
+                                 'guncellenebilir; anlik goruntunun kendisi hayir.';
+            END IF;
+            RETURN NEW;
+        END
+        $reject_snapshot$;
+    fn_plan_govde CONSTANT TEXT := $reject_rollback_plan$
+        BEGIN
+            IF OLD.onay_actor IS NOT NULL AND (
+                   NEW.incident_id             IS DISTINCT FROM OLD.incident_id
+                OR NEW.package_id              IS DISTINCT FROM OLD.package_id
+                OR NEW.observed_active_version IS DISTINCT FROM OLD.observed_active_version
+                OR NEW.target_version          IS DISTINCT FROM OLD.target_version
+                OR NEW.evidence_class          IS DISTINCT FROM OLD.evidence_class
+            ) THEN
+                RAISE EXCEPTION
+                    'onaylanmış geri alma planı satırının kimlik/hedef alanları değiştirilemez'
+                    USING ERRCODE = 'integrity_constraint_violation',
+                          HINT = 'durum / reason / onay_* / kanit_jetonu_* '
+                                 'guncellenebilir (yeniden muhurleme dahil); '
+                                 'onayin TANIMLADIGI kimlik/hedef alanlari '
+                                 'hayir. Hedef degisecekse once yeni bir plan '
+                                 'satiri yazin.';
+            END IF;
+            RETURN NEW;
+        END
+        $reject_rollback_plan$;
+
+    kayit RECORD;
+
     bagimli TEXT;
     mevcut_def TEXT;
     mevcut_tur "char";
@@ -177,6 +273,77 @@ BEGIN
             USING ERRCODE = 'integrity_constraint_violation',
                   HINT = 'Beklenen tanim: UNIQUE (run_id, source, kind).';
     END IF;
+
+    -- ── KAPI 4 — FONKSİYON VE TETİKLEYİCİ KİMLİĞİ ADdan DEĞİL TANIMdan ─────
+    -- `CREATE OR REPLACE FUNCTION` ve `DROP TRIGGER IF EXISTS` nesneyi yalnız
+    -- ADIYLA arar. Aynı adı taşıyan YABANCI bir fonksiyon sessizce EZİLİRDİ ve
+    -- ona bağlı BAŞKA bir tetikleyici, fonksiyon kimliği (oid) korunduğu için
+    -- ANINDA bizim gövdemizi çalıştırmaya başlardı. Kapalı manifest bunu
+    -- YAKALAYAMAZ: manifest ezme İŞLEMİNDEN SONRAKİ (kanonik görünen) durumu
+    -- okur. KAPI 2/KAPI 3 bu disiplini kısıtlar için zaten uyguluyordu;
+    -- fonksiyon/tetikleyici sınıfı dışarıda kalmıştı.
+    --
+    -- KABUL EDİLEN İKİ DURUM: nesne YOK, ya da tanımı BİREBİR kanonik (ikinci
+    -- koşum). Üçüncü her durum fail-closed reddedilir.
+    --
+    -- KAPSAM SINIRI (ölçülmüş, iddia edilmeyen): kapı SIFIR argümanlı adı
+    -- denetler (`to_regprocedure('<ad>()')`). Aynı adı taşıyan FARKLI imzalı
+    -- bir aşırı yükleme bizim yazdığımızı EZMEZ — `CREATE OR REPLACE` onu
+    -- görmez bile — dolayısıyla kapının konusu değildir.
+    FOR kayit IN
+        SELECT * FROM (VALUES
+            ('social.track_brand_sub_sector_history', fn_track_govde),
+            ('social.reject_approval_snapshot_mutation', fn_snapshot_govde),
+            ('social.reject_approved_rollback_plan_mutation', fn_plan_govde)
+        ) AS t(ad, govde)
+    LOOP
+        SELECT format('%s|%s|%s', l.lanname, format_type(p.prorettype, NULL),
+                      CASE WHEN p.prosrc = kayit.govde THEN 'kanonik'
+                           ELSE 'YABANCI-GOVDE' END)
+          INTO mevcut_def
+          FROM pg_proc p
+          JOIN pg_language l ON l.oid = p.prolang
+         WHERE p.oid = to_regprocedure(kayit.ad || '()');
+
+        IF mevcut_def IS NOT NULL AND mevcut_def <> 'plpgsql|trigger|kanonik' THEN
+            RAISE EXCEPTION
+                'migration 036: %() adini KANONIK OLMAYAN bir fonksiyon tutuyor (%)',
+                kayit.ad, mevcut_def
+                USING ERRCODE = 'integrity_constraint_violation',
+                      HINT = 'Ad SAHIPLIK DEGILDIR: bu fonksiyonu ezmek, ona '
+                             'bagli baska bir tetikleyiciyi sessizce bizim '
+                             'govdemize baglardi. Yabanci nesneyi elle cozup '
+                             'migration i yeniden kosturun.';
+        END IF;
+    END LOOP;
+
+    FOR kayit IN
+        SELECT * FROM (VALUES
+            ('social.brands', 'brands_sub_sector_history', trg_brands_kanonik),
+            ('social.sector_package_runs', 'sector_package_runs_approval_snapshot_immutable', trg_kosu_kanonik),
+            ('social.package_rollback_plans', 'package_rollback_plans_approved_immutable', trg_plan_kanonik)
+        ) AS t(tablo, ad, tanim)
+    LOOP
+        -- Tablo HENÜZ YOKSA (ilk kurulum) o adda bir tetikleyici de olamaz.
+        CONTINUE WHEN to_regclass(kayit.tablo) IS NULL;
+
+        SELECT format('%s|%s', pg_get_triggerdef(t.oid), t.tgenabled)
+          INTO mevcut_def
+          FROM pg_trigger t
+         WHERE t.tgrelid = kayit.tablo::regclass
+           AND t.tgname = kayit.ad
+           AND NOT t.tgisinternal;
+
+        IF mevcut_def IS NOT NULL AND mevcut_def <> kayit.tanim || '|O' THEN
+            RAISE EXCEPTION
+                'migration 036: % adini KANONIK OLMAYAN bir tetikleyici tutuyor (%)',
+                kayit.ad, mevcut_def
+                USING ERRCODE = 'integrity_constraint_violation',
+                      HINT = 'DROP TRIGGER IF EXISTS adiyla arar; baskasinin '
+                             'tetikleyicisini dusurmek onun tablosunu sessizce '
+                             'korumasiz birakirdi.';
+        END IF;
+    END LOOP;
 
     -- ═══ BURADAN SONRASI KALICI — ve hepsi BU deyimin içinde ════════════════
 
@@ -362,87 +529,28 @@ BEGIN
     -- metin→uuid dönüşümünü ortadan kaldırır ve kapı atlansa bile ikinci bir
     -- gürültülü savunma bırakır. Kapı katalog bağımlılığı KURMAZ (ölçüldü:
     -- kapı yerindeyken `DROP COLUMN` hâlâ `rc=0`).
-    EXECUTE $ddl$
-        CREATE OR REPLACE FUNCTION social.track_brand_sub_sector_history()
-        RETURNS trigger AS $track_history$
-        DECLARE
-            yeni UUID;
-            eski UUID;
-        BEGIN
-            IF NOT (to_jsonb(NEW) ? 'sub_sector_id') THEN
-                RAISE EXCEPTION
-                    'K-45 uretici KIRIK: social.brands.sub_sector_id kolonu YOK '
-                    '(dusurulmus ya da yeniden adlandirilmis). Atama gecmisi '
-                    'yazilamaz; sessizce devam etmek maruziyet kanitini bos '
-                    'birakirdi.'
-                    USING ERRCODE = 'integrity_constraint_violation',
-                          HINT = 'Kolonu eski adiyla geri getirin ya da '
-                                 'rollback/036_down.sql ile ureticiyi kaldirin. '
-                                 'Kolon adi degistiyse bu fonksiyon da '
-                                 'guncellenmelidir.';
-            END IF;
-
-            yeni := NEW.sub_sector_id;
-            IF TG_OP = 'UPDATE' THEN
-                eski := OLD.sub_sector_id;
-            END IF;
-
-            -- Değişmeyen atama yeni aralık ÜRETMEZ: maruziyet kanıtı, her
-            -- marka güncellemesinde tekrarlanan bir gürültü olamaz.
-            IF yeni IS NOT DISTINCT FROM eski THEN
-                RETURN NULL;
-            END IF;
-
-            UPDATE social.brand_sub_sector_history
-               SET unassigned_at = now()
-             WHERE brand_id = NEW.id AND unassigned_at IS NULL;
-
-            IF yeni IS NOT NULL THEN
-                INSERT INTO social.brand_sub_sector_history (brand_id, sub_sector_id)
-                VALUES (NEW.id, yeni);
-            END IF;
-
-            RETURN NULL;
-        END
-        $track_history$ LANGUAGE plpgsql
-    $ddl$;
+    -- GÖVDE, KANONİK SABİTTEN GELİR (KAPI 4 ile TEK KAYNAK): kapı da
+    -- yazım da aynı metni kullanır, ıraksayamazlar.
+    EXECUTE format(
+        'CREATE OR REPLACE FUNCTION %s() RETURNS trigger AS %L LANGUAGE plpgsql',
+        'social.track_brand_sub_sector_history', fn_track_govde);
 
     EXECUTE 'DROP TRIGGER IF EXISTS brands_sub_sector_history ON social.brands';
-    EXECUTE $ddl$
-        CREATE TRIGGER brands_sub_sector_history
-            AFTER INSERT OR UPDATE ON social.brands
-            FOR EACH ROW EXECUTE FUNCTION social.track_brand_sub_sector_history()
-    $ddl$;
+    EXECUTE trg_brands_kanonik;
 
     -- ── 4. K-98 — onay anlık görüntüsü DEĞİŞMEZ ─────────────────────────────
     -- `IS DISTINCT FROM` ZORUNLUDUR, `<>` DEĞİL: kolonu NULL'a çekmek de bir
     -- DEĞİŞTİRMEdir ve `<>` onu yakalamazdı (NULL karşılaştırması NULL'dır).
     -- Kanıtı silmek, kanıtı değiştirmekten daha zararsız değildir.
-    EXECUTE $ddl$
-        CREATE OR REPLACE FUNCTION social.reject_approval_snapshot_mutation()
-        RETURNS trigger AS $reject_snapshot$
-        BEGIN
-            IF OLD.approval_snapshot IS NOT NULL
-               AND NEW.approval_snapshot IS DISTINCT FROM OLD.approval_snapshot THEN
-                RAISE EXCEPTION
-                    'approval_snapshot DEGISMEZDIR (K-98): dolu bir anlik goruntu '
-                    'degistirilemez ve silinemez (run_id=%)', OLD.run_id
-                    USING ERRCODE = 'integrity_constraint_violation',
-                          HINT = 'approval_karar / approved_at / approval_seconds '
-                                 'guncellenebilir; anlik goruntunun kendisi hayir.';
-            END IF;
-            RETURN NEW;
-        END
-        $reject_snapshot$ LANGUAGE plpgsql
-    $ddl$;
+    -- GÖVDE, KANONİK SABİTTEN GELİR (KAPI 4 ile TEK KAYNAK): kapı da
+    -- yazım da aynı metni kullanır, ıraksayamazlar.
+    EXECUTE format(
+        'CREATE OR REPLACE FUNCTION %s() RETURNS trigger AS %L LANGUAGE plpgsql',
+        'social.reject_approval_snapshot_mutation', fn_snapshot_govde);
 
     EXECUTE 'DROP TRIGGER IF EXISTS sector_package_runs_approval_snapshot_immutable '
             'ON social.sector_package_runs';
-    EXECUTE $ddl$
-        CREATE TRIGGER sector_package_runs_approval_snapshot_immutable
-            BEFORE UPDATE ON social.sector_package_runs
-            FOR EACH ROW EXECUTE FUNCTION social.reject_approval_snapshot_mutation()
-    $ddl$;
+    EXECUTE trg_kosu_kanonik;
 
     -- ── 4b. AYAK (d) — ONAYLANMIŞ geri alma planı satırı DEĞİŞMEZ ───────────
     -- Onay, onayladığı satır KÜMESİNE mühürlenir (`onay_kapsam_sha`). Mühür
@@ -465,38 +573,15 @@ BEGIN
     -- `IS DISTINCT FROM` ZORUNLUDUR, `<>` DEĞİL: `target_version` `hedefsiz`
     -- durumda NULL'dır ve `<>` NULL karşılaştırmasını yakalamazdı — hedefi
     -- NULL'a çekmek de bir DEĞİŞTİRMEdir.
-    EXECUTE $ddl$
-        CREATE OR REPLACE FUNCTION social.reject_approved_rollback_plan_mutation()
-        RETURNS trigger AS $reject_rollback_plan$
-        BEGIN
-            IF OLD.onay_actor IS NOT NULL AND (
-                   NEW.incident_id             IS DISTINCT FROM OLD.incident_id
-                OR NEW.package_id              IS DISTINCT FROM OLD.package_id
-                OR NEW.observed_active_version IS DISTINCT FROM OLD.observed_active_version
-                OR NEW.target_version          IS DISTINCT FROM OLD.target_version
-                OR NEW.evidence_class          IS DISTINCT FROM OLD.evidence_class
-            ) THEN
-                RAISE EXCEPTION
-                    'onaylanmış geri alma planı satırının kimlik/hedef alanları değiştirilemez'
-                    USING ERRCODE = 'integrity_constraint_violation',
-                          HINT = 'durum / reason / onay_* / kanit_jetonu_* '
-                                 'guncellenebilir (yeniden muhurleme dahil); '
-                                 'onayin TANIMLADIGI kimlik/hedef alanlari '
-                                 'hayir. Hedef degisecekse once yeni bir plan '
-                                 'satiri yazin.';
-            END IF;
-            RETURN NEW;
-        END
-        $reject_rollback_plan$ LANGUAGE plpgsql
-    $ddl$;
+    -- GÖVDE, KANONİK SABİTTEN GELİR (KAPI 4 ile TEK KAYNAK): kapı da
+    -- yazım da aynı metni kullanır, ıraksayamazlar.
+    EXECUTE format(
+        'CREATE OR REPLACE FUNCTION %s() RETURNS trigger AS %L LANGUAGE plpgsql',
+        'social.reject_approved_rollback_plan_mutation', fn_plan_govde);
 
     EXECUTE 'DROP TRIGGER IF EXISTS package_rollback_plans_approved_immutable '
             'ON social.package_rollback_plans';
-    EXECUTE $ddl$
-        CREATE TRIGGER package_rollback_plans_approved_immutable
-            BEFORE UPDATE ON social.package_rollback_plans
-            FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()
-    $ddl$;
+    EXECUTE trg_plan_kanonik;
 
     -- ── 5. K-09 — artefakt benzersizliği ────────────────────────────────────
     -- Ad SÖZLEŞMEYLE SABİTTİR (katalogdan tahmin edilmez): 032 manifestinin
@@ -603,7 +688,11 @@ BEGIN
              '<yok>'),
 
             ('brands_sub_sector_history tetikleyicisi',
-             'CREATE TRIGGER brands_sub_sector_history AFTER INSERT OR UPDATE ON social.brands FOR EACH ROW EXECUTE FUNCTION social.track_brand_sub_sector_history()|enabled=O'),
+             trg_brands_kanonik || '|enabled=O'),
+            ('sector_package_runs_approval_snapshot_immutable tetikleyicisi',
+             trg_kosu_kanonik || '|enabled=O'),
+            ('package_rollback_plans_approved_immutable tetikleyicisi',
+             trg_plan_kanonik || '|enabled=O'),
             ('sector_research_artifacts K-09 kısıtı',
              'u|UNIQUE (run_id, source, kind)|enforced=true validated=true'),
             ('package_events.event_type CHECK (genişlemiş)',
@@ -749,6 +838,18 @@ BEGIN
                WHERE NOT t.tgisinternal
                  AND t.tgrelid = 'social.brands'::regclass
                  AND t.tgname = 'brands_sub_sector_history')),
+            ('sector_package_runs_approval_snapshot_immutable tetikleyicisi',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.sector_package_runs'::regclass
+                 AND t.tgname = 'sector_package_runs_approval_snapshot_immutable')),
+            ('package_rollback_plans_approved_immutable tetikleyicisi',
+             (SELECT format('%s|enabled=%s', pg_get_triggerdef(t.oid), t.tgenabled)
+                FROM pg_trigger t
+               WHERE NOT t.tgisinternal
+                 AND t.tgrelid = 'social.package_rollback_plans'::regclass
+                 AND t.tgname = 'package_rollback_plans_approved_immutable')),
             ('sector_research_artifacts K-09 kısıtı',
              (SELECT format('%s|%s|enforced=%s validated=%s',
                             k.contype, pg_get_constraintdef(k.oid),
