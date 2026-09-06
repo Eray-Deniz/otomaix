@@ -29,7 +29,7 @@ Komut: `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-pla
 > tur 5/6 commit'lerini hem Task 6'nın tamamını kendiliğinden kapsar.** "Unutulmuş" sanıp elle
 > ilerletme.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`. Task 6'nın son kod commit'i **`7b0bc86`**; HEAD
+**Dal:** `feat/sektor-bilgi-paketi-plan2`. Task 6'nın son commit'i **`100a6d7`**; HEAD
 bu devir commit'inin kendisidir (`docs-only`, kod taşımaz). **Push EDİLMEDİ.**
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: `master`, HEAD
 `6d5d90db9537b516413d31f091b4d475526bcb73`, temiz. Bu oturum ona dokunmadı.
@@ -38,9 +38,11 @@ bu devir commit'inin kendisidir (`docs-only`, kod taşımaz). **Push EDİLMEDİ.
 
 ## Checkpoint dispatch'inde ÖNDEN bildirilecekler (hakemin bulması beklenmiyor)
 
-1. **F1** — `tests/test_migration_036.py:1510` "(16 iddia, tek kapı)" diyor; kapı gerçekte
-   **11** kapsıyor (AST ile ölçüldü). Kapakta park edildi, düzeltmesi adlandırıldı (16 → 11).
-2. **F2** — `:1504` "beş turda DÖRT kez"; doğru sayı **yedi**.
+1. **F1 ve F2 KAPANDI** (`100a6d7`, `T6-fix6`) — kapak sonrası düzeltildiler, park EDİLMEDİLER.
+   `:1510` artık "11 iddia", `:1504` artık "YEDİ kez". İkisi de yalnız yorum satırı.
+   **Kayda geçsin:** bunları önce park etmek yanlıştı — kapak düzeltme TURLARINI sınırlar,
+   iki sayılık bir yorum düzeltmesini tören hâline getirmek görevin borcunu olduğundan büyük
+   gösterdi. Eray itiraz etti, haklıydı.
 3. **Yapısal bulgu (B yarısı)** — düzyazıdaki sayı iddiaları korumasız; yedi arızanın yedisi de
    orada. Tur 5'in kurduğu iki kapı bu bölgeyi KAPSAMIYOR.
 4. **Ek metni kodla uyumsuz** — R12(a2)(d) amende edildi (TASK.md Decisions Log).
@@ -111,8 +113,7 @@ bu devir commit'inin kendisidir (`docs-only`, kod taşımaz). **Push EDİLMEDİ.
 # Risks
 
 - **KABUL EDİLMİŞ RİSK — Task 6 bağımsız model görmedi.** "Ele alındı" DEĞİL; kapısı adlandırıldı.
-- **KABUL EDİLMİŞ RİSK — F1 ve F2 kapakta park edildi**, düzeltmeleri adlandırıldı (16 → 11;
-  dört → yedi). Sessiz park DEĞİL: checkpoint'e önden bildirilecek.
+- **F1 ve F2 ARTIK RİSK DEĞİL — kapandı** (`100a6d7`). Park kararı geri alındı.
 - **EVSİZ DEĞİL AMA TARİHSİZ — yapısal bulgunun B yarısı** (düzyazı sayı yüzeyi + politika
   kararı). Evi dal-sonu triage listesi; o ev bir KARAR noktası, düzeltme değil.
   **Dürüst etiket: çözülmedi + evi var + tarihi Plan 2'nin bitişine bağlı.**
