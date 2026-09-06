@@ -31,6 +31,7 @@ import importlib.util
 import itertools
 import json
 import pathlib
+import re
 import subprocess
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -510,7 +511,14 @@ EXPECTED_036_MANIFEST = {
                 "ON social.package_rollback_plans USING btree (incident_id, package_id)"
             ),
         },
-        "triggers": {},
+        "triggers": {
+            "package_rollback_plans_approved_immutable": (
+                "CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE UPDATE "
+                "ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION "
+                "social.reject_approved_rollback_plan_mutation()",
+                "O",
+            ),
+        },
     },
     "brand_sub_sector_history": {
         "relation": ("r", "p", False, False, False),
@@ -1187,6 +1195,311 @@ async def test_rollback_plan_approval_triple_matrix(db, actor, zaman_var, sha_va
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 5b. AYAK (d) — ONAYLANMIŞ geri alma planının kimlik/hedef alanları DEĞİŞMEZ
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# KİLİTLİ ALAN KÜMESİ ELLE YAZILMAZ. Bağlayıcı arayüz ekindeki tetikleyici
+# gövdesinden (`NEW.x IS DISTINCT FROM OLD.x` çiftleri) ÜRETİLİR ve
+# migration'ın gövdesinden türetilen kümeyle karşılaştırılır. İki kaynak
+# ıraksarsa tek tek hücreler değil, KÜMENİN KENDİSİ kırmızı düşer; "şu alan
+# unutulmuş" hücresi doğamaz.
+#
+# AŞIRI KİLİTLEME DE BİR KUSURDUR (ekin bağlayıcı sınırı): yürütücü onaydan
+# SONRA `durum` · `reason` · `onay_*` · `kanit_jetonu_*` yazar; yeniden
+# mühürleme (reseal) onay üçlüsünü YENİDEN yazar ve bu MEŞRUDUR. Bu yüzden
+# izinli kolon kümesi de türetilir: manifestin kolonları EKSİ kilitli alanlar.
+
+ANNEX_PATH = (
+    infra.REPO_ROOT
+    / "docs"
+    / "plans"
+    / "2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md"
+)
+
+IMMUTABLE_FUNCTION = "social.reject_approved_rollback_plan_mutation"
+IMMUTABLE_TRIGGER = "package_rollback_plans_approved_immutable"
+IMMUTABLE_MARKER = "kimlik/hedef alanları değiştirilemez"
+
+_NEW_OLD_PAIR = re.compile(r"NEW\.(\w+)\s+IS DISTINCT FROM\s+OLD\.\1\b")
+
+
+def _guard_body(text: str) -> str:
+    """Değişmezlik fonksiyonunun gövdesi — dosyadaki BAŞKA fonksiyonlar hariç.
+
+    Fonksiyon HİÇ YOKSA boş gövde döner: eksiklik toplama (collection) hatası
+    değil, kümenin BOŞ çıkması olarak raporlanır — kapı o zaman kendi
+    boş-küme kolunda düşer ve dosyanın kalan testleri koşmaya devam eder.
+    """
+    start = text.find(IMMUTABLE_FUNCTION)
+    if start < 0:
+        return ""
+    end = text.index("LANGUAGE plpgsql", start)
+    return text[start:end]
+
+
+def _locked_fields(text: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(_NEW_OLD_PAIR.findall(_guard_body(text))))
+
+
+ANNEX_LOCKED_FIELDS = _locked_fields(ANNEX_PATH.read_text(encoding="utf-8"))
+MIGRATION_LOCKED_FIELDS = _locked_fields(MIGRATION_036.read_text(encoding="utf-8"))
+
+PLAN_COLUMNS = EXPECTED_036_MANIFEST["package_rollback_plans"]["columns"]
+
+# İzinli kolonlar TÜRETİLİR: tablonun tamamı EKSİ kilitli alanlar.
+PERMITTED_COLUMNS = frozenset(PLAN_COLUMNS) - set(ANNEX_LOCKED_FIELDS)
+
+_NOW = datetime.now(timezone.utc)
+
+# Çok kolonlu CHECK'ler bazı kolonları ATOMİK yazmaya zorlar (onay üçlüsü
+# `num_nonnulls ∈ {0,3}`, jeton üçlüsü `kanit_jetonu_butun`). Gruplar izinli
+# kolon kümesini BÖLER; kapsama kapısı `test_permitted_groups_cover_...`.
+PERMITTED_UPDATE_GROUPS = {
+    "durum": {"durum": "tamamlandi"},
+    "reason": {"reason": "guncellenmis gerekce"},
+    "onay_ucluc_yeniden_muhurleme": {
+        "onay_actor": "ikinci@otomaix",
+        "onaylandi_at": _NOW + timedelta(minutes=5),
+        "onay_kapsam_sha": "yeni-kapsam-sha",
+    },
+    "kanit_jetonu_basimi": {
+        "kanit_jetonu": "j" * 64,
+        "kanit_jetonu_parmakizi": "p" * 64,
+        "kanit_jetonu_basildi_at": _NOW,
+    },
+    "kanit_jetonu_harcandi_at": {"kanit_jetonu_harcandi_at": _NOW},
+    "created_at": {"created_at": _NOW - timedelta(days=1)},
+}
+
+
+def _farkli_deger(kolon: str, mevcut):
+    """Kolonun KATALOG TİPİNDEN türetilmiş, mevcuttan FARKLI bir değer.
+
+    Tip kapsanmıyorsa test DÜŞER — "yeni tipte bir kilitli alan sessizce
+    denenmedi" hücresi doğamaz.
+    """
+    tip = PLAN_COLUMNS[kolon][0]
+    if tip == "text":
+        return f"{mevcut}-degisti"
+    if tip == "uuid":
+        return uuid.uuid4()
+    if tip == "integer":
+        return (mevcut or 0) + 1
+    raise AssertionError(
+        f"kilitli kolon {kolon} tipi {tip!r} için değer üreticisi YOK — "
+        "matris o alanı sessizce atlardı"
+    )
+
+
+def _sql_farkli_ifade(kolon: str) -> str:
+    """Aynı üretici, SQL tarafı (psql ile koşan mutasyon kolu için)."""
+    tip = PLAN_COLUMNS[kolon][0]
+    if tip == "text":
+        return f"{kolon} = {kolon} || '-degisti'"
+    if tip == "uuid":
+        return f"{kolon} = gen_random_uuid()"
+    if tip == "integer":
+        return f"{kolon} = coalesce({kolon}, 0) + 1"
+    raise AssertionError(f"{kolon}: {tip!r} tipi için SQL üreticisi YOK")
+
+
+async def _onayli_plan(db, *, onayli: bool = True):
+    """Bir plan satırı yazar ve (incident_id, package_id) anahtarını döner."""
+    incident_id = f"olay-{uuid.uuid4().hex[:10]}"
+    package_id = uuid.uuid4()
+    onay = (
+        {
+            "onay_actor": "yonetici@otomaix",
+            "onaylandi_at": _NOW,
+            "onay_kapsam_sha": "kapsam-sha-1",
+        }
+        if onayli
+        else {}
+    )
+    await _insert_plan(db, incident_id=incident_id, package_id=package_id, **onay)
+    return incident_id, package_id
+
+
+def test_locked_field_set_is_derived_and_non_empty():
+    """BOŞ-KÜME KONTROL KOLU + iki kaynak arasında ıraksama kapısı.
+
+    Küme boşsa aşağıdaki matrisler HİÇ hücre koşmadan yeşil görünürdü; bu test
+    o sessiz yeşili imkânsız kılar.
+    """
+    assert ANNEX_LOCKED_FIELDS, (
+        "bağlayıcı ekten HİÇ kilitli alan türetilemedi — mutasyon matrisi boş koşardı"
+    )
+    assert MIGRATION_LOCKED_FIELDS == ANNEX_LOCKED_FIELDS, (
+        "migration 036 ile bağlayıcı ek IRAKSADI: "
+        f"ek={ANNEX_LOCKED_FIELDS} migration={MIGRATION_LOCKED_FIELDS}"
+    )
+    bilinmeyen = set(ANNEX_LOCKED_FIELDS) - set(PLAN_COLUMNS)
+    assert not bilinmeyen, f"kilitli alan tabloda YOK: {sorted(bilinmeyen)}"
+
+
+def test_permitted_groups_cover_every_non_locked_column():
+    """İZİNLİ kolon kümesi de KAPALI: gruplar tam olarak onu böler.
+
+    Tabloya yarın bir kolon eklenirse (ve kilitlenmezse) bu kapı kırmızı düşer
+    — "aşırı kilitleme yok" iddiası o kolon için ölçülmemiş kalamaz.
+    """
+    kapsanan: set[str] = set()
+    for kolonlar in PERMITTED_UPDATE_GROUPS.values():
+        cakisma = kapsanan & set(kolonlar)
+        assert not cakisma, f"kolon iki grupta birden: {sorted(cakisma)}"
+        kapsanan |= set(kolonlar)
+    assert kapsanan == PERMITTED_COLUMNS, (
+        f"izinli kolon kapsaması eksik/fazla: eksik={sorted(PERMITTED_COLUMNS - kapsanan)} "
+        f"fazla={sorted(kapsanan - PERMITTED_COLUMNS)}"
+    )
+
+
+@pytest.mark.parametrize("alan", ANNEX_LOCKED_FIELDS)
+async def test_approved_rollback_plan_identity_fields_are_immutable(db, alan):
+    """Onaylı satırda kimlik/hedef alanı DEĞİŞTİRİLEMEZ — hücreler ekten üretilir.
+
+    Onay, onayladığı satır kümesine mühürlenir (`onay_kapsam_sha`); mühür
+    basıldıktan sonra hedefin değişmesi, "yönetici bunu onayladı" iddiasını
+    sessizce başka bir işe taşırdı.
+    """
+    incident_id, package_id = await _onayli_plan(db)
+    mevcut = await db.fetchrow(
+        f"SELECT {alan} FROM social.package_rollback_plans "
+        "WHERE incident_id = $1 AND package_id = $2",
+        incident_id,
+        package_id,
+    )
+    yeni = _farkli_deger(alan, mevcut[alan])
+
+    error = await _attempt(
+        db,
+        lambda: db.execute(
+            f"UPDATE social.package_rollback_plans SET {alan} = $1 "
+            "WHERE incident_id = $2 AND package_id = $3",
+            yeni,
+            incident_id,
+            package_id,
+        ),
+    )
+    assert error is not None, f"onaylı satırda {alan} DEĞİŞTİRİLDİ"
+    assert IMMUTABLE_MARKER in str(error), f"{alan}: beklenmeyen hata: {error!r}"
+
+
+@pytest.mark.parametrize("grup", sorted(PERMITTED_UPDATE_GROUPS))
+async def test_approved_rollback_plan_stays_updatable_on_operational_columns(db, grup):
+    """AŞIRI KİLİTLEME YOK: yürütücünün yazdığı kolonlar onaydan SONRA da açık.
+
+    `onay_*` grubu YENİDEN MÜHÜRLEMEdir (üyelik değişince zorunlu) ve tetikleyici
+    onu engellemez — engelleseydi kapsamı değişen bir olay bir daha asla
+    onaylanamazdı.
+    """
+    incident_id, package_id = await _onayli_plan(db)
+    kolonlar = PERMITTED_UPDATE_GROUPS[grup]
+    atama = ", ".join(f"{ad} = ${i + 1}" for i, ad in enumerate(kolonlar))
+    degerler = list(kolonlar.values())
+
+    error = await _attempt(
+        db,
+        lambda: db.execute(
+            f"UPDATE social.package_rollback_plans SET {atama} "
+            f"WHERE incident_id = ${len(degerler) + 1} "
+            f"AND package_id = ${len(degerler) + 2}",
+            *degerler,
+            incident_id,
+            package_id,
+        ),
+    )
+    assert error is None, f"{grup}: meşru güncelleme REDDEDİLDİ: {error!r}"
+
+
+@pytest.mark.parametrize("alan", ANNEX_LOCKED_FIELDS)
+async def test_unapproved_rollback_plan_identity_fields_are_free(db, alan):
+    """`onay_actor IS NULL` satır SERBEST — kilit onayla başlar, satırla değil."""
+    incident_id, package_id = await _onayli_plan(db, onayli=False)
+    mevcut = await db.fetchrow(
+        f"SELECT {alan} FROM social.package_rollback_plans "
+        "WHERE incident_id = $1 AND package_id = $2",
+        incident_id,
+        package_id,
+    )
+    yeni = _farkli_deger(alan, mevcut[alan])
+
+    error = await _attempt(
+        db,
+        lambda: db.execute(
+            f"UPDATE social.package_rollback_plans SET {alan} = $1 "
+            "WHERE incident_id = $2 AND package_id = $3",
+            yeni,
+            incident_id,
+            package_id,
+        ),
+    )
+    assert error is None, f"onaysız satırda {alan} güncellenemedi: {error!r}"
+
+
+def _doctored_guard_sql(fields) -> str:
+    """Kilitli alan kümesi VERİLEN küme olan bir mutant fonksiyon gövdesi."""
+    assert fields, "mutant gövde boş koşul üretemez"
+    kosullar = "\n        OR ".join(
+        f"NEW.{alan} IS DISTINCT FROM OLD.{alan}" for alan in fields
+    )
+    return (
+        f"CREATE OR REPLACE FUNCTION {IMMUTABLE_FUNCTION}() RETURNS trigger AS $mut$ "
+        f"BEGIN IF OLD.onay_actor IS NOT NULL AND ({kosullar}) THEN "
+        f"RAISE EXCEPTION 'mutant kol: {IMMUTABLE_MARKER}'; END IF; RETURN NEW; END "
+        "$mut$ LANGUAGE plpgsql;"
+    )
+
+
+def test_every_locked_field_clause_is_load_bearing(scratch_db_migrated):
+    """MUTASYON KOLU: her alanın kolu tek tek SİLİNİR ve kapı ölür mü ölçülür.
+
+    Kanonik fonksiyonla UPDATE `rc≠0` (ret), o alanın kolu silinmiş mutantla
+    `rc=0` (kabul). Bir alanın kolu ölçülmemiş olsaydı mutant da reddederdi ve
+    bu test kırmızı düşerdi — matrisin kendisi böyle sınanır.
+    """
+    url = scratch_db_migrated
+    assert ANNEX_LOCKED_FIELDS, "kilitli alan kümesi BOŞ — mutasyon hiç koşmazdı"
+
+    kanonik_def = _scalar(
+        url, f"SELECT pg_get_functiondef('{IMMUTABLE_FUNCTION}()'::regprocedure)"
+    )
+    assert IMMUTABLE_FUNCTION in kanonik_def, kanonik_def
+
+    for alan in ANNEX_LOCKED_FIELDS:
+        incident_id = f"mutasyon-{alan}"
+        _run_sql(
+            url,
+            "INSERT INTO social.package_rollback_plans "
+            "(incident_id, package_id, observed_active_version, target_version, "
+            " evidence_class, reason, durum, onay_actor, onaylandi_at, onay_kapsam_sha) "
+            f"VALUES ('{incident_id}', gen_random_uuid(), 3, 2, 'kanit-a', 'gerekce', "
+            "'bekliyor', 'yonetici@otomaix', now(), 'kapsam-sha-1')",
+        )
+        guncelle = (
+            f"UPDATE social.package_rollback_plans SET {_sql_farkli_ifade(alan)} "
+            f"WHERE incident_id = '{incident_id}'"
+        )
+
+        kanonik = _psql(url, "-c", guncelle)
+        assert kanonik.returncode != 0, (
+            f"{alan}: KANONİK tetikleyici onaylı satırın alanını DEĞİŞTİRTTİ"
+        )
+
+        _run_sql(
+            url,
+            _doctored_guard_sql([a for a in ANNEX_LOCKED_FIELDS if a != alan]),
+        )
+        mutant = _psql(url, "-c", guncelle)
+        _run_sql(url, kanonik_def)
+
+        assert mutant.returncode == 0, (
+            f"{alan}: kolu SİLİNMİŞ mutant hâlâ reddediyor — bu alanın hücresi "
+            f"gerçekte başka bir kolu ölçüyor:\n{mutant.stderr}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 6. K-09 — `sector_research_artifacts` benzersizliği
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -1289,6 +1602,104 @@ async def test_log_package_event_still_rejects_unknown_type(db):
             package_id=package_id,
             actor="yonetici@otomaix",
         )
+
+
+# ─── AKTÖR KAPISI: truthiness DEĞİL, KANONİK doğrulayıcı ────────────────────
+#
+# ÖLÇÜLEN KUSUR (Codex checkpoint, F2): kapı `bool(actor)` idi ve `"   "`
+# (yalnız boşluk) truthy olduğu için GEÇİYORDU; değer KALICI denetim satırına
+# olduğu gibi yazılıyordu. `social.package_events.actor` kolonu `TEXT` —
+# NOT NULL yok, CHECK yok (033_package_events.sql). Yani tek kapı buydu ve
+# kimliğin en çok önemli olduğu yüzeyde (onay/ret) sahipsiz bir denetim satırı
+# üretilebiliyordu. `123` gibi `str` OLMAYAN bir kimlik de truthy'dir: eski kapı
+# onu geçiriyor, yazım SQL'de düşüyor ve ALTYAPI hatası sayılıp YUTULUYORdu
+# (`None` döner) — yani olay sessizce kayboluyordu.
+#
+# HÜCRELER KAVRAMDAN ÜRETİLİR: "`strip()` sonrası boşalan her kimlik" +
+# "`str` olmayan her kimlik". Bulunan örnekten (`"   "`) desen türetilseydi bu
+# bir tarama değil, zaten bilinenin tekrar kontrolü olurdu.
+
+_BOSLUK_KARAKTERLERI = (" ", "\t", "\n", "\r", "\v", "\f", "\u00a0", "\u2009")
+BLANK_ACTORS = tuple(
+    dict.fromkeys(
+        ("",) + tuple(k * n for k in _BOSLUK_KARAKTERLERI for n in (1, 3))
+    )
+)
+INVALID_ACTORS = (None,) + BLANK_ACTORS + (123, 0, ("yonetici",))
+
+# Aktör kapısı KAPSAM SINIFINA bağlıdır, tek tek türlere değil: paket-kapsamlı
+# her tür (yaşam döngüsü + onay/ret) buradan geçer. Küme modülden TÜRETİLİR.
+PACKAGE_SCOPED_EVENTS = tuple(sorted(EVENT_TYPES - BRAND_SCOPED_EVENTS))
+
+
+def test_actor_gate_is_a_single_canonical_object():
+    """İKİ KAPI = İKİ DAVRANIŞ. Kimlik doğrulayıcısı TEK nesnedir.
+
+    Kural kopyalanırsa biri kırpar biri kırpmaz, biri `str` sorar biri sormaz —
+    ekin (`AÇIK-1` ayak (b)) kapattığı sınıf tam olarak budur.
+    """
+    from app.services import sector_package_lifecycle
+
+    assert sector_package_lifecycle._require_actor is package_events_module.require_actor
+    assert PACKAGE_SCOPED_EVENTS, "paket-kapsamlı tür kümesi BOŞ — matris hiç koşmazdı"
+    assert BLANK_ACTORS, "boş-kimlik hücreleri üretilemedi"
+
+
+@pytest.mark.parametrize("actor", INVALID_ACTORS, ids=repr)
+@pytest.mark.parametrize("event_type", PACKAGE_SCOPED_EVENTS)
+async def test_package_scoped_event_rejects_ownerless_actor(db, event_type, actor):
+    """Sahipsiz kimlikle KALICI denetim satırı YAZILMAZ — ve HİÇBİR satır yazılmaz.
+
+    İki iddia birden ölçülür: sözleşme hatası çağırana ULAŞIR ve `package_events`
+    o paket için BOŞ kalır (yarım iz, izin hiç olmamasından daha kötüdür).
+    """
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    sector_id = await _sub_sector(db)
+    package_id = await _package(db, sector_id)
+
+    with pytest.raises(PackageEventContractError):
+        await log_package_event(
+            db,
+            event_type=event_type,
+            sector_id=sector_id,
+            package_id=package_id,
+            actor=actor,
+        )
+
+    yazilan = await db.fetchval(
+        "SELECT count(*) FROM social.package_events WHERE package_id = $1", package_id
+    )
+    assert yazilan == 0, f"{event_type}/{actor!r}: sahipsiz olay YAZILDI ({yazilan} satır)"
+
+
+@pytest.mark.parametrize("event_type", sorted(APPROVAL_EVENTS))
+async def test_package_scoped_event_stores_the_normalized_actor(db, event_type):
+    """POZİTİF KONTROL: kimlik KIRPILMIŞ hâliyle yazılır.
+
+    Kapı yalnız reddetseydi `" yonetici@otomaix "` kabul edilir ve denetim izine
+    iki farklı görünen AYNI kimlik yazılırdı; kanonik doğrulayıcı kırpılmış
+    değeri DÖNER ve yazılan odur.
+    """
+    from app.core.database import _init_connection
+
+    await _init_connection(db)
+    sector_id = await _sub_sector(db)
+    package_id = await _package(db, sector_id)
+
+    event_id = await log_package_event(
+        db,
+        event_type=event_type,
+        sector_id=sector_id,
+        package_id=package_id,
+        actor="  yonetici@otomaix \n",
+    )
+    assert event_id is not None
+    stored = await db.fetchval(
+        "SELECT actor FROM social.package_events WHERE id = $1", event_id
+    )
+    assert stored == "yonetici@otomaix", f"kimlik normalize edilmeden yazıldı: {stored!r}"
 
 
 @pytest.mark.parametrize(
@@ -2255,6 +2666,96 @@ def test_036_down_succeeds_on_empty_plan2_data(scratch_db_migrated):
         )
         == "0"
     ), "geçmiş tetikleyicisi hâlâ duruyor"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9b. KİLİT SIRASI ÜRETİCİ BAĞIMLILIK YÖNÜNÜ İZLER
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ÖLÇÜLEN KUSUR (Codex checkpoint, F3): `036_down.sql` preflight'ı kilitleri AD
+# SIRASINA göre alıyordu — `brand_sub_sector_history` ÖNCE, `brands` SONRA.
+# Normal yazım yolu TERS yöndedir: `brands` güncellenir, tetikleyici geçmiş
+# tablosuna yazar. Ters sıra bir deadlock penceresidir; PostgreSQL birini abort
+# eder (tutarlılık için güvenli) ama ACİL geri almanın koşabilirliği belirsizleşir.
+#
+# KAPANIŞ CANLI ÇOK-OTURUMLU DEADLOCK TESTİYLE DEĞİL, YAPISAL REGRESYONLA
+# kurulur: kilit sırası ile 036'nın tetikleyici bağımlılık yönü ÇELİŞİRSE bu
+# test düşer. İki taraf da DOSYADAN TÜRETİLİR — ne sıra ne kenar elle yazılır.
+
+_LOCK_RE = re.compile(r"LOCK TABLE (social\.\w+) IN ACCESS EXCLUSIVE MODE")
+_TRIGGER_RE = re.compile(
+    r"CREATE TRIGGER\s+(\w+)\s+(?:BEFORE|AFTER|INSTEAD OF)\b[^;$]*?"
+    r"\bON\s+(social\.\w+)\b[^;$]*?EXECUTE FUNCTION\s+(social\.\w+)\(\)",
+    re.DOTALL,
+)
+_FUNCTION_RE = re.compile(
+    r"CREATE (?:OR REPLACE )?FUNCTION\s+(social\.\w+)\(\)(.*?)LANGUAGE plpgsql",
+    re.DOTALL,
+)
+_WRITE_RE = re.compile(r"(?:INSERT INTO|UPDATE|DELETE FROM)\s+(social\.\w+)")
+
+
+def _lock_order(text: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(_LOCK_RE.findall(text)))
+
+
+def _trigger_write_edges(text: str) -> tuple[tuple[str, str], ...]:
+    """(ÜRETİCİ tablo, tetikleyicinin YAZDIĞI tablo) kenarları — katalog yönü."""
+    bodies = {ad: govde for ad, govde in _FUNCTION_RE.findall(text)}
+    edges: list[tuple[str, str]] = []
+    for _, uretici, fonksiyon in _TRIGGER_RE.findall(text):
+        for yazilan in _WRITE_RE.findall(bodies.get(fonksiyon, "")):
+            if yazilan != uretici:
+                edges.append((uretici, yazilan))
+    return tuple(dict.fromkeys(edges))
+
+
+DOWN_036_LOCK_ORDER = _lock_order(DOWN_036.read_text(encoding="utf-8"))
+TRIGGER_WRITE_EDGES = _trigger_write_edges(MIGRATION_036.read_text(encoding="utf-8"))
+
+
+def _lock_order_violations(lock_order, edges):
+    """Üreticisi, yazdığı tablodan SONRA kilitlenen kenarlar."""
+    sira = {ad: i for i, ad in enumerate(lock_order)}
+    return sorted(
+        (uretici, yazilan)
+        for uretici, yazilan in edges
+        if uretici in sira and yazilan in sira and sira[uretici] > sira[yazilan]
+    )
+
+
+def test_down_lock_order_follows_the_producer_direction():
+    """Kilit sırası ⟂ tetikleyici yönü — ikisi de DOSYADAN türetilir.
+
+    BOŞ-KÜME KONTROL KOLU: kenar üretilemezse kapı hiçbir şey ölçmeden yeşil
+    olurdu; ilk iki iddia o sessiz yeşili imkânsız kılar. MUTASYON KOLU: sıra
+    ters çevrildiğinde kapı KIRMIZI düşmek ZORUNDA — düşmüyorsa denetimin
+    kendisi ölüdür.
+    """
+    assert TRIGGER_WRITE_EDGES, (
+        "036'dan HİÇ tetikleyici-yazım kenarı türetilemedi — kapı boş kümede "
+        "yeşil düşerdi"
+    )
+    assert DOWN_036_LOCK_ORDER, "036_down.sql'den kilit sırası okunamadı"
+
+    assert _lock_order_violations(DOWN_036_LOCK_ORDER, TRIGGER_WRITE_EDGES) == [], (
+        "kilit sırası ÜRETİCİ yönüne ters: normal yazım yolu üreticiyi ÖNCE, "
+        "yazdığı tabloyu SONRA kilitler; geri alma bunu tersine çevirirse "
+        f"deadlock penceresi açılır (sıra={DOWN_036_LOCK_ORDER})"
+    )
+    assert _lock_order_violations(tuple(reversed(DOWN_036_LOCK_ORDER)), TRIGGER_WRITE_EDGES), (
+        "TERS sıra da ihlal ÜRETMİYOR — denetim ölü"
+    )
+    assert _lock_order_violations(tuple(reversed(DOWN_036_LOCK_ORDER)), ()) == [], (
+        "kenar kümesi boşken ihlal uydurulmuş"
+    )
+
+
+def test_every_locked_table_of_the_down_script_is_locked_exactly_once():
+    """Sıra SABİT ve TEKİL: aynı tabloyu iki kez kilitlemek sırayı belirsizleştirir."""
+    ham = _LOCK_RE.findall(DOWN_036.read_text(encoding="utf-8"))
+    assert ham, "kilit ifadesi bulunamadı"
+    assert len(ham) == len(set(ham)), f"tablo birden çok kez kilitleniyor: {ham}"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
