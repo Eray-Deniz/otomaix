@@ -21,6 +21,11 @@
   **Tetik:** Task 8 dispatch'i — ek, o göreve bir yapısal test sözü veriyor ve o testin
   hangi hükme karşı koşacağı bu kararla belirlenir. Task 8'e gelinmeden karara bağlanmazsa
   görev orada durur.
+  **İKİNCİ KANIT (2026-09-06, checkpoint 4):** ek, kanonik kimlik kapısını
+  `sector_package_lifecycle._require_actor` diye SATIR NUMARASIYLA adlandırıyor; olay yazıcısının
+  da aynı kapıyı kullanması gerekince tanım `package_events.require_actor`a taşındı — ölçüldü ki
+  ters yönde ikinci bir import DÖNGÜdür (`ImportError`). Ad ve davranış aynı, ikinci kural kopyası
+  yazılmadı; **sapan şey tanımın YERİ.** Yani ekin bu bölgesi kodla ikinci kez uyumsuz.
 
 - **sector-package-unreviewed-merge-surface** (proposed, review borcu; DÜŞÜRÜLDÜ — koşullu) —
   Plan 1 kapanışında iki kod commit'i **hiçbir bağımsız hakem görmeden** main'e girdi:
@@ -284,6 +289,28 @@
   **Yeniden açılma koşulu:** (a) onaylı koşum yolu sarmalayıcısız hâle gelirse, VEYA
   (b) elle uygulanmış bir migration bir olayda kök sebep çıkarsa — o zaman ilk bakılacak
   yer bu kalemdir.
+
+- **migration-ddl-object-identity-class** (proposed, veri bütünlüğü / dağıtım; TETİKLİ —
+  bugün aktif borç DEĞİL) — Bir migration, katalog nesnesini yalnız ADIYLA arayıp koşulsuz
+  yazarsa (`CREATE OR REPLACE FUNCTION`) ya da düşürürse (`DROP TRIGGER IF EXISTS`), aynı adı
+  taşıyan **YABANCI** bir nesneyi sessizce devralır: fonksiyon kimliği korunduğu için ona bağlı
+  başka bir tetikleyici ANINDA bizim gövdemizi çalıştırmaya başlar. Kapalı manifest bunu
+  yakalayamaz — ezme işleminden SONRAKİ durumu okur.
+  **Nereden çıktı:** Codex checkpoint 4, tur 2 (high). Kontrolör doğruladı ve sınıfı adlandırdı:
+  aynı disiplin KISITLAR için zaten uygulanıyordu (036'nın KAPI 2 / KAPI 3'ü); açık kalan
+  fonksiyon/tetikleyici VARYANTIYDI.
+  **Kapatıldığı yer:** `036_package_runs.sql` (KAPI 4) ve `rollback/036_down.sql` (ayna kapı) —
+  yalnız o iki dosya.
+  **AÇIK KALAN — ölçüldü (uygulayıcı taraması, kavramdan türetilmiş desen, 2026-09-06):** beş
+  dosya sınıfı hâlâ taşıyor — `001_initial_social.sql` · `023_brands_updated_at.sql` ·
+  `026_brand_products.sql` · `032_sector_packages.sql` · `rollback/032_down.sql`. 032'nin
+  `pg_get_triggerdef` kullanımı YAZIMDAN SONRAKİ manifesttir, yani tam da bu sınıfın kör noktası.
+  **Bugün neden acil değil:** kayan/kirlenmiş bir şema gerektiriyor ve hiçbir şey henüz gerçek
+  bir ortama uygulanmadı. Ama "uygulanmadı" bir güvence değil, yalnız bugünkü durum.
+  **Dürüst etiket: çözülmedi + park edildi, EVİ YOK.** Reflekssel olarak Task 18'e yapıştırmak
+  sahte ev olurdu — o görev dağıtım runbook'u yazıyor, beş migration'ı yeniden yazmıyor.
+  **Yeniden açılma koşulu / tetik:** (a) bu beş dosyadan birine dokunan bir sonraki iş, VEYA
+  (b) canlıya ilk gerçek dağıtımdan ÖNCE — orada şema artık paylaşılan bir yüzeydir.
 
 <!-- Son kapanan: codex-review-scope-contract → done 2026-06-04, arşiv docs/task-archive/2026/06/ -->
 

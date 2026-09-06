@@ -192,6 +192,50 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   Test tabanı: 963 → 965 → 1133 → 1175 → 1176 → 1179 → **1181**, hiç düşmeden. Her sayı
   kontrolörün KENDİ taze koşumundan, sessiz veritabanında.
 
+- **CHECKPOINT 4 KOŞTU (2026-09-06) — iki Codex turu, taban `a6e053f`.** Kapsam Task 5'in hakem
+  görmemiş tur 5/6 commit'lerini VE Task 6'nın tamamını içeriyordu (tasarım gereği: `cp_count`
+  ilerletilmediği için taban geride kalmıştı).
+  **Tur 1 — 2 high + 1 medium + 1 low, `needs-attention`.** Dördü de kontrolörün KENDİ ölçümüyle
+  doğrulandı, hakemin sözüne dayanılmadı:
+  (F1, high) bağlayıcı ekin ayak (d) hükmü UYGULANMAMIŞTI — onaylanmış geri alma planının
+  kimlik/hedef alanları değiştirilebiliyordu; 036'nın kapalı tetikleyici manifesti `<yok>` diyordu.
+  (F2, high) onay/ret denetim satırı **yalnız boşluktan ibaret** bir aktör kabul ediyordu
+  (`bool(actor)` kapısı; `package_events.actor` kolonunda ne NOT NULL ne CHECK var — ölçüldü).
+  Kapı bu partiden ÖNCE de zayıftı, ama parti onu kimliğin en çok önemli olduğu yüzeye taşıdı.
+  (F3, medium) `036_down.sql` kilitleri üretici yönünün TERSİNDE alıyordu → deadlock penceresi.
+  (F4, low) bir test açıklaması güncel davranışı yanlış anlatıyordu. **Kontrolör hakemi daralttı:**
+  aynı dosyadaki diğer iki "beş alan" cümlesi geçmişi anlatıyor, onlar doğru — dokunulmadı.
+  **Tur 1'in F6'sı ölçümle reddedildi** (yine "tek-commit TDD ihlali"; S1 grameri `red-only`/
+  `green-only` ayrımını açıkça meşru sayıyor, defter kapısı `rc=0`).
+  **Düzeltme turu 1 İNDİ:** `7071ffa` + `8362f5f` + `4d293bb` + `16f9fe7`. Test tabanı 1181 → 1436.
+  **Tur 2 (kapanış-doğrulama) — F1·F2·F3·F4 KAPALI doğrulandı, hiçbiri yeniden açılmadı**, ama
+  fix diff'inin İÇİNDE yeni bir high çıktı:
+  (F7, high) migration aynı adı taşıyan **YABANCI** bir fonksiyonu/tetikleyiciyi sessizce
+  devralıyordu — üç çiftin üçü de koşulsuz `CREATE OR REPLACE` / `DROP TRIGGER IF EXISTS` ile
+  yazılıyordu ve kapalı manifest bunu YAKALAYAMAZ (ezme işleminden SONRAKİ durumu okur).
+  **Kontrolör doğruladı ve sınıfı adlandırdı:** aynı dosya bu disiplini KISITLAR için zaten
+  uyguluyor (KAPI 2 / KAPI 3, `pg_get_constraintdef` + `contype` + `convalidated`); açık kalan
+  fonksiyon/tetikleyici VARYANTIYDI — daha önce kapatılmış bir sınıfın gözden kaçmış ayağı.
+  **Düzeltme turu 2 İNDİ:** `9a65c0e` + `4b1e354` + `5d42db5`. KAPI 4 kalıcı DDL'den ÖNCE koşuyor
+  (ölçüldü: satır 277, "BURADAN SONRASI KALICI" satır 348), `036_down.sql` aynadaki eşini taşıyor
+  (kapı satır 245, ilk `DROP` satır 313). Tetikleyici metni TEK KAYNAK: aynı sabit hem kimlik
+  karşılaştırması hem tetikleyici yaratımı hem manifest beklentisi.
+  **Uygulayıcı kendi düzeltmesinin yan etkisini kendisi yakaladı ve kayda geçir:** gövdeleri
+  `DECLARE`e taşımak F1 ve F3'ün ayrıştırıcılarını bayatlattı; iki testin **boş-küme kontrol
+  kolları ateşledi** (iddialar hâlâ doğruydu, okuyucuları bayatlamıştı) ve `5d42db5` ikisini de
+  kavramdan yeniden türetti. Kontrol kolu tam da bunun için vardı.
+- **CHECKPOINT 4 `approve` ALMADAN kapandı — Eray kararı (2026-09-06): oturum burada kapanacak.**
+  Üçüncü tur AÇILMADI, yani **F7 düzeltmesi bağımsız hakem yargısı GÖRMEDİ.**
+  **Ev uydurulmadı:** `cp_count` ve `last_checkpoint_ref` yine BİLEREK ilerletilmedi (§8.6 mutasyon
+  protokolü yalnız Clean/Accepted-risk dallarında koşar; bu koşum onlardan biri değil), dolayısıyla
+  sıradaki checkpoint'in tabanı `a6e053f` KALIR ve bu turun yedi commit'ini kendiliğinden kapsar.
+  Aynı kapsanma yolu bu görevde daha önce iki kez ölçümle işledi.
+  **Dürüst etiket: kapanış kontrolör kararıdır, hakem `approve`'u DEĞİLDİR.**
+- **Kontrolörün ölçümleri (hepsi bu oturumda, kendi koşumları):** tam test kümesi giriş `1181` →
+  düzeltme turu 1 sonrası `1436` → düzeltme turu 2 sonrası **`1452 passed in 453.65s`**, exit 0,
+  temiz ağaçta; defter kapısı her turda `rc=0`; `ec_should_checkpoint 1 2 9` → `RUN_RISK`;
+  `command-blocks-maint.sh verify` → PASS.
+
 # Decisions Log
 
 - **2026-08-27 — K-84 = A:** kalıp kimliği sürümler arası korunur. Değeri eşleştirmek
@@ -321,6 +365,34 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   turdur takılan uygulayıcı kendi sorununu göremiyor" gerekçesine dayanır; bu döngü takılmadı —
   her tur kendi bulgularını kapattı, her yeni bulgu tazeydi. Model tabanı zaten mevcut en
   güçlüsü, yani "yükseltme" karar kılığında bir no-op olurdu.
+- **2026-09-06 — aktör kapısının TANIM YERİ taşındı (kontrolör kararı, ekten SAPMA — etiketli):**
+  bağlayıcı ek kanonik kimlik kapısını `sector_package_lifecycle._require_actor` diye SATIR
+  NUMARASIYLA adlandırıyor. Olay yazıcısının da aynı kapıyı kullanması gerekiyordu (F2), ama
+  bağımlılık ZATEN ters yönde kurulu: `sector_package_lifecycle` → `package_events`. Ölçüldü:
+  ters yönde ikinci bir import DÖNGÜdür ve `ImportError` ile düşer. Tanım `package_events.
+  require_actor`a taşındı, eski ad import ile bağlandı — **ad ve davranış AYNI**, ikinci bir
+  kural kopyası YAZILMADI (ekin kapattığı sınıf tam olarak kopya yazmaktır). **Sapma: tanım
+  YERİ ekin gösterdiği modül değil.** Bu, ekin ad-kümesi hükmüyle ilgili ZATEN AÇIK olan
+  tasarım maddesinin (`plan2-ek-bagimlilik-hukmu-ad-kumesi`) kanıt kümesine eklenir; yürütücü
+  ek metnini yeniden yazmaz.
+- **2026-09-06 — onaylı geri alma planı satırının SİLİNMESİ bilerek korumasız BIRAKILDI
+  (kontrolör kararı):** ekin DÜZYAZISI mekanizmayı "032'nin `sector_research_artifacts_
+  append_only` tetikleyicisinin aynısı" diye tarif ediyor ve o tetikleyici `BEFORE UPDATE OR
+  DELETE`; ama ekin BAĞLAYICI SQL BLOĞU `BEFORE UPDATE` diyor. Uygulama SQL bloğunu izledi.
+  **Neden DELETE ayağı eklenmedi:** aynı ek, yürütme penceresi açıkken üyeliğin küçülebileceğini
+  (satır çıkarma, `amend_rollback_plan`) söylüyor ve onay damgası `durum='bekliyor'` satırlara
+  yazılıyor — onaya bakan bir DELETE kapısı belgelenmiş ama henüz yazılmamış bir akışı
+  bloklayabilirdi. Ölçüldü (2026-09-06): bugün hiçbir üretim yolu o satırları silmiyor (tek
+  eşleşme `036_down.sql`in tabloyu tümden düşürmesi). **Ekin kendi içindeki düzyazı-SQL
+  çelişkisi ÇÖZÜLMEDİ**; madde Task 8'e (üyelik değiştiren `amend_rollback_plan`) ev verildi.
+- **2026-09-06 — DDL nesne kimliği sınıfı 036 + 036_down'da kapatıldı, KALAN BEŞ DOSYADA
+  AÇIK (kontrolör kararı):** F7 düzeltmesi yalnız bu turun dosyalarını kapsadı. Uygulayıcının
+  kavramdan türettiği tarama ("adıyla aranıp koşulsuz yazılan/düşürülen katalog nesnesi")
+  `shared/db/migrations/` genelinde beş dosyanın sınıfı hâlâ taşıdığını ölçtü: `001_initial_
+  social.sql` · `023_brands_updated_at.sql` · `026_brand_products.sql` · `032_sector_packages.sql`
+  · `rollback/032_down.sql`. 032'nin `pg_get_triggerdef` kullanımı YAZIMDAN SONRAKİ manifesttir,
+  yani tam da F7'nin adlandırdığı kör noktayı taşır. **Bu turda bilerek dokunulmadı** (kapsam
+  Task 6'nın dosyaları); aktif katmana tetikli madde olarak yazıldı, sessizce düşürülmedi.
 
 # Open Problems
 
@@ -480,3 +552,22 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
 - **Yedek etiket `backup/pre-footer-fix-20260830` süresiz durmaz.** Silinme koşulu: dal
   main'e merge edildiğinde VEYA final inceleme temiz geçtiğinde. O ana kadar commit etiketi
   yeniden yazımının geri dönüş yolu.
+
+- **Ekin düzyazısı ile bağlayıcı SQL bloğu ÇELİŞİYOR — ÇÖZÜLMEDİ, evi var (Task 8).**
+  Ayak (d) düzyazıda 032'nin `BEFORE UPDATE OR DELETE` desenine atıf yapıyor, SQL bloğu
+  `BEFORE UPDATE` diyor. Sonuç: onaylanmış bir geri alma planı satırı SİLİNEBİLİR. Bugün
+  zararsız (ölçüldü: hiçbir üretim yolu silmiyor), ama çelişkinin kendisi ekte duruyor ve
+  kararı tasarım katmanı verir. **Tetik: Task 8** — üyeliği değiştiren `amend_rollback_plan`
+  orada yazılır ve "onaylı satır çıkarılabilir mi" sorusunun cevabı orada belirlenir.
+  Dürüst etiket: *çözülmedi + evi var + tarihi Task 8'e bağlı. "Ele alındı" DEĞİL.*
+- **F7 düzeltmesi bağımsız hakem GÖRMEDİ (kabul edilmiş risk, 2026-09-06 Eray kararı).**
+  Üçüncü Codex turu açılmadı. Kapısı adlandırıldı: sıradaki checkpoint tabanı `a6e053f`
+  kaldığı için bu turun yedi commit'ini kendiliğinden kapsar.
+- **Uygulayıcının ölçemediği dört kalem (F7 turu, "doğrulanmadı" etiketiyle):** (a) temiz
+  şemaya yabancı nesne dikilip 036'nın ilk kez koşturulması AYRI bir hücre değil — altı kapı
+  hücresi de zaten göçmüş bir veritabanına YENİDEN uygulama yoluyla koşuyor (üç tetikleyicinin
+  ikisi için bu senaryo zaten erişilemez, tabloları 036'dan önce yok); (b) geri alma
+  dosyasındaki fonksiyon kimliği gövde değil `md5(prosrc)` özeti — çakışma direnci VARSAYIM;
+  (c) kapı `to_regprocedure('<ad>()')` bakıyor, aynı adı taşıyan FARKLI imzalı bir aşırı yükleme
+  incelenmedi (gerekçe akıl yürütmedir, ölçüm değil); (d) bizim dokunmadığımız BAŞKA bir tabloda
+  aynı adı taşıyan yabancı tetikleyici sınanmadı.
