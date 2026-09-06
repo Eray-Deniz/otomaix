@@ -81,6 +81,24 @@ EXPECTED_KEYS = {
     "okula-donus",
 }
 
+# ─── KÖKEN İZİ (fix turu 5, F1) — operatör kararı DEĞİL, teknik kimlik ──────
+#
+# 035 üç satırı SABİT `id` ile yazar. Sahiplik artık İÇERİKTEN türetilmez,
+# KÖKENDEN okunur: bir satır bu id'yi taşıyorsa onu bu migration'ın `INSERT`i
+# yaratmıştır — `ON CONFLICT DO NOTHING` atladığı satıra id BASMAZ.
+#
+# Ölçülen kusur (kontrolör, fix turu 5): sahiplik beş alanın BİREBİR eşitliğine
+# dayanıyordu. 035'ten ÖNCE aynı içerikle var olan bir satırı `up` atlıyor
+# (ölçüldü: satırın `id`si değişmiyor) ama `down` onu SİLİYORDU — planın
+# "önceden var olan satırlara dokunmaz" hükmünün doğrudan ihlali.
+#
+# Sıra `SEED_ROWS` ile AYNIdır.
+SEED_IDS: tuple[str, ...] = (
+    "03500000-0000-4035-8035-000000000001",  # 2026-11-10
+    "03500000-0000-4035-8035-000000000002",  # 2026-11-24
+    "03500000-0000-4035-8035-000000000003",  # 2026-08-15
+)
+
 # Geri alma reddinin metinsel imzası — testler ret SEBEBİNİ de ölçer, yalnız
 # sıfır-dışı çıkışı değil.
 REFUSAL_MARKER = "migration 035 geri alma REDDEDILDI"
@@ -91,6 +109,15 @@ SKIPPED_SEED_MARKER = "migration 035: takvim anahtari ZATEN DOLU"
 
 # Seed manifestinin KENDİ paydasını doğrulayan kapının imzası (fix turu 2, N3).
 MANIFEST_DENOMINATOR_MARKER = "seed manifesti"
+
+# Kısıt KİMLİĞİ kapısının imzası (fix turu 5, F2). Kısıt varlığı ADdan değil
+# TANIMdan okunur; aynı adı taşıyan kanonik olmayan bir kısıt fail-closed reddedilir.
+CONSTRAINT_IDENTITY_MARKER = "adini KANONIK OLMAYAN bir kisit tutuyor"
+
+# Geri almanın "dönem satırı sessizce tek güne dönüşecekti" kapısının imzası
+# (fix turu 5, F1-b). Şekil sezgiseli yerine KAPANIŞ ÖZELLİĞİ ölçülür: silme
+# bittikten sonra `end_date` taşıyan HİÇBİR satır kalmamalıdır.
+PERIOD_FLATTENING_MARKER = "donem satiri sessizce tek gune donusurdu"
 
 # İleri migration'ın manifest tablosunun TAM adı (şema nitelemesi dahil).
 # Kullanım yerleri `pg_temp.` ile nitelenmek ZORUNDA (fix turu 4, F3): niteliksiz
@@ -478,6 +505,302 @@ def test_rollback_spares_a_content_drifted_seed_row(scratch_db_migrated):
     )
 
 
+async def test_seed_rows_carry_the_migration_provenance_id(db):
+    """Üç satır 035'in SABİT `id`sini taşır — sahiplik KÖKENden okunabilir olmalı.
+
+    Ölçülen kusur (fix turu 5, F1): sahiplik beş alanın birebir eşitliğinden
+    türetiliyordu, yani "içeriği seed'e benzeyen" her satır 035'in sayılıyordu.
+    035'ten ÖNCE aynı içerikle var olan bir satırı `up` atlar (`DO NOTHING`,
+    ölçüldü: satırın `id`si değişmez) ama `down` onu SİLİYORDU.
+
+    Sabit `id` bu belirsizliği kaldırır: `INSERT` gerçekten satırı yarattıysa id
+    basılır, atladıysa BASILMAZ. Ne şekil ne içerik — köken.
+    """
+    for (year, day, *_), seed_id in zip(SEED_ROWS, SEED_IDS, strict=True):
+        got = await db.fetchval(
+            "SELECT id FROM social.public_holidays WHERE year = $1 AND date = $2",
+            year,
+            day,
+        )
+        assert got is not None, f"seed satırı YOK: {year}/{day}"
+        assert str(got) == seed_id, (
+            f"({year}, {day}) satırı 035'in köken izini taşımıyor: {got} != {seed_id}"
+        )
+
+
+def test_rollback_spares_pre_existing_rows_with_identical_content(scratch_db_migrated):
+    """035'ten ÖNCE aynı içerikle var olan satırlar geri almadan SAĞ çıkar.
+
+    ÖLÇÜLEN KUSUR (fix turu 5, F1-a — bağımsız hakem, kontrolör ölçtü):
+    `up` bu satırları `ON CONFLICT DO NOTHING` ile ATLAR (ölçüldü: satırın `id`si
+    değişmiyor, yani 035 yazmadı), ama `down`ın
+    `DELETE ... WHERE (year,date,name_tr,name_en,category) IN (manifest)` sorgusu
+    onları SİLİYORDU (ölçüldü: geri almadan sonra satır sayısı 0). Planın
+    "önceden var olan satırlara dokunmaz" hükmü ihlal ediliyordu.
+
+    Üçünü de kurar — sahiplik sınırı tek bir anahtarda değil, TÜM seed
+    kümesinde geçerli olmalı.
+    """
+    url = scratch_db_migrated
+    assert _apply_down(url).returncode == 0, "ön koşul: 035 geri alınamadı"
+
+    # 035 ÖNCESİ şema: `end_date` kolonu YOK, yani bu satırlar dönem taşıyamaz.
+    for year, day, name_tr, name_en, category, _ in SEED_ROWS:
+        _run_sql(
+            url,
+            "INSERT INTO social.public_holidays (year, date, name_tr, name_en, category) "
+            f"VALUES ({year}, '{day}', $tr${name_tr}$tr$, $en${name_en}$en$, "
+            f"'{category}')",
+        )
+    before_ids = _scalar(
+        url,
+        "SELECT id::text FROM social.public_holidays WHERE (year, date) IN "
+        "((2026, '2026-11-10'), (2026, '2026-11-24'), (2026, '2026-08-15')) ORDER BY date",
+    )
+
+    up = _apply_up(url)
+    assert up.returncode == 0, f"migration DURDU:\n{up.stderr}"
+    after_ids = _scalar(
+        url,
+        "SELECT id::text FROM social.public_holidays WHERE (year, date) IN "
+        "((2026, '2026-11-10'), (2026, '2026-11-24'), (2026, '2026-08-15')) ORDER BY date",
+    )
+    assert after_ids == before_ids, (
+        "035 önceden var olan satırları EZDİ — `DO NOTHING` sözleşmesi bozuldu "
+        "(prob bozuk, bulgu bu testten okunamaz)"
+    )
+
+    down = _apply_down(url)
+    assert down.returncode == 0, f"geri alma DURDU:\n{down.stderr}"
+    assert (
+        _scalar(
+            url,
+            "SELECT count(*) FROM social.public_holidays WHERE (year, date) IN "
+            "((2026, '2026-11-10'), (2026, '2026-11-24'), (2026, '2026-08-15'))",
+        )
+        == "3"
+    ), (
+        "035'in YAZMADIĞI satırlar, yalnız içerikleri seed'e benzediği için "
+        "silindi — sahiplik içerikten türetiliyor, kökenden değil"
+    )
+
+
+# ─── 3a. KAPANIŞ ÖZELLİĞİ — dönem satırı sessizce düzleşemez ────────────────
+#
+# NEDEN ÖZELLİK, NEDEN ÖRNEK DEĞİL (fix turu 5). Üç tur boyunca bu eksende
+# ŞEKİL sezgiselleri kondu: önce `year = 2026` çivisi, sonra "üreticinin
+# yazdığı desen" muafiyeti. Her ikisi de "bu satır kimin?" sorusunu satırın
+# GÖRÜNÜŞÜNDEN cevaplamaya çalıştı ve ikisi de kaçırdı — ikincisi ölçüldü:
+# üretici şekline uyan 2027 dönemi MUAF tutuluyor, geri alma `rc=0` ile geçiyor,
+# kolon düşüyor ve satır SESSİZCE tek günlük kayda dönüşüyordu.
+#
+# Nokta düzeltmesi yerine KAPANIŞ ÖZELLİĞİ pinlenir; özellik şekilden bağımsızdır:
+#
+#   Geri alma ya REDDEDER (ve hiçbir şeyi değiştirmez), ya da BAŞARIR — ve
+#   başardığında `end_date` taşıyan hiçbir satır AYAKTA KALMAZ.
+#
+# Beklenti duruma göre EL İLE YAZILMAZ: her durum aynı tek iddiaya tabidir.
+def _period_rows(url: str) -> dict[str, str]:
+    """`end_date` taşıyan satırların `id` → `end_date` eşlemesi."""
+    raw = _scalar(
+        url,
+        "SELECT id::text || '|' || end_date::text FROM social.public_holidays "
+        "WHERE end_date IS NOT NULL ORDER BY id",
+    )
+    return dict(line.split("|", 1) for line in raw.splitlines() if line)
+
+
+def _row_snapshot(url: str) -> set[str]:
+    """Tablonun tam durumu — reddeden koşumun HİÇBİR ŞEY değiştirmediğini ölçer."""
+    raw = _scalar(
+        url,
+        "SELECT id::text || '|' || year || '|' || date || '|' || name_tr || '|' || "
+        "coalesce(name_en, '-') || '|' || coalesce(category, '-') || '|' || "
+        "coalesce(end_date::text, '-') FROM social.public_holidays ORDER BY id",
+    )
+    return {line for line in raw.splitlines() if line}
+
+
+def _state_yalniz_035(url: str) -> None:
+    """Ek bir şey yok — ayakta olan tek dönem 035'in kendi satırı."""
+
+
+def _state_yabanci_donem(url: str) -> None:
+    _run_sql(
+        url,
+        "INSERT INTO social.public_holidays (year, date, name_tr, name_en, category, end_date) "
+        "VALUES (2030, '2030-07-01', 'Yabanci Donem', 'Foreign Period', 'commercial', "
+        "'2030-07-20')",
+    )
+
+
+def _state_uretici_sekilli_sonraki_yil(url: str) -> None:
+    """Sonraki yılın dönemini ÜRETİCİNİN KENDİSİ yazar (sahte saat)."""
+    from datetime import datetime
+
+    items = _run_workflow_node("Tatilleri Topla", now_year=datetime.now().year + 1)
+    period = [item for item in items if item["name_tr"] == "Okula Dönüş"]
+    assert period and period[0].get("end_date"), (
+        f"üretici dönem kalemini hiç üretmedi (prob bozuk): {period}"
+    )
+    _run_sql(url, _annual_job_sql(items))
+
+
+def _state_icerigi_kaymis_seed_donemi(url: str) -> None:
+    _run_sql(
+        url,
+        "UPDATE social.public_holidays SET name_tr = 'Yerel Duzeltme' "
+        "WHERE year = 2026 AND date = '2026-08-15'",
+    )
+
+
+def _state_elle_girilmis_ayni_yil_donemi(url: str) -> None:
+    _run_sql(
+        url,
+        "INSERT INTO social.public_holidays (year, date, name_tr, name_en, category, end_date) "
+        "VALUES (2026, '2026-12-01', 'Elle Girilmis Kampanya', 'Manual Campaign', "
+        "'commercial', '2026-12-31')",
+    )
+
+
+_PERIOD_STATES = {
+    "yalniz_035": _state_yalniz_035,
+    "yabanci_donem": _state_yabanci_donem,
+    "uretici_sekilli_sonraki_yil": _state_uretici_sekilli_sonraki_yil,
+    "icerigi_kaymis_seed_donemi": _state_icerigi_kaymis_seed_donemi,
+    "elle_girilmis_ayni_yil_donemi": _state_elle_girilmis_ayni_yil_donemi,
+}
+
+
+@pytest.mark.parametrize("state", sorted(_PERIOD_STATES), ids=sorted(_PERIOD_STATES))
+def test_rollback_never_silently_flattens_a_period_row(scratch_db_migrated, state: str):
+    """Her veritabanı durumu için TEK iddia: ya ret, ya dönemsiz bir sonuç.
+
+    Ölçülen ihlal (fix turu 5, F1-b): `uretici_sekilli_sonraki_yil` hücresinde
+    geri alma `rc=0` ile geçiyor, kolon düşüyor ve üreticinin 2027 dönem satırı
+    SESSİZCE tek günlük kayda dönüşüyordu (ölçüldü: `SESSIZ_DONEM_KAYBI=True`) —
+    dosyanın kendi HINT'inin önlemeyi vaat ettiği şey tam olarak buydu.
+    """
+    url = scratch_db_migrated
+    _PERIOD_STATES[state](url)
+
+    before = _period_rows(url)
+    assert before, f"{state}: durum hiç dönem satırı bırakmadı (prob bozuk)"
+    snapshot = _row_snapshot(url)
+
+    result = _apply_down(url)
+    refused = result.returncode != 0 or REFUSAL_MARKER in result.stderr
+
+    if refused:
+        assert REFUSAL_MARKER in result.stderr, result.stderr
+        assert _has_end_date_column(url), "reddeden koşum kolonu yine de düşürdü"
+        assert _row_snapshot(url) == snapshot, (
+            "reddeden koşum tabloyu DEĞİŞTİRDİ — 'hiçbir şey yapmadan durur' yalan"
+        )
+        return
+
+    assert not _has_end_date_column(url), f"başarılı geri alma kolonu düşürmedi:\n{result.stderr}"
+    ids = ", ".join(f"'{i}'::uuid" for i in before)
+    survivors = _scalar(
+        url, f"SELECT count(*) FROM social.public_holidays WHERE id IN ({ids})"
+    )
+    assert survivors == "0", (
+        f"{state}: geri alma BAŞARDI ama dönem taşıyan {survivors} satır ayakta "
+        "kaldı — kolon düşünce onlar sessizce TEK GÜNLÜK kayda dönüştü; bu "
+        "GERİ ALINAMAZ bir anlam kaybıdır"
+    )
+
+
+# ─── 3b. Kısıt KİMLİĞİ — addan değil TANIMdan ──────────────────────────────
+
+
+@pytest.mark.parametrize("bogus", [False, True], ids=["kanonik", "sahte_ayni_adli"])
+def test_constraint_identity_is_read_from_the_definition(scratch_db_migrated, bogus: bool):
+    """Kısıt varlığı ADdan değil GERÇEK TANIMdan okunur.
+
+    ÖLÇÜLEN KUSUR (fix turu 5, F2): kurulum kapısı yalnız `conname`e, garanti
+    doğrulaması yalnız `conname + contype='c'`ye bakıyordu; hiçbiri tanımı
+    okumuyordu. Ölçüldü: 035'ten ÖNCE aynı adla `CHECK (true)` konursa migration
+    `rc=0` ile BAŞARILI dönüyor ve `end_date < date` olan satır YAZILABİLİYOR.
+
+    `kanonik` kolu POZİTİF KONTROLdür: aynı kod yolu, sahte kısıt olmadan
+    başarılı olmalı ve ters dönemi reddetmeli. Yeşil değilse ölçüm geçersizdir.
+    """
+    url = scratch_db_migrated
+    assert _apply_down(url).returncode == 0, "ön koşul: 035 geri alınamadı"
+
+    if bogus:
+        _run_sql(
+            url,
+            "ALTER TABLE social.public_holidays "
+            "ADD CONSTRAINT public_holidays_end_date_check CHECK (true)",
+        )
+
+    result = _apply_up(url)
+
+    if bogus:
+        assert result.returncode != 0, (
+            "sahte kısıt KABUL edildi — migration adına bakıp tanımını okumuyor. "
+            f"stdout:\n{result.stdout}"
+        )
+        assert CONSTRAINT_IDENTITY_MARKER in result.stderr, result.stderr
+        assert not _has_end_date_column(url), (
+            "reddeden koşum şemayı yine de ilerletti (tek transaction bekleniyordu)"
+        )
+        return
+
+    assert result.returncode == 0, f"migration DURDU:\n{result.stderr}"
+    reverse = _psql(
+        url,
+        "-c",
+        "INSERT INTO social.public_holidays (year, date, name_tr, end_date) "
+        "VALUES (2031, '2031-05-10', 'Ters Donem Probu', '2031-01-01')",
+    )
+    assert reverse.returncode != 0, "kanonik kolda ters dönem YAZILDI — kısıt sahte"
+    assert "public_holidays_end_date_check" in reverse.stderr, reverse.stderr
+
+
+def test_rollback_refuses_to_drop_a_non_canonical_same_named_constraint(scratch_db_migrated):
+    """Geri alma, aynı adı taşıyan İLGİSİZ bir kısıtı düşürmez.
+
+    ÖLÇÜLEN KUSUR (fix turu 5, F2'nin geri-alma yüzü): `DROP CONSTRAINT IF EXISTS`
+    nesneyi yalnız ADIYLA arar. Kanonik kısıt elle düşürülüp yerine aynı adla
+    başka bir kısıt konursa geri alma onu SESSİZCE düşürüyordu — 035'in
+    sahiplenmediği bir nesne.
+    """
+    url = scratch_db_migrated
+    _run_sql(
+        url,
+        "ALTER TABLE social.public_holidays "
+        "DROP CONSTRAINT public_holidays_end_date_check",
+    )
+    _run_sql(
+        url,
+        "ALTER TABLE social.public_holidays "
+        "ADD CONSTRAINT public_holidays_end_date_check CHECK (year > 0)",
+    )
+
+    result = _apply_down(url)
+
+    assert result.returncode != 0, (
+        f"geri alma başkasının kısıtını düşürdü — stdout:\n{result.stdout}"
+    )
+    assert CONSTRAINT_IDENTITY_MARKER in result.stderr, result.stderr
+    assert _has_end_date_column(url), "reddeden koşum kolonu yine de düşürdü"
+    assert {r[2] for r in SEED_ROWS} <= _names(url), (
+        "reddeden koşum seed satırlarını yine de sildi"
+    )
+    assert (
+        _scalar(
+            url,
+            "SELECT count(*) FROM pg_constraint WHERE "
+            "conrelid = 'social.public_holidays'::regclass AND "
+            "conname = 'public_holidays_end_date_check'",
+        )
+        == "1"
+    ), "reddeden koşum yabancı kısıtı yine de düşürdü"
+
+
 def test_rollback_refuses_when_a_foreign_period_row_exists(scratch_db_migrated):
     """Sahibi 035 OLMAYAN bir dönem satırı varsa geri alma HİÇBİR ŞEY yapmadan durur.
 
@@ -506,24 +829,31 @@ def test_rollback_refuses_when_a_foreign_period_row_exists(scratch_db_migrated):
     )
 
 
-def test_rollback_runs_after_the_annual_job_wrote_a_later_year_period(scratch_db_migrated):
-    """Geri alma, KENDİ üreticisinin yazdığı sonraki yıl dönemine TAKILMAZ.
+def test_rollback_refuses_after_the_annual_job_wrote_a_later_year_period(
+    scratch_db_migrated,
+):
+    """Geri alma, üreticinin yazdığı sonraki yıl dönemine de FAIL-CLOSED durur.
 
-    Ölçülen arıza (bağımsız hakem, Q1): yabancı-dönem kapısının muafiyeti
-    2026'ya çivilenmişti. Oysa aynı commit'in gönderdiği yıllık iş `Okula
-    Dönüş`ü KOŞTUĞU YILA göre yazar (`${year}-08-15`..`${year}-09-15`). 1 Ocak
-    2027'de iş 2027 dönem satırını yazar; o satır tanım gereği "yabancı dönem"
-    olur ve geri alma o günden sonra bir operatör elle `end_date` boşaltana
-    kadar REDDEDER. Kapı, korumaya çalıştığı migration'ın kendi üreticisi
-    tarafından bir takvim yılı içinde tetikleniyordu.
+    BİR ÖNCEKİ TURUN KARARI ÖLÇÜMLE GERİ ALINDI (fix turu 5, F1-b). Tur 1'de
+    kapının muafiyeti `year = 2026`e çivilenmişti; tur 1 bunu "üreticinin
+    yazdığı ŞEKLE" bakan bir muafiyete çevirdi ki geri alma kendi üreticisi
+    tarafından tetiklenmesin (Q1). Ölçüldü ki o muafiyetin bedeli SESSİZ:
+    geri alma `rc=0` ile geçiyor, kolon düşüyor ve 2027 dönem satırı hiçbir
+    uyarı olmadan TEK GÜNLÜK kayda dönüşüyor (`SESSIZ_DONEM_KAYBI=True`).
+
+    Şekle bakan her muafiyet aynı sınıftadır: "bu satır kimin?" sorusunu satırın
+    GÖRÜNÜŞÜNDEN cevaplar. Sahiplik artık KÖKENden okunuyor (sabit `id`) ve
+    üreticinin yazdığı satır 035'in DEĞİLDİR — o yüzden silinmez, ve
+    silinmediği için kolon düşerken anlamı kaybolurdu. Kapı bu yüzden REDDEDER.
+
+    BEDELİ DÜRÜSTÇE: 1 Ocak'ta yıllık iş koştuktan sonra 035'i geri almak bir
+    OPERATÖR ADIMI ister — `end_date`leri elle boşaltmak. Bu bilinçli bir
+    takastır: sessiz ve geri alınamaz bir anlam kaybı yerine, görünür ve elle
+    çözülebilir bir duraklama. Zaten 035'i geri almak dönem yeteneğini tümden
+    kaldırır; dönem verisiyle ne yapılacağı operatörün kararıdır.
 
     Sonraki yılın satırı ÜRETİCİYE ürettirilir (sahte saat), elle yazılmaz —
     yoksa üreticinin yazdığı satırı değil onun taklidini ölçerdik.
-
-    Muafiyetin BEDELİ dürüstçe ölçülür: üreticinin satırı SİLİNMEZ (035 onun
-    sahibi değil), ama kolon düştüğü için dönem bilgisi gider. Bu geri
-    alınabilir bir kayıptır — üretici bir sonraki turunda dönemi yeniden yazar
-    ve geri alma zaten workflow'un önceki sürümüne dönmeyi de kapsar.
     """
     from datetime import datetime
 
@@ -548,8 +878,25 @@ def test_rollback_runs_after_the_annual_job_wrote_a_later_year_period(scratch_db
 
     result = _apply_down(url)
 
-    assert result.returncode == 0, (
-        "geri alma KENDİ üreticisinin yazdığı satıra takıldı:\n" + result.stderr
+    assert result.returncode != 0, (
+        "üreticinin dönem satırı SESSİZCE tek güne dönüştü — stdout:\n"
+        + result.stdout
+    )
+    assert PERIOD_FLATTENING_MARKER in result.stderr, result.stderr
+    assert f"{next_year}-08-15" in result.stderr, (
+        f"ret mesajı zarar görecek satırı ADLANDIRMIYOR:\n{result.stderr}"
+    )
+
+    # Operatör yolu AÇIK ve ölçülür: dönem elle boşaltılınca geri alma geçer.
+    assert _has_end_date_column(url), "reddeden koşum kolonu yine de düşürdü"
+    _run_sql(
+        url,
+        "UPDATE social.public_holidays SET end_date = NULL "
+        f"WHERE year = {next_year} AND date = '{next_year}-08-15'",
+    )
+    second = _apply_down(url)
+    assert second.returncode == 0, (
+        "operatör dönemleri boşalttıktan sonra da geri alma DURDU:\n" + second.stderr
     )
     assert not _has_end_date_column(url)
     assert (
@@ -699,6 +1046,58 @@ def test_bare_psql_apply_is_complete(scratch_db_migrated, error_stop: bool, labe
     assert {row[2] for row in SEED_ROWS} <= _names(url), (
         f"{label}: seed satırları YAZILMADI — şema ilerledi, veri ilerlemedi"
     )
+
+
+def _end_date_constraint_count(url: str) -> int:
+    return int(
+        _scalar(
+            url,
+            "SELECT count(*) FROM pg_constraint WHERE "
+            "conrelid = 'social.public_holidays'::regclass AND "
+            "conname = 'public_holidays_end_date_check'",
+        )
+    )
+
+
+def test_no_permanent_ddl_lands_before_the_droppable_gate(scratch_db_migrated):
+    """Düşebilen HER kapı, kalıcı HİÇBİR DDL'den ÖNCE koşar.
+
+    ÖLÇÜLEN KUSUR (fix turu 5, F3): `ALTER TABLE ... ADD COLUMN` ve kısıt bloğu
+    manifest kapısından ÖNCE koşuyordu. Ölçüldü — çıplak `psql` (`ON_ERROR_STOP`
+    YOK) + `m035_seed_up` adını tutan bir indeks squatter'ı ile: **`rc=0`**,
+    kolon ve kısıt COMMIT edilmiş, seed satırı **0**. Yani yarım uygulanmış bir
+    şema "başarılı" raporlanıyordu.
+
+    Sarmalı koşumda bunu transaction gizler; kusur ancak sarmalanmamış yolda
+    görünür ve deponun elle uygulama alışkanlığı tam da o yoldur.
+    """
+    url = scratch_db_migrated
+    _ensure_not_applied(url)
+
+    argv, env = _psql_argv_without_error_stop(url)
+    result = subprocess.run(
+        argv,
+        input=(
+            "CREATE TEMP TABLE m035_seed_up_sahibi (x int);\n"
+            "CREATE INDEX m035_seed_up ON m035_seed_up_sahibi (x);\n"
+            f"\\i {MIGRATION_035}\n"
+        ),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert GUARD_REFUSAL_MARKER in result.stderr, (
+        f"manifest kapısı hiç konuşmadı — prob bozuk:\n{result.stderr}"
+    )
+    assert not _has_end_date_column(url), (
+        "kapı REDDETTİ ama `end_date` kolonu COMMIT edildi — yarım şema "
+        f"'başarılı' raporlandı (rc={result.returncode})"
+    )
+    assert _end_date_constraint_count(url) == 0, (
+        "kapı REDDETTİ ama CHECK kısıtı COMMIT edildi — yarım şema"
+    )
+    assert _seed_row_count(url) == 0, "kapı reddettiği hâlde seed yazıldı"
 
 
 @pytest.mark.parametrize("wrapped", [True, False], ids=["sarmali", "ciplak"])
@@ -858,12 +1257,33 @@ _MANIFEST_NAMES = ("m035_seed", "m035_seed_up", "m035_seed_down")
 # Adı tutan nesne: DDL + o kindin ELE ALINIP alınmadığı.
 #
 # ÖLÇÜLDÜ (PG 18.3, `pg_temp`te gerçekten yaratılabilen kindler): r · p · v · m ·
-# S · c · i yaratılabiliyor; `f` (foreign table) bu kurulumda yaratılamıyor
-# (FDW sunucusu yok). Kapı bu yüzden TAM OLARAK yaratılabilir ve sahiplenilmesi
-# meşru olan altısını ele alır — her `WHEN` dalının bir hücresi vardır, yani
-# hiçbiri ölçülmemiş değildir. `i` (indeks) BİLEREK ele alınmaz: o adı taşıyan
-# bir indeks BİZİM olmayan bir tabloya aittir ve onu düşürmek ad rezervasyonunun
-# ötesine, başkasının nesnesine uzanırdı. Ret oradan gelir.
+# S · c · f · i yaratılabiliyor. `f` (foreign table) DE yaratılabiliyor — ölçüm
+# komutu: `CREATE EXTENSION file_fdw; CREATE SERVER … FOREIGN DATA WRAPPER
+# file_fdw; CREATE FOREIGN TABLE pg_temp.m035_seed_up (…)` → `relkind='f'`,
+# `relnamespace='pg_temp_26'`. Fix turu 4'te iki dosya da "`f` bu kurulumda
+# yaratılamıyor (ölçüldü: FDW sunucusu yok)" diyordu; ölçülen şey "şu an tanımlı
+# FDW SUNUCUSU yok"tu, "yaratılamaz" değil — iddia ölçülenden GENİŞTİ (fix turu
+# 5, F4). Kapı artık `f`yi de ele alır ve burada kendi hücresi vardır.
+#
+# `i` (indeks) BİLEREK ele alınmaz: o adı taşıyan bir indeks BİZİM olmayan bir
+# tabloya aittir ve onu düşürmek ad rezervasyonunun ötesine, başkasının nesnesine
+# uzanırdı. Ret oradan gelir.
+#
+# BAĞIMLI-NESNE EKSENİ HER ELE ALINAN KİNDDE VAR (fix turu 5, F5). Önceki yazımda
+# yalnız `r` hücresinin bağımlısı vardı; hakem beş daldan `CASCADE`i kaldırdı ve
+# suite YEŞİL kaldı — yani beş `CASCADE` hiçbir şeyle bağlı değildi. Ölçüldü
+# (PG 18.3): bağımlısı olan r · p · v · m · S · c · f için CASCADE'siz `DROP`
+# `cannot drop … because other objects depend on it` ile PATLIYOR. Her dalın
+# artık kendi bağımlı-nesne hücresi var.
+_FDW_SETUP = (
+    "CREATE EXTENSION IF NOT EXISTS file_fdw;"
+    "CREATE SERVER IF NOT EXISTS m035_matris_fdw FOREIGN DATA WRAPPER file_fdw;"
+)
+_FOREIGN_TABLE = (
+    _FDW_SETUP + "CREATE FOREIGN TABLE pg_temp.{n} (x int) SERVER m035_matris_fdw "
+    "OPTIONS (filename '/dev/null', format 'csv');"
+)
+
 _SQUATTERS: dict[str, tuple[str | None, bool]] = {
     # ad: (DDL şablonu, ret_bekleniyor_mu)
     "yok": (None, False),
@@ -880,11 +1300,41 @@ _SQUATTERS: dict[str, tuple[str | None, bool]] = {
         "CREATE TEMP VIEW {n}_bagimli AS SELECT * FROM {n};",
         False,
     ),
-    "v_view": ("CREATE TEMP VIEW {n} AS SELECT 1 AS x;", False),
     "p_bolumlu_tablo": ("CREATE TEMP TABLE {n} (x int) PARTITION BY RANGE (x);", False),
+    "p_bagimli_view_ile": (
+        "CREATE TEMP TABLE {n} (x int) PARTITION BY RANGE (x);"
+        "CREATE TEMP VIEW {n}_bagimli AS SELECT * FROM pg_temp.{n};",
+        False,
+    ),
+    "v_view": ("CREATE TEMP VIEW {n} AS SELECT 1 AS x;", False),
+    "v_bagimli_view_ile": (
+        "CREATE TEMP VIEW {n} AS SELECT 1 AS x;"
+        "CREATE TEMP VIEW {n}_bagimli AS SELECT * FROM pg_temp.{n};",
+        False,
+    ),
     "m_matview": ("CREATE MATERIALIZED VIEW pg_temp.{n} AS SELECT 1 AS x;", False),
+    "m_bagimli_view_ile": (
+        "CREATE MATERIALIZED VIEW pg_temp.{n} AS SELECT 1 AS x;"
+        "CREATE TEMP VIEW {n}_bagimli AS SELECT * FROM pg_temp.{n};",
+        False,
+    ),
     "S_sequence": ("CREATE TEMP SEQUENCE {n};", False),
+    "S_bagimli_view_ile": (
+        "CREATE TEMP SEQUENCE {n};"
+        "CREATE TEMP VIEW {n}_bagimli AS SELECT last_value FROM pg_temp.{n};",
+        False,
+    ),
     "c_composite_type": ("CREATE TYPE pg_temp.{n} AS (x int);", False),
+    "c_bagimli_tablo_ile": (
+        "CREATE TYPE pg_temp.{n} AS (x int);"
+        "CREATE TEMP TABLE {n}_bagimli (y pg_temp.{n});",
+        False,
+    ),
+    "f_foreign_table": (_FOREIGN_TABLE, False),
+    "f_bagimli_view_ile": (
+        _FOREIGN_TABLE + "CREATE TEMP VIEW {n}_bagimli AS SELECT * FROM pg_temp.{n};",
+        False,
+    ),
     "i_index": (
         # ELE ALINMAYAN kind → kapının KENDİ mesajıyla reddetmesi beklenir.
         "CREATE TEMP TABLE {n}_sahibi (x int); CREATE INDEX {n} ON {n}_sahibi (x);",
@@ -996,7 +1446,12 @@ def _seed_row_count(url: str) -> int:
 
 
 def test_manifest_lifetime_matrix(scratch_db_migrated, capsys):
-    """Çağrı biçimi × oturum dizisi × ad çakışması — 96 hücre, TÜRETİLMİŞ beklenti.
+    """Çağrı biçimi × oturum dizisi — 24 hücre (4 × 6), TÜRETİLMİŞ beklenti.
+
+    HÜCRE SAYISI ÖLÇÜLDÜ, ÇARPILMADI (fix turu 5, F4). Önceki yazım "96 hücre"
+    diyordu ve bunu üç yerde tekrarlıyordu; gerçek çarpım aşağıdaki `continue`
+    filtresinden sonra 4 çağrı biçimi × 6 dizi × 1 squatter = 24'tür. Ad
+    çakışması ekseni bu gridde DEĞİL, `test_manifest_squatter_matrix`tedir.
 
     Kapanış iddiası: manifestin ÖMRÜ artık yük taşımıyor. Hangi biçimde
     çağrılırsa çağrılsın, aynı oturumda hangi sırayla koşulursa koşulsun ve adı
@@ -1150,13 +1605,13 @@ def test_manifest_squatter_matrix(scratch_db_migrated, capsys):
                 if file_label == "up":
                     if not squat_refuses:
                         exp_column, exp_seed, exp_sign = True, 3, None
-                    elif wrapped:
-                        # Sarmalayıcı her şeyi geri alır → dokunulmamış.
-                        exp_column, exp_seed, exp_sign = False, 0, GUARD_REFUSAL_MARKER
                     else:
-                        # Sarmalanmamış: kolon kapıdan ÖNCE eklenmiştir ve
-                        # commit'lidir; seed yazılamaz. DAR EDİLMİŞ iddia.
-                        exp_column, exp_seed, exp_sign = True, 0, GUARD_REFUSAL_MARKER
+                        # RET = HİÇBİR KALICI İZ (fix turu 5, F3). Kapı artık
+                        # `ALTER TABLE`den ÖNCE koşuyor, yani sarmalayıcı OLMASA
+                        # da geride kolon/kısıt kalmaz. Önceki yazım burada
+                        # sarmalanmamış yol için `kolon=var, seed=0` BEKLİYORDU —
+                        # yani sevk edilen dosya kendi testiyle çelişiyordu.
+                        exp_column, exp_seed, exp_sign = False, 0, GUARD_REFUSAL_MARKER
                 else:
                     if wrapped:
                         # Sarmalayıcı-transaction kapısı HER ZAMAN önce konuşur.
@@ -1272,21 +1727,40 @@ def test_manifest_is_read_from_pg_temp_not_search_path(scratch_db_migrated):
     geçici tabloya hiç dokunmuyor. Sonuç: yabancı satırlar `social.public_holidays`e
     giriyor. Yabancı bir `search_path` gerektirdiği için hakem Minor dedi; yine de
     ÜRETİM tablosuna çöp yazıyor.
+
+    ÜÇ KULLANIM YERİNİN ÜÇÜ DE ÖLÇÜLÜR (fix turu 5, F5). Önceki yazım yalnız
+    "yabancı satır yazıldı mı" diye bakıyordu; hakem `$verify_035$` bloğundaki
+    okumaları niteliksiz bırakınca suite YEŞİL kaldı, çünkü çıplak `psql`
+    (ON_ERROR_STOP yok) hata bassa bile `rc=0` döner. Kapan üç ayaklıdır:
+
+      * TUZAK BEŞ SATIRLIDIR, üç değil. PAYDA kapısı niteliksiz okursa `5 <> 3`
+        görür ve DURur.
+      * ANAHTAR kontrolü niteliksiz okursa tuzağın anahtarlarını arar,
+        bulamaz ve DURur.
+      * SEED yazımı niteliksiz okursa tuzağın satırlarını ÜRETİM tablosuna yazar.
+
+    Üçünün de imzası aynı yerde toplanır: `stderr`de `ERROR` OLMAMALI ve
+    `rc = 0` OLMALI. Bu iddia olmadan test, ölçtüğünü sandığı şeyi ölçmüyordu.
     """
     url = scratch_db_migrated
     _ensure_not_applied(url)
 
     _run_sql(
         url,
-        "CREATE TABLE public.m035_seed_up (year INTEGER, date DATE, name_tr TEXT, "
-        "name_en TEXT, category TEXT, end_date DATE)",
+        "CREATE TABLE public.m035_seed_up (id UUID, year INTEGER, date DATE, "
+        "name_tr TEXT, name_en TEXT, category TEXT, end_date DATE)",
     )
     _run_sql(
         url,
         "INSERT INTO public.m035_seed_up VALUES "
-        "(2026, '2026-03-03', 'Yabanci Bir', 'Foreign One', 'commercial', NULL), "
-        "(2026, '2026-03-04', 'Yabanci Iki', 'Foreign Two', 'commercial', NULL), "
-        "(2026, '2026-03-05', 'Yabanci Uc', 'Foreign Three', 'commercial', NULL)",
+        "(gen_random_uuid(), 2026, '2026-03-03', 'Yabanci Bir', 'Foreign One', 'commercial', NULL), "
+        "(gen_random_uuid(), 2026, '2026-03-04', 'Yabanci Iki', 'Foreign Two', 'commercial', NULL), "
+        "(gen_random_uuid(), 2026, '2026-03-05', 'Yabanci Uc', 'Foreign Three', 'commercial', NULL), "
+        "(gen_random_uuid(), 2026, '2026-03-06', 'Yabanci Dort', 'Foreign Four', 'commercial', NULL), "
+        "(gen_random_uuid(), 2026, '2026-03-07', 'Yabanci Bes', 'Foreign Five', 'commercial', NULL)",
+    )
+    assert _scalar(url, "SELECT count(*) FROM public.m035_seed_up") == "5", (
+        "tuzak tablo üç satırlı olmamalı — payda kapısı ancak farklı bir sayıyla ölçülür"
     )
 
     argv, env = _psql_argv_without_error_stop(url)
@@ -1305,6 +1779,11 @@ def test_manifest_is_read_from_pg_temp_not_search_path(scratch_db_migrated):
         f"düşman `search_path` altında {intruders} yabancı satır ÜRETİM tablosuna "
         f"yazıldı — manifest `pg_temp`ten değil `public`ten okundu.\n{result.stderr}"
     )
+    assert "ERROR" not in result.stderr, (
+        "düşman `search_path` altında migration HATA bastı — bir okuma yeri hâlâ "
+        f"niteliksiz:\n{result.stderr}"
+    )
+    assert result.returncode == 0, f"rc={result.returncode}\n{result.stderr}"
     assert {row[2] for row in SEED_ROWS} <= _names(url), (
         f"operatör kararı yazılmadı:\n{result.stderr}"
     )
