@@ -211,30 +211,60 @@
   ritüeli ister ve 7 komutu birden etkiler (aynı uyarı `codex-scan-substrate-preflight-guard`
   maddesinde de var).
 
-- **n8n-workflow-sir-hijyeni** (proposed, güvenlik; EVSİZ — Eray kararı bekliyor, uydurma ev
-  VERİLMEDİ) — Task 5 yürütülürken üstüne denk gelindi; **Task 5'in ürünü DEĞİL, ikisi de
-  önceden vardı.** İki ayrı kalem, aynı sınıf:
-  **(a) Çıplak Telegram bot token'ı.** `shared/n8n-workflows/turkey-calendar-update.json`
-  bildirim URL'inin içinde bot token'ı ve chat_id'yi düz metin taşıyor. Kontrolör sınıfı taradı
-  (uygulayıcının raporuna güvenmeden): **aynı token İKİ izlenen dosyada** —
-  `turkey-calendar-update.json` ve `crm-automations.json`. Yönetici workflow'u ise doğru deseni
-  kullanıyor (`telegramApi` credential referansı), yani doğrusu depoda zaten var.
-  **Task 5'in yazdığı sözleşme testi bunu YAKALAYAMAZ** — çıplak token bir credential referansı
-  değil, dolayısıyla `test_calendar_workflow_credentials_are_bound` geçerken sır git'te kalıyor.
-  Token'ı döndürmek **operatör işlemidir** (Telegram tarafında), Claude yapamaz.
-  **(b) Kaçışsız tarih enterpolasyonu.** Aynı dosyanın `SQL Oluştur` düğümünde `${h.year}` ve
-  `'${h.date}'::date` INSERT metnine **`escape()` uygulanmadan** gömülüyor; ad ve kategori
-  alanlarına uygulanıyor. `h.date` üçüncü taraf HTTP yanıtından (`date.nager.at`) geliyor.
-  Bozuk ya da düşmanca bir besleme değeri tırnaktan çıkabilir. Task 5'in eklediği `end_date`
-  alanı kaçışlı; bu kalem `main`'de duruyor.
-  **Dürüst etiket: çözülmedi + park edildi, EVİ YOK.** Eray'a iki kez soruldu (2026-09-02),
-  cevap gelmedi; reflekssel ev vermek kova döngüsünü beslerdi.
-  **Karara bağlanacak iki soru:** token döndürülsün mü · iki workflow credential desenine
-  çevrilsin mi (ve (b) ayrı bir düzeltme turu mu, yoksa aynı turda mı).
-  **Yeniden açılma koşulu / tetik:** (i) Eray karar verdiğinde, VEYA (ii) n8n workflow'larına
-  dokunan bir sonraki iş — Plan 2'de bu **Task 16 Step 7/7b**'dir (hata bildirim workflow'u
-  yazılıyor ve credential'a bağlanıyor), yani o görev bu iki kalemin doğal komşusudur.
-  **Dikkat:** (ii) bir ev DEĞİL, bir tetiktir — Task 16 bugün bu kalemleri kapsamıyor.
+- **n8n-workflow-sir-hijyeni** (KAPANDI 2026-09-06 — iki ayak da çözüldü; ÜÇÜNCÜ ayak
+  ayrıldı, aşağıya bakınız) — Task 5 yürütülürken üstüne denk gelindi; Task 5'in ürünü DEĞİLDİ.
+  **(a) Çıplak Telegram bot token'ı — ÇÖZÜLDÜ.** Token operatör tarafından döndürüldü (BotFather),
+  eskisi ölçüldü: `401 Unauthorized`. Sekiz yer (`crm-automations.json` 7 düğüm ·
+  `turkey-calendar-update.json` 1 düğüm) `telegramApi` credential'ına bağlandı — yönetici
+  workflow'unun zaten kullandığı desen. Commit `dadb343`.
+  **(b) Kaçışsız tarih enterpolasyonu — ÇÖZÜLDÜ.** `${h.year}` ve `${h.date}` artık
+  `Number(...)` / `escape(...)` ile giriyor; aynı commit.
+  **Sınıf kapısı kondu:** `test_no_workflow_file_carries_a_bare_secret` (dizin geneli üretilmiş
+  matris) + `test_calendar_sql_escapes_every_interpolated_feed_value` (her enterpolasyon).
+  İkisi de mutasyonla sınandı. Test tabanı 963 → 965.
+  **KALAN — canlıya import EDİLMEDİ:** düzeltilmiş iki dosya n8n'e yeniden yüklenmedi, yani canlı
+  workflow'lar hâlâ ölü token'ı taşıyor ve CRM + takvim bildirimleri **şu an sessiz**. Operatör
+  işlemidir. Evi: Plan 2 **Task 18** dağıtım runbook'u (zaten iki değiştirilmiş workflow'un
+  import + aktive adımını taşıyor) — ya da Eray daha önce elle yapar.
+  **Kapsam sınırı, dürüstçe:** yeni tarama kapısı YALNIZ `shared/n8n-workflows/` klasörüne bakar.
+  `docs/archive/CLAUDE_crm_pre_cleanup.md` şu anki ağaçta aynı (artık ölü) token'ı taşıyor ve
+  kapı onu görmez. Zararsız ama duruyor.
+
+- **telegram-approval-token-in-query-string** (proposed, güvenlik; TETİKLİ — bugün aktif borç
+  DEĞİL) — `telegram-content-approval.json` onay/ret düğmelerinin adresini kurarken müşterinin
+  kendi bot şifresini **URL sorgu parametresine** gömüyor
+  (`.../webhook/tg-approve?post_id=...&bot_token=<şifre>&chat_id=...`); `telegram-onayla.json` ve
+  `telegram-reddet.json` onu `query.bot_token` olarak okuyor (ölçüldü 2026-09-06).
+  **Sınıf farkı:** bu, yukarıdaki (a) maddesiyle aynı şey DEĞİL — şifre depoda değil
+  veritabanında (doğru yer), ama mesajın içindeki bağlantıda dolaşıyor. Mesajı gören/ileten
+  okuyabilir; ara sunucu ve n8n çalıştırma kayıtlarına düşer.
+  **Alternatif biliniyor:** bağlantı yalnız `post_id` taşır, workflow şifreyi veritabanından
+  kendisi okur.
+  **Dürüst etiket: çözülmedi + park edildi.** Bugün acil değil çünkü bu akış gerçek müşteride
+  koşmuyor — ama "koşmuyor" ölçülmüş bir sayı değil, bugünkü kullanım biçiminin sonucu.
+  **Yeniden açılma koşulu / tetik:** onay akışına dokunan bir sonraki iş VEYA canlıya gerçek
+  müşteri alınmadan önce.
+
+- **repo-public-exposed-live-credentials** (proposed, GÜVENLİK — EN YÜKSEK ÖNCELİK; Eray sırayı
+  bilerek seçti: önce Plan 2 bitecek) — Telegram token'ı ararken geçmiş tarandı ve asıl bulgu
+  çıktı: **`apps/social/backend/.env` deponun İLK commit'inde var** (`37da813`, 2026-04-08); aynı
+  gün `7829f7f` ile kaldırılmış ama git geçmişinde duruyor. **Depo 2026-04-08'den beri public**
+  (ölçüldü: kimlik doğrulamasız GitHub API 200).
+  **Ölçüldü (2026-09-06, değerler ekrana basılmadan özet karşılaştırmasıyla) — bu anahtarlar
+  geçmiştekiyle BUGÜN AYNI, yani canlı:** `SUPABASE_SERVICE_KEY` (tüm satır güvenliğini atlar) ·
+  `R2_SECRET_ACCESS_KEY` + `R2_ACCESS_KEY_ID` (tüm müşteri medyası okunur/silinir) · `FAL_KEY`
+  (para harcanabilir) · `UPLOAD_POST_API_KEY` (müşteri sosyal hesaplarına paylaşım) ·
+  `REDIS_URL` (şifre içeriyor). `DATABASE_URL` değişmiş.
+  **Kullanılıp kullanılmadığı ÖLÇÜLEMEDİ** — fork 0 · yıldız 0 · izleyen 0 (ölçüldü), ama public
+  GitHub'ı tarayan otomatik sır avcıları var. "Kullanılmadı" iddia EDİLMİYOR.
+  **Depoyu private yapmak yetmez** — 5 aylık ifşayı geri almaz; tek gerçek çözüm anahtarları
+  yenilemek. Private yapmak ileriye dönük korumadır ve Eray bunu yapacak.
+  **Yanlış alarm elendi:** `apps/crm/.next/.../601.js` içindeki `sk-...` eşleşmeleri CSS değişken
+  adları (`sk-image-linear-from-pos`), sır değil.
+  **Ev VERİLDİ (tarihli): Plan 2 yürütmesi bittiği AN, ilk iş.** Sıra: Supabase servis anahtarı →
+  R2 → fal.ai (+ fatura geçmişi taraması) → Upload-Post → Redis. Her yenileme `.env` ve
+  Coolify'daki karşılığının güncellenmesini de ister.
+  **Dürüst etiket: çözülmedi + ev verildi + tarihi Plan 2'nin bitişine bağlı. "Ele alındı" DEĞİL.**
 
 - **migration-atomicity-outside-035** (proposed, dağıtım dayanıklılığı; **EVSİZ — uydurma ev
   VERİLMEDİ**) — Task 5 kapanışında ölçüldü: `035_holiday_periods.sql` artık desteklenen HER
