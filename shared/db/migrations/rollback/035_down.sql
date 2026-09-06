@@ -39,8 +39,15 @@
 -- SAHİPLİK SINIRI (planın geri-alma hükmü) — KÖKENDEN, ŞEKİLDEN DEĞİL:
 --
 --   Bu script YALNIZ 035'in KENDİ yazdığı üç satırı siler. "Kendi yazdığı" =
---   satırın `id`si 035'in bastığı SABİT köken izini taşıyor VE beş alan
---   (year, date, name_tr, name_en, category) seed değerine birebir eşit.
+--   satırın MANİFESTTEKİ HER ALANI seed değerine birebir eşit — köken izi
+--   (`id`) dahil, dönem alanı (`end_date`) dahil.
+--
+--   ALAN KÜMESİ ELLE SAYILMAZ, MANİFESTTEN TÜRETİLİR (fix turu 6, F1). Önceki
+--   yazım altı alanı ADIYLA sayıyordu ve 035'in KENDİ yazdığı `end_date`i
+--   ATLIYORDU: ölçüldü ki besleme yalnızca dönemi düzeltince geri alma
+--   REDDETMİYOR, satırı SESSİZCE SİLİYORDU (aynı satırın `name_tr`si değişince
+--   `rc=3` ile reddederken). Sayılan bir liste, bir sonraki alanda yine eksik
+--   kalırdı; bugün yüklem `pg_attribute`den doğuyor.
 --
 --   KÖKEN İZİ NEDEN GEREKTİ (fix turu 5, F1). Önceki yazım sahipliği YALNIZ
 --   beş-alan eşitliğinden türetiyordu, yani "içeriği seed'e benzeyen" her satır
@@ -51,10 +58,14 @@
 --   yarattıysa köken izi basılır, atladıysa BASILMAZ; belirsizlik kalmaz.
 --
 --   İÇERİK EŞİTLİĞİ DE KORUNUR (daraltıcıdır, genişletici değil): seed satırı
---   sonradan yıllık takvim işi tarafından düzeltilmişse (ad/kategori) artık
---   beş-alan eşitliği tutmaz ve satır BURADA KALIR. Bu bilinçlidir — düzeltilmiş
---   satır artık 035'in yazdığı satır değil, takvim beslemesinin bakımını
---   üstlendiği bir satırdır.
+--   sonradan yıllık takvim işi tarafından düzeltilmişse (ad · kategori · DÖNEM)
+--   artık alan eşitliği tutmaz ve satır BURADA KALIR. Bu bilinçlidir —
+--   düzeltilmiş satır artık 035'in yazdığı satır değil, takvim beslemesinin
+--   bakımını üstlendiği bir satırdır. Planın hükmü de budur: "takvim beslemesi
+--   kanonik kaynaktır, düzeltme hakkı onundur; değişen tek şey dönem alanının
+--   korunmasıdır". Düzeltilmiş bir DÖNEM satırı kaldığında aşağıdaki §3 kapısı
+--   devreye girer ve geri alma FAIL-CLOSED reddeder — sessiz düzleşme yerine
+--   görünür bir duraklama.
 --
 -- DÖNEM SATIRI SESSİZCE DÜZLEŞEMEZ — ŞEKİL SEZGİSELİ KALDIRILDI:
 --
@@ -248,13 +259,82 @@ END
 $preflight$;
 
 -- ---------------------------------------------------------------------------
--- 2. YALNIZ 035'in yazdığı üç satır — köken izi + beş alan BİREBİR eşleşmeli
+-- 2. YALNIZ 035'in yazdığı satırlar — MANİFESTİN HER ALANI, NULL-güvenli
 -- ---------------------------------------------------------------------------
+--
+-- ÖLÇÜLEN KUSUR (fix turu 6, F1): yüklem altı alanı ELLE sayıyordu ve 035'in
+-- KENDİ yazdığı `end_date`i denetlemiyordu. İki kollu ölçüm:
+--   * besleme `name_tr`yi düzeltti  → `down_rc=3`, REDDETTİ, satır duruyor.
+--   * besleme YALNIZ `end_date`i düzeltti → `down_rc=0`, REDDETMEDİ, satır
+--     SESSİZCE SİLİNDİ.
+-- Kural "yazdığımızdan beri değişmemişse sil" diyordu ama kendi yazdığı bir
+-- alanı dışarıda bırakıyordu — kuralın kendi içinde tutarsızlığı.
+--
+-- KAPANIŞ SAYARAK DEĞİL YAPIYLA: yüklem manifestin KOLON KÜMESİNDEN türetilir
+-- (`pg_attribute`, dinamik SQL). Manifeste yarın bir alan eklenirse yüklem onu
+-- KENDİLİĞİNDEN kapsar; "bir alan daha atlandı" hücresi doğamaz. İleri dosya da
+-- YAZDIĞI alan kümesini aynı kuralla türetir; iki kümenin eşitliği katalogdan
+-- ölçülür (`test_ownership_predicate_covers_every_manifest_column` — hücreler
+-- katalogdan ÜRETİLİR, elle yazılmaz).
+--
+-- `IS NOT DISTINCT FROM` ZORUNLUDUR, `=` DEĞİL: `end_date` hem manifestte hem
+-- tabloda NULL olabilir ve `NULL = NULL` → NULL'dur. Satır karşılaştırmasıyla
+-- (`IN`) yazılsaydı `end_date`i boş olan İKİ seed satırı hiç eşleşmez ve geri
+-- alma KENDİ yazdığını silemezdi. Ölçüm: matrisin `degismedi` kontrol hücresi
+-- (`=` mutasyonunda KIRMIZI düşer).
+--
+-- MANİFESTTE OLUP TABLODA OLMAYAN bir alan yüklemi PATLATIR (`column h.x does
+-- not exist`) — sessizce daraltmaz. Fail-closed.
+--
+-- KALINTI DOĞRULAMASI BURADA, §5'te DEĞİL: yüklem `end_date`e dokunur ve o
+-- kolon §4'te DÜŞER. Ölçüm silmeden hemen sonra, kolon hâlâ dururken ve ACCESS
+-- EXCLUSIVE kilit elde tutulurken yapılır. DÜRÜST SINIR: aynı transaction'da
+-- aynı yüklemi tekrar okumak tautolojiye yakındır — asıl kanıt yukarıda adı
+-- geçen matristir; bu blok dosyanın fail-closed duruşunun ucuz devamıdır.
 
-DELETE FROM social.public_holidays h
- WHERE (h.id, h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-        SELECT s.id, s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
-       );
+DO $delete_owned$
+DECLARE
+    predicate TEXT;
+    leftovers BIGINT;
+BEGIN
+    SELECT string_agg(
+               format('h.%I IS NOT DISTINCT FROM s.%I', a.attname, a.attname),
+               ' AND ' ORDER BY a.attnum)
+      INTO predicate
+      FROM pg_attribute a
+     WHERE a.attrelid = 'pg_temp.m035_seed_down'::regclass
+       AND a.attnum > 0
+       AND NOT a.attisdropped;
+
+    IF predicate IS NULL THEN
+        RAISE EXCEPTION
+            'migration 035 geri alma REDDEDILDI: seed manifestinin kolon kumesi okunamadi'
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Sahiplik yuklemi manifestin kolon kumesinden turetilir; '
+                         'okunamiyorsa hicbir sey silinmez.';
+    END IF;
+
+    EXECUTE format(
+        'DELETE FROM social.public_holidays h '
+        ' WHERE EXISTS (SELECT 1 FROM pg_temp.m035_seed_down s WHERE %s)',
+        predicate);
+
+    EXECUTE format(
+        'SELECT count(*) FROM social.public_holidays h '
+        ' WHERE EXISTS (SELECT 1 FROM pg_temp.m035_seed_down s WHERE %s)',
+        predicate)
+      INTO leftovers;
+
+    IF leftovers > 0 THEN
+        RAISE EXCEPTION
+            'migration 035 geri alma EKSIK kaldi: % adet 035 seed satiri duruyor',
+            leftovers
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Silme yuklemi eslesti ama satirlar duruyor; elle '
+                         'inceleyip script i yeniden kosturun.';
+    END IF;
+END
+$delete_owned$;
 
 -- ---------------------------------------------------------------------------
 -- 3. KAPANIŞ ÖZELLİĞİ — silmeden SONRA hiçbir dönem satırı kalmamalı
@@ -303,8 +383,15 @@ ALTER TABLE social.public_holidays DROP COLUMN IF EXISTS end_date;
 -- ---------------------------------------------------------------------------
 --
 -- `DROP ... IF EXISTS` bir nesneyi ADIYLA arar; ad tutmuyorsa sessizce geçer.
--- Bu blok katalogtan GERÇEK durumu okur. Seed satırı sorgusu yukarıdaki
--- silmeyle AYNI manifestten okur — ikisi ayrışamaz.
+-- Bu blok katalogtan GERÇEK durumu okur.
+--
+-- SEED SATIRI KOLU BURADA DEĞİL §2'DE (fix turu 6, F1): sahiplik yüklemi artık
+-- `end_date`i de karşılaştırıyor ve o kolon bir üstteki adımda DÜŞTÜ — kalıntı
+-- sorgusu burada `column h.end_date does not exist` ile patlardı. Ölçüm kolonun
+-- hâlâ durduğu ve aynı ACCESS EXCLUSIVE kilidin tutulduğu yere, silmenin hemen
+-- ardına taşındı. Alternatif — yüklemi "manifest ∩ tablo" kesişiminden kurmak —
+-- REDDEDİLDİ: düşen bir kolon yüklemi SESSİZCE daraltırdı, yani tam da bu turun
+-- kapattığı kusuru geri açardı.
 
 DO $verify_down$
 DECLARE
@@ -324,12 +411,6 @@ BEGIN
           FROM pg_constraint
          WHERE conrelid = 'social.public_holidays'::regclass
            AND conname = 'public_holidays_end_date_check'
-        UNION ALL
-        SELECT '035 seed satiri ' || h.name_tr
-          FROM social.public_holidays h
-         WHERE (h.id, h.year, h.date, h.name_tr, h.name_en, h.category) IN (
-                SELECT s.id, s.year, s.date, s.name_tr, s.name_en, s.category FROM pg_temp.m035_seed_down s
-               )
       ) AS remaining;
 
     IF leftovers IS NOT NULL THEN
