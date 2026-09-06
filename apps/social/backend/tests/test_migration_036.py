@@ -1455,20 +1455,98 @@ def test_version_contract_totality_gate_rejects_an_undeclared_type():
 # Bu yüzden test "import düştü mü" diye SORMAZ: fırlatılan TÜRÜ ve MESAJI ölçer.
 
 
-def _load_doctored_package_events(tmp_path, old: str, new: str):
-    """`package_events.py`nin bozulmuş bir KOPYASINI import eder.
+# ─── `gecis` kolunun KENDİ zinciri de kapanır (fix turu 3, R1) ─────────────
+#
+# Dağıtım seviyesi fix turu 1-2'de kapandı: her tür `gecis` ya da `surumsuz`
+# beyan eder, bütünlük import anında zorlanır. Ama `gecis` KOLUNUN İÇİ hâlâ
+# `if activation / elif rollback / elif deactivation` idi ve sonunda `else`
+# YOKTU. Bugün var olan on iki tür için ATEŞLENEMEZ (üçünün üçü de dala sahip)
+# — yani canlı bir tehlike değil, AÇIK BIRAKILMIŞ BİR EKSENDİ.
+#
+# Neden yine de kapatılıyor: I2'nin gereği "yarın eklenecek bir tür doğrulamadan
+# KAÇAMASIN"dı. Bu seviyede kaçabiliyordu. Ölçüldü: dördüncü bir `gecis` türü
+# beyan edilip `from_version=999, to_version=-5` ile çağrıldığında Python kapısı
+# KABUL ediyor, yazım SQL'e ulaşıyor ve yalnız veritabanının kendi kapalı tür
+# CHECK'i durduruyordu — o CHECK ise gerçek bir yeni türle BİRLİKTE
+# genişletileceği için dayanıklı bir ikinci hat DEĞİLDİR.
+
+
+async def test_a_fourth_gecis_type_is_rejected_by_the_python_gate(db, tmp_path):
+    """Dördüncü bir `gecis` türü SQL'e VARMADAN reddedilir.
+
+    Bozuk kopya iki dokunuş taşır — tür `LIFECYCLE_EVENTS`e eklenir VE
+    sözleşmede `gecis` olarak beyan edilir — çünkü yalnız biri yapılsaydı test
+    YANLIŞ SEBEPLE yeşil olurdu: eksik beyan import kapısına, beyansız küme ise
+    `EVENT_TYPES` kapısına takılırdı. İkisi de kapatılınca geriye TEK ölçülen
+    şey kalır: `gecis` kolunun sonundaki `else`.
+
+    HANGİ KAPININ durdurduğu da ölçülür: Python kapısı reddederse sözleşme
+    hatası ÇAĞIRANA ULAŞIR; SQL reddederse `log_package_event` altyapı hatasını
+    yutar ve `None` döner. `pytest.raises` ikisini birbirinden tam olarak ayırır.
+    """
+    from app.core.database import _init_connection
+
+    bozuk = _load_doctored_package_events(
+        tmp_path,
+        (
+            'LIFECYCLE_EVENTS = frozenset({"activation", "rollback", "deactivation"})',
+            'LIFECYCLE_EVENTS = frozenset({"activation", "rollback", "deactivation", '
+            '"gecis_dorduncu"})',
+        ),
+        ('    "deactivation": "gecis",\n', '    "deactivation": "gecis",\n    "gecis_dorduncu": "gecis",\n'),
+    )
+    assert bozuk.EVENT_VERSION_CONTRACT["gecis_dorduncu"] == "gecis"
+
+    await _init_connection(db)
+    sector_id = await _sub_sector(db)
+    package_id = await _package(db, sector_id)
+
+    with pytest.raises(Exception) as excinfo:
+        await bozuk.log_package_event(
+            db,
+            event_type="gecis_dorduncu",
+            sector_id=sector_id,
+            package_id=package_id,
+            actor="yonetici@otomaix",
+            from_version=999,
+            to_version=-5,
+        )
+
+    hata = excinfo.value
+    assert type(hata).__name__ == "PackageEventContractError", (
+        f"beyansız dal SQL'e ULAŞTI — durduran Python kapısı değil: "
+        f"{type(hata).__name__}: {hata}"
+    )
+    assert "gecis_dorduncu" in str(hata), str(hata)
+    assert (
+        await db.fetchval(
+            "SELECT count(*) FROM social.package_events WHERE package_id = $1",
+            package_id,
+        )
+        == 0
+    ), "reddedilen olay satır bıraktı"
+
+
+def _load_doctored_package_events(tmp_path, *replacements: tuple[str, str]):
+    """`package_events.py`nin bozulmuş bir KOPYASINI import eder ve döner.
+
+    Birden çok düzenleme alır: bir türü kümeye eklemek ve onu sözleşmede beyan
+    etmek AYRI iki dokunuştur; ikisini birden yapamayan bir yardımcı, "yeni tür"
+    senaryosunu hiç kuramazdı.
 
     Kopya kendi `PackageEventContractError` sınıfını tanımlar (ayrı modül, ayrı
     sınıf nesnesi), o yüzden tür kimliği `isinstance` ile DEĞİL ADIYLA ölçülür —
     ve ayrıca `ValueError` mirasının korunduğu doğrulanır.
     """
     src = pathlib.Path(package_events_module.__file__).read_text()
-    assert src.count(old) == 1, f"bozma deseni {src.count(old)} kez bulundu"
+    for old, new in replacements:
+        assert src.count(old) == 1, f"bozma deseni {src.count(old)} kez bulundu"
+        src = src.replace(old, new, 1)
     target = tmp_path / "package_events_bozuk.py"
-    target.write_text(src.replace(old, new, 1))
+    target.write_text(src)
     spec = importlib.util.spec_from_file_location("package_events_bozuk", target)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # kapı BURADA patlamalı
+    spec.loader.exec_module(module)  # import kapısı varsa BURADA patlar
     return module
 
 
@@ -1502,7 +1580,7 @@ def test_import_time_totality_gate_raises_the_declared_error(
     gördüğü metin NEYİN eksik/ölü olduğunu ADIYLA söylemek zorunda.
     """
     with pytest.raises(Exception) as excinfo:
-        _load_doctored_package_events(tmp_path, old, new)
+        _load_doctored_package_events(tmp_path, (old, new))
 
     hata = excinfo.value
     assert type(hata).__name__ == "PackageEventContractError", (

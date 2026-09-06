@@ -101,11 +101,26 @@ EVENT_TYPES = BRAND_SCOPED_EVENTS | LIFECYCLE_EVENTS | APPROVAL_EVENTS
 # uydurma bir değeri kabul eder ve denetim izi yalan söyler — modülün başındaki
 # "yarım iz, izin hiç olmamasından daha kötüdür" hükmünün doğrudan karşılığı.
 #
-# DB CHECK'İ EKLENMEDİ, bilinçli: üç `gecis` türünün sözleşmesi İLİŞKİSELDİR
-# (canlı aktif sürümle karşılaştırma) ve bir CHECK'te İFADE EDİLEMEZ. Yalnız
-# yarısı ifade edilebilen bir sözleşmeyi iki katmana bölmek, bu modülün başka
-# yerde açıkça kaçındığı "iki ölçü ıraksayabilir" kusurunu (K-01b) üretirdi.
-# Kalan risk dürüstçe: ham SQL bu kapıyı atlar — diğer üç tür için de öyle.
+# DB CHECK'İ EKLENMEDİ, bilinçli. GEREKÇE DEĞİŞMEDİ; ARİTMETİĞİ fix turu 2'den
+# sonra bayatlamıştı ve burada düzeltildi (fix turu 3, R2).
+#
+# Bugün on iki türün DOKUZU `surumsuz`dur ve onların sözleşmesi ("iki sürüm
+# alanı da NULL") bir CHECK'te İFADE EDİLEBİLİR. Kalan ÜÇÜ (`gecis`)
+# İLİŞKİSELDİR — `from_version`, olayın yazıldığı ANDA canlı olan aktif sürümle
+# TAM EŞLEŞMEK zorundadır — ve bu bir CHECK'te İFADE EDİLEMEZ.
+#
+# İlk yazım "yalnız YARISI ifade edilebilir" diyordu; o oran İKİ tür
+# `surumsuz`ken doğruydu, dokuz türken değil.
+#
+# Karar oranın büyüklüğünden DEĞİL, BÖLÜNMENİN KENDİSİNDEN gelir: ifade
+# edilebilen dokuzu DB'ye, edilemeyen üçü Python'a koymak AYNI sözleşmeyi iki
+# katmana böler ve iki ölçünün ıraksamasına izin verir (K-01b) — sözleşme
+# değişince biri güncellenir, diğeri unutulur. Üstelik bütünlük kapısı
+# eksik/ölü bir PYTHON beyanını yakalar; bayat bir DB CHECK'ini yakalayan
+# HİÇBİR ŞEY olmazdı. Oranın 2/5'ten 9/12'ye çıkması bu riski AZALTMAZ,
+# sözleşmenin daha BÜYÜK bir kısmını ikizlenmiş hâle getirir.
+#
+# Kalan risk dürüstçe: ham SQL bu kapıyı atlar — on iki türün HEPSİ için.
 EVENT_VERSION_CONTRACT: dict[str, str] = {
     # Yaşam döngüsü — sürüm GEÇİŞİ; alanlar türe özgü doğrulanır (F22).
     "activation": "gecis",
@@ -328,6 +343,23 @@ async def _validate_version_shape(
             from_version is not None and from_version == own,
             f"deactivation: from_version geri çekilen aktif sürüm olmalı "
             f"(beklenen {own!r}, verilen {from_version!r})",
+        )
+    else:
+        # DAĞITIM SEVİYESİ fix turu 1-2'de kapandı; bu `else` KOLUN KENDİ
+        # zincirini kapatır (fix turu 3, R1). Bugünkü on iki tür için
+        # ATEŞLENEMEZ — üç `gecis` türünün üçünün de dalı var — ama açık bırakılan
+        # bir eksendi: ölçüldü ki dördüncü bir `gecis` türü beyan edilip
+        # `from_version=999, to_version=-5` ile çağrıldığında Python kapısı KABUL
+        # ediyor, yazım SQL'e ulaşıyor ve yalnız veritabanının kapalı tür CHECK'i
+        # durduruyordu. O CHECK gerçek bir yeni türle BİRLİKTE genişletileceği
+        # için dayanıklı bir ikinci hat DEĞİLDİR — yani tür eklendiği gün kapı
+        # sessizce açılırdı. I2'nin gereği "yarın eklenen tür doğrulamadan
+        # KAÇAMASIN"dı; bu satır onu bu seviyede de bitirir.
+        raise PackageEventContractError(
+            f"{event_type}: `gecis` BEYAN EDİLDİ ama SÜRÜM DALI YOK — geçiş "
+            "türlerinin sürüm alanları TÜRE ÖZGÜ doğrulanır (F22) ve dalı "
+            "olmayan bir tür, denetim izine doğrulanmadan yazılırdı. Türü "
+            "`surumsuz` olarak beyan edin ya da bu zincire kendi dalını ekleyin."
         )
 
 
