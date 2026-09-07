@@ -481,10 +481,14 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
   3 iddia örnekleyip bağlantıyı GERÇEKTEN açıyor — makinenin yapamayacağı daha güçlü kontrol.
   Ama örnekleme, "her alan için kaynak gösterilmiş mi" BÜTÜNLÜK sorusunu cevaplamıyor; kaybedilen
   tam olarak bu, ve spec'in "mekanik iş dil modeline verilmez" hükmüyle gerilim taşıyor.
-  **Ev: `brief-sozlesmesi-kaynak-bolumu-makine-okunur` (CURRENT.md, commit `861eeff`),
-  SON TARİH Task 19 Step 5** — o adım üç araştırmayı sözleşmeler donduktan sonra tek seferde
-  yeniden üretir. Ölçüldü: şu anki sözleşme biçiminde üretilmiş gerçek çıktı bugün YOK, yani
-  değişiklik şimdi bedelsiz; o adımdan SONRA yapılırsa araştırmalar ikinci kez üretilmeli.
+  **EV: kendi görevi var (2026-09-07'de açıldı) —**
+  `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`.
+  **Zamanlanmış yuva: Task 8 bittikten SONRA, Task 9'a girmeden ÖNCE.** Son tarih değil YUVA:
+  Task 9/10 denetçi katmanını kurar ve sözleşme değişikliği o metne de dokunur; ayrıca Task 19
+  Step 5 araştırmaları tek seferde yeniden üretir. Ölçüldü: şu anki sözleşme biçiminde üretilmiş
+  gerçek çıktı bugün YOK, yani değişiklik şimdi bedelsiz.
+  **Bu kalem, o görev kapanınca KAPATILIR** — ve kapanışta Task 7'nin kapsam beyanı da kalkmalı,
+  yoksa bayat beyan denetçiyi yanıltır.
 
 - **[checkpoint-override turn 3] Uydurma içerik özeti kapıyı geçebiliyor (medium, kabul).**
   Biçimi geçerli ama `run`'ın üretmediği bir özet yazan doğrudan-kurucu K-127 tabanını geçiyor
