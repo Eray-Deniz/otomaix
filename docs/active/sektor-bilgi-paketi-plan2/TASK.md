@@ -264,6 +264,52 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
 
 **Test tabanı:** 1452 → 1493 → **1499**, hiç düşmedi (üçü de kontrolörün taze koşumu).
 
+## Task 7 + checkpoint 6 (2026-09-07)
+
+- **Task 7 İNDİ** — `brief-doctor` mekanik girdi kapısı, commit `d7827e4`. Kontrol kümesi
+  spec-input §7.3 tablosunun dokuz satırından **sekizi** (dokuzuncusu — görsel alanlarda metin
+  unsuru — o tablonun kendisi tarafından bugün denetçinin kuralı sayılıyor, gerekçesiyle
+  dışlandı). **12 kontrol, 8 aile, hepsinin seviyesi `not`** — İlke 9 uyum hükmü gereği eleme
+  üreten kontrol kümesi BOŞ ve dört düzeltme turu boyunca öyle kaldı.
+  Sözleşme sabitleri (sekiz alan adı · dört tür etiketi · dört kanal anahtarı · beş bölüm harfi)
+  elle yazılmadı: testte pinli sözleşmeden hash doğrulanarak çıkarılıyor.
+
+- **CHECKPOINT 6 KOŞTU — ÜÇ Codex turu, taban `2b468e8d`.** Aralık checkpoint 5'in kapanış
+  belgelerini de içeriyordu (mutasyon protokolü gereği `last_checkpoint_ref` yazımdan ÖNCEKİ
+  HEAD'e set edilir), yani o iki commit de ilk kez hakem gördü.
+  **Tur 1:** 2 high + 1 medium. **Tur 2:** F1/F2 yeniden açıldı (yeni alt-vakalar) + 2 medium.
+  **Tur 3:** F1/F2 yine yeniden açıldı + F5 kısmi.
+  **Beş bulgunun HEPSİ ve her turdaki yeniden açılma kontrolörün KENDİ probuyla doğrulandı** —
+  hakemin sözüne hiçbir turda dayanılmadı. Bir vakada (F5, tur 3) kontrolörün ilk probu bulguyu
+  ÜRETEMEDİ; prob sorgulandı, zayıf olduğu görüldü, güçlendirilince bulgu birebir çıktı.
+
+- **§8.5'in "2.-reopen" DUR koşulu ateşlendi ve otonom döngü DURDURULDU.** Üç tur aynı iki
+  ekseni getiriyordu; dördüncü bir nokta-düzeltme turu açmak yerine çerçeve teşhisi Eray'a
+  sunuldu. **Eray kararı (2026-09-07): kapanabilirler kapatılsın, kapanamayan kalem dürüstçe
+  ilan edilsin, kök çözüm ayrı iş olarak kaydedilsin.**
+
+- **Dört düzeltme turu indi — altı commit** (`295617b` `3e797bf` · `046fc1b` `ce69294` ·
+  `27e087b` `73451c9`). Kapanan **sınıflar** (varyant değil):
+  · **kaynak kimliği:** hiç yok → birebir ad tekrarı → kanonik ad+içerik denkliği (66 hücrelik
+    üretilmiş takma-ad matrisi) → özetsiz rapor K-127 sayımına GİRMEZ.
+  · **iç içe koleksiyonda tekrar/sıra kaybı:** bölüm+alan → dönem/video havuzu/kaynak eşlemesi;
+    9 düzey × 3 bozulma matrisi, 5 hücre GEREKÇELİ boş.
+  · **kapsam beyanı:** yoktu → çağıran uydurabiliyordu → `CHECKS`'ten türeyen `init=False` alan.
+  · **gerekçe tablosu tanıma:** yoktu → "ilk bitişik tablo" (önüne sahte tablo konunca
+    gizleniyordu) → kanonik başlık + belirsizlik notu.
+
+- **Kontrolörün önerileri bu turda İKİ KEZ daha ölçümde yanlış çıktı** (görevdeki toplam beşe
+  çıktı): (1) "kapsam sınırını bulgu olarak rapora düş" dedim — uygulayıcı ölçtü, o çözüm HER
+  kaynağı `notlu-gecti` yapıp pozitif kontrolü düşürürdü; bulgu-olmayan beyan alanı kurdu.
+  (2) Hakemin "içerik özeti kimliğe bağlansın" önerisini uygulayıcı tek başına yetersiz buldu ve
+  ölçtü — özet yazım takma adlarını çözmüyor; iki ayaklı tek denklik bağıntısı kurdu.
+  **Ders sabit: dispatch'e taşınan öneri aday'dır, cevap değil.**
+
+- **Kontrolörün kendi kapanış taraması:** uygulayıcı "Task 9/12 tüketicileri yeni `dur=True`
+  dalına karşı denenmedi, çağıran taraması YAPMADIM" diye dürüstçe bildirdi. Kontrolör taradı:
+  modül ve kendi testi dışında depoda **hiçbir atıf yok** — davranış değişikliği bugün hiçbir
+  şeyi kıramaz. Varsayımla değil ölçümle kapandı.
+
 # Decisions Log
 
 - **2026-08-27 — K-84 = A:** kalıp kimliği sürümler arası korunur. Değeri eşleştirmek
@@ -423,6 +469,32 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
   Task 6'nın dosyaları); aktif katmana tetikli madde olarak yazıldı, sessizce düşürülmedi.
 
 # Open Problems
+
+- **[checkpoint-override turn 3] Bölüm C'nin üçlü yapısı makineyle doğrulanmıyor (high, RİSK
+  KABULÜ — Eray onayı 2026-09-07).** Mekanik girdi kapısı, kaynak eşlemesinin gerçekten
+  `alan/dönem → iddia → kaynak` üçlüsü olduğunu serbest düzyazıdan çıkaramıyor. Ölçüldü:
+  `- Düz yazı, devamı https://example.com/kaynak` → `gecti`, 0 not. Üç hakem turunda yakınsamadı
+  (semantik-negatif sınıfı: kapı bypass ile yanlış-pozitif arasında salınır).
+  **ONARILMADI — raporda `url-bicimi` kapsam beyanı olarak DÜRÜSTÇE İLAN EDİLDİ**, denetçi
+  görüyor. Ayıraç vekili bilinçle SERTLEŞTİRİLMEDİ.
+  **Kısmen devredildi, tam çözülmedi (ölçüldü):** denetçi sözleşmesinin ADIM 1'i kaynak başına
+  3 iddia örnekleyip bağlantıyı GERÇEKTEN açıyor — makinenin yapamayacağı daha güçlü kontrol.
+  Ama örnekleme, "her alan için kaynak gösterilmiş mi" BÜTÜNLÜK sorusunu cevaplamıyor; kaybedilen
+  tam olarak bu, ve spec'in "mekanik iş dil modeline verilmez" hükmüyle gerilim taşıyor.
+  **Ev: `brief-sozlesmesi-kaynak-bolumu-makine-okunur` (CURRENT.md, commit `861eeff`),
+  SON TARİH Task 19 Step 5** — o adım üç araştırmayı sözleşmeler donduktan sonra tek seferde
+  yeniden üretir. Ölçüldü: şu anki sözleşme biçiminde üretilmiş gerçek çıktı bugün YOK, yani
+  değişiklik şimdi bedelsiz; o adımdan SONRA yapılırsa araştırmalar ikinci kez üretilmeli.
+
+- **[checkpoint-override turn 3] Uydurma içerik özeti kapıyı geçebiliyor (medium, kabul).**
+  Biçimi geçerli ama `run`'ın üretmediği bir özet yazan doğrudan-kurucu K-127 tabanını geçiyor
+  (ölçüldü: `dur=False gecerli=2`). Metne sahip olmayan çağıran için kapatılamaz; beyan edildi.
+  **Bugün depoda böyle bir çağıran YOK** (kontrolör taradı). Yeniden açılma koşulu: Task 9 ya da
+  Task 12 `run` yolunu atlayan bir rapor kurucusu eklerse.
+
+- **[checkpoint-override turn 3] Kanonik gerekçe-tablosu başlığı taklit edilebilir (low, kabul).**
+  Sahte tablo kanonik başlığı taşırsa aday sayısı 2 olur: belirsizlik notu düşer ve iki tablo da
+  denetlenir — **gizlenme YOK** — ama hangisinin gerçek olduğu doğrulanmadı.
 
 - **Task 1'in üç Minor bulgusu Task 2'de KAPANDI** (`1186d44`): depo-yok kapısı artık kendi
   sebebine assert ediyor · `_head_commit` çözümlemeyi verilen köke sabitliyor · hiçbir sözleşme
