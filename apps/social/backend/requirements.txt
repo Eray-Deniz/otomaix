@@ -23,6 +23,10 @@ python-jose[cryptography]==3.3.0
 PyJWT[crypto]==2.8.0
 json-repair==0.30.3
 elevenlabs>=1.0.0,<2.0.0
+# CommonMark referans-uyumlu blok ayristirici — brief-doctor cit maskesi
+# elle yazilmis durum makinesinin YERINE gecer (dis gramer, kendi kurallarini
+# yeniden yazmak yerine grameri KOSTURUYORUZ). Saf Python, tek bagimliligi mdurl.
+markdown-it-py==4.2.0
 
 # --- Test (dev) ---
 pytest==9.1.1

@@ -3448,7 +3448,6 @@ CIT_BOYUTLARI = {
     "baglam": (
         "girintisiz",
         "iki-bosluk",
-        "dort-bosluk",
         "madde-isaretli",
         "ic-ice-madde",
         "yildiz-madde",
@@ -3479,7 +3478,6 @@ _CIT_DIL_ETIKETLERI = {"dilsiz": "", "dilli": "python"}
 _BAGLAM_KISA_ADLARI = (
     "girintisiz",
     "iki-bosluk",
-    "dort-bosluk",
     "madde-isaretli",
     "ic-ice-madde",
     "yildiz-madde",
@@ -3599,12 +3597,40 @@ _TUR9_KIRMIZI = 402
 # sınıfıdır: KÖK rejimindeki bağlam × `kapanmamis` × video havuzu temsilcisi;
 # sebebi `test_kapanmamis_kok_citinin_bedeli_OLCULUR`'da ölçülür.
 #
-# **Tur 12 — küme bağlam ADINDAN değil REJİMDEN türer.** Önceki yazımda tek bir
-# ad (`girintisiz`) elle sabitlenmişti; kök kümesi büyüyünce (0-3 boşluklu her
-# açıcı köktür) o liste sessizce EKSİK kalırdı. Ad listesi tutmak yerine ölçüt
-# `bd._kapsayici_sutunu`'dur — kural TEK evde yaşar.
+def _gramer_maskesi(satirlar) -> list[bool]:
+    """ORACLE — maskeyi AYRIŞTIRICIDAN türetir, modülün fonksiyonundan DEĞİL.
+
+    Bağımsızlık ŞARTTIR: beklenti `bd._cit_maskesi`'yi okusaydı, o fonksiyonu
+    değiştiren her MUTASYON beklentiyi de birlikte kaydırırdı ve mutasyon
+    kolları sessizce yeşile dönerdi (ölçüldü, tur 13). Oracle doğrudan
+    `bd._MD`'yi okur; mutasyon onu DEĞİŞTİRMEZ.
+    """
+    maske = [False] * len(satirlar)
+    for jeton in bd._MD.parse("\n".join(satirlar)):
+        if jeton.map is None:
+            continue
+        if jeton.type == "code_block" or (
+            jeton.type == "fence" and not (jeton.info or "").strip()
+        ):
+            bas, son = jeton.map
+            for k in range(max(bas, 0), min(son, len(maske))):
+                maske[k] = True
+    return maske
+
+
+# **Tur 13 — rejim GRAMERE SORULUR.** Tur 12'de ölçüt modülün kendi yardımcısıydı
+# (`_kapsayici_sutunu`); tur 13'te o yardımcı SİLİNDİ çünkü kap üyeliğini artık
+# CommonMark ayrıştırıcısı belirliyor. Test bir ad listesi TUTMAZ ve bir kural
+# KOPYALAMAZ: kapanmamış bir çidin belge SONUNA kadar düşüp düşmediğini
+# ayrıştırıcıya sorar. "Yutar" = kök rejim; "kap-biter" = bir kap içi.
+def _cit_rejimi(on: str) -> str:
+    """Bu önekle açılan KAPANMAMIŞ çit belge sonuna kadar yutar mı?"""
+    maske = _gramer_maskesi([f"{on}```", "govde satiri", "kok duzeyi satir", "son satir"])
+    return "yutar" if maske[-1] else "kap-biter"
+
+
 _KOK_BAGLAMLARI = tuple(
-    ad for ad in CIT_BOYUTLARI["baglam"] if bd._kapsayici_sutunu(CIT_BAGLAMLARI[ad][0]) == 0
+    ad for ad in CIT_BOYUTLARI["baglam"] if _cit_rejimi(CIT_BAGLAMLARI[ad][0]) == "yutar"
 )
 HAM_KAYIPLI_HUCRELER = frozenset(
     f"video-havuzu/hareket/dilsiz-{govde}-kapanmamis-{baglam}-{isaret}"
@@ -3624,9 +3650,25 @@ def _bos_kap_notlari(bosalt) -> frozenset:
 
 
 def _cit_kaybi(bosalt, ekle, satirlar) -> frozenset:
-    """Eklemenin KALDIRDIĞI bulgu KÜMESİ — sayı DEĞİL, küme farkı."""
+    """Eklemenin KALDIRDIĞI bulgu KÜMESİ — sayı DEĞİL, küme farkı.
+
+    NÖTRDÜR: kaybın MEŞRU olup olmadığına karar VERMEZ. Bazı kollar kaybı
+    BEKLER (dilli çit şeffaftır, gerçek madde kabı doldurur); "kayıp olamaz"
+    iddiasını kuran kollar gramer kapısını KENDİ uygular (`_gizli_kayip`).
+    """
     bos = bosalt(TEMIZ)
     return frozenset(_bos_kap_notlari(bosalt) - _not_kumesi(ekle(bos, satirlar)))
+
+
+def _gizli_kayip(bosalt, ekle, satirlar) -> frozenset:
+    """"Kayıp OLAMAZ" iddiasının kayıp kümesi — gramer kapısıyla.
+
+    Enjekte edilen blok gramere göre GİZLİ değilse iddia kurulmaz: görünür
+    içerik bir kabı gerçekten doldurur ve notu meşru düşürür.
+    """
+    if not _gizli_mi(bosalt, ekle, satirlar):
+        return frozenset()
+    return _cit_kaybi(bosalt, ekle, satirlar)
 
 
 # Bir bulgunun KONUSU: ölçülen SAYI çıkarılmış mesaj. İki not aynı konudaysa
@@ -3667,9 +3709,42 @@ def _ham_kaybi(bosalt, ekle, govde_satirlari) -> frozenset:
     return _cit_kaybi(bosalt, ekle, govde_satirlari)
 
 
+# ─── BEKLENTİ GRAMERDEN TÜRER (tur 13) ─────────────────────────────────────
+#
+# Tur 12'ye kadar matris şunu varsayıyordu: verilen önekle yazılan bir ayıraç
+# HER ZAMAN bir çit AÇAR ve gövdesini GİZLER. Gramer koşturulunca bu varsayımın
+# yanlış olduğu ÖLÇÜLDÜ — enjeksiyon NOKTASI belirleyicidir:
+#
+#   * `   ``` ` bir liste öğesinin DEVAMI olarak gelirse çit o ÖĞENİN içinde
+#     açılır ve öğe bitince kapanır; sonraki kök başlığı GERÇEKTEN görünür.
+#   * `    ``` ` bir PARAGRAFTAN sonra gelirse girintili kod bloğu OLAMAZ
+#     (paragrafı bölemez) — satırlar paragrafın devamı, yani GÖRÜNÜR metindir.
+#
+# Bu hücrelerde notun düşmesi SAHTECİLİK DEĞİLDİR: içerik belgede gerçekten
+# vardır ve okuyan insan da görür. İddia bu yüzden gramere BAĞLANDI ve
+# GÜÇLENDİ: bir not ancak enjekte edilen içerik GERÇEKTEN GÖRÜNÜRSE düşebilir;
+# içerik LİTERAL bir blokta gizliyse HİÇBİR not düşemez.
+def _gizli_mi(bosalt, ekle, satirlar) -> bool:
+    """Enjekte edilen blok gramere göre LİTERAL mi (gizli mi)?
+
+    Ölçüt: enjekte edilen satırların TAMAMI maskeli mi. Bir tanesi bile
+    maskesizse içerik belgede görünür demektir ve "gizleme" iddiası düşer.
+    """
+    belge = ekle(bosalt(TEMIZ), satirlar)
+    ham = belge.splitlines()
+    maske = _gramer_maskesi(ham)
+    aranan = [x.rstrip("\n") for x in satirlar]
+    for k in range(len(ham) - len(aranan) + 1):
+        if ham[k : k + len(aranan)] == aranan:
+            return all(maske[k : k + len(aranan)])
+    return False
+
+
 def _cit_ihlali(dil: str, govde_satirlari, bosalt, ekle, satirlar) -> str:
     if dil == "dilsiz":
-        susan = _cit_sinif_kaybi(bosalt, ekle, satirlar)
+        if not _gizli_mi(bosalt, ekle, satirlar):
+            return ""  # içerik GÖRÜNÜR — gizleme iddiası yok, kayıp meşru
+        susan = _cit_sinif_kaybi(bosalt, ekle, satirlar)  # noqa: E501
         return (
             f"DİLSİZ çit eklemek şu KONULARI susturdu: {sorted(susan)}"
             if susan
@@ -3705,7 +3780,7 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
     carpim = 1
     for degerler in CIT_BOYUTLARI.values():
         carpim *= len(degerler)
-    assert carpim == len(CIT_BICIMLERI) == 600, len(CIT_BICIMLERI)
+    assert carpim == len(CIT_BICIMLERI) == 540, len(CIT_BICIMLERI)
     # BAĞLAM ve AYIRAÇ boyutları GERÇEKTEN üretiliyor: her değer en az bir
     # biçimde geçiyor ve ürettiği açıcı satırı BİRBİRİNDEN farklı.
     acicilar = {ad: satirlar[0] for ad, _d, _g, _gs, satirlar in CIT_BICIMLERI}
@@ -3717,11 +3792,11 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
     assert (on, devam) == ("- ", "  "), (on, devam)
     assert acicilar["dilsiz-bos-kapali-madde-isaretli-backtick3"] == "- ```\n"
     assert acicilar["dilsiz-bos-kapali-ic-ice-madde-tilde3"] == "  - ~~~\n"
-    assert acicilar["dilsiz-bos-kapali-dort-bosluk-backtick4"] == "    ````\n"
+    assert acicilar["dilsiz-bos-kapali-uc-bosluk-kok-backtick4"] == "   ````\n"
     assert acicilar["dilsiz-bos-kapali-yildiz-madde-backtick3"] == "* ```\n"
     assert acicilar["dilsiz-bos-kapali-arti-madde-backtick3"] == "+ ```\n"
     assert acicilar["dilsiz-bos-kapali-sirali-liste-backtick3"] == "1. ```\n"
-    assert len(set(acicilar.values())) == 60, len(set(acicilar.values()))
+    assert len(set(acicilar.values())) == 54, len(set(acicilar.values()))
     # KAP ekseni AİLE TEMSİLCİSİDİR (tur 11): her ailenin modül sabitindeki İLK
     # üyesi. Aile kümesi yine modülün KENDİ sabitlerinden türer.
     assert len(CIT_KAP_TEMSILCILERI) == len(CIT_KAPLARI) == 5
@@ -3734,7 +3809,7 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         "C",
     ], [ad for _a, ad, *_ in CIT_KAPLARI]
     # ...ve KÜÇÜLTÜLEN eksen KAYBOLMADI: aile başına bir temsilci ÖLÇÜLÜYOR.
-    assert len(CIT_MATRISI) == 600 * 5 == 3000, len(CIT_MATRISI)
+    assert len(CIT_MATRISI) == 540 * 5 == 2700, len(CIT_MATRISI)
     adlar = [h[0] for h in CIT_MATRISI]
     assert len(set(adlar)) == len(adlar), "hücreler ÇAKIŞIYOR"
     # Her hücre GERÇEKTEN bir kap boşaltıyor ve boşaltma NOT üretiyor.
@@ -3753,7 +3828,7 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         for ad, dil, _g, _gs, b, e, s in CIT_MATRISI
         if dil == "dilli" and _cit_kaybi(b, e, s)
     }
-    assert len(dilli_dusen) == 1164, len(dilli_dusen)
+    assert len(dilli_dusen) == 1056, len(dilli_dusen)
     # DİLLİ beklentisinin VACUOUS olduğu hücreler: çitsiz gövde de bir şey
     # kaldırmıyorsa "şeffaflık" iddiası boşta kalır. Sayısı ölçülmüştür.
     vacuous = {
@@ -3761,7 +3836,7 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         for ad, dil, govde, gs, b, e, _s in CIT_MATRISI
         if dil == "dilli" and not _ham_kaybi(b, e, gs)
     }
-    assert len(vacuous) == 840, len(vacuous)
+    assert len(vacuous) == 810, len(vacuous)
     # ÖLÇÜLMÜŞ dürüst kayıt: `maddeli` gövdenin HİÇBİR hücresi vacuous DEĞİLDİR —
     # şeffaflık beklentisi dilli-maddeli hücrelerin hepsinde GERÇEKTEN ölçülür.
     assert {govde for _ad, govde in vacuous} == {
@@ -3769,6 +3844,7 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         "sozcuklu",
         "sozcuksuz",
         "tablolu",
+        "maddeli",
     }
     # ...ve VACUOUS'luk bağlama/ayıraca GÖRE değişmiyor: girinti bir notu
     # düşürmez, dolayısıyla her (gövde, kapanış) bileşimi tüm 30 bağlam×ayıraç
@@ -3797,12 +3873,11 @@ def test_kod_citi_ekseni_mutasyona_duyarli() -> None:
     # ÖLÇÜLDÜ: kırılan KAP AİLESİ BEŞTİR — tur 8'de kol yalnız İKİ aileyi
     # (doluluk kapları) kırıyordu. Süpürme kardeş kapları da kapsadığı için
     # mutasyon beş ailenin hepsini birden düşürür.
-    assert len(kirmizi) == 792, len(kirmizi)
-    # ...ve ÇİT BOYUTLARININ HEPSİ kırmızıya katkı veriyor: 300 dilsiz biçimin
-    # 300'ü de listede — kol tek bir bileşime dayanmıyor. Bağlam ve ayıraç
-    # değerlerinin hepsi kırmızıda ADIYLA geçiyor. (Tur 12: 240 -> 300, bağlam
-    # ekseni iki KÖK bileşimiyle genişledi.)
-    assert len({ad.rsplit("/", 1)[1] for ad in kirmizi}) == 300, kirmizi
+    assert len(kirmizi) == 720, len(kirmizi)
+    # ...ve ÇİT BOYUTLARININ HEPSİ kırmızıya katkı veriyor: 270 dilsiz biçimin
+    # 270'i de listede — kol tek bir bileşime dayanmıyor. Bağlam ve ayıraç
+    # değerlerinin hepsi kırmızıda ADIYLA geçiyor.
+    assert len({ad.rsplit("/", 1)[1] for ad in kirmizi}) == 270, kirmizi
     for baglam in CIT_BOYUTLARI["baglam"]:
         assert any(ad.endswith(f"-{baglam}-backtick3") for ad in kirmizi), baglam
     for isaret in CIT_BOYUTLARI["isaret"]:
@@ -3818,104 +3893,138 @@ def test_kod_citi_ekseni_mutasyona_duyarli() -> None:
     # DÜRÜST BOŞ HÜCRE KAYDI: mutasyon altında da yeşil kalan dilsiz hücreler —
     # hiçbiri `maddeli` DEĞİLDİR; o gövdenin hücrelerinin hepsi kırılır.
     yesil = {ad for ad, dil, *_ in CIT_MATRISI if dil == "dilsiz"} - set(kirmizi)
-    assert len(yesil) == 708, len(yesil)
+    assert len(yesil) == 630, len(yesil)
     assert not any("maddeli" in ad for ad in yesil), sorted(yesil)[:5]
 
 
-# Tur 9'un çit ayıracı deseni — BAĞLAMA KÖR. Tur 10 mutasyon kolunun sökeceği
-# tam olarak budur: girinti/madde farkındalığı olmayan hâl.
-# Tur 9'un çit ayıracı deseni — BAĞLAMA TAMAMEN KÖR (liste işareti YOK).
-_TUR9_DESEN = re.compile(r"^([ \t]*)(`{3,}|~{3,})[ \t]*(\S*)[ \t]*$")
-# Tur 10'un çit ayıracı deseni — LİSTE İŞARETİ kümesi SÖZLEŞMEDEN türetilmişti
-# (`-` ve yalnız `-`). Grup düzeni tur 11'inkiyle aynıdır (önek · işaret · info)
-# ki mutasyon YALNIZ liste kümesini geri alsın, başka bir şeyi değil.
-_TUR10_DESEN = re.compile(r"^([ \t]*(?:-[ \t]+)?)(`{3,}|~{3,})[ \t]*(\S*)[ \t]*$")
+# ─── DONMUŞ MUTANTLAR (tur 13) — gönderdiğimiz HER elle yazılmış makine ────
+#
+# Tur 8-12 arasında maske elle yazılmıştı ve her turda gramerin bir kuralı daha
+# eklendi. Tur 13'te maske `markdown-it-py`'ye devredildi. O makineler artık
+# üretimde YAŞAMIYOR ama testte DONMUŞ MUTANT olarak duruyorlar: her biri, o
+# turda BİLİNMEYEN bir bileşimde en az bir notu kaldırır. Kol, bağımlılığın
+# yerini HAK ETTİĞİNİ ölçer — "grameri koşturmak daha iyi" bir iddia değil,
+# ölçülen bir farktır.
+#
+# Mutantlar DEĞİŞTİRİLMEZ: tarihsel kayıttır, bugünkü koda göre güncellenmez.
+
+_MUTANT_DESENLERI = {
+    # tur 9: bağlama TAMAMEN kör (liste işareti yok)
+    "tur9": re.compile(r"^([ \t]*)(`{3,}|~{3,})[ \t]*(\S*)[ \t]*$"),
+    # tur 10: liste işareti kümesi SÖZLEŞMEDEN türetilmişti (`-` ve yalnız `-`)
+    "tur10": re.compile(r"^([ \t]*(?:-[ \t]+)?)(`{3,}|~{3,})[ \t]*(\S*)[ \t]*$"),
+    # tur 11-12: markdown'ın liste dilbilgisi, ama girinti/kapatıcı kuralları elle
+    "tur12": re.compile(
+        r"^([ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?)(`{3,}|~{3,})[ \t]*(\S*)[ \t]*$"
+    ),
+}
 
 
-def test_cit_liste_isareti_kumesi_mutasyona_duyarli() -> None:
-    """HEDEFLİ MUTASYON: liste işareti kümesini tur 10 hâline döndür.
+def _mutant_maske(desen: re.Pattern[str], kok_tavani: int | None):
+    """Elle yazılmış maskenin donmuş hâli.
 
-    Genel mutasyon kolu (`_cit_maskesi` tamamen sökülür) bütün bağlamları birden
-    kırar, dolayısıyla YENİ boyutun bir şey ÖLÇÜP ölçmediğini gösteremez. Bu kol
-    yalnız LİSTE İŞARETİ kümesini sözleşmenin madde kuralına (`-`) geri çeker ve
-    ölçer:
-
-      * kırmızı düşen hücrelerin bağlam dağılımı SADECE `yildiz-madde` ·
-        `arti-madde` · `sirali-liste` — tur 11'in kapattığı gerçek açık;
-      * `madde-isaretli` · `ic-ice-madde` YEŞİL kalır (tur 10 onları zaten
-        kapatmıştı) ve `girintisiz` · `iki-bosluk` · `dort-bosluk` de öyle —
-        girinti tur 9'da da çalışıyordu. Tur 10'un kendi kazanımını ölçen kol
-        AYRI yaşar (`test_cit_baglam_boyutu_mutasyona_duyarli`).
+    `kok_tavani=None` → tur 9/10/11 davranışı: ham girinti KAP sütunudur.
+    `kok_tavani=3`    → tur 12 davranışı: 0-3 boşluklu açıcı köktür ve kap
+                        kontrolü kapatıcıdan ÖNCE koşar.
+    Hiçbirinde KAPATICI GİRİNTİSİ denetlenmez — tur 13'ün kapattığı açık budur.
     """
-    assert CIT_MATRISI, "matris BOŞ — kol boşa yeşil"
+
+    def sutun(onek: str) -> int:
+        ham = len(onek.expandtabs(4))
+        if kok_tavani is not None and not onek.strip() and ham <= kok_tavani:
+            return 0
+        return ham
+
+    def kapsayici_kirildi(satir: str, acik: int) -> bool:
+        if acik <= 0 or not satir.strip():
+            return False
+        onek = satir[: len(satir) - len(satir.lstrip())]
+        return len(onek.expandtabs(4)) < acik
+
+    def maskele(satirlar):
+        maske: list[bool] = []
+        acik_isaret = None
+        acik_sutun = 0
+        acik_dilsiz = False
+        for satir in satirlar:
+            cit = desen.match(satir)
+            kapatici = bool(
+                cit
+                and acik_isaret
+                and cit.group(2)[0] == acik_isaret[0]
+                and len(cit.group(2)) >= len(acik_isaret)
+                and not cit.group(3)
+            )
+            if acik_isaret is not None:
+                if kok_tavani is not None and kapsayici_kirildi(satir, acik_sutun):
+                    acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
+                elif kapatici:
+                    maske.append(acik_dilsiz)
+                    acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
+                    continue
+                elif kok_tavani is None and kapsayici_kirildi(satir, acik_sutun):
+                    acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
+                else:
+                    maske.append(acik_dilsiz)
+                    continue
+            if cit:
+                acik_isaret = cit.group(2)
+                acik_sutun = sutun(cit.group(1))
+                acik_dilsiz = not cit.group(3)
+                maske.append(acik_dilsiz)
+                continue
+            maske.append(False)
+        return maske
+
+    return maskele
+
+
+MUTANTLAR = {
+    "tur9": _mutant_maske(_MUTANT_DESENLERI["tur9"], None),
+    "tur10": _mutant_maske(_MUTANT_DESENLERI["tur10"], None),
+    "tur12": _mutant_maske(_MUTANT_DESENLERI["tur12"], 3),
+}
+
+
+def _kayipli_hucreler() -> set[str]:
+    """Üretilmiş matris + CommonMark sınır probları — not KAYBEDEN hücreler."""
+    kayipli = {
+        ad
+        for ad, dil, _g, gs, bosalt, ekle, satirlar in CIT_MATRISI
+        if dil == "dilsiz" and _cit_ihlali(dil, gs, bosalt, ekle, satirlar)
+    }
+    for ad, (on, son) in COMMONMARK_SINIR_PROBLARI.items():
+        taban, prob = _sinir_probu(on, son)
+        if taban - prob:
+            kayipli.add(f"sinir/{ad}")
+    return kayipli
+
+
+@pytest.mark.parametrize("mutant", sorted(MUTANTLAR))
+def test_elle_yazilmis_her_maske_en_az_bir_kacis_birakir(mutant: str) -> None:
+    """DİFERANSİYEL KOL: gönderdiğimiz her elle yazılmış makine kaçış bırakır."""
     _BOS_KAP_ONBELLEGI.clear()
     try:
-        with mock.patch.object(bd, "_KOD_CITI_RE", _TUR10_DESEN):
-            kirmizi = [
-                ad
-                for ad, dil, _g, gs, bosalt, ekle, satirlar in CIT_MATRISI
-                if dil == "dilsiz" and _cit_ihlali(dil, gs, bosalt, ekle, satirlar)
-            ]
+        with mock.patch.object(bd, "_cit_maskesi", MUTANTLAR[mutant]):
+            kayipli = _kayipli_hucreler()
     finally:
         _BOS_KAP_ONBELLEGI.clear()
-    # BOŞ KÜME KOLU: eksen boşalınca sessizce yeşile dönmesin.
-    assert kirmizi, "liste işareti kümesi daraltılınca HİÇBİR hücre kırılmadı"
-    assert len(kirmizi) == 222, len(kirmizi)
-    bicimler = [ad.rsplit("/", 1)[1] for ad in kirmizi]
-    kirilan_baglam = {
-        bg for bg in CIT_BOYUTLARI["baglam"] if any(f"-{bg}-" in b for b in bicimler)
-    }
-    assert kirilan_baglam == {
-        "yildiz-madde",
-        "arti-madde",
-        "sirali-liste",
-    }, sorted(kirilan_baglam)
-    # AYIRAÇ boyutunun ÜÇ değeri de kırmızıda — kol tek ayıraç biçimine dayanmıyor.
-    assert {
-        isr for isr in CIT_BOYUTLARI["isaret"] if any(b.endswith(isr) for b in bicimler)
-    } == set(CIT_BOYUTLARI["isaret"])
-    # ...ve kırılan hücreler BEŞ kap ailesinin hepsine yayılıyor.
-    assert {ad.split("/")[0] for ad in kirmizi} == {
-        "bolum-a-alani",
-        "donem-yuvasi",
-        "video-havuzu",
-        "bolum",
-        "c-esleme-kabi",
-    }
+    assert kayipli, (
+        f"{mutant} mutantı HİÇBİR kaçış bırakmadı — kol ölçmüyor ya da mutant "
+        f"bugünkü koda göre güncellenmiş"
+    )
 
 
-def test_cit_baglam_boyutu_mutasyona_duyarli() -> None:
-    """HEDEFLİ MUTASYON (tur 10'un KENDİ kazanımı): bağlam farkındalığını sök.
-
-    Kol KORUNDU: liste işareti kümesi genişleyince tur 10'un kazanımı
-    (`- ``` ` bir ayıraçtır) ölçüsüz kalmasın. Desen bağlama TAMAMEN kör hâle
-    döndürülür ve BEŞ liste bağlamının hepsi kırmızı düşer; GİRİNTİ bağlamları
-    yeşil kalır — girinti tur 9'da da çalışıyordu ve kol bunu KAYDA GEÇİRİR.
-    """
-    assert CIT_MATRISI, "matris BOŞ — kol boşa yeşil"
+def test_gramer_maskesi_hicbir_kacis_birakmaz() -> None:
+    """POZİTİF KONTROL: aynı kümede bugünkü maske HİÇ not kaybetmez."""
     _BOS_KAP_ONBELLEGI.clear()
     try:
-        with mock.patch.object(bd, "_KOD_CITI_RE", _TUR9_DESEN):
-            kirmizi = [
-                ad
-                for ad, dil, _g, gs, bosalt, ekle, satirlar in CIT_MATRISI
-                if dil == "dilsiz" and _cit_ihlali(dil, gs, bosalt, ekle, satirlar)
-            ]
+        kayipli = _kayipli_hucreler()
     finally:
         _BOS_KAP_ONBELLEGI.clear()
-    assert kirmizi, "bağlam farkındalığı sökülünce HİÇBİR hücre kırılmadı"
-    bicimler = [ad.rsplit("/", 1)[1] for ad in kirmizi]
-    kirilan = {
-        bg for bg in CIT_BOYUTLARI["baglam"] if any(f"-{bg}-" in b for b in bicimler)
-    }
-    assert kirilan == {
-        "madde-isaretli",
-        "ic-ice-madde",
-        "yildiz-madde",
-        "arti-madde",
-        "sirali-liste",
-    }, sorted(kirilan)
-    assert len(kirmizi) == _TUR9_KIRMIZI, len(kirmizi)
+    assert kayipli == set(), sorted(kayipli)
+    # ...ve küme BOŞ DEĞİL: kol gerçekten hücre koşuyor.
+    assert len(CIT_MATRISI) >= 2700 and len(COMMONMARK_SINIR_PROBLARI) == 2
 
 
 def test_cit_ayiraci_satirin_tek_anlamli_icerigi_olmali() -> None:
@@ -4001,33 +4110,33 @@ def _kap_of(aile: str, ad: str):
 
 def _kayip_cta_sayimi(baglam: str) -> frozenset:
     b, e = _kap_of("bolum-a-alani", "cta_kaliplari")
-    return _cit_kaybi(
+    return _gizli_kayip(
         b, e, tuple(_cit(*[f"- kalip {i}\n" for i in range(1, 6)], baglam=baglam))
     )
 
 
 def _kayip_doluluk(baglam: str) -> frozenset:
     b, e = _kap_of("donem-yuvasi", "mesaj_ekseni")
-    return _cit_kaybi(b, e, tuple(_cit("duz cumle govdesi\n", baglam=baglam)))
+    return _gizli_kayip(b, e, tuple(_cit("duz cumle govdesi\n", baglam=baglam)))
 
 
 def _kayip_madde_tekrar_izi(baglam: str) -> frozenset:
     # Var olan bir maddenin çit içinde TEKRARI, tekrar notu ÜRETMEMELİ; ve
     # hiçbir notu da kaldırmamalı.
     b, e = _kap_of("bolum-a-alani", "gorsel_kodlar")
-    return _cit_kaybi(
+    return _gizli_kayip(
         b, e, tuple(_cit("- soft diffused light macro composition 01\n", baglam=baglam))
     )
 
 
 def _kayip_bolum_boslugu(baglam: str) -> frozenset:
     b, e = _kap_of("bolum", "E")
-    return _cit_kaybi(b, e, tuple(_cit("print(42)\n", baglam=baglam)))
+    return _gizli_kayip(b, e, tuple(_cit("print(42)\n", baglam=baglam)))
 
 
 def _kayip_c_esleme(baglam: str) -> frozenset:
     b, e = _kap_of("c-esleme-kabi", "C")
-    return _cit_kaybi(
+    return _gizli_kayip(
         b, e, tuple(_cit("- alan → iddia → https://ornek.example/x\n", baglam=baglam))
     )
 
@@ -4049,7 +4158,7 @@ def _kayip_gerekce_tanima(baglam: str) -> frozenset:
 
 def _kayip_ayri_madde(baglam: str) -> frozenset:
     b, e = _kap_of("bolum-a-alani", "kanca_kaliplari")
-    return _cit_kaybi(b, e, tuple(_cit("madde isareti olmayan satir\n", baglam=baglam)))
+    return _gizli_kayip(b, e, tuple(_cit("madde isareti olmayan satir\n", baglam=baglam)))
 
 
 def _gorunur(metin_citli: str, taban: str) -> set:
@@ -4176,7 +4285,23 @@ def _sahtecilik(duzey: str, baglam: str, isaret: str = "```") -> tuple[str, str]
 
 
 def _kayip_baslik_tanima(duzey: str, baglam: str, isaret: str = "```") -> frozenset:
+    """Sahte başlık ÇİT İÇİNDE gizliyse HİÇBİR not düşemez.
+
+    Tur 13: iddia gramere BAĞLI. Enjeksiyon noktası yüzünden blok gerçekte bir
+    çit AÇMIYORSA (liste öğesi devamı · paragrafı bölemeyen girintili blok)
+    sahte başlık GERÇEKTEN görünürdür — o hücrede notun düşmesi doğru
+    davranıştır ve sahtecilik iddiası kurulamaz. Görünürlük ayrıştırıcıya
+    SORULUR, elle listelenmez.
+    """
     taban, sahte = _sahtecilik(duzey, baglam, isaret)
+    sil, sahte_govde = SAHTECILIK_DUZEYLERI[duzey]
+    on, devam = CIT_BAGLAMLARI[baglam]
+    ham = sahte.splitlines()
+    maske = _gramer_maskesi(ham)
+    hedef = f"{devam}{sahte_govde[0]}".rstrip("\n")
+    for k, satir in enumerate(ham):
+        if satir == hedef and not maske[k]:
+            return frozenset()  # başlık GÖRÜNÜR — gizleme iddiası yok
     return frozenset(_not_kumesi(taban) - _not_kumesi(sahte))
 
 
@@ -4206,7 +4331,7 @@ def test_yapisal_eksen_bos_kume_ve_taban_kollari() -> None:
     """Eksen ÜRETİLDİ mi, tabanı GERÇEKTEN not veriyor mu, hücreler boşa yeşil mi?"""
     assert len(CIT_YAPISAL_MATRISI) == (
         len(SAHTECILIK_DUZEYLERI) * len(CIT_BAGLAMLARI) * len(CIT_ISARETLERI)
-    ) == 120, len(CIT_YAPISAL_MATRISI)
+    ) == 108, len(CIT_YAPISAL_MATRISI)
     assert len({h[0] for h in CIT_YAPISAL_MATRISI}) == len(CIT_YAPISAL_MATRISI)
     # Düzey listesi belgenin KENDİ içerme modelinden — dördü de gerçek kaptır.
     assert set(SAHTECILIK_DUZEYLERI) == {
@@ -4249,7 +4374,7 @@ def test_yapisal_eksen_mutasyona_duyarli() -> None:
     assert {ad.split("/")[1] for ad in kirmizi} == set(CIT_BAGLAMLARI)
     # 96 hücrenin 96'sı da kırılır: yapısal açık HİÇBİR düzeyde ve HİÇBİR
     # bağlamda kapalı DEĞİLDİ.
-    assert len(kirmizi) == len(CIT_YAPISAL_MATRISI) == 120, len(kirmizi)
+    assert len(kirmizi) == 93, len(kirmizi)
 
 
 def _tur10_maskeli_satirlar(metin: str):
@@ -4343,10 +4468,10 @@ def _gecis_rejimi(baglam: str) -> str:
     """Rejim ÖNEKTEN değil, modülün KAP KURALINDAN türer.
 
     Tur 11'e dek ölçüt `önek == ""` idi, yani boşluktan ibaret HER önek kap
-    sayılıyordu. CommonMark ise 0-3 boşluklu açıcıyı KÖK sayar; ölçüt bu yüzden
-    `bd._kapsayici_sutunu`'dur — kural TEK evde yaşar, test onu KOPYALAMAZ.
+    sayılıyordu. Tur 13'ten beri ölçüt GRAMERİN KENDİSİDİR (`_cit_rejimi`):
+    test bir kural kopyalamaz, ayrıştırıcıya sorar.
     """
-    return "yutar" if bd._kapsayici_sutunu(CIT_BAGLAMLARI[baglam][0]) == 0 else "kap-biter"
+    return _cit_rejimi(CIT_BAGLAMLARI[baglam][0])
 
 
 def _gecis_ihlali(gecis: str, baglam: str) -> str:
@@ -4379,7 +4504,7 @@ def test_cit_kap_sinirini_asarsa_fail_closed(gecis: str, baglam: str) -> None:
 
 
 def test_gecis_ekseni_bos_kume_ve_taban_kollari() -> None:
-    assert len(CIT_GECIS_MATRISI) == len(GECIS_BICIMLERI) * len(CIT_BAGLAMLARI) == 30
+    assert len(CIT_GECIS_MATRISI) == len(GECIS_BICIMLERI) * len(CIT_BAGLAMLARI) == 27
     # İKİ rejim de GERÇEKTEN üretiliyor — kol tek yanlı değil.
     rejimler = {_gecis_rejimi(b) for b in CIT_BAGLAMLARI}
     assert rejimler == {"yutar", "kap-biter"}, rejimler
@@ -4398,7 +4523,9 @@ def test_gecis_ekseni_mutasyona_duyarli() -> None:
     Tur 10'un davranışı buydu: kap içinde açılan çit de uzaktaki ayıraca kadar
     yutuyordu. Kol, kap sonlanmasının GERÇEKTEN bir şey ölçtüğünü gösterir.
     """
-    with mock.patch.object(bd, "_kapsayici_kirildi", lambda satir, sutun: False):
+    # Tur 13: kap sonlanmasi artik gramerin icindedir; sokulemez. Esdeger
+    # mutasyon KAP FARKINDALIGI OLMAYAN donmus mutanttir (`tur9`).
+    with mock.patch.object(bd, "_cit_maskesi", MUTANTLAR["tur9"]):
         kirmizi = {
             ad
             for ad, gecis, baglam in CIT_GECIS_MATRISI
@@ -4417,16 +4544,13 @@ def test_gecis_ekseni_mutasyona_duyarli() -> None:
     # kabı hakkındadır (`cta_kaliplari` boş + 0 madde) ve yutulan bölge o kabın
     # DIŞINDADIR — yutmak not EKLER, kaldırmaz. Sınırı ölçen boyut budur:
     # kaybı ancak bir KABIN BAŞLIĞI yutulduğunda görürsün.
-    assert {ad.split("/")[0] for ad in kirmizi} == {
-        "alan-siniri",
-        "bolum-siniri",
-    }, sorted(kirmizi)
-    # Tur 12: 14 -> 12. Sayı DÜŞTÜ çünkü `iki-bosluk` bağlamı artık KÖK
-    # rejimindedir (CommonMark 0-3 boşluklu açıcıyı kap saymaz) ve kap
-    # sonlanması mutasyonundan ETKİLENMEZ. Kalan 12 = 6 gerçek KAP bağlamı
-    # (dört boşluk · dört liste işareti biçimi · iç içe madde) × 2 geçiş biçimi.
-    assert len(kirmizi) == 12, len(kirmizi)
-    assert len(kirmizi) == 2 * sum(
+    # Tur 13: donmuş `tur9` mutantı kap farkındalığını TAMAMEN kaldırdığı için
+    # kırmızı ÜÇ geçiş biçimine birden yayılır (tur 12'de mutasyon yalnız kap
+    # sonlanmasını söküyordu ve `kapanmamis-belge-sonu` yeşil kalıyordu).
+    # 15 = 5 gerçek KAP bağlamı × 3 geçiş biçimi.
+    assert {ad.split("/")[0] for ad in kirmizi} == set(GECIS_BICIMLERI), sorted(kirmizi)
+    assert len(kirmizi) == 15, len(kirmizi)
+    assert len(kirmizi) == len(GECIS_BICIMLERI) * sum(
         1 for baglam in CIT_BAGLAMLARI if _gecis_rejimi(baglam) == "kap-biter"
     ), sorted(kirmizi)
 
@@ -4508,16 +4632,35 @@ def test_ic_ice_cit_bilesimi_uzak_citi_MASKELI_kalir(bilesim: str) -> None:
 
 
 def test_bilesim_ekseni_mutasyona_ve_bos_kumeye_duyarli() -> None:
-    """MUTASYON: kap sonlanmasını sök (`_kapsayici_kirildi` -> hep False)."""
+    """MUTASYON: donmuş `tur10` mutantı — uzak kök ayıracını kapatıcı sanar.
+
+    Mutant SEÇİLMEDİ, ÖLÇÜLDÜ: üç donmuş mutant da koşuldu ve bu eksende
+    yalnız `tur10` kırmızı veriyor (10 bileşimin 3'ü). `tur9` liste işaretli
+    açıcıyı hiç TANIMIYOR, `tur12` kap sonlanmasını zaten modelliyor — ikisi de
+    bu ekseni kıramaz ve bu, eksenin NEYİ ölçtüğünün kaydıdır.
+    """
     bosalt, _ekle = _kap_of("bolum-a-alani", "cta_kaliplari")
     assert _bos_kap_notlari(bosalt), "taban BOŞ — kol boşa yeşil"
     _BOS_KAP_ONBELLEGI.clear()
     try:
-        with mock.patch.object(bd, "_kapsayici_kirildi", lambda satir, sutun: False):
+        with mock.patch.object(bd, "_cit_maskesi", MUTANTLAR["tur10"]):
             kirmizi = {b for b in BILESIM_BICIMLERI if _bilesim_ihlali(b)}
     finally:
         _BOS_KAP_ONBELLEGI.clear()
-    assert kirmizi == set(BILESIM_BICIMLERI), sorted(set(BILESIM_BICIMLERI) - kirmizi)
+    # ÖLÇÜLDÜ (tur 13): `tur10` mutantı 10 bileşimin 3'ünü kırar ve üçü de
+    # `bitisik` ARA değerindedir. Bu, tur 12'de eklenen ARA boyutunun NE
+    # ölçtüğünün kaydıdır: araya kabı bitiren bir paragraf girdiğinde eski
+    # makine de doğru davranıyordu; açık YALNIZ bitişik ayıraçta vardı.
+    assert kirmizi == {
+        "dilli-acici-kap-kirilmasi/bitisik",
+        "dilsiz-acici-kap-kirilmasi/bitisik",
+        "ic-ice-madde-kap-kirilmasi/bitisik",
+    }, sorted(kirmizi)
+    # DÜRÜST BOŞ HÜCRE KAYDI: `yildiz-madde` ve `sirali-liste` bitişik
+    # hücreleri mutant altında da YEŞİL kalır — `tur10` deseni o iki liste
+    # işaretini zaten TANIMIYORDU (tur 11'in kazanımı), dolayısıyla o
+    # hücrelerde açıcı hiç çit sayılmıyor ve kap geçişi sorusu doğmuyor.
+    assert all(ad.endswith("/bitisik") for ad in kirmizi), sorted(kirmizi)
     # AŞIRI SIKILAŞTIRMA KOLU: kap KIRILDIKTAN sonra gelen GERÇEK içerik hâlâ
     # kabı DOLDURUR — kap sonlanması yalnız çitin kapsamını bitirir, sonrasını
     # görünmez YAPMAZ.
@@ -4674,6 +4817,77 @@ def test_cit_govdesi_uydurma_bicim_notu_uretmez() -> None:
     assert yeni == set(), f"çit gövdesi UYDURMA not üretti: {sorted(yeni)}"
     # ...ve mesaj KÜMESİ ikisinde de AYNI: ne kayıp ne fazlalık.
     assert _not_kumesi(citli) == _not_kumesi(bos)
+
+
+# ─── CommonMark SINIR EKSENİ (tur 13) — gramer bizim değil, ONUN ────────────
+#
+# Tur 8-12 boyunca çit maskesi ELLE yazılmış bir CommonMark yaklaşımıydı ve her
+# turda gramerin kodlanmamış bir kuralı daha çıktı: liste işaretleri → açılış
+# girintisi → kapatıcı sırası → KAPATICI GİRİNTİSİ → iç içe işaret derinliği.
+# Beşinci sınır kuralını yazmak yerine gramer KOŞTURULUYOR (`markdown-it-py`,
+# CommonMark referans uyumlu). Aşağıdaki üç prob tur 10'un bağımsız hakem
+# turunda bildirilen ve kontrolörün KENDİ probuyla yeniden ürettiği kaçışlardır.
+#
+# Saldırının biçimi: erken KABUL EDİLEN bir kapatıcıdan SONRA sahte alan gelir.
+# CommonMark kapatıcının en fazla ÜÇ boşluk girintili olmasını şart koşar
+# (§4.5); daha girintili ayıraç kapatıcı DEĞİLDİR ve çit AÇIK kalır.
+COMMONMARK_SINIR_PROBLARI = {
+    "kok-cit-4-bosluk-kapatici": (["```", "print(1)", "    ```"], ["```"]),
+    "kok-cit-tab-kapatici": (["```", "print(1)", "\t```"], ["```"]),
+}
+
+# ÖLÇÜLDÜ ve KAÇIŞ DEĞİL (tur 13): `- ``` ` + `      ``` ` bileşimini hem hakem
+# hem kontrolör kaçış sandı. Gramere soruldu — markdown-it o ayıracı KAPATICI
+# SAYMIYOR; çit liste ÖĞESİ bitince kapanıyor ve sonraki kök başlığı
+# GERÇEKTEN görünür oluyor (render'da `<h3>` olarak çıkıyor). Notun düşmesi
+# DOĞRU davranıştır. Hücre silinmiyor, KONTROL KOLUNA taşınıyor: yanlış
+# pozitifin kendisi kayda geçer ki bir sonraki tur onu yeniden "kaçış" diye
+# açmasın.
+GORUNURLUK_KONTROL_PROBLARI = {
+    "liste-citi-6-bosluk-kapatici": (["- ```", "  print(1)", "      ```"], ["```"]),
+    "gecerli-3-bosluk-kapatici": (["```", "print(1)", "   ```"], []),
+}
+
+
+def _sinir_probu(on: list[str], son: list[str]) -> tuple[frozenset, frozenset]:
+    """(taban notları, prob notları) — `cta_kaliplari` bloğu SİLİNMİŞ belgede."""
+    bosalt, ekle = _kap_of("bolum-a-alani", "cta_kaliplari")
+    bos = bosalt(TEMIZ)
+    sahte = tuple(
+        f"{satir}\n"
+        for satir in on
+        + ["### cta_kaliplari"]
+        + [f"- [urun-{k}] icin randevu daveti — satis — vurgu." for k in range(1, 6)]
+        + son
+    )
+    return frozenset(_bos_kap_notlari(bosalt)), frozenset(_not_kumesi(ekle(bos, sahte)))
+
+
+@pytest.mark.parametrize("ad", sorted(COMMONMARK_SINIR_PROBLARI))
+def test_commonmark_sinirinda_sahte_yuva_KURULAMAZ(ad: str) -> None:
+    """Erken kabul edilen kapatıcıdan sonraki sahte başlık ALAN KURAMAZ."""
+    on, son = COMMONMARK_SINIR_PROBLARI[ad]
+    taban, prob = _sinir_probu(on, son)
+    kayip = taban - prob
+    assert kayip == frozenset(), (
+        f"{ad}: sahte yuva KURULDU, şu notlar kalktı → {sorted(_mesajlari(kayip))}"
+    )
+
+
+@pytest.mark.parametrize("ad", sorted(GORUNURLUK_KONTROL_PROBLARI))
+def test_gramer_gorunur_icerigi_MASKELEMEZ(ad: str) -> None:
+    """AŞIRI SIKILAŞTIRMA KOLU: gramere göre GÖRÜNÜR içerik alanı GERÇEKTEN kurar."""
+    on, son = GORUNURLUK_KONTROL_PROBLARI[ad]
+    taban, prob = _sinir_probu(on, son)
+    assert taban - prob, f"{ad}: görünür içerik alanı kurmadı — aşırı maskeleme"
+
+
+def test_commonmark_sinir_ekseni_bos_kume_kollari() -> None:
+    """Taban GERÇEKTEN not veriyor mu; iki envanter de dolu mu?"""
+    bosalt, _ekle = _kap_of("bolum-a-alani", "cta_kaliplari")
+    assert _bos_kap_notlari(bosalt), "taban BOŞ — eksen boşa yeşil"
+    assert COMMONMARK_SINIR_PROBLARI and GORUNURLUK_KONTROL_PROBLARI
+    assert not (set(COMMONMARK_SINIR_PROBLARI) & set(GORUNURLUK_KONTROL_PROBLARI))
 
 
 def test_cit_kapsam_envanteri_mutasyona_duyarli() -> None:

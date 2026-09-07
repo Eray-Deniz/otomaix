@@ -300,6 +300,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Callable, Iterable, Sequence
 
+from markdown_it import MarkdownIt
+
 from . import identity
 
 # ─── 1. Kapalı değer kümeleri ───────────────────────────────────────────────
@@ -1429,7 +1431,11 @@ CIT_KURALI_DISINDA: tuple[tuple[str, str], ...] = (
 CIT_BAGLAM_BICIMLERI: tuple[tuple[str, str, str], ...] = (
     ("girintisiz", "", ""),
     ("iki boşluk (madde devamı)", "  ", "  "),
-    ("dört boşluk", "    ", "    "),
+    # NOT (tur 13): "dört boşluk" bu envanterden ÇIKARILDI. CommonMark'ta 4
+    # sütun girinti bir ÇİT AÇMAZ — boş satırdan sonra GİRİNTİLİ KOD BLOĞU,
+    # paragraftan sonra ise paragrafın DEVAMIDIR. Onu bir çit bağlamı saymak
+    # ölçtüğünü sandığın şeyi ölçmemektir; girintili kod bloğu maskeye AYRI
+    # olarak dahildir (`code_block`) ve kendi testiyle ölçülür.
     ("madde işaretli (`- `)", "- ", "  "),
     ("iç içe madde (`  - `)", "  - ", "    "),
     # Tur 11 — liste işareti kümesi MARKDOWN'IN, sözleşmenin DEĞİL. Tur 10 yalnız
@@ -1634,134 +1640,63 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
     return [satir for satir in satirlar if not _cit_icinde(satir)]
 
 
+# CommonMark referans-uyumlu blok ayrıştırıcı — TEK örnek, durumsuz ve
+# yeniden girişli. "commonmark" ön ayarı bilerek seçildi: tablo/strikethrough
+# gibi eklentiler kod bloğu sınırlarını değiştirmez ama gramerden UZAKLAŞTIRIR;
+# burada istenen şey saf CommonMark'ın kendisidir.
+_MD = MarkdownIt("commonmark")
+
+
 def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
-    """Satır başına: DİLSİZ çit bloğuna mı ait (açıcı · gövde · kapatıcı)?
+    """Satır başına: LİTERAL bir kod bloğuna mı ait (açıcı · gövde · kapatıcı)?
 
     ÇİT TANIMA KURALININ TEK EVİ. `_citsiz_satirlar` bunun süzgeç yüzeyidir;
     satır KONUMUNU korumak zorunda olan süpürme yolları (Bölüm B tablo izi)
-    maskeyi doğrudan okur (tur 11'de maske satırın kendisine taşındı). KÖK
-    düzeyinde kapanmamış dilsiz çit FAIL-CLOSED'dır: açıcıdan BELGE sonuna kadar
-    her satır çit içi sayılır.
+    maskeyi doğrudan okur — maske satırın kendisine yapışır (`_Satir`).
 
-    Tanıma BAĞLAMDAN BAĞIMSIZDIR (tur 10): ayıracın önünde GİRİNTİ ya da LİSTE
-    İŞARETİ olabilir — koşul, ayıracın satırın TEK ANLAMLI İÇERİĞİ olmasıdır
-    (`_KOD_CITI_RE`). Bu fonksiyon TEK EV olduğu için kuralı burada
-    genişletmek, süpürülmüş bütün yolları birden kapsar; ikinci bir
-    ayrıştırıcı YAZILMAZ.
+    **Tur 13 — GRAMERİ YENİDEN YAZMIYORUZ, KOŞTURUYORUZ.** Tur 8-12 arasında bu
+    fonksiyon elle yazılmış bir CommonMark YAKLAŞIMIYDI ve her turda gramerin
+    kodlanmamış bir kuralı daha çıktı; her seferinde bir SINIR KURALI eklendi:
 
-    **Tur 11 — durum makinesi KAP SONLANMASINI modeller.** Tur 10 açıcıyı
-    tanıyordu ama açıcının hangi KAP içinde açıldığını unutuyordu: bir liste
-    öğesinin içinde açılan çit, o öğe bittikten çok sonra gelen KÖK düzeyindeki
-    bir ayıracı kendi kapatıcısı sanıyordu. Ölçülmüş bileşim: `- ```python `
-    (dilli açıcı) → girintili gövde → kabı bitiren KÖK düzeyi paragraf → kökte
-    DİLSİZ çit. CommonMark bunu İKİ ayrı çit olarak ayrıştırır; eski makine
-    dilli durumu kök açıcıya kadar sürdürüp DİLSİZ çitin gövdesini maskesiz
-    bırakıyordu (ölçüldü: hem boş-yuva hem 0/5 alt sınır notu KAYBOLUYORDU).
+        tur 10  ayıracın önünde girinti/liste işareti olabilir
+        tur 11  liste işareti kümesi markdown'ın, sözleşmenin değil
+        tur 12  açılış girintisi kap üyeliği DEĞİLDİR (0-3 boşluk köktür)
+        tur 12  kap kontrolü kapatıcı kontrolünden ÖNCE koşar
+        tur 13  KAPATICI GİRİNTİSİ de kuralın parçası (en fazla 3 boşluk)
+        tur 13  iç içe liste işaretleri (`- - ``` `) tek işaretle modellenemez
 
-    Kural `_kapsayici_kirildi`'dedir: bir çit KAP İÇİNDE açıldıysa (öneki boş
-    değilse), ondan daha AZ girintili boş-olmayan bir satır kabı bitirir ve
-    çitin kapsamı ORADA biter. KÖK düzeyinde (önek boş) açılan çit için hiçbir
-    satır bu koşulu sağlayamaz — kapanmamış kök çiti belge sonuna kadar
-    FAIL-CLOSED düşmeye devam eder.
+    Beşinci ve altıncı sınır kuralını yazmak yerine sınıf YAPIYLA kapatıldı:
+    maske artık CommonMark referans-uyumlu bir blok ayrıştırıcıdan
+    (`markdown-it-py`) türer. Kaçışlar "aklımıza gelen" bileşimlerle değil,
+    gramerin KENDİSİYLE sınırlanır; matrisin kör noktası artık kendi hayal
+    gücümüz kadar değildir. Bu, yürütme protokolünün M6 hükmünün de karşılığıdır
+    (dış gramer modelleyen guardrail'de çalıştırılabilir ground-truth ZORUNLU).
+
+    **Maskelenen küme — GEREKÇESİYLE:** ayrıştırıcının LİTERAL saydığı iki blok,
+    yani DİLSİZ çit (`fence`, info boş) ve GİRİNTİLİ kod bloğu (`code_block`).
+    İkisi de sözleşme içeriği OLAMAZ ve ikisinin içindeki bir başlık YAPI
+    KURAMAZ. DİLLİ çit BİLEREK maskelenmez: `ACIK_BLOK_BICIMLERI` onun bir kabı
+    DOLDURMAYA devam ettiğini söyler — doluluk ayrı, YAPI ayrıdır.
+
+    Kapanmamış çit FAIL-CLOSED kalır: CommonMark böyle bir çiti KAPSAYAN BLOĞUN
+    sonuna kadar sürdürür, dolayısıyla kök düzeyinde açılmışsa belge sonuna
+    kadar düşer. Bu davranış artık bizim kuralımız değil, gramerin kuralıdır.
+
+    Satır indisleri ÇAĞIRANIN dizisiyle hizalıdır: metin `"\n"` ile birleştirilip
+    ayrıştırılır, dolayısıyla `splitlines()`'ın markdown-it'ten farklı böldüğü
+    ayraçlar (`\x0b`, `\u2028` gibi) indis kaymasi yaratamaz.
     """
-    maske: list[bool] = []
-    acik_isaret: str | None = None
-    acik_sutun = 0
-    acik_dilsiz = False
-    for satir in satirlar:
-        cit = _KOD_CITI_RE.match(satir)
-        if acik_isaret is not None:
-            # SIRA ÖNEMLİ (tur 12): KAP kontrolü kapatıcı kontrolünden ÖNCE
-            # koşar. Tersi ölçülmüş bir fail-open'dı: `- ```python ` ile açılan
-            # çidin hemen ardından gelen KÖK düzeyi ayıraç, araya kabı bitiren
-            # bir satır girmediği için kapatıcı sanılıyordu. CommonMark önce
-            # KABI bitirir ve kök ayıracını YENİ bir çit açıcısı sayar; eski
-            # sırada sonraki sahte başlık maskesiz kalıyor ve yuva
-            # SAHTELEYEBİLİYORDU (mesaj kümesi: iki gerçek not KAYBOLURKEN
-            # toplam 2'den 16'ya çıkıyordu — sayı bu kaybı GİZLER).
-            if _kapsayici_kirildi(satir, acik_sutun):
-                # KAP BİTTİ: çitin kapsamı burada biter ve BU satır çit
-                # DIŞIDIR — kendisi yeni bir açıcı OLABİLİR, aşağıdaki dala
-                # düşer.
-                acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
-            elif cit and _kapatici_mi(cit, acik_isaret):
-                maske.append(acik_dilsiz)
-                acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
-                continue
-            else:
-                maske.append(acik_dilsiz)
-                continue
-        if cit:
-            acik_isaret = cit.group(2)
-            acik_sutun = _kapsayici_sutunu(cit.group(1))
-            acik_dilsiz = not cit.group(3)
-            maske.append(acik_dilsiz)  # DİLSİZ açıcı düşer
+    maske = [False] * len(satirlar)
+    for jeton in _MD.parse("\n".join(satirlar)):
+        if jeton.map is None:
             continue
-        maske.append(False)
+        if jeton.type == "code_block" or (
+            jeton.type == "fence" and not (jeton.info or "").strip()
+        ):
+            bas, son = jeton.map
+            for k in range(max(bas, 0), min(son, len(maske))):
+                maske[k] = True
     return maske
-
-
-def _kapatici_mi(cit: re.Match[str], acik_isaret: str) -> bool:
-    """CommonMark kapatıcı kuralı: aynı karakter, en az açıcı kadar uzun, INFO boş."""
-    isaret = cit.group(2)
-    return (
-        isaret[0] == acik_isaret[0]
-        and len(isaret) >= len(acik_isaret)
-        and not cit.group(3)
-    )
-
-
-def _girinti_sutunu(onek: str) -> int:
-    """Bir önekin SÜTUN genişliği (sekme dörde açılır)."""
-    return len(onek.expandtabs(4))
-
-
-# CommonMark 0.30 §4.5: bir kod çiti açıcısı ÜÇ boşluğa kadar girintilenebilir ve
-# hâlâ KÖK düzeyindedir; gövdesinden aynı girintiyi İSTEMEZ. Dört sütun kod
-# girintisi eşiğidir ve artık kap sayılır.
-_KOK_GIRINTI_TAVANI = 3
-
-
-def _kapsayici_sutunu(onek: str) -> int:
-    """Açıcının KAP sütunu — ham GİRİNTİ değil, KAPSAYICI üyeliği.
-
-    Tur 11'e dek kap sütunu ham girintiye eşitti ve bu İKİ ayrı soruyu
-    karıştırıyordu: bir satırın ne kadar girintili olduğu ile bir KABIN İÇİNDE
-    olup olmadığı. CommonMark kök düzeyinde 0-3 boşluklu açıcıya izin verir ve
-    gövdesinin aynı girintiyi taşımasını ŞART KOŞMAZ; ham girintiyi kap sanan
-    makine ilk girintisiz gövde satırında kabın bittiğini sanıyor, maskeyi
-    ERKEN kapatıyor ve çitin içindeki sahte başlık YAPI KURABİLİYORDU.
-
-    Ölçüldü (tur 12, mesaj KÜMESİ farkıyla): belgeden silinen `cta_kaliplari`
-    alanı, `  ``` ` ile açılan ve gövdesi GİRİNTİSİZ olan bir çit içine konan
-    sahte `### cta_kaliplari` başlığıyla `notlu-gecti / 2 not` -> `gecti / 0 not`
-    oluyordu.
-
-    Kap üyeliği yalnız İKİ yoldan doğar: açıcı bir LİSTE İŞARETİ taşır (önek
-    boşluktan ibaret DEĞİLDİR), ya da girinti kod eşiğine (4 sütun) ulaşır.
-    Belirsizlik KAP LEHİNE değil, MASKELEME lehine çözülür: fazla maskelemek
-    olmayan bir yapıyı gizler (not EKLER, fail-closed), eksik maskelemek ise
-    sahte yapı KURDURUR (not KALDIRIR, fail-open).
-    """
-    sutun = _girinti_sutunu(onek)
-    if not onek.strip() and sutun <= _KOK_GIRINTI_TAVANI:
-        return 0
-    return sutun
-
-
-def _kapsayici_kirildi(satir: str, acik_sutun: int) -> bool:
-    """Açık çitin KABI bu satırda bitti mi?
-
-    Bir liste öğesinin (ya da girintili bloğun) içinde açılan çit o kabın
-    içeriğidir; kaptan daha AZ girintili boş-olmayan bir satır kabı KAPATIR ve
-    çitin kapsamı orada biter. Boş satır kabı bitirmez (liste öğesi boş satır
-    taşıyabilir). KÖK düzeyinde açılan çit (`acik_sutun == 0`) için hiçbir satır
-    bu koşulu sağlayamaz — kapanmamış kök çiti FAIL-CLOSED kalır.
-    """
-    if acik_sutun <= 0 or not satir.strip():
-        return False
-    onek = satir[: len(satir) - len(satir.lstrip())]
-    return _girinti_sutunu(onek) < acik_sutun
 
 
 def _sozlesme_bicimli(parca: str) -> bool:
