@@ -34,7 +34,8 @@ sözü veriyor ve o testin hangi hükme karşı koşacağı bu kararla belirleni
 > tabanı `2b468e8d` KALIR ve Task 7'nin bütün commit'lerini kendiliğinden yeniden kapsar.
 
 **Dal:** `feat/sektor-bilgi-paketi-plan2`. Son commit için `git log -1` — bu satıra sha
-YAZILMAZ, drift eder. **Bu oturumun üç commit'i uzağa PUSH EDİLMEDİ.**
+YAZILMAZ, drift eder. **Bu oturumun commit'leri uzağa PUSH EDİLMEDİ** (kaç tane olduğu `git log origin/HEAD..HEAD`
+ile sayılır — bu satıra yazılmaz, drift eder).
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit **`7964ed6`**,
 monorepo pin manifesti bu commit'e bağlı. **Bu oturumda dokunulmadı.**
@@ -69,9 +70,9 @@ sözleşmeye** geçti, bayat "makineyle DOĞRULANMADI" beyanı üç yerden de ka
    Docker imajı yeniden kurulmalı; **canlıya dağıtılmadı.**
 2. **Ayrıştırıcı sınırı SONLUDUR ve ilan edilmiştir.** `maxNesting=100`, tripwire'lı.
 3. **Bağımsız hakem BU OTURUMUN commit'lerini GÖRMEDİ** — `c73c102` (docs) · `854373d` (kod) ·
-   `f98a392` (docs). **Ev uydurulmadı:** final incelemenin tabanı `a806e29` olduğu için üçü de
-   oraya kendiliğinden girer. Önceki oturumdan da üç commit incelenmemişti (`868f50a` ·
-   `cad705c` · `c5795d5`), onlar da aynı tabana giriyor.
+   `f98a392` (docs) · `ae9111c` (docs). Önceki oturumdan da incelenmemiş olanlar: `868f50a` ·
+   `cad705c` · `c5795d5`. **Ev uydurulmadı:** final incelemenin tabanı `a806e29` olduğu için
+   hepsi oraya kendiliğinden girer.
 4. **Kimlik kapıları migration dosyalarının BAŞINDA** — yeni migration yazılırken kapı ilk üst
    düzey DDL'den ÖNCE konmalı.
 5. **Task 7 ve Task 11 planda "Arayüz eki bağlar" satırını TAŞIMIYOR** (20 görevin 18'inde var).
@@ -155,9 +156,9 @@ koşumları):**
 
 **Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
 
-- **Bu oturumun üç commit'i bağımsız hakem GÖRMEDİ** — `c73c102` · `854373d` · `f98a392`.
-  Önceki oturumdan `868f50a` · `cad705c` · `c5795d5` de görülmemişti. Altısının da evi var:
-  final incelemenin tabanı `a806e29`.
+- **Bu oturumun commit'lerini bağımsız hakem GÖRMEDİ** — `c73c102` · `854373d` · `f98a392` ·
+  `ae9111c`. Önceki oturumdan `868f50a` · `cad705c` · `c5795d5` de görülmemişti. Hepsinin evi
+  var: final incelemenin tabanı `a806e29`.
 - **BÜTÜNLÜK kontrolü sözleşmenin yazılı harfinden bir adım ÖNDE** — sözleşme her alan için
   kaynak satırını kelimesi kelimesine ZORUNLU kılmıyor ("en az 2 bağımsız kaynak HEDEFLE").
   Bugün hiçbir kontrol ELEMEDİĞİ için bedel gürültüdür. **Eray veto ederse geri alınır:** tek
@@ -171,7 +172,7 @@ koşumları):**
 - **CRM webhook onarımı YAPILMADI** — yalnız kapatıldı (değişmedi).
 - PG 18.3 dışında sürüm denenmedi; çok-oturumlu eşzamanlılık denenmedi.
 - Canlıya hiçbir migration dağıtılmadı; pilot koşulmadı. Dal **PUSH EDİLMEDİ** (bu oturumun
-  üç commit'i yerelde), merge EDİLMEDİ, canlıya hiçbir şey dağıtılmadı.
+  commit'leri yerelde), merge EDİLMEDİ, canlıya hiçbir şey dağıtılmadı.
 - Task 8–20 hiç yazılmadı.
 
 # Risks
