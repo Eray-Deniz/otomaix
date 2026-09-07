@@ -378,9 +378,9 @@ zincir kontrolör kararıyla BİTİRİLDİ — dördüncüsü açılmadı.
   tripwire o eşikte 1200 kat iç içe blockquote'un ayrıştırıcıyı `RecursionError` ile düşürdüğünü
   gösterdi: fail-open'ı kapatan değişiklik bir ÇÖKME yolu açıyordu. 100'e çekildi.
 
-## Sözleşme görevi — üç ayak İNDİ (2026-09-07)
+## Sözleşme görevi — DÖRT AYAK DA İNDİ, görev KAPANDI (2026-09-07)
 
-`brief-sozlesmesi-kaynak-bolumu-makine-okunur` görevinin dört ayağından üçü bu oturumda indi;
+`brief-sozlesmesi-kaynak-bolumu-makine-okunur` görevinin dört ayağı da indi;
 gövde o görevin kendi dosyasında yaşar. Dördü de Eray kararıyla: 1-3 kontrolör kararı + veto
 hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir satır).
 
@@ -389,8 +389,12 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   başlık satırına** taşındı.
 - **`tarih` sütunu OKUYARAK eklendi**, tasarlayarak değil: Bölüm 2 "yayın tarihini Bölüm C'de
   belirt" diyor ve denetçi sözleşmesi "TARİHLİ güncellik" arayan bir güçlü-kaynak testi koşuyor.
-- **KALAN: 4. ayak** — kapının Bölüm C ailesi olumsuz çıkarımdan olumlu yapısal sözleşmeye
-  çevrilecek ve Task 7'nin "makineyle doğrulanmadı" kapsam beyanı KALKACAK.
+- **4. ayak — monorepo `854373d`:** kapının Bölüm C ailesi olumsuz çıkarımdan **olumlu yapısal
+  sözleşmeye** çevrildi (birebir başlık satırı · altı sütun · hücre doluluğu · `alan/dönem`
+  kapalı kümesi · `iddia` kelime sınırı · `URL` biçimi · `tarih` yazımı · `tek kaynak` kümesi)
+  ve **BÜTÜNLÜK** eklendi: her alan/dönem için en az bir kaynak satırı aranıyor. Task 7'nin
+  "makineyle DOĞRULANMADI" kapsam beyanı ÜÇ yerden de KALKTI. Serbest düzyazı kaçışı artık
+  NOT üretiyor; onu ilan eden tripwire testi ateşlendi ve TERSİNİ ölçüyor.
 
 # Decisions Log
 
@@ -569,8 +573,11 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   Task 9/10 denetçi katmanını kurar ve sözleşme değişikliği o metne de dokunur; ayrıca Task 19
   Step 5 araştırmaları tek seferde yeniden üretir. Ölçüldü: şu anki sözleşme biçiminde üretilmiş
   gerçek çıktı bugün YOK, yani değişiklik şimdi bedelsiz.
-  **Bu kalem, o görev kapanınca KAPATILIR** — ve kapanışta Task 7'nin kapsam beyanı da kalkmalı,
-  yoksa bayat beyan denetçiyi yanıltır.
+  **KAPATILDI 2026-09-07 (monorepo `854373d`).** Dört ayak da indi; Task 7'nin kapsam beyanı
+  üç yerden de kalktı. BÜTÜNLÜK sorusu artık makineyle cevaplanıyor — kaybedilen şey geri
+  alındı. **Kalan ve ETİKETLİ:** sözleşmenin yeni biçiminde üretilmiş gerçek araştırma çıktısı
+  YOK, dolayısıyla araçların tabloyu ne kadar düzgün ürettiği ve katı biçimin yanlış-pozitif
+  oranı ÖLÇÜLMEDİ; ilk gerçek ölçüm Task 19 Step 5'te doğacak.
 
 - **[risk kabulü] Uydurma içerik özeti kapıyı geçebiliyor (medium, kabul).**
   Biçimi geçerli ama `run`'ın üretmediği bir özet yazan doğrudan-kurucu K-127 tabanını geçiyor

@@ -1,7 +1,8 @@
 ---
 title: Araştırma sözleşmesinin çıktı biçimi makine-okunur kesinliğe getirilsin
-status: active
+status: done
 started: 2026-09-07
+finished: 2026-09-07
 last-touched: 2026-09-07
 blocked-by: null
 source_task: docs/active/sektor-bilgi-paketi-plan2/TASK.md
@@ -39,7 +40,7 @@ Bu görev bir "son tarih"e değil, **adlandırılmış bir yuvaya** oturur:
 
 # Current Status
 
-**active — DÖRT AYAKTAN ÜÇÜ İNDİ (2026-09-07).**
+**done — DÖRT AYAK DA İNDİ (2026-09-07).**
 
 - **Ayak 1 İNDİ** — dış depo `7964ed6`: `═══ 5. ÇIKTI FORMATI ═══` yapısal sözleşmeye çevrildi.
   Başlık düzeyleri bağlayıcı · gerekçe tablosunun başlık satırı birebir · dönem başlıklarından
@@ -49,9 +50,13 @@ Bu görev bir "son tarih"e değil, **adlandırılmış bir yuvaya** oturur:
   **sütunun BEYANINA güvenmiyor** — açılan kaynakta görülen tarihi esas alıyor.
 - **Ayak 3 İNDİ** — monorepo `868f50a`: pin manifesti yenilendi. Ayrıca testin sütun türetmesi
   düzyazı cümlesinden **birebir başlık satırına** taşındı (kapı ile sözleşme aynı metne bakıyor).
-- **AYAK 4 AÇIK** — mekanik kapının Bölüm C ailesi olumsuz çıkarımdan olumlu yapısal sözleşmeye
-  çevrilecek; kapanınca Task 7'nin "makineyle DOĞRULANMADI" kapsam beyanı KALKAR. Kalkmazsa
-  beyan bayatlar ve bayat beyan, beyan olmamaktan kötüdür.
+- **Ayak 4 İNDİ** — monorepo `854373d`: mekanik kapının Bölüm C ailesi olumsuz çıkarımdan
+  **olumlu yapısal sözleşmeye** çevrildi. Ayıraç vekili (`_C_AYIRAC_RE`) SÖKÜLDÜ; kapı artık
+  birebir başlık satırı · altı sabit sütun · hücre doluluğu · `alan/dönem` kapalı kümesi ·
+  `iddia` kelime sınırı · `URL` adres biçimi · `tarih` yazımı · `tek kaynak` kapalı kümesi
+  doğruluyor. **BÜTÜNLÜK de eklendi:** her alan ve her dönem için en az bir kaynak satırı
+  aranıyor — Eray'ın (a) kararının gerekçesi tam olarak buydu ve karşılığı verildi.
+  Task 7'nin "makineyle DOĞRULANMADI" kapsam beyanı **ÜÇ yerden de KALKTI**.
 
 **Dört soru CEVAPLANDI (2026-09-07).** 1-3 kontrolör kararı + Eray veto hakkı (veto gelmedi);
 **4. soru Eray'ın kendi kararı: (a) — iddia başına bir satır.** Gerekçe: makine "her alan için
@@ -132,17 +137,26 @@ Ayaklar — hepsi bu görevin içinde, parçalanmaz:
   kapının işi olan BÜTÜNLÜK sorusunu ("her alan için kaynak gösterilmiş mi") cevaplamıyor.**
   Ayrıca spec'in "mekanik iş dil modeline verilmez" hükmüyle gerilim doğuyor. Bu yüzden ilan
   edildi AMA kök çözüm ertelenmedi, bu göreve bağlandı.
+- **2026-09-07 — BÜTÜNLÜK kontrolü kapıya EKLENDİ (kontrolör kararı, Eray veto hakkı).**
+  Eray'ın (a) kararının gerekçesi *"makine 'her alan için kaynak gösterilmiş mi' BÜTÜNLÜK
+  sorusunu tam cevaplayabilsin"*di. Karar bir İMKÂN açıyordu; kontrolör onu ETKİN bir kontrole
+  çevirdi: Bölüm A'nın sekiz alanı ve Bölüm B'de işlenmiş her dönem için en az bir kaynak satırı
+  aranıyor, eksikler TEK bir notta adıyla sayılıyor.
+  **Neden etkin yapıldı:** yalnız "cevaplanabilir" bırakmak, kaybedilen kontrolü geri getirmezdi;
+  ilan edilen açık ancak ölçülürse kapanır.
+  **Maliyet dürüstçe:** sözleşme her alan için kaynak satırını KELİMESİ KELİMESİNE zorunlu
+  KILMIYOR ("en az 2 bağımsız kaynak HEDEFLE" diyor), dolayısıyla bu kontrol sözleşmenin
+  yazılı harfinden bir adım ÖNDE. Bugün hiçbir kontrol ELEME yapmadığı için bedeli gürültüdür.
+  **Eray isterse geri alınır** — tek fonksiyon (`_c_kapsama_ihlalleri`) ve kendi mutasyon kolu var.
 
 # Open Problems
 
-- **ÜRÜN KARARI — tablo tekrarı ve rapor uzunluğu.** Tablo, aynı kaynağın N iddiayı desteklediği
-  yerde N satır ister; rapor uzar. Sözleşme başka bir yerde *"kısa ve yoğun yaz; makale/rapor
-  formatına kayma"* diyor. Bu gerilim tasarım turunda karara bağlanmalı — çözüm biçimi (ör. kaynak
-  başına gruplama) sözleşme metnini belirler.
-- **ÜRÜN KARARI — katı biçim, kalıba oturmayan bulgunun düşürülmesine davet eder.** Sözleşme başka
-  bir yerde *"hiçbir başlığa oturmayan ama değerli bulduğun gözlemleri ATMA"* diyor. Tablo dışında
-  kalan bir kaynak notunun nereye yazılacağı sözleşmede AÇIKÇA gösterilmeli, yoksa araç sessizce
-  düşürür.
+- **KAPANDI — tablo tekrarı ve rapor uzunluğu.** Sözleşme metninde çözüldü: `iddia` hücresi
+  EN FAZLA 15 KELİME. Rapor SATIR SAYISI olarak uzar, SATIR olarak uzamaz. **Gerçek çıktıyla
+  sınanmadı** — ölçümü aşağıdaki etiketli kalemle aynı yuvada (Task 19 Step 5).
+- **KAPANDI — kalıba oturmayan bulgunun düşürülmesi.** Sözleşme metninde çözüldü: *"BU TABLOYA
+  OTURMAYAN kaynak notunu ATMA: Bölüm D — EK BULGULAR'a bir satır olarak yaz (ne gördün, hangi
+  kaynak, neden tabloya girmiyor). Sessizce düşürme."* **Gerçek çıktıyla sınanmadı.**
 - **ÖLÇÜLMEMİŞ, ETİKETLİ — araçların tabloyu ne kadar düzgün ürettiği DOĞRULANMADI.** Şu anki
   sözleşme biçiminde üretilmiş gerçek çıktı olmadığı için ölçülemedi. "Tablo işe yarıyor" İDDİA
   EDİLMİYOR; yalnız "sözleşme zaten bir yerde tablo istiyor, ikincisi yeni bir kalıp değil"
