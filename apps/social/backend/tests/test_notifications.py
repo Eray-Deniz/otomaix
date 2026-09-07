@@ -1010,6 +1010,97 @@ def test_calendar_sql_escapes_every_interpolated_feed_value():
     )
 
 
+# ─── 6d. n8n artefaktlarının canlıya taşınabilirliği — SINIF kapıları ───────
+#
+# Yukarıdaki iki kapı sırrın DOSYADA durmamasını ölçer. Bir artefaktın canlıya
+# import edilebilmesi için iki şey daha gerekir ve ikisi de ölçüldü (2026-09-07,
+# n8n API'siyle karşılaştırma): (a) credential ATIFI canlıda karşılığı olan tek
+# bir kimliğe işaret etmeli, (b) webhook yükü n8n'in sardığı anahtar üzerinden
+# okunmalı. İkisi de elle seçilmiş örnekle değil, dizin genelinde ÜRETİLMİŞ
+# matrisle kapatılır.
+
+
+def _workflow_definitions() -> list[tuple[str, dict]]:
+    """Dizindeki HER workflow tanımı — dosya bir tanım da olabilir, bir liste de."""
+    import json
+
+    out: list[tuple[str, dict]] = []
+    for path in _workflow_files():
+        blob = json.loads(path.read_text(encoding="utf-8"))
+        for workflow in blob if isinstance(blob, list) else [blob]:
+            out.append((f"{path.name}:{workflow.get('name', '<isimsiz>')}", workflow))
+    assert out, "hiç workflow tanımı türetilemedi — matris boş koşardı"
+    return out
+
+
+def test_every_workflow_pins_one_postgres_credential():
+    """Tek veritabanı → TEK credential kimliği; dizin genelinde üretilmiş matris.
+
+    Ölçüldü 2026-09-07: `crm-automations.json` dört düğümde `id='1'`
+    (`PostgreSQL Otomaix`) atfediyordu, canlı n8n'de o kimlik YOK — canlıdaki
+    karşılık `LRCmorU07F9lRpjV` (`Postgres account`). Böyle bir dosya canlıya
+    import edildiğinde veritabanı düğümleri credential'sız kalır ve workflow
+    sessizce kırılır. Kapı sırra değil TAŞINABİLİRLİĞE bakar.
+    """
+    atiflar: dict[tuple[str, str], list[str]] = {}
+    for etiket, workflow in _workflow_definitions():
+        for node in workflow.get("nodes", []):
+            for tur, ref in (node.get("credentials") or {}).items():
+                if tur != "postgres":
+                    continue
+                anahtar = (str(ref.get("id")), str(ref.get("name")))
+                atiflar.setdefault(anahtar, []).append(f"{etiket}/{node['name']}")
+
+    assert atiflar, "hiç postgres credential atfı bulunamadı — matris boşa koştu"
+    assert len(atiflar) == 1, (
+        "postgres credential atfı BÖLÜNMÜŞ: "
+        + " · ".join(
+            f"{kimlik}({ad}) → {', '.join(yerler)}" for (kimlik, ad), yerler in sorted(atiflar.items())
+        )
+        + " — canlıda tek bir Postgres credential'ı var, hepsi ona işaret etmeli"
+    )
+
+
+def test_webhook_payload_is_read_through_its_wrapper_key():
+    """Webhook düğümünün çıktısı SARMALAYICI anahtarla okunur, alan adıyla DEĞİL.
+
+    n8n webhook düğümü gelen isteği `headers` · `params` · `query` · `body`
+    altına sarar; `$('<webhook>').item.json.<alan>` biçimi tanım gereği
+    `undefined` döner. Matris dizindeki HER workflow'un HER webhook düğümüne
+    yapılan HER atfını tarar — yeni bir workflow eklendiğinde kendiliğinden
+    kapsar.
+    """
+    import json
+    import re
+
+    sarmalayicilar = {"headers", "params", "query", "body", "webhookUrl", "executionMode"}
+
+    ihlaller: list[str] = []
+    olculen = 0
+    for etiket, workflow in _workflow_definitions():
+        webhooklar = {
+            node["name"]
+            for node in workflow.get("nodes", [])
+            if node.get("type", "").endswith(".webhook")
+        }
+        if not webhooklar:
+            continue
+        blob = json.dumps(workflow, ensure_ascii=False)
+        for dugum, alan in re.findall(r"\$\('([^']+)'\)\.item\.json\.(\w+)", blob):
+            if dugum not in webhooklar:
+                continue
+            olculen += 1
+            if alan not in sarmalayicilar:
+                ihlaller.append(f"{etiket}: $('{dugum}').item.json.{alan}")
+
+    assert olculen >= 1, "hiç webhook atfı türetilemedi — matris boş koşardı"
+    assert not ihlaller, (
+        "webhook yükü sarmalayıcı anahtar olmadan okunuyor: "
+        + " · ".join(sorted(set(ihlaller)))
+        + " — doğru biçim `$('<webhook>').item.json.body.<alan>`"
+    )
+
+
 # ─── 7. Marka durumu ucu (K-45) ─────────────────────────────────────────────
 
 
