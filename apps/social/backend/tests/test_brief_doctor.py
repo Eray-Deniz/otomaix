@@ -1957,34 +1957,66 @@ def test_ozet_kapisi_mutasyona_duyarli() -> None:
         assert bd.gate_round(ozetsiz).gecerli_kaynak_sayisi == 2
 
 
-# ─── H6: gerekçe tablosu KANONİK BAŞLIĞINDAN tanınır ───────────────────────
+# ─── H6: dönem-ÖNCESİ HER tablo denetlenir — SEÇİM YOK ─────────────────────
 #
-# Sınıf (tur 3, F3 — bir önceki turun KENDİ düzeltmesinin yan etkisi): tur 2'de
-# F5'i kapatmak için "gerekçe tablosu dönemlerden ÖNCEKİ İLK BİTİŞİK tablodur"
-# denmişti. Bu seçim KOŞULSUZDU ve ölçüldü ki önüne konan sağlam görünümlü bir
-# tablo GERÇEK ve bozuk gerekçe tablosunu tamamen gizliyordu (`not 4 -> 0`).
-# Artık aday, blok BAŞLIĞININ kanonik sütun anahtarlarını taşımasıyla belirlenir
-# (`GEREKCE_BASLIK_ANAHTARLARI`, `GEREKCE_TABLOSU_SUTUNLARI`'ndan TÜRER) ve
-# fail-open dal yoktur: aday sıfır ya da birden çoksa NOT düşer ve BÜTÜN bloklar
-# denetlenir.
+# Sınıf (tur 4, medium — aynı eksende ÜÇÜNCÜ kez ve üçüncü kez KENDİ
+# düzeltmemizin ürünü):
+#   v1  tanıma yoktu → Bölüm B'deki her `|` satırı gerekçe malzemesiydi
+#       (dönem bloğuna konan meşru bir ölçüm tablosu DÖRT uydurma not verdi).
+#   v2  "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" → önüne konan yem gizledi.
+#   v3  "kanonik başlık taşıyan aday" → ölçüldü ve o da kandırıldı: GERÇEK
+#       gerekçe tablosunun başlığı JENERİK olduğunda eşiğin ALTINDA kalır,
+#       önüne konan KANONİK başlıklı bir yem TEK aday olur ve gerçek tabloyu
+#       tamamen susturur. Ölçüldü: yem yokken `notlu-gecti / 8 not`, yem
+#       eklenince `gecti / 0 not`.
 #
-# **Matris KAVRAMDAN türer:** eksen 1 = alakasız tablonun Bölüm B içindeki
-# KONUMU (gerekçe tablosuna göre önce · aralarda · sonra — bir tablonun bir
-# başkasına göre alabileceği üç konum), eksen 2 = GERÇEK gerekçe tablosunun
-# durumu (sağlam · bozuk). 3 × 2 = 6 hücre; boş hücre yoktur.
+# Ortak desen: her tur bir SEÇİM sezgiseli kurdu ve her sezgisel kendi kalıbına
+# uyan bir yemle kandırıldı. Bu tur SEÇİMİ BIRAKIR: dönem bloklarından ÖNCE
+# gelen BÜTÜN tablolar denetlenir, hiçbiri sessizce ATILMAZ; birden çoksa
+# belirsizlik NOTU düşer. Kanonik başlık artık bir SEÇİM kuralı değil, bir NOT
+# konusudur (`_gerekce_basligi_puani` yalnız notu besler).
+#
+# **Bilinçli bedel:** dönemlerden önce konmuş meşru ve alakasız bir tablo artık
+# NOT üretir (kendi satırları da tür etiketi/sütun denetimine girer). Bugün
+# hiçbir kontrol ELEMEDİĞİ için maliyet gürültüdür, kaynak kaybı değil — ve not
+# SESSİZ DEĞİLDİR, belirsizlik açıkça yazılır. Sessiz gizlenmeye tercih edilir.
+#
+# **Korunan kazanım (v2'nin yanlış-pozitif düzeltmesi):** dönem bloklarının
+# İÇİNDE ya da SONRASINDA duran tablolar gerekçe denetimine GİRMEZ ve 0 not
+# vermeye devam eder. Bu bir sezgisel değil, sözleşmenin KENDİ sırasıdır
+# ("önce tablo, sonra dönem dönem dört başlık").
+#
+# **Matris KAVRAMDAN türer** (bulunan örneklerden değil). Bir tablo bloğunun
+# gerekçe denetimine girip girmemesi iki bağımsız eksene bağlıdır:
+#   eksen 1 — KONUM: dönemlerden ÖNCE · dönemlerin İÇİNDE · dönemlerden SONRA
+#   eksen 2 — BAŞLIK: kanonik gerekçe başlığı taşıyor · taşımıyor
+# ve denetlenecek belgede GERÇEK gerekçe tablosunun durumu üçüncü eksendir:
+#   eksen 3 — sağlam · satırları bozuk · başlığı jenerik VE satırları bozuk
+# 3 × 2 × 3 = 18 hücre. BOŞ HÜCRE YOKTUR.
+#
+# Eksen 3'ün DÖRDÜNCÜ değeri ("gerçek gerekçe tablosu YOK") bilinçle dışarıda
+# bırakıldı, sessizce atlanmadı: o dalda susturulacak bir blok bulunmadığı için
+# bu sınıf (bir blok bir başkasını susturur mu) hiç KURULAMAZ; ayrıca kendi
+# yanlış-pozitif kapanı vardır (`test_tablosuz_bolum_b_tanima_notu_uretmez`).
 
-_ALAKASIZ_4_SUTUN = (
-    "| ay | trafik | dönüşüm | serbest not |\n",
-    "|---|---|---|---|\n",
-    "| ocak | yuksek | orta | ilk ceyrek |\n",
-    "| subat | orta | orta | ilk ceyrek |\n",
-)
-# Aynı tablo ama KANONİK gerekçe başlığıyla: iki aday üretir (belirsizlik kolu).
-_SAHTE_GEREKCE = (
-    "| dönem | karar | tür | gerekçe |\n",
-    "|---|---|---|---|\n",
-    "| ocak | secildi | kutlama | Uydurma gerekce. |\n",
-)
+_EK_TABLOLAR = {
+    # Alakasız ölçüm tablosu — kanonik gerekçe başlığını TAŞIMAZ.
+    "jenerik": (
+        "| ay | trafik | dönüşüm | serbest not |\n",
+        "|---|---|---|---|\n",
+        "| ocak | yuksek | orta | ilk ceyrek |\n",
+        "| subat | orta | orta | ilk ceyrek |\n",
+    ),
+    # Aynı boydaki tablo ama kanonik gerekçe BAŞLIĞIYLA — v3'ü kandıran yem.
+    "kanonik": (
+        "| dönem | karar | tür | gerekçe |\n",
+        "|---|---|---|---|\n",
+        "| ocak | secildi | kutlama | Uydurma gerekce. |\n",
+        "| subat | secildi | kutlama | Uydurma gerekce. |\n",
+    ),
+}
+_ALAKASIZ_4_SUTUN = _EK_TABLOLAR["jenerik"]
+_SAHTE_GEREKCE = _EK_TABLOLAR["kanonik"]
 
 
 def _bolum_b_araligi(satirlar: list[str]) -> tuple[int, int]:
@@ -1992,10 +2024,10 @@ def _bolum_b_araligi(satirlar: list[str]) -> tuple[int, int]:
 
 
 def bolum_b_tablo_ekle(metin: str, konum: str, tablo: tuple[str, ...]) -> str:
-    """Bölüm B'ye alakasız/sahte bir tabloyu ÜÇ konumdan birine koyar.
+    """Bölüm B'ye ek bir tabloyu ÜÇ konumdan birine koyar.
 
-    `once`  — gerekçe tablosundan ÖNCE (Bölüm B başlığının hemen altı)
-    `arada` — dönem blokları arasında (gerekçe tablosundan sonra)
+    `once`  — dönem bloklarından ÖNCE (Bölüm B başlığının hemen altı)
+    `arada` — dönem blokları arasında (dönemler BAŞLADIKTAN sonra)
     `sonra` — bütün dönemlerden SONRA (Bölüm B'nin sonu)
     """
     satirlar = metin.splitlines(True)
@@ -2011,49 +2043,157 @@ def bolum_b_tablo_ekle(metin: str, konum: str, tablo: tuple[str, ...]) -> str:
     return "".join(satirlar[:k] + ["\n"] + list(tablo) + ["\n"] + satirlar[k:])
 
 
-GEREKCE_TANIMA_MATRISI = tuple(
+def gerekce_basligini_jeneriklestir(metin: str) -> str:
+    """GERÇEK gerekçe tablosunun BAŞLIĞINI kanonik olmayan bir başlığa çevirir."""
+    yeni = metin.replace("| dönem | karar | tür | gerekçe |", "| a | b | c | d |")
+    assert yeni != metin, "cerrahi gerekçe tablosunun başlığını bulamadı"
+    return yeni
+
+
+# Eksen 3 — GERÇEK gerekçe tablosunun durumu. Üçüncü değer o durumun rapora
+# BIRAKMASI gereken izleri taşır; izler kontrol MESAJLARINDAN türer.
+_GERCEK_TABLO_DURUMLARI = (
+    ("saglam", lambda m: m, ()),
     (
-        f"alakasiz-{konum}/gercek-{durum}",
-        bolum_b_tablo_ekle(bozan(TEMIZ), konum, _ALAKASIZ_4_SUTUN),
-        izler,
+        "satirlari-bozuk",
+        gerekce_tablosunu_boz,
+        ("tür etiketi yok", "3 sütunlu satır"),
+    ),
+    (
+        "jenerik-baslik-ve-bozuk",
+        lambda m: gerekce_tablosunu_boz(gerekce_basligini_jeneriklestir(m)),
+        ("tür etiketi yok", "3 sütunlu satır"),
+    ),
+)
+
+
+def _tur_etiketi_notu_verir(tablo: tuple[str, ...]) -> bool:
+    """Ek tablonun VERİ satırlarından biri kapalı kümeden etiket taşımıyor mu?
+
+    Beklenti elle yazılmaz: denetime giren her satır `_kontrol_tur_etiketi`'ne
+    de girer, o yüzden ek tablonun kendi hücrelerinden ÜRETİLİR.
+    """
+    return any(
+        not any(
+            hucre.strip() in bd.TUR_ETIKETLERI
+            for hucre in satir.strip().strip("|").split("|")
+        )
+        for satir in tablo[2:]
+    )
+
+
+def _beklenen_izler(konum: str, baslik: str, durum: str, durum_izleri) -> tuple:
+    """Hücrenin beklentisini KURALDAN türetir, elle listelemez."""
+    izler = list(durum_izleri)
+    denetlenen = konum == "once"
+    if denetlenen and _tur_etiketi_notu_verir(_EK_TABLOLAR[baslik]):
+        izler.append("tür etiketi yok")
+    basliksiz = int(denetlenen and baslik == "jenerik") + int(
+        durum == "jenerik-baslik-ve-bozuk"
+    )
+    if basliksiz:
+        izler.append(f"denetimine giren {basliksiz} tablo")
+    if denetlenen:
+        izler.append("dönem başlıklarından ÖNCE 2 tablo var")
+    return tuple(dict.fromkeys(izler))
+
+
+GEREKCE_DENETIM_MATRISI = tuple(
+    (
+        f"ek-{konum}/baslik-{baslik}/gercek-{durum}",
+        bolum_b_tablo_ekle(bozan(TEMIZ), konum, _EK_TABLOLAR[baslik]),
+        _beklenen_izler(konum, baslik, durum, izler),
+        _EK_TABLOLAR[baslik][2],
     )
     for konum in ("once", "arada", "sonra")
-    for durum, bozan, izler in (
-        ("saglam", lambda m: m, ()),
-        ("bozuk", gerekce_tablosunu_boz, ("tür etiketi yok", "3 sütunlu satır")),
-    )
+    for baslik in ("jenerik", "kanonik")
+    for durum, bozan, izler in _GERCEK_TABLO_DURUMLARI
 )
 
 
 @pytest.mark.parametrize(
     "metin,izler",
-    [(h[1], h[2]) for h in GEREKCE_TANIMA_MATRISI],
-    ids=[h[0] for h in GEREKCE_TANIMA_MATRISI],
+    [(h[1], h[2]) for h in GEREKCE_DENETIM_MATRISI],
+    ids=[h[0] for h in GEREKCE_DENETIM_MATRISI],
 )
-def test_alakasiz_tablo_gercek_gerekce_tablosunu_gizleyemez(
-    metin: str, izler: tuple[str, ...]
-) -> None:
-    """Konumu ne olursa olsun alakasız tablo GERÇEK tabloyu köreltemez."""
+def test_donem_oncesi_her_tablo_denetlenir(metin: str, izler: tuple) -> None:
+    """Aday olan bir blok, aday OLMAYAN bir bloğu SUSTURAMAZ."""
     mesajlar = _notlari(metin)
     if not izler:
-        assert mesajlar == "", f"sağlam gerekçe tablosu not üretti: {mesajlar[:400]}"
+        assert mesajlar == "", f"dönem-sonrası tablo not üretti: {mesajlar[:400]}"
     for iz in izler:
-        assert iz in mesajlar, f"{iz!r} bulunamadı; görülen: {mesajlar[:400]}"
+        assert iz in mesajlar, f"{iz!r} bulunamadı; görülen: {mesajlar[:600]}"
 
 
-def test_gerekce_tanima_matrisi_bos_kume_ve_taban_kollari() -> None:
-    """Boş-küme kolu: matris iki eksenden GERÇEKTEN üretilmiş mi?"""
-    assert len(GEREKCE_TANIMA_MATRISI) == 3 * 2 == 6
-    for ad, metin, _ in GEREKCE_TANIMA_MATRISI:
+def test_gerekce_denetim_matrisi_bos_kume_ve_taban_kollari() -> None:
+    """Boş-küme kolu: matris ÜÇ eksenden gerçekten üretilmiş mi, boşa yeşil mi?"""
+    assert len(GEREKCE_DENETIM_MATRISI) == 3 * 2 * 3 == 18
+    adlar = [h[0] for h in GEREKCE_DENETIM_MATRISI]
+    assert len(set(adlar)) == 18, "matris hücreleri ÇAKIŞIYOR"
+    for konum in ("once", "arada", "sonra"):
+        assert sum(1 for ad in adlar if ad.startswith(f"ek-{konum}/")) == 6, konum
+    for baslik in ("jenerik", "kanonik"):
+        assert sum(1 for ad in adlar if f"/baslik-{baslik}/" in ad) == 9, baslik
+    for durum, _, _ in _GERCEK_TABLO_DURUMLARI:
+        assert sum(1 for ad in adlar if ad.endswith(f"/gercek-{durum}")) == 6, durum
+    for ad, metin, _, imza in GEREKCE_DENETIM_MATRISI:
         assert metin != TEMIZ, f"{ad}: cerrahi metni değiştirmedi"
-        assert metin.count("| ay | trafik | dönüşüm | serbest not |") == 1
-    # Taban kolu: alakasız tablo YOKKEN bozuk gerçek tablo zaten görünüyordu.
-    yalniz_bozuk = _notlari(gerekce_tablosunu_boz(TEMIZ))
-    assert "tür etiketi yok" in yalniz_bozuk and "3 sütunlu satır" in yalniz_bozuk
+        assert metin.count(imza) == 1, f"{ad}: ek tablo tam bir kez konmadı"
+    # Beklentiler BOŞA yeşil değil: 18 hücrenin 14'ü gerçekten NOT bekliyor
+    # (boş kalan dördü = dönem-sonrası konum × sağlam gerçek tablo).
+    beklentili = [h[0] for h in GEREKCE_DENETIM_MATRISI if h[2]]
+    assert len(beklentili) == 14, beklentili
+    # Taban kolu: pozitif kontrol — ek tablo YOKKEN temiz kaynak notsuz geçer.
+    rapor = bd.run(TEMIZ, source_name="P")
+    assert rapor.notlar == () and rapor.sonuc == bd.SONUC_GECTI
 
 
-def test_iki_aday_belirsizligi_not_duser_ve_ikisi_de_denetlenir() -> None:
-    """Kanonik başlıklı SAHTE tablo aday sayısını 2 yapar → belirsizlik NOTU."""
+def _v3_secimi(bloklar):
+    """Mutasyon: tur 3'ün SEÇİM sezgiseli (dönem-öncesi süpürme SÖKÜLÜ)."""
+    adaylar = [
+        blok
+        for blok in bloklar
+        if blok
+        and bd._gerekce_basligi_puani(blok[0][1]) >= bd.GEREKCE_BASLIK_ASGARI
+    ]
+    if adaylar:
+        return list(adaylar), len(adaylar)
+    return list(bloklar), 0
+
+
+def test_donem_oncesi_supurme_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: süpürmeyi sök (v3 seçimine dön) → matris KIRMIZI düşmeli."""
+    kirmizi = []
+    with mock.patch.object(bd, "_gerekce_tablosu", _v3_secimi):
+        for ad, metin, izler, _ in GEREKCE_DENETIM_MATRISI:
+            mesajlar = _notlari(metin)
+            if any(iz not in mesajlar for iz in izler):
+                kirmizi.append(ad)
+    assert kirmizi, "seçimi geri koymak matrisi kırmızıya düşürmedi"
+    # ...ve GİZLENME hücresi adıyla adına düşmeli: v3 orada 0 not veriyordu.
+    gizlenme = next(
+        h
+        for h in GEREKCE_DENETIM_MATRISI
+        if h[0] == "ek-once/baslik-kanonik/gercek-jenerik-baslik-ve-bozuk"
+    )
+    assert gizlenme[0] in kirmizi
+    with mock.patch.object(bd, "_gerekce_tablosu", _v3_secimi):
+        assert _notlari(gizlenme[1]) == "", "v3 bu hücrede zaten gizlemiyordu"
+
+
+def test_yem_tablo_gercek_tablonun_notlarini_gizleyemez() -> None:
+    """Gizlenme kolu: yem EKLEMEK gerçek tablonun notlarını EKSİLTEMEZ."""
+    yemsiz = gerekce_tablosunu_boz(gerekce_basligini_jeneriklestir(TEMIZ))
+    yemli = bolum_b_tablo_ekle(yemsiz, "once", _SAHTE_GEREKCE)
+    a = {b.mesaj for b in bd.run(yemsiz, source_name="P").notlar}
+    b = {b.mesaj for b in bd.run(yemli, source_name="P").notlar}
+    assert a, "taban kolu boş — prob gerçek tabloyu bozmuyor"
+    assert a <= b, f"yem şu notları GİZLEDİ: {sorted(a - b)}"
+    assert len(b) > len(a), "yem belirsizlik notu üretmedi"
+
+
+def test_iki_donem_oncesi_tablo_belirsizlik_notu_duser() -> None:
+    """Dönem-öncesi iki tablo → belirsizlik NOTU, ve İKİSİ DE denetlenir."""
     ikili = bolum_b_tablo_ekle(gerekce_tablosunu_boz(TEMIZ), "once", _SAHTE_GEREKCE)
     mesajlar = _notlari(ikili)
     assert "2 tablo var" in mesajlar, mesajlar[:400]
@@ -2062,11 +2202,8 @@ def test_iki_aday_belirsizligi_not_duser_ve_ikisi_de_denetlenir() -> None:
 
 
 def test_kanonik_baslik_yoksa_tanima_notu_duser() -> None:
-    """Aday sıfır ama tablo VAR → sessiz kalınmaz, not düşer ve hepsi denetlenir."""
-    basliksiz = TEMIZ.replace(
-        "| dönem | karar | tür | gerekçe |", "| a | b | c | d |"
-    )
-    assert basliksiz != TEMIZ
+    """Denetime giren tablo kanonik başlık taşımıyorsa NOT düşer (seçim değil)."""
+    basliksiz = gerekce_basligini_jeneriklestir(TEMIZ)
     mesajlar = _notlari(basliksiz)
     assert "KANONİK başlığını taşımıyor" in mesajlar, mesajlar[:400]
 
@@ -2084,17 +2221,17 @@ def test_tablosuz_bolum_b_tanima_notu_uretmez() -> None:
     assert "gerekçeleri tablosu yok" in mesajlar
 
 
-def test_gerekce_tanima_kapisi_mutasyona_duyarli() -> None:
-    """Mutasyon kolu: başlık tanımasını iki ayrı yerden sök → matris kırmızı."""
+def test_gerekce_denetim_kapisi_iki_ayri_yerden_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: denetim kümesini ve başlık notunu AYRI AYRI sök."""
     gizleyen = bolum_b_tablo_ekle(
         gerekce_tablosunu_boz(TEMIZ), "once", _ALAKASIZ_4_SUTUN
     )
     assert "3 sütunlu satır" in _notlari(gizleyen)
-    # (a) Seçimi sök: her blok tek gerekçe tablosuymuş gibi kabul edilsin.
+    # (a) Denetim kümesini sök: dönem-SONRASI tablolar da denetime girsin.
     with mock.patch.object(bd, "_gerekce_tablosu", lambda bloklar: (bloklar, 1)):
         bozuk = _notlari(bolum_b_alakasiz_tablo(TEMIZ, 2))
-        assert "2 sütunlu satır" in bozuk, "alakasız tablo yine uydurma not vermeli"
-    # (b) Başlık puanını sök: aday kalmaz → tanıma notu ve tam denetim.
+        assert "2 sütunlu satır" in bozuk, "dönem-içi tablo yine not vermeli"
+    # (b) Başlık puanını sök: her tablo başlıksız sayılır → tanıma notu.
     with mock.patch.object(bd, "_gerekce_basligi_puani", lambda satir: 0):
         assert "KANONİK başlığını taşımıyor" in _notlari(TEMIZ)
 

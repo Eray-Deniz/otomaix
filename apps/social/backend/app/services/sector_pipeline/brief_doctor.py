@@ -100,15 +100,21 @@ aynı dönemin iki kez yazılmasıyla sağlanabiliyordu. Alt sınırlar bu yüzd
 `_Yuva.essiz_maddeler` ve `_essiz_donem_sayisi` üstünden okur.
 
 Dilbilgisi bilerek DAR TUTULMAMIŞTIR: tanınmayan bir başlık iz bırakmaz ve ihlal
-sayılmaz — yanlış pozitif üretip gerçek araştırma çıktısını gürültüye boğmasın diye. Aynı
-disiplinle, Bölüm B'de gerekçe tablosu KANONİK BAŞLIĞINDAN tanınır
-(`_gerekce_basligi_puani`): ayıraçtan sonraki her `|` satırını gerekçe malzemesi saymak,
-bir dönem bloğunun içine konan meşru bir ölçüm tablosundan DÖRT uydurma not doğuruyordu;
-onu kapatan "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" kuralı ise KOŞULSUZ olduğu için yeni
-bir fail-open dal açmıştı — önüne konan sağlam görünümlü bir tablo, bozuk GERÇEK gerekçe
-tablosunu gizliyordu (ölçüldü: `5 not → 2 not`). Tanıma artık konumdan değil BAŞLIK
-ANLAMINDAN gelir ve fail-open dal yoktur: aday sıfır ya da birden çoksa NOT düşer ve
-blokların hepsi denetlenir.
+sayılmaz — yanlış pozitif üretip gerçek araştırma çıktısını gürültüye boğmasın diye. Bölüm
+B'deki gerekçe tablosunda ise bu disiplin ÜÇ TUR boyunca fail-open dal doğurdu: ayıraçtan
+sonraki her `|` satırını gerekçe malzemesi saymak bir dönem bloğuna konan meşru ölçüm
+tablosundan DÖRT uydurma not üretiyordu; onu kapatan "dönemlerden ÖNCEKİ İLK BİTİŞİK
+tablo" kuralının önüne konan bir yem gerçek tabloyu gizledi; onu kapatan "KANONİK başlık
+taşıyan adayı seç" kuralı da ÖLÇÜLDÜ ve kandırıldı — gerçek tablonun başlığı jenerik
+olduğunda önüne konan kanonik başlıklı bir yem TEK aday oluyor ve gerçek tabloyu tamamen
+susturuyordu (ölçüldü: `8 not → 0 not`). Ortak desen: her tur bir SEÇİM sezgiseli kurdu ve
+her sezgisel kendi kalıbına uyan bir yemle kandırıldı. Dördüncü bir sezgisel KURULMADI —
+seçim BIRAKILDI: dönem bloklarından ÖNCE gelen BÜTÜN tablolar denetlenir, hiçbiri sessizce
+atılmaz, birden çoksa belirsizlik NOTU düşer. Kanonik başlık artık seçmez, yalnız NOT
+besler. Bedeli bilinçle kabul edildi: dönemlerden önce konmuş meşru ve alakasız bir tablo
+artık NOT üretir — bugün hiçbir kontrol elemediği için maliyet gürültüdür, kaynak kaybı
+değil, ve not sessiz değildir. Korunan kazanım: dönemlerin İÇİNDE ya da SONRASINDA duran
+tablolar (dönem-öncesi bir tablo varken) denetime GİRMEZ.
 
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
@@ -134,9 +140,13 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   dolayısıyla SERBEST DÜZYAZI bu kontrolü GEÇER (ölçüldü). Kök çözüm sözleşme
   revizyonudur ve AYRI bir tasarım işine kaydedildi; vekil bu turda SERTLEŞTİRİLMEDİ —
   sertleştirme üç turdur yakınsamadı ve yanlış-pozitif üretir.
-* Gerekçe tablosunun KANONİK başlığı TAKLİT edilebilir: taklit eden tablo da aday olur,
-  o hâlde belirsizlik NOTU düşer ve blokların hepsi denetlenir, ama hangisinin gerçek
-  gerekçe tablosu olduğu DOĞRULANMADI.
+* Gerekçe denetimine giren küme SEÇİLMEZ: dönem bloklarından ÖNCEKİ bütün tablolar
+  denetlenir. Hangisinin GERÇEK gerekçe tablosu olduğu DOĞRULANMAZ ve doğrulanmaya
+  ÇALIŞILMAZ — bir önceki turun "kanonik başlıklı adayı seç" kuralı ÖLÇÜLDÜ ve
+  YANLIŞLANDI (kanonik başlıklı bir yem, jenerik başlıklı GERÇEK tabloyu susturuyordu:
+  `8 not → 0 not`). Dönem bloklarının İÇİNDE ya da SONRASINDA duran bir tablo, kanonik
+  başlık taşısa bile denetime GİRMEZ; o konumdaki bir tablonun gerekçe tablosu OLMADIĞI
+  sözleşmenin sırasından OKUNUR, ÖLÇÜLMEDİ.
 * Kaynak KİMLİĞİ yazım takma adlarını (`kanonik_kaynak_kimligi`) ve aynı metnin iki adla
   verilmesini (`icerik_ozeti`) denkler. Özetsiz kimlik artık kapıya UYGUN DEĞİLDİR, ama
   özetin `run` tarafından ÜRETİLDİĞİ doğrulanamaz: biçim zorlanır, KÖKEN zorlanmaz —
@@ -855,8 +865,10 @@ class _Belge:
     bos_bolumler: tuple[str, ...] = ()
     tablo_sutun_sayilari: tuple[int, ...] = ()
     tablo_donem_sonrasi: bool = False
-    gerekce_tablo_blok_sayisi: int = 0
-    gerekce_aday_sayisi: int = 0
+    # Gerekçe denetimine GİREN blokların sayımı. Seçim yoktur: denetim kümesi
+    # dönem bloklarından ÖNCEKİ bütün tablolardır (yoksa hepsi).
+    gerekce_donem_oncesi_sayisi: int = 0
+    gerekce_basliksiz_sayisi: int = 0
     c_esleme_satiri_var: bool = False
     # Tur 1 yalnız BÖLÜM ve ALAN düzeyini kurtardı; aşağıdakiler iç içe KALAN
     # düzeylerin sıralı-tekrarlı izleridir. Düzey listesi belgenin KENDİ içerme
@@ -1021,8 +1033,15 @@ def _ayristir(source_text: str) -> _Belge:
             aktif_donem.satirlar.append(satir)
 
     tablo_bloklari = _tablo_bloklari(tablo_izleri)
-    secilen_bloklar, gerekce_aday_sayisi = _gerekce_tablosu(tablo_bloklari)
+    secilen_bloklar, gerekce_donem_oncesi_sayisi = _gerekce_tablosu(tablo_bloklari)
     tablo_donem_sonrasi = any(blok[0][2] for blok in secilen_bloklar)
+    # Kanonik başlık artık SEÇMEZ, yalnız NOT besler: denetime giren kaç blok
+    # gerekçe tablosunun kanonik başlığını taşımıyor?
+    gerekce_basliksiz_sayisi = sum(
+        1
+        for blok in secilen_bloklar
+        if blok and _gerekce_basligi_puani(blok[0][1]) < GEREKCE_BASLIK_ASGARI
+    )
 
     for donem in donemler:
         donem.yuvalar, donem.yuva_sirasi = _bloklara_ayir(
@@ -1066,8 +1085,8 @@ def _ayristir(source_text: str) -> _Belge:
         bos_bolumler=bos_bolumler,
         tablo_sutun_sayilari=tablo_sutun_sayilari,
         tablo_donem_sonrasi=tablo_donem_sonrasi,
-        gerekce_tablo_blok_sayisi=len(tablo_bloklari),
-        gerekce_aday_sayisi=gerekce_aday_sayisi,
+        gerekce_donem_oncesi_sayisi=gerekce_donem_oncesi_sayisi,
+        gerekce_basliksiz_sayisi=gerekce_basliksiz_sayisi,
         c_esleme_satiri_var=bool(c_esleme_satirlari),
         video_havuz_sirasi=video_havuz_sirasi,
         donem_sirasi=tuple(_sadelestir(donem.ad) for donem in donemler),
@@ -1102,37 +1121,45 @@ def _gerekce_basligi_puani(satir: str) -> int:
 def _gerekce_tablosu(
     bloklar: Sequence[Sequence[tuple[int, str, bool]]]
 ) -> tuple[list[Sequence[tuple[int, str, bool]]], int]:
-    """Gerekçe tablosunu KANONİK BAŞLIĞINDAN tanır → (denetlenecek bloklar, aday).
+    """Denetim kümesi = dönem bloklarından ÖNCEKİ BÜTÜN tablolar. SEÇİM YOK.
 
-    **Ölçülmüş gerileme (tur 3, F3 — bir önceki turun KENDİ düzeltmesinin yan
-    etkisi):** tur 2 "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" diyordu. Seçim
-    KOŞULSUZDU ve ölçüldü ki gerçek gerekçe tablosunun önüne konan sağlam
-    görünümlü bir tablo, bozuk GERÇEK tabloyu tamamen gizliyordu: yalnız bozuk
-    tablo `notlu-gecti / 5 not`, önüne tablo konunca `2 not`. Yani F5'i kapatan
-    kural yeni bir fail-open dal açmıştı.
+    **Ölçülmüş gerileme (tur 4 — aynı eksende ÜÇÜNCÜ tur ve üçüncü kez kendi
+    düzeltmemizin ürünü):**
 
-    Tanıma artık KONUMDAN değil BAŞLIK ANLAMINDAN gelir: blok başlığı kanonik
-    sütun anahtarlarından (`GEREKCE_BASLIK_ANAHTARLARI`) en az
-    `GEREKCE_BASLIK_ASGARI` tanesini taşıyorsa ADAYDIR.
+    * v1: tanıma yoktu → Bölüm B'deki her `|` satırı gerekçe malzemesiydi.
+    * v2: "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" → önüne konan yem gizledi.
+    * v3: "kanonik başlık taşıyan aday" → yem, GERÇEK tablonun başlığı jenerik
+      olduğunda TEK aday olur ve gerçek tabloyu tamamen susturur. Ölçüldü: yem
+      yokken `notlu-gecti / 8 not`, yem eklenince `gecti / 0 not`.
 
-    **Fail-open dal YOKTUR.** Aday tam bir taneyse o denetlenir. Aday BİRDEN
-    ÇOKSA hepsi denetlenir (gizlenme olmaz) ve `_kontrol_gerekce_tablosu` not
-    düşer. Aday HİÇ YOKSA — ama tablo varsa — yine hepsi denetlenir ve tanıma
-    notu düşer: "hangisi olduğu bilinmiyor" hâli sessizce ilk bloğu seçmekten
-    daha kapalıdır.
+    Ortak desen: her tur bir SEÇİM sezgiseli kurdu, her sezgisel kendi kalıbına
+    uyan bir yemle kandırıldı. Dördüncü bir sezgisel KURULMAZ — seçim BIRAKILIR.
 
-    **Kapsam sınırı:** tanıma sütun başlıklarının SÖZCÜKLERİNE bakar, anlamına
-    değil; kanonik başlığı taklit eden bir tablo aday olur — o hâlde aday sayısı
-    ikiye çıkar ve belirsizlik NOTU düşer, ama hangisinin gerçek olduğu
-    DOĞRULANMADI.
+    Kural: dönem bloklarından ÖNCE gelen bütün tablolar denetlenir, hiçbiri
+    sessizce ATILMAZ; aday olan bir blok, aday olmayan bir bloğu SUSTURAMAZ.
+    Birden çoksa `_kontrol_gerekce_tablosu` belirsizlik NOTU düşer. Dönem-öncesi
+    hiç tablo yoksa — ama tablo varsa — bütün bloklar denetlenir ve `sıra` alt
+    kuralı "tablo dönemlerden SONRA geliyor" notunu düşürür.
+
+    **Korunan kazanım (v2'nin yanlış-pozitif düzeltmesi):** dönem bloklarının
+    İÇİNDE ya da SONRASINDA duran tablolar, dönem-öncesi bir tablo VARKEN
+    denetime GİRMEZ. Bu bir sezgisel değil, sözleşmenin kendi SIRASIDIR
+    (`_SABLON.md` §5: "önce tablo, sonra dönem dönem dört başlık").
+
+    **Bilinçle kabul edilen bedel:** dönemlerden önce konmuş meşru ve alakasız
+    bir tablo artık NOT üretir (kendi satırları da tür etiketi/sütun denetimine
+    girer). Bugün hiçbir kontrol ELEMEDİĞİ için maliyet gürültüdür, kaynak kaybı
+    değil — ve not SESSİZ DEĞİLDİR, belirsizlik açıkça yazılır.
+
+    **Kapsam sınırı:** dönem-öncesi tabloların hangisinin GERÇEK gerekçe tablosu
+    olduğu DOĞRULANMAZ ve doğrulanmaya ÇALIŞILMAZ; hepsi denetlenir. Dönemlerin
+    içinde/sonrasında duran bir tablo, kanonik başlık taşısa bile denetime
+    girmez — o konumdaki bir tablonun gerekçe tablosu OLMADIĞI sözleşmeden
+    okunur, ölçülmez.
     """
-    adaylar = [
-        blok
-        for blok in bloklar
-        if blok and _gerekce_basligi_puani(blok[0][1]) >= GEREKCE_BASLIK_ASGARI
-    ]
-    if adaylar:
-        return list(adaylar), len(adaylar)
+    donem_oncesi = [blok for blok in bloklar if blok and not blok[0][2]]
+    if donem_oncesi:
+        return donem_oncesi, len(donem_oncesi)
     return list(bloklar), 0
 
 
@@ -1628,22 +1655,23 @@ def _kontrol_gerekce_tablosu(belge: _Belge) -> list[str]:
             "Bölüm B'de özel gün seçim/eleme/ekleme gerekçeleri tablosu yok "
             f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)})"
         )
-    # Tanıma belirsizliği ayrı bir ihlaldir: sessizce bir blok SEÇİLMEZ.
-    # Bölüm B'de HİÇ tablo yokken bu dal susar — aksi hâlde tablosuz her gerçek
+    # Kanonik başlık bir SEÇİM kuralı değil, bir NOT konusudur: denetime giren
+    # bir blok başlığı taşımıyorsa bu bir ihlaldir — ama blok yine denetlenir.
+    # Bölüm B'de HİÇ tablo yokken bu dal susar; aksi hâlde tablosuz her gerçek
     # çıktı ikinci bir uydurma not alırdı (ölçüldü: beş gerçek çıktının beşinde
     # de Bölüm B tablosuzdur).
-    if belge.gerekce_tablo_blok_sayisi and not belge.gerekce_aday_sayisi:
+    if belge.gerekce_basliksiz_sayisi:
         mesajlar.append(
-            f"Bölüm B'de {belge.gerekce_tablo_blok_sayisi} tablo var ama hiçbiri "
-            "gerekçe tablosunun KANONİK başlığını taşımıyor "
-            f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}) — hangisinin gerekçe "
-            "tablosu olduğu ayırt edilemedi, hepsi denetlendi"
+            f"Bölüm B'de gerekçe denetimine giren {belge.gerekce_basliksiz_sayisi} "
+            "tablo gerekçe tablosunun KANONİK başlığını taşımıyor "
+            f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}) — yine de denetlendi"
         )
-    elif belge.gerekce_aday_sayisi > 1:
+    # Belirsizlik ayrı bir ihlaldir: sessizce bir blok SEÇİLMEZ, hepsi denetlenir.
+    if belge.gerekce_donem_oncesi_sayisi > 1:
         mesajlar.append(
-            f"Bölüm B'de gerekçe tablosu başlığını taşıyan "
-            f"{belge.gerekce_aday_sayisi} tablo var — sözleşme TEK gerekçe "
-            "tablosu ister; hepsi denetlendi"
+            f"Bölüm B'de dönem başlıklarından ÖNCE "
+            f"{belge.gerekce_donem_oncesi_sayisi} tablo var — sözleşme TEK "
+            "gerekçe tablosu ister; hepsi denetlendi, hiçbiri atılmadı"
         )
     # Şekil kontrolü VARLIKTAN bağımsız koşar: tablo sözleşmenin istediği yerde
     # bulunamadıysa bile yanlış yerde bulunmuş OLABİLİR ve bu ayrı bir ihlaldir.
@@ -1930,11 +1958,18 @@ CHECKS: tuple[Check, ...] = (
         kapsam_sinirlari=(
             (
                 "ozel-gun-gerekce-tablosu: sütun SAYISI ölçülür, sütun "
-                "başlıklarının ANLAMI doğrulanmadı. Tablo, blok BAŞLIĞININ "
-                "kanonik sütun anahtarlarını taşımasıyla tanınır; kanonik "
-                "başlığı TAKLİT eden bir tablo da aday olur — o hâlde "
-                "belirsizlik NOTU düşer ve blokların hepsi denetlenir, ama "
-                "hangisinin gerçek gerekçe tablosu olduğu DOĞRULANMADI."
+                "başlıklarının ANLAMI doğrulanmadı. Denetim kümesi SEÇİLMEZ: "
+                "dönem bloklarından ÖNCEKİ bütün tablolar denetlenir ve "
+                "birden çoksa belirsizlik NOTU düşer; hangisinin GERÇEK "
+                "gerekçe tablosu olduğu DOĞRULANMAZ. Bir önceki turun "
+                "'kanonik başlıklı adayı seç' kuralı ÖLÇÜLDÜ ve YANLIŞLANDI "
+                "(kanonik başlıklı bir yem, jenerik başlıklı GERÇEK tabloyu "
+                "susturuyordu: 8 not -> 0 not), o yüzden seçim BIRAKILDI. "
+                "Bedeli: dönemlerden önce konmuş meşru ve alakasız bir tablo "
+                "da NOT üretir. Dönem bloklarının İÇİNDE ya da SONRASINDA "
+                "duran bir tablo, kanonik başlık taşısa bile denetime GİRMEZ; "
+                "o konumdaki bir tablonun gerekçe tablosu OLMADIĞI "
+                "sözleşmenin sırasından OKUNUR, ÖLÇÜLMEDİ."
             ),
         ),
     ),
