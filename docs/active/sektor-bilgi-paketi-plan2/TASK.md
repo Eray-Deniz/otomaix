@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-06
+last-touched: 2026-09-07
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -14,9 +14,9 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-5 indi. Checkpoint 1 ve 2 hakem `approve`'uyla
-kapandı; **checkpoint 3 koştu ve iki tur sürdü ama `approve` ALMADAN kapatıldı** (Eray
-kararı — ayrıntı "Current Status"). Sıradaki iş **Task 6**.
+Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-6 indi. Checkpoint 1, 2 ve **5** hakem
+`approve`'uyla kapandı; checkpoint 3 ve 4 koştu ama `approve` ALMADAN kapatıldı — **ikisinin
+aralığı da checkpoint 5'in tabanına dâhildi ve artık incelendi.** Sıradaki iş **Task 7**.
 
 **Onay tarihçesi (değişmez kayıt, silinmez):** plan onayı hakem zinciriyle değil **Eray'ın
 risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenmemişti.
@@ -29,8 +29,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 2
-- last_checkpoint_ref: a6e053f32000259ccc1e4e94d49f977eff120192
+- cp_count: 3
+- last_checkpoint_ref: 2b468e8d014c191027edb69e5ccc7830d5b0c850
 
 # References
 
@@ -235,6 +235,34 @@ Yürütme defteri (kanonik ilerleme + tüm kararlar):
   düzeltme turu 1 sonrası `1436` → düzeltme turu 2 sonrası **`1452 passed in 453.65s`**, exit 0,
   temiz ağaçta; defter kapısı her turda `rc=0`; `ec_should_checkpoint 1 2 9` → `RUN_RISK`;
   `command-blocks-maint.sh verify` → PASS.
+
+## Bilinçli bırakılan dört kalemin kapanışı + checkpoint 5 (2026-09-07)
+
+Eray'ın talebi: "bilinçli bıraktıklarımızı bitirelim, arkada iş bırakmayı sevmem." Dördü de
+ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri hakem turuyla kapandı.
+
+1. **n8n canlıya import — KAPANDI.** Yedi workflow yüklendi (yalnız `nodes`+`connections`;
+   `settings` ve `name` canlıdan korundu). Yükleme sonrası tek tek ölçüldü: çıplak token **0**,
+   credential bağlı, yedisi de aktifti. **Yüklemeden ÖNCE iki depo kusuru bulundu ve
+   düzeltildi** — körlemesine import canlıyı bozardı (var olmayan credential kimliği `id=1`;
+   CRM-3'ün yarım kalmış webhook yolu). İki sınıf kapısı eklendi.
+   **Ölçülmeyen, etiketli:** `telegramApi` credential'ının canlı token taşıyıp taşımadığı —
+   hiçbir koşum Telegram düğümüne ulaşmadı.
+2. **DDL nesne kimliği sınıfı — KAPANDI.** Beş dosya (001·023·026·032·rollback/032_down).
+   Kanonik sabitler dosyaların kendi metinlerinden türetildi. Yeni test modülü sınıfı kapatıyor:
+   dosya listesi de nesne listesi de kavramdan türetiliyor, mutasyon kolu kapının ETKİSİNİ
+   ölçüyor ve zararın iki biçimini ayırıyor (yazan dosya ezer · bağlanan dosya yabancı gövdeye
+   bağlanır).
+3. **Checkpoint 4'ün `approve` borcu + görülmemiş yedi düzeltme commit'i — KAPANDI.**
+   Checkpoint 5, taban `a6e053f`, iki tur. Tur 1 `needs-attention` (3 high, 3 medium), tur 2
+   **`approve`**. Beş bulgunun beşi de kontrolör tarafından yeniden ölçüldü; biri (H2) geri
+   alınan bir transaction'da ampirik olarak kanıtlandı, biri (H1) ölçüm sonucu ÖNCEDEN VAR olan
+   bir yüzey çıktı, biri (M3) gerekçesiyle REDDEDİLDİ.
+4. **YENİ KALEM DOĞDU — kimlik doğrulamasız CRM webhook'ları + SQL enterpolasyonu.**
+   Bu partinin ürünü DEĞİL; canlıda ölçüldü, üç workflow **pasife alındı** (Eray kararı),
+   gerçek onarım CRM turuna evlendirildi. Ayrıntı CURRENT.md'de.
+
+**Test tabanı:** 1452 → 1493 → **1499**, hiç düşmedi (üçü de kontrolörün taze koşumu).
 
 # Decisions Log
 
