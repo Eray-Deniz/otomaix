@@ -123,7 +123,7 @@ belge): `0 not → 4 not`.
 SINIR kuralıydı ve her biri yeni bir BİLEŞİMLE kandırıldı; kural yazmak bu eksende işlemedi.
 Kapanış artık bir özelliktir ve hangi sınır kuralı yürürlükte olursa olsun geçerlidir:
 **bir belgeye tablo EKLEMEK, o belgenin zaten ürettiği notları KALDIRAMAZ**
-(`KUME_IDDIASI_ONEKLERI` başlığı). Yapısal ayağı `_gerekce_tablosu`'nun
+(`kap_iddiasi_mi` başlığı). Yapısal ayağı `_gerekce_tablosu`'nun
 MONOTONLUĞUDUR — karar blok BAŞINA verilir, bir bloğun denetime girip girmediği YALNIZ
 kendi konumuna bakar. Kandıran şey v4'ün fail-open geri dönüşüydü ("dönem-öncesi blok
 yoksa HEPSİNİ denetle"): dönem-öncesi TEK bir yem eklemek geri dönüşü devreden çıkarıyor
@@ -133,6 +133,25 @@ not`, 24 bileşimin 4'ünde). Geri dönüş KALDIRILDI. Değişmezin istisnası 
 ("kapta içerik yok" · "gerekli yerde tablo yok"); bir BLOĞA ait iddialar (satırı · sütunu ·
 başlığı) dokunulmazdır. Ölçülmüş bedel: dönem bölgesinde kalan BOZUK bir tablo artık
 satır/sütun denetimine hiç girmez, yerine iki küme düzeyi notu düşer.
+
+**Tur 7 — değişmezin İKİ ayağı da kendi tanımına göre kapandı.** Tur 6'nın
+değişmezi kendi ilan ettiği kapsam içinde İHLAL EDİLİYORDU: ilk dönemin
+`mesaj_ekseni` yuvası boşaltılınca rapor `notlu-gecti / 1 not`, AYNI yuvaya
+bağımsız iki sütunlu bir markdown tablosu eklenince `gecti / 0 not` veriyordu —
+yani bir tablo EKLEMEK, muaf OLMAYAN bir notu kaldırıyordu. İki kök birden
+düzeltildi. (a) **Sınıflandırma YAPISAL oldu:** muafiyet mesaj ÖNEKİ listesiyle
+tanımlanıyordu ve bu bağ iki yönde de ölçüldü — metni değişen bir mesaj sınıf
+değiştiriyor (15 notun 1 KAP iddiası olan hâli 0'a düşüyor), bir önekle
+başlayacak biçimde yeniden yazılan BLOK notu ise sessizce muaf oluyordu. Artık
+her `Bulgu` kendi `kategori`sini ÜRETİLDİĞİ yerden taşır (`_Mesaj` · `_kap`) ve
+`kap_iddiasi_mi` yalnız o alanı okur; beyan edilmeyen yol fail-closed olarak
+DOKUNULMAZDIR. Önek listesi bir üretim yolunu — Bölüm C eşleme kabının yokluk
+iddiasını — KAÇIRIYORDU; yapısal tarama onu buldu. (b) **Doluluk kontrolü
+SÖZLEŞME BİÇİMİNİ sayar:** `_sozlesme_bicimli` yalnız sözleşmenin tanıdığı üç
+biçimi (düz yazı satırı · madde işaretli satır · resmî `içerik-önerilmez`)
+içerik sayar; markdown tablosu ve yatay çizgi bir KABI DOLDURMAZ. Aşırı
+sıkılaştırma bilinçle yapılmadı — hangi kabın hangi biçimi isteyeceği
+DAYATILMAZ.
 
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
@@ -150,6 +169,10 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   bu bir mekanik vekildir.
 * Boşluk ifadeleri (`_BOSLUK_IFADELERI`) belgelenmiş KÜÇÜK bir kümedir, tüketici
   değildir; kapsama oranı ölçülmemiştir.
+* Doluluk yalnız BİÇİM eler, İLGİ ölçmez: sözleşme biçiminde ama alakasız bir düz
+  yazı satırı kabı doldurmuş sayılır — anlam yargısı gerektirir, DOĞRULANMADI.
+  BÖLÜM düzeyindeki boşluk kontrolü bu kuralı UYGULAMAZ (sözleşme tabloyu Bölüm B
+  gerekçesi ve Bölüm C eşlemesi olarak tanır); ölçüldü, ayrı bir sınıftır.
 * Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil; Bölüm C
   bağlantılarının gerçekten açıldığı doğrulanmaz (ağ çağrısı yapılmaz).
 * Bölüm C'de kaynak eşlemesinin VARLIĞI ve adres biçimi taranır; eşlemenin gerçekten
@@ -251,11 +274,19 @@ GEREKCE_BASLIK_ASGARI = 2
 # **İstisna İLKEDEN türer, örnekten DEĞİL.** "Hiçbir not kaybolamaz" YANLIŞ bir
 # ifadedir: meşru bir gerekçe tablosu eklemek "gerekçe tablosu YOK" notunu
 # HAKLI OLARAK kaldırır. İlke şudur: bir ekleme yalnız KENDİ VARLIĞININ
-# YANLIŞLADIĞI iddiaları düşürebilir. Bunlar bir BLOĞA ait değil, KÜMENİN
+# YANLIŞLADIĞI iddiaları düşürebilir. Bunlar bir BLOĞA ait değil, KABIN
 # bütünü hakkındaki YOKLUK iddialarıdır — "şu kapta içerik yok" ve "gerekli
 # yerde tablo yok". Bir bloğun KENDİ içeriği hakkındaki iddialar (satırı ·
 # sütunu · başlığı) istisnanın DIŞINDADIR: o blok hâlâ oradadır ve ikinci bir
 # blok onu ilgisizleştiremez.
+#
+# **Tur 7 — istisnanın SINIRI artık YAPISALDIR, metin değil.** Muafiyet bir
+# mesaj ÖNEKİ listesiyle tanımlanıyordu; her bulgu artık kendi KATEGORİSİNİ
+# üretildiği yerden taşır (`_Mesaj` · `_kap` · `Bulgu.kategori`) ve
+# `kap_iddiasi_mi` yalnız o alana bakar. Aynı turda değişmezin İKİNCİ ayağı
+# da kapandı: bir markdown TABLOSU sözleşmenin tanıdığı bir içerik biçimi
+# DEĞİLDİR (`_sozlesme_bicimli`), dolayısıyla bir kaba tablo eklemek o kabın
+# BOŞLUK notunu artık düşüremez.
 #
 
 BOLUM_BOS_MESAJI = (
@@ -269,36 +300,77 @@ TABLO_DONEM_SONRASI_MESAJI = (
     "Gerekçe tablosu dönem başlıklarından SONRA geliyor — sözleşme "
     "ÖNCE tablo, SONRA dönem dönem dört başlık der"
 )
-# Kümenin BÜTÜNÜ hakkındaki iddiaların DEĞİŞMEZ önekleri. Bir mesaj bunlardan
-# biriyle başlıyorsa iddia tek bir BLOK hakkında değildir; kap ya da küme
-# hakkındadır — "var mı" · "kaç tane" · "gerekli yerde bir tanesi var mı".
-# Küme gerçekten değiştiği için EKLEME bu iddiaları meşru olarak değiştirebilir.
-# SAYIM taşıyan iddialar ayrıca AZALAMAZ (denetim kümesi monoton olduğu için);
-# o ayak `gerekce_donem_oncesi_sayisi` / `gerekce_basliksiz_sayisi` üstünden
-# AYRICA ölçülür — istisna "sayı düştü"yü örtmesin diye.
+# Bulgunun KATEGORİSİ — ekleme değişmezinin istisnası BURADAN okunur.
 #
-# Önek listesi SÖZLEŞMEDİR: buraya bir önek eklemek, o mesajın bir KÜME iddiası
-# olduğunu BEYAN etmektir. Listenin dışındaki her not eklemeye karşı
-# DOKUNULMAZDIR.
-KUME_IDDIASI_ONEKLERI = (
-    # yokluk ("gerekli yerde tablo yok") + sayım (dönem-öncesi kaç tablo var)
-    "Bölüm B'de dönem başlıklarından ÖNCE ",
-    # sayım (denetime giren kaç blok kanonik başlık taşımıyor)
-    "Bölüm B'de gerekçe denetimine giren ",
-    # konum ("doğru yerde yok, olan tablo dönemlerden sonra")
-    "Gerekçe tablosu dönem başlıklarından SONRA",
-) + tuple(f"Bölüm {harf} boş" for harf in BOLUM_HARFLERI)
+# İki değer, kapalı: bir bulgu ya tek bir BLOĞUN kendi içeriği hakkındadır
+# (satırı · sütunu · başlığı — eklemeye karşı DOKUNULMAZ), ya da bir KABIN /
+# kümenin BÜTÜNÜ hakkındadır ("var mı" · "kaç tane" · "gerekli yerde bir
+# tanesi var mı"). İkincisi eklemeyle meşru olarak değişebilir: kap gerçekten
+# değişmiştir. SAYIM taşıyan iddialar ayrıca AZALAMAZ (denetim kümesi monoton
+# olduğu için); o ayak `gerekce_donem_oncesi_sayisi` /
+# `gerekce_basliksiz_sayisi` üstünden AYRICA ölçülür — istisna "sayı düştü"yü
+# örtmesin diye.
+#
+# **Kategori bulgunun ÜRETİLDİĞİ yerde verilir ve bulgu onu KENDİSİ TAŞIR;
+# mesaj METNİNE BAKILMAZ.** Bir önceki tur istisnayı mesaj ÖNEKİ listesiyle
+# tanımlıyordu ve o bağın kırılganlığı İKİ yönde de ÖLÇÜLDÜ:
+#
+#   (a) metin → sınıf: `BOLUM_BOS_MESAJI` metni yeniden yazıldığında aynı
+#       bulgunun kategorisi sessizce kaydı (ölçüldü: aynı belgede 15 notun
+#       1 KAP iddiası olan hâli, yalnız metin değişince 0 KAP iddiasına düştü);
+#   (b) sınıf → metin: bir BLOK notu kazara bir önekle başlayacak biçimde
+#       yeniden yazıldığında sessizce MUAF oldu (ölçüldü: "Bölüm B'de dönem
+#       başlıklarından ÖNCE gelen tabloda 3 sütunlu satır var" → `True`).
+#
+# Bu oturumda mesaj metinleri iki kez yeniden yazıldı ve öneklerden biri
+# güncellenmek ZORUNDA kaldı — bağ kurgusal değil ölçülmüş bir kırılganlıktı
+# ve KALDIRILDI. İkinci bir metin-eşleştirme kuralı YAZILMAZ.
+KATEGORI_BLOGA_AIT = "bloga-ait"
+KATEGORI_KAP_IDDIASI = "kap-iddiasi"
+KATEGORILER = (KATEGORI_BLOGA_AIT, KATEGORI_KAP_IDDIASI)
 
 
-def kume_iddiasi_mi(mesaj: str) -> bool:
-    """Not KÜMENİN bütünü hakkında mı (yokluk · sayım · konum)?
+@dataclass(frozen=True)
+class _Mesaj:
+    """Bir kontrolün ürettiği tek bulgu: METİN + KATEGORİ.
+
+    Varsayılan FAIL-CLOSED'dır (`bloga-ait`): kategorisini BEYAN ETMEYEN her
+    üretim yolu dokunulmaz sayılır, yani ekleme değişmezi onu KORUR. Muafiyet
+    ancak bilinçli bir `_kap(...)` çağrısıyla verilir — sızıntı yönü kapalıdır.
+    Kontroller düz `str` de dönebilir; `run` onu bu varsayılanla sarar.
+    """
+
+    metin: str
+    kategori: str = KATEGORI_BLOGA_AIT
+
+    def __post_init__(self) -> None:
+        if self.kategori not in KATEGORILER:
+            raise ValueError(
+                f"_Mesaj kategorisi kapalı kümenin dışında: {self.kategori!r} "
+                f"— {list(KATEGORILER)}"
+            )
+
+
+def _kap(metin: str) -> _Mesaj:
+    """KAP/KÜME iddiası olarak işaretler: yokluk · sayım · konum.
+
+    Çağrı SÖZLEŞMEDİR: bir mesajı `_kap`'a sarmak, o iddianın tek bir BLOK
+    hakkında DEĞİL kabın bütünü hakkında olduğunu BEYAN etmektir. Sarılmayan
+    her mesaj eklemeye karşı DOKUNULMAZDIR.
+    """
+    return _Mesaj(metin, KATEGORI_KAP_IDDIASI)
+
+
+def kap_iddiasi_mi(bulgu: "Bulgu") -> bool:
+    """Bulgu bir KABIN bütünü hakkında mı (yokluk · sayım · konum)?
 
     Ekleme değişmezinin İLKELİ istisnası budur: bir ekleme yalnız KENDİ
-    VARLIĞININ yanlışladığı KÜME iddialarını değiştirebilir. Bir bloğun KENDİ
+    VARLIĞININ yanlışladığı KAP iddialarını değiştirebilir. Bir bloğun KENDİ
     içeriği hakkındaki iddialar (satırı · sütunu) `False` döner ve eklemeye
-    karşı DOKUNULMAZDIR.
+    karşı DOKUNULMAZDIR. Cevap bulgunun KENDİ alanından okunur — mesaj metni
+    OKUNMAZ, bu yüzden metin yeniden yazımı sınıflandırmayı kaydıramaz.
     """
-    return mesaj.startswith(KUME_IDDIASI_ONEKLERI)
+    return bulgu.kategori == KATEGORI_KAP_IDDIASI
 
 VIDEO_HAVUZLARI = ("hareket", "sahne")
 
@@ -448,6 +520,20 @@ class Bulgu:
     aile: str
     seviye: str
     mesaj: str
+    kategori: str = KATEGORI_BLOGA_AIT
+    """Ekleme değişmezi karşısındaki sınıf — bulgunun ÜRETİLDİĞİ yerden gelir.
+
+    Kategori bir SINIFLANDIRICI tarafından mesaj metninden ÇIKARILMAZ; kontrol
+    onu `_kap(...)` ile BEYAN eder, beyan edilmeyen yol fail-closed olarak
+    `bloga-ait` (dokunulmaz) kalır. `kap_iddiasi_mi` yalnız bu alanı okur.
+    """
+
+    def __post_init__(self) -> None:
+        if self.kategori not in KATEGORILER:
+            raise ValueError(
+                f"Bulgu kategorisi kapalı kümenin dışında: {self.kategori!r} "
+                f"— {list(KATEGORILER)}"
+            )
 
 
 @dataclass(frozen=True)
@@ -587,7 +673,7 @@ class Check:
     aile: str
     seviye: str
     aciklama: str
-    kural: Callable[["_Belge"], list[str]]
+    kural: Callable[["_Belge"], list[str | _Mesaj]]
     kapsam_sinirlari: tuple[str, ...] = ()
     """Kontrolün sözleşmenin NE KADARINI ölçtüğünün dürüst beyanları.
 
@@ -898,15 +984,24 @@ class _Yuva:
 
     @property
     def dolu(self) -> bool:
-        """Anlamlı içerik var mı — serbest boşluk ifadeleri BOŞ sayılır."""
+        """Kapta SÖZLEŞME BİÇİMİNDE anlamlı içerik var mı?
+
+        İki eleme birlikte çalışır ve ayrı şeyleri kapatır:
+
+          * serbest BOŞLUK ifadeleri (`yok` · `-` · `n/a`) boş sayılır — K-120
+            yalnız AYNEN `içerik-önerilmez` yazımını muaf tutar;
+          * sözleşmenin tanımadığı markdown BLOK yapıları (tablo · yatay çizgi)
+            kabı DOLDURMAZ (`_sozlesme_bicimli`) — ölçüldü ki bir dönem
+            yuvasına konan bağımsız bir tablo yuvanın boşluk notunu
+            kaldırıyordu (`notlu-gecti / 1 not` → `gecti / 0 not`).
+        """
         parcalar = [self.inline] if self.inline else []
-        parcalar += [satir.strip() for satir in self.satirlar]
-        anlamli = [
-            parca
+        parcalar += list(self.satirlar)
+        return any(
+            _sozlesme_bicimli(parca)
+            and _sadelestir(parca) not in _BOSLUK_IFADELERI
             for parca in parcalar
-            if parca and _sadelestir(parca) not in _BOSLUK_IFADELERI
-        ]
-        return bool(anlamli)
+        )
 
     @property
     def tek_degeri(self) -> str | None:
@@ -981,6 +1076,10 @@ _BASLIK_GORUNUMU_RE = re.compile(
     r"çğıöşü][\w_]*\s*:)"
 )
 _ILK_SOZCUK_RE = re.compile(r"^\s*(?:#{1,6}\s+|\d+[a-z]?\s*[.)]\s*)?\*{0,2}`?([a-z_]+)")
+# Markdown YATAY ÇİZGİSİ — bir AYRAÇTIR, içerik değil.
+_YATAY_CIZGI_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+# En az bir SÖZCÜK karakteri: hem düz yazının hem madde gövdesinin asgari işareti.
+_SOZCUK_RE = re.compile(r"\w")
 
 
 def _yuva_deseni(isimler: Sequence[str]) -> re.Pattern[str]:
@@ -1011,6 +1110,47 @@ def _sadelestir(metin: str) -> str:
 
 def _baslik_metni(satir: str) -> str:
     return satir.strip().lstrip("#").strip().strip("*`").strip()
+
+
+def _sozlesme_bicimli(parca: str) -> bool:
+    """Satır, sözleşmenin bir KABI DOLDURAN içerik biçimlerinden biri mi?
+
+    Kabul kümesi SÖZLEŞME METNİNDEN türer, örnekten değil. `_SABLON.md` bir
+    kabın içeriğini ÜÇ biçimde tanır:
+
+      * DÜZ YAZI satırı — ADIM 3 `mesaj_ekseni` ("dönemin duygusal ekseni ve
+        SEKTÖRE özgü açısı. Kısa ve yoğun.") ve BİÇİM KURALLARI md. 1'in düz
+        metin alanları (`kapsam` · `ton_ve_dil`);
+      * MADDE İŞARETLİ satır — ADIM 3 `kanca`/`cta`/`gorsel_vurgu` ve BİÇİM
+        KURALLARI md. 3 ("Her kalıp / anahtar ifade AYRI madde işareti (-)
+        olsun");
+      * resmî `içerik-önerilmez` değeri — BİLİNÇLİ BOŞ muafiyeti (K-120).
+
+    Markdown TABLOSU bunların HİÇBİRİ değildir: sözleşme tabloyu YALNIZ Bölüm
+    B'nin gerekçe tablosu ve Bölüm C'nin eşlemesi için tanır, bir ALANIN ya da
+    dönem YUVASININ içeriği olarak DEĞİL. Yatay çizgi de içerik değil ayraçtır.
+
+    **Ölçülmüş fail-open (tur 7):** doluluk kontrolü "boş olmayan HERHANGİ bir
+    satır" sayıyordu, dolayısıyla sözleşmeye UYMAYAN bir blok kabı doldurmuş
+    sayılıyordu. Ölçüldü: ilk dönemin `mesaj_ekseni` yuvası boşaltılınca rapor
+    `notlu-gecti / 1 not`; AYNI yuvaya bağımsız iki sütunlu bir markdown
+    tablosu eklenince `gecti / 0 not`. Yani bir TABLO EKLEMEK bloğa ait bir
+    notu kaldırıyordu — ekleme değişmezinin kendi ilan ettiği kapsam içinde
+    ihlali.
+
+    **Aşırı sıkılaştırma bilinçle YAPILMADI:** hangi kabın hangi biçimi
+    isteyeceği (yuva bazında düz yazı mı madde mi) burada DAYATILMAZ — gerçek
+    çıktılar `mesaj_ekseni`'ni madde olarak da yazar ve liste alanlarındaki
+    paragraf zaten `bicim-kurallari/ayri-madde-isareti` ailesinde ölçülür.
+    Burada yalnız sözleşmenin HİÇ tanımadığı iki markdown BLOK yapısı elenir.
+    """
+    govde = parca.strip()
+    if not govde:
+        return False
+    if _TABLO_RE.match(govde) or _YATAY_CIZGI_RE.match(govde):
+        return False
+    madde = _MADDE_RE.match(govde)
+    return bool(_SOZCUK_RE.search(madde.group(1) if madde else govde))
 
 
 def _bloklara_ayir(
@@ -1269,7 +1409,7 @@ def _gerekce_tablosu(
 ) -> tuple[list[Sequence[tuple[int, str, bool]]], int]:
     """Denetim kümesi = dönem bloklarından ÖNCEKİ BÜTÜN tablolar. SEÇİM YOK.
 
-    **Bu fonksiyonun asıl sözleşmesi MONOTONLUKTUR** (`KUME_IDDIASI_ONEKLERI`
+    **Bu fonksiyonun asıl sözleşmesi MONOTONLUKTUR** (`kap_iddiasi_mi`
     başlığındaki ekleme değişmezinin yapısal ayağı): bir blok EKLEMEK denetim
     kümesinden başka bir bloğu ÇIKARAMAZ. Karar blok BAŞINA verilir — bir bloğun
     denetime girip girmediği YALNIZ kendi konumuna bakar, başka blokların
@@ -1544,16 +1684,17 @@ def _bolum_yapisi_ihlalleri(belge: _Belge) -> list[str]:
     Açık kümelerde SIRANIN neden ölçülmediği `_iz_ihlalleri`'nde yazılıdır ve
     kapsam beyanının BEŞİNCİ kalemi olarak rapora taşınır.
     """
-    mesajlar: list[str] = []
+    mesajlar: list[str | _Mesaj] = []
     for gorulen, sozlesme, sablon, sira_etiketi in _ic_ice_izler(belge):
         mesajlar += _iz_ihlalleri(gorulen, sozlesme, sablon, sira_etiketi)
+    # KAP iddiası: bölüm bir KAPTIR ve iddia onun BÜTÜNÜ hakkındadır.
     for harf in belge.bos_bolumler:
-        mesajlar.append(BOLUM_BOS_MESAJI.format(harf=harf))
+        mesajlar.append(_kap(BOLUM_BOS_MESAJI.format(harf=harf)))
     return mesajlar
 
 
 def _kontrol_bolum_ve_alan(belge: _Belge) -> list[str]:
-    mesajlar: list[str] = _bolum_yapisi_ihlalleri(belge)
+    mesajlar: list[str | _Mesaj] = _bolum_yapisi_ihlalleri(belge)
     for harf in BOLUM_HARFLERI:
         if harf not in belge.bolumler:
             mesajlar.append(
@@ -1698,7 +1839,7 @@ def _c_esleme_parcalari(satir: str) -> list[str]:
     ]
 
 
-def _kontrol_url_bicimi(belge: _Belge) -> list[str]:
+def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
     """Bölüm C ÜÇLÜ eşleme içermeli ve kaynak satırları tam `https://` taşımalı.
 
     Sözleşme (pinli `_SABLON.md`, Bölüm C): *"alan/dönem → iddia → kaynak
@@ -1713,12 +1854,20 @@ def _kontrol_url_bicimi(belge: _Belge) -> list[str]:
     (`_C_AYIRAC_RE`) görülür — parçaların ANLAMI (gerçekten alan/dönem mi,
     gerçekten iddia mı) DOĞRULANMADI.
     """
-    mesajlar: list[str] = []
+    mesajlar: list[str | _Mesaj] = []
     c_satirlari = belge.bolumler.get("C", [])
+    # KAP iddiası: Bölüm C eşleme KABININ bütünü hakkında bir YOKLUK iddiası,
+    # bir satırın içeriği hakkında değil — ve sözleşme eşlemeyi TABLO satırı
+    # olarak da tanır, dolayısıyla meşru bir tablo eklemek onu HAKLI OLARAK
+    # yanlışlar. Bu yolu tur 6'nın önek listesi KAÇIRMIŞTI: hiçbir bileşim
+    # Bölüm C'yi eşlemesiz-ama-dolu bırakmıyordu, dolayısıyla ölçülmemişti.
     if any(satir.strip() for satir in c_satirlari) and not belge.c_esleme_satiri_var:
         mesajlar.append(
-            "Bölüm C tek bir kaynak eşleme satırı taşımıyor — sözleşme "
-            "alan/dönem → iddia → kaynak eşlemesi ister (madde ya da tablo satırı)"
+            _kap(
+                "Bölüm C tek bir kaynak eşleme satırı taşımıyor — sözleşme "
+                "alan/dönem → iddia → kaynak eşlemesi ister (madde ya da tablo "
+                "satırı)"
+            )
         )
     for satir in belge.c_esleme_satirlari:
         if len(_c_esleme_parcalari(satir)) < 2:
@@ -1773,7 +1922,7 @@ def _kontrol_tur_etiketi(belge: _Belge) -> list[str]:
     return mesajlar
 
 
-def _tablo_sekli_ihlalleri(belge: _Belge) -> list[str]:
+def _tablo_sekli_ihlalleri(belge: _Belge) -> list[str | _Mesaj]:
     """Tablonun ŞEKLİ: dört sütun ve dönemlerden ÖNCE.
 
     Ayıraçtan sonraki HERHANGİ bir satırı kabul etmek yetmez — tek sütunlu bir
@@ -1785,7 +1934,7 @@ def _tablo_sekli_ihlalleri(belge: _Belge) -> list[str]:
     belirsizlikte kapalı düşen bir kural; seviyesi `not` olduğu için maliyeti
     gürültüdür, eleme değil.
     """
-    mesajlar: list[str] = []
+    mesajlar: list[str | _Mesaj] = []
     beklenen = len(GEREKCE_TABLOSU_SUTUNLARI)
     yanlis: dict[int, int] = {}
     for sayi in belge.tablo_sutun_sayilari:
@@ -1797,15 +1946,20 @@ def _tablo_sekli_ihlalleri(belge: _Belge) -> list[str]:
             f"sözleşme {beklenen} sütun sayar: "
             f"{' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}"
         )
+    # KAP iddiası: "gerekli yerde tablo yok, olan tablo dönemlerden SONRA" —
+    # bir bloğun içeriği hakkında değil, kabın bütünü hakkında bir KONUM iddiası.
     if belge.tablo_donem_sonrasi:
-        mesajlar.append(TABLO_DONEM_SONRASI_MESAJI)
+        mesajlar.append(_kap(TABLO_DONEM_SONRASI_MESAJI))
     return mesajlar
 
 
-def _kontrol_gerekce_tablosu(belge: _Belge) -> list[str]:
-    mesajlar: list[str] = []
+def _kontrol_gerekce_tablosu(belge: _Belge) -> list[str | _Mesaj]:
+    # Bu kontrolün ÜÇ mesajı da KAP iddiasıdır (yokluk · sayım · sayım): hiçbiri
+    # tek bir bloğun kendi içeriği hakkında değildir. Şekil ihlalleri
+    # (`_tablo_sekli_ihlalleri`) BLOĞA aittir ve sarılMAZ.
+    mesajlar: list[str | _Mesaj] = []
     if not belge.tablo_var:
-        mesajlar.append(TABLO_YOK_MESAJI)
+        mesajlar.append(_kap(TABLO_YOK_MESAJI))
     # Kanonik başlık bir SEÇİM kuralı değil, bir NOT konusudur: denetime giren
     # bir blok başlığı taşımıyorsa bu bir ihlaldir — ama blok yine denetlenir.
     # Bölüm B'de HİÇ tablo yokken bu dal susar; aksi hâlde tablosuz her gerçek
@@ -1813,16 +1967,21 @@ def _kontrol_gerekce_tablosu(belge: _Belge) -> list[str]:
     # de Bölüm B tablosuzdur).
     if belge.gerekce_basliksiz_sayisi:
         mesajlar.append(
-            f"Bölüm B'de gerekçe denetimine giren {belge.gerekce_basliksiz_sayisi} "
-            "tablo gerekçe tablosunun KANONİK başlığını taşımıyor "
-            f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}) — yine de denetlendi"
+            _kap(
+                f"Bölüm B'de gerekçe denetimine giren "
+                f"{belge.gerekce_basliksiz_sayisi} tablo gerekçe tablosunun "
+                f"KANONİK başlığını taşımıyor "
+                f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}) — yine de denetlendi"
+            )
         )
     # Belirsizlik ayrı bir ihlaldir: sessizce bir blok SEÇİLMEZ, hepsi denetlenir.
     if belge.gerekce_donem_oncesi_sayisi > 1:
         mesajlar.append(
-            f"Bölüm B'de dönem başlıklarından ÖNCE "
-            f"{belge.gerekce_donem_oncesi_sayisi} tablo var — sözleşme TEK "
-            "gerekçe tablosu ister; hepsi denetlendi, hiçbiri atılmadı"
+            _kap(
+                f"Bölüm B'de dönem başlıklarından ÖNCE "
+                f"{belge.gerekce_donem_oncesi_sayisi} tablo var — sözleşme TEK "
+                "gerekçe tablosu ister; hepsi denetlendi, hiçbiri atılmadı"
+            )
         )
     # Şekil kontrolü VARLIKTAN bağımsız koşar: tablo sözleşmenin istediği yerde
     # bulunamadıysa bile yanlış yerde bulunmuş OLABİLİR ve bu ayrı bir ihlaldir.
@@ -2034,6 +2193,26 @@ CHECKS: tuple[Check, ...] = (
                 "rapor `gecti / 0 not` verir. Uydurma bir sıra kuralı gerçek "
                 "çıktıyı gürültüye boğardı, bu yüzden YAZILMADI."
             ),
+            (
+                "bolum-ve-alan-tamligi/doluluk: bir KABIN dolu sayılması "
+                "sözleşmenin TANIDIĞI içerik biçimlerine bağlıdır (düz yazı "
+                "satırı · madde işaretli satır · resmî `içerik-önerilmez`); "
+                "markdown TABLOSU ve yatay çizgi kabı DOLDURMAZ — ölçüldü ki "
+                "aksi hâlde bir dönem yuvasına konan bağımsız bir tablo o "
+                "yuvanın boşluk notunu kaldırıyordu (`notlu-gecti / 1 not` -> "
+                "`gecti / 0 not`). ÖLÇÜLMÜŞ KALAN SINIRLAR: (a) kural yalnız "
+                "BİÇİM eler, İLGİ ölçmez — sözleşme biçiminde ama ALAKASIZ bir "
+                "düz yazı satırı kabı doldurmuş sayılır ve bu makineyle "
+                "DOĞRULANAMAZ; ELENEN markdown yapıları TABLO · yatay çizgi · "
+                "sözcüksüz kod çiti ile SINIRLIDIR — ölçüldü ki dilli kod çiti "
+                "(```python), blockquote (`>`) ve HTML bloğu hâlâ kabı "
+                "DOLDURUR, o üçü bu turda KAPATILMADI (daraltmak gerçek "
+                "çıktıda yanlış-pozitif riski taşır); (b) BÖLÜM düzeyindeki "
+                "boşluk kontrolü bu kuralı "
+                "UYGULAMAZ, çünkü sözleşme tabloyu Bölüm B gerekçesi ve Bölüm C "
+                "eşlemesi olarak TANIR — bir tablo o iki kabı gerçekten "
+                "doldurur; ayrı bir sınıftır ve bu turda kapatılmadı."
+            ),
         ),
     ),
     Check(
@@ -2117,8 +2296,14 @@ CHECKS: tuple[Check, ...] = (
                 "çoksa belirsizlik NOTU düşer; hangisinin GERÇEK gerekçe "
                 "tablosu olduğu DOĞRULANMAZ. Değişmezin İLKELİ istisnası: "
                 "eklemenin KENDİ VARLIĞININ yanlışladığı YOKLUK iddiaları "
-                "('kapta içerik yok', 'gerekli yerde tablo yok') düşebilir; "
-                "kapalı liste KUME_IDDIASI_ONEKLERI'dir. Bölgenin "
+                "('kapta içerik yok', 'gerekli yerde tablo yok') düşebilir. "
+                "İstisnanın SINIRI YAPISALDIR, mesaj METNİ DEĞİL: her bulgu "
+                "kendi KATEGORİSİNİ üretildiği yerden taşır (`_kap` ile BEYAN "
+                "edilen ALTI yol) ve beyan edilmeyen her yol fail-closed olarak "
+                "DOKUNULMAZ kalır (`kap_iddiasi_mi`). Önek listesi "
+                "KALDIRILDI — bağın kırılganlığı iki yönde de ölçüldü ve liste "
+                "bir üretim yolunu (Bölüm C eşleme kabının yokluk iddiası) "
+                "KAÇIRIYORDU. Bölgenin "
                 "SINIRI ilk dönem BAŞLIĞIDIR: bir dönem başlığından SONRA "
                 "gelen tablo, kanonik başlık taşısa bile denetime GİRMEZ. "
                 "DÜZELTİLMİŞ ÖNCEKİ BEYAN: bu beyan bir önceki turda dönem "
@@ -2196,12 +2381,16 @@ def run(source_text: str, *, source_name: str) -> DoctorReport:
     notlar: list[Bulgu] = []
     elemeler: list[Bulgu] = []
     for check in CHECKS:
-        for mesaj in check.kural(belge):
+        for ham in check.kural(belge):
+            # Kategori ÜRETİM yerinden gelir; beyan etmeyen yol fail-closed
+            # olarak `bloga-ait` (dokunulmaz) sayılır — mesaj metni OKUNMAZ.
+            mesaj = ham if isinstance(ham, _Mesaj) else _Mesaj(ham)
             bulgu = Bulgu(
                 kontrol=check.kimlik,
                 aile=check.aile,
                 seviye=check.seviye,
-                mesaj=mesaj,
+                mesaj=mesaj.metin,
+                kategori=mesaj.kategori,
             )
             if check.seviye == SEVIYE_ELEME:
                 elemeler.append(bulgu)

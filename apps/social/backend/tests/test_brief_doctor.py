@@ -24,11 +24,13 @@ Bu dosyanın kanıtlamak zorunda olduğu zor noktalar:
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import hashlib
 import itertools
 import json
 import re
+import sys
 import unicodedata
 from pathlib import Path
 from unittest import mock
@@ -2422,11 +2424,19 @@ def test_sozlesme_onem_sirasi_dayatir_ama_kapi_olcemez() -> None:
     assert "73-75" in birlesik, "beyan sözleşme satırını göstermeli"
 
 
-def test_kapsam_beyani_besinci_kalemi_tasir() -> None:
-    """Beyan sayısı DÖRT değil BEŞ: sıra sınırı ayrı bir kalem olarak eklendi."""
+def test_kapsam_beyani_altinci_kalemi_tasir() -> None:
+    """Beyan sayısı BEŞ değil ALTI: doluluk sınırı ayrı bir kalem olarak eklendi.
+
+    Kalem sayısı `CHECKS`'ten TÜRER; beyan bir kontrolün alanında yaşar ve rapor
+    onu kopyalar. Yeni bir ölçüm sınırı yazılırsa bu kapı düşer ve beyanın
+    güncellendiğini görünür kılar.
+    """
     beyanlar = bd.run(TEMIZ, source_name="P").kapsam_sinirlari
-    assert len(beyanlar) == 5, beyanlar
-    assert len(set(beyanlar)) == 5, "beyanlar tekrar ediyor"
+    turetilen = sum(len(check.kapsam_sinirlari) for check in bd.CHECKS)
+    assert len(beyanlar) == turetilen == 6, beyanlar
+    assert len(set(beyanlar)) == 6, "beyanlar tekrar ediyor"
+    doluluk = [b for b in beyanlar if b.startswith("bolum-ve-alan-tamligi/doluluk")]
+    assert len(doluluk) == 1 and "markdown TABLOSU" in doluluk[0], beyanlar
 
 
 def test_bolum_c_uclusu_serbest_duzyaziyla_gecer_ve_beyan_bunu_soyler() -> None:
@@ -2478,8 +2488,8 @@ def test_bolum_c_uclusu_serbest_duzyaziyla_gecer_ve_beyan_bunu_soyler() -> None:
 # KÜMENİN bütünü hakkındaki YOKLUK iddialarıdır ("kapta içerik yok" · "gerekli
 # yerde tablo yok"). Bir bloğun KENDİ içeriği hakkındaki iddialar (satırı ·
 # sütunu · başlığı) istisnanın DIŞINDADIR: o blok hâlâ oradadır. Kapalı liste
-# modülün SÖZLEŞMESİDİR (`bd.kume_iddiasi_mi`), testin elle yazdığı
-# bir liste DEĞİL.
+# modülün SÖZLEŞMESİDİR (`bd.kap_iddiasi_mi` — bulgunun ÜRETİLDİĞİ yerde
+# verilen kategori), testin elle yazdığı bir liste DEĞİL; mesaj METNİ okunmaz.
 #
 # Değişmez İKİ katmanda ölçülür:
 #   Katman 1 — YAPISAL, istisnasız: `_gerekce_tablosu` MONOTONdur (blok
@@ -2700,14 +2710,32 @@ EKLEME_BILESIMLERI = tuple(_bilesim_uzayi())
 
 
 def _not_kumesi(metin: str) -> set:
-    return {bulgu.mesaj for bulgu in bd.run(metin, source_name="P").notlar}
+    """Bulguların KENDİSİ — kategori mesaj metninde değil bulgunun üstündedir."""
+    return set(bd.run(metin, source_name="P").notlar)
+
+
+def _mesajlari(bulgular) -> set:
+    return {bulgu.mesaj for bulgu in bulgular}
+
+
+def _mesru_gerekce_tablosu_ekle(metin: str) -> str:
+    """Bölüm B'nin başına sözleşmeye UYAN gerçek bir gerekçe tablosu koyar."""
+    satirlar = metin.splitlines(True)
+    b_bas, _ = _b_bolgesi(satirlar)
+    mesru = ["\n", "| dönem | karar | tür | gerekçe |\n", "|---|---|---|---|\n"] + [
+        f"| {ad} | secildi | {tur} | Gerekce cumlesi. |\n"
+        for ad, tur in zip(_DONEM_ADLARI[:6], _DONEM_TURLERI[:6])
+    ] + ["\n"]
+    return "".join(satirlar[: b_bas + 1] + mesru + satirlar[b_bas + 1 :])
 
 
 def _ekleme_ihlali(yemsiz: str, yemli: str) -> str:
     """Değişmez ihlali (boş metin = bileşim yeşil)."""
     once, sonra = _not_kumesi(yemsiz), _not_kumesi(yemli)
-    kayip = {mesaj for mesaj in once - sonra if not bd.kume_iddiasi_mi(mesaj)}
-    return f"ekleme şu notları KALDIRDI: {sorted(kayip)}" if kayip else ""
+    kayip = {bulgu for bulgu in once - sonra if not bd.kap_iddiasi_mi(bulgu)}
+    return (
+        f"ekleme şu notları KALDIRDI: {sorted(_mesajlari(kayip))}" if kayip else ""
+    )
 
 
 @pytest.mark.parametrize(
@@ -2749,7 +2777,7 @@ def test_ekleme_bilesim_uzayi_bos_kume_ve_taban_kollari() -> None:
     bloga_ait = [
         ad
         for ad, yemsiz, _ in EKLEME_BILESIMLERI
-        if any(not bd.kume_iddiasi_mi(mesaj) for mesaj in _not_kumesi(yemsiz))
+        if any(not bd.kap_iddiasi_mi(bulgu) for bulgu in _not_kumesi(yemsiz))
     ]
     assert len(bloga_ait) == 320, len(bloga_ait)
 
@@ -2772,43 +2800,239 @@ def test_ekleme_degismezi_mutasyona_duyarli() -> None:
     assert all("/yem-bolum-b-basi-" in ad for ad in kirmizi), kirmizi
 
 
-def test_kume_iddiasi_onekleri_modulun_sozlesmesidir_ve_hepsi_uretilebilir() -> None:
-    """İstisnanın KAPSAMI uydurulmaz: her önek gerçekten ÜRETİLEBİLİR olmalı.
+# ── İstisnanın KAPSAMI: YAPISAL kategori, metin eşleştirmesi DEĞİL ─────────
+#
+# Tur 6 muafiyeti mesaj ÖNEKİ listesiyle tanımlıyordu. Bağ iki yönde de
+# ölçüldü ve kırılgandı; bu bölüm kapanışı SINAR, iddia etmez.
 
-    Fazla geniş yazılmış bir istisna = değişmezin YOKLUĞU. Bu kapı, listeye
-    ölçülmemiş bir önek sızarsa düşer ve gerekçe ister.
-    """
-    uretilen = set()
-    for metin in (
+def _tur6_korpusu() -> tuple[str, ...]:
+    """Tur 6'nın önek listesinin YAZILDIĞI belgeler — eşdeğerlik tabanı."""
+    return (
         kaynak(tablo=False),  # hiç tablo yok → "gerekli yerde tablo yok"
         tabloyu_donemlerden_sonraya_tasi(TEMIZ),  # yalnız dönem-sonrası tablo
         gerekce_basligini_jeneriklestir(TEMIZ),  # denetime giren blok başlıksız
         bolum_b_tablo_ekle(TEMIZ, DENETLENEN_KONUM, _SAHTE_GEREKCE),  # iki tablo
-    ) + tuple(bolum_bosalt(TEMIZ, harf) for harf in bd.BOLUM_HARFLERI):
-        uretilen |= _not_kumesi(metin)
-    kapsanmayan = [
-        onek
-        for onek in bd.KUME_IDDIASI_ONEKLERI
-        if not any(mesaj.startswith(onek) for mesaj in uretilen)
-    ]
-    assert kapsanmayan == [], kapsanmayan
-    # Liste TEKRARSIZ ve TAM olarak sekiz önektir (üç küme iddiası + beş kap);
-    # dokuzuncusu eklenirse bu kapı düşer.
-    assert len(set(bd.KUME_IDDIASI_ONEKLERI)) == len(bd.KUME_IDDIASI_ONEKLERI)
-    assert len(bd.KUME_IDDIASI_ONEKLERI) == 3 + len(bd.BOLUM_HARFLERI) == 8
-    # ...ve önekler BLOĞA AİT notları yutmuyor: satır/sütun notları istisna
-    # DIŞINDA kalmalı, yoksa değişmez sessizce boşalırdı.
+    ) + tuple(bolum_bosalt(TEMIZ, harf) for harf in bd.BOLUM_HARFLERI)
+
+
+def _kap_korpusu() -> tuple[str, ...]:
+    """KAP iddiası üretebilen belgeler — HER beyan yolunu ateşlemek için.
+
+    Tur 6 korpusuna Bölüm C'yi "dolu ama eşlemesiz" bırakan belge EKLENİR: o
+    yolu önek listesi KAÇIRMIŞTI ve hiçbir bileşim onu üretmiyordu.
+    """
+    return _tur6_korpusu() + (c_eslemesini_kaldir(TEMIZ),)
+
+
+def _kap_beyan_eden_fonksiyonlar() -> tuple[str, ...]:
+    """`_kap(...)` çağrısı TAŞIYAN fonksiyonlar — modülün KENDİ AST'inden.
+
+    Küme testin elle yazdığı bir liste DEĞİL: modül kaynağı ayrıştırılır ve
+    `_kap` çağrısını içeren her fonksiyon adı toplanır. Yeni bir beyan yolu
+    eklenirse küme kendiliğinden büyür ve aşağıdaki "hepsi ATEŞLENEBİLİR"
+    kapısı o yolu da ister.
+    """
+    agac = ast.parse(Path(bd.__file__).read_text(encoding="utf-8"))
+    adlar: list[str] = []
+    for dugum in ast.walk(agac):
+        if not isinstance(dugum, ast.FunctionDef) or dugum.name == "_kap":
+            continue
+        if any(
+            isinstance(alt, ast.Call)
+            and isinstance(alt.func, ast.Name)
+            and alt.func.id == "_kap"
+            for alt in ast.walk(dugum)
+        ):
+            adlar.append(dugum.name)
+    return tuple(sorted(set(adlar)))
+
+
+def _kap_cagri_sayisi() -> int:
+    agac = ast.parse(Path(bd.__file__).read_text(encoding="utf-8"))
+    return sum(
+        1
+        for dugum in ast.walk(agac)
+        if isinstance(dugum, ast.Call)
+        and isinstance(dugum.func, ast.Name)
+        and dugum.func.id == "_kap"
+    )
+
+
+def _kap_atesleyen_fonksiyonlar(metinler) -> set[str]:
+    """Korpus koşarken `_kap`'ı GERÇEKTEN çağıran fonksiyon adları."""
+    gorulen: set[str] = set()
+    gercek = bd._kap
+
+    def izleyici(metin: str):
+        gorulen.add(sys._getframe(1).f_code.co_name)
+        return gercek(metin)
+
+    with mock.patch.object(bd, "_kap", izleyici):
+        for metin in metinler:
+            bd.run(metin, source_name="P")
+    return gorulen
+
+
+def test_kap_kategorisi_uretim_yerinde_BEYAN_edilir() -> None:
+    """Muafiyetin KAPSAMI: her beyan yolu gerçekten ATEŞLENEBİLİR olmalı.
+
+    Fazla geniş yazılmış bir istisna = değişmezin YOKLUĞU. Küme AST'ten türer;
+    ölçülmemiş bir `_kap` çağrısı sızarsa bu kapı düşer ve gerekçe ister.
+    """
+    beyan_eden = _kap_beyan_eden_fonksiyonlar()
+    assert beyan_eden == (
+        "_bolum_yapisi_ihlalleri",
+        "_kontrol_gerekce_tablosu",
+        "_kontrol_url_bicimi",
+        "_tablo_sekli_ihlalleri",
+    ), beyan_eden
+    # ALTI çağrı yeri: bölüm boş · tablo yok · başlıksız sayımı · dönem-öncesi
+    # sayımı · tablo dönem sonrası · Bölüm C eşleme kabı boş.
+    assert _kap_cagri_sayisi() == 6, _kap_cagri_sayisi()
+    assert _kap_atesleyen_fonksiyonlar(_kap_korpusu()) == set(beyan_eden)
+    # ...ve kategori BULGUYA yazılıyor: korpusta gerçekten KAP bulgusu var.
+    kap_bulgulari = {
+        bulgu
+        for metin in _kap_korpusu()
+        for bulgu in _not_kumesi(metin)
+        if bd.kap_iddiasi_mi(bulgu)
+    }
+    # Beş bölüm kabı + kalan BEŞ çağrı yerinin birer mesajı (tablo yok · dönem
+    # sonrası · başlıksız sayımı · dönem-öncesi sayımı · Bölüm C eşleme kabı) =
+    # altı çağrı yerinin hepsi ürünüyle görünür.
+    assert len(kap_bulgulari) == len(bd.BOLUM_HARFLERI) + (
+        _kap_cagri_sayisi() - 1
+    ) == 10, sorted(_mesajlari(kap_bulgulari))
+    # ...ve BLOĞA AİT notlar muafiyete sızmıyor: satır/sütun notları DOKUNULMAZ.
     bloga_ait = _not_kumesi(gerekce_tablosunu_boz(TEMIZ))
-    sizan = [mesaj for mesaj in bloga_ait if bd.kume_iddiasi_mi(mesaj)]
-    assert [m for m in bloga_ait if not bd.kume_iddiasi_mi(m)], bloga_ait
-    assert all("sütunlu satır" not in m and "tür etiketi yok" not in m for m in sizan)
+    assert bloga_ait and all(not bd.kap_iddiasi_mi(b) for b in bloga_ait), sorted(
+        _mesajlari(bloga_ait)
+    )
+
+
+def test_her_bulgu_kapali_kategori_kumesinden_bir_deger_tasir() -> None:
+    """Kategorisi beyan edilmemiş yol FAIL-CLOSED: `bloga-ait` (dokunulmaz)."""
+    bulgular = {
+        bulgu
+        for metin in _kap_korpusu() + tuple(b[1] for b in EKLEME_BILESIMLERI[:40])
+        for bulgu in _not_kumesi(metin)
+    }
+    assert bulgular, "korpus not üretmiyor — kol BOŞA yeşil"
+    assert all(b.kategori in bd.KATEGORILER for b in bulgular)
+    assert bd.Bulgu("k", "uzun-alinti", bd.SEVIYE_NOT, "m").kategori == (
+        bd.KATEGORI_BLOGA_AIT
+    )
+    with pytest.raises(ValueError):
+        bd.Bulgu("k", "uzun-alinti", bd.SEVIYE_NOT, "m", "uydurma-kategori")
+    with pytest.raises(ValueError):
+        bd._Mesaj("m", "uydurma-kategori")
+
+
+# Tur 6'nın metin-eşleştirmeli sınıflandırıcısı — POZİTİF KONTROL olarak durur.
+_ESKI_ONEKLER = (
+    "Bölüm B'de dönem başlıklarından ÖNCE ",
+    "Bölüm B'de gerekçe denetimine giren ",
+    "Gerekçe tablosu dönem başlıklarından SONRA",
+) + tuple(f"Bölüm {harf} boş" for harf in bd.BOLUM_HARFLERI)
+
+
+def _eski_sinif(bulgu) -> bool:
+    return bulgu.mesaj.startswith(_ESKI_ONEKLER)
+
+
+def _kap_sayilari(sinif, korpus=None) -> tuple[int, ...]:
+    return tuple(
+        sum(1 for bulgu in _not_kumesi(metin) if sinif(bulgu))
+        for metin in (korpus if korpus is not None else _tur6_korpusu())
+    )
+
+
+def test_onek_listesi_bir_uretim_yolunu_KACIRMISTI() -> None:
+    """Ayak 1'in ölçülmüş kazancı: metin listesi TAM değildi, yapı tamdır.
+
+    Tur 6'nın önek listesi Bölüm C eşleme kabının YOKLUK iddiasını kapsamıyordu
+    — hiçbir bileşim Bölüm C'yi "dolu ama eşlemesiz" bırakmadığı için ölçülmemiş
+    kalmıştı. Yapısal kategori onu üretim yerinden alır.
+    """
+    belge = c_eslemesini_kaldir(TEMIZ)
+    kacan = [
+        bulgu
+        for bulgu in _not_kumesi(belge)
+        if bd.kap_iddiasi_mi(bulgu) and not _eski_sinif(bulgu)
+    ]
+    assert len(kacan) == 1, sorted(_mesajlari(kacan))
+    assert kacan[0].mesaj.startswith("Bölüm C tek bir kaynak eşleme satırı")
+    # Tur 6 korpusunda ise iki sınıflandırıcı BİREBİR aynıdır (kapsam sessizce
+    # genişlemedi/daralmadı — fark YALNIZ bu kaçan yoldur).
+    assert _kap_sayilari(bd.kap_iddiasi_mi) == _kap_sayilari(_eski_sinif)
+
+
+# Metin mutasyonu: KAP mesajlarının METNİ yeniden yazılır (bu oturumda iki kez
+# gerçekten yapıldı). Sabit adı + yeni metin; hiçbiri eski öneklerle başlamaz.
+METIN_MUTASYONLARI = (
+    ("BOLUM_BOS_MESAJI", "Kap {harf} DOLDURULMAMIŞ — başlık var, içerik yok"),
+    ("TABLO_YOK_MESAJI", "Gerekçe tablosu gerekli yerde YOK (yeniden yazım)"),
+    ("TABLO_DONEM_SONRASI_MESAJI", "Tablo YANLIŞ konumda (yeniden yazım)"),
+)
+
+
+@pytest.mark.parametrize("sabit,yeni_metin", METIN_MUTASYONLARI)
+def test_kategori_mesaj_metninden_BAGIMSIZDIR(sabit: str, yeni_metin: str) -> None:
+    """METİN MUTASYONU: mesaj yeniden yazılınca sınıflandırma KAYMAMALI.
+
+    Pozitif kontrol aynı mutasyonla koşar: tur 6'nın önek sınıflandırıcısı
+    AYNI mutasyonda KAYAR. Kolun boşa yeşil olmadığı böyle ölçülür.
+    """
+    taban_yapisal = _kap_sayilari(bd.kap_iddiasi_mi)
+    taban_eski = _kap_sayilari(_eski_sinif)
+    # Eşdeğerlik: yapısal kategori, mutasyonsuz hâlde eski öneklerle AYNI
+    # kümeyi verir — istisnanın KAPSAMI sessizce genişlemedi/daralmadı.
+    assert taban_yapisal == taban_eski, (taban_yapisal, taban_eski)
+    assert sum(taban_yapisal) > 0, "korpus KAP iddiası üretmiyor — kol boşa yeşil"
+
+    with mock.patch.object(bd, sabit, yeni_metin):
+        mutasyon_yapisal = _kap_sayilari(bd.kap_iddiasi_mi)
+        mutasyon_eski = _kap_sayilari(_eski_sinif)
+    assert mutasyon_yapisal == taban_yapisal, (mutasyon_yapisal, taban_yapisal)
+    assert mutasyon_eski != taban_eski, (
+        f"{sabit}: metin mutasyonu ESKİ sınıflandırıcıyı da kaydırmadı — "
+        "pozitif kontrol ölçmüyor"
+    )
+
+
+def test_kategori_yanlis_atanirsa_kapilar_KIRMIZI_duser() -> None:
+    """MUTASYON: kategoriyi yanlış ata → iki ayrı kapı kırmızı düşsün."""
+    # (a) KAP → BLOK: ilkeli istisna kolu KIRILIR (meşru tablo yokluk notunu
+    #     kaldırıyor ama artık dokunulmaz sayılıyor).
+    tablosuz = kaynak(tablo=False)
+    tablolu = _mesru_gerekce_tablosu_ekle(tablosuz)
+    with mock.patch.object(bd, "_kap", lambda metin: bd._Mesaj(metin)):
+        kayip = {
+            b
+            for b in _not_kumesi(tablosuz) - _not_kumesi(tablolu)
+            if not bd.kap_iddiasi_mi(b)
+        }
+    assert kayip, "KAP→BLOK mutasyonu ilkeli istisna kolunu KIRMADI"
+
+    # (b) BLOK → KAP: bloğa ait şekil notları muafiyete sızarsa kapı düşer.
+    gercek = bd._tablo_sekli_ihlalleri
+
+    def sizdiran(belge):
+        return [
+            bd._kap(m.metin if isinstance(m, bd._Mesaj) else m)
+            for m in gercek(belge)
+        ]
+
+    with mock.patch.object(bd, "_tablo_sekli_ihlalleri", sizdiran):
+        bloga_ait = _not_kumesi(gerekce_tablosunu_boz(TEMIZ))
+        sizan = [b for b in bloga_ait if bd.kap_iddiasi_mi(b)]
+    assert sizan, "BLOK→KAP mutasyonu sızıntı üretmedi — kol ölçmüyor"
 
 
 def test_sayim_iddialari_eklemeyle_AZALMAZ() -> None:
     """İstisna "sayı DÜŞTÜ"yü örtmesin: sayım taşıyan küme iddiaları monotondur.
 
-    `kume_iddiasi_mi` sayım taşıyan mesajları (metni sayıyla değiştiği için)
-    istisnaya alır. O boşluğu bu kapı kapatır: sayımların KENDİSİ ölçülür ve
+    Sayım taşıyan mesajlar KAP iddiası olarak beyan edilir ve istisnaya girer. O boşluğu bu kapı kapatır: sayımların KENDİSİ ölçülür ve
     ekleme ile AZALAMAZ.
     """
     dusen = []
@@ -2840,21 +3064,19 @@ def test_ilkeli_istisna_mesru_tablo_yokluk_notunu_kaldirir() -> None:
     """
     tablosuz = kaynak(tablo=False)
     once = _not_kumesi(tablosuz)
-    assert bd.TABLO_YOK_MESAJI in once
+    assert bd.TABLO_YOK_MESAJI in _mesajlari(once)
 
-    satirlar = tablosuz.splitlines(True)
-    b_bas, _ = _b_bolgesi(satirlar)
-    mesru = ["\n", "| dönem | karar | tür | gerekçe |\n", "|---|---|---|---|\n"] + [
-        f"| {ad} | secildi | {tur} | Gerekce cumlesi. |\n"
-        for ad, tur in zip(_DONEM_ADLARI[:6], _DONEM_TURLERI[:6])
-    ] + ["\n"]
-    tablolu = "".join(satirlar[: b_bas + 1] + mesru + satirlar[b_bas + 1 :])
+    tablolu = _mesru_gerekce_tablosu_ekle(tablosuz)
 
     sonra = _not_kumesi(tablolu)
-    assert bd.TABLO_YOK_MESAJI not in sonra, "meşru tablo yokluk notunu kaldırmalı"
-    assert sonra == set(), f"meşru tablo başka not üretti: {sorted(sonra)}"
-    # Kaybolan HER not bir KÜME iddiası: bloğa ait bir şey düşmüş OLMAMALI.
-    assert all(bd.kume_iddiasi_mi(mesaj) for mesaj in once - sonra), sorted(once - sonra)
+    assert bd.TABLO_YOK_MESAJI not in _mesajlari(
+        sonra
+    ), "meşru tablo yokluk notunu kaldırmalı"
+    assert sonra == set(), f"meşru tablo başka not üretti: {sorted(_mesajlari(sonra))}"
+    # Kaybolan HER not bir KAP iddiası: bloğa ait bir şey düşmüş OLMAMALI.
+    assert all(bd.kap_iddiasi_mi(bulgu) for bulgu in once - sonra), sorted(
+        _mesajlari(once - sonra)
+    )
 
 
 def test_korunan_gerilemeler_olculur() -> None:
@@ -2867,7 +3089,293 @@ def test_korunan_gerilemeler_olculur() -> None:
     yemli = bolum_b_tablo_ekle(yemsiz, DENETLENEN_KONUM, _SAHTE_GEREKCE)
     once, sonra = _not_kumesi(yemsiz), _not_kumesi(yemli)
     assert once, "taban boş — prob gerçek tabloyu bozmuyor"
-    assert once <= sonra, f"yem şu notları GİZLEDİ: {sorted(once - sonra)}"
+    assert once <= sonra, f"yem şu notları GİZLEDİ: {sorted(_mesajlari(once - sonra))}"
     # (c) POZİTİF KONTROL: temiz kaynak `gecti` ve SIFIR not.
     rapor = bd.run(TEMIZ, source_name="P")
     assert rapor.sonuc == bd.SONUC_GECTI and rapor.notlar == ()
+
+
+# ─── H8: BOŞ OLABİLEN KAP ekseni — tablo eklemek BOŞLUK notunu kaldıramaz ───
+#
+# H7 (ekleme değişmezi) bileşim uzayı yalnız GEREKÇE TABLOSU durumlarını
+# oynatıyordu: gerçek tablonun bozulması, yem konumu, ara başlık düzeyi. BOŞ
+# KAP durumlarını HİÇ değiştirmiyordu ve delik tam orada kaldı — ölçüldü:
+# ilk dönemin `mesaj_ekseni` yuvası boşaltılınca `notlu-gecti / 1 not`, AYNI
+# yuvaya bağımsız iki sütunlu bir tablo eklenince `gecti / 0 not`.
+#
+# Bu eksen o boyutu ekler. Kap kümesi BULUNAN ÖRNEKTEN değil, modülün KENDİ
+# yapısal sabitlerinden türer — doluluk/varlık kararı verilen her aile:
+#
+#   * Bölüm A alanı        → bd.TEMEL_ALANLAR        (`_Yuva.dolu`)
+#   * dönem yuvası         → bd.OZEL_GUN_YUVALARI    (`_Yuva.dolu`)
+#   * video havuzu         → bd.VIDEO_HAVUZLARI      (adet alt sınırı)
+#   * bölüm                → bd.BOLUM_HARFLERI       (`_Belge.bos_bolumler`)
+#   * Bölüm C eşleme kabı  → `_Belge.c_esleme_satiri_var`
+#
+# İki aile bilinçle İSTİSNADIR ve sözleşme gerekçesiyle işaretlidir: sözleşme
+# tabloyu Bölüm B'nin gerekçesi ve Bölüm C'nin eşlemesi olarak TANIR, dolayısıyla
+# bir tablo o iki kabı gerçekten DOLDURUR. Kalan üç ailede tablo sözleşmenin
+# tanıdığı bir içerik biçimi DEĞİLDİR (`bd._sozlesme_bicimli`).
+
+
+def _tablo_bicimleri() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Eklenen tablonun biçim uzayı — SÖZLEŞMEDEN türer, elle yazılmaz.
+
+    Sütun sayısı ∈ {2, sözleşmenin gerekçe tablosu sütun sayısı} × başlık ∈
+    {kanonik anahtarlar, jenerik}. Kanonik başlık taşıyan yem, tanıma notunu
+    beslemeyen en "meşru görünen" hâldir; iki sütunlu jenerik yem kontrolörün
+    probunun ta kendisidir.
+    """
+    bicimler: list[tuple[str, tuple[str, ...]]] = []
+    for sutun in (2, len(bd.GEREKCE_TABLOSU_SUTUNLARI)):
+        for tur in ("kanonik", "jenerik"):
+            basliklar = (
+                list(bd.GEREKCE_TABLOSU_SUTUNLARI)[:sutun]
+                if tur == "kanonik"
+                else [f"olcut{i}" for i in range(1, sutun + 1)]
+            )
+            govde = (
+                ["\n", "| " + " | ".join(basliklar) + " |\n"]
+                + ["|" + "---|" * sutun + "\n"]
+                + [
+                    "| " + " | ".join(f"deger{i}{j}" for j in range(sutun)) + " |\n"
+                    for i in (1, 2)
+                ]
+                + ["\n"]
+            )
+            bicimler.append((f"{sutun}sutun-{tur}", tuple(govde)))
+    return tuple(bicimler)
+
+
+TABLO_BICIMLERI = _tablo_bicimleri()
+
+
+def _baslik_altina_ekle(baslik: str):
+    def ekle(metin: str, tablo: tuple[str, ...]) -> str:
+        satirlar = metin.splitlines(True)
+        i = next(k for k, s in enumerate(satirlar) if s.strip() == baslik)
+        return "".join(satirlar[: i + 1] + list(tablo) + satirlar[i + 1 :])
+
+    return ekle
+
+
+def _ilk_donem_yuva_araligi(metin: str, yuva_adi: str):
+    """Yuvanın [k, m) aralığı — hem `ad` hem `ad: değer` yazımını tanır."""
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, f"### {_DONEM_ADLARI[0]}")
+
+    def yuva_basi(satir: str) -> bool:
+        govde = satir.strip()
+        return any(
+            govde == ad or govde.startswith(f"{ad}:") for ad in bd.OZEL_GUN_YUVALARI
+        )
+
+    for k in range(i, j):
+        govde = satirlar[k].strip()
+        if govde == yuva_adi or govde.startswith(f"{yuva_adi}:"):
+            m = k + 1
+            while m < j and not yuva_basi(satirlar[m]):
+                m += 1
+            return satirlar, k, m
+    raise AssertionError(f"dönem yuvası bulunamadı: {yuva_adi!r}")
+
+
+def _kap_aileleri():
+    """(aile, kap adı, boşalt, ekle, tablo_kabı_doldurur_mu) — modülden türer."""
+    for ad in bd.TEMEL_ALANLAR:
+        baslik = f"### {ad}"
+        yield (
+            "bolum-a-alani",
+            ad,
+            (lambda b: lambda metin: blok_bosalt(metin, b))(baslik),
+            _baslik_altina_ekle(baslik),
+            False,
+        )
+    for yuva_adi in bd.OZEL_GUN_YUVALARI:
+
+        def bosalt(metin: str, _ad: str = yuva_adi) -> str:
+            satirlar, k, m = _ilk_donem_yuva_araligi(metin, _ad)
+            return "".join(satirlar[:k] + [f"{_ad}:\n"] + satirlar[m:])
+
+        def ekle(metin: str, tablo, _ad: str = yuva_adi) -> str:
+            satirlar, k, _ = _ilk_donem_yuva_araligi(metin, _ad)
+            return "".join(satirlar[: k + 1] + list(tablo) + satirlar[k + 1 :])
+
+        yield ("donem-yuvasi", yuva_adi, bosalt, ekle, False)
+    for havuz in bd.VIDEO_HAVUZLARI:
+        baslik = f"#### {havuz}"
+        yield (
+            "video-havuzu",
+            havuz,
+            (lambda b: lambda metin: blok_bosalt(metin, b))(baslik),
+            _baslik_altina_ekle(baslik),
+            False,
+        )
+    for harf in bd.BOLUM_HARFLERI:
+
+        def bolum_ekle(metin: str, tablo, _h: str = harf) -> str:
+            satirlar = metin.splitlines(True)
+            i = next(
+                k
+                for k, s in enumerate(satirlar)
+                if (e := _BOLUM_BASLIK_RE.match(s)) and e.group(1) == _h
+            )
+            return "".join(satirlar[: i + 1] + list(tablo) + satirlar[i + 1 :])
+
+        yield (
+            "bolum",
+            harf,
+            (lambda h: lambda metin: bolum_bosalt(metin, h))(harf),
+            bolum_ekle,
+            True,  # sözleşme Bölüm B gerekçesini ve Bölüm C eşlemesini TABLO olarak tanır
+        )
+
+    def c_ekle(metin: str, tablo) -> str:
+        satirlar = metin.splitlines(True)
+        i = next(
+            k
+            for k, s in enumerate(satirlar)
+            if (e := _BOLUM_BASLIK_RE.match(s)) and e.group(1) == "C"
+        )
+        return "".join(satirlar[: i + 1] + list(tablo) + satirlar[i + 1 :])
+
+    yield ("c-esleme-kabi", "C", c_eslemesini_kaldir, c_ekle, True)
+
+
+KAP_AILELERI = tuple(_kap_aileleri())
+BOS_KAP_MATRISI = tuple(
+    (f"{aile}/{ad}/{bicim_adi}", bosalt, ekle, doldurur, tablo)
+    for aile, ad, bosalt, ekle, doldurur in KAP_AILELERI
+    for bicim_adi, tablo in TABLO_BICIMLERI
+)
+
+
+def _bos_kap_olcumu(bosalt, ekle, tablo):
+    bos = bosalt(TEMIZ)
+    return _not_kumesi(bos), _not_kumesi(ekle(bos, tablo))
+
+
+def _bos_kap_ihlali(bosalt, ekle, doldurur, tablo) -> str:
+    once, sonra = _bos_kap_olcumu(bosalt, ekle, tablo)
+    kayip = once - sonra
+    if not doldurur:
+        return (
+            f"tablo eklemek şu notları KALDIRDI: {sorted(_mesajlari(kayip))}"
+            if kayip
+            else ""
+        )
+    disari = [b for b in kayip if not bd.kap_iddiasi_mi(b)]
+    return (
+        f"istisna ailesinde BLOĞA AİT not düştü: {sorted(_mesajlari(disari))}"
+        if disari
+        else ""
+    )
+
+
+@pytest.mark.parametrize(
+    "bosalt,ekle,doldurur,tablo",
+    [(b[1], b[2], b[3], b[4]) for b in BOS_KAP_MATRISI],
+    ids=[b[0] for b in BOS_KAP_MATRISI],
+)
+def test_kaba_tablo_eklemek_bosluk_notunu_kaldiramaz(
+    bosalt, ekle, doldurur, tablo
+) -> None:
+    """Boş bir kaba TABLO koymak, o kabın boşluk/adet notunu düşüremez."""
+    assert _bos_kap_ihlali(bosalt, ekle, doldurur, tablo) == ""
+
+
+def test_bos_kap_ekseni_bos_kume_ve_taban_kollari() -> None:
+    """Eksen gerçekten ÜRETİLDİ mi, hücreler BOŞA yeşil mi?"""
+    aileler = {ad.split("/")[0] for ad, *_ in BOS_KAP_MATRISI}
+    assert aileler == {
+        "bolum-a-alani",
+        "donem-yuvasi",
+        "video-havuzu",
+        "bolum",
+        "c-esleme-kabi",
+    }
+    beklenen = (
+        len(bd.TEMEL_ALANLAR)
+        + len(bd.OZEL_GUN_YUVALARI)
+        + len(bd.VIDEO_HAVUZLARI)
+        + len(bd.BOLUM_HARFLERI)
+        + 1
+    ) * len(TABLO_BICIMLERI)
+    assert len(BOS_KAP_MATRISI) == beklenen == 80, len(BOS_KAP_MATRISI)
+    adlar = [b[0] for b in BOS_KAP_MATRISI]
+    assert len(set(adlar)) == len(adlar), "hücreler ÇAKIŞIYOR"
+    # Her hücre GERÇEKTEN bir kap boşaltıyor ve boşaltma NOT üretiyor.
+    bossuz = [
+        ad for ad, bosalt, _, _, _ in BOS_KAP_MATRISI if not _not_kumesi(bosalt(TEMIZ))
+    ]
+    assert bossuz == [], bossuz
+    # ...ve eklenen tablo belgeyi gerçekten BÜYÜTÜYOR.
+    for ad, bosalt, ekle, _, tablo in BOS_KAP_MATRISI:
+        bos = bosalt(TEMIZ)
+        assert len(ekle(bos, tablo).splitlines()) > len(bos.splitlines()), ad
+    # İstisna aileleri BOŞA istisna değil: orada gerçekten not DÜŞÜYOR.
+    dusen = [
+        ad
+        for ad, bosalt, ekle, doldurur, tablo in BOS_KAP_MATRISI
+        if doldurur and (_bos_kap_olcumu(bosalt, ekle, tablo)[0] - _bos_kap_olcumu(bosalt, ekle, tablo)[1])
+    ]
+    assert len(dusen) == len(
+        [ad for ad, _, _, doldurur, _ in BOS_KAP_MATRISI if doldurur]
+    ), dusen
+
+
+def test_bos_kap_ekseni_mutasyona_duyarli() -> None:
+    """MUTASYON (Ayak 2): doluluk kontrolünü ESKİ hâline al → eksen KIRILSIN."""
+
+    def eski_dolu(parca: str) -> bool:
+        """Tur 6 hâli: boş olmayan HERHANGİ bir satır kabı doldururdu."""
+        return bool(parca.strip())
+
+    with mock.patch.object(bd, "_sozlesme_bicimli", eski_dolu):
+        kirmizi = [
+            ad
+            for ad, bosalt, ekle, doldurur, tablo in BOS_KAP_MATRISI
+            if _bos_kap_ihlali(bosalt, ekle, doldurur, tablo)
+        ]
+    assert kirmizi, "eski doluluk kontrolü ekseni KIRMADI — kol ölçmüyor"
+    # Ölçüldü: 48 hücre kırılır ve hepsi `_Yuva.dolu` okuyan İKİ aileden gelir
+    # (8 alan + 4 yuva) × 4 tablo biçimi. Video havuzu ailesi bu sınıfa HİÇ açık
+    # DEĞİLDİ — orada boşluk `essiz_maddeler` ile MADDE sayılarak ölçülür ve bir
+    # tablo satırı madde değildir; bölüm ve Bölüm C aileleri ise ilan edilmiş
+    # istisnadır. Dürüst kayıt: mutasyon kolunun kapsamı 80 hücrenin 48'idir.
+    assert len(kirmizi) == 48, len(kirmizi)
+    assert all(
+        ad.startswith(("bolum-a-alani/", "donem-yuvasi/")) for ad in kirmizi
+    ), kirmizi
+
+
+def test_sozlesme_bicimli_kabul_kumesi_sozlesmeden_turer() -> None:
+    """Kabul kümesi ADIM 3 + BİÇİM KURALLARI'ndan okunur; aşırı daraltma YOK."""
+    # Sözleşmenin TANIDIĞI üç biçim kabul edilir.
+    assert bd._sozlesme_bicimli("Sevgililer Günü icin duygusal eksen.")  # düz yazı
+    assert bd._sozlesme_bicimli("- [an-1] + [urun bagi] acilis kalibi")  # madde
+    assert bd._sozlesme_bicimli(bd.BILINCLI_BOS)  # resmî bilinçli boş
+    assert bd._sozlesme_bicimli("  #### alt basligin altinda duz yazi")
+    # Sözleşmenin TANIMADIĞI markdown blok yapıları kabı doldurmaz.
+    assert not bd._sozlesme_bicimli("| olcut | deger |")
+    assert not bd._sozlesme_bicimli("|---|---|")
+    assert not bd._sozlesme_bicimli("---")
+    assert not bd._sozlesme_bicimli("```")
+    assert not bd._sozlesme_bicimli("   ")
+    # TRIPWIRE — ilan edilen ÖLÇÜLMÜŞ boşluk: bu üç markdown yapısı hâlâ kabı
+    # DOLDURUR ve bilinçle kapatılmadı. Biri kapatılırsa burası kırılır ve
+    # kapsam beyanı güncellenmek ZORUNDA kalır (bayat beyan kapısı).
+    assert bd._sozlesme_bicimli("```python")
+    assert bd._sozlesme_bicimli("> alintilanmis bir cumle")
+    assert bd._sozlesme_bicimli("<div>alakasiz</div>")
+    beyan = next(
+        b
+        for b in bd.run(TEMIZ, source_name="P").kapsam_sinirlari
+        if b.startswith("bolum-ve-alan-tamligi/doluluk")
+    )
+    assert "KAPATILMADI" in beyan and "blockquote" in beyan
+    # ...ve K-120 muafiyeti ile adet sayımı SAĞLAM kalır (yanlış-pozitif yok).
+    assert bd.run(kaynak(anma_donemi="resmi"), source_name="P").sonuc == (
+        bd.SONUC_GECTI
+    )
+    assert bd.run(TEMIZ, source_name="P").notlar == ()
