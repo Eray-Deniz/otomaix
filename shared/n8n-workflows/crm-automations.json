@@ -229,8 +229,8 @@
         ],
         "credentials": {
           "postgres": {
-            "id": "1",
-            "name": "PostgreSQL Otomaix"
+            "id": "LRCmorU07F9lRpjV",
+            "name": "Postgres account"
           }
         },
         "parameters": {
@@ -256,25 +256,25 @@
               {
                 "id": "c1",
                 "name": "text",
-                "value": "={{ '⚠️ <b>Ödeme Başarısız!</b>\\n\\n👤 ' + $('Webhook').item.json.name + '\\n📧 ' + $('Webhook').item.json.email + '\\n📦 Plan: ' + $('Webhook').item.json.plan.toUpperCase() + '\\n\\n⚡ Etiket eklendi: Ödeme Sorunu\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $('Webhook').item.json.account_id + '\">CRM\\'de Görüntüle</a>' }}",
+                "value": "={{ '⚠️ <b>Ödeme Başarısız!</b>\\n\\n👤 ' + $('Webhook').item.json.body.name + '\\n📧 ' + $('Webhook').item.json.body.email + '\\n📦 Plan: ' + $('Webhook').item.json.body.plan.toUpperCase() + '\\n\\n⚡ Etiket eklendi: Ödeme Sorunu\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $('Webhook').item.json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
                 "type": "string"
               },
               {
                 "id": "c2",
                 "name": "account_id",
-                "value": "={{ $('Webhook').item.json.account_id }}",
+                "value": "={{ $('Webhook').item.json.body.account_id }}",
                 "type": "string"
               },
               {
                 "id": "c3",
                 "name": "email",
-                "value": "={{ $('Webhook').item.json.email }}",
+                "value": "={{ $('Webhook').item.json.body.email }}",
                 "type": "string"
               },
               {
                 "id": "c4",
                 "name": "name",
-                "value": "={{ $('Webhook').item.json.name }}",
+                "value": "={{ $('Webhook').item.json.body.name }}",
                 "type": "string"
               }
             ]
@@ -338,7 +338,7 @@
               {
                 "id": "c5",
                 "name": "text",
-                "value": "={{ '🔔 <b>Ödeme Hatırlatması (2. gün)</b>\\n\\n👤 ' + $json.body.name + '\\n📧 ' + $json.body.email + '\\n\\nÖdeme sorunu hâlâ çözülmedi. Müşteri ile iletişime geçilmesi önerilir.\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
+                "value": "={{ '🔔 <b>Ödeme Hatırlatması (2. gün)</b>\\n\\n👤 ' + $('Webhook').item.json.body.name + '\\n📧 ' + $('Webhook').item.json.body.email + '\\n\\nÖdeme sorunu hâlâ çözülmedi. Müşteri ile iletişime geçilmesi önerilir.\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
                 "type": "string"
               }
             ]
@@ -478,8 +478,8 @@
         ],
         "credentials": {
           "postgres": {
-            "id": "1",
-            "name": "PostgreSQL Otomaix"
+            "id": "LRCmorU07F9lRpjV",
+            "name": "Postgres account"
           }
         },
         "parameters": {
@@ -530,8 +530,8 @@
         ],
         "credentials": {
           "postgres": {
-            "id": "1",
-            "name": "PostgreSQL Otomaix"
+            "id": "LRCmorU07F9lRpjV",
+            "name": "Postgres account"
           }
         },
         "parameters": {
@@ -701,8 +701,8 @@
         ],
         "credentials": {
           "postgres": {
-            "id": "1",
-            "name": "PostgreSQL Otomaix"
+            "id": "LRCmorU07F9lRpjV",
+            "name": "Postgres account"
           }
         },
         "parameters": {
@@ -892,8 +892,8 @@
         ],
         "credentials": {
           "postgres": {
-            "id": "1",
-            "name": "PostgreSQL Otomaix"
+            "id": "LRCmorU07F9lRpjV",
+            "name": "Postgres account"
           }
         },
         "parameters": {
