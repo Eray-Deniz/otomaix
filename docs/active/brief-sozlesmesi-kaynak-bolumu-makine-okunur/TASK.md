@@ -1,5 +1,5 @@
 ---
-title: Araştırma sözleşmesinin kaynak bölümü makine-okunur hâle getirilsin
+title: Araştırma sözleşmesinin çıktı biçimi makine-okunur kesinliğe getirilsin
 status: proposed
 started: 2026-09-07
 last-touched: 2026-09-07
@@ -9,7 +9,7 @@ source_task: docs/active/sektor-bilgi-paketi-plan2/TASK.md
 
 # Goal
 
-Araştırma görev sözleşmesinin **kaynak bölümünü** mekanik olarak denetlenebilir hâle getirmek.
+Araştırma görev sözleşmesinin **çıktı biçimini** mekanik olarak denetlenebilir kesinliğe getirmek.
 Bugün sözleşme bu bölüm için **ne istediğini** söylüyor (`alan/dönem → iddia → kaynak` eşlemesi,
 açılabilir tam adres) ama **hangi biçimde yazılacağını** söylemiyor. Serbest düzyazı da uyuyor,
 tablo da. Mekanik girdi kapısı bu yüzden serbest düzyazıdan *"bu bir eşleme DEĞİL"* sonucunu
@@ -47,7 +47,34 @@ taşıyor ve karara bağlanmadan sözleşme metni yazılamaz (bkz. Open Problems
 
 # Kapsam
 
-Dört ayak — hepsi bu görevin içinde, parçalanmaz:
+**KAPSAM GENİŞLETİLDİ (2026-09-07, checkpoint 6'nın beş turluk zincirinden sonra).**
+İlk yazımda kapsam yalnız **Bölüm C** idi. Ölçüldü ki aynı hastalık Bölüm B'de ve belgenin genel
+yapısında da var: sözleşme NE istediğini söylüyor, HANGİ KESİNLİKTE yazılacağını söylemiyor;
+mekanik kapı tahmin etmek zorunda kalıyor ve tahmin eden her kural kandırılabiliyor. Beş sınır
+kuralı beş kez yenildi (2026-09-07, checkpoint 6 tur 1-8) — kapının kendisi kötü olduğu için
+değil, dayandığı sözleşme yeterince kesin olmadığı için.
+
+**Eksik olan BİÇİM değil KESİNLİK — dört cümle.** Sözleşme zaten Bölüm B'nin tablosunu
+sütunlarıyla tarif ediyor ("dönem + karar + tür etiketi + gerekçe", önce tablo sonra dönemler).
+Yazılı OLMAYAN:
+
+1. **Gerekçe tablosunun BAŞLIK SATIRI nasıl yazılacak.** Bugün kapı hangi tablonun o tablo
+   olduğunu sezgiselle buluyor; sezgisel yem tabloyla kandırılabiliyor (beş turun konusu).
+2. **Bölüm B'de kaç tablo olabilir.** "Tek gerekçe tablosu" yazılı değil; ikincisi konursa
+   hangisinin gerçek olduğu doğrulanamıyor.
+3. **Markdown BAŞLIK DÜZEYLERİ.** Bölüm B'nin içine konan `##` bir satır bölümü fiilen kesiyor
+   (ölçüldü); sözleşme düzey dayatmadığı için kapı bunu meşru bölüm sonu saymak zorunda.
+4. **Bölüm C'nin biçimi.** Hiç yazılı değil — serbest düzyazı da sözleşmeye uyuyor, ve
+   "bu bir eşleme DEĞİL" sonucu serbest yazıdan makineyle çıkarılamaz. (İlk kayıt bu maddeydi.)
+
+Dördü de aynı türden: **kapının tahmin etmesini bırakıp olumlu bir yapısal sözleşmeyi
+doğrulamasını sağlar.** Dördü birlikte yapılmazsa aynı sınıf kalan bölümden yeniden çıkar.
+
+**Bu genişletmenin ek maliyeti ölçüldü ve DÜŞÜK:** dördü de aynı sözleşme dosyasının aynı
+"ÇIKTI FORMATI" bölümüne dokunuyor, aynı yeniden-pinleme turunda iniyor ve aynı araştırma
+yeniden-üretimini bekliyor. Dar tutup sonra genişletmek araştırmaları ÜÇÜNCÜ kez ürettirir.
+
+Ayaklar — hepsi bu görevin içinde, parçalanmaz:
 
 1. **Dış depodaki araştırma görev sözleşmesi** (`/root/otomaix-sosyal-medya-arastirmasi`):
    kaynak bölümünün biçimi sabit sütunlu tabloya çevrilir.
