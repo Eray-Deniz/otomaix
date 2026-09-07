@@ -4871,6 +4871,69 @@ def _sinir_probu(on: list[str], son: list[str]) -> tuple[frozenset, frozenset]:
     return frozenset(_bos_kap_notlari(bosalt)), frozenset(_not_kumesi(ekle(bos, sahte)))
 
 
+# Tur 11 (bagimsiz hakem) — AYRISTIRICI SINIRI. Hakem `maxNesting`
+# korumasinin fail-open urettigini bildirdi; kontrolor kendi probuyla
+# dogruladi: sinir 10'da kapali, 11'de acikti. `_MD` yapilandirmasi
+# yukseltildi; kol sinirin GERCEKTEN kalktigini derinlik derinlik olcer.
+IC_ICE_DERINLIKLERI = (9, 11, 25, 60, 99)
+
+
+def _ic_ice_probu(derinlik: int) -> tuple[frozenset, frozenset]:
+    """İç içe geçme BLOCKQUOTE ile kurulur, madde listesiyle DEĞİL.
+
+    Ölçüldü: iç içe `- x` maddeleri sözleşmenin GERÇEK maddeleridir ve kabı
+    MEŞRU olarak doldururlar; o kuyrukla kurulan prob adet notunu her
+    derinlikte düşürür ve ayrıştırıcı sınırını hiç ölçmez. Blockquote da
+    `maxNesting` sayacını aynı şekilde tüketir ama sözleşme içeriği DEĞİLDİR.
+    """
+    on = "> " * derinlik
+    bosalt, ekle = _kap_of("bolum-a-alani", "cta_kaliplari")
+    bos = bosalt(TEMIZ)
+    sahte = (
+        (f"{on}```\n", f"{on}### cta_kaliplari\n")
+        + tuple(f"{on}- [urun-{k}] x.\n" for k in range(1, 6))
+    )
+    return frozenset(_bos_kap_notlari(bosalt)), frozenset(_not_kumesi(ekle(bos, sahte)))
+
+
+@pytest.mark.parametrize("derinlik", IC_ICE_DERINLIKLERI)
+def test_ic_ice_liste_derinligi_sahte_yuva_KURDURMAZ(derinlik: int) -> None:
+    """Ayrıştırıcının iç içe geçme sınırı bir fail-open ÜRETMEMELİ."""
+    taban, prob = _ic_ice_probu(derinlik)
+    kayip = taban - prob
+    assert kayip == frozenset(), (
+        f"derinlik {derinlik}: sahte yuva KURULDU → {sorted(_mesajlari(kayip))}"
+    )
+
+
+def test_ic_ice_ekseni_taban_ve_sinir_kollari() -> None:
+    """Taban not veriyor mu; ve sınırın SONLU olduğu ilan edildi mi?"""
+    taban, _prob = _ic_ice_probu(9)
+    assert taban, "taban BOŞ — kol boşa yeşil"
+    # Sınır SONLUDUR ve bu KAYITLIDIR: yapılandırılan değerin ÜSTÜNDE aynı
+    # sınıf yeniden açılır. Beyan bayatlamasın diye TRIPWIRE olarak ölçülür.
+    sinir = bd._MD.options["maxNesting"]
+    assert sinir == 100, sinir
+    # Sınırın ÜSTÜNDE sınıf yeniden açılır — beyan bayatlamasın diye ÖLÇÜLÜR.
+    taban_a, prob_a = _ic_ice_probu(sinir + 50)
+    assert taban_a - prob_a, (
+        "ilan edilen sınır ÖLÇÜLMÜYOR — sınırın üstünde açık GÖRÜNMÜYOR, "
+        "yani beyan bayat"
+    )
+    # ...ve ÇOK derin belge ÇÖKMEZ. Bu ölçüm bir GERİ ALMANIN kaydıdır:
+    # sınır önce 1000 denendi ve o eşikte 1200 kat iç içe blockquote
+    # ayrıştırıcıyı `RecursionError` ile düşürüyordu — yüksek sınır fail-open'ı
+    # kapatırken bir ÇÖKME yolu açıyordu. 100'de ayrıştırıcı sınıra takılıp
+    # duruyor, özyinelemeye inmiyor.
+    for derin in (500, 2000, 5000):
+        maske = bd._cit_maskesi(["> " * derin + "x", "metin"])
+        assert len(maske) == 2, derin
+    # `RecursionError` yolu yine de FAIL-CLOSED bağlanmıştır (savunma katmanı):
+    # ayrıştırıcı bir gün düşerse maske boş DEĞİL, TAMAMEN literal döner.
+    with mock.patch.object(bd._MD, "parse", side_effect=RecursionError):
+        assert bd._cit_maskesi(["a", "b", "c"]) == [True, True, True]
+
+
 @pytest.mark.parametrize("ad", sorted(COMMONMARK_SINIR_PROBLARI))
 def test_commonmark_sinirinda_sahte_yuva_KURULAMAZ(ad: str) -> None:
     """Erken kabul edilen kapatıcıdan sonraki sahte başlık ALAN KURAMAZ."""

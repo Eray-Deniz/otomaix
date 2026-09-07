@@ -1644,7 +1644,23 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
 # yeniden girişli. "commonmark" ön ayarı bilerek seçildi: tablo/strikethrough
 # gibi eklentiler kod bloğu sınırlarını değiştirmez ama gramerden UZAKLAŞTIRIR;
 # burada istenen şey saf CommonMark'ın kendisidir.
-_MD = MarkdownIt("commonmark")
+# `maxNesting` BILEREK yukseltildi (varsayilan 20). Olculdu (2026-09-07,
+# mesaj KUMESI farkiyla): 11 kat ic ice listenin altinda acilan kapanmamis
+# dilsiz cit ayristiricinin ic ice gecme sinirina takiliyor, o bolge HIC
+# tokenlanmiyor ve icindeki sahte `### cta_kaliplari` basligi MASKESIZ
+# kaliyordu — gercek alan tamamen silinmisken rapor `gecti / 0 not` donuyordu.
+# Sinir 10'da kapali, 11'de acikti. Deger 1000'e cekildi: derinlik 200'de acik
+# KAPALI, temiz rapor DEGISMEDI, derinlik-400 belgesi 0.17 sn'de kosuyor
+# (varsayilanla 0.10 sn) — patolojik girdi maliyeti olculdu, kabul edilebilir.
+# Deger 1000 DENENDI ve GERI ALINDI: o esikte 1200 kat ic ice blockquote
+# ayristiriciyi `RecursionError` ile dusuruyor (olculdu) — yani yuksek sinir
+# fail-open'i kapatirken bir COKME yolu aciyor. 100 secildi: gercekci
+# belgenin cok uzerinde, Python'un ozyineleme sinirinin cok altinda.
+# Sinir hala SONLUDUR ve bu KAYITLIDIR: 100 kattan derin ic ice yapi tasiyan
+# bir belgede ayni sinif yeniden acilir. O yol artik SESSIZ degil —
+# `RecursionError` fail-closed yakalanir (asagida) ve belge TAMAMEN literal
+# sayilir, yani rapor temiz GECMEZ.
+_MD = MarkdownIt("commonmark", {"maxNesting": 100})
 
 
 def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
@@ -1687,7 +1703,15 @@ def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
     ayraçlar (`\x0b`, `\u2028` gibi) indis kaymasi yaratamaz.
     """
     maske = [False] * len(satirlar)
-    for jeton in _MD.parse("\n".join(satirlar)):
+    try:
+        jetonlar = _MD.parse("\n".join(satirlar))
+    except RecursionError:
+        # FAIL-CLOSED: ayristirici belgeyi COZEMEDI. Bos maske dondurmek
+        # fail-OPEN olurdu (her sey yapi sayilir); belgenin TAMAMI literal
+        # sayilir, dolayisiyla butun bolumler EKSIK gorunur ve rapor temiz
+        # GECEMEZ. Sessiz basari YOK.
+        return [True] * len(satirlar)
+    for jeton in jetonlar:
         if jeton.map is None:
             continue
         if jeton.type == "code_block" or (
