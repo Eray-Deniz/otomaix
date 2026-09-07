@@ -113,8 +113,13 @@ seçim BIRAKILDI: dönem bloklarından ÖNCE gelen BÜTÜN tablolar denetlenir, 
 atılmaz, birden çoksa belirsizlik NOTU düşer. Kanonik başlık artık seçmez, yalnız NOT
 besler. Bedeli bilinçle kabul edildi: dönemlerden önce konmuş meşru ve alakasız bir tablo
 artık NOT üretir — bugün hiçbir kontrol elemediği için maliyet gürültüdür, kaynak kaybı
-değil, ve not sessiz değildir. Korunan kazanım: dönemlerin İÇİNDE ya da SONRASINDA duran
-tablolar (dönem-öncesi bir tablo varken) denetime GİRMEZ.
+değil, ve not sessiz değildir. Korunan kazanım: dönem bölgesinde duran tablolar
+(dönem-öncesi bir tablo varken) denetime GİRMEZ. Bölgenin SINIRI tur 5'te DÜZELTİLDİ:
+dönem bloğu BAŞLIĞIYLA başlar, ilk yuvasıyla değil (`_ilk_donem_baslangici`). Önceki
+sınır ilk yuvadaydı ve başlık ile ilk yuva ARASINA konan meşru bir tablo hâlâ "dönem
+öncesi" sayılıyordu — ölçüldü (46579a1 vs 7075658, aynı belge): `0 not → 4 not`. Bu bir
+dördüncü SEÇİM sezgiseli değil, bir SINIR tanımıdır; hangi tablonun denetleneceği yine
+SEÇİLMEZ.
 
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
@@ -144,9 +149,12 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   denetlenir. Hangisinin GERÇEK gerekçe tablosu olduğu DOĞRULANMAZ ve doğrulanmaya
   ÇALIŞILMAZ — bir önceki turun "kanonik başlıklı adayı seç" kuralı ÖLÇÜLDÜ ve
   YANLIŞLANDI (kanonik başlıklı bir yem, jenerik başlıklı GERÇEK tabloyu susturuyordu:
-  `8 not → 0 not`). Dönem bloklarının İÇİNDE ya da SONRASINDA duran bir tablo, kanonik
-  başlık taşısa bile denetime GİRMEZ; o konumdaki bir tablonun gerekçe tablosu OLMADIĞI
-  sözleşmenin sırasından OKUNUR, ÖLÇÜLMEDİ.
+  `8 not → 0 not`). Bölgenin SINIRI ilk dönem BAŞLIĞIDIR: bir dönem başlığından SONRA
+  gelen tablo, kanonik başlık taşısa bile denetime GİRMEZ. Sınırın yeri ÖLÇÜLÜR (konum
+  ekseni belgenin kendi yapısından üretilir, dört denetim-dışı konumun ikisi bu tura
+  kadar hiç egzersiz edilmemişti). Ölçülmüş kalan sınır: ilk döneme başlık yazılmamış
+  ama tablonun üstüne alt yazı başlığı konmuşsa o alt yazı ilk dönemin başlığı sanılır;
+  tablo SUSTURULMAZ ama "tablo dönemlerden SONRA geliyor" notu yanıltıcı düşer.
 * Kaynak KİMLİĞİ yazım takma adlarını (`kanonik_kaynak_kimligi`) ve aynı metnin iki adla
   verilmesini (`icerik_ozeti`) denkler. Özetsiz kimlik artık kapıya UYGUN DEĞİLDİR, ama
   özetin `run` tarafından ÜRETİLDİĞİ doğrulanamaz: biçim zorlanır, KÖKEN zorlanmaz —
@@ -866,7 +874,8 @@ class _Belge:
     tablo_sutun_sayilari: tuple[int, ...] = ()
     tablo_donem_sonrasi: bool = False
     # Gerekçe denetimine GİREN blokların sayımı. Seçim yoktur: denetim kümesi
-    # dönem bloklarından ÖNCEKİ bütün tablolardır (yoksa hepsi).
+    # dönem BÖLGESİNDEN önceki bütün tablolardır (yoksa hepsi). Bölge ilk dönem
+    # BAŞLIĞINDA başlar — sınır `_ilk_donem_baslangici`'nda yaşar.
     gerekce_donem_oncesi_sayisi: int = 0
     gerekce_basliksiz_sayisi: int = 0
     c_esleme_satiri_var: bool = False
@@ -1010,11 +1019,13 @@ def _ayristir(source_text: str) -> _Belge:
     donemler: list[_Donem] = []
     aktif_donem: _Donem | None = None
     son_baslik: str | None = None
-    tablo_izleri: list[tuple[int, str, bool]] = []
+    son_baslik_sirasi: int | None = None
+    donem_bolgesi_basi: int | None = None
+    ham_tablo_izleri: list[tuple[int, str]] = []
 
     for sira, satir in enumerate(b_satirlari):
         if _TABLO_RE.match(satir):
-            tablo_izleri.append((sira, satir, bool(donemler)))
+            ham_tablo_izleri.append((sira, satir))
         yuva = _YUVA_DESENI.match(satir)
         if yuva and yuva.group(1) == "mesaj_ekseni":
             aktif_donem = _Donem(
@@ -1023,14 +1034,24 @@ def _ayristir(source_text: str) -> _Belge:
                 satirlar=[satir],
             )
             donemler.append(aktif_donem)
+            if donem_bolgesi_basi is None:
+                donem_bolgesi_basi = _ilk_donem_baslangici(son_baslik_sirasi, sira)
             continue
         if not yuva and _BASLIK_GORUNUMU_RE.match(satir):
             # Yuva olmayan bir başlık dönemi KAPATIR: sonraki dönemin adı budur.
             son_baslik = _baslik_metni(satir)
+            son_baslik_sirasi = sira
             aktif_donem = None
             continue
         if aktif_donem is not None:
             aktif_donem.satirlar.append(satir)
+
+    # Konum bayrağı DÖNGÜDEN SONRA hesaplanır: dönem bloğu BAŞLIĞIYLA başlar ama
+    # başlığın dönem başlığı OLDUĞU ancak ilk yuvası görülünce bilinir.
+    tablo_izleri = [
+        (sira, satir, donem_bolgesi_basi is not None and sira >= donem_bolgesi_basi)
+        for sira, satir in ham_tablo_izleri
+    ]
 
     tablo_bloklari = _tablo_bloklari(tablo_izleri)
     secilen_bloklar, gerekce_donem_oncesi_sayisi = _gerekce_tablosu(tablo_bloklari)
@@ -1095,6 +1116,37 @@ def _ayristir(source_text: str) -> _Belge:
     )
 
 
+def _ilk_donem_baslangici(baslik_sirasi: int | None, yuva_sirasi: int) -> int:
+    """Dönem bölgesinin BAŞLADIĞI satır — gerekçe denetim bölgesinin SINIRI.
+
+    Bir dönem bloğu BAŞLIĞIYLA başlar, ilk yuvasıyla değil: `### Sevgililer
+    Günü` satırından sonra gelen her tablo o DÖNEME aittir. Ayrıştırıcı dönemi
+    ancak `mesaj_ekseni` yuvasını görünce KURABİLİR (başlığın dönem başlığı
+    olduğu o an anlaşılır), bu yüzden sınır geriye dönük olarak BAŞLIĞA çekilir.
+
+    **Ölçülmüş gerileme (tur 5):** bir önceki tur bölgeyi `bool(donemler)` ile
+    kapatıyordu, yani ilk YUVADA. Dönem başlığı ile o dönemin ilk yuvası
+    ARASINA konan bir tablo hâlâ "dönem öncesi" sayılıyor ve gerekçe denetimine
+    giriyordu. Ölçüldü (46579a1 vs 7075658, aynı belge): `0 not → 4 not`.
+
+    Bu bir SEÇİM sezgiseli DEĞİLDİR — v2/v3/v4'ün her turda bir yemle
+    kandırılan aday-seçme kuralları gibi çalışmaz; hangi tablonun denetleneceği
+    yine SEÇİLMEZ, yalnız bölgenin sınırı sözleşmenin sırasından okunan doğru
+    yere konur ("önce tablo, sonra dönem dönem dört başlık").
+
+    Başlıksız bir ilk dönemde (belge başlık yazmamışsa) bölge ilk YUVADA biter:
+    ikinci dal fail-open değildir, tabloyu denetim İÇİNDE bırakır.
+
+    **Kapsam sınırı (İlke 9(4)):** "ilk dönemin başlığı" = ilk yuvadan ÖNCEKİ
+    SON başlık görünümü. Belge ilk döneme başlık yazmamış AMA gerekçe
+    tablosunun üstüne bir alt yazı başlığı koymuşsa o alt yazı ilk dönemin
+    başlığı sanılır ve tablo denetim DIŞINDA kalır. Bu dal beş gerçek çıktının
+    hiçbirinde GÖRÜLMEDİ (beşinde de Bölüm B tablosuzdur) ve ayrıca o belgede
+    dönem ADI da yanlış türer; ayrı bir kural YAZILMADI.
+    """
+    return yuva_sirasi if baslik_sirasi is None else baslik_sirasi
+
+
 def _tablo_bloklari(
     izler: Sequence[tuple[int, str, bool]]
 ) -> list[list[tuple[int, str, bool]]]:
@@ -1141,10 +1193,12 @@ def _gerekce_tablosu(
     hiç tablo yoksa — ama tablo varsa — bütün bloklar denetlenir ve `sıra` alt
     kuralı "tablo dönemlerden SONRA geliyor" notunu düşürür.
 
-    **Korunan kazanım (v2'nin yanlış-pozitif düzeltmesi):** dönem bloklarının
-    İÇİNDE ya da SONRASINDA duran tablolar, dönem-öncesi bir tablo VARKEN
-    denetime GİRMEZ. Bu bir sezgisel değil, sözleşmenin kendi SIRASIDIR
-    (`_SABLON.md` §5: "önce tablo, sonra dönem dönem dört başlık").
+    **Korunan kazanım (v2'nin yanlış-pozitif düzeltmesi):** dönem BÖLGESİNDE
+    duran tablolar, dönem-öncesi bir tablo VARKEN denetime GİRMEZ. Bu bir
+    sezgisel değil, sözleşmenin kendi SIRASIDIR (`_SABLON.md` §5: "önce tablo,
+    sonra dönem dönem dört başlık"). Bölgenin nerede BAŞLADIĞI ayrı bir
+    sorudur ve `_ilk_donem_baslangici`'nda yaşar: dönem bloğu BAŞLIĞIYLA
+    başlar, ilk yuvasıyla değil.
 
     **Bilinçle kabul edilen bedel:** dönemlerden önce konmuş meşru ve alakasız
     bir tablo artık NOT üretir (kendi satırları da tür etiketi/sütun denetimine
@@ -1966,10 +2020,16 @@ CHECKS: tuple[Check, ...] = (
                 "(kanonik başlıklı bir yem, jenerik başlıklı GERÇEK tabloyu "
                 "susturuyordu: 8 not -> 0 not), o yüzden seçim BIRAKILDI. "
                 "Bedeli: dönemlerden önce konmuş meşru ve alakasız bir tablo "
-                "da NOT üretir. Dönem bloklarının İÇİNDE ya da SONRASINDA "
-                "duran bir tablo, kanonik başlık taşısa bile denetime GİRMEZ; "
-                "o konumdaki bir tablonun gerekçe tablosu OLMADIĞI "
-                "sözleşmenin sırasından OKUNUR, ÖLÇÜLMEDİ."
+                "da NOT üretir. Bölgenin SINIRI ilk dönem BAŞLIĞIDIR: bir "
+                "dönem başlığından SONRA gelen tablo, kanonik başlık taşısa "
+                "bile denetime GİRMEZ. Sınırın YERİ artık ÖLÇÜLÜYOR (konum "
+                "ekseni belgenin kendi yapısından üretilir; önceki sınır ilk "
+                "YUVADAYDI ve başlık ile ilk yuva arasına konan tabloya DÖRT "
+                "uydurma not veriyordu). ÖLÇÜLMÜŞ kalan sınır: ilk döneme "
+                "başlık yazılmamış AMA tablonun üstüne bir alt yazı başlığı "
+                "konmuşsa o alt yazı ilk dönemin başlığı sanılır; tablo "
+                "SUSTURULMAZ (dönem-öncesi küme boşalınca hepsi denetlenir) "
+                "ama 'tablo dönemlerden SONRA geliyor' notu yanıltıcı düşer."
             ),
         ),
     ),

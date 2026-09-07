@@ -1988,11 +1988,22 @@ def test_ozet_kapisi_mutasyona_duyarli() -> None:
 #
 # **Matris KAVRAMDAN türer** (bulunan örneklerden değil). Bir tablo bloğunun
 # gerekçe denetimine girip girmemesi iki bağımsız eksene bağlıdır:
-#   eksen 1 — KONUM: dönemlerden ÖNCE · dönemlerin İÇİNDE · dönemlerden SONRA
+#   eksen 1 — KONUM: `_bolum_b_konumlari` ÜRETİR, bu yorum saymaz. Bölgeler
+#             ayrıştırıcının Bölüm B işaretlerinden (dönemi AÇAN `mesaj_ekseni`
+#             yuvası · dönemi KAPATAN başlık) türer ve BEŞ değerlidir.
 #   eksen 2 — BAŞLIK: kanonik gerekçe başlığı taşıyor · taşımıyor
 # ve denetlenecek belgede GERÇEK gerekçe tablosunun durumu üçüncü eksendir:
 #   eksen 3 — sağlam · satırları bozuk · başlığı jenerik VE satırları bozuk
-# 3 × 2 × 3 = 18 hücre. BOŞ HÜCRE YOKTUR.
+# 5 × 2 × 3 = 30 hücre. BOŞ HÜCRE YOKTUR.
+#
+# **Tur 5'in kapattığı boşluk.** Önceki eksen ÜÇ değerliydi (ÖNCE · İÇİNDE ·
+# SONRA) ve "İÇİNDE" TEK bir alt-konumla — yuvadan SONRA — sınandı. Dönem
+# BAŞLIĞI ile o dönemin İLK YUVASI arası hiç egzersiz edilmedi ve gerileme tam
+# oradan geçti: `bool(donemler)` dönemi başlıkta değil ilk YUVAda başlatıyordu,
+# başlığın hemen altındaki bir tablo "dönem öncesi" sayılıyor ve gerekçe
+# denetimine giriyordu (ölçüldü, 46579a1 vs 7075658: `0 not → 4 not`). Düzeltme
+# bir SEÇİM sezgiseli değil bir SINIR tanımıdır: bölge ilk dönem BAŞLIĞINDA
+# biter (`_ilk_donem_baslangici`).
 #
 # Eksen 3'ün DÖRDÜNCÜ değeri ("gerçek gerekçe tablosu YOK") bilinçle dışarıda
 # bırakıldı, sessizce atlanmadı: o dalda susturulacak bir blok bulunmadığı için
@@ -2019,28 +2030,88 @@ _ALAKASIZ_4_SUTUN = _EK_TABLOLAR["jenerik"]
 _SAHTE_GEREKCE = _EK_TABLOLAR["kanonik"]
 
 
-def _bolum_b_araligi(satirlar: list[str]) -> tuple[int, int]:
-    return _md_blok(satirlar, "## Bölüm B — GÖREV B çıktısı")
+def _bolum_b_izdusumu(metin: str) -> tuple[list[str], int]:
+    """Bölüm B satırları + o satırların TAM BELGEDEKİ ofseti.
+
+    Bölümleme test tarafından YENİDEN YAPILMAZ: satırlar modülün KENDİ
+    ayrıştırıcısından (`_ayristir`) okunur, ofset belgeye geri eşlenerek
+    doğrulanır (eşleşme TEK olmak zorunda).
+    """
+    satirlar = metin.splitlines()
+    b = bd._ayristir(metin).bolumler["B"]
+    eslesmeler = [
+        ofset
+        for ofset in range(len(satirlar) - len(b) + 1)
+        if satirlar[ofset : ofset + len(b)] == b
+    ]
+    assert len(eslesmeler) == 1, f"Bölüm B belgeye tek biçimde eşlenmedi: {eslesmeler}"
+    return b, eslesmeler[0]
+
+
+def _b_isaretleri(b_satirlari: list[str]) -> tuple[list[int], list[int]]:
+    """Ayrıştırıcının Bölüm B'de tanıdığı İKİ işaret — modülün KENDİ desenleriyle.
+
+    `_ayristir`'ın Bölüm B döngüsü yalnız şunlara bakar: dönemi AÇAN
+    `mesaj_ekseni` yuvası ve dönemi KAPATAN (ve bir sonrakini ADLANDIRAN)
+    başlık görünümü. Konum ekseni bu iki işaretin ayırdığı bölgelerden TÜRER —
+    elle seçilmiş örneklerden değil.
+    """
+    yuvalar: list[int] = []
+    basliklar: list[int] = []
+    for i, satir in enumerate(b_satirlari):
+        yuva = bd._YUVA_DESENI.match(satir)
+        if yuva and yuva.group(1) == "mesaj_ekseni":
+            yuvalar.append(i)
+        elif not yuva and bd._BASLIK_GORUNUMU_RE.match(satir):
+            basliklar.append(i)
+    return yuvalar, basliklar
+
+
+def _bolum_b_konumlari(metin: str) -> dict[str, tuple[int, tuple[str, ...]]]:
+    """Bir tablo bloğunun Bölüm B'de durabileceği AYRIK konumlar.
+
+    Değerler `(tam belge ekleme indeksi, önek satırları)`. Bölgeler
+    `_b_isaretleri`'nin iki işaretinden türer:
+
+      `donem-oncesi`            ilk dönem BAŞLIĞINDAN önce → denetime GİRER
+      `baslik-yuva-arasi`       dönem başlığı ile o dönemin İLK YUVASI arasında
+      `yuvalar-arasi`           bir dönemin yuvaları arasında
+      `bolum-b-sonu`            son dönemin son satırından sonra
+      `kapanis-basligi-sonrasi` son dönemi KAPATAN ama yeni dönem AÇMAYAN bir
+                                başlıktan sonra (konum kendi öneğini getirir)
+
+    Bir önceki turun ekseni ÜÇ değerliydi (ÖNCE · İÇİNDE · SONRA) ve "İÇİNDE"
+    tek bir alt-konumla — yuvadan SONRA — sınanmıştı; `baslik-yuva-arasi` hiç
+    egzersiz edilmedi ve gerileme tam oradan geçti (ölçüldü: `0 not → 4 not`).
+
+    `yuvalar-arasi` ile `bolum-b-sonu` ayrıştırıcının AYNI durumundadır (dönem
+    İÇİ, yuvadan sonra). İkisi ayrı hücre TUTULUR çünkü bir önceki turun
+    gerileme kolu belge SONUNDA yaşıyordu; tek hücreye indirmek kapsamı
+    DARALTIRDI. Bu bir durum ayrımı değil, bilinçli bir KAPSAMA fazlalığıdır.
+    """
+    b, ofset = _bolum_b_izdusumu(metin)
+    yuvalar, basliklar = _b_isaretleri(b)
+    assert len(yuvalar) > 1, "eksen çok dönemli belge ister"
+    ilk_yuva = yuvalar[0]
+    onceki = [i for i in basliklar if i < ilk_yuva]
+    konumlar: dict[str, tuple[int, tuple[str, ...]]] = {"donem-oncesi": (ofset, ())}
+    # İlk dönemin BAŞLIĞI yoksa bu konum o belgede VAR DEĞİLDİR; uydurulmaz.
+    if onceki:
+        konumlar["baslik-yuva-arasi"] = (ofset + onceki[-1] + 1, ())
+    konumlar["yuvalar-arasi"] = (ofset + ilk_yuva + 1, ())
+    konumlar["bolum-b-sonu"] = (ofset + len(b), ())
+    konumlar["kapanis-basligi-sonrasi"] = (ofset + len(b), ("### Ek ölçüm bloğu", ""))
+    return konumlar
 
 
 def bolum_b_tablo_ekle(metin: str, konum: str, tablo: tuple[str, ...]) -> str:
-    """Bölüm B'ye ek bir tabloyu ÜÇ konumdan birine koyar.
-
-    `once`  — dönem bloklarından ÖNCE (Bölüm B başlığının hemen altı)
-    `arada` — dönem blokları arasında (dönemler BAŞLADIKTAN sonra)
-    `sonra` — bütün dönemlerden SONRA (Bölüm B'nin sonu)
-    """
+    """Bölüm B'ye ek bir tabloyu `_bolum_b_konumlari`'nın bir konumuna koyar."""
+    konumlar = _bolum_b_konumlari(metin)
+    assert konum in konumlar, f"bilinmeyen konum: {konum!r} — {list(konumlar)}"
+    k, onek = konumlar[konum]
     satirlar = metin.splitlines(True)
-    i, j = _bolum_b_araligi(satirlar)
-    if konum == "once":
-        k = i + 1
-    elif konum == "arada":
-        k = _md_blok(satirlar, f"### {_DONEM_ADLARI[2]}")[1]
-    elif konum == "sonra":
-        k = j
-    else:  # pragma: no cover - matris kapalı kümedir
-        raise AssertionError(f"bilinmeyen konum: {konum!r}")
-    return "".join(satirlar[:k] + ["\n"] + list(tablo) + ["\n"] + satirlar[k:])
+    ek = [f"{satir}\n" for satir in onek] + list(tablo)
+    return "".join(satirlar[:k] + ["\n"] + ek + ["\n"] + satirlar[k:])
 
 
 def gerekce_basligini_jeneriklestir(metin: str) -> str:
@@ -2082,10 +2153,19 @@ def _tur_etiketi_notu_verir(tablo: tuple[str, ...]) -> bool:
     )
 
 
+# Konum ekseni ELLE SAYILMAZ: belgenin kendi yapısından türer.
+GEREKCE_KONUMLARI = tuple(_bolum_b_konumlari(TEMIZ))
+# Denetime giren TEK konum — sınır ilk dönem BAŞLIĞINDA biter.
+DENETLENEN_KONUM = "donem-oncesi"
+# Konumun görünür izi: ek tablo dönem-öncesi kümeye KATILDIYSA belirsizlik
+# notu düşer. Denetlenmeyen konumlarda bu iz OLMAMALIDIR (çift yönlü kapı).
+_KONUM_IZI = "dönem başlıklarından ÖNCE"
+
+
 def _beklenen_izler(konum: str, baslik: str, durum: str, durum_izleri) -> tuple:
     """Hücrenin beklentisini KURALDAN türetir, elle listelemez."""
     izler = list(durum_izleri)
-    denetlenen = konum == "once"
+    denetlenen = konum == DENETLENEN_KONUM
     if denetlenen and _tur_etiketi_notu_verir(_EK_TABLOLAR[baslik]):
         izler.append("tür etiketi yok")
     basliksiz = int(denetlenen and baslik == "jenerik") + int(
@@ -2094,8 +2174,18 @@ def _beklenen_izler(konum: str, baslik: str, durum: str, durum_izleri) -> tuple:
     if basliksiz:
         izler.append(f"denetimine giren {basliksiz} tablo")
     if denetlenen:
-        izler.append("dönem başlıklarından ÖNCE 2 tablo var")
+        izler.append(f"{_KONUM_IZI} 2 tablo var")
     return tuple(dict.fromkeys(izler))
+
+
+def _yasak_izler(konum: str) -> tuple[str, ...]:
+    """Hücrede BULUNMAMASI gereken izler — konumun negatif kapısı.
+
+    Pozitif iz listesi tek başına yetmiyordu: gerçek tablosu BOZUK bir hücrede
+    `olmali` listesi zaten doluydu ve ek tablonun denetime SIZDIĞI görünmüyordu.
+    Gerilemenin altı hücresi tam bu boşluktan geçti.
+    """
+    return () if konum == DENETLENEN_KONUM else (_KONUM_IZI,)
 
 
 GEREKCE_DENETIM_MATRISI = tuple(
@@ -2103,49 +2193,103 @@ GEREKCE_DENETIM_MATRISI = tuple(
         f"ek-{konum}/baslik-{baslik}/gercek-{durum}",
         bolum_b_tablo_ekle(bozan(TEMIZ), konum, _EK_TABLOLAR[baslik]),
         _beklenen_izler(konum, baslik, durum, izler),
+        _yasak_izler(konum),
         _EK_TABLOLAR[baslik][2],
     )
-    for konum in ("once", "arada", "sonra")
+    for konum in GEREKCE_KONUMLARI
     for baslik in ("jenerik", "kanonik")
     for durum, bozan, izler in _GERCEK_TABLO_DURUMLARI
 )
 
 
+def _matris_ihlali(metin: str, olmali: tuple, olmamali: tuple) -> str:
+    """Bir hücrenin ihlali (boş metin = hücre yeşil)."""
+    mesajlar = _notlari(metin)
+    if not olmali and mesajlar:
+        return f"denetim dışı tablo not üretti: {mesajlar[:400]}"
+    for iz in olmali:
+        if iz not in mesajlar:
+            return f"{iz!r} bulunamadı; görülen: {mesajlar[:600]}"
+    for iz in olmamali:
+        if iz in mesajlar:
+            return f"{iz!r} SIZDI; görülen: {mesajlar[:600]}"
+    return ""
+
+
 @pytest.mark.parametrize(
-    "metin,izler",
-    [(h[1], h[2]) for h in GEREKCE_DENETIM_MATRISI],
+    "metin,olmali,olmamali",
+    [(h[1], h[2], h[3]) for h in GEREKCE_DENETIM_MATRISI],
     ids=[h[0] for h in GEREKCE_DENETIM_MATRISI],
 )
-def test_donem_oncesi_her_tablo_denetlenir(metin: str, izler: tuple) -> None:
-    """Aday olan bir blok, aday OLMAYAN bir bloğu SUSTURAMAZ."""
-    mesajlar = _notlari(metin)
-    if not izler:
-        assert mesajlar == "", f"dönem-sonrası tablo not üretti: {mesajlar[:400]}"
-    for iz in izler:
-        assert iz in mesajlar, f"{iz!r} bulunamadı; görülen: {mesajlar[:600]}"
+def test_donem_oncesi_her_tablo_denetlenir(
+    metin: str, olmali: tuple, olmamali: tuple
+) -> None:
+    """Aday olan bir blok, aday OLMAYAN bir bloğu SUSTURAMAZ — ve tersi."""
+    assert _matris_ihlali(metin, olmali, olmamali) == ""
 
 
 def test_gerekce_denetim_matrisi_bos_kume_ve_taban_kollari() -> None:
     """Boş-küme kolu: matris ÜÇ eksenden gerçekten üretilmiş mi, boşa yeşil mi?"""
-    assert len(GEREKCE_DENETIM_MATRISI) == 3 * 2 * 3 == 18
+    assert len(GEREKCE_KONUMLARI) == 5, GEREKCE_KONUMLARI
+    assert DENETLENEN_KONUM in GEREKCE_KONUMLARI
+    assert len(GEREKCE_DENETIM_MATRISI) == 5 * 2 * 3 == 30
     adlar = [h[0] for h in GEREKCE_DENETIM_MATRISI]
-    assert len(set(adlar)) == 18, "matris hücreleri ÇAKIŞIYOR"
-    for konum in ("once", "arada", "sonra"):
+    assert len(set(adlar)) == 30, "matris hücreleri ÇAKIŞIYOR"
+    for konum in GEREKCE_KONUMLARI:
         assert sum(1 for ad in adlar if ad.startswith(f"ek-{konum}/")) == 6, konum
     for baslik in ("jenerik", "kanonik"):
-        assert sum(1 for ad in adlar if f"/baslik-{baslik}/" in ad) == 9, baslik
+        assert sum(1 for ad in adlar if f"/baslik-{baslik}/" in ad) == 15, baslik
     for durum, _, _ in _GERCEK_TABLO_DURUMLARI:
-        assert sum(1 for ad in adlar if ad.endswith(f"/gercek-{durum}")) == 6, durum
-    for ad, metin, _, imza in GEREKCE_DENETIM_MATRISI:
+        assert sum(1 for ad in adlar if ad.endswith(f"/gercek-{durum}")) == 10, durum
+    for ad, metin, _, _, imza in GEREKCE_DENETIM_MATRISI:
         assert metin != TEMIZ, f"{ad}: cerrahi metni değiştirmedi"
         assert metin.count(imza) == 1, f"{ad}: ek tablo tam bir kez konmadı"
-    # Beklentiler BOŞA yeşil değil: 18 hücrenin 14'ü gerçekten NOT bekliyor
-    # (boş kalan dördü = dönem-sonrası konum × sağlam gerçek tablo).
+    # Beklentiler BOŞA yeşil değil: 30 hücrenin 22'si POZİTİF iz bekliyor
+    # (boş kalan sekizi = denetim dışı DÖRT konum × iki başlık × sağlam gerçek
+    # tablo; o hücrelerin kapısı "hiç not yok" + negatif iz listesidir).
     beklentili = [h[0] for h in GEREKCE_DENETIM_MATRISI if h[2]]
-    assert len(beklentili) == 14, beklentili
+    assert len(beklentili) == 22, beklentili
+    yasakli = [h[0] for h in GEREKCE_DENETIM_MATRISI if h[3]]
+    assert len(yasakli) == 24, yasakli
     # Taban kolu: pozitif kontrol — ek tablo YOKKEN temiz kaynak notsuz geçer.
     rapor = bd.run(TEMIZ, source_name="P")
     assert rapor.notlar == () and rapor.sonuc == bd.SONUC_GECTI
+
+
+def _sinir_ilk_yuvada(baslik_sirasi, yuva_sirasi):
+    """Mutasyon: bölgeyi ilk YUVAda bitir — 46579a1'in (yanlış) sınırı."""
+    return yuva_sirasi
+
+
+def test_donem_bolgesi_siniri_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: sınırı ilk yuvaya geri al → matris KIRMIZI düşmeli."""
+    kirmizi = []
+    with mock.patch.object(bd, "_ilk_donem_baslangici", _sinir_ilk_yuvada):
+        for ad, metin, olmali, olmamali, _ in GEREKCE_DENETIM_MATRISI:
+            if _matris_ihlali(metin, olmali, olmamali):
+                kirmizi.append(ad)
+    assert kirmizi, "sınırı ilk yuvaya almak matrisi kırmızıya düşürmedi"
+    # ...ve KAÇAN konumun ALTI hücresinin hepsi düşmeli: gerileme tam oradaydı.
+    kacan = [ad for ad in kirmizi if ad.startswith("ek-baslik-yuva-arasi/")]
+    assert len(kacan) == 6, kacan
+    # Sınır mutasyonu YALNIZ o konumu bozmalı — matris başka yerden kırmızı
+    # düşüyorsa mutasyon ölçtüğünü sandığımız şeyi ölçmüyordur.
+    assert set(kirmizi) == set(kacan), sorted(set(kirmizi) - set(kacan))
+
+
+def test_basliksiz_ilk_donem_sinirini_ilk_yuvaya_ceker() -> None:
+    """Sınır fonksiyonunun İKİNCİ dalı: ilk dönemin başlığı YOKSA.
+
+    Bölge o zaman ilk YUVAda biter — aksi hâlde başlıksız bir belgede bölge
+    hiç kapanmaz ya da yanlış yerde kapanırdı (fail-open).
+    """
+    satirlar = TEMIZ.splitlines(True)
+    i, _ = _md_blok(satirlar, f"### {_DONEM_ADLARI[0]}")
+    basliksiz = "".join(satirlar[:i] + satirlar[i + 1 :])
+    assert basliksiz != TEMIZ
+    metin = bolum_b_tablo_ekle(basliksiz, DENETLENEN_KONUM, _ALAKASIZ_4_SUTUN)
+    mesajlar = _notlari(metin)
+    assert f"{_KONUM_IZI} 2 tablo var" in mesajlar, mesajlar[:400]
 
 
 def _v3_secimi(bloklar):
@@ -2165,16 +2309,15 @@ def test_donem_oncesi_supurme_mutasyona_duyarli() -> None:
     """Mutasyon kolu: süpürmeyi sök (v3 seçimine dön) → matris KIRMIZI düşmeli."""
     kirmizi = []
     with mock.patch.object(bd, "_gerekce_tablosu", _v3_secimi):
-        for ad, metin, izler, _ in GEREKCE_DENETIM_MATRISI:
-            mesajlar = _notlari(metin)
-            if any(iz not in mesajlar for iz in izler):
+        for ad, metin, olmali, olmamali, _ in GEREKCE_DENETIM_MATRISI:
+            if _matris_ihlali(metin, olmali, olmamali):
                 kirmizi.append(ad)
     assert kirmizi, "seçimi geri koymak matrisi kırmızıya düşürmedi"
     # ...ve GİZLENME hücresi adıyla adına düşmeli: v3 orada 0 not veriyordu.
     gizlenme = next(
         h
         for h in GEREKCE_DENETIM_MATRISI
-        if h[0] == "ek-once/baslik-kanonik/gercek-jenerik-baslik-ve-bozuk"
+        if h[0] == "ek-donem-oncesi/baslik-kanonik/gercek-jenerik-baslik-ve-bozuk"
     )
     assert gizlenme[0] in kirmizi
     with mock.patch.object(bd, "_gerekce_tablosu", _v3_secimi):
@@ -2184,7 +2327,7 @@ def test_donem_oncesi_supurme_mutasyona_duyarli() -> None:
 def test_yem_tablo_gercek_tablonun_notlarini_gizleyemez() -> None:
     """Gizlenme kolu: yem EKLEMEK gerçek tablonun notlarını EKSİLTEMEZ."""
     yemsiz = gerekce_tablosunu_boz(gerekce_basligini_jeneriklestir(TEMIZ))
-    yemli = bolum_b_tablo_ekle(yemsiz, "once", _SAHTE_GEREKCE)
+    yemli = bolum_b_tablo_ekle(yemsiz, DENETLENEN_KONUM, _SAHTE_GEREKCE)
     a = {b.mesaj for b in bd.run(yemsiz, source_name="P").notlar}
     b = {b.mesaj for b in bd.run(yemli, source_name="P").notlar}
     assert a, "taban kolu boş — prob gerçek tabloyu bozmuyor"
@@ -2194,7 +2337,9 @@ def test_yem_tablo_gercek_tablonun_notlarini_gizleyemez() -> None:
 
 def test_iki_donem_oncesi_tablo_belirsizlik_notu_duser() -> None:
     """Dönem-öncesi iki tablo → belirsizlik NOTU, ve İKİSİ DE denetlenir."""
-    ikili = bolum_b_tablo_ekle(gerekce_tablosunu_boz(TEMIZ), "once", _SAHTE_GEREKCE)
+    ikili = bolum_b_tablo_ekle(
+        gerekce_tablosunu_boz(TEMIZ), DENETLENEN_KONUM, _SAHTE_GEREKCE
+    )
     mesajlar = _notlari(ikili)
     assert "2 tablo var" in mesajlar, mesajlar[:400]
     # Fail-closed: belirsizlikte hepsi denetlenir, gerçek tablo GİZLENMEZ.
@@ -2224,7 +2369,7 @@ def test_tablosuz_bolum_b_tanima_notu_uretmez() -> None:
 def test_gerekce_denetim_kapisi_iki_ayri_yerden_mutasyona_duyarli() -> None:
     """Mutasyon kolu: denetim kümesini ve başlık notunu AYRI AYRI sök."""
     gizleyen = bolum_b_tablo_ekle(
-        gerekce_tablosunu_boz(TEMIZ), "once", _ALAKASIZ_4_SUTUN
+        gerekce_tablosunu_boz(TEMIZ), DENETLENEN_KONUM, _ALAKASIZ_4_SUTUN
     )
     assert "3 sütunlu satır" in _notlari(gizleyen)
     # (a) Denetim kümesini sök: dönem-SONRASI tablolar da denetime girsin.
