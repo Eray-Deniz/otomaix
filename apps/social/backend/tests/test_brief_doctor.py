@@ -869,3 +869,314 @@ def test_gate_ihlal_matrisi_iki_kollu_ve_mutasyona_duyarli() -> None:
 
     with mock.patch.object(bd, "_gate_ihlalleri", lambda **k: []):
         bd.RoundGate(**argumanlar)  # kapı sökülünce kurulabilmeli
+
+
+# ─── H2: biçimsel olarak geçersiz belge — tekrar · sıra · boşluk · tablo şekli ─
+#
+# Bu bölümün bozuk kurguları YUKARIDAKİ `kaynak()` üretecinden TÜRETİLMEZ.
+# Üreteç uygulamanın kendi şekline göre yazılmıştır ve bu dört biçim tam da o
+# yüzden görünmüyordu. Buradaki matrisler SÖZLEŞMENİN KENDİ listelerinden
+# üretilir — `BOLUM_HARFLERI` (beş bölüm, sabit sıra), `TEMEL_ALANLAR` (8 alan,
+# SIRAYLA) ve gerekçe tablosunun dört sütunu; üçü de pinlenmiş `_SABLON.md`'den
+# doğrulanır. Temiz belge yalnız CERRAHİ TABAN'dır: matris ona sözleşmeden
+# türetilmiş yapısal bozmalar uygular.
+
+_BOLUM_BASLIK_RE = re.compile(r"^##\s+Bölüm\s+([A-E])\b")
+_ALAN_BASLIK_RE = re.compile(r"^###\s+([a-z_]+)\s*$")
+
+
+def _bolum_bloklari(metin: str) -> list[tuple[str | None, str]]:
+    """Belgeyi `## Bölüm X` başlıklarına göre bloklara böler (önsöz = None)."""
+    parcalar: list[tuple[str | None, str]] = []
+    mevcut: list[str] = []
+    harf: str | None = None
+    for satir in metin.splitlines(keepends=True):
+        eslesme = _BOLUM_BASLIK_RE.match(satir)
+        if eslesme:
+            parcalar.append((harf, "".join(mevcut)))
+            mevcut, harf = [satir], eslesme.group(1)
+        else:
+            mevcut.append(satir)
+    parcalar.append((harf, "".join(mevcut)))
+    return parcalar
+
+
+def _birlestir(parcalar) -> str:
+    return "".join(blok for _, blok in parcalar)
+
+
+def _bolum_degistir(metin: str, harf: str, donusum) -> str:
+    return _birlestir(
+        [(h, donusum(b) if h == harf else b) for h, b in _bolum_bloklari(metin)]
+    )
+
+
+def bolum_bosalt(metin: str, harf: str) -> str:
+    return _bolum_degistir(metin, harf, lambda b: b.splitlines(True)[0] + "\n")
+
+
+def bolum_cogalt(metin: str, harf: str) -> str:
+    yeni: list[tuple[str | None, str]] = []
+    for h, blok in _bolum_bloklari(metin):
+        yeni.append((h, blok))
+        if h == harf:
+            yeni.append((h, blok))
+    return _birlestir(yeni)
+
+
+def bolum_sirasini_boz(metin: str, sol: str, sag: str) -> str:
+    parcalar = _bolum_bloklari(metin)
+    yerler = {h: i for i, (h, _) in enumerate(parcalar)}
+    i, j = yerler[sol], yerler[sag]
+    parcalar[i], parcalar[j] = parcalar[j], parcalar[i]
+    return _birlestir(parcalar)
+
+
+def _alan_bloklari(a_blogu: str) -> list[tuple[str | None, str]]:
+    parcalar: list[tuple[str | None, str]] = []
+    mevcut: list[str] = []
+    ad: str | None = None
+    for satir in a_blogu.splitlines(keepends=True):
+        eslesme = _ALAN_BASLIK_RE.match(satir)
+        if eslesme:
+            parcalar.append((ad, "".join(mevcut)))
+            mevcut, ad = [satir], eslesme.group(1)
+        else:
+            mevcut.append(satir)
+    parcalar.append((ad, "".join(mevcut)))
+    return parcalar
+
+
+def alan_cogalt(metin: str, ad: str) -> str:
+    def donusum(blok: str) -> str:
+        yeni: list[tuple[str | None, str]] = []
+        for a, parca in _alan_bloklari(blok):
+            yeni.append((a, parca))
+            if a == ad:
+                yeni.append((a, parca))
+        return _birlestir(yeni)
+
+    return _bolum_degistir(metin, "A", donusum)
+
+
+def alan_sirasini_boz(metin: str, sol: str, sag: str) -> str:
+    def donusum(blok: str) -> str:
+        parcalar = _alan_bloklari(blok)
+        yerler = {a: i for i, (a, _) in enumerate(parcalar)}
+        i, j = yerler[sol], yerler[sag]
+        parcalar[i], parcalar[j] = parcalar[j], parcalar[i]
+        return _birlestir(parcalar)
+
+    return _bolum_degistir(metin, "A", donusum)
+
+
+def tablo_sutunlarini_boz(metin: str, sutun: int) -> str:
+    """Tablonun her satırını `sutun` hücreye indirger/genişletir.
+
+    Tür etiketi sütunu KORUNUR — aksi hâlde `tur-etiketi` ailesi ateşler ve
+    tablo ŞEKLİNİN görünüp görünmediğini ölçemeyiz (kontrolörün probu tam da
+    bu yüzden `gecti / 0 not` vermişti).
+    """
+    cikti: list[str] = []
+    for satir in metin.splitlines(keepends=True):
+        if not satir.lstrip().startswith("|"):
+            cikti.append(satir)
+            continue
+        hucreler = [h.strip() for h in satir.strip().strip("|").split("|")]
+        tur = hucreler[2] if len(hucreler) > 2 else hucreler[0]
+        yeni = ([tur] + [h for i, h in enumerate(hucreler) if i != 2])[:sutun]
+        while len(yeni) < sutun:
+            yeni.append(yeni[-1])
+        cikti.append("| " + " | ".join(yeni) + " |\n")
+    return "".join(cikti)
+
+
+def tabloyu_donemlerden_sonraya_tasi(metin: str) -> str:
+    def donusum(blok: str) -> str:
+        satirlar = blok.splitlines(True)
+        tablo = [s for s in satirlar if s.lstrip().startswith("|")]
+        kalan = [s for s in satirlar if not s.lstrip().startswith("|")]
+        return "".join(kalan + tablo)
+
+    return _bolum_degistir(metin, "B", donusum)
+
+
+def c_eslemesini_kaldir(metin: str) -> str:
+    """Bölüm C dolu kalır ama tek bir eşleme satırı taşımaz (düz paragraf)."""
+
+    def donusum(blok: str) -> str:
+        satirlar = blok.splitlines(True)
+        return satirlar[0] + "\nKaynaklar oturum icinde toplandi ve degerlendirildi.\n"
+
+    return _bolum_degistir(metin, "C", donusum)
+
+
+def _sozlesme_tablo_sutunlari() -> tuple[str, ...]:
+    """Dört sütun UYDURULMAZ: pinlenmiş sözleşme cümlesinden okunur."""
+    metin = _pinli_sablon()
+    blok = re.search(
+        r"gerekçeleri tablosu\s*\n?\((.*?)\), sonra", metin, re.S
+    )
+    assert blok is not None, "sözleşmede gerekçe tablosu sütun cümlesi bulunamadı"
+    return tuple(parca.strip() for parca in blok.group(1).split("+"))
+
+
+def test_gerekce_tablosu_sutunlari_pinlenmis_sablondan_okunur() -> None:
+    assert _sozlesme_tablo_sutunlari() == bd.GEREKCE_TABLOSU_SUTUNLARI
+    assert len(bd.GEREKCE_TABLOSU_SUTUNLARI) == 4
+
+
+TEMIZ = kaynak()
+
+
+def _notlari(metin: str) -> str:
+    rapor = bd.run(metin, source_name="P")
+    assert rapor.elemeler == (), "İlke 9: bu tur ELEME üretmemeli"
+    return " | ".join(b.mesaj for b in rapor.notlar)
+
+
+# ── Matrisler: hepsi sözleşme listelerinden ÜRETİLİR ────────────────────────
+
+BOLUM_TEKRAR_MATRISI = tuple(
+    (harf, bolum_cogalt(TEMIZ, harf), f"Bölüm {harf} birden çok kez")
+    for harf in bd.BOLUM_HARFLERI
+)
+BOLUM_BOSLUK_MATRISI = tuple(
+    (harf, bolum_bosalt(TEMIZ, harf), f"Bölüm {harf} boş")
+    for harf in bd.BOLUM_HARFLERI
+)
+BOLUM_SIRA_MATRISI = tuple(
+    (
+        f"{sol}<->{sag}",
+        bolum_sirasini_boz(TEMIZ, sol, sag),
+        "Bölüm sırası sözleşmenin sırası değil",
+    )
+    for sol, sag in zip(bd.BOLUM_HARFLERI, bd.BOLUM_HARFLERI[1:])
+)
+ALAN_TEKRAR_MATRISI = tuple(
+    (ad, alan_cogalt(TEMIZ, ad), f"`{ad}` alan başlığı birden çok kez")
+    for ad in bd.TEMEL_ALANLAR
+)
+ALAN_SIRA_MATRISI = tuple(
+    (
+        f"{sol}<->{sag}",
+        alan_sirasini_boz(TEMIZ, sol, sag),
+        "Bölüm A alan sırası sözleşmenin sırası değil",
+    )
+    for sol, sag in zip(bd.TEMEL_ALANLAR, bd.TEMEL_ALANLAR[1:])
+)
+TABLO_SEKIL_MATRISI = tuple(
+    (f"{n}-sutun", tablo_sutunlarini_boz(TEMIZ, n), "sütun")
+    for n in (1, 2, 3, 5, 6)
+)
+TEKIL_BOZMALAR = (
+    (
+        "tablo-donemlerden-sonra",
+        tabloyu_donemlerden_sonraya_tasi(TEMIZ),
+        "dönem başlıklarından SONRA",
+    ),
+    ("c-eslemesiz", c_eslemesini_kaldir(TEMIZ), "eşleme satırı"),
+)
+
+BICIM_MATRISI = (
+    BOLUM_TEKRAR_MATRISI
+    + BOLUM_BOSLUK_MATRISI
+    + BOLUM_SIRA_MATRISI
+    + ALAN_TEKRAR_MATRISI
+    + ALAN_SIRA_MATRISI
+    + TABLO_SEKIL_MATRISI
+    + TEKIL_BOZMALAR
+)
+
+
+@pytest.mark.parametrize(
+    "metin,iz", [(m[1], m[2]) for m in BICIM_MATRISI], ids=[m[0] for m in BICIM_MATRISI]
+)
+def test_bicimsel_olarak_gecersiz_belge_gorunur(metin: str, iz: str) -> None:
+    """Tekrar · sıra · boşluk · tablo şekli — dördü de kapıda GÖRÜNMELİ."""
+    mesajlar = _notlari(metin)
+    assert iz in mesajlar, f"{iz!r} bulunamadı; görülen: {mesajlar[:400]}"
+
+
+def test_bicim_matrisi_bos_kume_ve_taban_kollari() -> None:
+    """Boş-küme kolu: matris sözleşme listelerinden GERÇEKTEN üretilmiş mi?"""
+    assert len(BOLUM_TEKRAR_MATRISI) == len(bd.BOLUM_HARFLERI) == 5
+    assert len(BOLUM_BOSLUK_MATRISI) == 5
+    assert len(BOLUM_SIRA_MATRISI) == 4
+    assert len(ALAN_TEKRAR_MATRISI) == len(bd.TEMEL_ALANLAR) == 8
+    assert len(ALAN_SIRA_MATRISI) == 7
+    assert len(TABLO_SEKIL_MATRISI) == 5
+    assert len(BICIM_MATRISI) == 36
+    # Cerrahinin gerçekten metni DEĞİŞTİRDİĞİ ölçülür: değiştirmeseydi matris
+    # temiz belgeyi 31 kez ölçer ve hiçbir şey kanıtlamazdı.
+    for ad, metin, _ in BICIM_MATRISI:
+        assert metin != TEMIZ, f"{ad}: cerrahi metni değiştirmedi"
+
+
+def test_bicim_kapisi_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: yapı/tablo kapılarını sök → matris KIRMIZI düşmeli."""
+    with mock.patch.object(bd, "_bolum_yapisi_ihlalleri", lambda belge: []):
+        for _, metin, iz in (
+            BOLUM_TEKRAR_MATRISI + BOLUM_BOSLUK_MATRISI + BOLUM_SIRA_MATRISI
+            + ALAN_TEKRAR_MATRISI + ALAN_SIRA_MATRISI
+        ):
+            assert iz not in _notlari(metin), f"{iz!r} kapı sökülünce de görünüyor"
+    with mock.patch.object(bd, "_tablo_sekli_ihlalleri", lambda belge: []):
+        for _, metin, iz in TABLO_SEKIL_MATRISI:
+            assert iz not in _notlari(metin)
+
+
+def test_temiz_kaynak_yeni_kapilardan_sonra_da_notsuz() -> None:
+    """Pozitif kontrol (yanlış-pozitif kapanı): temiz kaynak hâlâ `gecti`, 0 not."""
+    rapor = bd.run(TEMIZ, source_name="P")
+    assert rapor.notlar == (), " | ".join(b.mesaj for b in rapor.notlar)
+    assert rapor.sonuc == bd.SONUC_GECTI
+    # K-120 dalı da yanlış-pozitif üretmemeli.
+    resmi = bd.run(kaynak(anma_donemi="resmi"), source_name="P")
+    assert resmi.notlar == (), " | ".join(b.mesaj for b in resmi.notlar)
+    assert resmi.sonuc == bd.SONUC_GECTI
+
+
+# ─── M1: dil kuralının kapsam sınırı RAPORDA görünür ────────────────────────
+
+
+def test_kapsam_sinirlari_checks_ten_turer_ve_belgeden_bagimsizdir() -> None:
+    """İlke 9(4): ölçülmeyen yön 'doğrulanmadı' etiketiyle SUNULUR."""
+    beklenen = tuple(c.kapsam_siniri for c in bd.CHECKS if c.kapsam_siniri)
+    assert beklenen, "hiçbir kontrol kapsam sınırı beyan etmiyor"
+    assert bd.run(TEMIZ, source_name="P").kapsam_sinirlari == beklenen
+    assert bd.run("", source_name="P").kapsam_sinirlari == beklenen
+
+
+def test_dil_kurali_ters_yonu_dogrulanmadigini_raporda_soyler() -> None:
+    """Docstring'de saklı kalmak SUNUM DEĞİLDİR — rapor okuyucusu görmeli."""
+    rapor = bd.run(TEMIZ, source_name="P")
+    birlesik = " ".join(rapor.kapsam_sinirlari)
+    assert "dil-kurali" in birlesik
+    assert "DOĞRULANMADI" in birlesik.upper()
+    # ...ve bildirim bir BULGU değildir: temiz kaynağın sonucunu bozmaz.
+    assert rapor.notlar == ()
+    assert rapor.sonuc == bd.SONUC_GECTI
+    # Kapsam sınırı ailenin `aciklama` alanına da yansır.
+    dil = next(c for c in bd.CHECKS if c.aile == "dil-kurali")
+    assert "DOĞRULANMADI" in dil.kapsam_siniri.upper()
+    assert "ters yön" in dil.aciklama or "ölçülmez" in dil.aciklama
+
+
+def test_kapsam_sinirlari_donmus_ve_tip_zorlar() -> None:
+    rapor = bd.DoctorReport(
+        sonuc=bd.SONUC_GECTI,
+        notlar=(),
+        elemeler=(),
+        kaynak_adi="K",
+        kapsam_sinirlari=["tek sınır"],
+    )
+    assert rapor.kapsam_sinirlari == ("tek sınır",)
+    with pytest.raises(TypeError):
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="K",
+            kapsam_sinirlari=(7,),  # type: ignore[arg-type]
+        )

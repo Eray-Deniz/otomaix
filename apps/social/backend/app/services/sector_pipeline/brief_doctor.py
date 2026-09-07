@@ -61,16 +61,34 @@ etiketini gerekçe tablosunda taşır). Bu yüzden sabitler `sector_content_sche
 İTHAL EDİLMEZ — o modül ikinci yüzeyin kapısıdır ve buradan tüketilseydi iki sözleşme
 tek sabit kümesine sıkışırdı.
 
-**Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; aşağıdaki
-kontroller sözleşmenin taranabilir yüzeyini ölçer, tamamını değil:
+**Sözleşmenin DİLBİLGİSİ ölçülür, yalnız varlığı değil.** Bölümleri ve alanları sözlüğe
+koymak TEKRARI ve SIRAYI kaybettirir; "var mı" sorusu dört biçimi birden göremez —
+tekrar (aynı bölüm/alan ikinci kez), sıra (sözleşmenin sırası dışında), boşluk (başlık
+var içerik yok) ve tablo şekli (ayıraçtan sonraki HERHANGİ bir satır tablo sayılıyordu).
+Bu yüzden `_Belge` sıralı-tekrarlı izler taşır (`bolum_sirasi` · `alan_sirasi` ·
+`_Donem.yuva_sirasi` · `tablo_sutun_sayilari`) ve dilbilgisi kuralları
+`_bolum_yapisi_ihlalleri` ile `_tablo_sekli_ihlalleri` fonksiyonlarında yaşar. Dilbilgisi
+bilerek DAR TUTULMAMIŞTIR: tanınmayan bir başlık iz bırakmaz ve ihlal sayılmaz — yanlış
+pozitif üretip gerçek araştırma çıktısını gürültüye boğmasın diye.
+
+**Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
+sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
+SAKLI DEĞİLDİR: `Check.kapsam_siniri` alanında yaşarlar ve `run` onları
+`DoctorReport.kapsam_sinirlari`'na taşır — İlke 9'un dördüncü ayağı ölçülmemiş davranış
+iddiasının "doğrulanmadı" etiketiyle SUNULMASINI ister, ve docstring sunum değildir.
+Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
 
 * Dil kuralı YALNIZ İngilizce yüzeylerde ölçülür (Türkçe'ye özgü harf işareti).
   "Diğer alanların Türkçe olması" mekanik olarak DOĞRULANMADI — sözlük gerektirir.
+  Ailenin adı sözleşmedeki ÇİFT yönlü kuralı taşır, ölçüm tek yönlüdür; fark rapora
+  yazılır.
 * Bölüm/başlık tanıma markdown başlık DÜZEYİNE dayanır: 1-2 düzey başlık bölüm
   sayılır, 3+ düzey bölüm içi kabul edilir. Sözleşme bir markdown düzeyi dayatmaz;
   bu bir mekanik vekildir.
 * Boşluk ifadeleri (`_BOSLUK_IFADELERI`) belgelenmiş KÜÇÜK bir kümedir, tüketici
   değildir; kapsama oranı ölçülmemiştir.
+* Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil; Bölüm C
+  bağlantılarının gerçekten açıldığı doğrulanmaz (ağ çağrısı yapılmaz).
 """
 
 from __future__ import annotations
@@ -110,6 +128,11 @@ TEMEL_ALANLAR = (
 # Düz metin yazılan iki alan; kalanı madde işaretli liste (BİÇİM KURALLARI md. 3).
 METIN_ALANLARI = ("kapsam", "ton_ve_dil")
 LISTE_ALANLARI = tuple(ad for ad in TEMEL_ALANLAR if ad not in METIN_ALANLARI)
+
+# `_SABLON.md` ═══ 5. ÇIKTI FORMATI ═══ Bölüm B: "önce seçim/eleme/ekleme
+# gerekçeleri tablosu (dönem + karar + tür etiketi + gerekçe), sonra dönem dönem
+# dört başlık". SÜTUN SAYISI ve SIRA sözleşmenindir; test onu pinden okur.
+GEREKCE_TABLOSU_SUTUNLARI = ("dönem", "karar", "tür etiketi", "gerekçe")
 
 VIDEO_HAVUZLARI = ("hareket", "sahne")
 
@@ -225,10 +248,14 @@ class DoctorReport:
     notlar: tuple[Bulgu, ...]
     elemeler: tuple[Bulgu, ...]
     kaynak_adi: str
+    kapsam_sinirlari: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "notlar", _bulgu_demeti(self.notlar, "notlar"))
         object.__setattr__(self, "elemeler", _bulgu_demeti(self.elemeler, "elemeler"))
+        object.__setattr__(
+            self, "kapsam_sinirlari", _metin_demeti(self.kapsam_sinirlari)
+        )
         if not isinstance(self.kaynak_adi, str) or not self.kaynak_adi.strip():
             raise ValueError(
                 "DoctorReport.kaynak_adi kimlik taşımak ZORUNDA (boş/boşluk "
@@ -291,6 +318,14 @@ class Check:
     seviye: str
     aciklama: str
     kural: Callable[["_Belge"], list[str]]
+    kapsam_siniri: str = ""
+    """Kontrolün sözleşmenin NE KADARINI ölçtüğünün dürüst beyanı.
+
+    Boş değilse `run` onu `DoctorReport.kapsam_sinirlari`'na taşır — İlke 9(4)
+    ölçülmeyen davranış iddiasının "doğrulanmadı" etiketiyle SUNULMASINI ister
+    ve docstring'de saklı kalmak sunum değildir. Bu bir BULGU değildir: rapor
+    sonucunu değiştirmez, temiz kaynak `gecti` kalır.
+    """
 
     def __post_init__(self) -> None:
         if self.seviye not in SEVIYELER:
@@ -320,6 +355,22 @@ def _bulgu_demeti(deger: object, etiket: str) -> tuple[Bulgu, ...]:
             raise TypeError(
                 f"DoctorReport.{etiket} yalnız Bulgu taşır, {type(oge).__name__} "
                 "aldı — yabancı tip rapora sessizce giremez"
+            )
+    return ogeler
+
+
+def _metin_demeti(deger: object) -> tuple[str, ...]:
+    """Kapsam sınırı beyanlarını kopyalayarak dondurur + tipi zorlar."""
+    if isinstance(deger, (str, bytes)) or not isinstance(deger, Iterable):
+        raise TypeError(
+            f"DoctorReport.kapsam_sinirlari dizi değil: {type(deger).__name__}"
+        )
+    ogeler = tuple(deger)
+    for oge in ogeler:
+        if not isinstance(oge, str):
+            raise TypeError(
+                "DoctorReport.kapsam_sinirlari yalnız metin taşır, "
+                f"{type(oge).__name__} aldı"
             )
     return ogeler
 
@@ -479,6 +530,7 @@ class _Donem:
     ad: str
     yuvalar: dict[str, _Yuva]
     satirlar: list[str]
+    yuva_sirasi: tuple[str, ...] = ()
 
     @property
     def bilincli_bos(self) -> bool:
@@ -501,6 +553,18 @@ class _Belge:
     donemler: list[_Donem]
     tablo_satirlari: list[str]
     tablo_var: bool
+    # ── Yapısal iz: sözlük TEKRARI ve SIRAYI kaybeder, bunlar kaybetmez ────
+    #
+    # `bolumler`/`alanlar` sözlüktür; ikinci bir `Bölüm A` ya da ikinci bir
+    # `kapsam` başlığı sözlükte İZ BIRAKMAZ. Sözleşmenin dilbilgisi (beş bölüm
+    # SABİT sırayla, sekiz alan SIRAYLA) ancak sıralı-tekrarlı iz üstünde
+    # ölçülebilir; "var mı" sorusu bu dört biçimi göremez.
+    bolum_sirasi: tuple[str, ...] = ()
+    alan_sirasi: tuple[str, ...] = ()
+    bos_bolumler: tuple[str, ...] = ()
+    tablo_sutun_sayilari: tuple[int, ...] = ()
+    tablo_donem_sonrasi: bool = False
+    c_esleme_satiri_var: bool = False
 
 
 _BOLUM_RE = re.compile(r"^\s*(?:#{1,6}\s*)?Bölüm\s+([^\s—\-:]+)")
@@ -547,8 +611,14 @@ def _baslik_metni(satir: str) -> str:
 
 def _bloklara_ayir(
     satirlar: Iterable[str], desen: re.Pattern[str]
-) -> dict[str, _Yuva]:
+) -> tuple[dict[str, _Yuva], tuple[str, ...]]:
+    """Blokları ada göre sözlükler VE başlıkların görülme sırasını döndürür.
+
+    İkinci dönüş değeri TEKRARLIDIR ve SIRALIDIR: sözlük ikisini de kaybeder,
+    sözleşmenin dilbilgisi ise ikisini de sorar.
+    """
     bloklar: dict[str, _Yuva] = {}
+    sira: list[str] = []
     aktif: _Yuva | None = None
     for satir in satirlar:
         eslesme = desen.match(satir)
@@ -556,10 +626,11 @@ def _bloklara_ayir(
             ad = eslesme.group(1)
             aktif = _Yuva(ad=ad, inline=(eslesme.group(2) or "").strip())
             bloklar[ad] = aktif
+            sira.append(ad)
             continue
         if aktif is not None:
             aktif.satirlar.append(satir)
-    return bloklar
+    return bloklar, tuple(sira)
 
 
 def _ayristir(source_text: str) -> _Belge:
@@ -570,6 +641,7 @@ def _ayristir(source_text: str) -> _Belge:
     bir mekanik vekildir — sözleşme markdown düzeyi dayatmaz.
     """
     bolumler: dict[str, list[str]] = {}
+    bolum_sirasi: list[str] = []
     fazla: list[str] = []
     aktif: str | None = None
 
@@ -580,6 +652,7 @@ def _ayristir(source_text: str) -> _Belge:
             if harf in BOLUM_HARFLERI:
                 aktif = harf
                 bolumler.setdefault(harf, [])
+                bolum_sirasi.append(harf)
             else:
                 fazla.append(_baslik_metni(satir))
                 aktif = None
@@ -592,8 +665,14 @@ def _ayristir(source_text: str) -> _Belge:
         if aktif is not None:
             bolumler[aktif].append(satir)
 
+    bos_bolumler = tuple(
+        harf
+        for harf in BOLUM_HARFLERI
+        if harf in bolumler and not any(satir.strip() for satir in bolumler[harf])
+    )
+
     a_satirlari = bolumler.get("A", [])
-    alanlar = _bloklara_ayir(a_satirlari, _ALAN_DESENI)
+    alanlar, alan_sirasi = _bloklara_ayir(a_satirlari, _ALAN_DESENI)
 
     # "Tam alan adı" ihlali: başlık görünümlü bir satırın ilk sözcüğü bir alan
     # adı ama satırın kendisi o alan adı DEĞİL (ör. "kapsam ve tanım").
@@ -606,13 +685,16 @@ def _ayristir(source_text: str) -> _Belge:
             yeniden_adlandirilmis.append(_baslik_metni(satir))
 
     video = alanlar.get("video_kodlar")
-    video_havuzlari = _bloklara_ayir(video.satirlar, _HAVUZ_DESENI) if video else {}
+    video_havuzlari = (
+        _bloklara_ayir(video.satirlar, _HAVUZ_DESENI)[0] if video else {}
+    )
 
     b_satirlari = bolumler.get("B", [])
     tablo_satirlari: list[str] = []
     donemler: list[_Donem] = []
     aktif_donem: _Donem | None = None
     son_baslik: str | None = None
+    tablo_donem_sonrasi = False
 
     for satir in b_satirlari:
         yuva = _YUVA_DESENI.match(satir)
@@ -631,13 +713,35 @@ def _ayristir(source_text: str) -> _Belge:
             continue
         if aktif_donem is None:
             tablo_satirlari.append(satir)
+            if donemler and _TABLO_RE.match(satir):
+                # Sözleşme "ÖNCE tablo, SONRA dönemler" der; dönem açıldıktan
+                # sonra gelen tablo satırı bu sırayı ihlal eder.
+                tablo_donem_sonrasi = True
         else:
             aktif_donem.satirlar.append(satir)
+            if _TABLO_RE.match(satir):
+                # Dönem bloğunun İÇİNE düşen tablo satırı da sırayı ihlal eder:
+                # tablo dönem açıldıktan sonra yazılmış demektir.
+                tablo_donem_sonrasi = True
 
     for donem in donemler:
-        donem.yuvalar = _bloklara_ayir(donem.satirlar, _YUVA_DESENI)
+        donem.yuvalar, donem.yuva_sirasi = _bloklara_ayir(
+            donem.satirlar, _YUVA_DESENI
+        )
 
     tablo_veri_satirlari = _tablo_veri_satirlari(tablo_satirlari)
+    tablo_sutun_sayilari = tuple(
+        len(_hucreler(satir))
+        for satir in tablo_satirlari
+        if _TABLO_RE.match(satir) and not _TABLO_AYIRAC_RE.match(satir)
+    )
+
+    c_satirlari = bolumler.get("C", [])
+    c_esleme_satiri_var = any(
+        (_MADDE_RE.match(satir) or _TABLO_RE.match(satir))
+        and not _TABLO_AYIRAC_RE.match(satir)
+        for satir in c_satirlari
+    )
 
     return _Belge(
         ham=source_text,
@@ -649,6 +753,12 @@ def _ayristir(source_text: str) -> _Belge:
         donemler=donemler,
         tablo_satirlari=tablo_veri_satirlari,
         tablo_var=bool(tablo_veri_satirlari),
+        bolum_sirasi=tuple(bolum_sirasi),
+        alan_sirasi=alan_sirasi,
+        bos_bolumler=bos_bolumler,
+        tablo_sutun_sayilari=tablo_sutun_sayilari,
+        tablo_donem_sonrasi=tablo_donem_sonrasi,
+        c_esleme_satiri_var=c_esleme_satiri_var,
     )
 
 
@@ -684,8 +794,92 @@ def _bolum_satirlari(belge: _Belge, harfler: Sequence[str]) -> list[str]:
 # `CHECKS` üyesinin `seviye` alanındadır.
 
 
-def _kontrol_bolum_ve_alan(belge: _Belge) -> list[str]:
+def _ilk_gorunum_sirasi(izler: Sequence[str]) -> tuple[str, ...]:
+    """Tekrarları atarak İLK görünüm sırasını verir."""
+    gorulen: list[str] = []
+    for iz in izler:
+        if iz not in gorulen:
+            gorulen.append(iz)
+    return tuple(gorulen)
+
+
+def _sira_ihlali(
+    gorulen: Sequence[str], sozlesme: Sequence[str], etiket: str
+) -> list[str]:
+    """Görülen sıra, sözleşme sırasının BİR ALT DİZİSİ mi?
+
+    Eksik öğe burada ölçülmez (o `tamlık` kontrolünün işi) — yalnız var olanların
+    SIRASI sözleşmeye vurulur. Böylece eksik bir bölüm/alan sıra ihlali gibi
+    ikinci kez raporlanmaz.
+    """
+    beklenen = tuple(ad for ad in sozlesme if ad in set(gorulen))
+    if tuple(gorulen) == beklenen:
+        return []
+    return [
+        f"{etiket} sözleşmenin sırası değil: {list(gorulen)} — beklenen "
+        f"{list(beklenen)}"
+    ]
+
+
+def _bolum_yapisi_ihlalleri(belge: _Belge) -> list[str]:
+    """Sözleşmenin DİLBİLGİSİ: tekrar · sıra · boşluk.
+
+    "Var mı" sorusu bu üç biçimi göremez; ayrıştırıcı bölümleri ve alanları
+    sözlüğe koyar ve sözlük tekrarı da sırayı da kaybeder. Bu fonksiyon sıralı
+    ve tekrarlı izler üstünde çalışır.
+
+    **Kapsam sınırı:** bölüm/alan TANIMA markdown başlık düzeyine ve ad
+    eşleşmesine dayanan mekanik bir vekildir (`_ayristir` docstring'i); sözleşme
+    markdown düzeyi dayatmaz. Dilbilgisi bilerek DAR TUTULMAMIŞTIR: tanınmayan
+    bir başlık iz bırakmaz ve burada sessiz kalır — ihlal olarak sayılmaz.
+    """
     mesajlar: list[str] = []
+
+    for harf in BOLUM_HARFLERI:
+        adet = belge.bolum_sirasi.count(harf)
+        if adet > 1:
+            mesajlar.append(
+                f"Bölüm {harf} birden çok kez açılmış ({adet} kez) — beş bölüm "
+                "SABİTTİR, aynı bölüm ikinci kez yazılmaz"
+            )
+    mesajlar += _sira_ihlali(
+        _ilk_gorunum_sirasi(belge.bolum_sirasi), BOLUM_HARFLERI, "Bölüm sırası"
+    )
+    for harf in belge.bos_bolumler:
+        mesajlar.append(
+            f"Bölüm {harf} boş — başlık var, içerik yok (beş bölümün hepsi "
+            "doldurulur)"
+        )
+
+    for ad in TEMEL_ALANLAR:
+        adet = belge.alan_sirasi.count(ad)
+        if adet > 1:
+            mesajlar.append(
+                f"`{ad}` alan başlığı birden çok kez yazılmış ({adet} kez) — "
+                "Bölüm A sekiz alanı BİRER kez taşır"
+            )
+    mesajlar += _sira_ihlali(
+        _ilk_gorunum_sirasi(belge.alan_sirasi), TEMEL_ALANLAR, "Bölüm A alan sırası"
+    )
+
+    for donem in belge.donemler:
+        for yuva_adi in OZEL_GUN_YUVALARI:
+            adet = donem.yuva_sirasi.count(yuva_adi)
+            if adet > 1:
+                mesajlar.append(
+                    f"{donem.ad}: `{yuva_adi}` başlığı birden çok kez yazılmış "
+                    f"({adet} kez) — dönem başına DÖRT başlık vardır"
+                )
+        mesajlar += _sira_ihlali(
+            _ilk_gorunum_sirasi(donem.yuva_sirasi),
+            OZEL_GUN_YUVALARI,
+            f"{donem.ad}: dönem başlık sırası",
+        )
+    return mesajlar
+
+
+def _kontrol_bolum_ve_alan(belge: _Belge) -> list[str]:
+    mesajlar: list[str] = _bolum_yapisi_ihlalleri(belge)
     for harf in BOLUM_HARFLERI:
         if harf not in belge.bolumler:
             mesajlar.append(
@@ -795,8 +989,19 @@ def _kontrol_dil_kurali(belge: _Belge) -> list[str]:
 
 
 def _kontrol_url_bicimi(belge: _Belge) -> list[str]:
+    """Bölüm C eşleme İÇERMELİ ve her kaynak satırı tam `https://` taşımalı.
+
+    **Kapsam sınırı:** bağlantının gerçekten açılıp açılmadığı ölçülmez (ağ
+    çağrısı yapılmaz); yalnız yazım taranır.
+    """
     mesajlar: list[str] = []
-    for satir in belge.bolumler.get("C", []):
+    c_satirlari = belge.bolumler.get("C", [])
+    if any(satir.strip() for satir in c_satirlari) and not belge.c_esleme_satiri_var:
+        mesajlar.append(
+            "Bölüm C tek bir kaynak eşleme satırı taşımıyor — sözleşme "
+            "alan/dönem → iddia → kaynak eşlemesi ister (madde ya da tablo satırı)"
+        )
+    for satir in c_satirlari:
         if _TABLO_AYIRAC_RE.match(satir):
             continue
         if not (_MADDE_RE.match(satir) or _TABLO_RE.match(satir)):
@@ -847,13 +1052,48 @@ def _kontrol_tur_etiketi(belge: _Belge) -> list[str]:
     return mesajlar
 
 
+def _tablo_sekli_ihlalleri(belge: _Belge) -> list[str]:
+    """Tablonun ŞEKLİ: dört sütun ve dönemlerden ÖNCE.
+
+    Ayıraçtan sonraki HERHANGİ bir satırı kabul etmek yetmez — tek sütunlu bir
+    sahte tablo da "tablo var" der. Sözleşme dört alan sayar
+    (`GEREKCE_TABLOSU_SUTUNLARI`) ve tabloyu dönem başlıklarından ÖNCE ister.
+
+    **Kapsam sınırı:** sütun SAYISI ölçülür, sütun BAŞLIKLARININ anlamı değil.
+    Sözleşmenin saydığı dört alan dışında sütun eklenmişse burada NOT düşer —
+    belirsizlikte kapalı düşen bir kural; seviyesi `not` olduğu için maliyeti
+    gürültüdür, eleme değil.
+    """
+    mesajlar: list[str] = []
+    beklenen = len(GEREKCE_TABLOSU_SUTUNLARI)
+    yanlis: dict[int, int] = {}
+    for sayi in belge.tablo_sutun_sayilari:
+        if sayi != beklenen:
+            yanlis[sayi] = yanlis.get(sayi, 0) + 1
+    for sayi in sorted(yanlis):
+        mesajlar.append(
+            f"Gerekçe tablosunda {sayi} sütunlu satır var ({yanlis[sayi]} satır); "
+            f"sözleşme {beklenen} sütun sayar: "
+            f"{' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}"
+        )
+    if belge.tablo_donem_sonrasi:
+        mesajlar.append(
+            "Gerekçe tablosu dönem başlıklarından SONRA geliyor — sözleşme "
+            "ÖNCE tablo, SONRA dönem dönem dört başlık der"
+        )
+    return mesajlar
+
+
 def _kontrol_gerekce_tablosu(belge: _Belge) -> list[str]:
-    if belge.tablo_var:
-        return []
-    return [
-        "Bölüm B'de özel gün seçim/eleme/ekleme gerekçeleri tablosu yok "
-        "(dönem + karar + tür etiketi + gerekçe)"
-    ]
+    mesajlar: list[str] = []
+    if not belge.tablo_var:
+        mesajlar.append(
+            "Bölüm B'de özel gün seçim/eleme/ekleme gerekçeleri tablosu yok "
+            f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)})"
+        )
+    # Şekil kontrolü VARLIKTAN bağımsız koşar: tablo sözleşmenin istediği yerde
+    # bulunamadıysa bile yanlış yerde bulunmuş OLABİLİR ve bu ayrı bir ihlaldir.
+    return mesajlar + _tablo_sekli_ihlalleri(belge)
 
 
 _TIRNAK_RE = re.compile(r"\"([^\"]+)\"|“([^”]+)”")
@@ -1036,8 +1276,17 @@ CHECKS: tuple[Check, ...] = (
         kimlik="bolum-ve-alan-tamligi",
         aile="bolum-ve-alan-tamligi",
         seviye=SEVIYE_NOT,
-        aciklama="Beş bölüm + sekiz temel alan + dönem yuvalarının doluluğu (K-120 muaf)",
+        aciklama=(
+            "Beş bölüm + sekiz temel alan + dönem yuvalarının doluluğu (K-120 "
+            "muaf); ayrıca sözleşme dilbilgisi: tekrar · sıra · boş bölüm"
+        ),
         kural=_kontrol_bolum_ve_alan,
+        kapsam_siniri=(
+            "bolum-ve-alan-tamligi: bölüm/başlık TANIMA markdown başlık düzeyine "
+            "dayanan mekanik bir vekildir — sözleşme bir düzey dayatmaz, tanınmayan "
+            "başlık iz bırakmaz. Boşluk ifadeleri kümesi belgelenmiş KÜÇÜK bir "
+            "kümedir; kapsama oranı ÖLÇÜLMEDİ."
+        ),
     ),
     Check(
         kimlik="adet-alt-sinirlari",
@@ -1050,15 +1299,31 @@ CHECKS: tuple[Check, ...] = (
         kimlik="dil-kurali",
         aile="dil-kurali",
         seviye=SEVIYE_NOT,
-        aciklama="İngilizce yüzeylerde Türkçe harf işareti (ters yön ölçülmez)",
+        aciklama=(
+            "İngilizce yüzeylerde Türkçe harf işareti — sözleşmenin ÇİFT yönlü "
+            "dil kuralının yalnız bir yönü; ters yön ölçülmez"
+        ),
         kural=_kontrol_dil_kurali,
+        kapsam_siniri=(
+            "dil-kurali: YALNIZ İngilizce olması gereken yüzeylerde Türkçe harf "
+            "aranır. Sözleşmenin ters yönü — diğer alanların Türkçe olması — "
+            "makineyle DOĞRULANMADI (sözlük gerektirir). Bu ailenin temiz çıkması "
+            "Türkçe yüzeylerin doğrulandığı anlamına GELMEZ."
+        ),
     ),
     Check(
         kimlik="url-bicimi",
         aile="url-bicimi",
         seviye=SEVIYE_NOT,
-        aciklama="Bölüm C kaynak satırları açılabilir tam `https://` bağlantı taşır",
+        aciklama=(
+            "Bölüm C bir eşleme İÇERİR ve kaynak satırları açılabilir tam "
+            "`https://` bağlantı taşır"
+        ),
         kural=_kontrol_url_bicimi,
+        kapsam_siniri=(
+            "url-bicimi: bağlantının gerçekten AÇILDIĞI doğrulanmadı — ağ çağrısı "
+            "yapılmaz, yalnız `https://` yazımı taranır."
+        ),
     ),
     Check(
         kimlik="tur-etiketi",
@@ -1071,8 +1336,15 @@ CHECKS: tuple[Check, ...] = (
         kimlik="ozel-gun-gerekce-tablosu",
         aile="ozel-gun-gerekce-tablosu",
         seviye=SEVIYE_NOT,
-        aciklama="Bölüm B'de seçim/eleme/ekleme gerekçeleri tablosunun varlığı",
+        aciklama=(
+            "Bölüm B'de seçim/eleme/ekleme gerekçeleri tablosunun VARLIĞI ve "
+            "ŞEKLİ: dört sütun, dönem başlıklarından önce"
+        ),
         kural=_kontrol_gerekce_tablosu,
+        kapsam_siniri=(
+            "ozel-gun-gerekce-tablosu: sütun SAYISI ölçülür, sütun başlıklarının "
+            "ANLAMI doğrulanmadı."
+        ),
     ),
     Check(
         kimlik="uzun-alinti",
@@ -1145,6 +1417,11 @@ def run(source_text: str, *, source_name: str) -> DoctorReport:
         notlar=tuple(notlar),
         elemeler=tuple(elemeler),
         kaynak_adi=source_name,
+        # İlke 9(4): ölçülmeyen yön BULGU değil BEYAN olarak taşınır — sonucu
+        # bozmaz ama rapor okuyucusu kapının kapsamını GÖRÜR.
+        kapsam_sinirlari=tuple(
+            check.kapsam_siniri for check in CHECKS if check.kapsam_siniri
+        ),
     )
 
 
