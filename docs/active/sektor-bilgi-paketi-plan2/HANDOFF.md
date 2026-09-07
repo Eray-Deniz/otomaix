@@ -49,9 +49,11 @@ monorepo pin manifesti bu commit'e bağlı.
    iç içe yapı aynı sınıfı yeniden açar. Bu bir tripwire ile ölçülüyor (`sinir + 50`
    derinliğinde açığın GERÇEKTEN göründüğü doğrulanıyor); sınırı sessizce yükseltirsen test
    kırılır. Değer 1000 DENENDİ ve GERİ ALINDI — o eşikte `RecursionError` çıkıyordu.
-3. **YENİ — bu oturumun dört commit'i bağımsız hakem GÖRMEDİ** (`4d107e8` · `4167401` ·
-   `868f50a` · `cad705c`). Tur 11 `4167401`'e kadar inceledi ve `cad705c` onun bulgusunun
-   düzeltmesidir. **Ev uydurulmadı:** final incelemenin tabanı `a806e29` olduğu için hepsi
+3. **YENİ — hakem KAPSAMI, zaman damgalarıyla.** Bu oturumda ÜÇ tur koştu ve iki kod
+   commit'i İNCELENDİ: `4d107e8` (tur 10, 19:03 — commit 19:02) ve `4167401` (tur 11,
+   20:18 — commit 20:17). **İncelenmeyen ÜÇ commit:** `868f50a` (20:29, pin + testin sütun
+   türetmesi) · `cad705c` (21:16, tur 11'in kendi bulgusunun düzeltmesi) · `c5795d5` (21:21,
+   yalnız docs). **Ev uydurulmadı:** final incelemenin tabanı `a806e29` olduğu için üçü de
    oraya kendiliğinden girer.
 4. **Ek metni kodla uyumsuz, İKİ yerde** (değişmedi): R12(a2)(d) amende edildi; aktör kapısının
    tanım yeri ekin gösterdiği modül değil.
@@ -145,7 +147,8 @@ monorepo pin manifesti bu commit'e bağlı.
 
 **Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
 
-- **Bu oturumun dört commit'i bağımsız hakem GÖRMEDİ** (yukarıda; evi var).
+- **Üç commit bağımsız hakem GÖRMEDİ** — `868f50a` · `cad705c` · `c5795d5` (yukarıda,
+  zaman damgalarıyla; evi var). Diğer iki kod commit'i İNCELENDİ.
 - **Ayrıştırıcı sınırı SONLU** — 100 kattan derin iç içe yapıda sınıf yeniden açılır. İlan
   edildi, tripwire'lı, **çözülmedi**.
 - **`markdown-it-py` canlıya dağıtılmadı**; Docker imajı yeniden kurulmadı. Bağımlılığın
