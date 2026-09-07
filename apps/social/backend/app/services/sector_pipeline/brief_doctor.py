@@ -168,6 +168,25 @@ TEK yerde yaşar, kapsam beyanı metnini oradan ÜRETİR ve test her kalemin
 GERÇEKTEN bir boşluk notunu kaldırdığını ölçer — biri kapanırsa test kırılır. Bu
 görevde beyan BEŞ kez bayatlamıştı.
 
+**Tur 9 — kural TEK yerde, ama KARDEŞ SİTELER süpürüldü.** Tur 8 çit kuralını
+kurdu ve yalnız DOLULUK yoluna bağladı; AYNI yuva içeriğini okuyan kardeş yollar
+çit-farkında DEĞİLDİ. Ölçüldü: `cta_kaliplari` boşaltılınca rapor İKİ not
+veriyordu (`alanı boş` + `0 madde taşıyor, sözleşme alt sınırı 5`), AYNI alana
+DİLSİZ çit İÇİNDE beş madde konunca alt sınır notu SUSUYORDU. **Bu kaybın
+görülmesi bir yöntem dersidir:** not SAYISI 2 → 3 ARTMIŞTI (çitin ürettiği
+uydurma bir biçim notu yüzünden) ve sayı karşılaştırması kapanışı YANLIŞ
+gösteriyordu; kayıp ancak mesaj KÜMELERİ farkıyla göründü. Süpürme kavramdan
+türetildi (belgenin kendi içerme modeli × çitin boyutları) ve İKİ demette
+sayıldı: `CIT_KURALI_KAPSAMI` (yedi yol — doluluk · adet sayımı · madde tekrar
+izi · bölüm boşluğu · Bölüm C eşleme satırı · Bölüm B gerekçe tablosu tanıma ·
+ayrı madde işareti) ve `CIT_KURALI_DISINDA` (yedi yol — hepsi HAM METİN tarar ya
+da fail-closed tercihtir; ölçüt: kontrol SÖZLEŞME-BİÇİMLİ içerik mi arıyor,
+yoksa ham metin mi). Körlemesine eleme YAPILMADI: bir çitin içindeki İngilizce
+metin gerçekten İngilizcedir, çite alınmış 40 kelimelik alıntı hâlâ alıntıdır ve
+K-120 muafiyeti çite saklanmış içerikle ALINAMAZ (üçü de ölçüldü). Kural TEK
+evde yaşar (`_cit_maskesi`); `_citsiz_satirlar` onun süzgeç yüzeyidir ve konum
+koruması gereken yol maskeyi doğrudan okur.
+
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
 SAKLI DEĞİLDİR: `Check.kapsam_sinirlari` demetinde yaşarlar ve `run` onları
@@ -189,8 +208,12 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   Elenen markdown yapıları TABLO · yatay çizgi · DİLSİZ kod çiti BLOĞU ile
   SINIRLIDIR; dilli kod çiti, blockquote ve HTML bloğu HÂLÂ kabı doldurur
   (`ACIK_BLOK_BICIMLERI` — envanter tek yerde yaşar ve testi onu sabitler).
-  BÖLÜM düzeyindeki boşluk kontrolü bu kuralı UYGULAMAZ (sözleşme tabloyu Bölüm B
-  gerekçesi ve Bölüm C eşlemesi olarak tanır); ölçüldü, ayrı bir sınıftır.
+  BÖLÜM düzeyindeki boşluk kontrolü TABLO kuralını UYGULAMAZ (sözleşme tabloyu
+  Bölüm B gerekçesi ve Bölüm C eşlemesi olarak tanır); ölçüldü, ayrı bir sınıftır.
+  ÇİT kuralı ise bölüm düzeyinde de UYGULANIR.
+* Çit kuralının KAPSADIĞI ve bilinçle KAPSAMADIĞI yollar `CIT_KURALI_KAPSAMI` /
+  `CIT_KURALI_DISINDA` demetlerinde sayılıdır; kapsam beyanı metnini onlardan
+  ÜRETİR ve test her kalemi uçtan uca ölçer.
 * Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil; Bölüm C
   bağlantılarının gerçekten açıldığı doğrulanmaz (ağ çağrısı yapılmaz).
 * Bölüm C'de kaynak eşlemesinin VARLIĞI ve adres biçimi taranır; eşlemenin gerçekten
@@ -311,6 +334,12 @@ GEREKCE_BASLIK_ASGARI = 2
 # bakıldığında sözleşme biçimli görünür. Doluluk sayımı artık çit-farkındadır
 # (`_citsiz_satirlar`) ve dilsiz çit bloğu sayımdan çıkarılır. Dilli çit ·
 # blockquote · HTML bloğu ilan edilmiş AÇIK kalemdir (`ACIK_BLOK_BICIMLERI`).
+#
+# **Tur 9 — aynı ayağın KARDEŞ SİTELERİ.** Doluluk çit-farkındaydı ama AYNI
+# içeriği okuyan adet sayımı, bölüm boşluğu, Bölüm C eşleme satırı ve Bölüm B
+# tablo tanıma DEĞİLDİ: çite konan içerik o yollarda notu KALDIRIYORDU
+# (ölçüldü, mesaj KÜMESİ farkıyla — not SAYISI artmıştı). Süpürüldüler;
+# kapsam `CIT_KURALI_KAPSAMI` / `CIT_KURALI_DISINDA`'da sayılır.
 #
 
 BOLUM_BOS_MESAJI = (
@@ -976,16 +1005,36 @@ class _Yuva:
     inline: str = ""
     satirlar: list[str] = field(default_factory=list)
 
-    @property
-    def maddeler(self) -> list[str]:
-        """Madde işaretli öğeler + varsa satır-içi değer."""
+    def _ogeler(self, satirlar: Sequence[str]) -> list[str]:
+        """Madde işaretli öğeler + varsa satır-içi değer — VERİLEN satırlardan."""
         ogeler = [self.inline] if self.inline else []
         ogeler += [
             _MADDE_RE.match(satir).group(1).strip()  # type: ignore[union-attr]
-            for satir in self.satirlar
+            for satir in satirlar
             if _MADDE_RE.match(satir)
         ]
         return [oge for oge in ogeler if oge]
+
+    @property
+    def maddeler(self) -> list[str]:
+        """HAM madde listesi — DİLSİZ çit içindekiler DAHİL.
+
+        Bu yüzeyi yalnız HAM METİN tarayan yollar okur (dil kuralı ·
+        `tek_degeri` üstünden K-120): oradaki eleme yeni bir YANLIŞ-NEGATİF
+        sınıfı açardı — bir çite alınmış Türkçe harf hâlâ oradadır ve
+        `içerik-önerilmez` muafiyetini çite saklanmış içerikle almak
+        FAIL-OPEN olurdu. SÖZLEŞME SAYAN yollar `citsiz_maddeler`'i okur.
+        """
+        return self._ogeler(self.satirlar)
+
+    @property
+    def citsiz_maddeler(self) -> list[str]:
+        """Sözleşmenin SAYDIĞI yüzey: DİLSİZ çit bloğu ELENMİŞ madde listesi.
+
+        Eleme kuralı doluluk sayımıyla AYNI TEK yerden gelir
+        (`_citsiz_satirlar`); ikinci bir çit ayrıştırıcısı YAZILMAZ.
+        """
+        return self._ogeler(_citsiz_satirlar(self.satirlar))
 
     @property
     def essiz_maddeler(self) -> list[str]:
@@ -995,10 +1044,18 @@ class _Yuva:
         sınırları ham sayıyı okursa "5 CTA kalıbı" aynı satırın beş kopyasıyla
         ya da beş `yok` ile sağlanır ve kapı SESSİZ kalır — ölçüldü. Bu yüzden
         sayıya dayalı her eşik BURADAN okur (`_kontrol_adet_alt_sinirlari`).
+
+        **Tur 9 — sayım da ÇİT-FARKINDADIR.** Doluluk yolu tur 8'de
+        çit-farkında oldu ama AYNI içeriği okuyan ADET yolu süpürülmemişti:
+        `cta_kaliplari` boşaltılınca rapor İKİ not veriyordu (`alanı boş` +
+        `0 madde taşıyor, sözleşme alt sınırı 5`), AYNI alana DİLSİZ çit
+        İÇİNDE beş madde konunca alt sınır notu SUSUYORDU. Ölçüm mesaj
+        KÜMESİ farkıyla yapıldı: not SAYISI 2 → 3 ARTMIŞTI ve sayı
+        karşılaştırması kapanışı YANLIŞ gösteriyordu.
         """
         gorulen: set[str] = set()
         essiz: list[str] = []
-        for madde in self.maddeler:
+        for madde in self.citsiz_maddeler:
             anahtar = _sadelestir(madde)
             if not anahtar or anahtar in _BOSLUK_IFADELERI or anahtar in gorulen:
                 continue
@@ -1165,6 +1222,112 @@ ACIK_BLOK_BICIMLERI: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
+# ─── DİLSİZ ÇİT KURALININ KAPSAMI — envanterin İKİNCİ ayağı ────────────────
+#
+# Tur 8 çit kuralını KURDU ama yalnız TEK yola bağladı (doluluk). Tur 9'da
+# ölçüldü ki AYNI içeriği okuyan KARDEŞ yollar çit-farkında DEĞİLDİ ve çite
+# konan içerik notları KALDIRIYORDU (kapanış kanıtı SAYI değil, mesaj KÜMESİ
+# farkıyla alındı: `cta_kaliplari` probunda not SAYISI 2 → 3 ARTMIŞTI ve alt
+# sınır notu yine de SUSMUŞTU).
+#
+# Beyan artık "doluluk çit-farkındadır" demez; çit kuralının HANGİ yolları
+# kapsadığını ve hangilerini BİLİNÇLE kapsamadığını sayar. İki demet TEK
+# yerde yaşar, kapsam beyanı metnini buradan ÜRETİR ve test her kalemi
+# UÇTAN UCA ölçer — kapsanan yolda çit not KALDIRAMAZ, kapsanmayan yolda çit
+# içeriği HÂLÂ GÖRÜLÜR. Biri kayarsa test kırılır ve envanter güncellenmek
+# ZORUNDA kalır. Bu görevde beyan BEŞ kez bayatladı.
+CIT_KURALI_KAPSAMI: tuple[tuple[str, str], ...] = (
+    ("doluluk", "`_Yuva.dolu` — kapta sözleşme biçiminde içerik var mı"),
+    (
+        "adet-sayimi",
+        "`_Yuva.essiz_maddeler` — alan · video havuzu · dönem yuvası alt "
+        "sınırları",
+    ),
+    ("madde-tekrar-izi", "`_madde_izi` — adet ailesinin TEKRAR ayağı"),
+    (
+        "bolum-boslugu",
+        "`_Belge.bos_bolumler` — bölüm başlığı var, içerik yok",
+    ),
+    (
+        "c-esleme-satiri",
+        "Bölüm C eşleme satırının VARLIĞI, tekrarı ve satır denetimi",
+    ),
+    (
+        "gerekce-tablosu-tanima",
+        "Bölüm B'de gerekçe tablosu bloklarının TANINMASI (konum korunur)",
+    ),
+    (
+        "ayri-madde-isareti",
+        "`bicim-kurallari/ayri-madde-isareti` — içerik satırı madde işareti "
+        "taşıyor mu; bu yolda ölçülmüş bir NOT KAYBI YOKTU, süpürme TUTARLILIK "
+        "içindir: çit gövdesi için UYDURMA biçim notu üretiliyordu (ölçüldü: "
+        "`'```'` satırı için `madde işareti olmayan içerik satırı`) ve modül "
+        "aynı satırları doluluk/adet yollarında içerik SAYMIYOR",
+    ),
+)
+# Ölçüt: kontrol SÖZLEŞME-BİÇİMLİ içerik mi arıyor (ele), yoksa HAM METİN mi
+# tarıyor (ELEME)? Hepsini körlemesine elemek yeni bir YANLIŞ-NEGATİF sınıfı
+# açardı — bir kod bloğunun içindeki İngilizce metin gerçekten İngilizcedir ve
+# çite alınmış bir alıntı hâlâ alıntıdır.
+CIT_KURALI_DISINDA: tuple[tuple[str, str], ...] = (
+    (
+        "dil-kurali",
+        "HAM METİN taraması — çite alınmış Türkçe harf hâlâ oradadır; elemek "
+        "kuralı çitle atlatılabilir yapardı (ölçüldü: çit içindeki Türkçe "
+        "görsel kod maddesi HÂLÂ not üretir)",
+    ),
+    (
+        "uzun-alinti",
+        "HAM METİN taraması — kopya şüphesi çite alınmakla ortadan kalkmaz "
+        "(ölçüldü: çit içindeki 45 kelimelik blok HÂLÂ not üretir)",
+    ),
+    (
+        "govde-dipnotu",
+        "HAM METİN taraması — dipnot/atıf işareti gövdede geçiyorsa geçiyordur",
+    ),
+    (
+        "tur-etiketi-ascii",
+        "HAM METİN taraması — `ticari-fırsat` yazımı belgede geçiyorsa "
+        "geçiyordur",
+    ),
+    (
+        "etiket-yazimi",
+        "HAM METİN taraması — kanal/bağımlılık etiketleri belgenin tamamında "
+        "aranır",
+    ),
+    (
+        "k120-bilincli-bos",
+        "FAIL-CLOSED tercih — `tek_degeri` HAM maddeleri okur; elenseydi çite "
+        "saklanan içerik K-120 muafiyetini ALIRDI ve notlar DÜŞERDİ (ölçüldü: "
+        "çite konan madde bugün muafiyeti BOZAR, 0 not → 4 not)",
+    ),
+    (
+        "baslik-ve-bolum-tanima",
+        "AYRIŞTIRICI düzeyi — ölçüldü ve FAIL-CLOSED: çit içindeki `## Bölüm "
+        "Z` yalnız NOT EKLER (0 not → 16 not), hiçbir notu KALDIRMAZ. "
+        "Kapatma belge düzeyinde çit-farkında ayrıştırma ister ve yanlış-pozitif "
+        "maliyeti ÖLÇÜLMEDİ; bu turda KAPATILMADI",
+    ),
+)
+
+
+def _cit_kapsam_beyani() -> str:
+    """Çit kuralının kapsam beyanı — İKİ demetin TÜREVİ, kopyası değil."""
+    return (
+        "bolum-ve-alan-tamligi/cit-kapsami: DİLSİZ kod çiti eleme kuralı TEK "
+        "yerde yaşar (`_cit_maskesi`) ve süpürülen her yol onu ÇAĞIRIR — ikinci "
+        "bir çit ayrıştırıcısı yazılmaz. KAPSANAN yollar: "
+        + " · ".join(f"{ad} ({gerekce})" for ad, gerekce in CIT_KURALI_KAPSAMI)
+        + ". BİLİNÇLE KAPSAM DIŞI bırakılanlar — ölçüt: kontrol SÖZLEŞME-BİÇİMLİ "
+        "içerik mi arıyor yoksa HAM METİN mi tarıyor: "
+        + " · ".join(f"{ad} ({gerekce})" for ad, gerekce in CIT_KURALI_DISINDA)
+        + ". Kapsam dışı yolların hiçbiri bu turda ölçülmüş bir NOT KAYBI "
+        "üretmiyor; ürettikleri fazladan notlar fail-closed yöndedir. "
+        "DİLLİ çit · blockquote · HTML bloğu hâlâ AÇIK kalemdir "
+        "(`ACIK_BLOK_BICIMLERI`) ve kapsanan yolların HİÇBİRİNDE elenmez."
+    )
+
+
 def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
     """DİLSİZ kod çiti bloklarını (açıcı + gövde + kapatıcı) satır dizisinden ELER.
 
@@ -1194,8 +1357,29 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
 
     Kapatıcı eşleşmesi CommonMark'ın kuralını izler: aynı işaret karakteri, en az
     açıcı kadar uzun ve INFO dizesi BOŞ.
+
+    **Kural TEK yerde yaşar: `_cit_maskesi`.** Bu fonksiyon onun SÜZGEÇ
+    yüzeyidir; KONUM koruyan yollar (satır sırası taşıyan tablo izi gibi) aynı
+    maskeyi doğrudan okur. İkinci bir çit ayrıştırıcısı YAZILMAZ — ve mutasyon
+    kolu tek bir yeri (`_cit_maskesi`) sökerek BÜTÜN süpürülmüş yolları birden
+    kapıdan düşürebilir.
     """
-    kalan: list[str] = []
+    return [
+        satir
+        for satir, cit_icinde in zip(satirlar, _cit_maskesi(satirlar))
+        if not cit_icinde
+    ]
+
+
+def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
+    """Satır başına: DİLSİZ çit bloğuna mı ait (açıcı · gövde · kapatıcı)?
+
+    ÇİT TANIMA KURALININ TEK EVİ. `_citsiz_satirlar` bunun süzgeç yüzeyidir;
+    satır KONUMUNU korumak zorunda olan süpürme yolları (Bölüm B tablo izi)
+    maskeyi doğrudan okur. Kapanmamış dilsiz çit FAIL-CLOSED'dır: açıcıdan
+    dizinin sonuna kadar her satır çit içi sayılır.
+    """
+    maske: list[bool] = []
     acik_isaret: str | None = None
     acik_dilsiz = False
     for satir in satirlar:
@@ -1204,9 +1388,9 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
             if cit:
                 acik_isaret = cit.group(1)
                 acik_dilsiz = not cit.group(2)
-                if acik_dilsiz:
-                    continue  # DİLSİZ açıcı düşer
-            kalan.append(satir)
+                maske.append(acik_dilsiz)  # DİLSİZ açıcı düşer
+                continue
+            maske.append(False)
             continue
         kapatici = bool(
             cit
@@ -1214,12 +1398,11 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
             and len(cit.group(1)) >= len(acik_isaret)
             and not cit.group(2)
         )
-        if not acik_dilsiz:
-            kalan.append(satir)
+        maske.append(acik_dilsiz)
         if kapatici:
             acik_isaret = None
             acik_dilsiz = False
-    return kalan
+    return maske
 
 
 def _sozlesme_bicimli(parca: str) -> bool:
@@ -1326,10 +1509,17 @@ def _ayristir(source_text: str) -> _Belge:
         if aktif is not None:
             bolumler[aktif].append(satir)
 
+    # BÖLÜM boşluğu da ÇİT-FARKINDADIR (tur 9): ölçüldü ki bir bölümün altına
+    # konan DİLSİZ çit — GÖVDESİ BOŞ olanı bile — "Bölüm X boş" notunu
+    # kaldırıyordu (50 hücrenin 50'si). Bu kural bölüm düzeyinde `_sozlesme_bicimli`
+    # DEĞİLDİR ve öyle olmamalıdır (sözleşme tabloyu Bölüm B gerekçesi ve Bölüm C
+    # eşlemesi olarak TANIR); çit ise sözleşmenin HİÇBİR yerde tanımadığı bir
+    # yapıdır, dolayısıyla eleme bu düzeyde de geçerlidir.
     bos_bolumler = tuple(
         harf
         for harf in BOLUM_HARFLERI
-        if harf in bolumler and not any(satir.strip() for satir in bolumler[harf])
+        if harf in bolumler
+        and not any(satir.strip() for satir in _citsiz_satirlar(bolumler[harf]))
     )
 
     a_satirlari = bolumler.get("A", [])
@@ -1361,8 +1551,13 @@ def _ayristir(source_text: str) -> _Belge:
     donem_bolgesi_basi: int | None = None
     ham_tablo_izleri: list[tuple[int, str]] = []
 
+    # Tablo TANIMA da çit-farkındadır (tur 9): ölçüldü ki Bölüm B'de dönem
+    # başlıklarından ÖNCE DİLSİZ bir çitin içine konan tablo "gerekçe tablosu
+    # yok" notunu KALDIRIYORDU. Maske KONUMU korur — blok bitişikliği ve dönem
+    # bölgesi sınırı satır sırasına bakar.
+    b_cit_maskesi = _cit_maskesi(b_satirlari)
     for sira, satir in enumerate(b_satirlari):
-        if _TABLO_RE.match(satir):
+        if _TABLO_RE.match(satir) and not b_cit_maskesi[sira]:
             ham_tablo_izleri.append((sira, satir))
         yuva = _YUVA_DESENI.match(satir)
         if yuva and yuva.group(1) == "mesaj_ekseni":
@@ -1427,9 +1622,13 @@ def _ayristir(source_text: str) -> _Belge:
     tablo_sutun_sayilari = tuple(sutun_sayilari)
 
     c_satirlari = bolumler.get("C", [])
+    # Eşleme satırı sayımı da çit-farkındadır (tur 9): ölçüldü ki Bölüm C'nin
+    # eşlemesi silinip yerine DİLSİZ çit içinde madde ya da tablo satırı
+    # konduğunda "Bölüm C tek bir kaynak eşleme satırı taşımıyor" notu
+    # KAYBOLUYORDU.
     c_esleme_satirlari = tuple(
         satir
-        for satir in c_satirlari
+        for satir in _citsiz_satirlar(c_satirlari)
         if (_MADDE_RE.match(satir) or _TABLO_RE.match(satir))
         and not _TABLO_AYIRAC_RE.match(satir)
     )
@@ -1680,7 +1879,13 @@ def _iz_ihlalleri(
 
 
 def _madde_izi(yuva: _Yuva) -> tuple[str, ...]:
-    return tuple(_sadelestir(madde) for madde in yuva.maddeler)
+    """Madde TEKRARI izi — sözleşmenin SAYDIĞI yüzeyden (`citsiz_maddeler`).
+
+    İz mesajı adet ailesinin cümlesini taşır ("adet alt sınırı ESSİZ madde
+    sayar"); sayım çit-farkındaysa iz de öyle olmak zorundadır, yoksa aynı
+    içerik iki farklı yüzeyden okunur ve kapı kendi içinde çelişir.
+    """
+    return tuple(_sadelestir(madde) for madde in yuva.citsiz_maddeler)
 
 
 def _ic_ice_izler(
@@ -2161,7 +2366,13 @@ def _kontrol_bicim_ayri_madde(belge: _Belge) -> list[str]:
     mesajlar: list[str] = []
 
     def tara(etiket: str, yuva: _Yuva) -> None:
-        for satir in yuva.satirlar:
+        # Çit-farkında (tur 9): kural SÖZLEŞME BİÇİMİ arar ("bu içerik satırı
+        # madde işareti taşıyor mu"), ham metin taramaz. DİLSİZ çitin gövdesi
+        # sözleşme içeriği DEĞİLDİR — modül bunu doluluk ve adet yollarında
+        # zaten böyle sayar; burada saymamak kapıyı kendi içinde çelişkiye
+        # düşürür ve ölçüldü ki gerçek olmayan satırlar için not üretiyordu
+        # (`'```'` için "madde işareti olmayan içerik satırı").
+        for satir in _citsiz_satirlar(yuva.satirlar):
             if not satir.strip():
                 continue
             if _MADDE_RE.match(satir) or _TABLO_RE.match(satir):
@@ -2332,11 +2543,16 @@ CHECKS: tuple[Check, ...] = (
                 + " · ".join(ad for ad, _ in ACIK_BLOK_BICIMLERI)
                 + " (daraltmanın gerçek çıktıdaki yanlış-pozitif maliyeti "
                 "ÖLÇÜLMEDİ); (b) BÖLÜM düzeyindeki "
-                "boşluk kontrolü bu kuralı "
+                "boşluk kontrolü TABLO kuralını "
                 "UYGULAMAZ, çünkü sözleşme tabloyu Bölüm B gerekçesi ve Bölüm C "
                 "eşlemesi olarak TANIR — bir tablo o iki kabı gerçekten "
-                "doldurur; ayrı bir sınıftır ve bu turda kapatılmadı."
+                "doldurur; ayrı bir sınıftır ve bu turda kapatılmadı. ÇİT "
+                "kuralı ise bölüm düzeyinde de UYGULANIR (tur 9): sözleşme "
+                "kod çitini HİÇBİR yerde içerik saymaz — ölçüldü ki bir bölümün "
+                "altına konan DİLSİZ çit, GÖVDESİ BOŞ olanı bile, `Bölüm X boş` "
+                "notunu KALDIRIYORDU (50 hücrenin 50'sinde)."
             ),
+            _cit_kapsam_beyani(),
         ),
     ),
     Check(
