@@ -68,6 +68,8 @@ sözleşmeye** geçti, bayat "makineyle DOĞRULANMADI" beyanı üç yerden de ka
 
 1. **`markdown-it-py` bir ÜRETİM bağımlılığıdır** (`requirements.txt`, pinli `4.2.0`).
    Docker imajı yeniden kurulmalı; **canlıya dağıtılmadı.**
+   **EV VERİLDİ (2026-09-07 kapanış taraması): Task 18, Step 3** — *"Arka ucu ve CLI'yi
+   dağıt"*. Evsiz risk değil, zamanlanmış bir adımın girdisi.
 2. **Ayrıştırıcı sınırı SONLUDUR ve ilan edilmiştir.** `maxNesting=100`, tripwire'lı.
 3. **Bağımsız hakem BU OTURUMUN commit'lerini GÖRMEDİ** — `c73c102` (docs) · `854373d` (kod) ·
    `f98a392` (docs) · `ae9111c` (docs). Önceki oturumdan da incelenmemiş olanlar: `868f50a` ·
@@ -180,9 +182,16 @@ koşumları):**
 - **EN YÜKSEK — Task 8 dispatch'i KARAR KAPISIYLA açılıyor** (yukarıda dört kalem). Karar
   verilmeden dispatch edilirse görev orada durur ya da yürütücü ekin metnini kendi başına
   yorumlar — ikincisi ekin bağlayıcılığını fiilen kaldırır.
-- **Üretim bağımlılığı eklendi ve canlıda denenmedi.** `markdown-it-py==4.2.0`. Deploy öncesi
-  imaj yeniden kurulmazsa `brief_doctor` import'ta patlar.
-- **Ayrıştırıcı sınırı sonlu (100).** `RecursionError` yolu fail-closed bağlandı.
+- **Üretim bağımlılığı eklendi ve canlıda denenmedi.** `markdown-it-py==4.2.0`. İmaj yeniden
+  kurulmazsa `brief_doctor` import'ta patlar. **Ev: Task 18 Step 3** (arka ucun dağıtımı).
+- **Ayrıştırıcı sınırı sonlu (100) — DÜŞÜRÜLDÜ, park EDİLMEDİ (2026-09-07 kapanış taraması).**
+  Dürüst etiket: **çözülmedi + kapsam-dışı-by-design.** Gerekçe tehdit modelidir: bu kapı
+  Gemini/Claude/ChatGPT araştırma çıktısı okur — girdi ÖZENSİZ olabilir, SALDIRGAN değil; 100
+  kat iç içe yapı gerçekçi bir arıza biçimi değil. `RecursionError` yolu fail-closed bağlı ve
+  sınırın gerçekten var olduğunu ölçen bir tripwire var, yani beyan bayatlayamaz.
+  **Yeniden açılma koşulu:** (a) girdi kaynağı değişir ve düşmanca metin kabul eden bir yüzey
+  doğarsa, (b) gerçek araştırma çıktısında sınıra yaklaşan bir belge ÖLÇÜLÜRSE (ilk gerçek
+  ölçüm Task 19 Step 5).
 - **Katı Bölüm C biçimi yanlış-pozitif üretebilir ve bu ÖLÇÜLMEDİ.** Task 19 Step 5 sözleşmeyi
   ilk kez gerçek çıktıyla sınayacak; tablo düzgün üretilmezse sözleşme metni revize edilir ve
   pin + kapı ÜÇÜNCÜ kez dokunur.
@@ -204,7 +213,8 @@ koşumları):**
 - **Alt-ajan model alanını HİÇ GEÇME.** Çıplak takma ad hook tarafından reddediliyor.
 - **Spec değil, spec-input kanoniktir.**
 - **Eray'a teknik cümle onaylatma** — ama SEVİYE kararını (medium mu high mı) ONA SOR.
-- **Hafıza kararı AÇIK (değişmedi):** durum-tetikli kuralları hafızaya yazmak yanlış kapanış
-  üretiyor (not yazılınca konu "ele alınmış" görünüyor ama hiç ateşlenmiyor). Kapı komutun
-  içine mi kurulacak, yoksa bu sınıf hiç yazılmayacak mı — **karar verilmedi.**
+- **Hafıza kararı — bu HANDOFF'tan ÇIKARILDI (2026-09-07 kapanış taraması).** "Yeni oturum
+  gündemine alsın" zamanlanmamış bir sözdü ve her devirde taşınıyordu. Gövdesi artık
+  `docs/active/CURRENT.md` → Proposed bölümünde, dürüst etiketi ve yeniden açılma koşuluyla
+  duruyor (`durum-tetikli-kural-kapisi`). Burada tekrarlanmaz.
 - Diskte bekleyen düzeltme YOK; çalışma ağacı temiz.

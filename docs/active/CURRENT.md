@@ -5,6 +5,23 @@
 
 ## Proposed (spun-off)
 
+- **durum-tetikli-kural-kapisi** (proposed, süreç kalemi; DÜŞÜRÜLDÜ — koşullu) —
+  Eray'ın gözlemi (2026-09-07): **durum-tetikli** kuralları hafızaya/nota yazmak **yanlış
+  kapanış** üretiyor. Not yazılınca konu "ele alınmış" görünüyor ama kural hiç ateşlenmiyor.
+  **Ölçüldü (aynı gün, tek oturum):** eylem-tetikli notlar ALTI kez ateşlendi ve iş gördü;
+  durum-tetikli olanlar ÜÇ kez ateşlenmedi.
+  **İki kapanış yolu vardı:** (a) kapı komutun içine kurulur
+  (`checkpoint_codex_reviews_ran` sayacının yanına), (b) bu sınıf hiç yazılmaz.
+  **Neden şimdi DÜŞÜRÜLÜYOR:** ikisi de slash-command altyapısına dokunan bir tasarım
+  turu ister ve o tur bugün zamanlanmış DEĞİL. Aylardır her HANDOFF'ta "yeni oturum
+  gündemine alsın" diye taşınıyordu — bu zamanlanmamış bir sözdür ve aktif borç görüntüsü
+  veriyor.
+  **Dürüst etiket: çözülmedi + bilinçle düşürüldü** — "ele alındı" DEĞİL. Gövde ileride bir
+  spec'in girdisi olarak burada durur.
+  **Yeniden açılma koşulu:** (a) bir durum-tetikli kuralın ateşlenmemesi ölçülebilir bir
+  zarara yol açarsa (bu oturumda üçü de zararsız kaldı), ya da (b) slash-command ailesine
+  zaten dokunan bir tur açılırsa — kapı o turun içinde bedelsiz kurulur.
+
 - **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — GÖREVE DÖNÜŞTÜ 2026-09-07; artık
   kendi dosyası var, gövde ORADA yaşar (iki yerde birden değil):
   `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`. Yukarıdaki aktif
