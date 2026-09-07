@@ -2,9 +2,6 @@
 -- Fixes: 500 error on logo/intro video uploads (brands.py:187, brands.py:215)
 -- Root cause: UPDATE queries reference updated_at but column never existed on social.brands.
 
-ALTER TABLE social.brands
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
-
 -- ── KAPI: NESNE KİMLİĞİ — ad SAHİPLİK DEĞİLDİR ─────────────────────────────
 -- `CREATE OR REPLACE FUNCTION` ve `DROP TRIGGER IF EXISTS` katalog nesnesini
 -- yalnız ADIYLA arar. Aynı adı taşıyan YABANCI bir fonksiyon sessizce EZİLİR ve
@@ -86,6 +83,9 @@ BEGIN
     END LOOP;
 END
 $kimlik$;
+
+ALTER TABLE social.brands
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
 DROP TRIGGER IF EXISTS brands_updated_at ON social.brands;
 CREATE TRIGGER brands_updated_at

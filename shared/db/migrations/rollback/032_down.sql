@@ -134,28 +134,6 @@ $preflight$;
 -- 1. K-07 damga temsili — posts kolonları + bileşik FK
 -- ---------------------------------------------------------------------------
 
-ALTER TABLE social.posts DROP CONSTRAINT IF EXISTS posts_package_stamp_fkey;
-ALTER TABLE social.posts DROP COLUMN IF EXISTS package_id;
-ALTER TABLE social.posts DROP COLUMN IF EXISTS package_version;
-
--- ---------------------------------------------------------------------------
--- 2. Tablolar (makbuz → paket → ham kanıt: FK yönünün tersi)
--- ---------------------------------------------------------------------------
---
--- Tabloyla birlikte üstündeki tetikleyiciler ve indeksler de gider. Salt-ekleme
--- tetikleyicisi UPDATE/DELETE/TRUNCATE'i reddeder, DROP TABLE'ı engellemez.
-
-DROP TABLE IF EXISTS social.generation_stamps;
-DROP TABLE IF EXISTS social.sector_packages;
-DROP TABLE IF EXISTS social.sector_research_artifacts;
-
--- ---------------------------------------------------------------------------
--- 3. brands.sub_sector_id — bağları boşalt, sonra kolonu kaldır
--- ---------------------------------------------------------------------------
---
--- Tetikleyici KOLONDAN ÖNCE düşürülür: `require_sub_sector_reference`
--- TG_ARGV[0] ile kolon adını okur; kolon olmadan her INSERT/UPDATE patlardı.
-
 -- ── KAPI: NESNE KİMLİĞİ — AYNA KAPI (ileri yönün karşılığı) ────────────────
 -- `DROP FUNCTION IF EXISTS` ve `DROP TRIGGER IF EXISTS` nesneyi yalnız ADIYLA
 -- arar. Aynı adı taşıyan YABANCI bir nesne varsa geri alma onu SESSİZCE imha
@@ -273,6 +251,28 @@ BEGIN
     END LOOP;
 END
 $kimlik_down$;
+
+ALTER TABLE social.posts DROP CONSTRAINT IF EXISTS posts_package_stamp_fkey;
+ALTER TABLE social.posts DROP COLUMN IF EXISTS package_id;
+ALTER TABLE social.posts DROP COLUMN IF EXISTS package_version;
+
+-- ---------------------------------------------------------------------------
+-- 2. Tablolar (makbuz → paket → ham kanıt: FK yönünün tersi)
+-- ---------------------------------------------------------------------------
+--
+-- Tabloyla birlikte üstündeki tetikleyiciler ve indeksler de gider. Salt-ekleme
+-- tetikleyicisi UPDATE/DELETE/TRUNCATE'i reddeder, DROP TABLE'ı engellemez.
+
+DROP TABLE IF EXISTS social.generation_stamps;
+DROP TABLE IF EXISTS social.sector_packages;
+DROP TABLE IF EXISTS social.sector_research_artifacts;
+
+-- ---------------------------------------------------------------------------
+-- 3. brands.sub_sector_id — bağları boşalt, sonra kolonu kaldır
+-- ---------------------------------------------------------------------------
+--
+-- Tetikleyici KOLONDAN ÖNCE düşürülür: `require_sub_sector_reference`
+-- TG_ARGV[0] ile kolon adını okur; kolon olmadan her INSERT/UPDATE patlardı.
 
 DROP TRIGGER IF EXISTS brands_sub_sector_must_be_sub ON social.brands;
 

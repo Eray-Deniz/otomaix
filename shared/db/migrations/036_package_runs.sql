@@ -181,6 +181,24 @@ DECLARE
         $reject_snapshot$;
     fn_plan_govde CONSTANT TEXT := $reject_rollback_plan$
         BEGIN
+            -- MÜHÜR SİLİNEMEZ. Kilit aşağıda `OLD.onay_actor IS NOT NULL`
+            -- yüklemine dayanır; onay üçlüsü birlikte NULL yapılabilseydi
+            -- değişmezlik İKİ ADIMDA atlatılırdı (temizle → hedefi değiştir →
+            -- yeniden mühürle) ve `num_nonnulls ∈ {0,3}` CHECK'i buna izin
+            -- verirdi. Ölçüldü 2026-09-07: zincir target_version'i 3'ten 99'a
+            -- taşıyordu. Yeniden mühürleme (dolu → dolu) BİLEREK açık kalır;
+            -- kapanan yalnız dolu → BOŞ geçişidir.
+            IF OLD.onay_actor IS NOT NULL AND NEW.onay_actor IS NULL THEN
+                RAISE EXCEPTION
+                    'onaylanmış geri alma planının onay mührü SİLİNEMEZ'
+                    USING ERRCODE = 'integrity_constraint_violation',
+                          HINT = 'Muhru silmek, kimlik/hedef kilidini bir '
+                                 'sonraki UPDATE icin kaldirirdi. Kapsam '
+                                 'degistiyse YENIDEN MUHURLEYIN (onay_* ucusu '
+                                 'dolu kalir); hedef degisecekse yeni bir plan '
+                                 'satiri yazin.';
+            END IF;
+
             IF OLD.onay_actor IS NOT NULL AND (
                    NEW.incident_id             IS DISTINCT FROM OLD.incident_id
                 OR NEW.package_id              IS DISTINCT FROM OLD.package_id

@@ -8,28 +8,6 @@
 -- =====================================================================
 -- brand_products: Marka ürün/hizmet kütüphanesi
 -- =====================================================================
-CREATE TABLE IF NOT EXISTS social.brand_products (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  brand_id UUID NOT NULL REFERENCES social.brands(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK (type IN ('product', 'service')),
-  name TEXT NOT NULL,
-  description TEXT,
-  tags TEXT[] NOT NULL DEFAULT '{}',
-  image_url TEXT,       -- nullable: hizmet kayıtları için görsel opsiyonel
-  image_key TEXT,       -- R2 object key (silme için); image_url ile senkron
-  is_active BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Quota sorgusu için partial index (is_active=true satırları)
-CREATE INDEX IF NOT EXISTS idx_brand_products_brand_active
-  ON social.brand_products(brand_id) WHERE is_active = true;
-
--- Listeleme için genel index (yeni eklenen önce)
-CREATE INDEX IF NOT EXISTS idx_brand_products_brand
-  ON social.brand_products(brand_id, created_at DESC);
-
 -- ── KAPI: NESNE KİMLİĞİ — ad SAHİPLİK DEĞİLDİR ─────────────────────────────
 -- `CREATE OR REPLACE FUNCTION` ve `DROP TRIGGER IF EXISTS` katalog nesnesini
 -- yalnız ADIYLA arar. Aynı adı taşıyan YABANCI bir fonksiyon sessizce EZİLİR ve
@@ -111,6 +89,28 @@ BEGIN
     END LOOP;
 END
 $kimlik$;
+
+CREATE TABLE IF NOT EXISTS social.brand_products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  brand_id UUID NOT NULL REFERENCES social.brands(id) ON DELETE CASCADE,
+  type TEXT NOT NULL CHECK (type IN ('product', 'service')),
+  name TEXT NOT NULL,
+  description TEXT,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  image_url TEXT,       -- nullable: hizmet kayıtları için görsel opsiyonel
+  image_key TEXT,       -- R2 object key (silme için); image_url ile senkron
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Quota sorgusu için partial index (is_active=true satırları)
+CREATE INDEX IF NOT EXISTS idx_brand_products_brand_active
+  ON social.brand_products(brand_id) WHERE is_active = true;
+
+-- Listeleme için genel index (yeni eklenen önce)
+CREATE INDEX IF NOT EXISTS idx_brand_products_brand
+  ON social.brand_products(brand_id, created_at DESC);
 
 DROP TRIGGER IF EXISTS brand_products_updated_at ON social.brand_products;
 CREATE TRIGGER brand_products_updated_at

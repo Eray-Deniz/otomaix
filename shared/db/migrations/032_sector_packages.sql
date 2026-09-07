@@ -19,20 +19,6 @@
 -- `sector_slug` bilinçli olarak FK DEĞİLDİR (K-08a): araştırma, sektör satırı
 -- açılmadan koşabilmeli. Katmanlar arası bağ `run_id`'dir.
 
-CREATE TABLE IF NOT EXISTS social.sector_research_artifacts (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    run_id TEXT NOT NULL,
-    sector_slug TEXT NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('research', 'review', 'synthesis')),
-    source TEXT NOT NULL,
-    brief_ref TEXT,
-    content_md TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_sector_research_artifacts_slug_run
-    ON social.sector_research_artifacts (sector_slug, run_id);
-
 -- ── KAPI: NESNE KİMLİĞİ — ad SAHİPLİK DEĞİLDİR ─────────────────────────────
 -- `CREATE OR REPLACE FUNCTION` ve `DROP TRIGGER IF EXISTS` katalog nesnesini
 -- yalnız ADIYLA arar. Aynı adı taşıyan YABANCI bir fonksiyon sessizce EZİLİR ve
@@ -170,6 +156,20 @@ BEGIN
     END LOOP;
 END
 $kimlik$;
+
+CREATE TABLE IF NOT EXISTS social.sector_research_artifacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id TEXT NOT NULL,
+    sector_slug TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('research', 'review', 'synthesis')),
+    source TEXT NOT NULL,
+    brief_ref TEXT,
+    content_md TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sector_research_artifacts_slug_run
+    ON social.sector_research_artifacts (sector_slug, run_id);
 
 CREATE OR REPLACE FUNCTION social.reject_research_artifact_mutation()
 RETURNS TRIGGER

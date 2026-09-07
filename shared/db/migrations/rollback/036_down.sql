@@ -123,7 +123,7 @@ DECLARE
     -- ileri dosya değiştiği gün bu pini KIRMIZI düşürür.
     fn_track_ozet CONSTANT TEXT := 'acbbdd0d3cd2909368002b2a1e658c21';      -- len=1583
     fn_snapshot_ozet CONSTANT TEXT := '6b35399e0c93667855d214accb485d00';   -- len=641
-    fn_plan_ozet CONSTANT TEXT := 'ed12ac9a70491e686620af7c7a6b687f';       -- len=1124
+    fn_plan_ozet CONSTANT TEXT := '099a2fd56ee14257bcc02ed40d3be0c0';       -- len=2270
 
     kayit RECORD;
 

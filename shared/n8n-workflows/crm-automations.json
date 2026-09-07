@@ -338,7 +338,7 @@
               {
                 "id": "c5",
                 "name": "text",
-                "value": "={{ '🔔 <b>Ödeme Hatırlatması (2. gün)</b>\\n\\n👤 ' + $('Webhook').item.json.body.name + '\\n📧 ' + $('Webhook').item.json.body.email + '\\n\\nÖdeme sorunu hâlâ çözülmedi. Müşteri ile iletişime geçilmesi önerilir.\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
+                "value": "={{ '🔔 <b>Ödeme Hatırlatması (2. gün)</b>\\n\\n👤 ' + $('Webhook').item.json.body.name + '\\n📧 ' + $('Webhook').item.json.body.email + '\\n\\nÖdeme sorunu hâlâ çözülmedi. Müşteri ile iletişime geçilmesi önerilir.\\n🔗 <a href=\"https://crm.otomaix.com/musteriler/' + $('Webhook').item.json.body.account_id + '\">CRM\\'de Görüntüle</a>' }}",
                 "type": "string"
               }
             ]
