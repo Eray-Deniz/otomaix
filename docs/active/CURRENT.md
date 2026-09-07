@@ -247,6 +247,29 @@
   `docs/archive/CLAUDE_crm_pre_cleanup.md` şu anki ağaçta aynı (artık ölü) token'ı taşıyor ve
   kapı onu görmez. Zararsız ama duruyor.
 
+- **telegram-credential-live-token-unverified** (proposed, doğrulama borcu; TETİKLİ —
+  CANLI bir zinciri ilgilendiriyor) — n8n'in `Telegram account` credential'ı
+  (`VMbwUuFB8BzVhxEz`) **canlı bir token taşıyor mu, ÖLÇÜLMEDİ.** Token 2026-09-06'da
+  operatör tarafından BotFather'da döndürüldü ve eskisinin öldüğü doğrulandı (`401`), ama
+  n8n credential'ının YENİ tokenla güncellenip güncellenmediği hiçbir yerde ölçülmedi.
+  **Neden bugün kapatılamadı:** yükleme sonrası hiçbir koşum Telegram düğümüne ULAŞMADI —
+  CRM'de gerçek müşteri verisi yok, tetiklenen tek workflow (sektör paketi yönetici olayları)
+  her beş dakikada süpürme dalında dönüyor ve gönderecek olay bulamıyor. `success` durumu
+  "Telegram gitti" demek DEĞİLDİR.
+  **Neden önemli:** bu credential'ı **canlı** sektör paketi yönetici bildirim zinciri de
+  kullanıyor. Token ölüyse o zincir de sessizdir ve kimse haberdar olmaz — bu, zaten kayıtlı
+  olan `n8n-credential-host-drift` uyarısızlık sınıfının aynısıdır.
+  **Kendi maddesi VAR, çünkü bir kez kaybolmuştu benzeri:** `sector-package-assignment-ui-
+  live-verification` kalemi, evi olan madde kapanırken beraberinde silinmişti. Bu kalem
+  kapanan `n8n-workflow-sir-hijyeni` maddesinin içinde bırakılsaydı aynı şey olurdu.
+  **Nasıl ölçülür (bir dakikalık iş):** yönetici olay ucuna (`sector-package-admin-events`,
+  `headerAuth` + `.env`deki `N8N_ADMIN_EVENT_SECRET`) tek bir test olayı gönder; Telegram
+  mesajı Eray'ın telefonuna düşerse credential canlıdır. Yan etkisi: bir yönetici olay satırı
+  ve bir Telegram mesajı.
+  **Dürüst etiket: doğrulanmadı + ölçüm yolu belli.** "Çalışıyor" DEĞİL.
+  **Tetik:** sıradaki oturumun başı (bir dakikalık iş, Eray onayıyla), VEYA yönetici bildirim
+  zincirine dokunan bir sonraki görev (Task 16), hangisi önce gelirse.
+
 - **crm-webhooks-unauthenticated-sql-interpolation** (proposed, GÜVENLİK; canlı uç KAPATILDI,
   onarım AÇIK — tetikli) — CRM webhook'ları (`crm/new-customer` · `crm/plan-upgrade` ·
   `crm/payment-failed`) **kimlik doğrulaması taşımıyordu** ve `crm/payment-failed`'ın arkasındaki
