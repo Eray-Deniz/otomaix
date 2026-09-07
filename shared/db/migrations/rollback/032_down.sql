@@ -156,6 +156,124 @@ DROP TABLE IF EXISTS social.sector_research_artifacts;
 -- Tetikleyici KOLONDAN ÖNCE düşürülür: `require_sub_sector_reference`
 -- TG_ARGV[0] ile kolon adını okur; kolon olmadan her INSERT/UPDATE patlardı.
 
+-- ── KAPI: NESNE KİMLİĞİ — AYNA KAPI (ileri yönün karşılığı) ────────────────
+-- `DROP FUNCTION IF EXISTS` ve `DROP TRIGGER IF EXISTS` nesneyi yalnız ADIYLA
+-- arar. Aynı adı taşıyan YABANCI bir nesne varsa geri alma onu SESSİZCE imha
+-- eder: başkasının fonksiyonu silinir, başkasının tablosu korumasız kalır.
+-- Aşağıdaki `$verify_down$` bloğu bunu yakalayamaz — silmeden SONRA koşar ve
+-- "nesne yok" durumunu BAŞARI sayar.
+--
+-- KABUL EDİLEN İKİ DURUM: nesne YOK (düşürecek bir şey de yok), ya da tanımı
+-- BİREBİR kanonik (bizimki). Üçüncü her durum fail-closed reddedilir; dosya
+-- tek transaction'da koştuğu için hiçbir adım kalıcı olmaz.
+DO $kimlik_down$
+DECLARE
+    kayit RECORD;
+    mevcut_def TEXT;
+    fn_reparent CONSTANT TEXT := $fn_reparent$
+BEGIN
+    IF NEW.parent_sector_id IS DISTINCT FROM OLD.parent_sector_id THEN
+        RAISE EXCEPTION
+            'social.sectors.parent_sector_id Faz 1 de degistirilemez; % -> % reddedildi',
+            OLD.parent_sector_id, NEW.parent_sector_id
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NEW;
+END;
+$fn_reparent$;
+    fn_alt_sektor CONSTANT TEXT := $fn_alt_sektor$
+DECLARE
+    checked_column TEXT := TG_ARGV[0];
+    referenced_id UUID;
+    is_sub_sector BOOLEAN;
+BEGIN
+    referenced_id := (to_jsonb(NEW) ->> checked_column)::UUID;
+
+    -- Atama YAPILMAMIŞ olabilir: NULL serbesttir, geri doldurma yoktur.
+    IF referenced_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT parent_sector_id IS NOT NULL
+        INTO is_sub_sector
+        FROM social.sectors
+        WHERE id = referenced_id;
+
+    -- Satır yoksa is_sub_sector NULL kalır — o da reddedilir (fail-closed).
+    IF is_sub_sector IS NOT TRUE THEN
+        RAISE EXCEPTION
+            'social.%.% yalnizca alt sektor satirini kabul eder '
+            '(parent_sector_id NOT NULL); reddedilen: %',
+            TG_TABLE_NAME, checked_column, referenced_id
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+
+    RETURN NEW;
+END;
+$fn_alt_sektor$;
+    fn_artifact CONSTANT TEXT := $fn_artifact$
+BEGIN
+    RAISE EXCEPTION
+        'social.sector_research_artifacts salt-ekleme tablosudur; % reddedildi', TG_OP
+        USING ERRCODE = 'integrity_constraint_violation';
+END;
+$fn_artifact$;
+BEGIN
+    FOR kayit IN
+        SELECT * FROM (VALUES
+            ('social.reject_sector_reparenting', fn_reparent),
+            ('social.require_sub_sector_reference', fn_alt_sektor),
+            ('social.reject_research_artifact_mutation', fn_artifact)
+        ) AS t(ad, govde)
+    LOOP
+        SELECT format('%s|%s|%s', l.lanname, format_type(p.prorettype, NULL),
+                      CASE WHEN p.prosrc = kayit.govde THEN 'kanonik'
+                           ELSE 'YABANCI-GOVDE' END)
+          INTO mevcut_def
+          FROM pg_proc p
+          JOIN pg_language l ON l.oid = p.prolang
+         WHERE p.oid = to_regprocedure(kayit.ad || '()');
+
+        IF mevcut_def IS NOT NULL AND mevcut_def <> 'plpgsql|trigger|kanonik' THEN
+            RAISE EXCEPTION
+                'migration 032 geri alma REDDEDILDI: %() adini KANONIK OLMAYAN bir fonksiyon tutuyor (%)',
+                kayit.ad, mevcut_def
+                USING ERRCODE = 'integrity_constraint_violation',
+                      HINT = 'Ad SAHIPLIK DEGILDIR: bu fonksiyonu dusurmek, ona '
+                             'bagli baska bir tetikleyiciyi kirardi. Yabanci '
+                             'nesneyi elle cozup script i yeniden kosturun.';
+        END IF;
+    END LOOP;
+
+    FOR kayit IN
+        SELECT * FROM (VALUES
+            ('social.brands', 'brands_sub_sector_must_be_sub',
+             'CREATE TRIGGER brands_sub_sector_must_be_sub BEFORE INSERT OR UPDATE ON social.brands FOR EACH ROW EXECUTE FUNCTION social.require_sub_sector_reference(''sub_sector_id'')'),
+            ('social.sectors', 'sectors_reject_reparenting',
+             'CREATE TRIGGER sectors_reject_reparenting BEFORE UPDATE ON social.sectors FOR EACH ROW EXECUTE FUNCTION social.reject_sector_reparenting()')
+        ) AS t(tablo, ad, tanim)
+    LOOP
+        CONTINUE WHEN to_regclass(kayit.tablo) IS NULL;
+
+        SELECT format('%s|%s', pg_get_triggerdef(t.oid), t.tgenabled)
+          INTO mevcut_def
+          FROM pg_trigger t
+         WHERE t.tgrelid = kayit.tablo::regclass
+           AND t.tgname = kayit.ad
+           AND NOT t.tgisinternal;
+
+        IF mevcut_def IS NOT NULL AND mevcut_def <> kayit.tanim || '|O' THEN
+            RAISE EXCEPTION
+                'migration 032 geri alma REDDEDILDI: % adini KANONIK OLMAYAN bir tetikleyici tutuyor (%)',
+                kayit.ad, mevcut_def
+                USING ERRCODE = 'integrity_constraint_violation',
+                      HINT = 'Baskasinin tetikleyicisini dusurmek onun tablosunu '
+                             'sessizce korumasiz birakirdi.';
+        END IF;
+    END LOOP;
+END
+$kimlik_down$;
+
 DROP TRIGGER IF EXISTS brands_sub_sector_must_be_sub ON social.brands;
 
 DO $brands$
