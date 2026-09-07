@@ -153,6 +153,21 @@ içerik sayar; markdown tablosu ve yatay çizgi bir KABI DOLDURMAZ. Aşırı
 sıkılaştırma bilinçle yapılmadı — hangi kabın hangi biçimi isteyeceği
 DAYATILMAZ.
 
+**Tur 8 — doluluk artık ÇİT-FARKINDADIR, ve envanterin kendisi bir TRIPWIRE.**
+Tur 7'nin kuralı satırı TEK TEK değerlendiriyordu ve bir kod bloğu satır-tek-tek
+GÖRÜLEMEZ: çıplak ` ``` ` ayıracı sözcüksüz olduğu için eleniyordu ama çitin
+İÇİNDEKİ `print(42)` satırı "sözcük içeriyor" diye yuvayı DOLDURUYORDU (ölçüldü:
+`notlu-gecti / 1 not` → `gecti / 0 not`; kapanmamış çit de aynı). Kapatma satır
+dizisi üstünde yapılır (`_citsiz_satirlar`): DİLSİZ bir çitin açıcısı, gövdesi ve
+eşleşen kapatıcısı doluluk sayımından ÇIKARILIR, kapanmamış çit FAIL-CLOSED
+olarak blok sonuna kadar düşer. DİLLİ çit (` ```python `) · blockquote · HTML
+bloğu ilan edilmiş AÇIK kalemlerdir ve DOKUNULMADI — gerçek çıktıda meşru
+kullanımları olabilir, daraltmanın yanlış-pozitif maliyeti ÖLÇÜLMEDİ. Aynı turda
+envanterin kendi bayatlaması kapatıldı: açık biçimler `ACIK_BLOK_BICIMLERI`'nde
+TEK yerde yaşar, kapsam beyanı metnini oradan ÜRETİR ve test her kalemin
+GERÇEKTEN bir boşluk notunu kaldırdığını ölçer — biri kapanırsa test kırılır. Bu
+görevde beyan BEŞ kez bayatlamıştı.
+
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
 SAKLI DEĞİLDİR: `Check.kapsam_sinirlari` demetinde yaşarlar ve `run` onları
@@ -171,6 +186,9 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   değildir; kapsama oranı ölçülmemiştir.
 * Doluluk yalnız BİÇİM eler, İLGİ ölçmez: sözleşme biçiminde ama alakasız bir düz
   yazı satırı kabı doldurmuş sayılır — anlam yargısı gerektirir, DOĞRULANMADI.
+  Elenen markdown yapıları TABLO · yatay çizgi · DİLSİZ kod çiti BLOĞU ile
+  SINIRLIDIR; dilli kod çiti, blockquote ve HTML bloğu HÂLÂ kabı doldurur
+  (`ACIK_BLOK_BICIMLERI` — envanter tek yerde yaşar ve testi onu sabitler).
   BÖLÜM düzeyindeki boşluk kontrolü bu kuralı UYGULAMAZ (sözleşme tabloyu Bölüm B
   gerekçesi ve Bölüm C eşlemesi olarak tanır); ölçüldü, ayrı bir sınıftır.
 * Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil; Bölüm C
@@ -287,6 +305,12 @@ GEREKCE_BASLIK_ASGARI = 2
 # da kapandı: bir markdown TABLOSU sözleşmenin tanıdığı bir içerik biçimi
 # DEĞİLDİR (`_sozlesme_bicimli`), dolayısıyla bir kaba tablo eklemek o kabın
 # BOŞLUK notunu artık düşüremez.
+#
+# **Tur 8 — aynı ayağın DİZİ boyutu.** Tablo eklemek düşüremiyordu ama bir
+# DİLSİZ KOD ÇİTİ eklemek hâlâ düşürüyordu: çitin GÖVDESİ satır-tek-tek
+# bakıldığında sözleşme biçimli görünür. Doluluk sayımı artık çit-farkındadır
+# (`_citsiz_satirlar`) ve dilsiz çit bloğu sayımdan çıkarılır. Dilli çit ·
+# blockquote · HTML bloğu ilan edilmiş AÇIK kalemdir (`ACIK_BLOK_BICIMLERI`).
 #
 
 BOLUM_BOS_MESAJI = (
@@ -986,17 +1010,23 @@ class _Yuva:
     def dolu(self) -> bool:
         """Kapta SÖZLEŞME BİÇİMİNDE anlamlı içerik var mı?
 
-        İki eleme birlikte çalışır ve ayrı şeyleri kapatır:
+        ÜÇ eleme birlikte çalışır ve ayrı şeyleri kapatır:
 
           * serbest BOŞLUK ifadeleri (`yok` · `-` · `n/a`) boş sayılır — K-120
             yalnız AYNEN `içerik-önerilmez` yazımını muaf tutar;
           * sözleşmenin tanımadığı markdown BLOK yapıları (tablo · yatay çizgi)
             kabı DOLDURMAZ (`_sozlesme_bicimli`) — ölçüldü ki bir dönem
             yuvasına konan bağımsız bir tablo yuvanın boşluk notunu
-            kaldırıyordu (`notlu-gecti / 1 not` → `gecti / 0 not`).
+            kaldırıyordu (`notlu-gecti / 1 not` → `gecti / 0 not`);
+          * DİLSİZ kod çiti BLOĞU — açıcısı, GÖVDESİ ve kapatıcısı — sayımdan
+            ÇIKARILIR (`_citsiz_satirlar`). Bu eleme satır-tek-tek YAPILAMAZ:
+            çıplak ` ``` ` ayıracı sözcüksüz olduğu için zaten eleniyordu ama
+            çitin İÇİNDEKİ `print(42)` satırı kabı DOLDURUYORDU (ölçüldü:
+            `notlu-gecti / 1 not` → `gecti / 0 not`; kapanmamış çit de aynı).
+            DİLLİ çit (` ```python `) ilan edilmiş AÇIK kalemdir ve DOKUNULMAZ.
         """
         parcalar = [self.inline] if self.inline else []
-        parcalar += list(self.satirlar)
+        parcalar += _citsiz_satirlar(self.satirlar)
         return any(
             _sozlesme_bicimli(parca)
             and _sadelestir(parca) not in _BOSLUK_IFADELERI
@@ -1078,6 +1108,9 @@ _BASLIK_GORUNUMU_RE = re.compile(
 _ILK_SOZCUK_RE = re.compile(r"^\s*(?:#{1,6}\s+|\d+[a-z]?\s*[.)]\s*)?\*{0,2}`?([a-z_]+)")
 # Markdown YATAY ÇİZGİSİ — bir AYRAÇTIR, içerik değil.
 _YATAY_CIZGI_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
+# Markdown KOD ÇİTİ açıcı/kapatıcı satırı. İkinci grup INFO dizesidir: BOŞsa çit
+# DİLSİZDİR (` ``` `), doluysa DİLLİDİR (` ```python `).
+_KOD_CITI_RE = re.compile(r"^\s*(`{3,}|~{3,})\s*(\S*)\s*$")
 # En az bir SÖZCÜK karakteri: hem düz yazının hem madde gövdesinin asgari işareti.
 _SOZCUK_RE = re.compile(r"\w")
 
@@ -1112,6 +1145,83 @@ def _baslik_metni(satir: str) -> str:
     return satir.strip().lstrip("#").strip().strip("*`").strip()
 
 
+# ─── Doluluk kontrolünün AÇIK BIRAKTIĞI markdown blok biçimleri ────────────
+#
+# Envanter BURADA yaşar ve İKİ yerden okunur: kapsam beyanı (`CHECKS`) metnini
+# buradan üretir, testi de her kalemin GERÇEKTEN bir kabın boşluk notunu
+# kaldırdığını buradan ölçer. Böylece beyan BAYATLAYAMAZ — bir biçim kapanırsa
+# test kırılır ve envanter güncellenmek ZORUNDA kalır.
+#
+# Bu görevde beyan BEŞ kez bayatladı; sonuncusu ölçüldü: envanter DİLSİZ kod
+# çitini "elenen" sayıyordu, oysa yalnız SÖZCÜKSÜZ (gövdesiz) hâli eleniyordu —
+# gövdeli ve kapanmamış hâlleri kabı DOLDURUYORDU (`notlu-gecti / 1 not` ->
+# `gecti / 0 not`). O eksen `_citsiz_satirlar` ile KAPANDI; aşağıdaki üç kalem
+# ölçülmüş olarak AÇIK kalır — gerçek çıktıda meşru kullanımları olabilir ve
+# daraltmanın yanlış-pozitif maliyeti ÖLÇÜLMEDİ.
+ACIK_BLOK_BICIMLERI: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("dilli kod çiti (```python)", ("```python\n", "print(42)\n", "```\n")),
+    ("blockquote (`>`)", ("> alintilanmis bir cumle\n",)),
+    ("HTML bloğu (`<div>`)", ("<div>alakasiz</div>\n",)),
+)
+
+
+def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
+    """DİLSİZ kod çiti bloklarını (açıcı + gövde + kapatıcı) satır dizisinden ELER.
+
+    **Neden satır DİZİSİ (tur 8).** `_sozlesme_bicimli` satırı TEK TEK
+    değerlendirir ve bir kod bloğu satır-tek-tek görülemez: çıplak ` ``` `
+    ayıracı sözcük taşımadığı için zaten eleniyordu, ama çitin İÇİNDEKİ satır
+    (`print(42)`) "sözcük içeriyor" diye kabı DOLDURUYORDU. Ölçüldü, aynı belge
+    ve aynı yuva:
+
+        yuva bos (taban)             notlu-gecti  not=1
+        ciplak ``` (bos govde)       notlu-gecti  not=1
+        ``` + print(42) + ```        gecti        not=0
+        ``` + duz cumle + ```        gecti        not=0
+        kapanmamis ``` + govde       gecti        not=0
+
+    Satır-tek-tek bakan bir kural DİZİ gerektiren bir yapıyı ÖLÇEMEZ; bu yüzden
+    eleme burada, doluluk sayımının GİRDİSİNDE yapılır.
+
+    **Kapanmamış dilsiz çit FAIL-CLOSED düşer:** açık kalan bir çit "gerisi hep
+    gövde" demektir, dolayısıyla açıcıdan blok sonuna kadar hiçbir satır kabı
+    doldurmaz. Ölçüm bunu doğruladı — kapanmamış hâl de notu kaldırıyordu.
+
+    **DİLLİ çite DOKUNULMAZ (ilan edilmiş açık kalem).** ` ```python ` bloğu
+    açıcısıyla, gövdesiyle ve kapatıcısıyla OLDUĞU GİBİ kalır: gerçek çıktıda
+    meşru kullanımı olabilir ve daraltmanın yanlış-pozitif maliyeti ÖLÇÜLMEDİ.
+    Envanteri `ACIK_BLOK_BICIMLERI`'nde yaşar ve testi onu sabitler.
+
+    Kapatıcı eşleşmesi CommonMark'ın kuralını izler: aynı işaret karakteri, en az
+    açıcı kadar uzun ve INFO dizesi BOŞ.
+    """
+    kalan: list[str] = []
+    acik_isaret: str | None = None
+    acik_dilsiz = False
+    for satir in satirlar:
+        cit = _KOD_CITI_RE.match(satir)
+        if acik_isaret is None:
+            if cit:
+                acik_isaret = cit.group(1)
+                acik_dilsiz = not cit.group(2)
+                if acik_dilsiz:
+                    continue  # DİLSİZ açıcı düşer
+            kalan.append(satir)
+            continue
+        kapatici = bool(
+            cit
+            and cit.group(1)[0] == acik_isaret[0]
+            and len(cit.group(1)) >= len(acik_isaret)
+            and not cit.group(2)
+        )
+        if not acik_dilsiz:
+            kalan.append(satir)
+        if kapatici:
+            acik_isaret = None
+            acik_dilsiz = False
+    return kalan
+
+
 def _sozlesme_bicimli(parca: str) -> bool:
     """Satır, sözleşmenin bir KABI DOLDURAN içerik biçimlerinden biri mi?
 
@@ -1143,6 +1253,13 @@ def _sozlesme_bicimli(parca: str) -> bool:
     çıktılar `mesaj_ekseni`'ni madde olarak da yazar ve liste alanlarındaki
     paragraf zaten `bicim-kurallari/ayri-madde-isareti` ailesinde ölçülür.
     Burada yalnız sözleşmenin HİÇ tanımadığı iki markdown BLOK yapısı elenir.
+
+    **Kapsam sınırı (tur 8):** bu fonksiyon SATIRA bakar ve bir DİZİ gerektiren
+    yapıyı ölçemez. Kod çiti tam olarak öyle bir yapıdır — çıplak ` ``` `
+    ayıracı burada sözcüksüz olduğu için zaten elenir, ama çitin GÖVDESİ
+    tek başına bakıldığında sözleşme biçimli görünür. Dilsiz çit BLOĞUNUN
+    elenmesi bu yüzden burada değil, doluluk sayımının girdisinde yapılır
+    (`_citsiz_satirlar`).
     """
     govde = parca.strip()
     if not govde:
@@ -2204,10 +2321,17 @@ CHECKS: tuple[Check, ...] = (
                 "BİÇİM eler, İLGİ ölçmez — sözleşme biçiminde ama ALAKASIZ bir "
                 "düz yazı satırı kabı doldurmuş sayılır ve bu makineyle "
                 "DOĞRULANAMAZ; ELENEN markdown yapıları TABLO · yatay çizgi · "
-                "sözcüksüz kod çiti ile SINIRLIDIR — ölçüldü ki dilli kod çiti "
-                "(```python), blockquote (`>`) ve HTML bloğu hâlâ kabı "
-                "DOLDURUR, o üçü bu turda KAPATILMADI (daraltmak gerçek "
-                "çıktıda yanlış-pozitif riski taşır); (b) BÖLÜM düzeyindeki "
+                "DİLSİZ kod çiti BLOĞU (açıcısı + GÖVDESİ + kapatıcısı; "
+                "kapanmamış çit fail-closed olarak blok sonuna kadar) ile "
+                "SINIRLIDIR. Dilsiz çit bu turda KAPANDI ve beyan DÜZELTİLDİ: "
+                "bir önceki tur yalnız SÖZCÜKSÜZ hâlini eliyordu, gövdeli ve "
+                "kapanmamış hâlleri kabı DOLDURUYORDU (ölçüldü: `notlu-gecti / "
+                "1 not` -> `gecti / 0 not`) — satır-tek-tek bakan bir kural "
+                "DİZİ gerektiren bir yapıyı ölçemez. HÂLÂ kabı DOLDURAN ve bu "
+                "turda KAPATILMADI: "
+                + " · ".join(ad for ad, _ in ACIK_BLOK_BICIMLERI)
+                + " (daraltmanın gerçek çıktıdaki yanlış-pozitif maliyeti "
+                "ÖLÇÜLMEDİ); (b) BÖLÜM düzeyindeki "
                 "boşluk kontrolü bu kuralı "
                 "UYGULAMAZ, çünkü sözleşme tabloyu Bölüm B gerekçesi ve Bölüm C "
                 "eşlemesi olarak TANIR — bir tablo o iki kabı gerçekten "
