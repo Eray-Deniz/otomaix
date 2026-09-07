@@ -37,6 +37,23 @@ ama bu bağımsız yargı DEĞİLDİR. Final incelemenin tabanı `a806e29` oldu�
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: bu oturum ona DOKUNMADI.
 
+## ERAY'IN CEVABINI BEKLEYEN İKİ KARAR (2026-09-07 oturumu kapanırken açık kaldı)
+
+Bunlar olgu değil **karar**dır; oturum kapanırken cevaplanmadı. Yeni oturum bu ikisini
+gündeminin BAŞINA alır — Task 8 dispatch'inden ÖNCE sorar.
+
+1. **Dal push edilsin mi?** Şu an 21+ commit yalnız yerelde. Push edilmemesi bilinçliydi
+   (yürütme protokolü push'u kullanıcı onayına bağlar), ama karar verilmedi.
+   *Bağlam:* tam test kümesi `5002 passed`, defter kapısı `rc=0`, ağaç temiz.
+
+2. **Hakem görmemiş commit'ler için bir tur daha koşulsun mu?** Checkpoint 6'nın son hakem
+   turu (tur 8) `628f784`'e kadar inceledi. Ondan sonraki kod commit'i `7244ea0` (çit maskesinin
+   ayrıştırmadan önceye alınması) **bağımsız yargı GÖRMEDİ** — kontrolör kendi probuyla ölçtü
+   (yuva sahteciliği kapandı · liste işaretleri düzeldi · aşırı sıkılaştırma yok · gerçek veride
+   kaybolan tek not yanlış-pozitifti, dosya açılıp doğrulandı), ama bu bağımsız yargı DEĞİLDİR.
+   *Ev uydurulmadı:* final incelemenin tabanı `a806e29` olduğu için o commit oraya kendiliğinden
+   girer; yani cevap "hayır" olursa da evsiz kalmaz — yalnız daha geç incelenir.
+
 ## Sıradaki dispatch'te ÖNDEN bildirilecekler
 
 1. **Ek metni kodla uyumsuz, İKİ yerde** (değişmedi): R12(a2)(d) amende edildi; aktör kapısının
