@@ -274,3 +274,77 @@ def test_reapply_over_our_own_objects_passes(scratch_db_migrated, path):
     result = _apply_file(scratch_db_migrated, path)
     assert result.returncode == 0, f"{path.name} yeniden uygulama DURDU:\n{result.stderr}"
     assert IDENTITY_MARKER not in result.stderr, result.stderr
+
+
+# ─── 5. Mutasyon kolu — kapının VARLIĞI değil ETKİSİ ────────────────────────
+#
+# Kapı SİLİNİRSE yabancı gövde gerçekten EZİLİYOR mu? Bu ölçülmeden, yukarıdaki
+# ret testleri "zaten hiç ezmeyecek" bir dünyada da yeşil olurdu ve kapının
+# gereksiz olduğunu fark edemezdik.
+#
+# 036 bu koldan MUAFTIR ve bu bilinçlidir: onun kapısı kalıcı DDL ile AYNI `DO`
+# deyiminin içindedir, dolayısıyla ayrı bir blok olarak sökülemez. Onun mutasyon
+# kolu kendi modülünde koşar (`test_identity_gate_is_load_bearing`).
+
+_STANDALONE_GATE_RE = re.compile(
+    r"-- ── KAPI: NESNE KİMLİĞİ.*?\n\$kimlik(?:_down)?\$;\n", re.DOTALL
+)
+
+MUTABLE = tuple(p for p in FORWARD if _STANDALONE_GATE_RE.search(p.read_text("utf-8")))
+MUTABLE_IDS = [p.name for p in MUTABLE]
+
+
+def test_mutation_arm_has_targets():
+    """BOŞ-KÜME KONTROL KOLU: sökülebilir kapı yoksa mutasyon matrisi boş koşardı."""
+    assert MUTABLE, "hiç bağımsız kimlik kapısı bloğu bulunamadı"
+
+
+@pytest.mark.parametrize("path", MUTABLE, ids=MUTABLE_IDS)
+def test_identity_gate_is_load_bearing(scratch_db_migrated, tmp_path, path):
+    """Kapısız mutant zararı GERÇEKTEN veriyor — kapı demek ki yük taşıyor.
+
+    Zararın biçimi dosyanın sınıfına göre değişir ve ikisi de ölçülür:
+
+    * fonksiyonu YAZAN dosya (`CREATE OR REPLACE FUNCTION`) yabancı gövdeyi
+      EZER — bizim gövdemiz yabancı adın üstüne yazılır;
+    * fonksiyona yalnızca BAĞLANAN dosya (023 · 026) hiçbir şeyi ezmez ama
+      kendi tetikleyicisini yabancı gövdeye BAĞLAR — tablo bundan sonra her
+      UPDATE'te yabancı kodu çalıştırır. İkinci zarar birincisinden hafif
+      değildir; yalnız sessizdir.
+    """
+    url = scratch_db_migrated
+    ham = path.read_text(encoding="utf-8")
+    doktorlu, kesim = _STANDALONE_GATE_RE.subn("", ham)
+    assert kesim == 1, f"{path.name}: mutasyon {kesim} blok kesti (tam 1 bekleniyor)"
+    assert len(doktorlu) < len(ham), "mutasyon hiçbir şey silmedi"
+
+    hedef = tmp_path / f"{path.stem}_kapisiz.sql"
+    hedef.write_text(doktorlu, encoding="utf-8")
+
+    yazan = bool(_FUNCTION_RE.search(ham))
+    fonksiyon = _functions(path)[0]
+    _run_sql(url, _foreign_function_sql(fonksiyon))
+    result = _apply_file(url, hedef)
+
+    assert result.returncode == 0, (
+        f"{path.name}: kapısız mutant BAŞKA bir sebeple durdu — mutasyon "
+        f"ölçtüğünü ölçmüyor:\n{result.stderr}"
+    )
+
+    if yazan:
+        assert FOREIGN_BODY_MARKER not in _function_body(url, fonksiyon), (
+            f"{path.name}: kapısız mutant yabancı gövdeyi EZMEDİ — kapı zaten "
+            "gereksizmiş demektir"
+        )
+        return
+
+    tetikleyici, tablo, bagli_fn = _triples(path)[0]
+    assert bagli_fn == fonksiyon, (fonksiyon, bagli_fn)
+    assert FOREIGN_BODY_MARKER in _function_body(url, fonksiyon), (
+        f"{path.name}: yabancı gövde kurulumdan sonra kayboldu — mutasyon "
+        "ölçtüğünü ölçmüyor"
+    )
+    assert bagli_fn in _trigger_def(url, tetikleyici, tablo), (
+        f"{path.name}: kapısız mutant tetikleyiciyi yabancı gövdeye BAĞLAMADI — "
+        "kapı zaten gereksizmiş demektir"
+    )
