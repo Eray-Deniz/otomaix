@@ -29,6 +29,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -275,8 +276,8 @@ def kaynak(
     return "\n".join(satirlar) + "\n"
 
 
-def _rapor(**kwargs) -> "bd.DoctorReport":
-    return bd.run(kaynak(**kwargs), source_name="KAYNAK-1")
+def _rapor(*, _ad: str = "KAYNAK-1", **kwargs) -> "bd.DoctorReport":
+    return bd.run(kaynak(**kwargs), source_name=_ad)
 
 
 def _aileler(rapor) -> set[str]:
@@ -441,7 +442,9 @@ def test_round_gate_stops_below_two_sources() -> None:
 
 def test_round_gate_allows_exactly_two_sources() -> None:
     """Pozitif kontrol: TAM İKİ geçerli kaynak koşuyu durdurmaz."""
-    gate = bd.gate_round([_rapor(), _rapor(cta=2), _sahte_elenmis("KAYNAK-3")])
+    gate = bd.gate_round(
+        [_rapor(), _rapor(_ad="KAYNAK-2", cta=2), _sahte_elenmis("KAYNAK-3")]
+    )
     assert gate.dur is False
     assert gate.gecerli_kaynak_sayisi == 2
     assert gate.elenen_kaynak_sayisi == 1
@@ -632,7 +635,7 @@ def test_report_and_gate_are_self_freezing() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         rapor.sonuc = bd.SONUC_GECTI  # type: ignore[misc]
 
-    gate = bd.gate_round([rapor, rapor])
+    gate = bd.gate_round([rapor, dataclasses.replace(rapor, kaynak_adi="K2")])
     assert isinstance(gate.raporlar, tuple)
     with pytest.raises(dataclasses.FrozenInstanceError):
         gate.dur = True  # type: ignore[misc]
@@ -663,3 +666,206 @@ def test_sonuc_degerleri_plan_yazimiyla_ayni() -> None:
     assert bd.SONUCLAR == ("gecti", "notlu-gecti", "elendi")
     assert bd.SEVIYELER == ("not", "eleme")
     assert bd.KAYNAK_TABANI == 2
+
+
+# ─── H1: bozuk rapor / bozuk kapı TEMSİL EDİLEMEZ ───────────────────────────
+#
+# Emsal `sector_pipeline/contracts.py::ContractPin.__post_init__`: yapısal
+# değişmezler yapıcıda zorlanır ki `run`/`gate_round` yolunu ATLAYIP doğrudan
+# kuran çağrıcılar da kapsansın. Aşağıdaki üç matris o üç ayağı ölçer:
+# (a) kaynak kimliği yetkilidir, (b) rapor kendi bulgularıyla tutarlıdır,
+# (c) `RoundGate`'in türetilmiş alanları ham veriden hesaplanır.
+
+
+def _not_bulgu() -> "bd.Bulgu":
+    return bd.Bulgu("k", "uzun-alinti", bd.SEVIYE_NOT, "m")
+
+
+def _eleme_bulgu() -> "bd.Bulgu":
+    return bd.Bulgu("k", "uzun-alinti", bd.SEVIYE_ELEME, "m")
+
+
+# Kombinasyonlar KAVRAMDAN üretilir: her koleksiyon ya boş, ya doğru seviyeli,
+# ya YANLIŞ seviyeli bir bulgu taşır. Üçü üçle çarpılır, sonra üç `sonuc`la.
+_KOLEKSIYON_SECENEKLERI = (("bos", ()), ("dogru-not", (_not_bulgu(),)),
+                           ("yanlis-eleme", (_eleme_bulgu(),)))
+_ELEME_SECENEKLERI = (("bos", ()), ("dogru-eleme", (_eleme_bulgu(),)),
+                      ("yanlis-not", (_not_bulgu(),)))
+
+RAPOR_MATRISI = tuple(
+    (f"{n_ad}/{e_ad}/{sonuc}", notlar, elemeler, sonuc)
+    for n_ad, notlar in _KOLEKSIYON_SECENEKLERI
+    for e_ad, elemeler in _ELEME_SECENEKLERI
+    for sonuc in bd.SONUCLAR
+)
+
+
+def _rapor_yasal(notlar, elemeler, sonuc) -> bool:
+    """Sözleşme, testin KENDİ dilinde: koleksiyonlar seviyeye göre ayrışır ve
+    `sonuc` onlardan TÜRER. Modülün kendi ihlal fonksiyonuna bakmaz — bakarsa
+    kapıyı kendisiyle karşılaştırmış olurdu."""
+    if any(b.seviye != bd.SEVIYE_NOT for b in notlar):
+        return False
+    if any(b.seviye != bd.SEVIYE_ELEME for b in elemeler):
+        return False
+    return sonuc == bd.sonuc_belirle(notlar, elemeler)
+
+
+@pytest.mark.parametrize(
+    "notlar,elemeler,sonuc",
+    [m[1:] for m in RAPOR_MATRISI],
+    ids=[m[0] for m in RAPOR_MATRISI],
+)
+def test_rapor_kendi_bulgulariyla_celisemez(notlar, elemeler, sonuc) -> None:
+    """Rapor kendi hakkında YALAN söyleyemez — üretilmiş 27'lik matris."""
+    if _rapor_yasal(notlar, elemeler, sonuc):
+        rapor = bd.DoctorReport(
+            sonuc=sonuc, notlar=notlar, elemeler=elemeler, kaynak_adi="K"
+        )
+        assert rapor.sonuc == sonuc
+    else:
+        with pytest.raises(ValueError):
+            bd.DoctorReport(
+                sonuc=sonuc, notlar=notlar, elemeler=elemeler, kaynak_adi="K"
+            )
+
+
+def test_rapor_matrisi_iki_kollu_ve_mutasyona_duyarli() -> None:
+    """Boş-küme kolu + mutasyon kolu: matris gerçekten bir kapı ölçüyor mu?"""
+    assert len(RAPOR_MATRISI) == 27, "matris kavramdan üretilmedi"
+    yasal = [m for m in RAPOR_MATRISI if _rapor_yasal(*m[1:])]
+    yasadisi = [m for m in RAPOR_MATRISI if not _rapor_yasal(*m[1:])]
+    assert yasal, "matriste tek bir YASAL üçlü yok — kapı hep kırmızı ölçülür"
+    assert yasadisi, "matriste tek bir YASADIŞI üçlü yok — matris sessizce yeşil"
+
+    # Mutasyon kolu: kapıyı SÖK (ihlal fonksiyonunu boş dönene çevir) →
+    # yasadışı üçlü kurulabilir hâle gelmeli. Gelmiyorsa kapı burada değildir
+    # ve matris başka bir şeyi ölçüyordur.
+    _, notlar, elemeler, sonuc = yasadisi[0]
+    with mock.patch.object(bd, "_rapor_ihlalleri", lambda *a, **k: []):
+        bd.DoctorReport(
+            sonuc=sonuc, notlar=notlar, elemeler=elemeler, kaynak_adi="K"
+        )
+
+
+@pytest.mark.parametrize("ad", ("", "   ", "\t", "\n"))
+def test_kimliksiz_rapor_kurulamaz(ad: str) -> None:
+    """(a) ayağı: kimlik YETKİLİDİR — adsız rapor kurulamaz, üretilemez."""
+    with pytest.raises(ValueError):
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi=ad
+        )
+    with pytest.raises(ValueError):
+        bd.run(kaynak(), source_name=ad)
+
+
+def test_kaynak_adi_varsayilansizdir() -> None:
+    """SAPMA (bilinçli): `kaynak_adi` VARSAYILANSIZDIR.
+
+    Plan 950 `DoctorReport(sonuc, notlar, elemeler)` yazımını verir; ilk üç alanın
+    adı ve SIRASI korunur, ama dördüncü alan varsayılanını KAYBEDER. Gerekçe
+    ölçüldü: varsayılan `""` iken `gate_round` adsız iki raporu iki AYRI kaynak
+    sayıyordu (fail-open). Alanı `gate_round`'da reddetmek daha zayıf kapatmadır
+    — bozuk rapor yine kurulabilir ve Task 9 paketleyicisine akabilirdi.
+    """
+    with pytest.raises(TypeError):
+        bd.DoctorReport(bd.SONUC_GECTI, (), ())  # type: ignore[call-arg]
+
+
+KIMLIK_MATRISI = (
+    ("ayni-kaynak-iki-kez", ("KAYNAK-1", "KAYNAK-1"), 1, True),
+    ("iki-ayri-kaynak", ("KAYNAK-1", "KAYNAK-2"), 2, False),
+    ("uc-rapor-iki-kimlik", ("A", "A", "B"), 2, False),
+    ("uc-rapor-uc-kimlik", ("A", "B", "C"), 3, False),
+    ("tek-kaynak", ("A",), 1, True),
+    ("hic-kaynak", (), 0, True),
+)
+
+
+@pytest.mark.parametrize(
+    "adlar,beklenen,dur",
+    [m[1:] for m in KIMLIK_MATRISI],
+    ids=[m[0] for m in KIMLIK_MATRISI],
+)
+def test_gate_round_kaynagi_kimlige_gore_sayar(
+    adlar: tuple[str, ...], beklenen: int, dur: bool
+) -> None:
+    """K-127 iki BAĞIMSIZ kaynak ister: aynı kaynağın iki raporu bir sayılır."""
+    gate = bd.gate_round([_rapor(_ad=ad) for ad in adlar])
+    assert gate.gecerli_kaynak_sayisi == beklenen
+    assert gate.dur is dur
+
+
+def test_ayni_kimlikte_eleme_kimligi_gecersiz_kilar() -> None:
+    """Fail-closed: bir kimliğin RAPORLARINDAN biri elendiyse kimlik elenmiştir."""
+    gate = bd.gate_round(
+        [_rapor(_ad="A"), _sahte_elenmis("A"), _rapor(_ad="B")]
+    )
+    assert gate.gecerli_kaynak_sayisi == 1
+    assert gate.elenen_kaynak_sayisi == 1
+    assert gate.dur is True
+
+
+def _gecerli_gate_argumanlari() -> dict:
+    raporlar = (_rapor(_ad="A"), _rapor(_ad="B"), _sahte_elenmis("C"))
+    return dict(
+        dur=False,
+        gecerli_kaynak_sayisi=2,
+        elenen_kaynak_sayisi=1,
+        taban=bd.KAYNAK_TABANI,
+        bildirim="",
+        raporlar=raporlar,
+    )
+
+
+TUREV_BOZMALARI = (
+    ("gecerli_kaynak_sayisi", 99),
+    ("gecerli_kaynak_sayisi", 0),
+    ("elenen_kaynak_sayisi", 0),
+    ("elenen_kaynak_sayisi", 7),
+    ("dur", True),
+    ("taban", 5),
+)
+
+
+@pytest.mark.parametrize(
+    "alan,deger", TUREV_BOZMALARI, ids=[f"{a}={d}" for a, d in TUREV_BOZMALARI]
+)
+def test_roundgate_turev_alanlari_ham_veriyle_celisemez(alan: str, deger) -> None:
+    """(c) ayağı: `gecerli`/`elenen`/`dur` `raporlar`'ın FONKSİYONUDUR."""
+    argumanlar = _gecerli_gate_argumanlari()
+    argumanlar[alan] = deger
+    with pytest.raises(ValueError):
+        bd.RoundGate(**argumanlar)
+
+
+def test_roundgate_dogru_turevlerle_kurulur() -> None:
+    """Pozitif kontrol: tutarlı türevler REDDEDİLMEZ (kapı fazla dar değil)."""
+    gate = bd.RoundGate(**_gecerli_gate_argumanlari())
+    assert gate.dur is False
+    assert gate.gecerli_kaynak_sayisi == 2
+
+
+def test_duran_kapi_bildirimsiz_kurulamaz() -> None:
+    """`dur=True` bildirimsiz olamaz — durdurma yöneticiye İLETİLİR."""
+    with pytest.raises(ValueError):
+        bd.RoundGate(
+            dur=True,
+            gecerli_kaynak_sayisi=1,
+            elenen_kaynak_sayisi=0,
+            taban=bd.KAYNAK_TABANI,
+            bildirim="",
+            raporlar=(_rapor(_ad="A"),),
+        )
+
+
+def test_gate_ihlal_matrisi_iki_kollu_ve_mutasyona_duyarli() -> None:
+    """Boş-küme + mutasyon kolu — `RoundGate` kapısı için."""
+    assert TUREV_BOZMALARI, "türev bozma matrisi BOŞ — kapı ölçülmüyor"
+    argumanlar = _gecerli_gate_argumanlari()
+    assert bd._gate_ihlalleri(**argumanlar) == [], "pozitif kontrol kırmızı"
+    argumanlar["gecerli_kaynak_sayisi"] = 99
+    assert bd._gate_ihlalleri(**argumanlar), "bozuk türev yeşil geçti"
+
+    with mock.patch.object(bd, "_gate_ihlalleri", lambda **k: []):
+        bd.RoundGate(**argumanlar)  # kapı sökülünce kurulabilmeli

@@ -25,7 +25,17 @@ neden dışarıda kaldığı `DISLANAN_KONTROL_GEREKCESI`'nde yazılıdır.
 **K-127 = 2 (Eray, 2026-08-23).** `gate_round` bir KAYNAK-SAYISI kapısıdır, içerik
 eşiği değil: geçerli kaynak sayısı 2'nin altına düşerse koşu durur ve yöneticiye
 bildirilir (mutabakatın mümkün olduğu en küçük sayı — tek kaynakla denetim `tekil`
-sınıfından başka bir şey üretemez).
+sınıfından başka bir şey üretemez). **Sayım birimi KİMLİKTİR, rapor değil:** aynı
+kaynağın iki raporu iki bağımsız kaynak yerine geçmez. Bu yüzden `kaynak_adi`
+zorunludur (varsayılansız, boş olamaz) — plan 950 yazımından bilinçli SAPMA, gerekçesi
+`DoctorReport` docstring'inde ölçümüyle yazılıdır.
+
+**Bozuk hâl temsil edilemez.** `DoctorReport` ve `RoundGate` yapısal değişmezlerini
+`__post_init__`'te zorlar (emsal `sector_pipeline/contracts.py::ContractPin`): rapor
+kendi bulgularıyla çelişemez (`sonuc` onlardan TÜRER, bulgular doğru koleksiyonda ve
+doğru seviyededir) ve `RoundGate`'in `gecerli`/`elenen`/`dur`/`taban` alanları
+`raporlar`'ın fonksiyonudur. Kural gövdeye GÖMÜLMEZ, `_rapor_ihlalleri` ve
+`_gate_ihlalleri` fonksiyonlarında yaşar — mutasyon kolu kapıyı sökebilsin diye.
 
 **K-120.** `anma` dalında bilinçli boşluğun resmî temsili AYNEN `içerik-önerilmez`
 değeridir: doluluk kontrolü onu eksik alan saymaz ve o dönem için alt sınır denetimi
@@ -190,30 +200,58 @@ class DoctorReport:
     """Bir kaynağın kapı raporu.
 
     Alan sırası plan 950'nin `DoctorReport(sonuc, notlar, elemeler)` yazımını
-    KORUR; `kaynak_adi` sona eklenmiş ve varsayılanı olan bir alandır — Task 9
-    paketleyicisi raporu kaynağıyla eşleştirebilsin diye (`build_packet`
-    `sources` ve `doctor_reports` listelerini AYRI alır, eşleme sıraya
-    bırakılırsa sessizce kayabilir).
+    KORUR; `kaynak_adi` sona eklenmiş dördüncü alandır — Task 9 paketleyicisi
+    raporu kaynağıyla eşleştirebilsin diye (`build_packet` `sources` ve
+    `doctor_reports` listelerini AYRI alır, eşleme sıraya bırakılırsa sessizce
+    kayabilir).
+
+    **SAPMA (bilinçli, plan 950'den):** `kaynak_adi` VARSAYILANSIZDIR. Plan
+    yazımının ilk üç alanı adıyla ve sırasıyla korunur; dördüncü alan
+    varsayılanını kaybeder. Gerekçe ÖLÇÜLDÜ: varsayılan `""` iken `gate_round`
+    adsız iki raporu iki AYRI kaynak sayıyordu (`dur=False`, `gecerli=2`) —
+    K-127'nin "iki BAĞIMSIZ kaynak" şartı fail-open'dı. Kimliği yalnız
+    `gate_round`'da reddetmek daha ZAYIF kapatmadır: bozuk rapor yine kurulup
+    Task 9 paketleyicisine akabilirdi.
+
+    **Değişmez (H1(b)):** rapor kendi hakkında yalan söyleyemez. `sonuc`
+    taşıdığı bulgulardan TÜRETİLEBİLİR (`sonuc_belirle`), ve bulgular doğru
+    koleksiyonda + doğru seviyededir. Emsal
+    `sector_pipeline/contracts.py::ContractPin.__post_init__`: yapısal
+    değişmezler yapıcıda zorlanır ki `run` yolunu ATLAYAN çağrıcılar da
+    kapsansın.
     """
 
     sonuc: str
     notlar: tuple[Bulgu, ...]
     elemeler: tuple[Bulgu, ...]
-    kaynak_adi: str = ""
+    kaynak_adi: str
 
     def __post_init__(self) -> None:
-        if self.sonuc not in SONUCLAR:
-            raise ValueError(
-                f"DoctorReport sonuc kapalı kümenin dışında: {self.sonuc!r} — "
-                f"{list(SONUCLAR)}"
-            )
         object.__setattr__(self, "notlar", _bulgu_demeti(self.notlar, "notlar"))
         object.__setattr__(self, "elemeler", _bulgu_demeti(self.elemeler, "elemeler"))
+        if not isinstance(self.kaynak_adi, str) or not self.kaynak_adi.strip():
+            raise ValueError(
+                "DoctorReport.kaynak_adi kimlik taşımak ZORUNDA (boş/boşluk "
+                f"olamaz): {self.kaynak_adi!r} — K-127 kaynak SAYISI kapısı "
+                "kimliğe göre sayar"
+            )
+        ihlaller = _rapor_ihlalleri(self.sonuc, self.notlar, self.elemeler)
+        if ihlaller:
+            raise ValueError(
+                "DoctorReport kendi bulgularıyla çelişiyor: " + "; ".join(ihlaller)
+            )
 
 
 @dataclass(frozen=True)
 class RoundGate:
-    """K-127 kaynak tabanı kapısının sonucu — koşu düzeyinde tek nesne."""
+    """K-127 kaynak tabanı kapısının sonucu — koşu düzeyinde tek nesne.
+
+    **Değişmez (H1(c)):** `gecerli_kaynak_sayisi` · `elenen_kaynak_sayisi` ·
+    `dur` · `taban` HAM VERİNİN (`raporlar`) fonksiyonudur; onlarla çelişen bir
+    `RoundGate` kurulamaz. Sayım KİMLİĞE göredir: aynı kaynağın iki raporu tek
+    kaynak sayılır ve bir kimliğin raporlarından biri elendiyse o kimlik
+    ELENMİŞTİR (fail-closed).
+    """
 
     dur: bool
     gecerli_kaynak_sayisi: int
@@ -224,6 +262,19 @@ class RoundGate:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "raporlar", _rapor_demeti(self.raporlar))
+        ihlaller = _gate_ihlalleri(
+            dur=self.dur,
+            gecerli_kaynak_sayisi=self.gecerli_kaynak_sayisi,
+            elenen_kaynak_sayisi=self.elenen_kaynak_sayisi,
+            taban=self.taban,
+            bildirim=self.bildirim,
+            raporlar=self.raporlar,
+        )
+        if ihlaller:
+            raise ValueError(
+                "RoundGate türetilmiş alanları ham veriyle çelişiyor: "
+                + "; ".join(ihlaller)
+            )
 
 
 @dataclass(frozen=True)
@@ -271,6 +322,102 @@ def _bulgu_demeti(deger: object, etiket: str) -> tuple[Bulgu, ...]:
                 "aldı — yabancı tip rapora sessizce giremez"
             )
     return ogeler
+
+
+def _rapor_ihlalleri(
+    sonuc: str, notlar: Sequence[Bulgu], elemeler: Sequence[Bulgu]
+) -> list[str]:
+    """Raporun kendi içindeki tutarsızlıkları listeler (boş liste = tutarlı).
+
+    AYRI bir fonksiyondur ki testin mutasyon kolu kapıyı SÖKEBİLSİN: kural
+    `__post_init__`'in gövdesine gömülseydi "kapı gerçekten burada mı" sorusu
+    ölçülemezdi.
+    """
+    ihlaller: list[str] = []
+    if sonuc not in SONUCLAR:
+        ihlaller.append(
+            f"sonuc kapalı kümenin dışında: {sonuc!r} — {list(SONUCLAR)}"
+        )
+    for bulgu in notlar:
+        if bulgu.seviye != SEVIYE_NOT:
+            ihlaller.append(
+                f"`notlar` içinde {bulgu.seviye!r} seviyeli bulgu var "
+                f"({bulgu.kontrol!r}) — koleksiyonlar seviyeye göre ayrışır"
+            )
+    for bulgu in elemeler:
+        if bulgu.seviye != SEVIYE_ELEME:
+            ihlaller.append(
+                f"`elemeler` içinde {bulgu.seviye!r} seviyeli bulgu var "
+                f"({bulgu.kontrol!r}) — koleksiyonlar seviyeye göre ayrışır"
+            )
+    if sonuc in SONUCLAR:
+        beklenen = sonuc_belirle(notlar, elemeler)
+        if sonuc != beklenen:
+            ihlaller.append(
+                f"sonuc {sonuc!r}, taşınan bulgulardan türeyen değer "
+                f"{beklenen!r} ({len(notlar)} not, {len(elemeler)} eleme)"
+            )
+    return ihlaller
+
+
+def _kimlik_bolumlemesi(
+    raporlar: Sequence[DoctorReport],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Raporları KİMLİĞE böler → (geçerli, elenen, tekrar eden) kimlikler.
+
+    K-127 iki BAĞIMSIZ kaynak ister; mutabakat sinyali ilkece iki ayrı kaynağın
+    işidir. Bu yüzden birim RAPOR değil KİMLİKTİR. Bir kimliğin raporlarından
+    biri elendiyse kimlik elenmiş sayılır (fail-closed).
+    """
+    sirali: list[str] = []
+    gorulen: dict[str, int] = {}
+    elenen: set[str] = set()
+    for rapor in raporlar:
+        ad = rapor.kaynak_adi
+        if ad not in gorulen:
+            sirali.append(ad)
+        gorulen[ad] = gorulen.get(ad, 0) + 1
+        if rapor.sonuc == SONUC_ELENDI:
+            elenen.add(ad)
+    elenen_sirali = tuple(ad for ad in sirali if ad in elenen)
+    gecerli = tuple(ad for ad in sirali if ad not in elenen)
+    tekrar = tuple(ad for ad in sirali if gorulen[ad] > 1)
+    return gecerli, elenen_sirali, tekrar
+
+
+def _gate_ihlalleri(
+    *,
+    dur: bool,
+    gecerli_kaynak_sayisi: int,
+    elenen_kaynak_sayisi: int,
+    taban: int,
+    bildirim: str,
+    raporlar: Sequence[DoctorReport],
+) -> list[str]:
+    """`RoundGate` türev alanlarının ham veriyle çelişkilerini listeler."""
+    ihlaller: list[str] = []
+    gecerli, elenen, _ = _kimlik_bolumlemesi(raporlar)
+    if taban != KAYNAK_TABANI:
+        ihlaller.append(f"taban {taban}, kanonik K-127 tabanı {KAYNAK_TABANI}")
+    if gecerli_kaynak_sayisi != len(gecerli):
+        ihlaller.append(
+            f"gecerli_kaynak_sayisi {gecerli_kaynak_sayisi}, benzersiz geçerli "
+            f"kimlik sayısı {len(gecerli)} ({list(gecerli)})"
+        )
+    if elenen_kaynak_sayisi != len(elenen):
+        ihlaller.append(
+            f"elenen_kaynak_sayisi {elenen_kaynak_sayisi}, benzersiz elenen "
+            f"kimlik sayısı {len(elenen)} ({list(elenen)})"
+        )
+    beklenen_dur = len(gecerli) < taban
+    if bool(dur) is not beklenen_dur:
+        ihlaller.append(
+            f"dur {dur!r}, ham veriden türeyen değer {beklenen_dur!r} "
+            f"({len(gecerli)} geçerli kimlik, taban {taban})"
+        )
+    if dur and not bildirim.strip():
+        ihlaller.append("dur=True ama bildirim BOŞ — durdurma yöneticiye iletilir")
+    return ihlaller
 
 
 def _rapor_demeti(deger: object) -> tuple[DoctorReport, ...]:
@@ -973,6 +1120,11 @@ def run(source_text: str, *, source_name: str) -> DoctorReport:
     """
     if not isinstance(source_text, str):
         raise TypeError(f"source_text metin değil: {type(source_text).__name__}")
+    if not isinstance(source_name, str) or not source_name.strip():
+        raise ValueError(
+            f"source_name kimlik taşımak ZORUNDA (boş/boşluk olamaz): "
+            f"{source_name!r} — kapı kaynakları KİMLİĞE göre sayar (K-127)"
+        )
     belge = _ayristir(source_text)
     notlar: list[Bulgu] = []
     elemeler: list[Bulgu] = []
@@ -999,26 +1151,36 @@ def run(source_text: str, *, source_name: str) -> DoctorReport:
 def gate_round(reports: Sequence[DoctorReport]) -> RoundGate:
     """K-127 kaynak tabanı kapısı — kaynak SAYISI kapısı, içerik eşiği DEĞİL.
 
-    Geçerli kaynak = elenmemiş kaynak. Sayı `KAYNAK_TABANI`'nın (2) altına
+    Geçerli kaynak = elenmemiş KİMLİK. Sayı `KAYNAK_TABANI`'nın (2) altına
     düşerse koşu DURUR ve yöneticiye bildirilir: tek kaynakla mutabakat sinyali
     ilkece üretilemez, denetim `tekil` sınıfından başka bir şey veremez.
+
+    **Sayım birimi RAPOR DEĞİL KİMLİKTİR (H1(a)).** K-127'nin bütün varlık
+    sebebi "koşu en az İKİ BAĞIMSIZ kaynakla devam edebilir" cümlesidir;
+    aynı kaynağın iki raporu bağımsızlık üretmez. Tekrar eden kimlik BİR
+    sayılır ve `bildirim`'de adıyla bildirilir. Kimliğin kendisi
+    `DoctorReport.__post_init__`'te zorunludur (boş ad kurulamaz).
     """
     raporlar = _rapor_demeti(reports)
-    elenen = tuple(r for r in raporlar if r.sonuc == SONUC_ELENDI)
-    gecerli = tuple(r for r in raporlar if r.sonuc != SONUC_ELENDI)
+    gecerli, elenen, tekrar = _kimlik_bolumlemesi(raporlar)
     dur = len(gecerli) < KAYNAK_TABANI
-    bildirim = ""
+    parcalar: list[str] = []
     if dur:
-        bildirim = (
+        parcalar.append(
             f"Koşu DURDU: geçerli kaynak sayısı {len(gecerli)}, K-127 tabanı "
-            f"{KAYNAK_TABANI}. Elenen kaynak(lar): "
-            f"{[r.kaynak_adi for r in elenen] or 'yok'}. Yöneticiye bildirilir."
+            f"{KAYNAK_TABANI}. Elenen kaynak(lar): {list(elenen) or 'yok'}. "
+            "Yöneticiye bildirilir."
+        )
+    if tekrar:
+        parcalar.append(
+            f"Tekrar eden kaynak kimliği: {list(tekrar)} — aynı kimlik BİR "
+            "bağımsız kaynak sayılır (K-127 iki BAĞIMSIZ kaynak ister)."
         )
     return RoundGate(
         dur=dur,
         gecerli_kaynak_sayisi=len(gecerli),
         elenen_kaynak_sayisi=len(elenen),
         taban=KAYNAK_TABANI,
-        bildirim=bildirim,
+        bildirim=" ".join(parcalar),
         raporlar=raporlar,
     )
