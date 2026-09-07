@@ -187,6 +187,24 @@ K-120 muafiyeti çite saklanmış içerikle ALINAMAZ (üçü de ölçüldü). Ku
 evde yaşar (`_cit_maskesi`); `_citsiz_satirlar` onun süzgeç yüzeyidir ve konum
 koruması gereken yol maskeyi doğrudan okur.
 
+**Tur 10 — çit tanıma BAĞLAMDAN BAĞIMSIZ.** Kural tek evdeydi ve yedi yol onu
+çağırıyordu, ama evin kendi ekseni (dil × gövde × kapanış) GİRİNTİ/BAĞLAM
+boyutunu TAŞIMIYORDU. Ölçüldü, aynı yuva, mesaj KÜMESİ farkıyla: `- ``` ` +
+`  print(42)` + `  ``` ` bir notu KALDIRIYORDU. Sebep girinti DEĞİLDİ — ayıraç
+deseninin baştaki boşluk yutan öneki girintiyi zaten alıyordu ve 2/4 boşluk girintili çit notu KORUYORDU; açık olan
+MADDE BAĞLAMIYDI: `- ``` ` açıcı sayılmadığı için gövde MASKESİZ kalıp kabı
+DOLDURUYOR, kapatıcı ise yeni bir açıcı sanılıyordu. Ayıraç deseni bağlamdan
+BAĞIMSIZLAŞTIRILDI (`_KOD_CITI_RE`) — tek evde, ikinci ayrıştırıcı YAZILMADAN,
+dolayısıyla yedi yol da aynı anda faydalandı. Kapatıcı eşleşmesi satırın SOLUNA
+değil AYIRACIN KENDİSİNE bakar. AŞIRI SIKILAŞTIRMA YAPILMADI: ayıraç satırın TEK
+ANLAMLI İÇERİĞİ olmak zorundadır — `- gerçek bir kalıp` çit değildir ve kabı
+DOLDURMAYA devam eder (ölçüldü). Aynı turda eksen İKİ boyutla genişledi (bağlam
+`CIT_BAGLAM_BICIMLERI` · ayıraç biçimi `CIT_AYIRAC_BICIMLERI`; envanter TEK
+yerde yaşar, beyan ondan ÜRETİLİR ve tripwire her kalemi uçtan uca ÖLÇER) ve
+HEDEFLİ mutasyon kolu eklendi: deseni tur 9 hâline döndürmek yalnız iki YENİ
+bağlamı kırmızıya düşürür, girinti bağlamları YEŞİL kalır — boyutun gerçekten
+ölçtüğünün kanıtı.
+
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
 SAKLI DEĞİLDİR: `Check.kapsam_sinirlari` demetinde yaşarlar ve `run` onları
@@ -340,6 +358,11 @@ GEREKCE_BASLIK_ASGARI = 2
 # tablo tanıma DEĞİLDİ: çite konan içerik o yollarda notu KALDIRIYORDU
 # (ölçüldü, mesaj KÜMESİ farkıyla — not SAYISI artmıştı). Süpürüldüler;
 # kapsam `CIT_KURALI_KAPSAMI` / `CIT_KURALI_DISINDA`'da sayılır.
+#
+# **Tur 10 — aynı ayağın BAĞLAM boyutu.** Yedi yol da çit-farkındaydı ama çitin
+# KENDİSİ bağlam-farkında değildi: bir MADDE İŞARETİNDEN sonra açılan çit
+# (`- ``` `) ayıraç sayılmıyor, gövdesi kabı DOLDURUYORDU. Ayıraç deseni tek
+# evde bağlamdan bağımsızlaştırıldı; girinti zaten çalışıyordu (ölçüldü).
 #
 
 BOLUM_BOS_MESAJI = (
@@ -1167,7 +1190,26 @@ _ILK_SOZCUK_RE = re.compile(r"^\s*(?:#{1,6}\s+|\d+[a-z]?\s*[.)]\s*)?\*{0,2}`?([a
 _YATAY_CIZGI_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 # Markdown KOD ÇİTİ açıcı/kapatıcı satırı. İkinci grup INFO dizesidir: BOŞsa çit
 # DİLSİZDİR (` ``` `), doluysa DİLLİDİR (` ```python `).
-_KOD_CITI_RE = re.compile(r"^\s*(`{3,}|~{3,})\s*(\S*)\s*$")
+#
+# **BAĞLAMDAN BAĞIMSIZ (tur 10).** Bir çit ayıracı, önünde GİRİNTİ ya da MADDE
+# İŞARETİ olsa da çit ayıracıdır. `^\s*` girintiyi zaten yutuyordu — ölçüldü:
+# 2 ve 4 boşluk girintili çit notu KORUYORDU. Açık olan MADDE BAĞLAMIYDI:
+# `- ``` ` açıcı sayılmıyordu, dolayısıyla üç satırlık bir madde-içi blokta
+# gövde (`  print(42)`) MASKESİZ kalıp kabı DOLDURUYOR, kapatıcı (`  ``` `) ise
+# yeni bir açıcı sanılıp fail-closed kapanmamış çit açıyordu. Ölçüldü, aynı yuva:
+#
+#     yalniz '- ```' satiri                 kayip=0  [KORUNDU]
+#     '- ```' + '  print(42)' + '  ```'     kayip=1  [KAYBOLDU]  <-- ACIK
+#     ic ice madde '  - ```' + govde        kayip=1  [KAYBOLDU]  <-- ACIK
+#     2 ve 4 bosluk girintili cit           kayip=0  [KORUNDU]
+#
+# **AŞIRI SIKILAŞTIRMA YAPILMADI:** ayıraç satırın TEK ANLAMLI İÇERİĞİ olmak
+# ZORUNDADIR — `- gerçek bir kalıp` çit DEĞİLDİR ve kabı DOLDURMAYA devam eder.
+# Madde işareti olarak yalnız `-` tanınır: sözleşmenin KENDİ madde kavramı odur
+# (BİÇİM KURALLARI md. 3, `_MADDE_RE`); `*`/`+`/numaralı liste uydurulmaz.
+# Kapatıcı eşleşmesi ayıracın KENDİSİNE bakar, satırın SOLUNA değil — açıcı
+# girintiliyse kapatıcı da öyledir ve eşleşme buna TAKILMAZ.
+_KOD_CITI_RE = re.compile(r"^\s*(?:-\s+)?(`{3,}|~{3,})\s*(\S*)\s*$")
 # En az bir SÖZCÜK karakteri: hem düz yazının hem madde gövdesinin asgari işareti.
 _SOZCUK_RE = re.compile(r"\w")
 
@@ -1311,6 +1353,29 @@ CIT_KURALI_DISINDA: tuple[tuple[str, str], ...] = (
 )
 
 
+# Çit ayıracının SOLUNDA durabilecek BAĞLAMLAR (tur 10) — envanter TEK yerde
+# yaşar, kapsam beyanı metnini buradan ÜRETİR ve testi her kalemin GERÇEKTEN
+# maskelendiğini uçtan uca ölçer. Kalemler markdown'un LİSTE DİLBİLGİSİNDEN
+# türer, bulunan örnekten değil: bir çit ya blok düzeyindedir, ya bir liste
+# öğesinin DEVAMIDIR, ya kod-girintisi eşiğindedir, ya doğrudan bir MADDE
+# İŞARETİNDEN sonra açılır, ya da İÇ İÇE bir maddenin içindedir. İkinci üye
+# AÇICININ öneki, üçüncüsü ondan sonraki satırların DEVAM GİRİNTİSİDİR.
+CIT_BAGLAM_BICIMLERI: tuple[tuple[str, str, str], ...] = (
+    ("girintisiz", "", ""),
+    ("iki boşluk (madde devamı)", "  ", "  "),
+    ("dört boşluk", "    ", "    "),
+    ("madde işaretli (`- `)", "- ", "  "),
+    ("iç içe madde (`  - `)", "  - ", "    "),
+)
+# AYIRAÇ BİÇİMLERİ — CommonMark İKİ ayıraç karakteri ve EN AZ üç uzunluk tanır;
+# tur 9'a dek yalnız üçlü backtick egzersiz ediliyordu.
+CIT_AYIRAC_BICIMLERI: tuple[tuple[str, str], ...] = (
+    ("üçlü backtick", "```"),
+    ("dört backtick", "````"),
+    ("üçlü tilde", "~~~"),
+)
+
+
 def _cit_kapsam_beyani() -> str:
     """Çit kuralının kapsam beyanı — İKİ demetin TÜREVİ, kopyası değil."""
     return (
@@ -1324,7 +1389,18 @@ def _cit_kapsam_beyani() -> str:
         + ". Kapsam dışı yolların hiçbiri bu turda ölçülmüş bir NOT KAYBI "
         "üretmiyor; ürettikleri fazladan notlar fail-closed yöndedir. "
         "DİLLİ çit · blockquote · HTML bloğu hâlâ AÇIK kalemdir "
-        "(`ACIK_BLOK_BICIMLERI`) ve kapsanan yolların HİÇBİRİNDE elenmez."
+        "(`ACIK_BLOK_BICIMLERI`) ve kapsanan yolların HİÇBİRİNDE elenmez. "
+        "ÇİT TANIMA BAĞLAMDAN BAĞIMSIZDIR (tur 10): bir ayıraç, önünde GİRİNTİ "
+        "ya da MADDE İŞARETİ olsa da ayıraçtır ve açıcısı · gövdesi · eşleşen "
+        "kapatıcısı sayımdan çıkar; kapatıcı eşleşmesi satırın SOLUNA değil "
+        "AYIRACIN KENDİSİNE bakar. Ölçülen BAĞLAMLAR: "
+        + " · ".join(ad for ad, _on, _devam in CIT_BAGLAM_BICIMLERI)
+        + ". Ölçülen AYIRAÇ biçimleri: "
+        + " · ".join(f"{ad} ({isaret})" for ad, isaret in CIT_AYIRAC_BICIMLERI)
+        + ". AŞIRI SIKILAŞTIRMA YAPILMADI: ayıraç satırın TEK ANLAMLI İÇERİĞİ "
+        "olmak zorundadır — `- gerçek bir kalıp` çit DEĞİLDİR ve kabı "
+        "DOLDURMAYA devam eder; madde işareti olarak yalnız sözleşmenin KENDİ "
+        "madde kavramı (`-`) tanınır."
     )
 
 
@@ -1356,7 +1432,9 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
     Envanteri `ACIK_BLOK_BICIMLERI`'nde yaşar ve testi onu sabitler.
 
     Kapatıcı eşleşmesi CommonMark'ın kuralını izler: aynı işaret karakteri, en az
-    açıcı kadar uzun ve INFO dizesi BOŞ.
+    açıcı kadar uzun ve INFO dizesi BOŞ. Eşleşme satırın SOLUNA BAKMAZ (tur 10):
+    açıcı girintiliyse ya da bir MADDE İŞARETİNDEN sonra geliyorsa kapatıcı da
+    girintilidir, ve eşleşme buna TAKILMAZ.
 
     **Kural TEK yerde yaşar: `_cit_maskesi`.** Bu fonksiyon onun SÜZGEÇ
     yüzeyidir; KONUM koruyan yollar (satır sırası taşıyan tablo izi gibi) aynı
@@ -1378,6 +1456,12 @@ def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
     satır KONUMUNU korumak zorunda olan süpürme yolları (Bölüm B tablo izi)
     maskeyi doğrudan okur. Kapanmamış dilsiz çit FAIL-CLOSED'dır: açıcıdan
     dizinin sonuna kadar her satır çit içi sayılır.
+
+    Tanıma BAĞLAMDAN BAĞIMSIZDIR (tur 10): ayıracın önünde GİRİNTİ ya da MADDE
+    İŞARETİ olabilir — koşul, ayıracın satırın TEK ANLAMLI İÇERİĞİ olmasıdır
+    (`_KOD_CITI_RE`). Bu fonksiyon TEK EV olduğu için kuralı burada
+    genişletmek, süpürülmüş YEDİ yolun hepsini birden kapsar; ikinci bir
+    ayrıştırıcı YAZILMAZ.
     """
     maske: list[bool] = []
     acik_isaret: str | None = None
