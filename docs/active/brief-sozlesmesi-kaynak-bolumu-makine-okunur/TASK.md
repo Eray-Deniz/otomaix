@@ -85,6 +85,18 @@ Ayaklar — hepsi bu görevin içinde, parçalanmaz:
    çevrilir; Task 7'de konulan "makineyle doğrulanmadı" kapsam beyanı bu ayak kapanınca KALKAR
    (kalkmazsa beyan bayatlar — bayat beyan, beyan olmamaktan kötüdür).
 
+# Cevaplanmayı Bekleyen Dört Soru
+
+Bu dört soru **henüz hiçbir yerde cevaplanmadı.** Kapsam bölümünde boşluk olarak yazılı ama
+kimin, ne zaman cevaplayacağı belirlenmedi. **Bu görev başlamadan önce Eray'a sorulacak.**
+
+1. Gerekçe tablosunun **başlık satırı** nasıl yazılacak?
+2. Bölüm B'de **kaç tablo** olabilir?
+3. **Markdown başlık düzeyleri** ne olacak?
+4. **Kaynakçanın biçimi** ne olacak?
+
+Sözleşme metni bu dördü cevaplanmadan yazılmaz.
+
 # Decisions Log
 
 - **2026-09-07 — Eray onayı: sözleşme değiştirilecek, ama Task 7'nin İÇİNDE değil.** Gerekçe:
