@@ -265,14 +265,16 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
 * Çit kuralının KAPSADIĞI ve bilinçle KAPSAMADIĞI yollar `CIT_KURALI_KAPSAMI` /
   `CIT_KURALI_DISINDA` demetlerinde sayılıdır; kapsam beyanı metnini onlardan
   ÜRETİR ve test her kalemi uçtan uca ölçer.
-* Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil; Bölüm C
-  bağlantılarının gerçekten açıldığı doğrulanmaz (ağ çağrısı yapılmaz).
-* Bölüm C'de kaynak eşlemesinin VARLIĞI ve adres biçimi taranır; eşlemenin gerçekten
-  alan/dönem → iddia → kaynak ÜÇLÜSÜ olduğu makineyle DOĞRULANMADI. Vekil
-  (`_C_AYIRAC_RE`) serbest noktalamayı da ayıraç sayar ve yalnız PARÇA SAYISINI ölçer,
-  dolayısıyla SERBEST DÜZYAZI bu kontrolü GEÇER (ölçüldü). Kök çözüm sözleşme
-  revizyonudur ve AYRI bir tasarım işine kaydedildi; vekil bu turda SERTLEŞTİRİLMEDİ —
-  sertleştirme üç turdur yakınsamadı ve yanlış-pozitif üretir.
+* Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil.
+* Bölüm C OLUMLU bir yapısal sözleşme olarak doğrulanır: birebir başlık satırı · altı
+  sabit sütun · hücre doluluğu · `alan/dönem` kapalı kümesi · `iddia` kelime sınırı ·
+  `URL` adres biçimi · `tarih` yazımı · `tek kaynak` kapalı kümesi; ayrıca BÜTÜNLÜK
+  (her alan/dönem için en az bir satır). Önceki sürümün ayıraç vekili KALDIRILDI —
+  serbest düzyazıdan "bu bir eşleme DEĞİL" sonucunu çıkarmak semantik-negatif bir
+  sınıftı ve üç turda yakınsamadı; kök çözüm KODA değil SÖZLEŞMEYE yapıldı (dış depo
+  `7964ed6`, sabit sütunlu tablo). Ölçülmeyen İKİ eksen kaldı ve ikisi de anlam
+  yargısıdır: bağlantının gerçekten AÇILDIĞI (ağ çağrısı yapılmaz) ve `iddia`
+  hücresinin kaynağı gerçekten ÖZETLEDİĞİ. İkisi de denetçi katmanının işidir.
 * Gerekçe denetimine giren küme SEÇİLMEZ ve MONOTONdur: dönem bloklarından ÖNCEKİ bütün
   tablolar denetlenir, bir tablo EKLEMEK başka bir tabloyu kümeden ÇIKARAMAZ. Hangisinin
   GERÇEK gerekçe tablosu olduğu DOĞRULANMAZ ve doğrulanmaya ÇALIŞILMAZ. Bölgenin SINIRI
@@ -350,6 +352,33 @@ GEREKCE_BASLIK_ANAHTARLARI = tuple(
 # Eşik TAM eşleşme değildir bilerek: gerçek çıktıda sütun adı kısaltılabilir
 # ("tür etiketi" yerine "tür") ve tam eşleşme aramak yanlış-negatif üretirdi.
 GEREKCE_BASLIK_ASGARI = 2
+
+# `_SABLON.md` ═══ 5. ÇIKTI FORMATI ═══ Bölüm C: *"SABİT SÜTUNLU TABLO olarak
+# yaz, aynen şu başlık satırıyla"*. Sütun ADLARI ve SIRA sözleşmenindir; test
+# onu düzyazıdan değil, sözleşmenin BAŞLIK SATIRINDAN okur.
+#
+# **Neden burada TAM eşleşme aranır, gerekçe tablosunda aranmaz.** İki tablonun
+# sözleşmedeki kipi AYNI DEĞİLDİR: Bölüm B'de başlık satırı bir bloğun gerekçe
+# tablosu OLUP OLMADIĞINI SEÇMEYE yarar (yanlış-negatif pahalıdır, bu yüzden
+# `GEREKCE_BASLIK_ASGARI` eşiği gevşektir); Bölüm C'de sözleşme "aynen" der ve
+# başlık satırı kapının OLUMLU sözleşmesidir — hangi hücrenin ne olduğu ona
+# dayanır, gevşetilirse sütun anlamı yeniden TAHMİNE düşer.
+C_TABLOSU_SUTUNLARI = (
+    "alan/dönem",
+    "iddia",
+    "kaynak adı",
+    "URL",
+    "tarih",
+    "tek kaynak",
+)
+# Sözleşme `iddia` hücresine ÜST SINIR koyar: "EN FAZLA 15 KELİME". Uydurma
+# eşik DEĞİL — sözleşme metninden okunur, testi pinden doğrular.
+C_IDDIA_KELIME_UST_SINIRI = 15
+# `tek kaynak` hücresi kapalı kümedir (sözleşme: "`evet` ya da `hayır`").
+C_TEK_KAYNAK_DEGERLERI = ("evet", "hayır")
+# `tarih` hücresi: `YYYY-AA` · `YYYY-AA-GG` · ya da AYNEN `tarih-yok`.
+C_TARIH_YOK = "tarih-yok"
+_C_TARIH_RE = re.compile(r"^\d{4}-\d{2}(?:-\d{2})?$")
 
 # ─── Ekleme değişmezi: EKLEMEK KALDIRAMAZ ───────────────────────────────────
 #
@@ -1209,7 +1238,13 @@ class _Belge:
     # BAŞLIĞINDA başlar — sınır `_ilk_donem_baslangici`'nda yaşar.
     gerekce_donem_oncesi_sayisi: int = 0
     gerekce_basliksiz_sayisi: int = 0
-    c_esleme_satiri_var: bool = False
+    # Bölüm C artık OLUMLU bir yapısal sözleşmedir: sözleşmenin BİREBİR başlık
+    # satırı var mı, ve ayıraçtan sonra kaç veri satırı geliyor. Eski alan
+    # (`c_esleme_satiri_var`) bir madde/tablo satırının VARLIĞINI ölçüyordu ve
+    # serbest düzyazıyı ayırt edemiyordu — o eksen sözleşme sabit sütunlu
+    # tabloyu dayattığı için artık TAHMİN gerektirmiyor.
+    c_baslik_satiri_var: bool = False
+    c_veri_satirlari: tuple[str, ...] = ()
     # Tur 1 yalnız BÖLÜM ve ALAN düzeyini kurtardı; aşağıdakiler iç içe KALAN
     # düzeylerin sıralı-tekrarlı izleridir. Düzey listesi belgenin KENDİ içerme
     # modelinden gelir (`_SABLON.md` §5 + GÖREV A/B adımları), bulunan
@@ -1360,7 +1395,8 @@ CIT_KURALI_KAPSAMI: tuple[tuple[str, str], ...] = (
     ),
     (
         "c-esleme-satiri",
-        "Bölüm C eşleme satırının VARLIĞI, tekrarı ve satır denetimi",
+        "Bölüm C tablosunun BAŞLIK satırı, veri satırları, tekrarı ve satır "
+        "denetimi",
     ),
     (
         "gerekce-tablosu-tanima",
@@ -1969,12 +2005,23 @@ def _ayristir(source_text: str) -> _Belge:
     # eşlemesi silinip yerine DİLSİZ çit içinde madde ya da tablo satırı
     # konduğunda "Bölüm C tek bir kaynak eşleme satırı taşımıyor" notu
     # KAYBOLUYORDU.
+    c_citsiz = _citsiz_satirlar(c_satirlari)
     c_esleme_satirlari = tuple(
         satir
-        for satir in _citsiz_satirlar(c_satirlari)
+        for satir in c_citsiz
         if (_MADDE_RE.match(satir) or _TABLO_RE.match(satir))
         and not _TABLO_AYIRAC_RE.match(satir)
     )
+    # Sözleşmenin BİREBİR başlık satırı — kapının olumlu sözleşmesi. Hücre
+    # bazında karşılaştırılır (boşluk/hizalama serbest), sütun ADLARI değil.
+    c_baslik_satiri_var = any(
+        _hucreler(satir) == list(C_TABLOSU_SUTUNLARI)
+        for satir in c_citsiz
+        if _TABLO_RE.match(satir)
+    )
+    # Veri satırları = ayıraçtan SONRAKİ tablo satırları; başlık satırı veri
+    # DEĞİLDİR (aynı yardımcı Bölüm B gerekçe tablosunda da kullanılır).
+    c_veri_satirlari = tuple(_tablo_veri_satirlari(c_citsiz))
 
     return _Belge(
         ham=source_text,
@@ -1993,7 +2040,8 @@ def _ayristir(source_text: str) -> _Belge:
         tablo_donem_sonrasi=tablo_donem_sonrasi,
         gerekce_donem_oncesi_sayisi=gerekce_donem_oncesi_sayisi,
         gerekce_basliksiz_sayisi=gerekce_basliksiz_sayisi,
-        c_esleme_satiri_var=bool(c_esleme_satirlari),
+        c_baslik_satiri_var=c_baslik_satiri_var,
+        c_veri_satirlari=c_veri_satirlari,
         video_havuz_sirasi=video_havuz_sirasi,
         donem_sirasi=tuple(_sadelestir(donem.ad) for donem in donemler),
         c_esleme_satirlari=c_esleme_satirlari,
@@ -2484,74 +2532,178 @@ def _kontrol_dil_kurali(belge: _Belge) -> list[str]:
 
 
 _URL_RE = re.compile(r"https?://\S+")
-# Bölüm C eşlemesinin ÜÇLÜSÜNÜ (alan/dönem → iddia → kaynak) mekanik olarak
-# görebilmek için kullanılan ayıraç kümesi. Sözleşme tek bir işaret DAYATMAZ;
-# bu küme belgelenmiş KÜÇÜK bir vekildir (`_BOSLUK_IFADELERI` gibi) ve kapsama
-# oranı ÖLÇÜLMEMİŞTİR. Küme geniş tutuldu: fazla ayıraç parça SAYISINI artırır,
-# yani yanlış-pozitif değil yanlış-negatif yönünde hata yapar.
-_C_AYIRAC_RE = re.compile(r"→|->|—|–|»|\||;|,|:")
 
 
-def _c_esleme_parcalari(satir: str) -> list[str]:
-    """Bir Bölüm C satırının bağlantı DIŞI anlam parçaları."""
-    govde = satir.strip()
-    madde = _MADDE_RE.match(govde)
-    govde = madde.group(1) if madde else govde.strip("|")
-    return [
-        parca.strip()
-        for parca in _C_AYIRAC_RE.split(_URL_RE.sub(" ", govde))
-        if parca.strip()
-    ]
+def _c_gecerli_anahtarlar(belge: _Belge) -> frozenset[str]:
+    """`alan/dönem` hücresinin KAPALI kümesi — iki ayağı da türetilmiştir.
+
+    Sözleşme (Bölüm C): *"`alan/dönem` hücresi ya Bölüm A alan adıdır ya da
+    Bölüm B dönem adıdır — aynen o yazımla"*. Alan ayağı sözleşmenin kanonik
+    sabitinden (`TEMEL_ALANLAR`), dönem ayağı BELGENİN KENDİ Bölüm B'sinden
+    gelir; ikisi de elle yazılmış bir liste DEĞİLDİR.
+
+    Dönem ayağının belgeden gelmesi bilinçlidir: dönem kümesi açıktır
+    (araştırma kendi dönemlerini seçer), dolayısıyla tek doğrulanabilir bağ
+    "Bölüm C'de gösterilen dönem, Bölüm B'de gerçekten İŞLENMİŞ mi"dir.
+    """
+    return frozenset(
+        [_sadelestir(ad) for ad in TEMEL_ALANLAR] + list(belge.donem_sirasi)
+    )
+
+
+def _c_satir_ihlalleri(satir: str, belge: _Belge) -> list[str]:
+    """Bölüm C'nin TEK bir veri satırının sözleşmeye uygunluğu.
+
+    Ayrı bir fonksiyondur ki mutasyon kolu kuralı SÖKEBİLSİN — kapanış
+    "kontrol var" değil "kontrol GERÇEKTEN eliyor" ile kanıtlanır.
+    """
+    kisa = satir.strip()[:80]
+    hucreler = _hucreler(satir)
+    if len(hucreler) != len(C_TABLOSU_SUTUNLARI):
+        # Sütun sayısı tutmuyorsa hangi hücrenin ne olduğu BİLİNMEZ; hücre
+        # denetimi yapılmaz, yoksa kaydırılmış sütunlar üstünde uydurma not
+        # üretilirdi.
+        return [
+            f"Bölüm C satırı {len(hucreler)} sütunlu — sözleşme "
+            f"{len(C_TABLOSU_SUTUNLARI)} SABİT sütun ister: {kisa!r}"
+        ]
+    mesajlar: list[str] = []
+    for ad, hucre in zip(C_TABLOSU_SUTUNLARI, hucreler):
+        if not hucre:
+            mesajlar.append(f"Bölüm C satırında `{ad}` hücresi BOŞ: {kisa!r}")
+    alan, iddia, _kaynak_adi, url, tarih, tek_kaynak = hucreler
+
+    # Dönem ayağı belgeden geldiği için, Bölüm B HİÇ ayrıştırılamamışsa kapalı
+    # küme yarım kalır ve her dönem satırı haksızca yanlışlanırdı. O hâl AYRI
+    # bir ailenin konusudur (`bolum-ve-alan-tamligi`); aynı arıza iki kez
+    # sayılmaz ve üyelik ayağı o durumda hiçbir şey İDDİA ETMEZ.
+    if belge.donem_sirasi and alan:
+        if _sadelestir(alan) not in _c_gecerli_anahtarlar(belge):
+            mesajlar.append(
+                f"Bölüm C `alan/dönem` hücresi ne bir Bölüm A alan adı ne de "
+                f"Bölüm B'de işlenmiş bir dönem: {alan!r}"
+            )
+    if iddia:
+        kelime = len(iddia.split())
+        if kelime > C_IDDIA_KELIME_UST_SINIRI:
+            mesajlar.append(
+                f"Bölüm C `iddia` hücresi {kelime} kelime — sözleşme en fazla "
+                f"{C_IDDIA_KELIME_UST_SINIRI} kelime ister (iddia ÖZETİDİR, "
+                f"cümlesi değil): {kisa!r}"
+            )
+    if url:
+        if "http://" in url:
+            mesajlar.append(
+                f"Bölüm C `URL` hücresi `http://` bağlantı taşıyor: {url!r}"
+            )
+        elif len(_URL_RE.findall(url)) != 1 or not url.startswith("https://"):
+            mesajlar.append(
+                "Bölüm C `URL` hücresi TEK bir açılabilir `https://` "
+                "bağlantıdan ibaret olmalı (oturum-içi atıf kodu · dipnot "
+                f"numarası · alan adı kısaltması kabul edilmez): {url!r}"
+            )
+    if tarih and tarih != C_TARIH_YOK and not _C_TARIH_RE.match(tarih):
+        mesajlar.append(
+            f"Bölüm C `tarih` hücresi `YYYY-AA` ya da `YYYY-AA-GG` değil; "
+            f"kaynakta tarih görünmüyorsa AYNEN `{C_TARIH_YOK}` yazılır: "
+            f"{tarih!r}"
+        )
+    if tek_kaynak and _sadelestir(tek_kaynak) not in {
+        _sadelestir(deger) for deger in C_TEK_KAYNAK_DEGERLERI
+    }:
+        mesajlar.append(
+            "Bölüm C `tek kaynak` hücresi kapalı kümenin dışında "
+            f"({' / '.join(C_TEK_KAYNAK_DEGERLERI)} beklenir): {tek_kaynak!r}"
+        )
+    return mesajlar
 
 
 def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
-    """Bölüm C ÜÇLÜ eşleme içermeli ve kaynak satırları tam `https://` taşımalı.
+    """Bölüm C SABİT SÜTUNLU bir tablodur; sütunları ve hücreleri denetlenir.
 
-    Sözleşme (pinli `_SABLON.md`, Bölüm C): *"alan/dönem → iddia → kaynak
-    eşlemesi"*. Tur 1 yalnız "bir madde satırı var mı" + `https://` yazımını
-    ölçüyordu; ölçüldü ki Bölüm C'nin tamamı tek ÇIPLAK bağlantı satırına
-    indirilse bile rapor `gecti / 0 not` veriyordu. Artık her eşleme satırının
-    bağlantı DIŞINDA en az iki anlam parçası (alan/dönem ve iddia) taşıması
-    aranır.
+    **Bu kontrol OLUMSUZ ÇIKARIMDAN OLUMLU SÖZLEŞMEYE çevrildi (4. ayak).**
+    Önceki sürüm serbest düzyazıdan *"bu bir eşleme DEĞİL"* sonucunu çıkarmaya
+    çalışıyordu: satırı bir ayıraç vekiliyle (`_C_AYIRAC_RE`) parçalayıp PARÇA
+    SAYISINA bakıyordu. Vekil serbest noktalamayı da ayıraç saydığı için
+    düzyazı kontrolü GEÇİYORDU (ölçüldü: `- Düz yazı, devamı
+    https://example.com/kaynak` → `gecti`, 0 not) ve sertleştirmesi ÜÇ turda
+    yakınsamadı — semantik-negatif bir sınıftır, regex'le kapanmaz.
 
-    **Kapsam sınırı:** bağlantının gerçekten açılıp açılmadığı ölçülmez (ağ
-    çağrısı yapılmaz); ve üçlünün parçalara AYRILDIĞI bir ayıraç vekiliyle
-    (`_C_AYIRAC_RE`) görülür — parçaların ANLAMI (gerçekten alan/dönem mi,
-    gerçekten iddia mı) DOĞRULANMADI.
+    Kök çözüm koda değil SÖZLEŞMEYE yapıldı: `_SABLON.md` artık Bölüm C'yi
+    sabit sütunlu bir tablo olarak İSTİYOR (dış depo `7964ed6`). Kapı bu
+    yüzden hiçbir şey tahmin etmez; olumlu bir yapıyı doğrular — birebir
+    başlık satırı · sütun sayısı · hücre doluluğu · `alan/dönem` kapalı
+    kümesi · `iddia` kelime sınırı · `URL` adres biçimi · `tarih` yazımı ·
+    `tek kaynak` kapalı kümesi.
+
+    **Kapsam sınırı (kalan, gerçek):** bağlantının gerçekten AÇILDIĞI ölçülmez
+    (ağ çağrısı yapılmaz) ve `iddia` hücresinin kaynağı gerçekten ÖZETLEDİĞİ
+    ölçülmez — ikisi de anlam yargısıdır. Bunlar denetçi katmanının işidir;
+    denetçi görev metni ADIM 1'de kaynak başına 3 iddia örnekleyip bağlantıyı
+    GERÇEKTEN açar.
     """
     mesajlar: list[str | _Mesaj] = []
     c_satirlari = belge.bolumler.get("C", [])
-    # KAP iddiası: Bölüm C eşleme KABININ bütünü hakkında bir YOKLUK iddiası,
-    # bir satırın içeriği hakkında değil — ve sözleşme eşlemeyi TABLO satırı
-    # olarak da tanır, dolayısıyla meşru bir tablo eklemek onu HAKLI OLARAK
-    # yanlışlar. Bu yolu tur 6'nın önek listesi KAÇIRMIŞTI: hiçbir bileşim
-    # Bölüm C'yi eşlemesiz-ama-dolu bırakmıyordu, dolayısıyla ölçülmemişti.
-    if any(satir.strip() for satir in c_satirlari) and not belge.c_esleme_satiri_var:
+    if not any(satir.strip() for satir in c_satirlari):
+        # Boş bölüm AYRI bir ailenin konusudur (`bolum-ve-alan-tamligi`);
+        # burada ikinci bir boşluk notu üretmek aynı arızayı iki kez sayardı.
+        return mesajlar
+    if not belge.c_baslik_satiri_var:
         mesajlar.append(
             _kap(
-                "Bölüm C tek bir kaynak eşleme satırı taşımıyor — sözleşme "
-                "alan/dönem → iddia → kaynak eşlemesi ister (madde ya da tablo "
-                "satırı)"
+                "Bölüm C sözleşmenin başlık satırını taşımıyor — sabit sütunlu "
+                "tablo beklenir, AYNEN: `| "
+                + " | ".join(C_TABLOSU_SUTUNLARI)
+                + " |`"
             )
         )
-    for satir in belge.c_esleme_satirlari:
-        if len(_c_esleme_parcalari(satir)) < 2:
-            mesajlar.append(
-                "Bölüm C eşleme satırı ÜÇLÜ değil — sözleşme alan/dönem → "
-                "iddia → kaynak ister, satır bağlantı dışında iki anlam "
-                f"parçası taşımıyor: {satir.strip()[:80]!r}"
+        return mesajlar
+    if not belge.c_veri_satirlari:
+        mesajlar.append(
+            _kap(
+                "Bölüm C tablosu BAŞLIK SATIRINDAN İBARET — tek bir "
+                "iddia→kaynak satırı taşımıyor"
             )
-        if "https://" not in satir:
-            mesajlar.append(
-                "Bölüm C kaynak satırı açılabilir tam bağlantı taşımıyor "
-                f"(oturum-içi atıf kodu / dipnot / alan adı kısaltması kabul "
-                f"edilmez): {satir.strip()[:80]!r}"
-            )
-        if "http://" in satir:
-            mesajlar.append(
-                f"Bölüm C satırı `http://` bağlantı taşıyor: {satir.strip()[:80]!r}"
-            )
+        )
+        return mesajlar
+    for satir in belge.c_veri_satirlari:
+        mesajlar.extend(_c_satir_ihlalleri(satir, belge))
+    mesajlar.extend(_c_kapsama_ihlalleri(belge))
     return mesajlar
+
+
+def _c_kapsama_ihlalleri(belge: _Belge) -> list[str | _Mesaj]:
+    """BÜTÜNLÜK: her alan ve her dönem için en az bir kaynak satırı var mı?
+
+    Bu kontrol ancak sözleşme "İDDİA BAŞINA BİR SATIR" dediği için MÜMKÜN
+    oldu — kaynak başına gruplanmış serbest bir kaynakça bu soruyu makineyle
+    cevaplatmaz. Karar Eray'ındır (2026-09-07, dört sorunun dördüncüsü) ve
+    gerekçesi AYNEN buydu: *"makine 'her alan için kaynak gösterilmiş mi'
+    BÜTÜNLÜK sorusunu tam cevaplayabilsin"*.
+
+    **Kapsanan küme belgeden türer, sabit bir listeden değil:** Bölüm A'nın
+    sekiz alanı (sözleşme sabiti) + Bölüm B'de GERÇEKTEN işlenmiş dönemler.
+    Bölüm B yoksa dönem ayağı boş kalır ve bu kontrol dönem hakkında bir şey
+    İDDİA ETMEZ — eksik bölüm ayrı bir ailenin konusudur.
+
+    Bir KAP iddiasıdır: kabın bütünü hakkında bir YOKLUK söyler ve eksik
+    satırı EKLEMEK onu haklı olarak düşürür.
+    """
+    gorulen = {
+        _sadelestir(_hucreler(satir)[0])
+        for satir in belge.c_veri_satirlari
+        if len(_hucreler(satir)) == len(C_TABLOSU_SUTUNLARI)
+    }
+    eksik = [ad for ad in TEMEL_ALANLAR if _sadelestir(ad) not in gorulen]
+    eksik += [ad for ad in belge.donem_sirasi if ad not in gorulen]
+    if not eksik:
+        return []
+    return [
+        _kap(
+            f"Bölüm C {len(eksik)} alan/dönem için tek bir kaynak satırı "
+            f"taşımıyor: {', '.join(eksik)}"
+        )
+    ]
 
 
 _TICARI_FIRSAT_RE = re.compile(r"ticari[\s_\-]*f[ıi]rsat", re.IGNORECASE)
@@ -2930,26 +3082,30 @@ CHECKS: tuple[Check, ...] = (
         aile="url-bicimi",
         seviye=SEVIYE_NOT,
         aciklama=(
-            "Bölüm C ÜÇLÜ bir eşleme İÇERİR (alan/dönem → iddia → kaynak) ve "
-            "kaynak satırları açılabilir tam `https://` bağlantı taşır"
+            "Bölüm C SABİT SÜTUNLU tablodur: birebir başlık satırı, altı "
+            "sütun, dolu hücreler, açılabilir `https://` adres"
         ),
         kural=_kontrol_url_bicimi,
         kapsam_sinirlari=(
             (
-                "url-bicimi: kaynak eşlemesinin VARLIĞI ve adres BİÇİMİ "
-                "(`https://` yazımı) taranır. Bağlantının gerçekten AÇILDIĞI "
-                "doğrulanmadı — ağ çağrısı yapılmaz. Eşlemenin gerçekten "
-                "alan/dönem → iddia → kaynak ÜÇLÜSÜ olduğu makineyle "
-                "DOĞRULANMADI: yapı bir ayıraç vekiliyle (`_C_AYIRAC_RE`) "
-                "yalnız PARÇA SAYISI olarak ölçülür, parçaların ANLAMI değil. "
-                "Vekil serbest noktalamayı da ayıraç sayar, bu yüzden serbest "
-                "düzyazı bu kontrolü GEÇER — ölçüldü: "
-                "`- Düz yazı, devamı https://example.com/kaynak` → `gecti`, "
-                "0 not. Bu ailenin temiz çıkması Bölüm C'nin üçlü yapıya "
-                "uyduğu anlamına GELMEZ. Kök çözüm sözleşmenin bu bölümü sabit "
-                "sütunlu bir tablo olarak istemesidir ve AYRI bir tasarım işine "
-                "kaydedilmiştir; ayıraç vekilinin SERTLEŞTİRİLMESİ üç turdur "
-                "yakınsamadı ve yanlış-pozitif üretir."
+                "url-bicimi: Bölüm C artık OLUMLU bir yapısal sözleşme olarak "
+                "doğrulanır — sözleşmenin BİREBİR başlık satırı, altı sabit "
+                "sütun, hücre doluluğu, `alan/dönem` hücresinin kapalı kümesi "
+                "(Bölüm A alan adları + Bölüm B'de İŞLENMİŞ dönemler), `iddia` "
+                "hücresinin kelime sınırı, `URL` hücresinin tek açılabilir "
+                "`https://` adresi, `tarih` yazımı ve `tek kaynak` kapalı "
+                "kümesi. Kapı hiçbir şeyi TAHMİN ETMEZ: önceki sürümün ayıraç "
+                "vekili (serbest düzyazının GEÇTİĞİ yol) KALDIRILDI, çünkü "
+                "sözleşme biçimi dayatmaya başladı (dış depo `7964ed6`). "
+                "BÜTÜNLÜK de ölçülür: her alan ve her dönem için en az bir "
+                "kaynak satırı aranır. ÖLÇÜLMEYEN İKİ EKSEN: bağlantının "
+                "gerçekten AÇILDIĞI doğrulanmaz (ağ çağrısı yapılmaz) ve "
+                "`iddia` hücresinin kaynağı gerçekten ÖZETLEDİĞİ doğrulanmaz "
+                "— ikisi de anlam yargısıdır ve denetçi katmanının işidir "
+                "(denetçi ADIM 1'de kaynak başına 3 iddia örnekleyip "
+                "bağlantıyı açar). Bu ailenin temiz çıkması Bölüm C'nin "
+                "BİÇİMİNE uyduğu anlamına gelir, içeriğinin DOĞRU olduğu "
+                "anlamına GELMEZ."
             ),
         ),
     ),
