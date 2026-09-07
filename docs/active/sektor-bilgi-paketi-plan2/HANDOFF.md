@@ -29,8 +29,8 @@ Komut: `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-pla
 > protokolü yalnız Clean/Accepted-risk dallarında koşar. Sonuç fail-safe: sonraki checkpoint'in
 > tabanı `2b468e8d` KALIR ve Task 7'nin bütün commit'lerini kendiliğinden yeniden kapsar.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`. Son commit **`cad705c`**. Uzak **`091dc03`**'te —
-bu oturumun dört commit'i **push EDİLMEDİ**. Ağaç temiz.
+**Dal:** `feat/sektor-bilgi-paketi-plan2`. **PUSH EDİLDİ** (Eray onayı, 2026-09-07); uzak ile
+yerel senkron, ağaç temiz. Son commit için `git log -1` — bu satıra sha YAZILMAZ, drift eder.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit **`7964ed6`**,
 monorepo pin manifesti bu commit'e bağlı.
@@ -162,7 +162,8 @@ monorepo pin manifesti bu commit'e bağlı.
 - **`telegramApi` credential'ının canlı token taşıdığı DOĞRULANMADI** (değişmedi).
 - **CRM webhook onarımı YAPILMADI** — yalnız kapatıldı (değişmedi).
 - PG 18.3 dışında sürüm denenmedi; çok-oturumlu eşzamanlılık denenmedi.
-- Canlıya hiçbir migration dağıtılmadı; pilot koşulmadı. **Dal push EDİLMEDİ.**
+- Canlıya hiçbir migration dağıtılmadı; pilot koşulmadı. Dal PUSH EDİLDİ ama **merge
+  EDİLMEDİ** ve canlıya hiçbir şey dağıtılmadı.
 - Task 8–20 hiç yazılmadı.
 
 # Risks
