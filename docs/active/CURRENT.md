@@ -82,8 +82,11 @@
   turlarının bugün `success` dönmesini beklemek aktif borç DEĞİL. Bilinen durum kayda geçsin:
   düzeltme yapıldı ve tek dolaylı kanıtı var (aynı credential'ı kullanan Postgres düğümü
   başarılı bir çalıştırmada koştu, 2026-08-26) — **zamanlanmış turla doğrulanmadı.**
-  **Yeniden açılma koşulu:** CRM'in bütün olarak ele alınacağı tur — ilk iş o iki günlük turun
-  gerçekten koştuğunu ölçmektir.
+  **O ÖLÇÜM YAPILDI (2026-09-07, n8n çalıştırma geçmişinden):** CRM-4 ve CRM-5'in günlük turları
+  3·4·5·6 Eylül'de **dördü de `success`** döndü. Yani host düzeltmesi artık dolaylı değil
+  doğrudan kanıtlı; bu ayak KAPANDI. **Dikkat:** `success` "Telegram gitti" demek DEĞİLDİR —
+  koşum büyük olasılıkla koşul dalında durdu (müşteri verisi yok).
+  **Yeniden açılma koşulu:** CRM'in bütün olarak ele alınacağı tur.
 
 - **sector-package-assignment-ui-live-verification** (proposed, doğrulama borcu; EVSİZ KALMIŞTI —
   şimdi ikiye bölündü) —
@@ -227,13 +230,44 @@
   **Sınıf kapısı kondu:** `test_no_workflow_file_carries_a_bare_secret` (dizin geneli üretilmiş
   matris) + `test_calendar_sql_escapes_every_interpolated_feed_value` (her enterpolasyon).
   İkisi de mutasyonla sınandı. Test tabanı 963 → 965.
-  **KALAN — canlıya import EDİLMEDİ:** düzeltilmiş iki dosya n8n'e yeniden yüklenmedi, yani canlı
-  workflow'lar hâlâ ölü token'ı taşıyor ve CRM + takvim bildirimleri **şu an sessiz**. Operatör
-  işlemidir. Evi: Plan 2 **Task 18** dağıtım runbook'u (zaten iki değiştirilmiş workflow'un
-  import + aktive adımını taşıyor) — ya da Eray daha önce elle yapar.
+  **KALAN AYAK DA KAPANDI (2026-09-07, Eray onayıyla): canlıya import EDİLDİ.** Yedi workflow
+  (CRM-1..6 + Türkiye Takvimi) n8n API'siyle güncellendi; yükleme gövdesi yalnız `nodes` +
+  `connections` taşıdı, `settings` ve `name` canlıdan korundu. **Ölçüldü (yükleme sonrası, tek
+  tek):** çıplak token **0** · `telegramApi` credential'ı bağlı · yedisi de `active=True`.
+  **Yüklemeden ÖNCE ölçülen iki depo kusuru düzeltildi (`9a46948`), yoksa import canlıyı
+  bozardı:** (a) depo dosyası canlıda var OLMAYAN bir Postgres credential kimliğine (`id=1`)
+  işaret ediyordu — dört CRM workflow'unun veritabanı düğümü credential'sız kalırdı;
+  (b) CRM-3'ün webhook yolu depoda yarım kalmıştı (canlıda alert doğru/reminder yanlış, depoda
+  tam tersi). İki sınıf kapısı eklendi (`624e0b3`): tek postgres credential kimliği · webhook
+  yükünün sarmalayıcı anahtardan okunması.
+  **ÖLÇÜLMEYEN, dürüstçe:** `telegramApi` credential'ının canlı token taşıyıp taşımadığı.
+  Hiçbir koşum Telegram düğümüne ULAŞMADI (CRM'de gerçek müşteri verisi yok), dolayısıyla
+  "bildirimler artık gidiyor" İDDİA EDİLMİYOR — yalnız "ölü token artık hiçbir workflow'da yok".
   **Kapsam sınırı, dürüstçe:** yeni tarama kapısı YALNIZ `shared/n8n-workflows/` klasörüne bakar.
   `docs/archive/CLAUDE_crm_pre_cleanup.md` şu anki ağaçta aynı (artık ölü) token'ı taşıyor ve
   kapı onu görmez. Zararsız ama duruyor.
+
+- **crm-webhooks-unauthenticated-sql-interpolation** (proposed, GÜVENLİK; canlı uç KAPATILDI,
+  onarım AÇIK — tetikli) — CRM webhook'ları (`crm/new-customer` · `crm/plan-upgrade` ·
+  `crm/payment-failed`) **kimlik doğrulaması taşımıyordu** ve `crm/payment-failed`'ın arkasındaki
+  Postgres düğümü gelen `account_id`'yi SQL metnine **düz metin olarak gömüyor**:
+  `INSERT INTO crm.account_tags (...) VALUES ('{{ $json.body.account_id }}', ...)`. Tırnak içeren
+  bir değer bu ifadeden çıkabilir — yani uç, uygulamanın Postgres hesabıyla serbest SQL
+  çalıştırmaya açıktı ve o hesap `social` şemasını da görüyor.
+  **ÖNCEDEN VAR OLAN yüzey, 2026-09-07 partisinin ürünü DEĞİL:** canlı workflow zaten çalışan
+  credential'ı taşıyordu (ölçüldü, yükleme öncesi) ve SQL düğümü depo ile canlıda bayt-aynıydı.
+  Checkpoint 5 hakemi bunu high olarak gösterdi, kontrolör canlıda doğruladı.
+  **Ölçüldü (2026-09-07, salt-okunur prob):** üç uç da herkese açık cevap veriyordu
+  (`GET` → "bu webhook GET için kayıtlı değil, POST mu demek istediniz?").
+  Karşılaştırma: `sector-package-admin-events` `headerAuth` taşıyor — doğru desen projede zaten var.
+  **YAPILAN (Eray kararı 2026-09-07): üç workflow canlıda PASİFE ALINDI.** Doğrulandı: üçü de
+  `active=False` ve `POST` artık `404` dönüyor. İşlevsel kayıp YOK — n8n çalıştırma geçmişinde
+  bu üç workflow'un **sıfır** koşumu var.
+  **AÇIK KALAN — çözülmedi:** gerçek onarım (header auth credential'ı + parametreli sorgu +
+  backend'in `billing.py` çağrısına başlığı eklemesi). Pasifleştirme bir **kapatmadır**,
+  düzeltme değil.
+  **Ev / tetik:** CRM'in bütün olarak ele alınacağı tur — CRM yeniden aktive edilmeden ÖNCE bu
+  üç kalem yapılmak ZORUNDA; aksi hâlde aktive etmek ucu geri açar.
 
 - **telegram-approval-token-in-query-string** (proposed, güvenlik; TETİKLİ — bugün aktif borç
   DEĞİL) — `telegram-content-approval.json` onay/ret düğmelerinin adresini kurarken müşterinin
@@ -290,8 +324,7 @@
   (b) elle uygulanmış bir migration bir olayda kök sebep çıkarsa — o zaman ilk bakılacak
   yer bu kalemdir.
 
-- **migration-ddl-object-identity-class** (proposed, veri bütünlüğü / dağıtım; TETİKLİ —
-  bugün aktif borç DEĞİL) — Bir migration, katalog nesnesini yalnız ADIYLA arayıp koşulsuz
+- **migration-ddl-object-identity-class** (KAPANDI 2026-09-07 — sınıf beş dosyada da kapatıldı) — Bir migration, katalog nesnesini yalnız ADIYLA arayıp koşulsuz
   yazarsa (`CREATE OR REPLACE FUNCTION`) ya da düşürürse (`DROP TRIGGER IF EXISTS`), aynı adı
   taşıyan **YABANCI** bir nesneyi sessizce devralır: fonksiyon kimliği korunduğu için ona bağlı
   başka bir tetikleyici ANINDA bizim gövdemizi çalıştırmaya başlar. Kapalı manifest bunu
@@ -307,10 +340,21 @@
   `pg_get_triggerdef` kullanımı YAZIMDAN SONRAKİ manifesttir, yani tam da bu sınıfın kör noktası.
   **Bugün neden acil değil:** kayan/kirlenmiş bir şema gerektiriyor ve hiçbir şey henüz gerçek
   bir ortama uygulanmadı. Ama "uygulanmadı" bir güvence değil, yalnız bugünkü durum.
-  **Dürüst etiket: çözülmedi + park edildi, EVİ YOK.** Reflekssel olarak Task 18'e yapıştırmak
-  sahte ev olurdu — o görev dağıtım runbook'u yazıyor, beş migration'ı yeniden yazmıyor.
-  **Yeniden açılma koşulu / tetik:** (a) bu beş dosyadan birine dokunan bir sonraki iş, VEYA
-  (b) canlıya ilk gerçek dağıtımdan ÖNCE — orada şema artık paylaşılan bir yüzeydir.
+  **KAPANDI (2026-09-07, `9c69547` + `122867d`; test tabanı `c62e74a`).** Beş dosyanın hepsine
+  kapı kondu. Kanonik sabitler elle yazılmadı: 032'nin fonksiyon gövdeleri dosyanın kendi
+  metninden, tetikleyici tanımları dosyanın KENDİ `$verify$` bloğundan, geri alma kapsamı da
+  down dosyasının kendi `DROP` satırlarından türetildi.
+  **Sınıf kapatıldı, varyant değil:** yeni test modülü dosya listesini de nesne listesini de
+  KAVRAMDAN türetir — kapısız bir migration eklendiği an kırmızı düşer. Mutasyon kolu kapının
+  varlığını değil ETKİSİNİ ölçüyor ve zararın iki biçimini ayırıyor: fonksiyonu YAZAN dosya
+  yabancı gövdeyi ezer; ona yalnız BAĞLANAN dosya (023 · 026) kendi tetikleyicisini yabancı
+  gövdeye bağlar.
+  **Kalan sınır, dürüstçe:** kapı SIFIR argümanlı adı denetler (farklı imzalı aşırı yükleme
+  kapsam dışı, gerekçesi yazılı); `rollback/032_down`'da kapı `DROP TABLE` satırlarından SONRA
+  gelir (tek transaction olduğu için ret hiçbir adımı kalıcı bırakmaz, ama sıra "en başta"
+  değildir); çıplak `psql -f` altında `ON_ERROR_STOP` yoksa erken deyimler kalıcı olabilir —
+  o ayrı bir parked kalem (`migration-atomicity-outside-035`).
+  Taze ölçüm: tam takım **1493 passed in 548.28s**, exit 0 (taban 1452, düşmedi).
 
 <!-- Son kapanan: codex-review-scope-contract → done 2026-06-04, arşiv docs/task-archive/2026/06/ -->
 
