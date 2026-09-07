@@ -1438,6 +1438,14 @@ CIT_BAGLAM_BICIMLERI: tuple[tuple[str, str, str], ...] = (
     ("yıldız madde (`* `)", "* ", "  "),
     ("artı madde (`+ `)", "+ ", "  "),
     ("sıralı liste (`1. `)", "1. ", "   "),
+    # Tur 12 — AÇILIŞ GİRİNTİSİ ile GÖVDE GİRİNTİSİ AYRI boyutlardır. Tur 11'e
+    # dek her bağlam gövdeyi açıcının girintisiyle yazıyordu, dolayısıyla eksen
+    # "kök düzeyinde açılmış ama gövdesi girintisiz çit" bileşimini HİÇ
+    # üretmiyordu — 96 hücrelik yapısal matris bu yüzden yeşil kalıyordu.
+    # CommonMark 0-3 boşluklu açıcıyı kök sayar ve gövdesinden girinti İSTEMEZ
+    # (`_kapsayici_sutunu`).
+    ("bir boşluk kök (gövde girintisiz)", " ", ""),
+    ("üç boşluk kök (gövde girintisiz)", "   ", ""),
 )
 # AYIRAÇ BİÇİMLERİ — CommonMark İKİ ayıraç karakteri ve EN AZ üç uzunluk tanır;
 # tur 9'a dek yalnız üçlü backtick egzersiz ediliyordu.
@@ -1489,6 +1497,16 @@ def _cit_kapsam_beyani() -> str:
         "satırla BİTER — uzaktaki bir kök ayıracı onun kapatıcısı DEĞİLDİR "
         "(ölçüldü: `- ```python` → girintili gövde → kabı bitiren kök paragraf → "
         "kökte DİLSİZ çit bileşimi, eski makinede İKİ notu birden KALDIRIYORDU). "
+        "**DÜZELTİLMİŞ BEYAN (tur 12) — KAP ÜYELİĞİ GİRİNTİ DEĞİLDİR.** Tur 11 "
+        "kap sütununu ham girintiye eşitliyor ve kapatıcıyı kap kontrolünden "
+        "ÖNCE sınıyordu; ikisi de ÖLÇÜLMÜŞ fail-open'dı ve `2 not -> 0 not` "
+        "verdi: (a) `  ``` ` ile KÖKTE açılıp gövdesi GİRİNTİSİZ olan çit ilk "
+        "gövde satırında kapanmış sanılıyor, içindeki sahte başlık YAPI "
+        "kuruyordu; (b) kap içinde açılan çidin hemen ardından gelen BİTİŞİK kök "
+        "ayıracı kapatıcı sanılıyor, sonrası maskesiz kalıyordu (o hücrede toplam "
+        "not 2'den 16'ya ÇIKARKEN gerçek iki not KAYBOLUYORDU — sayı bunu gizler). "
+        "Kap üyeliği artık `_kapsayici_sutunu`'ndan türer (CommonMark: 0-3 "
+        "boşluklu açıcı KÖKTÜR) ve KAP kontrolü kapatıcıdan ÖNCE koşar. "
         "KÖK düzeyinde açılan kapanmamış çit için hiçbir satır kabı bitiremez ve "
         "çit FAIL-CLOSED olarak BELGE SONUNA kadar düşer; bunun ÖLÇÜLMÜŞ bedeli "
         "şudur: belgenin geri kalanı görünmez olduğu için SAYIM taşıyan bir not "
@@ -1653,19 +1671,29 @@ def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
     for satir in satirlar:
         cit = _KOD_CITI_RE.match(satir)
         if acik_isaret is not None:
-            if cit and _kapatici_mi(cit, acik_isaret):
+            # SIRA ÖNEMLİ (tur 12): KAP kontrolü kapatıcı kontrolünden ÖNCE
+            # koşar. Tersi ölçülmüş bir fail-open'dı: `- ```python ` ile açılan
+            # çidin hemen ardından gelen KÖK düzeyi ayıraç, araya kabı bitiren
+            # bir satır girmediği için kapatıcı sanılıyordu. CommonMark önce
+            # KABI bitirir ve kök ayıracını YENİ bir çit açıcısı sayar; eski
+            # sırada sonraki sahte başlık maskesiz kalıyor ve yuva
+            # SAHTELEYEBİLİYORDU (mesaj kümesi: iki gerçek not KAYBOLURKEN
+            # toplam 2'den 16'ya çıkıyordu — sayı bu kaybı GİZLER).
+            if _kapsayici_kirildi(satir, acik_sutun):
+                # KAP BİTTİ: çitin kapsamı burada biter ve BU satır çit
+                # DIŞIDIR — kendisi yeni bir açıcı OLABİLİR, aşağıdaki dala
+                # düşer.
+                acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
+            elif cit and _kapatici_mi(cit, acik_isaret):
                 maske.append(acik_dilsiz)
                 acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
                 continue
-            if not _kapsayici_kirildi(satir, acik_sutun):
+            else:
                 maske.append(acik_dilsiz)
                 continue
-            # KAP BİTTİ: çitin kapsamı burada biter ve BU satır çit DIŞIDIR —
-            # kendisi yeni bir açıcı OLABİLİR, aşağıdaki dala düşer.
-            acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
         if cit:
             acik_isaret = cit.group(2)
-            acik_sutun = _girinti_sutunu(cit.group(1))
+            acik_sutun = _kapsayici_sutunu(cit.group(1))
             acik_dilsiz = not cit.group(3)
             maske.append(acik_dilsiz)  # DİLSİZ açıcı düşer
             continue
@@ -1686,6 +1714,39 @@ def _kapatici_mi(cit: re.Match[str], acik_isaret: str) -> bool:
 def _girinti_sutunu(onek: str) -> int:
     """Bir önekin SÜTUN genişliği (sekme dörde açılır)."""
     return len(onek.expandtabs(4))
+
+
+# CommonMark 0.30 §4.5: bir kod çiti açıcısı ÜÇ boşluğa kadar girintilenebilir ve
+# hâlâ KÖK düzeyindedir; gövdesinden aynı girintiyi İSTEMEZ. Dört sütun kod
+# girintisi eşiğidir ve artık kap sayılır.
+_KOK_GIRINTI_TAVANI = 3
+
+
+def _kapsayici_sutunu(onek: str) -> int:
+    """Açıcının KAP sütunu — ham GİRİNTİ değil, KAPSAYICI üyeliği.
+
+    Tur 11'e dek kap sütunu ham girintiye eşitti ve bu İKİ ayrı soruyu
+    karıştırıyordu: bir satırın ne kadar girintili olduğu ile bir KABIN İÇİNDE
+    olup olmadığı. CommonMark kök düzeyinde 0-3 boşluklu açıcıya izin verir ve
+    gövdesinin aynı girintiyi taşımasını ŞART KOŞMAZ; ham girintiyi kap sanan
+    makine ilk girintisiz gövde satırında kabın bittiğini sanıyor, maskeyi
+    ERKEN kapatıyor ve çitin içindeki sahte başlık YAPI KURABİLİYORDU.
+
+    Ölçüldü (tur 12, mesaj KÜMESİ farkıyla): belgeden silinen `cta_kaliplari`
+    alanı, `  ``` ` ile açılan ve gövdesi GİRİNTİSİZ olan bir çit içine konan
+    sahte `### cta_kaliplari` başlığıyla `notlu-gecti / 2 not` -> `gecti / 0 not`
+    oluyordu.
+
+    Kap üyeliği yalnız İKİ yoldan doğar: açıcı bir LİSTE İŞARETİ taşır (önek
+    boşluktan ibaret DEĞİLDİR), ya da girinti kod eşiğine (4 sütun) ulaşır.
+    Belirsizlik KAP LEHİNE değil, MASKELEME lehine çözülür: fazla maskelemek
+    olmayan bir yapıyı gizler (not EKLER, fail-closed), eksik maskelemek ise
+    sahte yapı KURDURUR (not KALDIRIR, fail-open).
+    """
+    sutun = _girinti_sutunu(onek)
+    if not onek.strip() and sutun <= _KOK_GIRINTI_TAVANI:
+        return 0
+    return sutun
 
 
 def _kapsayici_kirildi(satir: str, acik_sutun: int) -> bool:
