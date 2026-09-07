@@ -274,7 +274,7 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
   Sözleşme sabitleri (sekiz alan adı · dört tür etiketi · dört kanal anahtarı · beş bölüm harfi)
   elle yazılmadı: testte pinli sözleşmeden hash doğrulanarak çıkarılıyor.
 
-- **CHECKPOINT 6 KOŞTU — ÜÇ Codex turu, taban `2b468e8d`.** Aralık checkpoint 5'in kapanış
+- **CHECKPOINT 6 KOŞTU — SEKİZ Codex turu, taban `2b468e8d`.** Aralık checkpoint 5'in kapanış
   belgelerini de içeriyordu (mutasyon protokolü gereği `last_checkpoint_ref` yazımdan ÖNCEKİ
   HEAD'e set edilir), yani o iki commit de ilk kez hakem gördü.
   **Tur 1:** 2 high + 1 medium. **Tur 2:** F1/F2 yeniden açıldı (yeni alt-vakalar) + 2 medium.
@@ -288,15 +288,39 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
   sunuldu. **Eray kararı (2026-09-07): kapanabilirler kapatılsın, kapanamayan kalem dürüstçe
   ilan edilsin, kök çözüm ayrı iş olarak kaydedilsin.**
 
-- **Dört düzeltme turu indi — altı commit** (`295617b` `3e797bf` · `046fc1b` `ce69294` ·
-  `27e087b` `73451c9`). Kapanan **sınıflar** (varyant değil):
-  · **kaynak kimliği:** hiç yok → birebir ad tekrarı → kanonik ad+içerik denkliği (66 hücrelik
-    üretilmiş takma-ad matrisi) → özetsiz rapor K-127 sayımına GİRMEZ.
-  · **iç içe koleksiyonda tekrar/sıra kaybı:** bölüm+alan → dönem/video havuzu/kaynak eşlemesi;
-    9 düzey × 3 bozulma matrisi, 5 hücre GEREKÇELİ boş.
-  · **kapsam beyanı:** yoktu → çağıran uydurabiliyordu → `CHECKS`'ten türeyen `init=False` alan.
-  · **gerekçe tablosu tanıma:** yoktu → "ilk bitişik tablo" (önüne sahte tablo konunca
-    gizleniyordu) → kanonik başlık + belirsizlik notu.
+- **TUR 4-8: BEŞİ DE `approve`.** Eray "codex sayısı önemli değil, task'lar eksiksiz bitsin" dedi
+  ve zincir sürdürüldü. Her tur `approve` + TEK medium verdi, her medium bir öncekinden dar —
+  salınım değil yakınsama. **Tur 7'de kontrolörün "her şey mekanik olarak kapandı" iddiası
+  hakem tarafından KANITLA REDDEDİLDİ:** kalan açıkların bir kısmı mekanik olarak kapatılabilir,
+  hiçbiri high değil. İddia düzeltildi.
+
+- **ON DÖRT düzeltme turu indi.** Kapanan sınıflar, hepsi kontrolörün KENDİ probuyla doğrulandı:
+  · **kaynak kimliği** — hiç yok → birebir ad → kanonik ad+içerik denkliği → özetsiz rapor sayılmaz.
+  · **iç içe koleksiyonda tekrar/sıra kaybı** — bölüm+alan → dönem/havuz/eşleme; üretilmiş matris.
+  · **kapsam beyanı** — çağıran uydurabiliyordu → `CHECKS`'ten türeyen `init=False` alan.
+  · **yem tablonun gerçek tabloyu gizlemesi** — BEŞ tur sürdü. Kök neden bir **fail-open geri
+    dönüş**tü; kaldırıldı ve yerine bir **DEĞİŞMEZ** kondu: *"tablo eklemek var olan notu
+    kaldıramaz"*, ilkeli istisnası yapısal (`kap_iddiasi_mi`), mesaj metnine DEĞİL.
+  · **bulgu sınıflandırması** — mesaj önekine dayalıydı ve iki yönde de kırıldığı ölçüldü →
+    her bulgu kategorisini üretildiği yerden taşır; beyan edilmeyen yol fail-closed bloğa-ait.
+  · **kod çiti** — dilsiz çit kabı dolduruyordu → doluluk, sonra KARDEŞ SİTELER (adet sayımı ·
+    bölüm boşluğu · eşleme · tablo tanıma), sonra bağlam (madde altı · girintili · tilde ·
+    dört backtick), en sonunda **ayrıştırmanın tamamı**.
+  · **çit içinde başlık → TAM YUVA SAHTECİLİĞİ** — belgeden tamamen silinmiş bir alan, dilsiz
+    çit içine konan sahte başlık + maddelerle dolu ve eksiksiz gösterilebiliyordu (ölçüldü:
+    `notlu-gecti/2 not` → `gecti/0 not`). Çit maskesi artık belgenin TAMAMI üstünde, BİR KEZ,
+    **ayrıştırmadan ÖNCE** hesaplanıyor.
+
+- **BAYAT BEYAN ALTI KEZ YAKALANDI.** Kapsam beyanları ölçümle yalanlandıkça düzeltildi; sonunda
+  envanterin KENDİSİ tripwire'a çevrildi (ilan edilen her açık biçim için, o biçimin gerçekten
+  not kaldırdığını uçtan uca ölçen bir test). **Kontrolörün Eray'a aktardığı bir iddia da
+  yanlıştı ve düzeltildi:** `baslik-ve-bolum-tanima` yolunun "fail-closed, yalnız not ekler"
+  olduğu söylenmişti; ölçüm NOT KALDIRDIĞINI gösterdi.
+
+- **KONTROLÖRÜN ÖNERİSİ/TEŞHİSİ ALTI KEZ ÖLÇÜMDE YANLIŞ ÇIKTI, KENDİ PROBU DÖRT KEZ YANILTTI.**
+  Prob hataları: fazla masum vaka · boş gövdeli çit (gövdeli olanı kaçırdı) · not SAYISI
+  karşılaştırması (küme yerine) · yanlış yuva tipinde deneme. Üçünde de ilk okuma "sorun yok"
+  diyordu. **Ders: kapanış SAYIYLA değil mesaj KÜMESİ farkıyla kanıtlanır.**
 
 - **Kontrolörün önerileri bu turda İKİ KEZ daha ölçümde yanlış çıktı** (görevdeki toplam beşe
   çıktı): (1) "kapsam sınırını bulgu olarak rapora düş" dedim — uygulayıcı ölçtü, o çözüm HER
@@ -470,7 +494,7 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
 
 # Open Problems
 
-- **[checkpoint-override turn 3] Bölüm C'nin üçlü yapısı makineyle doğrulanmıyor (high, RİSK
+- **[risk kabulü — Eray onayı] Bölüm C'nin üçlü yapısı makineyle doğrulanmıyor (high, RİSK
   KABULÜ — Eray onayı 2026-09-07).** Mekanik girdi kapısı, kaynak eşlemesinin gerçekten
   `alan/dönem → iddia → kaynak` üçlüsü olduğunu serbest düzyazıdan çıkaramıyor. Ölçüldü:
   `- Düz yazı, devamı https://example.com/kaynak` → `gecti`, 0 not. Üç hakem turunda yakınsamadı
@@ -490,15 +514,30 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
   **Bu kalem, o görev kapanınca KAPATILIR** — ve kapanışta Task 7'nin kapsam beyanı da kalkmalı,
   yoksa bayat beyan denetçiyi yanıltır.
 
-- **[checkpoint-override turn 3] Uydurma içerik özeti kapıyı geçebiliyor (medium, kabul).**
+- **[risk kabulü] Uydurma içerik özeti kapıyı geçebiliyor (medium, kabul).**
   Biçimi geçerli ama `run`'ın üretmediği bir özet yazan doğrudan-kurucu K-127 tabanını geçiyor
   (ölçüldü: `dur=False gecerli=2`). Metne sahip olmayan çağıran için kapatılamaz; beyan edildi.
   **Bugün depoda böyle bir çağıran YOK** (kontrolör taradı). Yeniden açılma koşulu: Task 9 ya da
   Task 12 `run` yolunu atlayan bir rapor kurucusu eklerse.
 
-- **[checkpoint-override turn 3] Kanonik gerekçe-tablosu başlığı taklit edilebilir (low, kabul).**
-  Sahte tablo kanonik başlığı taşırsa aday sayısı 2 olur: belirsizlik notu düşer ve iki tablo da
-  denetlenir — **gizlenme YOK** — ama hangisinin gerçek olduğu doğrulanmadı.
+- **Kanonik gerekçe-tablosu başlığı taklit edilebilir (low, kabul).** Belirsizlik notu düşer ve
+  dönem öncesindeki BÜTÜN tablolar denetlenir — **gizlenme YOK** (ölçüldü, üretilmiş matrisle) —
+  ama hangisinin gerçek olduğu doğrulanmıyor.
+  **NOT: bu kalemin bir önceki yazımı YANLIŞTI.** "Aday 2 olur, gizlenme yok" deniyordu; ölçüm
+  gerçek tablonun başlığı eşiğin ALTINDAYSA aday sayısının 1 kaldığını ve gizlenmenin
+  GERÇEKLEŞTİĞİNİ gösterdi. Seçim tamamen bırakıldı, sonra bir DEĞİŞMEZ kondu.
+
+- **Sözleşme-biçimli ama ALAKASIZ içerik kabı doldurur (kabul, SEMANTİK — kapatılamaz).**
+  Bir düz yazı satırının o alanla ilgili olup olmadığı makineyle ölçülemez. Hakem tur 7'de bunu
+  "gerçekten semantik" diye sınıflandırdı. Aynı sınıf: dilli kod çiti · blockquote · HTML bloğu
+  hâlâ kabı doldurur — bunlar mekanik olarak kapatılabilir ama daraltmanın gerçek çıktıdaki
+  yanlış-pozitif maliyeti ÖLÇÜLEMEDİ (o biçimde üretilmiş gerçek çıktı yok). Envanter tripwire'ı
+  bu kalemleri sabitliyor: biri kapatılırsa test kırılır ve beyan güncellenmek zorunda kalır.
+
+- **Düzey 1-2 ara başlık Bölüm B'yi kapatır (kabul, gürültülü ama SESSİZ DEĞİL).**
+  Ölçüldü: 63 başlık enjeksiyonunun **sıfırı** raporu temiz yapabildi; kaybolan bloğa-ait notların
+  yerine gürültülü küme notları geliyor. Hakem tur 6'da bağımsız olarak aynı 63 enjeksiyonu
+  tekrarladı ve aynı sonucu aldı. Kapatmak bölüm tanımayı markdown düzeyinden koparmayı ister.
 
 - **Task 1'in üç Minor bulgusu Task 2'de KAPANDI** (`1186d44`): depo-yok kapısı artık kendi
   sebebine assert ediyor · `_head_commit` çözümlemeyi verilen köke sabitliyor · hiçbir sözleşme
