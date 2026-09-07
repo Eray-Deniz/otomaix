@@ -2455,3 +2455,419 @@ def test_bolum_c_uclusu_serbest_duzyaziyla_gecer_ve_beyan_bunu_soyler() -> None:
     assert "serbest düzyazı" in beyan
     assert "DOĞRULANMADI" in beyan
     assert "ÜÇLÜSÜ" in beyan or "ÜÇLÜ" in beyan
+
+
+# ─── H7: EKLEME DEĞİŞMEZİ — tablo eklemek not KALDIRAMAZ ───────────────────
+#
+# Bu sınıf ALTINCI turdur ve önceki beş turun beşi de bir KURAL yazdı:
+#   v1 tanıma yok · v2 ilk bitişik tablo · v3 kanonik başlıklı aday ·
+#   v4 seçimi bırak (dönem-öncesi hepsi) · v5 sınırı ilk dönem başlığına çek.
+# Her kural, kendi kalıbına uyan yeni bir BİLEŞİMLE kandırıldı. Altıncı kural
+# YAZILMAZ; onun yerine bir DEĞİŞMEZ konur:
+#
+#   **Bir belgeye tablo EKLEMEK, o belgenin zaten ürettiği notları KALDIRAMAZ.**
+#
+# Bu bir sezgisel değil bir ÖZELLİKTİR: hangi sınır kuralı yürürlükte olursa
+# olsun geçerlidir ve yeni bileşimlerle kandırılamaz, çünkü test bileşimleri
+# ÜRETİR ve özelliği doğrular.
+#
+# **İstisna MUTLAK DEĞİL, İLKELİDİR.** "Hiçbir not kaybolamaz" YANLIŞ bir
+# ifadedir: meşru bir gerekçe tablosu eklemek "gerekçe tablosu YOK" notunu
+# HAKLI OLARAK kaldırır. Kapsam İLKEDEN türer: bir ekleme yalnız KENDİ
+# VARLIĞININ YANLIŞLADIĞI iddiaları düşürebilir — bunlar bir BLOĞA ait değil,
+# KÜMENİN bütünü hakkındaki YOKLUK iddialarıdır ("kapta içerik yok" · "gerekli
+# yerde tablo yok"). Bir bloğun KENDİ içeriği hakkındaki iddialar (satırı ·
+# sütunu · başlığı) istisnanın DIŞINDADIR: o blok hâlâ oradadır. Kapalı liste
+# modülün SÖZLEŞMESİDİR (`bd.kume_iddiasi_mi`), testin elle yazdığı
+# bir liste DEĞİL.
+#
+# Değişmez İKİ katmanda ölçülür:
+#   Katman 1 — YAPISAL, istisnasız: `_gerekce_tablosu` MONOTONdur (blok
+#              eklemek denetim kümesinden blok ÇIKARAMAZ). Üretilmiş BLOK
+#              dizileri üstünde ölçülür.
+#   Katman 2 — DAVRANIŞSAL, ilkeli istisnalı: üretilmiş BELGE bileşimleri
+#              üstünde `öncekiNotlar - sonrakiNotlar ⊆ istisna`.
+
+
+# ── Katman 1: `_gerekce_tablosu` MONOTONdur ────────────────────────────────
+#
+# Blok modeli fonksiyonun KENDİ imzasından okunur: bir blok
+# `(sıra, satır, dönem_sonrası)` üçlülerinden oluşur ve fonksiyon kararını
+# YALNIZ `blok[0][2]`'ye (konum) bakarak verir. Blok TÜRLERİ bu iki bitten
+# türer: konum (dönem öncesi · sonrası) × başlık (kanonik · jenerik).
+
+_BLOK_TURLERI = tuple(
+    itertools.product((False, True), (False, True))
+)  # (dönem_sonrası, kanonik_başlık)
+
+
+def _sentetik_blok(kimlik: int, donem_sonrasi: bool, kanonik: bool) -> list:
+    """Ayrıştırıcının ürettiği blok biçiminde sentetik bir tablo bloğu."""
+    baslik = (
+        "| dönem | karar | tür | gerekçe |" if kanonik else "| a | b | c | d |"
+    )
+    govde = [baslik, "|---|---|---|---|", f"| kimlik-{kimlik} | x | y | z |"]
+    return [(0, satir, donem_sonrasi) for satir in govde]
+
+
+def _sira_ver(bloklar: list) -> list:
+    """Blokları BİTİŞİK OLMAYACAK biçimde numaralandırır (blok birimi korunur)."""
+    sirali, s = [], 0
+    for blok in bloklar:
+        sirali.append([(s + i, satir, bayrak) for i, (_, satir, bayrak) in enumerate(blok)])
+        s += len(blok) + 1
+    return sirali
+
+
+def _blok_kimlikleri(bloklar) -> set:
+    return {blok[-1][1] for blok in bloklar if blok}
+
+
+def _monotonluk_bilesimleri():
+    """Taban dizi × eklenen blok türü × ekleme KONUMU — hepsi üretilir."""
+    for uzunluk in range(0, 4):
+        for turler in itertools.product(_BLOK_TURLERI, repeat=uzunluk):
+            taban = [
+                _sentetik_blok(i, sonrasi, kanonik)
+                for i, (sonrasi, kanonik) in enumerate(turler)
+            ]
+            for ek_sonrasi, ek_kanonik in _BLOK_TURLERI:
+                ek = _sentetik_blok(99, ek_sonrasi, ek_kanonik)
+                for yer in range(uzunluk + 1):
+                    yield taban, ek, yer
+
+
+MONOTONLUK_BILESIMLERI = tuple(_monotonluk_bilesimleri())
+
+
+def _monotonluk_ihlali(taban, ek, yer, fonksiyon=None) -> str:
+    fonksiyon = fonksiyon or bd._gerekce_tablosu
+    once, _ = fonksiyon(_sira_ver(taban))
+    sonra, _ = fonksiyon(_sira_ver(taban[:yer] + [ek] + taban[yer:]))
+    kayip = _blok_kimlikleri(once) - _blok_kimlikleri(sonra)
+    return f"ekleme kümeden blok ÇIKARDI: {sorted(kayip)}" if kayip else ""
+
+
+def test_gerekce_tablosu_denetim_kumesi_monotondur() -> None:
+    """Katman 1 — İSTİSNASIZ: blok eklemek denetim kümesinden blok çıkaramaz."""
+    ihlaller = [
+        f"uzunluk={len(taban)} yer={yer} ek={ek[0][1]!r}: {iz}"
+        for taban, ek, yer in MONOTONLUK_BILESIMLERI
+        if (iz := _monotonluk_ihlali(taban, ek, yer))
+    ]
+    assert ihlaller == [], ihlaller[:5]
+
+
+def _v4_geri_donusu(bloklar):
+    """Mutasyon: v4'ün fail-open geri dönüşü — dönem-öncesi boşsa HEPSİ."""
+    donem_oncesi = [blok for blok in bloklar if blok and not blok[0][2]]
+    if donem_oncesi:
+        return donem_oncesi, len(donem_oncesi)
+    return list(bloklar), 0
+
+
+def test_monotonluk_kolu_mutasyona_duyarli_ve_bos_kume_degil() -> None:
+    """Mutasyon + boş-küme kolu: geri dönüşü geri koy → monotonluk KIRILSIN."""
+    # Boş-küme kolu: bileşim uzayı gerçekten ÜRETİLDİ mi?
+    assert len(MONOTONLUK_BILESIMLERI) == sum(
+        len(_BLOK_TURLERI) ** n * len(_BLOK_TURLERI) * (n + 1) for n in range(4)
+    ) == 1252, len(MONOTONLUK_BILESIMLERI)
+    # ...ve taban dizilerin bir kısmı GERÇEKTEN boş-olmayan bir küme üretiyor.
+    dolu = sum(
+        1
+        for taban, _, _ in MONOTONLUK_BILESIMLERI
+        if bd._gerekce_tablosu(_sira_ver(taban))[0]
+    )
+    assert dolu > 0, "hiçbir taban dizi denetim kümesi üretmiyor — kol BOŞA yeşil"
+    # Mutasyon kolu.
+    kirilan = [
+        f"uzunluk={len(taban)} yer={yer}"
+        for taban, ek, yer in MONOTONLUK_BILESIMLERI
+        if _monotonluk_ihlali(taban, ek, yer, _v4_geri_donusu)
+    ]
+    assert kirilan, "v4 geri dönüşü monotonluğu KIRMADI — mutasyon ölçmüyor"
+
+
+# ── Katman 2: BELGE bileşimleri ────────────────────────────────────────────
+#
+# Eksenler ayrıştırıcının KENDİ belge modelinden türer, bulunan örneklerden
+# DEĞİL. Beş turun her biri tek bir ekseni tek başına oynattığı için delik
+# BİLEŞİMDE kaldı; bu yüzden eksenler ÇAPRAZ çarpılır.
+
+# Eksen 1 — ara başlığın markdown DÜZEYİ. Ayrıştırıcının iki rejimi vardır ve
+# sınır `_UST_BASLIK_RE`'nin KENDİ deseninden okunur (elle sayılmaz): düzey
+# 1..N bölüm KAPATIR, N+1 ve üstü bölüm İÇİ sayılır. Her rejimden iki değer.
+_UST_SINIR = int(re.search(r"#\{1,(\d+)\}", bd._UST_BASLIK_RE.pattern).group(1))
+ARA_BASLIK_DUZEYLERI = (1, _UST_SINIR, _UST_SINIR + 1, _UST_SINIR + 2)
+
+# Eksen 2 — ara başlığın YERİ: gerçek tablonun iki yanı, ya da hiç yok.
+ARA_BASLIK_YERLERI = ("yok", "tablo-oncesi", "tablo-sonrasi")
+
+# Eksen 3 — `_ilk_donem_baslangici`'nın İKİ dalı.
+ILK_DONEM_BASLIGI = ("var", "yok")
+
+# Eksen 4 — eklenen tablonun YERİ: ayrıştırıcının Bölüm B işaretlerinden türer
+# (bölüm başı · gerçek tablonun iki yanı · ilk dönem yuvasının içi).
+YEM_YERLERI = ("bolum-b-basi", "tablo-oncesi", "tablo-sonrasi", "donem-icinde")
+
+# Eksen 5 — eklenen tablonun BAŞLIĞI (`_EK_TABLOLAR`'dan; ikinci liste yok).
+YEM_BASLIKLARI = tuple(_EK_TABLOLAR)
+
+# Eksen 6 — GERÇEK gerekçe tablosunun durumu (`_GERCEK_TABLO_DURUMLARI`).
+
+
+def _b_bolgesi(satirlar: list[str]) -> tuple[int, int]:
+    """Bölüm B'nin FİZİKSEL satır aralığı (`## Bölüm B` → `## Bölüm C`).
+
+    Ayrıştırıcının BÖLÜMLEMESİ kullanılamaz: bileşimlerin bir kısmı Bölüm B'yi
+    bilerek kapatan (düzey 1-2) bir ara başlık taşır ve o hâlde ayrıştırıcı
+    tabloyu Bölüm B'de GÖRMEZ — ekleme yine de fiziksel olarak oraya yapılır.
+    """
+    bas = next(i for i, s in enumerate(satirlar) if s.startswith("## Bölüm B"))
+    son = next(i for i, s in enumerate(satirlar) if s.startswith("## Bölüm C"))
+    return bas, son
+
+
+def _gercek_tablo_araligi(satirlar: list[str]) -> tuple[int, int]:
+    """Bölüm B'deki İLK bitişik `|` bloğu — gerçek gerekçe tablosu."""
+    bas, son = _b_bolgesi(satirlar)
+    izler = [i for i in range(bas, son) if satirlar[i].lstrip().startswith("|")]
+    assert izler, "bileşim gerçek gerekçe tablosu olmadan kurulamaz"
+    ilk = izler[0]
+    bitis = ilk
+    while bitis + 1 in izler:
+        bitis += 1
+    return ilk, bitis + 1
+
+
+def _bilesim_metni(
+    duzey: int, ara_yeri: str, ilk_baslik: str, yem_yeri: str, yem: str | None, bozan
+) -> str:
+    """Bir bileşimin belgesini KURAR (yem `None` ise yemsiz taban)."""
+    satirlar = bozan(TEMIZ).splitlines(True)
+    if ilk_baslik == "yok":
+        i = next(
+            k for k, s in enumerate(satirlar) if s.strip() == f"### {_DONEM_ADLARI[0]}"
+        )
+        satirlar = satirlar[:i] + satirlar[i + 1 :]
+    if ara_yeri != "yok":
+        bas, bitis = _gercek_tablo_araligi(satirlar)
+        k = bas if ara_yeri == "tablo-oncesi" else bitis
+        satirlar = satirlar[:k] + ["\n", "#" * duzey + " Ara ölçüm başlığı\n", "\n"] + satirlar[k:]
+    if yem is None:
+        return "".join(satirlar)
+    b_bas, b_son = _b_bolgesi(satirlar)
+    tablo_bas, tablo_bitis = _gercek_tablo_araligi(satirlar)
+    if yem_yeri == "bolum-b-basi":
+        k = b_bas + 1
+    elif yem_yeri == "tablo-oncesi":
+        k = tablo_bas
+    elif yem_yeri == "tablo-sonrasi":
+        k = tablo_bitis
+    else:
+        k = next(
+            i for i in range(b_bas, b_son) if satirlar[i].startswith("mesaj_ekseni")
+        ) + 1
+    ek = ["\n"] + list(_EK_TABLOLAR[yem]) + ["\n"]
+    return "".join(satirlar[:k] + ek + satirlar[k:])
+
+
+def _bilesim_uzayi():
+    """Altı eksenin ÇAPRAZ çarpımı; dejenere hücreler bilinçle ELENİR."""
+    for ara_yeri in ARA_BASLIK_YERLERI:
+        # Ara başlık YOKKEN düzey ekseninin karşılığı yoktur: aynı belgeyi dört
+        # kez üretmek kapsamı BÜYÜTMEZ, yalnız sayıyı şişirir.
+        duzeyler = ARA_BASLIK_DUZEYLERI if ara_yeri != "yok" else (ARA_BASLIK_DUZEYLERI[0],)
+        for duzey in duzeyler:
+            for ilk_baslik in ILK_DONEM_BASLIGI:
+                for yem_yeri in YEM_YERLERI:
+                    for yem in YEM_BASLIKLARI:
+                        for durum, bozan, _ in _GERCEK_TABLO_DURUMLARI:
+                            ad = (
+                                f"ara-{ara_yeri}-d{duzey}/ilkbaslik-{ilk_baslik}/"
+                                f"yem-{yem_yeri}-{yem}/gercek-{durum}"
+                            )
+                            yemsiz = _bilesim_metni(
+                                duzey, ara_yeri, ilk_baslik, yem_yeri, None, bozan
+                            )
+                            yemli = _bilesim_metni(
+                                duzey, ara_yeri, ilk_baslik, yem_yeri, yem, bozan
+                            )
+                            yield ad, yemsiz, yemli
+
+
+EKLEME_BILESIMLERI = tuple(_bilesim_uzayi())
+
+
+def _not_kumesi(metin: str) -> set:
+    return {bulgu.mesaj for bulgu in bd.run(metin, source_name="P").notlar}
+
+
+def _ekleme_ihlali(yemsiz: str, yemli: str) -> str:
+    """Değişmez ihlali (boş metin = bileşim yeşil)."""
+    once, sonra = _not_kumesi(yemsiz), _not_kumesi(yemli)
+    kayip = {mesaj for mesaj in once - sonra if not bd.kume_iddiasi_mi(mesaj)}
+    return f"ekleme şu notları KALDIRDI: {sorted(kayip)}" if kayip else ""
+
+
+@pytest.mark.parametrize(
+    "yemsiz,yemli",
+    [(b[1], b[2]) for b in EKLEME_BILESIMLERI],
+    ids=[b[0] for b in EKLEME_BILESIMLERI],
+)
+def test_tablo_eklemek_var_olan_notu_kaldiramaz(yemsiz: str, yemli: str) -> None:
+    """Katman 2 — DEĞİŞMEZ: eklemeden önceki notlar sonrakinin ALT KÜMESİDİR."""
+    assert _ekleme_ihlali(yemsiz, yemli) == ""
+
+
+def test_ekleme_bilesim_uzayi_bos_kume_ve_taban_kollari() -> None:
+    """Boş-küme kolu: uzay gerçekten ÜRETİLDİ mi, tabanlar BOŞA yeşil mi?"""
+    beklenen = (
+        (1 + 2 * len(ARA_BASLIK_DUZEYLERI))
+        * len(ILK_DONEM_BASLIGI)
+        * len(YEM_YERLERI)
+        * len(YEM_BASLIKLARI)
+        * len(_GERCEK_TABLO_DURUMLARI)
+    )
+    assert len(EKLEME_BILESIMLERI) == beklenen == 432, len(EKLEME_BILESIMLERI)
+    adlar = [b[0] for b in EKLEME_BILESIMLERI]
+    assert len(set(adlar)) == len(adlar), "bileşimler ÇAKIŞIYOR"
+    # Her bileşim GERÇEKTEN bir tablo EKLİYOR ve ekleme belgeyi değiştiriyor.
+    for ad, yemsiz, yemli in EKLEME_BILESIMLERI:
+        assert yemli != yemsiz, f"{ad}: yem eklenmedi"
+        assert len(yemli.splitlines()) > len(yemsiz.splitlines()), ad
+    # Taban BOŞA yeşil DEĞİL. Ölçüldü: 432 bileşimin 368'inde yemsiz belge
+    # zaten not üretiyor; boş kalan 64'ün HEPSİ `gercek-saglam` — yani gerçek
+    # tablosu bozulmamış, hiç not üretmeyen TEMİZ taban (bu hücrelerde değişmez
+    # bedavaya sağlanır ve kapı onları saymaz).
+    dolu = [ad for ad, yemsiz, _ in EKLEME_BILESIMLERI if _not_kumesi(yemsiz)]
+    assert len(dolu) == 368, len(dolu)
+    bos = [ad for ad in adlar if ad not in set(dolu)]
+    assert len(bos) == 64 and all(ad.endswith("/gercek-saglam") for ad in bos), bos[:5]
+    # ...ve tabanların çoğunda not BLOĞA AİTTİR (istisna dışı) — yoksa değişmez
+    # yalnız küme iddialarını ölçer ve asıl sınıfı hiç sınamazdı. Ölçüldü: 320.
+    bloga_ait = [
+        ad
+        for ad, yemsiz, _ in EKLEME_BILESIMLERI
+        if any(not bd.kume_iddiasi_mi(mesaj) for mesaj in _not_kumesi(yemsiz))
+    ]
+    assert len(bloga_ait) == 320, len(bloga_ait)
+
+
+def test_ekleme_degismezi_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: v4'ün fail-open geri dönüşünü geri koy → KIRMIZI düşsün."""
+    with mock.patch.object(bd, "_gerekce_tablosu", _v4_geri_donusu):
+        kirmizi = [
+            ad
+            for ad, yemsiz, yemli in EKLEME_BILESIMLERI
+            if _ekleme_ihlali(yemsiz, yemli)
+        ]
+    assert kirmizi, "geri dönüşü geri koymak değişmezi KIRMADI"
+    # Ölçüldü: SEKİZ hücre kırılır ve hepsi aynı imzayı taşır — ilk dönemin
+    # başlığı YOK, gerçek tablonun üstünde bölüm-İÇİ (düzey 3+) bir ara başlık
+    # var, yem Bölüm B'nin başında. O hâlde gerçek tablo dönem bölgesine düşer
+    # ve v4'ün geri dönüşü onu ancak dönem-öncesi bir yem YOKKEN denetliyordu.
+    assert len(kirmizi) == 8, kirmizi
+    assert all("/ilkbaslik-yok/" in ad for ad in kirmizi), kirmizi
+    assert all("/yem-bolum-b-basi-" in ad for ad in kirmizi), kirmizi
+
+
+def test_kume_iddiasi_onekleri_modulun_sozlesmesidir_ve_hepsi_uretilebilir() -> None:
+    """İstisnanın KAPSAMI uydurulmaz: her önek gerçekten ÜRETİLEBİLİR olmalı.
+
+    Fazla geniş yazılmış bir istisna = değişmezin YOKLUĞU. Bu kapı, listeye
+    ölçülmemiş bir önek sızarsa düşer ve gerekçe ister.
+    """
+    uretilen = set()
+    for metin in (
+        kaynak(tablo=False),  # hiç tablo yok → "gerekli yerde tablo yok"
+        tabloyu_donemlerden_sonraya_tasi(TEMIZ),  # yalnız dönem-sonrası tablo
+        gerekce_basligini_jeneriklestir(TEMIZ),  # denetime giren blok başlıksız
+        bolum_b_tablo_ekle(TEMIZ, DENETLENEN_KONUM, _SAHTE_GEREKCE),  # iki tablo
+    ) + tuple(bolum_bosalt(TEMIZ, harf) for harf in bd.BOLUM_HARFLERI):
+        uretilen |= _not_kumesi(metin)
+    kapsanmayan = [
+        onek
+        for onek in bd.KUME_IDDIASI_ONEKLERI
+        if not any(mesaj.startswith(onek) for mesaj in uretilen)
+    ]
+    assert kapsanmayan == [], kapsanmayan
+    # Liste TEKRARSIZ ve TAM olarak sekiz önektir (üç küme iddiası + beş kap);
+    # dokuzuncusu eklenirse bu kapı düşer.
+    assert len(set(bd.KUME_IDDIASI_ONEKLERI)) == len(bd.KUME_IDDIASI_ONEKLERI)
+    assert len(bd.KUME_IDDIASI_ONEKLERI) == 3 + len(bd.BOLUM_HARFLERI) == 8
+    # ...ve önekler BLOĞA AİT notları yutmuyor: satır/sütun notları istisna
+    # DIŞINDA kalmalı, yoksa değişmez sessizce boşalırdı.
+    bloga_ait = _not_kumesi(gerekce_tablosunu_boz(TEMIZ))
+    sizan = [mesaj for mesaj in bloga_ait if bd.kume_iddiasi_mi(mesaj)]
+    assert [m for m in bloga_ait if not bd.kume_iddiasi_mi(m)], bloga_ait
+    assert all("sütunlu satır" not in m and "tür etiketi yok" not in m for m in sizan)
+
+
+def test_sayim_iddialari_eklemeyle_AZALMAZ() -> None:
+    """İstisna "sayı DÜŞTÜ"yü örtmesin: sayım taşıyan küme iddiaları monotondur.
+
+    `kume_iddiasi_mi` sayım taşıyan mesajları (metni sayıyla değiştiği için)
+    istisnaya alır. O boşluğu bu kapı kapatır: sayımların KENDİSİ ölçülür ve
+    ekleme ile AZALAMAZ.
+    """
+    dusen = []
+    for ad, yemsiz, yemli in EKLEME_BILESIMLERI:
+        once, sonra = bd._ayristir(yemsiz), bd._ayristir(yemli)
+        if (
+            sonra.gerekce_donem_oncesi_sayisi < once.gerekce_donem_oncesi_sayisi
+            or sonra.gerekce_basliksiz_sayisi < once.gerekce_basliksiz_sayisi
+        ):
+            dusen.append(ad)
+    assert dusen == [], dusen[:5]
+    # Boş-küme kolu: sayımlar gerçekten OYNUYOR mu, yoksa hep sıfır mı?
+    artan = sum(
+        1
+        for _, yemsiz, yemli in EKLEME_BILESIMLERI
+        if bd._ayristir(yemli).gerekce_donem_oncesi_sayisi
+        > bd._ayristir(yemsiz).gerekce_donem_oncesi_sayisi
+    )
+    assert artan > 0, "hiçbir bileşimde sayım artmıyor — kol BOŞA yeşil"
+
+
+def test_ilkeli_istisna_mesru_tablo_yokluk_notunu_kaldirir() -> None:
+    """İLKELİ İSTİSNA KOLU: değişmez FAZLA GENİŞ yazılmamalı.
+
+    Gerekçe tablosu HİÇ olmayan bir belgeye MEŞRU bir gerekçe tablosu
+    eklenince "tablo yok" notunun kalkması BEKLENEN davranıştır — ekleme o
+    iddiayı YANLIŞLAR. Bu kol sabitlenmezse değişmez "hiçbir not kaybolamaz"a
+    kayar ve kapı meşru davranışı ihlal sayardı.
+    """
+    tablosuz = kaynak(tablo=False)
+    once = _not_kumesi(tablosuz)
+    assert bd.TABLO_YOK_MESAJI in once
+
+    satirlar = tablosuz.splitlines(True)
+    b_bas, _ = _b_bolgesi(satirlar)
+    mesru = ["\n", "| dönem | karar | tür | gerekçe |\n", "|---|---|---|---|\n"] + [
+        f"| {ad} | secildi | {tur} | Gerekce cumlesi. |\n"
+        for ad, tur in zip(_DONEM_ADLARI[:6], _DONEM_TURLERI[:6])
+    ] + ["\n"]
+    tablolu = "".join(satirlar[: b_bas + 1] + mesru + satirlar[b_bas + 1 :])
+
+    sonra = _not_kumesi(tablolu)
+    assert bd.TABLO_YOK_MESAJI not in sonra, "meşru tablo yokluk notunu kaldırmalı"
+    assert sonra == set(), f"meşru tablo başka not üretti: {sorted(sonra)}"
+    # Kaybolan HER not bir KÜME iddiası: bloğa ait bir şey düşmüş OLMAMALI.
+    assert all(bd.kume_iddiasi_mi(mesaj) for mesaj in once - sonra), sorted(once - sonra)
+
+
+def test_korunan_gerilemeler_olculur() -> None:
+    """KORUNACAK iki gerileme kolu — tur 5 ve tur 4'ün kazanımları."""
+    # (a) v5: dönem BAŞLIĞININ hemen altına konan meşru tablo 0 NOT üretir.
+    baslik_alti = bolum_b_tablo_ekle(TEMIZ, "baslik-yuva-arasi", _ALAKASIZ_4_SUTUN)
+    assert _notlari(baslik_alti) == "", _notlari(baslik_alti)[:400]
+    # (b) v4: jenerik başlıklı BOZUK gerçek tablo + kanonik YEM → not kaybı YOK.
+    yemsiz = gerekce_tablosunu_boz(gerekce_basligini_jeneriklestir(TEMIZ))
+    yemli = bolum_b_tablo_ekle(yemsiz, DENETLENEN_KONUM, _SAHTE_GEREKCE)
+    once, sonra = _not_kumesi(yemsiz), _not_kumesi(yemli)
+    assert once, "taban boş — prob gerçek tabloyu bozmuyor"
+    assert once <= sonra, f"yem şu notları GİZLEDİ: {sorted(once - sonra)}"
+    # (c) POZİTİF KONTROL: temiz kaynak `gecti` ve SIFIR not.
+    rapor = bd.run(TEMIZ, source_name="P")
+    assert rapor.sonuc == bd.SONUC_GECTI and rapor.notlar == ()

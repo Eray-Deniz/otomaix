@@ -113,13 +113,26 @@ seçim BIRAKILDI: dönem bloklarından ÖNCE gelen BÜTÜN tablolar denetlenir, 
 atılmaz, birden çoksa belirsizlik NOTU düşer. Kanonik başlık artık seçmez, yalnız NOT
 besler. Bedeli bilinçle kabul edildi: dönemlerden önce konmuş meşru ve alakasız bir tablo
 artık NOT üretir — bugün hiçbir kontrol elemediği için maliyet gürültüdür, kaynak kaybı
-değil, ve not sessiz değildir. Korunan kazanım: dönem bölgesinde duran tablolar
-(dönem-öncesi bir tablo varken) denetime GİRMEZ. Bölgenin SINIRI tur 5'te DÜZELTİLDİ:
-dönem bloğu BAŞLIĞIYLA başlar, ilk yuvasıyla değil (`_ilk_donem_baslangici`). Önceki
-sınır ilk yuvadaydı ve başlık ile ilk yuva ARASINA konan meşru bir tablo hâlâ "dönem
-öncesi" sayılıyordu — ölçüldü (46579a1 vs 7075658, aynı belge): `0 not → 4 not`. Bu bir
-dördüncü SEÇİM sezgiseli değil, bir SINIR tanımıdır; hangi tablonun denetleneceği yine
-SEÇİLMEZ.
+değil, ve not sessiz değildir. Korunan kazanım: dönem bölgesinde duran tablolar denetime
+GİRMEZ. Bölgenin SINIRI tur 5'te DÜZELTİLDİ: dönem bloğu BAŞLIĞIYLA başlar, ilk yuvasıyla
+değil (`_ilk_donem_baslangici`). Önceki sınır ilk yuvadaydı ve başlık ile ilk yuva ARASINA
+konan meşru bir tablo hâlâ "dönem öncesi" sayılıyordu — ölçüldü (46579a1 vs 7075658, aynı
+belge): `0 not → 4 not`.
+
+**Tur 6 — altıncı KURAL yazılmadı, bir DEĞİŞMEZ kondu.** Beş turun beşi de bir SEÇİM ya da
+SINIR kuralıydı ve her biri yeni bir BİLEŞİMLE kandırıldı; kural yazmak bu eksende işlemedi.
+Kapanış artık bir özelliktir ve hangi sınır kuralı yürürlükte olursa olsun geçerlidir:
+**bir belgeye tablo EKLEMEK, o belgenin zaten ürettiği notları KALDIRAMAZ**
+(`KUME_IDDIASI_ONEKLERI` başlığı). Yapısal ayağı `_gerekce_tablosu`'nun
+MONOTONLUĞUDUR — karar blok BAŞINA verilir, bir bloğun denetime girip girmediği YALNIZ
+kendi konumuna bakar. Kandıran şey v4'ün fail-open geri dönüşüydü ("dönem-öncesi blok
+yoksa HEPSİNİ denetle"): dönem-öncesi TEK bir yem eklemek geri dönüşü devreden çıkarıyor
+ve dönem-sonrası gerçek tablonun SEKİZ notunu birden düşürüyordu (ölçüldü: `9 not → 0
+not`, 24 bileşimin 4'ünde). Geri dönüş KALDIRILDI. Değişmezin istisnası MUTLAK DEĞİL ama
+İLKELİDİR: bir ekleme yalnız KENDİ VARLIĞININ yanlışladığı YOKLUK iddialarını düşürebilir
+("kapta içerik yok" · "gerekli yerde tablo yok"); bir BLOĞA ait iddialar (satırı · sütunu ·
+başlığı) dokunulmazdır. Ölçülmüş bedel: dönem bölgesinde kalan BOZUK bir tablo artık
+satır/sütun denetimine hiç girmez, yerine iki küme düzeyi notu düşer.
 
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
@@ -145,16 +158,18 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   dolayısıyla SERBEST DÜZYAZI bu kontrolü GEÇER (ölçüldü). Kök çözüm sözleşme
   revizyonudur ve AYRI bir tasarım işine kaydedildi; vekil bu turda SERTLEŞTİRİLMEDİ —
   sertleştirme üç turdur yakınsamadı ve yanlış-pozitif üretir.
-* Gerekçe denetimine giren küme SEÇİLMEZ: dönem bloklarından ÖNCEKİ bütün tablolar
-  denetlenir. Hangisinin GERÇEK gerekçe tablosu olduğu DOĞRULANMAZ ve doğrulanmaya
-  ÇALIŞILMAZ — bir önceki turun "kanonik başlıklı adayı seç" kuralı ÖLÇÜLDÜ ve
-  YANLIŞLANDI (kanonik başlıklı bir yem, jenerik başlıklı GERÇEK tabloyu susturuyordu:
-  `8 not → 0 not`). Bölgenin SINIRI ilk dönem BAŞLIĞIDIR: bir dönem başlığından SONRA
-  gelen tablo, kanonik başlık taşısa bile denetime GİRMEZ. Sınırın yeri ÖLÇÜLÜR (konum
-  ekseni belgenin kendi yapısından üretilir, dört denetim-dışı konumun ikisi bu tura
-  kadar hiç egzersiz edilmemişti). Ölçülmüş kalan sınır: ilk döneme başlık yazılmamış
-  ama tablonun üstüne alt yazı başlığı konmuşsa o alt yazı ilk dönemin başlığı sanılır;
-  tablo SUSTURULMAZ ama "tablo dönemlerden SONRA geliyor" notu yanıltıcı düşer.
+* Gerekçe denetimine giren küme SEÇİLMEZ ve MONOTONdur: dönem bloklarından ÖNCEKİ bütün
+  tablolar denetlenir, bir tablo EKLEMEK başka bir tabloyu kümeden ÇIKARAMAZ. Hangisinin
+  GERÇEK gerekçe tablosu olduğu DOĞRULANMAZ ve doğrulanmaya ÇALIŞILMAZ. Bölgenin SINIRI
+  ilk dönem BAŞLIĞIDIR: bir dönem başlığından SONRA gelen tablo, kanonik başlık taşısa
+  bile denetime GİRMEZ — satır/sütun notu VERMEZ; yerine "dönem başlıklarından ÖNCE tablo
+  yok" ve "tablo dönemlerden SONRA geliyor" küme notları düşer. **DÜZELTİLMİŞ BEYAN:** bir
+  önceki tur bu dalda "tablo SUSTURULMAZ" diyordu ve ÖLÇÜM bunu YALANLADI — fail-open geri
+  dönüş yüzünden dönem-öncesi tek bir yem tabloyu tamamen susturuyordu (`9 not → 0 not`).
+  Ölçülmüş kalan sınırlar: (a) ilk döneme başlık yazılmamış ama tablonun üstüne alt yazı
+  başlığı konmuşsa o alt yazı ilk dönemin başlığı sanılır ve tablo denetim dışında kalır;
+  (b) düzey 1-2 bir ara başlık Bölüm B'yi KAPATIR ve o başlıktan sonrası Bölüm B sayılmaz
+  (bölüm tanıma markdown düzeyine dayanır) — ikisi de AYRI sınıftır, bu turda kapatılmadı.
 * Kaynak KİMLİĞİ yazım takma adlarını (`kanonik_kaynak_kimligi`) ve aynı metnin iki adla
   verilmesini (`icerik_ozeti`) denkler. Özetsiz kimlik artık kapıya UYGUN DEĞİLDİR, ama
   özetin `run` tarafından ÜRETİLDİĞİ doğrulanamaz: biçim zorlanır, KÖKEN zorlanmaz —
@@ -218,6 +233,72 @@ GEREKCE_BASLIK_ANAHTARLARI = tuple(
 # Eşik TAM eşleşme değildir bilerek: gerçek çıktıda sütun adı kısaltılabilir
 # ("tür etiketi" yerine "tür") ve tam eşleşme aramak yanlış-negatif üretirdi.
 GEREKCE_BASLIK_ASGARI = 2
+
+# ─── Ekleme değişmezi: EKLEMEK KALDIRAMAZ ───────────────────────────────────
+#
+# **Değişmez (kural değil, ÖZELLİK):** bir belgeye tablo EKLEMEK, o belgenin
+# zaten ürettiği notları KALDIRAMAZ. Beş tur boyunca bu eksene beş SINIR/SEÇİM
+# kuralı yazıldı ve her biri kendi kalıbına uyan yeni bir bileşimle kandırıldı
+# (v1 tanıma yok · v2 ilk bitişik tablo · v3 kanonik başlıklı aday · v4 seçimi
+# bırak · v5 sınırı ilk dönem başlığına çek). Altıncı kural YAZILMAZ: kapanış
+# artık hangi sınır kuralı yürürlükte olursa olsun geçerli olan bir ÖZELLİKTİR
+# ve yapısal ayağı `_gerekce_tablosu`'nun MONOTONLUĞUDUR — blok EKLEMEK denetim
+# kümesinden blok ÇIKARAMAZ. Fail-open geri dönüş (dönem-öncesi blok yoksa
+# HEPSİNİ denetle) tam olarak bu monotonluğu kırıyordu ve ölçüldü: dönem-öncesi
+# TEK bir yem eklemek dönem-sonrası gerçek tablonun SEKİZ notunu birden
+# düşürüyordu (`9 not → 0 not`).
+#
+# **İstisna İLKEDEN türer, örnekten DEĞİL.** "Hiçbir not kaybolamaz" YANLIŞ bir
+# ifadedir: meşru bir gerekçe tablosu eklemek "gerekçe tablosu YOK" notunu
+# HAKLI OLARAK kaldırır. İlke şudur: bir ekleme yalnız KENDİ VARLIĞININ
+# YANLIŞLADIĞI iddiaları düşürebilir. Bunlar bir BLOĞA ait değil, KÜMENİN
+# bütünü hakkındaki YOKLUK iddialarıdır — "şu kapta içerik yok" ve "gerekli
+# yerde tablo yok". Bir bloğun KENDİ içeriği hakkındaki iddialar (satırı ·
+# sütunu · başlığı) istisnanın DIŞINDADIR: o blok hâlâ oradadır ve ikinci bir
+# blok onu ilgisizleştiremez.
+#
+
+BOLUM_BOS_MESAJI = (
+    "Bölüm {harf} boş — başlık var, içerik yok (beş bölümün hepsi doldurulur)"
+)
+TABLO_YOK_MESAJI = (
+    "Bölüm B'de dönem başlıklarından ÖNCE özel gün seçim/eleme/ekleme "
+    f"gerekçeleri tablosu yok ({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)})"
+)
+TABLO_DONEM_SONRASI_MESAJI = (
+    "Gerekçe tablosu dönem başlıklarından SONRA geliyor — sözleşme "
+    "ÖNCE tablo, SONRA dönem dönem dört başlık der"
+)
+# Kümenin BÜTÜNÜ hakkındaki iddiaların DEĞİŞMEZ önekleri. Bir mesaj bunlardan
+# biriyle başlıyorsa iddia tek bir BLOK hakkında değildir; kap ya da küme
+# hakkındadır — "var mı" · "kaç tane" · "gerekli yerde bir tanesi var mı".
+# Küme gerçekten değiştiği için EKLEME bu iddiaları meşru olarak değiştirebilir.
+# SAYIM taşıyan iddialar ayrıca AZALAMAZ (denetim kümesi monoton olduğu için);
+# o ayak `gerekce_donem_oncesi_sayisi` / `gerekce_basliksiz_sayisi` üstünden
+# AYRICA ölçülür — istisna "sayı düştü"yü örtmesin diye.
+#
+# Önek listesi SÖZLEŞMEDİR: buraya bir önek eklemek, o mesajın bir KÜME iddiası
+# olduğunu BEYAN etmektir. Listenin dışındaki her not eklemeye karşı
+# DOKUNULMAZDIR.
+KUME_IDDIASI_ONEKLERI = (
+    # yokluk ("gerekli yerde tablo yok") + sayım (dönem-öncesi kaç tablo var)
+    "Bölüm B'de dönem başlıklarından ÖNCE ",
+    # sayım (denetime giren kaç blok kanonik başlık taşımıyor)
+    "Bölüm B'de gerekçe denetimine giren ",
+    # konum ("doğru yerde yok, olan tablo dönemlerden sonra")
+    "Gerekçe tablosu dönem başlıklarından SONRA",
+) + tuple(f"Bölüm {harf} boş" for harf in BOLUM_HARFLERI)
+
+
+def kume_iddiasi_mi(mesaj: str) -> bool:
+    """Not KÜMENİN bütünü hakkında mı (yokluk · sayım · konum)?
+
+    Ekleme değişmezinin İLKELİ istisnası budur: bir ekleme yalnız KENDİ
+    VARLIĞININ yanlışladığı KÜME iddialarını değiştirebilir. Bir bloğun KENDİ
+    içeriği hakkındaki iddialar (satırı · sütunu) `False` döner ve eklemeye
+    karşı DOKUNULMAZDIR.
+    """
+    return mesaj.startswith(KUME_IDDIASI_ONEKLERI)
 
 VIDEO_HAVUZLARI = ("hareket", "sahne")
 
@@ -1055,7 +1136,12 @@ def _ayristir(source_text: str) -> _Belge:
 
     tablo_bloklari = _tablo_bloklari(tablo_izleri)
     secilen_bloklar, gerekce_donem_oncesi_sayisi = _gerekce_tablosu(tablo_bloklari)
-    tablo_donem_sonrasi = any(blok[0][2] for blok in secilen_bloklar)
+    # Konum notu KÜME düzeyinde bir YOKLUK iddiasıdır ("gerekli yerde tablo
+    # yok, olan tablo dönemlerden sonra"), bir bloğun içeriği hakkında değil —
+    # bu yüzden denetim kümesinden DEĞİL, bütün bloklardan türer.
+    tablo_donem_sonrasi = not secilen_bloklar and any(
+        blok and blok[0][2] for blok in tablo_bloklari
+    )
     # Kanonik başlık artık SEÇMEZ, yalnız NOT besler: denetime giren kaç blok
     # gerekçe tablosunun kanonik başlığını taşımıyor?
     gerekce_basliksiz_sayisi = sum(
@@ -1137,12 +1223,20 @@ def _ilk_donem_baslangici(baslik_sirasi: int | None, yuva_sirasi: int) -> int:
     Başlıksız bir ilk dönemde (belge başlık yazmamışsa) bölge ilk YUVADA biter:
     ikinci dal fail-open değildir, tabloyu denetim İÇİNDE bırakır.
 
-    **Kapsam sınırı (İlke 9(4)):** "ilk dönemin başlığı" = ilk yuvadan ÖNCEKİ
-    SON başlık görünümü. Belge ilk döneme başlık yazmamış AMA gerekçe
-    tablosunun üstüne bir alt yazı başlığı koymuşsa o alt yazı ilk dönemin
-    başlığı sanılır ve tablo denetim DIŞINDA kalır. Bu dal beş gerçek çıktının
-    hiçbirinde GÖRÜLMEDİ (beşinde de Bölüm B tablosuzdur) ve ayrıca o belgede
-    dönem ADI da yanlış türer; ayrı bir kural YAZILMADI.
+    **Kapsam sınırı (İlke 9(4)) — ÖLÇÜLMÜŞ.** "İlk dönemin başlığı" = ilk
+    yuvadan ÖNCEKİ SON başlık görünümü. Belge ilk döneme başlık yazmamış AMA
+    gerekçe tablosunun üstüne bir alt yazı başlığı koymuşsa o alt yazı ilk
+    dönemin başlığı SANILIR, tablo dönem bölgesinde kalır ve denetim DIŞINDA
+    olur; dönem ADI da yanlış türer. Ayrı bir kural YAZILMADI — bu dal beş
+    gerçek çıktının hiçbirinde görülmedi (beşinde de Bölüm B tablosuzdur).
+
+    **Bu dalın ZARARI artık SINIRLIDIR (tur 6).** Önceki tur burada "tablo
+    SUSTURULMAZ" diye beyan ediyordu; ölçüm bunu YALANLADI: fail-open geri
+    dönüş yüzünden dönem-öncesi TEK bir yem, bu dalda kalan gerçek tablonun
+    SEKİZ notunu birden düşürüyordu (`9 not → 0 not`). Denetim kümesi artık
+    MONOTONdur (`_gerekce_tablosu`), yani bir EKLEME hiçbir bloğu kümeden
+    çıkaramaz; bu dalda kalan tablo denetlenmez ama denetlenmemesi bir
+    EKLEMEYE de bağlı DEĞİLDİR — belgeye tablo eklemek notları eksiltemez.
     """
     return yuva_sirasi if baslik_sirasi is None else baslik_sirasi
 
@@ -1175,46 +1269,58 @@ def _gerekce_tablosu(
 ) -> tuple[list[Sequence[tuple[int, str, bool]]], int]:
     """Denetim kümesi = dönem bloklarından ÖNCEKİ BÜTÜN tablolar. SEÇİM YOK.
 
-    **Ölçülmüş gerileme (tur 4 — aynı eksende ÜÇÜNCÜ tur ve üçüncü kez kendi
-    düzeltmemizin ürünü):**
+    **Bu fonksiyonun asıl sözleşmesi MONOTONLUKTUR** (`KUME_IDDIASI_ONEKLERI`
+    başlığındaki ekleme değişmezinin yapısal ayağı): bir blok EKLEMEK denetim
+    kümesinden başka bir bloğu ÇIKARAMAZ. Karar blok BAŞINA verilir — bir bloğun
+    denetime girip girmediği YALNIZ kendi konumuna bakar, başka blokların
+    varlığına DEĞİL. Bu bir sezgisel değil bir özelliktir ve altıncı bir sınır
+    kuralı yazmadan bütün yem bileşimlerini birden kapatır.
+
+    Sınıfın tarihçesi — beş turun beşi de bir SEÇİM/SINIR kuralıydı ve her biri
+    kendi kalıbına uyan bir bileşimle kandırıldı:
 
     * v1: tanıma yoktu → Bölüm B'deki her `|` satırı gerekçe malzemesiydi.
     * v2: "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" → önüne konan yem gizledi.
-    * v3: "kanonik başlık taşıyan aday" → yem, GERÇEK tablonun başlığı jenerik
-      olduğunda TEK aday olur ve gerçek tabloyu tamamen susturur. Ölçüldü: yem
-      yokken `notlu-gecti / 8 not`, yem eklenince `gecti / 0 not`.
+    * v3: "kanonik başlık taşıyan aday" → gerçek tablonun başlığı JENERİK
+      olduğunda kanonik başlıklı bir yem TEK aday olur ve gerçek tabloyu
+      susturur. Ölçüldü: `notlu-gecti / 8 not` → `gecti / 0 not`.
+    * v4: "seçimi bırak, dönem öncesi HEPSİNİ denetle" → doğru yöndeydi ama
+      geri dönüşü (`dönem-öncesi blok yoksa HEPSİNİ denetle`) monotonluğu
+      kırıyordu.
+    * v5: "sınırı ilk dönem BAŞLIĞINA çek" → sınır doğrulandı ama v4'ün geri
+      dönüşü yerinde kaldı.
 
-    Ortak desen: her tur bir SEÇİM sezgiseli kurdu, her sezgisel kendi kalıbına
-    uyan bir yemle kandırıldı. Dördüncü bir sezgisel KURULMAZ — seçim BIRAKILIR.
-
-    Kural: dönem bloklarından ÖNCE gelen bütün tablolar denetlenir, hiçbiri
-    sessizce ATILMAZ; aday olan bir blok, aday olmayan bir bloğu SUSTURAMAZ.
-    Birden çoksa `_kontrol_gerekce_tablosu` belirsizlik NOTU düşer. Dönem-öncesi
-    hiç tablo yoksa — ama tablo varsa — bütün bloklar denetlenir ve `sıra` alt
-    kuralı "tablo dönemlerden SONRA geliyor" notunu düşürür.
+    **Tur 6 — ölçülmüş gerileme ve kapanış.** v4'ün fail-open geri dönüşü tam
+    olarak "ekleme kaldırır" davranışıydı: ilk döneme başlık YAZILMAMIŞ ve
+    tablonun üstüne bir alt yazı başlığı KONMUŞ bir belgede gerçek tablo
+    dönem-SONRASI sayılıyor, geri dönüş sayesinde yine de denetleniyordu; önüne
+    dönem-ÖNCESİ tek bir yem konduğunda geri dönüş DEVREDEN ÇIKIYOR ve gerçek
+    tablonun bütün notları birden düşüyordu (ölçüldü: `9 not → 0 not`). Geri
+    dönüş KALDIRILDI; kural artık blok başınadır ve monotondur.
 
     **Korunan kazanım (v2'nin yanlış-pozitif düzeltmesi):** dönem BÖLGESİNDE
-    duran tablolar, dönem-öncesi bir tablo VARKEN denetime GİRMEZ. Bu bir
-    sezgisel değil, sözleşmenin kendi SIRASIDIR (`_SABLON.md` §5: "önce tablo,
-    sonra dönem dönem dört başlık"). Bölgenin nerede BAŞLADIĞI ayrı bir
-    sorudur ve `_ilk_donem_baslangici`'nda yaşar: dönem bloğu BAŞLIĞIYLA
-    başlar, ilk yuvasıyla değil.
+    duran tablolar gerekçe denetimine GİRMEZ. Bu bir sezgisel değil,
+    sözleşmenin kendi SIRASIDIR (`_SABLON.md` §5: "önce tablo, sonra dönem
+    dönem dört başlık"). Bölgenin nerede BAŞLADIĞI ayrı bir sorudur ve
+    `_ilk_donem_baslangici`'nda yaşar: dönem bloğu BAŞLIĞIYLA başlar.
 
     **Bilinçle kabul edilen bedel:** dönemlerden önce konmuş meşru ve alakasız
-    bir tablo artık NOT üretir (kendi satırları da tür etiketi/sütun denetimine
-    girer). Bugün hiçbir kontrol ELEMEDİĞİ için maliyet gürültüdür, kaynak kaybı
-    değil — ve not SESSİZ DEĞİLDİR, belirsizlik açıkça yazılır.
+    bir tablo NOT üretir (kendi satırları da denetime girer). Bugün hiçbir
+    kontrol ELEMEDİĞİ için maliyet gürültüdür, kaynak kaybı değil — ve not
+    SESSİZ DEĞİLDİR, belirsizlik açıkça yazılır.
 
-    **Kapsam sınırı:** dönem-öncesi tabloların hangisinin GERÇEK gerekçe tablosu
-    olduğu DOĞRULANMAZ ve doğrulanmaya ÇALIŞILMAZ; hepsi denetlenir. Dönemlerin
-    içinde/sonrasında duran bir tablo, kanonik başlık taşısa bile denetime
-    girmez — o konumdaki bir tablonun gerekçe tablosu OLMADIĞI sözleşmeden
-    okunur, ölçülmez.
+    **Geri dönüşün kaldırılmasının ölçülmüş bedeli:** dönem bölgesinden SONRA
+    duran BOZUK bir tablo artık satır/sütun denetimine hiç GİRMEZ; onun yerine
+    iki KÜME düzeyi notu düşer — "dönem başlıklarından ÖNCE tablo yok" ve
+    "tablo dönemlerden SONRA geliyor". Sinyal kaybı değil, sinyal DEĞİŞİMİDİR:
+    o konumdaki bir tablonun gerekçe tablosu olduğu ZATEN doğrulanamıyordu ve
+    denetlenmesi v2'nin kapattığı yanlış-pozitif sınıfının ta kendisiydi.
+
+    **Kapsam sınırı:** dönem-öncesi tabloların hangisinin GERÇEK gerekçe
+    tablosu olduğu DOĞRULANMAZ ve doğrulanmaya ÇALIŞILMAZ; hepsi denetlenir.
     """
     donem_oncesi = [blok for blok in bloklar if blok and not blok[0][2]]
-    if donem_oncesi:
-        return donem_oncesi, len(donem_oncesi)
-    return list(bloklar), 0
+    return donem_oncesi, len(donem_oncesi)
 
 
 def _tablo_veri_satirlari(satirlar: Sequence[str]) -> list[str]:
@@ -1442,10 +1548,7 @@ def _bolum_yapisi_ihlalleri(belge: _Belge) -> list[str]:
     for gorulen, sozlesme, sablon, sira_etiketi in _ic_ice_izler(belge):
         mesajlar += _iz_ihlalleri(gorulen, sozlesme, sablon, sira_etiketi)
     for harf in belge.bos_bolumler:
-        mesajlar.append(
-            f"Bölüm {harf} boş — başlık var, içerik yok (beş bölümün hepsi "
-            "doldurulur)"
-        )
+        mesajlar.append(BOLUM_BOS_MESAJI.format(harf=harf))
     return mesajlar
 
 
@@ -1695,20 +1798,14 @@ def _tablo_sekli_ihlalleri(belge: _Belge) -> list[str]:
             f"{' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}"
         )
     if belge.tablo_donem_sonrasi:
-        mesajlar.append(
-            "Gerekçe tablosu dönem başlıklarından SONRA geliyor — sözleşme "
-            "ÖNCE tablo, SONRA dönem dönem dört başlık der"
-        )
+        mesajlar.append(TABLO_DONEM_SONRASI_MESAJI)
     return mesajlar
 
 
 def _kontrol_gerekce_tablosu(belge: _Belge) -> list[str]:
     mesajlar: list[str] = []
     if not belge.tablo_var:
-        mesajlar.append(
-            "Bölüm B'de özel gün seçim/eleme/ekleme gerekçeleri tablosu yok "
-            f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)})"
-        )
+        mesajlar.append(TABLO_YOK_MESAJI)
     # Kanonik başlık bir SEÇİM kuralı değil, bir NOT konusudur: denetime giren
     # bir blok başlığı taşımıyorsa bu bir ihlaldir — ama blok yine denetlenir.
     # Bölüm B'de HİÇ tablo yokken bu dal susar; aksi hâlde tablosuz her gerçek
@@ -2012,24 +2109,35 @@ CHECKS: tuple[Check, ...] = (
         kapsam_sinirlari=(
             (
                 "ozel-gun-gerekce-tablosu: sütun SAYISI ölçülür, sütun "
-                "başlıklarının ANLAMI doğrulanmadı. Denetim kümesi SEÇİLMEZ: "
-                "dönem bloklarından ÖNCEKİ bütün tablolar denetlenir ve "
-                "birden çoksa belirsizlik NOTU düşer; hangisinin GERÇEK "
-                "gerekçe tablosu olduğu DOĞRULANMAZ. Bir önceki turun "
-                "'kanonik başlıklı adayı seç' kuralı ÖLÇÜLDÜ ve YANLIŞLANDI "
-                "(kanonik başlıklı bir yem, jenerik başlıklı GERÇEK tabloyu "
-                "susturuyordu: 8 not -> 0 not), o yüzden seçim BIRAKILDI. "
-                "Bedeli: dönemlerden önce konmuş meşru ve alakasız bir tablo "
-                "da NOT üretir. Bölgenin SINIRI ilk dönem BAŞLIĞIDIR: bir "
-                "dönem başlığından SONRA gelen tablo, kanonik başlık taşısa "
-                "bile denetime GİRMEZ. Sınırın YERİ artık ÖLÇÜLÜYOR (konum "
-                "ekseni belgenin kendi yapısından üretilir; önceki sınır ilk "
-                "YUVADAYDI ve başlık ile ilk yuva arasına konan tabloya DÖRT "
-                "uydurma not veriyordu). ÖLÇÜLMÜŞ kalan sınır: ilk döneme "
-                "başlık yazılmamış AMA tablonun üstüne bir alt yazı başlığı "
-                "konmuşsa o alt yazı ilk dönemin başlığı sanılır; tablo "
-                "SUSTURULMAZ (dönem-öncesi küme boşalınca hepsi denetlenir) "
-                "ama 'tablo dönemlerden SONRA geliyor' notu yanıltıcı düşer."
+                "başlıklarının ANLAMI doğrulanmadı. Denetim kümesi SEÇİLMEZ "
+                "ve MONOTONdur: bir tablo EKLEMEK denetim kümesinden başka "
+                "bir tabloyu ÇIKARAMAZ, dolayısıyla bir bloğa AİT notlar "
+                "ekleme ile kaybolamaz (ekleme değişmezi). Dönem "
+                "bloklarından ÖNCEKİ bütün tablolar denetlenir, birden "
+                "çoksa belirsizlik NOTU düşer; hangisinin GERÇEK gerekçe "
+                "tablosu olduğu DOĞRULANMAZ. Değişmezin İLKELİ istisnası: "
+                "eklemenin KENDİ VARLIĞININ yanlışladığı YOKLUK iddiaları "
+                "('kapta içerik yok', 'gerekli yerde tablo yok') düşebilir; "
+                "kapalı liste KUME_IDDIASI_ONEKLERI'dir. Bölgenin "
+                "SINIRI ilk dönem BAŞLIĞIDIR: bir dönem başlığından SONRA "
+                "gelen tablo, kanonik başlık taşısa bile denetime GİRMEZ. "
+                "DÜZELTİLMİŞ ÖNCEKİ BEYAN: bu beyan bir önceki turda dönem "
+                "bölgesinde kalan tablonun 'SUSTURULMAZ' olduğunu söylüyordu "
+                "— ölçüm bunu YALANLADI. Fail-open geri dönüş (dönem-öncesi "
+                "küme boşsa hepsini denetle) yüzünden dönem-öncesi TEK bir "
+                "yem, dönem-sonrası gerçek tablonun SEKİZ notunu birden "
+                "düşürüyordu (ölçüldü: 9 not -> 0 not, 24 bileşimin 4'ünde). "
+                "Geri dönüş KALDIRILDI. Bugünkü ÖLÇÜLMÜŞ hâl: dönem "
+                "bölgesinde kalan tablo hiç DENETLENMEZ (satır/sütun notu "
+                "vermez); yerine iki KÜME düzeyi notu düşer — 'dönem "
+                "başlıklarından ÖNCE tablo yok' ve 'tablo dönemlerden SONRA "
+                "geliyor'. İlk döneme başlık yazılmamış ama tablonun üstüne "
+                "alt yazı başlığı konmuşsa o alt yazı ilk dönemin başlığı "
+                "SANILIR ve tablo bu yolla denetim dışında kalır; dönem ADI "
+                "da yanlış türer. Bir düzey 1-2 ara başlık Bölüm B'yi "
+                "KAPATIR (bölüm tanıma markdown düzeyine dayanır) ve o "
+                "başlıktan sonrası Bölüm B sayılmaz — ölçüldü, ayrı bir "
+                "sınıftır ve bu turda KAPATILMADI."
             ),
         ),
     ),
