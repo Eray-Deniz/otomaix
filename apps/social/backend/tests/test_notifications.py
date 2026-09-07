@@ -1037,34 +1037,45 @@ def _workflow_definitions() -> list[tuple[str, dict]]:
 LIVE_POSTGRES_CREDENTIAL = ("LRCmorU07F9lRpjV", "Postgres account")
 
 
-def test_every_workflow_pins_one_postgres_credential():
-    """Tek veritabanı → TEK credential kimliği; dizin genelinde üretilmiş matris.
+def test_every_postgres_node_carries_the_live_credential():
+    """HER Postgres düğümü canlıdaki TEK credential'ı taşır — düğümden türetilmiş matris.
 
-    Ölçüldü 2026-09-07: `crm-automations.json` dört düğümde `id='1'`
-    (`PostgreSQL Otomaix`) atfediyordu, canlı n8n'de o kimlik YOK — canlıdaki
-    karşılık `LRCmorU07F9lRpjV` (`Postgres account`). Böyle bir dosya canlıya
-    import edildiğinde veritabanı düğümleri credential'sız kalır ve workflow
-    sessizce kırılır. Kapı sırra değil TAŞINABİLİRLİĞE bakar.
+    İki arıza modu birden kapanır ve ikisi de ölçülmüş:
+
+    * yanlış kimlik — `crm-automations.json` dört düğümde `id='1'`
+      (`PostgreSQL Otomaix`) atfediyordu, canlı n8n'de o kimlik YOK; karşılık
+      `LRCmorU07F9lRpjV` (`Postgres account`). Böyle bir dosya import edilirse
+      veritabanı düğümleri credential'sız kalır ve workflow sessizce kırılır.
+    * EKSİK atıf — kapının ilk hâli yalnız VAR OLAN atıfları inceliyordu;
+      bir düğümün `credentials` bloğu tamamen silinse kapı YEŞİL kalıyordu
+      (ölçüldü 2026-09-07, silme mutasyonu). Matris artık atıflardan değil
+      DÜĞÜMLERDEN türetiliyor: her Postgres düğümü kendi hücresidir.
     """
-    atiflar: dict[tuple[str, str], list[str]] = {}
+    eksik: list[str] = []
+    yanlis: list[str] = []
+    olculen = 0
     for etiket, workflow in _workflow_definitions():
         for node in workflow.get("nodes", []):
-            for tur, ref in (node.get("credentials") or {}).items():
-                if tur != "postgres":
-                    continue
-                anahtar = (str(ref.get("id")), str(ref.get("name")))
-                atiflar.setdefault(anahtar, []).append(f"{etiket}/{node['name']}")
+            if node.get("type") != "n8n-nodes-base.postgres":
+                continue
+            olculen += 1
+            ref = (node.get("credentials") or {}).get("postgres")
+            yer = f"{etiket}/{node['name']}"
+            if not ref:
+                eksik.append(yer)
+                continue
+            if (str(ref.get("id")), str(ref.get("name"))) != LIVE_POSTGRES_CREDENTIAL:
+                yanlis.append(f"{yer}: {ref.get('id')}({ref.get('name')})")
 
-    assert atiflar, "hiç postgres credential atfı bulunamadı — matris boşa koştu"
-    # TAM EŞLEŞME, iç tutarlılık DEĞİL: yalnız "hepsi birbirine eşit" demek,
-    # hepsinin birden var olmayan bir kimliğe (`id=1`) çevrilmesini YAKALAMAZDI
-    # — borcu doğuran arıza modu tam olarak buydu. Kimlik canlı n8n'den okundu
-    # (2026-09-07); değişirse bu satır BİLEREK güncellenir.
-    assert set(atiflar) == {(LIVE_POSTGRES_CREDENTIAL)}, (
-        "postgres credential atfı canlıdaki kimlikle EŞLEŞMİYOR: "
-        + " · ".join(
-            f"{kimlik}({ad}) → {', '.join(yerler)}" for (kimlik, ad), yerler in sorted(atiflar.items())
-        )
+    assert olculen >= 1, "hiç Postgres düğümü bulunamadı — matris boşa koştu"
+    assert not eksik, (
+        "Postgres düğümü credential ATFI TAŞIMIYOR: "
+        + " · ".join(sorted(eksik))
+        + " — import edilirse düğüm çalışma anında kırılır"
+    )
+    assert not yanlis, (
+        "Postgres credential atfı canlıdaki kimlikle EŞLEŞMİYOR: "
+        + " · ".join(sorted(yanlis))
         + f" — beklenen tek kimlik {LIVE_POSTGRES_CREDENTIAL}"
     )
 
