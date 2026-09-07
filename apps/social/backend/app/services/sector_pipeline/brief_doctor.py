@@ -30,6 +30,16 @@ kaynağın iki raporu iki bağımsız kaynak yerine geçmez. Bu yüzden `kaynak_
 zorunludur (varsayılansız, boş olamaz) — plan 950 yazımından bilinçli SAPMA, gerekçesi
 `DoctorReport` docstring'inde ölçümüyle yazılıdır.
 
+**Kimlik ÇAĞIRANIN YAZDIĞI METİN DEĞİL, kanonik bir kuraldan TÜRER.** Adı zorunlu
+kılmak yetmedi: ölçüldü ki takma adlar (`" KAYNAK-1 "` · `"kaynak-1"` ·
+`"a/../KAYNAK-1"` · NFD yazımı · `"KAYNAK-1.md"`) tek kaynağı beş eksende birden İKİ
+bağımsız kaynak gibi gösteriyordu. Kapatma o eksenleri tek tek normalleştiren bir
+liste DEĞİLDİR: `kanonik_kaynak_kimligi` kimliği TEK kuralla üretir ve hem
+`DoctorReport.__post_init__` hem `_kimlik_bolumlemesi` onu çağırır. Yazımla
+görülemeyen ikinci eksen — aynı metnin İKİ FARKLI adla verilmesi — `run`'ın ürettiği
+kanonik içerik özetiyle (`identity.canonical_sha`) kapanır. İki ayak birlikte
+raporlar üstünde geçişli bir DENKLİK bağıntısı kurar; birim yine kimliktir.
+
 **Bozuk hâl temsil edilemez.** `DoctorReport` ve `RoundGate` yapısal değişmezlerini
 `__post_init__`'te zorlar (emsal `sector_pipeline/contracts.py::ContractPin`): rapor
 kendi bulgularıyla çelişemez (`sonuc` onlardan TÜRER, bulgular doğru koleksiyonda ve
@@ -94,9 +104,12 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Callable, Iterable, Sequence
+
+from . import identity
 
 # ─── 1. Kapalı değer kümeleri ───────────────────────────────────────────────
 
@@ -195,6 +208,71 @@ _BOSLUK_IFADELERI = frozenset(
 # Türkçe'ye özgü harfler — İngilizce yüzeylerin mekanik işareti.
 _TURKCE_HARFLER = frozenset("çğıöşüÇĞİÖŞÜ")
 
+# Kanonik kimliğin uzantı ayağı: nokta sonrası parça YALNIZ harflerden oluşuyor
+# ve bu uzunluğu aşmıyorsa dosya uzantısı sayılır. Sınır rakam taşıyan sürüm
+# eklerini (`KAYNAK-1.2`) uzantı sanmayı ENGELLER — o ekler kimliğin parçasıdır.
+_UZANTI_AZAMI_UZUNLUK = 8
+
+# Yol bileşenlerinde ATILAN parçalar (gezinme ve boş bileşen).
+_YOL_GEZINME_PARCALARI = frozenset({"", ".", ".."})
+
+# `run`'ın ürettiği kanonik içerik özetinin BİÇİMİ (`identity.canonical_sha`
+# sha256 onaltılık dizesi döner). Serbest metin bu alandan geçemez.
+_ICERIK_OZETI_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def kanonik_kaynak_kimligi(ad: str) -> str:
+    """Ham kaynak adından KANONİK kimliği türetir — TEK kural, TEK yer.
+
+    **Sınıf (tur 2, F1):** *"bir sayım/benzersizlik kararına giren kimlik,
+    çağıranın serbest metnidir."* Tur 1 `kaynak_adi`'nı zorunlu yaptı ama
+    normalleştirmedi; ölçüldü ki takma adlar (`" KAYNAK-1 "` · `"kaynak-1"` ·
+    `"a/../KAYNAK-1"` · NFD yazımı · `"KAYNAK-1.md"`) tek kaynağı İKİ bağımsız
+    kaynak gibi gösteriyordu — beşinde de `dur=False, gecerli=2`. Kapatma o beş
+    ekseni tek tek yamalamak DEĞİL: kimlik burada TÜRER ve `gate_round` da,
+    `DoctorReport.__post_init__` de aynı kuralı çağırır.
+
+    Kural sırayla:
+
+      (1) unicode NFC — aynı harfin ayrık ve bitişik yazımı tek biçime düşer;
+      (2) `\\` → `/`, sonra yol bileşenlerine böl, gezinme parçalarını (`.`,
+          `..`, boş) at ve SON bileşeni al — dizin öneki kimlik değildir;
+      (3) iç/kenar boşluk tek boşluğa indirgenir;
+      (4) tamamı HARF olan ve `_UZANTI_AZAMI_UZUNLUK`'u aşmayan son uzantı
+          atılır — `KAYNAK-1.md` ile `KAYNAK-1` aynı kaynaktır;
+      (5) `casefold` — harf durumu kimlik taşımaz.
+
+    Boş dizeye düşen ad KİMLİK DEĞİLDİR ve çağıran (`__post_init__`) onu
+    reddeder — kural burada sessizce bir yedek ad UYDURMAZ (fail-closed).
+
+    **Kapsam sınırı (İlke 9(4)):** kural yalnız YAZIM takma adlarını denkler.
+    Gerçekten farklı iki adın aynı kaynağı göstermesi (`"OpenAI-raporu"` ve
+    `"gpt-cikitisi"`) yazımdan görülemez; o eksen İÇERİK özetiyle kapanır
+    (`DoctorReport.icerik_ozeti`) ve özeti olmayan raporlarda DOĞRULANMADI.
+    Son bileşeni almak `dizin-1/K` ile `dizin-2/K`'yi de denkler; bu yön
+    fail-closed'dır (sayı DÜŞER, koşu durur).
+    """
+    if not isinstance(ad, str):
+        raise TypeError(f"kaynak adı metin değil: {type(ad).__name__}")
+    metin = unicodedata.normalize("NFC", ad).replace("\\", "/")
+    parcalar = [
+        parca
+        for parca in metin.split("/")
+        if parca.strip() not in _YOL_GEZINME_PARCALARI
+    ]
+    if not parcalar:
+        return ""
+    son = " ".join(parcalar[-1].split())
+    kok, nokta, uzanti = son.rpartition(".")
+    if (
+        nokta
+        and kok
+        and uzanti.isalpha()
+        and len(uzanti) <= _UZANTI_AZAMI_UZUNLUK
+    ):
+        son = kok
+    return son.casefold()
+
 DISLANAN_KONTROL_GEREKCESI = """
 Spec-input §7.3 "Kontrol kümesi" tablosunun DOKUZUNCU satırı — "görsel/video/özel gün
 görsel vurgu alanlarında metin unsuru" — bu kümeye BİLİNÇLE ALINMADI, unutulmadı.
@@ -249,6 +327,21 @@ class DoctorReport:
     elemeler: tuple[Bulgu, ...]
     kaynak_adi: str
     kapsam_sinirlari: tuple[str, ...] = ()
+    icerik_ozeti: str = ""
+    """Kaynak METNİNİN kanonik özeti — kimliğin İÇERİK ayağı.
+
+    `run` bunu `identity.canonical_sha(source_text)`'ten ÜRETİR; çağıranın
+    yazdığı bir etiket değildir ve biçimi (`sha256` onaltılık) fail-closed
+    zorlanır — serbest metin buradan geçemez. `run` yolunu atlayan bir çağıran
+    (Task 9/12 tüketicileri) metne sahip olmayabilir; o rapor özetsiz kalır ve
+    kimlik yalnız ADA göre denklenir. Bu dürüst bir boşluktur, uydurma bir
+    değer DEĞİL: özetsiz raporlarda içerik ekseni DOĞRULANMADI.
+    """
+
+    @property
+    def kanonik_kimlik(self) -> str:
+        """Kimliğin AD ayağı — saklanmaz, kanonik kuraldan TÜRER."""
+        return kanonik_kaynak_kimligi(self.kaynak_adi)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "notlar", _bulgu_demeti(self.notlar, "notlar"))
@@ -256,11 +349,22 @@ class DoctorReport:
         object.__setattr__(
             self, "kapsam_sinirlari", _metin_demeti(self.kapsam_sinirlari)
         )
-        if not isinstance(self.kaynak_adi, str) or not self.kaynak_adi.strip():
+        if not isinstance(self.kaynak_adi, str) or not self.kanonik_kimlik:
             raise ValueError(
-                "DoctorReport.kaynak_adi kimlik taşımak ZORUNDA (boş/boşluk "
-                f"olamaz): {self.kaynak_adi!r} — K-127 kaynak SAYISI kapısı "
-                "kimliğe göre sayar"
+                "DoctorReport.kaynak_adi kimlik taşımak ZORUNDA (kanonik "
+                f"biçimde de boş olamaz): {self.kaynak_adi!r} — K-127 kaynak "
+                "SAYISI kapısı KANONİK kimliğe göre sayar"
+            )
+        if not isinstance(self.icerik_ozeti, str):
+            raise TypeError(
+                f"DoctorReport.icerik_ozeti metin değil: "
+                f"{type(self.icerik_ozeti).__name__}"
+            )
+        if self.icerik_ozeti and not _ICERIK_OZETI_RE.match(self.icerik_ozeti):
+            raise ValueError(
+                "DoctorReport.icerik_ozeti KANONİK bir özet olmak zorunda "
+                f"(sha256 onaltılık ya da boş): {self.icerik_ozeti!r} — "
+                "serbest metin kimlik kararına giremez"
             )
         ihlaller = _rapor_ihlalleri(self.sonuc, self.notlar, self.elemeler)
         if ihlaller:
@@ -411,6 +515,20 @@ def _rapor_ihlalleri(
     return ihlaller
 
 
+def _kimlik_anahtarlari(rapor: DoctorReport) -> tuple[tuple[str, str], ...]:
+    """Bir raporun kimlik ANAHTARLARI — kanonik ad, ve varsa kanonik özet.
+
+    İki ayaklı olmasının sebebi ölçüldü: ad ayağı YAZIM takma adlarını
+    (`" KAYNAK-1 "`, `"kaynak-1.md"`, `"a/../KAYNAK-1"`) denkler; içerik ayağı
+    aynı metnin İKİ FARKLI adla verilmesini denkler. İkisi ayrı şeyi çözer ve
+    birlikte TEK bir denklik bağıntısı kurar (`_kimlik_bolumlemesi`).
+    """
+    anahtarlar: list[tuple[str, str]] = [("ad", rapor.kanonik_kimlik)]
+    if rapor.icerik_ozeti:
+        anahtarlar.append(("ozet", rapor.icerik_ozeti))
+    return tuple(anahtarlar)
+
+
 def _kimlik_bolumlemesi(
     raporlar: Sequence[DoctorReport],
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
@@ -418,21 +536,49 @@ def _kimlik_bolumlemesi(
 
     K-127 iki BAĞIMSIZ kaynak ister; mutabakat sinyali ilkece iki ayrı kaynağın
     işidir. Bu yüzden birim RAPOR değil KİMLİKTİR. Bir kimliğin raporlarından
-    biri elendiyse kimlik elenmiş sayılır (fail-closed).
+    biri elendiyse kimlik elenmiş sayılır (fail-closed) — takma adla `gecti`,
+    öbür takma adla `elendi` gelen ÇELİŞKİLİ çift de elenmiştir.
+
+    Denklik bağıntısı `_kimlik_anahtarlari`'nın ANAHTARLARI üstünde kurulur ve
+    geçişlidir (birleştir/bul): A ile B adı üstünden, B ile C özet üstünden
+    denkse üçü TEK kaynaktır. Dönen adlar grubun İLK görülen HAM adıdır —
+    yönetici bildirimini kanonik biçimle değil yazdığı adla okur.
     """
-    sirali: list[str] = []
-    gorulen: dict[str, int] = {}
-    elenen: set[str] = set()
+    ebeveyn: dict[tuple[str, str], tuple[str, str]] = {}
+
+    def bul(anahtar: tuple[str, str]) -> tuple[str, str]:
+        while ebeveyn[anahtar] != anahtar:
+            ebeveyn[anahtar] = ebeveyn[ebeveyn[anahtar]]
+            anahtar = ebeveyn[anahtar]
+        return anahtar
+
+    def birlestir(sol: tuple[str, str], sag: tuple[str, str]) -> None:
+        kok_sol, kok_sag = bul(sol), bul(sag)
+        if kok_sol != kok_sag:
+            ebeveyn[kok_sag] = kok_sol
+
     for rapor in raporlar:
-        ad = rapor.kaynak_adi
-        if ad not in gorulen:
-            sirali.append(ad)
-        gorulen[ad] = gorulen.get(ad, 0) + 1
+        anahtarlar = _kimlik_anahtarlari(rapor)
+        for anahtar in anahtarlar:
+            ebeveyn.setdefault(anahtar, anahtar)
+        for anahtar in anahtarlar[1:]:
+            birlestir(anahtarlar[0], anahtar)
+
+    sirali: list[tuple[str, str]] = []
+    ad: dict[tuple[str, str], str] = {}
+    gorulen: dict[tuple[str, str], int] = {}
+    elenen: set[tuple[str, str]] = set()
+    for rapor in raporlar:
+        kok = bul(_kimlik_anahtarlari(rapor)[0])
+        if kok not in ad:
+            sirali.append(kok)
+            ad[kok] = rapor.kaynak_adi
+        gorulen[kok] = gorulen.get(kok, 0) + 1
         if rapor.sonuc == SONUC_ELENDI:
-            elenen.add(ad)
-    elenen_sirali = tuple(ad for ad in sirali if ad in elenen)
-    gecerli = tuple(ad for ad in sirali if ad not in elenen)
-    tekrar = tuple(ad for ad in sirali if gorulen[ad] > 1)
+            elenen.add(kok)
+    elenen_sirali = tuple(ad[kok] for kok in sirali if kok in elenen)
+    gecerli = tuple(ad[kok] for kok in sirali if kok not in elenen)
+    tekrar = tuple(ad[kok] for kok in sirali if gorulen[kok] > 1)
     return gecerli, elenen_sirali, tekrar
 
 
@@ -1417,6 +1563,11 @@ def run(source_text: str, *, source_name: str) -> DoctorReport:
         notlar=tuple(notlar),
         elemeler=tuple(elemeler),
         kaynak_adi=source_name,
+        # Kimliğin İÇERİK ayağı BURADA üretilir: aynı metin iki farklı adla
+        # verilirse `gate_round` onu tek kaynak sayabilsin diye (K-127 iki
+        # BAĞIMSIZ kaynak ister). Kural `identity.canonical_sha`'dır, ikinci
+        # bir hash kuralı YAZILMAZ.
+        icerik_ozeti=identity.canonical_sha(source_text),
         # İlke 9(4): ölçülmeyen yön BULGU değil BEYAN olarak taşınır — sonucu
         # bozmaz ama rapor okuyucusu kapının kapsamını GÖRÜR.
         kapsam_sinirlari=tuple(

@@ -26,14 +26,17 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import itertools
 import json
 import re
+import unicodedata
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from app.services.sector_pipeline import brief_doctor as bd
+from app.services.sector_pipeline import identity
 
 MONOREPO_KOK = Path(__file__).resolve().parents[4]
 PIN_PATH = MONOREPO_KOK / "shared/contracts/research-contracts.pin.json"
@@ -790,8 +793,15 @@ KIMLIK_MATRISI = (
 def test_gate_round_kaynagi_kimlige_gore_sayar(
     adlar: tuple[str, ...], beklenen: int, dur: bool
 ) -> None:
-    """K-127 iki BAĞIMSIZ kaynak ister: aynı kaynağın iki raporu bir sayılır."""
-    gate = bd.gate_round([_rapor(_ad=ad) for ad in adlar])
+    """K-127 iki BAĞIMSIZ kaynak ister: aynı kaynağın iki raporu bir sayılır.
+
+    Raporların İÇERİĞİ bilerek FARKLIDIR (`cta` düğmesi): kimlik artık ada VE
+    içerik özetine göre denkleşir, aynı metin iki adla verilseydi bu matris ad
+    ekseni yerine içerik eksenini ölçerdi (bkz. TAKMA_AD_MATRISI).
+    """
+    gate = bd.gate_round(
+        [_rapor(_ad=ad, cta=5 + i) for i, ad in enumerate(adlar)]
+    )
     assert gate.gecerli_kaynak_sayisi == beklenen
     assert gate.dur is dur
 
@@ -799,7 +809,7 @@ def test_gate_round_kaynagi_kimlige_gore_sayar(
 def test_ayni_kimlikte_eleme_kimligi_gecersiz_kilar() -> None:
     """Fail-closed: bir kimliğin RAPORLARINDAN biri elendiyse kimlik elenmiştir."""
     gate = bd.gate_round(
-        [_rapor(_ad="A"), _sahte_elenmis("A"), _rapor(_ad="B")]
+        [_rapor(_ad="A", cta=5), _sahte_elenmis("A"), _rapor(_ad="B", cta=6)]
     )
     assert gate.gecerli_kaynak_sayisi == 1
     assert gate.elenen_kaynak_sayisi == 1
@@ -807,7 +817,9 @@ def test_ayni_kimlikte_eleme_kimligi_gecersiz_kilar() -> None:
 
 
 def _gecerli_gate_argumanlari() -> dict:
-    raporlar = (_rapor(_ad="A"), _rapor(_ad="B"), _sahte_elenmis("C"))
+    # İçerik AYRI: aynı metin iki adla verilseydi kimlik denkliği onları TEK
+    # kaynağa indirir ve türev alanları ölçen matris yanlış tabanla koşardı.
+    raporlar = (_rapor(_ad="A", cta=5), _rapor(_ad="B", cta=6), _sahte_elenmis("C"))
     return dict(
         dur=False,
         gecerli_kaynak_sayisi=2,
@@ -1180,3 +1192,184 @@ def test_kapsam_sinirlari_donmus_ve_tip_zorlar() -> None:
             kaynak_adi="K",
             kapsam_sinirlari=(7,),  # type: ignore[arg-type]
         )
+
+
+# ─── H3: KİMLİK kanonik bir kuraldan TÜRER (takma-ad denkliği) ─────────────
+#
+# Sınıf (tur 2, F1): *"bir sayım/benzersizlik kararına giren kimlik, çağıranın
+# serbest metnidir."* Tur 1 kimliği ZORUNLU yaptı ama NORMALLEŞTİRMEDİ; takma
+# adlar tek kaynağı iki bağımsız kaynak gibi gösteriyordu. Kapatma tek tek
+# ekseni yamalamak DEĞİL, kimliği üreten TEK kanonik kuraldır: ad ekseninde
+# `kanonik_kaynak_kimligi`, içerik ekseninde `run`'ın ürettiği kanonik özet.
+# İkisi birlikte raporlar üstünde bir DENKLİK bağıntısı kurar.
+#
+# **Matris KAVRAMDAN türer, bulunan örneklerden değil.** Takma-ad denkliğinin
+# eksenleri belgelenmiş bir addır ve her biri BAĞIMSIZ açılıp kapanır:
+# kenar/iç boşluk · harf durumu · unicode normalizasyon biçimi · dosya uzantısı
+# · yol bileşenleri. Bileşim uzayı 2**5 = 32'dir ve buna İÇERİK ekseni (aynı
+# içerik / farklı içerik) ÇARPILIR → 64 hücre. Artı gerçekten FARKLI ad, iki
+# içerik hâliyle → 66. Aşağıdaki liste elle seçilmemiştir, bu çarpımdan
+# ÜRETİLİR.
+
+AD_BOZMA_EKSENLERI = (
+    ("harf-durumu", lambda ad: ad.swapcase()),
+    ("unicode-nfd", lambda ad: unicodedata.normalize("NFD", ad)),
+    ("dosya-uzantisi", lambda ad: f"{ad}.md"),
+    ("yol-bileseni", lambda ad: f"arsiv/gecici/../{ad}"),
+    ("kenar-bosluk", lambda ad: f"  {ad}\t"),
+)
+TABAN_AD = "KAYNAK-Şubat-1"
+BASKA_AD = "KAYNAK-Mart-2"
+ICERIK_EKSENI = (("ayni-icerik", True), ("farkli-icerik", False))
+
+
+def _bozulmus_ad(taban: str, secim: tuple[bool, ...]) -> str:
+    ad = taban
+    for (_, donusum), acik in zip(AD_BOZMA_EKSENLERI, secim):
+        if acik:
+            ad = donusum(ad)
+    return ad
+
+
+_AD_BILESIMLERI = tuple(
+    itertools.product((False, True), repeat=len(AD_BOZMA_EKSENLERI))
+)
+
+# Hücre: (kimlik, ad_a, ad_b, ayni_icerik, beklenen_gecerli, beklenen_dur)
+TAKMA_AD_MATRISI = tuple(
+    (
+        (
+            "+".join(
+                eksen[0] for eksen, acik in zip(AD_BOZMA_EKSENLERI, secim) if acik
+            )
+            or "bozma-yok"
+        )
+        + f"/{icerik_adi}",
+        TABAN_AD,
+        _bozulmus_ad(TABAN_AD, secim),
+        ayni,
+        1,
+        True,
+    )
+    for secim in _AD_BILESIMLERI
+    for icerik_adi, ayni in ICERIK_EKSENI
+) + tuple(
+    (
+        f"gercekten-farkli-ad/{icerik_adi}",
+        TABAN_AD,
+        BASKA_AD,
+        ayni,
+        1 if ayni else 2,
+        ayni,
+    )
+    for icerik_adi, ayni in ICERIK_EKSENI
+)
+
+_FARKLI_ICERIK = kaynak(cta=6)
+
+
+def _kimlik_gate(ad_a: str, ad_b: str, ayni_icerik: bool):
+    a = bd.run(TEMIZ, source_name=ad_a)
+    b = bd.run(TEMIZ if ayni_icerik else _FARKLI_ICERIK, source_name=ad_b)
+    return bd.gate_round([a, b])
+
+
+@pytest.mark.parametrize(
+    "ad_a,ad_b,ayni,gecerli,dur",
+    [h[1:] for h in TAKMA_AD_MATRISI],
+    ids=[h[0] for h in TAKMA_AD_MATRISI],
+)
+def test_takma_ad_matrisi_kimligi_kanonik_sayar(
+    ad_a: str, ad_b: str, ayni: bool, gecerli: int, dur: bool
+) -> None:
+    """Takma adlar TEK kaynaktır; gerçekten farklı iki kaynak İKİ kaynaktır."""
+    gate = _kimlik_gate(ad_a, ad_b, ayni)
+    assert gate.gecerli_kaynak_sayisi == gecerli
+    assert gate.dur is dur
+
+
+def test_takma_ad_matrisi_bos_kume_ve_taban_kollari() -> None:
+    """Boş-küme kolu: matris gerçekten ÇARPIMDAN üretilmiş mi?"""
+    eksen = len(AD_BOZMA_EKSENLERI)
+    assert eksen == 5, "eksen kümesi daraldı — matris sessizce küçülür"
+    assert len(_AD_BILESIMLERI) == 2**eksen == 32
+    assert len(TAKMA_AD_MATRISI) == 2**eksen * len(ICERIK_EKSENI) + 2 == 66
+    # Cerrahi gerçekten uygulanmış mı: boş bileşim DIŞINDA her ad farklı olmalı.
+    bozulmus = {
+        h[0]: h[2] for h in TAKMA_AD_MATRISI if not h[0].startswith("bozma-yok")
+    }
+    for kimlik, ad in bozulmus.items():
+        if kimlik.startswith("gercekten-farkli-ad"):
+            continue
+        assert ad != TABAN_AD, f"{kimlik}: ad bozulmamış"
+    # ...ve hepsi AYNI kanonik kimliğe düşmeli (kural TEK yerdedir).
+    kanonik = {
+        bd.kanonik_kaynak_kimligi(h[2])
+        for h in TAKMA_AD_MATRISI
+        if not h[0].startswith("gercekten-farkli-ad")
+    }
+    assert kanonik == {bd.kanonik_kaynak_kimligi(TABAN_AD)}
+
+
+def test_takma_ad_kapisi_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: iki kanonik kuralı AYRI AYRI sök → matris KIRMIZI düşmeli."""
+    # (a) Ad kuralını sök: farklı-içerikli takma ad hücreleri fail-open olmalı.
+    ad_hucreleri = [
+        h
+        for h in TAKMA_AD_MATRISI
+        if not h[0].startswith(("bozma-yok", "gercekten-farkli-ad"))
+        and h[3] is False
+    ]
+    assert ad_hucreleri, "ad ekseni hücresi YOK — mutasyon kolu boş ölçüyor"
+    with mock.patch.object(bd, "kanonik_kaynak_kimligi", lambda ad: ad):
+        for kimlik, ad_a, ad_b, ayni, _, _ in ad_hucreleri:
+            gate = _kimlik_gate(ad_a, ad_b, ayni)
+            assert gate.gecerli_kaynak_sayisi == 2, f"{kimlik}: kapı sökülmedi"
+
+    # (b) İçerik özeti kuralını sök: aynı içerik + farklı ad fail-open olmalı.
+    with mock.patch.object(
+        bd, "_kimlik_anahtarlari", lambda r: (("ad", r.kanonik_kimlik),)
+    ):
+        gate = _kimlik_gate(TABAN_AD, BASKA_AD, True)
+        assert gate.gecerli_kaynak_sayisi == 2
+
+
+def test_celiskili_takma_ad_cifti_fail_closed() -> None:
+    """Bir takma adla `gecti`, öbürüyle `elendi` → KİMLİK elenmiştir."""
+    gate = bd.gate_round(
+        [bd.run(TEMIZ, source_name="KAYNAK-1"), _sahte_elenmis("  kaynak-1.md ")]
+    )
+    assert gate.gecerli_kaynak_sayisi == 0
+    assert gate.elenen_kaynak_sayisi == 1
+    assert gate.dur is True
+
+
+@pytest.mark.parametrize("ad", ("/", "//", " / / ", "./", "../..", "  "))
+def test_kanonik_kimligi_bos_dusen_ad_reddedilir(ad: str) -> None:
+    """Kimlik KANONİK biçimde de boş olamaz — fail-closed."""
+    assert bd.kanonik_kaynak_kimligi(ad) == ""
+    with pytest.raises(ValueError):
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi=ad
+        )
+
+
+def test_icerik_ozeti_run_tarafindan_uretilir_ve_bicimi_zorlanir() -> None:
+    """Özet çağıranın serbest metni DEĞİLDİR: `run` üretir, biçim fail-closed."""
+    rapor = bd.run(TEMIZ, source_name="K")
+    assert rapor.icerik_ozeti == identity.canonical_sha(TEMIZ)
+    assert re.fullmatch(r"[0-9a-f]{64}", rapor.icerik_ozeti)
+    # Aynı metin → aynı özet; farklı metin → farklı özet (deterministik).
+    assert bd.run(TEMIZ, source_name="B").icerik_ozeti == rapor.icerik_ozeti
+    assert bd.run(_FARKLI_ICERIK, source_name="B").icerik_ozeti != rapor.icerik_ozeti
+    # Doğrudan kurulan rapor özetsizdir (dürüst boşluk) ama SERBEST METİN olamaz.
+    assert _sahte_elenmis("X").icerik_ozeti == ""
+    for bozuk in ("elbette-ozet", "ABC", "0" * 63, "g" * 64):
+        with pytest.raises(ValueError):
+            bd.DoctorReport(
+                sonuc=bd.SONUC_GECTI,
+                notlar=(),
+                elemeler=(),
+                kaynak_adi="K",
+                icerik_ozeti=bozuk,
+            )
