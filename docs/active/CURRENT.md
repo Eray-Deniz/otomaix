@@ -4,6 +4,31 @@
 
 ## Proposed (spun-off)
 
+- **brief-sozlesmesi-kaynak-bolumu-makine-okunur** (proposed, TASARIM KARARI — Eray onayı
+  alındı 2026-09-07; **SON TARİHLİ**) — Araştırma görev sözleşmesi kaynak bölümü için ne
+  istediğini söylüyor (`alan/dönem → iddia → kaynak` eşlemesi) ama **hangi biçimde yazılacağını
+  söylemiyor**. Serbest yazı da uyuyor, tablo da. Mekanik girdi kapısı bu yüzden serbest
+  düzyazıdan "bu bir eşleme DEĞİL" sonucunu çıkaramıyor.
+  **Ölçüldü (2026-09-07, checkpoint 6 üç turu):** kapıyı düzyazıya karşı sertleştirme üç turda
+  yakınsamadı — her tur yeni bir kaçış verdi (ayıraç vekili → `- Düz yazı, devamı https://…`
+  hâlâ `gecti`/0 not). Bu, semantik-negatif sınıfının bilinen deseni: serbest prose'dan olumsuz
+  kanıtlamaya çalışan kapı, bypass ile yanlış-pozitif arasında salınır.
+  **Kapanış yönü:** sözleşme kaynak bölümünü **sabit sütunlu bir tablo** olarak istesin; kapı o
+  zaman olumlu bir yapısal sözleşme sayar (sütun sayısı · hücre doluluğu · adres biçimi).
+  Emsal: sözleşme özel gün seçimleri için ZATEN tablo istiyor.
+  **SON TARİH — Task 19 Step 5.** O adım üç araştırmayı sözleşmeler donduktan sonra **tek
+  seferde** yeniden üretir. Ölçüldü: bugün şu anki sözleşme biçiminde üretilmiş gerçek çıktı
+  YOK (dış depodaki dört dosya 2026-07-11 tarihli, sözleşme v2 2026-08-30) — yani değişiklik
+  şu an hiçbir işi çöpe atmaz. Task 19'dan SONRA yapılırsa araştırmaların ikinci kez üretilmesi
+  gerekir.
+  **Kapsam:** dış depodaki görev sözleşmesi + denetçi görev metninin kaynak bölümüne atfı +
+  monorepo pin manifestinin yenilenmesi + mekanik kapının bu aileyi olumlu sözleşmeye çevirmesi.
+  **Ölçülmemiş, etiketli:** araçların mevcut tabloyu ne kadar düzgün ürettiği DOĞRULANMADI —
+  şu anki biçimde gerçek çıktı olmadığı için ölçülemedi. "Tablo işe yarıyor" İDDİA EDİLMİYOR.
+  **Bilinen iki bedel (Eray'a sunuldu):** tablo tekrar ister, rapor uzar (sözleşmenin "kısa ve
+  yoğun yaz" hükmüyle hafif gerilim); katı biçim kalıba oturmayan bulgunun düşürülmesine davet
+  eder (sözleşmenin "değerli gözlemi ATMA" hükmüyle gerilim). İkisi de kapsamda ele alınmalı.
+
 - **plan2-ek-bagimlilik-hukmu-ad-kumesi** (proposed, TASARIM KARARI — yürütücü çözemez;
   TETİKLİ) — Plan 2'nin bağlayıcı arayüz eki, yaşam döngüsü modülünün kimlik modülünden
   **yalnız kanonik hash adını** kullanmasını şart koşuyor. Ölçüldü (2026-08-31): modül
