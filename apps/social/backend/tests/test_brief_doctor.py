@@ -1154,7 +1154,7 @@ def test_temiz_kaynak_yeni_kapilardan_sonra_da_notsuz() -> None:
 
 def test_kapsam_sinirlari_checks_ten_turer_ve_belgeden_bagimsizdir() -> None:
     """İlke 9(4): ölçülmeyen yön 'doğrulanmadı' etiketiyle SUNULUR."""
-    beklenen = tuple(c.kapsam_siniri for c in bd.CHECKS if c.kapsam_siniri)
+    beklenen = tuple(s for c in bd.CHECKS for s in c.kapsam_sinirlari)
     assert beklenen, "hiçbir kontrol kapsam sınırı beyan etmiyor"
     assert bd.run(TEMIZ, source_name="P").kapsam_sinirlari == beklenen
     assert bd.run("", source_name="P").kapsam_sinirlari == beklenen
@@ -1171,7 +1171,7 @@ def test_dil_kurali_ters_yonu_dogrulanmadigini_raporda_soyler() -> None:
     assert rapor.sonuc == bd.SONUC_GECTI
     # Kapsam sınırı ailenin `aciklama` alanına da yansır.
     dil = next(c for c in bd.CHECKS if c.aile == "dil-kurali")
-    assert "DOĞRULANMADI" in dil.kapsam_siniri.upper()
+    assert "DOĞRULANMADI" in " ".join(dil.kapsam_sinirlari).upper()
     assert "ters yön" in dil.aciklama or "ölçülmez" in dil.aciklama
 
 
@@ -1390,9 +1390,15 @@ def test_icerik_ozeti_run_tarafindan_uretilir_ve_bicimi_zorlanir() -> None:
 # sözleşmenin bir sıra DAYATMADIĞI açık kümelerde bilinçle boştur ve gerekçesi
 # hücrenin yanında yazılıdır — sessizce atlanmaz.
 
+# **Tur 3 DÜZELTMESİ (davranış DEĞİŞMEZ, gerekçe değişir).** Eski gerekçe
+# "sözleşme bu düzeyde SIRA dayatmaz" diyordu ve YANLIŞTI: pinli sözleşme
+# (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI dayatır. Hücreler yine boş
+# kalır — ama doğru gerekçeyle: önem SEMANTİK bir yargıdır, mekanik kapı
+# doğrulayamaz. Ölçümü `test_sozlesme_onem_sirasi_dayatir_ama_kapi_olcemez`'te.
 _ACIK_KUME_GEREKCESI = (
-    "sözleşme bu düzeyde bir SIRA dayatmaz (açık küme); sıra kuralı "
-    "uydurulsaydı gerçek çıktı gürültüye boğulurdu"
+    "sözleşme bu düzeyde ÖNEM SIRASI dayatır (_SABLON.md satır 73-75) ama önem "
+    "SEMANTİK bir yargıdır; mekanik kapı DOĞRULAYAMAZ — uydurulmuş bir sıra "
+    "kuralı gerçek çıktıyı gürültüye boğardı (İlke 9)"
 )
 
 _YUVA_BASLIKLARI = ("kanca", "cta", "gorsel_vurgu")
@@ -1711,7 +1717,7 @@ def test_kapsam_sinirlari_cagirandan_alinmaz() -> None:
     dogrudan = bd.DoctorReport(
         sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K"
     )
-    beklenen = tuple(c.kapsam_siniri for c in bd.CHECKS if c.kapsam_siniri)
+    beklenen = tuple(s for c in bd.CHECKS for s in c.kapsam_sinirlari)
     assert dogrudan.kapsam_sinirlari == beklenen
     assert dogrudan.kapsam_sinirlari == bd.run(TEMIZ, source_name="K").kapsam_sinirlari
 
@@ -1724,7 +1730,7 @@ def test_kapsam_beyani_checks_ten_turedigi_mutasyonla_olculur() -> None:
             sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K"
         )
         assert rapor.kapsam_sinirlari == tuple(
-            c.kapsam_siniri for c in sahte if c.kapsam_siniri
+            sinir for c in sahte for sinir in c.kapsam_sinirlari
         )
     # Boş-küme kolu: hiç beyan yoksa demet BOŞ olmalı, eski değer sızmamalı.
     with mock.patch.object(bd, "CHECKS", ()):
@@ -1792,13 +1798,13 @@ def test_yeni_kapilarin_hepsi_mutasyona_duyarli() -> None:
     with mock.patch.object(bd, "_c_esleme_parcalari", lambda satir: ["a", "b"]):
         assert "ÜÇLÜ değil" not in _notlari(ciplak)
 
-    # (d) İlk-bitişik-tablo kuralı: sök → alakasız tablo yine uydurma not versin.
+    # (d) Gerekçe tablosu TANIMA kuralı: sök → alakasız tablo uydurma not versin.
+    # (Kural tur 3'te "ilk bitişik tablo"dan KANONİK BAŞLIK tanımasına geçti;
+    #  mutasyon o yüzden yeni sözleşmeye göre yazılır — bkz. H6.)
     alakasiz = bolum_b_alakasiz_tablo(TEMIZ, 2)
     assert _notlari(alakasiz) == ""
     with mock.patch.object(
-        bd,
-        "_gerekce_tablosu",
-        lambda izler: ([s for _, s, _ in izler], bool(izler) and izler[0][2]),
+        bd, "_gerekce_tablosu", lambda bloklar: (list(bloklar), 1)
     ):
         bozuk = _notlari(alakasiz)
         assert "2 sütunlu satır" in bozuk and "tür etiketi yok" in bozuk
@@ -1949,3 +1955,221 @@ def test_ozet_kapisi_mutasyona_duyarli() -> None:
     assert bd.gate_round(ozetsiz).gecerli_kaynak_sayisi == 0
     with mock.patch.object(bd, "_kimlik_kapiya_uygun", lambda raporlar: True):
         assert bd.gate_round(ozetsiz).gecerli_kaynak_sayisi == 2
+
+
+# ─── H6: gerekçe tablosu KANONİK BAŞLIĞINDAN tanınır ───────────────────────
+#
+# Sınıf (tur 3, F3 — bir önceki turun KENDİ düzeltmesinin yan etkisi): tur 2'de
+# F5'i kapatmak için "gerekçe tablosu dönemlerden ÖNCEKİ İLK BİTİŞİK tablodur"
+# denmişti. Bu seçim KOŞULSUZDU ve ölçüldü ki önüne konan sağlam görünümlü bir
+# tablo GERÇEK ve bozuk gerekçe tablosunu tamamen gizliyordu (`not 4 -> 0`).
+# Artık aday, blok BAŞLIĞININ kanonik sütun anahtarlarını taşımasıyla belirlenir
+# (`GEREKCE_BASLIK_ANAHTARLARI`, `GEREKCE_TABLOSU_SUTUNLARI`'ndan TÜRER) ve
+# fail-open dal yoktur: aday sıfır ya da birden çoksa NOT düşer ve BÜTÜN bloklar
+# denetlenir.
+#
+# **Matris KAVRAMDAN türer:** eksen 1 = alakasız tablonun Bölüm B içindeki
+# KONUMU (gerekçe tablosuna göre önce · aralarda · sonra — bir tablonun bir
+# başkasına göre alabileceği üç konum), eksen 2 = GERÇEK gerekçe tablosunun
+# durumu (sağlam · bozuk). 3 × 2 = 6 hücre; boş hücre yoktur.
+
+_ALAKASIZ_4_SUTUN = (
+    "| ay | trafik | dönüşüm | serbest not |\n",
+    "|---|---|---|---|\n",
+    "| ocak | yuksek | orta | ilk ceyrek |\n",
+    "| subat | orta | orta | ilk ceyrek |\n",
+)
+# Aynı tablo ama KANONİK gerekçe başlığıyla: iki aday üretir (belirsizlik kolu).
+_SAHTE_GEREKCE = (
+    "| dönem | karar | tür | gerekçe |\n",
+    "|---|---|---|---|\n",
+    "| ocak | secildi | kutlama | Uydurma gerekce. |\n",
+)
+
+
+def _bolum_b_araligi(satirlar: list[str]) -> tuple[int, int]:
+    return _md_blok(satirlar, "## Bölüm B — GÖREV B çıktısı")
+
+
+def bolum_b_tablo_ekle(metin: str, konum: str, tablo: tuple[str, ...]) -> str:
+    """Bölüm B'ye alakasız/sahte bir tabloyu ÜÇ konumdan birine koyar.
+
+    `once`  — gerekçe tablosundan ÖNCE (Bölüm B başlığının hemen altı)
+    `arada` — dönem blokları arasında (gerekçe tablosundan sonra)
+    `sonra` — bütün dönemlerden SONRA (Bölüm B'nin sonu)
+    """
+    satirlar = metin.splitlines(True)
+    i, j = _bolum_b_araligi(satirlar)
+    if konum == "once":
+        k = i + 1
+    elif konum == "arada":
+        k = _md_blok(satirlar, f"### {_DONEM_ADLARI[2]}")[1]
+    elif konum == "sonra":
+        k = j
+    else:  # pragma: no cover - matris kapalı kümedir
+        raise AssertionError(f"bilinmeyen konum: {konum!r}")
+    return "".join(satirlar[:k] + ["\n"] + list(tablo) + ["\n"] + satirlar[k:])
+
+
+GEREKCE_TANIMA_MATRISI = tuple(
+    (
+        f"alakasiz-{konum}/gercek-{durum}",
+        bolum_b_tablo_ekle(bozan(TEMIZ), konum, _ALAKASIZ_4_SUTUN),
+        izler,
+    )
+    for konum in ("once", "arada", "sonra")
+    for durum, bozan, izler in (
+        ("saglam", lambda m: m, ()),
+        ("bozuk", gerekce_tablosunu_boz, ("tür etiketi yok", "3 sütunlu satır")),
+    )
+)
+
+
+@pytest.mark.parametrize(
+    "metin,izler",
+    [(h[1], h[2]) for h in GEREKCE_TANIMA_MATRISI],
+    ids=[h[0] for h in GEREKCE_TANIMA_MATRISI],
+)
+def test_alakasiz_tablo_gercek_gerekce_tablosunu_gizleyemez(
+    metin: str, izler: tuple[str, ...]
+) -> None:
+    """Konumu ne olursa olsun alakasız tablo GERÇEK tabloyu köreltemez."""
+    mesajlar = _notlari(metin)
+    if not izler:
+        assert mesajlar == "", f"sağlam gerekçe tablosu not üretti: {mesajlar[:400]}"
+    for iz in izler:
+        assert iz in mesajlar, f"{iz!r} bulunamadı; görülen: {mesajlar[:400]}"
+
+
+def test_gerekce_tanima_matrisi_bos_kume_ve_taban_kollari() -> None:
+    """Boş-küme kolu: matris iki eksenden GERÇEKTEN üretilmiş mi?"""
+    assert len(GEREKCE_TANIMA_MATRISI) == 3 * 2 == 6
+    for ad, metin, _ in GEREKCE_TANIMA_MATRISI:
+        assert metin != TEMIZ, f"{ad}: cerrahi metni değiştirmedi"
+        assert metin.count("| ay | trafik | dönüşüm | serbest not |") == 1
+    # Taban kolu: alakasız tablo YOKKEN bozuk gerçek tablo zaten görünüyordu.
+    yalniz_bozuk = _notlari(gerekce_tablosunu_boz(TEMIZ))
+    assert "tür etiketi yok" in yalniz_bozuk and "3 sütunlu satır" in yalniz_bozuk
+
+
+def test_iki_aday_belirsizligi_not_duser_ve_ikisi_de_denetlenir() -> None:
+    """Kanonik başlıklı SAHTE tablo aday sayısını 2 yapar → belirsizlik NOTU."""
+    ikili = bolum_b_tablo_ekle(gerekce_tablosunu_boz(TEMIZ), "once", _SAHTE_GEREKCE)
+    mesajlar = _notlari(ikili)
+    assert "2 tablo var" in mesajlar, mesajlar[:400]
+    # Fail-closed: belirsizlikte hepsi denetlenir, gerçek tablo GİZLENMEZ.
+    assert "tür etiketi yok" in mesajlar and "3 sütunlu satır" in mesajlar
+
+
+def test_kanonik_baslik_yoksa_tanima_notu_duser() -> None:
+    """Aday sıfır ama tablo VAR → sessiz kalınmaz, not düşer ve hepsi denetlenir."""
+    basliksiz = TEMIZ.replace(
+        "| dönem | karar | tür | gerekçe |", "| a | b | c | d |"
+    )
+    assert basliksiz != TEMIZ
+    mesajlar = _notlari(basliksiz)
+    assert "KANONİK başlığını taşımıyor" in mesajlar, mesajlar[:400]
+
+
+def test_tablosuz_bolum_b_tanima_notu_uretmez() -> None:
+    """Yanlış-pozitif kapanı: Bölüm B'de HİÇ tablo yoksa tanıma notu ÇIKMAZ.
+
+    Gerçek araştırma çıktılarının beşi de Bölüm B'de tablo taşımıyor; tanıma
+    notu oraya sızarsa bu tur her dosyaya bir uydurma not ekler.
+    """
+    tablosuz = kaynak(tablo=False)
+    mesajlar = _notlari(tablosuz)
+    assert "KANONİK başlığını taşımıyor" not in mesajlar
+    assert "tablo var" not in mesajlar
+    assert "gerekçeleri tablosu yok" in mesajlar
+
+
+def test_gerekce_tanima_kapisi_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: başlık tanımasını iki ayrı yerden sök → matris kırmızı."""
+    gizleyen = bolum_b_tablo_ekle(
+        gerekce_tablosunu_boz(TEMIZ), "once", _ALAKASIZ_4_SUTUN
+    )
+    assert "3 sütunlu satır" in _notlari(gizleyen)
+    # (a) Seçimi sök: her blok tek gerekçe tablosuymuş gibi kabul edilsin.
+    with mock.patch.object(bd, "_gerekce_tablosu", lambda bloklar: (bloklar, 1)):
+        bozuk = _notlari(bolum_b_alakasiz_tablo(TEMIZ, 2))
+        assert "2 sütunlu satır" in bozuk, "alakasız tablo yine uydurma not vermeli"
+    # (b) Başlık puanını sök: aday kalmaz → tanıma notu ve tam denetim.
+    with mock.patch.object(bd, "_gerekce_basligi_puani", lambda satir: 0):
+        assert "KANONİK başlığını taşımıyor" in _notlari(TEMIZ)
+
+
+# ─── M4: ÖNEM SIRASI dayatılır ama makineyle DOĞRULANAMAZ (dürüst beyan) ────
+#
+# Bir önceki turun iç içe matrisinde SIRA hücreleri "sözleşme bu düzeyde sıra
+# DAYATMAZ" gerekçesiyle boş bırakılmıştı. Gerekçe YANLIŞTI: pinli sözleşme
+# (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI dayatır. Ölçüldü ki iki
+# çağrı kalıbı takas edildiğinde rapor `gecti / 0 not` veriyor. Davranış AYNEN
+# KORUNUR — önem SEMANTİK bir yargıdır, uydurma bir sıra kuralı gerçek çıktıyı
+# gürültüye boğardı — ama gerekçe düzelir ve kapsam beyanına GEÇER.
+
+
+def _sozlesmenin_onem_sirasi_kurali() -> str:
+    """Kural UYDURULMAZ: pinlenmiş sözleşmeden okunur."""
+    metin = _pinli_sablon()
+    for satir in metin.splitlines():
+        if "ÖNEM SIRASINA" in satir:
+            return satir.strip()
+    raise AssertionError("sözleşmede önem sırası kuralı bulunamadı")
+
+
+def test_sozlesme_onem_sirasi_dayatir_ama_kapi_olcemez() -> None:
+    """Ölçülmüş hâl: sözleşme sıra DAYATIR, mekanik kapı görmez."""
+    assert "ÖNEM SIRASINA göre sırala" in _sozlesmenin_onem_sirasi_kurali()
+
+    satirlar = TEMIZ.splitlines(True)
+    i, j = _md_blok(satirlar, "### cta_kaliplari")
+    maddeler = [k for k in range(i + 1, j) if satirlar[k].lstrip().startswith("- ")]
+    sol, sag = maddeler[0], maddeler[1]
+    satirlar[sol], satirlar[sag] = satirlar[sag], satirlar[sol]
+    takas = "".join(satirlar)
+    assert takas != TEMIZ
+
+    rapor = bd.run(takas, source_name="P")
+    assert rapor.sonuc == bd.SONUC_GECTI
+    assert rapor.notlar == (), "uydurma bir sıra kuralı yazılmış olmalı DEĞİL"
+
+    # Dürüst beyan: ölçülemeyen kural RAPORDA "doğrulanmadı" etiketiyle yaşar.
+    birlesik = " ".join(rapor.kapsam_sinirlari)
+    assert "ÖNEM SIRASI" in birlesik and "DOĞRULAYAMAZ" in birlesik
+    assert "73-75" in birlesik, "beyan sözleşme satırını göstermeli"
+
+
+def test_kapsam_beyani_besinci_kalemi_tasir() -> None:
+    """Beyan sayısı DÖRT değil BEŞ: sıra sınırı ayrı bir kalem olarak eklendi."""
+    beyanlar = bd.run(TEMIZ, source_name="P").kapsam_sinirlari
+    assert len(beyanlar) == 5, beyanlar
+    assert len(set(beyanlar)) == 5, "beyanlar tekrar ediyor"
+
+
+def test_bolum_c_uclusu_serbest_duzyaziyla_gecer_ve_beyan_bunu_soyler() -> None:
+    """Dürüst ilan (Kalem 4): kaçış ÖLÇÜLÜR, beyan onu AYNEN söyler.
+
+    Kök çözüm sözleşme revizyonudur (Bölüm C'nin sabit sütunlu tablo olması) ve
+    AYRI bir tasarım işine kaydedilmiştir; bu tur ayıraç vekilini
+    SERTLEŞTİRMEZ — sertleştirme üç turdur yakınsamadı ve yanlış-pozitif üretir.
+    Test bir TRIPWIRE'dır: kaçış kapanırsa burası kırılır ve beyan güncellenir.
+    """
+    satirlar = TEMIZ.splitlines(True)
+    i, j = _md_blok(satirlar, "## Bölüm C — KAYNAKLAR")
+    maddeler = [k for k in range(i + 1, j) if satirlar[k].lstrip().startswith("- ")]
+    duzyazi = "".join(
+        satirlar[: maddeler[0]]
+        + ["- Düz yazı, devamı https://example.com/kaynak\n"]
+        + satirlar[maddeler[-1] + 1 :]
+    )
+    rapor = bd.run(duzyazi, source_name="P")
+    assert rapor.sonuc == bd.SONUC_GECTI
+    assert [b.mesaj for b in rapor.notlar if b.aile == "url-bicimi"] == []
+
+    beyan = next(
+        b for b in rapor.kapsam_sinirlari if b.startswith("url-bicimi:")
+    )
+    assert "serbest düzyazı" in beyan
+    assert "DOĞRULANMADI" in beyan
+    assert "ÜÇLÜSÜ" in beyan or "ÜÇLÜ" in beyan

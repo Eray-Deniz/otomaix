@@ -86,7 +86,13 @@ eden Bölüm C eşleme satırı hâlâ `gecti / 0 not` veriyordu. Düzey listesi
 KENDİ içerme modelinden türer ve TEK yerde yaşar (`_ic_ice_izler`): bölüm → Bölüm A alanı
 → alan maddesi · video havuzu → havuz maddesi · Bölüm B dönemi → dönem yuvası → yuva
 maddesi · Bölüm C eşleme satırı. Sabit kümelerde SIRA da ölçülür; açık kümelerde
-(madde · dönem · eşleme satırı) sözleşme bir sıra DAYATMADIĞI için yalnız TEKRAR ölçülür.
+(madde · dönem · eşleme satırı) yalnız TEKRAR ölçülür. **Gerekçe tur 3'te DÜZELTİLDİ,
+davranış DEĞİŞMEDİ:** sözleşme o düzeylerde sıra dayatMIYOR değil — `_SABLON.md` satır
+73-75 her listede ÖNEM SIRASI dayatır (sektöre özgülük → kaynak sayısı ve gücü → Türkiye
+yerelliği). Ama önem SEMANTİK bir yargıdır ve mekanik kapı doğrulayamaz; ölçüldü ki iki
+çağrı kalıbı takas edildiğinde rapor `gecti / 0 not` verir. Uydurulmuş bir sıra kuralı
+gerçek çıktıyı gürültüye boğardı, bu yüzden YAZILMAZ ve sınır artık kapsam beyanında
+SUNULUR (docstring sunum değildir).
 
 **Sayıya dayalı her eşik ESSİZ DOĞRULANMIŞ varlığı sayar.** Ham `len(...)` tekrarı ve
 serbest boşluk ifadesini de sayar: "5 CTA kalıbı" aynı satırın beş kopyasıyla, ">=6 dönem"
@@ -95,13 +101,18 @@ aynı dönemin iki kez yazılmasıyla sağlanabiliyordu. Alt sınırlar bu yüzd
 
 Dilbilgisi bilerek DAR TUTULMAMIŞTIR: tanınmayan bir başlık iz bırakmaz ve ihlal
 sayılmaz — yanlış pozitif üretip gerçek araştırma çıktısını gürültüye boğmasın diye. Aynı
-disiplinle, Bölüm B'de gerekçe tablosu artık dönemlerden ÖNCEKİ İLK BİTİŞİK tablodur
-(`_gerekce_tablosu`): ayıraçtan sonraki her `|` satırını gerekçe malzemesi saymak, bir
-dönem bloğunun içine konan meşru bir ölçüm tablosundan DÖRT uydurma not doğuruyordu.
+disiplinle, Bölüm B'de gerekçe tablosu KANONİK BAŞLIĞINDAN tanınır
+(`_gerekce_basligi_puani`): ayıraçtan sonraki her `|` satırını gerekçe malzemesi saymak,
+bir dönem bloğunun içine konan meşru bir ölçüm tablosundan DÖRT uydurma not doğuruyordu;
+onu kapatan "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" kuralı ise KOŞULSUZ olduğu için yeni
+bir fail-open dal açmıştı — önüne konan sağlam görünümlü bir tablo, bozuk GERÇEK gerekçe
+tablosunu gizliyordu (ölçüldü: `5 not → 2 not`). Tanıma artık konumdan değil BAŞLIK
+ANLAMINDAN gelir ve fail-open dal yoktur: aday sıfır ya da birden çoksa NOT düşer ve
+blokların hepsi denetlenir.
 
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
-SAKLI DEĞİLDİR: `Check.kapsam_siniri` alanında yaşarlar ve `run` onları
+SAKLI DEĞİLDİR: `Check.kapsam_sinirlari` demetinde yaşarlar ve `run` onları
 `DoctorReport.kapsam_sinirlari`'na taşır — İlke 9'un dördüncü ayağı ölçülmemiş davranış
 iddiasının "doğrulanmadı" etiketiyle SUNULMASINI ister, ve docstring sunum değildir.
 Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
@@ -117,11 +128,15 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   değildir; kapsama oranı ölçülmemiştir.
 * Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil; Bölüm C
   bağlantılarının gerçekten açıldığı doğrulanmaz (ağ çağrısı yapılmaz).
-* Bölüm C'nin ÜÇLÜ yapısı (alan/dönem → iddia → kaynak) bir AYIRAÇ vekiliyle
-  (`_C_AYIRAC_RE`) görülür; parçaların ANLAMI doğrulanmaz ve vekilin kapsama oranı
-  ÖLÇÜLMEMİŞTİR.
-* Gerekçe tablosu "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" vekiliyle bulunur; gerekçe
-  tablosundan önce Bölüm B'ye konmuş alakasız bir tablonun ayırt edilmesi DOĞRULANMADI.
+* Bölüm C'de kaynak eşlemesinin VARLIĞI ve adres biçimi taranır; eşlemenin gerçekten
+  alan/dönem → iddia → kaynak ÜÇLÜSÜ olduğu makineyle DOĞRULANMADI. Vekil
+  (`_C_AYIRAC_RE`) serbest noktalamayı da ayıraç sayar ve yalnız PARÇA SAYISINI ölçer,
+  dolayısıyla SERBEST DÜZYAZI bu kontrolü GEÇER (ölçüldü). Kök çözüm sözleşme
+  revizyonudur ve AYRI bir tasarım işine kaydedildi; vekil bu turda SERTLEŞTİRİLMEDİ —
+  sertleştirme üç turdur yakınsamadı ve yanlış-pozitif üretir.
+* Gerekçe tablosunun KANONİK başlığı TAKLİT edilebilir: taklit eden tablo da aday olur,
+  o hâlde belirsizlik NOTU düşer ve blokların hepsi denetlenir, ama hangisinin gerçek
+  gerekçe tablosu olduğu DOĞRULANMADI.
 * Kaynak KİMLİĞİ yazım takma adlarını (`kanonik_kaynak_kimligi`) ve aynı metnin iki adla
   verilmesini (`icerik_ozeti`) denkler. Özetsiz kimlik artık kapıya UYGUN DEĞİLDİR, ama
   özetin `run` tarafından ÜRETİLDİĞİ doğrulanamaz: biçim zorlanır, KÖKEN zorlanmaz —
@@ -174,6 +189,17 @@ LISTE_ALANLARI = tuple(ad for ad in TEMEL_ALANLAR if ad not in METIN_ALANLARI)
 # gerekçeleri tablosu (dönem + karar + tür etiketi + gerekçe), sonra dönem dönem
 # dört başlık". SÜTUN SAYISI ve SIRA sözleşmenindir; test onu pinden okur.
 GEREKCE_TABLOSU_SUTUNLARI = ("dönem", "karar", "tür etiketi", "gerekçe")
+
+# Gerekçe tablosunun KANONİK BAŞLIK anahtarları — sütun adlarının çekirdek
+# sözcükleri. İkinci bir liste YAZILMAZ: küme sözleşmeden okunan sabitin
+# TÜREVİDİR ("tür etiketi" → "tür"), böylece sözleşme değişirse tanıma da değişir.
+GEREKCE_BASLIK_ANAHTARLARI = tuple(
+    sutun.split()[0] for sutun in GEREKCE_TABLOSU_SUTUNLARI
+)
+# Başlık satırı bu kadar anahtarı taşıyorsa blok gerekçe tablosu ADAYIDIR.
+# Eşik TAM eşleşme değildir bilerek: gerçek çıktıda sütun adı kısaltılabilir
+# ("tür etiketi" yerine "tür") ve tam eşleşme aramak yanlış-negatif üretirdi.
+GEREKCE_BASLIK_ASGARI = 2
 
 VIDEO_HAVUZLARI = ("hareket", "sahne")
 
@@ -463,16 +489,29 @@ class Check:
     seviye: str
     aciklama: str
     kural: Callable[["_Belge"], list[str]]
-    kapsam_siniri: str = ""
-    """Kontrolün sözleşmenin NE KADARINI ölçtüğünün dürüst beyanı.
+    kapsam_sinirlari: tuple[str, ...] = ()
+    """Kontrolün sözleşmenin NE KADARINI ölçtüğünün dürüst beyanları.
 
-    Boş değilse `run` onu `DoctorReport.kapsam_sinirlari`'na taşır — İlke 9(4)
-    ölçülmeyen davranış iddiasının "doğrulanmadı" etiketiyle SUNULMASINI ister
-    ve docstring'de saklı kalmak sunum değildir. Bu bir BULGU değildir: rapor
-    sonucunu değiştirmez, temiz kaynak `gecti` kalır.
+    Boş değilse `run` onları `DoctorReport.kapsam_sinirlari`'na taşır — İlke
+    9(4) ölçülmeyen davranış iddiasının "doğrulanmadı" etiketiyle SUNULMASINI
+    ister ve docstring'de saklı kalmak sunum değildir. Bu bir BULGU değildir:
+    rapor sonucunu değiştirmez, temiz kaynak `gecti` kalır.
+
+    **Alan tur 3'te TEK metinden DEMETE çevrildi:** bir kontrolün birden çok
+    BAĞIMSIZ ölçüm sınırı olabiliyor ve ikisini tek paragrafa sıkıştırmak
+    denetçiden kalem SAYISINI gizliyordu. `bolum-ve-alan-tamligi` bunun ölçülmüş
+    örneğidir: tanıma vekili ayrı bir sınır, sözleşmenin ÖNEM SIRASI kuralının
+    doğrulanamaması ayrı bir sınırdır.
     """
 
     def __post_init__(self) -> None:
+        if not isinstance(self.kapsam_sinirlari, tuple) or not all(
+            isinstance(sinir, str) for sinir in self.kapsam_sinirlari
+        ):
+            raise TypeError(
+                "Check.kapsam_sinirlari metin DEMETİ olmak zorunda: "
+                f"{self.kapsam_sinirlari!r}"
+            )
         if self.seviye not in SEVIYELER:
             raise ValueError(
                 f"Check seviyesi kapalı kümenin dışında: {self.seviye!r} — "
@@ -506,7 +545,9 @@ def _bulgu_demeti(deger: object, etiket: str) -> tuple[Bulgu, ...]:
 
 def _kapsam_beyani() -> tuple[str, ...]:
     """Kapsam beyanı — kanonik kontrol kümesinin TÜREVİ, kopyası değil."""
-    return tuple(check.kapsam_siniri for check in CHECKS if check.kapsam_siniri)
+    return tuple(
+        sinir for check in CHECKS for sinir in check.kapsam_sinirlari
+    )
 
 
 def _metin_demeti(deger: object) -> tuple[str, ...]:
@@ -814,6 +855,8 @@ class _Belge:
     bos_bolumler: tuple[str, ...] = ()
     tablo_sutun_sayilari: tuple[int, ...] = ()
     tablo_donem_sonrasi: bool = False
+    gerekce_tablo_blok_sayisi: int = 0
+    gerekce_aday_sayisi: int = 0
     c_esleme_satiri_var: bool = False
     # Tur 1 yalnız BÖLÜM ve ALAN düzeyini kurtardı; aşağıdakiler iç içe KALAN
     # düzeylerin sıralı-tekrarlı izleridir. Düzey listesi belgenin KENDİ içerme
@@ -977,19 +1020,28 @@ def _ayristir(source_text: str) -> _Belge:
         if aktif_donem is not None:
             aktif_donem.satirlar.append(satir)
 
-    tablo_satirlari, tablo_donem_sonrasi = _gerekce_tablosu(tablo_izleri)
+    tablo_bloklari = _tablo_bloklari(tablo_izleri)
+    secilen_bloklar, gerekce_aday_sayisi = _gerekce_tablosu(tablo_bloklari)
+    tablo_donem_sonrasi = any(blok[0][2] for blok in secilen_bloklar)
 
     for donem in donemler:
         donem.yuvalar, donem.yuva_sirasi = _bloklara_ayir(
             donem.satirlar, _YUVA_DESENI
         )
 
-    tablo_veri_satirlari = _tablo_veri_satirlari(tablo_satirlari)
-    tablo_sutun_sayilari = tuple(
-        len(_hucreler(satir))
-        for satir in tablo_satirlari
-        if not _TABLO_AYIRAC_RE.match(satir)
-    )
+    # Sayımlar blok BAŞINA yürür: birden çok aday varken tek bir akışa
+    # düzleştirmek ikinci bloğun BAŞLIK satırını veri sanırdı.
+    tablo_veri_satirlari: list[str] = []
+    sutun_sayilari: list[int] = []
+    for blok in secilen_bloklar:
+        blok_satirlari = [satir for _, satir, _ in blok]
+        tablo_veri_satirlari += _tablo_veri_satirlari(blok_satirlari)
+        sutun_sayilari += [
+            len(_hucreler(satir))
+            for satir in blok_satirlari
+            if not _TABLO_AYIRAC_RE.match(satir)
+        ]
+    tablo_sutun_sayilari = tuple(sutun_sayilari)
 
     c_satirlari = bolumler.get("C", [])
     c_esleme_satirlari = tuple(
@@ -1014,6 +1066,8 @@ def _ayristir(source_text: str) -> _Belge:
         bos_bolumler=bos_bolumler,
         tablo_sutun_sayilari=tablo_sutun_sayilari,
         tablo_donem_sonrasi=tablo_donem_sonrasi,
+        gerekce_tablo_blok_sayisi=len(tablo_bloklari),
+        gerekce_aday_sayisi=gerekce_aday_sayisi,
         c_esleme_satiri_var=bool(c_esleme_satirlari),
         video_havuz_sirasi=video_havuz_sirasi,
         donem_sirasi=tuple(_sadelestir(donem.ad) for donem in donemler),
@@ -1022,33 +1076,64 @@ def _ayristir(source_text: str) -> _Belge:
     )
 
 
-def _gerekce_tablosu(
+def _tablo_bloklari(
     izler: Sequence[tuple[int, str, bool]]
-) -> tuple[list[str], bool]:
-    """Bölüm B'nin İLK BİTİŞİK tablo bloğu — gerekçe tablosu ODUR.
+) -> list[list[tuple[int, str, bool]]]:
+    """Bölüm B'deki `|` satırlarını BİTİŞİK bloklara ayırır — tablo birimi budur."""
+    bloklar: list[list[tuple[int, str, bool]]] = []
+    for iz in izler:
+        if bloklar and iz[0] == bloklar[-1][-1][0] + 1:
+            bloklar[-1].append(iz)
+        else:
+            bloklar.append([iz])
+    return bloklar
 
-    **Ölçülmüş gerileme (tur 2, F5):** ayıraçtan sonraki HER `|` satırını
-    gerekçe tablosu saymak, Bölüm B'deki bir dönem bloğunun içine konan meşru
-    ve başlıklı iki sütunlu bir tablodan 4 UYDURMA not doğuruyordu (tür etiketi
-    yok ×3 + sütun sayısı). Sözleşme "ÖNCE tablo, SONRA dönem dönem dört
-    başlık" der; gerekçe tablosu bu yüzden TEK ve İLK bitişik bloktur.
 
-    Dönen ikinci değer o bloğun SIRA ihlali taşıyıp taşımadığıdır (blok bir
-    dönem açıldıktan sonra başlamışsa). Sonraki tablolar hiçbir gerekçe
-    kontrolüne beslenmez.
+def _gerekce_basligi_puani(satir: str) -> int:
+    """Bir tablo BAŞLIK satırının kanonik gerekçe anahtarı sayısı."""
+    govde = " | ".join(_hucreler(satir)).casefold()
+    return sum(
+        1
+        for anahtar in GEREKCE_BASLIK_ANAHTARLARI
+        if anahtar.casefold() in govde
+    )
 
-    **Kapsam sınırı:** gerekçe tablosundan ÖNCE Bölüm B'ye konmuş alakasız bir
-    tablo, gerekçe tablosu sanılır — o hâlde gerçek tablo zaten sözleşmenin
-    istediği yerde değildir ve notlar boşa düşmez, ama ayrım DOĞRULANMADI.
+
+def _gerekce_tablosu(
+    bloklar: Sequence[Sequence[tuple[int, str, bool]]]
+) -> tuple[list[Sequence[tuple[int, str, bool]]], int]:
+    """Gerekçe tablosunu KANONİK BAŞLIĞINDAN tanır → (denetlenecek bloklar, aday).
+
+    **Ölçülmüş gerileme (tur 3, F3 — bir önceki turun KENDİ düzeltmesinin yan
+    etkisi):** tur 2 "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" diyordu. Seçim
+    KOŞULSUZDU ve ölçüldü ki gerçek gerekçe tablosunun önüne konan sağlam
+    görünümlü bir tablo, bozuk GERÇEK tabloyu tamamen gizliyordu: yalnız bozuk
+    tablo `notlu-gecti / 5 not`, önüne tablo konunca `2 not`. Yani F5'i kapatan
+    kural yeni bir fail-open dal açmıştı.
+
+    Tanıma artık KONUMDAN değil BAŞLIK ANLAMINDAN gelir: blok başlığı kanonik
+    sütun anahtarlarından (`GEREKCE_BASLIK_ANAHTARLARI`) en az
+    `GEREKCE_BASLIK_ASGARI` tanesini taşıyorsa ADAYDIR.
+
+    **Fail-open dal YOKTUR.** Aday tam bir taneyse o denetlenir. Aday BİRDEN
+    ÇOKSA hepsi denetlenir (gizlenme olmaz) ve `_kontrol_gerekce_tablosu` not
+    düşer. Aday HİÇ YOKSA — ama tablo varsa — yine hepsi denetlenir ve tanıma
+    notu düşer: "hangisi olduğu bilinmiyor" hâli sessizce ilk bloğu seçmekten
+    daha kapalıdır.
+
+    **Kapsam sınırı:** tanıma sütun başlıklarının SÖZCÜKLERİNE bakar, anlamına
+    değil; kanonik başlığı taklit eden bir tablo aday olur — o hâlde aday sayısı
+    ikiye çıkar ve belirsizlik NOTU düşer, ama hangisinin gerçek olduğu
+    DOĞRULANMADI.
     """
-    if not izler:
-        return [], False
-    blok = [izler[0]]
-    for iz in izler[1:]:
-        if iz[0] != blok[-1][0] + 1:
-            break
-        blok.append(iz)
-    return [satir for _, satir, _ in blok], blok[0][2]
+    adaylar = [
+        blok
+        for blok in bloklar
+        if blok and _gerekce_basligi_puani(blok[0][1]) >= GEREKCE_BASLIK_ASGARI
+    ]
+    if adaylar:
+        return list(adaylar), len(adaylar)
+    return list(bloklar), 0
 
 
 def _tablo_veri_satirlari(satirlar: Sequence[str]) -> list[str]:
@@ -1122,9 +1207,17 @@ def _iz_ihlalleri(
 ) -> list[str]:
     """Bir iç içe düzeyin SIRALI-TEKRARLI izini sözleşmeye vurur.
 
-    `sozlesme is None` → küme AÇIKTIR (sözleşme o düzeyde bir sıra DAYATMAZ):
-    yalnız TEKRAR ölçülür, sıra ölçülmez. Sıra kuralı uydurulsaydı gerçek
-    araştırma çıktısı gürültüye boğulurdu.
+    `sozlesme is None` → küme AÇIKTIR: yalnız TEKRAR ölçülür, sıra ölçülmez.
+
+    **Gerekçe tur 3'te DÜZELTİLDİ (davranış DEĞİŞMEDİ).** Önceki gerekçe
+    "sözleşme o düzeyde bir sıra DAYATMAZ" diyordu ve YANLIŞTI: pinli sözleşme
+    (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI dayatır — ölçüt sırasıyla
+    sektöre özgülük, kaynak sayısı ve gücü, Türkiye yerelliği. Doğru gerekçe
+    şudur: sözleşme sıra DAYATIR ama önem SEMANTİK bir yargıdır ve mekanik kapı
+    onu DOĞRULAYAMAZ. Ölçüldü: iki çağrı kalıbı takas edildiğinde rapor
+    `gecti / 0 not` verir. Uydurulmuş bir sıra kuralı gerçek araştırma çıktısını
+    gürültüye boğar ve İlke 9'u ihlal ederdi; bu yüzden YAZILMAZ ve sınır
+    `bolum-ve-alan-tamligi` kapsam beyanına BEŞİNCİ kalem olarak taşınır.
     """
     mesajlar: list[str] = []
     sayim: dict[str, int] = {}
@@ -1261,6 +1354,8 @@ def _bolum_yapisi_ihlalleri(belge: _Belge) -> list[str]:
     eşleşmesine dayanan mekanik bir vekildir (`_ayristir` docstring'i); sözleşme
     markdown düzeyi dayatmaz. Dilbilgisi bilerek DAR TUTULMAMIŞTIR: tanınmayan
     bir başlık iz bırakmaz ve burada sessiz kalır — ihlal olarak sayılmaz.
+    Açık kümelerde SIRANIN neden ölçülmediği `_iz_ihlalleri`'nde yazılıdır ve
+    kapsam beyanının BEŞİNCİ kalemi olarak rapora taşınır.
     """
     mesajlar: list[str] = []
     for gorulen, sozlesme, sablon, sira_etiketi in _ic_ice_izler(belge):
@@ -1533,6 +1628,23 @@ def _kontrol_gerekce_tablosu(belge: _Belge) -> list[str]:
             "Bölüm B'de özel gün seçim/eleme/ekleme gerekçeleri tablosu yok "
             f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)})"
         )
+    # Tanıma belirsizliği ayrı bir ihlaldir: sessizce bir blok SEÇİLMEZ.
+    # Bölüm B'de HİÇ tablo yokken bu dal susar — aksi hâlde tablosuz her gerçek
+    # çıktı ikinci bir uydurma not alırdı (ölçüldü: beş gerçek çıktının beşinde
+    # de Bölüm B tablosuzdur).
+    if belge.gerekce_tablo_blok_sayisi and not belge.gerekce_aday_sayisi:
+        mesajlar.append(
+            f"Bölüm B'de {belge.gerekce_tablo_blok_sayisi} tablo var ama hiçbiri "
+            "gerekçe tablosunun KANONİK başlığını taşımıyor "
+            f"({' + '.join(GEREKCE_TABLOSU_SUTUNLARI)}) — hangisinin gerekçe "
+            "tablosu olduğu ayırt edilemedi, hepsi denetlendi"
+        )
+    elif belge.gerekce_aday_sayisi > 1:
+        mesajlar.append(
+            f"Bölüm B'de gerekçe tablosu başlığını taşıyan "
+            f"{belge.gerekce_aday_sayisi} tablo var — sözleşme TEK gerekçe "
+            "tablosu ister; hepsi denetlendi"
+        )
     # Şekil kontrolü VARLIKTAN bağımsız koşar: tablo sözleşmenin istediği yerde
     # bulunamadıysa bile yanlış yerde bulunmuş OLABİLİR ve bu ayrı bir ihlaldir.
     return mesajlar + _tablo_sekli_ihlalleri(belge)
@@ -1724,13 +1836,25 @@ CHECKS: tuple[Check, ...] = (
             "sıra · boş bölüm"
         ),
         kural=_kontrol_bolum_ve_alan,
-        kapsam_siniri=(
-            "bolum-ve-alan-tamligi: bölüm/başlık TANIMA markdown başlık düzeyine "
-            "dayanan mekanik bir vekildir — sözleşme bir düzey dayatmaz, tanınmayan "
-            "başlık iz bırakmaz. Boşluk ifadeleri kümesi belgelenmiş KÜÇÜK bir "
-            "kümedir; kapsama oranı ÖLÇÜLMEDİ. Açık kümelerde (madde · dönem · "
-            "Bölüm C eşleme satırı) yalnız TEKRAR ölçülür: sözleşme o düzeylerde "
-            "bir SIRA dayatmaz, uydurulsaydı gerçek çıktı gürültüye boğulurdu."
+        kapsam_sinirlari=(
+            (
+                "bolum-ve-alan-tamligi: bölüm/başlık TANIMA markdown başlık "
+                "düzeyine dayanan mekanik bir vekildir — sözleşme bir düzey "
+                "dayatmaz, tanınmayan başlık iz bırakmaz. Boşluk ifadeleri "
+                "kümesi belgelenmiş KÜÇÜK bir kümedir; kapsama oranı ÖLÇÜLMEDİ."
+            ),
+            (
+                "bolum-ve-alan-tamligi/sıra: sabit kümelerde (bölüm · alan · "
+                "video havuzu · dönem yuvası) SIRA ölçülür. Açık kümelerde "
+                "(madde · dönem · Bölüm C eşleme satırı) yalnız TEKRAR ölçülür — "
+                "ve bunun sebebi sözleşmenin sıra dayatmaması DEĞİLDİR: "
+                "sözleşme (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI "
+                "dayatır (sektöre özgülük → kaynak sayısı ve gücü → Türkiye "
+                "yerelliği). Önem SEMANTİK bir yargıdır ve mekanik kapı onu "
+                "DOĞRULAYAMAZ; ölçüldü ki iki çağrı kalıbı takas edildiğinde "
+                "rapor `gecti / 0 not` verir. Uydurma bir sıra kuralı gerçek "
+                "çıktıyı gürültüye boğardı, bu yüzden YAZILMADI."
+            ),
         ),
     ),
     Check(
@@ -1752,11 +1876,11 @@ CHECKS: tuple[Check, ...] = (
             "dil kuralının yalnız bir yönü; ters yön ölçülmez"
         ),
         kural=_kontrol_dil_kurali,
-        kapsam_siniri=(
+        kapsam_sinirlari=(
             "dil-kurali: YALNIZ İngilizce olması gereken yüzeylerde Türkçe harf "
             "aranır. Sözleşmenin ters yönü — diğer alanların Türkçe olması — "
             "makineyle DOĞRULANMADI (sözlük gerektirir). Bu ailenin temiz çıkması "
-            "Türkçe yüzeylerin doğrulandığı anlamına GELMEZ."
+            "Türkçe yüzeylerin doğrulandığı anlamına GELMEZ.",
         ),
     ),
     Check(
@@ -1768,11 +1892,23 @@ CHECKS: tuple[Check, ...] = (
             "kaynak satırları açılabilir tam `https://` bağlantı taşır"
         ),
         kural=_kontrol_url_bicimi,
-        kapsam_siniri=(
-            "url-bicimi: bağlantının gerçekten AÇILDIĞI doğrulanmadı — ağ çağrısı "
-            "yapılmaz, yalnız `https://` yazımı taranır. Eşlemenin ÜÇLÜ yapısı "
-            "(alan/dönem → iddia → kaynak) bir ayıraç vekiliyle görülür; "
-            "parçaların ANLAMI doğrulanmadı, vekilin kapsama oranı ÖLÇÜLMEDİ."
+        kapsam_sinirlari=(
+            (
+                "url-bicimi: kaynak eşlemesinin VARLIĞI ve adres BİÇİMİ "
+                "(`https://` yazımı) taranır. Bağlantının gerçekten AÇILDIĞI "
+                "doğrulanmadı — ağ çağrısı yapılmaz. Eşlemenin gerçekten "
+                "alan/dönem → iddia → kaynak ÜÇLÜSÜ olduğu makineyle "
+                "DOĞRULANMADI: yapı bir ayıraç vekiliyle (`_C_AYIRAC_RE`) "
+                "yalnız PARÇA SAYISI olarak ölçülür, parçaların ANLAMI değil. "
+                "Vekil serbest noktalamayı da ayıraç sayar, bu yüzden serbest "
+                "düzyazı bu kontrolü GEÇER — ölçüldü: "
+                "`- Düz yazı, devamı https://example.com/kaynak` → `gecti`, "
+                "0 not. Bu ailenin temiz çıkması Bölüm C'nin üçlü yapıya "
+                "uyduğu anlamına GELMEZ. Kök çözüm sözleşmenin bu bölümü sabit "
+                "sütunlu bir tablo olarak istemesidir ve AYRI bir tasarım işine "
+                "kaydedilmiştir; ayıraç vekilinin SERTLEŞTİRİLMESİ üç turdur "
+                "yakınsamadı ve yanlış-pozitif üretir."
+            ),
         ),
     ),
     Check(
@@ -1791,11 +1927,15 @@ CHECKS: tuple[Check, ...] = (
             "ŞEKLİ: dört sütun, dönem başlıklarından önce"
         ),
         kural=_kontrol_gerekce_tablosu,
-        kapsam_siniri=(
-            "ozel-gun-gerekce-tablosu: sütun SAYISI ölçülür, sütun başlıklarının "
-            "ANLAMI doğrulanmadı. Tablo, Bölüm B'nin dönemlerden ÖNCEKİ İLK "
-            "BİTİŞİK tablosu vekiliyle bulunur; gerekçe tablosundan ÖNCE konmuş "
-            "alakasız bir tablonun ayırt edilmesi DOĞRULANMADI."
+        kapsam_sinirlari=(
+            (
+                "ozel-gun-gerekce-tablosu: sütun SAYISI ölçülür, sütun "
+                "başlıklarının ANLAMI doğrulanmadı. Tablo, blok BAŞLIĞININ "
+                "kanonik sütun anahtarlarını taşımasıyla tanınır; kanonik "
+                "başlığı TAKLİT eden bir tablo da aday olur — o hâlde "
+                "belirsizlik NOTU düşer ve blokların hepsi denetlenir, ama "
+                "hangisinin gerçek gerekçe tablosu olduğu DOĞRULANMADI."
+            ),
         ),
     ),
     Check(
