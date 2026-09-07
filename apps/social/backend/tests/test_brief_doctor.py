@@ -1026,13 +1026,21 @@ def c_eslemesini_kaldir(metin: str) -> str:
 
 
 def _sozlesme_tablo_sutunlari() -> tuple[str, ...]:
-    """Dört sütun UYDURULMAZ: pinlenmiş sözleşme cümlesinden okunur."""
+    """Dört sütun UYDURULMAZ: pinlenmiş sözleşmenin BAŞLIK SATIRINDAN okunur.
+
+    2026-09-07'ye kadar sütunlar sözleşmenin bir DÜZYAZI cümlesinden
+    (`(dönem + karar + tür etiketi + gerekçe)`) ayrıştırılıyordu. Sözleşme o
+    turda birebir başlık satırını DAYATTI; türetme de oraya taşındı —
+    düzyazıyı ayrıştırmak yerine kapının beklediği satırın KENDİSİ okunuyor.
+    """
     metin = _pinli_sablon()
     blok = re.search(
-        r"gerekçeleri tablosu\s*\n?\((.*?)\), sonra", metin, re.S
+        r"tek tablo, aynen şu\s*\n\s*başlık satırıyla:\s*\n+\|(.+?)\|\s*\n\s*\|-",
+        metin,
+        re.S,
     )
-    assert blok is not None, "sözleşmede gerekçe tablosu sütun cümlesi bulunamadı"
-    return tuple(parca.strip() for parca in blok.group(1).split("+"))
+    assert blok is not None, "sözleşmede gerekçe tablosu başlık satırı bulunamadı"
+    return tuple(parca.strip() for parca in blok.group(1).split("|"))
 
 
 def test_gerekce_tablosu_sutunlari_pinlenmis_sablondan_okunur() -> None:
