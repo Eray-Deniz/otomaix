@@ -1176,22 +1176,22 @@ def test_dil_kurali_ters_yonu_dogrulanmadigini_raporda_soyler() -> None:
 
 
 def test_kapsam_sinirlari_donmus_ve_tip_zorlar() -> None:
+    """Beyan demeti DONMUŞ ve METİN taşır — tip kapısı türev alanda da durur.
+
+    Alan artık `init=False`'tur (F3): çağıran onu yazamaz. Tip kapısı yine de
+    ölçülür, çünkü beyan `CHECKS`'ten TÜRER ve bozuk bir `Check` sessizce
+    metin olmayan bir beyan sızdırmamalıdır.
+    """
     rapor = bd.DoctorReport(
-        sonuc=bd.SONUC_GECTI,
-        notlar=(),
-        elemeler=(),
-        kaynak_adi="K",
-        kapsam_sinirlari=["tek sınır"],
+        sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K"
     )
-    assert rapor.kapsam_sinirlari == ("tek sınır",)
-    with pytest.raises(TypeError):
-        bd.DoctorReport(
-            sonuc=bd.SONUC_GECTI,
-            notlar=(),
-            elemeler=(),
-            kaynak_adi="K",
-            kapsam_sinirlari=(7,),  # type: ignore[arg-type]
-        )
+    assert isinstance(rapor.kapsam_sinirlari, tuple)
+    assert all(isinstance(sinir, str) for sinir in rapor.kapsam_sinirlari)
+    with mock.patch.object(bd, "_kapsam_beyani", lambda: (7,)):
+        with pytest.raises(TypeError):
+            bd.DoctorReport(
+                sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K"
+            )
 
 
 # ─── H3: KİMLİK kanonik bir kuraldan TÜRER (takma-ad denkliği) ─────────────
@@ -1373,3 +1373,440 @@ def test_icerik_ozeti_run_tarafindan_uretilir_ve_bicimi_zorlanir() -> None:
                 kaynak_adi="K",
                 icerik_ozeti=bozuk,
             )
+
+
+# ─── H4: İÇ İÇE her düzey tekrarı ve sırayı KORUR ──────────────────────────
+#
+# Sınıf (tur 2, F2): *"iç içe bir koleksiyon sözlüğe konuyor, tekrar ve sıra
+# kayboluyor; ve sayıya dayalı her eşik ESSİZ doğrulanmış varlık yerine ham
+# sayıyı okuyor."* Tur 1 yalnız BÖLÜM ve ALAN düzeyini kurtardı; ölçüldü ki
+# dönem kimliği tekrarı (`ayrıştırılan dönem=6, ESSİZ ad=5`), video havuzu
+# bloğunun ikinci kez yazılması ve Bölüm C'nin ÜÇLÜ yapısını kaybetmiş çıplak
+# bağlantı satırı üçü de `gecti / 0 not` veriyordu.
+#
+# **Matris KAVRAMDAN türer:** eksen 1 = belgenin KENDİ içerme modeli
+# (`_SABLON.md` §5 ÇIKTI FORMATI + GÖREV A/B adımları), eksen 2 = bozulma
+# biçimi (tekrar · sıra · boş). Dokuz düzey × üç biçim = 27 hücre. SIRA hücresi,
+# sözleşmenin bir sıra DAYATMADIĞI açık kümelerde bilinçle boştur ve gerekçesi
+# hücrenin yanında yazılıdır — sessizce atlanmaz.
+
+_ACIK_KUME_GEREKCESI = (
+    "sözleşme bu düzeyde bir SIRA dayatmaz (açık küme); sıra kuralı "
+    "uydurulsaydı gerçek çıktı gürültüye boğulurdu"
+)
+
+_YUVA_BASLIKLARI = ("kanca", "cta", "gorsel_vurgu")
+
+
+def _md_duzeyi(satir: str) -> int:
+    govde = satir.lstrip()
+    sayi = len(govde) - len(govde.lstrip("#"))
+    return sayi if sayi and govde[sayi : sayi + 1] == " " else 0
+
+
+def _md_blok(satirlar: list[str], baslik: str) -> tuple[int, int]:
+    """`baslik` satırının açtığı markdown bloğunun [i, j) aralığı."""
+    for i, satir in enumerate(satirlar):
+        if satir.strip() == baslik:
+            duzey = _md_duzeyi(satir)
+            j = i + 1
+            while j < len(satirlar) and not 0 < _md_duzeyi(satirlar[j]) <= duzey:
+                j += 1
+            return i, j
+    raise AssertionError(f"başlık bulunamadı: {baslik!r}")
+
+
+def blok_cogalt(metin: str, baslik: str) -> str:
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, baslik)
+    return "".join(satirlar[:j] + satirlar[i:j] + satirlar[j:])
+
+
+def blok_bosalt(metin: str, baslik: str) -> str:
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, baslik)
+    return "".join(satirlar[: i + 1] + ["\n"] + satirlar[j:])
+
+
+def blok_takasla(metin: str, sol: str, sag: str) -> str:
+    satirlar = metin.splitlines(True)
+    i1, j1 = _md_blok(satirlar, sol)
+    i2, j2 = _md_blok(satirlar, sag)
+    assert j1 <= i2, "takas için bloklar ayrık ve sıralı olmalı"
+    return "".join(
+        satirlar[:i1]
+        + satirlar[i2:j2]
+        + satirlar[j1:i2]
+        + satirlar[i1:j1]
+        + satirlar[j2:]
+    )
+
+
+def _madde_indeksi(satirlar: list[str], i: int, j: int) -> int:
+    for k in range(i + 1, j):
+        if satirlar[k].lstrip().startswith("- "):
+            return k
+    raise AssertionError("blokta madde yok")
+
+
+def blok_maddesini_cogalt(metin: str, baslik: str) -> str:
+    satirlar = metin.splitlines(True)
+    k = _madde_indeksi(satirlar, *_md_blok(satirlar, baslik))
+    return "".join(satirlar[: k + 1] + [satirlar[k]] + satirlar[k + 1 :])
+
+
+def blok_maddesini_bosalt(metin: str, baslik: str) -> str:
+    """İlk maddeyi serbest BOŞLUK ifadesine çevirir — sözleşme onu boş sayar."""
+    satirlar = metin.splitlines(True)
+    k = _madde_indeksi(satirlar, *_md_blok(satirlar, baslik))
+    return "".join(satirlar[:k] + ["- yok\n"] + satirlar[k + 1 :])
+
+
+def _donem_yuva_araligi(
+    satirlar: list[str], i: int, j: int, yuva_adi: str
+) -> tuple[int, int]:
+    for k in range(i, j):
+        if satirlar[k].strip() == yuva_adi:
+            m = k + 1
+            while m < j and satirlar[m].strip() not in _YUVA_BASLIKLARI:
+                m += 1
+            return k, m
+    raise AssertionError(f"dönem yuvası bulunamadı: {yuva_adi!r}")
+
+
+def _ilk_donem_yuvasi(metin: str, yuva_adi: str) -> tuple[list[str], int, int]:
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, f"### {_DONEM_ADLARI[0]}")
+    return (satirlar, *_donem_yuva_araligi(satirlar, i, j, yuva_adi))
+
+
+def donem_yuvasini_cogalt(metin: str, yuva_adi: str) -> str:
+    satirlar, k, m = _ilk_donem_yuvasi(metin, yuva_adi)
+    return "".join(satirlar[:m] + satirlar[k:m] + satirlar[m:])
+
+
+def donem_yuvasini_bosalt(metin: str, yuva_adi: str) -> str:
+    satirlar, k, m = _ilk_donem_yuvasi(metin, yuva_adi)
+    return "".join(satirlar[: k + 1] + satirlar[m:])
+
+
+def donem_yuva_sirasini_boz(metin: str, sol: str, sag: str) -> str:
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, f"### {_DONEM_ADLARI[0]}")
+    k1, m1 = _donem_yuva_araligi(satirlar, i, j, sol)
+    k2, m2 = _donem_yuva_araligi(satirlar, i, j, sag)
+    assert m1 <= k2
+    return "".join(
+        satirlar[:k1]
+        + satirlar[k2:m2]
+        + satirlar[m1:k2]
+        + satirlar[k1:m1]
+        + satirlar[m2:]
+    )
+
+
+def donem_yuva_maddesini_cogalt(metin: str, yuva_adi: str) -> str:
+    satirlar, k, m = _ilk_donem_yuvasi(metin, yuva_adi)
+    p = _madde_indeksi(satirlar, k, m)
+    return "".join(satirlar[: p + 1] + [satirlar[p]] + satirlar[p + 1 :])
+
+
+def donem_yuva_maddesini_bosalt(metin: str, yuva_adi: str) -> str:
+    satirlar, k, m = _ilk_donem_yuvasi(metin, yuva_adi)
+    p = _madde_indeksi(satirlar, k, m)
+    return "".join(satirlar[:p] + ["- yok\n"] + satirlar[p + 1 :])
+
+
+def c_satirini_cogalt(metin: str) -> str:
+    satirlar = metin.splitlines(True)
+    k = _madde_indeksi(satirlar, *_md_blok(satirlar, "## Bölüm C — KAYNAKLAR"))
+    return "".join(satirlar[: k + 1] + [satirlar[k]] + satirlar[k + 1 :])
+
+
+def c_ucluyu_boz(metin: str) -> str:
+    """Eşleme satırı VAR ama alan/dönem → iddia → kaynak ÜÇLÜSÜ yok."""
+    satirlar = metin.splitlines(True)
+    k = _madde_indeksi(satirlar, *_md_blok(satirlar, "## Bölüm C — KAYNAKLAR"))
+    return "".join(satirlar[:k] + ["- https://ornek-ajans.example/rehber\n"] + satirlar[k + 1 :])
+
+
+def bolum_b_alakasiz_tablo(metin: str, donem_sirasi: int) -> str:
+    """Bölüm B'de bir dönem bloğunun İÇİNE meşru, başlıklı 2 sütunlu tablo koyar."""
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, f"### {_DONEM_ADLARI[donem_sirasi]}")
+    ek = [
+        "\n",
+        "| olcut | deger |\n",
+        "|---|---|\n",
+        "| talep | yuksek |\n",
+        "| rekabet | orta |\n",
+        "\n",
+    ]
+    return "".join(satirlar[: j] + ek + satirlar[j:])
+
+
+def gerekce_tablosunu_boz(metin: str) -> str:
+    """GERÇEK gerekçe tablosunun tür etiketi sütununu siler (kontrol kolu)."""
+    cikti = []
+    for satir in metin.splitlines(True):
+        if not satir.lstrip().startswith("|") or satir.lstrip().startswith("|-"):
+            cikti.append(satir)
+            continue
+        hucreler = [h.strip() for h in satir.strip().strip("|").split("|")]
+        cikti.append("| " + " | ".join(h for i, h in enumerate(hucreler) if i != 2) + " |\n")
+    return "".join(cikti)
+
+
+# Eksen 1 — belgenin İÇERME MODELİ. Sıra sütunu `None` ise küme AÇIKTIR ve o
+# hücre bilinçle boştur (gerekçe: `_ACIK_KUME_GEREKCESI`).
+IC_ICE_DUZEYLER = (
+    (
+        "bolum",
+        lambda: bolum_cogalt(TEMIZ, "C"),
+        lambda: bolum_sirasini_boz(TEMIZ, "A", "B"),
+        lambda: bolum_bosalt(TEMIZ, "C"),
+        ("birden çok kez", "sözleşmenin sırası değil", "boş"),
+    ),
+    (
+        "bolum-a-alani",
+        lambda: alan_cogalt(TEMIZ, "cta_kaliplari"),
+        lambda: alan_sirasini_boz(TEMIZ, "kapsam", "ton_ve_dil"),
+        lambda: blok_bosalt(TEMIZ, "### cta_kaliplari"),
+        ("birden çok kez", "sözleşmenin sırası değil", "boş"),
+    ),
+    (
+        "alan-maddesi",
+        lambda: blok_maddesini_cogalt(TEMIZ, "### cta_kaliplari"),
+        None,
+        lambda: blok_maddesini_bosalt(TEMIZ, "### cta_kaliplari"),
+        ("kez yazılmış", None, "alt sınırı"),
+    ),
+    (
+        "video-havuzu",
+        lambda: blok_cogalt(TEMIZ, "#### hareket"),
+        lambda: blok_takasla(TEMIZ, "#### hareket", "#### sahne"),
+        lambda: blok_bosalt(TEMIZ, "#### hareket"),
+        ("kez yazılmış", "sözleşmenin sırası değil", "alt sınır"),
+    ),
+    (
+        "video-havuzu-maddesi",
+        lambda: blok_maddesini_cogalt(TEMIZ, "#### hareket"),
+        None,
+        lambda: blok_maddesini_bosalt(TEMIZ, "#### hareket"),
+        ("kez yazılmış", None, "alt sınır"),
+    ),
+    (
+        "donem",
+        lambda: blok_cogalt(TEMIZ, f"### {_DONEM_ADLARI[0]}"),
+        None,
+        lambda: blok_bosalt(TEMIZ, f"### {_DONEM_ADLARI[0]}"),
+        ("kez yazılmış", None, "alt sınır"),
+    ),
+    (
+        "donem-yuvasi",
+        lambda: donem_yuvasini_cogalt(TEMIZ, "kanca"),
+        lambda: donem_yuva_sirasini_boz(TEMIZ, "kanca", "cta"),
+        lambda: donem_yuvasini_bosalt(TEMIZ, "kanca"),
+        ("birden çok kez", "sözleşmenin sırası değil", "boş"),
+    ),
+    (
+        "donem-yuvasi-maddesi",
+        lambda: donem_yuva_maddesini_cogalt(TEMIZ, "kanca"),
+        None,
+        lambda: donem_yuva_maddesini_bosalt(TEMIZ, "kanca"),
+        ("kez yazılmış", None, "alt sınır"),
+    ),
+    (
+        "bolum-c-eslemesi",
+        lambda: c_satirini_cogalt(TEMIZ),
+        None,
+        lambda: c_ucluyu_boz(TEMIZ),
+        ("kez yazılmış", None, "iddia"),
+    ),
+)
+
+IC_ICE_MATRISI = tuple(
+    (f"{duzey}/{biçim}", uretec(), iz)
+    for duzey, tekrar, sira, bos, izler in IC_ICE_DUZEYLER
+    for biçim, uretec, iz in zip(("tekrar", "sira", "bos"), (tekrar, sira, bos), izler)
+    if uretec is not None
+)
+BOS_BIRAKILAN_HUCRELER = tuple(
+    (f"{duzey}/sira", _ACIK_KUME_GEREKCESI)
+    for duzey, _, sira, _, _ in IC_ICE_DUZEYLER
+    if sira is None
+)
+
+
+@pytest.mark.parametrize(
+    "metin,iz",
+    [(h[1], h[2]) for h in IC_ICE_MATRISI],
+    ids=[h[0] for h in IC_ICE_MATRISI],
+)
+def test_ic_ice_duzeyler_tekrari_ve_sirayi_kaybetmez(metin: str, iz: str) -> None:
+    mesajlar = _notlari(metin)
+    assert iz in mesajlar, f"{iz!r} bulunamadı; görülen: {mesajlar[:500]}"
+
+
+def test_ic_ice_matrisi_bos_kume_ve_taban_kollari() -> None:
+    """Boş-küme kolu: matris içerme modelinden ÜRETİLMİŞ mi, hücreler dolu mu?"""
+    assert len(IC_ICE_DUZEYLER) == 9, "içerme modeli düzey kaybetti"
+    assert len(IC_ICE_MATRISI) + len(BOS_BIRAKILAN_HUCRELER) == 9 * 3 == 27
+    assert len(BOS_BIRAKILAN_HUCRELER) == 5
+    assert {ad for ad, _ in BOS_BIRAKILAN_HUCRELER} == {
+        "alan-maddesi/sira",
+        "video-havuzu-maddesi/sira",
+        "donem/sira",
+        "donem-yuvasi-maddesi/sira",
+        "bolum-c-eslemesi/sira",
+    }
+    for _, gerekce in BOS_BIRAKILAN_HUCRELER:
+        assert gerekce == _ACIK_KUME_GEREKCESI
+    for ad, metin, _ in IC_ICE_MATRISI:
+        assert metin != TEMIZ, f"{ad}: cerrahi metni değiştirmedi"
+
+
+def test_ic_ice_kapisi_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: dilbilgisi kapısını sök → tekrar/sıra hücreleri sussun."""
+    yapisal = [
+        h for h in IC_ICE_MATRISI if h[0].endswith(("/tekrar", "/sira"))
+    ]
+    assert len(yapisal) == 13
+    with mock.patch.object(bd, "_bolum_yapisi_ihlalleri", lambda belge: []):
+        for ad, metin, iz in yapisal:
+            if ad.startswith("bolum-c-eslemesi"):
+                continue
+            assert iz not in _notlari(metin), f"{ad}: kapı sökülünce de görünüyor"
+
+
+def test_adet_esikleri_essiz_varlik_sayar() -> None:
+    """Sayıya dayalı HER eşik ESSİZ doğrulanmış varlığı sayar, ham satırı değil."""
+    yuva = bd._Yuva(ad="cta_kaliplari", satirlar=["- ayni", "- ayni", "- yok", "- baska"])
+    assert len(yuva.maddeler) == 4
+    assert [m for m in yuva.essiz_maddeler] == ["ayni", "baska"]
+    belge = bd._ayristir(blok_cogalt(TEMIZ, f"### {_DONEM_ADLARI[0]}"))
+    assert len(belge.donemler) == 7, "ham dönem sayısı"
+    assert bd._essiz_donem_sayisi(belge) == 6, "ESSİZ dönem kimliği"
+
+
+def test_bolum_c_ucluyu_ister_ama_temizde_yanlis_pozitif_uretmez() -> None:
+    """Bölüm C sözleşmesi ÜÇLÜdür: alan/dönem → iddia → kaynak."""
+    assert "iddia" in _notlari(c_ucluyu_boz(TEMIZ))
+    assert _notlari(TEMIZ) == "", "temiz Bölüm C üçlü kontrolünden geçmeli"
+
+
+# ─── M2: kapsam beyanı ÇAĞIRAN tarafından uydurulamaz ──────────────────────
+
+
+def test_kapsam_sinirlari_cagirandan_alinmaz() -> None:
+    """F3: beyan `CHECKS`'ten TÜRER — isteğe bağlı da değildir, uydurulamaz da."""
+    with pytest.raises(TypeError):
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="K",
+            kapsam_sinirlari=("uydurma sınır",),  # type: ignore[call-arg]
+        )
+    dogrudan = bd.DoctorReport(
+        sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K"
+    )
+    beklenen = tuple(c.kapsam_siniri for c in bd.CHECKS if c.kapsam_siniri)
+    assert dogrudan.kapsam_sinirlari == beklenen
+    assert dogrudan.kapsam_sinirlari == bd.run(TEMIZ, source_name="K").kapsam_sinirlari
+
+
+def test_kapsam_beyani_checks_ten_turedigi_mutasyonla_olculur() -> None:
+    """Mutasyon kolu: `CHECKS` değişince beyan da değişmeli (türev, kopya değil)."""
+    sahte = bd.CHECKS[:1]
+    with mock.patch.object(bd, "CHECKS", sahte):
+        rapor = bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K"
+        )
+        assert rapor.kapsam_sinirlari == tuple(
+            c.kapsam_siniri for c in sahte if c.kapsam_siniri
+        )
+    # Boş-küme kolu: hiç beyan yoksa demet BOŞ olmalı, eski değer sızmamalı.
+    with mock.patch.object(bd, "CHECKS", ()):
+        assert bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K"
+        ).kapsam_sinirlari == ()
+
+
+# ─── M3: Bölüm B'deki ALAKASIZ tablo gerekçe kontrollerine beslenmez ───────
+
+ALAKASIZ_TABLO_MATRISI = tuple(
+    (f"donem-{i}-icine-tablo", bolum_b_alakasiz_tablo(TEMIZ, i)) for i in range(6)
+)
+
+
+@pytest.mark.parametrize(
+    "metin", [m[1] for m in ALAKASIZ_TABLO_MATRISI],
+    ids=[m[0] for m in ALAKASIZ_TABLO_MATRISI],
+)
+def test_alakasiz_tablo_uydurma_bulgu_uretmez(metin: str) -> None:
+    """F5: gerekçe tablosu dönemlerden ÖNCEKİ İLK bitişik tablodur."""
+    rapor = bd.run(metin, source_name="P")
+    assert rapor.notlar == (), " | ".join(b.mesaj for b in rapor.notlar)
+    assert rapor.sonuc == bd.SONUC_GECTI
+
+
+def test_gercek_gerekce_tablosu_bozuksa_hala_gorunur() -> None:
+    """Kontrol kolu: körelme YOK — bozuk GERÇEK tablo hâlâ not üretir."""
+    mesajlar = _notlari(gerekce_tablosunu_boz(TEMIZ))
+    assert "3 sütunlu satır" in mesajlar
+    assert "tür etiketi yok" in mesajlar
+    # ...alakasız tablo EKLENSE bile bozuk gerçek tablo görünmeye devam eder.
+    ikili = _notlari(bolum_b_alakasiz_tablo(gerekce_tablosunu_boz(TEMIZ), 2))
+    assert "3 sütunlu satır" in ikili
+
+
+def test_tablo_donemlerden_sonra_hala_gorunur() -> None:
+    """Kontrol kolu: ilk-bitişik-tablo kuralı SIRA ihlalini köreltmemeli."""
+    assert "dönem başlıklarından SONRA" in _notlari(
+        tabloyu_donemlerden_sonraya_tasi(TEMIZ)
+    )
+
+
+def test_yeni_kapilarin_hepsi_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: tur 2'de eklenen DÖRT kapıyı ayrı ayrı sök → susmalılar."""
+    # (a) ESSİZ madde sayımı: sök → boşluk ifadesiyle doldurulan alan sussun.
+    bos_madde = blok_maddesini_bosalt(TEMIZ, "### cta_kaliplari")
+    assert "alt sınırı" in _notlari(bos_madde)
+    with mock.patch.object(
+        bd._Yuva, "essiz_maddeler", property(lambda self: self.maddeler)
+    ):
+        assert "alt sınırı" not in _notlari(bos_madde)
+
+    # (b) ESSİZ dönem sayımı: sök → tekrarla sağlanan alt sınır sussun.
+    tekrar_donem = blok_cogalt(TEMIZ, f"### {_DONEM_ADLARI[0]}")
+    eksik = bolum_b_alakasiz_tablo(TEMIZ, 0)  # tabloyu bozmayan taban
+    assert bd._essiz_donem_sayisi(bd._ayristir(tekrar_donem)) == 6
+    with mock.patch.object(bd, "_essiz_donem_sayisi", lambda b: len(b.donemler)):
+        assert bd._essiz_donem_sayisi(bd._ayristir(tekrar_donem)) == 7
+    assert _notlari(eksik) == ""
+
+    # (c) Bölüm C üçlüsü: sök → çıplak bağlantı satırı sussun.
+    ciplak = c_ucluyu_boz(TEMIZ)
+    assert "ÜÇLÜ değil" in _notlari(ciplak)
+    with mock.patch.object(bd, "_c_esleme_parcalari", lambda satir: ["a", "b"]):
+        assert "ÜÇLÜ değil" not in _notlari(ciplak)
+
+    # (d) İlk-bitişik-tablo kuralı: sök → alakasız tablo yine uydurma not versin.
+    alakasiz = bolum_b_alakasiz_tablo(TEMIZ, 2)
+    assert _notlari(alakasiz) == ""
+    with mock.patch.object(
+        bd,
+        "_gerekce_tablosu",
+        lambda izler: ([s for _, s, _ in izler], bool(izler) and izler[0][2]),
+    ):
+        bozuk = _notlari(alakasiz)
+        assert "2 sütunlu satır" in bozuk and "tür etiketi yok" in bozuk
+
+
+def test_alakasiz_tablo_matrisi_bos_kume_kolu() -> None:
+    """Boş-küme kolu: alakasız tablo matrisi TÜM dönemlere uygulanmış mı?"""
+    assert len(ALAKASIZ_TABLO_MATRISI) == 6
+    for ad, metin in ALAKASIZ_TABLO_MATRISI:
+        assert metin != TEMIZ, f"{ad}: cerrahi metni değiştirmedi"
+        assert metin.count("| olcut | deger |") == 1
