@@ -5,6 +5,8 @@ written: 2026-09-07
 
 # Resume From
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-09-07 09:05) — bu anlatı yürütme öncesine aittir; güncel durum TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+
 **Sıradaki iş Task 7 — `brief-doctor` mekanik girdi kapısı** (plan satır 938).
 
 Bu oturum yeni bir plan görevi indirmedi. Eray'ın talebi üzerine **bilinçle park edilmiş dört
