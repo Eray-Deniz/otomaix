@@ -348,3 +348,41 @@ def test_identity_gate_is_load_bearing(scratch_db_migrated, tmp_path, path):
         f"{path.name}: kapısız mutant tetikleyiciyi yabancı gövdeye BAĞLAMADI — "
         "kapı zaten gereksizmiş demektir"
     )
+
+
+# ─── 6. Kapı, dosyanın İLK kalıcı DDL'inden ÖNCE koşar ──────────────────────
+#
+# "Fonksiyon/tetikleyici yazımından önce" YETMEZ. Kapı dosyanın ortasındaysa,
+# ondan önceki tablo/indeks/ALTER ifadeleri ciplak `psql -f` yolunda (ON_ERROR_STOP
+# yokken) kalici olabilir ve yarim bir sema birakir. 036'nin kendi metni de
+# "kalici DDL'den ONCE" diyor; sinif o sozlesmeye uymali.
+#
+# Ust duzey DDL = satir basinda (girintisiz) baslayan ifade. 036'nin DDL'i tek
+# `DO` deyiminin ICINDE ve girintili oldugu icin dogal olarak kapsam disidir.
+
+_TOP_LEVEL_DDL_RE = re.compile(
+    r"^(?:CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|TRUNCATE|GRANT|REVOKE)\b",
+    re.MULTILINE,
+)
+
+
+def _first_top_level_ddl_offset(text: str):
+    m = _TOP_LEVEL_DDL_RE.search(text)
+    return m.start() if m else None
+
+
+@pytest.mark.parametrize("path", MUTABLE, ids=MUTABLE_IDS)
+def test_identity_gate_precedes_the_first_permanent_ddl(path):
+    """Kapı dosyanın İLK kalıcı DDL ifadesinden ÖNCE gelir."""
+    text = path.read_text(encoding="utf-8")
+    kapi = _STANDALONE_GATE_RE.search(text)
+    assert kapi, f"{path.name}: bağımsız kimlik kapısı bulunamadı"
+    ilk_ddl = _first_top_level_ddl_offset(text)
+    assert ilk_ddl is not None, (
+        f"{path.name}: hiç üst düzey DDL bulunamadı — test ölçtüğünü ölçmüyor"
+    )
+    assert kapi.start() < ilk_ddl, (
+        f"{path.name}: kimlik kapısı ilk kalıcı DDL'den SONRA (kapı ofset "
+        f"{kapi.start()}, ilk DDL ofset {ilk_ddl}) — ret hâlinde ondan önceki "
+        "ifadeler çıplak psql yolunda kalıcı olabilir"
+    )

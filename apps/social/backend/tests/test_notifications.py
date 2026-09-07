@@ -1033,6 +1033,10 @@ def _workflow_definitions() -> list[tuple[str, dict]]:
     return out
 
 
+# Canlı n8n'deki tek Postgres credential'ı (ölçüldü 2026-09-07, API üzerinden).
+LIVE_POSTGRES_CREDENTIAL = ("LRCmorU07F9lRpjV", "Postgres account")
+
+
 def test_every_workflow_pins_one_postgres_credential():
     """Tek veritabanı → TEK credential kimliği; dizin genelinde üretilmiş matris.
 
@@ -1052,12 +1056,16 @@ def test_every_workflow_pins_one_postgres_credential():
                 atiflar.setdefault(anahtar, []).append(f"{etiket}/{node['name']}")
 
     assert atiflar, "hiç postgres credential atfı bulunamadı — matris boşa koştu"
-    assert len(atiflar) == 1, (
-        "postgres credential atfı BÖLÜNMÜŞ: "
+    # TAM EŞLEŞME, iç tutarlılık DEĞİL: yalnız "hepsi birbirine eşit" demek,
+    # hepsinin birden var olmayan bir kimliğe (`id=1`) çevrilmesini YAKALAMAZDI
+    # — borcu doğuran arıza modu tam olarak buydu. Kimlik canlı n8n'den okundu
+    # (2026-09-07); değişirse bu satır BİLEREK güncellenir.
+    assert set(atiflar) == {(LIVE_POSTGRES_CREDENTIAL)}, (
+        "postgres credential atfı canlıdaki kimlikle EŞLEŞMİYOR: "
         + " · ".join(
             f"{kimlik}({ad}) → {', '.join(yerler)}" for (kimlik, ad), yerler in sorted(atiflar.items())
         )
-        + " — canlıda tek bir Postgres credential'ı var, hepsi ona işaret etmeli"
+        + f" — beklenen tek kimlik {LIVE_POSTGRES_CREDENTIAL}"
     )
 
 
@@ -1098,6 +1106,61 @@ def test_webhook_payload_is_read_through_its_wrapper_key():
         "webhook yükü sarmalayıcı anahtar olmadan okunuyor: "
         + " · ".join(sorted(set(ihlaller)))
         + " — doğru biçim `$('<webhook>').item.json.body.<alan>`"
+    )
+
+
+def test_current_item_body_is_read_only_directly_after_the_webhook():
+    """`$json.body.*` YALNIZ webhook'un HEMEN ardındaki düğümde meşrudur.
+
+    `$json` çalışan düğüme GELEN öğedir. Araya bir düğüm girdiği anda (mesaj
+    kurma · HTTP · Wait) öğe artık webhook yükü değildir; `$json.body.<alan>`
+    sessizce `undefined` döner. Ölçüldü 2026-09-07: CRM-3'ün `Build Reminder
+    Message` düğümü `Wait 2 Days`ten sonra koşuyor ve müşteri bağlantısını
+    `$json.body.account_id` ile kuruyordu.
+
+    Sarmalayıcı kapısı bunu göremez — o yalnız `$('<webhook>')...` biçimini
+    tarar. Bu kapı KÖKENİ modelliyor: kenar kümesi workflow'un kendi
+    `connections` çizgesinden türetilir, elle yazılmaz.
+    """
+    import json
+    import re
+
+    ihlaller: list[str] = []
+    olculen = 0
+    for etiket, workflow in _workflow_definitions():
+        webhooklar = {
+            node["name"]
+            for node in workflow.get("nodes", [])
+            if node.get("type", "").endswith(".webhook")
+        }
+        if not webhooklar:
+            continue
+        # Webhook'un DOĞRUDAN ardılları — çizgeden türetildi.
+        dogrudan = set()
+        for kaynak, veri in (workflow.get("connections") or {}).items():
+            if kaynak not in webhooklar:
+                continue
+            for cikis in veri.get("main", []):
+                for baglanti in cikis:
+                    dogrudan.add(baglanti["node"])
+
+        for node in workflow.get("nodes", []):
+            govde = json.dumps(node.get("parameters"), ensure_ascii=False)
+            atiflar = re.findall(r"\$json\.body\.(\w+)", govde)
+            if not atiflar:
+                continue
+            olculen += len(atiflar)
+            if node["name"] not in dogrudan:
+                ihlaller.append(
+                    f"{etiket}/{node['name']}: $json.body.{{{','.join(sorted(set(atiflar)))}}}"
+                )
+
+    assert olculen >= 1, "hiç `$json.body` atfı bulunamadı — matris boş koşardı"
+    assert not ihlaller, (
+        "webhook yükü, webhook'un doğrudan ardılı OLMAYAN bir düğümde `$json` "
+        "üzerinden okunuyor: "
+        + " · ".join(sorted(ihlaller))
+        + " — pinli düğümden okuyun: `$('<webhook>').item.json.body.<alan>`"
     )
 
 

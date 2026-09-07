@@ -1219,6 +1219,9 @@ ANNEX_PATH = (
 IMMUTABLE_FUNCTION = "social.reject_approved_rollback_plan_mutation"
 IMMUTABLE_TRIGGER = "package_rollback_plans_approved_immutable"
 IMMUTABLE_MARKER = "kimlik/hedef alanları değiştirilemez"
+# Mühür SİLME ayağının kendi imzası — kimlik/hedef ayağıyla KARIŞMASIN,
+# yoksa test iki farklı yüklemden hangisinin ateşlediğini ayırt edemez.
+SEAL_MARKER = "onay mührü SİLİNEMEZ"
 
 _NEW_OLD_PAIR = re.compile(r"NEW\.(\w+)\s+IS DISTINCT FROM\s+OLD\.\1\b")
 
@@ -1389,6 +1392,44 @@ async def test_approved_rollback_plan_identity_fields_are_immutable(db, alan):
     )
     assert error is not None, f"onaylı satırda {alan} DEĞİŞTİRİLDİ"
     assert IMMUTABLE_MARKER in str(error), f"{alan}: beklenmeyen hata: {error!r}"
+
+
+async def test_approved_rollback_plan_seal_cannot_be_cleared(db):
+    """MÜHÜR SİLİNEMEZ — değişmezlik iki adımda ATLATILAMAZ.
+
+    Kilit `OLD.onay_actor IS NOT NULL` yüklemine dayanıyordu ve onay üçlüsünü
+    birlikte NULL yapmak hem tetikleyiciden hem `num_nonnulls ∈ {0,3}`
+    CHECK'inden geçiyordu. Ölçüldü (2026-09-07, geri alınan transaction):
+    temizle → hedefi değiştir → yeniden mühürle zinciri `target_version`i
+    3'ten 99'a taşıdı ve satırı yeniden onaylı gösterdi. Doğrudan değişim
+    reddedilirken dolambaçlısı geçiyordu; "onay hedefe mühürlenir" iddiası
+    bu yolla YALANLANABİLİRdi.
+
+    Yeniden mühürleme (dolu → dolu) BİLEREK açık kalır; kapanan yalnız
+    dolu → BOŞ geçişidir.
+    """
+    incident_id, package_id = await _onayli_plan(db)
+
+    error = await _attempt(
+        db,
+        lambda: db.execute(
+            "UPDATE social.package_rollback_plans "
+            "SET onay_actor = NULL, onaylandi_at = NULL, onay_kapsam_sha = NULL "
+            "WHERE incident_id = $1 AND package_id = $2",
+            incident_id,
+            package_id,
+        ),
+    )
+    assert error is not None, "onaylı satırın mührü SİLİNDİ — zincir hâlâ açık"
+    assert SEAL_MARKER in str(error), f"beklenmeyen hata: {error!r}"
+
+    kalan = await db.fetchrow(
+        "SELECT onay_actor, target_version FROM social.package_rollback_plans "
+        "WHERE incident_id = $1 AND package_id = $2",
+        incident_id,
+        package_id,
+    )
+    assert kalan["onay_actor"] is not None, "ret geldi ama satır yine de mühürsüz"
 
 
 @pytest.mark.parametrize("grup", sorted(PERMITTED_UPDATE_GROUPS))
