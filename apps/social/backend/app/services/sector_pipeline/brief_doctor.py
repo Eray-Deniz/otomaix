@@ -39,6 +39,11 @@ liste DEĞİLDİR: `kanonik_kaynak_kimligi` kimliği TEK kuralla üretir ve hem
 görülemeyen ikinci eksen — aynı metnin İKİ FARKLI adla verilmesi — `run`'ın ürettiği
 kanonik içerik özetiyle (`identity.canonical_sha`) kapanır. İki ayak birlikte
 raporlar üstünde geçişli bir DENKLİK bağıntısı kurar; birim yine kimliktir.
+İçerik ayağı İSTEĞE BAĞLI DEĞİLDİR: ölçüldü ki `run`'ı atlayıp doğrudan kurulan
+iki özetsiz rapor `dur=False, gecerli=2` veriyordu — kimliğin içerik ayağı
+sessizce düşüyor ve tek kaynak K-127 tabanını geçiyordu. Kapatma fail-closed'dır
+(`_kimlik_kapiya_uygun`): özeti olmayan kimlik SAYILMAZ ve bildirimde ADIYLA
+söylenir. Meşru hâl uydurulmaz — `elendi` raporları zaten sayıma girmez.
 
 **Bozuk hâl temsil edilemez.** `DoctorReport` ve `RoundGate` yapısal değişmezlerini
 `__post_init__`'te zorlar (emsal `sector_pipeline/contracts.py::ContractPin`): rapor
@@ -118,8 +123,10 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
 * Gerekçe tablosu "dönemlerden ÖNCEKİ İLK BİTİŞİK tablo" vekiliyle bulunur; gerekçe
   tablosundan önce Bölüm B'ye konmuş alakasız bir tablonun ayırt edilmesi DOĞRULANMADI.
 * Kaynak KİMLİĞİ yazım takma adlarını (`kanonik_kaynak_kimligi`) ve aynı metnin iki adla
-  verilmesini (`icerik_ozeti`) denkler; gerçekten farklı iki adın aynı kaynağı gösterdiği,
-  özeti olmayan raporlarda DOĞRULANMADI.
+  verilmesini (`icerik_ozeti`) denkler. Özetsiz kimlik artık kapıya UYGUN DEĞİLDİR, ama
+  özetin `run` tarafından ÜRETİLDİĞİ doğrulanamaz: biçim zorlanır, KÖKEN zorlanmaz —
+  metne sahip olmayan bir çağıran biçimi geçerli bir özet uydurabilir, o eksen
+  DOĞRULANMADI.
 """
 
 from __future__ import annotations
@@ -269,7 +276,8 @@ def kanonik_kaynak_kimligi(ad: str) -> str:
     **Kapsam sınırı (İlke 9(4)):** kural yalnız YAZIM takma adlarını denkler.
     Gerçekten farklı iki adın aynı kaynağı göstermesi (`"OpenAI-raporu"` ve
     `"gpt-cikitisi"`) yazımdan görülemez; o eksen İÇERİK özetiyle kapanır
-    (`DoctorReport.icerik_ozeti`) ve özeti olmayan raporlarda DOĞRULANMADI.
+    (`DoctorReport.icerik_ozeti`) ve özeti OLMAYAN kimlik `_kimlik_kapiya_uygun`
+    gereği kapı sayımına hiç girmez (fail-closed).
     Son bileşeni almak `dizin-1/K` ile `dizin-2/K`'yi de denkler; bu yön
     fail-closed'dır (sayı DÜŞER, koşu durur).
     """
@@ -365,8 +373,10 @@ class DoctorReport:
     yazdığı bir etiket değildir ve biçimi (`sha256` onaltılık) fail-closed
     zorlanır — serbest metin buradan geçemez. `run` yolunu atlayan bir çağıran
     (Task 9/12 tüketicileri) metne sahip olmayabilir; o rapor özetsiz kalır ve
-    kimlik yalnız ADA göre denklenir. Bu dürüst bir boşluktur, uydurma bir
-    değer DEĞİL: özetsiz raporlarda içerik ekseni DOĞRULANMADI.
+    burada uydurma bir değer ÜRETİLMEZ. Bunun bedeli `gate_round`'da ödenir:
+    özetsiz bir kimlik K-127 sayımına GİRMEZ (`_kimlik_kapiya_uygun`) — ölçüldü
+    ki aksi hâlde iki özetsiz rapor tabanı fail-open geçiyordu. Alanın BİÇİMİ
+    zorlanır, KÖKENİ (gerçekten bu metnin özeti mi) DOĞRULANMADI.
     """
 
     @property
@@ -565,10 +575,41 @@ def _kimlik_anahtarlari(rapor: DoctorReport) -> tuple[tuple[str, str], ...]:
     return tuple(anahtarlar)
 
 
+def _kimlik_kapiya_uygun(raporlar: Sequence[DoctorReport]) -> bool:
+    """Bir kimlik grubu K-127 SAYIMINA girebilir mi — kimliğin İÇERİK ayağı.
+
+    **Ölçülmüş fail-open (tur 3, F1):** `icerik_ozeti` boş olabildiği için
+    kimliğin içerik ayağı SESSİZCE düşüyordu. `run`'ı ATLAYIP doğrudan kurulan
+    iki özetsiz rapor (`DoctorReport(sonuc='gecti', notlar=(), elemeler=(),
+    kaynak_adi='gemini-cikti' / 'claude-cikti')`) `dur=False, gecerli=2`
+    veriyordu: kimliğin yalnız AD ayağı denklendiği için tek bir kaynağın iki
+    adla verilmesi K-127 tabanını geçiyordu. Bir önceki turun takma-ad matrisi
+    bunu göremezdi — o matris yalnız `run` üretimi raporları egzersiz eder ve
+    `run` özeti HER ZAMAN üretir.
+
+    Kapatma yönü FAIL-CLOSED'dır: özeti olmayan kimlik SAYILMAZ — ve sessizce
+    düşmez, `gate_round` onu bildirimde ADIYLA söyler. Uydurma bir özet
+    ÜRETİLMEZ; metne sahip olmayan çağıran için doğru cevap "bu kimlik kapıya
+    uygun değildir"dir.
+
+    **Meşru hâl açıkça temsil edilir:** sentetik/elenen raporun kaynak metni
+    olmayabilir ve `elendi` raporları zaten sayıma GİRMEZ
+    (`_kimlik_bolumlemesi` onları `elenen` kovasına koyar), dolayısıyla kural
+    onları etkilemez. Aynı kimliğin raporlarından BİRİ özet taşıyorsa grup
+    uygundur — özet KİMLİĞİN ayağıdır, tek bir raporun alanı değil.
+
+    **Kapsam sınırı (İlke 9(4)):** özetin BİÇİMİ zorlanır (`_ICERIK_OZETI_RE`),
+    KÖKENİ zorlanamaz — `run` yolunu atlayan çağıranın elinde metin yoktur ve
+    biçimi geçerli bir özet uydurulabilir. O eksen DOĞRULANMADI; kapı yalnız
+    "içerik ayağı BEYAN edilmiş mi" sorusunu sorar.
+    """
+    return any(rapor.icerik_ozeti for rapor in raporlar)
+
+
 def _kimlik_bolumlemesi(
     raporlar: Sequence[DoctorReport],
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    """Raporları KİMLİĞE böler → (geçerli, elenen, tekrar eden) kimlikler.
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Raporları KİMLİĞE böler → (geçerli, elenen, tekrar eden, özetsiz).
 
     K-127 iki BAĞIMSIZ kaynak ister; mutabakat sinyali ilkece iki ayrı kaynağın
     işidir. Bu yüzden birim RAPOR değil KİMLİKTİR. Bir kimliğin raporlarından
@@ -579,6 +620,9 @@ def _kimlik_bolumlemesi(
     geçişlidir (birleştir/bul): A ile B adı üstünden, B ile C özet üstünden
     denkse üçü TEK kaynaktır. Dönen adlar grubun İLK görülen HAM adıdır —
     yönetici bildirimini kanonik biçimle değil yazdığı adla okur.
+
+    Elenmemiş bir kimlik `_kimlik_kapiya_uygun` değilse GEÇERLİ sayılmaz;
+    dördüncü demet (`özetsiz`) onu ADIYLA taşır ki sessizce düşmesin.
     """
     ebeveyn: dict[tuple[str, str], tuple[str, str]] = {}
 
@@ -602,20 +646,25 @@ def _kimlik_bolumlemesi(
 
     sirali: list[tuple[str, str]] = []
     ad: dict[tuple[str, str], str] = {}
-    gorulen: dict[tuple[str, str], int] = {}
+    grup: dict[tuple[str, str], list[DoctorReport]] = {}
     elenen: set[tuple[str, str]] = set()
     for rapor in raporlar:
         kok = bul(_kimlik_anahtarlari(rapor)[0])
         if kok not in ad:
             sirali.append(kok)
             ad[kok] = rapor.kaynak_adi
-        gorulen[kok] = gorulen.get(kok, 0) + 1
+            grup[kok] = []
+        grup[kok].append(rapor)
         if rapor.sonuc == SONUC_ELENDI:
             elenen.add(kok)
+    kalan = [kok for kok in sirali if kok not in elenen]
     elenen_sirali = tuple(ad[kok] for kok in sirali if kok in elenen)
-    gecerli = tuple(ad[kok] for kok in sirali if kok not in elenen)
-    tekrar = tuple(ad[kok] for kok in sirali if gorulen[kok] > 1)
-    return gecerli, elenen_sirali, tekrar
+    gecerli = tuple(ad[kok] for kok in kalan if _kimlik_kapiya_uygun(grup[kok]))
+    ozetsiz = tuple(
+        ad[kok] for kok in kalan if not _kimlik_kapiya_uygun(grup[kok])
+    )
+    tekrar = tuple(ad[kok] for kok in sirali if len(grup[kok]) > 1)
+    return gecerli, elenen_sirali, tekrar, ozetsiz
 
 
 def _gate_ihlalleri(
@@ -629,7 +678,7 @@ def _gate_ihlalleri(
 ) -> list[str]:
     """`RoundGate` türev alanlarının ham veriyle çelişkilerini listeler."""
     ihlaller: list[str] = []
-    gecerli, elenen, _ = _kimlik_bolumlemesi(raporlar)
+    gecerli, elenen, _, _ = _kimlik_bolumlemesi(raporlar)
     if taban != KAYNAK_TABANI:
         ihlaller.append(f"taban {taban}, kanonik K-127 tabanı {KAYNAK_TABANI}")
     if gecerli_kaynak_sayisi != len(gecerli):
@@ -1844,7 +1893,7 @@ def gate_round(reports: Sequence[DoctorReport]) -> RoundGate:
     `DoctorReport.__post_init__`'te zorunludur (boş ad kurulamaz).
     """
     raporlar = _rapor_demeti(reports)
-    gecerli, elenen, tekrar = _kimlik_bolumlemesi(raporlar)
+    gecerli, elenen, tekrar, ozetsiz = _kimlik_bolumlemesi(raporlar)
     dur = len(gecerli) < KAYNAK_TABANI
     parcalar: list[str] = []
     if dur:
@@ -1852,6 +1901,12 @@ def gate_round(reports: Sequence[DoctorReport]) -> RoundGate:
             f"Koşu DURDU: geçerli kaynak sayısı {len(gecerli)}, K-127 tabanı "
             f"{KAYNAK_TABANI}. Elenen kaynak(lar): {list(elenen) or 'yok'}. "
             "Yöneticiye bildirilir."
+        )
+    if ozetsiz:
+        parcalar.append(
+            f"Kanonik içerik ÖZETİ olmayan kaynak(lar): {list(ozetsiz)} — "
+            "özetsiz kimlik K-127 sayımına GİRMEZ (kimliğin içerik ayağı yok, "
+            "iki BAĞIMSIZ kaynak şartı doğrulanamaz); uydurma özet ÜRETİLMEZ."
         )
     if tekrar:
         parcalar.append(

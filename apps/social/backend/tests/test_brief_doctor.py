@@ -1810,3 +1810,142 @@ def test_alakasiz_tablo_matrisi_bos_kume_kolu() -> None:
     for ad, metin in ALAKASIZ_TABLO_MATRISI:
         assert metin != TEMIZ, f"{ad}: cerrahi metni değiştirmedi"
         assert metin.count("| olcut | deger |") == 1
+
+
+# ─── H5: kapıya UYGUN rapor kanonik ÖZET taşır (fail-closed) ───────────────
+#
+# Sınıf (tur 3, F1): *"kimliğin İÇERİK ayağı olmadan da K-127 tabanı
+# geçilebiliyor."* Ölçüldü — `run`'ı ATLAYIP doğrudan kurulan iki özetsiz rapor
+# (`DoctorReport(sonuc='gecti', notlar=(), elemeler=(), kaynak_adi='gemini-cikti'
+# / 'claude-cikti')`) `dur=False, gecerli=2` veriyordu. Tipin AÇIKÇA desteklediği
+# bir çağrı yolu (Task 9/12 tüketicileri `run`'ı atlayabilir) tek kaynakla tabanı
+# geçiyordu. Bir önceki turun TAKMA_AD_MATRISI bunu göremezdi: o matris yalnız
+# `run` üretimi raporları egzersiz eder ve `run` özeti HER ZAMAN üretir.
+#
+# **Matris KAVRAMDAN türer** (kontrolörün üç örneğinden değil): eksen 1 =
+# raporun İÇERİK ayağının durumu, eksen 2 = AD ayağının denkliği, eksen 3 =
+# raporun sonucu — kimliğin iki ayağı × kapı sayımına giriş koşulu. 3 × 2 × 3 =
+# 18 hücre; bilinçle boş bırakılan hücre YOKTUR.
+
+_OZET_A = bd.identity.canonical_sha("kanonik metin A")
+_OZET_B = bd.identity.canonical_sha("kanonik metin B")
+
+OZET_EKSENI = (
+    # `run` yolunu atlayan çağıran metne sahip olmayabilir — özet BOŞ kalır.
+    ("ozet-yok", ("", "")),
+    # Biçimi geçerli ama `run` ÜRETMEDİ: köken doğrulanamaz (kapsam sınırı).
+    ("ozet-uydurma-bicimli", ("a" * 64, "b" * 64)),
+    # `identity.canonical_sha` üretimi — kimliğin gerçek İÇERİK ayağı.
+    ("ozet-kanonik", (_OZET_A, _OZET_B)),
+)
+AD_EKSENI = (
+    ("ad-ayni", ("KAYNAK-9", "KAYNAK-9")),
+    ("ad-farkli", ("KAYNAK-9", "KAYNAK-8")),
+)
+SONUC_EKSENI = (
+    ("gecti", bd.SONUC_GECTI),
+    ("notlu-gecti", bd.SONUC_NOTLU_GECTI),
+    ("elendi", bd.SONUC_ELENDI),
+)
+
+
+def _dogrudan_rapor(sonuc: str, ad: str, ozet: str) -> "bd.DoctorReport":
+    """`run` yolunu ATLAYAN çağıranın kurduğu rapor — tipin açık yolu."""
+    notlar = (_not_bulgu(),) if sonuc == bd.SONUC_NOTLU_GECTI else ()
+    elemeler = (_eleme_bulgu(),) if sonuc == bd.SONUC_ELENDI else ()
+    return bd.DoctorReport(
+        sonuc=sonuc, notlar=notlar, elemeler=elemeler, kaynak_adi=ad,
+        icerik_ozeti=ozet,
+    )
+
+
+def _ozet_matris_beklentisi(ozet_adi: str, ad_adi: str, sonuc: str) -> tuple[int, bool]:
+    """Beklenti KURALDAN türer, hücre hücre elle yazılmaz."""
+    kimlik_sayisi = 1 if ad_adi == "ad-ayni" else 2
+    if sonuc == bd.SONUC_ELENDI:
+        return 0, True  # elenen kimlik sayıma GİRMEZ (meşru özetsiz hâl)
+    if ozet_adi == "ozet-yok":
+        return 0, True  # fail-closed: özetsiz rapor kapıya uygun DEĞİLDİR
+    return kimlik_sayisi, kimlik_sayisi < bd.KAYNAK_TABANI
+
+
+OZET_MATRISI = tuple(
+    (
+        f"{ozet_adi}/{ad_adi}/{sonuc_adi}",
+        _ozet_ciftler,
+        _ad_ciftler,
+        sonuc,
+        _ozet_matris_beklentisi(ozet_adi, ad_adi, sonuc),
+    )
+    for ozet_adi, _ozet_ciftler in OZET_EKSENI
+    for ad_adi, _ad_ciftler in AD_EKSENI
+    for sonuc_adi, sonuc in SONUC_EKSENI
+)
+
+
+@pytest.mark.parametrize(
+    "ozetler,adlar,sonuc,beklenen",
+    [h[1:] for h in OZET_MATRISI],
+    ids=[h[0] for h in OZET_MATRISI],
+)
+def test_ozetsiz_rapor_kapi_sayisina_giremez(
+    ozetler: tuple[str, str], adlar: tuple[str, str], sonuc: str,
+    beklenen: tuple[int, bool],
+) -> None:
+    """Özetsiz bir rapor SESSİZCE sayılamaz — sayılmaz (fail-closed)."""
+    gate = bd.gate_round(
+        [_dogrudan_rapor(sonuc, ad, ozet) for ad, ozet in zip(adlar, ozetler)]
+    )
+    assert (gate.gecerli_kaynak_sayisi, gate.dur) == beklenen
+
+
+def test_ozet_matrisi_bos_kume_taban_ve_kontrol_kollari() -> None:
+    """Boş-küme + kontrol kolları: matris üç eksenden GERÇEKTEN üretilmiş mi?"""
+    assert len(OZET_EKSENI) == 3 and len(AD_EKSENI) == 2 and len(SONUC_EKSENI) == 3
+    assert len(OZET_MATRISI) == 3 * 2 * 3 == 18
+    assert {h[0] for h in OZET_MATRISI}.__len__() == 18, "hücre adları çakışıyor"
+    # Matris hem geçen hem duran hücre taşımalı — tek renkli matris ölçmez.
+    durumlar = {h[4][1] for h in OZET_MATRISI}
+    assert durumlar == {True, False}, f"matris tek renkli: {durumlar}"
+
+    # Kontrol kolu (a): `run` üretimi İKİ GERÇEK farklı kaynak hâlâ geçmeli.
+    gate = bd.gate_round([_rapor(_ad="KAYNAK-1"), _rapor(_ad="KAYNAK-2", cta=6)])
+    assert (gate.dur, gate.gecerli_kaynak_sayisi) == (False, 2)
+
+    # Kontrol kolu (b): MEŞRU karma hâl — aynı kimliğin bir raporu özetli.
+    # Grup özet taşıdığı için kimlik kapıya UYGUNDUR; uydurma özet ÜRETİLMEZ.
+    karma = bd.gate_round(
+        [
+            _rapor(_ad="KAYNAK-1"),
+            _dogrudan_rapor(bd.SONUC_GECTI, "KAYNAK-1", ""),
+            _rapor(_ad="KAYNAK-2", cta=6),
+        ]
+    )
+    assert (karma.dur, karma.gecerli_kaynak_sayisi) == (False, 2)
+
+    # Boş-küme kolu.
+    assert bd.gate_round([]).gecerli_kaynak_sayisi == 0
+
+
+def test_ozetsiz_kaynak_yoneticiye_BILDIRILIR() -> None:
+    """Sessizce düşmez: özetsiz kimlik bildirimde ADIYLA görünür."""
+    gate = bd.gate_round(
+        [
+            _dogrudan_rapor(bd.SONUC_GECTI, "gemini-cikti", ""),
+            _dogrudan_rapor(bd.SONUC_GECTI, "claude-cikti", ""),
+        ]
+    )
+    assert gate.dur is True
+    assert "gemini-cikti" in gate.bildirim and "claude-cikti" in gate.bildirim
+    assert "özet" in gate.bildirim.casefold()
+
+
+def test_ozet_kapisi_mutasyona_duyarli() -> None:
+    """Mutasyon kolu: özet şartını SÖK → özetsiz çift yine 2 kaynak saysın."""
+    ozetsiz = [
+        _dogrudan_rapor(bd.SONUC_GECTI, "gemini-cikti", ""),
+        _dogrudan_rapor(bd.SONUC_GECTI, "claude-cikti", ""),
+    ]
+    assert bd.gate_round(ozetsiz).gecerli_kaynak_sayisi == 0
+    with mock.patch.object(bd, "_kimlik_kapiya_uygun", lambda raporlar: True):
+        assert bd.gate_round(ozetsiz).gecerli_kaynak_sayisi == 2
