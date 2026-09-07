@@ -334,6 +334,64 @@ ele alındı; ikisi kapandı, biri kapandı ve YENİ bir kalem doğurdu, biri ha
   modül ve kendi testi dışında depoda **hiçbir atıf yok** — davranış değişikliği bugün hiçbir
   şeyi kıramaz. Varsayımla değil ölçümle kapandı.
 
+## Task 7 — checkpoint 6'nın devamı (2026-09-07, ikinci oturum)
+
+Bu oturum tek bir ekseni kapattı: **çit maskesi**. Üç hakem turu koşuldu (9, 10, 11) ve
+zincir kontrolör kararıyla BİTİRİLDİ — dördüncüsü açılmadı.
+
+- **Tur 9** iki medium bildirdi (girintili kök çiti · bitişik kök ayıracı). Kontrolör kendi
+  probuyla ikisini de doğruladı ve **etiketi tartıştı:** aynı dosyada aynı şekilli bir bulgu
+  daha önce `[high]` almıştı (*"structurally invalid reports are silently classified as
+  clean"*). Eray'ın kararıyla P1 **high** sayıldı ve otonom düzeltme döngüsü açıldı.
+  `4d107e8` indi: kap üyeliği ham girintiye eşitlenmişti ve kapatıcı kap kontrolünden ÖNCE
+  koşuyordu; ikisi de düzeltildi, matris iki kavramsal eksende genişledi.
+- **Tur 10** `needs-attention` + bir **high**: `_kapatici_mi` kapatıcının GİRİNTİSİNE hiç
+  bakmıyordu. Beş varyant bildirildi; kontrolör **üçünü doğruladı, ikisini yanlış-pozitif
+  olarak ölçtü** (gramere sorularak).
+- **ÇERÇEVE TEŞHİSİ — altıncı sınır kuralı YAZILMADI.** Tur 8'den beri her tur CommonMark'ın
+  kodlanmamış bir kuralını getiriyordu. Eray'a üç seçenekli çerçeve teşhisi sunuldu; **(A)
+  seçildi:** maske `markdown-it-py`'ye devredildi (`4167401`), elle yazılmış durum makinesi ve
+  dört yardımcısı SİLİNDİ. Bu, yürütme protokolünün **M6** hükmünün karşılığıdır — dış gramer
+  modelleyen guardrail'de çalıştırılabilir ground-truth ZORUNLUDUR ve hiç kurulmamıştı.
+- **Tur 11** `needs-attention`: ayrıştırıcının `maxNesting` koruması bir fail-open üretiyor.
+  Kontrolör doğruladı ve **sınırı ölçtü** (10'da kapalı, 11'de açık). `cad705c` indi.
+
+**Bu oturumun kalıcı dersleri:**
+
+- **Beklenti GRAMERE bağlandı ve GÜÇLENDİ.** Eski iddia "çit eklemek not kaldıramaz" idi ve
+  enjeksiyon NOKTASINI yok sayıyordu; ölçüldü ki bazı noktalarda blok hiç çit açmaz ve içerik
+  GERÇEKTEN görünür olur. Yeni iddia: bir not ancak içerik gramere göre görünürse düşebilir.
+- **Oracle İMPLEMENTASYONDAN BAĞIMSIZ olmalı.** İlk yazımda beklenti `bd._cit_maskesi`'yi
+  okuyordu; ölçüldü ki o fonksiyonu değiştiren her mutasyon beklentiyi de kaydırıyor ve
+  mutasyon kolları SESSİZCE yeşile dönüyordu.
+- **Gönderdiğimiz her elle yazılmış makine DONMUŞ MUTANT olarak testte yaşıyor** (tur9 · tur10 ·
+  tur12); her biri en az bir kaçış bırakıyor, bugünkü maske hiçbirini bırakmıyor. Bağımlılığın
+  yerini hak ettiği bir iddia değil, ölçülen bir farktır.
+- **`dört boşluk` bağlamı matristen ÇIKARILDI.** CommonMark'ta 4 sütun girinti çit AÇMAZ; onu
+  çit bağlamı saymak ölçtüğünü sandığın şeyi ölçmemekti. Girintili kod bloğu maskeye AYRI
+  olarak dahil (`code_block`).
+- **PROB HATASI ÜÇ KEZ.** Sahte içerik kapatıcıdan ÖNCE konmuştu · iç içe yuvalama sözleşmenin
+  GERÇEK maddeleriyle kurulmuştu (kabı meşru doldurdular) · tripwire çökme beklentisiyle
+  yazılmıştı. **Üçü de İNANDIRICI sonuç verdi.** Her birinde `md.render(doc)` beş saniyede kesin
+  cevabı verdi ve o adım en sona bırakılmıştı. Görevdeki prob-hatası sayısı dörtten YEDİYE çıktı.
+- **YÜKSELTMEDE GERİ ALMA.** `maxNesting` önce 1000 denendi, bütün derinlikleri kapattı — ama
+  tripwire o eşikte 1200 kat iç içe blockquote'un ayrıştırıcıyı `RecursionError` ile düşürdüğünü
+  gösterdi: fail-open'ı kapatan değişiklik bir ÇÖKME yolu açıyordu. 100'e çekildi.
+
+## Sözleşme görevi — üç ayak İNDİ (2026-09-07)
+
+`brief-sozlesmesi-kaynak-bolumu-makine-okunur` görevinin dört ayağından üçü bu oturumda indi;
+gövde o görevin kendi dosyasında yaşar. Dördü de Eray kararıyla: 1-3 kontrolör kararı + veto
+hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir satır).
+
+- Dış depo `7964ed6`: `ÇIKTI FORMATI` yapısal sözleşmeye çevrildi.
+- Monorepo `868f50a`: pin yenilendi; testin sütun türetmesi düzyazı cümlesinden **birebir
+  başlık satırına** taşındı.
+- **`tarih` sütunu OKUYARAK eklendi**, tasarlayarak değil: Bölüm 2 "yayın tarihini Bölüm C'de
+  belirt" diyor ve denetçi sözleşmesi "TARİHLİ güncellik" arayan bir güçlü-kaynak testi koşuyor.
+- **KALAN: 4. ayak** — kapının Bölüm C ailesi olumsuz çıkarımdan olumlu yapısal sözleşmeye
+  çevrilecek ve Task 7'nin "makineyle doğrulanmadı" kapsam beyanı KALKACAK.
+
 # Decisions Log
 
 - **2026-08-27 — K-84 = A:** kalıp kimliği sürümler arası korunur. Değeri eşleştirmek

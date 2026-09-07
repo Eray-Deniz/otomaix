@@ -1,6 +1,6 @@
 ---
 title: Araştırma sözleşmesinin çıktı biçimi makine-okunur kesinliğe getirilsin
-status: proposed
+status: active
 started: 2026-09-07
 last-touched: 2026-09-07
 blocked-by: null
@@ -39,11 +39,33 @@ Bu görev bir "son tarih"e değil, **adlandırılmış bir yuvaya** oturur:
 
 # Current Status
 
-**proposed.** Eray onayı alındı (2026-09-07): "sözleşme değişikliğini ayrı ve küçük bir iş olarak
-yapabiliriz". Henüz hiçbir dosyaya dokunulmadı.
+**active — DÖRT AYAKTAN ÜÇÜ İNDİ (2026-09-07).**
 
-**Giriş kapısı bir TASARIM kararıdır, yürütücü işi DEĞİLDİR.** Aşağıdaki iki bedel ürün kararı
-taşıyor ve karara bağlanmadan sözleşme metni yazılamaz (bkz. Open Problems).
+- **Ayak 1 İNDİ** — dış depo `7964ed6`: `═══ 5. ÇIKTI FORMATI ═══` yapısal sözleşmeye çevrildi.
+  Başlık düzeyleri bağlayıcı · gerekçe tablosunun başlık satırı birebir · dönem başlıklarından
+  önce TEK tablo · Bölüm C sabit sütunlu tablo.
+- **Ayak 2 İNDİ** — aynı commit: denetçi görev metni hizalandı. ADIM 1 örneklemi artık Bölüm C
+  tablosundan çekiliyor; güçlü-kaynak ölçütünün tarih ayağı `tarih` sütununu okuyor ama
+  **sütunun BEYANINA güvenmiyor** — açılan kaynakta görülen tarihi esas alıyor.
+- **Ayak 3 İNDİ** — monorepo `868f50a`: pin manifesti yenilendi. Ayrıca testin sütun türetmesi
+  düzyazı cümlesinden **birebir başlık satırına** taşındı (kapı ile sözleşme aynı metne bakıyor).
+- **AYAK 4 AÇIK** — mekanik kapının Bölüm C ailesi olumsuz çıkarımdan olumlu yapısal sözleşmeye
+  çevrilecek; kapanınca Task 7'nin "makineyle DOĞRULANMADI" kapsam beyanı KALKAR. Kalkmazsa
+  beyan bayatlar ve bayat beyan, beyan olmamaktan kötüdür.
+
+**Dört soru CEVAPLANDI (2026-09-07).** 1-3 kontrolör kararı + Eray veto hakkı (veto gelmedi);
+**4. soru Eray'ın kendi kararı: (a) — iddia başına bir satır.** Gerekçe: makine "her alan için
+kaynak gösterilmiş mi" BÜTÜNLÜK sorusunu tam cevaplayabilsin. Rapor uzamasın diye `iddia`
+hücresi en fazla 15 kelime — uydurma sınır değil, denetçi görev metni kendi tablosunda zaten
+aynı sınırla çalışıyor.
+
+**Beşinci bir sütun OKUYARAK eklendi:** `tarih`. İlk taslakta yoktu; sözleşmenin 2. bölümü
+"kaynak yayın tarihini Bölüm C'de belirt" diyor ve denetçi sözleşmesi "TARİHLİ güncellik"
+arayan bir güçlü-kaynak testi koşuyor — sütun olmasa o iki hüküm karşılıksız kalırdı.
+
+**Kod çiti KULLANIMI YASAKLANDI.** Bu, üç turluk çit zincirinin doğrudan çıktısı: kapı çit
+içindeki hiçbir şeyi içerik saymaz, çite konan başlık görünmez olur. Araca SÖYLEMEK, kapının
+her turda yeni bir çit bileşimini yakalamaya çalışmasından ucuzdur.
 
 # Kapsam
 
@@ -85,17 +107,14 @@ Ayaklar — hepsi bu görevin içinde, parçalanmaz:
    çevrilir; Task 7'de konulan "makineyle doğrulanmadı" kapsam beyanı bu ayak kapanınca KALKAR
    (kalkmazsa beyan bayatlar — bayat beyan, beyan olmamaktan kötüdür).
 
-# Cevaplanmayı Bekleyen Dört Soru
+# Cevaplanan Dört Soru (2026-09-07)
 
-Bu dört soru **henüz hiçbir yerde cevaplanmadı.** Kapsam bölümünde boşluk olarak yazılı ama
-kimin, ne zaman cevaplayacağı belirlenmedi. **Bu görev başlamadan önce Eray'a sorulacak.**
-
-1. Gerekçe tablosunun **başlık satırı** nasıl yazılacak?
-2. Bölüm B'de **kaç tablo** olabilir?
-3. **Markdown başlık düzeyleri** ne olacak?
-4. **Kaynakçanın biçimi** ne olacak?
-
-Sözleşme metni bu dördü cevaplanmadan yazılmaz.
+1. **Başlık satırı:** `| dönem | karar | tür etiketi | gerekçe |` — birebir.
+2. **Kaç tablo:** dönem başlıklarından önce TAM OLARAK BİR.
+3. **Başlık düzeyleri:** `##` beş bölüm · `###` Bölüm A alanları + dönem adları · `####` dönem
+   başlıkları + `video_kodlar` alt listeleri. Başka düzey yok.
+4. **Kaynakçanın biçimi (ERAY KARARI — (a)):** sabit sütunlu tablo, İDDİA BAŞINA BİR SATIR.
+   `| alan/dönem | iddia | kaynak adı | URL | tarih | tek kaynak |`
 
 # Decisions Log
 

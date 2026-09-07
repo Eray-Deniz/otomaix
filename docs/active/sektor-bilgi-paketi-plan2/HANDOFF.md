@@ -5,18 +5,19 @@ written: 2026-09-07
 
 # Resume From
 
-**Sıradaki iş — İKİ seçenek, sırası ÖNEMLİ:**
+**Sıradaki iş — sırayla:**
 
-1. **`brief-sozlesmesi-kaynak-bolumu-makine-okunur`** (kendi TASK dosyası var) — yuvası
-   **Task 8 ile Task 9 ARASI**, yani Task 8'den hemen sonra. İki ürün kararı Eray'a sorulmadan
-   sözleşme metni yazılamaz.
+1. **Sözleşme görevinin 4. AYAĞI** (`docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/`).
+   Diğer üç ayak indi. Kalan: mekanik kapının Bölüm C ailesini **olumsuz çıkarımdan olumlu
+   yapısal sözleşmeye** çevirmek. Sözleşme artık sabit sütunlu tablo istiyor, dolayısıyla kapı
+   "bu bir eşleme DEĞİL" çıkarımı yapmak yerine sütun sayısı · hücre doluluğu · adres biçimi
+   doğrulayabilir. **Kapanınca Task 7'nin "makineyle DOĞRULANMADI" kapsam beyanı KALKMALI**
+   (`brief_doctor.py` modül docstring'i) — kalkmazsa beyan bayatlar.
 2. **Task 8 — koşu ve artefakt servisi** (plan satır 981).
-
-Yani sıra: **Task 8 → sözleşme görevi → Task 9.** Sözleşme görevi Task 9/10'dan (denetçi katmanı)
-ÖNCE bitmeli, yoksa o görevlerin yazdığı koda geri dönülür.
+3. Task 9.
 
 Komut: `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
-→ resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam** → Task 8 dispatch.
+→ resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam**.
 
 **ÖNCE OKU — kanonik ilerleme burada DEĞİL:**
 `.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md` (git'e girmiyor).
@@ -24,68 +25,64 @@ Komut: `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-pla
 **Yürütme durumu:** kip alt-ajanlı · başlangıç çapası `a806e29` · defter penceresi `a806e29` ·
 **`cp_count: 3`** · **`last_checkpoint_ref: 2b468e8d`**.
 
-> **BİLEREK İLERLETİLMEDİ.** Checkpoint 6 sekiz tur sürdü; son beş tur `approve` verdi ama
-> kapanış Eray'ın risk kabulüyle alınan bir **override**'dır (bir high bilinçle onarılmadı,
-> evi var). §8.6 mutasyon protokolü yalnız Clean/Accepted-risk dallarında koşar. Sonuç
-> fail-safe: sonraki checkpoint'in tabanı `2b468e8d` KALIR ve Task 7'nin bütün commit'lerini
-> kendiliğinden yeniden kapsar.
+> **BİLEREK İLERLETİLMEDİ** (değişmedi). Checkpoint 6 override ile kapandı; §8.6 mutasyon
+> protokolü yalnız Clean/Accepted-risk dallarında koşar. Sonuç fail-safe: sonraki checkpoint'in
+> tabanı `2b468e8d` KALIR ve Task 7'nin bütün commit'lerini kendiliğinden yeniden kapsar.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`. Son commit **`7244ea0`**. **Push EDİLMEDİ.**
-**`7244ea0` bağımsız hakem GÖRMEDİ** — tur 8 `628f784`'e kadar inceledi. Kontrolör kendi
-probuyla ölçtü (yuva sahteciliği kapandı, liste işaretleri düzeldi, aşırı sıkılaştırma yok),
-ama bu bağımsız yargı DEĞİLDİR. Final incelemenin tabanı `a806e29` olduğu için kapsanır.
+**Dal:** `feat/sektor-bilgi-paketi-plan2`. Son commit **`cad705c`**. Uzak **`091dc03`**'te —
+bu oturumun dört commit'i **push EDİLMEDİ**. Ağaç temiz.
 
-**Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: bu oturum ona DOKUNMADI.
+**Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit **`7964ed6`**,
+monorepo pin manifesti bu commit'e bağlı.
 
-## ERAY'IN CEVABINI BEKLEYEN İKİ KARAR (2026-09-07 oturumu kapanırken açık kaldı)
+## Bu oturum ne yaptı — tek cümle
 
-Bunlar olgu değil **karar**dır; oturum kapanırken cevaplanmadı. Yeni oturum bu ikisini
-gündeminin BAŞINA alır — Task 8 dispatch'inden ÖNCE sorar.
-
-1. **Dal push edilsin mi?** Şu an 21+ commit yalnız yerelde. Push edilmemesi bilinçliydi
-   (yürütme protokolü push'u kullanıcı onayına bağlar), ama karar verilmedi.
-   *Bağlam:* tam test kümesi `5002 passed`, defter kapısı `rc=0`, ağaç temiz.
-
-2. **Hakem görmemiş commit'ler için bir tur daha koşulsun mu?** Checkpoint 6'nın son hakem
-   turu (tur 8) `628f784`'e kadar inceledi. Ondan sonraki kod commit'i `7244ea0` (çit maskesinin
-   ayrıştırmadan önceye alınması) **bağımsız yargı GÖRMEDİ** — kontrolör kendi probuyla ölçtü
-   (yuva sahteciliği kapandı · liste işaretleri düzeldi · aşırı sıkılaştırma yok · gerçek veride
-   kaybolan tek not yanlış-pozitifti, dosya açılıp doğrulandı), ama bu bağımsız yargı DEĞİLDİR.
-   *Ev uydurulmadı:* final incelemenin tabanı `a806e29` olduğu için o commit oraya kendiliğinden
-   girer; yani cevap "hayır" olursa da evsiz kalmaz — yalnız daha geç incelenir.
+Çit maskesi elle yazılmış CommonMark yaklaşımı olmaktan çıkıp **grameri koşturur** hâle geldi
+(`markdown-it-py`), ve araştırma sözleşmesinin çıktı formatı **makine-okunur kesinliğe** çevrildi.
 
 ## Sıradaki dispatch'te ÖNDEN bildirilecekler
 
-1. **Ek metni kodla uyumsuz, İKİ yerde** (değişmedi): R12(a2)(d) amende edildi; aktör kapısının
+1. **YENİ — `markdown-it-py` artık bir ÜRETİM bağımlılığıdır** (`requirements.txt`, pinli
+   `4.2.0`, saf Python, tek bağımlılığı `mdurl`). Docker imajı yeniden kurulmalı; **canlıya
+   dağıtılmadı.**
+2. **YENİ — ayrıştırıcı sınırı SONLUDUR ve ilan edilmiştir.** `maxNesting=100`. 100 kattan derin
+   iç içe yapı aynı sınıfı yeniden açar. Bu bir tripwire ile ölçülüyor (`sinir + 50`
+   derinliğinde açığın GERÇEKTEN göründüğü doğrulanıyor); sınırı sessizce yükseltirsen test
+   kırılır. Değer 1000 DENENDİ ve GERİ ALINDI — o eşikte `RecursionError` çıkıyordu.
+3. **YENİ — bu oturumun dört commit'i bağımsız hakem GÖRMEDİ** (`4d107e8` · `4167401` ·
+   `868f50a` · `cad705c`). Tur 11 `4167401`'e kadar inceledi ve `cad705c` onun bulgusunun
+   düzeltmesidir. **Ev uydurulmadı:** final incelemenin tabanı `a806e29` olduğu için hepsi
+   oraya kendiliğinden girer.
+4. **Ek metni kodla uyumsuz, İKİ yerde** (değişmedi): R12(a2)(d) amende edildi; aktör kapısının
    tanım yeri ekin gösterdiği modül değil.
-2. **Ekin kendi içinde çelişkisi:** ayak (d) düzyazısı `BEFORE UPDATE OR DELETE`, bağlayıcı SQL
-   bloğu `BEFORE UPDATE`. **Evi Task 8 — yani sıradaki görev.**
-3. **Onay mührü yüklemi:** dolu → BOŞ reddediliyor, yeniden mühürleme BİLEREK açık. Task 8'de
+5. **Ekin kendi içinde çelişkisi:** ayak (d) düzyazısı `BEFORE UPDATE OR DELETE`, bağlayıcı SQL
+   bloğu `BEFORE UPDATE`. **Evi Task 8.**
+6. **Onay mührü yüklemi:** dolu → BOŞ reddediliyor, yeniden mühürleme BİLEREK açık. Task 8'de
    ek metniyle karşılaştırılmalı.
-4. **Kimlik kapıları migration dosyalarının BAŞINDA** — yeni migration yazılırken kapı ilk üst
+7. **Kimlik kapıları migration dosyalarının BAŞINDA** — yeni migration yazılırken kapı ilk üst
    düzey DDL'den ÖNCE konmalı.
-5. **Task 7 ve Task 11 planda "Arayüz eki bağlar" satırını TAŞIMIYOR** (20 görevin 18'inde var).
-   Task 7'de sorun çıkmadı çünkü ekin iki tüketici sözleşmesi yine de bağlıyordu ve dispatch'e
-   harfiyen taşındı. **Task 11'de aynı kontrol ELLE yapılmalı.**
-6. **Task 8/9/12 girdi kapısının tiplerini tüketecek.** Bugün depoda o tiplere modül ve kendi
-   testi dışında **hiçbir atıf yok** (kontrolör taradı). Task 8 ilk tüketiciyi eklerse, TASK.md
-   Open Problems'taki tetikli kalemler yeniden değerlendirilmeli.
-7. **Substrat kapsam kaybı:** Codex kum havuzu `api_key=<ifade>` desenli üretim dosyalarını,
-   aktif katman dosyalarını ve bağlayıcı eki dışlıyor. Hakem her turda bunları HEAD git
-   nesnelerinden okuduğunu ve **tam test kümesini yeniden koşamadığını** açıkça yazdı.
-8. **YENİ — girdi kapısının test dosyası büyük.** 3503 test, 25 sn (tam küme 5002 / 570 sn).
-   Bir önceki turda 6929'du ve hakem "orantısız" dedi; kap ekseni aile temsilcisine indirilip
-   kazanılan yer gerçekten ayırt eden eksenlere harcandı. Yeni matris eklerken aynı disiplin:
-   **kap çarpımını büyütme, ayırt eden ekseni büyüt.**
+8. **Task 7 ve Task 11 planda "Arayüz eki bağlar" satırını TAŞIMIYOR** (20 görevin 18'inde var).
+   **Task 11'de bu kontrol ELLE yapılmalı.**
+9. **Task 8/9/12 girdi kapısının tiplerini tüketecek.** Bugün depoda o tiplere modül ve kendi
+   testi dışında **hiçbir atıf yok**. Task 8 ilk tüketiciyi eklerse TASK.md Open Problems'taki
+   tetikli kalemler yeniden değerlendirilmeli.
+10. **Substrat kapsam kaybı:** Codex kum havuzu `api_key=<ifade>` desenli üretim dosyalarını,
+    aktif katman dosyalarını ve bağlayıcı eki dışlıyor; hakem tam test kümesini yeniden
+    koşamıyor ve bunu her turda kendisi yazıyor.
+11. **Girdi kapısının test dosyası büyük** — 3850 test. Yeni matris eklerken disiplin aynı:
+    **kap çarpımını büyütme, ayırt eden ekseni büyüt.** Bu oturumda `dört boşluk` bağlamı
+    ÇIKARILDI (gerçek bir çit bağlamı değildi) ve kazanılan yer sınır problarına harcandı.
 
 ## Her görev dispatch'inde ZORUNLU olarak taşınacaklar
 
 1. Arayüz eki **bağlayıcıdır**; ilgili hükümler brief'e **harfiyen kopyalanır**.
 2. Test komutu sanal ortam aktifleştirilerek koşar (aşağıda Verification).
-3. **Taban 5002**; bu sayı düşmeyecek.
+3. **Taban 5349**; bu sayı düşmeyecek. (5665'ten düşüş `dört boşluk` bağlamının matristen
+   ÇIKARILMASIDIR — davranış iddiası kaybı DEĞİL; ölçüldü, girintili kod bloğu maskeye AYRI
+   olarak dahil.)
 4. `Exec-Kind` **sınıflandırıcıya** karşı seçilir. `.sql` çalıştırılabilir sınıfa GİRMEZ.
 5. `Exec-*` bloğu mesajın SON PARAGRAFI, co-author trailer'ları **aynı paragrafta**.
-6. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY, tahmin etme.
+6. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY.
 7. Her commit'ten SONRA defter kapısı koşulur.
 8. Uygulayıcı kendi alt-ajanını çağırmaz. **`docs/active/` altına yazmaz.**
 9. Codex çağrılarına tam 40 karakterlik SHA verilir.
@@ -94,58 +91,71 @@ gündeminin BAŞINA alır — Task 8 dispatch'inden ÖNCE sorar.
 11. **Gönderilen düzyazıya sayı yazma** — ya üreten komutu yanına koy, ya "doğrulanmadı" etiketle.
 12. **Tarama deseni KAVRAMDAN türetilir**, bulunan örneklerden değil.
 13. **Kontrolörün tam test kümesi, veritabanına dokunan bir alt-ajanla ASLA üst üste binmez.**
-14. Bir düzeltme, DEĞİŞTİRDİĞİ yapıyı okuyan testleri bayatlatabilir — **her turda eski test
-    dosyasını yeni modüle karşı koştur.**
+14. Bir düzeltme, DEĞİŞTİRDİĞİ yapıyı okuyan testleri bayatlatabilir — her turda eski test
+    dosyasını yeni modüle karşı koştur.
 15. Kimlik kapısı ya kanonik değerle TAM eşleşmeli ya da kümeyi ÜRETEN yapıdan türemeli.
 16. Canlıya hiçbir n8n dosyası körlemesine yüklenmez.
 17. **Hakem/kontrolör önerisi ADAYDIR.** Bu görevde ölçümde yanlış çıkan öneri/teşhis sayısı
-    **altı**. Uygulayıcı ölçüp reddetmekle yükümlü ve bunu YAPTI.
-18. **Kendi probunu da sorgula.** Bu oturumda kontrolörün probu **dört kez** yanılttı: fazla
-    masum vaka · boş gövdeli çit · not SAYISI karşılaştırması · yanlış yuva tipi. Üçünde de ilk
-    okuma "sorun yok" diyordu.
-19. **KAPANIŞ SAYIYLA DEĞİL MESAJ KÜMESİ FARKIYLA KANITLANIR.** Bir not kaybolurken toplam
-    ARTABİLİR — bu oturumda tam olarak öyle oldu ve kaçtı.
+    **sekiz** (bu oturumda ikisi: tur 10'un beş varyantından ikisi yanlış-pozitifti).
+18. **Kendi probunu da sorgula** — bu görevde prob YEDİ kez yanılttı, bu oturumda ÜÇÜ.
+    **YENİ VE EN ÖNEMLİSİ:** üçü de İNANDIRICI sonuç verdi, yani sürprize bağlı kural onları
+    yakalayamaz. **Prob kanıt sayılmadan ÖNCE, probun ne ürettiğini ÖLÇÜLEN SİSTEME DEĞİL
+    OTORİTEYE sor** (`md.render(doc)` · token dökümü). Bu adım her seferinde beş saniyede kesin
+    cevabı verdi ve her seferinde en sona bırakılmıştı.
+19. **KAPANIŞ SAYIYLA DEĞİL MESAJ KÜMESİ FARKIYLA KANITLANIR.**
 20. **Üç tur aynı ekseni getiriyorsa dördüncü nokta-düzeltmesi AÇMA.** Sınıfı adlandır, üretilmiş
-    matrisle kapat; kapanmıyorsa çerçeve teşhisiyle Eray'a git.
-21. **Bir KURAL beşinci kez kandırılıyorsa kural yazmayı bırak, DEĞİŞMEZ kur.** Bu oturumun en
-    değerli dersi: beş sınır kuralı beş kez yenildi; *"tablo eklemek var olan notu kaldıramaz"*
-    değişmezi sınıfı kapattı.
-22. **Beyan bayatlarsa beyan olmamaktan kötüdür.** Bu oturumda altı kez yakalandı; çözüm
-    envanteri TRIPWIRE'a çevirmek oldu — ilan edilen her açık için o açığın gerçekten var
-    olduğunu ölçen bir test.
+    matrisle kapat; kapanmıyorsa **çerçeve teşhisiyle Eray'a git**. Bu oturumda tam olarak bu
+    yapıldı ve işe yaradı (üç seçenekli teşhis → A → sınıf yapıyla kapandı).
+21. **Bir KURAL beşinci kez kandırılıyorsa kural yazmayı bırak, DEĞİŞMEZ kur** — ve değişmez de
+    kandırılıyorsa **GRAMERİ KOŞTUR**. Bu oturumun dersi: dış gramer modelleyen guardrail'de
+    çalıştırılabilir ground-truth ZORUNLUDUR (protokolün M6 hükmü); yoksa matrisin kör noktası
+    kendi hayal gücün kadardır.
+22. **Beyan bayatlarsa beyan olmamaktan kötüdür** — ilan edilen her açık için o açığın gerçekten
+    var olduğunu ölçen bir TRIPWIRE.
+23. **YENİ — ORACLE İMPLEMENTASYONDAN BAĞIMSIZ OLMALI.** Beklenti ölçülen fonksiyonu okursa,
+    o fonksiyonu değiştiren her mutasyon beklentiyi de kaydırır ve mutasyon kolları SESSİZCE
+    yeşile döner. Ölçüldü ve düzeltildi (`_gramer_maskesi` doğrudan `bd._MD`'yi okur).
+24. **YENİ — ÇAKILI SAYILARI TEK GEÇİŞTE ÖLÇ.** Ayrıştırıcıyı değiştirmek 2700 hücrelik
+    matrisin on bir çakılı sayısını ve dört mutasyon kolunun beklentisini birden geçersiz
+    kıldı. Teker teker ölçmek her adımda iki dakikalık bir test koşumuna mal oldu ve saatler
+    yedi. **Hepsini tek ölçüm betiğiyle çıkar, tek seferde yaz.**
 
 # Verification
 
-**Koşulan komutlar ve TAZE çıktıları (2026-09-07, hepsi kontrolörün KENDİ koşumları):**
+**Koşulan komutlar ve TAZE çıktıları (2026-09-07 ikinci oturum, hepsi kontrolörün KENDİ koşumları):**
+
 - `cd apps/social/backend && source .venv/bin/activate && python -m pytest tests/ -q`
-  → **5002 passed in 569.66s**, exit 0, temiz ağaçta, HEAD `7244ea0`'da.
-  Seyir: 1499 → 1552 → 1644 → 1758 → 1793 → 1821 → 2261 → 2350 → 2770 → 8428 → **5002**.
-  (8428 → 5002 düşüşü **matris küçültmesidir**, iddia kaybı değil: kap ekseni aile temsilcisine
-  indirildi, her küçültülen aile hâlâ temsilcisiyle ölçülüyor ve genel mutasyon kolunda beş
-  ailenin beşi de kırmızıya düşüyor.) **Hiç test silinmedi, hiç davranış iddiası kaybolmadı.**
+  → **5349 passed in 669.10s**, exit 0, temiz ağaçta, HEAD `cad705c`'de.
+  Seyir: … 5002 → 5665 → **5349**. 5665 → 5349 düşüşü **`dört boşluk` bağlamının
+  ÇIKARILMASIDIR**; hiç test silinmedi, hiçbir davranış iddiası kaybolmadı.
 - `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**, her commit'ten sonra.
-- `bash ~/.claude/tools/command-blocks-maint.sh verify` → **PASS** (oturum başında).
-- **Sözleşme pini:** `verify_pin` → **sıfır sapma**.
-- **Codex çağrısı: 8** (checkpoint 6, tur 1-8; hepsi `rc=0`). Ham çıktı + kapanış denetim kaydı
-  `/root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md`.
-- **Kontrolörün bulgu doğrulaması:** sekiz turun HER bulgusu kontrolörün kendi probuyla yeniden
-  ölçüldü; hiçbir turda hakemin sözüne dayanılmadı.
-- **Gürültü ölçümü, gerçek veri:** dış depodaki 62 dosyada mesaj kümeleri; son turda **1 dosyada
-  1 not düştü** ve kontrolör dosyayı açıp doğruladı — not 12. satırdan geliyordu, çit 3-13
-  satırları arasındaydı, yani **yanlış-pozitifti**. Gerileme değil, gürültü azalması.
-- **Çağıran taraması:** girdi kapısının tiplerine modül ve kendi testi dışında depoda atıf yok.
+- **Sözleşme pini:** `pytest tests/test_contract_pin.py` → 32 passed, yeni sürüme bağlı.
+- **Codex çağrısı: 3** (tur 9 · 10 · 11). Tur 9/10 `rc=0`; **tur 11 `rc=1` — çıktı KESİLDİ**
+  (düzyazıda bulguyu anlatıyor ama yapılandırılmış `Findings` bölümü boş). Bulgu yine de
+  kontrolör tarafından doğrulandı ve düzeltildi. Ham çıktı log'da.
+- **Kontrolörün bulgu doğrulaması:** üç turun HER bulgusu kendi probuyla yeniden ölçüldü;
+  **iki bulgu yanlış-pozitif çıktı** ve düzeltilmedi, KAYDEDİLDİ (görünürlük kontrol koluna
+  taşındı ki bir sonraki tur onları yeniden "kaçış" diye açmasın).
+- **Düzeltmenin kendi yan etkisi ÖLÇÜLDÜ:** eski modül `git show 7244ea0:…` ile çıkarıldı ve
+  390 hücrelik çarpımda yan yana koşuldu. Yeni sürüm 24 hücrede not kaldırıyor; hepsi eski
+  sürümün belgeyi yanlışlıkla yutmasından doğan **yanlış pozitiflerdi**. Gerçek notu kaybeden
+  hücre: eski sürümde 40, yeni sürümde 0.
+- **Sınır ölçümü:** iç içe derinlik 9 kapalı / 11 açıktı; düzeltmeden sonra 9·11·25·60·99
+  kapalı. Derinlik 500/2000/5000 çökmüyor. Derinlik-400 belgesi 0.17 sn.
 
 **Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
-- **`7244ea0` bağımsız hakem görmedi** (yukarıda).
-- **Bölüm C'nin üçlü yapısı makineyle DOĞRULANMIYOR** — ilan edildi, onarılmadı, evi var.
-- **Sözleşmeye uyan bir araştırma çıktısında yanlış-pozitif oranı ÖLÇÜLMEDİ** — dış depodaki
-  dosyalar sözleşmenin şimdiki biçiminden eski ve hiçbirinde Bölüm B tablosu yok.
-- **Kontrolörün 5002 sonucu bağımsız hakem tarafından yeniden üretilmedi** — Codex kum havuzunda
-  dışlanan dosyalar toplama hatası veriyor; hakem bunu her turda kendisi yazdı.
-- **Değişmez bir kez GEVŞETİLDİ:** dilsiz çit kolu ham mesaj kümesi yerine "konu" düzeyinde
-  karşılaştırıyor. Sebep ölçülmüş (kökte kapanmamış çit belgenin gerisini yutunca sayım notu
-  `5 madde` → `0 madde` olur; not susmaz, sayısı düşer). Ham kaybın çıktığı 15 hücre adıyla
-  pinli ve ayrı bir test her birinde konunun konuştuğunu + sayının artmadığını ölçüyor.
+
+- **Bu oturumun dört commit'i bağımsız hakem GÖRMEDİ** (yukarıda; evi var).
+- **Ayrıştırıcı sınırı SONLU** — 100 kattan derin iç içe yapıda sınıf yeniden açılır. İlan
+  edildi, tripwire'lı, **çözülmedi**.
+- **`markdown-it-py` canlıya dağıtılmadı**; Docker imajı yeniden kurulmadı. Bağımlılığın
+  üretim ortamında davranışı DOĞRULANMADI.
+- **Sözleşmenin YENİ biçiminde üretilmiş gerçek araştırma çıktısı YOK** (dış depodaki dosyalar
+  2026-07-11 tarihli). Araçların tabloyu ne kadar düzgün ürettiği ve yanlış-pozitif oranı
+  **ÖLÇÜLMEDİ**; ilk gerçek ölçüm Task 19 Step 5'te doğacak.
+- **Bölüm C kapısı HENÜZ olumlu sözleşmeye çevrilmedi** (4. ayak) — sözleşme tabloyu istiyor
+  ama kapı hâlâ eski vekille bakıyor. **"Makineyle doğrulanmadı" beyanı hâlâ YERİNDE ve doğru.**
+- **Bölüm C'nin üçlü yapısı makineyle DOĞRULANMIYOR** — ilan edildi, onarılmadı, evi 4. ayak.
 - **`telegramApi` credential'ının canlı token taşıdığı DOĞRULANMADI** (değişmedi).
 - **CRM webhook onarımı YAPILMADI** — yalnız kapatıldı (değişmedi).
 - PG 18.3 dışında sürüm denenmedi; çok-oturumlu eşzamanlılık denenmedi.
@@ -154,33 +164,39 @@ gündeminin BAŞINA alır — Task 8 dispatch'inden ÖNCE sorar.
 
 # Risks
 
-- **Checkpoint 6 `approve` ile DEĞİL, override ile kapandı.** Son beş tur `approve` verdi ama bir
-  high (Bölüm C üçlüsü) bilinçle onarılmadı; evi ve son tarihi var. `cp_count` ilerletilmedi.
-- **TARİHLİ — sözleşmenin kaynak bölümü makine-okunur değil.** Ev:
-  `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/`. **Yuva: Task 8 → Task 9 arası.**
-  Task 9/10 denetçi katmanını kurar ve sözleşme değişikliği o metne de dokunur.
+- **YENİ — üretim bağımlılığı eklendi ve canlıda denenmedi.** `markdown-it-py==4.2.0`. Deploy
+  öncesi imaj yeniden kurulmalı; kurulmazsa `brief_doctor` import'ta patlar.
+- **YENİ — ayrıştırıcı sınırı sonlu (100).** Gerçekçi araştırma çıktısında erişilemez ama
+  ÇÖZÜLMEDİ. `RecursionError` yolu fail-closed bağlandı (savunma katmanı, testi var).
+- **Checkpoint 6 `approve` ile DEĞİL, override ile kapandı** (değişmedi). `cp_count`
+  ilerletilmedi.
+- **Sözleşme görevi YARIM** — üç ayak indi, dördüncüsü açık. Yuva hâlâ **Task 9'dan ÖNCE**:
+  Task 9/10 denetçi katmanını kurar ve sözleşmeye atıf yapar.
 - **EN YÜKSEK — kimlik doğrulamasız CRM webhook'ları onarılmadı, yalnız KAPATILDI** (değişmedi).
-- **KABUL EDİLMİŞ RİSK (M3) — commit geçmişi tek-commit TDD modeline uymuyor** (değişmedi; hakem
-  bu oturumun sekiz turunda bu itirazı BİR KEZ BİLE tekrarlamadı).
+- **KABUL EDİLMİŞ RİSK (M3) — commit geçmişi tek-commit TDD modeline uymuyor** (değişmedi).
 - **EVSİZ PARK — atomiklik sınıfı depo GENELİ** (değişmedi).
 - **KABUL EDİLMİŞ RİSK — `ON_ERROR_STOP` ret yolunda geri konamıyor** (değişmedi).
 - **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`).
-- **Codex maliyeti:** bu oturumda 8 çağrı (Eray "sayı önemli değil, eksiksiz bitsin" dedi).
 
 # Notes For Claude/Codex
 
 - **Hakem turlarını Claude koşar — SORMA.** Eray'ın kalıcı kuralı.
-- **Bu oturumun en değerli dersi (madde 21):** bir kural beşinci kez kandırılıyorsa altıncı kuralı
-  yazma — **değişmez** kur. Beş sınır kuralı beş kez yenildi; *"ekleme var olan notu kaldıramaz"*
-  değişmezi sınıfı kapattı ve sonrasında bulunan her şey o değişmezin KAPSAM sorusu oldu.
-- **İkinci ders: beyanı ölçülebilir yap.** Beyan altı kez bayatladı. Çözüm envanteri tripwire'a
-  çevirmek oldu: ilan edilen her açık için, o açığın gerçekten var olduğunu uçtan uca ölçen test.
-- **Üçüncü ders: "doğrulanmadı" demek çözmek değil devretmektir** — devrin nereye gittiğini ölç.
-  Bu oturumda ölçüldü: denetçi sözleşmesi kaynak başına 3 iddia örnekleyip bağlantıyı gerçekten
-  açıyor (makinenin yapamayacağı kontrol), ama **bütünlük** sorusunu cevaplamıyor.
-- **Hakem raporunu doğrulanmamış iddia say** — sekiz turun her bulgusu yeniden ölçüldü.
-- **Kendi probunu da sorgula** — dört kez yanılttı.
+- **ZİNCİRİ DURDURMA KARARINI ERAY'A GÖTÜR.** Bu oturumun en pahalı süreç hatası: üç hakem turu
+  koşuldu ve durma kararı hiç önüne konmadı. Eray haklı olarak "bir bulguyu düzeltmek kaç saat
+  sürüyor" diye sordu. Kural zaten yazılıydı (`feedback_severity_gates_process_weight`) ve
+  ateşlenmedi — çünkü **durum-tetikli** bir kuraldır ve not olarak ateşlenmez.
+- **TEHDİT MODELİNİ ÖNDEN SÖYLE.** Bu kapı Gemini/Claude/ChatGPT araştırma çıktısı okuyor —
+  girdisi ÖZENSİZ olabilir, SALDIRGAN değil. "11 kat iç içe liste" gerçekçi bir arıza biçimi
+  değildir. Bu üç tur önce söylenseydi zincir orada biterdi.
+- **Prob otoriteye sorulmadan kanıt sayılmaz** (madde 18) — bu oturumun en pahalı teknik dersi.
+- **Hakem raporunu doğrulanmamış iddia say.**
 - **Alt-ajan model alanını HİÇ GEÇME.** Çıplak takma ad hook tarafından reddediliyor.
 - **Spec değil, spec-input kanoniktir.**
-- **Eray'a teknik cümle onaylatma** — İlke-8 kapısı bu oturumda bir soruyu haklı olarak reddetti.
+- **Eray'a teknik cümle onaylatma** — ama SEVİYE kararını (medium mu high mı) ONA SOR: bu
+  oturumda etiket tartışması doğru yere gitti ve otonom düzeltme döngüsünü açan şey o oldu.
+- **Hafıza kararı AÇIK:** Eray, durum-tetikli kuralları hafızaya yazmanın **yanlış kapanış**
+  ürettiğini söyledi (not yazılınca konu "ele alınmış" görünüyor ama hiç ateşlenmiyor).
+  Eylem-tetikli notlar bu oturumda ALTI kez ateşlendi ve iş gördü; durum-tetikli olanlar ÜÇ kez
+  ateşlenmedi. **Karar verilmedi:** kapı komutun içine mi kurulacak (`checkpoint_codex_reviews_ran`
+  sayacının yanına), yoksa bu sınıf hiç yazılmayacak mı. Yeni oturum bunu gündemine alsın.
 - Diskte bekleyen düzeltme YOK; çalışma ağacı temiz.

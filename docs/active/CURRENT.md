@@ -1,6 +1,6 @@
 # Active Tasks
 
-- **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — Araştırma sözleşmesinin kaynak bölümünü makine-okunur hâle getirme (tasarım kararı; Plan 2'nin Task 8 ile Task 9 arası yuvaya oturur). Durum, yuva gerekçesi ve iki ürün kararı: `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`
+- **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — Araştırma sözleşmesinin çıktı biçimini makine-okunur kesinliğe getirme. Dört ayaktan üçü indi; kalan ayak mekanik kapının Bölüm C ailesi. Durum: `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`
 - **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
 
 ## Proposed (spun-off)
