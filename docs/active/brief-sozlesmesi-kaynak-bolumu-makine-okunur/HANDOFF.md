@@ -18,7 +18,9 @@ written: 2026-09-07
 **Bu görevi doğuran Plan 2 kalemi de KAPATILDI** (`docs/active/sektor-bilgi-paketi-plan2/TASK.md`,
 Decisions Log'daki `url-bicimi` kalemi) — iki yerde birden yaşamıyor.
 
-**Sıradaki iş bu görevde değil, Plan 2'de:** Task 8 → (Eray onayı) → Task 9.
+**Sıradaki iş bu görevde değil, Plan 2'de: Task 8.** (Task 8 BAŞLAMADI — ölçüldü: `runs.py`
+YOK, `test_pipeline_runs.py` YOK, `task-8-brief.md` YOK, `Exec-Task: T8` commit'i 0. Bu görev
+ilan edilen yuvadan ERKEN bitti; bağlayıcı olan "Task 9'dan ÖNCE" koşulu korundu.)
 
 # Verification
 

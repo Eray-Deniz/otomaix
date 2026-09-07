@@ -27,6 +27,12 @@ Bu görev bir "son tarih"e değil, **adlandırılmış bir yuvaya** oturur:
 
 **YUVA: Plan 2'nin Task 8'i ile Task 9'u ARASINDA.**
 
+> **GERÇEKTE NE OLDU (düzeltme, 2026-09-07):** görev bu yuvada DEĞİL, **Task 8'den ÖNCE**
+> yapıldı. Yuvanın bağlayıcı yanı "Task 9'dan ÖNCE" idi ve o korundu; erken bitmesi bir ihlal
+> değil. **Task 8 hâlâ BAŞLAMADI** (ölçüldü 2026-09-07: `sector_pipeline/runs.py` YOK,
+> `tests/test_pipeline_runs.py` YOK, SDD defterinde `task-8-brief.md` YOK, `Exec-Task: T8`
+> etiketli commit sayısı 0). Bu satır aksi izlenimi vermesin diye eklendi.
+
 İki bağımsız son tarih var ve ikisi de bu yuvadan sonra geliyor:
 
 1. **Task 9 / Task 10 — denetçi katmanı.** Sözleşme değişikliği denetçi görev metnine de dokunuyor
