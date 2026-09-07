@@ -160,7 +160,8 @@ GÖRÜLEMEZ: çıplak ` ``` ` ayıracı sözcüksüz olduğu için eleniyordu am
 `notlu-gecti / 1 not` → `gecti / 0 not`; kapanmamış çit de aynı). Kapatma satır
 dizisi üstünde yapılır (`_citsiz_satirlar`): DİLSİZ bir çitin açıcısı, gövdesi ve
 eşleşen kapatıcısı doluluk sayımından ÇIKARILIR, kapanmamış çit FAIL-CLOSED
-olarak blok sonuna kadar düşer. DİLLİ çit (` ```python `) · blockquote · HTML
+olarak (tur 11'den beri BELGE sonuna kadar) düşer. DİLLİ çit (` ```python `) ·
+blockquote · HTML
 bloğu ilan edilmiş AÇIK kalemlerdir ve DOKUNULMADI — gerçek çıktıda meşru
 kullanımları olabilir, daraltmanın yanlış-pozitif maliyeti ÖLÇÜLMEDİ. Aynı turda
 envanterin kendi bayatlaması kapatıldı: açık biçimler `ACIK_BLOK_BICIMLERI`'nde
@@ -177,17 +178,19 @@ görülmesi bir yöntem dersidir:** not SAYISI 2 → 3 ARTMIŞTI (çitin üretti
 uydurma bir biçim notu yüzünden) ve sayı karşılaştırması kapanışı YANLIŞ
 gösteriyordu; kayıp ancak mesaj KÜMELERİ farkıyla göründü. Süpürme kavramdan
 türetildi (belgenin kendi içerme modeli × çitin boyutları) ve İKİ demette
-sayıldı: `CIT_KURALI_KAPSAMI` (yedi yol — doluluk · adet sayımı · madde tekrar
-izi · bölüm boşluğu · Bölüm C eşleme satırı · Bölüm B gerekçe tablosu tanıma ·
-ayrı madde işareti) ve `CIT_KURALI_DISINDA` (yedi yol — hepsi HAM METİN tarar ya
-da fail-closed tercihtir; ölçüt: kontrol SÖZLEŞME-BİÇİMLİ içerik mi arıyor,
-yoksa ham metin mi). Körlemesine eleme YAPILMADI: bir çitin içindeki İngilizce
+sayıldı: `CIT_KURALI_KAPSAMI` (bugün SEKİZ yol — doluluk · adet sayımı · madde
+tekrar izi · bölüm boşluğu · Bölüm C eşleme satırı · Bölüm B gerekçe tablosu
+tanıma · ayrı madde işareti · tur 11'de eklenen BAŞLIK VE BÖLÜM TANIMA) ve
+`CIT_KURALI_DISINDA` (bugün ALTI yol — hepsi HAM METİN tarar ya da fail-closed
+tercihtir; ölçüt: kontrol SÖZLEŞME-BİÇİMLİ içerik mi arıyor, yoksa ham metin mi). Körlemesine eleme YAPILMADI: bir çitin içindeki İngilizce
 metin gerçekten İngilizcedir, çite alınmış 40 kelimelik alıntı hâlâ alıntıdır ve
 K-120 muafiyeti çite saklanmış içerikle ALINAMAZ (üçü de ölçüldü). Kural TEK
 evde yaşar (`_cit_maskesi`); `_citsiz_satirlar` onun süzgeç yüzeyidir ve konum
-koruması gereken yol maskeyi doğrudan okur.
+koruması gereken yol maskeyi doğrudan okur (tur 11'de maske SATIRIN KENDİSİNE
+taşındı — `_Satir.cit_icinde`).
 
-**Tur 10 — çit tanıma BAĞLAMDAN BAĞIMSIZ.** Kural tek evdeydi ve yedi yol onu
+**Tur 10 — çit tanıma BAĞLAMDAN BAĞIMSIZ.** Kural tek evdeydi ve süpürülmüş
+yollar onu
 çağırıyordu, ama evin kendi ekseni (dil × gövde × kapanış) GİRİNTİ/BAĞLAM
 boyutunu TAŞIMIYORDU. Ölçüldü, aynı yuva, mesaj KÜMESİ farkıyla: `- ``` ` +
 `  print(42)` + `  ``` ` bir notu KALDIRIYORDU. Sebep girinti DEĞİLDİ — ayıraç
@@ -195,7 +198,7 @@ deseninin baştaki boşluk yutan öneki girintiyi zaten alıyordu ve 2/4 boşluk
 MADDE BAĞLAMIYDI: `- ``` ` açıcı sayılmadığı için gövde MASKESİZ kalıp kabı
 DOLDURUYOR, kapatıcı ise yeni bir açıcı sanılıyordu. Ayıraç deseni bağlamdan
 BAĞIMSIZLAŞTIRILDI (`_KOD_CITI_RE`) — tek evde, ikinci ayrıştırıcı YAZILMADAN,
-dolayısıyla yedi yol da aynı anda faydalandı. Kapatıcı eşleşmesi satırın SOLUNA
+dolayısıyla hepsi aynı anda faydalandı. Kapatıcı eşleşmesi satırın SOLUNA
 değil AYIRACIN KENDİSİNE bakar. AŞIRI SIKILAŞTIRMA YAPILMADI: ayıraç satırın TEK
 ANLAMLI İÇERİĞİ olmak zorundadır — `- gerçek bir kalıp` çit değildir ve kabı
 DOLDURMAYA devam eder (ölçüldü). Aynı turda eksen İKİ boyutla genişledi (bağlam
@@ -204,6 +207,36 @@ yerde yaşar, beyan ondan ÜRETİLİR ve tripwire her kalemi uçtan uca ÖLÇER)
 HEDEFLİ mutasyon kolu eklendi: deseni tur 9 hâline döndürmek yalnız iki YENİ
 bağlamı kırmızıya düşürür, girinti bağlamları YEŞİL kalır — boyutun gerçekten
 ölçtüğünün kanıtı.
+
+**Tur 11 — MASKE AYRIŞTIRMADAN ÖNCE, BİR KEZ, BELGENİN TAMAMI ÜSTÜNDE.** Tur
+10'a kadar kural tek evdeydi ama maske HER KULLANIM YERİNDE, bir DİLİM üstünde
+yeniden hesaplanıyordu ve ayrıştırma onu hiç görmüyordu. İki ölçülmüş açık:
+
+  (a) **TAM YUVA SAHTECİLİĞİ.** `_bloklara_ayir` başlıkları HAM satırlardan
+      tanıyordu. Belgeden TAMAMEN silinen `cta_kaliplari` alanı İKİ not
+      veriyordu (`0 madde taşıyor, sözleşme alt sınırı 5` + `alan başlığı Bölüm
+      A'da yok`); AYNI belgeye DİLSİZ bir çit içinde sahte `### cta_kaliplari`
+      başlığı ve beş madde konunca rapor `gecti / 0 not` oluyordu. Yani VAR
+      OLMAYAN bir sözleşme alanı, kod bloğunun içine yazılarak DOLU ve EKSİKSİZ
+      gösterilebiliyordu. Bir önceki tur bu yolu "kapsam dışı, fail-closed,
+      yalnız NOT EKLER" diye İLAN ETMİŞTİ; ölçüm ilanı YALANLADI ve beyan
+      düzeltildi (bu görevde beyan ALTINCI kez bayatladı).
+  (b) **KAP GEÇİŞİ.** Bir liste öğesi içinde açılan çit, o öğe bittikten çok
+      sonra gelen KÖK düzeyi bir ayıracı kendi kapatıcısı sanıyordu:
+      `- ```python` → girintili gövde → kabı bitiren kök paragraf → kökte DİLSİZ
+      çit bileşimi, DİLSİZ çitin beş maddesini maskesiz bırakıp hem boş-yuva hem
+      alt sınır notunu KALDIRIYORDU. Ayrıca liste işareti kümesi sözleşmenin
+      madde kuralından (`-`) türetilmişti; `* ``` ` ve `+ ``` ` birer not
+      kaldırıyordu.
+
+Kapatma ÜÇ yama değil TEK yapısal değişikliktir: maske `_maskeli_satirlar`'da
+BİR KEZ hesaplanır ve satıra YAPIŞIR (`_Satir`), böylece dilim alan hiçbir yol
+onu yeniden hesaplayamaz; liste işaretleri MARKDOWN'ın kendi dilbilgisinden
+türer (sözleşmenin madde kuralı ayrı yaşar ve `*` ile yazılmış maddeye NOT
+düşmeye devam eder); durum makinesi KAP SONLANMASINI modeller
+(`_kapsayici_kirildi`). HAM METİN tarayan yollar (dil kuralı · uzun alıntı ·
+gövde dipnotu · tür etiketi · etiket yazımı) maskeyi GÖRMEZ — `_Satir` bir `str`
+türevidir ve satır ham kalır; çite alınmış Türkçe harf hâlâ oradadır (ölçüldü).
 
 **Ölçüm sınırları dürüstçe (İlke 9).** Mekanik kapı bir dil modeli değildir; kontroller
 sözleşmenin taranabilir yüzeyini ölçer, tamamını değil. Bu sınırlar artık DOCSTRING'DE
@@ -360,9 +393,18 @@ GEREKCE_BASLIK_ASGARI = 2
 # kapsam `CIT_KURALI_KAPSAMI` / `CIT_KURALI_DISINDA`'da sayılır.
 #
 # **Tur 10 — aynı ayağın BAĞLAM boyutu.** Yedi yol da çit-farkındaydı ama çitin
-# KENDİSİ bağlam-farkında değildi: bir MADDE İŞARETİNDEN sonra açılan çit
+# KENDİSİ bağlam-farkında değildi: bir LİSTE İŞARETİNDEN sonra açılan çit
 # (`- ``` `) ayıraç sayılmıyor, gövdesi kabı DOLDURUYORDU. Ayıraç deseni tek
 # evde bağlamdan bağımsızlaştırıldı; girinti zaten çalışıyordu (ölçüldü).
+#
+# **Tur 11 — aynı ayağın YAPISAL boyutu: çit eklemek YUVA UYDURAMAZ.** Sekiz
+# yolun hepsi çit-farkındaydı ama AYRIŞTIRMA değildi ve maske her yerde bir
+# DİLİM üstünde yeniden hesaplanıyordu. Ölçüldü: DİLSİZ bir çit içine konan
+# sahte `### cta_kaliplari` başlığı, belgeden TAMAMEN SİLİNMİŞ bir alanı DOLU
+# gösteriyor ve İKİ notu birden KALDIRIYORDU (`notlu-gecti / 2 not` ->
+# `gecti / 0 not`). Maske artık ayrıştırmadan ÖNCE, belgenin TAMAMI üstünde bir
+# kez hesaplanır ve satıra YAPIŞIR (`_Satir`); ayrıca durum makinesi KAP
+# SONLANMASINI modeller ve liste işaretleri markdown'ın kendi kümesinden türer.
 #
 
 BOLUM_BOS_MESAJI = (
@@ -1055,7 +1097,8 @@ class _Yuva:
         """Sözleşmenin SAYDIĞI yüzey: DİLSİZ çit bloğu ELENMİŞ madde listesi.
 
         Eleme kuralı doluluk sayımıyla AYNI TEK yerden gelir
-        (`_citsiz_satirlar`); ikinci bir çit ayrıştırıcısı YAZILMAZ.
+        (`_maskeli_satirlar` hesaplar, `_citsiz_satirlar` süzer); ikinci bir
+        çit ayrıştırıcısı YAZILMAZ.
         """
         return self._ogeler(_citsiz_satirlar(self.satirlar))
 
@@ -1191,9 +1234,9 @@ _YATAY_CIZGI_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 # Markdown KOD ÇİTİ açıcı/kapatıcı satırı. İkinci grup INFO dizesidir: BOŞsa çit
 # DİLSİZDİR (` ``` `), doluysa DİLLİDİR (` ```python `).
 #
-# **BAĞLAMDAN BAĞIMSIZ (tur 10).** Bir çit ayıracı, önünde GİRİNTİ ya da MADDE
+# **BAĞLAMDAN BAĞIMSIZ (tur 10).** Bir çit ayıracı, önünde GİRİNTİ ya da LİSTE
 # İŞARETİ olsa da çit ayıracıdır. `^\s*` girintiyi zaten yutuyordu — ölçüldü:
-# 2 ve 4 boşluk girintili çit notu KORUYORDU. Açık olan MADDE BAĞLAMIYDI:
+# 2 ve 4 boşluk girintili çit notu KORUYORDU. Açık olan LİSTE BAĞLAMIYDI:
 # `- ``` ` açıcı sayılmıyordu, dolayısıyla üç satırlık bir madde-içi blokta
 # gövde (`  print(42)`) MASKESİZ kalıp kabı DOLDURUYOR, kapatıcı (`  ``` `) ise
 # yeni bir açıcı sanılıp fail-closed kapanmamış çit açıyordu. Ölçüldü, aynı yuva:
@@ -1203,13 +1246,35 @@ _YATAY_CIZGI_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 #     ic ice madde '  - ```' + govde        kayip=1  [KAYBOLDU]  <-- ACIK
 #     2 ve 4 bosluk girintili cit           kayip=0  [KORUNDU]
 #
+# **Tur 11 — liste işareti kümesi MARKDOWN'IN, sözleşmenin DEĞİL.** Tur 10 yalnız
+# `-`'yi tanıyordu ve gerekçesi "sözleşmenin KENDİ madde kavramı odur" idi. O
+# gerekçe İKİ ayrı soruyu birbirine karıştırıyordu: markdown'ın hangi satırı KAP
+# (liste öğesi) saydığı ile sözleşmenin hangi madde işaretini KABUL ettiği ayrı
+# şeylerdir. Ölçüldü, aynı yuva, mesaj KÜMESİ farkıyla:
+#
+#     '- ```' + govde + kapanis   kayip=0  [kapali]
+#     '* ```' + govde + kapanis   kayip=1  <-- ACIK
+#     '+ ```' + govde + kapanis   kayip=1  <-- ACIK
+#     '1. ```' + govde + kapanis  kayip=1  <-- ACIK
+#
+# Küme artık CommonMark'ın liste dilbilgisinden TÜRER (`-` · `*` · `+` ve
+# sıralı liste). Bu, `*` ile yazılmış bir maddeyi sözleşmeye UYGUN yapmaz:
+# `_MADDE_RE` değişmedi ve `bicim-kurallari/ayri-madde-isareti` o satıra NOT
+# düşmeye DEVAM eder — ölçülür. Markdown TANIMASI ile sözleşme KURALI ayrı
+# yaşar; çitin içindeki kodu sözleşme içeriğine çeviren şey liste işareti değil,
+# ÇİTİN KENDİSİDİR.
+#
 # **AŞIRI SIKILAŞTIRMA YAPILMADI:** ayıraç satırın TEK ANLAMLI İÇERİĞİ olmak
 # ZORUNDADIR — `- gerçek bir kalıp` çit DEĞİLDİR ve kabı DOLDURMAYA devam eder.
-# Madde işareti olarak yalnız `-` tanınır: sözleşmenin KENDİ madde kavramı odur
-# (BİÇİM KURALLARI md. 3, `_MADDE_RE`); `*`/`+`/numaralı liste uydurulmaz.
 # Kapatıcı eşleşmesi ayıracın KENDİSİNE bakar, satırın SOLUNA değil — açıcı
 # girintiliyse kapatıcı da öyledir ve eşleşme buna TAKILMAZ.
-_KOD_CITI_RE = re.compile(r"^\s*(?:-\s+)?(`{3,}|~{3,})\s*(\S*)\s*$")
+#
+# BİRİNCİ grup açıcının ÖNEKİDİR (girinti + varsa liste işareti) ve uzunluğu
+# çitin KAP SÜTUNUDUR — `_kapsayici_kirildi` onu okur.
+_LISTE_ISARETI = r"(?:[-*+]|\d{1,9}[.)])[ \t]+"
+_KOD_CITI_RE = re.compile(
+    r"^([ \t]*(?:" + _LISTE_ISARETI + r")?)(`{3,}|~{3,})[ \t]*(\S*)[ \t]*$"
+)
 # En az bir SÖZCÜK karakteri: hem düz yazının hem madde gövdesinin asgari işareti.
 _SOZCUK_RE = re.compile(r"\w")
 
@@ -1266,7 +1331,8 @@ ACIK_BLOK_BICIMLERI: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 # ─── DİLSİZ ÇİT KURALININ KAPSAMI — envanterin İKİNCİ ayağı ────────────────
 #
-# Tur 8 çit kuralını KURDU ama yalnız TEK yola bağladı (doluluk). Tur 9'da
+# Kalem SAYISI burada YAZILMAZ — demetlerin kendisi kanoniktir ve test onları
+# birebir eşler. Tur 8 çit kuralını KURDU ama yalnız TEK yola bağladı (doluluk). Tur 9'da
 # ölçüldü ki AYNI içeriği okuyan KARDEŞ yollar çit-farkında DEĞİLDİ ve çite
 # konan içerik notları KALDIRIYORDU (kapanış kanıtı SAYI değil, mesaj KÜMESİ
 # farkıyla alındı: `cta_kaliplari` probunda not SAYISI 2 → 3 ARTMIŞTI ve alt
@@ -1297,6 +1363,13 @@ CIT_KURALI_KAPSAMI: tuple[tuple[str, str], ...] = (
     (
         "gerekce-tablosu-tanima",
         "Bölüm B'de gerekçe tablosu bloklarının TANINMASI (konum korunur)",
+    ),
+    (
+        "baslik-ve-bolum-tanima",
+        "AYRIŞTIRICI düzeyi — bölüm · Bölüm A alanı · video havuzu · dönem "
+        "yuvası başlıklarının TANINMASI. Maske ayrıştırmadan ÖNCE, belgenin "
+        "TAMAMI üstünde hesaplanır (`_maskeli_satirlar`), dolayısıyla çit "
+        "içindeki bir başlık YAPI KURAMAZ",
     ),
     (
         "ayri-madde-isareti",
@@ -1343,13 +1416,6 @@ CIT_KURALI_DISINDA: tuple[tuple[str, str], ...] = (
         "saklanan içerik K-120 muafiyetini ALIRDI ve notlar DÜŞERDİ (ölçüldü: "
         "çite konan madde bugün muafiyeti BOZAR, 0 not → 4 not)",
     ),
-    (
-        "baslik-ve-bolum-tanima",
-        "AYRIŞTIRICI düzeyi — ölçüldü ve FAIL-CLOSED: çit içindeki `## Bölüm "
-        "Z` yalnız NOT EKLER (0 not → 16 not), hiçbir notu KALDIRMAZ. "
-        "Kapatma belge düzeyinde çit-farkında ayrıştırma ister ve yanlış-pozitif "
-        "maliyeti ÖLÇÜLMEDİ; bu turda KAPATILMADI",
-    ),
 )
 
 
@@ -1366,6 +1432,12 @@ CIT_BAGLAM_BICIMLERI: tuple[tuple[str, str, str], ...] = (
     ("dört boşluk", "    ", "    "),
     ("madde işaretli (`- `)", "- ", "  "),
     ("iç içe madde (`  - `)", "  - ", "    "),
+    # Tur 11 — liste işareti kümesi MARKDOWN'IN, sözleşmenin DEĞİL. Tur 10 yalnız
+    # `-`'yi tanıyordu ve gerekçesi sözleşmenin madde kuralıydı; iki soru ayrı
+    # şeydir (ölçüldü: `* ``` ` ve `+ ``` ` birer not KALDIRIYORDU).
+    ("yıldız madde (`* `)", "* ", "  "),
+    ("artı madde (`+ `)", "+ ", "  "),
+    ("sıralı liste (`1. `)", "1. ", "   "),
 )
 # AYIRAÇ BİÇİMLERİ — CommonMark İKİ ayıraç karakteri ve EN AZ üç uzunluk tanır;
 # tur 9'a dek yalnız üçlü backtick egzersiz ediliyordu.
@@ -1380,32 +1452,127 @@ def _cit_kapsam_beyani() -> str:
     """Çit kuralının kapsam beyanı — İKİ demetin TÜREVİ, kopyası değil."""
     return (
         "bolum-ve-alan-tamligi/cit-kapsami: DİLSİZ kod çiti eleme kuralı TEK "
-        "yerde yaşar (`_cit_maskesi`) ve süpürülen her yol onu ÇAĞIRIR — ikinci "
-        "bir çit ayrıştırıcısı yazılmaz. KAPSANAN yollar: "
+        "yerde yaşar (`_cit_maskesi`) ve MASKE BELGENİN TAMAMI ÜSTÜNDE, BİR KEZ, "
+        "AYRIŞTIRMADAN ÖNCE hesaplanır (`_maskeli_satirlar`); satıra YAPIŞIR "
+        "(`_Satir.cit_icinde`) ve hiçbir yol onu yerel olarak yeniden hesaplamaz "
+        "— ikinci bir çit ayrıştırıcısı yazılmaz. Bölüm · Bölüm A alanı · video "
+        "havuzu · dönem yuvası TANIMANIN hepsi MASKELENMİŞ görünümü okur: çit "
+        "içindeki bir başlık YAPI KURAMAZ. **DÜZELTİLMİŞ BEYAN (tur 11):** bir "
+        "önceki tur `baslik-ve-bolum-tanima` için 'kapsam dışı, fail-closed, "
+        "yalnız NOT EKLER' diyordu ve ÖLÇÜM bunu YALANLADI — belgeden TAMAMEN "
+        "silinen `cta_kaliplari` alanı, DİLSİZ bir çit içine konan sahte "
+        "`### cta_kaliplari` başlığı ve beş maddeyle DOLU ve EKSİKSİZ "
+        "gösteriliyordu (ölçüldü, mesaj KÜMESİ farkıyla: `notlu-gecti / 2 not` "
+        "-> `gecti / 0 not`; TAM YUVA SAHTECİLİĞİ). Yol artık KAPSANANLAR "
+        "arasındadır. HAM METİN tarayan yollar maskeyi GÖRMEZ ve görmemelidir: "
+        "satırlar `str` türevi olarak ham kalır. KAPSANAN yollar: "
         + " · ".join(f"{ad} ({gerekce})" for ad, gerekce in CIT_KURALI_KAPSAMI)
         + ". BİLİNÇLE KAPSAM DIŞI bırakılanlar — ölçüt: kontrol SÖZLEŞME-BİÇİMLİ "
         "içerik mi arıyor yoksa HAM METİN mi tarıyor: "
         + " · ".join(f"{ad} ({gerekce})" for ad, gerekce in CIT_KURALI_DISINDA)
         + ". Kapsam dışı yolların hiçbiri bu turda ölçülmüş bir NOT KAYBI "
         "üretmiyor; ürettikleri fazladan notlar fail-closed yöndedir. "
+        "Kalan altı kalemin HEPSİ ham metin tarar ve maskesiz satırı okur; "
+        "hiçbiri sözleşme-biçimli içerik ARAMAZ. "
         "DİLLİ çit · blockquote · HTML bloğu hâlâ AÇIK kalemdir "
         "(`ACIK_BLOK_BICIMLERI`) ve kapsanan yolların HİÇBİRİNDE elenmez. "
         "ÇİT TANIMA BAĞLAMDAN BAĞIMSIZDIR (tur 10): bir ayıraç, önünde GİRİNTİ "
-        "ya da MADDE İŞARETİ olsa da ayıraçtır ve açıcısı · gövdesi · eşleşen "
+        "ya da LİSTE İŞARETİ olsa da ayıraçtır ve açıcısı · gövdesi · eşleşen "
         "kapatıcısı sayımdan çıkar; kapatıcı eşleşmesi satırın SOLUNA değil "
-        "AYIRACIN KENDİSİNE bakar. Ölçülen BAĞLAMLAR: "
+        "AYIRACIN KENDİSİNE bakar. LİSTE İŞARETİ kümesi MARKDOWN'IN kendi "
+        "dilbilgisinden türer (`-` · `*` · `+` · sıralı liste), sözleşmenin madde "
+        "kuralından DEĞİL — ikisi AYRI sorudur: `*` ile yazılmış bir madde "
+        "sözleşme ihlalidir ve `bicim-kurallari/ayri-madde-isareti` ona NOT "
+        "düşmeye DEVAM eder, ama bu, içindeki kodu sözleşme içeriğine ÇEVİRMEZ. "
+        "DURUM MAKİNESİ KAP SONLANMASINI MODELLER (`_kapsayici_kirildi`): bir KAP "
+        "İÇİNDE açılan çitin kapsamı, o kaptan daha AZ girintili boş-olmayan bir "
+        "satırla BİTER — uzaktaki bir kök ayıracı onun kapatıcısı DEĞİLDİR "
+        "(ölçüldü: `- ```python` → girintili gövde → kabı bitiren kök paragraf → "
+        "kökte DİLSİZ çit bileşimi, eski makinede İKİ notu birden KALDIRIYORDU). "
+        "KÖK düzeyinde açılan kapanmamış çit için hiçbir satır kabı bitiremez ve "
+        "çit FAIL-CLOSED olarak BELGE SONUNA kadar düşer; bunun ÖLÇÜLMÜŞ bedeli "
+        "şudur: belgenin geri kalanı görünmez olduğu için SAYIM taşıyan bir not "
+        "daha SIKI bir sayıyla yeniden yazılabilir (ör. `toplam 5 madde` -> "
+        "`toplam 0 madde`) — notun KENDİSİ susmaz, sayısı düşer. Ölçülen "
+        "BAĞLAMLAR: "
         + " · ".join(ad for ad, _on, _devam in CIT_BAGLAM_BICIMLERI)
         + ". Ölçülen AYIRAÇ biçimleri: "
         + " · ".join(f"{ad} ({isaret})" for ad, isaret in CIT_AYIRAC_BICIMLERI)
         + ". AŞIRI SIKILAŞTIRMA YAPILMADI: ayıraç satırın TEK ANLAMLI İÇERİĞİ "
         "olmak zorundadır — `- gerçek bir kalıp` çit DEĞİLDİR ve kabı "
-        "DOLDURMAYA devam eder; madde işareti olarak yalnız sözleşmenin KENDİ "
-        "madde kavramı (`-`) tanınır."
+        "DOLDURMAYA devam eder, `- ``` içeren bir kalıp` da çit sayılmaz."
     )
 
 
+class _Satir(str):
+    """Belgenin BİR ham satırı + o satırın ÇİT MASKESİ — AYRILAMAZ biçimde.
+
+    **Tur 11'in yapısal ayağı budur.** Maske tur 8-10 boyunca satır dizisinden
+    HER KULLANIM YERİNDE yeniden hesaplanıyordu (`_citsiz_satirlar(...)` yuva
+    satırları üstünde, bölüm satırları üstünde, Bölüm B satırları üstünde). Bu
+    yerel yeniden hesap iki şeyi birden bozuyordu:
+
+      (a) bir DİLİM, çitin AÇICISINI içermeyebilir — o zaman gövde MASKESİZ
+          kalır ve kapatıcı yeni bir açıcı sanılır;
+      (b) AYRIŞTIRMA hiç maske görmüyordu — çit içindeki `### cta_kaliplari`
+          gerçek bir alan başlığı sayılıyor ve OLMAYAN bir alan DOLU
+          görünüyordu (ölçüldü, mesaj KÜMESİ farkıyla: `2 not → 0 not`, sonuç
+          `gecti`).
+
+    Kapatma bir üçüncü kural DEĞİL: maske belgenin TAMAMI üstünde, BİR KEZ,
+    ayrıştırmadan ÖNCE hesaplanır (`_maskeli_satirlar`) ve satıra YAPIŞIR. Satır
+    nereye taşınırsa maskesi de oraya gider; dilim alan bir yol maskeyi yeniden
+    hesaplayamaz çünkü hesaplayacak bir şey kalmamıştır.
+
+    Tip `str` TÜREVİDİR ve bu bilinçlidir: HAM METİN tarayan yollar (dil kuralı ·
+    uzun alıntı · gövde dipnotu · tür etiketi · etiket yazımı) satırı OLDUĞU GİBİ
+    görmeye devam eder — çite alınmış Türkçe harf hâlâ oradadır.
+    """
+
+    cit_icinde: bool
+
+    def __new__(cls, ham: str, cit_icinde: bool) -> "_Satir":
+        nesne = super().__new__(cls, ham)
+        nesne.cit_icinde = bool(cit_icinde)
+        return nesne
+
+
+def _cit_icinde(satir: str) -> bool:
+    """Satır bir DİLSİZ çit bloğuna mı ait? (maskesiz satır için `False`)"""
+    return bool(getattr(satir, "cit_icinde", False))
+
+
+def _yapi_kurmaz(satir: str) -> bool:
+    """Satır BAŞLIK olamaz mı — yani belgenin YAPISINI kuramaz mı?
+
+    İki durum: (a) satır DİLSİZ bir çit bloğunun içindedir; (b) satırın kendisi
+    bir çit AYIRACIDIR. İkincisi DİLLİ çit için de geçerlidir ve ayrı bir
+    karardır: `ACIK_BLOK_BICIMLERI` dilli çitin bir kabı DOLDURMAYA devam
+    ettiğini söyler — doluluk ayrı, YAPI ayrıdır. Bir çit ayıracı hiçbir
+    markdown ayrıştırıcısında başlık değildir; ölçüldü ki aksi hâlde
+    `1. ```python` satırı `_BASLIK_GORUNUMU_RE`'ye uyup bir DÖNEM bloğunu
+    KAPATIYOR ve dilli çitin ilan edilmiş ŞEFFAFLIĞINI bozuyordu.
+    """
+    return _cit_icinde(satir) or bool(_KOD_CITI_RE.match(satir))
+
+
+def _maskeli_satirlar(source_text: str) -> list[_Satir]:
+    """Belgeyi satırlara böler ve ÇİT MASKESİNİ BİR KEZ, burada hesaplar.
+
+    Ayrıştırmanın TEK girdisi budur: `_ayristir` ham `splitlines()` çağırmaz.
+    Böylece bölüm · alan · video havuzu · dönem yuvası tanımanın hepsi
+    MASKELENMİŞ görünüm üzerinden çalışır ve çit içindeki bir başlık yapı
+    kuramaz.
+    """
+    ham = source_text.splitlines()
+    return [
+        _Satir(satir, cit_icinde)
+        for satir, cit_icinde in zip(ham, _cit_maskesi(ham))
+    ]
+
+
 def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
-    """DİLSİZ kod çiti bloklarını (açıcı + gövde + kapatıcı) satır dizisinden ELER.
+    """DİLSİZ çit bloğuna ait satırları ELER — SÜZGEÇ, hesap DEĞİL.
 
     **Neden satır DİZİSİ (tur 8).** `_sozlesme_bicimli` satırı TEK TEK
     değerlendirir ve bir kod bloğu satır-tek-tek görülemez: çıplak ` ``` `
@@ -1424,7 +1591,9 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
 
     **Kapanmamış dilsiz çit FAIL-CLOSED düşer:** açık kalan bir çit "gerisi hep
     gövde" demektir, dolayısıyla açıcıdan blok sonuna kadar hiçbir satır kabı
-    doldurmaz. Ölçüm bunu doğruladı — kapanmamış hâl de notu kaldırıyordu.
+    doldurmaz. Ölçüm bunu doğruladı — kapanmamış hâl de notu kaldırıyordu. (Tur
+    11: maske belge geneli olduğu için sınır artık BELGE sonudur; KAP İÇİNDE
+    açılan çit ise kabı bitiren ilk satırda biter — `_kapsayici_kirildi`.)
 
     **DİLLİ çite DOKUNULMAZ (ilan edilmiş açık kalem).** ` ```python ` bloğu
     açıcısıyla, gövdesiyle ve kapatıcısıyla OLDUĞU GİBİ kalır: gerçek çıktıda
@@ -1433,20 +1602,18 @@ def _citsiz_satirlar(satirlar: Sequence[str]) -> list[str]:
 
     Kapatıcı eşleşmesi CommonMark'ın kuralını izler: aynı işaret karakteri, en az
     açıcı kadar uzun ve INFO dizesi BOŞ. Eşleşme satırın SOLUNA BAKMAZ (tur 10):
-    açıcı girintiliyse ya da bir MADDE İŞARETİNDEN sonra geliyorsa kapatıcı da
+    açıcı girintiliyse ya da bir LİSTE İŞARETİNDEN sonra geliyorsa kapatıcı da
     girintilidir, ve eşleşme buna TAKILMAZ.
 
-    **Kural TEK yerde yaşar: `_cit_maskesi`.** Bu fonksiyon onun SÜZGEÇ
-    yüzeyidir; KONUM koruyan yollar (satır sırası taşıyan tablo izi gibi) aynı
-    maskeyi doğrudan okur. İkinci bir çit ayrıştırıcısı YAZILMAZ — ve mutasyon
-    kolu tek bir yeri (`_cit_maskesi`) sökerek BÜTÜN süpürülmüş yolları birden
-    kapıdan düşürebilir.
+    **Tur 11 — bu fonksiyon artık HESAP YAPMAZ, yalnız SÜZER.** Maske belgenin
+    TAMAMI üstünde bir kez hesaplanır (`_maskeli_satirlar`) ve satıra YAPIŞIR
+    (`_Satir.cit_icinde`); burada yerel bir yeniden hesap yapmak tam olarak
+    kapatılan hatanın kendisiydi — açıcıyı içermeyen bir DİLİM üstünde maske
+    yeniden hesaplanınca gövde maskesiz kalıyor, kapatıcı yeni bir açıcı
+    sanılıyordu. Maskesiz (`str`) bir dizi verilirse hiçbir satır elenmez;
+    ayrıştırmadan geçen bütün yollar `_Satir` taşır.
     """
-    return [
-        satir
-        for satir, cit_icinde in zip(satirlar, _cit_maskesi(satirlar))
-        if not cit_icinde
-    ]
+    return [satir for satir in satirlar if not _cit_icinde(satir)]
 
 
 def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
@@ -1454,39 +1621,86 @@ def _cit_maskesi(satirlar: Sequence[str]) -> list[bool]:
 
     ÇİT TANIMA KURALININ TEK EVİ. `_citsiz_satirlar` bunun süzgeç yüzeyidir;
     satır KONUMUNU korumak zorunda olan süpürme yolları (Bölüm B tablo izi)
-    maskeyi doğrudan okur. Kapanmamış dilsiz çit FAIL-CLOSED'dır: açıcıdan
-    dizinin sonuna kadar her satır çit içi sayılır.
+    maskeyi doğrudan okur (tur 11'de maske satırın kendisine taşındı). KÖK
+    düzeyinde kapanmamış dilsiz çit FAIL-CLOSED'dır: açıcıdan BELGE sonuna kadar
+    her satır çit içi sayılır.
 
-    Tanıma BAĞLAMDAN BAĞIMSIZDIR (tur 10): ayıracın önünde GİRİNTİ ya da MADDE
+    Tanıma BAĞLAMDAN BAĞIMSIZDIR (tur 10): ayıracın önünde GİRİNTİ ya da LİSTE
     İŞARETİ olabilir — koşul, ayıracın satırın TEK ANLAMLI İÇERİĞİ olmasıdır
     (`_KOD_CITI_RE`). Bu fonksiyon TEK EV olduğu için kuralı burada
-    genişletmek, süpürülmüş YEDİ yolun hepsini birden kapsar; ikinci bir
+    genişletmek, süpürülmüş bütün yolları birden kapsar; ikinci bir
     ayrıştırıcı YAZILMAZ.
+
+    **Tur 11 — durum makinesi KAP SONLANMASINI modeller.** Tur 10 açıcıyı
+    tanıyordu ama açıcının hangi KAP içinde açıldığını unutuyordu: bir liste
+    öğesinin içinde açılan çit, o öğe bittikten çok sonra gelen KÖK düzeyindeki
+    bir ayıracı kendi kapatıcısı sanıyordu. Ölçülmüş bileşim: `- ```python `
+    (dilli açıcı) → girintili gövde → kabı bitiren KÖK düzeyi paragraf → kökte
+    DİLSİZ çit. CommonMark bunu İKİ ayrı çit olarak ayrıştırır; eski makine
+    dilli durumu kök açıcıya kadar sürdürüp DİLSİZ çitin gövdesini maskesiz
+    bırakıyordu (ölçüldü: hem boş-yuva hem 0/5 alt sınır notu KAYBOLUYORDU).
+
+    Kural `_kapsayici_kirildi`'dedir: bir çit KAP İÇİNDE açıldıysa (öneki boş
+    değilse), ondan daha AZ girintili boş-olmayan bir satır kabı bitirir ve
+    çitin kapsamı ORADA biter. KÖK düzeyinde (önek boş) açılan çit için hiçbir
+    satır bu koşulu sağlayamaz — kapanmamış kök çiti belge sonuna kadar
+    FAIL-CLOSED düşmeye devam eder.
     """
     maske: list[bool] = []
     acik_isaret: str | None = None
+    acik_sutun = 0
     acik_dilsiz = False
     for satir in satirlar:
         cit = _KOD_CITI_RE.match(satir)
-        if acik_isaret is None:
-            if cit:
-                acik_isaret = cit.group(1)
-                acik_dilsiz = not cit.group(2)
-                maske.append(acik_dilsiz)  # DİLSİZ açıcı düşer
+        if acik_isaret is not None:
+            if cit and _kapatici_mi(cit, acik_isaret):
+                maske.append(acik_dilsiz)
+                acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
                 continue
-            maske.append(False)
+            if not _kapsayici_kirildi(satir, acik_sutun):
+                maske.append(acik_dilsiz)
+                continue
+            # KAP BİTTİ: çitin kapsamı burada biter ve BU satır çit DIŞIDIR —
+            # kendisi yeni bir açıcı OLABİLİR, aşağıdaki dala düşer.
+            acik_isaret, acik_dilsiz, acik_sutun = None, False, 0
+        if cit:
+            acik_isaret = cit.group(2)
+            acik_sutun = _girinti_sutunu(cit.group(1))
+            acik_dilsiz = not cit.group(3)
+            maske.append(acik_dilsiz)  # DİLSİZ açıcı düşer
             continue
-        kapatici = bool(
-            cit
-            and cit.group(1)[0] == acik_isaret[0]
-            and len(cit.group(1)) >= len(acik_isaret)
-            and not cit.group(2)
-        )
-        maske.append(acik_dilsiz)
-        if kapatici:
-            acik_isaret = None
-            acik_dilsiz = False
+        maske.append(False)
     return maske
+
+
+def _kapatici_mi(cit: re.Match[str], acik_isaret: str) -> bool:
+    """CommonMark kapatıcı kuralı: aynı karakter, en az açıcı kadar uzun, INFO boş."""
+    isaret = cit.group(2)
+    return (
+        isaret[0] == acik_isaret[0]
+        and len(isaret) >= len(acik_isaret)
+        and not cit.group(3)
+    )
+
+
+def _girinti_sutunu(onek: str) -> int:
+    """Bir önekin SÜTUN genişliği (sekme dörde açılır)."""
+    return len(onek.expandtabs(4))
+
+
+def _kapsayici_kirildi(satir: str, acik_sutun: int) -> bool:
+    """Açık çitin KABI bu satırda bitti mi?
+
+    Bir liste öğesinin (ya da girintili bloğun) içinde açılan çit o kabın
+    içeriğidir; kaptan daha AZ girintili boş-olmayan bir satır kabı KAPATIR ve
+    çitin kapsamı orada biter. Boş satır kabı bitirmez (liste öğesi boş satır
+    taşıyabilir). KÖK düzeyinde açılan çit (`acik_sutun == 0`) için hiçbir satır
+    bu koşulu sağlayamaz — kapanmamış kök çiti FAIL-CLOSED kalır.
+    """
+    if acik_sutun <= 0 or not satir.strip():
+        return False
+    onek = satir[: len(satir) - len(satir.lstrip())]
+    return _girinti_sutunu(onek) < acik_sutun
 
 
 def _sozlesme_bicimli(parca: str) -> bool:
@@ -1544,12 +1758,18 @@ def _bloklara_ayir(
 
     İkinci dönüş değeri TEKRARLIDIR ve SIRALIDIR: sözlük ikisini de kaybeder,
     sözleşmenin dilbilgisi ise ikisini de sorar.
+
+    **Tanıma MASKELENMİŞ görünüm üzerinden yapılır (tur 11):** çit içindeki bir
+    `### cta_kaliplari` satırı BAŞLIK DEĞİLDİR ve blok AÇMAZ — açsaydı olmayan
+    bir sözleşme alanı dolu görünürdü (ölçüldü: `2 not → 0 not`). Satır yine de
+    açık bloğun gövdesine EKLENİR: ham metin tarayan yollar onu görmeye devam
+    eder.
     """
     bloklar: dict[str, _Yuva] = {}
     sira: list[str] = []
     aktif: _Yuva | None = None
     for satir in satirlar:
-        eslesme = desen.match(satir)
+        eslesme = None if _yapi_kurmaz(satir) else desen.match(satir)
         if eslesme:
             ad = eslesme.group(1)
             aktif = _Yuva(ad=ad, inline=(eslesme.group(2) or "").strip())
@@ -1567,13 +1787,25 @@ def _ayristir(source_text: str) -> _Belge:
     Bölüm tanıma iki işarete dayanır: `Bölüm <harf>` kalıbı ve markdown başlık
     DÜZEYİ. 1-2 düzey başlık bölüm sayılır; 3+ düzey bölüm içi kabul edilir. Bu
     bir mekanik vekildir — sözleşme markdown düzeyi dayatmaz.
+
+    **Tur 11 — GİRDİ MASKELENMİŞTİR.** Ayrıştırma ham `splitlines()` çağırmaz;
+    tek girdisi `_maskeli_satirlar`'dır ve maske belgenin TAMAMI üstünde BİR KEZ,
+    burada başlamadan ÖNCE hesaplanmıştır. Bölüm · alan · video havuzu · dönem
+    yuvası tanımanın hepsi maskelenmiş görünümü okur: çit içindeki bir başlık
+    YAPI KURAMAZ. Satırların KENDİSİ ham kalır (`_Satir` bir `str` türevidir),
+    dolayısıyla ham metin tarayan kontroller çit içeriğini görmeye DEVAM eder.
     """
     bolumler: dict[str, list[str]] = {}
     bolum_sirasi: list[str] = []
     fazla: list[str] = []
     aktif: str | None = None
 
-    for satir in source_text.splitlines():
+    for satir in _maskeli_satirlar(source_text):
+        if _yapi_kurmaz(satir):
+            # Çit içindeki satır YAPI KURMAZ ama gövdede KALIR.
+            if aktif is not None:
+                bolumler[aktif].append(satir)
+            continue
         bolum = _BOLUM_RE.match(satir)
         if bolum:
             harf = bolum.group(1).strip().upper()
@@ -1613,6 +1845,8 @@ def _ayristir(source_text: str) -> _Belge:
     # adı ama satırın kendisi o alan adı DEĞİL (ör. "kapsam ve tanım").
     yeniden_adlandirilmis: list[str] = []
     for satir in a_satirlari:
+        if _yapi_kurmaz(satir):
+            continue
         if _ALAN_DESENI.match(satir) or not _BASLIK_GORUNUMU_RE.match(satir):
             continue
         ilk = _ILK_SOZCUK_RE.match(satir)
@@ -1638,10 +1872,15 @@ def _ayristir(source_text: str) -> _Belge:
     # Tablo TANIMA da çit-farkındadır (tur 9): ölçüldü ki Bölüm B'de dönem
     # başlıklarından ÖNCE DİLSİZ bir çitin içine konan tablo "gerekçe tablosu
     # yok" notunu KALDIRIYORDU. Maske KONUMU korur — blok bitişikliği ve dönem
-    # bölgesi sınırı satır sırasına bakar.
-    b_cit_maskesi = _cit_maskesi(b_satirlari)
+    # bölgesi sınırı satır sırasına bakar. Tur 11: maske artık satırın KENDİSİNDE
+    # taşınır, burada YENİDEN HESAPLANMAZ (dilim üstünde yeniden hesap tam olarak
+    # kapatılan hataydı) — ve DÖNEM BAŞLIĞI tanıma da aynı maskeyi okur.
     for sira, satir in enumerate(b_satirlari):
-        if _TABLO_RE.match(satir) and not b_cit_maskesi[sira]:
+        if _yapi_kurmaz(satir):
+            if aktif_donem is not None:
+                aktif_donem.satirlar.append(satir)
+            continue
+        if _TABLO_RE.match(satir):
             ham_tablo_izleri.append((sira, satir))
         yuva = _YUVA_DESENI.match(satir)
         if yuva and yuva.group(1) == "mesaj_ekseni":
@@ -2616,8 +2855,9 @@ CHECKS: tuple[Check, ...] = (
                 "BİÇİM eler, İLGİ ölçmez — sözleşme biçiminde ama ALAKASIZ bir "
                 "düz yazı satırı kabı doldurmuş sayılır ve bu makineyle "
                 "DOĞRULANAMAZ; ELENEN markdown yapıları TABLO · yatay çizgi · "
-                "DİLSİZ kod çiti BLOĞU (açıcısı + GÖVDESİ + kapatıcısı; "
-                "kapanmamış çit fail-closed olarak blok sonuna kadar) ile "
+                "DİLSİZ kod çiti BLOĞU (açıcısı + GÖVDESİ + kapatıcısı; KÖK "
+                "düzeyinde kapanmamış çit fail-closed olarak BELGE sonuna kadar, "
+                "kap içinde açılan çit ise kabı bitiren ilk satıra kadar) ile "
                 "SINIRLIDIR. Dilsiz çit bu turda KAPANDI ve beyan DÜZELTİLDİ: "
                 "bir önceki tur yalnız SÖZCÜKSÜZ hâlini eliyordu, gövdeli ve "
                 "kapanmamış hâlleri kabı DOLDURUYORDU (ölçüldü: `notlu-gecti / "
