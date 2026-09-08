@@ -3332,6 +3332,11 @@ def _lock_incident_cagiranlari() -> set[str]:
     Küme ELLE YAZILMAZ: modülün kaynağı AST ile ayrıştırılır ve her çağrı, onu
     saran EN İÇTEKİ fonksiyon tanımının adına bağlanır. `_lock_incident`'ın
     kendi tanımı kümenin dışındadır.
+
+    **Çözünürlük sınırı:** dönen şey fonksiyon ADLARIDIR, çağrı yerleri değil —
+    aynı fonksiyondaki iki çağrı TEK girdiye çöker. Tüketicisinin ne yakalayıp
+    ne yakalamadığı `test_every_incident_lock_call_site_is_gated_or_explicitly_excepted`
+    docstring'inde yazılıdır.
     """
     agac = ast.parse(RUNS_KAYNAK)
     cagiranlar: set[str] = set()
@@ -3380,6 +3385,8 @@ KILIT_KAPISI_OLAN_YOLLAR: Mapping[str, str] = MappingProxyType(
     }
 )
 
+# Kapısı OLAN yollar: ad → o yolu koruyan testin ADI. Değerler DÜZ METİNDİR,
+# çözülen referans DEĞİL: adı geçen test silinirse aşağıdaki kapı bunu GÖRMEZ.
 # Kapısı OLMAYAN yollar: ad → NEDEN kapı kurulamadığının ÖLÇÜLMÜŞ gerekçesi.
 # Gerekçe kodda YORUM değil VERİ olarak yaşar; bir gün bu koşullar değişirse
 # (ör. `mint_evidence_token`'a ikinci bir doğrudan çağıran eklenirse) gerekçenin
@@ -3411,10 +3418,30 @@ def test_every_incident_lock_call_site_is_gated_or_explicitly_excepted():
     yarın `_lock_incident` alan yeni bir fonksiyon eklenirse hiçbir şey KIRMIZI
     olmazdı — kapsama sessizce düşerdi.
 
-    Bu kapı çağrı yerlerini `runs.py`'nin AST'sinden ÜRETİR ve iki AÇIK sözlüğe
-    karşı İKİ YÖNLÜ eşitler: kapısı olanlar ve gerekçesiyle istisna edilenler.
-    Yeni bir çağrı yeri eklenince (kapsamadaki delik) KIRMIZI olur; bir çağrı
-    yeri kaldırılınca (bayatlamış girdi) da KIRMIZI olur.
+    Bu kapı çağıran FONKSİYON ADLARINI `runs.py`'nin AST'sinden ÜRETİR ve iki
+    AÇIK sözlüğe karşı İKİ YÖNLÜ eşitler: kapısı olanlar ve gerekçesiyle
+    istisna edilenler.
+
+    **NE YAKALAR:** `_lock_incident` çağıran YENİ BİR FONKSİYON beyan edilmeden
+    eklenirse KIRMIZI olur; beyan edilen bir fonksiyon artık kilit ALMIYORSA
+    (bayatlamış girdi) yine KIRMIZI olur. İkisi de mutasyonla ölçüldü.
+
+    **NE YAKALAMAZ — kapsam sınırı, kusur değil (kapanış-doğrulama turu 2026-09-08
+    bunu bulgu olarak çıkardı, açıklama gerçeğe indirildi):**
+
+      1. Kimlik FONKSİYON ADIDIR, çağrı yeri DEĞİL. `set[str]` olduğu için
+         ZATEN BEYAN EDİLMİŞ bir fonksiyona eklenen İKİNCİ bir `_lock_incident`
+         çağrısı kümeyi değiştirmez → kapı yeşil kalır. Özellikle
+         `mint_evidence_token`'ın istisna gerekçesi YALNIZ geri alma dalı için
+         ölçülmüştür; o fonksiyona başka koşulda ikinci bir kilit çağrısı
+         eklenirse gerekçe kapsamaz ama bu kapı susar.
+      2. `KILIT_KAPISI_OLAN_YOLLAR` değerleri test ADLARIDIR — DÜZ METİN, çözülen
+         referans DEĞİL. Adı geçen koruma testlerinden biri silinir ya da yeniden
+         adlandırılırsa bu kapı YEŞİL kalır.
+
+    Yani bu kapı KAPSAMA MUHASEBESİ tutar; bir kilidin gerçekten yük taşıdığını
+    ya da onu koruyan testin hâlâ var olduğunu KANITLAMAZ. O kanıt, adı geçen
+    davranışsal testlerin kendisindedir.
 
     Saf AST — veritabanına DOKUNMAZ.
     """
