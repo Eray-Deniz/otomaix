@@ -50,6 +50,14 @@ from .test_sector_packages_service import CUMHURIYET_KEY, _valid_content
 
 ACTOR = "plan2@otomaix"
 
+# Plan 2 Task 8 (arayüz eki R8(c)) — iki kanıt sınıfı da ZORUNLU köken alanları
+# taşır. Buradaki değerler LİTERALDİR; jetonun tüketimi Task 15'in kalemidir ve
+# o gün bu kurulumlar veritabanı destekli fabrikaya çevrilir.
+_KOKEN_RUN_ID = "kosu-arayuz-sozlesmesi"
+_KOKEN_OLAYI = "olay-arayuz-sozlesmesi"
+_KOKEN_JETONU = "0" * 64
+_KOKEN_KAPSAM_SHA = "a" * 64
+
 
 # ─── Ortak kurulum ──────────────────────────────────────────────────────────
 
@@ -725,6 +733,8 @@ async def test_insert_draft_and_activate_chain_end_to_end(pkg_db):
             open_questions_count=0,
             katman1_passed=True,
             checklist_approved=True,
+            run_id=_KOKEN_RUN_ID,
+            provenance_token=_KOKEN_JETONU,
         ),
         actor=ACTOR,
     )
@@ -745,6 +755,8 @@ async def test_rollback_package_takes_its_own_evidence(pkg_db):
         open_questions_count=0,
         katman1_passed=True,
         checklist_approved=True,
+        run_id=_KOKEN_RUN_ID,
+        provenance_token=_KOKEN_JETONU,
     )
     await activate_package(pkg_db, package_id=first, evidence=activation, actor=ACTOR)
 
@@ -763,7 +775,16 @@ async def test_rollback_package_takes_its_own_evidence(pkg_db):
         pkg_db,
         sector_id=sector_id,
         to_version=1,
-        evidence=RollbackGateEvidence(manager_approved=True, katman1_passed=True),
+        evidence=RollbackGateEvidence(
+            manager_approved=True,
+            katman1_passed=True,
+            incident_id=_KOKEN_OLAYI,
+            # Sürücü `uuid.UUID`in ALT SINIFINI döndürür; kanıt sınıfının şekil
+            # kapısı tam tip eşitliği arar (A4 disiplini) — normalize edilir.
+            package_id=uuid.UUID(str(first)),
+            onay_kapsam_sha=_KOKEN_KAPSAM_SHA,
+            provenance_token=_KOKEN_JETONU,
+        ),
         actor=ACTOR,
     )
     assert (
@@ -788,6 +809,8 @@ async def test_deactivate_package_documented_signature(pkg_db):
             open_questions_count=0,
             katman1_passed=True,
             checklist_approved=True,
+            run_id=_KOKEN_RUN_ID,
+            provenance_token=_KOKEN_JETONU,
         ),
         actor=ACTOR,
     )

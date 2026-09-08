@@ -56,6 +56,19 @@
 --     `evidence_class` değişimini reddeder. AŞIRI KİLİTLEME YOKTUR: `durum` ·
 --     `reason` · `onay_*` · `kanit_jetonu_*` onaydan sonra da güncellenir
 --     (yeniden mühürleme dahil).
+--   * **AYAK (d)'nin DELETE kolu — R-B'nin açık ayağı, Task 8'de kapandı.**
+--     Ek, tetikleyiciyi `BEFORE UPDATE` diye bağlamış ve satırın hard DELETE
+--     ile silinebildiğini AÇIK bırakmıştı; kararı Task 8'e vermişti. Task 8
+--     `amend_rollback_plan` için HARD DELETE seçti (gerekçe: kapsam parmak izi
+--     `durum` kolonunu hash'e almaz, dolayısıyla durum-değişikliğiyle "çıkarma"
+--     mührü bayatlatmaz ve üyelik küçülmesi hiçbir kapıda görünmez). Bu yüzden
+--     tetikleyici `BEFORE DELETE OR UPDATE`e genişletildi ve `TG_OP` ayrımlı
+--     DELETE kolu YÜRÜTÜLMÜŞ satırın (durum `tamamlandi`/`hata` ya da jetonu
+--     HARCANMIŞ) silinmesini reddeder. `bekliyor`/`hedefsiz` satırlar — onaylı
+--     olsalar bile — silinebilir; üyelik yürütme başlamadan ÖNCE değişebilir.
+--     Kanonik tetikleyici metni `BEFORE DELETE OR UPDATE` biçimindedir çünkü
+--     `pg_get_triggerdef` olayları BÖYLE sıralar (ÖLÇÜLDÜ 2026-09-08, tahmin
+--     değil; `BEFORE UPDATE OR DELETE` yazımı garanti doğrulamasını düşürüyordu).
 --   * **R8(c) — jeton dörtlüsü İKİ tabloda da AYNI.** Jetonun TÜRÜ kolonda
 --     taşınmaz, türünü taşıdığı TABLO belirler; ikinci bir enum AÇILMAZ.
 --   * **K-45 üretici ZORUNLU.** Geçmiş tablosunu hiçbir şey yazmıyorsa Task 16
@@ -119,7 +132,7 @@ DECLARE
     trg_kosu_kanonik CONSTANT TEXT :=
         'CREATE TRIGGER sector_package_runs_approval_snapshot_immutable BEFORE UPDATE ON social.sector_package_runs FOR EACH ROW EXECUTE FUNCTION social.reject_approval_snapshot_mutation()';
     trg_plan_kanonik CONSTANT TEXT :=
-        'CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE UPDATE ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()';
+        'CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE DELETE OR UPDATE ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()';
 
     -- FONKSİYON GÖVDELERİ BURADA — çünkü kimlik kapısı kalıcı DDL'den ÖNCE
     -- koşmak ZORUNDA ve aynı metni okumalı. `prosrc` bu sabitin BİREBİR
@@ -181,6 +194,45 @@ DECLARE
         $reject_snapshot$;
     fn_plan_govde CONSTANT TEXT := $reject_rollback_plan$
         BEGIN
+            -- ── DELETE KOLU — ÖNCE, ve sırası MECBURİDİR (Task 8 · R-B kararı).
+            --
+            -- Arayüz eki ayak (d) revizyon R-B, tetikleyiciyi `BEFORE UPDATE`
+            -- olarak bağladı ve AÇIK bir ayak bıraktı: onaylanmış bir satır
+            -- hard DELETE ile silinebiliyordu. Kararı Task 8'e bıraktı, çünkü
+            -- soruyu ancak orası doğurur.
+            --
+            -- TASK 8 KARARI: `runs.amend_rollback_plan` üyelikten çıkarmayı
+            -- HARD DELETE ile yapar. DURUM değişikliği seçilemezdi ve gerekçesi
+            -- mekaniktir: kapsam parmak izi (`runs.incident_scope_sha`) `durum`
+            -- kolonunu HASH'E ALMAZ — "çıkarıldı" diye işaretlenen bir satır
+            -- mührü bayatlatmaz ve üyelik küçülmesi hiçbir kapıda görünmezdi.
+            -- Ekin bağladığı sınır ("kanıt kaybı sessiz KALAMAZ") bu kolla
+            -- karşılanır: YÜRÜTÜLMÜŞ satır veri katmanında silinemez.
+            --
+            -- `TG_OP` ayrımı ve bu kolun ÖNDE olması ekin adıyla uyardığı
+            -- tuzağın karşılığıdır: aşağıdaki iki yüklem `NEW`i KOŞULSUZ okur,
+            -- DELETE'te `NEW` NULL'dur ve ayrım olmadan gövde HER silmeyi
+            -- yanlışlıkla reddederdi.
+            --
+            -- AŞIRI KİLİTLEME YOK: `bekliyor` ve `hedefsiz` satırlar — onaylı
+            -- olsalar bile — silinebilir; üyelik yürütme başlamadan ÖNCE
+            -- değişebilir (ekin A3 penceresi). Kapanan yalnız YÜRÜTÜLMÜŞ işin
+            -- izinin silinmesidir.
+            IF TG_OP = 'DELETE' THEN
+                IF OLD.durum IN ('tamamlandi', 'hata')
+                   OR OLD.kanit_jetonu_harcandi_at IS NOT NULL THEN
+                    RAISE EXCEPTION
+                        'yurutulmus geri alma plani satiri SILINEMEZ (incident_id=%, package_id=%, durum=%)',
+                        OLD.incident_id, OLD.package_id, OLD.durum
+                        USING ERRCODE = 'integrity_constraint_violation',
+                              HINT = 'Uyelik YALNIZ yurutme baslamadan once '
+                                     'degisebilir; yurutulmus isin izini silmek '
+                                     'kanit kaybidir. Bekleyen/hedefsiz '
+                                     'satirlar silinebilir.';
+                END IF;
+                RETURN OLD;
+            END IF;
+
             -- MÜHÜR SİLİNEMEZ. Kilit aşağıda `OLD.onay_actor IS NOT NULL`
             -- yüklemine dayanır; onay üçlüsü birlikte NULL yapılabilseydi
             -- değişmezlik İKİ ADIMDA atlatılırdı (temizle → hedefi değiştir →

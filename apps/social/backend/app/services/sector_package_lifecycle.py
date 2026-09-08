@@ -32,8 +32,8 @@ yüzeyidir; elle sayılmaz.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field, fields as dataclass_fields
+from typing import Any, Mapping, Protocol
 from uuid import UUID
 
 from app.services.package_events import log_package_event, require_actor as _require_actor
@@ -100,6 +100,60 @@ def _require_count(value: Any, label: str) -> None:
         raise ValueError(f"{label} negatif olamaz: {value}")
 
 
+# ─── Köken jetonu — ŞEKİL kapıları (Plan 2 Task 8 MODIFY) ──────────────────
+#
+# Arayüz eki R8(c): iki kanıt sınıfı da yalnız veritabanı destekli bir fabrikanın
+# üretebileceği TEK KULLANIMLIK bir köken jetonu taşır. Bu görevde YALNIZ alanlar
+# ve onların ŞEKİL kapıları doğar; jetonun TÜKETİMİ (`_consume_provenance`,
+# `EvidenceProvenanceInvalid`) ve geçiş fonksiyonlarının doğrulaması Task 15'in
+# kalemidir. Bölünme R9 gereğidir: jetonu BASAN (`runs.mint_evidence_token`) ve
+# kanıtı KURAN (`runs.build_rollback_evidence`) iki fonksiyon da Task 8'dedir.
+
+
+class EvidenceMintRefused(RuntimeError):
+    """Jeton BASILAMADI — satır yok ya da jeton basmaya uygun durumda değil.
+
+    R9: `runs.mint_evidence_token` (Task 8) bunu fırlatır, bu yüzden TANIM YERİ
+    bu modül olsa da YAZAN GÖREV Task 8'dir.
+    """
+
+
+_HEX_KARAKTERLERI = frozenset("0123456789abcdef")
+
+
+def _require_token(value: Any, label: str) -> None:
+    """Jeton 64 karakterlik KÜÇÜK HARF hex `str` olmalı — boş/whitespace/`None` RED.
+
+    `type(...) is not str`: `str` alt sınıfı da reddedilir (A4 süpürmesi #3).
+    Hiçbir yerde `strip()`/`lower()` UYGULANMAZ — normalizasyon, uydurulmuş bir
+    değeri geçerli görünür kılardı.
+    """
+    if (
+        type(value) is not str
+        or len(value) != 64
+        or any(karakter not in _HEX_KARAKTERLERI for karakter in value)
+    ):
+        raise TypeError(
+            f"{label} 64 karakterlik hex jeton olmalı — köken kanıtı uydurulamaz"
+        )
+
+
+def _require_kapsam_sha(value: Any, label: str) -> None:
+    """Kapsam parmak izi de 64 karakterlik küçük harf hex `str` (A4 süpürmesi #6).
+
+    `_require_token` ile AYNI şekil kuralıdır, ayrı bir mesajla — ikinci bir
+    NORMALİZASYON kuralı DEĞİLDİR.
+    """
+    if (
+        type(value) is not str
+        or len(value) != 64
+        or any(karakter not in _HEX_KARAKTERLERI for karakter in value)
+    ):
+        raise TypeError(
+            f"{label} 64 karakterlik hex sha olmalı — kapsam mührü uydurulamaz"
+        )
+
+
 @dataclass(frozen=True)
 class ActivationGateEvidence:
     """Aktivasyon kapısının mekanik kanıtı (spec §2.3, K-71).
@@ -118,6 +172,13 @@ class ActivationGateEvidence:
     katman1_passed: bool
     checklist_approved: bool
     expected_active_version: int | None = None
+    # ── Plan 2 Task 8 (arayüz eki R8(c)) — KÖKEN alanları.
+    # `field(kw_only=True)` seçilmesinin sebebi ölçülmüştür: yeni alanlar
+    # VARSAYILANSIZ olmalı, ama `expected_active_version` zaten varsayılanlı
+    # olduğu için konumsal sırada öncelerine konamazlar. Depoda kanıt sınıflarını
+    # kuran her çağrı anahtar argüman kullanıyor, yani kırılma yoktur.
+    run_id: str = field(kw_only=True)  # jetonun basıldığı koşu
+    provenance_token: str = field(kw_only=True)  # 64 hex, TEK KULLANIMLIK
 
     def __post_init__(self) -> None:
         _require_flag(self.activation_eligible, "activation_eligible")
@@ -131,6 +192,11 @@ class ActivationGateEvidence:
                     "expected_active_version 1'den küçük olamaz: "
                     f"{self.expected_active_version} (sürümler 1'den başlar)"
                 )
+        # A4 süpürmesi #4: `isinstance` DEĞİL `type(...) is not str` — `str` alt
+        # sınıfı da RED. Boşluk kapısı AYRI kalır; karşılaştırma değildir.
+        if type(self.run_id) is not str or self.run_id.strip() == "":
+            raise ValueError("run_id zorunlu — kökensiz kanıt kurulamaz")
+        _require_token(self.provenance_token, "provenance_token")
 
 
 @dataclass(frozen=True)
@@ -144,10 +210,22 @@ class RollbackGateEvidence:
 
     manager_approved: bool
     katman1_passed: bool
+    # ── Plan 2 Task 8 (arayüz eki R8(c) + A1(c)) — KÖKEN alanları.
+    incident_id: str = field(kw_only=True)  # jetonun basıldığı olay
+    package_id: UUID = field(kw_only=True)  # geri alınan paket
+    onay_kapsam_sha: str = field(kw_only=True)  # onaylanan ÜYELİĞİN parmak izi
+    provenance_token: str = field(kw_only=True)  # 64 hex, TEK KULLANIMLIK
 
     def __post_init__(self) -> None:
         _require_flag(self.manager_approved, "manager_approved")
         _require_flag(self.katman1_passed, "katman1_passed")
+        # A4 süpürmesi #5: `type(...) is not str` — alt sınıf da RED.
+        if type(self.incident_id) is not str or self.incident_id.strip() == "":
+            raise ValueError("incident_id zorunlu")
+        if type(self.package_id) is not UUID:
+            raise TypeError("package_id UUID olmalı")
+        _require_kapsam_sha(self.onay_kapsam_sha, "onay_kapsam_sha")
+        _require_token(self.provenance_token, "provenance_token")
 
 
 def _require_evidence(evidence: Any, expected: type) -> None:
@@ -162,6 +240,237 @@ def _require_evidence(evidence: Any, expected: type) -> None:
             f"kanıt {expected.__name__} olmalı ({type(evidence).__name__} verildi) — "
             "benzer alan taşıyan nesne kanıt yerine geçmez"
         )
+
+
+# ─── Kanıt YÜKÜ ve PARMAK İZİ (Plan 2 Task 8 MODIFY — AÇIK-3 kararı) ───────
+#
+# Arayüz eki AÇIK-3 (B seçeneği): dört yardımcı `sector_pipeline/` altında DEĞİL,
+# BU dosyada doğar. Gerekçe bağımlılık YÖNÜdür — bugüne kadar Plan 2'nin her
+# modülü Plan 1'den okur, tersi yoktur; yardımcıları Plan 2'ye koymak o yönü
+# tersine çevirirdi. `runs.py` (Plan 2) bu modülden ZATEN `_require_actor`'ı
+# alıyor; yön değişmez, yalnız alınan ad sayısı artar.
+#
+# DÖNGÜSEL IMPORT — kararın ölçülmüş teknik kusuru ve çözümü: yardımcılar
+# `runs.VerifiedRun`'ı IMPORT ETMEZ (o import `runs` → burası → `runs` döngüsü
+# üretirdi), aşağıdaki YEREL protokole yazılır. `VerifiedRun` protokolü YAPISAL
+# olarak karşılar; nominal bağ KURULMAZ.
+
+
+class KilitliKosuGorunumu(Protocol):
+    """`runs.VerifiedRun`'ın bu modülün GÖRDÜĞÜ yüzeyi — YEREL tip, KAPALI küme.
+
+    Alan kümesi KAPALIDIR: SEKİZ alan, dokuzuncusu YOKTUR. Hepsi `VerifiedRun`'da
+    aynı adla ve aynı tiple vardır.
+    """
+
+    run_id: str
+    sector_id: UUID
+    package_id: UUID | None
+    durum: str
+    sonuc: str
+    approval_snapshot: Mapping[str, Any] | None
+    katman1_attestation: Mapping[str, Any] | None
+    readiness_attestation: Mapping[str, Any] | None
+
+
+_KOSU_GORUNUM_ALANLARI: tuple[str, ...] = (
+    "run_id",
+    "sector_id",
+    "package_id",
+    "durum",
+    "sonuc",
+    "approval_snapshot",
+    "katman1_attestation",
+    "readiness_attestation",
+)  # KAPALI — SEKİZ ad; `KilitliKosuGorunumu` ile BİREBİR
+
+
+def _require_kosu_gorunumu(value: Any, label: str) -> None:
+    """Ördek tiplemesi kabul edilmez ama nominal bağ da kurulamaz (döngüsel import).
+
+    Aradaki tek dürüst kapı: SEKİZ alanın SEKİZİ de VAR mı? Biri eksikse
+    `TypeError` (fail-closed) — sessizce `None` üretilmez.
+    """
+    eksik = [ad for ad in _KOSU_GORUNUM_ALANLARI if not hasattr(value, ad)]
+    if eksik:
+        raise TypeError(
+            f"{label} kilitli koşu görünümü değil — eksik alanlar: {sorted(eksik)}"
+        )
+
+
+def _yuk_anahtarlari(cls: type) -> tuple[str, ...]:
+    """Sınıfın jeton-DIŞI alan kümesi, alan adına göre ARTAN sırada.
+
+    **Küme ELLE SAYILMAZ, sınıfın kendisinden ÜRETİLİR.** Arayüz eki aktivasyon
+    yükünü YEDİ, geri alma yükünü BEŞ anahtar diye bağlar; geri alma bugün tam
+    olarak BEŞ'tir. Aktivasyon bugün ALTI'dır ve eksik olan tek ad
+    `expected_no_active`'dir — o alan Task 15'in kalemidir (arayüz eki R8(c)
+    görev bölünmesi). Küme türetilmiş olduğu için Task 15 alanı eklediği anda
+    yük, parmak izi ve kapı BİRLİKTE yediye çıkar; ikinci bir elle-liste
+    bakımı gerekmez ve iki tarafın ayrışabileceği bir pencere açılmaz.
+    """
+    return tuple(
+        sorted(
+            alan.name
+            for alan in dataclass_fields(cls)
+            if alan.name != "provenance_token"
+        )
+    )
+
+
+def activation_evidence_payload(
+    kosu: KilitliKosuGorunumu,
+    aktif_paket_satiri: Mapping[str, Any] | None,
+) -> Mapping[str, Any]:
+    """`ActivationGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ satırlardan TÜRETİR.
+
+    İki girdinin İKİSİ de aynı işlemde `FOR UPDATE` ile kilitlenmiş satırlardır:
+    `kosu` doğrulanmış koşu satırı, `aktif_paket_satiri` o sektörün o an AKTİF
+    paket satırı (aktif paket yoksa `None` — K-94 ilk aktivasyon hâli). Çağıranın
+    serbestçe ürettiği hiçbir değer GİRMEZ.
+
+    **TEK türetici:** hem `runs.mint_evidence_token` hem
+    `writeback.build_activation_evidence` (Task 15) BUNU çağırır. İki yerde iki
+    türetme yazılsaydı, basılan parmak izi ile kurulan kanıtın parmak izi
+    sessizce ayrışabilirdi.
+    """
+    _require_kosu_gorunumu(kosu, "kosu")
+
+    okunan = {
+        "activation_eligible": kosu.sonuc == "activation_eligible",
+        "open_questions_count": len(kosu.approval_snapshot["acik_sorular"])
+        if kosu.approval_snapshot is not None
+        else 0,
+        "katman1_passed": (
+            kosu.katman1_attestation is not None
+            and kosu.katman1_attestation["sonuc"] == "PASS"
+        ),
+        "checklist_approved": _checklist_approved(kosu.readiness_attestation),
+        "expected_active_version": (
+            aktif_paket_satiri["version"] if aktif_paket_satiri is not None else None
+        ),
+        "expected_no_active": aktif_paket_satiri is None,
+        "run_id": kosu.run_id,
+    }
+    return _yuk_kes(ActivationGateEvidence, okunan)
+
+
+def _checklist_approved(readiness_attestation: Mapping[str, Any] | None) -> bool:
+    """A4 kapısının BU MODÜLDE koşabilen ÜÇ koşulu — dördüncüsü Task 15'te.
+
+    Koşullar: (1) tasdik VAR ve `onaylandi is True`; (2) `madde_kumesi_sha`
+    anahtarı VAR ve değeri `type(...) is str`; (3) `strip()` sonrası BOŞ DEĞİL.
+    `strip()` yalnız boş-olmama kapısında kullanılır, KARŞILAŞTIRILAN değerin
+    üzerinde DEĞİL. Geriye uyum yedeği YOKTUR (fail-closed).
+
+    **DÖRDÜNCÜ koşul — `sha == readiness_items.MADDE_KUMESI_SHA` — BURADA
+    KOŞAMAZ ve bunun sebebi ölçülmüş bir sözleşme çatışmasıdır.** Arayüz eki iki
+    şeyi birden bağlıyor: (a) `activation_evidence_payload`'ın `checklist_approved`
+    alanı DÖRT koşullu A4 kapısıdır (R8(c)); (b) bu modül `sector_pipeline`
+    altından YALNIZ `identity`'yi import eder ve `readiness*` adı AÇIKÇA
+    yasaklıdır (AÇIK-3, yapısal testi de var). Kanonik madde kümesi
+    `sector_pipeline/readiness_items.py`'de yaşadığı için ikisi aynı anda
+    tutamaz. Daraltılan taraf (b) DEĞİL (a)'dır: import kenarı YAPISAL bir
+    invaryanttır ve kırılması geri alınamaz; eşitlik koşulunun ise ADI KONMUŞ
+    ikinci bir evi vardır — `writeback.activate_from_snapshot` (Task 15,
+    Plan 2 modülü, `readiness_items`'ı serbestçe import eder) ve o kapının kendi
+    testleri (`test_activation_refused_when_madde_kumesi_sha_differs_from_current`
+    · `..._missing_or_blank` · `..._is_whitespace_padded`) ekte Task 15'e
+    dosyalanmıştır. Yani koşul düşmez, YERİ değişir — bayat sha ile basılmış bir
+    jeton geçişi AÇMAZ, çünkü aktivasyon kapısı onu ayrıca reddeder.
+    """
+    if readiness_attestation is None:
+        return False
+    if "onaylandi" not in readiness_attestation:
+        return False
+    if readiness_attestation["onaylandi"] is not True:
+        return False
+    if "madde_kumesi_sha" not in readiness_attestation:
+        return False
+    sha = readiness_attestation["madde_kumesi_sha"]
+    return type(sha) is str and sha.strip() != ""
+
+
+def rollback_evidence_payload(
+    plan_satiri: Mapping[str, Any],
+    hedef_kosu: KilitliKosuGorunumu,
+) -> Mapping[str, Any]:
+    """`RollbackGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ satırlardan TÜRETİR.
+
+    Anahtar kümesi KAPALI ve TAM — BEŞ anahtar (A1(c)): `manager_approved` ·
+    `katman1_passed` · `incident_id` · `package_id` · `onay_kapsam_sha`.
+    Türetme kuralının GEREKÇESİ `runs.build_rollback_evidence`'ın gövdesindedir;
+    burada YALNIZ kilitli satır alanları okunur.
+    """
+    _require_kosu_gorunumu(hedef_kosu, "hedef_kosu")
+
+    onay_actor = plan_satiri["onay_actor"]
+    okunan = {
+        "manager_approved": (
+            type(onay_actor) is str
+            and onay_actor.strip() != ""
+            and plan_satiri["onaylandi_at"] is not None
+            and type(plan_satiri["onay_kapsam_sha"]) is str
+        ),
+        "katman1_passed": (
+            hedef_kosu.katman1_attestation is not None
+            and hedef_kosu.katman1_attestation["sonuc"] == "PASS"
+        ),
+        "incident_id": plan_satiri["incident_id"],
+        # Sürücü `uuid.UUID`in bir ALT SINIFINI döndürür; kanıt sınıfının şekil
+        # kapısı `type(...) is UUID` arar (alt sınıf kabul etmez, A4 disiplini).
+        # Normalize BURADA yapılır — kapı gevşetilmez.
+        "package_id": UUID(str(plan_satiri["package_id"])),
+        "onay_kapsam_sha": plan_satiri["onay_kapsam_sha"],
+    }
+    return _yuk_kes(RollbackGateEvidence, okunan)
+
+
+def _yuk_kes(cls: type, okunan: dict[str, Any]) -> Mapping[str, Any]:
+    """Türetilmiş anahtar kümesini uygular — fail-closed.
+
+    Sınıfın jeton-dışı her alanının BURADA hesaplanmış bir karşılığı olmak
+    ZORUNDADIR; olmayan bir alan sessizce `None`'a düşmez, `KeyError` fırlatır.
+    """
+    anahtarlar = _yuk_anahtarlari(cls)
+    eksik = [ad for ad in anahtarlar if ad not in okunan]
+    if eksik:
+        raise KeyError(
+            f"{cls.__name__} yük türetmesi eksik: {sorted(eksik)} — sessizce "
+            "atlanan alan, parmak izini basan ve kanıtı kuran iki tarafı ayırırdı"
+        )
+    return {ad: okunan[ad] for ad in anahtarlar}
+
+
+def _evidence_fingerprint(evidence: Any) -> str:
+    """Kanıtın kanonik parmak izi — `provenance_token` HARİÇ.
+
+    SINIF ADI + (alan adı, değer) çiftleri, alan adına göre ARTAN sırada;
+    `identity.canonical_sha` (K-92) kuralıyla hash'lenir. İkinci bir hash kuralı
+    YAZILMAZ.
+    """
+    cls = type(evidence)
+    payload = {ad: getattr(evidence, ad) for ad in _yuk_anahtarlari(cls)}
+    return _evidence_fingerprint_from_payload(cls, payload)
+
+
+def _evidence_fingerprint_from_payload(cls: type, payload: Mapping[str, Any]) -> str:
+    """`_evidence_fingerprint`'in NESNESİZ ikizi — AYNI kanonik diziyi üretir.
+
+    Tanım gereği `_evidence_fingerprint(e)` ≡
+    `_evidence_fingerprint_from_payload(type(e), <e'nin jeton dışı alanları>)`.
+    `payload` anahtar kümesi sınıfın jeton-dışı alan kümesiyle **birebir**
+    olmalıdır; eksik ya da fazla anahtar `ValueError`'dır (fail-closed).
+    """
+    anahtarlar = _yuk_anahtarlari(cls)
+    if set(payload) != set(anahtarlar):
+        raise ValueError(
+            f"{cls.__name__} parmak izi yükü uyuşmuyor: beklenen {list(anahtarlar)}, "
+            f"verilen {sorted(payload)} — eksik ya da fazla anahtar kabul edilmez"
+        )
+    return identity.canonical_sha(
+        [cls.__name__] + [[ad, payload[ad]] for ad in anahtarlar]
+    )
 
 
 # `_require_actor` TANIMI BURADA DEĞİL, `package_events.require_actor`tadır —

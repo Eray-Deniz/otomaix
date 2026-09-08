@@ -133,19 +133,44 @@ class _EventTail:
         ]
 
 
+# ── KÖKEN ALANLARI (Plan 2 Task 8, arayüz eki R8(c)) ────────────────────────
+#
+# İki kanıt sınıfı da artık ZORUNLU köken alanları taşır. Bu dosyadaki kurulum
+# hâlâ LİTERALDİR ve bu bilinçlidir: jetonun TÜKETİMİ (`_consume_provenance`)
+# Task 15'in kalemidir, bugün hiçbir geçiş jetonu doğrulamaz. Task 15 bu iki
+# yardımcıyı veritabanı destekli FABRİKAYA çevirir (planın Task 15 kaleminde
+# adıyla yazılı) ve o gün literal kurulan kanıt her iki geçişte de REDDEDİLİR.
+# Bugün eklenen tek şey ŞEKİL kapısıdır — 64 hex jeton, boş olmayan kimlik.
+_JETON = "0" * 64
+_KAPSAM_SHA = "a" * 64
+
+_ACTIVATION_DEFAULTS = dict(
+    activation_eligible=True,
+    open_questions_count=0,
+    katman1_passed=True,
+    checklist_approved=True,
+    run_id="kosu-plan1-testi",
+    provenance_token=_JETON,
+)
+
+_ROLLBACK_DEFAULTS = dict(
+    manager_approved=True,
+    katman1_passed=True,
+    incident_id="olay-plan1-testi",
+    package_id=uuid.UUID(int=1),
+    onay_kapsam_sha=_KAPSAM_SHA,
+    provenance_token=_JETON,
+)
+
+
 def _activation_evidence(**overrides) -> ActivationGateEvidence:
-    fields = dict(
-        activation_eligible=True,
-        open_questions_count=0,
-        katman1_passed=True,
-        checklist_approved=True,
-    )
+    fields = dict(_ACTIVATION_DEFAULTS)
     fields.update(overrides)
     return ActivationGateEvidence(**fields)
 
 
 def _rollback_evidence(**overrides) -> RollbackGateEvidence:
-    fields = dict(manager_approved=True, katman1_passed=True)
+    fields = dict(_ROLLBACK_DEFAULTS)
     fields.update(overrides)
     return RollbackGateEvidence(**fields)
 
@@ -754,16 +779,19 @@ async def test_transition_failure_leaves_no_event(pkg_db, monkeypatch):
         {"expected_active_version": True},
         {"expected_active_version": "1"},
         {"expected_active_version": 0},
+        # Plan 2 Task 8 — köken alanlarının şekil kapıları.
+        {"run_id": ""},
+        {"run_id": "   "},
+        {"run_id": None},
+        {"provenance_token": ""},
+        {"provenance_token": "a" * 63},
+        {"provenance_token": "A" * 64},
+        {"provenance_token": None},
     ],
 )
 def test_activation_evidence_rejects_loose_values(override):
     """Doğru-görünen değer kanıt DEĞİLDİR — yapımda reddedilir."""
-    fields = dict(
-        activation_eligible=True,
-        open_questions_count=0,
-        katman1_passed=True,
-        checklist_approved=True,
-    )
+    fields = dict(_ACTIVATION_DEFAULTS)
     fields.update(override)
     with pytest.raises((TypeError, ValueError)):
         ActivationGateEvidence(**fields)
@@ -771,10 +799,23 @@ def test_activation_evidence_rejects_loose_values(override):
 
 @pytest.mark.parametrize(
     "override",
-    [{"manager_approved": "false"}, {"katman1_passed": 1}, {"manager_approved": None}],
+    [
+        {"manager_approved": "false"},
+        {"katman1_passed": 1},
+        {"manager_approved": None},
+        # Plan 2 Task 8 — köken alanlarının şekil kapıları.
+        {"incident_id": ""},
+        {"incident_id": None},
+        {"package_id": str(uuid.UUID(int=1))},
+        {"onay_kapsam_sha": "a" * 63},
+        {"onay_kapsam_sha": "A" * 64},
+        {"provenance_token": ""},
+        {"provenance_token": "a" * 63},
+        {"provenance_token": None},
+    ],
 )
 def test_rollback_evidence_rejects_loose_values(override):
-    fields = dict(manager_approved=True, katman1_passed=True)
+    fields = dict(_ROLLBACK_DEFAULTS)
     fields.update(override)
     with pytest.raises((TypeError, ValueError)):
         RollbackGateEvidence(**fields)

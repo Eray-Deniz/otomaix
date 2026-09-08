@@ -513,7 +513,8 @@ EXPECTED_036_MANIFEST = {
         },
         "triggers": {
             "package_rollback_plans_approved_immutable": (
-                "CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE UPDATE "
+                "CREATE TRIGGER package_rollback_plans_approved_immutable "
+                "BEFORE DELETE OR UPDATE "
                 "ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION "
                 "social.reject_approved_rollback_plan_mutation()",
                 "O",

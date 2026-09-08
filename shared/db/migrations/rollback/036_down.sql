@@ -114,7 +114,7 @@ DECLARE
     trg_kosu_kanonik CONSTANT TEXT :=
         'CREATE TRIGGER sector_package_runs_approval_snapshot_immutable BEFORE UPDATE ON social.sector_package_runs FOR EACH ROW EXECUTE FUNCTION social.reject_approval_snapshot_mutation()';
     trg_plan_kanonik CONSTANT TEXT :=
-        'CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE UPDATE ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()';
+        'CREATE TRIGGER package_rollback_plans_approved_immutable BEFORE DELETE OR UPDATE ON social.package_rollback_plans FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation()';
 
     -- FONKSİYON KİMLİĞİ GÖVDENİN ÖZETİYLE pinlenir, gövdenin İKİNCİ BİR
     -- KOPYASIYLA değil (SQL dosyaları birbirini içeremez; ileri dosyanın
@@ -123,7 +123,7 @@ DECLARE
     -- ileri dosya değiştiği gün bu pini KIRMIZI düşürür.
     fn_track_ozet CONSTANT TEXT := 'acbbdd0d3cd2909368002b2a1e658c21';      -- len=1583
     fn_snapshot_ozet CONSTANT TEXT := '6b35399e0c93667855d214accb485d00';   -- len=641
-    fn_plan_ozet CONSTANT TEXT := '099a2fd56ee14257bcc02ed40d3be0c0';       -- len=2270
+    fn_plan_ozet CONSTANT TEXT := 'ec47b3d4342ca5f5e1398024b386a407';       -- len=4586
 
     kayit RECORD;
 
