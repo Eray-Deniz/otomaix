@@ -2749,7 +2749,9 @@ CREATE TRIGGER package_rollback_plans_approved_immutable
 
 **Aşırı kilitleme YOK:** `durum` · `reason` · `onay_*` · `kanit_jetonu_*` kolonları
 onaydan SONRA da güncellenebilir — yürütücü onları yazar. Kilitlenen yalnız **neyin
-onaylandığını tanımlayan beş alandır** ve (R-B) satırın kendisinin silinmesidir.
+onaylandığını tanımlayan beş alandır** — artı mührün kendisi (dolu → BOŞ; aşağıdaki R-C).
+**Satırın SİLİNMESİ kilitli DEĞİLDİR** (R-B'nin açık kalan ayağı): tetikleyici `BEFORE UPDATE`
+kurulur, hard DELETE'i kapılamaz ve kararı Task 8'e aittir.
 
 **Onay mührünün yüklemi — AÇIKÇA BEYAN EDİLİR (revizyon R-C, 2026-09-08).** Üç onay kolonu
 üzerinde ÜÇ geçiş vardır; üçünün de davranışı burada YAZILIDIR, okuyucu çıkarım YAPMAZ:
