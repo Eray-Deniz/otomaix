@@ -365,9 +365,18 @@ def _yuk_anahtarlari(cls: type) -> tuple[str, ...]:
     yükünü YEDİ, geri alma yükünü BEŞ anahtar diye bağlar; geri alma bugün tam
     olarak BEŞ'tir. Aktivasyon bugün ALTI'dır ve eksik olan tek ad
     `expected_no_active`'dir — o alan Task 15'in kalemidir (arayüz eki R8(c)
-    görev bölünmesi). Küme türetilmiş olduğu için Task 15 alanı eklediği anda
-    yük, parmak izi ve kapı BİRLİKTE yediye çıkar; ikinci bir elle-liste
-    bakımı gerekmez ve iki tarafın ayrışabileceği bir pencere açılmaz.
+    görev bölünmesi).
+
+    **Türetmenin taşıdığı güvencenin SINIRI (fix turu B, B2 — dürüst etiket):**
+    türetme, bu fonksiyonun ÜÇ tüketicisinin (`_yuk_kes`,
+    `_evidence_fingerprint`, `_evidence_fingerprint_from_payload`) BİRLİKTE
+    hareket etmesini garanti eder — jetonu BASAN taraf ile kanıtı KURAN taraf
+    ayrışamaz. Garanti ETMEDİĞİ şey "hiçbir yerde ikinci bir elle-liste
+    kalmadığı"dır: kamu şeklini ekin metnine karşı pinleyen sözleşme testi
+    (`test_evidence_payload_key_set_is_closed`) bilinçli olarak ELLE yazılmıştır
+    ve Task 15 alanı eklediği gün KIRMIZI olup ELLE güncellenir. Türetmenin
+    kendisini ölçen kapı ayrıdır:
+    `test_yuk_anahtarlari_discovers_a_field_it_was_never_told_about`.
     """
     return tuple(
         sorted(

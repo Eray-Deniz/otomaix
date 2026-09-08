@@ -24,7 +24,7 @@ import asyncio
 import inspect
 import logging
 import uuid
-from dataclasses import fields as dataclass_fields
+from dataclasses import dataclass, fields as dataclass_fields
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -3207,6 +3207,124 @@ async def test_evidence_and_spend_are_serialised_by_the_incident_lock(test_db_se
         await kurulum.close()
 
 
+@pytest.mark.parametrize(
+    "yol", ["approve_incident_rollback", "build_rollback_evidence"]
+)
+async def test_remaining_lock_paths_wait_on_the_incident_lock(test_db_setup, yol):
+    """B1 (fix turu B): KAPISIZ kalan İKİ yol için AYIRT EDEN çekişme ölçümü.
+
+    `_lock_incident`'ın üretimde ALTI çağrı yeri var. `amend_rollback_plan`'in
+    davranışsal ispatı (`test_evidence_and_spend_are_serialised_by_the_incident_lock`)
+    ve `execute_rollback_plan`'in yapısal kapıları vardı; bu iki yolun HİÇBİR
+    kapısı YOKTU — kilit satırı silinse tüm takım YEŞİL kalıyordu.
+
+    ÖLÇÜM (uyku DEĞİL, katalog): bağlantı A YALNIZ olay kilidini alır — hiçbir
+    satır kilidi TUTMAZ, hiçbir satırı DEĞİŞTİRMEZ. Bu bilinçlidir: kilit satırı
+    silindiğinde B'yi bekletecek BAŞKA hiçbir şey kalmasın, yani beklemenin TEK
+    açıklaması olay kilidi olsun. B'nin gerçekten beklediği `pg_locks`
+    katalogundan (`locktype='advisory' AND NOT granted`) okunur.
+
+    KONTROL KOLU çekişmeden SONRA koşar: kilit artık tutulmazken AYNI çağrı
+    ANINDA döner — yani test kilidin VARLIĞINI ölçer, prose'unu değil.
+
+    Olay ONAYLANMAZ. Gerekçe ölçülmüştür: onaylı bir olayda
+    `build_rollback_evidence` `mint_evidence_token`'a iner ve O da `_lock_incident`
+    çağırır — kendi kilit satırı silinse bile B orada beklerdi ve test AYIRT
+    ETMEZDİ. Onaysız olayda çağrı, plan satırını okuduktan hemen sonra
+    `RollbackEvidenceUnavailable` ile döner; yani kilit gerçekten İLK iş olmak
+    ZORUNDADIR, yoksa hiç beklemez.
+    """
+    url = _require_test_database(test_db_setup)
+    kurulum = await asyncpg.connect(url)
+    await _init_connection(kurulum)
+    a_baglanti = await asyncpg.connect(url)
+    await _init_connection(a_baglanti)
+    b_baglanti = await asyncpg.connect(url)
+    await _init_connection(b_baglanti)
+    gozlemci = await asyncpg.connect(url)
+    sektorler: list = []
+    incident_id = None
+    try:
+        sector_id = await _sub_sector(kurulum)
+        sektorler.append(sector_id)
+        await _kokenli_paket(
+            kurulum, sector_id, version=1, status="archived", kural_surumu=KURAL_V2
+        )
+        aktif, _ = await _kokenli_paket(
+            kurulum, sector_id, version=2, status="active"
+        )
+        kume = await runs.affected_packages(
+            kurulum,
+            engine_version=MOTOR_SURUM,
+            engine_config_sha=CONFIG_SHA,
+            kural_kimligi=KURAL,
+            kural_surumu=KURAL_V1,
+        )
+        assert aktif in kume.geri_alinacaklar
+        incident_id = await runs.build_rollback_plan(
+            kurulum, affected=kume, actor=ACTOR
+        )
+
+        async def _b_cagrisi():
+            if yol == "approve_incident_rollback":
+                return await runs.approve_incident_rollback(
+                    b_baglanti, incident_id=incident_id, actor=ACTOR
+                )
+            async with b_baglanti.transaction():
+                return await runs.build_rollback_evidence(
+                    b_baglanti, incident_id=incident_id, package_id=aktif
+                )
+
+        # ── ÇEKİŞME: A kilidi alır (BAŞKA HİÇBİR ŞEY yapmaz), COMMIT ETMEZ.
+        a_tx = a_baglanti.transaction()
+        await a_tx.start()
+        await runs._lock_incident(a_baglanti, incident_id)
+
+        b_gorev = asyncio.create_task(_b_cagrisi())
+        for _ in range(200):
+            bekleyen = await gozlemci.fetchval(
+                "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' "
+                "AND NOT granted"
+            )
+            if bekleyen:
+                break
+            await asyncio.sleep(0.01)
+        assert bekleyen, f"{yol} olay kilidini BEKLEMEDİ — kilit yük taşımıyor"
+        assert not b_gorev.done()
+
+        await a_tx.commit()
+
+        if yol == "approve_incident_rollback":
+            assert await asyncio.wait_for(b_gorev, timeout=10) == 1
+        else:
+            with pytest.raises(runs.RollbackEvidenceUnavailable):
+                await asyncio.wait_for(b_gorev, timeout=10)
+
+        # ── KONTROL KOLU: kilit tutulmuyorken AYNI çağrı ANINDA döner.
+        if yol == "approve_incident_rollback":
+            assert await asyncio.wait_for(_b_cagrisi(), timeout=10) == 0
+        else:
+            with pytest.raises(runs.RollbackEvidenceUnavailable):
+                await asyncio.wait_for(_b_cagrisi(), timeout=10)
+    finally:
+        for baglanti in (a_baglanti, b_baglanti):
+            await baglanti.close()
+        await gozlemci.close()
+        if incident_id is not None:
+            await kurulum.execute(
+                "UPDATE social.package_rollback_plans SET durum = 'bekliyor', "
+                "kanit_jetonu_harcandi_at = NULL WHERE incident_id = $1",
+                incident_id,
+            )
+            await kurulum.execute(
+                "DELETE FROM social.package_rollback_plans WHERE incident_id = $1",
+                incident_id,
+            )
+        for sector_id in sektorler:
+            await _committed_sektor_sil(kurulum, sector_id)
+        await kurulum.close()
+
+
 # ═══ 17. AÇIK-3 — yardımcıların YERİ ve import kenarı ═══════════════════════
 
 
@@ -3289,21 +3407,37 @@ def test_payload_helper_refuses_object_missing_a_view_field(eksik):
         if ad != eksik:
             setattr(sahte, ad, None)
 
+    # B4 (fix turu B): zorunlu anahtar-kelime parametresi VERİLİR. Verilmediğinde
+    # `TypeError` argüman BAĞLAMADA doğuyordu — `_require_kosu_gorunumu` daha hiç
+    # koşmuyordu, yani matrisin aktivasyon yarısı eksik-alan kapısı SİLİNSE BİLE
+    # geçiyordu. Şimdi iki kol YALNIZ eksik görünüm alanında farklılaşır.
     with pytest.raises(TypeError):
-        lifecycle.activation_evidence_payload(sahte, None)
+        lifecycle.activation_evidence_payload(
+            sahte, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+        )
     with pytest.raises(TypeError):
         lifecycle.rollback_evidence_payload({}, sahte)
 
 
 def test_evidence_payload_key_set_is_closed():
-    """Yük anahtar kümesi SINIFTAN türetilir — fazlası da eksiği de RED.
+    """BUGÜNKÜ KAMU ŞEKLİ — sözleşme assert'i; TÜRETME KANITI DEĞİLDİR.
+
+    Oracle burada ELLE yazılmıştır ve bilinçli öyledir: iki kamu kanıt sınıfının
+    bugün hangi anahtarları taşıdığını ekin metnine karşı pinler. Ama bu test
+    `_yuk_anahtarlari` yerine sabit bir tuple konsa da YEŞİL kalır — türetmenin
+    kendisini ölçen kapı ayrıdır:
+    `test_yuk_anahtarlari_discovers_a_field_it_was_never_told_about`.
 
     Geri alma yükü BEŞ anahtardır (A1(c)) ve ek metniyle BİREBİR eşleşir.
     Aktivasyon yükü ekte YEDİ anahtar diye bağlanmıştır; bugün ALTI'dır ve eksik
     olan TEK ad `expected_no_active`'dir — o alan Task 15'in kalemidir (arayüz
-    eki R8(c) görev bölünmesi). Küme TÜRETİLMİŞ olduğu için Task 15 alanı
-    eklediği anda yük, parmak izi ve kapı BİRLİKTE yediye çıkar; bu test o gün
-    kendiliğinden yedi ölçer.
+    eki R8(c) görev bölünmesi).
+
+    **DÜRÜST ETİKET (fix turu B, B2):** bu test o gün KENDİLİĞİNDEN yedi ÖLÇMEZ.
+    `assert aktivasyon == beklenen_bugun` Task 15 alanı eklediği gün KIRMIZI olur
+    ve buradaki elle liste ELLE güncellenir — kapı budur, otomatik genişleme
+    değil. Türetmenin taşıdığı güvence ayrı: yük, parmak izi ve `_yuk_kes`
+    BİRLİKTE hareket eder; ayrışamazlar.
     """
     geri_alma = lifecycle._yuk_anahtarlari(RollbackGateEvidence)
     assert set(geri_alma) == {
@@ -3329,6 +3463,68 @@ def test_evidence_payload_key_set_is_closed():
     assert {"expected_no_active"} == (
         beklenen_bugun | {"expected_no_active"}
     ) - aktivasyon
+
+
+def test_yuk_anahtarlari_discovers_a_field_it_was_never_told_about():
+    """B2'nin ANA İSPATI: küme SINIFTAN TÜRETİLİR — elle listeden DEĞİL.
+
+    Oracle burada implementasyondan BAĞIMSIZDIR: sınıf testin İÇİNDE, üretim
+    kodunda HİÇ GEÇMEYEN alan adlarıyla kurulur. `_yuk_anahtarlari` sabit bir
+    tuple'a (ya da elle bakılan bir listeye) çevrilirse bu adları BULAMAZ ve
+    burası KIRMIZI olur — oysa `test_evidence_payload_key_set_is_closed` aynı
+    mutasyonda YEŞİL kalır. Ayırt eden kapı budur.
+
+    Üç halka BİRLİKTE ölçülür: keşif (`_yuk_anahtarlari`) → taşıma (`_yuk_kes`)
+    → parmak izi (`_evidence_fingerprint_from_payload`). Halkalardan biri
+    kopsaydı, jetonu BASAN taraf ile kanıtı KURAN taraf sessizce ayrışırdı;
+    A1(c)'nin kapattığı sınıf tam olarak budur.
+    """
+
+    @dataclass(frozen=True)
+    class SentetikGelecekKaniti:
+        zeta_gelecek_alani: int
+        alfa_gelecek_alani: str
+        provenance_token: str
+
+    # (1) KEŞİF: jeton DIŞLANIR; kalan iki uydurma ad ARTAN sırada gelir.
+    assert lifecycle._yuk_anahtarlari(SentetikGelecekKaniti) == (
+        "alfa_gelecek_alani",
+        "zeta_gelecek_alani",
+    )
+
+    # (2) TAŞIMA: `_yuk_kes` uydurma alanı yüke KOYAR, küme DIŞINI atar.
+    assert dict(
+        lifecycle._yuk_kes(
+            SentetikGelecekKaniti,
+            {
+                "alfa_gelecek_alani": "a",
+                "zeta_gelecek_alani": 7,
+                "provenance_token": "jeton-yuke-GIRMEZ",
+                "kume_disi": "atilir",
+            },
+        )
+    ) == {"alfa_gelecek_alani": "a", "zeta_gelecek_alani": 7}
+
+    # (3) FAIL-CLOSED: hesaplanmayan alan sessizce `None`'a DÜŞMEZ.
+    with pytest.raises(KeyError):
+        lifecycle._yuk_kes(SentetikGelecekKaniti, {"alfa_gelecek_alani": "a"})
+
+    # (4) PARMAK İZİ o alanı ARAR: uydurma alansız yük REDDEDİLİR...
+    with pytest.raises(ValueError):
+        lifecycle._evidence_fingerprint_from_payload(
+            SentetikGelecekKaniti, {"alfa_gelecek_alani": "a"}
+        )
+    # ...ve NESNELİ ikizle BİREBİR aynı diziyi üretir (jeton hash'e girmez).
+    assert lifecycle._evidence_fingerprint_from_payload(
+        SentetikGelecekKaniti,
+        {"alfa_gelecek_alani": "a", "zeta_gelecek_alani": 7},
+    ) == lifecycle._evidence_fingerprint(
+        SentetikGelecekKaniti(
+            zeta_gelecek_alani=7,
+            alfa_gelecek_alani="a",
+            provenance_token="jeton-HASHE-girmez",
+        )
+    )
 
 
 def test_rollback_evidence_payload_has_five_keys(pkg_db):
@@ -4367,11 +4563,15 @@ async def test_transaction_gate_is_fail_closed_for_unknown_connections(sahte_db)
 
 
 def test_transaction_required_is_not_swallowed_by_the_rollback_executor():
-    """Sözleşme ihlali paket arızası olarak MASKELENMEZ.
+    """SINIF TAKSONOMİSİ — ucuz ve doğru, ama TEK BAŞINA YETMEZ.
 
     `execute_rollback_plan` yalnız üç tipi yakalar; `TransactionRequired`
-    onların hiçbirinin alt sınıfı DEĞİLDİR, yani `durum='hata'` diye rapor
-    edilmez, yukarı çıkar.
+    onların hiçbirinin alt sınıfı DEĞİLDİR.
+
+    **DÜRÜST SINIR (fix turu B, B3):** burası yürütücüyü ÇALIŞTIRMAZ. `except`
+    kolu `except Exception` yapılsa bu iki assert YEŞİL kalırdı. Davranışsal
+    yayılma ölçümü kardeş testtedir:
+    `test_transaction_required_propagates_out_of_the_rollback_executor`.
     """
     assert not issubclass(
         runs.TransactionRequired,
@@ -4382,3 +4582,42 @@ def test_transaction_required_is_not_swallowed_by_the_rollback_executor():
         ),
     )
     assert "TransactionRequired" in runs.__all__
+
+
+async def test_transaction_required_propagates_out_of_the_rollback_executor(
+    pkg_db, monkeypatch
+):
+    """B3'ün ANA İSPATI — YÜRÜTÜCÜ GERÇEKTEN KOŞAR.
+
+    Geçerli, onaylanmış bir olay kurulur; `build_rollback_evidence` sözleşme
+    ihlali (`TransactionRequired`) fırlatacak biçimde değiştirilir ve
+    `execute_rollback_plan` ÇAĞRILIR. Ölçülen İKİ şey:
+      1. İstisna ÇAĞIRANA çıkar — yürütücü rapor DÖNMEZ, dolayısıyla ihlal bir
+         arıza satırı olarak RAPORLANAMAZ;
+      2. plan satırı `durum='hata'` diye DAMGALANMAZ — `bekliyor` kalır ve olay
+         yeniden koşulabilir.
+
+    `except Exception` mutasyonunda ikisi de düşer: çağrı sessizce bir rapor
+    döner ve satır `hata` olur.
+    """
+    await _bos_evren(pkg_db)
+    incident_id, aktif = await _onayli_olay(pkg_db)
+
+    async def _sozlesme_ihlali(db, *, incident_id, package_id):
+        raise runs.TransactionRequired("SENTETİK sözleşme ihlali (fix turu B, B3)")
+
+    monkeypatch.setattr(runs, "build_rollback_evidence", _sozlesme_ihlali)
+
+    with pytest.raises(runs.TransactionRequired):
+        await runs.execute_rollback_plan(
+            pkg_db, incident_id=incident_id, actor=ACTOR
+        )
+
+    satir = await pkg_db.fetchrow(
+        "SELECT durum, reason FROM social.package_rollback_plans "
+        "WHERE incident_id = $1 AND package_id = $2",
+        incident_id,
+        aktif,
+    )
+    assert satir["durum"] == "bekliyor", satir["durum"]
+    assert satir["reason"] is None or "SENTETİK" not in satir["reason"]
