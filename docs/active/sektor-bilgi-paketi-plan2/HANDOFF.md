@@ -11,10 +11,14 @@ takılıp açık bıraktığı iki tur da koştu, ikisi de bulgu üretti, hepsi 
 **Komut:** `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
 → resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam**.
 
-**ÖNCE OKU — kanonik ilerleme burada DEĞİL:**
-`.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md` (git'e girmiyor).
-**Uyarı: o dosya Task 6'da bitiyor** — Task 7 ve Task 8 oraya işlenmedi; o iki görevin izi
-TASK.md Decisions/Open Problems bölümlerinde ve git defterindedir.
+**KAYIT TASK.md + bu dosya + git defteridir. BAŞKA DEFTER YOK.**
+
+> **KALDIRILAN İŞARETÇİ (2026-09-08).** Bu satır 2026-09-08'e kadar
+> `.superpowers/sdd/.../progress.md`'yi "önce oku, kanonik ilerleme orada" diye gösteriyordu ve
+> bir oturum açılışını yanlış yönlendirdi. O dizini Superpowers'ın `subagent-driven-development`
+> skill'i kendi kendine yazar; `.superpowers/sdd/.gitignore` içeriği `*` olduğu için hiçbir
+> zaman commit'e girmez ve geçmiş kayıtlarda görünmez. **Bu projenin task-handoff yapısının
+> parçası DEĞİLDİR ve devir-teslimde işaretçisi olmaz.** Yeni oturum onu okumaz.
 
 **Yürütme durumu:** kip alt-ajanlı · başlangıç çapası `a806e29` · defter penceresi `a806e29` ·
 **`cp_count: 3`** · **`last_checkpoint_ref: 2b468e8d`**.
@@ -26,7 +30,10 @@ TASK.md Decisions/Open Problems bölümlerinde ve git defterindedir.
 > yeniden kapsar.
 
 **Dal:** `feat/sektor-bilgi-paketi-plan2`. Son commit için `git log -1` — bu satıra sha
-YAZILMAZ, drift eder. **Bu dal uzağa PUSH EDİLMEDİ.**
+YAZILMAZ, drift eder. **Bu dal uzağa PUSH EDİLDİ** — uzak uç `3c41b24` (2026-09-07 22:47).
+Ondan sonraki commit'ler gönderilmedi; farkı `git rev-list --left-right --count
+origin/feat/sektor-bilgi-paketi-plan2...HEAD` ile ÖLÇ — bu satıra sayı yazılmaz, drift eder.
+**DÜZELTME 2026-09-08:** bu satır "hiç push edilmedi" diyordu; ölçüm aksini gösterdi.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit **`7964ed6`**,
 pin manifesti bu commit'e bağlı. **Bu oturumda dokunulmadı.**
@@ -179,14 +186,21 @@ ya da (b) bir turda dosyaların TEK gizlenme sebebi bu yanlış alarm olursa ve 
 - **`telegramApi` credential'ının canlı token taşıdığı DOĞRULANMADI** (değişmedi).
 - **CRM webhook onarımı YAPILMADI** — yalnız kapatıldı (değişmedi).
 - PG 18.3 dışında sürüm denenmedi. Canlıya hiçbir migration dağıtılmadı; pilot koşulmadı.
-  Dal **PUSH EDİLMEDİ**, merge EDİLMEDİ.
+  Dal `3c41b24`'e kadar **PUSH EDİLDİ**, sonrası gönderilmedi; **merge EDİLMEDİ.**
 - Task 9–20 hiç yazılmadı.
 
 # Risks
 
 - **`last_checkpoint_ref` ilerletilmedi** — fail-safe yön, gerekçesi yukarıda. Sonraki
-  checkpoint Task 7 + Task 8 + bütün düzeltmeleri yeniden kapsayacak; kapsamı büyük olacak,
+  checkpoint Task 7 + Task 8 + bütün düzeltmeleri **YENİDEN** kapsayacak; kapsamı büyük olacak,
   **bölünerek dispatch edilmeli** (üretim ↔ test ekseni).
+  **Bu bir TEKRAR'dır, incelenmemiş yığın DEĞİL** — ölçüldü 2026-09-08 (TASK.md'nin checkpoint
+  kayıtları): checkpoint 6 zaten `2b468e8d` tabanıyla koştu (sekiz Codex turu; Task 7 incelendi),
+  Task 8 ise dört tur gördü (kapanış-2 taban `a21d2c9` · kapanış-3 · B turu taban `3c41b24` ·
+  B-kapanış). Bu aralıkta bağımsız hakemin görmediği KOD/TEST commit'i tektir: **`a488769`**
+  (ölçüldü: `git show --stat` → yalnız `tests/test_pipeline_runs.py`). Ondan sonraki
+  **`65fb649`** de hakem görmedi ama BELGE-YALNIZDIR (TASK.md + HANDOFF.md).
+  Kapsamı "incelenmemiş" diye okuyan bir dispatch, yapılmış işi baştan inceletir.
 - **Migration `036` yerinde düzenlendi** — kabul edilmiş risk, koşulu yukarıda.
 - **Katı Bölüm C biçimi yanlış-pozitif üretebilir ve bu ÖLÇÜLMEDİ** (değişmedi; ilk gerçek
   ölçüm Task 19 Step 5).

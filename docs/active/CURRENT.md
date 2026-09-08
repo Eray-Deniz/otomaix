@@ -1,7 +1,18 @@
 # Active Tasks
 
-- **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — Araştırma sözleşmesinin çıktı biçimini makine-okunur kesinliğe getirme (dış sözleşme metni + denetçi metni + pin + mekanik kapı). Durum: `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`
 - **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
+
+## Bitti — arşivi Plan 2 ile BİRLİKTE yapılacak
+
+> Bunlar AKTİF DEĞİL; iş beklemiyorlar. `docs/active/` altında duruyorlar çünkü Plan 2'nin
+> içinden doğdular ve plan koşarken kayıtları ana görevle aynı yerde kalsın isteniyor.
+> **Arşiv tetiği: Plan 2 kapanışı** (`/finish-branch-claude-codex`) — o gün ana görevle
+> birlikte `docs/task-archive/YYYY/MM/` altına, kendi bitiş tarihlerine göre taşınırlar.
+
+- **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — `status: done`, `finished: 2026-09-07`
+  (dört ayak da indi). `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`.
+  **2026-09-08 düzeltmesi:** bitmiş olduğu hâlde bir gün boyunca yukarıdaki AKTİF listede
+  duruyordu ve bir oturum açılışını "iki aktif görev var" diye yanılttı.
 
 ## Proposed (spun-off)
 
@@ -22,10 +33,10 @@
   zarara yol açarsa (bu oturumda üçü de zararsız kaldı), ya da (b) slash-command ailesine
   zaten dokunan bir tur açılırsa — kapı o turun içinde bedelsiz kurulur.
 
-- **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — GÖREVE DÖNÜŞTÜ 2026-09-07; artık
-  kendi dosyası var, gövde ORADA yaşar (iki yerde birden değil):
-  `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`. Yukarıdaki aktif
-  listede de görünür.
+- **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — GÖREVE DÖNÜŞTÜ 2026-09-07, AYNI GÜN
+  BİTTİ. Gövde kendi dosyasında yaşar (iki yerde birden değil):
+  `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`. Artık AKTİF listede
+  değil, yukarıdaki **"Bitti — arşivi Plan 2 ile BİRLİKTE"** bölümünde görünür.
 
 - **plan2-ek-bagimlilik-hukmu-ad-kumesi** (proposed, TASARIM KARARI — yürütücü çözemez;
   TETİKLİ) — Plan 2'nin bağlayıcı arayüz eki, yaşam döngüsü modülünün kimlik modülünden

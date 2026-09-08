@@ -20,8 +20,9 @@ doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve
 kanıtlandı. **Durum `active` KALIYOR** — sıradaki iş Task 9. Checkpoint 1, 2 ve **5** hakem
 `approve`'uyla kapandı; checkpoint 3 ve 4 koştu ama `approve` ALMADAN kapatıldı — **ikisinin
 aralığı da checkpoint 5'in tabanına dâhildi ve artık incelendi.** Checkpoint 6 override ile
-kapandı. Sıradaki iş **Task 8** (koşu ve artefakt servisi); dispatch'inin önündeki dört
-kalemlik karar kapısı 2026-09-08'de kapandı (aşağıda).
+kapandı. **Sıradaki iş Task 9.** (Bu cümle 2026-09-08'e kadar "sıradaki iş Task 8" diyordu —
+Task 8 aynı gün indi ve checkpoint'i kapandı; bayat satır düzeltildi.) Task 8'in dispatch'inin
+önündeki dört kalemlik karar kapısı 2026-09-08'de kapandı (aşağıda).
 
 **Onay tarihçesi (değişmez kayıt, silinmez):** plan onayı hakem zinciriyle değil **Eray'ın
 risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenmemişti.
@@ -182,8 +183,11 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
   `ON_ERROR_STOP` yokken psql hatadan sonra devam ediyor ve sonraki `ALTER TABLE` yine
   commit ediliyor. **Ders sabit: dispatch'e taşınan öneri aday'dır, cevap değil.**
 
-Yürütme defteri (kanonik ilerleme + tüm kararlar):
-`.superpowers/sdd/2026-08-27-sektor-bilgi-paketi-plan2/progress.md`
+> **KALDIRILDI (2026-09-08).** Burada "yürütme defteri (kanonik ilerleme + tüm kararlar):
+> `.superpowers/sdd/.../progress.md`" yazıyordu. O dizini Superpowers'ın
+> `subagent-driven-development` skill'i kendi kendine yazar, `.gitignore`'u `*` olduğu için
+> git'e hiç girmez ve bu projenin task-handoff yapısının parçası DEĞİLDİR. **Kanonik kayıt bu
+> dosyadır (TASK.md); yanında HANDOFF.md ve git defteri.** Başka defter yok.
 
 - **Task 6 TAMAM (2026-09-06)** — migration 036 (koşu kaydı · politika raporu · onay anlık
   görüntüsü · atama geçmişi) + `033_down.sql` / `034_down.sql` / `036_down.sql` + iki donmuş
@@ -401,6 +405,18 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   "makineyle DOĞRULANMADI" kapsam beyanı ÜÇ yerden de KALKTI. Serbest düzyazı kaçışı artık
   NOT üretiyor; onu ilan eden tripwire testi ateşlendi ve TERSİNİ ölçüyor.
 
+# Kapanışta Yapılacaklar
+
+Plan 2 kapanırken (`/finish-branch-claude-codex`) unutulmaması gereken, başka hiçbir adımın
+tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
+
+- **Birlikte arşivleme.** `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/` bu
+  planın içinden doğdu, 2026-09-07'de bitti (`status: done`) ve plan koşarken bilerek
+  `docs/active/` altında tutuluyor — değiştirdiği sözleşme metnine Task 9/10 dokunacak.
+  **Kapanışta bu görev ana görevle BİRLİKTE arşivlenir**, her biri kendi bitiş tarihinin
+  `docs/task-archive/YYYY/MM/` klasörüne. Tek başına erken taşınmaz (2026-09-08'de bir kez
+  taşındı ve geri alındı: kaydı ikiye bölüyordu).
+
 # Decisions Log
 
 - **2026-08-27 — K-84 = A:** kalıp kimliği sürümler arası korunur. Değeri eşleştirmek
@@ -572,9 +588,14 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   3 iddia örnekleyip bağlantıyı GERÇEKTEN açıyor — makinenin yapamayacağı daha güçlü kontrol.
   Ama örnekleme, "her alan için kaynak gösterilmiş mi" BÜTÜNLÜK sorusunu cevaplamıyor; kaybedilen
   tam olarak bu, ve spec'in "mekanik iş dil modeline verilmez" hükmüyle gerilim taşıyor.
-  **EV: kendi görevi var (2026-09-07'de açıldı) —**
-  `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`.
-  **Zamanlanmış yuva: Task 8 bittikten SONRA, Task 9'a girmeden ÖNCE.** Son tarih değil YUVA:
+  **EV: kendi görevi vardı (2026-09-07'de açıldı) ve AYNI GÜN BİTTİ** (`status: done`) —
+  `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`. **Arşive Plan 2 ile
+  BİRLİKTE gider**, tek başına taşınmaz: değiştirdiği sözleşme metnine Task 9/10 dokunacak,
+  kayıt plan koşarken ana görevle aynı yerde kalır.
+  **Yuva GERÇEKTE Task 8'den ÖNCE doldu** (görevin kendi düzeltme notu, 2026-09-07);
+  aşağıdaki "Task 8'den sonra" tarifi o günün planıydı, gerçekleşen bu DEĞİL — Task 9'un
+  önünde bu kalemden gelen bir kapı YOKTUR.
+  **O günkü yuva tarifi (kayıt için): Task 8 bittikten SONRA, Task 9'a girmeden ÖNCE.** Son tarih değil YUVA:
   Task 9/10 denetçi katmanını kurar ve sözleşme değişikliği o metne de dokunur; ayrıca Task 19
   Step 5 araştırmaları tek seferde yeniden üretir. Ölçüldü: şu anki sözleşme biçiminde üretilmiş
   gerçek çıktı bugün YOK, yani değişiklik şimdi bedelsiz.

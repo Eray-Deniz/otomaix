@@ -3,7 +3,7 @@ title: Sektör Bilgi Paketi — Plan 2/2 Arayüz Eki (BAĞLAYICI)
 status: binding-addendum
 date: 2026-08-30
 revised: 2026-09-08
-revisions: 5
+revisions: 6
 binds_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 source_spec: docs/specs/2026-08-21-sektor-bilgi-paketi.md
 canonical_input: docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md
