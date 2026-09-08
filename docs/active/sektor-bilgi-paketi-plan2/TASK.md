@@ -405,6 +405,108 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   "makineyle DOĞRULANMADI" kapsam beyanı ÜÇ yerden de KALKTI. Serbest düzyazı kaçışı artık
   NOT üretiyor; onu ilan eden tripwire testi ateşlendi ve TERSİNİ ölçüyor.
 
+# ÖN KOŞUL — Task 10'dan ÖNCE: test matrisi küçültme
+
+> **Eray kararı (2026-09-08): Plan 2'nin yürütmesi bu iş bitene kadar DURAKLAR.** Ayrı görev
+> klasörü AÇILMADI — bu iş Plan 2'nin kendi görevinin (Task 7) ürünüdür ve Task 10'u bekletir,
+> bağımsız bir iş değildir. (Kısa süre `docs/active/test-matris-kucultme/` diye ayrı bir klasör
+> açıldı ve Eray itirazıyla aynı gün geri alındı; kayıt burada yaşar.)
+
+### Amaç
+
+Arka uç test kümesini **ayırt eden eksenlere** indirmek. Bugün küme, davranış sayısıyla değil
+**kombinasyon çarpımıyla** büyüyor; her hakem turu, her düzeltme turu ve her doğrulama o çarpımı
+baştan koşuyor.
+
+**Eray'ın kararı (2026-09-08): Plan 2'nin Task 10'una geçmeden ÖNCE bu iş yapılır.** Gerekçesi
+kendi cümlesiyle: bu şekilde test olmaz, bu şekilde plan bitmez.
+
+### Ölçüm (2026-09-08, taze koşum)
+
+```
+$ cd apps/social/backend && source .venv/bin/activate
+$ python -m pytest tests/ --collect-only -q | grep -oE '^tests/[a-z_0-9]+\.py' | sort | uniq -c | sort -rn | head -4
+   4414 tests/test_brief_doctor.py
+    484 tests/test_migration_036.py
+    411 tests/test_pipeline_runs.py
+    169 tests/test_unit_identity.py
+```
+
+Toplam **6380 vaka**; `test_brief_doctor.py` tek başına **%69**'u.
+
+O dosyanın içinde kütle iki fonksiyonda toplanıyor:
+
+```
+$ python -m pytest tests/test_brief_doctor.py --collect-only -q | grep -oE '::test_[a-z_0-9]+' | sort | uniq -c | sort -rn | head -3
+   3240 ::test_kod_citi_ekseni
+    432 ::test_tablo_eklemek_var_olan_notu_kaldiramaz
+    108 ::test_cit_icindeki_baslik_yuva_
+```
+
+- **`test_kod_citi_ekseni` TEK BAŞINA 3240 vaka** = bütün arka uç kümesinin **%51'i**.
+- İlk iki fonksiyon birlikte **3672 vaka** = kümenin **%58'i**.
+- Dosyada **123 test fonksiyonu**, **31 `parametrize`** bloğu var; fonksiyon başına ortalama
+  36 katlık çarpım.
+
+**Kıyas — Plan 1 (arşiv kaydı, `docs/task-archive/2026/08/sektor-bilgi-paketi/`):**
+
+```
+pytest tests/ -q  →  660 passed (105s)
+pytest tests/ -q  →  659 passed (106s)
+Plan 1 kapanışı   →  577 passed
+```
+
+Yani pratik değişmedi (Plan 1'de de tam küme koşuluyordu); **küme değişti**: 577 → 6380 vaka,
+105 saniye → 715 saniye. Büyümenin çoğu tek bir Plan 2 görevinin (Task 7, `brief-doctor`) test
+dosyasından geliyor.
+
+**ÖLÇÜLMEDİ — tahmin değil, ölçülmemiş:** `test_kod_citi_ekseni`'nin küme süresindeki payı
+sayılmadı. Vaka sayısı payı (%51) süre payına EŞİT DEĞİLDİR ve öyle varsayılamaz. Süreyi
+küçültmenin ne kadar kazandıracağı, işe başlarken şu komutla ölçülür:
+
+```
+python -m pytest tests/test_brief_doctor.py::test_kod_citi_ekseni -q --durations=0
+```
+
+### Neden ŞİMDİ
+
+Her hakem turu, her düzeltme turu ve her kapanış doğrulaması tam kümeyi koşuyor. Task 9'un tek
+oturumunda küme **iki kez** koştu (24 dakika). Task 10-20 önümüzde; aynı çarpım her turda
+yeniden ödenecek.
+
+### Kapsam
+
+**Ana hedef:** `tests/test_brief_doctor.py` — özellikle `test_kod_citi_ekseni` ve
+`test_tablo_eklemek_var_olan_notu_kaldiramaz`.
+
+**Kural:** kombinasyon çarpımı yerine **ayırt eden eksen**. Bir vaka, ancak başka hiçbir vakanın
+yakalayamadığı bir mutasyonu yakalıyorsa kalır.
+
+**Kapanış ölçütü — sayı değil, MUTASYON:** küçültme "vaka sayısı düştü" diye kapatılamaz.
+Küçültülen her eksen için, küçültmeden ÖNCE kırmızı olan mutasyonların küçültmeden SONRA da
+kırmızı kaldığı gösterilir. Kaybolan bir kırmızı = geri alınacak küçültme.
+İlgili disiplin: [[feedback_measure_your_own_fix_side_effects]].
+
+**Kapsam DIŞI:** diğer test dosyaları (`test_migration_036.py`, `test_pipeline_runs.py`) bu turda
+ellenmez — ikisi birlikte kümenin %14'ü, önce %69'luk kalem ölçülür.
+
+### Açık kalemler
+
+- Küçültmenin süre kazancı ölçülmedi (yukarıda, komutuyla birlikte). İlk adım o ölçüm olmalı;
+  kazanç beklenenden küçükse kapsam yeniden değerlendirilir.
+- `test_kod_citi_ekseni`'nin 3240 vakasının kaçının gerçekten ayırt ettiği bilinmiyor — bu da
+  ölçülecek, varsayılmayacak.
+
+### Kararlar
+
+- **2026-09-08 — Eray: Task 10'dan ÖNCE.** Plan 2'nin yürütmesi bu iş bitene kadar duraklar.
+- **2026-09-08 — kapanış ölçütü mutasyon kanıtıdır**, vaka sayısı değil.
+- **2026-09-08 — bu kalem Eray sormasaydı çıkmayacaktı.** HANDOFF'ta yalnız *yeni* matrisler için
+  yarım bir uyarı vardı ("kap çarpımını değil ayırt eden ekseni büyüt"); var olan 4414 vakaya
+  karşı hiç çevrilmemişti. Kayda geçiyor: ölçülmüş bir sürtünme kaynağı, adlandırılmış bir ev
+  bulana kadar aktif borç sayılmaz.
+
+
 # Kapanışta Yapılacaklar
 
 Plan 2 kapanırken (`/finish-branch-claude-codex`) unutulmaması gereken, başka hiçbir adımın

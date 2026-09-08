@@ -5,6 +5,19 @@ written: 2026-09-08
 
 # Resume From
 
+> ## ÖNCE BU — Task 10 BEKLİYOR (Eray kararı, 2026-09-08)
+>
+> Sıradaki iş Task 10 DEĞİL. Önce test matrisi küçültülür — kaydı ayrı klasörde değil,
+> **`TASK.md`'nin "ÖN KOŞUL — Task 10'dan ÖNCE" bölümündedir.**
+> Ölçüm: arka uç kümesi **6380 vaka / 715 saniye**; bunun **4414'ü** tek dosyada
+> (`tests/test_brief_doctor.py`), **3240'ı TEK fonksiyonda** (`test_kod_citi_ekseni` =
+> kümenin **%51'i**). Kıyas: Plan 1 kapanışında küme **577 vaka / 105 saniye**ydi.
+> Her hakem turu, her düzeltme turu ve her doğrulama bu çarpımı baştan koşuyor.
+> Eray'ın gerekçesi: bu şekilde test olmaz, bu şekilde plan bitmez.
+> **Kapanış ölçütü vaka sayısı DEĞİL, mutasyon kanıtıdır** — küçültmeden önce kırmızı olan
+> her mutasyon sonra da kırmızı kalmalı.
+
+
 **Sıradaki iş: Task 9.** Task 8'in checkpoint'i bu oturumda KAPANDI — önceki oturumun kotaya
 takılıp açık bıraktığı iki tur da koştu, ikisi de bulgu üretti, hepsi kapatıldı.
 
@@ -140,9 +153,42 @@ ya da (b) bir turda dosyaların TEK gizlenme sebebi bu yanlış alarm olursa ve 
     "alt parçalar hâlinde dispatch" paragrafı DARALTILDI — kural değil, ölçüm kaydıdır.
 28. **TESTLER KODDAN SONRA YAZILDIYSA KAPANIŞ ÖLÇÜTÜ MUTASYON KANITIDIR** — her yeni test için
     "şunu bozdum → şu test kırmızı oldu" satırı istenir; kanıtsız kalem kapatılmış SAYILMAZ.
+30. **İSKELET ÖNCE — HER TESTİN KENDİ KIRMIZISI AYRI ÖLÇÜLÜR.** Uygulayıcı brief'inde
+    **işin sırası** olarak yazılır, tavsiye olarak değil: (1) modül boş iskelet kurulur
+    (fonksiyon ve tip adları var, gövdeler `raise NotImplementedError`), (2) her test yazılır
+    ve **tek tek** koşulup kendi kırmızısı ölçülür, (3) sonra gövdeler yazılır.
+    **Modül yokken alınan tek `ImportError` kırmızı SAYILMAZ** — o, N testi birden kapsayan
+    TEK ölçümdür ve hiçbir testin ayırt ettiğini kanıtlamaz.
+    **Neden bu madde var (ölçüldü, üç görev):** Task 7, 8 ve 9'un üçünde de testler tek toplu
+    kırmızıyla yazıldı ve üçünde de hakem AYNI sınıfı buldu — *tespit edemediği garantiyi
+    onaylayan test*. Task 9'da bu sınıf B turunun DÖRT yüksek bulgusunun tamamıydı: sırayı
+    kapılamayan sıra testi · üç eşlemeden birini sınayan takma-ad testi · hangi aracın
+    yoklandığını iddia etmeyen ön kontrol testi · yalnız bir alanı sınayan tip testi.
+    Üç kez tekrarlayan kusur olağan değil, **düzeltilmemiş** demektir; brief'e cümle eklemek
+    üç kez denendi ve üçünde de yetmedi, o yüzden bu bir SIRA kuralıdır.
+
 29. **SÜRE TAHMİNİ VERİRKEN ELDEKİ ÖLÇÜMÜ KULLAN.** Tam test takımı **tek koşumda ~715 saniye**;
     bunu içeren hiçbir tur "15 dakika" olamaz. Bu oturumda ölçüm elde varken yanlış tahmin
     verildi ve Eray haklı olarak itiraz etti.
+
+# Task 9 — durum (2026-09-08 kapanışı)
+
+Task 9 indi (`f95cff5`), iki hakem turu koştu (A = üretim, B = test), **yedi yüksek + iki orta**
+bulgu çıktı, düzeltme turu `4831015` ile indi. Kontrolörün ölçümü, bulgu başına:
+
+| # | bulgu | durum | kontrolörün ölçümü |
+|---|---|---|---|
+| F1 | eşleme konumsal, "ölçülemez" deniyordu | **KAPANDI** | `auditors.py:517,524` — `icerik_ozeti != canonical_sha(sources[i])` ve boş özet reddediliyor |
+| F2 | pin sonrası ikinci okuma (TOCTOU) | **KAPANDI** | `contracts.require_pinned_text` tek okur+doğrular; `auditors.py`'da `read_text` KALMADI |
+| F3 | URL sayısı raporun kendi beyanından | **ÇÖZÜLMEDİ + EVİ VAR** | iddia gerçeğe indirildi (`auditors.py:636-644`); ev **Task 10** — imza değişikliği ek revizyonu ister |
+| F4 | K-137 mutlak garanti dili | **KAPANDI** (iddia daraltıldı) | garanti cümlesi ölçülen kümeye indirildi |
+| B1 | sıra kapısının ayırt eden testi yok | **KAPANDI** | `test_validate_report_rejects_swapped_section_order` |
+| B2 | takma-ad testi üç eşlemenin birini sınıyor | **KAPANDI** | `test_packet_ref_does_not_alias_the_caller_mapping`, alan başına parametrize |
+| B3 | kimlik taraması sonlu liste | **KAPANDI** (iddia daraltıldı + küme türetildi) | `test_packet_excludes_every_identity_named_by_pin_or_config`; docstring semantik-olumsuzlama gerekçesini taşıyor |
+| B4 | prob argümanı yok sayılıyor | **KAPANDI** | `assert prob.cagrilar == [ARAC]`, iki dalda birden |
+| B5 | tip iddiası tek alanı sınıyor | **KAPANDI** | `test_audit_report_rejects_a_foreign_row_in_each_sequence_field` |
+
+**Hedef test dosyası: `75 passed in 0.62s`** (Task 9 sonrası 39'du).
 
 # Verification
 
@@ -169,6 +215,16 @@ ya da (b) bir turda dosyaların TEK gizlenme sebebi bu yanlış alarm olursa ve 
   (1 yüksek). Bir tur kurulum hatası yüzünden başlar başlamaz iptal edildi.
 
 **Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
+
+- **`4831015` ÜSTÜNDE TAM TEST KÜMESİ KOŞMADI.** Eray koşturmayı durdurdu (2026-09-08). Ölçülen
+  tek şey hedef dosyadır (75 passed). **Kalan 6300+ vakanın bu commit'le yeşil kaldığı
+  DOĞRULANMADI** — yeni oturumun ilk mekanik işi budur.
+- **`4831015` için MUTASYON KANITI ALINMADI.** Uygulayıcı raporunu yazmadan durduruldu; brief
+  her kalem için "şunu bozdum → şu test kırmızı" satırı istiyordu, o satırlar YOK. Testlerin
+  VARLIĞI kontrolörce ölçüldü, **ayırt ettikleri ölçülmedi**.
+- **`4831015` bağımsız hakem GÖRMEDİ** — kapanış-doğrulama turu koşulmadı.
+- **`auditors.py`'da erişilemez-kod uyarıları görülmüştü** (tip analizi, üç satır); düzeltme
+  sonrası tekrar ÖLÇÜLMEDİ. Erişilemez kapı = sessiz fail-open adayı.
 
 - **`a488769` (B5 açıklama düzeltmesi) bağımsız hakem GÖRMEDİ.** Kabul edilmiş risk; gerekçe
   ve kapısı TASK.md'de. Kontrolör metni kodla karşılaştırarak doğruladı, hakem doğrulamadı.

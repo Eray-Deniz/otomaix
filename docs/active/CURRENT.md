@@ -1,6 +1,6 @@
 # Active Tasks
 
-- **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
+- **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). **Task 10 BEKLİYOR** — önce test matrisi küçültme (TASK.md'de "ÖN KOŞUL" bölümü). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
 
 ## Bitti — arşivi Plan 2 ile BİRLİKTE yapılacak
 
