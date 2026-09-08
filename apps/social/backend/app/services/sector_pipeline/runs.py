@@ -120,6 +120,15 @@ class ReadinessAttestationRefused(ValueError):
     """Onay TÜRETİLEMEDİ — verilen kapı kümesi kanonik kümeyle örtüşmüyor."""
 
 
+class TransactionRequired(RuntimeError):
+    """Kanıt üreticisi AÇIK bir işlem DIŞINDA çağrıldı — kilitler taşımıyordu.
+
+    Kanıt sınıflarından ve `LifecycleError`'dan AYRI tutulur: bu bir paket
+    arızası değil, çağıranın sözleşme ihlalidir ve `execute_rollback_plan`'ın
+    `durum='hata'` koluna DÜŞMEZ.
+    """
+
+
 # ─── K-136 — maskeleme süzgeci ve günlük yazıcısı ───────────────────────────
 #
 # Karar evrensel bir kısıttı ama onu UYGULAYAN dosya/arayüz/test yoktu. Süzgeç
@@ -1178,6 +1187,32 @@ async def affected_packages(
 # ─── 9. Olay kilidi ve kapsam mührü ─────────────────────────────────────────
 
 
+def _require_transaction(db, label: str) -> None:
+    """Çağıran AÇIK bir işlemin İÇİNDE olmak ZORUNDADIR (fix turu 1, F4).
+
+    Bu modülün kanıt üreticileri işlem-ömürlü kilitlere dayanır: olayın danışma
+    kilidi (`_lock_incident`) ve satırların `FOR UPDATE`'i. Otomatik-commit altında
+    ikisi de KENDİ İFADELERİNİN sonunda düşer — yani fonksiyon kapsamı
+    doğrulayıp, üyelik değişimiyle yarışıp, ESKİ kapsama bağlı bir jeton
+    bastırıp kilitler bırakıldıktan sonra kanıt döndürebilirdi. Fonksiyonlar
+    dışa açıktır; imzalarına uyan herhangi bir çağıran bu yolu açardı.
+
+    Kapı fail-closed'dur: bağlantı nesnesi bu soruyu CEVAPLAYAMIYORSA da düşer —
+    "belki işlemdedir" varsayımı kanıt sayılmaz.
+
+    Fırlatılan tip `execute_rollback_plan`'ın yakaladığı kümede DEĞİLDİR:
+    programlama hatası, `durum='hata'` diye rapor edilecek bir paket arızası
+    olarak maskelenmez.
+    """
+    kontrol = getattr(db, "is_in_transaction", None)
+    if not callable(kontrol) or not kontrol():
+        raise TransactionRequired(
+            f"{label} AÇIK bir işlem içinde çağrılmalıdır — otomatik-commit "
+            "altında danışma kilidi ve satır kilitleri kendi ifadelerinin "
+            "sonunda düşer, kanıt kilitsiz kalırdı"
+        )
+
+
 async def _lock_incident(db, incident_id: str) -> None:
     """Olay kapsamlı, İŞLEM ÖMÜRLÜ danışma kilidi — TEK kilit adı budur.
 
@@ -1543,7 +1578,13 @@ async def mint_evidence_token(
     kilidini almaz — kilit · basım · tüketim aynı işlemde kalsın diye. Geri alma
     yolunda olay kilidi yeniden alınır (yeniden-girişli). Basılamazsa
     `EvidenceMintRefused`; **boş dönüş YOKTUR.**
+
+    **Çağıran AÇIK bir işlemde olmak ZORUNDADIR (fix turu 1, F4).** Aksi hâlde
+    "kilitli satırdan türetilmiş parmak izi" iddiası boşa düşer: otomatik-commit
+    altında `FOR UPDATE` kilidi kendi ifadesinin sonunda bırakılır. İlk iş bu
+    kapıdır; sağlanmazsa `TransactionRequired`.
     """
+    _require_transaction(db, "mint_evidence_token")
     if table not in JETON_TABLOLARI:
         raise ValueError(
             f"jeton tablosu kapalı kümenin dışında: {table!r} — "
@@ -1643,7 +1684,15 @@ async def build_rollback_evidence(
     `katman1_attestation["sonuc"] == "PASS"` kaydı.
 
     Herhangi biri düşerse `RollbackEvidenceUnavailable` — uydurma YOK.
+
+    **Çağıran AÇIK bir işlemde olmak ZORUNDADIR (fix turu 1, F4).** Olay kilidi
+    işlem-ömürlüdür; otomatik-commit altında hem o hem satır kilitleri kendi
+    ifadelerinin sonunda düşerdi ve fonksiyon kapsamı doğrulayıp, üyelik
+    değişimiyle yarışıp, ESKİ kapsama bağlı bir jeton bastırıp kilitler
+    bırakıldıktan sonra kanıt döndürebilirdi. Kapı `_lock_incident`'tan da
+    ÖNCEDİR; sağlanmazsa `TransactionRequired`.
     """
+    _require_transaction(db, "build_rollback_evidence")
     await _lock_incident(db, incident_id)
 
     plan_satiri = await db.fetchrow(
@@ -1891,6 +1940,7 @@ __all__ = [
     "RollbackReport",
     "RunNotVerified",
     "SecretMaskingFilter",
+    "TransactionRequired",
     "VerifiedRun",
     "affected_packages",
     "amend_rollback_plan",

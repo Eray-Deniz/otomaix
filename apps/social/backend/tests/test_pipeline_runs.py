@@ -3789,14 +3789,13 @@ async def test_mint_refuses_activation_token_without_approval_snapshot(pkg_db):
     run_id = await _tam_kosu(pkg_db, sector_id)
 
     with pytest.raises(lifecycle.EvidenceMintRefused):
-        async with pkg_db.transaction():
-            await runs.mint_evidence_token(
-                pkg_db,
-                table="sector_package_runs",
-                run_id=run_id,
-                incident_id=None,
-                package_id=None,
-            )
+        await runs.mint_evidence_token(
+            pkg_db,
+            table="sector_package_runs",
+            run_id=run_id,
+            incident_id=None,
+            package_id=None,
+        )
 
     basildi = await pkg_db.fetchval(
         "SELECT kanit_jetonu FROM social.sector_package_runs WHERE run_id = $1",
@@ -3984,3 +3983,141 @@ def test_rollback_failure_write_is_inside_the_locked_transaction():
                     if "'hata'" in metin or "hata'" in metin:
                         bulundu = True
     assert bulundu, "hata yazımı kilitli işlem bloğunun İÇİNDE değil"
+
+
+# ═══ 22. Kanıt üreticileri AÇIK bir işlem İSTER (F4) ═══════════════════════
+#
+# Checkpoint fix turu 1, F4 (yüksek): `build_rollback_evidence` işlem-ömürlü
+# danışma kilidini ALIYOR ama kendi işlemini AÇMIYOR ve çağıranın açtığını da
+# DOĞRULAMIYORDU. Otomatik-commit altında hem danışma kilidi hem satır kilitleri
+# kendi ifadelerinin sonunda düşer; fonksiyon dışa açık olduğu için imzasına
+# uyan bir çağıran kapsamı doğrulayıp, üyelik değişimiyle yarışıp, ESKİ kapsama
+# bağlı bir jeton bastırıp kilitler bırakıldıktan SONRA kanıt döndürebilirdi.
+# Aynı boşluk `mint_evidence_token` için de geçerliydi (kilitli satır iddiası).
+#
+# ÖLÇÜM NOTU (İlke 9): `db`/`pkg_db` fixture'ı HER testi bir işlemde koşturur —
+# yani o bağlantıyla bu kapı hiç görülmez. Kapıyı ölçmek için işlem AÇMAYAN ham
+# bir bağlantı gerekir; `islemsiz_db` tam olarak odur.
+
+
+@pytest.fixture
+async def islemsiz_db(test_db_setup: str):
+    """İşlem AÇMAYAN ham bağlantı (üretimin havuzdan aldığı hâl).
+
+    `db` fixture'ının aksine burada `transaction().start()` YOKTUR: otomatik
+    commit altındaki gerçek çağıran davranışı ancak böyle ölçülebilir. Test
+    verisi YAZMAZ — bu yolun kapısı veriye ULAŞMADAN önce koşar.
+    """
+    baglanti = await asyncpg.connect(_require_test_database(test_db_setup))
+    await _init_connection(baglanti)
+    try:
+        yield baglanti
+    finally:
+        await baglanti.close()
+
+
+async def test_build_rollback_evidence_refuses_outside_a_transaction(islemsiz_db):
+    """FAIL-CLOSED: işlem yoksa kanıt KURULMAZ — kilitsiz kanıt YOKTUR.
+
+    MESAJ FARKI: düzeltmeden önce bu çağrı olay kilidini alıp (ve HEMEN
+    bırakıp) plan satırını arıyor ve `RollbackEvidenceUnavailable` veriyordu;
+    yani kilitsiz koşum SESSİZCE kabul ediliyordu. Artık veriye ULAŞMADAN
+    `TransactionRequired` ile düşer.
+    """
+    assert not islemsiz_db.is_in_transaction()
+    with pytest.raises(runs.TransactionRequired):
+        await runs.build_rollback_evidence(
+            islemsiz_db, incident_id="olay-yok-0001", package_id=uuid.UUID(int=9)
+        )
+
+
+async def test_mint_evidence_token_refuses_outside_a_transaction(islemsiz_db):
+    """Aynı kapı jeton basımında da vardır — hem de tablo kapısından ÖNCE."""
+    assert not islemsiz_db.is_in_transaction()
+    with pytest.raises(runs.TransactionRequired):
+        await runs.mint_evidence_token(
+            islemsiz_db,
+            table="package_rollback_plans",
+            run_id=None,
+            incident_id="olay-yok-0001",
+            package_id=uuid.UUID(int=9),
+        )
+    # Kapı İLK iştir: kapalı küme dışı bir tablo bile onu ATLAYAMAZ.
+    with pytest.raises(runs.TransactionRequired):
+        await runs.mint_evidence_token(
+            islemsiz_db,
+            table="admin_events",
+            run_id=None,
+            incident_id="olay-yok-0001",
+            package_id=uuid.UUID(int=9),
+        )
+
+
+async def test_evidence_producers_run_when_the_caller_opened_a_transaction(
+    islemsiz_db,
+):
+    """POZİTİF KONTROL: açık işlemde kapı GEÇİLİR — eski redler geri gelir.
+
+    Kapının geniş kesmediği ancak böyle ölçülür: aynı çağrı, aynı (var olmayan)
+    olayla, işlem içinde ESKİ istisnalarını verir.
+    """
+    async with islemsiz_db.transaction():
+        with pytest.raises(runs.RollbackEvidenceUnavailable):
+            await runs.build_rollback_evidence(
+                islemsiz_db, incident_id="olay-yok-0001", package_id=uuid.UUID(int=9)
+            )
+        with pytest.raises(lifecycle.EvidenceMintRefused):
+            await runs.mint_evidence_token(
+                islemsiz_db,
+                table="package_rollback_plans",
+                run_id=None,
+                incident_id="olay-yok-0001",
+                package_id=uuid.UUID(int=9),
+            )
+        with pytest.raises(ValueError):
+            await runs.mint_evidence_token(
+                islemsiz_db,
+                table="admin_events",
+                run_id=None,
+                incident_id="olay-yok-0001",
+                package_id=uuid.UUID(int=9),
+            )
+
+
+@pytest.mark.parametrize(
+    "sahte_db",
+    [object(), type("Yok", (), {"is_in_transaction": None})()],
+    ids=["yontem-yok", "yontem-cagrilabilir-degil"],
+)
+async def test_transaction_gate_is_fail_closed_for_unknown_connections(sahte_db):
+    """Bağlantı soruyu CEVAPLAYAMIYORSA da düşer — "belki işlemdedir" YOK."""
+    with pytest.raises(runs.TransactionRequired):
+        await runs.mint_evidence_token(
+            sahte_db,
+            table="package_rollback_plans",
+            run_id=None,
+            incident_id="olay-1",
+            package_id=uuid.UUID(int=1),
+        )
+    with pytest.raises(runs.TransactionRequired):
+        await runs.build_rollback_evidence(
+            sahte_db, incident_id="olay-1", package_id=uuid.UUID(int=1)
+        )
+
+
+def test_transaction_required_is_not_swallowed_by_the_rollback_executor():
+    """Sözleşme ihlali paket arızası olarak MASKELENMEZ.
+
+    `execute_rollback_plan` yalnız üç tipi yakalar; `TransactionRequired`
+    onların hiçbirinin alt sınıfı DEĞİLDİR, yani `durum='hata'` diye rapor
+    edilmez, yukarı çıkar.
+    """
+    assert not issubclass(
+        runs.TransactionRequired,
+        (
+            runs.RollbackEvidenceUnavailable,
+            lifecycle.EvidenceMintRefused,
+            lifecycle.LifecycleError,
+        ),
+    )
+    assert "TransactionRequired" in runs.__all__
