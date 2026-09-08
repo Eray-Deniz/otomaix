@@ -2710,21 +2710,37 @@ yarışın ÇIKTISININ harcanmasını engeller.
 > `sectors_reject_reparenting`'tir. Düzeltilen düzyazıdır; SQL bloğu DEĞİŞMEDİ ve uygulanmış
 > 036 ile hizalı kaldı.
 >
-> **AÇIK KALAN — dürüst etiket: çözülmedi, evi var (Task 8). "Ele alındı" DEĞİL.**
-> `BEFORE UPDATE` yalnız UPDATE'i kapılar: veri katmanında onaylanmış bir satır bugün hâlâ
-> **hard DELETE ile silinebilir**. **Ölçüldü (2026-09-08):** depoda `package_rollback_plans`a
-> değen tek bir üretim Python yolu YOK (yalnız migration ve testler) ve 036'da hiçbir
-> DELETE/TRUNCATE tetikleyicisi yok — bugün erişilebilir bir kayıp yolu YOKTUR.
-> **Kararı Task 8 verir**, çünkü soruyu ancak orası doğurur: `amend_rollback_plan` onaylanmış
-> bir satırı olay üyeliğinden çıkarabiliyorsa, çıkarmanın hard DELETE mi yoksa DURUM
-> değişikliği mi olduğu orada belirlenir. **Bağlanan sınır:** hard DELETE tasarlanırsa
-> tetikleyici AYNI turda bir DELETE koluna genişletilir (`TG_OP` ayrımıyla — eski gövde `NEW`'i
-> koşulsuz okur, DELETE'te `NEW` NULL'dur ve gövde her silmeyi yanlışlıkla reddederdi);
-> kanıt kaybı sessiz KALAMAZ.
+> **AÇIK AYAK KAPANDI — Task 8 kararı, 2026-09-08 (commit `3b4beec`).** R-B bu ayağı
+> *"çözülmedi, evi var (Task 8)"* diye bırakmıştı; Task 8 `amend_rollback_plan`'ı yazarken
+> soruyu doğurdu ve **HARD DELETE**'i seçti. **Gerekçe ölçülmüştür:** `incident_scope_sha`
+> üyelik parmak izini `durum`'u DIŞARIDA bırakarak kurar — yani durum tabanlı bir "çıkarma"
+> satırı hash'in İÇİNDE bırakır, mühür TAZE görünmeye devam eder ve üyelik daralması her
+> kapıda GÖRÜNMEZ olur. Yeni bir `durum` değeri hem şema değişikliği ister hem de bu körlüğü
+> çözmez.
+> **Bağlanan sınır iki ayakla karşılandı** (ikisi de aynı turda indi):
+> **(a)** 036'nın tetikleyicisi `BEFORE DELETE OR UPDATE`e genişletildi ve gövdeye `TG_OP`
+> ayrımlı bir DELETE kolu **EN BAŞA** kondu — `NEW` okuyan iki yüklem önce gelseydi HER
+> silmeyi yanlışlıkla reddederdi. Kol, **yürütülmüş** işin izini korur: `durum IN
+> ('tamamlandi','hata')` ya da jeton harcanmışsa silme REDDEDİLİR. `bekliyor` ve `hedefsiz`
+> satırlar — onaylı olsalar bile — silinebilir; üyelik yürütme başlamadan önce değişebilir
+> (A3 penceresi). **(b)** `amend_rollback_plan`, mühürlü ama yürütülmemiş bir satırı
+> düşürdüğünde `sektor_paketi.olay_uyeligi_daraltildi` yönetici olayı yazar — mühür kaybı
+> SESSİZ kalmaz.
+> **Kanonik metin sırası `BEFORE DELETE OR UPDATE`'tir**, `BEFORE UPDATE OR DELETE` değil:
+> ölçüldü ki PostgreSQL `pg_get_triggerdef` çıktısını o sırada normalize ediyor ve 036'nın
+> tetikleyici manifesti metni birebir karşılaştırıyor.
 
 ```sql
 CREATE FUNCTION social.reject_approved_rollback_plan_mutation() RETURNS trigger AS $$
 BEGIN
+  -- DELETE kolu EN BAŞTA: aşağıdaki iki yüklem `NEW` okur, DELETE'te `NEW` NULL'dur.
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.durum IN ('tamamlandi', 'hata') OR OLD.kanit_jetonu_harcandi_at IS NOT NULL THEN
+      RAISE EXCEPTION 'yurutulmus geri alma plani satiri SILINEMEZ';
+    END IF;
+    RETURN OLD;   -- bekliyor / hedefsiz satır silinebilir (A3 üyelik penceresi)
+  END IF;
+
   IF OLD.onay_actor IS NOT NULL AND NEW.onay_actor IS NULL THEN
     RAISE EXCEPTION 'onaylanmış geri alma planının onay mührü SİLİNEMEZ';
   END IF;
@@ -2743,15 +2759,16 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER package_rollback_plans_approved_immutable
-  BEFORE UPDATE ON social.package_rollback_plans
+  BEFORE DELETE OR UPDATE ON social.package_rollback_plans
   FOR EACH ROW EXECUTE FUNCTION social.reject_approved_rollback_plan_mutation();
 ```
 
 **Aşırı kilitleme YOK:** `durum` · `reason` · `onay_*` · `kanit_jetonu_*` kolonları
 onaydan SONRA da güncellenebilir — yürütücü onları yazar. Kilitlenen yalnız **neyin
 onaylandığını tanımlayan beş alandır** — artı mührün kendisi (dolu → BOŞ; aşağıdaki R-C).
-**Satırın SİLİNMESİ kilitli DEĞİLDİR** (R-B'nin açık kalan ayağı): tetikleyici `BEFORE UPDATE`
-kurulur, hard DELETE'i kapılamaz ve kararı Task 8'e aittir.
+**Satırın SİLİNMESİ KISMEN kilitlidir** (R-B'nin kapanan ayağı, Task 8 kararı): yürütülmüş
+satır (`durum IN ('tamamlandi','hata')` ya da jeton harcanmış) SİLİNEMEZ; `bekliyor` ve
+`hedefsiz` satırlar onaylı olsalar bile silinebilir — üyelik yürütme başlamadan önce değişir.
 
 **Onay mührünün yüklemi — AÇIKÇA BEYAN EDİLİR (revizyon R-C, 2026-09-08).** Üç onay kolonu
 üzerinde ÜÇ geçiş vardır; üçünün de davranışı burada YAZILIDIR, okuyucu çıkarım YAPMAZ:

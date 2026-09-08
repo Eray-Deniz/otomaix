@@ -787,6 +787,61 @@ dördü de ölçülerek kapatıldı ve ek revize edildi. **Hiçbiri yeni kapsam 
 **Bu revizyonun sınırı — dürüst etiket:** dördünü de **bağımsız hakem GÖRMEDİ**; kontrolör
 kararıyla yazıldılar. Evleri var: final incelemenin tabanı `a806e29`.
 
+**Ön-yürütme taraması BİR GERÇEK BULGU verdi ve kapandı (`e854add`).** R-B turunda SQL'e
+eklediğim DELETE kolunu 036 ile hizalamak için geri almıştım, ama düzyazıdaki *"...ve satırın
+kendisinin silinmesidir"* cümlesini geri ALMAMIŞTIM — ekin aynı bölümü iki şey birden
+söylüyordu. Kendi açtığım tutarsızlıktı, park edilmedi. Aynı taramanın iki "önkoşul" bulgusu
+(DB yanıt vermiyor · `.venv` yok) ÖLÇÜLEREK çürütüldü: PostgreSQL 18.3 ayakta, `.venv` var —
+ikisi de Codex kum havuzunun kendi sınırı, kanıt sayılmadı.
+
+**R-B'nin açık ayağı Task 8'de KAPANDI (2026-09-08).** Karar: **hard DELETE**. Gerekçe
+ölçülmüş: `incident_scope_sha` üyelik parmak izini `durum`'u dışarıda bırakarak kurar, yani
+durum tabanlı bir "çıkarma" satırı hash'in içinde bırakır ve üyelik daralması her kapıda
+görünmez olurdu. Bağlanan sınır iki ayakla karşılandı — 036'nın tetikleyicisi
+`BEFORE DELETE OR UPDATE`e genişletildi (`TG_OP` kolu EN BAŞTA; yürütülmüş satır silinemez,
+`bekliyor`/`hedefsiz` silinebilir) ve `amend_rollback_plan` mühür düşürünce yönetici olayı
+yazıyor. **Ekin metni bu karara göre güncellendi**; ekin SQL bloğu ile 036'nın kilitli alan
+kümesi bağımsız çıkarıldı ve EŞİT.
+
+## Task 8 (2026-09-08) — indi
+
+**Commit `3b4beec`** — koşu ve artefakt servisi. `runs.py` (1836 satır) + `engine_contract.py`
++ `readiness_items.py` yeni; `sector_package_lifecycle.py` genişledi; `036_package_runs.sql`
+ve `rollback/036_down.sql` **yerinde** değiştirildi (037 denendi, 036'nın kapalı tetikleyici
+manifestini kırdığı için geri alındı — bu ekin harfiyen yazdığı yoldu).
+
+**Uygulayıcının kendi dürüst etiketleri (kontrolör tarafından doğrulanmadı, hakem turuna
+girdi olarak taşınır):**
+- **TDD sırası ders kitabı değildi:** modüller önce, testler sonra yazıldı; Step-2 FAIL'i
+  modüller kaldırılıp geri konarak üretildi. Sonraki kırmızı→yeşil turları (26 → 12 → 0)
+  gerçek.
+- **A4'ün dördüncü koşulu DARALTILDI.** `activation_evidence_payload`'ın
+  `checklist_approved`'ı ekin dört koşulundan ÜÇÜNÜ uyguluyor; dördüncüsü
+  (`sha == readiness_items.MADDE_KUMESI_SHA`) yaşam döngüsü modülünde KOŞAMAZ, çünkü AÇIK-3
+  `identity` dışında hiçbir `sector_pipeline` modülünün import edilmesini yasaklıyor ve
+  `readiness*` orada adıyla sayılı. Uygulayıcı import kenarını değil boolean'ı daralttı;
+  eşitliğin adı konmuş sahibi Task 15 (`writeback.activate_from_snapshot`). **Sonuç: bayat
+  sha taşıyan bir tasdik JETON BASTIRABİLİR; aktivasyon Task 15'in kapısında reddedilir.**
+  Bu ekin bir hükmünden sapmadır ve hakem turunun ilk kalemidir.
+- **Aktivasyon yükünün anahtar kümesi YEDİ değil ALTI.** Eksik ad `expected_no_active`,
+  Task 15'in kalemi; küme dataclass'tan TÜRETİLDİĞİ için Task 15 inince kendiliğinden yediye
+  çıkar. Geri alma yükü ekin bağladığı gibi tam BEŞ.
+- Jeton tüketimi hiçbir yerde koşmuyor (`_consume_provenance` Task 15); bugün elle kurulmuş
+  bir kanıt nesnesi iki geçişten de geçer, yalnız ŞEKİL kapıları koşar.
+
+## Yürütme kadansı kararı (2026-09-08, Eray) — bölerek dispatch
+
+Task 9'dan itibaren her plan görevi **tek parça değil, alt parçalar hâlinde** dispatch edilir.
+Gerekçe ölçüldü: Plan 1'de görev başına ortanca ~6 commit'ti (20 görev / 137 commit); Plan 2'de
+T5 = 21, T6 = 32, T7 = 36. Maliyeti büyüten şey görev başına düzeltme turu kuyruğudur ve her
+tur tam test kümesini yeniden koşturur.
+
+**Kıyas ölçüsü ÖNCEDEN sabitlendi** (sonradan uydurulmuş kıyas olmasın): bölünmüş dispatch'te
+bir plan görevinin parçalarının commit'leri TOPLANIR (T9a + T9b = T9), yanına kaç hakem turu
+koştuğu ve görevin baştan sona süresi yazılır. **Dürüst uyarı: bu kontrollü bir deney
+DEĞİLDİR** — T9-T20 ile T5-T7 aynı zorlukta değil. Anlamlı sinyal: bir PARÇA 36 commit'lik bir
+kuyruk üretmiyorsa bölme işe yaramıştır.
+
 - **Yedek etiket `backup/pre-footer-fix-20260830` süresiz durmaz.** Silinme koşulu: dal
   main'e merge edildiğinde VEYA final inceleme temiz geçtiğinde. O ana kadar commit etiketi
   yeniden yazımının geri dönüş yolu.
