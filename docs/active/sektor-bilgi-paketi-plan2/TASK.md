@@ -14,7 +14,9 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-7 indi. Checkpoint 1, 2 ve **5** hakem
+Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-8 indi (Task 8 + dört yüksek-bulgu düzeltmesi).
+**Durum `active` KALIYOR, `waiting-review` DEĞİL:** düzeltmelerin kapanış-doğrulaması ve test
+tarafı incelemesi kota yüzünden koşamadı; ikisi de yeni oturumun ilk işi. Checkpoint 1, 2 ve **5** hakem
 `approve`'uyla kapandı; checkpoint 3 ve 4 koştu ama `approve` ALMADAN kapatıldı — **ikisinin
 aralığı da checkpoint 5'in tabanına dâhildi ve artık incelendi.** Checkpoint 6 override ile
 kapandı. Sıradaki iş **Task 8** (koşu ve artefakt servisi); dispatch'inin önündeki dört
@@ -841,6 +843,52 @@ bir plan görevinin parçalarının commit'leri TOPLANIR (T9a + T9b = T9), yanı
 koştuğu ve görevin baştan sona süresi yazılır. **Dürüst uyarı: bu kontrollü bir deney
 DEĞİLDİR** — T9-T20 ile T5-T7 aynı zorlukta değil. Anlamlı sinyal: bir PARÇA 36 commit'lik bir
 kuyruk üretmiyorsa bölme işe yaramıştır.
+
+**KARAR AYNI GÜN GENİŞLETİLDİ — İNCELEMELER DE BÖLÜNÜR (2026-09-08, ölçülmüş kanıtla).**
+Karar önce yalnız uygulama dispatch'i için yazılmıştı; aynı gün inceleme tarafında da ölçüldü:
+- Tek parça checkpoint turu (42 commit, 6161 satır) **1200 sn tavanında zaman aşımına uğradı ve
+  HİÇ RAPOR ÜRETMEDİ** — hakem 125 araç çağrısı yaptı, yazmaya vakit kalmadı.
+- Aynı kapsam ikiye bölününce (A = üretim yüzeyleri, B = test tarafı) **A turu tam rapor verdi:
+  beş yüksek bulgu**, dördü kontrolör ölçümüyle doğrulandı ve düzeltildi.
+**Bağlanan kural:** bir inceleme turunun kapsamı tek pencerede rapor üretemeyecek kadar
+büyükse tur AÇILMADAN bölünür; prompt'un başına "keşfi bütçele, raporu YAZ" talimatı ve
+öncelik sırası konur. Bölme ekseni dosya türüdür (üretim yüzeyleri ↔ test tarafı), commit
+aralığı değil — aralığı bölmek bulguyu iki turun arasına düşürür.
+
+## Task 8 düzeltme turu (2026-09-08) — dört yüksek bulgu kapandı
+
+Bağımsız hakem (A turu, taban `2b468e8d`) **beş yüksek** bulgu verdi. Kontrolör tahkimi:
+**dördü ölçümle doğrulandı ve düzeltildi, biri ölçümde ÇÜRÜDÜ.**
+
+- **F1 `a03207b`** — aktivasyon kanıtı İKİ yerde fail-open'dı: kontrol listesi imzası hiç
+  karşılaştırılmıyordu (boş olmayan her dize geçiyordu) ve onay anlık görüntüsü YOKKEN "açık
+  soru sayısı 0" yazılıyordu. Erişilebilirlik ÖLÇÜLDÜ: `activate_package` iki booleana da
+  olduğu gibi güveniyor, jeton tüketimi yok; kodun "sonraki görevin kapısı reddeder" gerekçesi
+  Task 15'e aitti ve o kapı YOK. **Kapanış import kenarını AÇMADAN yapıldı** — beklenen imza
+  yalnız-anahtar parametreyle çağırandan gelir, kaynağın kapalılığını bir AST kapısı ölçer.
+- **F2 `f6c37bb`** — geri alma hatası kaydı kilit bırakıldıktan SONRA yazılıyordu; o pencerede
+  satır silinebiliyor, güncelleme sıfır satır etkileyip sessizce geçiyordu. Deneme artık iç
+  kayıt noktasında koşuyor, hata durumu kilit altındayken yazılıyor ve bir satır etkilendiği
+  dönen değerle kanıtlanıyor.
+- **F3 `797bd0c`** — `record_result` son-yazan-kazanırdı; tamamlanmış bir koşunun bütün motor
+  alanları sonradan ezilebiliyordu. Karşılaştır-ve-yaz oldu.
+- **F4 `e5225a4`** — kanıt üreticileri sözleşmelerinin gerektirdiği işlemi denetlemiyordu;
+  otomatik-commit altında kilitler anında düşüyordu. Giriş kapısı eklendi (fail-closed).
+- **F5 REDDEDİLDİ — kabul edilmiş risk, bağlayıcı koşuluyla.** Hakem, migration'ın yerinde
+  düzenlenmesinin "onu zaten uygulamış ortamları güncellenemez bıraktığını" söyledi. Mekanizma
+  doğru, **öncül ölçümde çürüdü:** öyle bir ortam YOK — geliştirme veritabanında iki tablonun
+  ikisi de yok (`to_regclass` → NULL), dal main'e merge edilmemiş, hiçbir yere dağıtılmamış.
+  Hakemin önerisi (dosyayı geri al + çift kimlikli yeni migration) var olmayan bir soruna
+  kalıcı karmaşıklık eklerdi. **Koşul: bu dal merge edilene kadar yerinde düzenleme serbest;
+  merge sonrası her değişiklik yeni numaralı migration ister.**
+- **`466d1d4`** — F1 bir imzayı genişletti, ekin örnek imzası ve iki çağrı örneği geride kaldı;
+  üçü hizalandı ve revizyon kaydına **R-E** olarak yazıldı. Hüküm değişmedi, beklenen değerin
+  nereden geldiği belirlendi.
+
+**Uygulayıcının kendi yakaladığı ölçüm tuzağı (kayda değer):** F4'ün ilk kırmızı testi
+kirliymiş — test altyapısı zaten her testi bir işlem içine sarıyor, dolayısıyla kapı orada
+görünmüyor. Taslak atıldı, işlemsiz bağlantı kuran ayrı bir altyapı yazıldı, kırmızı kapının
+iki satırı sökülerek kanıtlandı (4 düştü, 1 geçti — geçen, kontrol kolu).
 
 - **Yedek etiket `backup/pre-footer-fix-20260830` süresiz durmaz.** Silinme koşulu: dal
   main'e merge edildiğinde VEYA final inceleme temiz geçtiğinde. O ana kadar commit etiketi
