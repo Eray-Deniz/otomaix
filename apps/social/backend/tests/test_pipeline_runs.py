@@ -3325,6 +3325,120 @@ async def test_remaining_lock_paths_wait_on_the_incident_lock(test_db_setup, yol
         await kurulum.close()
 
 
+
+def _lock_incident_cagiranlari() -> set[str]:
+    """`runs.py`'de `_lock_incident` ÇAĞIRAN her fonksiyonun adı — ÜRETİLİR.
+
+    Küme ELLE YAZILMAZ: modülün kaynağı AST ile ayrıştırılır ve her çağrı, onu
+    saran EN İÇTEKİ fonksiyon tanımının adına bağlanır. `_lock_incident`'ın
+    kendi tanımı kümenin dışındadır.
+    """
+    agac = ast.parse(RUNS_KAYNAK)
+    cagiranlar: set[str] = set()
+
+    def _gez(dugum: ast.AST, kapsam: str | None) -> None:
+        for cocuk in ast.iter_child_nodes(dugum):
+            if isinstance(cocuk, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                _gez(cocuk, cocuk.name)
+                continue
+            if isinstance(cocuk, ast.Call):
+                hedef = cocuk.func
+                ad = (
+                    hedef.id
+                    if isinstance(hedef, ast.Name)
+                    else hedef.attr
+                    if isinstance(hedef, ast.Attribute)
+                    else None
+                )
+                if ad == "_lock_incident" and kapsam is not None:
+                    cagiranlar.add(kapsam)
+            _gez(cocuk, kapsam)
+
+    _gez(agac, None)
+    return cagiranlar - {"_lock_incident"}
+
+
+# Olay kilidini alan ve KAPISI OLAN yollar: ad → kapıyı koşan testin adı.
+KILIT_KAPISI_OLAN_YOLLAR: Mapping[str, str] = MappingProxyType(
+    {
+        "amend_rollback_plan": (
+            "test_evidence_and_spend_are_serialised_by_the_incident_lock — "
+            "pg_locks'tan ölçülen davranışsal çekişme"
+        ),
+        "approve_incident_rollback": (
+            "test_remaining_lock_paths_wait_on_the_incident_lock"
+            "[approve_incident_rollback] — pg_locks'tan ölçülen çekişme"
+        ),
+        "build_rollback_evidence": (
+            "test_remaining_lock_paths_wait_on_the_incident_lock"
+            "[build_rollback_evidence] — pg_locks'tan ölçülen çekişme"
+        ),
+        "execute_rollback_plan": (
+            "test_evidence_construction_and_spend_share_one_transaction — "
+            "kilidin kanıt+harcama bloğunu sardığının yapısal kapısı"
+        ),
+    }
+)
+
+# Kapısı OLMAYAN yollar: ad → NEDEN kapı kurulamadığının ÖLÇÜLMÜŞ gerekçesi.
+# Gerekçe kodda YORUM değil VERİ olarak yaşar; bir gün bu koşullar değişirse
+# (ör. `mint_evidence_token`'a ikinci bir doğrudan çağıran eklenirse) gerekçenin
+# bayatladığı okunabilsin diye.
+KILIT_KAPISI_OLMAYAN_YOLLAR: Mapping[str, str] = MappingProxyType(
+    {
+        "build_rollback_plan": (
+            "kilidi, iki satır önce KENDİ ürettiği YEPYENİ uuid4 olay kimliği "
+            "üzerine alır; kimliği o an başka kimse bilemez ve satırlar aynı "
+            "işlemde yazılır → çekişme YAPISAL olarak imkânsız, kilit bugün "
+            "yük taşımaz"
+        ),
+        "mint_evidence_token": (
+            "geri alma dalına bugün TEK giriş, kilidi ZATEN almış olan "
+            "`build_rollback_evidence`'tan; kilit yeniden girilebilir "
+            "(test_incident_lock_is_reentrant_within_one_transaction) → koruma "
+            "çağırandan gelir; ayrıca `FOR UPDATE` satır kilidi ve "
+            "`_require_transaction` ayrıca durur"
+        ),
+    }
+)
+
+
+def test_every_incident_lock_call_site_is_gated_or_explicitly_excepted():
+    """B5: kilit KAPSAMASI ELLE LİSTEDEN değil ÜRETİLMİŞ KÜMEDEN doğrulanır.
+
+    Bir üstteki iki çekişme testi `_lock_incident`'ın İKİ çağrı yerini ELLE
+    sayıyordu. Zayıflık testlerin kendisinde değil LİSTENİN ELLE OLMASINDAYDI:
+    yarın `_lock_incident` alan yeni bir fonksiyon eklenirse hiçbir şey KIRMIZI
+    olmazdı — kapsama sessizce düşerdi.
+
+    Bu kapı çağrı yerlerini `runs.py`'nin AST'sinden ÜRETİR ve iki AÇIK sözlüğe
+    karşı İKİ YÖNLÜ eşitler: kapısı olanlar ve gerekçesiyle istisna edilenler.
+    Yeni bir çağrı yeri eklenince (kapsamadaki delik) KIRMIZI olur; bir çağrı
+    yeri kaldırılınca (bayatlamış girdi) da KIRMIZI olur.
+
+    Saf AST — veritabanına DOKUNMAZ.
+    """
+    turetilen = _lock_incident_cagiranlari()
+    assert turetilen, "boş-küme kontrol kolu: hiç çağrı yeri türetilemedi"
+
+    ortak = set(KILIT_KAPISI_OLAN_YOLLAR) & set(KILIT_KAPISI_OLMAYAN_YOLLAR)
+    assert not ortak, f"bir yol hem korunan hem istisna olamaz: {sorted(ortak)}"
+    for ad, gerekce in KILIT_KAPISI_OLMAYAN_YOLLAR.items():
+        assert gerekce.strip(), f"istisna gerekçesiz bırakılamaz: {ad}"
+
+    beyan = set(KILIT_KAPISI_OLAN_YOLLAR) | set(KILIT_KAPISI_OLMAYAN_YOLLAR)
+    kapsanmayan = turetilen - beyan
+    assert not kapsanmayan, (
+        "`_lock_incident` çağıran yeni yol(lar) beyan edilmedi — ya kapı "
+        "kurulmalı ya da ÖLÇÜLMÜŞ gerekçeyle istisna edilmeli: "
+        f"{sorted(kapsanmayan)}"
+    )
+    bayat = beyan - turetilen
+    assert not bayat, (
+        "beyan edilen yol(lar) artık `_lock_incident` ÇAĞIRMIYOR — girdi "
+        f"bayat: {sorted(bayat)}"
+    )
+
 # ═══ 17. AÇIK-3 — yardımcıların YERİ ve import kenarı ═══════════════════════
 
 
