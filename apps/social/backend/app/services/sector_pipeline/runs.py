@@ -1541,7 +1541,15 @@ async def mint_evidence_token(
             "WHERE sector_id = $1 AND status = 'active' FOR UPDATE",
             kosu.sector_id,
         )
-        payload = activation_evidence_payload(kosu, aktif)
+        # A4'ün DÖRDÜNCÜ koşulu (fix turu 1, F1): kanonik madde kümesi imzası
+        # Plan 1 modülünün import kenarından GEÇEMEZ (AÇIK-3), o yüzden değeri
+        # ÇAĞIRAN taşır. Kaynak kapalıdır ve buradadır — dış dünyadan gelen
+        # hiçbir girdi bu parametreye ulaşamaz.
+        payload = activation_evidence_payload(
+            kosu,
+            aktif,
+            beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        )
         parmakizi = _evidence_fingerprint_from_payload(ActivationGateEvidence, payload)
         anahtarlar: tuple[Any, ...] = (run_id,)
         kosul = "run_id = $2"

@@ -139,10 +139,11 @@ def _require_token(value: Any, label: str) -> None:
 
 
 def _require_kapsam_sha(value: Any, label: str) -> None:
-    """Kapsam parmak izi de 64 karakterlik küçük harf hex `str` (A4 süpürmesi #6).
+    """Sha alanları 64 karakterlik küçük harf hex `str` (A4 süpürmesi #6).
 
     `_require_token` ile AYNI şekil kuralıdır, ayrı bir mesajla — ikinci bir
-    NORMALİZASYON kuralı DEĞİLDİR.
+    NORMALİZASYON kuralı DEĞİLDİR. İki çağıranı vardır: kapsam mührü
+    (`onay_kapsam_sha`) ve A4'ün beklenen kanonik madde kümesi imzası.
     """
     if (
         type(value) is not str
@@ -150,7 +151,7 @@ def _require_kapsam_sha(value: Any, label: str) -> None:
         or any(karakter not in _HEX_KARAKTERLERI for karakter in value)
     ):
         raise TypeError(
-            f"{label} 64 karakterlik hex sha olmalı — kapsam mührü uydurulamaz"
+            f"{label} 64 karakterlik hex sha olmalı — mühür uydurulamaz"
         )
 
 
@@ -321,31 +322,61 @@ def _yuk_anahtarlari(cls: type) -> tuple[str, ...]:
 def activation_evidence_payload(
     kosu: KilitliKosuGorunumu,
     aktif_paket_satiri: Mapping[str, Any] | None,
+    *,
+    beklenen_madde_kumesi_sha: str,
 ) -> Mapping[str, Any]:
     """`ActivationGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ satırlardan TÜRETİR.
 
-    İki girdinin İKİSİ de aynı işlemde `FOR UPDATE` ile kilitlenmiş satırlardır:
-    `kosu` doğrulanmış koşu satırı, `aktif_paket_satiri` o sektörün o an AKTİF
-    paket satırı (aktif paket yoksa `None` — K-94 ilk aktivasyon hâli). Çağıranın
-    serbestçe ürettiği hiçbir değer GİRMEZ.
+    İki konumsal girdinin İKİSİ de aynı işlemde `FOR UPDATE` ile kilitlenmiş
+    satırlardır: `kosu` doğrulanmış koşu satırı, `aktif_paket_satiri` o sektörün
+    o an AKTİF paket satırı (aktif paket yoksa `None` — K-94 ilk aktivasyon
+    hâli). Çağıranın serbestçe ürettiği hiçbir değer GİRMEZ.
+
+    **`beklenen_madde_kumesi_sha` — kanonik SABİT, çağıran girdisi DEĞİL
+    (fix turu 1, F1).** A4 kapısının dördüncü koşulu kanonik madde kümesinin
+    imzasını gerektirir; o sabit `sector_pipeline/readiness_items.py`'de yaşar ve
+    bu modülün import kenarı (AÇIK-3) `identity` DIŞINDA hiçbir `sector_pipeline`
+    modülüne açılamaz — yapısal testi de vardır. Daraltılan taraf artık kapı
+    DEĞİL, taşıma biçimidir: değeri ÇAĞIRAN taşır ve tek çağıran
+    (`runs.mint_evidence_token`) onu `readiness_items.MADDE_KUMESI_SHA`'dan
+    okur. İstekten/dış dünyadan gelen bir değer OLAMAZ; kapısı
+    `tests/test_pipeline_runs.py::
+    test_runs_passes_the_canonical_madde_kumesi_sha_to_the_payload_helper`
+    (AST: geçilen ifade birebir o nitelik erişimidir).
 
     **TEK türetici:** hem `runs.mint_evidence_token` hem
     `writeback.build_activation_evidence` (Task 15) BUNU çağırır. İki yerde iki
     türetme yazılsaydı, basılan parmak izi ile kurulan kanıtın parmak izi
     sessizce ayrışabilirdi.
+
+    Onay anlık görüntüsü EKSİKSE `EvidenceMintRefused` — eksik kanıt sıfıra
+    normalize EDİLMEZ (aşağıda gerekçesi).
     """
     _require_kosu_gorunumu(kosu, "kosu")
+    _require_kapsam_sha(beklenen_madde_kumesi_sha, "beklenen_madde_kumesi_sha")
+
+    # F1(b), fix turu 1: ÖNCEKİ yazım `approval_snapshot is None` iken
+    # `open_questions_count = 0` yazıyordu. Sıfır, K-71 kapısını GEÇİREN tek
+    # değerdir (`activate_package`: `open_questions_count != 0` → red) — yani
+    # "kanıt yok" hâli sessizce "kanıt temiz" hâline genişliyordu. Eksik anlık
+    # görüntü artık jeton BASTIRMAZ; kanıt hiç doğmaz.
+    anlik = kosu.approval_snapshot
+    if anlik is None or "acik_sorular" not in anlik:
+        raise EvidenceMintRefused(
+            "onay anlık görüntüsü YOK ya da 'acik_sorular' taşımıyor — eksik "
+            "kanıt SIFIRA normalize edilmez; açık soru sayısı uydurulamaz"
+        )
 
     okunan = {
         "activation_eligible": kosu.sonuc == "activation_eligible",
-        "open_questions_count": len(kosu.approval_snapshot["acik_sorular"])
-        if kosu.approval_snapshot is not None
-        else 0,
+        "open_questions_count": len(anlik["acik_sorular"]),
         "katman1_passed": (
             kosu.katman1_attestation is not None
             and kosu.katman1_attestation["sonuc"] == "PASS"
         ),
-        "checklist_approved": _checklist_approved(kosu.readiness_attestation),
+        "checklist_approved": _checklist_approved(
+            kosu.readiness_attestation, beklenen_madde_kumesi_sha
+        ),
         "expected_active_version": (
             aktif_paket_satiri["version"] if aktif_paket_satiri is not None else None
         ),
@@ -355,29 +386,27 @@ def activation_evidence_payload(
     return _yuk_kes(ActivationGateEvidence, okunan)
 
 
-def _checklist_approved(readiness_attestation: Mapping[str, Any] | None) -> bool:
-    """A4 kapısının BU MODÜLDE koşabilen ÜÇ koşulu — dördüncüsü Task 15'te.
+def _checklist_approved(
+    readiness_attestation: Mapping[str, Any] | None,
+    beklenen_madde_kumesi_sha: str,
+) -> bool:
+    """A4 kapısının DÖRT koşulunun DÖRDÜ — hiçbiri başka göreve devredilmez.
 
     Koşullar: (1) tasdik VAR ve `onaylandi is True`; (2) `madde_kumesi_sha`
-    anahtarı VAR ve değeri `type(...) is str`; (3) `strip()` sonrası BOŞ DEĞİL.
-    `strip()` yalnız boş-olmama kapısında kullanılır, KARŞILAŞTIRILAN değerin
-    üzerinde DEĞİL. Geriye uyum yedeği YOKTUR (fail-closed).
+    anahtarı VAR ve değeri `type(...) is str`; (3) `strip()` sonrası BOŞ DEĞİL;
+    (4) değer `beklenen_madde_kumesi_sha`'ya **BİREBİR** eşit. `strip()` yalnız
+    boş-olmama kapısında kullanılır, KARŞILAŞTIRILAN değerin üzerinde DEĞİL —
+    yani `" <kanonik> "` GEÇMEZ. Geriye uyum yedeği YOKTUR (fail-closed).
 
-    **DÖRDÜNCÜ koşul — `sha == readiness_items.MADDE_KUMESI_SHA` — BURADA
-    KOŞAMAZ ve bunun sebebi ölçülmüş bir sözleşme çatışmasıdır.** Arayüz eki iki
-    şeyi birden bağlıyor: (a) `activation_evidence_payload`'ın `checklist_approved`
-    alanı DÖRT koşullu A4 kapısıdır (R8(c)); (b) bu modül `sector_pipeline`
-    altından YALNIZ `identity`'yi import eder ve `readiness*` adı AÇIKÇA
-    yasaklıdır (AÇIK-3, yapısal testi de var). Kanonik madde kümesi
-    `sector_pipeline/readiness_items.py`'de yaşadığı için ikisi aynı anda
-    tutamaz. Daraltılan taraf (b) DEĞİL (a)'dır: import kenarı YAPISAL bir
-    invaryanttır ve kırılması geri alınamaz; eşitlik koşulunun ise ADI KONMUŞ
-    ikinci bir evi vardır — `writeback.activate_from_snapshot` (Task 15,
-    Plan 2 modülü, `readiness_items`'ı serbestçe import eder) ve o kapının kendi
-    testleri (`test_activation_refused_when_madde_kumesi_sha_differs_from_current`
-    · `..._missing_or_blank` · `..._is_whitespace_padded`) ekte Task 15'e
-    dosyalanmıştır. Yani koşul düşmez, YERİ değişir — bayat sha ile basılmış bir
-    jeton geçişi AÇMAZ, çünkü aktivasyon kapısı onu ayrıca reddeder.
+    **DÖRDÜNCÜ koşul fix turu 1'de BURAYA GELDİ (F1(a), yüksek).** Önceki yazım
+    onu Task 15'e devrediyor ve gerekçesini "import kenarı açılamaz"a
+    dayandırıyordu; ölçüldü ki devir bugün BOŞTU — devralacak kapı
+    (`writeback.activate_from_snapshot`) henüz YAZILMAMIŞTIR, oysa
+    `activate_package` `checklist_approved` alanına BUGÜN olduğu gibi güveniyor.
+    Yani "yeri değişti" değil, kapı hiç koşmuyordu: boş olmayan HER dize
+    geçiyordu. İmport kenarı (AÇIK-3) yine AÇILMADI — beklenen kanonik değer
+    ÇAĞIRANDAN, yalnız-anahtar bir parametreyle taşınır. Task 15 kendi
+    kapısını kurduğunda bu koşul ORTADAN KALKMAZ; iki kapı da aynı sabite bakar.
     """
     if readiness_attestation is None:
         return False
@@ -388,7 +417,11 @@ def _checklist_approved(readiness_attestation: Mapping[str, Any] | None) -> bool
     if "madde_kumesi_sha" not in readiness_attestation:
         return False
     sha = readiness_attestation["madde_kumesi_sha"]
-    return type(sha) is str and sha.strip() != ""
+    return (
+        type(sha) is str
+        and sha.strip() != ""
+        and sha == beklenen_madde_kumesi_sha
+    )
 
 
 def rollback_evidence_payload(

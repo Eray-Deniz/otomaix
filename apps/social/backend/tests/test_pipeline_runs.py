@@ -210,6 +210,20 @@ async def _tam_kosu(
     return run_id
 
 
+async def _anlik_goruntu_yaz(db, run_id: str, *, acik_sorular=()) -> None:
+    """Koşu satırına onay anlık görüntüsü yazar (K-98: İLK yazım serbesttir).
+
+    Üretim yazıcısı Task 14'ün kalemidir; bu görevde kanıt yükünün okuduğu satır
+    alanı testlerde doğrudan kurulur.
+    """
+    await db.execute(
+        "UPDATE social.sector_package_runs SET approval_snapshot = $2 "
+        "WHERE run_id = $1",
+        run_id,
+        {"acik_sorular": list(acik_sorular)},
+    )
+
+
 async def _paket(
     db, sector_id: uuid.UUID, *, version: int, status: str, run_id: str | None = None
 ) -> uuid.UUID:
@@ -3440,6 +3454,9 @@ async def test_activation_token_minted_from_locked_run_row(pkg_db):
     await _bos_evren(pkg_db)
     sector_id = await _sub_sector(pkg_db)
     run_id = await _tam_kosu(pkg_db, sector_id)
+    # Onay anlık görüntüsü ZORUNLUDUR (fix turu 1, F1(b)): eksikse jeton
+    # BASILMAZ — "açık soru yok" değeri uydurulamaz.
+    await _anlik_goruntu_yaz(pkg_db, run_id)
 
     jeton = await runs.mint_evidence_token(
         pkg_db,
@@ -3458,7 +3475,10 @@ async def test_activation_token_minted_from_locked_run_row(pkg_db):
     assert satir["kanit_jetonu_harcandi_at"] is None
     kosu = await runs._kosu_gorunumu(pkg_db, run_id)
     beklenen = lifecycle._evidence_fingerprint_from_payload(
-        ActivationGateEvidence, lifecycle.activation_evidence_payload(kosu, None)
+        ActivationGateEvidence,
+        lifecycle.activation_evidence_payload(
+            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+        ),
     )
     assert satir["kanit_jetonu_parmakizi"] == beklenen
 
@@ -3537,3 +3557,189 @@ def test_rollback_evidence_package_id_must_be_uuid():
             onay_kapsam_sha="a" * 64,
             provenance_token="b" * 64,
         )
+
+
+# ═══ 20. A4 kapısının DÖRDÜNCÜ koşulu ve eksik onay anlık görüntüsü ════════
+#
+# Checkpoint fix turu 1, F1 (yüksek): `activation_evidence_payload` iki yerde
+# birden FAIL-OPEN'dı.
+#   (a) `_checklist_approved` A4'ün DÖRT koşulundan yalnız ÜÇÜNÜ uyguluyordu;
+#       dördüncüsü — tasdikteki imzanın kanonik madde kümesi imzasına BİREBİR,
+#       NORMALİZASYONSUZ eşitliği — hiç koşmuyordu. Boş olmayan HER dize
+#       geçiyordu.
+#   (b) Onay anlık görüntüsü `None` iken "açık soru sayısı" 0 yazılıyordu —
+#       eksik kanıt, aktivasyon kapısını GEÇİREN değere genişliyordu.
+#
+# Erişilebilirlik ÖLÇÜLDÜ: `activate_package` `open_questions_count != 0` ve
+# `checklist_approved` alanlarına OLDUĞU GİBİ güvenir; jeton tüketimi (Task 15)
+# henüz YAZILMAMIŞTIR, dolayısıyla "sonraki görevin kapısı ayrıca reddeder"
+# bugün DOĞRU DEĞİLDİR.
+#
+# İmport kenarı AÇILMAZ (AÇIK-3): beklenen kanonik imza ÇAĞIRANDAN, YALNIZ
+# ANAHTAR bir parametreyle gelir; `runs.py` onu `readiness_items`ten okur.
+
+
+def _kosu_gorunumu_ornegi(**overrides) -> runs.KosuSatiriGorunumu:
+    """Kilitli koşu görünümünün TAM ve GEÇERLİ örneği — alanlar tek tek ezilir."""
+    alanlar = {
+        "run_id": "kosu-a4",
+        "sector_id": uuid.UUID(int=7),
+        "package_id": None,
+        "durum": "tamamlandi",
+        "sonuc": "activation_eligible",
+        "approval_snapshot": {"acik_sorular": []},
+        "katman1_attestation": {"sonuc": "PASS"},
+        "readiness_attestation": {
+            "onaylandi": True,
+            "madde_kumesi_sha": readiness_items.MADDE_KUMESI_SHA,
+        },
+    }
+    alanlar.update(overrides)
+    return runs.KosuSatiriGorunumu(**alanlar)
+
+
+def test_activation_payload_takes_expected_sha_as_keyword_only_parameter():
+    """İmport kenarı yerine ÇAĞIRAN taşır — ve YALNIZ ANAHTAR olarak."""
+    parametreler = inspect.signature(lifecycle.activation_evidence_payload).parameters
+    assert list(parametreler) == [
+        "kosu",
+        "aktif_paket_satiri",
+        "beklenen_madde_kumesi_sha",
+    ]
+    assert (
+        parametreler["beklenen_madde_kumesi_sha"].kind
+        is inspect.Parameter.KEYWORD_ONLY
+    )
+    assert parametreler["beklenen_madde_kumesi_sha"].default is inspect.Parameter.empty
+
+
+def test_activation_payload_checklist_true_for_canonical_sha():
+    """POZİTİF KONTROL: kanonik imza BİREBİR eşleşince kapı AÇILIR."""
+    yuk = lifecycle.activation_evidence_payload(
+        _kosu_gorunumu_ornegi(),
+        None,
+        beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+    )
+    assert yuk["checklist_approved"] is True
+    assert yuk["open_questions_count"] == 0
+
+
+@pytest.mark.parametrize(
+    "sha",
+    [
+        "a" * 64,
+        readiness_items.MADDE_KUMESI_SHA.upper(),
+        " " + readiness_items.MADDE_KUMESI_SHA,
+        readiness_items.MADDE_KUMESI_SHA + " ",
+        readiness_items.MADDE_KUMESI_SHA[:-1] + ("0" if
+            readiness_items.MADDE_KUMESI_SHA[-1] != "0" else "1"),
+        "onaylandi",
+    ],
+)
+def test_activation_payload_checklist_false_when_sha_is_not_canonical(sha):
+    """A4'ün DÖRDÜNCÜ koşulu: boş olmayan HER dize GEÇMEZ — birebir eşitlik."""
+    yuk = lifecycle.activation_evidence_payload(
+        _kosu_gorunumu_ornegi(
+            readiness_attestation={"onaylandi": True, "madde_kumesi_sha": sha}
+        ),
+        None,
+        beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+    )
+    assert yuk["checklist_approved"] is False
+
+
+def test_activation_payload_rejects_malformed_expected_sha():
+    """Beklenen imza da ŞEKİL kapısından geçer — uydurma değer taşınamaz."""
+    for bozuk in ("", "   ", "a" * 63, "A" * 64, None, 1):
+        with pytest.raises((TypeError, ValueError)):
+            lifecycle.activation_evidence_payload(
+                _kosu_gorunumu_ornegi(), None, beklenen_madde_kumesi_sha=bozuk
+            )
+
+
+@pytest.mark.parametrize("anlik", [None, {}, {"baska": []}])
+def test_activation_payload_refuses_missing_approval_snapshot(anlik):
+    """Eksik kanıt SIFIRA normalize EDİLMEZ — jeton basımı REDDEDİLİR."""
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        lifecycle.activation_evidence_payload(
+            _kosu_gorunumu_ornegi(approval_snapshot=anlik),
+            None,
+            beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        )
+
+
+def test_runs_passes_the_canonical_madde_kumesi_sha_to_the_payload_helper():
+    """YAPISAL: beklenen imza `readiness_items.MADDE_KUMESI_SHA`'dan gelir.
+
+    Değer çağırandan taşınıyor diye "dışarıdan gelebilir" olmamalı: `runs.py`'nin
+    o çağrıda geçtiği ifade ELLE değil AST'ten okunur.
+    """
+    agac = ast.parse(RUNS_KAYNAK)
+    gecilen: list[ast.expr] = []
+    for dugum in ast.walk(agac):
+        if (
+            isinstance(dugum, ast.Call)
+            and isinstance(dugum.func, ast.Name)
+            and dugum.func.id == "activation_evidence_payload"
+        ):
+            anahtarlar = {kw.arg: kw.value for kw in dugum.keywords}
+            assert "beklenen_madde_kumesi_sha" in anahtarlar, ast.dump(dugum)
+            gecilen.append(anahtarlar["beklenen_madde_kumesi_sha"])
+    assert gecilen, "runs.py yardımcıyı hiç çağırmıyor"
+    for ifade in gecilen:
+        assert isinstance(ifade, ast.Attribute), ast.dump(ifade)
+        assert ifade.attr == "MADDE_KUMESI_SHA", ast.dump(ifade)
+        assert isinstance(ifade.value, ast.Name), ast.dump(ifade)
+        assert ifade.value.id == "readiness_items", ast.dump(ifade)
+
+
+async def test_mint_refuses_activation_token_without_approval_snapshot(pkg_db):
+    """ERİŞİLEBİLİRLİK: açık, `mint_evidence_token` üzerinden GERÇEKTEN kapanır."""
+    await _bos_evren(pkg_db)
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _tam_kosu(pkg_db, sector_id)
+
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        async with pkg_db.transaction():
+            await runs.mint_evidence_token(
+                pkg_db,
+                table="sector_package_runs",
+                run_id=run_id,
+                incident_id=None,
+                package_id=None,
+            )
+
+    basildi = await pkg_db.fetchval(
+        "SELECT kanit_jetonu FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    )
+    assert basildi is None
+
+
+async def test_mint_activation_token_records_checklist_gate_from_attestation(pkg_db):
+    """POZİTİF KONTROL + FARK: tasdik kanonikse parmak izi DEĞİŞİR, kapı AÇIKTIR."""
+    await _bos_evren(pkg_db)
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _tam_kosu(pkg_db, sector_id)
+    await _anlik_goruntu_yaz(pkg_db, run_id)
+
+    async with pkg_db.transaction():
+        kosu = await runs._kosu_gorunumu(pkg_db, run_id)
+        onaysiz = lifecycle.activation_evidence_payload(
+            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+        )
+    assert onaysiz["checklist_approved"] is False
+
+    await runs.attest_readiness(
+        pkg_db,
+        run_id=run_id,
+        kapi_maddeleri=tuple(sorted(readiness_items.KAPI_MADDELERI)),
+        sinyal_maddeleri=(),
+        actor=ACTOR,
+    )
+    async with pkg_db.transaction():
+        kosu = await runs._kosu_gorunumu(pkg_db, run_id)
+        onayli = lifecycle.activation_evidence_payload(
+            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+        )
+    assert onayli["checklist_approved"] is True
