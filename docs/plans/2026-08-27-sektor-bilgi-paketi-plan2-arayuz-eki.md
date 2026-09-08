@@ -46,6 +46,9 @@ edilen bir sınırdır; kayma riski taşımayan çapa sembol adıdır, satır nu
 
 ## Revizyon kaydı — 2026-09-08 (Task 8 dispatch'inden ÖNCE)
 
+> **R-E ve R-F dispatch'ten SONRA eklendi** (checkpoint kapanış-doğrulama turları,
+> bağımsız hakem bulguları). Başlıktaki "dispatch'inden ÖNCE" yalnız R-A…R-D için doğrudur.
+
 Ek 2026-08-30'da kapandı; aradan Task 3 · 4 · 5 · 6 · 7 geçti ve **kod dört yerde ekin
 metnini geride bıraktı.** Task 8'in brief'i bu hükümleri HARFİYEN kopyaladığı için, yürütücü
 uyuşmazlığı kendi başına yorumlasaydı ekin bağlayıcılığı fiilen kalkardı. Dördü de ölçülerek
@@ -58,6 +61,7 @@ kapatıldı; **hiçbiri yeni kapsam açmaz.**
 | **R-C** | **Onay mührünün yüklemi** yazılı DEĞİLDİ: dolu → BOŞ geçişinin reddedildiği (036'da uygulanmış) kural metne alındı | metin koda uyarlandı |
 | **R-D** | Aktör kapısının **tanım yeri**: `sector_package_lifecycle._require_actor` bir yeniden-dışavurumdur; tanım `package_events.require_actor` | metin koda uyarlandı |
 | **R-E** | A4'ün **dördüncü koşulu** yaşam döngüsü modülünde koşabilir hâle getirildi: beklenen kanonik imza yalnız-anahtar bir parametreyle ÇAĞIRANDAN gelir; import kenarı AÇILMAZ | hüküm korundu, yol değişti |
+| **R-F** | Kanıt yükünün **ŞEKİL kapısı**: `acik_sorular` YALNIZ `list`/`tuple` (boş olanlar dâhil), jsonb tasdikleri YALNIZ `Mapping`/`None`; kalan her şey `EvidenceMintRefused` — ekin ÖRNEK kodu `len(...)`'i şekil doğrulamadan çağırıyordu | hüküm DARALTILDI (fail-closed) |
 
 **R-E (2026-09-08) — hakem bulgusunun kapanışı.** Task 8'in ilk yazımı A4 kapısının dördüncü
 koşulunu (tasdikteki imzanın kanonik madde kümesi imzasına birebir eşitliği) *"AÇIK-3 import
@@ -70,6 +74,37 @@ olarak girer ve tek çağıran (`runs.mint_evidence_token`) kanonik sabiti geçe
 kapalılığı düzyazıyla değil, çağrı yerindeki ifadeyi okuyan bir AST kapısıyla ölçülür.
 Aynı turda ikinci bir açık daha kapandı: onay anlık görüntüsü YOKKEN "açık soru sayısı 0"
 yazılıyordu; artık jeton basımı REDDEDİLİR.
+
+**R-F (2026-09-08) — hakem bulgusunun kapanışı, checkpoint fix turu 2.** R-E eksik anlık
+görüntüyü ve eksik anahtarı kapattı ama değerin **ŞEKLİNİ** doğrulamadan `len(...)` çağırmayı
+sürdürdü. Kontrolör ölçtü: `{"acik_sorular": ""}` · `{}` · `set()` · `()` şekillerinin
+DÖRDÜ de `open_questions_count=0` üretiyordu — sıfır, K-71 kapısını GEÇİREN tek değerdir;
+skaler şekiller (`int`/`bool`/`None`/`float`) ise alan-DIŞI bir `TypeError` fırlatıyordu, o da
+bir alan reddi DEĞİLDİR. **Ek bu noktada kodun ÖNÜNDE değil, ARKASINDA kaldı:** bağlayıcı örnek
+kod tam olarak korumasız `len(...)`'i yazıyor — İKİ yerde: `writeback.activate_from_snapshot`
+örneğinde ve `activation_evidence_payload`'ın anahtar listesinde. (Çapa SEMBOL adıdır, satır
+numarası DEĞİL — bu belgenin kendi kuralı; ikisine de yerinde R-F işaretçisi kondu.) Sapma
+DARALTMA yönündedir ve meşrudur; hüküm olarak işlenir:
+
+* `acik_sorular` için KABUL kümesi KAPALI ve NOMİNALDİR: `list` ve `tuple`, **boş olanlar
+  dâhil** — `[]` ve `()` MEŞRUDUR ("açık soru yok" demektir) ve pozitif kontrolleri vardır.
+  `tuple` de zorunludur çünkü `VerifiedRun.__post_init__` yükü `identity.donmus`'tan geçirir ve
+  `donmus` kuralı (2) `list|tuple → tuple` yazar: DONMUŞ yolda değer `tuple`, HAM yolda `list`
+  gelir. Kalan HER şey `EvidenceMintRefused`.
+* Aynı şekil disiplini **eşleme alanlarına** da uygulanır: `approval_snapshot` ·
+  `katman1_attestation` · `readiness_attestation` YALNIZ `Mapping` (tasdiklerde ayrıca `None`,
+  ki kapıyı KAPATIR). Gerekçe ölçüldü: `"x" in "xy"` alt dize, `"x" in {"x"}` küme üyeliğidir —
+  ikisi de `in` kapısını geçer, ardından gelen `[...]` alan-dışı `TypeError` fırlatır.
+* **`Sized`/`Iterable`/`len()` var-mı tabanlı GEVŞEK kontrol YASAKTIR** — `str` ve `dict` o
+  kontrolü geçer, açık aynen kalırdı. Negatif kontrolü test matrisindedir.
+* Süpürme aynı turda koştu: aynı okuma `rollback_evidence_payload`'ın
+  `hedef_kosu.katman1_attestation` dalında da vardı, o da kapatıldı.
+
+**R-F'nin erişilebilirlik sınırı — dürüst etiket.** `approval_snapshot` kolonu 036'da şekilsiz
+`JSONB`'dir (yalnız değişmezlik tetikleyicisi var, CHECK yok) ve **bugün ÜRETİM YAZICISI
+YOKTUR** — yazıcı Task 14'ün kalemidir. Yani sınıf bugün canlıda tetiklenemez; kapatılma
+sebebi, Task 14 yazıcısının bu şekli üretmesi hâlinde kanıtın SESSİZCE genişlemesidir. Tehdit
+modeli: girdi araştırma çıktısıdır — ÖZENSİZ/BAYAT olabilir, SALDIRGAN değildir.
 
 **R-A'nın ölçümü (2026-09-08).** `sector_package_lifecycle.py` `identity` modülünden İKİ ad
 kullanıyor — `validate_decision_log` ve `check_unit_integrity` — ve `canonical_sha`'yı HİÇ
@@ -1258,6 +1293,8 @@ async def activate_from_snapshot(db, *, run_id: str, actor: str) -> None:
     `VerifiedRun`'dan ve kilitli taslak satırından okunur:
 
         activation_eligible = (run.sonuc == "activation_eligible")
+        # ŞEKİL KAPISI ZORUNLU (revizyon R-F, 2026-09-08) — aşağıdaki satır korumasızdır:
+        # değer önce `list`/`tuple` olarak sınanır, değilse `EvidenceMintRefused`.
         open_questions_count = len(run.approval_snapshot["acik_sorular"])
         katman1_passed       = run.katman1_attestation["sonuc"] == "PASS"
         # A4 (fix turu 3, düzeltme) — ÖNCEKİ YAZIM `….strip() == KANONİK` yazıyordu;
@@ -1457,6 +1494,7 @@ def activation_evidence_payload(
     Anahtar kümesi KAPALI ve TAM — YEDİ anahtar, sekizincisi YOKTUR:
       `activation_eligible: bool` = `kosu.sonuc == "activation_eligible"`
       `open_questions_count: int` = `len(kosu.approval_snapshot["acik_sorular"])`
+                                    (ÖNCE şekil kapısı — revizyon R-F)
       `katman1_passed: bool`      = `kosu.katman1_attestation["sonuc"] == "PASS"`
       `checklist_approved: bool`  = R8 gövdesindeki DÖRT koşullu A4 kapısı (aynen)
       `expected_active_version: int | None` = `aktif_paket_satiri["version"]`
