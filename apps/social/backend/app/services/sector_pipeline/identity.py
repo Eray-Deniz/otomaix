@@ -34,7 +34,7 @@ Plan 1'in K-01b'de kapattığı yazım/okuma ayrışmasının ta kendisi.
 
 Kural daha önce Plan 1'in erişim katmanında (`sector_packages`) yaşıyordu ve
 buradan oraya bir import kenarı vardı. Plan 2 arayüz eki
-(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1476-1477)
+(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1509-1510 — 2026-09-08 revizyonundan sonra)
 bunu yasaklar: *"`identity.py` hiçbir Plan 1 modülünü ve hiçbir DB yüzeyini
 IMPORT ETMEZ"*. Kural yaprağa taşındı; iki taraf da yapraktan tüketir, kopya YOK.
 Kapısı yapısal testtir

@@ -2,6 +2,8 @@
 title: Sektör Bilgi Paketi — Plan 2/2 Arayüz Eki (BAĞLAYICI)
 status: binding-addendum
 date: 2026-08-30
+revised: 2026-09-08
+revisions: 4
 binds_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 source_spec: docs/specs/2026-08-21-sektor-bilgi-paketi.md
 canonical_input: docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md
@@ -41,6 +43,31 @@ yerlerde çapa **sembole · test adına · başlığa** çevrildi (ör.
 `sector_package_lifecycle.py::_require_evidence`, `Task 6 Produces → sector_package_runs`).
 **Plan gövdesi bir daha düzenlenirse bu numaralar yeniden kayar** — bu bilinen ve kabul
 edilen bir sınırdır; kayma riski taşımayan çapa sembol adıdır, satır numarası değildir.
+
+## Revizyon kaydı — 2026-09-08 (Task 8 dispatch'inden ÖNCE)
+
+Ek 2026-08-30'da kapandı; aradan Task 3 · 4 · 5 · 6 · 7 geçti ve **kod dört yerde ekin
+metnini geride bıraktı.** Task 8'in brief'i bu hükümleri HARFİYEN kopyaladığı için, yürütücü
+uyuşmazlığı kendi başına yorumlasaydı ekin bağlayıcılığı fiilen kalkardı. Dördü de ölçülerek
+kapatıldı; **hiçbiri yeni kapsam açmaz.**
+
+| # | ne değişti | yön |
+|---|---|---|
+| **R-A** | Hüküm (a)'nın **ad kümesi**: "kullanılan TEK ad `identity.canonical_sha`" → `identity`nin ÜRETİLMİŞ public yüzeyi | metin koda uyarlandı |
+| **R-B** | Ayak (d) düzyazısı ile bağlayıcı SQL bloğunun **çelişkisi**: SQL bağlar (`BEFORE UPDATE`); yanlış emsal ve yanlış satır alıntısı düzeltildi | metin SQL'e ve 036'ya uyarlandı |
+| **R-C** | **Onay mührünün yüklemi** yazılı DEĞİLDİ: dolu → BOŞ geçişinin reddedildiği (036'da uygulanmış) kural metne alındı | metin koda uyarlandı |
+| **R-D** | Aktör kapısının **tanım yeri**: `sector_package_lifecycle._require_actor` bir yeniden-dışavurumdur; tanım `package_events.require_actor` | metin koda uyarlandı |
+
+**R-A'nın ölçümü (2026-09-08).** `sector_package_lifecycle.py` `identity` modülünden İKİ ad
+kullanıyor — `validate_decision_log` ve `check_unit_integrity` — ve `canonical_sha`'yı HİÇ
+ÇAĞIRMIYOR; 645 satırda tek bir hash hesabı yok. Yani hüküm yalnız "fazla ad var" diye değil,
+**dayandığı varsayım yüzünden de** kodla uyumsuzdu. Sebep meşrudur: Task 3'ün şema kapısı
+`insert_draft` içinde koşar ve kuralın İKİNCİ BİR KOPYASI yazılamaz. Bu yüzden daraltılan ad
+sayısı değil, **kenarın kendisidir** (tek import, yaprak hedef, başka modül yok).
+
+**Bu revizyonun kendi sınırı — dürüst etiket.** Dördü de **bağımsız hakem GÖRMEDİ**; Task 8
+dispatch'i öncesi kontrolör kararıyla yazıldılar. Evleri var: final incelemenin tabanı
+`a806e29` olduğu için bu commit de oraya kendiliğinden girer.
 
 ---
 
@@ -1471,8 +1498,14 @@ def _evidence_fingerprint_from_payload(cls: type, payload: Mapping[str, Any]) ->
 # kararıyla DEĞİL, fix turu 2'nin `_evidence_fingerprint` yazımıyla ZATEN açılmıştı —
 # hüküm "ikinci bir hash kuralı YAZILMAZ" olduğu için `hashlib`'e inmek de yol değildir.
 # Bağlanan sınır: kenar TEKTİR ve YAPRAK bir modüle gider.
-#   (a) İzin verilen TEK import: `from app.services.sector_pipeline import identity`;
-#       kullanılan TEK ad `identity.canonical_sha`.
+#   (a) İzin verilen TEK import BİÇİMİ: `from app.services.sector_pipeline import identity`
+#       — MODÜL importudur; addan import (`from ...sector_pipeline.identity import X`) YASAK.
+#       **AD KÜMESİ REVİZE EDİLDİ 2026-09-08 — revizyon R-A (aşağıdaki revizyon kaydı).**
+#       Ad kümesi TEK ada sabitlenmez ve ELLE SAYILMAZ: `identity`nin ALTÇİZGİSİZ (public)
+#       yüzeyidir ve o yüzeyi ÜRETEN yapıdan türer (kapı `dir(identity)`den üretilmiş
+#       listeyle kurulur, elle seçilmiş örnekle DEĞİL). Bağlayan invaryant AD SAYISI değil
+#       KENARIN kendisidir: kenar TEKTİR, hedefi YAPRAKTIR (ayak (b)), ve `sector_pipeline`
+#       altından başka hiçbir modüle uzanmaz (ayak (c)).
 #   (b) `identity.py` hiçbir Plan 1 modülünü ve hiçbir DB yüzeyini IMPORT ETMEZ
 #       (Task 3'ün kendi sözleşmesi: "YALNIZ kimlik + hash"), dolayısıyla DÖNGÜ YOKTUR.
 #   (c) `sector_package_lifecycle` `sector_pipeline` altından BAŞKA hiçbir modülü
@@ -1942,8 +1975,11 @@ async def attest_readiness(
       (5) iki demetten birinde TEKRAR EDEN kimlik var (küme boyu ≠ demet boyu).
 
     `actor` Plan 1'in KANONİK aktör kapısından geçer:
-    `sector_package_lifecycle._require_actor` (ölçüldü, satır 147-150 — `str` değilse ya da
-    `strip()` sonrası boşsa `ValueError`). İkinci bir aktör kuralı YAZILMAZ.
+    `sector_package_lifecycle._require_actor` (**TANIM YERİ DÜZELTİLDİ 2026-09-08, revizyon
+    R-D:** bu ad yaşam döngüsü modülünde bir YENİDEN-DIŞAVURUMDUR; tanım
+    `app/services/package_events.py` `require_actor`tadır — ölçüldü, satır 258-280: `str`
+    değilse ya da `strip()` sonrası boşsa `ValueError`, aksi hâlde kırpılmış kimlik).
+    İkinci bir aktör kuralı YAZILMAZ.
 
     Yazılan kayıt:
         {"onaylandi": True, "actor": <doğrulanmış>, "at": <now>,
@@ -2448,8 +2484,14 @@ R11'in yasakladığı uydurulmuş boolean'ın veri katmanından gelen hâli. İk
 değişse bile satır "yönetici onaylı" görünmeye devam ederdi.
 
 **Ayak (b) — servis katmanında fail-closed aktör doğrulaması, Plan 1'in KENDİ kapısıyla.**
-Ölçüldü: Plan 1'in kanonik aktör kapısı `sector_package_lifecycle._require_actor`'dır
-(`sector_package_lifecycle.py`, satır 147-150): `isinstance(actor, str)` değilse ya da
+**Ölçüldü (TAZE, 2026-09-08 — revizyon R-D; eski metin İKİ şeyi birden yanlış
+gösteriyordu).** Kapının TANIMI `app/services/package_events.py` `require_actor`tadır
+(satır 258-280); `sector_package_lifecycle` onu `_require_actor` adıyla ALIR (satır 37) ve
+kuralın SAHİBİ yaşam döngüsüdür. Tanımın yaprak modülde durmasının sebebi ölçülmüş bir
+DÖNGÜdür: `log_package_event` dalı da aynı kapıyı kullanır ve ters yönde bir import
+`ImportError` ile düşer. Eski metin tanımı yaşam döngüsü modülünde ve satır 147-150'de
+gösteriyordu; **davranış ve aşağıdaki import biçimi DEĞİŞMEDİ** —
+`isinstance(actor, str)` değilse ya da
 `actor.strip()` boşsa `ValueError("actor zorunlu — sahipsiz yaşam döngüsü işlemi yazılmaz")`
 fırlatır, aksi hâlde **kırpılmış** kimliği döner. `runs.approve_incident_rollback` ve
 `runs.attest_readiness` (R9) **bu kapıyı kullanır**; `runs.py` onu açıkça alır:
@@ -2649,14 +2691,44 @@ yarışın ÇIKTISININ harcanmasını engeller.
    olay sessizce yeni üyelikle devam ETMEZ. Kurtarma yolu tektir ve elle-müdahale
    gerektirir; sistem kendiliğinden yeniden mühürlemez.
 
-**Ayak (d) — onaylanmış satırın kimlik/hedef alanları DEĞİŞMEZ (tetikleyici).** Mekanizma
-032'nin `sector_research_artifacts_append_only` tetikleyicisinin aynısıdır (ölçüldü:
-`032_sector_packages.sql`'de `BEFORE UPDATE OR DELETE ... FOR EACH ROW EXECUTE FUNCTION` deseni
-`032_sector_packages.sql` satır 49-51'de zaten kullanılıyor):
+**Ayak (d) — onaylanmış satırın kimlik/hedef alanları DEĞİŞMEZ (tetikleyici).**
+
+> **REVİZYON R-B (2026-09-08) — düzyazı ile bağlayıcı SQL bloğu ÇELİŞİYORDU; SQL BAĞLAR.**
+> Eski düzyazı mekanizmayı *"032'nin `sector_research_artifacts_append_only` tetikleyicisinin
+> aynısı"* diye tarif edip `BEFORE UPDATE OR DELETE` desenini gösteriyordu; hemen altındaki
+> bağlayıcı SQL bloğu ise `BEFORE UPDATE` diyordu. **Taze ölçümler (2026-09-08):**
+> **(1)** o desen `032_sector_packages.sql` **satır 187-188**'dedir — eski metnin gösterdiği
+> 49-51 bir tetikleyici değil, fonksiyon GÖVDESİDİR; **(2)** 032 İKİ deseni birden taşır:
+> salt-ekleme `BEFORE UPDATE OR DELETE` (187-188) ve alan-kilitleyen
+> `sectors_reject_reparenting BEFORE UPDATE` (310-311); **(3)** hüküm ARTIK UYGULANMIŞTIR —
+> `shared/db/migrations/036_package_runs.sql` tetikleyiciyi
+> `BEFORE UPDATE ON social.package_rollback_plans` olarak kuruyor (kanonik manifest satır 122).
+>
+> **Karar: SQL bloğu bağlar — `BEFORE UPDATE`.** Salt-ekleme analojisi zaten YANLIŞTI: o desen
+> HER `UPDATE`i reddeder, oysa burada `durum` · `reason` · `onay_*` · `kanit_jetonu_*`
+> onaydan SONRA yazılabilir KALMAK ZORUNDADIR (yeniden mühürleme yolu). Doğru emsal
+> `sectors_reject_reparenting`'tir. Düzeltilen düzyazıdır; SQL bloğu DEĞİŞMEDİ ve uygulanmış
+> 036 ile hizalı kaldı.
+>
+> **AÇIK KALAN — dürüst etiket: çözülmedi, evi var (Task 8). "Ele alındı" DEĞİL.**
+> `BEFORE UPDATE` yalnız UPDATE'i kapılar: veri katmanında onaylanmış bir satır bugün hâlâ
+> **hard DELETE ile silinebilir**. **Ölçüldü (2026-09-08):** depoda `package_rollback_plans`a
+> değen tek bir üretim Python yolu YOK (yalnız migration ve testler) ve 036'da hiçbir
+> DELETE/TRUNCATE tetikleyicisi yok — bugün erişilebilir bir kayıp yolu YOKTUR.
+> **Kararı Task 8 verir**, çünkü soruyu ancak orası doğurur: `amend_rollback_plan` onaylanmış
+> bir satırı olay üyeliğinden çıkarabiliyorsa, çıkarmanın hard DELETE mi yoksa DURUM
+> değişikliği mi olduğu orada belirlenir. **Bağlanan sınır:** hard DELETE tasarlanırsa
+> tetikleyici AYNI turda bir DELETE koluna genişletilir (`TG_OP` ayrımıyla — eski gövde `NEW`'i
+> koşulsuz okur, DELETE'te `NEW` NULL'dur ve gövde her silmeyi yanlışlıkla reddederdi);
+> kanıt kaybı sessiz KALAMAZ.
 
 ```sql
 CREATE FUNCTION social.reject_approved_rollback_plan_mutation() RETURNS trigger AS $$
 BEGIN
+  IF OLD.onay_actor IS NOT NULL AND NEW.onay_actor IS NULL THEN
+    RAISE EXCEPTION 'onaylanmış geri alma planının onay mührü SİLİNEMEZ';
+  END IF;
+
   IF OLD.onay_actor IS NOT NULL AND (
        NEW.incident_id             IS DISTINCT FROM OLD.incident_id
     OR NEW.package_id              IS DISTINCT FROM OLD.package_id
@@ -2677,7 +2749,25 @@ CREATE TRIGGER package_rollback_plans_approved_immutable
 
 **Aşırı kilitleme YOK:** `durum` · `reason` · `onay_*` · `kanit_jetonu_*` kolonları
 onaydan SONRA da güncellenebilir — yürütücü onları yazar. Kilitlenen yalnız **neyin
-onaylandığını tanımlayan beş alandır.**
+onaylandığını tanımlayan beş alandır** ve (R-B) satırın kendisinin silinmesidir.
+
+**Onay mührünün yüklemi — AÇIKÇA BEYAN EDİLİR (revizyon R-C, 2026-09-08).** Üç onay kolonu
+üzerinde ÜÇ geçiş vardır; üçünün de davranışı burada YAZILIDIR, okuyucu çıkarım YAPMAZ:
+
+| geçiş | izin | nerede bağlanır |
+|---|---|---|
+| BOŞ → DOLU (ilk onay) | **ZORUNLU YOL** — üçü birlikte yazılır | `approve_incident_rollback`; `..._onay_butun` CHECK'i (0,3) |
+| DOLU → DOLU (yeniden mühürleme) | **BİLEREK AÇIK** — kapsam değişince ZORUNLU | A3; tetikleyici `onay_*`'ı kilitlemez |
+| DOLU → BOŞ (mühür silme) | **REDDEDİLİR** | tetikleyicinin BİRİNCİ kolu (yukarıdaki SQL; uygulanmış hâli `036_package_runs.sql` satır 190-199) |
+
+**Üçüncü satırın gerekçesi ÖLÇÜLDÜ (2026-09-07, Task 6 yazımı sırasında) ve bu metin ondan
+GERİDE kalmıştı — şimdi hizalandı.** Kilit `OLD.onay_actor IS NOT NULL` yüklemine dayanır;
+onay üçlüsü birlikte NULL yapılabilseydi değişmezlik **İKİ ADIMDA** atlatılırdı
+(mührü temizle → kimlik/hedef alanını değiştir → yeniden mühürle) ve `num_nonnulls ∈ {0,3}`
+CHECK'i buna İZİN VERİRDİ. Ölçülen zincir `target_version`'ı 3'ten 99'a taşıyordu.
+Kapanan yalnız **dolu → BOŞ** geçişidir; yeniden mühürleme açık kalır.
+**Yanlışlıkla verilmiş onayın düzeltme yolu:** kapsam değiştiyse YENİDEN MÜHÜRLE (üçlü dolu
+kalır); hedef değişecekse YENİ bir plan satırı yaz — mührü silmek yol DEĞİLDİR.
 
 **Gerekçe — kanonik kayıt seçeneği C'yi zaten eliyor.** Spec girdisi satır 1409 geri alma
 kararını *"yöneticiye/operatöre"* verir ve satır 1977 aktivasyon/geri alma olayının
@@ -2691,9 +2781,12 @@ zorunda kalır — kanıt kurulumu artık tek satırdan atomik değildir; (b) ku
 yaşam döngüsü (tüketim, budama) onay kaydının yaşam döngüsünden farklıdır ve onayı bir
 temizlik işi sessizce yok edebilir. Onay, onayladığı planın yanında durur.
 
-**Maliyet ölçüldü ve SIFIRA yakın:** Task 6 henüz uygulanmadı (migration 036 yazılmadı,
-ölçüldü — `shared/db/migrations/` en yüksek numara 034). İki nullable kolon + bir CHECK
-şimdi ücretsizdir; karar Task 6'dan SONRA verilseydi migration 037 gerekirdi.
+**Maliyet ölçüldü ve SIFIRA yakın — ölçüm TARİHLİDİR (2026-08-30):** o gün Task 6 henüz
+uygulanmamıştı (migration 036 yazılmamıştı; `shared/db/migrations/` en yüksek numara 034).
+İki nullable kolon + bir CHECK o an ücretsizdi; karar Task 6'dan SONRA verilseydi migration
+037 gerekirdi. **Bugün geçerli değildir:** `036_package_runs.sql` yazıldı (ölçüldü
+2026-09-08) ve bu kolonları taşıyor — yani karar zamanında alınmış, bedel gerçekten
+doğmamıştır. Buradan sonraki şema değişiklikleri 037 ister.
 
 **Granülerlik — onay OLAY düzeyindedir, paket düzeyinde DEĞİL.** K-145 bir kural sürümünün
 etkilediği TÜM paketleri geri alır; paket başına ayrı onay istemek tek operatörlü işletimde
@@ -2714,7 +2807,8 @@ async def approve_incident_rollback(db, *, incident_id: str, actor: str) -> int:
     - **İLK İŞ: `await _lock_incident(db, incident_id)`** (A1(b), yol #2) — `require_actor`
       çağrısından hemen sonra, HİÇBİR `durum` ya da kapsam okumasından ÖNCE.
     - `actor` **Plan 1'in kanonik kapısından** geçer: `require_actor` (yani
-      `sector_package_lifecycle._require_actor`, satır 147-150). Boş/whitespace/`str`
+      `sector_package_lifecycle._require_actor`; TANIM `package_events.require_actor`,
+      satır 258-280 — revizyon R-D). Boş/whitespace/`str`
       olmayan kimlikte `ValueError` fırlar ve **HİÇBİR satır damgalanmaz** (fail-closed;
       kısmi damgalama YOK — tek işlem).
     - `durum='bekliyor'` OLMAYAN satırlar damgalanmaz (tamamlanmış/hatalı/hedefsiz iş

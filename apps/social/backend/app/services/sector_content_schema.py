@@ -8,7 +8,7 @@ değişip diğeri kalırdı — K-01b'de kapatılan yazım/okuma ayrışmasını
 
 Kural daha önce `sector_packages` içinde yaşıyordu ve `identity` oradan import ediyordu;
 bu, `identity`'nin bir Plan 1 modülüne bağlanması demekti. Plan 2 arayüz eki
-(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1476-1477)
+(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1509-1510 — 2026-09-08 revizyonundan sonra)
 bunu açıkça yasaklar: *"`identity.py` hiçbir Plan 1 modülünü ve hiçbir DB yüzeyini
 IMPORT ETMEZ"*. Çözüm kopya DEĞİL, ortak yapraktır: kural buraya taşındı, iki taraf da
 buradan tüketir.

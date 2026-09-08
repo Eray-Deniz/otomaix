@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-07
+last-touched: 2026-09-08
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -14,9 +14,11 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-6 indi. Checkpoint 1, 2 ve **5** hakem
+Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-7 indi. Checkpoint 1, 2 ve **5** hakem
 `approve`'uyla kapandı; checkpoint 3 ve 4 koştu ama `approve` ALMADAN kapatıldı — **ikisinin
-aralığı da checkpoint 5'in tabanına dâhildi ve artık incelendi.** Sıradaki iş **Task 7**.
+aralığı da checkpoint 5'in tabanına dâhildi ve artık incelendi.** Checkpoint 6 override ile
+kapandı. Sıradaki iş **Task 8** (koşu ve artefakt servisi); dispatch'inin önündeki dört
+kalemlik karar kapısı 2026-09-08'de kapandı (aşağıda).
 
 **Onay tarihçesi (değişmez kayıt, silinmez):** plan onayı hakem zinciriyle değil **Eray'ın
 risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenmemişti.
@@ -757,17 +759,50 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   ve migration'ını F1 eşli yükümlülüğü altında sahipleniyor.
   Dürüst etiket: *çözülmedi; evi ve adımı var.*
 
+## Arayüz eki revizyonu (2026-09-08) — Task 8 karar kapısı KAPANDI
+
+Task 8 dispatch'inin önünde dört kalemlik bir karar kapısı vardı (hepsi ekin metnine aitti);
+dördü de ölçülerek kapatıldı ve ek revize edildi. **Hiçbiri yeni kapsam açmadı.**
+
+- **R-A — hüküm (a)'nın ad kümesi.** Eski hüküm "kullanılan TEK ad `identity.canonical_sha`"
+  diyordu. Ölçüldü: `sector_package_lifecycle.py` `identity`den İKİ ad kullanıyor
+  (`validate_decision_log` · `check_unit_integrity`) ve `canonical_sha`'yı HİÇ çağırmıyor —
+  645 satırda tek hash hesabı yok. Sebep meşru: Task 3'ün şema kapısı `insert_draft` içinde
+  koşar, kuralın ikinci kopyası yazılamaz. **Karar: ad sayısı değil KENAR bağlanır** — tek
+  import, MODÜL biçiminde, hedef YAPRAK, başka `sector_pipeline` modülü yok; kullanılabilir
+  ad kümesi `identity`nin ÜRETİLMİŞ public yüzeyi. **Kapısı yazıldı** (elle liste YOK):
+  `test_lifecycle_uses_only_identitys_public_surface` + ayırt edicilik kolu
+  `test_identity_name_gate_rejects_a_name_outside_the_surface`.
+- **R-B — düzyazı ↔ SQL çelişkisi.** Yukarıda Open Problems'ta.
+- **R-C — onay mührünün yüklemi metinde YAZILI DEĞİLDİ.** Kod ekten öndeydi: 036 dolu → BOŞ
+  geçişini REDDEDİYOR (satır 190-199), çünkü mühür silinebilseydi değişmezlik İKİ ADIMDA
+  atlatılırdı (temizle → hedefi değiştir → yeniden mühürle) ve `num_nonnulls ∈ {0,3}` CHECK'i
+  buna izin verirdi (ölçülen zincir `target_version`'ı 3'ten 99'a taşıyordu). Üç geçişin
+  üçü de artık ekte tablo hâlinde yazılı; yeniden mühürleme BİLEREK açık kalıyor.
+- **R-D — aktör kapısının tanım yeri.** Ek üç yerde tanımı `sector_package_lifecycle`
+  satır 147-150'de gösteriyordu. Ölçüldü: o ad bir YENİDEN-DIŞAVURUMDUR; tanım
+  `package_events.require_actor`tadır (satır 258-280). Sebep ölçülmüş bir DÖNGÜdür.
+  Import biçimi ve davranış DEĞİŞMEDİ — yalnız yanlış adres düzeltildi.
+
+**Bu revizyonun sınırı — dürüst etiket:** dördünü de **bağımsız hakem GÖRMEDİ**; kontrolör
+kararıyla yazıldılar. Evleri var: final incelemenin tabanı `a806e29`.
+
 - **Yedek etiket `backup/pre-footer-fix-20260830` süresiz durmaz.** Silinme koşulu: dal
   main'e merge edildiğinde VEYA final inceleme temiz geçtiğinde. O ana kadar commit etiketi
   yeniden yazımının geri dönüş yolu.
 
-- **Ekin düzyazısı ile bağlayıcı SQL bloğu ÇELİŞİYOR — ÇÖZÜLMEDİ, evi var (Task 8).**
-  Ayak (d) düzyazıda 032'nin `BEFORE UPDATE OR DELETE` desenine atıf yapıyor, SQL bloğu
-  `BEFORE UPDATE` diyor. Sonuç: onaylanmış bir geri alma planı satırı SİLİNEBİLİR. Bugün
-  zararsız (ölçüldü: hiçbir üretim yolu silmiyor), ama çelişkinin kendisi ekte duruyor ve
-  kararı tasarım katmanı verir. **Tetik: Task 8** — üyeliği değiştiren `amend_rollback_plan`
-  orada yazılır ve "onaylı satır çıkarılabilir mi" sorusunun cevabı orada belirlenir.
-  Dürüst etiket: *çözülmedi + evi var + tarihi Task 8'e bağlı. "Ele alındı" DEĞİL.*
+- **Ekin düzyazısı ile bağlayıcı SQL bloğu ÇELİŞİYORDU — ÇELİŞKİ ÇÖZÜLDÜ 2026-09-08
+  (revizyon R-B); ARTIK KALAN dar bir açık ve evi Task 8.** Karar: **SQL bloğu bağlar
+  (`BEFORE UPDATE`)** — uygulanmış `036_package_runs.sql` de öyle kuruyor (manifest satır
+  122) ve salt-ekleme analojisi zaten yanlıştı (o desen HER `UPDATE`i reddeder, oysa
+  `durum`/`onay_*`/`kanit_jetonu_*` yazılabilir kalmak zorunda). Düzyazının yanlış emsali ve
+  yanlış satır alıntısı (032 "49-51" → gerçekte 187-188) düzeltildi.
+  **Kalan açık — dürüst etiket: çözülmedi, evi var (Task 8).** `BEFORE UPDATE` yalnız
+  UPDATE'i kapılar; onaylanmış bir satır veri katmanında hâlâ hard DELETE ile silinebilir.
+  Ölçüldü (2026-09-08): `package_rollback_plans`a değen üretim Python yolu YOK ve 036'da
+  DELETE/TRUNCATE tetikleyicisi yok — bugün erişilebilir bir kayıp yolu yok. Kararı Task 8
+  verir (`amend_rollback_plan` çıkarmayı hard DELETE mi DURUM değişikliği mi yapacak);
+  hard DELETE seçilirse tetikleyici AYNI turda `TG_OP` ayrımlı bir DELETE koluna genişler.
 - **F7 düzeltmesi bağımsız hakem GÖRMEDİ (kabul edilmiş risk, 2026-09-06 Eray kararı).**
   Üçüncü Codex turu açılmadı. Kapısı adlandırıldı: sıradaki checkpoint tabanı `a6e053f`
   kaldığı için bu turun yedi commit'ini kendiliğinden kapsar.

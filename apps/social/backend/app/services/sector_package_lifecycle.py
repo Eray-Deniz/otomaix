@@ -10,7 +10,7 @@ statü uyuşmuyorsa ya da sektör kilidi kaymışsa geçiş YAPILMAZ ve istisna 
 okuyucuya göre değişir; ayrı dosyada her modülün tek bir cevabı vardır.
 
 **Plan 2'ye TEK bağımlılık kenarı.** Sınırı Plan 2 arayüz eki bağlar
-(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1467-1480):
+(`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1494-1513 — 2026-09-08 revizyonundan sonra):
 kenar TEKTİR ve yaprak bir modüle gider. İzin verilen biçim MODÜL importudur —
 `from app.services.sector_pipeline import identity` — ve `sector_pipeline` altından
 BAŞKA hiçbir modül import edilmez. Kenar tek yönlüdür: `identity` bu modülü import
@@ -18,13 +18,15 @@ ETMEZ ve etmeyecektir (döngü olurdu); `identity` ortak yaprak `sector_content_
 dışında hiçbir `app` modülünü import etmez. İkisinin de kapısı yapısal testtir
 (`tests/test_plan2_interface_contract.py`, "Madde 9").
 
-**DÜRÜST ETİKET — kapanmayan ayak.** Ekin (a) hükmü "kullanılan TEK ad
-`identity.canonical_sha`" der. Burada import BİÇİMİ o hükme çevrildi, ama AD KÜMESİ
-hâlâ geniş: bu modül `identity.validate_decision_log` ve `identity.check_unit_integrity`
-adlarını da gerçekten kullanıyor (Task 3'ün şema kapısı `insert_draft` içinde koşar ve
-kuralın ikinci bir kopyası YAZILMAZ). Yani (a)'nın ad-kümesi ayağı KAPANMADI; kapanması
-ekin hükmünün revizyonunu gerektirir ve bu tasarım katmanının işidir — burada sessizce
-genişletilmez.
+**AYAK (a) KAPANDI — ek REVİZE EDİLDİ (2026-09-08, revizyon R-A).** Eski hüküm
+"kullanılan TEK ad `identity.canonical_sha`" diyordu ve bu modül gerçekte
+`identity.validate_decision_log` ile `identity.check_unit_integrity` adlarını
+kullanıyordu (Task 3'ün şema kapısı `insert_draft` içinde koşar; kuralın İKİNCİ BİR
+KOPYASI yazılamaz). Ölçüldü: bu modül `canonical_sha`'yı HİÇ çağırmıyor — yani hüküm
+dayandığı varsayım yüzünden de kodla uyumsuzdu. Revizyondan sonra bağlayan invaryant AD
+SAYISI değil KENARIN kendisidir: tek import, MODÜL biçiminde, hedefi YAPRAK, başka
+`sector_pipeline` modülü YOK. Kullanılabilir ad kümesi `identity`nin ÜRETİLMİŞ public
+yüzeyidir; elle sayılmaz.
 """
 
 from __future__ import annotations

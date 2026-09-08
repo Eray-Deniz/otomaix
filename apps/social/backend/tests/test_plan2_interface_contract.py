@@ -871,20 +871,22 @@ def test_video_kodlar_delivers_two_pools():
 
 # ─── Madde 9: Plan 1 ↔ Plan 2 bağımlılık sınırı (yapısal kapı) ──────────────
 #
-# Ek (`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1467-1480)
-# sınırı harfiyen bağlar ve kapısının "yapısal test" olduğunu söyler. Kapı buradadır.
+# Ek (`docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md`, satır 1494-1513 —
+# 2026-09-08 revizyonundan sonra) sınırı harfiyen bağlar ve kapısının "yapısal test"
+# olduğunu söyler. Kapı buradadır.
 #
 # Test ELLE SEÇİLMİŞ bir örneğe bakmaz: kaynağı `ast` ile ayrıştırır ve modülün TÜM
 # import düğümlerinin ÜRETİLMİŞ listesini kapalı bir izin kümesiyle karşılaştırır.
 # Tek bir yasak adı aramak, bir sonraki turda ikinci yasak adı davet ederdi.
 #
-# DÜRÜST ETİKET — kapanmayan ayak. Hüküm (a) "kullanılan TEK ad
-# `identity.canonical_sha`" der. Bu test import BİÇİMİNİ (modül import edilir, ad
-# değil) ve hüküm (c)'yi (başka `sector_pipeline` modülü YOK) kapatır; hüküm (a)'nın
-# AD KÜMESİ ayağını KAPATMAZ: `sector_package_lifecycle` bugün gerçekten
-# `identity.validate_decision_log` ve `identity.check_unit_integrity`'yi de çağırıyor
-# (Task 3'ün şema kapısı orada koşar). Ad kümesinin daraltılması ekin hükmünün
-# revizyonunu gerektirir — tasarım katmanının işidir, burada sessizce genişletilmez.
+# AD KÜMESİ AYAĞI ARTIK KAPALI (2026-09-08, ekin R-A revizyonu). Eski hüküm (a)
+# "kullanılan TEK ad `identity.canonical_sha`" diyordu ve kodla uyumsuzdu: bu modül
+# `identity.validate_decision_log` ile `identity.check_unit_integrity`'yi çağırıyor
+# (Task 3'ün şema kapısı orada koşar) ve `canonical_sha`'yı HİÇ çağırmıyor. Revizyon
+# ad SAYISINI değil KENARI bağladı; kullanılabilir ad kümesi `identity`nin ÜRETİLMİŞ
+# public yüzeyidir. Kapı aşağıda: kullanılan adlar ELLE SAYILMAZ, `dir(identity)`den
+# türetilen kümeye karşı sınanır — o yüzey büyüdüğünde test kendiliğinden büyür,
+# elle bakım İSTEMEZ.
 
 import ast
 from pathlib import Path
@@ -1035,6 +1037,65 @@ def test_lifecycle_touches_plan2_through_the_identity_module_only():
     kenarlar = _kenarlar(Path(_lifecycle_module.__file__))
     pipeline = sorted(k for k in kenarlar if "sector_pipeline" in k)
     assert pipeline == _LIFECYCLE_IZINLI_PIPELINE_KENARLARI, pipeline
+
+
+def _identity_nitelikleri(kaynak: str) -> tuple[str, ...]:
+    """Kaynakta geçen `identity.<ad>` niteliklerinin ÜRETİLMİŞ listesi.
+
+    `ast` ile toplanır, metin araması YAPILMAZ: `grep` docstring'deki bir örneği de
+    kullanım sanardı ve kapı kendi belgesini ölçmeye başlardı.
+    """
+    adlar: list[str] = []
+    for node in ast.walk(ast.parse(kaynak)):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "identity"
+        ):
+            adlar.append(node.attr)
+    return tuple(dict.fromkeys(adlar))
+
+
+def test_lifecycle_uses_only_identitys_public_surface():
+    """Hüküm (a)'nın AD KÜMESİ ayağı (ekin R-A revizyonu, 2026-09-08).
+
+    İzinli küme ELLE YAZILMAZ: `identity`nin altçizgisiz yüzeyinden ÜRETİLİR. Elle
+    yazılsaydı yaprak büyüdüğünde liste bayatlar ve kapı ya yanlış düşer ya da
+    gerçekte olmayan bir daralmayı iddia ederdi.
+    """
+    yuzey = {ad for ad in dir(identity) if not ad.startswith("_")}
+    kullanilan = _identity_nitelikleri(
+        Path(_lifecycle_module.__file__).read_text(encoding="utf-8")
+    )
+
+    # BOŞ-KÜME KONTROL KOLU: hiç ad bulunmadıysa kapı "hepsi izinli" diye SESSİZCE
+    # geçerdi. Modül `identity`yi import ediyorsa en az bir nitelik kullanmalıdır.
+    assert kullanilan, (
+        "kapı boş kümeyle geçti — `identity.<ad>` niteliği hiç bulunamadı; "
+        "çözümleyici kırık ya da import artık kullanılmıyor"
+    )
+
+    kacak = sorted(ad for ad in kullanilan if ad not in yuzey)
+    assert kacak == [], (
+        f"`identity`nin public yüzeyinde OLMAYAN ad(lar) kullanılıyor: {kacak} — "
+        f"yüzey: {sorted(yuzey)}"
+    )
+
+
+def test_identity_name_gate_rejects_a_name_outside_the_surface():
+    """Kapı AYIRT EDİCİ mi: yüzeyde olmayan bir ad enjekte edilince DÜŞMELİ.
+
+    Mutasyon BELLEKTE yapılır, gerçek dosyaya dokunulmaz.
+    """
+    yuzey = {ad for ad in dir(identity) if not ad.startswith("_")}
+    uydurma = "bu_ad_identity_yuzeyinde_yok"
+    assert uydurma not in yuzey
+
+    bozuk = _identity_nitelikleri(
+        f'"""bellek ici mutasyon."""\nidentity.{uydurma}(1)\n'
+    )
+    assert bozuk == (uydurma,)
+    assert [ad for ad in bozuk if ad not in yuzey] == [uydurma]
 
 
 # ─── Ayırt edicilik: ÜRETİLMİŞ import biçimi matrisi ────────────────────────
