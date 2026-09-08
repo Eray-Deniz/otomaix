@@ -2,10 +2,12 @@
 
 Ölçülen sözleşme dört başlıkta toplanır:
 
-* **K-137 körlük.** Pakete yazılan HİÇBİR baytta araç kimliği bulunmaz. Beklenen
-  araç adı kümesi burada bulunan örneklerden DEĞİL, kavramdan yazılır (bir yapay
-  zekâ asistanının satıcı/ürün adı) ve ayrıca **pinlenmiş sözleşmelerden ölçülen**
-  adlarla bağımsız olarak sınanır — iki kaynak birbirinin yerine geçmez.
+* **K-137 körlük — ÖLÇÜLEN vaat.** Pakete yazılan hiçbir bayt, PİNLENMİŞ
+  sözleşmelerde ya da YAPILANDIRILMIŞ `ARAC_KIMLIKLERI` kümesinde adı geçen bir
+  araç kimliği taşımaz; tarama kümesi elle yazılmaz, bu iki kaynaktan TÜRETİLİR.
+  "Hiçbir araç kimliği yok" bundan TÜREMEZ — o semantik olumsuzlamadır ve
+  serbest metinden kanıtlanamaz. Kimliğin pakete hiç yazılmadığı YAPISAL ayak
+  ayrıca, maskelemeye bağışık opak sentinellerle sınanır.
 * **K-79 bayt-özdeşlik.** İki denetçinin kopyası bayt bayt aynıdır; `PacketRef`
   eşitsiz iki özet TAŞIYAMAZ.
 * **K-81 biçim kapısı.** Beş bölüm, sözleşmedeki SIRAYLA. Anahtarların kendisi
@@ -25,6 +27,7 @@ import dataclasses
 import hashlib
 import json
 import re
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -44,6 +47,11 @@ ARASTIRMA_DEPOSU = Path("/root/otomaix-sosyal-medya-arastirmasi")
 # KAVRAM: "araç kimliği" = bir yapay zekâ asistanının SATICI ya da ÜRÜN/model
 # ailesi adı. Küme bu tanımdan yazılır; depoda rastlanan örneklerden TÜRETİLMEZ
 # (öyle olsaydı tarama, zaten bulunmuş olanın tekrar kontrolü olurdu).
+#
+# Bu demet yalnız `auditors.ARAC_KIMLIKLERI`'nin AYNASIdır (modül sabiti sessizce
+# değişirse `test_arac_kimlikleri_cover_the_pinned_contract_tool_names` düşer).
+# Paket TARAMASININ kümesi bu değildir — o `TURETILEN_KIMLIKLER`'dir ve pin
+# manifestinden + modül sabitinden TÜRETİLİR (elle uzatılmaz).
 #
 # Bilinçli DIŞARIDA (ölçülmüş gerekçeyle): "Google" tek başına bir asistan
 # kimliği değil, bir şirket/arama motoru adıdır ve araştırma çıktısında meşru
@@ -115,16 +123,13 @@ def test_bolum_anahtarlari_has_five_entries() -> None:
     assert len(auditors.BOLUM_ANAHTARLARI) == 5
 
 
-def test_arac_kimlikleri_cover_the_pinned_contract_tool_names() -> None:
-    """Kavramsal küme ile modül sabiti aynı; ölçülen adlar İKİSİ tarafından da kapsanır.
+def _pinde_adi_gecen_araclar() -> tuple[str, ...]:
+    """Pin manifestinin adlandırdığı sözleşmelerden ÖLÇÜLEN araç kimlikleri.
 
-    Ölçülen adlar iki pinli sözleşmeden gelir: `_SABLON.md` üç araştırma aracını,
-    `hakem-denetci-gorevi.md` iki denetçi aracını ADIYLA anar.
+    `_SABLON.md` üç araştırma aracını, `hakem-denetci-gorevi.md` iki denetçi
+    aracını ADIYLA anar. Küme burada elle yazılmaz; sözleşme yeni bir aracı
+    adıyla anarsa tarama onu KENDİLİĞİNDEN kapsar.
     """
-    assert tuple(sorted(auditors.ARAC_KIMLIKLERI)) == tuple(
-        sorted(KAVRAMSAL_ARAC_ADLARI)
-    )
-
     sablon = _pinli("_SABLON.md")
     arastirma_blok = re.search(r"Üç araştırma aracına da \((.*?)\)", sablon)
     assert arastirma_blok is not None, "_SABLON.md üç aracı adıyla anmıyor"
@@ -136,7 +141,23 @@ def test_arac_kimlikleri_cover_the_pinned_contract_tool_names() -> None:
     olculen += [ad.strip() for ad in denetci_blok.group(1).split(" ve ")]
 
     assert olculen, "ölçüm boş küme döndü — tarama hiçbir şey kanıtlamaz"
-    for ad in olculen:
+    return tuple(olculen)
+
+
+# Tarama kümesi TÜRETİLİR (elle yazılmaz): pin manifestinde adı geçen
+# sözleşmelerden ölçülen adlar + `auditors.ARAC_KIMLIKLERI` yapılandırılmış
+# kaynak kümesi. Parametrize edilebilmesi için toplama anında hesaplanır.
+TURETILEN_KIMLIKLER = tuple(
+    sorted(set(_pinde_adi_gecen_araclar()) | set(auditors.ARAC_KIMLIKLERI))
+)
+
+
+def test_arac_kimlikleri_cover_the_pinned_contract_tool_names() -> None:
+    """Kavramsal küme ile modül sabiti aynı; ölçülen adlar İKİSİ tarafından da kapsanır."""
+    assert tuple(sorted(auditors.ARAC_KIMLIKLERI)) == tuple(
+        sorted(KAVRAMSAL_ARAC_ADLARI)
+    )
+    for ad in _pinde_adi_gecen_araclar():
         assert auditors.ARAC_MASKESI in auditors.anonymize(
             f"kaynak: {ad} tarafından üretildi"
         ), f"pinli sözleşmede ölçülen araç adı maskelenmiyor: {ad!r}"
@@ -203,7 +224,13 @@ def _rapor_metni(
     envanter: str | None = None,
     url: str | None = None,
     atlanan_bolum: int | None = None,
+    takas: tuple[int, int] | None = None,
 ) -> str:
+    """Rapor metni kurucusu.
+
+    `takas` İKİ TAM bölüm bloğunu yer değiştirir: başlıklar, numaralandırma,
+    gövdeler ve envanter geçerliliği KORUNUR — sapan tek şey bölüm SIRASIDIR.
+    """
     govdeler = {
         1: "| no | alan | iddia | kaynaklar | sınıf | bayraklar | öneri | gerekçe |\n"
         "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
@@ -218,6 +245,9 @@ def _rapor_metni(
         if sira == atlanan_bolum:
             continue
         parcalar.append(f"{sira}) {baslik}\n{govdeler[sira]}")
+    if takas is not None:
+        i, j = (n - 1 for n in takas)
+        parcalar[i], parcalar[j] = parcalar[j], parcalar[i]
     return "\n\n".join(parcalar) + "\n"
 
 
@@ -277,26 +307,43 @@ MASKE_BAGISIK_KIMLIKLER = (
 )
 
 
+KAYNAK_METINLERI = (
+    "KAYNAK metni: ChatGPT bu bölümü üretti.",
+    "Gemini çıktısı — takvim temaları.",
+    "Claude Code notu: cta kalıpları.",
+)
+
+
+def _rapor(kaynak_adi: str, kaynak_metni: str, **sapma) -> bd.DoctorReport:
+    """`brief_doctor.run`'ın ürettiği raporun aynısı — özet DAHİL.
+
+    `icerik_ozeti` burada da `identity.canonical_sha` ile üretilir; ikinci bir
+    hash kuralı yazılmaz. `sapma` ile alan bilerek bozulabilir (negatif vaka).
+    """
+    alanlar = {
+        "sonuc": bd.SONUC_GECTI,
+        "notlar": (),
+        "elemeler": (),
+        "kaynak_adi": kaynak_adi,
+        "icerik_ozeti": identity.canonical_sha(kaynak_metni),
+    }
+    alanlar.update(sapma)
+    return bd.DoctorReport(**alanlar)
+
+
 def _paket(
     tmp_path: Path,
     *,
     kaynak_sayisi: int = 3,
     kimlikler: tuple[str, ...] = ARAC_ADLI_KIMLIKLER,
+    raporlar: list[bd.DoctorReport] | None = None,
 ):
-    kaynaklar = [
-        "KAYNAK metni: ChatGPT bu bölümü üretti.",
-        "Gemini çıktısı — takvim temaları.",
-        "Claude Code notu: cta kalıpları.",
-    ][:kaynak_sayisi]
-    raporlar = [
-        bd.DoctorReport(
-            sonuc=bd.SONUC_GECTI,
-            notlar=(),
-            elemeler=(),
-            kaynak_adi=ad,
-        )
-        for ad in kimlikler[:kaynak_sayisi]
-    ]
+    kaynaklar = list(KAYNAK_METINLERI[:kaynak_sayisi])
+    if raporlar is None:
+        raporlar = [
+            _rapor(ad, metin)
+            for ad, metin in zip(kimlikler[:kaynak_sayisi], kaynaklar)
+        ]
     return auditors.build_packet(
         brief="Marka için sektör araştırması — ChatGPT'ye verilen metinle aynı.",
         sources=kaynaklar,
@@ -309,25 +356,47 @@ def _paket(
     )
 
 
-def test_packet_contains_no_tool_identity(tmp_path: Path) -> None:
-    """Yapısal garanti: pakete yazılan hiçbir baytta araç kimliği YOK."""
-    ref = _paket(tmp_path)
-    dosyalar = sorted(p for p in ref.kok.rglob("*") if p.is_file())
+@pytest.fixture(scope="module")
+def taranan_paket(tmp_path_factory: pytest.TempPathFactory):
+    """Kimlik taramasının tek paketi — parametrize edilen her ad aynı paketi görür."""
+    return _paket(tmp_path_factory.mktemp("kimlik-taramasi"))
+
+
+@pytest.mark.parametrize("kimlik", TURETILEN_KIMLIKLER)
+def test_packet_excludes_every_identity_named_by_pin_or_config(
+    taranan_paket, kimlik: str
+) -> None:
+    """Ölçülen vaat: PİNLENMİŞ sözleşmelerde ve YAPILANDIRILMIŞ kaynak kümesinde
+    adı geçen kimlikler paket içeriğine de dosya adlarına da GİRMEZ.
+
+    "Hiçbir araç kimliği geçmez" DEĞİL — o bir semantik olumsuzlamadır ve
+    serbest metinden kanıtlanamaz: elle yazılan liste ne kadar uzasa bir
+    sonraki satıcı adı (Amazon Q · Cursor · Manus …) hep dışarıda kalır. Bu
+    yüzden küme uzatılmaz, TÜRETİLİR — sözleşme yeni bir aracı adıyla anarsa
+    tarama onu kendiliğinden kapsar; kapsam sınırı da `ARAC_KIMLIKLERI`'nin
+    beyan ettiği kadardır.
+
+    Yapısal ayak (kaynak `kaynak_adi`'sı pakete HİÇ yazılmaz) bu testte DEĞİL,
+    maskelemeye bağışık opak sentinellerle
+    `test_packet_never_writes_the_source_identity`'de ölçülür.
+    """
+    dosyalar = sorted(p for p in taranan_paket.kok.rglob("*") if p.is_file())
     assert dosyalar, "paket boş — tarama hiçbir şey kanıtlamaz"
-
+    desen = re.compile(rf"(?<!\w){re.escape(kimlik)}(?!\w)", re.I)
     for dosya in dosyalar:
-        metin = dosya.read_text(encoding="utf-8")
-        for ad in KAVRAMSAL_ARAC_ADLARI:
-            assert not re.search(rf"(?<!\w){re.escape(ad)}(?!\w)", metin, re.I), (
-                f"{dosya.relative_to(ref.kok)} araç kimliği taşıyor: {ad!r}"
-            )
-        # Kaynak KİMLİKLERİ (brief-doctor `kaynak_adi`) pakete hiç yazılmaz.
-        for kimlik in ARAC_ADLI_KIMLIKLER:
-            assert kimlik not in metin
-        # Dosya adları da kör: yalnız KAYNAK-n.
-        assert not re.search(r"(?<!\w)(gemini|chatgpt|claude)", dosya.name, re.I)
+        goreli = dosya.relative_to(taranan_paket.kok)
+        assert not desen.search(dosya.read_text(encoding="utf-8")), (
+            f"{goreli} araç kimliği taşıyor: {kimlik!r}"
+        )
+        assert not desen.search(dosya.name), (
+            f"{goreli} dosya ADI araç kimliği taşıyor: {kimlik!r}"
+        )
 
-    ekler = {p.name for p in dosyalar}
+
+def test_packet_file_names_are_blind_positional_labels(tmp_path: Path) -> None:
+    """Pozitif kontrol: kör etiketler GERÇEKTEN yazılmış (boş kümeyi temiz okuma)."""
+    ref = _paket(tmp_path)
+    ekler = {p.name for p in ref.kok.rglob("*") if p.is_file()}
     assert {"EK-B-KAYNAK-1.md", "EK-C-KAYNAK-2.md", "EK-D-KAYNAK-3.md"} <= ekler
 
 
@@ -410,6 +479,50 @@ def test_packet_ref_mappings_are_read_only_and_unaliased(tmp_path: Path) -> None
     assert set(ikinci.unit_snapshot) == {UNIT_A, UNIT_B}
 
 
+@pytest.mark.parametrize(
+    "alan", ["kopyalar", "kopya_shalari", "unit_snapshot"]
+)
+def test_packet_ref_does_not_alias_the_caller_mapping(
+    tmp_path: Path, alan: str
+) -> None:
+    """ÜÇ eşlemenin HER BİRİ çağıranın sözlüğüyle takma ad paylaşmaz.
+
+    Alan başına AYRI mutasyon: tek alanı sınamak diğerlerini kapsamaz.
+    `kopya_shalari` için tehlike en somut hâlde — çağıran, bayt-özdeşlik kapısı
+    GEÇTİKTEN sonra bir özeti değiştirebilseydi `PacketRef` doğrulanmamış bir
+    eşitlik iddiası taşırdı.
+    """
+    ref = _paket(tmp_path)
+    cagiran = {
+        "kopyalar": dict(ref.kopyalar),
+        "kopya_shalari": dict(ref.kopya_shalari),
+        "unit_snapshot": _snapshot(UNIT_A, UNIT_B),
+    }
+    ikinci = auditors.PacketRef(
+        run_id=ref.run_id,
+        sector_id=ref.sector_id,
+        kok=ref.kok,
+        kopyalar=cagiran["kopyalar"],
+        kopya_shalari=cagiran["kopya_shalari"],
+        unit_snapshot=cagiran["unit_snapshot"],
+        unit_snapshot_sha=identity.canonical_sha(cagiran["unit_snapshot"]),
+    )
+    once = dict(getattr(ikinci, alan))
+
+    hedef = cagiran[alan]
+    anahtar = sorted(hedef)[0]
+    hedef[anahtar] = "SONRADAN DEĞİŞTİ"
+    hedef["SONRADAN EKLENDİ"] = "x"
+    del hedef[sorted(hedef)[-1]]
+
+    assert dict(getattr(ikinci, alan)) == once, (
+        f"PacketRef.{alan} çağıranın sözlüğüyle takma ad paylaşıyor — kapıdan "
+        "geçmiş değer yapımdan SONRA değiştirilebiliyor"
+    )
+    # `kopya_shalari` için invariant da ayakta kalır: özetler HÂLÂ eşit.
+    assert len(set(ikinci.kopya_shalari.values())) == 1
+
+
 def test_build_packet_stops_when_the_contract_pin_drifts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -419,6 +532,172 @@ def test_build_packet_stops_when_the_contract_pin_drifts(
     monkeypatch.setattr(auditors, "ARASTIRMA_DEPOSU_KOKU", sahte_depo)
     with pytest.raises(ContractDriftError):
         _paket(tmp_path / "paket")
+
+
+# ─── F1: konumsal eşleme ÖLÇÜLÜR (kaynak ↔ brief-doctor raporu) ────────────
+
+
+def test_build_packet_rejects_a_shifted_source_report_pairing(tmp_path: Path) -> None:
+    """Sıra kayarsa paket KURULMAZ — eşleme "ölçülemez" değil, ölçülür.
+
+    Kayma dışındaki HER kapı geçerli kalır: sayılar eşit (3 = 3) ve üç kimlik
+    tekil. Ölçülen tek sapma, hangi raporun hangi METNİ anlattığıdır; kanıt
+    `DoctorReport.icerik_ozeti`'dir (`brief_doctor.run` onu
+    `identity.canonical_sha(source_text)`'ten üretir).
+    """
+    raporlar = [
+        _rapor(ad, metin)
+        for ad, metin in zip(ARAC_ADLI_KIMLIKLER, KAYNAK_METINLERI)
+    ]
+    ters = [raporlar[1], raporlar[0], raporlar[2]]
+    # Kayan sıra dışındaki kapılar HÂLÂ geçerli — tek ölçülen sapma eşlemedir.
+    assert len(ters) == len(KAYNAK_METINLERI)
+    assert len({rapor.kanonik_kimlik for rapor in ters}) == 3
+
+    with pytest.raises(ValueError, match="EŞLEŞMİYOR"):
+        _paket(tmp_path / "kayan", raporlar=ters)
+
+
+def test_build_packet_rejects_a_doctor_report_without_a_content_digest(
+    tmp_path: Path,
+) -> None:
+    """Özetsiz rapor eşleme KANITI taşımaz — kör etiketin arkasına saklanamaz."""
+    raporlar = [
+        _rapor(ad, metin)
+        for ad, metin in zip(ARAC_ADLI_KIMLIKLER, KAYNAK_METINLERI)
+    ]
+    raporlar[1] = _rapor(
+        ARAC_ADLI_KIMLIKLER[1], KAYNAK_METINLERI[1], icerik_ozeti=""
+    )
+    with pytest.raises(ValueError, match="içerik özeti TAŞIMIYOR"):
+        _paket(tmp_path / "ozetsiz", raporlar=raporlar)
+
+
+def test_build_packet_accepts_a_correctly_paired_packet(tmp_path: Path) -> None:
+    """Pozitif kontrol: kapı hep-RED değil — doğru eşleşen paket KURULUR."""
+    ref = _paket(tmp_path)
+    assert ref.kok.is_dir()
+    assert set(ref.kopyalar) == set(auditors.DENETCI_ROLLERI)
+
+
+# ─── F2: pin kapısının doğruladığı baytlar paketlenir (TOCTOU) ──────────────
+
+
+PINLENEN_SOZLESMELER = (
+    "_SABLON.md",
+    "hakem-denetci-gorevi.md",
+    "hakem-sentez-gorevi.md",
+)
+
+
+def _git(repo: Path, *args: str) -> str:
+    """Sahte depoda git çalıştırır. Kurulum aracıdır — üretim kodu değil."""
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _sahte_pinli_depo(tmp_path: Path) -> tuple[Path, Path]:
+    """Pin kapısını GERÇEKTEN geçen sahte dış depo + eşleşen manifest.
+
+    Gerçek depo kullanılamaz: TOCTOU penceresini ölçmek için sözleşme dosyasını
+    doğrulama SONRASINDA değiştirmek gerekir ve pinli artefaktlara YAZILMAZ.
+    """
+    repo = tmp_path / "arastirma-deposu"
+    repo.mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", "master")
+    _git(repo, "config", "user.email", "test@otomaix")
+    _git(repo, "config", "user.name", "Test")
+    for ad in PINLENEN_SOZLESMELER:
+        (repo / ad).write_text(
+            f"# {ad}\n\nPİNLENMİŞ SÖZLEŞME GÖVDESİ\n", encoding="utf-8"
+        )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "sözleşme v2")
+
+    pin_path = tmp_path / "research-contracts.pin.json"
+    pin_path.write_text(
+        json.dumps(
+            {
+                "commit": _git(repo, "rev-parse", "HEAD"),
+                "files": {
+                    ad: hashlib.sha256((repo / ad).read_bytes()).hexdigest()
+                    for ad in PINLENEN_SOZLESMELER
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return repo, pin_path
+
+
+def test_packet_carries_the_bytes_the_pin_gate_verified(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sözleşme BİR KEZ okunur: doğrulanan bayt ile paketlenen bayt AYNIDIR.
+
+    Kurgu TOCTOU penceresini bilerek açar: pin kapısı döndükten HEMEN sonra
+    sözleşme dosyası diskte değişir. İkinci bir okuma yapan bir uygulama
+    pinlenmemiş talimatı pakete yazardı — ve iki kopya da AYNI yanlış baytı
+    taşıdığı için K-79 bayt-eşitliği bunu göstermezdi.
+    """
+    repo, pin_path = _sahte_pinli_depo(tmp_path / "dis")
+    monkeypatch.setattr(auditors, "ARASTIRMA_DEPOSU_KOKU", repo)
+    monkeypatch.setattr(auditors, "PIN_PATH", pin_path)
+
+    gorev = repo / auditors.GOREV_DOSYASI
+    dogrulanan = gorev.read_text(encoding="utf-8")
+    sizan = "# SIZAN TALİMAT\n\npinlenmemiş bayt\n"
+
+    gercek = auditors.contracts.require_pinned_text
+
+    def _yaris(*args, **kwargs):
+        metin = gercek(*args, **kwargs)
+        # Doğrulama BİTTİ; pencere burada açık.
+        gorev.write_text(sizan, encoding="utf-8")
+        return metin
+
+    monkeypatch.setattr(auditors.contracts, "require_pinned_text", _yaris)
+
+    ref = _paket(tmp_path / "paket")
+    for rol in auditors.DENETCI_ROLLERI:
+        paketlenen = (ref.kopyalar[rol] / "00-GOREV.md").read_text("utf-8")
+        assert "SIZAN" not in paketlenen, (
+            f"{rol} kopyası doğrulama SONRASI yazılan baytı taşıyor — sözleşme "
+            "ikinci kez okunmuş"
+        )
+        assert paketlenen == auditors.anonymize(dogrulanan)
+    # Yarış gerçekten koştu: disk hâlâ sızan içeriği taşıyor (kurgu boş değil).
+    assert gorev.read_text(encoding="utf-8") == sizan
+
+
+def test_pin_gate_stops_when_the_contract_file_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tek okumaya geçiş kapıyı ZAYIFLATMAZ: eksik sözleşme yine fail-closed."""
+    repo, pin_path = _sahte_pinli_depo(tmp_path / "dis")
+    monkeypatch.setattr(auditors, "ARASTIRMA_DEPOSU_KOKU", repo)
+    monkeypatch.setattr(auditors, "PIN_PATH", pin_path)
+    (repo / auditors.GOREV_DOSYASI).unlink()
+    with pytest.raises(ContractDriftError, match="sözleşme dosyası yok"):
+        _paket(tmp_path / "paket")
+
+
+def test_pin_gate_stops_when_the_contract_bytes_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Doğrulamadan ÖNCE değişen bayt: paket hiç kurulmaz (hash kapısı)."""
+    repo, pin_path = _sahte_pinli_depo(tmp_path / "dis")
+    monkeypatch.setattr(auditors, "ARASTIRMA_DEPOSU_KOKU", repo)
+    monkeypatch.setattr(auditors, "PIN_PATH", pin_path)
+    (repo / auditors.GOREV_DOSYASI).write_text("başka gövde\n", encoding="utf-8")
+    with pytest.raises(ContractDriftError, match="hash uyuşmuyor"):
+        _paket(tmp_path / "paket")
+    assert not (tmp_path / "paket").exists()
 
 
 def test_build_packet_refuses_to_overwrite_an_existing_packet(
@@ -449,6 +728,25 @@ def test_validate_report_requires_five_sections() -> None:
     assert not sonuc.gecerli
     assert sonuc.rapor is None
     assert any("YENİDEN DOĞRULAMA ENVANTERİ" in hata for hata in sonuc.errors)
+
+
+def test_validate_report_rejects_swapped_section_order() -> None:
+    """Bölüm SIRASI kapıdır — küme doğru olsa bile sıra sapması RED.
+
+    Takas iki TAM bloğu yer değiştirir: başlıklar, numaralandırma, gövdeler ve
+    envanterin kendi geçerliliği BOZULMAZ. Set karşılaştırmasına dönen bir
+    uygulama bu raporu geçerli sayardı; sıralı karşılaştırma saymaz.
+    """
+    sonuc = _dogrula(_rapor_metni(takas=(3, 4)))
+    assert not sonuc.gecerli and sonuc.rapor is None
+    assert any("SIRASI" in hata for hata in sonuc.errors), sonuc.errors
+    # Sapan şey SIRA: hiçbir bölüm eksik ya da yabancı değil.
+    assert not any(
+        "bölümü YOK" in hata or "sözleşmede olmayan" in hata
+        for hata in sonuc.errors
+    ), sonuc.errors
+    # Pozitif kontrol: aynı gövdeler DOĞRU sırayla geçerli rapor üretir.
+    assert _dogrula(_rapor_metni()).gecerli
 
 
 def test_validate_report_accepts_valid_report() -> None:
@@ -735,31 +1033,141 @@ def test_audit_report_rejects_foreign_row_type() -> None:
         )
 
 
+YABANCI_SATIR_VAKALARI = (
+    (
+        "yeniden_dogrulama",
+        "InventoryRow",
+        auditors.UrlCheck("u", "KAYNAK-1", True, True, "not"),
+    ),
+    (
+        "url_orneklem",
+        "UrlCheck",
+        auditors.InventoryRow(UNIT_A, "supported", "#1", "Tek cümle."),
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    "alan, beklenen_tip, yabanci",
+    YABANCI_SATIR_VAKALARI,
+    ids=[vaka[0] for vaka in YABANCI_SATIR_VAKALARI],
+)
+def test_audit_report_rejects_a_foreign_row_in_each_sequence_field(
+    alan: str, beklenen_tip: str, yabanci: object
+) -> None:
+    """Tip kapısı ALAN BAŞINA ölçülür — tek alanı sınamak diğerini kapsamaz."""
+    rapor = _gecerli_rapor()
+    alanlar = {
+        "denetci": rapor.denetci,
+        "ham_metin": rapor.ham_metin,
+        "bolumler": dict(rapor.bolumler),
+        "yeniden_dogrulama": rapor.yeniden_dogrulama,
+        "url_orneklem": rapor.url_orneklem,
+        "unit_snapshot_sha": rapor.unit_snapshot_sha,
+    }
+    alanlar[alan] = (yabanci,)
+    with pytest.raises(TypeError, match=beklenen_tip):
+        auditors.AuditReport(**alanlar)
+
+
+def test_the_foreign_row_matrix_covers_every_sequence_field() -> None:
+    """Matris KAPALI: ileride eklenen her dizi alanı buraya girmek ZORUNDA.
+
+    `from __future__ import annotations` yüzünden alan tipleri METİNDİR; dizi
+    alanı `tuple[...]` yazımından tanınır. Yeni bir dizi alanı eklenip matrise
+    yazılmazsa bu test DÜŞER — kapanış elle seçilmiş örnekle değil, üretilmiş
+    kümeyle kanıtlanır.
+    """
+    dizi_alanlari = {
+        alan.name
+        for alan in dataclasses.fields(auditors.AuditReport)
+        if str(alan.type).startswith("tuple[")
+    }
+    assert dizi_alanlari, "dizi alanı ölçülemedi — tarama hiçbir şey kanıtlamaz"
+    assert dizi_alanlari == {vaka[0] for vaka in YABANCI_SATIR_VAKALARI}
+
+
+def test_audit_report_does_not_alias_the_caller_sections() -> None:
+    """`bolumler` çağıranın sözlüğüyle takma ad PAYLAŞMAZ (kurucu-sonrası mutasyon).
+
+    Salt-okunur olması yetmez: `MappingProxyType` çağıranın sözlüğünün CANLI
+    görüntüsüdür. Kapıdan geçmiş beş anahtarlı küme yapımdan SONRA
+    değiştirilebilirdi.
+    """
+    rapor = _gecerli_rapor()
+    cagiran = dict(rapor.bolumler)
+    ikinci = auditors.AuditReport(
+        denetci=rapor.denetci,
+        ham_metin=rapor.ham_metin,
+        bolumler=cagiran,
+        yeniden_dogrulama=rapor.yeniden_dogrulama,
+        url_orneklem=rapor.url_orneklem,
+        unit_snapshot_sha=rapor.unit_snapshot_sha,
+    )
+    once = dict(ikinci.bolumler)
+    cagiran[auditors.BOLUM_ANAHTARLARI[0]] = "SONRADAN DEĞİŞTİ"
+    cagiran["UYDURMA BÖLÜM"] = "sonradan eklendi"
+    del cagiran[auditors.BOLUM_ANAHTARLARI[4]]
+    assert dict(ikinci.bolumler) == once
+    assert set(ikinci.bolumler) == set(auditors.BOLUM_ANAHTARLARI)
+
+
 # ─── K-14 ön kontrol ────────────────────────────────────────────────────────
 
 
+ARAC = "denetci-2-araci"
+
+
+class _KayitliProb:
+    """Argümanını KAYDEDEN prob — hangi aracın yoklandığı ölçülebilsin diye.
+
+    Argümanı yok sayan bir prob (`lambda _: False`) yanlış aracı yoklayan bir
+    uygulamayı yeşil bırakırdı: ölçülmeyen erişim "ölçüldü" sayılır ve K-14'ün
+    bütün varlık sebebi düşerdi.
+    """
+
+    def __init__(self, sonuc: bool | Exception) -> None:
+        self.cagrilar: list[str] = []
+        self._sonuc = sonuc
+
+    def __call__(self, arac: str) -> bool:
+        self.cagrilar.append(arac)
+        if isinstance(self._sonuc, Exception):
+            raise self._sonuc
+        return self._sonuc
+
+
 def test_preflight_failure_blocks_round() -> None:
-    sonuc = auditors.preflight("denetci-2-araci", prob=lambda _: False)
+    prob = _KayitliProb(False)
+    sonuc = auditors.preflight(ARAC, prob=prob)
     assert sonuc.web_erisimi is False
     assert sonuc.tur_baslayabilir is False
     assert sonuc.sebep
+    assert prob.cagrilar == [ARAC], (
+        f"ön kontrol yanlış aracı yokladı: {prob.cagrilar} — ölçüm hangi araç "
+        "için yapıldıysa sonuç O aracın sonucudur"
+    )
 
     # Prob patlarsa da fail-closed: istisna "erişim var" diye okunmaz.
-    def _patla(_: str) -> bool:
-        raise RuntimeError("bağlantı yok")
-
-    patlayan = auditors.preflight("denetci-2-araci", prob=_patla)
+    patlayan_prob = _KayitliProb(RuntimeError("bağlantı yok"))
+    patlayan = auditors.preflight(ARAC, prob=patlayan_prob)
     assert patlayan.tur_baslayabilir is False
     assert "bağlantı yok" in patlayan.sebep
+    assert patlayan_prob.cagrilar == [ARAC]
 
 
 def test_preflight_without_a_probe_is_fail_closed() -> None:
     """Ölçülmemiş erişim "var" sayılmaz — prob yoksa tur BAŞLAMAZ."""
-    assert auditors.preflight("denetci-2-araci").tur_baslayabilir is False
+    assert auditors.preflight(ARAC).tur_baslayabilir is False
 
 
 def test_preflight_success_allows_round() -> None:
-    sonuc = auditors.preflight("denetci-2-araci", prob=lambda _: True)
+    prob = _KayitliProb(True)
+    sonuc = auditors.preflight(ARAC, prob=prob)
     assert sonuc.web_erisimi is True
     assert sonuc.tur_baslayabilir is True
-    assert sonuc.arac == "denetci-2-araci"
+    assert sonuc.arac == ARAC
+    assert prob.cagrilar == [ARAC], (
+        f"ön kontrol yanlış aracı yokladı: {prob.cagrilar} — başka bir aracın "
+        "erişimi bu turu başlatamaz"
+    )

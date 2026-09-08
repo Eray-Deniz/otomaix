@@ -3,7 +3,9 @@
 Pin manifesti (`shared/contracts/research-contracts.pin.json`) iki şey taşır:
 dış deponun **commit sha**'sı ve pinlenen sözleşme dosyalarının **sha256**'sı.
 Resmî koşuyu başlatan her CLI alt komutu ilk iş olarak `require_pin` çağırır;
-sözleşme sapmışsa koşu BAŞLAMAZ.
+sözleşme sapmışsa koşu BAŞLAMAZ. Pinlenmiş bir dosyanın İÇERİĞİNİ kullanacak
+çağıran `require_pinned_text` kullanır: doğrulanan baytla kullanılan bayt AYNI
+okumadan gelir, ikinci bir okuma penceresi açılmaz.
 
 Kapı kümesi TAM OLARAK dörttür (plan 423-426):
   1. depo dizini yok
@@ -180,22 +182,44 @@ def load_pin(pin_path: Path) -> ContractPin:
     return ContractPin(commit=data["commit"], files=files)
 
 
-def verify_pin(pin: ContractPin, repo_root: Path) -> list[str]:
+def verify_pin(
+    pin: ContractPin,
+    repo_root: Path,
+    *,
+    snapshots: Mapping[str, bytes | None] | None = None,
+) -> list[str]:
     """Pin'i dış depoya karşı doğrular.
 
     Boş liste = geçti. Dolu liste = uyuşmazlık sebepleri (fail-closed).
+
+    `snapshots` KAPI EKLEMEZ (arayüz eki R14: kapı kümesi TAM OLARAK dört
+    kalır) — yalnız kapının **hangi baytları** ölçtüğünü değiştirir. Çağıran
+    bir sözleşme dosyasını zaten okuduysa o anlık görüntüyü buraya verir ve
+    hash kapısı diskten İKİNCİ bir okuma yapmadan aynı baytları ölçer. Gerekçe
+    ölçüldü: doğrulanan bayt ile kullanılan bayt farklı iki okumadan gelirse
+    aralarındaki pencerede dosya değişebilir ve pinlenmemiş içerik
+    doğrulanmış sayılırdı. Anlık görüntü `None` ise dosya okunamamıştır ve
+    ikinci kapı ("sözleşme dosyası yok") düşer.
     """
     repo_root = Path(repo_root)
     if not repo_root.is_dir():
         return [f"depo dizini yok: {repo_root}"]
 
+    goruntuler = dict(snapshots or {})
     reasons: list[str] = []
     for rel_path, beklenen_sha in sorted(pin.files.items()):
         dosya = repo_root / rel_path
-        if not dosya.is_file():
-            reasons.append(f"sözleşme dosyası yok: {dosya}")
-            continue
-        bulunan_sha = hashlib.sha256(dosya.read_bytes()).hexdigest()
+        if rel_path in goruntuler:
+            ham = goruntuler[rel_path]
+            if ham is None:
+                reasons.append(f"sözleşme dosyası yok: {dosya}")
+                continue
+        else:
+            if not dosya.is_file():
+                reasons.append(f"sözleşme dosyası yok: {dosya}")
+                continue
+            ham = dosya.read_bytes()
+        bulunan_sha = hashlib.sha256(ham).hexdigest()
         if bulunan_sha != beklenen_sha:
             reasons.append(
                 f"hash uyuşmuyor: {rel_path} (pin {beklenen_sha}, disk {bulunan_sha})"
@@ -210,7 +234,48 @@ def verify_pin(pin: ContractPin, repo_root: Path) -> list[str]:
 
 def require_pin(pin_path: Path, repo_root: Path) -> None:
     """Uyuşmazlıkta `ContractDriftError` fırlatır; uyumda sessizce döner."""
-    reasons = verify_pin(load_pin(pin_path), repo_root)
+    _require(verify_pin(load_pin(pin_path), repo_root))
+
+
+def require_pinned_text(
+    pin_path: Path, repo_root: Path, rel_path: str, *, encoding: str = "utf-8"
+) -> str:
+    """Pin kapısını koşturur VE **doğrulanan baytların kendisini** döndürür.
+
+    `require_pin` + ayrı bir `read_text` deseni iki BAĞIMSIZ okuma üretir:
+    kapı bir anlık görüntüyü ölçer, tüketici başka bir anlık görüntüyü
+    kullanır. İkisi arasındaki pencerede dosya değişirse pinlenmemiş baytlar
+    doğrulanmış sayılır — ve tüketici baytları kendi içinde tutarlı olduğu
+    için hiçbir bayt-eşitliği kontrolü bunu göstermez. "Önce kontrol, sonra
+    ikinci okuma" o pencereyi küçültür, KAPATMAZ; bu yüzden okuma BİR KEZDİR
+    ve doğrulanan anlık görüntü çağırana geri verilir.
+
+    Kapı kümesi büyümez (arayüz eki R14): dosya `verify_pin`'in DÖRT kapısıyla
+    aynı ölçümden geçer, yalnız hash'i çağıranın elindeki anlık görüntüden
+    hesaplanır. `rel_path`'in pinde adlandırılmış olması bir kapı değil çağrı
+    ön koşuludur — pinlenmemiş bir dosyanın baytları hiçbir kapıdan geçemez,
+    o yüzden bu fonksiyon onu hiç döndürmez.
+    """
+    pin = load_pin(pin_path)
+    rel = str(rel_path)
+    if rel not in pin.files:
+        raise ContractDriftError(
+            f"istenen sözleşme dosyası pinde adlandırılmamış: {rel!r} — "
+            f"pinlenen küme {sorted(pin.files)}; pinlenmemiş bayt paketlenemez"
+        )
+    try:
+        ham: bytes | None = (Path(repo_root) / rel).read_bytes()
+    except OSError:
+        ham = None
+    _require(verify_pin(pin, repo_root, snapshots={rel: ham}))
+    if ham is None:
+        # Ulaşılmaz olmalı (ikinci kapı düşerdi) — ama "olmalı" bir kapı
+        # değildir; okunamayan bayt hiçbir koşulda geri verilmez.
+        raise ContractDriftError(f"sözleşme dosyası okunamadı: {rel!r}")
+    return ham.decode(encoding)
+
+
+def _require(reasons: list[str]) -> None:
     if reasons:
         raise ContractDriftError(
             "Dış sözleşme deposu pinden sapmış (fail-closed): " + " · ".join(reasons)

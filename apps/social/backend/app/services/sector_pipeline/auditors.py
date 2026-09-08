@@ -6,11 +6,18 @@ Plan 2 Task 9 (K-14 · K-79 · K-81 · K-100 · K-137). Arayüz eki R5 · R6 ba�
 Bu modülün dört yüzeyi vardır ve dördü de FAIL-CLOSED'dur:
 
 * `build_packet` — iki denetçiye giden **bayt-özdeş** girdi kopyasını kurar
-  (K-79). İlk işi `contracts.require_pin`'dir: sözleşme v2 pinden sapmışsa
-  paket KURULMAZ (arayüz eki M1 sıra kapısı). Kaynaklar `KAYNAK-1/2/3` olarak
-  kör adlandırılır; brief-doctor raporunun `kaynak_adi`'sı pakete HİÇ yazılmaz.
+  (K-79). İlk işi `contracts.require_pinned_text`'tir: sözleşme v2 pinden
+  sapmışsa paket KURULMAZ (arayüz eki M1 sıra kapısı) ve pakete YALNIZ o
+  çağrının doğruladığı baytlar yazılır — sözleşme dosyası ikinci kez okunmaz.
+  Kaynaklar `KAYNAK-1/2/3` olarak kör adlandırılır; brief-doctor raporunun
+  `kaynak_adi`'sı pakete HİÇ yazılmaz.
 * `anonymize` — K-137'nin kod düzeyindeki ayağı. Pakete yazılan HER bayt bundan
-  geçer: görev metni, brief, ham kaynaklar, EK-E ve EK-H dâhil.
+  geçer: görev metni, brief, ham kaynaklar, EK-E ve EK-H dâhil. **Vaadin ölçülen
+  hâli:** `ARAC_KIMLIKLERI`'nin YAPILANDIRILMIŞ, pinlenmiş kümesinde adı geçen
+  kimlikler maskelenir. "Her araç kimliği" DEĞİL — küme kapalıdır ve iki ad
+  bilerek dışındadır (aşağıda `ARAC_KIMLIKLERI` beyanı). Serbest metinde geçen
+  bir kimliğin YOKLUĞU bu katmanda kanıtlanamaz; kanıtlanan, kümenin
+  maskelendiğidir.
 * `validate_report` — K-81 **biçim** kapısı ile K-100 **veri** kapısı. İkisi
   ayrıdır: "beş bölüm var mı" bölüm-VARLIĞI kontrolüdür ve eksik bir envanteri
   görmez; eksik envanter motorun mutabakat kapısına "uyum" gibi görünürdü.
@@ -114,11 +121,17 @@ ARAC_KIMLIKLERI: tuple[str, ...] = (
     "Perplexity",
     "Qwen",
 )
-"""K-137 taraması — KAVRAMDAN yazılmış küme, bulunan örneklerden türetilmiş DEĞİL.
+"""K-137 taraması — KAVRAMDAN yazılmış KAPALI küme, bulunan örneklerden türetilmiş DEĞİL.
 
 Kavram: "araç kimliği" = bir yapay zekâ asistanının SATICI ya da ÜRÜN/model
 ailesi adı. Depoda rastlanan adlardan türetilseydi tarama, zaten bulunmuş
 olanın tekrar kontrolü olurdu.
+
+**Vaat kümenin kendisi kadardır.** `anonymize` bu demette YAZILI kimlikleri
+maskeler; "hiçbir araç kimliği kalmaz" YAPISAL bir garanti DEĞİLDİR ve bu
+katmanda kanıtlanamaz — serbest metinde bir sonraki satıcı adı daima kümenin
+dışında kalabilir (semantik olumsuzlama). Küme uzadıkça vaat değil kapsama
+büyür; ikisi karıştırılmaz.
 
 **Kapsam sınırı BEYAN EDİLİR, sessizce atlanmaz.** İki ad bilerek DIŞARIDADIR:
 `Google` tek başına bir asistan kimliği değil şirket/arama motoru adıdır ve
@@ -355,10 +368,15 @@ class PreflightResult:
 
 
 def anonymize(text: str) -> str:
-    """Metindeki araç kimliklerini maskeler (K-137).
+    """`ARAC_KIMLIKLERI` kümesindeki araç kimliklerini maskeler (K-137).
 
     Anonimleştirme kod düzeyindedir, disiplin değil: pakete yazan HER yol bu
     fonksiyondan geçer, "bu dosyada zaten yoktur" varsayımı YAPILMAZ.
+
+    **Ölçülen vaat KÜMEYE bağlıdır.** Dönen metinde `ARAC_KIMLIKLERI`'nin
+    hiçbir üyesi kalmaz. "Metinde hiçbir araç kimliği kalmadı" bundan
+    TÜREMEZ — küme kapalıdır ve `Google` ile `Kimi` bilerek dışındadır
+    (gerekçeleri `ARAC_KIMLIKLERI` beyanında).
     """
     if not isinstance(text, str):
         raise TypeError(f"anonymize metin bekler: {type(text).__name__}")
@@ -368,13 +386,21 @@ def anonymize(text: str) -> str:
 # ─── Paketleyici (K-79 · K-137) ─────────────────────────────────────────────
 
 
-def _pin_kapisi() -> None:
+def _pin_kapisi() -> str:
     """Task 9'un İLK işi: sözleşme v2 pini (arayüz eki M1 sıra kapısı).
+
+    Kapı **doğrulanan görev metnini geri döndürür** ve pakete yalnız o metin
+    yazılır. Ayrı bir `read_text` ikinci bir okuma olurdu; doğrulama ile
+    paketleme arasındaki pencerede dosya değişirse pinlenmemiş talimat baytları
+    pakete girer ve iki kopya da aynı olduğu için K-79 bayt-eşitliği bunu
+    GÖSTERMEZDİ (iki kopya da yanlış baytı taşır).
 
     Modül sabitleri çağrı anında okunur — testler onları yerinden oynatarak
     kapının gerçekten koştuğunu ölçebilsin diye.
     """
-    contracts.require_pin(PIN_PATH, ARASTIRMA_DEPOSU_KOKU)
+    return contracts.require_pinned_text(
+        PIN_PATH, ARASTIRMA_DEPOSU_KOKU, GOREV_DOSYASI
+    )
 
 
 def _ek_e_metni(doctor_reports: list[DoctorReport]) -> str:
@@ -404,16 +430,21 @@ def _ek_h_metni(active_package: dict | None, unit_snapshot: dict[str, dict]) -> 
 
 def _paket_dosyalari(
     *,
+    gorev_metni: str,
     brief: str,
     sources: list[str],
     doctor_reports: list[DoctorReport],
     active_package: dict | None,
     unit_snapshot: dict[str, dict],
 ) -> dict[str, str]:
-    """Paketin dosya adı → metin eşlemesi. HER değer anonimleştirmeden geçer."""
-    gorev = (ARASTIRMA_DEPOSU_KOKU / GOREV_DOSYASI).read_text(encoding="utf-8")
+    """Paketin dosya adı → metin eşlemesi. HER değer anonimleştirmeden geçer.
+
+    `gorev_metni` PARAMETREDİR ve burada diskten OKUNMAZ: pin kapısının
+    doğruladığı baytların ta kendisi geçer. Fonksiyon dosyayı kendi okusaydı
+    doğrulanan bayt ile paketlenen bayt iki ayrı okumadan gelirdi (TOCTOU).
+    """
     dosyalar: dict[str, str] = {
-        "00-GOREV.md": gorev,
+        "00-GOREV.md": gorev_metni,
         "EK-A-brief.md": brief,
         "EK-E-brief-doctor.md": _ek_e_metni(doctor_reports),
         "EK-H-aktif-paket.json": _ek_h_metni(active_package, unit_snapshot),
@@ -439,14 +470,27 @@ def build_packet(
 ) -> PacketRef:
     """İki denetçinin BAYT-ÖZDEŞ girdi kopyasını kurar (K-79 · K-137).
 
-    **Eşleme sözleşmesi (dürüst etiket).** `sources[i]` ile `doctor_reports[i]`
-    aynı kaynağı anlatır; bu KONUMSAL sözleşme çağıranındır ve burada
-    ölçülemez. Burada ölçülen üç şey vardır: sayıların eşitliği, `kaynak_adi`
-    kimliklerinin TEKİLLİĞİ ve kaynak sayısının sözleşmenin üç-kaynak
-    tavanını aşmaması. Kimliğin kendisi pakete GİRMEZ — kör etiket konumdan
-    türer.
+    **Eşleme sözleşmesi ÖLÇÜLÜR, çağırana bırakılmaz.** `sources[i]` ile
+    `doctor_reports[i]` aynı kaynağı anlatmak ZORUNDADIR ve bunun kanıtı elde
+    duran veridedir: `brief_doctor.run` her raporun `icerik_ozeti`'ni
+    `identity.canonical_sha(source_text)`'ten üretir. Bu yüzden her `i` için
+    `doctor_reports[i].icerik_ozeti == identity.canonical_sha(sources[i])`
+    ZORLANIR (fail-closed) — sıra kayarsa özetler tutmaz ve paket kurulmaz.
+    Özetsiz rapor da REDDEDİLİR: eşleme kanıtı taşımayan bir rapor kör
+    etiketin arkasına saklanamaz. Kural TEKTİR (`identity.canonical_sha`);
+    burada ikinci bir hash kuralı yazılmaz.
+
+    Ayrıca ölçülen üç şey: sayıların eşitliği, `kaynak_adi` kimliklerinin
+    TEKİLLİĞİ ve kaynak sayısının sözleşmenin üç-kaynak tavanını aşmaması.
+    Kimliğin kendisi pakete GİRMEZ — kör etiket konumdan türer.
+
+    **Kapsam sınırı (dürüst etiket).** Ölçülen, özetin METİNLE eşleştiğidir;
+    özetin gerçekten `run` tarafından üretildiği (KÖKEN) burada da
+    doğrulanmaz — metne sahip bir çağıran doğru özeti kendisi hesaplayabilir.
+    O eksen `brief_doctor.DoctorReport.icerik_ozeti`'nin beyan ettiği sınırla
+    aynıdır.
     """
-    _pin_kapisi()
+    gorev_metni = _pin_kapisi()
     require_run_id(run_id)
     if not isinstance(sector_id, UUID):
         raise TypeError(f"sector_id UUID olmalı: {type(sector_id).__name__}")
@@ -469,6 +513,21 @@ def build_packet(
             f"brief-doctor kaynak kimlikleri TEKİL DEĞİL: {kimlikler} — aynı "
             "kaynağın iki raporu iki kaynak sayılamaz (K-127)"
         )
+    for sira, (metin, rapor) in enumerate(zip(sources, doctor_reports)):
+        if not rapor.icerik_ozeti:
+            raise ValueError(
+                f"brief-doctor raporu {sira} içerik özeti TAŞIMIYOR — konumsal "
+                "eşlemenin kanıtı özettir; özetsiz rapor hangi kaynağı "
+                "anlattığını gösteremez"
+            )
+        olculen = identity.canonical_sha(metin)
+        if rapor.icerik_ozeti != olculen:
+            raise ValueError(
+                f"kaynak {sira} ile brief-doctor raporu {sira} EŞLEŞMİYOR "
+                f"(rapor özeti {rapor.icerik_ozeti}, kaynak metnin özeti "
+                f"{olculen}) — konumsal eşleme kaymış; kör etiket yanlış "
+                "kaynağa yapıştırılamaz"
+            )
 
     kok = Path(dest) / run_id
     if kok.exists():
@@ -478,6 +537,7 @@ def build_packet(
         )
 
     dosyalar = _paket_dosyalari(
+        gorev_metni=gorev_metni,
         brief=brief,
         sources=sources,
         doctor_reports=doctor_reports,
@@ -567,13 +627,21 @@ def _tablo_satirlari(govde: str, baslik_hucreleri: tuple[str, ...]) -> list[list
 
 
 def _url_orneklemi(govde: str) -> tuple[tuple[UrlCheck, ...], list[str]]:
-    """URL örneklem bölümü — satır sayısı KOŞULLUDUR (kalan kaynak × 3).
+    """URL örneklem bölümü — **BEYANIN KENDİ İÇİNDE TUTARLILIĞI** ölçülür.
 
-    Sabit "dokuz satır" beklenmez. Tek rapor gören bir kapının ölçebileceği tek
-    çapa, sözleşmenin bölüm başında ZORUNLU kıldığı beyandır ("kaç kaynakla
-    çalıştığını ve beklenen satır sayısını yaz"); o yüzden beyan burada
-    kapıdır, envanter bölümünün beyanı ise DEĞİLDİR — orada anlık görüntü
-    karşılaştırması daha güçlü ve mekanik bir ölçüm sağlar.
+    Ölçülen tam olarak şudur: raporun yazdığı `Kaynak sayısı: <n>` ile yazdığı
+    `beklenen satır: <m>` kuralı sağlıyor mu (`n ≥ 2` ise `m = n × 3`, değilse
+    `m = 0`) ve tabloya gerçekten `m` satır yazılmış mı.
+
+    **ÖLÇÜLMEYEN (dürüst etiket, çözülmedi + evi var).** Beyan edilen kaynak
+    sayısının YETKİLİ kaynak sayısıyla eşit olduğu BURADA KARŞILAŞTIRILMAZ:
+    üç kaynakla koşan bir rapor "Kaynak sayısı: 2" yazıp altı satırla bu
+    kapıdan geçer. Aynı şekilde `_ORTAM_KISITI` cümlesinin gerçekten ölçülmüş
+    bir erişimsizliğe karşılık geldiği de ölçülmez — cümle satır beklentisini
+    KALDIRIR ve doğruluğu bu kapının görüş alanı dışındadır. İki karşılaştırma
+    da tek rapor gören bir kapıya sığmaz (yetkili sayı ile ölçülmüş erişim
+    durumu bu imzada YOKTUR); evleri **Task 10 tur seviyesidir** — orada koşu
+    kaydı yetkili kaynak sayısını ve `preflight` sonucunu taşır.
     """
     errors: list[str] = []
     kaynak_e = _KAYNAK_SAYISI_RE.search(govde)
@@ -710,6 +778,15 @@ def validate_report(
 
     `unit_snapshot`'ın TEK üreticisi `identity.decision_units`'tir (Task 3).
     Çapraz denetçi mutabakatı BURADA YAPILMAZ — tek rapor görülür (R6(c)).
+
+    **İki kapının GÜCÜ ayrıdır (dürüst etiket).** K-100 envanteri `unit_snapshot`
+    ile karşılaştırılır: yetkili bir kaynağa karşı ölçülür ve rapor kendi
+    beyanıyla bu kapıyı geçemez. URL örneklemi ise BÖYLE DEĞİLDİR — orada
+    yalnız raporun **kendi beyanının iç tutarlılığı** ölçülür; beyan edilen
+    kaynak sayısı yetkili kaynak sayısıyla KARŞILAŞTIRILMAZ, çünkü bu imza ne
+    yetkili sayıyı ne de ölçülmüş erişim durumunu görür. O karşılaştırmanın evi
+    **Task 10 tur seviyesidir** (çözülmedi + evi var). İmza arayüz eki R6(a)
+    ile bağlıdır ve bu turda DEĞİŞTİRİLMEZ.
     """
     if not isinstance(text, str):
         raise TypeError(f"validate_report metin bekler: {type(text).__name__}")
