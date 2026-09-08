@@ -134,6 +134,10 @@ ya da (b) bir turda dosyaların TEK gizlenme sebebi bu yanlış alarm olursa ve 
 26. **PROB KENDİ ÖLÇTÜĞÜ AİLEYE DARALTILMALI.**
 27. **İNCELEME TURU DA BÖLÜNÜR.** Bölme ekseni **dosya türüdür** (üretim ↔ test), commit
     aralığı DEĞİL. Bu oturumda çalıştı: B turu üretim turunun göremediği dört bulgu çıkardı.
+    **GÖREVİN KENDİSİ BÖLÜNMEZ (2026-09-08 Eray kararı):** plan görevi TEK PARÇA dispatch
+    edilir, inceleme aynı aralık üzerinden iki turda koşar (A = üretim dosyaları, B = test
+    dosyaları). Aralık bölünmediği için iki turun arasına bulgu düşmez. TASK.md'deki
+    "alt parçalar hâlinde dispatch" paragrafı DARALTILDI — kural değil, ölçüm kaydıdır.
 28. **TESTLER KODDAN SONRA YAZILDIYSA KAPANIŞ ÖLÇÜTÜ MUTASYON KANITIDIR** — her yeni test için
     "şunu bozdum → şu test kırmızı oldu" satırı istenir; kanıtsız kalem kapatılmış SAYILMAZ.
 29. **SÜRE TAHMİNİ VERİRKEN ELDEKİ ÖLÇÜMÜ KULLAN.** Tam test takımı **tek koşumda ~715 saniye**;

@@ -855,7 +855,15 @@ girdi olarak taşınır):**
 
 ## Yürütme kadansı kararı (2026-09-08, Eray) — bölerek dispatch
 
-Task 9'dan itibaren her plan görevi **tek parça değil, alt parçalar hâlinde** dispatch edilir.
+> **KARAR DARALTILDI (2026-09-08, Eray — Task 9 dispatch'inden hemen önce).** Aşağıdaki
+> **uygulama-bölmesi UYGULANMIYOR**: plan görevleri TEK PARÇA dispatch edilir. Bölünen yalnız
+> **inceleme turudur** (aşağıdaki genişletme). Gerekçe: inceleme bölmesinin ölçümü var (1200 sn
+> tavanında rapor üretemeyen tur, bölününce beş bulgu); uygulama bölmesinin kuyruğu kısaltacağı
+> ÖLÇÜLMEDİ ve metnin kendisi "kontrollü bir deney DEĞİLDİR" diyor. **Yeniden açılma koşulu:**
+> tek parça dispatch edilen bir görev yine 30+ commit'lik düzeltme kuyruğu üretirse.
+> Aşağıdaki gövde, o gün ölçülmüş sayıların kaydı olarak DURUYOR — kural olarak DEĞİL.
+
+~~Task 9'dan itibaren her plan görevi **tek parça değil, alt parçalar hâlinde** dispatch edilir.~~
 Gerekçe ölçüldü: Plan 1'de görev başına ortanca ~6 commit'ti (20 görev / 137 commit); Plan 2'de
 T5 = 21, T6 = 32, T7 = 36. Maliyeti büyüten şey görev başına düzeltme turu kuyruğudur ve her
 tur tam test kümesini yeniden koşturur.
