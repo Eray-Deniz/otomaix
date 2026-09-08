@@ -25,7 +25,11 @@ import inspect
 import logging
 import uuid
 from dataclasses import fields as dataclass_fields
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
+from typing import Mapping
 
 import asyncpg
 import pytest
@@ -3755,6 +3759,263 @@ def test_activation_payload_refuses_missing_approval_snapshot(anlik):
             None,
             beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
         )
+
+
+# ─── 20b. Fix turu 2, F1 (yüksek): ŞEKİL kapısı ────────────────────────────
+#
+# Fix turu 1 EKSİK anlık görüntüyü ve EKSİK anahtarı kapattı, ama değerin
+# ŞEKLİNİ doğrulamadan `len(...)` çağırmayı sürdürdü. Ölçüldü:
+# `{"acik_sorular": ""}` · `{}` · `set()` · `()` hepsi `open_questions_count=0`
+# üretiyordu — yani "açık soru YOK" diyen, K-71 kapısını GEÇİREN tek değer.
+# Skaler şekiller (`int`/`bool`/`None`/`float`) ise alan-DIŞI bir `TypeError`
+# fırlatıyordu; o da alan reddi değil, çağırana sızan beklenmedik hatadır.
+#
+# ERİŞİLEBİLİRLİK — dürüst sınır: `approval_snapshot` kolonu 036'da şekilsiz
+# `JSONB`'dir (yalnız değişmezlik tetikleyicisi var, CHECK yok) ve BUGÜN üretim
+# yazıcısı YOKTUR (yazıcı Task 14'ün kalemi). Sınıf bugün canlıda tetiklenemez;
+# kapatılma sebebi, Task 14 yazıcısının bu şekli üretmesi hâlinde kanıtın
+# SESSİZCE genişlemesidir. Tehdit modeli: girdi araştırma çıktısıdır —
+# ÖZENSİZ/BAYAT olabilir, SALDIRGAN değildir.
+#
+# Sözleşme (ekin revizyonu R-F): `acik_sorular` YALNIZ `list` ve `tuple` kabul
+# eder (boş olanlar dâhil — `[]`/`()` MEŞRUDUR, "açık soru yok" demektir);
+# kalan HER şey `EvidenceMintRefused`. `tuple` de kabul edilir çünkü
+# `VerifiedRun.__post_init__` yükü `identity.donmus`'tan geçirir ve `donmus`
+# kuralı (2) `list|tuple → tuple` yazar: donmuş yolda değer `tuple`, ham yolda
+# `list` gelir. Aynı şekil disiplini eşleme alanlarına da uygulanır — anlık
+# görüntünün ve tasdiklerin KENDİLERİ de `Mapping` olmak ZORUNDADIR.
+#
+# Matris ELLE SEÇİLMEZ: `donmus`'un KAPALI skaler kümesinden
+# (`identity._DEGISMEZ_SKALERLER`) ve kalan kapsayıcı sınıflarından ÜRETİLİR;
+# red kolları sözleşme yüklemleriyle SÜZÜLÜR, implementasyondan kopyalanmaz.
+
+
+class _SayilabilirYineleyici:
+    """`Sized` + `Iterable` — GEVŞEK bir kontrol bunu GEÇİRİR, şekil kapısı GEÇİRMEZ.
+
+    `len()`/`Sized`/`Iterable` tabanlı bir kapı yazılsaydı `str` ve `dict` de
+    geçerdi; bu sınıf o gevşemenin NEGATİF kontrolüdür.
+    """
+
+    def __len__(self) -> int:  # pragma: no cover — çağrılırsa kapı gevşemiştir
+        return 0
+
+    def __iter__(self):  # pragma: no cover — çağrılırsa kapı gevşemiştir
+        return iter(())
+
+
+class _ListeAltSinifi(list):
+    """Alt sınıf da RED — A4 disiplini (`type(...) is`, `isinstance` DEĞİL)."""
+
+
+class _DemetAltSinifi(tuple):
+    """Alt sınıf da RED — A4 disiplini."""
+
+
+_SKALER_ORNEKLERI: dict[type, tuple] = {
+    type(None): (None,),
+    bool: (True, False),
+    int: (0, 3),
+    float: (0.0, 1.5),
+    str: ("", "iki açık soru var"),
+    bytes: (b"", b"xx"),
+    Decimal: (Decimal("0"), Decimal("2")),
+    uuid.UUID: (uuid.UUID(int=0),),
+    Path: (Path("."),),
+    datetime: (datetime(2026, 1, 1),),
+    date: (date(2026, 1, 1),),
+}
+
+
+def _sekil_katalogu() -> list[tuple[str, object]]:
+    """Şekil evreni — `donmus`'un kapalı kümesinden ÜRETİLİR, elle yazılmaz."""
+    katalog: list[tuple[str, object]] = []
+    for tip, ornekler in _SKALER_ORNEKLERI.items():
+        for sira, ornek in enumerate(ornekler):
+            katalog.append((f"skaler-{tip.__name__}-{sira}", ornek))
+    katalog += [
+        ("dizi-list-bos", []),
+        ("dizi-list-dolu", ["s1", "s2"]),
+        ("dizi-tuple-bos", ()),
+        ("dizi-tuple-dolu", ("s1",)),
+        ("esleme-dict-bos", {}),
+        ("esleme-dict-dolu", {"acik_sorular": ["s1"]}),
+        ("esleme-proxy-bos", MappingProxyType({})),
+        ("esleme-proxy-dolu", MappingProxyType({"a": 1})),
+        ("kume-set-bos", set()),
+        ("kume-set-dolu", {"s1"}),
+        ("kume-frozenset-bos", frozenset()),
+        ("kume-frozenset-dolu", frozenset({"s1"})),
+        ("sayilabilir-yineleyici", _SayilabilirYineleyici()),
+        ("altsinif-list", _ListeAltSinifi(["s1"])),
+        ("altsinif-tuple", _DemetAltSinifi(("s1",))),
+    ]
+    return katalog
+
+
+def _param(sekiller):
+    return [pytest.param(deger, id=etiket) for etiket, deger in sekiller]
+
+
+# Red kolları SÖZLEŞME yüklemiyle süzülür (implementasyondan kopyalanmaz):
+#   dizi sözleşmesi   → KABUL yalnız `type(x) in (list, tuple)`
+#   eşleme sözleşmesi → KABUL yalnız `Mapping` (tasdiklerde ayrıca `None`)
+_BOZUK_DIZI = [
+    (etiket, deger)
+    for etiket, deger in _sekil_katalogu()
+    if type(deger) not in (list, tuple)
+]
+_ESLEME_OLMAYAN = [
+    (etiket, deger)
+    for etiket, deger in _sekil_katalogu()
+    if not isinstance(deger, Mapping) and deger is not None
+]
+
+
+def test_open_question_shape_matrix_is_generated_from_the_closed_scalar_set():
+    """Matrisin KAVRAMDAN türediğinin kapısı — yarın eklenen skaler kendiliğinden girer."""
+    assert set(_SKALER_ORNEKLERI) == set(identity._DEGISMEZ_SKALERLER)
+    etiketler = {etiket for etiket, _ in _sekil_katalogu()}
+    assert len(etiketler) == len(_sekil_katalogu())  # etiketler TEKİL
+    # Süzgeçler boş kalmasın ve kabul kolunu gerçekten DIŞARIDA bıraksın.
+    assert {e for e, _ in _BOZUK_DIZI} & {"dizi-list-bos", "dizi-tuple-bos"} == set()
+    assert len(_BOZUK_DIZI) == len(_sekil_katalogu()) - 4
+    assert {e for e, _ in _ESLEME_OLMAYAN} & {"esleme-dict-bos", "esleme-proxy-bos"} == set()
+
+
+@pytest.mark.parametrize(
+    "acik_sorular,beklenen",
+    [
+        pytest.param([], 0, id="bos-list-MESRU"),
+        pytest.param((), 0, id="bos-tuple-MESRU"),
+        pytest.param(["s1"], 1, id="dolu-list"),
+        pytest.param(("s1", "s2"), 2, id="dolu-tuple"),
+        pytest.param(identity.donmus(["s1", "s2", "s3"]), 3, id="donmus-yol-tuple"),
+    ],
+)
+def test_activation_payload_counts_open_questions_for_sequences(acik_sorular, beklenen):
+    """POZİTİF KONTROL + BOŞ-KÜME kolu: `[]` ve `()` MEŞRUDUR, reddedilmez."""
+    yuk = lifecycle.activation_evidence_payload(
+        _kosu_gorunumu_ornegi(approval_snapshot={"acik_sorular": acik_sorular}),
+        None,
+        beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+    )
+    assert yuk["open_questions_count"] == beklenen
+
+
+@pytest.mark.parametrize("acik_sorular", _param(_BOZUK_DIZI))
+def test_activation_payload_refuses_malformed_open_questions_shape(acik_sorular):
+    """Şekli bozuk değer SIFIRA genişlemez, alan-DIŞI `TypeError` de fırlatmaz."""
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        lifecycle.activation_evidence_payload(
+            _kosu_gorunumu_ornegi(approval_snapshot={"acik_sorular": acik_sorular}),
+            None,
+            beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        )
+
+
+@pytest.mark.parametrize("anlik", _param(_ESLEME_OLMAYAN))
+def test_activation_payload_refuses_non_mapping_approval_snapshot(anlik):
+    """Anlık görüntünün KENDİSİ de eşleme olmak zorundadır (`"x" in "xy"` tuzağı)."""
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        lifecycle.activation_evidence_payload(
+            _kosu_gorunumu_ornegi(approval_snapshot=anlik),
+            None,
+            beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        )
+
+
+@pytest.mark.parametrize("tasdik", _param(_ESLEME_OLMAYAN))
+def test_activation_payload_refuses_non_mapping_katman1_attestation(tasdik):
+    """Aynı sınıf: tasdik de şekli doğrulanmadan booleana çevrilmez."""
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        lifecycle.activation_evidence_payload(
+            _kosu_gorunumu_ornegi(katman1_attestation=tasdik),
+            None,
+            beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        )
+
+
+@pytest.mark.parametrize("tasdik", _param(_ESLEME_OLMAYAN))
+def test_activation_payload_refuses_non_mapping_readiness_attestation(tasdik):
+    """A4 kapısının girdisi de şekil kapısından geçer."""
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        lifecycle.activation_evidence_payload(
+            _kosu_gorunumu_ornegi(readiness_attestation=tasdik),
+            None,
+            beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        )
+
+
+def test_activation_payload_keeps_none_attestations_as_closed_gates():
+    """POZİTİF KONTROL: `None` tasdik MEŞRUDUR — reddedilmez, kapıyı KAPATIR."""
+    yuk = lifecycle.activation_evidence_payload(
+        _kosu_gorunumu_ornegi(katman1_attestation=None, readiness_attestation=None),
+        None,
+        beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+    )
+    assert yuk["katman1_passed"] is False
+    assert yuk["checklist_approved"] is False
+
+
+def _ornek_plan_satiri() -> dict:
+    return {
+        "onay_actor": ACTOR,
+        "onaylandi_at": datetime(2026, 1, 1),
+        "onay_kapsam_sha": "d" * 64,
+        "incident_id": "olay-sekil",
+        "package_id": uuid.UUID(int=11),
+    }
+
+
+@pytest.mark.parametrize("tasdik", _param(_ESLEME_OLMAYAN))
+def test_rollback_payload_refuses_non_mapping_target_attestation(tasdik):
+    """SÜPÜRME: aynı okuma geri alma yükünde de var — orada da kapatılır."""
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        lifecycle.rollback_evidence_payload(
+            _ornek_plan_satiri(),
+            _kosu_gorunumu_ornegi(katman1_attestation=tasdik),
+        )
+
+
+def test_rollback_payload_keeps_none_target_attestation_as_closed_gate():
+    """POZİTİF KONTROL: geri alma yolunda da `None` MEŞRUDUR, kapıyı KAPATIR."""
+    yuk = lifecycle.rollback_evidence_payload(
+        _ornek_plan_satiri(), _kosu_gorunumu_ornegi(katman1_attestation=None)
+    )
+    assert yuk["katman1_passed"] is False
+    assert yuk["manager_approved"] is True
+
+
+async def test_mint_refuses_activation_token_for_malformed_open_questions(pkg_db):
+    """ERİŞİLEBİLİRLİK: şekilsiz `JSONB` kolonundan gelen bozuk şekil, jetonu DURDURUR."""
+    await _bos_evren(pkg_db)
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _tam_kosu(pkg_db, sector_id)
+    # Kolon 036'da şekilsizdir: CHECK yok, üretim yazıcısı da YOK (Task 14).
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET approval_snapshot = $2 "
+        "WHERE run_id = $1",
+        run_id,
+        {"acik_sorular": ""},
+    )
+
+    with pytest.raises(lifecycle.EvidenceMintRefused):
+        await runs.mint_evidence_token(
+            pkg_db,
+            table="sector_package_runs",
+            run_id=run_id,
+            incident_id=None,
+            package_id=None,
+        )
+
+    assert (
+        await pkg_db.fetchval(
+            "SELECT kanit_jetonu FROM social.sector_package_runs WHERE run_id = $1",
+            run_id,
+        )
+        is None
+    )
 
 
 def test_runs_passes_the_canonical_madde_kumesi_sha_to_the_payload_helper():

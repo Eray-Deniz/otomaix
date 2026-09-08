@@ -299,6 +299,65 @@ def _require_kosu_gorunumu(value: Any, label: str) -> None:
         )
 
 
+# ─── Kanıt alanlarının ŞEKİL kapıları (fix turu 2, F1 — yüksek) ────────────
+#
+# Fix turu 1 EKSİK anlık görüntüyü kapattı; bu tur değerin ŞEKLİNİ kapatır.
+# Ölçülen açık: `{"acik_sorular": ""}` · `{}` · `set()` hepsi `len(...) == 0`
+# veriyordu — yani "açık soru YOK" diyen ve K-71 kapısını GEÇİREN tek değer.
+# Skaler şekiller (`int`/`bool`/`None`/`float`) ise alan-DIŞI bir `TypeError`
+# fırlatıyordu; o da bir alan reddi değil, çağırana sızan beklenmedik hatadır.
+#
+# `Sized`/`Iterable`/`hasattr(..., "__len__")` tabanlı GEVŞEK bir kapı YAZILMAZ:
+# `str` de `dict` de o kapıyı geçer ve açık aynen kalırdı. Kabul kümesi KAPALI
+# ve NOMİNALDİR.
+#
+# ERİŞİLEBİLİRLİK — dürüst sınır: `approval_snapshot` kolonu 036'da şekilsiz
+# `JSONB`'dir (yalnız değişmezlik tetikleyicisi var, CHECK yok) ve BUGÜN üretim
+# yazıcısı YOKTUR — yazıcı Task 14'ün kalemidir. Sınıf bugün canlıda
+# tetiklenemez; kapatılma sebebi, Task 14 yazıcısının bu şekli üretmesi hâlinde
+# kanıtın SESSİZCE genişlemesidir. Tehdit modeli: girdi araştırma çıktısıdır —
+# ÖZENSİZ/BAYAT olabilir, SALDIRGAN değildir.
+
+_DIZI_ALAN_TIPLERI: tuple[type, ...] = (list, tuple)
+"""`acik_sorular` gibi SAYILAN alanların KAPALI kabul kümesi — ikisi de gerekli.
+
+`VerifiedRun.__post_init__` dokuz jsonb yükünü `identity.donmus`'tan geçirir ve
+`donmus` kuralı (2) `list | tuple → tuple` yazar: DONMUŞ yolda değer `tuple`,
+HAM yolda (sürücünün çözdüğü jsonb dizisi) `list`'tir. Biri kabul edilmezse
+üretim yolu kırılır. Alt sınıflar RED — A4 disiplini `type(...) is` arar.
+"""
+
+
+def _dizi_alan(value: Any, label: str) -> tuple[Any, ...]:
+    """Sayılacak alanın şekli: YALNIZ `list` ya da `tuple`; kalan her şey RED.
+
+    **Boş olan MEŞRUDUR.** `[]` ve `()` "açık soru YOK" demektir ve pozitif
+    kontrolü vardır; reddedilen şey boşluk değil, YANLIŞ ŞEKİLDİR.
+    """
+    if type(value) not in _DIZI_ALAN_TIPLERI:
+        raise EvidenceMintRefused(
+            f"{label} dizi DEĞİL: {type(value).__name__} — şekli doğrulanmamış "
+            "bir değer sayıya çevrilmez; bozuk kanıt SIFIRA genişletilemez"
+        )
+    return tuple(value)
+
+
+def _esleme_alan(value: Any, label: str) -> Mapping[str, Any] | None:
+    """Jsonb eşleme alanının şekli: `Mapping` ya da `None`; kalan her şey RED.
+
+    `None` MEŞRUDUR — "tasdik yok" demektir ve kapıyı KAPATIR. Reddedilen,
+    eşleme olmayan bir değerin anahtarla okunmaya çalışılmasıdır: `"x" in "xy"`
+    alt dize kontrolüdür, `"x" in {"x"}` küme üyeliğidir — ikisi de `in`
+    kapısını geçer, ardından gelen `[...]` alan-DIŞI `TypeError` fırlatır.
+    """
+    if value is None or isinstance(value, Mapping):
+        return value
+    raise EvidenceMintRefused(
+        f"{label} eşleme DEĞİL: {type(value).__name__} — şekli doğrulanmamış "
+        "bir değer anahtarla okunup booleana çevrilmez"
+    )
+
+
 def _yuk_anahtarlari(cls: type) -> tuple[str, ...]:
     """Sınıfın jeton-DIŞI alan kümesi, alan adına göre ARTAN sırada.
 
@@ -360,22 +419,25 @@ def activation_evidence_payload(
     # değerdir (`activate_package`: `open_questions_count != 0` → red) — yani
     # "kanıt yok" hâli sessizce "kanıt temiz" hâline genişliyordu. Eksik anlık
     # görüntü artık jeton BASTIRMAZ; kanıt hiç doğmaz.
-    anlik = kosu.approval_snapshot
+    anlik = _esleme_alan(kosu.approval_snapshot, "approval_snapshot")
     if anlik is None or "acik_sorular" not in anlik:
         raise EvidenceMintRefused(
             "onay anlık görüntüsü YOK ya da 'acik_sorular' taşımıyor — eksik "
             "kanıt SIFIRA normalize edilmez; açık soru sayısı uydurulamaz"
         )
+    # F1, fix turu 2: `len(...)` ÇAĞRILMADAN ÖNCE şekil kapısı. Önceki yazım
+    # `""` · `{}` · `set()` · `()` için 0, skalerler için alan-DIŞI `TypeError`
+    # üretiyordu; ilki K-71'i AÇAR, ikincisi alan reddi DEĞİLDİR.
+    acik_sorular = _dizi_alan(anlik["acik_sorular"], "acik_sorular")
+    katman1 = _esleme_alan(kosu.katman1_attestation, "katman1_attestation")
 
     okunan = {
         "activation_eligible": kosu.sonuc == "activation_eligible",
-        "open_questions_count": len(anlik["acik_sorular"]),
-        "katman1_passed": (
-            kosu.katman1_attestation is not None
-            and kosu.katman1_attestation["sonuc"] == "PASS"
-        ),
+        "open_questions_count": len(acik_sorular),
+        "katman1_passed": katman1 is not None and katman1["sonuc"] == "PASS",
         "checklist_approved": _checklist_approved(
-            kosu.readiness_attestation, beklenen_madde_kumesi_sha
+            _esleme_alan(kosu.readiness_attestation, "readiness_attestation"),
+            beklenen_madde_kumesi_sha,
         ),
         "expected_active_version": (
             aktif_paket_satiri["version"] if aktif_paket_satiri is not None else None
@@ -407,6 +469,12 @@ def _checklist_approved(
     geçiyordu. İmport kenarı (AÇIK-3) yine AÇILMADI — beklenen kanonik değer
     ÇAĞIRANDAN, yalnız-anahtar bir parametreyle taşınır. Task 15 kendi
     kapısını kurduğunda bu koşul ORTADAN KALKMAZ; iki kapı da aynı sabite bakar.
+
+    **Girdi ÇAĞRI YERİNDE şekil kapısından geçmiştir (fix turu 2):** buraya
+    yalnız `None` ya da `Mapping` gelir. İkinci bir şekil kontrolü YAZILMAZ —
+    `"onaylandi" not in "…onaylandi…"` alt dize kontrolüdür ve bir `str`
+    tasdiki bu kapıyı geçip aşağıdaki `[...]` okumasında alan-DIŞI `TypeError`
+    fırlatırdı; o yüzden kapı burada değil, TEK yerde (`_esleme_alan`) durur.
     """
     if readiness_attestation is None:
         return False
@@ -436,6 +504,9 @@ def rollback_evidence_payload(
     burada YALNIZ kilitli satır alanları okunur.
     """
     _require_kosu_gorunumu(hedef_kosu, "hedef_kosu")
+    hedef_katman1 = _esleme_alan(
+        hedef_kosu.katman1_attestation, "katman1_attestation"
+    )
 
     onay_actor = plan_satiri["onay_actor"]
     okunan = {
@@ -445,9 +516,9 @@ def rollback_evidence_payload(
             and plan_satiri["onaylandi_at"] is not None
             and type(plan_satiri["onay_kapsam_sha"]) is str
         ),
+        # Süpürme (fix turu 2): AYNI şekilsiz okuma burada da vardı.
         "katman1_passed": (
-            hedef_kosu.katman1_attestation is not None
-            and hedef_kosu.katman1_attestation["sonuc"] == "PASS"
+            hedef_katman1 is not None and hedef_katman1["sonuc"] == "PASS"
         ),
         "incident_id": plan_satiri["incident_id"],
         # Sürücü `uuid.UUID`in bir ALT SINIFINI döndürür; kanıt sınıfının şekil
