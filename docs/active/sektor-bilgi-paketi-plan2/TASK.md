@@ -14,9 +14,10 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-8 indi (Task 8 + dört yüksek-bulgu düzeltmesi).
-**Durum `active` KALIYOR, `waiting-review` DEĞİL:** düzeltmelerin kapanış-doğrulaması ve test
-tarafı incelemesi kota yüzünden koşamadı; ikisi de yeni oturumun ilk işi. Checkpoint 1, 2 ve **5** hakem
+Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-8 indi. Task 8'in checkpoint'i 2026-09-08'de
+KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
+doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
+kanıtlandı. **Durum `active` KALIYOR** — sıradaki iş Task 9. Checkpoint 1, 2 ve **5** hakem
 `approve`'uyla kapandı; checkpoint 3 ve 4 koştu ama `approve` ALMADAN kapatıldı — **ikisinin
 aralığı da checkpoint 5'in tabanına dâhildi ve artık incelendi.** Checkpoint 6 override ile
 kapandı. Sıradaki iş **Task 8** (koşu ve artefakt servisi); dispatch'inin önündeki dört
@@ -917,3 +918,72 @@ iki satırı sökülerek kanıtlandı (4 düştü, 1 geçti — geçen, kontrol 
   (c) kapı `to_regprocedure('<ad>()')` bakıyor, aynı adı taşıyan FARKLI imzalı bir aşırı yükleme
   incelenmedi (gerekçe akıl yürütmedir, ölçüm değil); (d) bizim dokunmadığımız BAŞKA bir tabloda
   aynı adı taşıyan yabancı tetikleyici sınanmadı.
+
+
+## Task 8 — kapanış-doğrulama ve test tarafı turları (2026-09-08, ikinci oturum)
+
+Bir önceki oturum iki turu kotaya takıldığı için açık bırakmıştı; ikisi de bu oturumda koştu.
+
+**Kapanış-doğrulama turu 2 (taban `a21d2c9`).** F2/F4/F5 ve F1'in imza bacağı KAPALI
+doğrulandı; R-E doküman hizası doğrulandı. **F1'in ikinci bacağı AÇIK çıktı** ve öncülü
+kontrolör tarafından ölçüldü: `acik_sorular` değerinin ŞEKLİ doğrulanmadan `len()`
+çağrılıyordu, yani `""` ve `{}` "açık soru YOK" anlamına geliyor ve K-71 kapısını açıyordu.
+**`79c3570`** kapalı ve NOMİNAL bir kabul kümesi koydu (`list`/`tuple`, boşlar dâhil;
+`tuple` zorunlu çünkü `identity.donmus` kuralı (2) `list|tuple → tuple`), `Sized`/`Iterable`
+gevşekliği YOK. Aynı turda süpürme AYNI sınıftan **dört örnek daha** buldu ve kapattı
+(anlık görüntünün kendi `in` kapısı `str` ve `set` için geçiyordu; iki tasdik indekslemesi).
+Sapma ekin bağlayıcı örnek koduna aykırı olduğu için revizyon kaydına **R-F** yazıldı
+(**`f0371e9`**). **Kapanış-doğrulama turu 3 `approve` — bulgu YOK**; hakem kendi matrisini
+kurup koştu (10 ret + iki meşru boş-küme kabulü).
+
+**B turu — test yüzeyi (taban `3c41b24`), hiçbir hakemin görmediği yüzey.** Tam da aranan
+sınıfı buldu: **tespit edemediği bir güvenceyi onaylayan test.** Üç yüksek + bir orta, dördü
+de kontrolör tarafından dosya açılarak doğrulandı, dördü de Task 8'in KENDİ ürünü:
+- **B1** — A1(b)'nin "ana ispatı" dört yoldan yalnız `amend_rollback_plan`'i deniyordu;
+  `approve_incident_rollback` ve `build_rollback_evidence` KAPISIZDI.
+- **B2** — "anahtar kümesi türetilir" iddiası testte SABİTLENMEMİŞTİ (elle yazılmış küme ile
+  karşılaştırıyordu) ve hem testin hem `_yuk_anahtarlari`'nın docstring'i "kendiliğinden
+  yediye çıkar" diye YANLIŞ beyan taşıyordu.
+- **B3** — "istisna yutulmaz" testi `execute_rollback_plan`'i HİÇ çağırmıyordu.
+- **B4 (orta)** — eksik-alan matrisinin aktivasyon yarısı, test edilen kapıya ulaşmadan
+  argüman bağlamada düşüyordu.
+
+**B4 park EDİLMEDİ.** Politika orta bulguyu advisory sayar ama o izin ÖNCEDEN VAR OLAN borç
+içindir; bu gerileme görevin kendi ürünüydü ve düzeltmesi tek satırdı. Ayrıca diğer üçüyle
+AYNI sınıftandı — üç örneği kapatıp dördüncüsünü etiketi düşük diye bırakmak sınıfı değil
+varyantı kapatmak olurdu.
+
+**Turun kapanış ölçütü MUTASYON KANITIYDI** (`ae06bb9`): testler koddan sonra yazıldığı için
+"kırmızıyı gördüm" güvencesi yapısal olarak elde edilememişti; karşılığı, her yeni testin
+koruduğu davranışı geçici bozup kırmızıyı ÖLÇMEKTİR. Kontrolör bunlardan ikisini BAĞIMSIZ
+olarak tekrarladı (yürütücünün `except` kolu genişletildi → yeni test kırmızı, eski taksonomi
+testi yeşil; yeni bir kilit çağrı yeri eklendi → kapı kırmızı).
+
+**B5 — kontrolörün kendi inisiyatifi, ve DERSİ.** Kilit listesi hâlâ ELLE olduğu için
+türetilmiş bir AST kapısı eklendi (`cc0a129`). Eray'a "ucuz, sınıfı kalıcı kapatır" diye
+sunuldu; **kapatmadı.** Kapanış turu kapının kimliği fonksiyon ADINA indirgediğini (aynı
+fonksiyona eklenen ikinci çağrı görünmez) ve korunan-yol değerlerinin çözülmeyen düz metin
+olduğunu (adı geçen test silinse kapı yeşil kalır) buldu; kontrolör ikisini de ölçtü.
+**Aynı eksenin ÜÇÜNCÜ turuydu** (el listesi → türetilmiş liste → türetmenin çözünürlüğü) ve
+sistemik-sınıf kuralı gereği dördüncü nokta-düzeltmesi AÇILMADI. Çerçeve teşhisi: davranışsal
+bir garanti muhasebe mekanizmasıyla kurulamaz — AST kapısı "bu kilit yük taşıyor mu" sorusunu
+asla cevaplayamaz, yalnız "her kilit noktası beyan edilmiş mi" der; muhasebenin her zaman bir
+deliği daha olur. **Eray'ın kararı: açıklamayı gerçeğe indir, kapıyı bırak** (`a488769`).
+Kapı artık NE YAKALAR / NE YAKALAMAZ ayrımını adıyla taşıyor ve kapsama MUHASEBESİ tuttuğunu
+söylüyor, kilidin yük taşıdığını kanıtladığını değil.
+
+**`a488769` bağımsız hakem GÖRMEDİ — dürüst etiket, kabul edilmiş risk.** Bulgu "test
+söylediğinden azını yapıyor"du, düzeltme tam olarak o cümleyi gerçeğe indirmek; bunun için
+ayrı bir dış inceleme turu koşmak orantısızdı. Kontrolör metni kodla karşılaştırarak
+doğruladı. Kapısı: sıradaki checkpoint tabanı `2b468e8d` KALDIĞI için bu commit'i
+kendiliğinden kapsar.
+
+**Kontrolörün KENDİ hatası, kayda geçiyor:** fix turu 2'nin brief'inde commit etiketi
+`T8-fix2` diye yazdırıldı; o etiket 1. turda `f6c37bb`'de zaten kullanılmıştı. Defterde iki
+farklı iş aynı adı taşıyor. Kapı `rc=0` veriyor, geçmiş değişmez — düzeltilemez, yalnız
+kayda geçer. Sonraki turlar `T8-fixB`, `T8-fixB5`, `T8-fixB6` ile çakışmasız ilerledi.
+
+**`last_checkpoint_ref` ve `cp_count` BİLEREK İLERLETİLMEDİ.** §8.6 mutasyon protokolü yalnız
+Clean/Accepted-risk dallarında koşar; son bağımsız hakem verdict'i `needs-attention`'dı ve
+onun blokeri (B5) bağımsız yeniden-doğrulama GÖRMEDEN kapatıldı. Fail-safe yön: taban
+`2b468e8d` KALIR ve Task 7 + Task 8 + bütün düzeltmeleri kendiliğinden yeniden kapsar.
