@@ -712,6 +712,10 @@ async def record_result(db, *, run_id: str, result: EngineResult) -> None:
     üretmeden. `barrier_report` üç sonuçta da ZORUNLUDUR (K-24). F19:
     `activation_eligible` iken dört köken alanı BİRLİKTE yazılır; biri eksikse
     yazım REDDEDİLİR — yarım köken kaydı yoktur.
+
+    **Yazım KARŞILAŞTIR-VE-YAZ'dır (fix turu 1, F3):** yalnız
+    `durum='calisiyor'` ve `sonuc IS NULL` iken koşar. Kaybeden ya da tekrar
+    eden yazıcı REDDEDİLİR; yarım koşu işareti (K-82) de EZİLEMEZ.
     """
     _require_run_id(run_id)
     if type(result) is not EngineResult:
@@ -745,15 +749,33 @@ async def record_result(db, *, run_id: str, result: EngineResult) -> None:
 
     kolonlar = [kolon for _alan, kolon in _SONUC_KOLON_ESLEMESI]
     atamalar = ", ".join(f"{kolon} = ${i + 2}" for i, kolon in enumerate(kolonlar))
+    # KARŞILAŞTIR-VE-YAZ (fix turu 1, F3). Koşul YALNIZ `run_id` olsaydı yazım
+    # SON-YAZAN-KAZANIR olurdu: iki eşzamanlı tamamlama birbirini ezer ve
+    # SONRAKİ herhangi bir çağrı, tamamlanmış — hatta onaylanmış — bir koşunun
+    # bütün motor alanlarını değiştirebilirdi. Migration yalnız onay anlık
+    # görüntüsünü koruyor (K-98), motor sonuç alanlarını DEĞİL.
     guncellendi = await db.fetchval(
         "UPDATE social.sector_package_runs "
         f"SET durum = 'tamamlandi', {atamalar} "
-        "WHERE run_id = $1 RETURNING id",
+        "WHERE run_id = $1 AND durum = 'calisiyor' AND sonuc IS NULL "
+        "RETURNING id",
         run_id,
         *[degerler[kolon] for kolon in kolonlar],
     )
     if guncellendi is None:
-        raise ValueError(f"koşu bulunamadı: {run_id!r}")
+        # Kaybeden/tekrarlayan yazıcı ile OLMAYAN koşu AYRI iki hatadır; tek
+        # mesaj ikisini birbirine karıştırırdı.
+        mevcut = await db.fetchrow(
+            "SELECT durum, sonuc FROM social.sector_package_runs WHERE run_id = $1",
+            run_id,
+        )
+        if mevcut is None:
+            raise ValueError(f"koşu bulunamadı: {run_id!r}")
+        raise ValueError(
+            f"koşu sonucu ZATEN yazılmış: {run_id!r} "
+            f"durum={mevcut['durum']!r}, sonuc={mevcut['sonuc']!r} — yazım "
+            "yalnız 'calisiyor' ve sonucu boş satıra yapılır"
+        )
 
 
 # ─── 5. TEK KAPI LİSTESİ — load_verified_run ───────────────────────────────

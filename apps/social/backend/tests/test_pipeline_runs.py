@@ -956,6 +956,69 @@ async def test_record_result_rejects_eligible_result_missing_f19_fields(pkg_db, 
     )
 
 
+async def test_record_result_refuses_a_second_write_for_the_same_run(pkg_db):
+    """F3: sonuç yazımı KARŞILAŞTIR-VE-YAZ'dır — son-yazan-kazanır DEĞİL.
+
+    Önceki yazım yalnız koşu kimliğine bakıyordu; iki eşzamanlı tamamlama
+    son-yazan-kazanır oluyor ve SONRAKİ herhangi bir çağrı, tamamlanmış (hatta
+    onaylanmış) bir koşunun BÜTÜN motor alanlarını değiştirebiliyordu.
+    Migration yalnız onay anlık görüntüsünü koruyor, motor alanlarını DEĞİL.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+    await runs.record_result(pkg_db, run_id=run_id, result=_engine_result())
+
+    with pytest.raises(ValueError) as hata:
+        await runs.record_result(
+            pkg_db,
+            run_id=run_id,
+            result=_engine_result(sonuc="blocked", sebep="ikinci yazıcı"),
+        )
+    assert "koşu bulunamadı" not in str(hata.value)
+    assert "calisiyor" in str(hata.value)
+
+    satir = await pkg_db.fetchrow(
+        "SELECT durum, sonuc, sebep, engine_version FROM social.sector_package_runs "
+        "WHERE run_id = $1",
+        run_id,
+    )
+    assert satir["durum"] == "tamamlandi"
+    assert satir["sonuc"] == "activation_eligible"
+    assert satir["sebep"] is None
+    assert satir["engine_version"] == MOTOR_SURUM
+
+
+async def test_record_result_refuses_to_overwrite_an_incomplete_run(pkg_db):
+    """K-82 işareti de EZİLEMEZ: yarım koşu sonradan 'tamamlandi' yapılamaz."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+    await runs.mark_incomplete(
+        pkg_db, run_id=run_id, asama="sentez", sebep="yerel zaman aşımı"
+    )
+
+    with pytest.raises(ValueError):
+        await runs.record_result(pkg_db, run_id=run_id, result=_engine_result())
+
+    satir = await pkg_db.fetchrow(
+        "SELECT durum, sonuc, sebep FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    )
+    assert satir["durum"] == "tamamlanmadi"
+    assert satir["sonuc"] is None
+    assert satir["sebep"] == "yerel zaman aşımı"
+
+
+async def test_record_result_still_names_a_missing_run_distinctly(pkg_db):
+    """KONTROL KOLU: iki red birbirinden AYIRT EDİLİR — mesaj farkı ölçülür."""
+    with pytest.raises(ValueError) as hata:
+        await runs.record_result(
+            pkg_db, run_id="kosu-hic-yok-0001", result=_engine_result()
+        )
+    assert "koşu bulunamadı" in str(hata.value)
+
+
 # ═══ 5. TEK KAPI LİSTESİ ════════════════════════════════════════════════════
 
 
