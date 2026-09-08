@@ -1694,6 +1694,38 @@ async def build_rollback_evidence(
 # ─── 13. Geri alma yürütücüsü ───────────────────────────────────────────────
 
 
+async def _plan_durumu_yaz(
+    db, *, incident_id: str, package_id: UUID, durum: str, reason: str | None = None
+) -> None:
+    """Plan satırının durumunu yazar ve BİR satır etkilediğini KANITLAR.
+
+    `execute` sıfır satır etkilese de sessizce başarılı olur; yürütme sonucunu
+    yazan bir güncelleme için bu, izin sessizce kaybolması demektir (fix turu 1,
+    F2). `RETURNING` ile dönen değer kontrol edilir — satır kaybolmuşsa
+    `LifecycleError` fırlatılır ve rapor "düştü" diye YALAN SÖYLEMEZ.
+
+    Hata kolundaki çağrı `except` bloğunun İÇİNDEN yapılır; oradan fırlayan bir
+    `LifecycleError` yeniden yakalanmaz, yukarı çıkar (fail-closed). Tamamlanma
+    kolundaki çağrı ise kayıt noktasının içindedir: orada düşerse deneme geri
+    alınır ve satır `hata` olarak kaydedilir.
+    """
+    yazilan = await db.fetchval(
+        "UPDATE social.package_rollback_plans SET durum = $3, "
+        "reason = COALESCE($4, reason) "
+        "WHERE incident_id = $1 AND package_id = $2 RETURNING package_id",
+        incident_id,
+        package_id,
+        durum,
+        reason,
+    )
+    if yazilan is None:
+        raise LifecycleError(
+            f"geri alma planı satırı yazılamadı: ({incident_id!r}, {package_id}) "
+            f"durum={durum!r} güncellemesi SIFIR satır etkiledi — yürütme izi "
+            "kaybolurdu"
+        )
+
+
 async def execute_rollback_plan(db, *, incident_id: str, actor: str) -> RollbackReport:
     """Planı PAKET PAKET yürütür — toplu-atomik mekanizma YOKTUR.
 
@@ -1705,6 +1737,16 @@ async def execute_rollback_plan(db, *, incident_id: str, actor: str) -> Rollback
     **Tekrar güvenli:** tamamlanmış satır ATLANIR, hedef YENİDEN HESAPLANMAZ.
     **`hedefsiz` satır HATA ÜRETMEDEN atlanır** ve `durum='hedefsiz'` kalır;
     tekrar koşumda aynı sonucu korur. Rapor onu AYRI sayar.
+
+    **Deneme bir KAYIT NOKTASINDA koşar (fix turu 1, F2).** Tanınan bir istisna
+    dış işlemi SONLANDIRMAZ: yalnız kayıt noktası geri alınır, olay kilidi ile
+    satır kilidi AYAKTA kalır ve `durum='hata'` kilit bırakılmadan yazılır.
+    Önceki yazımda istisna dış işlemi de düşürüyor, hata kaydı KİLİTSİZ
+    koşuyordu — o pencerede `amend_rollback_plan` kilidi alıp satırı `bekliyor`
+    görüp SİLEBİLİYORDU; hata güncellemesi sıfır satır etkileyip sessizce
+    geçiyor, rapor yine "bu paket düştü" diyordu ve denemenin izi kayboluyordu.
+    İki durum yazımı da etkilenen satır sayısını `RETURNING` ile KANITLAR
+    (`_plan_durumu_yaz`).
     """
     owner = require_actor(actor)
 
@@ -1720,76 +1762,88 @@ async def execute_rollback_plan(db, *, incident_id: str, actor: str) -> Rollback
 
     for kayit in satirlar:
         package_id = kayit["package_id"]
-        try:
-            async with db.transaction():
-                await _lock_incident(db, incident_id)
-                satir = await db.fetchrow(
-                    "SELECT * FROM social.package_rollback_plans "
-                    "WHERE incident_id = $1 AND package_id = $2 FOR UPDATE",
-                    incident_id,
-                    package_id,
-                )
-                if satir is None:  # pragma: no cover — üyelik kilidi bunu kapatır
-                    continue
-                if satir["durum"] == "tamamlandi":
-                    zaten.append(package_id)
-                    continue
-                if satir["durum"] == "hedefsiz":
-                    hedefsiz.append(package_id)
-                    continue
-
-                paket = await db.fetchrow(
-                    "SELECT sector_id, version, status FROM social.sector_packages "
-                    "WHERE id = $1",
-                    package_id,
-                )
-                if paket is None:
-                    raise RollbackEvidenceUnavailable(f"paket bulunamadı: {package_id}")
-                if (
-                    paket["status"] != "active"
-                    or paket["version"] != satir["observed_active_version"]
-                ):
-                    raise RollbackEvidenceUnavailable(
-                        "karşılaştır-ve-uygula düştü: aktif sürüm plandan beri "
-                        f"kaydı (plan {satir['observed_active_version']}, "
-                        f"gerçek {paket['version']}/{paket['status']})"
-                    )
-
-                evidence = await build_rollback_evidence(
-                    db, incident_id=incident_id, package_id=package_id
-                )
-                await rollback_package(
-                    db,
-                    sector_id=paket["sector_id"],
-                    to_version=satir["target_version"],
-                    evidence=evidence,
-                    actor=owner,
-                )
-                await db.execute(
-                    "UPDATE social.package_rollback_plans SET durum = 'tamamlandi' "
-                    "WHERE incident_id = $1 AND package_id = $2",
-                    incident_id,
-                    package_id,
-                )
-                tamamlandi.append(package_id)
-        except (
-            RollbackEvidenceUnavailable,
-            EvidenceMintRefused,
-            LifecycleError,
-        ) as hata:
-            # Yeni durum değeri ÜRETİLMEZ: `hedefsiz` bu vaka için KULLANILMAZ
-            # (o yalnız güvenli sürüm yokluğu demektir).
-            sebep = mask_secrets(str(hata))
-            await db.execute(
-                "UPDATE social.package_rollback_plans "
-                "SET durum = 'hata', reason = $3 "
-                "WHERE incident_id = $1 AND package_id = $2",
+        async with db.transaction():
+            await _lock_incident(db, incident_id)
+            satir = await db.fetchrow(
+                "SELECT * FROM social.package_rollback_plans "
+                "WHERE incident_id = $1 AND package_id = $2 FOR UPDATE",
                 incident_id,
                 package_id,
-                sebep,
             )
-            hatali.append(package_id)
-            sebepler[str(package_id)] = sebep
+            if satir is None:  # pragma: no cover — üyelik kilidi bunu kapatır
+                continue
+            if satir["durum"] == "tamamlandi":
+                zaten.append(package_id)
+                continue
+            if satir["durum"] == "hedefsiz":
+                hedefsiz.append(package_id)
+                continue
+
+            # DENEME bir KAYIT NOKTASINDA (savepoint) koşar. Dış işlem — ve
+            # onunla birlikte olay kilidi ile satır kilidi — istisnada da AYAKTA
+            # KALIR; yalnız denemenin yazdıkları geri alınır (fix turu 1, F2).
+            try:
+                async with db.transaction():
+                    paket = await db.fetchrow(
+                        "SELECT sector_id, version, status "
+                        "FROM social.sector_packages WHERE id = $1",
+                        package_id,
+                    )
+                    if paket is None:
+                        raise RollbackEvidenceUnavailable(
+                            f"paket bulunamadı: {package_id}"
+                        )
+                    if (
+                        paket["status"] != "active"
+                        or paket["version"] != satir["observed_active_version"]
+                    ):
+                        raise RollbackEvidenceUnavailable(
+                            "karşılaştır-ve-uygula düştü: aktif sürüm plandan beri "
+                            f"kaydı (plan {satir['observed_active_version']}, "
+                            f"gerçek {paket['version']}/{paket['status']})"
+                        )
+
+                    evidence = await build_rollback_evidence(
+                        db, incident_id=incident_id, package_id=package_id
+                    )
+                    await rollback_package(
+                        db,
+                        sector_id=paket["sector_id"],
+                        to_version=satir["target_version"],
+                        evidence=evidence,
+                        actor=owner,
+                    )
+                    await _plan_durumu_yaz(
+                        db,
+                        incident_id=incident_id,
+                        package_id=package_id,
+                        durum="tamamlandi",
+                    )
+            except (
+                RollbackEvidenceUnavailable,
+                EvidenceMintRefused,
+                LifecycleError,
+            ) as hata:
+                # Yeni durum değeri ÜRETİLMEZ: `hedefsiz` bu vaka için
+                # KULLANILMAZ (o yalnız güvenli sürüm yokluğu demektir).
+                #
+                # Yazım DIŞ işlemin İÇİNDEDİR: kilit bırakılmadan önce satır
+                # `hata` olur. Önceki yazımda kilit istisnayla birlikte düşüyor,
+                # güncelleme kilitsiz koşuyordu — o pencerede üyelik daraltması
+                # satırı `bekliyor` görüp SİLEBİLİYOR, güncelleme sıfır satır
+                # etkileyip SESSİZCE geçiyor ve rapor yine "düştü" diyordu.
+                sebep = mask_secrets(str(hata))
+                await _plan_durumu_yaz(
+                    db,
+                    incident_id=incident_id,
+                    package_id=package_id,
+                    durum="hata",
+                    reason=sebep,
+                )
+                hatali.append(package_id)
+                sebepler[str(package_id)] = sebep
+            else:
+                tamamlandi.append(package_id)
 
     return RollbackReport(
         incident_id=incident_id,

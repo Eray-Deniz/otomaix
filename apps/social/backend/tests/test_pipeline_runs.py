@@ -2989,26 +2989,52 @@ async def test_incident_lock_is_reentrant_within_one_transaction(pkg_db):
 
 
 def test_evidence_construction_and_spend_share_one_transaction():
-    """YAPISAL: kanıt kurulumu ve geçiş AYNI `async with db.transaction()` içinde."""
+    """YAPISAL: kanıt kurulumu ve geçiş AYNI işlem bloğunda ve KİLİDİN ALTINDA.
+
+    Fix turu 1'de (F2) deneme bir KAYIT NOKTASINA (iç `db.transaction()`) alındı;
+    olay kilidini alan blok artık onun DIŞINDADIR. Ölçü buna göre güncellendi ve
+    ZAYIFLAMADI: iki çağrının aynı blokta olması KORUNUR, üstüne o bloğu SARAN
+    zincirde kilidi İLK ifade yapan bir işlem bloğu ARANIR — yani kanıt ile
+    harcamanın arasında kilidin düştüğü bir an yoktur.
+    """
     govde = _fonksiyon_govdesi(RUNS_KAYNAK, "execute_rollback_plan")
     agac = ast.parse(govde)
+
+    ebeveyn: dict[int, ast.AST] = {}
+    for dugum in ast.walk(agac):
+        for cocuk in ast.iter_child_nodes(dugum):
+            ebeveyn[id(cocuk)] = dugum
+
+    def _cagrilar(dugum: ast.AST) -> set[str]:
+        return {
+            alt.func.attr
+            for alt in ast.walk(dugum)
+            if isinstance(alt, ast.Call) and isinstance(alt.func, ast.Attribute)
+        } | {
+            alt.func.id
+            for alt in ast.walk(dugum)
+            if isinstance(alt, ast.Call) and isinstance(alt.func, ast.Name)
+        }
+
     bulundu = False
     for dugum in ast.walk(agac):
-        if isinstance(dugum, ast.AsyncWith):
-            cagrilar = {
-                alt.func.attr
-                for alt in ast.walk(dugum)
-                if isinstance(alt, ast.Call) and isinstance(alt.func, ast.Attribute)
-            } | {
-                alt.func.id
-                for alt in ast.walk(dugum)
-                if isinstance(alt, ast.Call) and isinstance(alt.func, ast.Name)
-            }
-            if {"build_rollback_evidence", "rollback_package"} <= cagrilar:
-                bulundu = True
-                # Kilit o bloğun İLK ifadesidir.
-                ilk = dugum.body[0]
-                assert "_lock_incident" in ast.dump(ilk), ast.dump(ilk)
+        if not isinstance(dugum, ast.AsyncWith):
+            continue
+        if not {"build_rollback_evidence", "rollback_package"} <= _cagrilar(dugum):
+            continue
+        bulundu = True
+        # Kilit, bu bloğun KENDİSİNİN ya da onu saran bir işlem bloğunun İLK
+        # ifadesidir — arada kilitsiz bir katman YOKTUR.
+        kilitli = False
+        aday: ast.AST | None = dugum
+        while aday is not None:
+            if isinstance(aday, ast.AsyncWith) and "_lock_incident" in ast.dump(
+                aday.body[0]
+            ):
+                kilitli = True
+                break
+            aday = ebeveyn.get(id(aday))
+        assert kilitli, ast.dump(dugum)
     assert bulundu, "iki çağrı aynı transaction bloğunda bulunamadı"
 
 
@@ -3743,3 +3769,155 @@ async def test_mint_activation_token_records_checklist_gate_from_attestation(pkg
             kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
         )
     assert onayli["checklist_approved"] is True
+
+
+# ═══ 21. Geri alma HATA kaydı — kilidin İÇİNDE ve satır sayısı KANITLI ═════
+#
+# Checkpoint fix turu 1, F2 (yüksek): paket başına işlem ve olay kilidi, tanınan
+# bir istisna dışarı çıkınca SONA ERİYORDU; `durum='hata'` ancak ondan SONRA,
+# KİLİTSİZ bir güncellemeyle yazılıyor ve kaç satır etkilendiği KONTROL
+# EDİLMİYORDU. O pencerede üyelik daraltması kilidi alıp satırı `bekliyor` görüp
+# SİLEBİLİR; hata güncellemesi sıfır satır etkiler, sessizce geçer ve rapor yine
+# "bu paket düştü" der — yürütme denemesinin izi KAYBOLUR.
+#
+# Aralık DETERMİNİSTİKTİR, uykuyla değil katalogla ölçülür: B bağlantısı, A'nın
+# işlem boyunca tuttuğu SATIR kilidine `FOR UPDATE` ile girmeye çalışır ve
+# bekler (`pg_locks`, `NOT granted`). A'nın işlemi bittiği anda B sunucu
+# tarafında UYANIR — yani "önce kim davranır" yarışı yoktur, B kazanır.
+#
+#   * DÜZELTMEDEN ÖNCE: A'nın işlemi istisnayla sona erer, satır hâlâ
+#     `bekliyor`dur, B onu SİLER; A'nın kilitsiz güncellemesi 0 satır etkiler.
+#   * DÜZELTMEDEN SONRA: A `durum='hata'`yı kilidi BIRAKMADAN yazar; B kilidi
+#     ancak ondan sonra alır ve 036'nın DELETE kolu "yürütülmüş satır
+#     SİLİNEMEZ" ile REDDEDER.
+
+
+async def test_rollback_failure_status_is_written_before_the_lock_is_released(
+    monkeypatch, test_db_setup
+):
+    """F2'nin ANA İSPATI: hata kaydı kilidin İÇİNDE yazılır ve izi silinemez."""
+    url = _require_test_database(test_db_setup)
+    kurulum = await asyncpg.connect(url)
+    await _init_connection(kurulum)
+    a_baglanti = await asyncpg.connect(url)
+    await _init_connection(a_baglanti)
+    b_baglanti = await asyncpg.connect(url)
+    await _init_connection(b_baglanti)
+    gozlemci = await asyncpg.connect(url)
+    sektorler: list = []
+    incident_id = None
+    b_gorev = None
+    try:
+        await _bos_evren(kurulum)
+        sector_id, aktif = await _geri_alinabilir(kurulum)
+        sektorler.append(sector_id)
+        kume = await _affected(kurulum)
+        incident_id = await runs.build_rollback_plan(
+            kurulum, affected=kume, actor=ACTOR
+        )
+        await runs.approve_incident_rollback(
+            kurulum, incident_id=incident_id, actor=ACTOR
+        )
+
+        async def _b_uyeligi_siler():
+            """Üyelik daraltmasının veri katmanı hamlesi: hard DELETE."""
+            async with b_baglanti.transaction():
+                await b_baglanti.fetchrow(
+                    "SELECT package_id FROM social.package_rollback_plans "
+                    "WHERE incident_id = $1 AND package_id = $2 FOR UPDATE",
+                    incident_id,
+                    aktif,
+                )
+                await b_baglanti.execute(
+                    "DELETE FROM social.package_rollback_plans "
+                    "WHERE incident_id = $1 AND package_id = $2",
+                    incident_id,
+                    aktif,
+                )
+
+        async def _dusen_kanit(db, *, incident_id, package_id):
+            nonlocal b_gorev
+            b_gorev = asyncio.create_task(_b_uyeligi_siler())
+            bekleyen = 0
+            for _ in range(300):
+                bekleyen = await gozlemci.fetchval(
+                    "SELECT count(*) FROM pg_locks WHERE NOT granted"
+                )
+                if bekleyen:
+                    break
+                await asyncio.sleep(0.01)
+            assert bekleyen, "B satır kilidinde beklemedi — aralık kurulmadı"
+            raise runs.RollbackEvidenceUnavailable("enjekte edilen arıza")
+
+        monkeypatch.setattr(runs, "build_rollback_evidence", _dusen_kanit)
+
+        rapor = await runs.execute_rollback_plan(
+            a_baglanti, incident_id=incident_id, actor=ACTOR
+        )
+
+        assert rapor.hata == (aktif,)
+
+        # B, A'nın işlemi bittiği anda kilidi alır. Satır `hata` olduğu için
+        # 036'nın DELETE kolu onu REDDEDER — iz silinemez.
+        with pytest.raises(asyncpg.PostgresError):
+            await asyncio.wait_for(b_gorev, timeout=10)
+
+        satir = await gozlemci.fetchrow(
+            "SELECT durum, reason FROM social.package_rollback_plans "
+            "WHERE incident_id = $1 AND package_id = $2",
+            incident_id,
+            aktif,
+        )
+        assert satir is not None, "hata satırı KAYBOLDU — yürütme izi silindi"
+        assert satir["durum"] == "hata"
+        assert "enjekte edilen arıza" in satir["reason"]
+    finally:
+        if b_gorev is not None and not b_gorev.done():
+            b_gorev.cancel()
+        for baglanti in (a_baglanti, b_baglanti):
+            await baglanti.close()
+        if incident_id is not None:
+            await kurulum.execute(
+                "UPDATE social.package_rollback_plans SET durum = 'bekliyor', "
+                "kanit_jetonu_harcandi_at = NULL WHERE incident_id = $1",
+                incident_id,
+            )
+            await kurulum.execute(
+                "DELETE FROM social.package_rollback_plans WHERE incident_id = $1",
+                incident_id,
+            )
+        for sector_id in sektorler:
+            await _committed_sektor_sil(kurulum, sector_id)
+        await gozlemci.close()
+        await kurulum.close()
+
+
+def test_rollback_failure_write_is_inside_the_locked_transaction():
+    """YAPISAL: `except` kolu olay kilidini alan `async with` bloğunun İÇİNDEDİR.
+
+    Davranış testi aralığı ölçer; bu kapı yapıyı pinler — hata yazımının
+    kilidin dışına geri kayması sessizce olmasın.
+    """
+    agac = ast.parse(RUNS_KAYNAK)
+    (govde,) = [
+        dugum
+        for dugum in ast.walk(agac)
+        if isinstance(dugum, ast.AsyncFunctionDef)
+        and dugum.name == "execute_rollback_plan"
+    ]
+    dis_bloklar = [
+        dugum
+        for dugum in ast.walk(govde)
+        if isinstance(dugum, ast.AsyncWith)
+        and "_lock_incident" in ast.dump(dugum.body[0])
+    ]
+    assert dis_bloklar, "olay kilidini ilk ifade yapan işlem bloğu bulunamadı"
+    bulundu = False
+    for blok in dis_bloklar:
+        for dugum in ast.walk(blok):
+            if isinstance(dugum, ast.Try):
+                for kol in dugum.handlers:
+                    metin = ast.dump(kol)
+                    if "'hata'" in metin or "hata'" in metin:
+                        bulundu = True
+    assert bulundu, "hata yazımı kilitli işlem bloğunun İÇİNDE değil"
