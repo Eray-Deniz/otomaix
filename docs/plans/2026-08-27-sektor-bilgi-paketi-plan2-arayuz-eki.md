@@ -3,7 +3,7 @@ title: Sektör Bilgi Paketi — Plan 2/2 Arayüz Eki (BAĞLAYICI)
 status: binding-addendum
 date: 2026-08-30
 revised: 2026-09-08
-revisions: 4
+revisions: 5
 binds_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 source_spec: docs/specs/2026-08-21-sektor-bilgi-paketi.md
 canonical_input: docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md
@@ -57,6 +57,19 @@ kapatıldı; **hiçbiri yeni kapsam açmaz.**
 | **R-B** | Ayak (d) düzyazısı ile bağlayıcı SQL bloğunun **çelişkisi**: SQL bağlar (`BEFORE UPDATE`); yanlış emsal ve yanlış satır alıntısı düzeltildi | metin SQL'e ve 036'ya uyarlandı |
 | **R-C** | **Onay mührünün yüklemi** yazılı DEĞİLDİ: dolu → BOŞ geçişinin reddedildiği (036'da uygulanmış) kural metne alındı | metin koda uyarlandı |
 | **R-D** | Aktör kapısının **tanım yeri**: `sector_package_lifecycle._require_actor` bir yeniden-dışavurumdur; tanım `package_events.require_actor` | metin koda uyarlandı |
+| **R-E** | A4'ün **dördüncü koşulu** yaşam döngüsü modülünde koşabilir hâle getirildi: beklenen kanonik imza yalnız-anahtar bir parametreyle ÇAĞIRANDAN gelir; import kenarı AÇILMAZ | hüküm korundu, yol değişti |
+
+**R-E (2026-09-08) — hakem bulgusunun kapanışı.** Task 8'in ilk yazımı A4 kapısının dördüncü
+koşulunu (tasdikteki imzanın kanonik madde kümesi imzasına birebir eşitliği) *"AÇIK-3 import
+yasağı yüzünden burada koşamaz"* diyerek DÜŞÜRMÜŞTÜ ve gerekçeyi *"aktivasyon kapısı onu
+ayrıca reddeder"* diye yazmıştı — **o kapı Task 15'e ait ve henüz YOK.** Bağımsız hakem bunu
+**yüksek** olarak buldu; kontrolör ölçerek doğruladı: `activate_package` ilgili booleanlara
+olduğu gibi güveniyor, jeton tüketimi yok. **Kapanış import kenarını AÇMADAN yapıldı** —
+beklenen imza `activation_evidence_payload`'a yalnız-anahtar, varsayılansız bir parametre
+olarak girer ve tek çağıran (`runs.mint_evidence_token`) kanonik sabiti geçer; kaynağın
+kapalılığı düzyazıyla değil, çağrı yerindeki ifadeyi okuyan bir AST kapısıyla ölçülür.
+Aynı turda ikinci bir açık daha kapandı: onay anlık görüntüsü YOKKEN "açık soru sayısı 0"
+yazılıyordu; artık jeton basımı REDDEDİLİR.
 
 **R-A'nın ölçümü (2026-09-08).** `sector_package_lifecycle.py` `identity` modülünden İKİ ad
 kullanıyor — `validate_decision_log` ve `check_unit_integrity` — ve `canonical_sha`'yı HİÇ
@@ -1430,6 +1443,8 @@ def _require_kosu_gorunumu(value: Any, label: str) -> None:
 def activation_evidence_payload(
     kosu: KilitliKosuGorunumu,
     aktif_paket_satiri: Mapping[str, Any] | None,
+    *,
+    beklenen_madde_kumesi_sha: str,        # R-E (2026-09-08) — A4'ün 4. koşulu
 ) -> Mapping[str, Any]:
     """`ActivationGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ satırlardan TÜRETİR.
 
@@ -1633,7 +1648,9 @@ async def mint_evidence_token(
         # aktivasyon yolu (table == "sector_package_runs"):
         kosu        = <bu işlemde ZATEN kilitli koşu satırı, tekrar okunur>
         aktif       = <o sektörün AKTİF paket satırı, aynı işlemde FOR UPDATE; yoksa None>
-        payload     = activation_evidence_payload(kosu, aktif)
+        payload     = activation_evidence_payload(
+                          kosu, aktif,
+                          beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA)
         fingerprint = _evidence_fingerprint_from_payload(ActivationGateEvidence, payload)
 
         # geri alma yolu (table == "package_rollback_plans"):
@@ -1661,8 +1678,9 @@ async def build_activation_evidence(db, *, run_id: str) -> ActivationGateEvidenc
 
       1. `run = await runs.load_verified_run(db, run_id=run_id, for_update=True)`
       2. `aktif = <o sektörün AKTİF paket satırı, aynı işlemde FOR UPDATE; yoksa None>`
-      3. `payload = sector_package_lifecycle.activation_evidence_payload(run, aktif)` —
-         dört boolean/sayaç + K-94 taban durumu + `run_id`; **TEK türetici** (A2(d)).
+      3. `payload = sector_package_lifecycle.activation_evidence_payload(run, aktif,
+         beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA)` — dört
+         boolean/sayaç + K-94 taban durumu + `run_id`; **TEK türetici** (A2(d)).
          **Yardımcı `runs.py`'de DEĞİL, `sector_package_lifecycle.py`'dedir (AÇIK-3,
          fix turu 3'te gövdeye süpürüldü);** `runs.activation_evidence_payload` adı
          ARTIK YOKTUR.
