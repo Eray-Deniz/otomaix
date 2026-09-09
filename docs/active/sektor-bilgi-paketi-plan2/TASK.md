@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-08
+last-touched: 2026-09-09
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 10 İNDİ ve checkpoint 7 kapandı;
-sıradaki iş **Task 11**.) Task 1-10 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 11 İNDİ ve checkpoint 8 kapandı;
+sıradaki iş **Task 12**.) Task 1-11 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -38,8 +38,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 4
-- last_checkpoint_ref: 3af43313970f3e921fbe746a9a8a1404a4882015
+- cp_count: 5
+- last_checkpoint_ref: a44d9ecd81dcc0b4b1a0e32ea47dc4890cf1a486
 
 # References
 
@@ -441,6 +441,32 @@ okunmuyordu; üstelik başarısızlık URL doğrulamasını tümden atlama iznin
 ters yönde çalışıyordu. Artık dört durum ayrı: erişim var · erişim yok · ölçülmedi · ölçüm
 arızalandı. Turu yalnız birincisi başlatır, muafiyeti yalnız ikincisi meşrulaştırır.
 
+## Task 11 TAMAM (2026-09-09) — sentez koşumu + çıktı doğrulayıcı
+
+Üç commit: `0f4a20c` (iskelet + kırmızı küme) · `0f39d0c` (ana) · `a44d9ec` (düzeltme turu).
+Tam küme **3649 passed** (`python -m pytest tests/ -q`, 299.03s, exit 0); taban 3595 → 3649.
+
+**Yürütme kipi bu görevde `inline`** (Eray talebi). Task 1-10 alt-ajanlıydı; kip alanı
+güncellendi, kapılar değişmedi.
+
+**Checkpoint 8 — İKİ tur** (1 tam inceleme + 1 kapanış-doğrulama), taban `3af4331`.
+Tur 1: `needs-attention`, altı yüksek + iki orta. Tur 2: **`approve`, maddi bulgu yok.**
+
+Kapanan yüksek bulgular: koşu kimliği grameri (mutlak kimlik hedef kökünü sessizce
+düşürüyordu — ölçüldü) · tur ↔ aktif paket görüntü bağı · çıkarma kanıtının statü
+dizgesinden doğrulanmış-referans TAM eşleşmesine çevrilmesi · churn korumasının karar
+etiketinden birimin düşmesine taşınması (`kirp` kaçağı) · sonuç içeriğinin derinlemesine
+dondurulması.
+
+**Altıncı yüksek bulgu kod değil SAHİPLİK kalemiydi** ve reddedildi + yeniden evlendirildi:
+aşağıda Open Problems'ta.
+
+**Bilinçle DAR tutulan iki kol (kapsam beyanı, sessiz değil):**
+- `kanit` alanındaki `#<no>` biçimi bu katmanda ÇÖZÜLEMEZ (denetim tablosu satırları tipli
+  nesneye ayrıştırılmıyor). Çözülemeyen referans çıkarmayı AÇMAZ; madde açık soruya düşer.
+  Fail-closed yön; yanlış-pozitif riski var ve kabul edildi.
+- `risk_unverified` de çıkarma açmaz. Sonuç kayıp değil açık sorudur.
+
 # ÖN KOŞUL — Task 10'dan ÖNCE: test matrisi küçültme (BİTTİ 2026-09-09)
 
 > **Eray kararı (2026-09-08): Plan 2'nin yürütmesi bu iş bitene kadar DURAKLAR.** Ayrı görev
@@ -785,7 +811,50 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   için alan güncellendi — sessiz kayma DEĞİL, açık talimat. İnceleme/checkpoint kapıları
   DEĞİŞMEDİ (daraltma yalnız dispatch kipini kapsar).
 
+## Task 11 kararları (2026-09-09)
+
+- **Plan imzasına `dest` EKLENDİ ve sapma beyan edildi.** `Runner` protokolü çalışma dizini
+  ve istem dosyası ister; kök gizli bir sabitten türetilseydi testler gerçek araştırma
+  deposuna yazardı. `build_packet`'in `dest` deseniyle simetrik.
+
+- **`kirp` churn kapısına GİRER, kanıt kapısına GİRMEZ.** Sözleşme churn korumasını
+  "kırpmanın ve `cikar` kararının SONUCUNA konan kısıt" diye yazar; ama kırpma bir BOYUT
+  kararıdır (spec §8.6), kanıt kararı değil. İki kolun ayrılması bilinçli — kanıt eşiği
+  kırpmaya da konsaydı sözleşmede olmayan bir kural yazılmış olurdu.
+
+- **Çözme kuralı `identity.cozulmus`'a taşındı; `runs._coz` oraya devretti.** Dondurma ile
+  çözme bir çifttir ve iki kopya sürüm sürüm ayrışırdı. Hakem, "şema `list` ister, o yüzden
+  donduramayız" gerekçemi çürüttü: çözme şema SINIRINDA yapılır, kalıcı temsil donabilir.
+
+- **Reddedilen çıkarmanın eşi olan `ekle` satırı `yerine_gecer` bağını KAYBEDER.** Bağ
+  bırakılsaydı günlük olmamış bir değiştirmeyi olmuş gibi gösterirdi. Aday düşürülmez.
+
+- **Kontrolörün kendi test tarayıcısı mutasyon matrisiyle yakalandı.** `insert_draft` yasağı
+  önce ham dizge taramasıydı ve kendi düzyazısına takıldı; AST'ye taşındıktan sonra ekilen
+  beş ihlalden biri (`from app.services import sector_package_lifecycle`) hâlâ görülmüyordu.
+  Elle seçilmiş örnek değil ÜRETİLMİŞ matris yakaladı.
+
 # Open Problems
+
+- **[YÜKSEK — yeniden evlendirildi 2026-09-09] Denetçi web erişim probunun ÜRETİM sahibi
+  Task 11 DEĞİL, Task 16'dır.** Devir notu bu yükümlülüğü Task 11'in dispatch'ine yazmıştı;
+  yanlıştı ve düzeltiliyor. **Ölçüldü:** `grep -rn 'run_audit_round(' --include='*.py'` test
+  dışında yalnız tanımı buluyor, `synthesis.run(` için üretim çağıranı HİÇ YOK. Yani prob,
+  Task 11'in eksik bir parçası değil — Task 11 zaten kurulmuş bir `AuditRound`'dan sonra
+  başlar. Gerçek ev, üretim orkestrasyonunu kuran CLI'dır:
+  `apps/social/backend/scripts/sector_pipeline_cli.py` (**Task 16, planda zamanlanmış**).
+  **Etiket dürüst: ÇÖZÜLMEDİ.** Bugün K-14 kapısı probsuz her turu bloke ediyor (doğru
+  davranış), yani hat üretimde HÂLÂ koşamaz.
+
+- **[accepted_risk, medium] Reddedilen çıkarmanın metin/özel-gün kolu (2026-09-09).**
+  `_geri_koy` birim hâlâ yerindeyse NO-OP'tur (yaygın hâl kapandı), ama gerçekten adaydan
+  düşmüş bir düz metin alanı ya da özel gün yuvası geri KONULAMAZ ve koşu yarım işaretlenir.
+  Yeniden açılma koşulu: gerçek koşumda bu kolun tetiklendiği ölçülürse.
+
+- **[accepted_risk, medium] Sentezin koşu başına kiralaması YOK (2026-09-09).** Hedef dizin
+  kontrolü kontrol-sonra-yarat desenidir; aynı `run_id` ile iki çağrı çakışırsa kaybeden
+  koşuyu `tamamlanmadi` işaretlerken kazanan geçerli sonuç dönebilir. Denetçi tarafında
+  kiralama VAR, sentezde yok. Yeniden açılma koşulu: hat gerçekten eşzamanlı çağrılırsa.
 
 - **[accepted_risk, medium] TOCTOU penceresi daraltıldı, KAPANMADI (2026-09-09).**
   `run_audit_round` her alt süreç çağrısından önce rol yolunu yeniden doğruluyor, ama

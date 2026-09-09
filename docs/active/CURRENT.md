@@ -1,6 +1,10 @@
 # Active Tasks
 
-- **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). **Sıradaki iş: Task 11.** Task 10 indi ve checkpoint 7 kapandı (beş hakem turu; on bulgu kapandı, ikisi gerekçeli kabul edilmiş risk). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
+- **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim
+  hattı (Plan 2, 20 görev). **Durum, sıradaki iş ve açık borçlar:**
+  `docs/active/sektor-bilgi-paketi-plan2/TASK.md`; oturum devri `HANDOFF.md`.
+  *(Buraya durum cümlesi YAZILMAZ — kanonik ayrım gereği status TASK.md'nin malıdır ve
+  burada tutulan kopya her görevde bayatlıyordu: Task 8 → 9 → 10 → 11 dört kez.)*
 
 ## Bitti — arşivi Plan 2 ile BİRLİKTE yapılacak
 
