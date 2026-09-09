@@ -43,13 +43,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from types import MappingProxyType
+from typing import Any, Callable, Mapping, Protocol, Sequence
 from uuid import UUID
 
-from app.services.sector_pipeline import contracts, identity
+from app.services.sector_pipeline import contracts, identity, runs
 from app.services.sector_pipeline.brief_doctor import DoctorReport
 from app.services.sector_pipeline.runs import (
     ARASTIRMA_DEPOSU_KOKU as _DEPO_KOKU,
@@ -859,3 +862,100 @@ def preflight(
         web_erisimi=erisim,
         sebep="" if erisim else "web erişimi probu olumsuz döndü — tur başlamaz",
     )
+
+
+# ═══ Task 10 — iki kör denetçi orkestrasyonu (K-76 · K-78 · K-79 · K-82 · K-150) ═══
+
+GOREV_DOSYA_ADI = "00-GOREV.md"
+RAPOR_DOSYA_KALIBI = "RAPOR-{}.md"
+DENETIM_ASAMASI = "denetim"
+SENTEZ_ARACI = "sentez"
+ARAC_ADLARI: tuple[str, ...] = DENETCI_ROLLERI + (SENTEZ_ARACI,)
+RUNNER_DURUMLARI: tuple[str, ...] = ("tamam", "zaman-asimi", "hata")
+
+_LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    argv: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        raise NotImplementedError
+
+
+ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType({})
+
+
+@dataclass(frozen=True)
+class RunnerOutcome:
+    durum: str
+    stdout: str
+    stderr: str
+    exit_code: int | None
+
+    def __post_init__(self) -> None:
+        raise NotImplementedError
+
+
+class Runner(Protocol):
+    def run(self, tool: str, cwd: Path, prompt_path: Path) -> RunnerOutcome: ...
+
+
+class SubprocessRunner:
+    def __init__(self, *, zaman_asimi_sn: float) -> None:
+        raise NotImplementedError
+
+    def run(self, tool: str, cwd: Path, prompt_path: Path) -> RunnerOutcome:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class ValidatedAuditPair:
+    birinci: AuditReport
+    ikinci: AuditReport
+    unit_snapshot_sha: str
+
+    def __post_init__(self) -> None:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class SnapshotAgreement:
+    cift: ValidatedAuditPair | None
+    errors: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        raise NotImplementedError
+
+    @property
+    def gecerli(self) -> bool:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True)
+class AuditRound:
+    reports: tuple[AuditReport, ...]
+    gecerli: bool
+    sebep: str | None
+
+    def __post_init__(self) -> None:
+        raise NotImplementedError
+
+
+def check_snapshot_agreement(
+    validated: tuple[ValidatedReport, ValidatedReport],
+    *,
+    expected_snapshot_sha: str,
+) -> SnapshotAgreement:
+    raise NotImplementedError
+
+
+async def run_audit_round(
+    db,
+    packet: PacketRef,
+    *,
+    runner: Runner,
+    run_id: str,
+) -> AuditRound:
+    raise NotImplementedError
