@@ -1,0 +1,934 @@
+"""Sentez koşumu + çıktı doğrulayıcı (Plan 2 Task 11).
+
+Ölçülen sözleşme beş başlıkta toplanır:
+
+* **KANONİK SIRA.** `sentez → motor → draft`. Modül `sector_packages` tablosuna
+  yazamaz; yapısal tarama `insert_draft` içe aktarımının YOKLUĞUNU kanıtlar.
+* **KİMLİK SENTEZİN MALI DEĞİL.** Yol ve hash üretilen içerikten
+  `identity.enumerate_content_units` + `identity.canonical_sha` ile TÜRETİLİR;
+  modelin yazdığı değerler kabul edilmez. `guncelle` kimliği korur, `ekle` yeni
+  kimlik alır ve `yerine_gecer` ile çıkarılana bağlanır.
+* **ÇIKARMA POZİTİF KANIT İSTER (K-124), DOĞRULANMIŞ KALIP KORUNUR (K-122).**
+  Reddedilen çıkarma SESSİZCE düşmez: birim içeriğe geri konur, `koru` satırı
+  yazılır ve madde AÇIK SORUYA düşer.
+* **TAŞMA KESMEZ (K-74/K-75).** Tavanı aşan madde DÜŞÜRÜLMEZ; yalnız `tasma`
+  işaretlenir. Sayı kapı DEĞİLDİR.
+* **DURUM SAHİPLİĞİ (K-82).** Zaman aşımı ve araç arızası `tamamlanmadi`
+  işaretini SENTEZDEN attırır; testler GERÇEK veritabanı satırına bakar.
+
+**Oracle bağımsızlığı.** Sentez çıktısının bölüm başlıkları ve iki taşma tavanı
+bu dosyada pinlenmiş sözleşmelerden ELLE okunarak yazılmıştır; üretim
+sabitlerinden TÜRETİLMEZ — türetilseydi yanlış bir değer de testi geçerdi
+(totolojik oracle).
+
+**Girdi kurucuları `identity`'yi KULLANIR.** Aktif paketin kendi bütünlük
+kapısından geçmesi gerekir; elle yazılmış hash o kapıyı düşürürdü. Ölçülen şey
+girdinin kendisi değil, sentezin ÜRETTİĞİdir.
+"""
+
+from __future__ import annotations
+
+import ast
+import json
+import re
+import uuid
+from pathlib import Path
+
+import pytest
+
+from app.core.database import _init_connection
+from app.services.sector_pipeline import auditors, identity, runs, synthesis
+
+REPO_KOK = Path(__file__).resolve().parents[4]
+
+
+# ═══ Ölçüm anında elle yazılmış BAĞIMSIZ sabitler ═══════════════════════════
+#
+# Kaynak: `/root/otomaix-sosyal-medya-arastirmasi/hakem-sentez-gorevi.md`
+# ADIM 4 (satır 348 · 378 · 394 · 397) ve satır 395; denetçi sözleşmesi
+# satır 217. Üretim sabitlerinden OKUNMAZ.
+
+OLCULEN_BOLUM_ANAHTARLARI = ("ADAY PAKET", "DECISION_LOG", "AÇIK SORULAR", "ÖZET")
+OLCULEN_ACIK_SORU_TAVANI = 10
+OLCULEN_DENETCI_ONERI_TAVANI = 5
+
+
+# ═══ İçerik ve kimlik kurucuları ═══════════════════════════════════════════
+
+
+UNIT_KORU = "ku-111111111111"
+UNIT_CIKAR = "ku-222222222222"
+UNIT_MEVZUAT = "ku-333333333333"
+
+KORUNAN_METIN = "Doğrulanmış kalıp metni"
+CIKARILACAK_METIN = "Çıkarılacak kalıp metni"
+MEVZUAT_METNI = "Ayar beyanı mevzuata bağlıdır"
+
+
+def _tam_icerik(**degisiklik) -> dict:
+    """Yazım kapısını GEÇEN eksiksiz içerik — alan kümesi kapalı ve TAM."""
+    icerik = {
+        "kapsam": "Kuyumculuk: altın ve gümüş takı perakendesi.",
+        "ton_ve_dil": "Sıcak, güven veren, sade.",
+        "gorsel_kodlar": "Yakın çekim, sıcak ışık, doku vurgusu.",
+        "cta_kaliplari": [
+            {
+                "kalip": "Vitrini görmek için uğrayın",
+                "tur": "ziyaret",
+                "gerekce": "Mağaza trafiği hedefi.",
+            }
+        ],
+        "kanca_kaliplari": [KORUNAN_METIN, CIKARILACAK_METIN],
+        "takvim_temalari": ["Sevgililer Günü hediye seçimi"],
+        "yasaklar_ve_hassasiyetler": [MEVZUAT_METNI],
+        "video_kodlar": {"hareket": ["yavaş kaydırma"], "sahne": ["tezgâh üstü"]},
+        "ozel_gun": {},
+    }
+    icerik.update(degisiklik)
+    return icerik
+
+
+AKTIF_ICERIK = _tam_icerik()
+
+ADLI_KIMLIKLER = {
+    "kanca_kaliplari[0]": UNIT_KORU,
+    "kanca_kaliplari[1]": UNIT_CIKAR,
+    "yasaklar_ve_hassasiyetler[0]": UNIT_MEVZUAT,
+}
+
+
+def _yol_kimlik(icerik: dict) -> dict[str, str]:
+    """Yol → `unit_id`. Adlandırılmamış yollar deterministik kimlik alır."""
+    eslemeler: dict[str, str] = {}
+    for sira, yol in enumerate(sorted(identity.enumerate_content_units(icerik)), 1):
+        eslemeler[yol] = ADLI_KIMLIKLER.get(yol, "ku-" + f"{sira:012x}")
+    return eslemeler
+
+
+def _aktif_paket() -> dict:
+    icerik = AKTIF_ICERIK
+    birimler = identity.enumerate_content_units(icerik)
+    kimlikler = _yol_kimlik(icerik)
+    return {
+        "schema_version": 1,
+        "content": icerik,
+        "decision_log": [
+            {
+                "tur": "karar",
+                "alan": birimler[yol]["alan"],
+                "oge_yolu": yol,
+                "unit_id": kimlikler[yol],
+                "oge_sha": birimler[yol]["oge_sha"],
+                "karar": "koru",
+                "gerekce": "Önceki turdan taşındı.",
+                "kanit": "",
+                "aktor": "sentez",
+            }
+            for yol in sorted(birimler)
+        ],
+    }
+
+
+BOZUK_SHA = "f" * 64
+"""Modelin yazdığı hash — sentezin onu KABUL ETMEDİĞİ ancak böyle ölçülür."""
+
+
+def _satir(karar: str, unit_id: str, yol: str, alan: str, **ek) -> dict:
+    satir = {
+        "tur": "karar",
+        "alan": alan,
+        "oge_yolu": yol,
+        "unit_id": unit_id,
+        "oge_sha": BOZUK_SHA,
+        "karar": karar,
+        "gerekce": "Sentez gerekçesi.",
+        "kanit": "D1#1",
+        "aktor": "sentez",
+    }
+    satir.update(ek)
+    return satir
+
+
+def _model_gunlugu(icerik: dict, *, atlanan: tuple[str, ...] = ()) -> list[dict]:
+    """Modelin yazdığı "her şey kalsın" günlüğü — hash'ler BOZUK.
+
+    `atlanan` kimlikleri günlükten düşer; çıkarma senaryoları o boşluğa kendi
+    satırını koyar.
+    """
+    birimler = identity.enumerate_content_units(icerik)
+    kimlikler = _yol_kimlik(AKTIF_ICERIK)
+    satirlar = []
+    for yol in sorted(birimler):
+        unit_id = kimlikler.get(yol)
+        if unit_id is None or unit_id in atlanan:
+            continue
+        satirlar.append(
+            _satir("koru", unit_id, yol, birimler[yol]["alan"])
+        )
+    return satirlar
+
+
+# ═══ Denetçi turu kurucuları ═══════════════════════════════════════════════
+
+
+def _envanter(*satirlar: tuple[str, str]) -> tuple[auditors.InventoryRow, ...]:
+    return tuple(
+        auditors.InventoryRow(
+            unit_id=uid, statu=statu, kanit="KAYNAK-1", gerekce="Tek cümle gerekçe."
+        )
+        for uid, statu in satirlar
+    )
+
+
+def _rapor(
+    rol: str,
+    *,
+    envanter: tuple[auditors.InventoryRow, ...] = (),
+    oneri_sayisi: int = 1,
+) -> auditors.AuditReport:
+    oneriler = "\n".join(f"- Öneri {sira}" for sira in range(1, oneri_sayisi + 1))
+    bolumler = {
+        ad: (oneriler if ad == "AÇIK SORU ÖNERİLERİ" else f"{ad} gövdesi")
+        for ad in auditors.BOLUM_ANAHTARLARI
+    }
+    return auditors.AuditReport(
+        denetci=rol,
+        ham_metin=f"{rol} ham raporu — Claude Code ile üretildi",
+        bolumler=bolumler,
+        yeniden_dogrulama=envanter,
+        url_orneklem=(),
+        unit_snapshot_sha="a" * 64,
+    )
+
+
+def _tur(
+    *,
+    envanter_1: tuple[auditors.InventoryRow, ...] = (),
+    envanter_2: tuple[auditors.InventoryRow, ...] = (),
+    oneri_sayisi: int = 1,
+) -> auditors.AuditRound:
+    return auditors.AuditRound(
+        reports=(
+            _rapor(
+                auditors.DENETCI_ROLLERI[0],
+                envanter=envanter_1,
+                oneri_sayisi=oneri_sayisi,
+            ),
+            _rapor(
+                auditors.DENETCI_ROLLERI[1],
+                envanter=envanter_2,
+                oneri_sayisi=oneri_sayisi,
+            ),
+        ),
+        gecerli=True,
+        sebep=None,
+    )
+
+
+# ═══ Sentez çıktısı kurucusu — sözleşmenin KENDİ biçiminden yazıldı ════════
+
+
+def _sentez_metni(
+    aday: dict,
+    gunluk: list[dict],
+    sorular: list[str],
+    ozet: str = "Onay özeti gövdesi.",
+) -> str:
+    govde = (
+        f"1) {OLCULEN_BOLUM_ANAHTARLARI[0]} — şemaya birebir JSON:\n"
+        "```json\n"
+        f"{json.dumps(aday, ensure_ascii=False)}\n"
+        "```\n"
+        f"2) {OLCULEN_BOLUM_ANAHTARLARI[1]} — karar günlüğü:\n"
+        "```json\n"
+        f"{json.dumps(gunluk, ensure_ascii=False)}\n"
+        "```\n"
+        f"3) {OLCULEN_BOLUM_ANAHTARLARI[2]} — insan kararı gerekenler:\n"
+    )
+    if sorular:
+        govde += "\n".join(f"- {soru}" for soru in sorular) + "\n"
+    govde += (
+        f"4) {OLCULEN_BOLUM_ANAHTARLARI[3]} — operatör onay ekranı için:\n{ozet}\n"
+    )
+    return govde
+
+
+class SahteRunner:
+    """Sentez aracının yerine geçen dikiş — çağrıyı ve girdisini kaydeder."""
+
+    def __init__(self, sonuc: auditors.RunnerOutcome) -> None:
+        self.sonuc = sonuc
+        self.cagrilar: list[tuple[str, Path, Path]] = []
+        self.istem_metni: str | None = None
+
+    def run(self, tool: str, cwd: Path, prompt_path: Path) -> auditors.RunnerOutcome:
+        self.cagrilar.append((tool, cwd, prompt_path))
+        self.istem_metni = prompt_path.read_text(encoding="utf-8")
+        return self.sonuc
+
+
+def _tamam(metin: str) -> auditors.RunnerOutcome:
+    return auditors.RunnerOutcome(durum="tamam", stdout=metin, stderr="", exit_code=0)
+
+
+# ═══ Koşu dikişi ═══════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+async def kosu(db):
+    """GERÇEK koşu satırı — `mark_incomplete` gerçekten YAZAR.
+
+    Bağlantı üretimin kendi yapılandırmasından geçer (`_init_connection`):
+    yönetici olayı `jsonb` kolona yazılır ve codec'siz bağlantıda düşer.
+    """
+    await _init_connection(db)
+    root_id = await db.fetchval(
+        "SELECT id FROM social.sectors WHERE parent_sector_id IS NULL LIMIT 1"
+    )
+    assert root_id is not None, "kök sektör seed'i eksik"
+    sector_id = await db.fetchval(
+        "INSERT INTO social.sectors (slug, display_name, parent_sector_id) "
+        "VALUES ($1, $2, $3) RETURNING id",
+        f"alt-{uuid.uuid4().hex[:8]}",
+        "Alt Sektör",
+        root_id,
+    )
+    run_id = runs.new_run_id()
+    await runs.open_run(db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+    return db, run_id
+
+
+async def _durum(db, run_id: str) -> tuple[str, str | None]:
+    kayit = await db.fetchrow(
+        "SELECT durum, sebep FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    )
+    return kayit["durum"], kayit["sebep"]
+
+
+async def _sentez(
+    kosu,
+    tmp_path: Path,
+    *,
+    aday: dict,
+    gunluk: list[dict],
+    sorular: list[str] | None = None,
+    tur: auditors.AuditRound | None = None,
+    aktif: dict | None = None,
+    sonuc: auditors.RunnerOutcome | None = None,
+):
+    db, run_id = kosu
+    runner = SahteRunner(
+        sonuc
+        if sonuc is not None
+        else _tamam(_sentez_metni(aday, gunluk, list(sorular or [])))
+    )
+    uretilen = await synthesis.run(
+        db,
+        _tur() if tur is None else tur,
+        run_id=run_id,
+        active_package=_aktif_paket() if aktif is None else aktif,
+        removed_history=(),
+        holiday_keys=set(),
+        runner=runner,
+        dest=tmp_path / "sentez-kokleri",
+    )
+    return uretilen, runner
+
+
+def _satirlar(sonuc: synthesis.SynthesisResult) -> dict[str, dict]:
+    """`unit_id` → satır. Yola DEĞİL KİMLİĞE anahtarlanır (yol KONUMSALDIR)."""
+    return {
+        satir["unit_id"]: dict(satir)
+        for satir in sonuc.karar_gunlugu
+        if satir.get("tur") == "karar"
+    }
+
+
+# ═══ 1. Ölçülmüş sözleşme ══════════════════════════════════════════════════
+
+
+def test_section_keys_match_pinned_contract() -> None:
+    """Başlıklar pinlenmiş sözleşmeden YENİDEN ölçülür — SIRA dâhil."""
+    metin = (auditors.ARASTIRMA_DEPOSU_KOKU / synthesis.GOREV_DOSYASI).read_text(
+        encoding="utf-8"
+    )
+    bulunan = tuple(
+        m.group(1)
+        for m in re.finditer(r"^\d\) ([A-ZÇĞİÖŞÜ_][A-ZÇĞİÖŞÜ_ ]*?) —", metin, re.M)
+    )
+    assert bulunan == OLCULEN_BOLUM_ANAHTARLARI
+    assert synthesis.SENTEZ_BOLUM_ANAHTARLARI == OLCULEN_BOLUM_ANAHTARLARI
+
+
+def test_overflow_caps_match_the_two_contracts() -> None:
+    """K-74 ve K-75 AYRI sözleşmelerden gelir; tek karara bağlanmaz."""
+    assert synthesis.K74_ACIK_SORU_TAVANI == OLCULEN_ACIK_SORU_TAVANI
+    assert synthesis.K75_DENETCI_ONERI_TAVANI == OLCULEN_DENETCI_ONERI_TAVANI
+
+
+# ═══ 2. Kanonik sıra — yapısal kapı ════════════════════════════════════════
+
+
+def test_synthesis_module_does_not_import_insert_draft() -> None:
+    """`sentez → motor → draft` sırası KOD DÜZEYİNDE zorlanır.
+
+    Desen kavramdan türetilir: aranan şey "paket tablosuna yazan yüzeyin adı",
+    bulunan örneklerden değil.
+    """
+    kaynak = (
+        REPO_KOK / "apps/social/backend/app/services/sector_pipeline/synthesis.py"
+    ).read_text(encoding="utf-8")
+    agac = ast.parse(kaynak)
+    ice_aktarilan: set[str] = set()
+    for dugum in ast.walk(agac):
+        if isinstance(dugum, ast.ImportFrom):
+            assert dugum.module != "app.services.sector_package_lifecycle"
+            for ad in dugum.names:
+                ice_aktarilan.add(ad.name)
+        elif isinstance(dugum, ast.Import):
+            for ad in dugum.names:
+                assert "sector_package_lifecycle" not in ad.name
+    assert "insert_draft" not in ice_aktarilan
+    assert "insert_draft" not in kaynak
+
+
+# ═══ 3. Pozitif kontrol ve kimlik taşıması ═════════════════════════════════
+
+
+async def test_valid_round_produces_four_outputs(kosu, tmp_path) -> None:
+    """Geçerli turdan DÖRT çıktı doğar ve taşma işareti temizdir."""
+    icerik = _tam_icerik()
+    sonuc, runner = await _sentez(
+        kosu,
+        tmp_path,
+        aday=icerik,
+        gunluk=_model_gunlugu(icerik),
+        sorular=["Kanca sayısı yeterli mi?"],
+    )
+    assert dict(sonuc.aday_json) == icerik
+    assert len(sonuc.karar_gunlugu) == len(identity.enumerate_content_units(icerik))
+    assert sonuc.acik_sorular == ("Kanca sayısı yeterli mi?",)
+    assert sonuc.onay_ozeti.strip()
+    assert sonuc.tasma is False
+    assert [cagri[0] for cagri in runner.cagrilar] == [auditors.SENTEZ_ARACI]
+
+
+async def test_prompt_carries_both_reports_with_tool_identity_masked(
+    kosu, tmp_path
+) -> None:
+    """İki rapor da isteme girer; araç kimliği maskeden GEÇER (K-137 uzantısı).
+
+    Vaat kümenin kendisi kadardır: `auditors.ARAC_KIMLIKLERI` kapalı bir
+    kümedir ve dışındaki bir satıcı adı maskelenmez. Ölçülen, kümedeki bir
+    adın maskelendiğidir.
+    """
+    icerik = _tam_icerik()
+    _, runner = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    istem = runner.istem_metni
+    assert istem is not None
+    for rol in auditors.DENETCI_ROLLERI:
+        assert rol in istem
+    assert "Claude Code" not in istem
+    assert auditors.ARAC_MASKESI in istem
+
+
+async def test_every_decision_row_carries_path_and_sha(kosu, tmp_path) -> None:
+    """Yol ve hash MODELDEN alınmaz, üretilen içerikten TÜRETİLİR."""
+    icerik = _tam_icerik()
+    sonuc, _ = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    birimler = identity.enumerate_content_units(dict(sonuc.aday_json))
+    for satir in sonuc.karar_gunlugu:
+        assert satir["aktor"] == "sentez"
+        for alan in ("unit_id", "oge_yolu", "oge_sha"):
+            assert satir[alan], f"{alan} boş"
+        assert satir["oge_sha"] != BOZUK_SHA, "modelin yazdığı hash KABUL EDİLMİŞ"
+        assert satir["oge_sha"] == birimler[satir["oge_yolu"]]["oge_sha"]
+        assert satir["alan"] == birimler[satir["oge_yolu"]]["alan"]
+
+
+async def test_produced_log_passes_check_unit_integrity(kosu, tmp_path) -> None:
+    """Üretici ↔ doğrulayıcı uçtan uca: ürettiğimiz çift bütünlük kapısını GEÇER."""
+    icerik = _tam_icerik()
+    sonuc, _ = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    assert (
+        identity.check_unit_integrity(
+            dict(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu]
+        )
+        == []
+    )
+    assert synthesis.validate(sonuc) == []
+
+
+async def test_guncelle_preserves_unit_id(kosu, tmp_path) -> None:
+    """`guncelle` kimliği KORUR; hash yeni metinden TAZE üretilir."""
+    yeni = KORUNAN_METIN + " — güncellendi"
+    icerik = _tam_icerik(kanca_kaliplari=[yeni, CIKARILACAK_METIN])
+    gunluk = _model_gunlugu(icerik)
+    for satir in gunluk:
+        if satir["unit_id"] == UNIT_KORU:
+            satir["karar"] = "guncelle"
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk)
+
+    satir = _satirlar(sonuc)[UNIT_KORU]
+    assert satir["karar"] == "guncelle"
+    assert satir["unit_id"] == UNIT_KORU
+    assert satir["oge_sha"] == identity.canonical_sha(yeni)
+
+
+async def test_cikar_ekle_pair_links_via_yerine_gecer(kosu, tmp_path) -> None:
+    """K-86/K-154: `ekle` YENİ kimlik alır, `yerine_gecer` çıkarılana bağlar."""
+    yeni_metin = "Yepyeni kalıp metni"
+    icerik = _tam_icerik(kanca_kaliplari=[KORUNAN_METIN, yeni_metin])
+    gunluk = _model_gunlugu(icerik, atlanan=(UNIT_CIKAR,))
+    gunluk = [s for s in gunluk if s["oge_yolu"] != "kanca_kaliplari[1]"]
+    gunluk.append(
+        _satir("cikar", UNIT_CIKAR, "kanca_kaliplari[1]", "kanca_kaliplari")
+    )
+    gunluk.append(
+        _satir(
+            "ekle",
+            "ku-999999999999",
+            "kanca_kaliplari[1]",
+            "kanca_kaliplari",
+            yerine_gecer=UNIT_CIKAR,
+        )
+    )
+    tur = _tur(envanter_1=_envanter((UNIT_CIKAR, "contradicted")))
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, tur=tur)
+
+    satirlar = _satirlar(sonuc)
+    assert satirlar[UNIT_CIKAR]["karar"] == "cikar"
+    ekle = [s for s in satirlar.values() if s["karar"] == "ekle"]
+    assert len(ekle) == 1
+    assert ekle[0]["unit_id"] not in {
+        UNIT_KORU,
+        UNIT_CIKAR,
+        UNIT_MEVZUAT,
+        "ku-999999999999",
+    }
+    assert identity.UNIT_ID_RE.match(ekle[0]["unit_id"])
+    assert ekle[0]["yerine_gecer"] == UNIT_CIKAR
+    assert (
+        identity.check_unit_integrity(
+            dict(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu]
+        )
+        == []
+    )
+
+
+# ═══ 4. Çıkarma eşiği — K-124 ve K-122 ═════════════════════════════════════
+
+
+def _cikarma_gunlugu(icerik: dict, hedef: str, yol: str, alan: str) -> list[dict]:
+    """Modelin "bu birimi çıkar" günlüğü — kalan her öğe `koru`."""
+    gunluk = _model_gunlugu(icerik, atlanan=(hedef,))
+    gunluk.append(_satir("cikar", hedef, yol, alan))
+    return gunluk
+
+
+async def test_cikar_without_evidence_becomes_open_question(kosu, tmp_path) -> None:
+    """K-124: pozitif kanıt yoksa çıkarma YAPILMAZ, madde açık soruya DÜŞER.
+
+    Sessiz kayıp yolu kapalıdır: birim içeriğe geri konur ve onu sahiplenen
+    `koru` satırı yazılır — yoksa bütünlük kapısı zaten düşerdi.
+    """
+    icerik = _tam_icerik(kanca_kaliplari=[KORUNAN_METIN])
+    gunluk = _cikarma_gunlugu(
+        icerik, UNIT_CIKAR, "kanca_kaliplari[1]", "kanca_kaliplari"
+    )
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk)
+
+    assert CIKARILACAK_METIN in dict(sonuc.aday_json)["kanca_kaliplari"]
+    assert _satirlar(sonuc)[UNIT_CIKAR]["karar"] == "koru"
+    assert any(UNIT_CIKAR in soru for soru in sonuc.acik_sorular)
+    assert (
+        identity.check_unit_integrity(
+            dict(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu]
+        )
+        == []
+    )
+
+
+async def test_cikar_with_positive_evidence_is_admitted(kosu, tmp_path) -> None:
+    """Pozitif kontrol: tek denetçinin `contradicted` satırı normal bilgide YETER."""
+    icerik = _tam_icerik(kanca_kaliplari=[KORUNAN_METIN])
+    gunluk = _cikarma_gunlugu(
+        icerik, UNIT_CIKAR, "kanca_kaliplari[1]", "kanca_kaliplari"
+    )
+    tur = _tur(envanter_1=_envanter((UNIT_CIKAR, "contradicted")))
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, tur=tur)
+
+    assert CIKARILACAK_METIN not in dict(sonuc.aday_json)["kanca_kaliplari"]
+    assert _satirlar(sonuc)[UNIT_CIKAR]["karar"] == "cikar"
+    assert sonuc.acik_sorular == ()
+
+
+async def test_cikar_of_legislation_requires_both_auditors(kosu, tmp_path) -> None:
+    """K-124 mevzuat kolu: TEK denetçinin çelişki satırı YETMEZ."""
+    icerik = _tam_icerik(yasaklar_ve_hassasiyetler=["Yeni mevzuat kalıbı"])
+    gunluk = _model_gunlugu(icerik, atlanan=(UNIT_MEVZUAT,))
+    gunluk = [s for s in gunluk if s["oge_yolu"] != "yasaklar_ve_hassasiyetler[0]"]
+    gunluk.append(
+        _satir(
+            "cikar",
+            UNIT_MEVZUAT,
+            "yasaklar_ve_hassasiyetler[0]",
+            "yasaklar_ve_hassasiyetler",
+        )
+    )
+    gunluk.append(
+        _satir(
+            "ekle",
+            "ku-888888888888",
+            "yasaklar_ve_hassasiyetler[0]",
+            "yasaklar_ve_hassasiyetler",
+            yerine_gecer=UNIT_MEVZUAT,
+        )
+    )
+    tek = _tur(envanter_1=_envanter((UNIT_MEVZUAT, "contradicted")))
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, tur=tek)
+
+    assert MEVZUAT_METNI in dict(sonuc.aday_json)["yasaklar_ve_hassasiyetler"]
+    assert _satirlar(sonuc)[UNIT_MEVZUAT]["karar"] == "koru"
+    assert any(UNIT_MEVZUAT in soru for soru in sonuc.acik_sorular)
+
+
+async def test_cikar_of_legislation_passes_with_both_auditors(kosu, tmp_path) -> None:
+    """Pozitif kontrol: iki denetçi de çelişki gösterirse mevzuat birimi ÇIKAR."""
+    icerik = _tam_icerik(yasaklar_ve_hassasiyetler=["Yeni mevzuat kalıbı"])
+    gunluk = _model_gunlugu(icerik, atlanan=(UNIT_MEVZUAT,))
+    gunluk = [s for s in gunluk if s["oge_yolu"] != "yasaklar_ve_hassasiyetler[0]"]
+    gunluk.append(
+        _satir(
+            "cikar",
+            UNIT_MEVZUAT,
+            "yasaklar_ve_hassasiyetler[0]",
+            "yasaklar_ve_hassasiyetler",
+        )
+    )
+    gunluk.append(
+        _satir(
+            "ekle",
+            "ku-888888888888",
+            "yasaklar_ve_hassasiyetler[0]",
+            "yasaklar_ve_hassasiyetler",
+            yerine_gecer=UNIT_MEVZUAT,
+        )
+    )
+    iki = _tur(
+        envanter_1=_envanter((UNIT_MEVZUAT, "contradicted")),
+        envanter_2=_envanter((UNIT_MEVZUAT, "contradicted")),
+    )
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, tur=iki)
+
+    assert MEVZUAT_METNI not in dict(sonuc.aday_json)["yasaklar_ve_hassasiyetler"]
+    assert _satirlar(sonuc)[UNIT_MEVZUAT]["karar"] == "cikar"
+
+
+async def test_churn_guard_blocks_weak_new_over_verified(kosu, tmp_path) -> None:
+    """K-122: bir denetçi `supported` diyorsa doğrulanmış kalıp KALIR.
+
+    Karşı taraftaki `contradicted` satırı tek başına yetmez — iki denetçinin
+    ayrıştığı yer çıkarma değil AÇIK SORU yeridir.
+    """
+    icerik = _tam_icerik(kanca_kaliplari=[KORUNAN_METIN, "Yepyeni zayıf kalıp"])
+    gunluk = _model_gunlugu(icerik, atlanan=(UNIT_CIKAR,))
+    gunluk = [s for s in gunluk if s["oge_yolu"] != "kanca_kaliplari[1]"]
+    gunluk.append(
+        _satir("cikar", UNIT_CIKAR, "kanca_kaliplari[1]", "kanca_kaliplari")
+    )
+    gunluk.append(
+        _satir(
+            "ekle",
+            "ku-777777777777",
+            "kanca_kaliplari[1]",
+            "kanca_kaliplari",
+            yerine_gecer=UNIT_CIKAR,
+        )
+    )
+    tur = _tur(
+        envanter_1=_envanter((UNIT_CIKAR, "contradicted")),
+        envanter_2=_envanter((UNIT_CIKAR, "supported")),
+    )
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, tur=tur)
+
+    assert CIKARILACAK_METIN in dict(sonuc.aday_json)["kanca_kaliplari"]
+    assert _satirlar(sonuc)[UNIT_CIKAR]["karar"] == "koru"
+    assert any(UNIT_CIKAR in soru for soru in sonuc.acik_sorular)
+
+
+async def test_not_observed_alone_does_not_license_removal(kosu, tmp_path) -> None:
+    """`not_observed` GEÇERSİZLİK KANITI DEĞİLDİR (denetçi sözleşmesi satır 179)."""
+    icerik = _tam_icerik(kanca_kaliplari=[KORUNAN_METIN])
+    gunluk = _cikarma_gunlugu(
+        icerik, UNIT_CIKAR, "kanca_kaliplari[1]", "kanca_kaliplari"
+    )
+    tur = _tur(
+        envanter_1=_envanter((UNIT_CIKAR, "not_observed")),
+        envanter_2=_envanter((UNIT_CIKAR, "not_observed")),
+    )
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, tur=tur)
+
+    assert CIKARILACAK_METIN in dict(sonuc.aday_json)["kanca_kaliplari"]
+    assert _satirlar(sonuc)[UNIT_CIKAR]["karar"] == "koru"
+
+
+# ═══ 5. Taşma — K-74 / K-75 ════════════════════════════════════════════════
+
+
+async def test_overflow_marks_flag_without_truncating(kosu, tmp_path) -> None:
+    """Tavanı aşan açık soru DÜŞÜRÜLMEZ; yalnız `tasma` işaretlenir."""
+    sorular = [f"Açık soru {sira}" for sira in range(OLCULEN_ACIK_SORU_TAVANI + 2)]
+    icerik = _tam_icerik()
+    sonuc, _ = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), sorular=sorular
+    )
+    assert sonuc.tasma is True
+    assert len(sonuc.acik_sorular) == len(sorular)
+    assert sonuc.acik_sorular == tuple(sorular)
+
+
+async def test_auditor_suggestion_overflow_also_marks_the_flag(kosu, tmp_path) -> None:
+    """K-75 AYRI koldur: sentez hiç açık soru yazmasa da denetçi taşması işaretlenir."""
+    icerik = _tam_icerik()
+    tur = _tur(oneri_sayisi=OLCULEN_DENETCI_ONERI_TAVANI + 1)
+    sonuc, _ = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), tur=tur
+    )
+    assert sonuc.acik_sorular == ()
+    assert sonuc.tasma is True
+
+
+async def test_counts_at_the_cap_do_not_overflow(kosu, tmp_path) -> None:
+    """Sınır dâhil: tam tavanda taşma YOKTUR (kapalı aralık kontrolü)."""
+    sorular = [f"Açık soru {sira}" for sira in range(OLCULEN_ACIK_SORU_TAVANI)]
+    icerik = _tam_icerik()
+    tur = _tur(oneri_sayisi=OLCULEN_DENETCI_ONERI_TAVANI)
+    sonuc, _ = await _sentez(
+        kosu,
+        tmp_path,
+        aday=icerik,
+        gunluk=_model_gunlugu(icerik),
+        sorular=sorular,
+        tur=tur,
+    )
+    assert sonuc.tasma is False
+
+
+# ═══ 6. Çıktı doğrulayıcı — `validate` ═════════════════════════════════════
+
+
+def _sonuc(aday: dict, gunluk: list[dict] | None = None) -> synthesis.SynthesisResult:
+    return synthesis.SynthesisResult(
+        aday_json=aday,
+        karar_gunlugu=tuple(gunluk or []),
+        acik_sorular=(),
+        onay_ozeti="Özet.",
+        tasma=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "video, etiket",
+    [
+        ({"hareket": "tek cümle", "sahne": ["tezgâh üstü"]}, "hareket dize"),
+        ({"hareket": ["yavaş kaydırma"], "sahne": "tek cümle"}, "sahne dize"),
+        ({"hareket": ["yavaş kaydırma"]}, "sahne havuzu yok"),
+        ({"sahne": ["tezgâh üstü"]}, "hareket havuzu yok"),
+    ],
+)
+def test_video_pools_are_two_lists(video, etiket) -> None:
+    """K-02/K-113: İKİ havuz, ikisi de LİSTE.
+
+    Kural KOPYALANMAZ — Plan 1 yazım kapısı yeniden kullanılır. Bu test
+    `validate`'in o kapıyı gerçekten çağırdığını ölçer: çağrı düşerse KIRMIZI.
+    """
+    hatalar = synthesis.validate(_sonuc(_tam_icerik(video_kodlar=video)))
+    assert any("video_kodlar" in hata for hata in hatalar), etiket
+
+
+def test_validate_accepts_the_two_pool_shape() -> None:
+    """Boş küme kontrol kolu: doğru şekil video_kodlar hatası ÜRETMEZ."""
+    icerik = _tam_icerik()
+    birimler = identity.enumerate_content_units(icerik)
+    kimlikler = _yol_kimlik(icerik)
+    gunluk = [
+        {
+            "tur": "karar",
+            "alan": birimler[yol]["alan"],
+            "oge_yolu": yol,
+            "unit_id": kimlikler[yol],
+            "oge_sha": birimler[yol]["oge_sha"],
+            "karar": "koru",
+            "gerekce": "Taşındı.",
+            "kanit": "",
+            "aktor": "sentez",
+        }
+        for yol in sorted(birimler)
+    ]
+    assert synthesis.validate(_sonuc(icerik, gunluk)) == []
+
+
+def test_validate_rejects_a_row_written_by_another_actor() -> None:
+    """Sentezin günlüğündeki her satırın aktörü `sentez`tir."""
+    icerik = _tam_icerik()
+    birimler = identity.enumerate_content_units(icerik)
+    kimlikler = _yol_kimlik(icerik)
+    gunluk = [
+        {
+            "tur": "karar",
+            "alan": birimler[yol]["alan"],
+            "oge_yolu": yol,
+            "unit_id": kimlikler[yol],
+            "oge_sha": birimler[yol]["oge_sha"],
+            "karar": "koru",
+            "gerekce": "Taşındı.",
+            "kanit": "",
+            "aktor": "sentez",
+        }
+        for yol in sorted(birimler)
+    ]
+    gunluk[0] = dict(gunluk[0], aktor="insan")
+    hatalar = synthesis.validate(_sonuc(icerik, gunluk))
+    assert any("aktor" in hata for hata in hatalar)
+
+
+def test_result_collections_are_frozen() -> None:
+    """R6(e): geçerlilik taşıyan koleksiyon yapımdan SONRA değiştirilemez."""
+    icerik = _tam_icerik()
+    sonuc = _sonuc(icerik)
+    assert isinstance(sonuc.karar_gunlugu, tuple)
+    assert isinstance(sonuc.acik_sorular, tuple)
+    with pytest.raises(TypeError):
+        sonuc.aday_json["kapsam"] = "değişti"  # type: ignore[index]
+
+
+def test_result_does_not_alias_the_caller_content() -> None:
+    """Çağıranın sözlüğü yapımdan sonra sonucun içini DEĞİŞTİREMEZ."""
+    icerik = _tam_icerik()
+    sonuc = _sonuc(icerik)
+    icerik["kanca_kaliplari"].append("sonradan eklendi")
+    assert "sonradan eklendi" not in dict(sonuc.aday_json)["kanca_kaliplari"]
+
+
+# ═══ 7. Terminal arızalar — K-82 durum sahipliği ═══════════════════════════
+
+
+@pytest.mark.parametrize(
+    "sonuc, etiket",
+    [
+        (
+            auditors.RunnerOutcome(
+                durum="zaman-asimi", stdout="", stderr="", exit_code=None
+            ),
+            "zaman aşımı",
+        ),
+        (
+            auditors.RunnerOutcome(
+                durum="hata", stdout="", stderr="araç düştü", exit_code=1
+            ),
+            "araç arızası",
+        ),
+    ],
+)
+async def test_synthesis_timeout_marks_incomplete(
+    kosu, tmp_path, sonuc, etiket
+) -> None:
+    """Sentezin de durum sahibi VARDIR — runner `tamamlanmadi` atamaz."""
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    with pytest.raises(synthesis.SynthesisFailed):
+        await _sentez(
+            kosu,
+            tmp_path,
+            aday=icerik,
+            gunluk=_model_gunlugu(icerik),
+            sonuc=sonuc,
+        )
+    durum, sebep = await _durum(db, run_id)
+    assert durum == "tamamlanmadi", etiket
+    assert sebep
+
+
+async def test_unparseable_output_marks_incomplete(kosu, tmp_path) -> None:
+    """Biçim kapısı: dört bölümü taşımayan çıktı SONUÇ DEĞİLDİR."""
+    db, run_id = kosu
+    with pytest.raises(synthesis.SynthesisFailed):
+        await _sentez(
+            kosu,
+            tmp_path,
+            aday=_tam_icerik(),
+            gunluk=[],
+            sonuc=_tamam("serbest metin rapor, bölüm yok"),
+        )
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+async def test_candidate_failing_the_writing_gate_marks_incomplete(
+    kosu, tmp_path
+) -> None:
+    """Şemayı geçmeyen aday motora ULAŞMAZ."""
+    db, run_id = kosu
+    bozuk = _tam_icerik()
+    bozuk.pop("kapsam")
+    with pytest.raises(synthesis.SynthesisFailed):
+        await _sentez(kosu, tmp_path, aday=bozuk, gunluk=_model_gunlugu(bozuk))
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+async def test_invalid_round_blocks_synthesis(kosu, tmp_path) -> None:
+    """K-150: geçersiz tur sentezi HİÇ başlatmaz — araç koşmaz, satır bozulmaz."""
+    db, run_id = kosu
+    runner = SahteRunner(_tamam("kullanılmayacak"))
+    gecersiz = auditors.AuditRound(
+        reports=(), gecerli=False, sebep="tek denetçi rapor üretti"
+    )
+    with pytest.raises(synthesis.SynthesisFailed):
+        await synthesis.run(
+            db,
+            gecersiz,
+            run_id=run_id,
+            active_package=_aktif_paket(),
+            removed_history=(),
+            holiday_keys=set(),
+            runner=runner,
+            dest=tmp_path / "sentez-kokleri",
+        )
+    assert runner.cagrilar == []
+    assert (await _durum(db, run_id)) == ("calisiyor", None)
+
+
+async def test_existing_run_directory_refuses_the_round(kosu, tmp_path) -> None:
+    """Aynı koşu kimliği için ikinci sentez kökü AÇILMAZ (salt-ekleme)."""
+    db, run_id = kosu
+    (tmp_path / "sentez-kokleri" / run_id).mkdir(parents=True)
+    icerik = _tam_icerik()
+    with pytest.raises(synthesis.SynthesisFailed):
+        await _sentez(kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik))
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+async def test_relative_dest_is_refused(kosu, tmp_path) -> None:
+    """Göreli kök çalışma dizinine göre kayar — kapı dosya yaratmadan ÖNCE koşar."""
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    runner = SahteRunner(_tamam(_sentez_metni(icerik, _model_gunlugu(icerik), [])))
+    with pytest.raises(synthesis.SynthesisFailed):
+        await synthesis.run(
+            db,
+            _tur(),
+            run_id=run_id,
+            active_package=_aktif_paket(),
+            removed_history=(),
+            holiday_keys=set(),
+            runner=runner,
+            dest=Path("goreli/kok"),
+        )
+    assert runner.cagrilar == []
