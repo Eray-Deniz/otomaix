@@ -17,8 +17,9 @@ tipleri). Task 12 indi ve checkpoint 9 kapandı.
 **`cp_count: 6`** · **`last_checkpoint_ref: 692e4d9`** — §8.6 mutasyon protokolüyle bu oturumda
 ilerletildi.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**. Push durumu bu oturumun sonunda
-ayrıca sorulmuştur; taze ölçüm `git rev-list --left-right --count origin/<dal>...HEAD` ile alınır.
+**Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**, **push EDİLDİ** (Eray onayı,
+2026-09-09 oturum sonu). Ölçüldü: `git rev-list --left-right --count origin/<dal>...HEAD` → `0 0`;
+iki uç da `888ba67`. Yeni oturumda taze ölçüm yine o komutla alınır.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit `7964ed6`.
 Bu oturumda dokunulmadı; okundu (denetçi ve sentez sözleşmelerinin çıktı biçimleri ölçüldü).
