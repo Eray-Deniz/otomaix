@@ -18,12 +18,14 @@ main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 ön koşulu BİTTİ — `458661b`; sıradaki iş Task 10.) Task 1-8 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
-kanıtlandı. **Durum `active` KALIYOR** — sıradaki iş Task 9. Checkpoint 1, 2 ve **5** hakem
-`approve`'uyla kapandı; checkpoint 3 ve 4 koştu ama `approve` ALMADAN kapatıldı — **ikisinin
-aralığı da checkpoint 5'in tabanına dâhildi ve artık incelendi.** Checkpoint 6 override ile
-kapandı. **Sıradaki iş Task 9.** (Bu cümle 2026-09-08'e kadar "sıradaki iş Task 8" diyordu —
-Task 8 aynı gün indi ve checkpoint'i kapandı; bayat satır düzeltildi.) Task 8'in dispatch'inin
-önündeki dört kalemlik karar kapısı 2026-09-08'de kapandı (aşağıda).
+kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
+checkpoint 3 ve 4 koştu ama `approve` ALMADAN kapatıldı — **ikisinin aralığı da checkpoint 5'in
+tabanına dâhildi ve artık incelendi.** Checkpoint 6 override ile kapandı. Task 8'in
+dispatch'inin önündeki dört kalemlik karar kapısı 2026-09-08'de kapandı (aşağıda).
+
+> **"Sıradaki iş" bu paragrafta ÜÇ kez tekrarlanıyordu ve üçü de ayrı ayrı bayatladı
+> (Task 8 → Task 9 → Task 10). 2026-09-09'da TEK eve indirildi: yukarıdaki ilk cümle.**
+> Tekrarlanan durum cümlesi bayatlamaya davetiyedir; bir daha çoğaltma.
 
 **Onay tarihçesi (değişmez kayıt, silinmez):** plan onayı hakem zinciriyle değil **Eray'ın
 risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenmemişti.
