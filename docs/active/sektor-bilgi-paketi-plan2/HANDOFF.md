@@ -3,6 +3,9 @@ task: sektor-bilgi-paketi-plan2
 written: 2026-09-09
 ---
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-09-09 08:49) — bu anlatı yürütme öncesine aittir; güncel durum
+> TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+
 # Resume From
 
 **Sıradaki iş: Task 10.** Önündeki test matrisi ön koşulu 2026-09-09'da KAPANDI (`458661b`);
