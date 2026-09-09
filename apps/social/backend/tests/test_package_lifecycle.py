@@ -1251,3 +1251,81 @@ async def test_deactivation_rejects_sector_reassignment_under_lock(test_db_setup
     await _race_sector_reassignment(
         test_db_setup, transition=_transition, seed_status="active", with_keeper=False
     )
+
+
+# ─── K-112 (b): takvim erişilemezken YAZIM KAPISI (Plan 2 Task 12) ──────────
+#
+# Ölçülen şey eşleşmeme DEĞİL, ERİŞİLEMEZLİKTİR. Bu yolda sessiz düşüş YANLIŞ
+# olurdu: anahtar doğrulaması yapılamadan yazım, uydurma bir özel gün anahtarını
+# pakete alırdı. Doğru davranış açık ve TİPLİ bir hatayla fail-closed durmaktır.
+# Bugünkü davranış (ham `asyncpg` istisnası) doğruydu ama KAZARAydı; taban ölçümü
+# `docs/research/2026-08-27-k112-takvim-erisilemezlik-taban.md`'dedir.
+
+
+class _TakvimiDusenBaglanti:
+    """Yalnız takvim sorgusunda düşen sarmalayıcı — hata ENJEKSİYONU."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self.calendar_reads = 0
+
+    async def fetch(self, query, *args, **kwargs):
+        if "public_holidays" in query:
+            self.calendar_reads += 1
+            raise RuntimeError("takvim tablosuna erisilemedi (enjekte edilmis ariza)")
+        return await self._inner.fetch(query, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+async def test_calendar_unavailable_fails_draft_write_closed(pkg_db):
+    """Takvim okunamazsa yazım TİPLİ bir hatayla durur; satır YAZILMAZ."""
+    sector_id = await _sub_sector(pkg_db)
+    kirik = _TakvimiDusenBaglanti(pkg_db)
+
+    with pytest.raises(sector_package_lifecycle.CalendarUnavailable):
+        await insert_draft(
+            kirik,
+            sector_id=sector_id,
+            content=_valid_content(),
+            schema_version=1,
+            actor=ACTOR,
+        )
+
+    assert kirik.calendar_reads == 1, "kapı takvimi GERÇEKTEN okumaya çalışmalı"
+    yazilan = await pkg_db.fetchval(
+        "SELECT count(*) FROM social.sector_packages WHERE sector_id = $1", sector_id
+    )
+    assert yazilan == 0, "kapı geçilmeden satır yazılamaz"
+
+
+async def test_calendar_unavailable_error_keeps_the_original_cause(pkg_db):
+    """Tipli hata ham sebebi YUTMAZ — teşhis kaybolmaz."""
+    sector_id = await _sub_sector(pkg_db)
+    kirik = _TakvimiDusenBaglanti(pkg_db)
+
+    with pytest.raises(sector_package_lifecycle.CalendarUnavailable) as hata:
+        await insert_draft(
+            kirik,
+            sector_id=sector_id,
+            content=_valid_content(),
+            schema_version=1,
+            actor=ACTOR,
+        )
+
+    assert isinstance(hata.value.__cause__, RuntimeError)
+    assert hata.value.__cause__ is not hata.value
+
+
+async def test_calendar_available_still_writes_the_draft(pkg_db):
+    """POZİTİF KONTROL: kapı yalnız ERİŞİLEMEZLİKTE kapanır."""
+    sector_id = await _sub_sector(pkg_db)
+    package_id = await insert_draft(
+        pkg_db,
+        sector_id=sector_id,
+        content=_valid_content(),
+        schema_version=1,
+        actor=ACTOR,
+    )
+    assert package_id is not None
