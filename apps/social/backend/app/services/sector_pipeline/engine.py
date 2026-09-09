@@ -599,16 +599,57 @@ def _kabul_edilen_etiketler(inputs: EngineInputs) -> set[str]:
     }
 
 
+_SATIR_ATIF_RE = re.compile(r"^D\d+#\d+$")
+"""Denetçi satır atfının BİÇİMİ (`D1#7`) — sözleşmenin kendi yazımı."""
+
+
+def _bilesen_kabul_edilir(parca: str, kabul_edilen_etiketler: set[str]) -> bool:
+    """Bileşen KAPALI dilbilgisinin üç biçiminden biri mi?
+
+    Üç biçim: (1) bu koşuda geçerli kör etiket, (2) URL, (3) denetçi satır atfı.
+    Başka her şey — tek kelime dâhil — dilbilgisi DIŞIDIR.
+    """
+    if parca in kabul_edilen_etiketler:
+        return True
+    if "://" in parca and " " not in parca:
+        return True
+    return bool(_SATIR_ATIF_RE.match(parca))
+
+
 def sayilan_kaynaklar(kanit: Any, kabul_edilen_etiketler: set[str]) -> set[str]:
     """`kanit` metninin SAYILAN kaynak etiketleri — TEK kanonik ayrıştırıcı.
 
-    Bir parça ancak (a) virgülle ayrılmış bir parçanın TAMAMIYSA ve (b) bu koşuda
-    geçerli bir kör etiketse sayılır. Çevresinde düzyazı olan, olumsuzlanan,
-    uydurulan ya da elenmiş etiket SAYILMAZ. Kaynak sayan başka bir yol YOKTUR.
+    **Alan BÜTÜN olarak doğrulanır, bileşen bileşen SÜZÜLMEZ.** Üçüncü kapanış
+    turu (checkpoint 9) bunun neden gerektiğini ölçtü: bileşen bazlı süzme, bir
+    bileşendeki olumsuz düzyazının KOMŞU bileşenlerdeki çıplak etiketleri
+    kurtarmasına izin veriyordu — *"Bu kaynaklar iddiayı desteklemiyor: KAYNAK-1,
+    KAYNAK-2, KAYNAK-3"* iki kaynak sayılıyor ve yapısal çoğunluğu geçiriyordu.
+
+    Aynı eksen üç turda üç varyant doğurdu (metnin herhangi bir yerinde desen →
+    bileşen içinde sarmalanmış etiket → komşu bileşene taşan düzyazı). Varyant
+    yamamak yerine EKSEN kapatıldı: `kanit` alanı **kapalı bir dilbilgisidir** —
+    virgülle ayrılmış her bileşen ya geçerli bir kör etiket, ya bir URL, ya da bir
+    denetçi satır atfıdır. Dilbilgisi dışında TEK bir bileşen bile varsa alan
+    yapısal kanıt TAŞIMAZ ve hiçbir kaynak sayılmaz (fail-closed: karar
+    uygulanmaz, kalıp korunur).
+
+    **Neden olumsuzlama ARANMAZ.** *"Bu referans olumlu mu"* sorusunu serbest
+    düzyazıdan yanıtlamak bypass ile yanlış-pozitif arasında salınan bir sınıftır;
+    olumsuzlama listesi her turda yeni bir cümle biçimiyle aşılır. Kural bu yüzden
+    yapısaldır: düzyazı ZATEN dilbilgisi dışıdır, ne dediğine bakılmaz.
+
+    **Kabul edilen bedel, dürüst etiket:** meşru ama karışık yazılmış bir kanıt
+    alanı (etiketlerin yanında serbest not) da reddedilir. Yön bilinçlidir —
+    reddedilen karar uygulanmaz, kalıp korunur; sessizce kabul edilen desteksiz
+    bir ekleme ise pakete girerdi. Kalıcı çözüm serbest metni tipli bir destek
+    alanına çevirmektir ve o, arayüz eki revizyonudur (açık borç).
     """
-    return {
-        parca for parca in _kanit_parcalari(kanit) if parca in kabul_edilen_etiketler
-    }
+    parcalar = _kanit_parcalari(kanit)
+    if not parcalar:
+        return set()
+    if not all(_bilesen_kabul_edilir(p, kabul_edilen_etiketler) for p in parcalar):
+        return set()
+    return {parca for parca in parcalar if parca in kabul_edilen_etiketler}
 
 
 def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:

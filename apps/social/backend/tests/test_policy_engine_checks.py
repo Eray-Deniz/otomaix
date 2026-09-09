@@ -1364,3 +1364,71 @@ def test_auditor_row_reference_counts_as_evidence() -> None:
         otomatik_kapilar=girdi.otomatik_kapilar,
     )
     assert "kanit-yok" in _sebepler(engine.run_checks(yanlis))
+
+
+# ── Eksen kapanışı: ALAN BÜTÜN olarak doğrulanır (üretilmiş matris) ────────
+#
+# Üçüncü kapanış turu bileşen-bazlı süzmenin komşu bileşene taşan düzyazıyla
+# aşıldığını ÖLÇTÜ. Matris artık düzyazının KONUMUNU (baş/orta/son) ve etiket
+# sayısını (iki/üç) çarpım olarak üretir; tek tek örnek yazılmaz.
+
+_ETIKET_KUMESI = {DOGRULANMIS_KAYNAK, IKINCI_KAYNAK, "KAYNAK-3"}
+_DUZYAZILAR = (
+    "Bu kaynaklar iddiayi desteklemiyor",
+    "ancak ikisi de iddiayi desteklemiyor",
+    "yalniz baglam",
+)
+
+
+def _matris_vakalari():
+    """(kimlik, kanit, beklenen_sayim) üçlülerini ÜRETİR."""
+    etiket_kumeleri = [
+        [DOGRULANMIS_KAYNAK, IKINCI_KAYNAK],
+        [DOGRULANMIS_KAYNAK, IKINCI_KAYNAK, "KAYNAK-3"],
+    ]
+    for etiketler in etiket_kumeleri:
+        n = len(etiketler)
+        # Pozitif kol: yalnız çıplak etiketler → hepsi sayılır.
+        yield (f"saf-{n}", ", ".join(etiketler), n)
+        # Pozitif kol: etiket + dilbilgisi içi bileşenler (URL, satır atfı).
+        yield (f"saf-{n}-url", ", ".join([*etiketler, DOGRULANMIS_URL]), n)
+        yield (f"saf-{n}-satir", ", ".join([*etiketler, "D1#7"]), n)
+        # Negatif kol: düzyazı BAŞTA / ORTADA / SONDA — alanın tamamı düşer.
+        for sira, duzyazi in enumerate(_DUZYAZILAR):
+            for konum, ad in ((0, "bas"), (len(etiketler) // 2, "orta"), (len(etiketler), "son")):
+                parcalar = list(etiketler)
+                parcalar.insert(konum, duzyazi)
+                yield (f"duzyazi-{ad}-{n}-{sira}", ", ".join(parcalar), 0)
+        # Negatif kol: düzyazı ETİKETE YAPIŞIK (ilk turun varyantı).
+        yield (
+            f"yapisik-{n}",
+            ", ".join([f"{_DUZYAZILAR[0]}: {etiketler[0]}", *etiketler[1:]]),
+            0,
+        )
+
+
+_MATRIS = list(_matris_vakalari())
+
+
+def test_matrix_is_actually_generated_and_two_sided() -> None:
+    """BOŞ-KÜME kontrol kolu: matris gerçekten iki yanlı ve doluysa anlamlıdır."""
+    assert len(_MATRIS) >= 20, len(_MATRIS)
+    beklenenler = {beklenen for _ad, _kanit, beklenen in _MATRIS}
+    assert beklenenler == {0, 2, 3}, beklenenler
+
+
+@pytest.mark.parametrize("ad,kanit,beklenen", _MATRIS, ids=[v[0] for v in _MATRIS])
+def test_evidence_field_is_validated_as_a_whole(ad, kanit, beklenen) -> None:
+    """Dilbilgisi dışı TEK bileşen bile alanın tamamını düşürür."""
+    sayilan = engine.sayilan_kaynaklar(kanit, _ETIKET_KUMESI)
+    assert len(sayilan) == beklenen, f"{ad}: {sorted(sayilan)}"
+
+
+def test_cross_part_prose_does_not_pass_the_majority_gate() -> None:
+    """Entegrasyon: üçüncü turun somut bypass'ı `run_checks` düzeyinde kapalı."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(
+            kanit=f"Bu kaynaklar iddiayi desteklemiyor: {DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}"
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)

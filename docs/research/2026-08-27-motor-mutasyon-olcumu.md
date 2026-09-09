@@ -164,3 +164,29 @@ boş metin, boş etiket kümesi ve `None` hiçbir kaynak saymaz.
 kümesi kapalı), yani başka bir koşunun mekanik kapısı bu koşuya verilirse motor bunu
 göremez. F1'in görüntü bağına denk gelen bağ burada YOKTUR; kurulması arayüz eki
 revizyonu ister ve bu katmanda kapatılamaz. Açık borç olarak TASK.md'ye yazıldı.
+
+### Üçüncü tur — eksen kapalı dilbilgisiyle kapatıldı
+
+Üçüncü kapanış turu F8'i kapalı buldu; F2 aynı eksende ÜÇÜNCÜ varyantı üretti:
+bileşen bazlı süzme, bir bileşendeki olumsuz düzyazının KOMŞU bileşenlerdeki
+çıplak etiketleri kurtarmasına izin veriyordu (hakemin taze probu: *"Bu kaynaklar
+iddiayı desteklemiyor: KAYNAK-1, KAYNAK-2, KAYNAK-3"* iki kaynak sayıyordu).
+
+Üç varyant tek eksendir — *serbest düzyazıdan yapı çıkarma*. Dördüncü bir yama
+yerine alan BÜTÜN olarak kapalı bir dilbilgisine bağlandı: virgülle ayrılmış her
+bileşen ya geçerli kör etiket, ya URL, ya denetçi satır atfıdır; dilbilgisi dışı
+tek bileşen alanın tamamını düşürür. Olumsuzlama ARANMAZ — düzyazı zaten
+dilbilgisi dışıdır, ne dediğine bakılmaz.
+
+Matris artık düzyazının KONUMUNU (baş · orta · son) × düzyazı biçimini ×
+etiket sayısını (iki · üç) çarpım olarak ÜRETİR; önceki matris tek etiketi
+sarmaladığı için bu sınıfı görmüyordu.
+
+| Mutasyon | Kırmızıya dönen test(ler) |
+|---|---|
+| alan-bütün kuralı kaldırıldı (bileşen bazlı süzmeye dönüş) | matrisin **yirmi** negatif kolu (üç konum × üç düzyazı × iki etiket-sayısı + iki yapışık kol) |
+
+**Kabul edilen bedel (dürüst etiket):** meşru ama karışık yazılmış bir kanıt alanı
+(etiketlerin yanına serbest not düşülmüş) da reddedilir. Yön bilinçlidir: reddedilen
+karar uygulanmaz, kalıp korunur. Kalıcı çözüm serbest metni tipli bir destek alanına
+çevirmektir — arayüz eki revizyonu, açık borç.
