@@ -47,11 +47,24 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
-from app.services.sector_content_schema import SPECIAL_DAY_SLOTS
+from app.services.sector_content_schema import (
+    LIST_FIELDS,
+    SPECIAL_DAY_SLOTS,
+    TEXT_FIELDS,
+    VIDEO_POOL_KEYS,
+    structural_errors,
+)
 from app.services.sector_pipeline import identity
 from app.services.sector_pipeline.auditors import KAYNAK_ETIKETI, ValidatedAuditPair
 from app.services.sector_pipeline.brief_doctor import RoundGate, kimlik_bolumlemesi
-from app.services.sector_pipeline.engine_contract import BulguIzi, UygulanmayanKarar
+from app.services.sector_pipeline.engine_contract import (
+    BulguIzi,
+    EngineResult,
+    KararsizMadde,
+    PolicyReport,
+    UygulanmayanKarar,
+)
+from app.services.sector_pipeline.policy_config import PolicyConfig, config_sha
 from app.services.sector_pipeline.synthesis import (
     MEVZUAT_ALANLARI,
     SynthesisResult,
@@ -973,4 +986,586 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
         uygulanmayan_kararlar=tuple(kayitlar),
         notlar=tuple(notlar),
         olcumler=olcumler,
+    )
+
+
+# ─── Sonuç katmanı (Plan 2 Task 13) ─────────────────────────────────────────
+#
+# **Bulguyu SONUCA çeviren tek yer burasıdır** (arayüz eki R7). `run_checks`
+# ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
+# bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
+
+ENGINE_VERSION: str = "2.13.0"
+"""Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
+
+Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
+kuralı değiştiğinde eski koşuların sonucu yenisiyle karşılaştırılamaz.
+"""
+
+ETKI_BLOKLAR = "bloklar"
+ETKI_BAYRAGA_BAGLI = "bayraga-bagli-bloklar"
+ETKI_AKTIVASYONU_ENGELLER = "aktivasyonu-engeller"
+
+SEBEP_BARIYER = "bariyer-asildi"
+SEBEP_ILK_KOSU = "ilk-kosuda-degisiklik-yok-gecersiz"
+SEBEP_UYGULANAMAZ = "uygulanan-aday-yazim-kapisini-gecmiyor"
+
+KURAL_KIMLIKLERI: Mapping[str, str] = {
+    "kanit-yok": "kanit-zorunlulugu",
+    "mutabakat-yok": "K-125",
+    "cogunluk-yok": "yeni-oge-cogunlugu",
+}
+"""K-145: uygulanmayan her kararın KURAL kimliği — `UYGULANMAMA_SEBEPLERI` ile
+birebir. Sebep kapalı kümededir; eşlemenin eksik kalması `KeyError` ile
+fail-closed durur, uydurma bir kimlik ÜRETİLMEZ."""
+
+
+@dataclass(frozen=True)
+class BulguEtkisi:
+    """Bir bulgu sınıfının `decide`'daki TÜKETİCİSİ (arayüz eki R7)."""
+
+    sinif: str
+    etki: str
+    sebep: str
+
+
+BULGU_ETKILERI: tuple[BulguEtkisi, ...] = (
+    BulguEtkisi("kapsam_ihlali", ETKI_BLOKLAR, "kapsam-ihlali"),
+    BulguEtkisi("mevzuat_uyusmazligi", ETKI_BLOKLAR, "mevzuat-uyusmazligi"),
+    BulguEtkisi(
+        "mevzuat_dogrulanamadi", ETKI_BAYRAGA_BAGLI, "mevzuat-dogrulanamadi"
+    ),
+    BulguEtkisi(
+        "regresyon_kapisi", ETKI_AKTIVASYONU_ENGELLER, "regresyon-kapisi-gecmedi"
+    ),
+    BulguEtkisi("ikinci_aktif", ETKI_BLOKLAR, "ikinci-aktif-paket"),
+    BulguEtkisi("acik_soru", ETKI_BLOKLAR, "acik-soru-var"),
+)
+"""Bulgu → sonuç dönüşüm tablosu — `BULGU_SINIFLARI`'nın ALTISI da burada.
+
+Yapısal kapı `test_finding_classes_all_have_a_consumer`'dır: kapalı kümeye bir
+sınıf eklenip burada karşılanmazsa test düşer. Tüketicisi olmayan bulgu
+sınıfı, sessizce yok sayılan bir ölçüm demektir (R7'nin kapattığı sınıf).
+"""
+
+
+# ─── Yol grameri (konumsal sıra numaraları BURADA çözülür) ──────────────────
+
+_LISTE_YOLU = re.compile(r"^(?P<alan>[a-z_]+)\[(?P<sira>\d+)\]$")
+_VIDEO_YOLU = re.compile(r"^video_kodlar/(?P<havuz>[a-z_]+)\[(?P<sira>\d+)\]$")
+_OZEL_GUN_YOLU = re.compile(r"^ozel_gun/(?P<anahtar>[^/]+)/(?P<yuva>[a-z_]+)$")
+
+
+def canonical_content_sha(content: Mapping) -> str:
+    """Aday içeriğin kanonik kimliği (K-92).
+
+    `identity.canonical_sha`'yı ÇAĞIRIR — ikinci bir hash kuralı YAZILMAZ.
+    Anahtar sırası kimliği değiştirmez, LİSTE sırası değiştirir: sıra içeriğin
+    parçasıdır (bir kalıp listesinin sırası okunma sırasıdır).
+    """
+    return identity.canonical_sha(content)
+
+
+def _eslesmeyen_ozel_gunler(inputs: EngineInputs) -> tuple[str, ...]:
+    """Sistem takviminde karşılığı OLMAYAN özel gün anahtarları.
+
+    TEK kural, İKİ tüketici: `_ozel_gun_anahtari` bunu NOT'a çevirir,
+    `decide` aynı kümeyi UYGULAR (anahtar pakete girmez). İkinci bir yerde
+    yeniden ölçülseydi not ile uygulama sessizce ıraksardı; not satırının düz
+    yazısından anahtar ÇIKARILMAZ.
+    """
+    aday = _aday_icerik(inputs).get("ozel_gun") or {}
+    return tuple(
+        anahtar for anahtar in sorted(aday) if anahtar not in inputs.takvim_anahtarlari
+    )
+
+
+def _yasayan_satirlar(inputs: EngineInputs) -> dict[str, dict]:
+    """Aday günlüğün YAŞAYAN karar satırları: aday yolu → satır."""
+    return {
+        satir["oge_yolu"]: satir
+        for satir in _karar_satirlari(inputs)
+        if satir.get("karar") in identity.YASAYAN_KARARLAR
+    }
+
+
+def _eylem(
+    satir: Mapping | None,
+    reddedilen: Mapping[str, UygulanmayanKarar],
+    aktif: Mapping[str, Mapping],
+) -> tuple[str, Any]:
+    """Bir aday öğesine ne olacak: `tut` · `sil` · `geri_al`.
+
+    `geri_al` YALNIZ aktif pakette karşılığı olan birimde mümkündür; olmayan
+    birimde karar `tut`'tur — çünkü geri alınacak bir kalıp YOKTUR. O durum
+    zaten `kapsam_ihlali` bulgusudur ve koşuyu bloklar; burada sessizce
+    uydurma bir değer üretilmez.
+    """
+    if satir is None:
+        return ("tut", None)
+    kayit = reddedilen.get(satir["unit_id"])
+    if kayit is None:
+        return ("tut", None)
+    if kayit.karar == "ekle":
+        return ("sil", None)
+    birim = aktif.get(satir["unit_id"])
+    if birim is None:
+        return ("tut", None)
+    return ("geri_al", birim["deger"])
+
+
+def _geri_konanlar(
+    reddedilen: Mapping[str, UygulanmayanKarar], aktif: Mapping[str, Mapping]
+) -> dict[str, list[tuple[str, str, Any]]]:
+    """Uygulanmayan `cikar` kararları: alan → (aktif yol, unit_id, değer).
+
+    Öğe adayda YOKTUR (sentez onu çıkarmıştır); kalıbın korunması onu GERİ
+    KOYMAK demektir.
+    """
+    yerlestirme: dict[str, list[tuple[str, str, Any]]] = {}
+    for unit_id, kayit in reddedilen.items():
+        if kayit.karar != "cikar":
+            continue
+        birim = aktif.get(unit_id)
+        if birim is None:
+            continue
+        yerlestirme.setdefault(birim["alan"], []).append(
+            (birim["oge_yolu"], unit_id, birim["deger"])
+        )
+    return yerlestirme
+
+
+def _liste_kur(
+    aday_liste: list,
+    yol_kurucu: Callable[[int], str],
+    satirlar: Mapping[str, Mapping],
+    reddedilen: Mapping[str, UygulanmayanKarar],
+    aktif: Mapping[str, Mapping],
+    geri: list[tuple[str, str, Any]],
+) -> tuple[list, dict[str, str], list[str]]:
+    """Bir listeyi yeniden kurar ve KİMLİK → YENİ YOL eşlemesini üretir.
+
+    Sıra numarası KONUMSALDIR: reddedilen bir ekleme listeyi kaydırır. Bu
+    yüzden yollar üretimin KENDİSİNDE toplanır — sonradan değere bakarak
+    eşlenseydi aynı listede iki kez geçen bir metin ayırt edilemezdi.
+    """
+    kurulan: list[tuple[str | None, Any]] = []
+    silinen: list[str] = []
+    for sira, deger in enumerate(aday_liste):
+        satir = satirlar.get(yol_kurucu(sira))
+        eylem, yeni_deger = _eylem(satir, reddedilen, aktif)
+        if eylem == "sil":
+            silinen.append(satir["unit_id"])  # type: ignore[index]
+            continue
+        kurulan.append(
+            (
+                satir["unit_id"] if satir is not None else None,
+                yeni_deger if eylem == "geri_al" else deger,
+            )
+        )
+    for aktif_yol, unit_id, deger in sorted(geri):
+        eslesme = _LISTE_YOLU.match(aktif_yol) or _VIDEO_YOLU.match(aktif_yol)
+        konum = int(eslesme.group("sira")) if eslesme else len(kurulan)
+        kurulan.insert(min(konum, len(kurulan)), (unit_id, deger))
+    yollar = {
+        unit_id: yol_kurucu(sira)
+        for sira, (unit_id, _) in enumerate(kurulan)
+        if unit_id is not None
+    }
+    return [deger for _, deger in kurulan], yollar, silinen
+
+
+def _nihai_icerik(
+    inputs: EngineInputs,
+    reddedilen: Mapping[str, UygulanmayanKarar],
+    dusen_anahtarlar: tuple[str, ...],
+) -> tuple[dict, dict[str, str], dict[str, tuple[str, ...]]]:
+    """Motorun UYGULADIĞI içerik + kimlik→yol eşlemesi + DÜŞEN kimlikler.
+
+    Düşen kimlikler İKİ AYRI kümedir ve karıştırılmaları sonucu bozar:
+    `reddedilen_ekleme` hiç pakete girmemiş bir aday kalıptır (paket
+    DEĞİŞMEMİŞTİR), `eslesmeyen_takvim` ise pakette olan bir dönemin
+    düşmesidir (paket DEĞİŞMİŞTİR). K-91 ilkini değişiklik saysaydı, tek bir
+    reddedilen ekleme ilk koşuyu "değişiklik oldu" gösterirdi.
+
+    Aday içerik YERİNDE DEĞİŞTİRİLMEZ (K-96): sentezin raporu olduğu gibi
+    kalır, motor kendi kopyasını kurar.
+    """
+    aday = _aday_icerik(inputs)
+    aktif = inputs.aktif_birimler
+    satirlar = _yasayan_satirlar(inputs)
+    geri = _geri_konanlar(reddedilen, aktif)
+    nihai = json.loads(json.dumps(aday, ensure_ascii=False))
+    yollar: dict[str, str] = {}
+    dusenler: list[str] = []
+    takvim_dusenleri: list[str] = []
+
+    for alan in TEXT_FIELDS:
+        if alan not in nihai:
+            continue
+        satir = satirlar.get(alan)
+        eylem, deger = _eylem(satir, reddedilen, aktif)
+        if eylem == "sil":
+            dusenler.append(satir["unit_id"])  # type: ignore[index]
+            nihai.pop(alan)
+            continue
+        if eylem == "geri_al":
+            nihai[alan] = deger
+        if satir is not None:
+            yollar[satir["unit_id"]] = alan
+    for alan in TEXT_FIELDS:
+        for aktif_yol, unit_id, deger in geri.get(alan, []):
+            nihai[aktif_yol] = deger
+            yollar[unit_id] = aktif_yol
+
+    for alan in LIST_FIELDS:
+        if not isinstance(nihai.get(alan), list):
+            continue
+        nihai[alan], alan_yollari, silinen = _liste_kur(
+            aday[alan],
+            lambda sira, _alan=alan: f"{_alan}[{sira}]",
+            satirlar,
+            reddedilen,
+            aktif,
+            geri.get(alan, []),
+        )
+        yollar.update(alan_yollari)
+        dusenler.extend(silinen)
+
+    video = nihai.get("video_kodlar")
+    if isinstance(video, dict):
+        havuz_geri: dict[str, list] = {}
+        for aktif_yol, unit_id, deger in geri.get("video_kodlar", []):
+            eslesme = _VIDEO_YOLU.match(aktif_yol)
+            if eslesme is not None:
+                havuz_geri.setdefault(eslesme.group("havuz"), []).append(
+                    (aktif_yol, unit_id, deger)
+                )
+        for havuz in VIDEO_POOL_KEYS:
+            if not isinstance(video.get(havuz), list):
+                continue
+            video[havuz], havuz_yollari, silinen = _liste_kur(
+                aday["video_kodlar"][havuz],
+                lambda sira, _h=havuz: f"video_kodlar/{_h}[{sira}]",
+                satirlar,
+                reddedilen,
+                aktif,
+                havuz_geri.get(havuz, []),
+            )
+            yollar.update(havuz_yollari)
+            dusenler.extend(silinen)
+
+    ozel_gun = nihai.get("ozel_gun")
+    if isinstance(ozel_gun, dict):
+        for anahtar in dusen_anahtarlar:
+            ozel_gun.pop(anahtar, None)
+        for anahtar in sorted(ozel_gun):
+            for yuva in SPECIAL_DAY_SLOTS:
+                if yuva not in ozel_gun[anahtar]:
+                    continue
+                yol = f"ozel_gun/{anahtar}/{yuva}"
+                satir = satirlar.get(yol)
+                eylem, deger = _eylem(satir, reddedilen, aktif)
+                if eylem == "sil":
+                    dusenler.append(satir["unit_id"])  # type: ignore[index]
+                    ozel_gun[anahtar].pop(yuva)
+                    continue
+                if eylem == "geri_al":
+                    ozel_gun[anahtar][yuva] = deger
+                if satir is not None:
+                    yollar[satir["unit_id"]] = yol
+        for aktif_yol, unit_id, deger in geri.get("ozel_gun", []):
+            eslesme = _OZEL_GUN_YOLU.match(aktif_yol)
+            if eslesme is None or eslesme.group("anahtar") in dusen_anahtarlar:
+                continue
+            hedef = ozel_gun.setdefault(eslesme.group("anahtar"), {})
+            hedef[eslesme.group("yuva")] = deger
+            yollar[unit_id] = aktif_yol
+
+    # Düşen anahtarın birimleri de nihai içerikte YOKTUR; günlükten çıkarlar.
+    for unit_id, yol in list(yollar.items()):
+        eslesme = _OZEL_GUN_YOLU.match(yol)
+        if eslesme is not None and eslesme.group("anahtar") in dusen_anahtarlar:
+            yollar.pop(unit_id)
+            takvim_dusenleri.append(unit_id)
+    for yol, satir in satirlar.items():
+        eslesme = _OZEL_GUN_YOLU.match(yol)
+        if (
+            eslesme is not None
+            and eslesme.group("anahtar") in dusen_anahtarlar
+            and satir["unit_id"] not in takvim_dusenleri
+        ):
+            takvim_dusenleri.append(satir["unit_id"])
+
+    return (
+        nihai,
+        yollar,
+        {
+            "reddedilen_ekleme": tuple(dusenler),
+            "eslesmeyen_takvim": tuple(takvim_dusenleri),
+        },
+    )
+
+
+def _motor_satiri(
+    satir: Mapping, kayit: UygulanmayanKarar, yol: str, oge_sha: str
+) -> dict:
+    """Kalıbı KORUYAN motor kararı — K-145 kural damgasını TAŞIR.
+
+    `aktor='motor'` satırı kural damgası taşımak ZORUNDADIR (`identity`
+    şeması); sentez satırı ise taşıyAMAZ. F19'un ayrımı budur: nihai günlük
+    motorun UYGULADIĞI kararların günlüğüdür, sentezin ham önerisininki değil.
+    """
+    return {
+        "tur": "karar",
+        "alan": satir["alan"],
+        "oge_yolu": yol,
+        "unit_id": satir["unit_id"],
+        "oge_sha": oge_sha,
+        "karar": "koru",
+        "gerekce": (
+            f"sentezin {kayit.karar!r} kararı UYGULANMADI ({kayit.sebep}); "
+            "mevcut kalıp korundu (K-23=B)"
+        ),
+        "kanit": "",
+        "aktor": "motor",
+        "kural_kimligi": KURAL_KIMLIKLERI[kayit.sebep],
+        "kural_surumu": ENGINE_VERSION,
+    }
+
+
+def _nihai_gunluk(
+    inputs: EngineInputs,
+    outcome: CheckOutcome,
+    reddedilen: Mapping[str, UygulanmayanKarar],
+    nihai: Mapping,
+    yollar: Mapping[str, str],
+) -> tuple[tuple[Mapping, ...], tuple[Mapping, ...]]:
+    """(nihai günlük, uygulanan karar satırları).
+
+    Yollar ve öğe hash'leri NİHAİ içerikten yeniden hesaplanır: konumsal sıra
+    numarası reddedilen bir eklemeden sonra kayar ve eski yolunu taşıyan bir
+    satır başka bir öğeyi işaret ederdi.
+    """
+    birimler = identity.enumerate_content_units(nihai)
+    satirlar: list[Mapping] = []
+    uygulanan: list[Mapping] = []
+
+    for satir in _karar_satirlari(inputs):
+        unit_id = satir["unit_id"]
+        kayit = reddedilen.get(unit_id)
+        yol = yollar.get(unit_id)
+        if yol is None:
+            continue  # öğe nihai içerikte YOK (reddedilen ekleme / düşen anahtar)
+        oge_sha = birimler[yol]["oge_sha"]
+        if kayit is None:
+            yeni = dict(satir)
+            yeni["oge_yolu"] = yol
+            yeni["oge_sha"] = oge_sha
+            satirlar.append(yeni)
+            if satir.get("karar") != "koru":
+                uygulanan.append(yeni)
+            continue
+        satirlar.append(_motor_satiri(satir, kayit, yol, oge_sha))
+
+    # Uygulanmayan `cikar`: aday günlükte satırı YAŞAYAN değildir (öğe çıkmış
+    # sayılıyordu) — kalıp geri konduğu için `koru` satırı BURADA doğar.
+    for satir in _karar_satirlari(inputs):
+        unit_id = satir["unit_id"]
+        kayit = reddedilen.get(unit_id)
+        if kayit is None or kayit.karar != "cikar":
+            continue
+        yol = yollar.get(unit_id)
+        if yol is None:
+            continue
+        satirlar.append(_motor_satiri(satir, kayit, yol, birimler[yol]["oge_sha"]))
+
+    notlar = [
+        dict(satir) for satir in _gunluk(inputs) if satir.get("tur") == "not"
+    ] + [dict(satir) for satir in outcome.notlar]
+    return tuple(satirlar) + tuple(notlar), tuple(uygulanan)
+
+
+def _bariyerler(
+    inputs: EngineInputs,
+    config: PolicyConfig,
+    uygulanan: tuple[Mapping, ...],
+    kararsiz_sayisi: int,
+) -> dict:
+    """K-130/131/132 — mekanizma KURULU, eşikler varsayılan olarak PASİF.
+
+    Eşik `None` iken bariyer hiçbir şeyi bloklamaz, yalnız oranı yazar
+    (İlke 9: ölçülmemiş sayı kapı yapılmaz). İlk paket koşusunda payda 0'dır;
+    oran hesaplanmaz ve YALNIZ mutlak limit uygulanabilir.
+    """
+    sayilar = {
+        "degisim": sum(
+            1 for satir in uygulanan if satir["karar"] in ("guncelle", "cikar", "kirp")
+        ),
+        "ekleme": sum(1 for satir in uygulanan if satir["karar"] == "ekle"),
+        "kararsizlik": kararsiz_sayisi,
+    }
+    esikler = {
+        "degisim": config.max_change_ratio,
+        "ekleme": config.max_add_ratio,
+        "kararsizlik": config.max_undecided_ratio,
+    }
+    payda = inputs.mevcut_birim_sayisi
+    mutlak = dict(config.abs_limits or {})
+    oranlar: dict[str, float | None] = {}
+    asilan: list[str] = []
+    for ad, sayi in sayilar.items():
+        if payda > 0:
+            oran = sayi / payda
+            oranlar[ad] = oran
+            esik = esikler[ad]
+            if esik is not None and oran > esik:
+                asilan.append(ad)
+            continue
+        oranlar[ad] = None
+        limit = mutlak.get(ad)
+        if limit is not None and sayi > limit:
+            asilan.append(ad)
+    return {
+        "payda": payda,
+        "sayilar": sayilar,
+        "oranlar": oranlar,
+        "esikler": esikler,
+        "abs_limits": mutlak,
+        "asilan": tuple(sorted(asilan)),
+    }
+
+
+def _acik_soru_kimlikleri(inputs: EngineInputs, bulgular) -> tuple[str, ...]:
+    """Açık sorunun İZİ: birime bağlanabilen bulgunun kimliği + sentezin soruları."""
+    kimlikler = [
+        bulgu.unit_id
+        for bulgu in bulgular
+        if bulgu.sinif == "acik_soru" and bulgu.unit_id is not None
+    ]
+    return tuple(kimlikler) + tuple(inputs.sentez.acik_sorular)
+
+
+def decide(inputs: EngineInputs, config: PolicyConfig) -> EngineResult:
+    """Bulguyu SONUCA çeviren tek yer (arayüz eki R7).
+
+    **`run_checks`'in girdi kapısı `decide` tarafından YUTULMAZ.** Bozuk şema,
+    durmuş mekanik tur ya da bayat denetçi çifti `EngineInputError` fırlatır ve
+    bu istisna ÇAĞIRANA gider — `blocked`'a çevrilseydi bir koşu sonucu gibi
+    kaydedilir ve "motor karar verdi" görünürdü; oysa motor hiç koşmadı.
+
+    **Motor belirsizliği yeni içeriğin lehine YORUMLAMAZ** (spec §9.3): karar
+    verilemeyen madde MEVCUT kalıbı korur, `kararsizlar`'a girer ve aktivasyonu
+    BLOKLAMAZ (K-23=B). Sentezin AÇIK SORUsu ayrı bir yoldur ve K-71 gereği
+    bloklar.
+    """
+    outcome = run_checks(inputs)
+    reddedilen = {kayit.unit_id: kayit for kayit in outcome.uygulanmayan_kararlar}
+    dusen_anahtarlar = _eslesmeyen_ozel_gunler(inputs)
+
+    nihai, yollar, dusen_kimlikler = _nihai_icerik(inputs, reddedilen, dusen_anahtarlar)
+    takvim_dusenleri = dusen_kimlikler["eslesmeyen_takvim"]
+    yazim_hatalari = structural_errors(nihai)
+    if yazim_hatalari:
+        nihai_icerik: Mapping | None = None
+        nihai_gunluk: tuple[Mapping, ...] | None = None
+        uygulanan: tuple[Mapping, ...] = ()
+        content_sha: str | None = None
+        decision_log_sha: str | None = None
+    else:
+        nihai_icerik = nihai
+        nihai_gunluk, uygulanan = _nihai_gunluk(
+            inputs, outcome, reddedilen, nihai, yollar
+        )
+        content_sha = canonical_content_sha(nihai)
+        decision_log_sha = identity.canonical_sha(nihai_gunluk)
+
+    kararsizlar = tuple(
+        KararsizMadde(
+            unit_id=kayit.unit_id,
+            sebep=(
+                f"{kayit.karar!r} kararı {kayit.sebep} sebebiyle uygulanmadı; "
+                "mevcut kalıp korundu"
+            ),
+        )
+        for kayit in outcome.uygulanmayan_kararlar
+    )
+    acik_sorular = _acik_soru_kimlikleri(inputs, outcome.bulgular)
+    policy_report = PolicyReport(
+        kararsizlar=kararsizlar,
+        bulgular=outcome.bulgular,
+        uygulanmayan_kararlar=outcome.uygulanmayan_kararlar,
+        acik_soru_kimlikleri=acik_sorular,
+    )
+
+    barrier_report = _bariyerler(inputs, config, uygulanan, len(kararsizlar))
+
+    gorulen = {bulgu.sinif for bulgu in outcome.bulgular}
+    sebepler: list[str] = []
+    aktivasyon_engeli: str | None = None
+    for etki in BULGU_ETKILERI:
+        if etki.sinif not in gorulen:
+            continue
+        if etki.etki == ETKI_BLOKLAR:
+            sebepler.append(etki.sebep)
+        elif etki.etki == ETKI_BAYRAGA_BAGLI:
+            if config.block_on_legislation:
+                sebepler.append(etki.sebep)
+        else:
+            aktivasyon_engeli = etki.sebep
+    if acik_sorular and "acik-soru-var" not in sebepler:
+        sebepler.append("acik-soru-var")
+    if barrier_report["asilan"]:
+        sebepler.append(SEBEP_BARIYER)
+
+    # Reddedilen bir ekleme DEĞİŞİKLİK DEĞİLDİR: o kalıp pakete hiç girmedi.
+    degisiklik_var = bool(uygulanan) or bool(takvim_dusenleri)
+    if not degisiklik_var and inputs.ilk_kosu:
+        sebepler.append(SEBEP_ILK_KOSU)  # K-91
+    if yazim_hatalari:
+        sebepler.append(SEBEP_UYGULANAMAZ)
+    if aktivasyon_engeli is not None and degisiklik_var:
+        sebepler.append(aktivasyon_engeli)
+
+    if sebepler:
+        sonuc = "blocked"
+    elif degisiklik_var:
+        sonuc = "activation_eligible"
+    else:
+        sonuc = "no_change"
+
+    engine_diff = {
+        "uygulanmayan_kararlar": tuple(
+            {
+                "unit_id": kayit.unit_id,
+                "karar": kayit.karar,
+                "sebep": kayit.sebep,
+                "kural_kimligi": KURAL_KIMLIKLERI[kayit.sebep],
+                "kural_surumu": ENGINE_VERSION,
+            }
+            for kayit in outcome.uygulanmayan_kararlar
+        ),
+        "dusen_birimler": dusen_kimlikler,
+        "dusen_birim_sayisi": sum(len(k) for k in dusen_kimlikler.values()),
+        "eslesmeyen_ozel_gunler": dusen_anahtarlar,
+        "paket_turu_degisiklikleri": outcome.olcumler.get(
+            "paket_turu_degisiklikleri", ()
+        ),
+        "diff": outcome.olcumler.get("diff", {}),
+        "uygulanan_karar_sayisi": len(uygulanan),
+        "yazim_hatalari": tuple(yazim_hatalari),
+    }
+
+    return EngineResult(
+        sonuc=sonuc,
+        sebep="; ".join(sebepler) if sebepler else None,
+        final_candidate=nihai_icerik,
+        final_decision_log=nihai_gunluk,
+        engine_diff=engine_diff,
+        policy_report=policy_report,
+        barrier_report=barrier_report,
+        content_sha=content_sha,
+        decision_log_sha=decision_log_sha,
+        engine_version=ENGINE_VERSION,
+        engine_config_sha=config_sha(config),
     )
