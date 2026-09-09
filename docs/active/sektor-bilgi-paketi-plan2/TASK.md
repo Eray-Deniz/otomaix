@@ -32,7 +32,7 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 
 # Execution State
 
-- execute_mode: subagent-driven
+- execute_mode: inline
 - execute_started: 2026-08-30 11:36
 - execute_start_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
@@ -779,6 +779,11 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 - **Süreç ağırlığı azaltıldı (Eray talebi, 2026-09-09).** Mutasyon kanıtı artık yalnız YENİ
   kapıya isteniyor; inceleme turu üretim/test diye BÖLÜNMÜYOR; düzeltme brief'leri kısa.
   Ölçüm: uzun brief'li turlar 16-24 dk sürdü, kısa brief'li tur 7,4 dk.
+
+- **Yürütme kipi Task 11 için `inline`'a çevrildi (Eray talebi, 2026-09-09 14:27).** Task 1-10
+  alt-ajanlı koştu; Task 11 ana oturumda yazılacak. Kip bir HAFIZA değil CANLI AYAR olduğu
+  için alan güncellendi — sessiz kayma DEĞİL, açık talimat. İnceleme/checkpoint kapıları
+  DEĞİŞMEDİ (daraltma yalnız dispatch kipini kapsar).
 
 # Open Problems
 

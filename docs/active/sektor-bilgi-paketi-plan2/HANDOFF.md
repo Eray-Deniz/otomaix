@@ -5,6 +5,10 @@ written: 2026-09-09
 
 # Resume From
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-09-09 14:27) — bu anlatı yürütme öncesine aittir; güncel durum
+> TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+
+
 **Sıradaki iş: Task 11** (sentez koşumu + çıktı doğrulayıcı — pakete YAZMAZ).
 Task 10 indi ve checkpoint 7 kapandı.
 
@@ -13,12 +17,14 @@ Task 10 indi ve checkpoint 7 kapandı.
 
 **KAYIT TASK.md + bu dosya + git defteridir. BAŞKA DEFTER YOK.**
 
-**Yürütme durumu:** kip alt-ajanlı · başlangıç çapası `a806e29` · defter penceresi `a806e29` ·
+**Yürütme durumu:** kip **inline** (Task 11 için Eray talebiyle değişti; Task 1-10 alt-ajanlıydı) · başlangıç çapası `a806e29` · defter penceresi `a806e29` ·
 **`cp_count: 4`** · **`last_checkpoint_ref: 3af4331`** — bu oturumda §8.6 mutasyon protokolüyle
 İLERLETİLDİ. Yani Task 11'in checkpoint'i artık Task 1-10'u yeniden kapsamayacak; önceki
 oturumlarda ilerletilmediği için her tur giderek büyüyen bir aralığı tekrar tarıyordu.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, merge EDİLMEDİ, **push EDİLMEDİ**. Son commit
+**Dal:** `feat/sektor-bilgi-paketi-plan2`, merge EDİLMEDİ. Uzak dal VAR; ölçüldü
+(2026-09-09): `git rev-list --left-right --count origin/<dal>...HEAD` → `0 11`, yani
+on bir commit gönderilmemiş. Önceki "push EDİLMEDİ" cümlesi yanlıştı. Son commit
 `git log -1` ile, uzağa fark `git rev-list --left-right --count origin/<dal>...HEAD` ile ÖLÇÜLÜR.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit `7964ed6`.
