@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 12 İNDİ ve checkpoint 9 kapandı;
-sıradaki iş **Task 13**.) Task 1-11 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 13 İNDİ ve checkpoint 10 kapandı;
+sıradaki iş **Task 14**.) Task 1-12 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -38,8 +38,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 6
-- last_checkpoint_ref: 692e4d9e4db4fdb7ce3869c16d0700d11b56f6a2
+- cp_count: 7
+- last_checkpoint_ref: 33bfae63f5bd6a93bcf1e9a1939a21409becadf8
 
 # References
 
@@ -467,6 +467,37 @@ aşağıda Open Problems'ta.
   Fail-closed yön; yanlış-pozitif riski var ve kabul edildi.
 - `risk_unverified` de çıkarma açmaz. Sonuç kayıp değil açık sorudur.
 
+## Task 13 TAMAM (2026-09-09) — motor sonuç katmanı + checkpoint 10
+
+Dört commit: `8b569a0` (ana) · `3365574` · `5d7c1ab` · `33bfae6` (üç düzeltme turu).
+Tam küme **3876 passed** (`python -m pytest tests/ -q`, 302.66s, exit 0); taban 3774 → 3876.
+Testler: 102 (`tests/test_policy_engine_outcome.py`).
+
+**Checkpoint 10 — DÖRT tur** (1 tam inceleme + 3 kapanış-doğrulama), taban `692e4d9`.
+Tur 1: `needs-attention`, DÖRT yüksek + bir orta + bir düşük. Tur 2: F1-F6 kapalı doğrulandı,
+BİR yeni yüksek (F7). Tur 3: F7 kapalı doğrulandı; `approve` verdi ama **cümle ortasında kesildi**
+(rc=1) — başladığı probu bitirmeden. Kontrolör o ölçümü tamamladı: şüphe GERÇEKTİ (F8).
+Tur 4 **HİÇ KOŞMADI** — Codex kota sınırı (20:34'e kadar).
+
+**Kapanan yüksek bulgular:** (F1) `koru` satırı "değişmedi" derken aday yükü farklıysa değişiklik
+kanıt/mutabakat/bariyer üçünü birden atlıyordu · (F2) kabul edilen çıkarma günlükten ve uygulanan
+kümesinden düşüyor, reddedilen çıkarma iki satır üretip günlüğü geçersiz kılıyordu · (F3) donmuş
+yapılandırılmış değer yazım kapısına takılıp sıradan bir kanıtsız güncellemeyi bloklıyordu ·
+(F4) geri konan çıkarma ham sıra numarasına yerleşiyordu · (F7) takvim yüklemi yalnız adaya
+baktığı için geri koyma takvim kapısını atlıyordu.
+
+**Orta/düşük:** (F5) bir birim iki sebeple reddedilince kararsızlık oranı şişiyordu · (F6) "tek
+kural, iki tüketici" iddiası yanlıştı · (F8) düşen-birim sayımına takvim anahtarı karışıyordu.
+Üçü de kontrolörün KENDİ ürettiği gerilemeydi; `accepted_risk`'e ALINMADAN düzeltildi.
+
+**Ölçüm:** altı bulgunun altısı + F7 + F8, kontrolörün kendi probuyla doğrulandı (ezberden kabul
+YOK). ON yeni kapının ONU mutasyonla kanıtlandı (kapıyı sustur → hedef test kırmızı).
+Sıra sınıfı ÜRETİLMİŞ matrisle kapatıldı (konum × kabul × çıkarma × yinelenen değer + boş-küme
+kontrol kolu), elle seçilmiş örnekle değil.
+
+**DÜRÜST BOŞLUK:** F8'in kapanışını bağımsız hakem GÖRMEDİ (kota). Kapanış kontrolörün ölçümüne
+dayanır; aralığı Adım 11'in koşulsuz final incelemesi kapsayacak.
+
 # ÖN KOŞUL — Task 10'dan ÖNCE: test matrisi küçültme (BİTTİ 2026-09-09)
 
 > **Eray kararı (2026-09-08): Plan 2'nin yürütmesi bu iş bitene kadar DURAKLAR.** Ayrı görev
@@ -860,6 +891,40 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   önce ham dizge taramasıydı ve kendi düzyazısına takıldı; AST'ye taşındıktan sonra ekilen
   beş ihlalden biri (`from app.services import sector_package_lifecycle`) hâlâ görülmüyordu.
   Elle seçilmiş örnek değil ÜRETİLMİŞ matris yakaladı.
+
+## Task 13 kararları (2026-09-09)
+
+- **`decide` girdi kapısının istisnasını YUTMAZ.** `EngineInputError` çağırana gider; `blocked`'a
+  çevrilseydi motor hiç koşmadığı hâlde "karar verdi" görünür ve koşu satırına bir sonuç yazılırdı.
+
+- **`koru` satırının iddiası uygulanır, aday yükünün iddiası DEĞİL.** Reddedilmemiş olmak "yükü
+  kabul et" demek değildir; iki taraf çelişirse mevcut kalıp geri konur (spec §9.3: motor
+  belirsizliği yeni içeriğin lehine yorumlamaz). İz `engine_diff.koru_ihlalleri`'nde.
+
+- **Sınıflandırma KİMLİĞE göre, nihai yolun VARLIĞINA göre değil.** Yol-varlığı kabul edilen
+  çıkarmayı "hiç olmamış" gösteriyordu. Yaşayan olmayan satır (kabul edilen `cikar`/`kirp`) kendi
+  yoluyla KALIR ve uygulanan sayılır.
+
+- **Motorun ürettiği çift, tüketicinin koşacağı kapılardan geçer.** `decide` nihai içerik+günlük
+  çiftini `validate_decision_log` + `check_unit_integrity` ile sınar; geçmezse sonuç üretmez.
+  Sınıf noktasal testle değil KAPIYLA kapandı.
+
+- **Bariyer payı UYGULANAN kararlardan sayılır**, sentezin ham önerisinden değil. Bariyer
+  gerçekleşecek değişimi ölçer; reddedilen bir öneri hiç olmayan bir değişikliği bloklardı.
+  Aday dağılımı `engine_diff.diff`'te ayrıca durur.
+
+- **Reddedilen ekleme DEĞİŞİKLİK DEĞİLDİR, düşen takvim dönemi DEĞİŞİKLİKTİR.** İkisi tek kovaya
+  konsaydı tek bir reddedilen ekleme ilk koşuyu "değişiklik oldu" gösterir ve K-91 sessizce düşerdi.
+
+- **Uygulanmama sebebinin önceliği BİLDİRİLMİŞTİR** (`UYGULANMAMA_SEBEPLERI` sırası). "Son yazan
+  kazanır" bir kural değildir: kontrol kümesinin sırası değişince aynı girdi başka bir kural
+  kimliği damgalardı.
+
+- **Kural yüklemi KONUSUNU argüman alır.** Yüklem kendi konusunu içeriden okursa, aynı kuralın
+  başka bir konuya (yeniden kurulmuş içerik) sorulması İMKÂNSIZ olur — F7 tam olarak buydu.
+
+- **Farklı TÜRLER farklı kovalara konur.** Toplayan tarafın türleri ayırt etmesi beklenemez;
+  ayrım sözleşmede kurulur (F8). Kova testi TÜRÜ sınar, varyantı kovalamaz.
 
 # Open Problems
 
