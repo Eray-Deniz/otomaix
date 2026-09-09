@@ -229,6 +229,28 @@ def _rapor(rol: str, *, statuler=None, ornekle=None) -> auditors.AuditReport:
     )
 
 
+def _bos_gorunti_cifti():
+    """İlk koşunun çifti: aktif birim YOK, görüntü BOŞ kümenin hash'idir."""
+    sha = identity.canonical_sha({})
+    raporlar = [
+        auditors.AuditReport(
+            denetci=rol,
+            ham_metin=f"{rol} ham raporu",
+            bolumler={ad: f"{ad} govdesi" for ad in auditors.BOLUM_ANAHTARLARI},
+            yeniden_dogrulama=(),
+            url_orneklem=_ornekle(),
+            unit_snapshot_sha=sha,
+        )
+        for rol in auditors.DENETCI_ROLLERI
+    ]
+    mutabakat = auditors.check_snapshot_agreement(
+        (auditors.ValidatedReport(raporlar[0], ()), auditors.ValidatedReport(raporlar[1], ())),
+        expected_snapshot_sha=sha,
+    )
+    assert mutabakat.gecerli, mutabakat.errors
+    return mutabakat.cift
+
+
 def _cift(*, statuler_1=None, statuler_2=None, ornekle_1=None, ornekle_2=None):
     """`ValidatedAuditPair` — TEK üreticisinden (mutabakat kapısı) geçerek."""
     mutabakat = auditors.check_snapshot_agreement(
@@ -296,6 +318,7 @@ def _girdi(
     aday = AKTIF_ICERIK if icerik is None else icerik
     log = _gunluk(aday) if gunluk is None else gunluk
     birimler = AKTIF_BIRIMLER if aktif else {}
+    varsayilan_cift = _cift() if aktif else _bos_gorunti_cifti()
     return engine.EngineInputs(
         sentez=_sonuc(aday, log, acik_sorular=acik_sorular),
         aktif_paket=_aktif_paket() if aktif else None,
@@ -304,7 +327,7 @@ def _girdi(
         mevcut_birim_sayisi=len(birimler),
         ilk_kosu=not aktif,
         son_turlarin_cikarmalari=cikarmalar,
-        denetci_envanterleri=_cift() if cift is None else cift,
+        denetci_envanterleri=varsayilan_cift if cift is None else cift,
         mekanik_eleme=_gecen_kapi() if kapi is None else kapi,
         takvim_anahtarlari=frozenset({TAKVIM_ANAHTARI}) if takvim is None else takvim,
         otomatik_kapilar=(
@@ -843,20 +866,25 @@ def test_new_item_with_two_sources_passes() -> None:
     assert sonuc.uygulanmayan_kararlar == ()
 
 
-def test_single_source_exception_requires_official_and_live_url() -> None:
-    """K-126: tekil iddia YALNIZ resmî kaynak + canlı URL doğrulamasıyla girer."""
-    gecen = engine.run_checks(
+def test_single_source_exception_is_closed_until_officiality_is_typed() -> None:
+    """K-126 İKİ koşulu BİRLİKTE ister; biri ölçülemiyorsa istisna İŞLEMEZ.
+
+    Canlı ve içerikçe uyumlu bir URL (ikinci ayak) TEK BAŞINA yetmez: kaynağın
+    resmî/birincil olduğu (K-123, birinci ayak) tipli girdide taşınmıyor. Bir
+    AND koşulunun tek ayağını zorlamak istisnayı canlı HER kaynağa açardı.
+    """
+    canli = engine.run_checks(
         _ekle_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, {DOGRULANMIS_URL}")
     )
-    assert gecen.uygulanmayan_kararlar == ()
+    assert "cogunluk-yok" in _sebepler(canli)
 
-    dusen = engine.run_checks(
+    olu = engine.run_checks(
         _ekle_girdisi(
             kanit=f"{DOGRULANMIS_KAYNAK}, {DOGRULANMIS_URL}",
             ornekle=_ornekle(uyumlu=False),
         )
     )
-    assert "cogunluk-yok" in _sebepler(dusen)
+    assert "cogunluk-yok" in _sebepler(olu)
 
 
 # ═══ 11. Kontrol: bayrak tüketimi ═════════════════════════════════════════
@@ -933,8 +961,11 @@ def test_new_item_unrelated_to_removals_emits_no_finding() -> None:
 # ═══ 13. Kontrol: kategori çakışması (K-03) ═══════════════════════════════
 
 
-def test_category_conflict_is_recorded_and_package_type_wins() -> None:
-    """K-03: tür etiketi çatışması KAYDEDİLİR; paket türü üstündür, blok YOK."""
+def test_package_type_change_is_recorded_and_never_blocks() -> None:
+    """K-03'ün ölçülebilen ayağı: tür etiketi DEĞİŞİMİ kaydedilir, blok YOK.
+
+    Kategori ayağı girdide olmadığı için ölçüm adı da onu iddia ETMEZ (checkpoint 9).
+    """
     aday = _tam_icerik(
         ozel_gun={
             TAKVIM_ANAHTARI: {
@@ -960,16 +991,16 @@ def test_category_conflict_is_recorded_and_package_type_wins() -> None:
             ),
         )
     )
-    catismalar = sonuc.olcumler["kategori_cakismalari"]
-    assert catismalar and catismalar[0]["anahtar"] == TAKVIM_ANAHTARI
-    assert catismalar[0]["paket_turu"] == "anma"
+    degisiklikler = sonuc.olcumler["paket_turu_degisiklikleri"]
+    assert degisiklikler and degisiklikler[0]["anahtar"] == TAKVIM_ANAHTARI
+    assert degisiklikler[0]["paket_turu"] == "anma"
     assert sonuc.bulgular == ()
 
 
-def test_matching_type_label_records_no_conflict() -> None:
-    """POZİTİF: tür etiketi değişmediyse çatışma kaydı YOKTUR."""
+def test_matching_type_label_records_no_change() -> None:
+    """POZİTİF: tür etiketi değişmediyse kayıt YOKTUR."""
     sonuc = engine.run_checks(_girdi())
-    assert sonuc.olcumler["kategori_cakismalari"] == ()
+    assert sonuc.olcumler["paket_turu_degisiklikleri"] == ()
 
 
 # ═══ 14. Kontrol: özel gün anahtarı ═══════════════════════════════════════
@@ -1076,9 +1107,199 @@ def test_engine_consumes_only_validated_inventory() -> None:
     assert kimlikler == set(AKTIF_BIRIMLER)
 
 
-def test_yerel_degil_flag_closes_the_single_source_exception() -> None:
-    """`[yerel-değil]` tekil istisnayı KAPATIR — canlı URL bile yetmez."""
-    sonuc = engine.run_checks(
-        _ekle_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, {DOGRULANMIS_URL} [yerel-değil]")
+
+# ═══ 18. Checkpoint 9 fix'lerinin kendi kapıları ══════════════════════════
+#
+# Bu bölüm hakem turunda ÖLÇÜLEN beş fail-open/fail-closed kırığını çiviler.
+# Her biri düzeltmeden ÖNCE kırmızıydı; mutasyon kaydı
+# `docs/research/2026-08-27-motor-mutasyon-olcumu.md`'dedir.
+
+
+def test_stale_audit_pair_is_rejected() -> None:
+    """F1: çift BU aktif görüntüye ait değilse motora GİREMEZ (R6 sınırı).
+
+    Kimlikler kalıcı olduğu için bayat statüler değişmiş içeriğe cevap verir;
+    `ValidatedAuditPair` yalnız iki raporun BİR görüntüde uyuştuğunu kanıtlar,
+    o görüntünün BU çağrının görüntüsü olduğunu kanıtlamaz.
+    """
+    degisik = _tam_icerik(kapsam="Degismis kapsam metni.")
+    gunluk = _gunluk(degisik, kimlikler=_kimlik_haritasi(AKTIF_ICERIK, degisik))
+    birimler = identity.decision_units(degisik, gunluk)
+    with pytest.raises(ValueError, match="aktif görüntüye ait değil"):
+        engine.EngineInputs(
+            sentez=_sonuc(degisik, gunluk),
+            aktif_paket={"schema_version": 1, "content": degisik, "decision_log": gunluk},
+            aktif_schema_version=1,
+            aktif_birimler=birimler,
+            mevcut_birim_sayisi=len(birimler),
+            ilk_kosu=False,
+            son_turlarin_cikarmalari=(),
+            denetci_envanterleri=_cift(),  # AKTIF_ICERIK'in görüntüsü — bayat
+            mekanik_eleme=_gecen_kapi(),
+            takvim_anahtarlari=frozenset({TAKVIM_ANAHTARI}),
+            otomatik_kapilar=engine.GateResults(True, False),
+        )
+
+
+def test_current_audit_pair_is_accepted() -> None:
+    """POZİTİF KONTROL: görüntü eşleşiyorsa çift kabul edilir."""
+    girdi = _girdi()
+    assert identity.canonical_sha(girdi.aktif_birimler) == (
+        girdi.denetci_envanterleri.unit_snapshot_sha
     )
+
+
+def test_invented_source_label_does_not_count() -> None:
+    """F2: mekanik kapının tanımadığı kimlik yapısal çoğunluğa SAYILMAZ."""
+    sonuc = engine.run_checks(_ekle_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, KAYNAK-99"))
     assert "cogunluk-yok" in _sebepler(sonuc)
+
+
+def test_eliminated_source_does_not_count() -> None:
+    """F2: elenen kaynak kimliği de sayılmaz — eleme fail-closed'dır."""
+    elenmis = bd.DoctorReport(
+        sonuc=bd.SONUC_ELENDI,
+        notlar=(),
+        elemeler=(
+            bd.Bulgu(
+                kontrol="sahte-kontrol",
+                aile="bolum-ve-alan-tamligi",
+                seviye=bd.SEVIYE_ELEME,
+                mesaj="elenmis kaynak",
+            ),
+        ),
+        kaynak_adi=IKINCI_KAYNAK,
+        icerik_ozeti=_ozet(IKINCI_KAYNAK),
+    )
+    gecerli = [
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi=ad,
+            icerik_ozeti=_ozet(ad),
+        )
+        for ad in (DOGRULANMIS_KAYNAK, "KAYNAK-3")
+    ]
+    kapi = bd.gate_round([*gecerli, elenmis])
+    assert kapi.dur is False, "fixture kapıyı durdurmamalı — ölçülen şey SAYIM"
+
+    girdi = _ekle_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}")
+    kirli = engine.EngineInputs(
+        sentez=girdi.sentez,
+        aktif_paket=girdi.aktif_paket,
+        aktif_schema_version=girdi.aktif_schema_version,
+        aktif_birimler=girdi.aktif_birimler,
+        mevcut_birim_sayisi=girdi.mevcut_birim_sayisi,
+        ilk_kosu=girdi.ilk_kosu,
+        son_turlarin_cikarmalari=girdi.son_turlarin_cikarmalari,
+        denetci_envanterleri=girdi.denetci_envanterleri,
+        mekanik_eleme=kapi,
+        takvim_anahtarlari=girdi.takvim_anahtarlari,
+        otomatik_kapilar=girdi.otomatik_kapilar,
+    )
+    assert "cogunluk-yok" in _sebepler(engine.run_checks(kirli))
+
+
+@pytest.mark.parametrize("deger", ["false", "true", 1, 0, None])
+def test_gate_results_reject_non_bool_values(deger) -> None:
+    """F4: doğru-görünen değer kapı kanıtı DEĞİLDİR (`"false"` DOĞRUdur)."""
+    with pytest.raises(TypeError, match="bool"):
+        engine.GateResults(katman1_passed=deger, tek_aktif_ihlali=False)
+    with pytest.raises(TypeError, match="bool"):
+        engine.GateResults(katman1_passed=True, tek_aktif_ihlali=deger)
+
+
+def test_engine_inputs_rejects_lookalike_round_gate() -> None:
+    """F4: `dur=False` taşıyan benzeyen nesne kapı değişmezlerini ATLAR."""
+
+    class SahteKapi:
+        dur = False
+        bildirim = ""
+        raporlar = ()
+
+    with pytest.raises(TypeError, match="RoundGate"):
+        _girdi(kapi=SahteKapi())
+
+
+def test_auditor_row_reference_counts_as_evidence() -> None:
+    """F5: kanonik kural İKİ kolludur — denetçi SATIRI da kanıttır.
+
+    Satır kanıtı YOLA değil KİMLİĞE bağlıdır: aynı referans BAŞKA bir birimin
+    satırında duruyorsa bu karara kanıt olmaz.
+    """
+    satir_kaniti = "D1#7"
+    girdi = _guncelle_girdisi(
+        alan="kanca_kaliplari",
+        eski=KORUNAN_KANCA,
+        yeni_metin="Guncellenmis kanca kalibi",
+        kanit=satir_kaniti,
+        statuler_1=MUTABIK,
+        statuler_2=MUTABIK,
+    )
+    # Kanıt hiçbir denetçi satırında YOKKEN: uygulanmaz.
+    assert "kanit-yok" in _sebepler(engine.run_checks(girdi))
+
+    # Aynı kanıt DOĞRU birimin satırında dururken: çözülür.
+    def _envanter_kanitli(hedef: str) -> tuple[auditors.InventoryRow, ...]:
+        return tuple(
+            auditors.InventoryRow(
+                unit_id=unit_id,
+                statu="needs_update" if unit_id == KANCA_KIMLIGI else "supported",
+                kanit=satir_kaniti if unit_id == hedef else DOGRULANMIS_KAYNAK,
+                gerekce="Tek cumle gerekce.",
+            )
+            for unit_id in sorted(AKTIF_BIRIMLER)
+        )
+
+    def _cift_kanitli(hedef: str):
+        raporlar = [
+            auditors.AuditReport(
+                denetci=rol,
+                ham_metin=f"{rol} ham raporu",
+                bolumler={ad: f"{ad} govdesi" for ad in auditors.BOLUM_ANAHTARLARI},
+                yeniden_dogrulama=_envanter_kanitli(hedef),
+                url_orneklem=_ornekle(),
+                unit_snapshot_sha=AKTIF_GORUNTU_SHA,
+            )
+            for rol in auditors.DENETCI_ROLLERI
+        ]
+        mutabakat = auditors.check_snapshot_agreement(
+            (
+                auditors.ValidatedReport(raporlar[0], ()),
+                auditors.ValidatedReport(raporlar[1], ()),
+            ),
+            expected_snapshot_sha=AKTIF_GORUNTU_SHA,
+        )
+        assert mutabakat.gecerli, mutabakat.errors
+        return mutabakat.cift
+
+    dogru = engine.EngineInputs(
+        sentez=girdi.sentez,
+        aktif_paket=girdi.aktif_paket,
+        aktif_schema_version=girdi.aktif_schema_version,
+        aktif_birimler=girdi.aktif_birimler,
+        mevcut_birim_sayisi=girdi.mevcut_birim_sayisi,
+        ilk_kosu=girdi.ilk_kosu,
+        son_turlarin_cikarmalari=girdi.son_turlarin_cikarmalari,
+        denetci_envanterleri=_cift_kanitli(KANCA_KIMLIGI),
+        mekanik_eleme=girdi.mekanik_eleme,
+        takvim_anahtarlari=girdi.takvim_anahtarlari,
+        otomatik_kapilar=girdi.otomatik_kapilar,
+    )
+    assert engine.run_checks(dogru).uygulanmayan_kararlar == ()
+
+    yanlis = engine.EngineInputs(
+        sentez=girdi.sentez,
+        aktif_paket=girdi.aktif_paket,
+        aktif_schema_version=girdi.aktif_schema_version,
+        aktif_birimler=girdi.aktif_birimler,
+        mevcut_birim_sayisi=girdi.mevcut_birim_sayisi,
+        ilk_kosu=girdi.ilk_kosu,
+        son_turlarin_cikarmalari=girdi.son_turlarin_cikarmalari,
+        denetci_envanterleri=_cift_kanitli(MEVZUAT_KIMLIGI),
+        mekanik_eleme=girdi.mekanik_eleme,
+        takvim_anahtarlari=girdi.takvim_anahtarlari,
+        otomatik_kapilar=girdi.otomatik_kapilar,
+    )
+    assert "kanit-yok" in _sebepler(engine.run_checks(yanlis))

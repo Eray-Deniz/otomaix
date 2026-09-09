@@ -106,3 +106,40 @@ sınır değerinin kaydırılması ÖLÇÜLMEDİ; yani "bu kontrol var mı" soru
 kanıtlandı, "bu kontrolün her dalı test edilmiş mi" sorusu kanıtlanmadı.
 Kontrol başına en az bir pozitif + bir negatif test kuralı o boşluğu daraltır
 ama kapatmaz.
+
+---
+
+## Ek ölçüm — checkpoint 9 fix'lerinin kapıları (2026-09-09)
+
+Bağımsız hakem turu beş yüksek bulgu üretti; beşi de kontrolörün KENDİ probuyla
+doğrulandı (ölçümler aşağıda), düzeltildi ve her düzeltmenin kapısı ayrıca
+mutasyona uğratıldı. Mutasyon, düzeltilmiş dosyanın kopyası üzerinden yapıldı ve
+her turda geri yüklendi.
+
+**Düzeltmeden ÖNCE ölçülen davranış (kontrolörün kendi probu, hakemin iddiası
+olduğu gibi kabul edilmedi):**
+
+```
+F1 bayat çift kabul edildi -> b51aeebfff3d9edc vs 24c2a5bf6aa33eda
+F2 uydurma KAYNAK-99 ile sebepler: []            (boş = fail-open)
+F4 katman1_passed='false' ile bulgular: []       (boş = fail-open)
+F5 doğrulanmış referans kümesi: ['KAYNAK-1', 'https://resmi.example/mevzuat-2026']
+   -> denetçi SATIRI kolu hiç çözülemiyordu
+```
+
+**Fix kapılarının mutasyon ölçümü:**
+
+| Mutasyon | Kırmızıya dönen test(ler) |
+|---|---|
+| F1 görüntü bağı kaldırıldı | `test_stale_audit_pair_is_rejected` |
+| F2 kabul edilen kaynak süzgeci kaldırıldı | `test_invented_source_label_does_not_count` · `test_eliminated_source_does_not_count` |
+| F3 tek-kaynak istisnası geri kondu | `test_single_source_exception_is_closed_until_officiality_is_typed` |
+| F4 bool kapısı kaldırıldı | `test_gate_results_reject_non_bool_values` (beş parametre) |
+| F4 `RoundGate` kimlik kapısı kaldırıldı | `test_engine_inputs_rejects_lookalike_round_gate` |
+| F5 denetçi satırı kanıtı kaldırıldı | `test_auditor_row_reference_counts_as_evidence` |
+
+Altı mutasyonun altısı hedeflediği testi kırdı; sahte kapı YOK.
+
+**Kabul edilmiş riskler (orta — düzeltilmedi, dürüst etiket):** K-129 rakam kolu
+sıradan sayısal metni de mevzuat sayar (yön fail-closed); alt-dize eşlemesi Türkçe
+eklemeli olduğu için bilinçlidir (kelime-sınırı ankoru "ayarı/ayarında"yı kaçırır).

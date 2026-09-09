@@ -981,10 +981,16 @@ def _kimlik_kapiya_uygun(raporlar: Sequence[DoctorReport]) -> bool:
     return any(rapor.icerik_ozeti for rapor in raporlar)
 
 
-def _kimlik_bolumlemesi(
+def kimlik_bolumlemesi(
     raporlar: Sequence[DoctorReport],
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     """Raporları KİMLİĞE böler → (geçerli, elenen, tekrar eden, özetsiz).
+
+    **PUBLIC (Plan 2 Task 12, checkpoint 9 / F2).** Motorun `2-3` çoğunluk kapısı
+    "hangi kaynak kimlikleri bu koşuda GEÇERLİ" sorusunu sorar ve cevabı BURADA
+    yaşar. İkinci bir kopya yazmak iki sürümlü bir kimlik kuralı üretirdi —
+    fail-closed eleme kuralı (bir raporu elenen kimlik ELENMİŞTİR) ve içerik
+    ayağı yalnız burada doğru.
 
     K-127 iki BAĞIMSIZ kaynak ister; mutabakat sinyali ilkece iki ayrı kaynağın
     işidir. Bu yüzden birim RAPOR değil KİMLİKTİR. Bir kimliğin raporlarından
@@ -1053,7 +1059,7 @@ def _gate_ihlalleri(
 ) -> list[str]:
     """`RoundGate` türev alanlarının ham veriyle çelişkilerini listeler."""
     ihlaller: list[str] = []
-    gecerli, elenen, _, _ = _kimlik_bolumlemesi(raporlar)
+    gecerli, elenen, _, _ = kimlik_bolumlemesi(raporlar)
     if taban != KAYNAK_TABANI:
         ihlaller.append(f"taban {taban}, kanonik K-127 tabanı {KAYNAK_TABANI}")
     if gecerli_kaynak_sayisi != len(gecerli):
@@ -3251,6 +3257,10 @@ def run(source_text: str, *, source_name: str) -> DoctorReport:
     )
 
 
+_kimlik_bolumlemesi = kimlik_bolumlemesi
+"""Geriye uyum: modül içi çağrı yerleri ve onları çivileyen testler."""
+
+
 def gate_round(reports: Sequence[DoctorReport]) -> RoundGate:
     """K-127 kaynak tabanı kapısı — kaynak SAYISI kapısı, içerik eşiği DEĞİL.
 
@@ -3265,7 +3275,7 @@ def gate_round(reports: Sequence[DoctorReport]) -> RoundGate:
     `DoctorReport.__post_init__`'te zorunludur (boş ad kurulamaz).
     """
     raporlar = _rapor_demeti(reports)
-    gecerli, elenen, tekrar, ozetsiz = _kimlik_bolumlemesi(raporlar)
+    gecerli, elenen, tekrar, ozetsiz = kimlik_bolumlemesi(raporlar)
     dur = len(gecerli) < KAYNAK_TABANI
     parcalar: list[str] = []
     if dur:

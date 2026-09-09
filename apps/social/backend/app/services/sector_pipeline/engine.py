@@ -50,7 +50,7 @@ from typing import Any, Callable, Mapping
 from app.services.sector_content_schema import SPECIAL_DAY_SLOTS
 from app.services.sector_pipeline import identity
 from app.services.sector_pipeline.auditors import ValidatedAuditPair
-from app.services.sector_pipeline.brief_doctor import RoundGate
+from app.services.sector_pipeline.brief_doctor import RoundGate, kimlik_bolumlemesi
 from app.services.sector_pipeline.engine_contract import BulguIzi, UygulanmayanKarar
 from app.services.sector_pipeline.synthesis import (
     MEVZUAT_ALANLARI,
@@ -93,9 +93,6 @@ tutuluyor; `[kanal-bağımlı: X]` ile `[kanal-bagimli: X]` aynı bayraktır.
 SAG_CIKAN_BAYRAK = "kanal-bagimli"
 """Sentezden sağ çıkan TEK bayrak (sentez görevi 212-214); kalan yedi TÜKETİLİR."""
 
-ISTISNAYI_KAPATAN_BAYRAKLAR = frozenset({"yerel-degil", "eski-kaynak"})
-"""Tek-kaynak istisnasını kapatan bayraklar (sentez görevi 125-126 · 193-195)."""
-
 _BAYRAK_RE = re.compile(r"\[([^\]]*)\]")
 
 MEVZUAT_ANAHTAR_KELIMELERI: tuple[str, ...] = (
@@ -122,6 +119,13 @@ varlığıyla, mevzuat ayağı bu aksan-katlanmış kelime listesiyle ölçülü
 GENİŞ tutulur: yanlış-pozitif yönü bloklamaya (fail-closed), yanlış-negatif yönü
 mevzuat uyuşmazlığını sessizce geçirmeye (fail-open) çıkar. Genişletmesi spec
 revizyonudur.
+
+**Eşleme ALT-DİZEDİR ve bu bilinçlidir.** Türkçe eklemeli bir dildir: "ayar"
+kelimesi metinde "ayarı", "ayarında", "ayarlar" olarak geçer ve kelime-sınırı
+ankoru bunları KAÇIRIR. Alt-dize eşlemesinin bedeli, kelimeyi içinde barındıran
+ilgisiz bir sözcüğün de eşleşmesidir (yanlış-pozitif) — yön fail-closed olduğu
+için bu bedel bilinçle kabul edilir. Kabul edilmiş kalan risk: rakam kolu
+sıradan sayısal metni de mevzuat sayar (checkpoint 9, orta — accepted_risk).
 """
 
 _CIKARMA_DESTEKLEYEN = frozenset({"contradicted"})
@@ -138,6 +142,21 @@ class GateResults:
 
     katman1_passed: bool
     tek_aktif_ihlali: bool
+
+    def __post_init__(self) -> None:
+        # F4 (checkpoint 9, yüksek — ÖLÇÜLDÜ): anotasyon çalışma zamanı kapısı
+        # DEĞİLDİR. Serileştirmeden gelen `"false"` DİZESİ doğruluk-değeriyle
+        # DOĞRUdur; ölçümde `katman1_passed="false"` regresyon kapısını sessizce
+        # GEÇTİ (bulgu üretilmedi). Bu, zorunlu kapının fail-open hâlidir.
+        # Emsal: `sector_package_lifecycle._require_flag` aynı kuralı kurar.
+        for _alan in ("katman1_passed", "tek_aktif_ihlali"):
+            _deger = getattr(self, _alan)
+            if type(_deger) is not bool:
+                raise TypeError(
+                    f"GateResults.{_alan} GERÇEKTEN bool olmalı "
+                    f"({type(_deger).__name__} verildi) — doğru-görünen değer "
+                    "kapı kanıtı DEĞİLDİR"
+                )
 
 
 @dataclass(frozen=True)
@@ -178,8 +197,37 @@ class EngineInputs:
                 f"({type(self.denetci_envanterleri).__name__} verildi) — ham denetçi "
                 "raporu motora GİRMEZ; doğrulayıcı ve tur-seviyesi mutabakat atlanamaz"
             )
+        # F4 (checkpoint 9, yüksek): invariant TAŞIYAN iki tip de KİMLİKLE aranır.
+        # `RoundGate`/`GateResults` değişmezlerini kendi `__post_init__`'lerinde
+        # zorlar; benzeyen bir nesne (`dur=False` taşıyan serbest sınıf) o
+        # değişmezleri ATLAYARAK motora girerdi.
+        if type(self.mekanik_eleme) is not RoundGate:
+            raise TypeError(
+                "mekanik_eleme RoundGate olmalı "
+                f"({type(self.mekanik_eleme).__name__} verildi) — benzeyen nesne "
+                "kapı değişmezlerini taşımaz"
+            )
+        if type(self.otomatik_kapilar) is not GateResults:
+            raise TypeError(
+                "otomatik_kapilar GateResults olmalı "
+                f"({type(self.otomatik_kapilar).__name__} verildi)"
+            )
         if self.mevcut_birim_sayisi != len(self.aktif_birimler):
             raise ValueError("mevcut_birim_sayisi aktif_birimler ile tutarsız")
+        # F1 (checkpoint 9, yüksek — ÖLÇÜLDÜ): `ValidatedAuditPair` iki raporun
+        # BİR görüntü üzerinde uyuştuğunu kanıtlar; o görüntünün BU çağrıdaki
+        # aktif birimler olduğunu KANITLAMAZ. Ölçümde farklı bir içerikten
+        # türetilmiş birimler, eski çifte takılmadan kabul edildi: kimlikler
+        # kalıcı olduğu için bayat statüler değişmiş içeriğe cevap veriyor ve
+        # R6'nın görüntü sınırı sessizce düşüyordu. Bağ ARTIK YAPIMDA kurulur.
+        _gorunti = identity.canonical_sha(self.aktif_birimler)
+        if _gorunti != self.denetci_envanterleri.unit_snapshot_sha:
+            raise ValueError(
+                "denetci_envanterleri BU aktif görüntüye ait değil: çift "
+                f"{self.denetci_envanterleri.unit_snapshot_sha}, aktif birimler "
+                f"{_gorunti} — bayat envanter değişmiş içeriğe cevap veremez "
+                "(K-79/K-100, arayüz eki R6)"
+            )
 
 
 @dataclass(frozen=True)
@@ -283,9 +331,35 @@ def _mevzuat_mi(alan: str, metin: str) -> bool:
 
 
 def _referanslar(inputs: EngineInputs) -> set[str]:
-    """İki denetçinin DOĞRULANMIŞ referans kümesi — kural TEK yerde yaşar."""
+    """İki denetçinin DOĞRULANMIŞ URL referans kümesi — kural TEK yerde yaşar."""
     cift = inputs.denetci_envanterleri
     return dogrulanmis_referanslar(cift.birinci) | dogrulanmis_referanslar(cift.ikinci)
+
+
+def _denetci_satiri_kanitlari(inputs: EngineInputs, unit_id: str) -> set[str]:
+    """O BİRİME ait denetçi envanter satırlarının taşıdığı kanıt referansları.
+
+    F5 (checkpoint 9, yüksek — ÖLÇÜLDÜ): kanonik kural İKİ kollu — *"`guncelle`
+    ve `cikar` kararları **denetçi satırı** veya doğrulanmış URL referansı
+    taşımalı"* (spec girdisi satır 1189). İlk yazım yalnız URL kolunu tanıyordu;
+    ölçümde doğrulanmış referans kümesi `{KAYNAK-1, https://...}` ile sınırlıydı,
+    yani denetçinin kendi satırına dayanan meşru bir `guncelle` `kanit-yok`
+    olarak kaydediliyordu — fail-closed bir işletim kırığı.
+
+    Satır YOLA değil KİMLİĞE anahtarlanır: envanter K-100 gereği her aktif birimi
+    tam bir kez taşır. `#<no>` biçimli satır numarası TİPLİ girdide YOKTUR ve
+    buraya ayrıştırılmaz — sunum sırasından türetilen numara kayabilir; kimlik
+    kaymaz.
+    """
+    cift = inputs.denetci_envanterleri
+    kanitlar: set[str] = set()
+    for rapor in (cift.birinci, cift.ikinci):
+        for satir in rapor.yeniden_dogrulama:
+            if satir.unit_id != unit_id:
+                continue
+            if isinstance(satir.kanit, str) and satir.kanit.strip():
+                kanitlar.add(satir.kanit.strip())
+    return kanitlar
 
 
 def _kanit_parcalari(kanit: Any) -> list[str]:
@@ -423,7 +497,8 @@ def _kanit(inputs: EngineInputs) -> CheckOutput:
         if karar not in ("guncelle", "cikar"):
             continue
         parcalar = _kanit_parcalari(satir.get("kanit"))
-        if any(parca in referanslar for parca in parcalar):
+        kabul = referanslar | _denetci_satiri_kanitlari(inputs, satir["unit_id"])
+        if any(parca in kabul for parca in parcalar):
             continue
         kayitlar.append(
             UygulanmayanKarar(unit_id=satir["unit_id"], karar=karar, sebep="kanit-yok")
@@ -485,27 +560,47 @@ def _mutabakat(inputs: EngineInputs) -> CheckOutput:
     return CheckOutput(bulgular=tuple(bulgular), uygulanmayan_kararlar=tuple(kayitlar))
 
 
+def _kabul_edilen_kaynaklar(inputs: EngineInputs) -> set[str]:
+    r"""Bu koşuda GEÇERLİ sayılan kaynak kimlikleri — mekanik kapının kendi ölçümü.
+
+    F2 (checkpoint 9, yüksek — ÖLÇÜLDÜ): `2-3` kapısı serbest metinde `KAYNAK-\d+`
+    deseni sayıyordu; uydurma bir kimlik (`KAYNAK-99`) ve elenmiş bir kaynak
+    yapısal çoğunluğu SESSİZCE geçiriyordu. Kimlik kümesi artık uydurulmaz,
+    `brief_doctor.kimlik_bolumlemesi`'nden OKUNUR — eleme fail-closed'dır (bir
+    raporu elenen kimlik elenmiştir) ve özetsiz kimlik sayıma girmez.
+    """
+    gecerli, _elenen, _tekrar, _ozetsiz = kimlik_bolumlemesi(
+        inputs.mekanik_eleme.raporlar
+    )
+    return set(gecerli)
+
+
 def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
-    referanslar = _referanslar(inputs)
+    kabul_edilen = _kabul_edilen_kaynaklar(inputs)
     kayitlar: list[UygulanmayanKarar] = []
     for satir in _karar_satirlari(inputs):
         if satir.get("karar") != "ekle":
             continue
         kanit = satir.get("kanit") or ""
-        kaynaklar = set(_KAYNAK_ETIKETI_RE.findall(kanit))
+        kaynaklar = set(_KAYNAK_ETIKETI_RE.findall(kanit)) & kabul_edilen
         if len(kaynaklar) >= KAYNAK_TABANI_YENI_OGE:
             continue
-        # K-126 tek-kaynak istisnası — ölçülebilen ayak: canlı URL doğrulaması.
-        # İstisnayı kapatan bayrak varsa (sentez görevi 125-126 · 193-195) hiç
-        # bakılmaz: bayrak ZATEN "bu iddia tekil işlenir" demektir.
-        bayraklar = _bayraklar(kanit) | _bayraklar(str(satir.get("gerekce") or ""))
-        istisna = (
-            not (bayraklar & ISTISNAYI_KAPATAN_BAYRAKLAR)
-            and kaynaklar
-            and any(parca in referanslar for parca in _kanit_parcalari(kanit) if "://" in parca)
-        )
-        if istisna:
-            continue
+        # K-126 TEK-KAYNAK İSTİSNASI BU KATMANDA İŞLEMEZ — ve bu, fail-closed
+        # bir karardır (F3, checkpoint 9, yüksek).
+        #
+        # Sözleşme istisnayı İKİ koşulun BİRLİKTE sağlanmasına bağlar: (1) kaynak
+        # resmî/birincil (K-123 ölçütü) VE (2) en az bir denetçinin canlı URL
+        # doğrulaması. (2) tipli girdide ölçülebilir; (1) ölçülemez — `EngineInputs`
+        # alan kümesi KAPALIDIR (R5) ve resmîlik yargısı denetçi katmanında yaşar.
+        # İlk yazım yalnız (2)'yi arayıp istisnayı AÇIYORDU: bir AND koşulunun tek
+        # ayağını zorlamak, istisnayı canlı herhangi bir kaynağa açmak demektir.
+        # Alan adı ("resmi.example") resmîlik KANITI değildir.
+        #
+        # Bu yüzden tekil iddia burada istisnadan yararlanmaz: kalıp pakete
+        # girmez, gerekiyorsa açık soruya düşer (sentez görevi 142-147).
+        # EV: istisnanın işleyebilmesi K-123'ün TİPLİ taşınmasını ister — bu,
+        # arayüz eki revizyonu (R5 alan kümesi) + denetçi sözleşmesi işidir ve
+        # Task 12'nin kapsamı DIŞINDADIR. Açık borç olarak TASK.md'ye yazılır.
         kayitlar.append(
             UygulanmayanKarar(
                 unit_id=satir["unit_id"], karar="ekle", sebep="cogunluk-yok"
@@ -565,19 +660,35 @@ def _geri_ekleme_celiskisi(inputs: EngineInputs) -> CheckOutput:
 
 
 def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
+    """K-03'ün ÖLÇÜLEBİLEN ayağı — ve ölçülemeyenin DÜRÜST adı.
+
+    K-03 *"paket tür etiketi ile SİSTEM KATEGORİSİ çeliştiğinde paket türü
+    üstündür"* der (spec §11.2, spec girdisi satır 1189 tablosu). Sistem
+    kategorisi `EngineInputs`'ta YOKTUR: `takvim_anahtarlari` yalnız anahtar
+    taşır, kategori taşımaz (R5 alan kümesi KAPALI).
+
+    İlk yazım bu boşluğu aktif paketin ÖNCEKİ tür etiketiyle karşılaştırarak
+    doldurmuş ve çıktıyı `kategori_cakismalari` diye adlandırmıştı — ölçtüğü şey
+    ile adı ÖRTÜŞMÜYORDU (checkpoint 9, orta): sıradan bir tür revizyonu
+    "kategori çatışması" gibi görünüyor, gerçek kategori çatışması ise hiç
+    görünmüyordu. Ad artık ölçtüğü şeydir; K-03'ün kategori ayağı bu katmanda
+    UYGULANMAMIŞTIR ve uygulanabilmesi arayüz eki revizyonu ister (anahtar →
+    kategori eşlemesi). Açık borç olarak TASK.md'ye yazılır.
+    """
     aday = _aday_icerik(inputs).get("ozel_gun") or {}
     onceki = _aktif_ozel_gunler(inputs)
-    catismalar = []
+    degisiklikler = []
     for anahtar in sorted(aday):
-        yeni = (aday.get(anahtar) or {}).get("tur")
-        eski = (onceki.get(anahtar) or {}).get("tur")
-        if eski is None or yeni is None or eski == yeni:
+        yeni_tur = (aday.get(anahtar) or {}).get("tur")
+        onceki_tur = (onceki.get(anahtar) or {}).get("tur")
+        if onceki_tur is None or yeni_tur is None or onceki_tur == yeni_tur:
             continue
-        # K-03: paket türü ÜSTÜNDÜR — çatışma kararsız dalına DÜŞMEZ, kaydedilir.
-        catismalar.append(
-            {"anahtar": anahtar, "paket_turu": yeni, "onceki_tur": eski}
+        degisiklikler.append(
+            {"anahtar": anahtar, "paket_turu": yeni_tur, "onceki_tur": onceki_tur}
         )
-    return CheckOutput(olcumler={"kategori_cakismalari": tuple(catismalar)})
+    return CheckOutput(
+        olcumler={"paket_turu_degisiklikleri": tuple(degisiklikler)}
+    )
 
 
 def _ozel_gun_anahtari(inputs: EngineInputs) -> CheckOutput:
@@ -689,7 +800,7 @@ CHECKS: tuple[EngineCheck, ...] = (
     ),
     EngineCheck(
         ad="kategori_cakismasi",
-        aciklama="K-03: tür etiketi çatışması kaydedilir; paket türü üstündür.",
+        aciklama="K-03: paket tür etiketi değişimi kaydedilir; kategori ayağı girdide YOK.",
         calistir=_kategori_cakismasi,
     ),
     EngineCheck(
