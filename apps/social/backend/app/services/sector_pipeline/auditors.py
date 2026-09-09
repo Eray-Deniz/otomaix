@@ -41,6 +41,7 @@ değişip diğeri kalırdı.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -280,6 +281,7 @@ class PacketRef:
     """Kurulmuş denetçi paketinin kaydı (K-79)."""
 
     run_id: str
+    yetkili_kaynak_sayisi: int
     sector_id: UUID
     kok: Path
     kopyalar: Mapping[str, Path]
@@ -301,6 +303,22 @@ class PacketRef:
                     f"örtüşmüyor: {sorted(getattr(self, _alan))} — rol uzayı "
                     "KAPALIDIR"
                 )
+        self._rol_yollarini_kapila()
+        if isinstance(self.yetkili_kaynak_sayisi, bool) or not isinstance(
+            self.yetkili_kaynak_sayisi, int
+        ):
+            raise TypeError(
+                "PacketRef.yetkili_kaynak_sayisi TAM SAYI olmak ZORUNDA: "
+                f"{self.yetkili_kaynak_sayisi!r} — kaynak sayısı raporun "
+                "beyanından değil paketi KURAN taraftan gelir"
+            )
+        if not 1 <= self.yetkili_kaynak_sayisi <= AZAMI_KAYNAK:
+            raise ValueError(
+                "PacketRef.yetkili_kaynak_sayisi sözleşmenin 1.."
+                f"{AZAMI_KAYNAK} aralığının dışında: "
+                f"{self.yetkili_kaynak_sayisi} — kaynaksız paket kurulmaz, "
+                "üç kaynaktan fazlası da adlandırılmaz (EK-B/C/D)"
+            )
         if len(set(self.kopya_shalari.values())) != 1:
             raise ValueError(
                 "K-79 ihlali: iki denetçi kopyası bayt-özdeş DEĞİL "
@@ -313,6 +331,46 @@ class PacketRef:
                 "PacketRef.unit_snapshot_sha taşıdığı görüntünün kimliği DEĞİL "
                 f"(beyan {self.unit_snapshot_sha}, ölçüm {beklenen_sha})"
             )
+
+
+    def _rol_yollarini_kapila(self) -> None:
+        """B3(2) — rol yolu TAKMA AD, SYMLINK ya da KÖK DIŞI olamaz.
+
+        K-79 körlüğünün yol ayağı: iki rol AYRI dizinde koşar. `cwd` bir okuma
+        sınırı olmadığı için ayrımın tek yapısal dayanağı YOLUN KENDİSİDİR —
+        bir rol dizini kardeşinin (ya da paket dışının) takma adıysa ayrım
+        görünüşte durur, gerçekte iki rol AYNI yeri görür.
+
+        Üç koşul birden: yol `kok/<rol>` biçiminde MUTLAK ve kökün DOĞRUDAN
+        çocuğu; symlink çözümü kendi beklenen canonical'ine EŞİT; iki rolün
+        çözülmüş yolu birbirinden FARKLI.
+        """
+        kok = Path(self.kok)
+        object.__setattr__(self, "kok", kok)
+        kok_canonical = kok.resolve()
+        gorulen: dict[Path, str] = {}
+        for rol in DENETCI_ROLLERI:
+            yol = Path(self.kopyalar[rol])
+            if not yol.is_absolute() or yol.parent != kok or yol.name != rol:
+                raise ValueError(
+                    f"PacketRef.kopyalar[{rol!r}] rol yolu sözleşmesini "
+                    f"çiğniyor: {yol} — rol yolu MUTLAK, kökün DOĞRUDAN çocuğu "
+                    f"ve `kok/{rol}` adında olmak ZORUNDA (kok={kok})"
+                )
+            canonical = yol.resolve()
+            if canonical != kok_canonical / rol:
+                raise ValueError(
+                    f"PacketRef.kopyalar[{rol!r}] rol yolu kendi canonical'ine "
+                    f"EŞİT DEĞİL ({yol} → {canonical}) — takma ad/symlink bir "
+                    "rolü kardeşinin ya da paketin dışının üstüne düşürebilir"
+                )
+            if canonical in gorulen:
+                raise ValueError(
+                    f"PacketRef.kopyalar rol yolu PAYLAŞILAMAZ: {rol!r} ile "
+                    f"{gorulen[canonical]!r} AYNI dizini gösteriyor "
+                    f"({canonical}) — iki rol ayrı dizinde koşar (K-79)"
+                )
+            gorulen[canonical] = rol
 
 
 @dataclass(frozen=True)
@@ -571,6 +629,10 @@ def build_packet(
 
     return PacketRef(
         run_id=run_id,
+        # B4(1): YETKİLİ kaynak sayısı — paketi KURAN taraftan gelir. Raporun
+        # kendi `Kaynak sayısı: <n>` beyanı bu sayıya karşı ölçülür (tur
+        # seviyesi); rapor kendi beyanıyla tamlık kapısını geçemez.
+        yetkili_kaynak_sayisi=len(sources),
         sector_id=sector_id,
         kok=kok,
         kopyalar=kopyalar,
@@ -644,15 +706,14 @@ def _url_orneklemi(govde: str) -> tuple[tuple[UrlCheck, ...], list[str]]:
     `beklenen satır: <m>` kuralı sağlıyor mu (`n ≥ 2` ise `m = n × 3`, değilse
     `m = 0`) ve tabloya gerçekten `m` satır yazılmış mı.
 
-    **ÖLÇÜLMEYEN (dürüst etiket, çözülmedi + evi var).** Beyan edilen kaynak
-    sayısının YETKİLİ kaynak sayısıyla eşit olduğu BURADA KARŞILAŞTIRILMAZ:
-    üç kaynakla koşan bir rapor "Kaynak sayısı: 2" yazıp altı satırla bu
-    kapıdan geçer. Aynı şekilde `_ORTAM_KISITI` cümlesinin gerçekten ölçülmüş
-    bir erişimsizliğe karşılık geldiği de ölçülmez — cümle satır beklentisini
-    KALDIRIR ve doğruluğu bu kapının görüş alanı dışındadır. İki karşılaştırma
-    da tek rapor gören bir kapıya sığmaz (yetkili sayı ile ölçülmüş erişim
-    durumu bu imzada YOKTUR); evleri **Task 10 tur seviyesidir** — orada koşu
-    kaydı yetkili kaynak sayısını ve `preflight` sonucunu taşır.
+    **BURADA ÖLÇÜLMEYEN — ama artık ÖLÇÜLEN (ev onurlandırıldı).** Beyan edilen
+    kaynak sayısının YETKİLİ kaynak sayısıyla eşit olduğu ve `_ORTAM_KISITI`
+    cümlesinin gerçekten ölçülmüş bir erişimsizliğe karşılık geldiği bu imzada
+    KARŞILAŞTIRILAMAZ (ne yetkili sayı ne de ölçülmüş erişim durumu tek rapor
+    gören bir kapıya girer). İkisinin evi **tur seviyesidir** ve o ev artık
+    DOLUDUR: `_tur_url_kapisi` (`run_audit_round` içinden çağrılır)
+    `PacketRef.yetkili_kaynak_sayisi` ile `preflight` sonucuna karşı ölçer.
+    Bu fonksiyon TEK BAŞINA kullanılırsa iki karşılaştırma yapılmamış olur.
     """
     errors: list[str] = []
     kaynak_e = _KAYNAK_SAYISI_RE.search(govde)
@@ -792,12 +853,13 @@ def validate_report(
 
     **İki kapının GÜCÜ ayrıdır (dürüst etiket).** K-100 envanteri `unit_snapshot`
     ile karşılaştırılır: yetkili bir kaynağa karşı ölçülür ve rapor kendi
-    beyanıyla bu kapıyı geçemez. URL örneklemi ise BÖYLE DEĞİLDİR — orada
-    yalnız raporun **kendi beyanının iç tutarlılığı** ölçülür; beyan edilen
-    kaynak sayısı yetkili kaynak sayısıyla KARŞILAŞTIRILMAZ, çünkü bu imza ne
-    yetkili sayıyı ne de ölçülmüş erişim durumunu görür. O karşılaştırmanın evi
-    **Task 10 tur seviyesidir** (çözülmedi + evi var). İmza arayüz eki R6(a)
-    ile bağlıdır ve bu turda DEĞİŞTİRİLMEZ.
+    beyanıyla bu kapıyı geçemez. URL örneklemi BURADA BÖYLE DEĞİLDİR — bu imza
+    ne yetkili kaynak sayısını ne de ölçülmüş erişim durumunu görür, dolayısıyla
+    yalnız raporun **kendi beyanının iç tutarlılığı** ölçülür. Eksik ayak TUR
+    SEVİYESİNDE kapatıldı: `run_audit_round` → `_tur_url_kapisi` beyanı
+    `PacketRef.yetkili_kaynak_sayisi` ile, ortam-kısıtı muafiyetini de `preflight`
+    sonucuyla karşılaştırır. İmza arayüz eki R6(a) ile bağlıdır ve bu turda
+    DEĞİŞTİRİLMEDİ — kapı EKLENMEDİ, tur seviyesine KONDU.
     """
     if not isinstance(text, str):
         raise TypeError(f"validate_report metin bekler: {type(text).__name__}")
@@ -1326,24 +1388,124 @@ def _tur_dosyasi(dizin: Path, rol: str) -> Path:
     return dizin / RAPOR_DOSYA_KALIBI.format(rol)
 
 
+def _kalicilastir(packet: PacketRef, ham: Mapping[str, str]) -> str | None:
+    """Bellekte tutulan raporları diske indirir — var olan dosya EZİLMEZ.
+
+    **Neden GEÇ yazılıyor (B3(1)).** Denetçi-1'in raporu diske indiği ANDAN
+    itibaren denetçi-2'nin adresleyebileceği bir dosyadır (`cwd` okumayı
+    sınırlamaz). Gözlenebilir sızıntı kanalı budur; yazımı iki rol de bitene
+    kadar ertelemek onu kapatır. Denetçi-2 DÜŞSE bile denetçi-1'in raporu yine
+    yazılır — kanıt kaybolmaz ve düşen rol zaten koşmadığı için sızıntı yoktur.
+
+    Dönüş: hata yoksa `None`, salt-eklemelik çiğnenirse SEBEP. `FileExistsError`
+    DIŞINDAKİ `OSError`'lar YUTULMAZ — çağıranın dış koruması onları tipli
+    arızaya çevirir.
+    """
+    for rol in DENETCI_ROLLERI:
+        if rol not in ham:
+            continue
+        hedef = _tur_dosyasi(packet.kopyalar[rol], rol)
+        try:
+            # Salt-eklemeli açılış: var olan kısmi rapor EZİLMEZ (K-82).
+            with open(hedef, "x", encoding="utf-8") as akis:
+                akis.write(ham[rol])
+        except FileExistsError:
+            return (
+                f"denetim turu {rol} raporunu yazamadı: {hedef} ZATEN var — "
+                "ham katman salt-eklemedir, dosya EZİLMEZ (K-82); yeniden "
+                "koşum yeni kimlik alır"
+            )
+    return None
+
+
+def _tur_url_kapisi(
+    rapor: AuditReport,
+    *,
+    yetkili_kaynak_sayisi: int,
+    on_kontrol: PreflightResult,
+) -> list[str]:
+    """B4 (F3) — URL tamlığı raporun KENDİ beyanıyla doğrulanamaz.
+
+    `validate_report` tek rapor görür ve yalnız beyanın İÇ tutarlılığını ölçer
+    (arayüz eki R6: "çapraz denetçi karşılaştırması BURADA YAPILMAZ"). Bu
+    yüzden iki karşılaştırma TUR seviyesindedir ve imza DEĞİŞMEZ:
+
+    (a) **Yetkili sayı.** Raporun `Kaynak sayısı: <n>` beyanı, paketi kuran
+        tarafın `sources` uzunluğuna EŞİT olmak zorundadır. Üç kaynakla koşup
+        "Kaynak sayısı: 2" yazan bir rapor altı satırla iç tutarlıdır ama
+        koşunun ÜÇÜNCÜ kaynağını hiç örneklememiştir.
+    (b) **Ortam-kısıtı muafiyeti.** Kaçış cümlesi TÜM satır beklentisini
+        kaldırır. K-14 ön kontrolü erişimi ÖLÇTÜYSE muafiyet KABUL EDİLMEZ:
+        ölçülmüş erişimin üstüne yazılan "erişemedim" beyanı doğrulamayı
+        atlatan tek cümlelik bir kapı olurdu.
+
+    **Ölçülmüş kapsam sınırı (dürüst etiket).** (b) yalnız ön kontrol BAŞARILI
+    iken bağlar. Prob YOKSA `preflight` fail-closed davranır (`web_erisimi`
+    False) ve muafiyet meşru sayılır — probu sağlayan katman Task 11'dir. Bu
+    turda "erişim gerçekten yoktu" iddiası DOĞRULANMADI, yalnız "erişim
+    ölçüldüyse muafiyet yasak" iddiası ölçüldü.
+    """
+    govde = rapor.bolumler[BOLUM_ANAHTARLARI[1]]
+    errors: list[str] = []
+    eslesme = _KAYNAK_SAYISI_RE.search(govde)
+    if eslesme is None:
+        # Biçim kapısı bunu zaten düşürür; ikinci kez fail-closed durulur.
+        errors.append(
+            f"tur kapısı: {rapor.denetci} raporu kaynak sayısı beyanı "
+            "TAŞIMIYOR — yetkili sayıyla karşılaştırılamaz"
+        )
+    elif int(eslesme.group(1)) != yetkili_kaynak_sayisi:
+        errors.append(
+            f"tur kapısı: {rapor.denetci} raporu {int(eslesme.group(1))} kaynak "
+            f"beyan etti, koşunun YETKİLİ kaynak sayısı "
+            f"{yetkili_kaynak_sayisi} — tamlık raporun kendi beyanıyla "
+            "doğrulanamaz, paketi kuran taraf yetkilidir"
+        )
+    if _ORTAM_KISITI in govde and on_kontrol.web_erisimi:
+        errors.append(
+            f"tur kapısı: {rapor.denetci} raporu ortam kısıtı muafiyeti "
+            f"kullandı ({_ORTAM_KISITI}) ama K-14 ön kontrolü "
+            f"{on_kontrol.arac} için web erişimini ÖLÇTÜ — ölçülmüş erişimin "
+            "üstüne yazılan muafiyet URL doğrulamasını atlatır"
+        )
+    return errors
+
+
 async def run_audit_round(
     db,
     packet: PacketRef,
     *,
     runner: Runner,
     run_id: str,
+    web_prob: Callable[[str], bool] | None = None,
 ) -> AuditRound:
     """İki kör denetçiyi SIRAYLA koşturur ve turu mutabakat kapısından geçirir.
 
     Bağlayıcı invariantlar bu gövdededir:
 
+    * **KİMLİK BAĞI** — `run_id` ile `packet.run_id` TAM EŞİT olmak ZORUNDA.
+      İkisi bağımsız doğrulanıp eşitlikleri ölçülmeseydi A koşusunun paketi
+      denetlenip B koşusu `tamamlanmadi` işaretlenebilirdi: dosyalar paketin
+      yollarından okunur, arıza ise argümanla adlandırılan SATIRA yazılır.
+      Ayrışmada hiçbir alt süreç koşmaz ve hiçbir DB mutasyonu olmaz.
     * **K-78 SIRALI** — döngü `DENETCI_ROLLERI` üzerinde yürür ve bir rol
       bitmeden diğeri başlamaz; sıra deterministiktir.
     * **K-79 AYRI DİZİN** — her rol kendi `packet.kopyalar[rol]` dizininde
-      koşar, istem dosyası da o dizinden okunur.
+      koşar, istem dosyası da o dizinden okunur. Rol yollarının takma
+      ad/symlink/kök-dışı olmadığı `PacketRef` kapısında ölçülür.
+    * **K-79 GEÇ YAZIM** — denetçi-1'in raporu denetçi-2 çıkana kadar DİSKE
+      YAZILMAZ; ikisi de bittikten sonra kalıcılaşır (`_kalicilastir`).
     * **K-82 DURUM SAHİPLİĞİ** — terminal arızada `runs.mark_incomplete`
-      BURADAN çağrılır (runner'ın `db`'si yoktur) ve yazılmış kısmi rapor
-      dosyası EZİLMEZ: dosyalar salt-eklemeli (`"x"`) açılır.
+      BURADAN çağrılır (runner'ın `db`'si yoktur) ve yazılmış rapor dosyası
+      EZİLMEZ: dosyalar salt-eklemeli (`"x"`) açılır.
+    * **K-82 İSTİSNA YOLLARI** — turun tamamı bir dış koruma altındadır.
+      Beklenen alt süreç/dosya sistemi `OSError`'ları tipli arızaya çevrilir;
+      beklenmeyen istisnada ve İPTALDE işaret EN İYİ ÇABAYLA atılır ve istisna
+      YENİDEN FIRLATILIR (yutulmaz). Koruma olmasaydı eksik CLI · izin · disk ·
+      iptal yollarında satır `calisiyor` olarak ASILI kalırdı — K-82'nin
+      kapatmak için var olduğu durum.
+    * **K-14 ÖN KONTROL** — `preflight` runner'lardan ÖNCE koşar; sonucu tur
+      seviyesindeki ortam-kısıtı kapısını besler.
     * **K-136** — koşu sebebine giden stderr maskeleme süzgecinden geçer.
     * **K-150 FAIL-CLOSED** — iki GEÇERLİ rapor yoksa çift kurulmaz, tur
       geçersizdir ve sentez BAŞLAMAZ.
@@ -1351,16 +1513,34 @@ async def run_audit_round(
       `validate_report` biçim kapısına verilir; içindeki yönerge yürütülmez.
 
     **Doğrulama düşüşü TERMİNAL hata DEĞİLDİR (bilinçli, beyan edilir).** Rapor
-    biçim/veri kapısını geçemezse tur geçersiz döner ama koşu `tamamlanmadi`
-    İŞARETLENMEZ: K-150 "eksik denetçi yeniden koşulur" der ve yarım işareti
-    yeniden koşumun önünü keserdi. `tamamlanmadi` yalnız aracın KENDİSİ
-    düştüğünde (zaman aşımı · sıfırdan farklı çıkış · boş çıktı · dosya
-    çakışması) yazılır.
+    biçim/veri kapısını ya da tur kapısını geçemezse tur geçersiz döner ama koşu
+    `tamamlanmadi` İŞARETLENMEZ: K-150 "eksik denetçi yeniden koşulur" der ve
+    yarım işareti yeniden koşumun önünü keserdi. `tamamlanmadi` yalnız aracın
+    KENDİSİ düştüğünde (zaman aşımı · sıfırdan farklı çıkış · boş çıktı · dosya
+    çakışması · alt süreç istisnası) yazılır.
+
+    **KALAN RİSK — dürüst beyan (B3).** `cwd` bir güvenlik sınırı DEĞİLDİR:
+    işletim sistemi düzeyinde kum havuzu YOKTUR ve kasıtlı düşmanca bir denetçi
+    dosya sistemini gezip kardeş rolün dizinini okuyabilir. Bu turda kapatılan
+    şey İZOLASYON değil, gözlenebilir SIZINTI KANALIDIR: denetçi-1'in raporu
+    denetçi-2 koşarken diskte YOKTUR ve rol yolları takma ad kabul etmez.
+    Tehdit modeli girdinin ÖZENSİZ olmasıdır, SALDIRGAN olması değil; gerçek
+    izolasyon dağıtım katmanının işidir ve bu görevin kapsamı DIŞINDADIR.
+    `test_cwd_is_not_a_security_boundary_and_the_declaration_is_measured` bu
+    beyanı ölçer — izolasyon eklenirse test KIRMIZI olur ve beyan bayat kalamaz.
     """
     require_run_id(run_id)
     if not isinstance(packet, PacketRef):
         raise TypeError(
             f"run_audit_round PacketRef bekler: {type(packet).__name__}"
+        )
+    if run_id != packet.run_id:
+        # FAIL-CLOSED ve HER ŞEYDEN ÖNCE: alt süreç de DB mutasyonu da yok.
+        raise ValueError(
+            f"koşu kimliği paketin kimliğiyle EŞİT DEĞİL (argüman {run_id!r}, "
+            f"paket {packet.run_id!r}) — dosyalar paketin yollarından okunur, "
+            "arıza ise argümanla adlandırılan satıra yazılırdı: bir koşunun "
+            "denetimi başka bir koşuyu işaretleyemez"
         )
 
     async def _yarim(asama_sebebi: str) -> AuditRound:
@@ -1369,45 +1549,104 @@ async def run_audit_round(
         )
         return AuditRound((), False, asama_sebebi)
 
-    ham: dict[str, str] = {}
-    for rol in DENETCI_ROLLERI:
-        dizin = packet.kopyalar[rol]
-        sonuc = runner.run(
-            tool=rol, cwd=dizin, prompt_path=dizin / GOREV_DOSYA_ADI
-        )
-        if not isinstance(sonuc, RunnerOutcome):
-            raise TypeError(
-                "Runner tipli sonuç döndürmek ZORUNDA: "
-                f"{type(sonuc).__name__} — ham metin kabul edilmez"
-            )
-        if sonuc.durum != "tamam":
-            return await _yarim(
-                f"denetim turu {rol} aracında yarım kaldı "
-                f"(durum={sonuc.durum}, çıkış={sonuc.exit_code}): "
-                + runs.mask_secrets(sonuc.stderr.strip() or "<stderr boş>")
-            )
-        hedef = _tur_dosyasi(dizin, rol)
+    async def _en_iyi_cabayla_isaretle(sebep: str) -> None:
+        """İstisna yolunda işaret — asıl istisnayı GÖLGELEMEZ."""
         try:
-            # Salt-eklemeli açılış: var olan kısmi rapor EZİLMEZ (K-82).
-            with open(hedef, "x", encoding="utf-8") as akis:
-                akis.write(sonuc.stdout)
-        except FileExistsError:
-            return await _yarim(
-                f"denetim turu {rol} raporunu yazamadı: {hedef} ZATEN var — "
-                "ham katman salt-eklemedir, dosya EZİLMEZ (K-82); yeniden "
-                "koşum yeni kimlik alır"
+            await runs.mark_incomplete(
+                db, run_id=run_id, asama=DENETIM_ASAMASI, sebep=sebep
             )
-        ham[rol] = sonuc.stdout
+        except BaseException:  # noqa: BLE001 — asıl istisna korunur
+            _LOG.warning(
+                "denetim turu istisna yolunda işaretlenemedi: run_id=%s",
+                run_id,
+                exc_info=True,
+            )
 
-    dogrulanmis = tuple(
-        validate_report(
-            ham[rol], unit_snapshot=packet.unit_snapshot, denetci=rol
+    # K-14: erişim runner'lardan ÖNCE ölçülür. Prob yoksa `preflight`
+    # fail-closed davranır ve ortam-kısıtı muafiyeti meşru sayılır (Task 11).
+    on_kontroller = {
+        rol: preflight(rol, prob=web_prob) for rol in DENETCI_ROLLERI
+    }
+
+    ham: dict[str, str] = {}
+    try:
+        for rol in DENETCI_ROLLERI:
+            dizin = packet.kopyalar[rol]
+            sonuc = runner.run(
+                tool=rol, cwd=dizin, prompt_path=dizin / GOREV_DOSYA_ADI
+            )
+            if not isinstance(sonuc, RunnerOutcome):
+                raise TypeError(
+                    "Runner tipli sonuç döndürmek ZORUNDA: "
+                    f"{type(sonuc).__name__} — ham metin kabul edilmez"
+                )
+            if sonuc.durum != "tamam":
+                sebep = (
+                    f"denetim turu {rol} aracında yarım kaldı "
+                    f"(durum={sonuc.durum}, çıkış={sonuc.exit_code}): "
+                    + runs.mask_secrets(sonuc.stderr.strip() or "<stderr boş>")
+                )
+                # Düşen rol koşmadı; ondan ÖNCEKİ rolün raporu kanıttır.
+                yazma_sebebi = _kalicilastir(packet, ham)
+                if yazma_sebebi is not None:
+                    sebep = f"{sebep} · {yazma_sebebi}"
+                return await _yarim(sebep)
+            ham[rol] = sonuc.stdout
+
+        yazma_sebebi = _kalicilastir(packet, ham)
+        if yazma_sebebi is not None:
+            return await _yarim(yazma_sebebi)
+
+        dogrulanmis = tuple(
+            validate_report(
+                ham[rol], unit_snapshot=packet.unit_snapshot, denetci=rol
+            )
+            for rol in DENETCI_ROLLERI
         )
-        for rol in DENETCI_ROLLERI
-    )
-    anlasma = check_snapshot_agreement(
-        dogrulanmis, expected_snapshot_sha=packet.unit_snapshot_sha
-    )
-    if anlasma.cift is None:
-        return AuditRound((), False, " · ".join(anlasma.errors))
-    return AuditRound((anlasma.cift.birinci, anlasma.cift.ikinci), True, None)
+        anlasma = check_snapshot_agreement(
+            dogrulanmis, expected_snapshot_sha=packet.unit_snapshot_sha
+        )
+        if anlasma.cift is None:
+            return AuditRound((), False, " · ".join(anlasma.errors))
+
+        tur_hatalari: list[str] = []
+        for rol, rapor in zip(
+            DENETCI_ROLLERI, (anlasma.cift.birinci, anlasma.cift.ikinci)
+        ):
+            tur_hatalari.extend(
+                _tur_url_kapisi(
+                    rapor,
+                    yetkili_kaynak_sayisi=packet.yetkili_kaynak_sayisi,
+                    on_kontrol=on_kontroller[rol],
+                )
+            )
+        if tur_hatalari:
+            return AuditRound((), False, " · ".join(tur_hatalari))
+        return AuditRound((anlasma.cift.birinci, anlasma.cift.ikinci), True, None)
+    except OSError as exc:
+        # Beklenen alt süreç/dosya sistemi arızası: eksik CLI · izin · disk.
+        sebep = (
+            f"denetim turu alt süreç arızasıyla düştü ({type(exc).__name__}): "
+            + runs.mask_secrets(str(exc) or "<sebep boş>")
+        )
+        try:
+            _kalicilastir(packet, ham)  # kanıt kaybolmasın (en iyi çaba)
+        except OSError:
+            _LOG.warning(
+                "denetim turu kısmi raporu istisna yolunda yazılamadı: "
+                "run_id=%s",
+                run_id,
+                exc_info=True,
+            )
+        return await _yarim(sebep)
+    except asyncio.CancelledError:
+        await _en_iyi_cabayla_isaretle(
+            "denetim turu İPTAL edildi (CancelledError) — koşu yarım kaldı"
+        )
+        raise
+    except BaseException as exc:
+        await _en_iyi_cabayla_isaretle(
+            f"denetim turu beklenmeyen istisnayla düştü ({type(exc).__name__}): "
+            + runs.mask_secrets(str(exc) or "<sebep boş>")
+        )
+        raise

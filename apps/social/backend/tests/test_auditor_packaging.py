@@ -449,6 +449,7 @@ def test_packet_ref_carries_unit_snapshot_and_equal_copy_hashes(
     with pytest.raises(ValueError, match="bayt-özdeş"):
         auditors.PacketRef(
             run_id=ref.run_id,
+            yetkili_kaynak_sayisi=ref.yetkili_kaynak_sayisi,
             sector_id=ref.sector_id,
             kok=ref.kok,
             kopyalar=dict(ref.kopyalar),
@@ -468,6 +469,7 @@ def test_packet_ref_mappings_are_read_only_and_unaliased(tmp_path: Path) -> None
     cagiran = _snapshot(UNIT_A, UNIT_B)
     ikinci = auditors.PacketRef(
         run_id=ref.run_id,
+        yetkili_kaynak_sayisi=ref.yetkili_kaynak_sayisi,
         sector_id=ref.sector_id,
         kok=ref.kok,
         kopyalar=dict(ref.kopyalar),
@@ -500,6 +502,7 @@ def test_packet_ref_does_not_alias_the_caller_mapping(
     }
     ikinci = auditors.PacketRef(
         run_id=ref.run_id,
+        yetkili_kaynak_sayisi=ref.yetkili_kaynak_sayisi,
         sector_id=ref.sector_id,
         kok=ref.kok,
         kopyalar=cagiran["kopyalar"],
@@ -1171,3 +1174,118 @@ def test_preflight_success_allows_round() -> None:
         f"ön kontrol yanlış aracı yokladı: {prob.cagrilar} — başka bir aracın "
         "erişimi bu turu başlatamaz"
     )
+
+
+# ═══ Düzeltme turu — B3(2): rol yolları takma ad/symlink/kök-dışı KABUL ETMEZ ═
+
+
+def _rol_yollu_ref(ref, *, kok: Path, kopyalar: dict[str, Path]):
+    return auditors.PacketRef(
+        run_id=ref.run_id,
+        yetkili_kaynak_sayisi=ref.yetkili_kaynak_sayisi,
+        sector_id=ref.sector_id,
+        kok=kok,
+        kopyalar=kopyalar,
+        kopya_shalari=dict(ref.kopya_shalari),
+        unit_snapshot=dict(ref.unit_snapshot),
+        unit_snapshot_sha=ref.unit_snapshot_sha,
+    )
+
+
+def test_packet_ref_rejects_a_symlinked_role_path(tmp_path: Path) -> None:
+    """Rol adı doğru olsa da symlink KABUL EDİLMEZ — yol kendi canonical'i olmalı.
+
+    Sızıntı ekseni: bir rol dizini kardeşinin (ya da paket dışının) takma adı
+    olursa `cwd` ayrımı görünüşte durur, gerçekte iki rol AYNI yeri görür.
+    """
+    ref = _paket(tmp_path)
+    sahte_kok = tmp_path / "sahte-kok"
+    sahte_kok.mkdir()
+    disarisi = tmp_path / "disarisi"
+    disarisi.mkdir()
+    (sahte_kok / "denetci-1").symlink_to(disarisi, target_is_directory=True)
+    (sahte_kok / "denetci-2").mkdir()
+
+    with pytest.raises(ValueError, match="rol yolu"):
+        _rol_yollu_ref(
+            ref,
+            kok=sahte_kok,
+            kopyalar={
+                "denetci-1": sahte_kok / "denetci-1",
+                "denetci-2": sahte_kok / "denetci-2",
+            },
+        )
+
+
+def test_packet_ref_rejects_a_role_path_outside_the_root(tmp_path: Path) -> None:
+    """Kök dışındaki rol yolu REDDEDİLİR — paket sınırı yol düzeyinde ölçülür."""
+    ref = _paket(tmp_path)
+    disarisi = tmp_path / "kok-disi"
+    disarisi.mkdir()
+    (disarisi / "denetci-2").mkdir()
+
+    with pytest.raises(ValueError, match="rol yolu"):
+        _rol_yollu_ref(
+            ref,
+            kok=ref.kok,
+            kopyalar={
+                "denetci-1": ref.kopyalar["denetci-1"],
+                "denetci-2": disarisi / "denetci-2",
+            },
+        )
+
+
+def test_packet_ref_rejects_two_roles_sharing_one_directory(
+    tmp_path: Path,
+) -> None:
+    """İki rol AYNI dizini gösteremez — kör bağımsızlığın yol ayağı."""
+    ref = _paket(tmp_path)
+    with pytest.raises(ValueError, match="rol yolu"):
+        _rol_yollu_ref(
+            ref,
+            kok=ref.kok,
+            kopyalar={
+                "denetci-1": ref.kopyalar["denetci-1"],
+                "denetci-2": ref.kopyalar["denetci-1"],
+            },
+        )
+
+
+def test_packet_ref_accepts_the_paths_build_packet_produced(
+    tmp_path: Path,
+) -> None:
+    """POZİTİF KONTROL: kapı gerçek paketi REDDETMEZ."""
+    ref = _paket(tmp_path)
+    ikinci = _rol_yollu_ref(ref, kok=ref.kok, kopyalar=dict(ref.kopyalar))
+    assert dict(ikinci.kopyalar) == dict(ref.kopyalar)
+
+
+# ═══ Düzeltme turu — B4(1): YETKİLİ kaynak sayısı pakette taşınır ═══════════
+
+
+def test_build_packet_carries_the_authoritative_source_count(
+    tmp_path: Path,
+) -> None:
+    """Yetkili sayı `sources`'tan gelir — rapordan DEĞİL, paketi kuran taraftan."""
+    for sayi in (1, 2, 3):
+        ref = _paket(tmp_path / f"kaynak-{sayi}", kaynak_sayisi=sayi)
+        assert ref.yetkili_kaynak_sayisi == sayi
+
+
+@pytest.mark.parametrize("deger", [0, 4, -1, True, "2", 2.0, None])
+def test_packet_ref_rejects_an_out_of_contract_source_count(
+    tmp_path: Path, deger
+) -> None:
+    """Sayı sözleşmenin 1..3 aralığında bir TAM SAYI olmak ZORUNDA."""
+    ref = _paket(tmp_path)
+    with pytest.raises((ValueError, TypeError), match="yetkili_kaynak_sayisi"):
+        auditors.PacketRef(
+            run_id=ref.run_id,
+            yetkili_kaynak_sayisi=deger,
+            sector_id=ref.sector_id,
+            kok=ref.kok,
+            kopyalar=dict(ref.kopyalar),
+            kopya_shalari=dict(ref.kopya_shalari),
+            unit_snapshot=dict(ref.unit_snapshot),
+            unit_snapshot_sha=ref.unit_snapshot_sha,
+        )
