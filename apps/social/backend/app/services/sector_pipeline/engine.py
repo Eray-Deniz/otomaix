@@ -49,7 +49,7 @@ from typing import Any, Callable, Mapping
 
 from app.services.sector_content_schema import SPECIAL_DAY_SLOTS
 from app.services.sector_pipeline import identity
-from app.services.sector_pipeline.auditors import ValidatedAuditPair
+from app.services.sector_pipeline.auditors import KAYNAK_ETIKETI, ValidatedAuditPair
 from app.services.sector_pipeline.brief_doctor import RoundGate, kimlik_bolumlemesi
 from app.services.sector_pipeline.engine_contract import BulguIzi, UygulanmayanKarar
 from app.services.sector_pipeline.synthesis import (
@@ -71,8 +71,6 @@ KAYNAK_TABANI_YENI_OGE = 2
 Ölçülmüş bir eşik DEĞİLDİR (İlke 9): kaynak sözleşmesi motordan bağımsız
 yürürlüktedir, motor onu UYGULAR, KOYMAZ.
 """
-
-_KAYNAK_ETIKETI_RE = re.compile(r"KAYNAK-\d+")
 
 BAYRAKLAR: tuple[str, ...] = (
     "kaynak-bagimli",
@@ -560,29 +558,67 @@ def _mutabakat(inputs: EngineInputs) -> CheckOutput:
     return CheckOutput(bulgular=tuple(bulgular), uygulanmayan_kararlar=tuple(kayitlar))
 
 
-def _kabul_edilen_kaynaklar(inputs: EngineInputs) -> set[str]:
-    r"""Bu koşuda GEÇERLİ sayılan kaynak kimlikleri — mekanik kapının kendi ölçümü.
+def _kabul_edilen_etiketler(inputs: EngineInputs) -> set[str]:
+    r"""Bu koşuda GEÇERLİ sayılan KÖR KAYNAK ETİKETLERİ (`KAYNAK-<n>`).
 
-    F2 (checkpoint 9, yüksek — ÖLÇÜLDÜ): `2-3` kapısı serbest metinde `KAYNAK-\d+`
-    deseni sayıyordu; uydurma bir kimlik (`KAYNAK-99`) ve elenmiş bir kaynak
-    yapısal çoğunluğu SESSİZCE geçiriyordu. Kimlik kümesi artık uydurulmaz,
-    `brief_doctor.kimlik_bolumlemesi`'nden OKUNUR — eleme fail-closed'dır (bir
-    raporu elenen kimlik elenmiştir) ve özetsiz kimlik sayıma girmez.
+    İki ayrı kırık aynı yerde birleşiyordu ve ikisi de ÖLÇÜLDÜ (checkpoint 9):
+
+    **(F2) Serbest metinden yapı çıkarma.** İlk yazım `KAYNAK-\d+` desenini
+    `kanit` metninin HERHANGİ bir yerinde arıyordu; uydurma kimlik (`KAYNAK-99`),
+    elenmiş kaynak ve *"KAYNAK-1 desteklemiyor"* gibi OLUMSUZ cümle yapısal
+    çoğunluğu geçiriyordu. Serbest düzyazıdan *"bu referans olumlu"* çıkarmak
+    bypass ile yanlış-pozitif arasında salınan bir sınıftır; bu yüzden kural
+    POZİTİF ve KAPALI bir kontrattır — `kanit` virgülle ayrılır ve bir parça
+    ancak etiketin TA KENDİSİYSE sayılır. Bu, `synthesis.dogrulanmis_referanslar`
+    doktrininin ("alt dizge değil TAM eşleşme") aynısıdır; ikinci bir ölçüt YOK.
+
+    **(F8) Ad uzayı çakışması.** İkinci yazım `DoctorReport.kaynak_adi` (GERÇEK
+    kaynak adı) ile denetçinin gördüğü KÖR etiketi karşılaştırıyordu. Bunlar ayrı
+    ad uzaylarıdır: `build_packet` kimliği pakete YAZMAZ, kör etiketi KONUMDAN
+    türetir (`EK-B — KAYNAK-1` …). Fixture'da adlar tesadüfen `KAYNAK-1`/`KAYNAK-2`
+    olduğu için kırık görünmüyordu; gerçek adlarla (`kuyumculuk.md` gibi) hiçbir
+    referans eşleşmez ve HER yeni öğe reddedilirdi. Eşleme artık konumdan türer —
+    bu bir varsayım DEĞİL, sistemin kendi sözleşmesidir: `build_packet` her `i`
+    için `doctor_reports[i].icerik_ozeti == canonical_sha(sources[i])` eşitliğini
+    FAIL-CLOSED zorlar, yani sıra kayarsa paket hiç kurulmaz.
+
+    **Kapanmayan ayak — dürüst etiket (İlke 3).** `EngineInputs` bir paket/koşu
+    bağı TAŞIMAZ (R5 alan kümesi KAPALI): başka bir koşunun mekanik kapısı bu
+    koşuya verilirse motor bunu göremez. F1'in görüntü bağına denk gelen bağ
+    burada YOKTUR ve kurulması arayüz eki revizyonu ister. Açık borç olarak
+    TASK.md'ye yazılır; bu katmanda kapatılamaz.
     """
     gecerli, _elenen, _tekrar, _ozetsiz = kimlik_bolumlemesi(
         inputs.mekanik_eleme.raporlar
     )
-    return set(gecerli)
+    gecerli_adlar = set(gecerli)
+    return {
+        KAYNAK_ETIKETI.format(sira + 1)
+        for sira, rapor in enumerate(inputs.mekanik_eleme.raporlar)
+        if rapor.kaynak_adi in gecerli_adlar
+    }
+
+
+def sayilan_kaynaklar(kanit: Any, kabul_edilen_etiketler: set[str]) -> set[str]:
+    """`kanit` metninin SAYILAN kaynak etiketleri — TEK kanonik ayrıştırıcı.
+
+    Bir parça ancak (a) virgülle ayrılmış bir parçanın TAMAMIYSA ve (b) bu koşuda
+    geçerli bir kör etiketse sayılır. Çevresinde düzyazı olan, olumsuzlanan,
+    uydurulan ya da elenmiş etiket SAYILMAZ. Kaynak sayan başka bir yol YOKTUR.
+    """
+    return {
+        parca for parca in _kanit_parcalari(kanit) if parca in kabul_edilen_etiketler
+    }
 
 
 def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
-    kabul_edilen = _kabul_edilen_kaynaklar(inputs)
+    kabul_edilen = _kabul_edilen_etiketler(inputs)
     kayitlar: list[UygulanmayanKarar] = []
     for satir in _karar_satirlari(inputs):
         if satir.get("karar") != "ekle":
             continue
         kanit = satir.get("kanit") or ""
-        kaynaklar = set(_KAYNAK_ETIKETI_RE.findall(kanit)) & kabul_edilen
+        kaynaklar = sayilan_kaynaklar(kanit, kabul_edilen)
         if len(kaynaklar) >= KAYNAK_TABANI_YENI_OGE:
             continue
         # K-126 TEK-KAYNAK İSTİSNASI BU KATMANDA İŞLEMEZ — ve bu, fail-closed

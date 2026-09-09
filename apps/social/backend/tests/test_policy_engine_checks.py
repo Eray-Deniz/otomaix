@@ -1156,36 +1156,49 @@ def test_invented_source_label_does_not_count() -> None:
 
 
 def test_eliminated_source_does_not_count() -> None:
-    """F2: elenen kaynak kimliği de sayılmaz — eleme fail-closed'dır."""
-    elenmis = bd.DoctorReport(
-        sonuc=bd.SONUC_ELENDI,
-        notlar=(),
-        elemeler=(
-            bd.Bulgu(
-                kontrol="sahte-kontrol",
-                aile="bolum-ve-alan-tamligi",
-                seviye=bd.SEVIYE_ELEME,
-                mesaj="elenmis kaynak",
-            ),
-        ),
-        kaynak_adi=IKINCI_KAYNAK,
-        icerik_ozeti=_ozet(IKINCI_KAYNAK),
-    )
-    gecerli = [
+    """F2/F8: elenen kaynağın KONUMUNA düşen kör etiket sayılmaz.
+
+    Kaynak adları bilerek kör etiketten FARKLI: denetçi `KAYNAK-<n>` görür,
+    mekanik kapı gerçek adı bilir. Eşleme konumdan türer (`build_packet` bu
+    hizayı fail-closed zorlar); ad uzaylarını karşılaştırmak F8'in kırığıydı.
+    """
+    adlar = ("kuyumculuk-rehberi.md", "sektor-notlari.md", "vitrin-analizi.md")
+    raporlar = [
         bd.DoctorReport(
-            sonuc=bd.SONUC_GECTI,
+            sonuc=bd.SONUC_ELENDI if sira == 1 else bd.SONUC_GECTI,
             notlar=(),
-            elemeler=(),
+            elemeler=(
+                (
+                    bd.Bulgu(
+                        kontrol="sahte-kontrol",
+                        aile="bolum-ve-alan-tamligi",
+                        seviye=bd.SEVIYE_ELEME,
+                        mesaj="elenmis kaynak",
+                    ),
+                )
+                if sira == 1
+                else ()
+            ),
             kaynak_adi=ad,
             icerik_ozeti=_ozet(ad),
         )
-        for ad in (DOGRULANMIS_KAYNAK, "KAYNAK-3")
+        for sira, ad in enumerate(adlar)
     ]
-    kapi = bd.gate_round([*gecerli, elenmis])
+    kapi = bd.gate_round(raporlar)
     assert kapi.dur is False, "fixture kapıyı durdurmamalı — ölçülen şey SAYIM"
 
-    girdi = _ekle_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}")
-    kirli = engine.EngineInputs(
+    girdi = _kapili_girdi(kapi, kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}")
+    assert "cogunluk-yok" in _sebepler(engine.run_checks(girdi))
+
+    # POZİTİF KONTROL: elenmeyen İKİ konum sayılır (KAYNAK-1 ve KAYNAK-3).
+    temiz = _kapili_girdi(kapi, kanit=f"{DOGRULANMIS_KAYNAK}, KAYNAK-3")
+    assert engine.run_checks(temiz).uygulanmayan_kararlar == ()
+
+
+def _kapili_girdi(kapi: bd.RoundGate, *, kanit: str) -> engine.EngineInputs:
+    """`_ekle_girdisi`nin mekanik kapısı değiştirilmiş hâli."""
+    girdi = _ekle_girdisi(kanit=kanit)
+    return engine.EngineInputs(
         sentez=girdi.sentez,
         aktif_paket=girdi.aktif_paket,
         aktif_schema_version=girdi.aktif_schema_version,
@@ -1198,7 +1211,55 @@ def test_eliminated_source_does_not_count() -> None:
         takvim_anahtarlari=girdi.takvim_anahtarlari,
         otomatik_kapilar=girdi.otomatik_kapilar,
     )
-    assert "cogunluk-yok" in _sebepler(engine.run_checks(kirli))
+
+
+# ── Sınıf kapanışı: ÜRETİLMİŞ matris (elle seçilmiş örnek DEĞİL) ───────────
+#
+# Çoğunluk kapısı iki hakem turunda aynı eksenin üç ayrı varyantını doğurdu
+# (serbest metin · uydurma kimlik · ad uzayı). Kapanış tek kanonik ayrıştırıcıyla
+# yapıldı; kanıtı da elle seçilmiş örnek değil, sarmalayıcı ekseni üzerinde
+# ÜRETİLMİŞ bir matristir: bir etiket ancak parçanın TAMAMIYSA sayılır.
+
+_SARMALAYICILAR = {
+    "tam": ("{etiket}", True),
+    "onunde-duzyazi": ("kaynak {etiket}", False),
+    "arkasinda-duzyazi": ("{etiket} desteklemiyor", False),
+    "olumsuz-cumle": ("{etiket} bu iddiayi DESTEKLEMIYOR", False),
+    "ayrac-icinde": ("[{etiket}]", False),
+    "kucuk-harf": ("{etiket_kucuk}", False),
+    "bosluklu": ("  {etiket}  ", True),
+}
+
+
+@pytest.mark.parametrize("sarmalayici", sorted(_SARMALAYICILAR))
+def test_source_parser_counts_only_whole_part_matches(sarmalayici) -> None:
+    """ÜRETİLMİŞ MATRİS: sarmalanan etiket sayılmaz, çıplak etiket sayılır."""
+    kalip, sayilmali = _SARMALAYICILAR[sarmalayici]
+    etiket = DOGRULANMIS_KAYNAK
+    parca = kalip.format(etiket=etiket, etiket_kucuk=etiket.lower())
+    sayilan = engine.sayilan_kaynaklar(parca, {DOGRULANMIS_KAYNAK, IKINCI_KAYNAK})
+    assert (sayilan == {etiket}) is sayilmali, f"{sarmalayici}: {sayilan}"
+
+
+def test_source_parser_empty_arm_is_measured() -> None:
+    """BOŞ-KÜME kontrol kolu: matris gerçekten bir şey ölçüyor mu?"""
+    assert engine.sayilan_kaynaklar("", {DOGRULANMIS_KAYNAK}) == set()
+    assert engine.sayilan_kaynaklar(DOGRULANMIS_KAYNAK, set()) == set()
+    assert engine.sayilan_kaynaklar(None, {DOGRULANMIS_KAYNAK}) == set()
+    # Tekrar eden etiket TEK kaynaktır (küme semantiği).
+    assert engine.sayilan_kaynaklar(
+        f"{DOGRULANMIS_KAYNAK}, {DOGRULANMIS_KAYNAK}", {DOGRULANMIS_KAYNAK}
+    ) == {DOGRULANMIS_KAYNAK}
+
+
+def test_negated_prose_does_not_pass_the_majority_gate() -> None:
+    """Hakem turunun somut bypass örneği: iki olumsuz cümle çoğunluk DEĞİLDİR."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(
+            kanit=f"{DOGRULANMIS_KAYNAK} desteklemiyor, {IKINCI_KAYNAK} yalniz baglam"
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)
 
 
 @pytest.mark.parametrize("deger", ["false", "true", 1, 0, None])

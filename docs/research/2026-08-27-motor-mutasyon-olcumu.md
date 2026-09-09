@@ -143,3 +143,24 @@ Altı mutasyonun altısı hedeflediği testi kırdı; sahte kapı YOK.
 **Kabul edilmiş riskler (orta — düzeltilmedi, dürüst etiket):** K-129 rakam kolu
 sıradan sayısal metni de mevzuat sayar (yön fail-closed); alt-dize eşlemesi Türkçe
 eklemeli olduğu için bilinçlidir (kelime-sınırı ankoru "ayarı/ayarında"yı kaçırır).
+
+### Kapanış turu (round 2) — çoğunluk kapısının SINIF kapanışı
+
+Kapanış-doğrulama turu F1/F3/F4/F5'i kapalı buldu; F2'yi AÇIK bıraktı ve yeni bir
+yüksek bulgu (F8) ekledi. İkisi de aynı ekseni gösteriyordu: *serbest metinden yapı
+çıkarma* ve *ad uzayı karıştırma*. Varyant yamamak yerine eksen tek kanonik
+ayrıştırıcıyla kapatıldı (`engine.sayilan_kaynaklar`) ve kapanış ELLE SEÇİLMİŞ
+örnekle değil ÜRETİLMİŞ matrisle kanıtlandı.
+
+| Mutasyon | Kırmızıya dönen test(ler) |
+|---|---|
+| tam-parça kuralı alt-dizeye çevrildi | matrisin dört sarmalayıcı kolu (`önünde-düzyazı` · `arkasında-düzyazı` · `olumsuz-cümle` · `ayraç-içinde`) + `test_negated_prose_does_not_pass_the_majority_gate` |
+| kör etiket konumdan değil addan türetildi | `test_eliminated_source_does_not_count` |
+
+Matrisin boş-küme kontrol kolu ayrıca ölçülür (`test_source_parser_empty_arm_is_measured`):
+boş metin, boş etiket kümesi ve `None` hiçbir kaynak saymaz.
+
+**Kapanmayan ayak — dürüst etiket:** `EngineInputs` paket/koşu bağı taşımaz (R5 alan
+kümesi kapalı), yani başka bir koşunun mekanik kapısı bu koşuya verilirse motor bunu
+göremez. F1'in görüntü bağına denk gelen bağ burada YOKTUR; kurulması arayüz eki
+revizyonu ister ve bu katmanda kapatılamaz. Açık borç olarak TASK.md'ye yazıldı.
