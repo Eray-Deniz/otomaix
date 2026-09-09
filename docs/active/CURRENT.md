@@ -1,6 +1,6 @@
 # Active Tasks
 
-- **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). **Sıradaki iş: Task 10.** Önündeki test matrisi ön koşulu 2026-09-09'da BİTTİ (`458661b`; tam küme 704s → 286s, kapanış mutasyonla kanıtlandı). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
+- **sektor-bilgi-paketi-plan2** — Sektör bilgi paketini üreten ve aktive eden işletim hattı (Plan 2, 20 görev). **Sıradaki iş: Task 11.** Task 10 indi ve checkpoint 7 kapandı (beş hakem turu; on bulgu kapandı, ikisi gerekçeli kabul edilmiş risk). Durum ve sıradaki adım: `docs/active/sektor-bilgi-paketi-plan2/TASK.md`
 
 ## Bitti — arşivi Plan 2 ile BİRLİKTE yapılacak
 

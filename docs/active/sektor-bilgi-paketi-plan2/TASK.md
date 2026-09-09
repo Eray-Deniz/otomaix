@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 10'un önündeki test matrisi
-ön koşulu BİTTİ — `458661b`; sıradaki iş Task 10.) Task 1-8 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 10 İNDİ ve checkpoint 7 kapandı;
+sıradaki iş **Task 11**.) Task 1-10 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -38,8 +38,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 3
-- last_checkpoint_ref: 2b468e8d014c191027edb69e5ccc7830d5b0c850
+- cp_count: 4
+- last_checkpoint_ref: 3af43313970f3e921fbe746a9a8a1404a4882015
 
 # References
 
@@ -408,6 +408,39 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   "makineyle DOĞRULANMADI" kapsam beyanı ÜÇ yerden de KALKTI. Serbest düzyazı kaçışı artık
   NOT üretiyor; onu ilan eden tripwire testi ateşlendi ve TERSİNİ ölçüyor.
 
+## Task 10 TAMAM (2026-09-09) — iki kör denetçi orkestrasyonu
+
+Dokuz commit: `e83e9d4` (CLI ölçümü) · `0503bd0` (iskelet + kırmızı küme) · `df92c0b` (ana) ·
+`29fd099` · `47cb0da` · `1588f89` · `4c868c6` · `3af4331` (beş düzeltme turu). Tam küme
+**3595 passed** (`python -m pytest tests/ -q`, 294.20s, exit 0); taban 3458 → 3595.
+
+**Step 3a ÖLÇÜLDÜ, uydurulmadı:** üç aracın komut satırı kurulu CLI'lardan ölçüldü ve donduruldu
+(`docs/research/2026-09-09-denetci-cli-olcumu.md`; `claude 2.1.266`, `codex-cli 0.151.0`).
+Ölçüm iki hatayı yakaladı — argv'ye konan `--search` bayrağı `codex exec`'te YOK, ve ölçüm
+probunun kendisi var olan bir bayrağı "yok" raporluyordu.
+
+**Checkpoint 7 — BEŞ hakem turu** (1 tam inceleme + 4 kapanış-doğrulama), taban `f1f897c`.
+Taban BİLEREK daraltıldı: `2b468e8d` yerine Task 9 düzeltmesinin hemen öncesi. Gerekçe ölçüldü —
+devir notu "`a488769` hakem görmedi" diyordu ama 2026-09-08 20:05 turunun kapsama ifadesi onu
+ADIYLA sayıyor; buna karşılık devir notunun HİÇ saymadığı `4831015` (Task 9'un iki
+`needs-attention` verdict'ini kapatan düzeltme) hakem GÖRMEMİŞTİ.
+
+Kapanan bulgular: kaynak-rapor eşleşmesi · sözleşme baytlarının yeniden okunması (F1, F2 —
+`4831015`'te kapanmış, bu turda doğrulandı) · URL tamlığının yetkili sayıya bağlanması (F3) ·
+K-79 körlüğünün yol ayağı (F5) · K-82 istisna koruması (F6) · koşu kimliğinin pakete bağlanması
+(F7) · prob dönüşünün tip kapısı (B5) · rol başına kanıt kalıcılaştırma (B6) · paket kiralaması
+ve koşum anı bayt bütünlüğü (B7) · yapım sonrası kök symlink kaçağı (B7-symlink).
+
+**Kapanış ÜRETİLMİŞ MATRİSLE kanıtlandı:** 28 → 52+ hücre (kapı × çıkış yolu × arıza rolü ×
+prob tipi × mutasyon × kiralama × symlink zamanı), `parametrize` ile üretiliyor, boş-küme
+kontrol kolu var. Her kapı için mutasyon kanıtı alındı; kırmızıya dönmeyen iki kapı GİZLENMEDİ,
+kapsam olarak ilan edildi (kardeş-ağaç karşılaştırması ve göreli-kök hücresi).
+
+**K-14 GERÇEK KAPIYA çevrildi.** Önceden ön kontrol koşuyor, sonucu yazılıyor ama HİÇ
+okunmuyordu; üstelik başarısızlık URL doğrulamasını tümden atlama iznine dönüşüyordu — kural
+ters yönde çalışıyordu. Artık dört durum ayrı: erişim var · erişim yok · ölçülmedi · ölçüm
+arızalandı. Turu yalnız birincisi başlatır, muafiyeti yalnız ikincisi meşrulaştırır.
+
 # ÖN KOŞUL — Task 10'dan ÖNCE: test matrisi küçültme (BİTTİ 2026-09-09)
 
 > **Eray kararı (2026-09-08): Plan 2'nin yürütmesi bu iş bitene kadar DURAKLAR.** Ayrı görev
@@ -713,7 +746,59 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   yani tam da F7'nin adlandırdığı kör noktayı taşır. **Bu turda bilerek dokunulmadı** (kapsam
   Task 6'nın dosyaları); aktif katmana tetikli madde olarak yazıldı, sessizce düşürülmedi.
 
+## Task 10 kararları (2026-09-09)
+
+- **Hakem bulgusunun severity'si kontrolör tarafından İNDİRİLDİ — bir kez, gerekçesiyle.**
+  Round 5'in tek bulgusu (`B7-toctou`: yollar kabul anında doğrulanıyor, kullanım anında
+  atomik değil) `high` geldi; kontrolör `medium`'a indirdi ve `accepted_risk` yazdı.
+  Gerekçe: mekanizma gerçek, ama erişilebilirliği ilan edilmiş tehdit modelinin DIŞINDA —
+  girdi özensiz araştırma çıktısıdır, saldırgan değildir; yerel tek kullanıcılı hat.
+  Rol dizininin tur koşarken bayt-özdeş bir dış ikize symlink'le değiştirilmesi kazara
+  üretilebilir bir olay değil. Hakemin KENDİ fallback'i de bunu "unresolved concurrency
+  residual olarak tut" diye öneriyor. Kısmi kapanış yine de uygulandı (`3af4331`).
+  **Bu bir emsal DEĞİL:** severity indirimi ancak erişilebilirlik tehdit modeline karşı
+  ÖLÇÜLDÜĞÜNDE yapılır; "kapsam büyüyor" ya da "maliyet artıyor" gerekçe değildir.
+
+- **OS kum havuzu / konteyner Task 10 kapsamı DIŞINDA tutuldu (kontrolör kararı).**
+  Hakem K-79 için OS düzeyinde izolasyon önerdi; reddedildi — dağıtım katmanının işi.
+  Uygulanan asgari kapanış: raporlar iki denetçi de bitene kadar diske yazılmıyor, rol
+  yolları takma ad/symlink/paylaşım kabul etmiyor, paket kiralaması ve koşum anı bayt
+  bütünlüğü kapıları eklendi, kalan risk kodda beyan + tripwire.
+
+- **Kilit devralma politikası: ASLA devralınmaz** (zaman aşımı yok, PID canlılığı yok).
+  Gerekçe yapısaldır ve hakem tarafından koddan doğrulandı: kiralama paket kökü başına,
+  kök `<dest>/<run_id>`, ham katman salt-eklemeli — her yeniden koşum yeni kimlik, yeni kök,
+  yeni kiralama alır. Sahibi ölmüş bir kiralama yalnız zaten tekrar koşulamayacak bir kökü
+  bloke eder. İnsan kurtarması: o dizini silmek.
+
+- **Arayüz eki kodun ARKASINDA kaldı (R-A…R-D deseninin beşinci tekrarı).** Task 10 ekin
+  `PacketRef` alan listesine `yetkili_kaynak_sayisi` ekledi ve `run_audit_round`'a
+  `web_prob` parametresi koydu. Ek dosyasına DOKUNULMADI (yürütücü sınırı). Ekin
+  güncellenmesi bekleyen bir karar.
+
+- **Süreç ağırlığı azaltıldı (Eray talebi, 2026-09-09).** Mutasyon kanıtı artık yalnız YENİ
+  kapıya isteniyor; inceleme turu üretim/test diye BÖLÜNMÜYOR; düzeltme brief'leri kısa.
+  Ölçüm: uzun brief'li turlar 16-24 dk sürdü, kısa brief'li tur 7,4 dk.
+
 # Open Problems
+
+- **[accepted_risk, medium] TOCTOU penceresi daraltıldı, KAPANMADI (2026-09-09).**
+  `run_audit_round` her alt süreç çağrısından önce rol yolunu yeniden doğruluyor, ama
+  doğrulama ile kullanım arası atomik değil; kapanması dosya tanımlayıcı tabanlı koşum
+  (`openat`/`fchdir`) ister. Kodda beyan + tripwire testi var. Yeniden açılma koşulu:
+  tehdit modeli değişirse (çok kullanıcılı ya da ağ erişimli hat) bu KAPANMALIDIR.
+
+- **[Task 11'in devraldığı] Denetçi web erişim probu YOK.** K-14 kapısı bugün probsuz her
+  turu bloke ediyor — doğru davranış, ama probu sağlayacak katman Task 11. Bu yüzden
+  "erişim gerçekten yoktu" iddiası hâlâ DOĞRULANMADI; yalnız "erişim ölçüldüyse muafiyet
+  yasak" ölçüldü. Task 11 dispatch'ine ZORUNLU kalem.
+
+- **[düşük] Tip denetleyicisi uyarıları (2026-09-09, ölçülmedi).** Pyright
+  `auditors.py::check_snapshot_agreement`'ta 11, `test_auditor_orchestration.py`'de 10 uyarı
+  veriyor (`ValidatedReport.rapor` `AuditReport | None` olduğu için `gecerli` kontrolünden
+  sonra daraltılamıyor; testlerde `list` vs `tuple` değişmezliği). Testler geçiyor, çalışma
+  hatası değil. `ruff` bu ortamda KURULU DEĞİL, lint hiç koşmadı.
+
 
 - **[risk kabulü — Eray onayı] Bölüm C'nin üçlü yapısı makineyle doğrulanmıyor (high, RİSK
   KABULÜ — Eray onayı 2026-09-07).** Mekanik girdi kapısı, kaynak eşlemesinin gerçekten
