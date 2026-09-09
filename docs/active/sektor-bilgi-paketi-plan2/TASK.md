@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 11 İNDİ ve checkpoint 8 kapandı;
-sıradaki iş **Task 12**.) Task 1-11 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 12 İNDİ ve checkpoint 9 kapandı;
+sıradaki iş **Task 13**.) Task 1-11 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -38,8 +38,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 5
-- last_checkpoint_ref: a44d9ecd81dcc0b4b1a0e32ea47dc4890cf1a486
+- cp_count: 6
+- last_checkpoint_ref: 692e4d9e4db4fdb7ce3869c16d0700d11b56f6a2
 
 # References
 
@@ -829,12 +829,67 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 - **Reddedilen çıkarmanın eşi olan `ekle` satırı `yerine_gecer` bağını KAYBEDER.** Bağ
   bırakılsaydı günlük olmamış bir değiştirmeyi olmuş gibi gösterirdi. Aday düşürülmez.
 
+- **[Task 12, 2026-09-09] Motor SONUÇ üretmez, ÖLÇÜM üretir.** `run_checks` dört kanal
+  döndürür (bulgu · uygulanmayan karar · not · ölçüm) ve dördünün de tanımlı tüketicisi
+  vardır. Kapalı kümeye sığmayan ihlal BULGU İCAT ETTİRMEZ: bozuk şema ve durmuş mekanik
+  tur girdi kapısında fail-closed durur (`identity.decision_units` emsali).
+
+- **[Task 12, 2026-09-09] K-126 tek-kaynak istisnası bu katmanda İŞLEMEZ.** Sözleşme iki
+  koşulu BİRLİKTE ister; resmîlik ayağı (K-123) tipli girdide taşınmıyor. Bir AND koşulunun
+  tek ayağını zorlamak istisnayı canlı HER kaynağa açardı — o yüzden istisna kapalı doğar.
+  Açılması arayüz eki revizyonu ister.
+
+- **[Task 12, 2026-09-09] Kanıt alanı KAPALI DİLBİLGİSİDİR.** Dört hakem turu aynı eksende
+  dört sızıntı verdi (metnin herhangi bir yerinde desen → bileşen içinde sarmalanmış etiket
+  → komşu bileşene taşan düzyazı → gevşek URL kolu). Varyant yamamak yerine alan BÜTÜN olarak
+  doğrulanıyor: her bileşen ya geçerli kör etiket, ya tam biçimli URL, ya denetçi satır atfı.
+  Olumsuzlama ARANMAZ — düzyazı zaten dilbilgisi dışıdır. Kabul edilen bedel: karışık yazılmış
+  meşru kanıt da reddedilir (yön fail-closed).
+
+- **[Task 12, 2026-09-09] Kör etiket KONUMDAN türer, addan değil.** `build_packet` kimliği
+  pakete yazmaz; `doctor_reports[i]` ↔ `sources[i]` hizasını fail-closed zorlar. Motor
+  eligibility'yi bu konumdan okur — gerçek kaynak adıyla karşılaştırmak (ilk yazım) her yeni
+  öğeyi reddederdi.
+
+- **[Task 12, 2026-09-09] Task 10'un tarayıcısı BİÇİME bakar oldu.** "`ValidatedAuditPair`
+  adı `auditors.py` dışında geçemez" kuralı, arayüz eki R5'in zorunlu kıldığı tip kapısını
+  imkânsız kılıyordu. Üretici invariantı aynı güçle korunuyor (çağrı ve takma ad her dosyada
+  kaçak); muafiyet yalnız üretemeyen biçimlerde ve sınırı kendi kontrol koluyla ölçülü.
+
 - **Kontrolörün kendi test tarayıcısı mutasyon matrisiyle yakalandı.** `insert_draft` yasağı
   önce ham dizge taramasıydı ve kendi düzyazısına takıldı; AST'ye taşındıktan sonra ekilen
   beş ihlalden biri (`from app.services import sector_package_lifecycle`) hâlâ görülmüyordu.
   Elle seçilmiş örnek değil ÜRETİLMİŞ matris yakaladı.
 
 # Open Problems
+
+- **[YÜKSEK — kök sebep, EVİ VAR 2026-09-09] Motor çoğunluğu düz yazıdan sayıyor.**
+  Denetçinin sekiz sütunlu denetim tablosu tipli okunmuyor (`validate_report` yalnız iki
+  tabloyu ayrıştırıyor), bu yüzden `2-3` sınıfı ve destekleyen kaynak listesi denetçinin
+  sütununda dururken motor onu sentezin `kanit` düz yazısından çıkarmak zorunda. Kapı bugün
+  fail-closed ve dört sızıntısı kapalı, ama okuduğu şey hâlâ düz yazı.
+  **EV: `docs/active/denetci-denetim-tablosu-tipli-okuma/TASK.md`** (yuva: Task 13 sonrası,
+  Task 16 öncesi; sert son tarih Task 19).
+
+- **[YÜKSEK — kapanışı DOĞRULANMADI 2026-09-09] Kanıt dilbilgisinin son düzeltmesi bağımsız
+  hakem görmedi.** F2 kümesi dört-tavana ulaştı; kullanıcı kararıyla beşinci tur açılmadı.
+  Son iki fix'in (`3c0f9e8` · `2697de6`) kapanışı kontrolörün kendi ölçümüne dayanır.
+  Yeniden değerlendirme yeri: Adım 11 final incelemesi (tabanı `a806e29` olduğu için oraya
+  kendiliğinden girer) ve `/review-claude-codex`.
+
+- **[accepted_risk, medium — 2026-09-09] `EngineInputs` paket/koşu bağı taşımıyor.** Başka
+  bir koşunun mekanik kapısı bu koşuya verilirse motor göremez (R5 alan kümesi kapalı).
+  F1'in görüntü bağının karşılığı burada YOK. Aynı arayüz eki turunda ele alınabilir; ayrı
+  ele alınacaksa kendi evi verilmelidir (bkz. yeni görevin Open Problems'ı).
+
+- **[accepted_risk, medium — 2026-09-09] K-03'ün takvim-kategorisi ayağı UYGULANMADI.**
+  `takvim_anahtarlari` yalnız anahtar taşır, kategori taşımaz. Motor yalnız paket içi tür
+  etiketi değişimini ölçer ve ölçümün adı artık bunu iddia eder
+  (`paket_turu_degisiklikleri`). Kategori ayağı arayüz eki revizyonu ister.
+
+- **[accepted_risk, medium — 2026-09-09] K-129 yüklemi mekanik yaklaşımdır.** Rakam kolu
+  sıradan sayısal metni de mevzuat sayar (yön fail-closed); alt-dize eşlemesi Türkçe eklemeli
+  olduğu için bilinçlidir. Genişletmesi spec revizyonudur.
 
 - **[YÜKSEK — yeniden evlendirildi 2026-09-09] Denetçi web erişim probunun ÜRETİM sahibi
   Task 11 DEĞİL, Task 16'dır.** Devir notu bu yükümlülüğü Task 11'in dispatch'ine yazmıştı;

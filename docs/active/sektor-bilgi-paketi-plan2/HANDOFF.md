@@ -5,69 +5,73 @@ written: 2026-09-09
 
 # Resume From
 
-**Sıradaki iş: Task 12** (politika motoru — zorunlu kontroller + K-112 takvim erişilemezliği).
-Task 11 indi ve checkpoint 8 kapandı.
+**Sıradaki iş: Task 13** (motor — güvenli fallback K-23=B · üç bariyer, eşikler pasif · sonuç
+tipleri). Task 12 indi ve checkpoint 9 kapandı.
 
 **Komut:** `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
 → resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam**.
 
 **KAYIT TASK.md + bu dosya + git defteridir. BAŞKA DEFTER YOK.**
 
-**Yürütme durumu:** kip **`inline`** (Task 11'de Eray talebiyle değişti; Task 1-10 alt-ajanlıydı)
-· başlangıç çapası `a806e29` · defter penceresi `a806e29` · **`cp_count: 5`** ·
-**`last_checkpoint_ref: a44d9ec`** — §8.6 mutasyon protokolüyle bu oturumda ilerletildi.
+**Yürütme durumu:** kip **`inline`** · başlangıç çapası `a806e29` · defter penceresi `a806e29` ·
+**`cp_count: 6`** · **`last_checkpoint_ref: 692e4d9`** — §8.6 mutasyon protokolüyle bu oturumda
+ilerletildi.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**, **push EDİLDİ** (Eray onayı,
-2026-09-09 oturum sonu). Ölçüldü: `git rev-list --left-right --count origin/<dal>...HEAD` →
-`0 0`; iki uç da `431db78`. Yeni oturumda taze ölçüm yine o komutla alınır.
+**Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**. Push durumu bu oturumun sonunda
+ayrıca sorulmuştur; taze ölçüm `git rev-list --left-right --count origin/<dal>...HEAD` ile alınır.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit `7964ed6`.
-Bu oturumda dokunulmadı; pin kapısı sentez sözleşmesini okurken geçti.
+Bu oturumda dokunulmadı; okundu (denetçi ve sentez sözleşmelerinin çıktı biçimleri ölçüldü).
 
 ## Bu oturum ne yaptı — tek cümle
 
-Task 11 (sentez koşumu + çıktı doğrulayıcı) inline yazıldı; iki hakem turunda altı yüksek
-bulgunun beşi kapatıldı, altıncısı sahiplik kalemi olarak Task 16'ya yeniden evlendirildi,
-iki orta kabul edilmiş riske alındı; test tabanı 3595 → 3649.
+Task 12 (politika motoru, §9.2 kontrol kümesi + K-112'nin iki dikişi) inline yazıldı; dört hakem
+turunda altı yüksek bulgunun altısı kapatıldı, iki orta kabul edilmiş riske alındı, kök sebep
+adlandırılmış yeni bir göreve devredildi; test tabanı 3649 → 3774.
 
 # Verification
 
 **Bu oturumda koşulan komutlar ve TAZE çıktıları (hepsi kontrolörün kendi koşumları):**
 
-- `python -m pytest tests/ -q` → **3649 passed in 299.03s**, exit 0 (SON, `a44d9ec`, temiz ağaç).
-  Ara koşumlar: 3633 (rename sonrası ara hâl) · 3635 (`0f39d0c`).
-- `python -m pytest tests/test_synthesis.py -q` → 32 failed / 1 passed (iskelet, `0f4a20c`) →
-  40 passed (`0f39d0c`) → **54 passed** (`a44d9ec`).
+- `python -m pytest tests/ -q` → **3774 passed in 298.19s**, exit 0 (SON, `2697de6`, temiz ağaç).
+  Ara koşumlar: 3711 (`626824c`) · 3721 (`b4a6574`) · 3730 (`11984c2`) · 3758 (`3c0f9e8`).
+- Üç yüzey birlikte (plan Task 12 Step 2/4): kırmızı ölçümü **51 failed / 199 passed**, yeşil
+  ölçümü **252 passed**.
 - `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**, her commit'ten sonra.
-- `ec_classify_diff` → `0f4a20c` RISKY · `0f39d0c` RISKY → `ec_should_checkpoint 1 4 9` →
+- `ec_classify_diff` → `756bf6c` RISKY · `626824c` RISKY → `ec_should_checkpoint 1 5 9` →
   `RUN_RISK`.
-- İki Codex turu, ikisi de `run_codex_scan` ile, taban `3af4331`; ham çıktılar `$CODEX_LOG`'da
+- **Mutasyon ölçümü:** on üç kontrolün ON ÜÇÜ + altı yeni kapı, hepsi hedef testini kırdı.
+  Tam kayıt `docs/research/2026-08-27-motor-mutasyon-olcumu.md`.
+- Dört Codex turu, hepsi `run_codex_scan` ile, taban `a44d9ec`; ham çıktılar `$CODEX_LOG`'da
   byte-exact. Turların gerçekten koştuğu `grep -c '^\[codex\] Running command'` ile ölçüldü
-  (19 ve 12; ~1 olsaydı çağrı hiç kurulmamış olurdu).
-- `Path('/tmp/dest') / '/tmp/kacak'` → `/tmp/kacak` — F1'in gerçekliği kontrolörün KENDİ
-  probuyla ölçüldü, hakemin iddiası olduğu gibi kabul edilmedi.
-- `grep -rn 'run_audit_round(' --include='*.py'` (test dışı) → yalnız tanım; `synthesis.run(`
-  → üretim çağıranı YOK. F5'in yeniden evlendirilmesi bu ölçüme dayanır.
+  (23 · 27 · 27 · 27). **İlk deneme rc=5 ile boş döndü** çünkü `PROMPT`/`COMPANION` çağıran
+  kabukta kurulmamıştı — bilinen tuzak; ikinci kurulumda tur gerçekten koştu.
+- Hakemin beş yüksek bulgusu **kontrolörün KENDİ probuyla** doğrulandı (bayat çift kabul
+  ediliyor · `KAYNAK-99` geçiyor · `katman1_passed="false"` kapıyı geçiyor · denetçi satırı
+  kanıtı hiç çözülmüyor). Ezberden kabul edilmedi.
 
 **Denenmemiş / doğrulanmamış — dürüst liste:**
 
-- **Uçtan uca CLI koşumu YAPILMADI.** Sentez aracı hiç gerçekten çağrılmadı; tüm koşumlar sahte
-  runner ile. "Bu argv gerçekten aday paket üretir" DOĞRULANMADI (ücretli model çağrısı gerekir).
-- **Denetçi web erişim probu YOK** — üretim hattı hâlâ koşamaz (bkz. TASK.md Open Problems).
-- **`kanit` alanının `#<no>` kolu hiç çözülmüyor.** Gerçek denetçi çıktısında bu biçimin ne
-  sıklıkta geçtiği ÖLÇÜLMEDİ; yanlış-pozitif oranı bilinmiyor. İlk gerçek ölçüm Task 19'da.
-- **Reddedilen çıkarmanın metin/özel-gün kolu ve sentez eşzamanlılığı** kabul edilmiş risk;
-  ikisi de mutasyonla kırmızıya döndürülmedi çünkü fix yazılmadı.
+- **Son iki fix'in kapanışı bağımsız hakem GÖRMEDİ** (kullanıcı kararı: beşinci tur açılmasın).
+  Kapanış kontrolörün ölçümüne dayanır.
+- **Uçtan uca CLI koşumu YAPILMADI.** Motor gerçek bir koşuda hiç çağrılmadı; tüm ölçümler
+  fixture ile. Üretim çağıranı Task 16'da doğacak.
+- **Denetçi web erişim probu YOK** — üretim hattı hâlâ koşamaz (K-14 kapısı her turu bloke eder).
+- **Motorun çoğunluk kapısı gerçek denetçi çıktısıyla hiç sınanmadı.** `kanit` alanının gerçek
+  koşumda hangi biçimlerde geldiği ÖLÇÜLMEDİ; kapalı dilbilgisi meşru ama karışık yazılmış bir
+  alanı da reddeder ve bunun oranı bilinmiyor. İlk gerçek ölçüm Task 19'dur.
 - **`ruff` bu ortamda kurulu değil** — lint hiç koşmadı. Pyright de koşulmadı.
 - **CRM webhook onarımı YAPILMADI** (değişmedi). Canlıya migration dağıtılmadı; pilot koşulmadı.
-- Task 12-20 hiç yazılmadı.
+- Task 13-20 hiç yazılmadı.
 
 # Risks
 
 - **EN YÜKSEK (işletim) — kimlik doğrulamasız CRM webhook'ları onarılmadı, yalnız KAPATILDI.**
 - **Üretim hattı hâlâ koşamaz:** denetçi web probu yok, K-14 kapısı her turu bloke ediyor.
-- **Migration `036` yerinde düzenlendi** — kabul edilmiş risk; merge sonrası her değişiklik
-  yeni numaralı migration ister.
+- **Motor çoğunluğu düz yazıdan sayıyor** — dört sızıntısı kapalı ama sınıf ancak tipli okuma
+  ile biter. Evi açıldı: `docs/active/denetci-denetim-tablosu-tipli-okuma/`.
+- **Migration `036` yerinde düzenlendi** — kabul edilmiş risk; merge sonrası her değişiklik yeni
+  numaralı migration ister.
 - **Katı Bölüm C biçimi yanlış-pozitif üretebilir ve ÖLÇÜLMEDİ** (ilk gerçek ölçüm Task 19 Step 5).
 - **KABUL EDİLMİŞ RİSK (M3) — commit geçmişi tek-commit TDD modeline uymuyor.**
 - **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`).
@@ -81,30 +85,47 @@ iki orta kabul edilmiş riske alındı; test tabanı 3595 → 3649.
 3. Düzeltme brief'leri **KISA**.
 4. Severity kuralı: `critical`/`high` kapatılır, `medium`/`low` `accepted_risk` alır.
    **Tur-yönetimi kuralları C/H'yi kullanıcıya taşımanın bahanesi DEĞİLDİR.**
+5. **YENİ (2026-09-09):** aynı eksen üst üste turlarda varyant üretiyorsa yamamayı bırak, tavanı
+   bekleme — çerçeve teşhisiyle kullanıcıya git. Task 12'de dört tur harcandı; kök sebep dördüncü
+   turda değil, sözleşmeleri ÖLÇÜNCE görüldü.
 
 **Her görev dispatch'inde ZORUNLU:**
 1. Arayüz eki **bağlayıcıdır**; ilgili hükümler brief'e **harfiyen kopyalanır**.
-   **Ek şu an kodun ARKASINDA** — Task 10 `PacketRef`/`run_audit_round`'a alan ekledi, Task 11
-   `synthesis.run`'a `dest` ekledi ve `SynthesisResult`'ı tanımladı; eke DOKUNULMADI.
-   Çelişkide ÖLÇ, ezberden uygulama.
-2. Test komutu sanal ortam aktifleştirilerek koşar (`source .venv/bin/activate`).
-3. **Taban 3649** (2026-09-09'dan itibaren).
-4. `Exec-Kind` **sınıflandırıcıya** göre seçilir (yalnız `tests/` → `red-only`, yalnız üretim →
-   `green-only`, ikisi → `code`, çalıştırılabilir path yok → `docs-only`). `.sql` çalıştırılabilir
-   sınıfa GİRMEZ. `Exec-*` bloğu mesajın SON PARAGRAFI, co-author trailer'ları aynı paragrafta.
-5. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY.
-6. `Exec-Task` id'sini yazmadan ÖNCE defterde ARA.
-7. Her commit'ten SONRA defter kapısı koşulur (`ec_ledger_view … --post-window`, rc=0).
-8. Uygulayıcı kendi alt-ajanını çağırmaz. **`docs/active/` altına yazmaz.**
-9. **İSKELET ÖNCE — her testin kendi kırmızısı ayrı ölçülür.**
-10. **Kapanış üretilmiş matrisle** kanıtlanır, **boş-küme kontrol kolu** eklenir. Task 11'de bu
-    kural kontrolörün KENDİ tarayıcısındaki deliği yakaladı — elle seçilmiş örnek yakalamazdı.
-11. **Gönderilen düzyazıya sayı yazma** — ya üreten komutu yanına koy, ya "doğrulanmadı" etiketle.
-12. **Hakem/kontrolör önerisi ADAYDIR** — dosyayı açmadan tekrarlanmaz. Task 11'de hakemin altı
-    yüksek bulgusundan beşi ölçümle DOĞRULANDI, biri (F5) ölçümle REDDEDİLDİ ve yeniden
-    evlendirildi. İkisini de ölçüm ayırdı, ezber değil.
-13. **Kontrolörün tam test kümesi, veritabanına dokunan bir alt-ajanla ASLA üst üste binmez.**
-14. Canlıya hiçbir n8n dosyası körlemesine yüklenmez.
+   **Ek şu an kodun ARKASINDA** — Task 12 `EngineInputs`'a R5'in yazmadığı üç kapı ekledi
+   (görüntü bağı · `RoundGate`/`GateResults` kimliği); ek bunları BİLMİYOR. Çelişkide ÖLÇ.
+2. **Ek, sır tarayıcısı tarafından tarama kökünden DIŞLANIYOR** (yanlış alarm). Hakeme
+   gidecekse ilgili hükümler prompt'a VERBATIM gömülür ve dışlanma coverage'da beyan edilir.
+3. Test komutu sanal ortam aktifleştirilerek koşar (`source .venv/bin/activate`).
+4. **Taban 3774** (2026-09-09'dan itibaren).
+5. `Exec-Kind` **sınıflandırıcıya** göre seçilir. `Exec-*` bloğu mesajın SON PARAGRAFI.
+6. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY.
+7. `Exec-Task` id'sini yazmadan ÖNCE defterde ARA.
+8. Her commit'ten SONRA defter kapısı koşulur (`ec_ledger_view … --post-window`, rc=0).
+9. Uygulayıcı kendi alt-ajanını çağırmaz. **`docs/active/` altına yazmaz.**
+10. **İSKELET ÖNCE — her testin kendi kırmızısı ayrı ölçülür.**
+11. **Kapanış üretilmiş matrisle** kanıtlanır, **boş-küme kontrol kolu** eklenir. Task 12'de bu
+    kural iki kez delik yakaladı: ilk matris tek etiketi sarmaladığı için komşu-bileşen sınıfını
+    görmüyordu; matris konum × biçim × sayı çarpımına çevrilince görüldü.
+12. **Gönderilen düzyazıya sayı yazma** — ya üreten komutu yanına koy, ya "doğrulanmadı" etiketle.
+13. **Hakem/kontrolör önerisi ADAYDIR** — dosyayı açmadan tekrarlanmaz. Task 12'de hakemin beş
+    yüksek bulgusunun beşi de ölçümle DOĞRULANDI; ama bir orta bulgunun alt-önerisi (kelime sınırı
+    ankoru) ölçümle REDDEDİLDİ (Türkçe eklemeli).
+14. **Kontrolörün tam test kümesi, veritabanına dokunan bir alt-ajanla ASLA üst üste binmez.**
+15. Canlıya hiçbir n8n dosyası körlemesine yüklenmez.
+
+**Task 13'ün dispatch'ine ZORUNLU kalemler:**
+- `decide(inputs, config)` Task 12'nin `CheckOutcome`'ını tüketir: **dört kanal** — `bulgular` ·
+  `uygulanmayan_kararlar` · `notlar` · `olcumler`. `PolicyReport`'un TEK üreticisi `decide`'dır.
+- **Altı bulgu sınıfının ALTISI da tüketilecek** (R7 tablosu), `acik_soru` dâhil → `blocked`.
+- `olcumler["diff"]` bariyer paydasının girdisidir; `olcumler["boyut"]` kapı DEĞİLDİR.
+- `olcumler["paket_turu_degisiklikleri"]` K-03'ün ölçülebilen ayağıdır — **kategori ayağı YOK**,
+  `engine_diff`'e yazarken bunu kategori çatışması diye ADLANDIRMA.
+- `run_checks` **istisna atabilir** (`EngineInputError`): bozuk şema · durmuş mekanik tur · bayat
+  denetçi çifti · benzeyen kapı nesnesi. `decide` bunu `blocked`'a çevirmez, ÇAĞIRANA bırakır.
+
+**Yeni açılan görev — sırası gelince okunacak:**
+`docs/active/denetci-denetim-tablosu-tipli-okuma/TASK.md` (proposed). Yuva: **Task 13'ten SONRA,
+Task 16'dan ÖNCE**; sert son tarih **Task 19**. Task 13'ün dispatch'i bu görevi BEKLEMEZ.
 
 **EVİ OLAN, TAŞINAN KALEMLER — rolling yeniden yazımda DÜŞÜRÜLMESİN:**
 - **`markdown-it-py` bir ÜRETİM bağımlılığıdır** (pinli `4.2.0`), canlıya dağıtılmadı.
@@ -114,38 +135,27 @@ iki orta kabul edilmiş riske alındı; test tabanı 3595 → 3649.
   Bağlayıcı: `expected_no_active` eklendiği gün `test_evidence_payload_key_set_is_closed`
   KIRMIZI olur ve elle güncellenir. **Ev: Task 14 + Task 15.**
 - **Yol sıra numaraları KONUMSAL** — karşılaştıran her tüketici kimliğe anahtarlar, yola asla.
-  Task 11 bunu koda geçirdi (`_geri_koy` hash eşitliğine bakar, yola değil).
-  **Ev: Task 12 ve Task 13 dispatch'leri.**
-- **Task 10'un TEST dosyaları bağımsız hakem GÖRMEDİ.** **Ev: Adım 11 final inceleme** —
-  tabanı `a806e29` olduğu için oraya kendiliğinden girer.
-- **Denetçi web probunun üretim sahibi Task 16'dır** (bu oturumda yeniden evlendirildi).
-
-**Task 12'nin dispatch'ine ZORUNLU kalemler:**
-- `EngineInputs` **arayüz eki R5'te TAM ALAN LİSTESİYLE bağlıdır** — harfiyen kopyala.
-  `sentez: SynthesisResult` alanı artık gerçek bir tipe işaret ediyor.
-- **`SynthesisResult.aday_json` DONMUŞTUR.** Şemaya ya da JSON'a verilecekken
-  `identity.cozulmus` ile çözülür; `dict()` YETMEZ (iç içe listeler demettir ve yazım kapısı
-  `isinstance(..., list)` sorar).
-- `denetci_envanterleri` tipi `ValidatedAuditPair`'dır; ham `AuditReport` demeti REDDEDİLİR.
-- K-71: sentezin açık soruları aktivasyonu BLOKLAR (`acik_soru` bulgusu → `blocked`).
+  **Ev: Task 13 dispatch'i.**
+- **Task 10'un TEST dosyaları bağımsız hakem GÖRMEDİ.** Task 12 o dosyalardan birini
+  (`test_auditor_orchestration.py`) değiştirdi ve değişiklik hakem turunda incelendi; geri kalanı
+  hâlâ görülmedi. **Ev: Adım 11 final inceleme.**
+- **Denetçi web probunun üretim sahibi Task 16'dır.**
 
 **Codex çağrısı kurarken — çağrıdan ÖNCE bas:**
-1. `PROMPT` yüklendi mi (`PROMPT=$(cat -- "$CODEX_PROMPT_FILE")`) — dosyayı yazmak YETMEZ.
-2. `REQUIRED_CURRENT_FILES` SATIR SATIR mı.
-3. Taban SHA 40 karakter mi.
-4. `CODEX_LOG` yazılabilir mi.
-5. Turun gerçekten koştuğunu ÖLÇ: `grep -c '^\[codex\] Running command'`; ~1 ise onay sahtedir.
-6. **Uzun turları arka planda koştur** — ön planda kabuk 10 dakikada keser.
+1. `COMPANION` **ve** `PROMPT` **çağıran kabukta** kurulu mu. Bu oturumda ilk tur bu yüzden
+   rc=5 ile boş döndü: değişkenler ÖNCEKİ Bash çağrısında kurulmuştu, kabuk durumu taşınmaz.
+2. `REQUIRED_CURRENT_FILES` SATIR SATIR mı — ve **dışlanan dosya var mı** (arayüz eki dışlanıyor).
+3. Taban SHA 40 karakter mi. `CODEX_LOG` yazılabilir mi.
+4. Turun gerçekten koştuğunu ÖLÇ: `grep -c '^\[codex\] Running command'`; ~1 ise onay sahtedir.
+5. **Uzun turları arka planda koştur** — ön planda kabuk 10 dakikada keser.
 
 **Sır tarayıcısı yanlış alarmı (her oturumda yeniden onay ister).** Substrat şunları dışlıyor:
-`tests/test_auditor_orchestration.py` (satır 438/920'de `api_key={sir}` — maskeleme TESTİNİN
-kendi malzemesi), arayüz eki (`provenance_token=token` — değişken adı),
-`tests/test_plan2_interface_contract.py` (`provenance_token=_KOKEN_JETONU` — sabit adı).
+`tests/test_auditor_orchestration.py` · arayüz eki · `tests/test_plan2_interface_contract.py`.
 Üçü de yanlış alarm, gerçek kimlik bilgisi YOK.
 
 - **Eray'a teknik cümle onaylatma** — karar sorularını sade dille sor, proje-lokal kod referansı
   OLMADAN.
 - **TEHDİT MODELİNİ ÖNDEN SÖYLE.** Girdi araştırma çıktısıdır — ÖZENSİZ olabilir, SALDIRGAN
-  değil. Task 11'de bu cümle hakem prompt'una konuldu ve bulguların hepsi doğru katmandan geldi.
+  değil. Task 12'de bu cümle hakem prompt'una konuldu ve bulguların hepsi doğru katmandan geldi.
 - **Bu dosya ROLLING'dir** — her oturumda BAŞTAN yazılır; karar izi `TASK.md` Decisions Log'una gider.
 - Diskte bekleyen düzeltme YOK; çalışma ağacı temiz.
