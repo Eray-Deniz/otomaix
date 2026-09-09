@@ -1432,3 +1432,69 @@ def test_cross_part_prose_does_not_pass_the_majority_gate() -> None:
         )
     )
     assert "cogunluk-yok" in _sebepler(sonuc)
+
+
+# ── URL kolunun kendi matrisi (dördüncü kapanış turu) ─────────────────────
+#
+# Gevşek URL kolu düzyazıyı geri alıyordu: "://" içeren ve ASCII boşluk taşımayan
+# her bileşen URL sayılıyordu. Matris bozuk biçimleri ÜRETİR; kollar tek tek
+# yazılmaz.
+
+_BOZUK_URL_BILESENLERI = {
+    "satir-sonu": "https://ornek.example\nDESTEKLEMIYOR",
+    "sekme": "https://ornek.example\tDESTEKLEMIYOR",
+    "dikey-bosluk": "https://ornek.example\x0bDESTEKLEMIYOR",
+    "gecersiz-sema": "javascript://ornek",
+    "sema-yok": "://ornek.example",
+    "konak-yok": "https://",
+    "cikplak-metin": "ornek.example",
+}
+
+_GECERLI_URL_BILESENLERI = {
+    "sade": "https://ornek.example",
+    "yollu": "https://ornek.example/a/b",
+    "sorgulu": "https://ornek.example/a?b=1#c",
+    "http": "http://ornek.example",
+}
+
+
+@pytest.mark.parametrize("ad", sorted(_BOZUK_URL_BILESENLERI))
+def test_malformed_url_component_drops_the_whole_field(ad) -> None:
+    """Bozuk URL bileşeni alanın TAMAMINI düşürür — komşu etiketler kurtulmaz."""
+    kanit = f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}, {_BOZUK_URL_BILESENLERI[ad]}"
+    assert engine.sayilan_kaynaklar(kanit, _ETIKET_KUMESI) == set()
+
+
+@pytest.mark.parametrize("ad", sorted(_GECERLI_URL_BILESENLERI))
+def test_wellformed_url_component_keeps_the_labels(ad) -> None:
+    """POZİTİF KONTROL: düzgün URL bileşeni etiketleri düşürmez."""
+    kanit = f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}, {_GECERLI_URL_BILESENLERI[ad]}"
+    assert engine.sayilan_kaynaklar(kanit, _ETIKET_KUMESI) == {
+        DOGRULANMIS_KAYNAK,
+        IKINCI_KAYNAK,
+    }
+
+
+@pytest.mark.parametrize(
+    "kanit",
+    [
+        f"{DOGRULANMIS_KAYNAK}, , {IKINCI_KAYNAK}",
+        f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK},",
+        f",{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}",
+        f"{DOGRULANMIS_KAYNAK},,{IKINCI_KAYNAK}",
+    ],
+    ids=["orta-bos", "sondaki-virgul", "bastaki-virgul", "cift-virgul"],
+)
+def test_empty_component_drops_the_whole_field(kanit) -> None:
+    """Boş bileşen sessizce DÜŞÜRÜLMEZ; biçim bozuksa alan kanıt taşımaz."""
+    assert engine.sayilan_kaynaklar(kanit, _ETIKET_KUMESI) == set()
+
+
+def test_malformed_url_does_not_pass_the_majority_gate() -> None:
+    """Entegrasyon: dördüncü turun somut probu `run_checks` düzeyinde kapalı."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(
+            kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}, https://ornek.example\nDESTEKLEMIYOR"
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)

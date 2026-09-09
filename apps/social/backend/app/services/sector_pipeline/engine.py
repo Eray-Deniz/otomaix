@@ -603,15 +603,39 @@ _SATIR_ATIF_RE = re.compile(r"^D\d+#\d+$")
 """Denetçi satır atfının BİÇİMİ (`D1#7`) — sözleşmenin kendi yazımı."""
 
 
+_URL_BILESENI_RE = re.compile(r"^https?://[^\s/?#]+(?:[/?#][^\s]*)?$")
+"""URL bileşeninin TAM biçimi: şema + boş olmayan konak + boşluksuz kalan."""
+
+
 def _bilesen_kabul_edilir(parca: str, kabul_edilen_etiketler: set[str]) -> bool:
     """Bileşen KAPALI dilbilgisinin üç biçiminden biri mi?
 
-    Üç biçim: (1) bu koşuda geçerli kör etiket, (2) URL, (3) denetçi satır atfı.
-    Başka her şey — tek kelime dâhil — dilbilgisi DIŞIDIR.
+    Üç biçim SENTEZ SÖZLEŞMESİNİN KENDİ LİSTESİDİR (`hakem-sentez-gorevi.md`
+    ADIM 4: *"kanit: <standart format: 'D1#<satır no>' / 'D2#<satır no>' /
+    'KAYNAK-N' / URL>"*): (1) bu koşuda geçerli kör etiket, (2) URL, (3) denetçi
+    satır atfı. Başka her şey — tek kelime dâhil — dilbilgisi DIŞIDIR.
+
+    **URL kolu TAM doğrulanır (dördüncü kapanış turu, yüksek — ÖLÇÜLDÜ).** İlk
+    yazım *"`://` içeriyor ve ASCII boşluk yok"* diyordu; bu kol düzyazıyı GERİ
+    ALIYORDU: `https://ornek.example\nDESTEKLEMIYOR` bileşeni geçiyor ve komşu
+    çıplak etiketler sayılıyordu (ölçüldü: iki kaynak). Sekme, satır sonu, geçersiz
+    şema (`javascript://x`) ve konağı olmayan `://` de geçiyordu. Kural artık
+    biçimin tamamını arar ve HER TÜR boşluk karakterini reddeder.
+
+    **Ölçülmüş kapsam sınırı (dürüst etiket, İlke 3).** Baştaki boşluk kontrolü
+    savunma derinliğidir: onu SÖKEN mutasyon hiçbir testi kırmızılaştırmadı,
+    çünkü URL biçimi zaten boşluk taşıyamaz ve etiket/satır-atfı biçimleri de
+    boşluksuzdur. Yani bugün TEK BAŞINA erişilebilir bir dal DEĞİLDİR ve "kendi
+    testi var" diye okunmaz; kodda durmasının sebebi biçim kuralı ileride
+    gevşetilirse kolun tek başına açılmamasıdır. Emsal:
+    `auditors.check_snapshot_agreement`'in dördüncü koşulu aynı biçimde
+    etiketlidir.
     """
+    if any(ch.isspace() for ch in parca):
+        return False
     if parca in kabul_edilen_etiketler:
         return True
-    if "://" in parca and " " not in parca:
+    if _URL_BILESENI_RE.match(parca):
         return True
     return bool(_SATIR_ATIF_RE.match(parca))
 
@@ -644,8 +668,13 @@ def sayilan_kaynaklar(kanit: Any, kabul_edilen_etiketler: set[str]) -> set[str]:
     bir ekleme ise pakete girerdi. Kalıcı çözüm serbest metni tipli bir destek
     alanına çevirmektir ve o, arayüz eki revizyonudur (açık borç).
     """
-    parcalar = _kanit_parcalari(kanit)
-    if not parcalar:
+    if not isinstance(kanit, str) or not kanit.strip():
+        return set()
+    # Bileşenler KAYIPSIZ ayrılır: boş bileşen (çift virgül, baştaki/sondaki
+    # virgül) SESSİZCE DÜŞÜRÜLMEZ, alanı düşürür. Düşürülseydi biçimi bozuk bir
+    # alan "temiz" görünürdü — dilbilgisinin kendisi de bir kapıdır.
+    parcalar = [parca.strip() for parca in kanit.split(",")]
+    if any(parca == "" for parca in parcalar):
         return set()
     if not all(_bilesen_kabul_edilir(p, kabul_edilen_etiketler) for p in parcalar):
         return set()

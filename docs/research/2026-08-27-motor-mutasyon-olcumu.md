@@ -190,3 +190,37 @@ sarmaladığı için bu sınıfı görmüyordu.
 (etiketlerin yanına serbest not düşülmüş) da reddedilir. Yön bilinçlidir: reddedilen
 karar uygulanmaz, kalıp korunur. Kalıcı çözüm serbest metni tipli bir destek alanına
 çevirmektir — arayüz eki revizyonu, açık borç.
+
+### Dördüncü tur — URL kolunun sıkı doğrulanması (zincirin son turu)
+
+Dördüncü kapanış turu F2'yi yine açık buldu: kapalı dilbilgisinin URL kolu
+gevşekti (*"`://` içerir ve ASCII boşluk yok"*), yani düzyazıyı GERİ ALIYORDU.
+Hakemin probu ölçüldü ve kontrolörün kendi probuyla doğrulandı:
+
+```
+"KAYNAK-1, KAYNAK-2, https://ornek.example\nDESTEKLEMIYOR" -> ['KAYNAK-1','KAYNAK-2']
+"KAYNAK-1, KAYNAK-2, javascript://x"                        -> ['KAYNAK-1','KAYNAK-2']
+"KAYNAK-1, , KAYNAK-2"                                      -> ['KAYNAK-1','KAYNAK-2']
+```
+
+URL kolu artık biçimin TAMAMINI arar (şema + boş olmayan konak + boşluksuz kalan)
+ve boş bileşen alanı düşürür. Aynı problar düzeltmeden sonra boş küme döndü.
+
+| Mutasyon | Kırmızıya dönen test(ler) |
+|---|---|
+| URL kolu `"://" in parca`'ya geri çevrildi | `test_malformed_url_component_drops_the_whole_field` üç kolu (geçersiz-şema · şema-yok · konak-yok) |
+| boş bileşen sessizce düşürüldü | `test_empty_component_drops_the_whole_field` dört kolu |
+| **boşluk kontrolü söküldü** | **HİÇBİRİ** — aşağıya bakınız |
+
+**Dürüst etiket:** boşluk kontrolü bugün TEK BAŞINA erişilebilir bir dal DEĞİLDİR
+(mutasyon hiçbir testi kırmadı); URL biçimi zaten boşluk taşıyamaz, etiket ve satır
+atfı biçimleri de boşluksuzdur. Kodda durmasının sebebi savunma derinliğidir ve bu,
+"kendi testi var" diye okunmaz. Emsal: `auditors.check_snapshot_agreement`'in
+dördüncü koşulu aynı biçimde etiketlidir.
+
+**Zincir burada DURDU (kullanıcı kararı, 2026-09-09):** beşinci hakem turu
+AÇILMADI. Yani bu turun kapanışı kontrolörün ölçümüne dayanır, bağımsız hakem
+doğrulamasına değil — kapanış doğrulaması sonraki kapanış turlarına kalmıştır.
+Kalan kök sorun (kanıtın düz yazı olması) kod tarafında değil veri akışında:
+denetçinin denetim tablosu tipli okunmuyor. Adlandırılmış evi aktif katmanda
+açıldı.
