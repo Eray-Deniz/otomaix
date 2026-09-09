@@ -952,6 +952,17 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   etiketi değişimini ölçer ve ölçümün adı artık bunu iddia eder
   (`paket_turu_degisiklikleri`). Kategori ayağı arayüz eki revizyonu ister.
 
+- **[EVSİZ — dürüst etiket, 2026-09-09 kapanış denetimi] K-126'nın resmîlik ayağı ve K-03'ün
+  kategori ayağı ÇÖZÜLMEDİ ve TARİHLİ EVİ YOK.** İkisi de aynı eksiğe bakar: denetçi sözleşmesi
+  bu iki bilgiyi (kaynağın resmî/birincil olması · takvim anahtarının kategorisi) TİPLİ
+  taşımıyor, o yüzden motor onları ölçemiyor. Bugüne dek "arayüz eki revizyonu ister" diye
+  yazılıydılar — bu bir AD, tarih değil; hiçbir plana, faza ya da göreve bağlı değiller.
+  **Yeniden açılma koşulu:** denetçi sözleşmesi bu alanları tipli taşımaya başladığında ya da
+  arayüz eki revizyonu için bir spec açıldığında; gövdeleri o spec'in girdisi olarak burada
+  durur. **Aktif borçtan ÇIKARILDI** — reflekssel ev vermek kova döngüsünü besler.
+  *Bitişik ama AYNI DEĞİL:* `denetci-denetim-tablosu-tipli-okuma` görevi denetim TABLOSUNUN
+  tipli okunmasıdır; bu iki alanı kapsamaz ve onlara ev diye GÖSTERİLMEZ.
+
 - **[accepted_risk, medium — 2026-09-09] K-129 yüklemi mekanik yaklaşımdır.** Rakam kolu
   sıradan sayısal metni de mevzuat sayar (yön fail-closed); alt-dize eşlemesi Türkçe eklemeli
   olduğu için bilinçlidir. Genişletmesi spec revizyonudur.

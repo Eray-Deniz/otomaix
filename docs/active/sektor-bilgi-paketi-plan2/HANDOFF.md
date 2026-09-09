@@ -18,8 +18,8 @@ Task 13 indi ve checkpoint 10 kapandı.
 KOPYALANMAZ** (iki yerde tutulunca mutasyon protokolü yalnız birini ilerletiyor ve `ec_state_base_ref`
 ıraksama görüp her checkpoint'i öldürüyor).
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**. **Bu oturumun dört commit'i PUSH
-EDİLMEDİ** — Eray'a sorulmadı. **Uç SHA'sı buraya YAZILMAZ.** Taze ölçüm:
+**Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**. **Bu oturumun commit'leri PUSH
+EDİLMEDİ** — Eray'a sorulmadı; sayı buraya YAZILMAZ, `git rev-list` ile ölçülür. **Uç SHA'sı buraya YAZILMAZ.** Taze ölçüm:
 `git rev-list --left-right --count origin/feat/sektor-bilgi-paketi-plan2...HEAD`.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: bu oturumda DOKUNULMADI.
@@ -63,7 +63,8 @@ sınırına takıldı; test tabanı 3774 → 3876.
 - **`decide` gerçek denetçi/sentez çıktısıyla hiç sınanmadı.** İlk gerçek ölçüm Task 19'dur.
 - **`ruff` bu ortamda kurulu değil** — lint hiç koşmadı. Pyright de koşulmadı.
 - **CRM webhook onarımı YAPILMADI** (değişmedi). Canlıya migration dağıtılmadı; pilot koşulmadı.
-- Task 14-20 hiç yazılmadı. **Bu oturumun commit'leri push EDİLMEDİ.**
+- Task 14-20 hiç yazılmadı. **Bu oturumun commit'leri push EDİLMEDİ** (sıradaki oturumun
+  ilk kararı).
 
 # Risks
 
