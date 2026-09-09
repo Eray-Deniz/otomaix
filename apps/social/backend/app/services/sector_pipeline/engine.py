@@ -816,7 +816,9 @@ def _ozel_gun_anahtari(inputs: EngineInputs) -> CheckOutput:
     # İlk yazımda yüklem eklenmiş ama bu döngü OLDUĞU GİBİ bırakılmıştı —
     # "tek kural, iki tüketici" cümlesi o hâliyle YANLIŞTI (checkpoint 10, düşük).
     notlar = []
-    for anahtar in _eslesmeyen_ozel_gunler(inputs):
+    for anahtar in _eslesmeyen_ozel_gunler(
+        _aday_icerik(inputs), inputs.takvim_anahtarlari
+    ):
         notlar.append(
             {
                 "tur": "not",
@@ -1074,17 +1076,26 @@ def canonical_content_sha(content: Mapping) -> str:
     return identity.canonical_sha(content)
 
 
-def _eslesmeyen_ozel_gunler(inputs: EngineInputs) -> tuple[str, ...]:
+def _eslesmeyen_ozel_gunler(
+    icerik: Mapping, takvim_anahtarlari: frozenset[str]
+) -> tuple[str, ...]:
     """Sistem takviminde karşılığı OLMAYAN özel gün anahtarları.
 
-    TEK kural, İKİ tüketici: `_ozel_gun_anahtari` bunu NOT'a çevirir,
-    `decide` aynı kümeyi UYGULAR (anahtar pakete girmez). İkinci bir yerde
-    yeniden ölçülseydi not ile uygulama sessizce ıraksardı; not satırının düz
-    yazısından anahtar ÇIKARILMAZ.
+    TEK kural, ÜÇ tüketici — ve KONU her tüketicide FARKLIDIR: `_ozel_gun_anahtari`
+    ADAYI sorar (not üretir), `_nihai_icerik` önce adayı sonra YENİDEN KURULMUŞ
+    içeriği sorar (uygular).
+
+    **Konunun argüman olması F7'nin (checkpoint 10, yüksek — ÖLÇÜLDÜ) kapısıdır.**
+    Yüklem yalnız adaya bakarken, adayın TAMAMEN çıkardığı bir dönem kümeye hiç
+    girmiyordu; o dönemin `cikar` kararları reddedilince kalıp GERİ KONUYOR ve
+    takvimde karşılığı olmayan bir dönem pakete SESSİZCE giriyordu (ölçüldü:
+    boş takvimle koşuda anahtar nihai içerikte, rapor `()` diyor). Geri koyma,
+    kuralın uygulandığı andan SONRA gerçekleşen bir yazımdır; bu yüzden kural
+    yeniden kurulmuş içeriğe de sorulur.
     """
-    aday = _aday_icerik(inputs).get("ozel_gun") or {}
+    ozel_gun = icerik.get("ozel_gun") or {}
     return tuple(
-        anahtar for anahtar in sorted(aday) if anahtar not in inputs.takvim_anahtarlari
+        anahtar for anahtar in sorted(ozel_gun) if anahtar not in takvim_anahtarlari
     )
 
 
@@ -1357,6 +1368,13 @@ def _nihai_icerik(
             hedef = ozel_gun.setdefault(eslesme.group("anahtar"), {})
             hedef[eslesme.group("yuva")] = deger
             yollar[unit_id] = aktif_yol
+        # F7: geri koyma, kuralın ilk uygulandığı andan SONRAKİ bir yazımdır —
+        # kural YENİDEN KURULMUŞ içeriğe de sorulur, yoksa adayın hiç taşımadığı
+        # bir dönem geri konarak takvim kapısını ATLAR.
+        for anahtar in _eslesmeyen_ozel_gunler(nihai, inputs.takvim_anahtarlari):
+            ozel_gun.pop(anahtar, None)
+            if anahtar not in dusen_anahtarlar:
+                dusen_anahtarlar = dusen_anahtarlar + (anahtar,)
 
     # Düşen anahtarın birimleri de nihai içerikte YOKTUR; günlükten çıkarlar.
     for unit_id, yol in list(yollar.items()):
@@ -1379,6 +1397,7 @@ def _nihai_icerik(
         {
             "reddedilen_ekleme": tuple(dusenler),
             "eslesmeyen_takvim": tuple(takvim_dusenleri),
+            "dusen_anahtarlar": tuple(sorted(set(dusen_anahtarlar))),
         },
     )
 
@@ -1547,10 +1566,13 @@ def decide(inputs: EngineInputs, config: PolicyConfig) -> EngineResult:
     """
     outcome = run_checks(inputs)
     reddedilen = _reddedilenler(outcome)
-    dusen_anahtarlar = _eslesmeyen_ozel_gunler(inputs)
+    aday_dusenleri = _eslesmeyen_ozel_gunler(
+        _aday_icerik(inputs), inputs.takvim_anahtarlari
+    )
 
-    nihai, yollar, dusen_kimlikler = _nihai_icerik(inputs, reddedilen, dusen_anahtarlar)
+    nihai, yollar, dusen_kimlikler = _nihai_icerik(inputs, reddedilen, aday_dusenleri)
     takvim_dusenleri = dusen_kimlikler["eslesmeyen_takvim"]
+    dusen_anahtarlar = dusen_kimlikler["dusen_anahtarlar"]
     koru_ihlalleri = _koru_ihlalleri(inputs)
 
     nihai_icerik: Mapping | None = None

@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.sector_content_schema import structural_errors
+from app.services.sector_content_schema import SPECIAL_DAY_SLOTS, structural_errors
 from app.services.sector_pipeline import brief_doctor as bd, engine, identity
 from app.services.sector_pipeline.engine_contract import (
     BULGU_SINIFLARI,
@@ -808,7 +808,7 @@ def test_unmatched_key_note_and_application_share_one_predicate(monkeypatch) -> 
         TAKVIM_ANAHTARI,
     )
 
-    monkeypatch.setattr(engine, "_eslesmeyen_ozel_gunler", lambda inputs: ())
+    monkeypatch.setattr(engine, "_eslesmeyen_ozel_gunler", lambda icerik, takvim: ())
     susturulmus_notlar = [
         satir
         for satir in engine.run_checks(girdi).notlar
@@ -970,3 +970,73 @@ def test_motor_row_provenance_follows_declared_precedence() -> None:
     ]
     assert len(motor) == 1
     assert motor[0]["kural_kimligi"] == engine.KURAL_KIMLIKLERI["kanit-yok"]
+
+
+def _takvimden_dusen_donem_girdisi(*, takvim: frozenset, mutabik: bool):
+    """Aday dönemi TAMAMEN çıkarır; çıkarma kararları çağırana göre kabul/red."""
+    aday = _tam_icerik()
+    aday["ozel_gun"] = {}
+    aktif = identity.enumerate_content_units(AKTIF_ICERIK)
+    ek, kimlikler = [], []
+    for yuva in SPECIAL_DAY_SLOTS:
+        yol = f"ozel_gun/{TAKVIM_ANAHTARI}/{yuva}"
+        birim = aktif[yol]
+        kimlik = KIMLIKLER[yol]
+        kimlikler.append(kimlik)
+        ek.append(
+            {
+                "tur": "karar",
+                "alan": "ozel_gun",
+                "oge_yolu": yol,
+                "unit_id": kimlik,
+                "oge_sha": birim["oge_sha"],
+                "karar": "cikar",
+                "gerekce": "Donem gecti.",
+                "kanit": DOGRULANMIS_KAYNAK,
+                "aktor": "sentez",
+            }
+        )
+    return _girdi(
+        icerik=aday,
+        gunluk=_gunluk(aday, ek=tuple(ek)),
+        takvim=takvim,
+        cift=_cift(
+            statuler_1={k: "contradicted" for k in kimlikler},
+            statuler_2={k: "contradicted" if mutabik else "supported" for k in kimlikler},
+        ),
+    )
+
+
+def test_restored_unmatched_calendar_key_stays_out() -> None:
+    """Geri koyma takvim kapısını ATLAYAMAZ (F7, checkpoint 10 turu 2).
+
+    Adayın TAMAMEN çıkardığı bir dönem, kural yalnız adaya sorulduğunda kümeye
+    hiç girmiyordu; çıkarma reddedilince kalıp geri konuyor ve takvimde
+    karşılığı olmayan dönem pakete SESSİZCE giriyordu — tüm kapılar "başarılı"
+    diyordu.
+    """
+    sonuc = _karar(_takvimden_dusen_donem_girdisi(takvim=frozenset(), mutabik=False))
+    assert sonuc.final_candidate["ozel_gun"] == {}
+    assert TAKVIM_ANAHTARI in sonuc.engine_diff["eslesmeyen_ozel_gunler"]
+    gunluk = [identity.cozulmus(satir) for satir in sonuc.final_decision_log]
+    assert identity.check_unit_integrity(
+        identity.cozulmus(sonuc.final_candidate), gunluk
+    ) == []
+
+
+def test_restored_matching_calendar_key_is_kept() -> None:
+    """POZİTİF KONTROL: takvimde KARŞILIĞI OLAN dönem geri konar ve KALIR."""
+    sonuc = _karar(
+        _takvimden_dusen_donem_girdisi(takvim=frozenset({TAKVIM_ANAHTARI}), mutabik=False)
+    )
+    assert TAKVIM_ANAHTARI in sonuc.final_candidate["ozel_gun"]
+    assert sonuc.engine_diff["eslesmeyen_ozel_gunler"] == ()
+
+
+def test_accepted_calendar_removal_leaves_the_period_out() -> None:
+    """POZİTİF KONTROL: kabul edilen çıkarma dönemi zaten dışarıda bırakır."""
+    sonuc = _karar(
+        _takvimden_dusen_donem_girdisi(takvim=frozenset({TAKVIM_ANAHTARI}), mutabik=True)
+    )
+    assert sonuc.final_candidate["ozel_gun"] == {}
+    assert sonuc.sonuc == "activation_eligible"
