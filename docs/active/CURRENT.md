@@ -20,6 +20,13 @@
 
 ## Proposed (spun-off)
 
+- **denetci-denetim-tablosu-tipli-okuma** (proposed, 2026-09-09) — denetçinin sekiz sütunlu
+  denetim tablosu tipli okunsun; motorun yapısal çoğunluk kapısı sınıf/kaynak sütununu okusun,
+  sentezin düz yazı `kanit` alanını SAYMASIN. `brief-sozlesmesi-kaynak-bolumu-makine-okunur`
+  görevinin kardeşi (aynı sınıf, bir katman aşağıda) — fark: sözleşme zaten yapısal, eksik olan
+  tipli okuyucu. **Yuva: Task 13'ten sonra, Task 16'dan önce; sert son tarih Task 19.**
+  Ayrıntı: `docs/active/denetci-denetim-tablosu-tipli-okuma/TASK.md`.
+
 - **durum-tetikli-kural-kapisi** (proposed, süreç kalemi; DÜŞÜRÜLDÜ — koşullu) —
   Eray'ın gözlemi (2026-09-07): **durum-tetikli** kuralları hafızaya/nota yazmak **yanlış
   kapanış** üretiyor. Not yazılınca konu "ele alınmış" görünüyor ama kural hiç ateşlenmiyor.
