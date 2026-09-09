@@ -1040,3 +1040,33 @@ def test_accepted_calendar_removal_leaves_the_period_out() -> None:
     )
     assert sonuc.final_candidate["ozel_gun"] == {}
     assert sonuc.sonuc == "activation_eligible"
+
+
+def test_dropped_unit_bucket_carries_only_unit_ids() -> None:
+    """Düşen BİRİM kovası yalnız kimlik taşır — takvim ANAHTARI oraya girmez.
+
+    Sınıf yapısal kapanır: kovanın her üyesi kimlik biçimini taşımak zorundadır.
+    Varyantı (takvim anahtarı) tek tek kovalamak yerine kovanın TÜRÜ sınanır —
+    ikinci bir yabancı tür eklendiğinde de bu test kırılır.
+    """
+    for girdi in (
+        _takvimden_dusen_donem_girdisi(takvim=frozenset(), mutabik=False),
+        _girdi(takvim=frozenset()),
+        _basa_ekleme_girdisi(kanit=DOGRULANMIS_KAYNAK),
+        _girdi(),
+    ):
+        sonuc = engine.decide(girdi, PolicyConfig())
+        kovalar = sonuc.engine_diff["dusen_birimler"]
+        for ad, uyeler in kovalar.items():
+            for uye in uyeler:
+                assert identity.UNIT_ID_RE.match(uye), f"{ad} kimlik olmayan üye taşıyor: {uye!r}"
+        assert sonuc.engine_diff["dusen_birim_sayisi"] == sum(
+            len(uyeler) for uyeler in kovalar.values()
+        )
+
+
+def test_dropped_unit_count_excludes_calendar_keys() -> None:
+    """Düşen dönemin BEŞ yuvası beş birimdir; anahtarın kendisi birim DEĞİLDİR."""
+    sonuc = _karar(_takvimden_dusen_donem_girdisi(takvim=frozenset(), mutabik=False))
+    assert sonuc.engine_diff["eslesmeyen_ozel_gunler"] == (TAKVIM_ANAHTARI,)
+    assert sonuc.engine_diff["dusen_birim_sayisi"] == len(SPECIAL_DAY_SLOTS)

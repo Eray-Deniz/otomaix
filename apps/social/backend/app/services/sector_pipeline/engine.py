@@ -1266,8 +1266,17 @@ def _nihai_icerik(
     inputs: EngineInputs,
     reddedilen: Mapping[str, UygulanmayanKarar],
     dusen_anahtarlar: tuple[str, ...],
-) -> tuple[dict, dict[str, str], dict[str, tuple[str, ...]]]:
-    """Motorun UYGULADIĞI içerik + kimlik→yol eşlemesi + DÜŞEN kimlikler.
+) -> tuple[dict, dict[str, str], dict[str, tuple[str, ...]], tuple[str, ...]]:
+    """Motorun UYGULADIĞI içerik · kimlik→yol eşlemesi · DÜŞEN kimlikler · DÜŞEN anahtarlar.
+
+    **Düşen ANAHTARLAR ayrı bir dönüş değeridir, kimlik sözlüğünün İÇİNDE
+    DEĞİL** (checkpoint 10, turu 3 — kendi düzeltmemin yan etkisi, ÖLÇÜLDÜ).
+    İlk yazımda takvim anahtarları kimlik sözlüğüne üçüncü bir anahtar olarak
+    eklenmişti; aşağı akıştaki toplama tüketicisi sözlüğün TÜM değerlerini
+    topladığı için takvim ANAHTARI düşen BİRİM sayılıyor ve sayı şişiyordu
+    (ölçüldü: 5 birim düşerken rapor 6 diyordu). İki farklı TÜR aynı kovaya
+    konulduğunda toplayan tarafın onları ayırt etmesi beklenemez — ayrım
+    sözleşmede kurulur, tüketicinin dikkatinde değil.
 
     Düşen kimlikler İKİ AYRI kümedir ve karıştırılmaları sonucu bozar:
     `reddedilen_ekleme` hiç pakete girmemiş bir aday kalıptır (paket
@@ -1397,8 +1406,8 @@ def _nihai_icerik(
         {
             "reddedilen_ekleme": tuple(dusenler),
             "eslesmeyen_takvim": tuple(takvim_dusenleri),
-            "dusen_anahtarlar": tuple(sorted(set(dusen_anahtarlar))),
         },
+        tuple(sorted(set(dusen_anahtarlar))),
     )
 
 
@@ -1570,9 +1579,10 @@ def decide(inputs: EngineInputs, config: PolicyConfig) -> EngineResult:
         _aday_icerik(inputs), inputs.takvim_anahtarlari
     )
 
-    nihai, yollar, dusen_kimlikler = _nihai_icerik(inputs, reddedilen, aday_dusenleri)
+    nihai, yollar, dusen_kimlikler, dusen_anahtarlar = _nihai_icerik(
+        inputs, reddedilen, aday_dusenleri
+    )
     takvim_dusenleri = dusen_kimlikler["eslesmeyen_takvim"]
-    dusen_anahtarlar = dusen_kimlikler["dusen_anahtarlar"]
     koru_ihlalleri = _koru_ihlalleri(inputs)
 
     nihai_icerik: Mapping | None = None
