@@ -31,6 +31,7 @@ import ast
 import asyncio
 import builtins
 import logging
+import shutil
 import subprocess
 import sys
 import threading
@@ -1501,12 +1502,14 @@ EKSEN_1_KAPI = (
     "dosya-cakismasi",
     "paket-butunlugu",
     "yol-kapisi",
+    "kosum-ani-yol",
 )
 """Eksen 1 — giriş kapısı (`yok` = hiçbir kapı ihlal edilmedi).
 
 Sıra kabul bölgesindeki UYGULAMA sırasıdır: kimlik bağı → K-14 ön kontrol →
 kiralama → hedef dosya çakışması → paket bütünlüğü. `yol-kapisi` turdan önce,
-paketin YAPIM yüzeyinde koşar.
+paketin YAPIM yüzeyinde koşar; `kosum-ani-yol` ise AYNI yol sözleşmesini turda,
+ilk mutasyondan önce yeniden ölçer.
 """
 
 EKSEN_2_CIKIS = (
@@ -1572,6 +1575,17 @@ EKSEN_6_KIRALAMA = ("rakip-kiralama", "olu-kiralama", "rakip-tur")
 `rakip-kiralama` kiralama TUTULUYORken gelen tur; `olu-kiralama` sahibi ölmüş
 bir kiralama (devralma beyanının ölçümü); `rakip-tur` ise kiralama biz
 tutarken AYRI iş parçacığından gelen gerçek eşzamanlı tur.
+"""
+
+
+EKSEN_7_KOK_SYMLINK = ("rol-koku-symlink", "paket-koku-symlink")
+"""Eksen 7 — ağacın KÖKÜ yapımdan sonra dış bir ikize symlink'lenir.
+
+Eksen 5 ÇOCUK düğümün tipini değiştirir; bu eksen KÖKÜN kendisininkini. Ayrım
+yapısaldır: süpürme kökü `os.scandir` ile AÇILIR, dolayısıyla çocuklara
+uygulanan symlink kuralı köke uygulanmaz — ve ikiz BAYT-ÖZDEŞ olduğu için
+parmak izi, saklı özet ve kardeş karşılaştırma üçü de eşleşir. Kök hem ROL
+dizini hem PAKET kökü olabilir; ikisi ayrı yol kuralına dayanır.
 """
 
 
@@ -1717,6 +1731,17 @@ def _matris_hucreleri() -> tuple[_Hucre, ...]:
                     0, (), 0, "tamamlanmadi", None, parcalar,
                 )
             )
+
+    # (1g) Koşum anı yol kapısı — kök yapımdan SONRA bayt-özdeş bir dış
+    #      ikize symlink'lenirse tur HİÇ başlamaz. Sebep `symlink` taşır:
+    #      bu kol parmak izi kolundan bağımsız ölçülmezse ölçülmemiştir.
+    for alt in EKSEN_7_KOK_SYMLINK:
+        hucreler.append(
+            _Hucre(
+                "kosum-ani-yol", "kapi-reddi", "yok", alt,
+                0, (), 0, "tamamlanmadi", None, ("yol kapısı", "symlink"),
+            )
+        )
 
     # (2a) Kapı ihlali yok — pozitif kontrol. Eksen 4'ün `dogru-tip-olumlu`
     #      değeri BURADA yaşar: turu başlatan tek prob dönüşü budur.
@@ -1906,6 +1931,25 @@ def _mutasyon_kur(alt: str, rol_dizini: Path, disarisi: Path) -> None:
         raise AssertionError(f"bilinmeyen mutasyon: {alt!r}")
 
 
+def _kok_symlink_kur(alt: str, paket, disarisi: Path) -> None:
+    """Ağacın KÖKÜNÜ bayt-özdeş bir DIŞ ikize symlink'ler (Eksen 7).
+
+    Gerçek ağaç paketin DIŞINA taşınır, yerine symlink konur: baytlar
+    korunduğu için parmak izi ve saklı özet eşleşir — hücreyi ayırt eden şey
+    KÖKÜN düğüm tipidir.
+    """
+    disarisi.mkdir(parents=True, exist_ok=True)
+    gercek = (
+        paket.kok
+        if alt == "paket-koku-symlink"
+        else paket.kopyalar[auditors.DENETCI_ROLLERI[0]]
+    )
+    ikiz = disarisi / f"ikiz-{gercek.name}"
+    shutil.copytree(gercek, ikiz)
+    shutil.rmtree(gercek)
+    gercek.symlink_to(ikiz, target_is_directory=True)
+
+
 class _RakipTurRunner(_SayanRunner):
     """İLK çağrının içinde — yani kiralama TUTULURKEN — ikinci bir tur koşar.
 
@@ -2054,6 +2098,9 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
         for rol in hedefler:
             _mutasyon_kur(hucre.alt, paket.kopyalar[rol], tmp_path / "disarida")
 
+    if hucre.kapi == "kosum-ani-yol":
+        _kok_symlink_kur(hucre.alt, paket, tmp_path / "disarida")
+
     if hucre.kapi == "kiralama" and hucre.alt != "rakip-tur":
         # RAKİP kiralamayı tutuyor. `olu-kiralama` sahibi ölmüş bir kiralamadır
         # (var olmayan PID): beyan "DEVRALINMAZ" der, bu hücre onu ölçer.
@@ -2113,7 +2160,11 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
     kullanilan_run_id = (
         runs.new_run_id() if hucre.kapi == "kimlik-bagi" else run_id
     )
-    oncesi = _dosya_goruntusu(paket.kok)
+    # Ölçüm kökü: symlink'lenen ağacın gerçek baytları paketin DIŞINDA durur
+    # ve `rglob` symlink'li dizine İNMEZ — o hücrelerde görüntü `tmp_path`'ten
+    # alınır, yoksa yer değiştirme "dosya silindi" gibi okunurdu.
+    olcum_koku = tmp_path if hucre.kapi == "kosum-ani-yol" else paket.kok
+    oncesi = _dosya_goruntusu(olcum_koku)
     firlatan = None
     try:
         await auditors.run_audit_round(
@@ -2125,7 +2176,7 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
         )
     except BaseException as exc:  # noqa: BLE001 — tip ÖLÇÜLÜR
         firlatan = type(exc)
-    sonrasi = _dosya_goruntusu(paket.kok)
+    sonrasi = _dosya_goruntusu(olcum_koku)
 
     assert firlatan is hucre.firlatan, (
         f"{hucre.kimlik}: fırlatan {firlatan}, beklenen {hucre.firlatan}"
@@ -2221,6 +2272,7 @@ def test_closure_matrix_is_not_empty_and_not_trivially_green() -> None:
         ("prob-tipi", EKSEN_4_PROB_TIPI),
         ("mutasyon", EKSEN_5_MUTASYON),
         ("kiralama", EKSEN_6_KIRALAMA),
+        ("kok-symlink", EKSEN_7_KOK_SYMLINK),
     ):
         eksik = set(degerler) - {h.alt for h in MATRIS}
         assert not eksik, (
@@ -2250,6 +2302,37 @@ def test_closure_matrix_is_not_empty_and_not_trivially_green() -> None:
     # yakalayamaz.
     assert len({h.sebep_parcalari for h in MATRIS if h.sebep_parcalari}) >= 6, (
         "sebep yüklemi ayırt edici DEĞİL — eksenler sessizce çakışıyor"
+    )
+
+
+def test_fingerprint_rejects_a_symlinked_tree_root(tmp_path) -> None:
+    """Parmak izi süpürmesi KÖKÜN KENDİ düğüm tipini de sınar.
+
+    Turda bu vakayı koşum anı yol kapısı DAHA ÖNCE yakalar; bu kol parmak
+    izinin kendi başına da bayt-özdeş bir dış ikize KAPALI olduğunu ölçer —
+    kapı sırası değişirse kol yine kırmızıdır. Pozitif kontrol aynı baytların
+    GERÇEK dizinde ölçüldüğünü gösterir: ayrım baytlarda değil düğüm tipinde.
+    """
+    gercek = tmp_path / auditors.DENETCI_ROLLERI[0]
+    gercek.mkdir()
+    (gercek / PAKET_DOSYA_ADI).write_text("aynı baytlar", encoding="utf-8")
+    ikiz = tmp_path / "disarida" / "ikiz"
+    ikiz.parent.mkdir()
+    shutil.copytree(gercek, ikiz)
+
+    parmak, reddedilen = auditors._rol_agaci_parmagi(gercek)
+    assert reddedilen == [], "gerçek dizin reddedildi — kol TRIVIALLY yeşil"
+    assert set(parmak) == {PAKET_DOSYA_ADI}
+
+    shutil.rmtree(gercek)
+    gercek.symlink_to(ikiz, target_is_directory=True)
+    symlink_parmak, symlink_reddedilen = auditors._rol_agaci_parmagi(gercek)
+    assert symlink_parmak == {}, (
+        "symlink KÖK ölçüldü — ağaç paketin DIŞINA açıldı, baytlar aynı "
+        "olduğu için özet kapısı bunu GÖREMEZ"
+    )
+    assert any("symlink" in kayit for kayit in symlink_reddedilen), (
+        f"kök reddi düğüm TİPİNİ adlandırmıyor: {symlink_reddedilen}"
     )
 
 

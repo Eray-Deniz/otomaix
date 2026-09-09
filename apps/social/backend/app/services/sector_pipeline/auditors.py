@@ -1585,6 +1585,29 @@ def _hedef_rapor_kapisi(packet: PacketRef) -> str | None:
     )
 
 
+def _kosum_ani_yol_kapisi(packet: PacketRef) -> str | None:
+    """Yol sözleşmesini KOŞUM ANINDA, ilk mutasyondan ÖNCE yeniden ölçer.
+
+    `PacketRef` yol kapısı yalnız YAPIM anında koşar. Bir rol dizini — ya da
+    paket KÖKÜNÜN kendisi — yapımdan sonra bayt-özdeş bir DIŞ ağaca symlink'le
+    değiştirilirse parmak izi, saklı özet ve kardeş karşılaştırma üçü birden
+    eşleşir; kapı geçer ve runner paket kökünün DIŞINDA koşar.
+
+    Yeni kural YOKTUR: `PacketRef`'in kendi yol kapısı (`_kok_yolunu_kapila` +
+    rol yolu canonical eşitliği) OLDUĞU GİBİ yeniden çağrılır. Kapı kiralama
+    dâhil HİÇBİR mutasyondan önce koşar — reddedilen bir paket diskte iz
+    bırakmaz.
+    """
+    try:
+        packet._rol_yollarini_kapila()
+    except ValueError as hata:
+        return (
+            "denetim turu BAŞLAMADI: paket yol kapısı koşum anında düştü — "
+            f"{hata}"
+        )
+    return None
+
+
 KIRALAMA_DIZIN_ADI = ".kiralama"
 """Paket başına kiralamanın dizin adı — kökün ALTINDA, rol ağaçlarının DIŞINDA.
 
@@ -1686,6 +1709,13 @@ def _rol_agaci_parmagi(dizin: Path) -> tuple[dict[str, str], list[str]]:
     """
     parmak: dict[str, str] = {}
     reddedilen: list[str] = []
+
+    # Süpürme kökü `os.scandir` ile AÇILIR, yani kökün KENDİ düğüm tipi
+    # çocuklarına uygulanan symlink kuralının DIŞINDA kalırdı: rol dizini
+    # bayt-özdeş bir dış ikize symlink'lenirse scandir onu izler ve özet
+    # eşleşir. Kök açıkça reddedilir.
+    if Path(dizin).is_symlink():
+        return {}, ["<ağaç kökü> (symlink)"]
 
     def _gez(kok: Path, onek: str) -> None:
         with os.scandir(kok) as girisler:
@@ -2019,6 +2049,12 @@ async def run_audit_round(
                     for sonuc in kapali
                 )
             )
+        # Yol kapısı HER mutasyondan (kiralama `mkdir`'i dâhil) ÖNCE: yapımdan
+        # sonra symlink'lenen bir kök ya da rol dizini parmak izi kapısını
+        # bayt-özdeş bir ikizle geçebilir.
+        yol_sebebi = _kosum_ani_yol_kapisi(packet)
+        if yol_sebebi is not None:
+            return await _yarim(yol_sebebi)
         # Kiralama ÇAKIŞMA KONTROLÜNDEN ÖNCE ve son kalıcılaştırmaya kadar
         # TUTULUR: çakışma kontrolü bir sıra kapısıdır, kilit değildir.
         kiralama_sebebi = _kiralamayi_al(packet)
