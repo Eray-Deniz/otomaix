@@ -17,9 +17,9 @@ Task 11 indi ve checkpoint 8 kapandı.
 · başlangıç çapası `a806e29` · defter penceresi `a806e29` · **`cp_count: 5`** ·
 **`last_checkpoint_ref: a44d9ec`** — §8.6 mutasyon protokolüyle bu oturumda ilerletildi.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, merge EDİLMEDİ. Uzak dal VAR; ölçüldü (2026-09-09,
-Task 11 öncesi): `git rev-list --left-right --count origin/<dal>...HEAD` → `0 11`. Task 11'in
-commit'leri sonra indi, yani gönderilmemiş sayı ARTTI — taze ölçüm o komutla alınır.
+**Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**, **push EDİLDİ** (Eray onayı,
+2026-09-09 oturum sonu). Ölçüldü: `git rev-list --left-right --count origin/<dal>...HEAD` →
+`0 0`; iki uç da `431db78`. Yeni oturumda taze ölçüm yine o komutla alınır.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit `7964ed6`.
 Bu oturumda dokunulmadı; pin kapısı sentez sözleşmesini okurken geçti.
