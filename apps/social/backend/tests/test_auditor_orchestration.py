@@ -1282,6 +1282,34 @@ async def test_cwd_is_not_a_security_boundary_and_the_declaration_is_measured(
     )
 
 
+def test_toctou_window_is_narrowed_not_closed_and_the_declaration_is_measured(
+) -> None:
+    """TOCTOU beyanı gövdededir ve bu test onu ÖLÇER (tripwire).
+
+    Beyan: rol yolu her `runner.run`'dan önce yeniden doğrulanır ama doğrulama
+    ile kullanım arası ATOMİK DEĞİLDİR; dosya tanımlayıcı tabanlı işlemler
+    olmadan pencere tümüyle kapanmaz. Daraltmanın DAVRANIŞINI matrisin
+    `kosum-ani-yol|kapi-reddi|<denetçi-2>|rol-koku-symlink-kosum-arasi` hücresi
+    ölçer; burada ölçülen şey BEYANIN KENDİSİDİR — silinirse ya da "pencere
+    kapatıldı" diye güçlendirilirse bu test KIRMIZI olur ve iddia sessizce
+    büyüyemez.
+    """
+    # Satır sarması beyanın İÇERİĞİ değildir: yüklem boşluk-normalize metne
+    # uygulanır, yoksa yeniden biçimlendirme testi sahte kırmızıya düşürürdü.
+    beyan = " ".join((auditors.run_audit_round.__doc__ or "").split())
+    for parca in (
+        "arası ATOMİK DEĞİLDİR",
+        "TANIMLAYICI tabanlı işlemler",
+        "pencerenin DARALTILMASIDIR",
+        "KAPATILMASI değildir",
+        "SALDIRGAN değildir",
+    ):
+        assert parca in beyan, (
+            f"TOCTOU beyanının {parca!r} parçası gövdeden KAYBOLMUŞ — kalan "
+            "risk beyansız kalamaz"
+        )
+
+
 async def test_dead_lease_takeover_declaration_is_in_the_body_and_is_measured(
     kosu, tmp_path
 ):
@@ -1578,7 +1606,14 @@ tutarken AYRI iş parçacığından gelen gerçek eşzamanlı tur.
 """
 
 
-EKSEN_7_KOK_SYMLINK = ("rol-koku-symlink", "paket-koku-symlink")
+KOSUM_ARASI_SYMLINK = "rol-koku-symlink-kosum-arasi"
+"""Eksen 7'nin ZAMAN değeri: değişim tur BAŞLADIKTAN sonra gelir."""
+
+EKSEN_7_KOK_SYMLINK = (
+    "rol-koku-symlink",
+    "paket-koku-symlink",
+    KOSUM_ARASI_SYMLINK,
+)
 """Eksen 7 — ağacın KÖKÜ yapımdan sonra dış bir ikize symlink'lenir.
 
 Eksen 5 ÇOCUK düğümün tipini değiştirir; bu eksen KÖKÜN kendisininkini. Ayrım
@@ -1586,6 +1621,10 @@ yapısaldır: süpürme kökü `os.scandir` ile AÇILIR, dolayısıyla çocuklar
 uygulanan symlink kuralı köke uygulanmaz — ve ikiz BAYT-ÖZDEŞ olduğu için
 parmak izi, saklı özet ve kardeş karşılaştırma üçü de eşleşir. Kök hem ROL
 dizini hem PAKET kökü olabilir; ikisi ayrı yol kuralına dayanır.
+
+Üçüncü değer eksenin ZAMAN kolu: aynı değişim tur BAŞLADIKTAN sonra, denetçi-1
+koşarken gelir. İlk iki değeri kabul bölgesindeki tek kapı çağrısı yakalar;
+üçüncüsünü YALNIZ rol döngüsünün içindeki çağrı yakalayabilir.
 """
 
 
@@ -1735,7 +1774,20 @@ def _matris_hucreleri() -> tuple[_Hucre, ...]:
     # (1g) Koşum anı yol kapısı — kök yapımdan SONRA bayt-özdeş bir dış
     #      ikize symlink'lenirse tur HİÇ başlamaz. Sebep `symlink` taşır:
     #      bu kol parmak izi kolundan bağımsız ölçülmezse ölçülmemiştir.
+    #      ZAMAN kolu ayrıdır: aynı değişim denetçi-1 KOŞARKEN gelirse kabul
+    #      bölgesindeki tek çağrı onu göremez. Orada tur başlamış olur — bir
+    #      alt süreç çağrılmış, kanıtı korunmuştur — ve denetçi-2'nin alt
+    #      süreci HİÇ çağrılmaz.
     for alt in EKSEN_7_KOK_SYMLINK:
+        if alt == KOSUM_ARASI_SYMLINK:
+            hucreler.append(
+                _Hucre(
+                    "kosum-ani-yol", "kapi-reddi", ikinci, alt,
+                    1, (birinci,), 1, "tamamlanmadi", None,
+                    ("yol kapısı", "symlink", f"{ikinci} alt süreci ÇAĞRILMADI"),
+                )
+            )
+            continue
         hucreler.append(
             _Hucre(
                 "kosum-ani-yol", "kapi-reddi", "yok", alt,
@@ -1931,23 +1983,55 @@ def _mutasyon_kur(alt: str, rol_dizini: Path, disarisi: Path) -> None:
         raise AssertionError(f"bilinmeyen mutasyon: {alt!r}")
 
 
-def _kok_symlink_kur(alt: str, paket, disarisi: Path) -> None:
-    """Ağacın KÖKÜNÜ bayt-özdeş bir DIŞ ikize symlink'ler (Eksen 7).
+def _ikiz_yolu(gercek: Path, disarisi: Path) -> Path:
+    return disarisi / f"ikiz-{gercek.name}"
 
-    Gerçek ağaç paketin DIŞINA taşınır, yerine symlink konur: baytlar
-    korunduğu için parmak izi ve saklı özet eşleşir — hücreyi ayırt eden şey
-    KÖKÜN düğüm tipidir.
+
+def _dizini_ikize_symlinkle(gercek: Path, disarisi: Path) -> None:
+    """Bir dizini paketin DIŞINDA duran bayt-özdeş ikizine symlink'ler.
+
+    Gerçek ağaç dışarı taşınır, yerine symlink konur: baytlar korunduğu için
+    parmak izi, saklı özet ve kardeş karşılaştırma üçü de eşleşir — ayırt eden
+    tek şey KÖKÜN düğüm tipidir.
     """
     disarisi.mkdir(parents=True, exist_ok=True)
+    ikiz = _ikiz_yolu(gercek, disarisi)
+    shutil.copytree(gercek, ikiz)
+    shutil.rmtree(gercek)
+    gercek.symlink_to(ikiz, target_is_directory=True)
+
+
+def _kok_symlink_kur(alt: str, paket, disarisi: Path) -> None:
+    """Ağacın KÖKÜNÜ bayt-özdeş bir DIŞ ikize symlink'ler (Eksen 7)."""
     gercek = (
         paket.kok
         if alt == "paket-koku-symlink"
         else paket.kopyalar[auditors.DENETCI_ROLLERI[0]]
     )
-    ikiz = disarisi / f"ikiz-{gercek.name}"
-    shutil.copytree(gercek, ikiz)
-    shutil.rmtree(gercek)
-    gercek.symlink_to(ikiz, target_is_directory=True)
+    _dizini_ikize_symlinkle(gercek, disarisi)
+
+
+class _AradaSymlinkleyenRunner(_SayanRunner):
+    """Denetçi-1 KOŞARKEN denetçi-2'nin rol dizinini dış ikizle değiştirir.
+
+    Gerçek eşzamanlılık KURULMAZ ve gerekmez: kapanması ölçülen pencere,
+    kabul bölgesindeki tek kapı çağrısı ile denetçi-2'nin `runner.run`'ı
+    arasındaki penceredir. Sahte runner tam o pencerede durduğu için
+    değişimin zamanlaması UMUT EDİLMEZ, KURULUR.
+    """
+
+    def __init__(self, ciktilar, paket, disarisi: Path) -> None:
+        super().__init__(ciktilar)
+        self.paket = paket
+        self.disarisi = disarisi
+
+    def run(self, tool: str, cwd: Path, prompt_path: Path):
+        sonuc = super().run(tool, cwd, prompt_path)
+        if len(self.cagrilar) == 1:
+            _dizini_ikize_symlinkle(
+                self.paket.kopyalar[auditors.DENETCI_ROLLERI[1]], self.disarisi
+            )
+        return sonuc
 
 
 class _RakipTurRunner(_SayanRunner):
@@ -2098,7 +2182,7 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
         for rol in hedefler:
             _mutasyon_kur(hucre.alt, paket.kopyalar[rol], tmp_path / "disarida")
 
-    if hucre.kapi == "kosum-ani-yol":
+    if hucre.kapi == "kosum-ani-yol" and hucre.alt != KOSUM_ARASI_SYMLINK:
         _kok_symlink_kur(hucre.alt, paket, tmp_path / "disarida")
 
     if hucre.kapi == "kiralama" and hucre.alt != "rakip-tur":
@@ -2151,11 +2235,12 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
             durum="hata", stdout="", stderr="araç düştü", exit_code=1
         )
         ariza = None
-    runner = (
-        _RakipTurRunner(ciktilar, paket)
-        if hucre.alt == "rakip-tur"
-        else _SayanRunner(ciktilar, ariza_rolu=ariza_rolu, ariza=ariza)
-    )
+    if hucre.alt == "rakip-tur":
+        runner = _RakipTurRunner(ciktilar, paket)
+    elif hucre.alt == KOSUM_ARASI_SYMLINK:
+        runner = _AradaSymlinkleyenRunner(ciktilar, paket, tmp_path / "disarida")
+    else:
+        runner = _SayanRunner(ciktilar, ariza_rolu=ariza_rolu, ariza=ariza)
 
     kullanilan_run_id = (
         runs.new_run_id() if hucre.kapi == "kimlik-bagi" else run_id
@@ -2165,6 +2250,17 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
     # alınır, yoksa yer değiştirme "dosya silindi" gibi okunurdu.
     olcum_koku = tmp_path if hucre.kapi == "kosum-ani-yol" else paket.kok
     oncesi = _dosya_goruntusu(olcum_koku)
+    if hucre.alt == KOSUM_ARASI_SYMLINK:
+        # Bu hücrede taşıma çağrının İÇİNDE olur, dolayısıyla `oncesi` rol-2
+        # ağacını hâlâ ESKİ adıyla görür. Salt-eklemelik yüklemi DÜŞÜRÜLMEZ:
+        # adlar ikize eşlenir, baytlar yine bire bir karşılaştırılır.
+        ikiz = _ikiz_yolu(paket.kopyalar[ikinci], tmp_path / "disarida")
+        eski = f"{paket.kok.relative_to(olcum_koku)}/{ikinci}/"
+        yeni = f"{ikiz.relative_to(olcum_koku)}/"
+        oncesi = {
+            (yeni + ad[len(eski):] if ad.startswith(eski) else ad): bayt
+            for ad, bayt in oncesi.items()
+        }
     firlatan = None
     try:
         await auditors.run_audit_round(

@@ -1585,7 +1585,9 @@ def _hedef_rapor_kapisi(packet: PacketRef) -> str | None:
     )
 
 
-def _kosum_ani_yol_kapisi(packet: PacketRef) -> str | None:
+def _kosum_ani_yol_kapisi(
+    packet: PacketRef, *, onek: str = "denetim turu BAŞLAMADI"
+) -> str | None:
     """Yol sözleşmesini KOŞUM ANINDA, ilk mutasyondan ÖNCE yeniden ölçer.
 
     `PacketRef` yol kapısı yalnız YAPIM anında koşar. Bir rol dizini — ya da
@@ -1594,17 +1596,20 @@ def _kosum_ani_yol_kapisi(packet: PacketRef) -> str | None:
     eşleşir; kapı geçer ve runner paket kökünün DIŞINDA koşar.
 
     Yeni kural YOKTUR: `PacketRef`'in kendi yol kapısı (`_kok_yolunu_kapila` +
-    rol yolu canonical eşitliği) OLDUĞU GİBİ yeniden çağrılır. Kapı kiralama
-    dâhil HİÇBİR mutasyondan önce koşar — reddedilen bir paket diskte iz
-    bırakmaz.
+    rol yolu canonical eşitliği) OLDUĞU GİBİ yeniden çağrılır. KABUL
+    BÖLGESİNDEKİ çağrısı kiralama dâhil HİÇBİR mutasyondan önce koşar —
+    baştan geçersiz bir paket diskte iz bırakmaz. Rol döngüsündeki çağrısı ise
+    her `runner.run`'dan hemen öncedir: orada tur zaten başlamıştır, kapatılan
+    şey KALAN rolün alt sürecidir.
+
+    `onek` YALNIZ sebebin ilk cümlesidir: kapı kabul bölgesinde turun HİÇ
+    başlamadığı yerde de, rol döngüsünde turun DURDUĞU yerde de aynı kuralı
+    ölçer; "BAŞLAMADI" ikinci yerde yanlış olurdu.
     """
     try:
         packet._rol_yollarini_kapila()
     except ValueError as hata:
-        return (
-            "denetim turu BAŞLAMADI: paket yol kapısı koşum anında düştü — "
-            f"{hata}"
-        )
+        return f"{onek}: paket yol kapısı koşum anında düştü — {hata}"
     return None
 
 
@@ -1961,6 +1966,18 @@ async def run_audit_round(
     beyanı ölçer — izolasyon eklenirse test KIRMIZI olur ve beyan bayat kalamaz.
     Kiralama ve bütünlük kapısı bu sınırı DEĞİŞTİRMEZ: ikisi de dosya sistemi
     tabanlıdır, kum havuzu · konteyner · ayrı kullanıcı EKLEMEZ.
+
+    **TOCTOU PENCERESİ — dürüst beyan.** Rol yolu artık HER `runner.run`'dan
+    hemen önce yeniden doğrulanır, ama doğrulama ile kullanım arası ATOMİK
+    DEĞİLDİR: kapı yolu ADIYLA çözer, alt süreç ise aynı adı bir sonraki anda
+    KENDİ açar; ikisinin arasında ad başka bir düğüme bağlanabilir. Dosya
+    TANIMLAYICI tabanlı işlemler (dizini bir kez açıp o fd'ye göre `openat` /
+    `fchdir` ile koşmak) olmadan pencere TÜMÜYLE KAPANMAZ. Yapılan şey
+    pencerenin DARALTILMASIDIR — bir turluk pencere rol başına indi —
+    KAPATILMASI değildir. Tehdit modeli B3 ile aynıdır ve değişmez: girdi
+    ÖZENSİZ olabilir, SALDIRGAN değildir; hat yerel ve tek kullanıcılıdır.
+    `test_toctou_window_is_narrowed_not_closed_and_the_declaration_is_measured`
+    bu beyanı ölçer — beyan gövdeden silinirse test KIRMIZI olur.
     """
     require_run_id(run_id)
     if not isinstance(packet, PacketRef):
@@ -2074,6 +2091,19 @@ async def run_audit_round(
 
         # ══ KOŞUM BÖLGESİ — ilk yan etki buradan sonra ══
         for rol in DENETCI_ROLLERI:
+            # Yol kapısı HER `runner.run`'dan hemen ÖNCE yeniden koşar. Kabul
+            # bölgesindeki tek çağrı, denetçi-1 KOŞARKEN denetçi-2'nin rol
+            # dizininin bayt-özdeş bir dış ikize symlink'lenmesini göremezdi.
+            # Yeni kural YOKTUR: aynı yardımcı, aynı sözleşme.
+            yol_sebebi = _kosum_ani_yol_kapisi(
+                packet,
+                onek=(
+                    f"denetim turu {rol} rolünde DURDU, {rol} alt süreci "
+                    "ÇAĞRILMADI"
+                ),
+            )
+            if yol_sebebi is not None:
+                return await _yarim(yol_sebebi)
             dizin = packet.kopyalar[rol]
             sonuc = runner.run(
                 tool=rol, cwd=dizin, prompt_path=dizin / GOREV_DOSYA_ADI
