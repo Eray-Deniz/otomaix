@@ -109,6 +109,20 @@ kapatıldı, iki bulgu gerekçeli olarak kabul edilmiş riske alındı; test tab
 13. **Kontrolörün tam test kümesi, veritabanına dokunan bir alt-ajanla ASLA üst üste binmez.**
 14. Canlıya hiçbir n8n dosyası körlemesine yüklenmez.
 
+**EVİ OLAN, TAŞINAN KALEMLER — rolling yeniden yazımda DÜŞÜRÜLMESİN:**
+- **`markdown-it-py` bir ÜRETİM bağımlılığıdır** (pinli `4.2.0`), canlıya dağıtılmadı.
+  **Ev: Task 18, Step 3.**
+- **Task 8 üç yüzeyi Task 15'e bağlı bıraktı** — jeton tüketimi koşmuyor · aktivasyon yükü
+  yediye değil altıya varıyor · onay anlık görüntüsünün üretim yazıcısı yok (o Task 14).
+  Bağlayıcı: `expected_no_active` eklendiği gün `test_evidence_payload_key_set_is_closed`
+  KIRMIZI olur ve elle güncellenir. **Ev: Task 14 + Task 15.**
+- **Yol sıra numaraları KONUMSAL** — karşılaştıran her tüketici kimliğe anahtarlar, yola asla.
+  **Ev: Task 12 ve Task 13 dispatch'leri.**
+- **Task 10'un TEST dosyaları bağımsız hakem GÖRMEDİ** (2026-09-09'da doğdu). Bugünkü beş tur
+  üretim/test diye bölünmüştü ve test tarafı hiç koşulmadı; `test_auditor_orchestration.py`
+  (~1000 satır) hiç incelenmedi. **Ev: Adım 11 final inceleme** — tabanı `a806e29` olduğu için
+  bu dosyalar oraya kendiliğinden girer. Uydurma ev değil, mevcut zorunlu kapı.
+
 **Task 11'in dispatch'ine ZORUNLU kalemler:**
 - **Denetçi web erişim probunu SAĞLA.** K-14 kapısı probsuz her turu bloke ediyor (doğru
   davranış). Task 11 `run_audit_round`'a gerçek prob geçirmeli, yoksa hat çalışmaz.
