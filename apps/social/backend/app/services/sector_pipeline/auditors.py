@@ -161,6 +161,14 @@ ARASTIRMA_DEPOSU_KOKU = _DEPO_KOKU
 
 GOREV_DOSYASI = "hakem-denetci-gorevi.md"
 
+GOREV_DOSYA_ADI = "00-GOREV.md"
+"""Pakete yazılan görev dosyasının adı — istem yolu BURADAN türer.
+
+İki yer okur: paketi kuran `_paket_dosyalari` ve turu koşturan
+`run_audit_round`. İki ayrı dizge yazılsaydı biri değişip diğeri kalır,
+denetçi var olmayan bir istem dosyasıyla koşardı.
+"""
+
 _ORTAM_KISITI = "URL doğrulaması yapılamadı (ortam kısıtı)"
 """Sözleşmenin web-erişimsiz kaçış cümlesi — satır beklentisini KALDIRIR."""
 
@@ -447,7 +455,7 @@ def _paket_dosyalari(
     doğrulanan bayt ile paketlenen bayt iki ayrı okumadan gelirdi (TOCTOU).
     """
     dosyalar: dict[str, str] = {
-        "00-GOREV.md": gorev_metni,
+        GOREV_DOSYA_ADI: gorev_metni,
         "EK-A-brief.md": brief,
         "EK-E-brief-doctor.md": _ek_e_metni(doctor_reports),
         "EK-H-aktif-paket.json": _ek_h_metni(active_package, unit_snapshot),
@@ -866,7 +874,6 @@ def preflight(
 
 # ═══ Task 10 — iki kör denetçi orkestrasyonu (K-76 · K-78 · K-79 · K-82 · K-150) ═══
 
-GOREV_DOSYA_ADI = "00-GOREV.md"
 RAPOR_DOSYA_KALIBI = "RAPOR-{}.md"
 DENETIM_ASAMASI = "denetim"
 SENTEZ_ARACI = "sentez"
@@ -878,69 +885,351 @@ _LOG = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ToolSpec:
+    """Bir aracın DONDURULMUŞ komut satırı — argümanlar ÖLÇÜLDÜ, uydurulmadı.
+
+    Ölçüm dosyası: `docs/research/2026-09-09-denetci-cli-olcumu.md` (kurulu
+    CLI'ların ham `--help` çıktısı). İstem argv'ye GÖMÜLMEZ, alt sürece
+    STDIN'den gider: tek argümanın bayt sınırı vardır, görev metni ekleriyle
+    büyür.
+    """
+
     argv: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        deger = tuple(self.argv)
+        if not deger:
+            raise ValueError("ToolSpec.argv BOŞ olamaz — komutsuz araç koşamaz")
+        for parca in deger:
+            if not isinstance(parca, str) or not parca:
+                raise ValueError(
+                    f"ToolSpec.argv yalnız boş olmayan dize taşır: {parca!r}"
+                )
+        object.__setattr__(self, "argv", deger)
 
 
-ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType({})
+ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
+    {
+        DENETCI_ROLLERI[0]: ToolSpec(("claude", "-p", "--output-format", "text")),
+        DENETCI_ROLLERI[1]: ToolSpec(
+            (
+                "codex",
+                "exec",
+                "--skip-git-repo-check",
+                "--sandbox",
+                "read-only",
+                "--color",
+                "never",
+                "-",
+            )
+        ),
+        SENTEZ_ARACI: ToolSpec(("claude", "-p", "--output-format", "text")),
+    }
+)
+"""Araç → komut satırı — KAPALI, ÜÇ giriş (iki denetçi + sentez).
+
+Rol/araç eşlemesi planın 1267. satırında bağlıdır (`denetci-1` → Claude Code,
+`denetci-2` → Codex). `sentez`'in Claude Code olması TERCİH DEĞİL ÖLÇÜMDÜR:
+pinlenmiş `hakem-sentez-gorevi.md` 4. satırı "İki denetçi çıktısı hazır
+olduktan sonra Claude Code'da koşulur" der.
+
+**Testin beklentisi bu eşlemeden OKUNMAZ** — okusaydı yanlış bir eşlemeyi de
+geçirirdi (totolojik test). `test_runner_argv_matches_independent_literals`
+ölçüm anında elle yazılmış sabitlere bakar, ayrıca
+`test_toolspec_flags_exist_in_the_installed_cli_help` her koşumda kurulu
+CLI'nın yardımını yeniden okur.
+
+**Ölçülmüş eksik (dürüst etiket):** `codex exec` 0.151.0'da `--search` YOKTUR
+(yalnız üst düzey `codex`'te var), dolayısıyla bu argv canlı web aramasını
+AÇMAZ. Kapı yine de fail-closed'dır: K-14 `preflight` erişimi ÖLÇER ve
+erişimsiz tur BAŞLAMAZ. Evi Task 11'dir (probu sağlayan katman).
+"""
 
 
 @dataclass(frozen=True)
 class RunnerOutcome:
+    """Alt süreç koşumunun TİPLİ sonucu — ham metin DEĞİL.
+
+    Üç hâl kapalıdır ve `tamam` hâli İKİ koşula birden bakar: çıkış kodu sıfır
+    VE gövde dolu. "Sessiz başarı" (0 dönen ama hiçbir şey yazmayan araç) bu
+    tiple KURULAMAZ; boş rapor, rapor değildir.
+    """
+
     durum: str
     stdout: str
     stderr: str
     exit_code: int | None
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        if self.durum not in RUNNER_DURUMLARI:
+            raise ValueError(
+                f"RunnerOutcome.durum kapalı kümenin dışında: {self.durum!r} — "
+                f"{list(RUNNER_DURUMLARI)}"
+            )
+        for alan in ("stdout", "stderr"):
+            if not isinstance(getattr(self, alan), str):
+                raise TypeError(
+                    f"RunnerOutcome.{alan} dize olmak ZORUNDA: "
+                    f"{type(getattr(self, alan)).__name__}"
+                )
+        if self.exit_code is not None and not isinstance(self.exit_code, int):
+            raise TypeError(
+                f"RunnerOutcome.exit_code int ya da None: {self.exit_code!r}"
+            )
+        if self.durum == "zaman-asimi" and self.exit_code is not None:
+            raise ValueError(
+                "zaman aşımına uğrayan süreç çıkış kodu TAŞIMAZ: "
+                f"{self.exit_code!r}"
+            )
+        if self.durum == "tamam":
+            if self.exit_code != 0:
+                raise ValueError(
+                    f"`tamam` sıfır çıkış kodu ister: {self.exit_code!r}"
+                )
+            if not self.stdout.strip():
+                raise ValueError(
+                    "`tamam` BOŞ gövdeyle kurulamaz — sessiz başarı YOKTUR; "
+                    "çıktı yoksa sonuç `hata`dır"
+                )
 
 
 class Runner(Protocol):
+    """Denetçi/sentez koşumunun test edilebilirlik DİKİŞİ.
+
+    **İmzada koşu kimliği ya da veritabanı YOKTUR** — bu bilinçlidir: durum
+    sahibi orkestratördür (`run_audit_round` · `synthesis.run`), runner
+    `tamamlanmadi` işaretini ATAMAZ. Gerçek koşumda `SubprocessRunner`, testte
+    sahte runner geçer.
+    """
+
     def run(self, tool: str, cwd: Path, prompt_path: Path) -> RunnerOutcome: ...
 
 
 class SubprocessRunner:
+    """`Runner`'ın GERÇEK uygulaması — yerel CLI alt süreci (K-76).
+
+    Dört şey burada olur, beşincisi OLMAZ:
+
+    1. Araç adı KAPALI eşlemeden çözülür; tanınmayan ad fail-closed düşer.
+    2. İstem dosyası STDIN'e verilir (argv'ye gömülmez).
+    3. Dış zaman aşımı uygulanır — CLI'ların kendi zaman aşımı bayrağı YOKTUR
+       (ölçüldü, `docs/research/2026-09-09-denetci-cli-olcumu.md` §3(d)).
+       **Varsayılan YOKTUR:** süre zorunlu parametredir, ölçülmemiş bir saniye
+       değeri sabit yazılmaz (İlke 9).
+    4. stdout rapor gövdesidir; **stderr'e KARIŞMAZ** (ayrı yakalanır) ve
+       günlüğe yazılmadan önce K-136 süzgecinden geçer.
+    5. OLMAYAN: koşu durumu yazmak. Runner'ın `db`'si ve `run_id`'si yoktur.
+    """
+
     def __init__(self, *, zaman_asimi_sn: float) -> None:
-        raise NotImplementedError
+        if isinstance(zaman_asimi_sn, bool) or not isinstance(
+            zaman_asimi_sn, (int, float)
+        ):
+            raise TypeError(
+                f"zaman_asimi_sn sayı olmalı: {type(zaman_asimi_sn).__name__}"
+            )
+        if zaman_asimi_sn <= 0:
+            raise ValueError(
+                f"zaman_asimi_sn pozitif olmalı: {zaman_asimi_sn!r} — sıfır ya "
+                "da negatif sınır koşumu hiç başlatmaz"
+            )
+        self.zaman_asimi_sn = float(zaman_asimi_sn)
+
+    @staticmethod
+    def _metin(ham: bytes | str | None) -> str:
+        if ham is None:
+            return ""
+        if isinstance(ham, str):
+            return ham
+        return ham.decode("utf-8", errors="replace")
+
+    def _gunlukle(self, tool: str, durum: str, stderr: str) -> None:
+        """stderr GÜNLÜĞE maskelenerek gider (K-136) — ham hâli asla."""
+        if not stderr.strip():
+            return
+        _LOG.warning(
+            "denetçi alt süreci stderr yazdı: arac=%s durum=%s stderr=%s",
+            tool,
+            durum,
+            runs.mask_secrets(stderr),
+        )
 
     def run(self, tool: str, cwd: Path, prompt_path: Path) -> RunnerOutcome:
-        raise NotImplementedError
+        # Eşleme ÇAĞRI ANINDA okunur: testler onu yerinden oynatarak gerçek alt
+        # süreç davranışını zararsız bir komutla ölçebilsin diye.
+        spec = ARAC_KOMUTLARI.get(tool)
+        if spec is None:
+            raise ValueError(
+                f"araç kapalı kümenin dışında: {tool!r} — "
+                f"{sorted(ARAC_KOMUTLARI)}"
+            )
+        istem = Path(prompt_path).read_bytes()
+        try:
+            tamamlanan = subprocess.run(  # noqa: S603 — argv KAPALI eşlemeden
+                list(spec.argv),
+                cwd=str(cwd),
+                input=istem,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=self.zaman_asimi_sn,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout = self._metin(exc.stdout)
+            stderr = self._metin(exc.stderr)
+            self._gunlukle(tool, "zaman-asimi", stderr)
+            return RunnerOutcome(
+                durum="zaman-asimi", stdout=stdout, stderr=stderr, exit_code=None
+            )
+
+        stdout = self._metin(tamamlanan.stdout)
+        stderr = self._metin(tamamlanan.stderr)
+        kod = tamamlanan.returncode
+        if kod != 0:
+            durum = "hata"
+        elif not stdout.strip():
+            # Sessiz başarı YOK: sıfır dönüp hiçbir şey yazmayan araç, boş bir
+            # raporu geçerli sayan bir yol açardı.
+            durum = "hata"
+        else:
+            durum = "tamam"
+        self._gunlukle(tool, durum, stderr)
+        return RunnerOutcome(
+            durum=durum, stdout=stdout, stderr=stderr, exit_code=kod
+        )
 
 
 @dataclass(frozen=True)
 class ValidatedAuditPair:
+    """Motorun kabul ettiği TEK envanter tipi (K-150: tam iki denetçi).
+
+    **TEK ÜRETİCİSİ `check_snapshot_agreement`'tır.** Sınıf başka hiçbir modülde
+    KURULMAZ; kurulsaydı doğrulayıcıyı ve mutabakat kapısını atlayan ikinci bir
+    yol doğardı — arayüz eki R6'nın kapattığı sınıfın ta kendisi. Yapısal tarama
+    (`test_validated_pair_constructed_only_in_check_snapshot_agreement`) bunu
+    kavramdan türetilmiş desenle ölçer.
+
+    Tip TUTARSIZ KURULAMAZ: roller `DENETCI_ROLLERI` sırasına bağlıdır ve
+    taşınan görüntü hash'i İKİ raporun hash'iyle de örtüşmek zorundadır.
+    """
+
     birinci: AuditReport
     ikinci: AuditReport
     unit_snapshot_sha: str
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        for alan, beklenen_rol in (
+            ("birinci", DENETCI_ROLLERI[0]),
+            ("ikinci", DENETCI_ROLLERI[1]),
+        ):
+            rapor = getattr(self, alan)
+            if type(rapor) is not AuditReport:
+                raise TypeError(
+                    f"ValidatedAuditPair.{alan} yalnız AuditReport taşır "
+                    f"({type(rapor).__name__} verildi) — benzeyen nesne kabul "
+                    "edilmez"
+                )
+            if rapor.denetci != beklenen_rol:
+                raise ValueError(
+                    f"ValidatedAuditPair.{alan} {beklenen_rol!r} raporunu "
+                    f"taşımalı, {rapor.denetci!r} verildi — alan kimliğe "
+                    "bağlıdır, konuma değil"
+                )
+        if not isinstance(self.unit_snapshot_sha, str) or not self.unit_snapshot_sha:
+            raise ValueError(
+                f"ValidatedAuditPair.unit_snapshot_sha boş olamaz: "
+                f"{self.unit_snapshot_sha!r}"
+            )
+        for alan in ("birinci", "ikinci"):
+            rapor = getattr(self, alan)
+            if rapor.unit_snapshot_sha != self.unit_snapshot_sha:
+                raise ValueError(
+                    f"ValidatedAuditPair tutarsız: {alan} raporunun görüntü "
+                    f"hash'i {rapor.unit_snapshot_sha}, çiftin taşıdığı "
+                    f"{self.unit_snapshot_sha} — ayrışan görüntüye yazılmış iki "
+                    "rapor tek envanter olamaz (K-79/K-100)"
+                )
 
 
 @dataclass(frozen=True)
 class SnapshotAgreement:
+    """Mutabakat kapısının sonucu — İKİ HÂL VARDIR, üçüncüsü YOKTUR."""
+
     cift: ValidatedAuditPair | None
     errors: tuple[str, ...]
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        # `ValidatedReport` ile AYNI iki-hâl kuralı — üçüncü hâl yapım hatasıdır.
+        # Normalizasyon kontrolden ÖNCE; takma ad da PAYLAŞILMAZ.
+        object.__setattr__(self, "errors", tuple(self.errors))
+        if (self.cift is None) != bool(self.errors):
+            raise ValueError(
+                "SnapshotAgreement tutarsız: cift ile errors birlikte karar "
+                f"verir (cift={'None' if self.cift is None else 'dolu'}, "
+                f"errors={len(self.errors)})"
+            )
 
     @property
     def gecerli(self) -> bool:
-        raise NotImplementedError
+        """İKİ koşul BİRDEN — çift VAR ve hata YOK."""
+        return self.cift is not None and not self.errors
 
 
 @dataclass(frozen=True)
 class AuditRound:
+    """Bir denetim turunun sonucu.
+
+    Plan `reports: list[AuditReport]` yazar; arayüz eki R6(e) BAĞLAYICIDIR ve
+    geçerlilik taşıyan koleksiyon DEĞİŞTİRİLEMEZ olur: alan kopyalanıp demete
+    çevrilir, öğe tipleri sınanır (`AuditReport` donmuş dataclass'tır ve
+    `identity.donmus`'un KAPALI kümesinin dışındadır — kural 5).
+
+    Tur TUTARSIZ KURULAMAZ: geçerli bir tur TAM İKİ rol taşır ve sebepsizdir;
+    geçersiz bir tur rapor taşımaz ve sebebi VARDIR. "Sebepsiz geçersiz tur"
+    K-150'yi okunamaz kılardı — sentezin neden başlamadığı kayda geçmek zorunda.
+    """
+
     reports: tuple[AuditReport, ...]
     gecerli: bool
     sebep: str | None
 
     def __post_init__(self) -> None:
-        raise NotImplementedError
+        deger = tuple(self.reports)
+        for oge in deger:
+            if type(oge) is not AuditReport:
+                raise TypeError(
+                    f"AuditRound.reports yalnız AuditReport taşır "
+                    f"({type(oge).__name__} verildi) — benzeyen nesne kabul "
+                    "edilmez"
+                )
+        object.__setattr__(self, "reports", deger)
+        if not isinstance(self.gecerli, bool):
+            raise TypeError(
+                f"AuditRound.gecerli bool olmalı: {type(self.gecerli).__name__}"
+            )
+        if self.gecerli:
+            roller = tuple(rapor.denetci for rapor in deger)
+            if roller != DENETCI_ROLLERI:
+                raise ValueError(
+                    "AuditRound tutarsız: geçerli tur DENETCI_ROLLERI'nin "
+                    f"ikisini de sırayla taşır, {roller} verildi (K-150: tek "
+                    "raporla ilerleme YOKTUR)"
+                )
+            if self.sebep is not None:
+                raise ValueError(
+                    f"AuditRound tutarsız: geçerli tur sebep TAŞIMAZ: "
+                    f"{self.sebep!r}"
+                )
+        else:
+            if deger:
+                raise ValueError(
+                    "AuditRound tutarsız: geçersiz tur rapor TAŞIMAZ "
+                    f"({len(deger)} rapor verildi) — yarım envanter motora "
+                    "ulaşamaz"
+                )
+            if not (isinstance(self.sebep, str) and self.sebep.strip()):
+                raise ValueError(
+                    "AuditRound tutarsız: geçersiz tur SEBEPSİZ kurulamaz — "
+                    "sentezi durduran şey kayda geçer"
+                )
 
 
 def check_snapshot_agreement(
@@ -948,7 +1237,93 @@ def check_snapshot_agreement(
     *,
     expected_snapshot_sha: str,
 ) -> SnapshotAgreement:
-    raise NotImplementedError
+    """Çapraz denetçi mutabakatı — TUR seviyesi kapı (arayüz eki R6(c)).
+
+    Girdi HAM rapor DEĞİL, `validate_report`'un dönüşüdür. DÖRT koşul birden
+    aranır:
+
+    (1) iki `ValidatedReport`'un İKİSİ de `gecerli` — biri değilse `cift=None`
+        ve hataları `errors`'a birleştirilir (K-150 fail-closed);
+    (2) iki raporun `denetci` alanları `DENETCI_ROLLERI`nin ikisini de TAM BİR
+        KEZ kapsar (aynı rolden iki rapor REDDEDİLİR);
+    (3) her raporun `unit_snapshot_sha`'sı `expected_snapshot_sha`'ya EŞİT;
+    (4) iki raporun `unit_snapshot_sha`'ları birbirine EŞİT (K-79/K-100).
+
+    Dördü de geçerse `ValidatedAuditPair` üretilir — BAŞKA ÜRETİCİ YOKTUR. Bir
+    koşul düşerse `cift` `None`'dır ve tur GEÇERSİZDİR.
+
+    Çift kurulurken raporlar KİMLİĞE anahtarlanır (`denetci` alanı), girdi
+    KONUMUNA değil: konumsal okuma, sırası kaymış bir çağrıda rolleri sessizce
+    takas ederdi.
+
+    **Ölçülmüş kapsam sınırı (dürüst etiket, İlke 3).** (4) numaralı koşul (3)
+    numaralının MANTIKSAL SONUCUDUR: iki rapor birbirinden ayrışıyorsa en az
+    biri `expected_snapshot_sha`'dan da ayrışır ve (3) zaten düşer. İkisi de
+    ekin bağladığı biçimde kodda DURUR (savunma derinliği), ama (4) TEK BAŞINA
+    erişilebilir bir dal DEĞİLDİR — yalnız onu kaldıran mutasyon (M8) hiçbir
+    testi kırmızılaştırmadı. Bu, "(4)'ün kendi testi var" diye okunmaz;
+    `test_snapshot_gate_matrix_over_hash_axes` ekseni bütün olarak kapatır.
+    """
+    sonuclar = tuple(validated)
+    errors: list[str] = []
+    if len(sonuclar) != 2:
+        return SnapshotAgreement(
+            None,
+            (
+                f"mutabakat kapısı TAM İKİ doğrulama sonucu ister, "
+                f"{len(sonuclar)} verildi — K-150 tek raporla ilerlemez",
+            ),
+        )
+
+    for sonuc in sonuclar:
+        if not isinstance(sonuc, ValidatedReport):
+            raise TypeError(
+                "check_snapshot_agreement girdisi ValidatedReport olmalı: "
+                f"{type(sonuc).__name__} — ham rapor kapıya ULAŞAMAZ"
+            )
+        if not sonuc.gecerli:
+            errors.extend(sonuc.errors)
+    if errors:
+        return SnapshotAgreement(None, tuple(errors))
+
+    raporlar = [sonuc.rapor for sonuc in sonuclar]
+    roller = sorted(rapor.denetci for rapor in raporlar)
+    if roller != sorted(DENETCI_ROLLERI):
+        errors.append(
+            f"mutabakat kapısı: iki rapor DENETCI_ROLLERI'ni tam bir kez "
+            f"kapsamıyor (bulunan roller {roller}, beklenen "
+            f"{sorted(DENETCI_ROLLERI)}) — aynı rolden iki rapor iki denetçi "
+            "sayılamaz"
+        )
+    for rapor in raporlar:
+        if rapor.unit_snapshot_sha != expected_snapshot_sha:
+            errors.append(
+                f"mutabakat kapısı: {rapor.denetci} raporu paketin anlık "
+                f"görüntüsüne yazılmamış (rapor {rapor.unit_snapshot_sha}, "
+                f"paket {expected_snapshot_sha})"
+            )
+    if raporlar[0].unit_snapshot_sha != raporlar[1].unit_snapshot_sha:
+        errors.append(
+            "mutabakat kapısı: iki rapor AYRI anlık görüntüye karşı yazılmış "
+            f"({raporlar[0].unit_snapshot_sha} ≠ {raporlar[1].unit_snapshot_sha}) "
+            "— farklı girdi gören iki rapor mutabakat kanıtlayamaz (K-79/K-100)"
+        )
+    if errors:
+        return SnapshotAgreement(None, tuple(errors))
+
+    esleme = {rapor.denetci: rapor for rapor in raporlar}
+    return SnapshotAgreement(
+        ValidatedAuditPair(
+            birinci=esleme[DENETCI_ROLLERI[0]],
+            ikinci=esleme[DENETCI_ROLLERI[1]],
+            unit_snapshot_sha=expected_snapshot_sha,
+        ),
+        (),
+    )
+
+
+def _tur_dosyasi(dizin: Path, rol: str) -> Path:
+    return dizin / RAPOR_DOSYA_KALIBI.format(rol)
 
 
 async def run_audit_round(
@@ -958,4 +1333,81 @@ async def run_audit_round(
     runner: Runner,
     run_id: str,
 ) -> AuditRound:
-    raise NotImplementedError
+    """İki kör denetçiyi SIRAYLA koşturur ve turu mutabakat kapısından geçirir.
+
+    Bağlayıcı invariantlar bu gövdededir:
+
+    * **K-78 SIRALI** — döngü `DENETCI_ROLLERI` üzerinde yürür ve bir rol
+      bitmeden diğeri başlamaz; sıra deterministiktir.
+    * **K-79 AYRI DİZİN** — her rol kendi `packet.kopyalar[rol]` dizininde
+      koşar, istem dosyası da o dizinden okunur.
+    * **K-82 DURUM SAHİPLİĞİ** — terminal arızada `runs.mark_incomplete`
+      BURADAN çağrılır (runner'ın `db`'si yoktur) ve yazılmış kısmi rapor
+      dosyası EZİLMEZ: dosyalar salt-eklemeli (`"x"`) açılır.
+    * **K-136** — koşu sebebine giden stderr maskeleme süzgecinden geçer.
+    * **K-150 FAIL-CLOSED** — iki GEÇERLİ rapor yoksa çift kurulmaz, tur
+      geçersizdir ve sentez BAŞLAMAZ.
+    * **LLM çıktısı VERİDİR** — gövde yalnız dosyaya yazılır ve
+      `validate_report` biçim kapısına verilir; içindeki yönerge yürütülmez.
+
+    **Doğrulama düşüşü TERMİNAL hata DEĞİLDİR (bilinçli, beyan edilir).** Rapor
+    biçim/veri kapısını geçemezse tur geçersiz döner ama koşu `tamamlanmadi`
+    İŞARETLENMEZ: K-150 "eksik denetçi yeniden koşulur" der ve yarım işareti
+    yeniden koşumun önünü keserdi. `tamamlanmadi` yalnız aracın KENDİSİ
+    düştüğünde (zaman aşımı · sıfırdan farklı çıkış · boş çıktı · dosya
+    çakışması) yazılır.
+    """
+    require_run_id(run_id)
+    if not isinstance(packet, PacketRef):
+        raise TypeError(
+            f"run_audit_round PacketRef bekler: {type(packet).__name__}"
+        )
+
+    async def _yarim(asama_sebebi: str) -> AuditRound:
+        await runs.mark_incomplete(
+            db, run_id=run_id, asama=DENETIM_ASAMASI, sebep=asama_sebebi
+        )
+        return AuditRound((), False, asama_sebebi)
+
+    ham: dict[str, str] = {}
+    for rol in DENETCI_ROLLERI:
+        dizin = packet.kopyalar[rol]
+        sonuc = runner.run(
+            tool=rol, cwd=dizin, prompt_path=dizin / GOREV_DOSYA_ADI
+        )
+        if not isinstance(sonuc, RunnerOutcome):
+            raise TypeError(
+                "Runner tipli sonuç döndürmek ZORUNDA: "
+                f"{type(sonuc).__name__} — ham metin kabul edilmez"
+            )
+        if sonuc.durum != "tamam":
+            return await _yarim(
+                f"denetim turu {rol} aracında yarım kaldı "
+                f"(durum={sonuc.durum}, çıkış={sonuc.exit_code}): "
+                + runs.mask_secrets(sonuc.stderr.strip() or "<stderr boş>")
+            )
+        hedef = _tur_dosyasi(dizin, rol)
+        try:
+            # Salt-eklemeli açılış: var olan kısmi rapor EZİLMEZ (K-82).
+            with open(hedef, "x", encoding="utf-8") as akis:
+                akis.write(sonuc.stdout)
+        except FileExistsError:
+            return await _yarim(
+                f"denetim turu {rol} raporunu yazamadı: {hedef} ZATEN var — "
+                "ham katman salt-eklemedir, dosya EZİLMEZ (K-82); yeniden "
+                "koşum yeni kimlik alır"
+            )
+        ham[rol] = sonuc.stdout
+
+    dogrulanmis = tuple(
+        validate_report(
+            ham[rol], unit_snapshot=packet.unit_snapshot, denetci=rol
+        )
+        for rol in DENETCI_ROLLERI
+    )
+    anlasma = check_snapshot_agreement(
+        dogrulanmis, expected_snapshot_sha=packet.unit_snapshot_sha
+    )
+    if anlasma.cift is None:
+        return AuditRound((), False, " · ".join(anlasma.errors))
+    return AuditRound((anlasma.cift.birinci, anlasma.cift.ikinci), True, None)

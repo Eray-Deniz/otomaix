@@ -36,6 +36,7 @@ from pathlib import Path
 
 import pytest
 
+from app.core.database import _init_connection
 from app.services.sector_pipeline import auditors, identity, runs
 from app.services.sector_pipeline import brief_doctor as bd
 
@@ -213,7 +214,13 @@ def _paket(tmp_path: Path, run_id: str, snapshot: dict[str, dict] | None = None)
 
 @pytest.fixture
 async def kosu(db, tmp_path):
-    """GERÇEK koşu satırı + kurulmuş paket — `mark_incomplete` gerçekten yazar."""
+    """GERÇEK koşu satırı + kurulmuş paket — `mark_incomplete` gerçekten yazar.
+
+    Bağlantı ÜRETİMİN kendi yapılandırmasından geçer (`_init_connection`):
+    `mark_incomplete` yönetici olayını `jsonb` kolona yazar ve codec'siz bir
+    bağlantıda `DataError` ile düşer. Çağrı sayan bir casus bunu GÖRMEZDİ.
+    """
+    await _init_connection(db)
     root_id = await db.fetchval(
         "SELECT id FROM social.sectors WHERE parent_sector_id IS NULL LIMIT 1"
     )
@@ -265,6 +272,10 @@ async def test_single_report_blocks_synthesis(kosu):
     assert tur.gecerli is False
     assert tur.reports == ()
     assert tur.sebep
+    # Eksik denetçi TERMİNAL arızadır: koşu yarım işaretlenir ve sentez
+    # başlamaz. Bu satır olmadan test, arızayı hiç görmeyen bir gövdeyi de
+    # geçirirdi (ölçüldü: mutasyon M30).
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
 
 
 async def test_invalid_format_report_blocks_synthesis(kosu):
@@ -354,6 +365,16 @@ async def test_crash_mid_round_marks_incomplete_and_preserves_files(kosu):
     birinci_dosya = paket.kopyalar[birinci] / f"RAPOR-{birinci}.md"
     assert birinci_dosya.read_text(encoding="utf-8") == ciktilar[birinci].stdout
     assert not (paket.kopyalar[ikinci] / f"RAPOR-{ikinci}.md").exists()
+
+    # Yönetici olayı DENETİM aşamasına yazılır. Anahtar LİTERALDİR: modülün
+    # sabitinden okunsaydı, kapalı küme içinde başka bir aşamaya kayan bir
+    # değişiklik (ör. "sentez") testten geçerdi — ölçüldü, mutasyon M31.
+    olay = await db.fetchrow(
+        "SELECT payload FROM social.admin_events WHERE idempotency_key = $1",
+        f"{run_id}:denetim",
+    )
+    assert olay is not None, "denetim aşamasının yönetici olayı YAZILMAMIŞ"
+    assert olay["payload"]["asama"] == "denetim"
 
 
 async def test_second_round_does_not_overwrite_existing_report(kosu):
@@ -549,6 +570,49 @@ def test_agreement_rejects_pair_diverging_from_the_packet() -> None:
     assert anlasma.cift is None
 
 
+def _sha_ile(rapor: auditors.AuditReport, sha: str) -> auditors.ValidatedReport:
+    return auditors.ValidatedReport(
+        auditors.AuditReport(
+            denetci=rapor.denetci,
+            ham_metin=rapor.ham_metin,
+            bolumler=dict(rapor.bolumler),
+            yeniden_dogrulama=rapor.yeniden_dogrulama,
+            url_orneklem=rapor.url_orneklem,
+            unit_snapshot_sha=sha,
+        ),
+        (),
+    )
+
+
+def test_snapshot_gate_matrix_over_hash_axes() -> None:
+    """Kapanış ÜRETİLMİŞ matrisle kanıtlanır — üç hash ekseni, sekiz hâl.
+
+    Eksen: rapor-1 hash'i · rapor-2 hash'i · paketin beklediği hash, her biri
+    iki değerden ({A, B}). Kabul YALNIZ üçü de aynıyken beklenir.
+
+    **Ölçülmüş ve BEYAN EDİLEN gerçek:** ekin (4). koşulu (iki raporun
+    birbirine eşitliği) (3). koşulun (her raporun pakete eşitliği) MANTIKSAL
+    SONUCUDUR — üçü aynı değilse (3) zaten düşer. İkisi de kodda durur (ek
+    bağlayıcı, savunma derinliği) ama (4) TEK BAŞINA erişilebilir DEĞİLDİR:
+    mutasyon M8 tek başına hiçbir test kırmızılaştırmadı. Bu matris ekseni
+    kapatır; koşulun bağımsız erişilebilirliğini iddia ETMEZ.
+    """
+    birinci, ikinci = _iki_rapor()
+    A, B = _sha(), "b" * 64
+    kabul, ret = [], []
+    for r1 in (A, B):
+        for r2 in (A, B):
+            for beklenen in (A, B):
+                anlasma = auditors.check_snapshot_agreement(
+                    (_sha_ile(birinci, r1), _sha_ile(ikinci, r2)),
+                    expected_snapshot_sha=beklenen,
+                )
+                (kabul if anlasma.cift is not None else ret).append((r1, r2, beklenen))
+    # Boş-küme kontrol kolu: matris hem kabul hem ret üretmeli, yoksa ölçmüyor.
+    assert kabul == [(A, A, A), (B, B, B)], kabul
+    assert len(ret) == 6, ret
+
+
 def test_snapshot_agreement_errors_are_a_tuple_and_cannot_be_cleared() -> None:
     nesne = auditors.SnapshotAgreement(None, ["x"])
     assert isinstance(nesne.errors, tuple)
@@ -642,8 +706,18 @@ def _uretim_modulleri() -> list[Path]:
     ]
 
 
-def _disaridan_kurulanlar(kaynak: str, dosya_adi: str) -> list[str]:
-    """Sınıfın `check_snapshot_agreement` gövdesi DIŞINDAKİ çağrılarını döner."""
+def _kacak_referanslar(kaynak: str, dosya_adi: str) -> list[str]:
+    """Sınıfa yapılan KAÇAK atıfları döner — yalnız ÇAĞRILARI değil.
+
+    **Ölçülmüş gerileme (mutasyon M35).** İlk yazım yalnız `ast.Call`
+    düğümlerine bakıyordu; üretim gövdesine eklenen `_kacak = ValidatedAuditPair`
+    takma adı taramadan SESSİZCE geçti. Takma ad çağrı değildir ama ikinci bir
+    üretici yolunu AÇAR — kapatılan şey çağrının BİÇİMİ değil, sınıfa erişimin
+    kendisidir (varyantı değil sınıfı kapat).
+
+    İzinli ÜÇ bağlam: (a) sınıfın kendi tanımı, (b) tip anotasyonları,
+    (c) `check_snapshot_agreement` gövdesi. Dışındaki her atıf ihlaldir.
+    """
     agac = ast.parse(kaynak, filename=dosya_adi)
     izinli: set[int] = set()
     for dugum in ast.walk(agac):
@@ -652,19 +726,31 @@ def _disaridan_kurulanlar(kaynak: str, dosya_adi: str) -> list[str]:
             and dugum.name == "check_snapshot_agreement"
         ):
             izinli.update(id(alt) for alt in ast.walk(dugum))
-    ihlaller = []
+        anotasyonlar = []
+        if isinstance(dugum, ast.AnnAssign):
+            anotasyonlar.append(dugum.annotation)
+        elif isinstance(dugum, ast.arg) and dugum.annotation is not None:
+            anotasyonlar.append(dugum.annotation)
+        elif (
+            isinstance(dugum, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and dugum.returns is not None
+        ):
+            anotasyonlar.append(dugum.returns)
+        for anot in anotasyonlar:
+            izinli.update(id(alt) for alt in ast.walk(anot))
+
+    ihlaller = set()
     for dugum in ast.walk(agac):
-        if not isinstance(dugum, ast.Call):
-            continue
-        hedef = dugum.func
-        ad = (
-            hedef.id
-            if isinstance(hedef, ast.Name)
-            else hedef.attr if isinstance(hedef, ast.Attribute) else None
-        )
+        ad = None
+        if isinstance(dugum, ast.Name):
+            ad = dugum.id
+        elif isinstance(dugum, ast.Attribute):
+            ad = dugum.attr
+        elif isinstance(dugum, ast.Constant) and isinstance(dugum.value, str):
+            ad = dugum.value  # getattr(auditors, "ValidatedAuditPair")
         if ad == SINIF_ADI and id(dugum) not in izinli:
-            ihlaller.append(f"{dosya_adi}:{dugum.lineno}")
-    return ihlaller
+            ihlaller.add(f"{dosya_adi}:{dugum.lineno}")
+    return sorted(ihlaller)
 
 
 def test_validated_pair_constructed_only_in_check_snapshot_agreement() -> None:
@@ -685,7 +771,7 @@ def test_validated_pair_constructed_only_in_check_snapshot_agreement() -> None:
         f"{SINIF_ADI} adı üretim ağacında `auditors.py` dışında geçiyor: "
         f"{disarida} — ikinci bir üretici yolu doğabilir"
     )
-    assert _disaridan_kurulanlar(
+    assert _kacak_referanslar(
         auditors_yolu.read_text(encoding="utf-8"), "auditors.py"
     ) == []
 
@@ -697,9 +783,12 @@ def test_pair_constructor_scan_detects_a_planted_violation(tmp_path) -> None:
         "def check_snapshot_agreement():\n"
         "    return ValidatedAuditPair()\n\n"
         "def baska_yol():\n"
-        "    return ValidatedAuditPair()\n"
+        "    return ValidatedAuditPair()\n\n"
+        "_takma = ValidatedAuditPair\n"
     )
-    assert _disaridan_kurulanlar(kirli, "sahte.py") == ["sahte.py:8"]
+    # İKİ kaçak biçimi: gövde dışı ÇAĞRI (8) ve TAKMA AD (10). İkincisi
+    # mutasyon M35'te taramadan sessizce geçmişti.
+    assert _kacak_referanslar(kirli, "sahte.py") == ["sahte.py:10", "sahte.py:8"]
 
 
 # ═══ 7. ToolSpec — ölçülmüş komut satırları ═════════════════════════════════
