@@ -472,7 +472,7 @@ def test_notes_pass_the_decision_log_schema() -> None:
 def test_malformed_candidate_fails_closed() -> None:
     """Yazım kapısını geçmeyen aday için BULGU İCAT EDİLMEZ — kapı kapanır."""
     bozuk = _tam_icerik(kanca_kaliplari="liste degil")
-    with pytest.raises(engine.EngineInputError, match="sema"):
+    with pytest.raises(engine.EngineInputError, match="şema"):
         engine.run_checks(_girdi(icerik=bozuk, gunluk=AKTIF_GUNLUK))
 
 
@@ -489,10 +489,15 @@ def test_size_is_measured_but_never_blocks() -> None:
 
 
 def test_missing_unit_result_emits_kapsam_ihlali_finding() -> None:
-    """Aktif birimin sonucu YOKSA kapsam ihlali doğar."""
-    dusen = _yol(AKTIF_ICERIK, "kanca_kaliplari", KORUNAN_KANCA)
-    sonuc = engine.run_checks(_girdi(gunluk=_gunluk(AKTIF_ICERIK, dus=(dusen,))))
-    assert "kapsam_ihlali" in _siniflar(sonuc)
+    """Aktif birimin sonucu YOKSA kapsam ihlali doğar.
+
+    Öğe adaydan düşürülür ama `cikar` satırı YAZILMAZ — sessiz taşıma tam da
+    K-84'ün kapattığı sınıftır.
+    """
+    aday = _tam_icerik(kanca_kaliplari=[KORUNAN_KANCA])
+    sonuc = engine.run_checks(_girdi(icerik=aday, gunluk=_gunluk(aday)))
+    bulgular = [b for b in sonuc.bulgular if b.unit_id == CIKAN_KIMLIK]
+    assert [b.sinif for b in bulgular] == ["kapsam_ihlali"]
 
 
 def test_unknown_unit_id_emits_kapsam_ihlali_finding() -> None:
@@ -528,18 +533,46 @@ def test_first_run_has_full_coverage_without_active_units() -> None:
 
 
 def test_duplicate_new_identity_emits_kapsam_ihlali_finding() -> None:
-    """`ekle` satırı aktif bir kimliği YENİDEN kullanamaz."""
-    yeni = _tam_icerik(kanca_kaliplari=[KORUNAN_KANCA, CIKARILACAK_KANCA, "Yeni kanca"])
-    harita = _kimlik_haritasi(AKTIF_ICERIK, yeni)
-    yeni_yol = _yol(yeni, "kanca_kaliplari", "Yeni kanca")
-    harita[yeni_yol] = KIMLIKLER[_yol(AKTIF_ICERIK, "kapsam", AKTIF_ICERIK["kapsam"])]
+    """`ekle` satırı aktif bir kimliği YENİDEN kullanamaz (K-86/K-152)."""
+    aday = _tam_icerik(kanca_kaliplari=[KORUNAN_KANCA, "Yeni kanca kalibi"])
+    yeni_yol = _yol(aday, "kanca_kaliplari", "Yeni kanca kalibi")
     gunluk = _gunluk(
-        yeni,
-        kimlikler=harita,
-        degis={yeni_yol: {"karar": "ekle", "kanit": f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}"}},
+        aday,
+        degis={
+            yeni_yol: {
+                "karar": "ekle",
+                "kanit": f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}",
+            }
+        },
     )
-    sonuc = engine.run_checks(_girdi(icerik=yeni, gunluk=gunluk))
-    assert "kapsam_ihlali" in _siniflar(sonuc)
+    # Yol AYNI olduğu için satır aktif kimliği (CIKAN_KIMLIK) taşır: yeni kalıp
+    # eski kimliğin üstüne yazılmaya çalışılıyor.
+    sonuc = engine.run_checks(_girdi(icerik=aday, gunluk=gunluk))
+    detaylar = [b.detay for b in sonuc.bulgular if b.sinif == "kapsam_ihlali"]
+    assert any("yeniden kullan" in detay for detay in detaylar), detaylar
+
+
+def test_yerine_gecer_must_point_to_an_active_unit() -> None:
+    """`yerine_gecer` aktif olmayan kimliğe işaret edemez — çift KOPUK olur."""
+    aday = _tam_icerik(
+        kanca_kaliplari=[KORUNAN_KANCA, CIKARILACAK_KANCA, "Yeni kanca kalibi"]
+    )
+    harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
+    yeni_yol = _yol(aday, "kanca_kaliplari", "Yeni kanca kalibi")
+    gunluk = _gunluk(
+        aday,
+        kimlikler=harita,
+        degis={
+            yeni_yol: {
+                "karar": "ekle",
+                "kanit": f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}",
+                "yerine_gecer": "ku-ffffffffffff",
+            }
+        },
+    )
+    sonuc = engine.run_checks(_girdi(icerik=aday, gunluk=gunluk))
+    detaylar = [b.detay for b in sonuc.bulgular if b.sinif == "kapsam_ihlali"]
+    assert any("yerine_gecer" in detay for detay in detaylar), detaylar
 
 
 def test_new_identity_that_is_unique_emits_no_finding() -> None:
@@ -833,7 +866,7 @@ def test_unconsumed_flag_becomes_an_open_question() -> None:
     """Sentezden sağ çıkmaması gereken bayrak motora ulaşırsa AÇIK SORUDUR."""
     sonuc = engine.run_checks(
         _ekle_girdisi(
-            kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK} [kopya-supheci]"
+            kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK} [kopya-şüphesi]"
         )
     )
     assert "acik_soru" in _siniflar(sonuc)
@@ -1041,3 +1074,11 @@ def test_engine_consumes_only_validated_inventory() -> None:
         satir.unit_id for satir in girdi.denetci_envanterleri.birinci.yeniden_dogrulama
     }
     assert kimlikler == set(AKTIF_BIRIMLER)
+
+
+def test_yerel_degil_flag_closes_the_single_source_exception() -> None:
+    """`[yerel-değil]` tekil istisnayı KAPATIR — canlı URL bile yetmez."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, {DOGRULANMIS_URL} [yerel-değil]")
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)

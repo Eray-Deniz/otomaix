@@ -1,5 +1,6 @@
 """Calendar endpoints — posts in date range + Turkish public holidays."""
 
+import logging
 from datetime import date, datetime
 from uuid import UUID
 
@@ -11,8 +12,11 @@ from app.core.cache import get_cached, set_cached
 from app.core.database import get_db
 from app.core.security import assert_brand_owned, assert_post_owned, get_current_user
 from app.models.schemas import OkResponse
+from app.services.sector_pipeline.runs import mask_secrets
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
+
+logger = logging.getLogger(__name__)
 
 
 # ─── GET /calendar/posts ─────────────────────────────────────────────────────
@@ -119,6 +123,18 @@ async def get_holidays(
         data = [dict(r) for r in rows]
         await set_cached(cache_key, data, 86400)  # 24 saat
         return OkResponse(data=data)
-    except Exception:
-        # Table may not exist yet — return empty list
+    except Exception as exc:
+        # K-112 (a) — takvim ERİŞİLEMEZ. Bağlam BOŞ döner ve özel gün bloğu
+        # sessizce düşer: uydurma bir anahtar üretmek, karşılıksız bir dönemi
+        # pakete ve prompt'a sokardı. Sessizlik yalnız KULLANICI yüzeyindedir;
+        # arıza günlüğe ZORUNLU olarak yazılır — logsuz sessiz düşüş, aynı
+        # arızanın haftalarca fark edilmemesi demektir.
+        #
+        # Günlük K-136 maskeleme süzgecinden geçer: bağlantı dizesi taşıyan bir
+        # sürücü hatası ham hâliyle yazılsa parola günlüğe düşerdi.
+        logger.warning(
+            "takvim okunamadı (yıl=%s) — özel gün bağlamı BOŞ döndü, blok düştü: %s",
+            year,
+            mask_secrets(f"{type(exc).__name__}: {exc}"),
+        )
         return OkResponse(data=[])

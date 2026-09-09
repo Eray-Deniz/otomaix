@@ -797,6 +797,17 @@ def _kacak_referanslar(kaynak: str, dosya_adi: str) -> list[str]:
             anotasyonlar.append(dugum.returns)
         for anot in anotasyonlar:
             izinli.update(id(alt) for alt in ast.walk(anot))
+        # KİMLİK KARŞILAŞTIRMASI muaftır: `type(x) is not ValidatedAuditPair`
+        # örnek ÜRETEMEZ, üretilmiş bir nesneyi REDDEDER. Muafiyet arayüz eki
+        # R5'in bağladığı `EngineInputs.__post_init__` kapısı için gerekli
+        # (ördek tipleme kabul edilmez), ama bir DOSYA carve-out'u değildir:
+        # her modülde aynı biçim muaf, her modülde çağrı/takma ad KAÇAKTIR.
+        if isinstance(dugum, ast.Compare) and all(
+            isinstance(op, (ast.Is, ast.IsNot)) for op in dugum.ops
+        ):
+            for taraf in [dugum.left, *dugum.comparators]:
+                if isinstance(taraf, (ast.Name, ast.Attribute)):
+                    izinli.add(id(taraf))
 
     ihlaller = set()
     for dugum in ast.walk(agac):
@@ -819,20 +830,24 @@ def test_validated_pair_constructed_only_in_check_snapshot_agreement() -> None:
     assert len(moduller) > 10, f"tarama kümesi boş/dar: {len(moduller)}"
     assert auditors_yolu in {y.resolve() for y in moduller}
 
-    disarida = []
-    for yol in moduller:
-        kaynak = yol.read_text(encoding="utf-8")
-        if SINIF_ADI not in kaynak:
-            continue
-        if yol.resolve() != auditors_yolu:
-            disarida.append(str(yol))
-    assert disarida == [], (
-        f"{SINIF_ADI} adı üretim ağacında `auditors.py` dışında geçiyor: "
-        f"{disarida} — ikinci bir üretici yolu doğabilir"
+    # Kapı DOSYA adına değil BİÇİME bakar (Plan 2 Task 12): adı anan her üretim
+    # modülü aynı AST taramasından geçer. Eski yazım "yalnız `auditors.py`
+    # anabilir" diyordu; arayüz eki R5 `EngineInputs.__post_init__`'te tipin
+    # KENDİSİNİ zorunlu kıldığı için o kural, ekin bağladığı kapıyı imkânsız
+    # kılıyordu. Yeni kural üreticiyi AYNI güçle korur — çağrı da takma ad da
+    # her dosyada kaçaktır — ve muafiyet yalnız üretemeyen biçimlerdedir
+    # (anotasyon, kimlik karşılaştırması).
+    anan = [yol for yol in moduller if SINIF_ADI in yol.read_text(encoding="utf-8")]
+    assert auditors_yolu in {yol.resolve() for yol in anan}
+    kacaklar: list[str] = []
+    for yol in anan:
+        kacaklar.extend(
+            _kacak_referanslar(yol.read_text(encoding="utf-8"), str(yol))
+        )
+    assert kacaklar == [], (
+        f"{SINIF_ADI} üretim ağacında kaçak biçimde geçiyor: {kacaklar} — "
+        "ikinci bir üretici yolu doğabilir"
     )
-    assert _kacak_referanslar(
-        auditors_yolu.read_text(encoding="utf-8"), "auditors.py"
-    ) == []
 
 
 def test_pair_constructor_scan_detects_a_planted_violation(tmp_path) -> None:
@@ -848,6 +863,23 @@ def test_pair_constructor_scan_detects_a_planted_violation(tmp_path) -> None:
     # İKİ kaçak biçimi: gövde dışı ÇAĞRI (8) ve TAKMA AD (10). İkincisi
     # mutasyon M35'te taramadan sessizce geçmişti.
     assert _kacak_referanslar(kirli, "sahte.py") == ["sahte.py:10", "sahte.py:8"]
+
+
+def test_pair_scan_allows_identity_check_but_not_construction_in_it() -> None:
+    """Muafiyetin SINIRI: kimlik karşılaştırması geçer, içindeki çağrı GEÇMEZ."""
+    temiz = (
+        "def kapi(x):\n"
+        "    if type(x) is not ValidatedAuditPair:\n"
+        "        raise TypeError('ham rapor girmez')\n"
+    )
+    assert _kacak_referanslar(temiz, "temiz.py") == []
+
+    kirli = (
+        "def kapi(x):\n"
+        "    if x is ValidatedAuditPair():\n"
+        "        return x\n"
+    )
+    assert _kacak_referanslar(kirli, "kirli.py") == ["kirli.py:2"]
 
 
 # ═══ 7. ToolSpec — ölçülmüş komut satırları ═════════════════════════════════

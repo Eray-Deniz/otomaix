@@ -362,8 +362,13 @@ def _aktif_birimler(active_package: Mapping | None) -> dict[str, dict]:
         raise SynthesisFailed(f"aktif paket kimlik kapısını geçmedi: {hata}") from hata
 
 
-def _dogrulanmis_referanslar(rapor) -> set[str]:
+def dogrulanmis_referanslar(rapor) -> set[str]:
     """Raporun DOĞRULANMIŞ kaynak referansları — TAM EŞLEŞME kümesi.
+
+    **PUBLIC (Plan 2 Task 12).** Motorun kanıt kontrolü AYNI kuralı sorar;
+    alt çizgili ad "modül içi" diye yalan söylüyordu. İkinci bir kopya yazmak
+    iki sürümlü bir kanıt ölçütü üretirdi — `auditors.kok_yolunu_kapila`
+    emsali: kural TEK yerde yaşar, iki tüketici onu ÇAĞIRIR.
 
     Doğrulanmış = ADIM 1 örnekleminde hem erişilmiş hem içerikçe uyumlu
     (sözleşmenin `DOĞRULANDI` sonucu). Küme, o satırın hem URL'sini hem kör
@@ -420,7 +425,7 @@ def _cikarma_kapisi(
         ]
         if not celiskiler:
             continue
-        referanslar = _dogrulanmis_referanslar(rapor)
+        referanslar = dogrulanmis_referanslar(rapor)
         if any(str(satir.kanit).strip() in referanslar for satir in celiskiler):
             destekleyen.append(rapor.denetci)
         else:

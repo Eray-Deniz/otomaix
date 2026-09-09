@@ -68,6 +68,21 @@ class GateNotSatisfied(RuntimeError):
     """Geçiş kapısının kanıtı sağlanmadı — geçiş YAPILMAZ."""
 
 
+class CalendarUnavailable(RuntimeError):
+    """K-112 (b) — sistem takvimi OKUNAMADI, yazım fail-closed durdu.
+
+    Bu yolda sessiz düşüş YANLIŞ olurdu: doğrulayıcı özel gün anahtarını sistem
+    takvimine karşı sınar; takvim okunamazken yazıma devam etmek, uydurma bir
+    anahtarı pakete ALMAK demektir (spec §4.4). Doğru davranış açık ve TİPLİ bir
+    hatayla durmaktır.
+
+    Bugüne kadar davranış doğruydu ama KAZARAydı — ham sürücü istisnası çağırana
+    kadar yükseliyordu (taban ölçümü:
+    `docs/research/2026-08-27-k112-takvim-erisilemezlik-taban.md`). Tipli sınıf
+    onu bilinçli kılar: çağıran "takvim erişilemez" hâlini şema hatasından ve
+    kapı reddinden AYIRT EDEBİLİR. Ham sebep `__cause__` ile korunur, yutulmaz."""
+
+
 def _require_flag(value: Any, label: str) -> None:
     """Alan GERÇEKTEN `bool` olmalı — doğru-görünen değer kanıt değildir.
 
@@ -850,9 +865,15 @@ async def insert_draft(
                 "karar günlüğü şemayı geçmedi: " + "; ".join(log_errors)
             )
 
-    holiday_rows = await db.fetch(
-        "SELECT name_tr FROM social.public_holidays WHERE name_tr IS NOT NULL"
-    )
+    try:
+        holiday_rows = await db.fetch(
+            "SELECT name_tr FROM social.public_holidays WHERE name_tr IS NOT NULL"
+        )
+    except Exception as exc:  # K-112 (b): erişilemez takvim -> fail-closed
+        raise CalendarUnavailable(
+            "sistem takvimi okunamadı — özel gün anahtarı doğrulanamaz, taslak "
+            "YAZILMAZ (K-112 (b): doğrulanmamış anahtar pakete giremez)"
+        ) from exc
     holiday_keys = {
         key
         for key in (normalize_special_day_key(row["name_tr"]) for row in holiday_rows)
