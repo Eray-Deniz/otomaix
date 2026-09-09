@@ -33,6 +33,7 @@ import logging
 import subprocess
 import sys
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -195,6 +196,30 @@ def _iki_gecerli_rapor(**kw) -> dict[str, auditors.RunnerOutcome]:
     return {rol: _tamam(_rapor_metni(**kw)) for rol in auditors.DENETCI_ROLLERI}
 
 
+# ═══ K-14 kapısı — tur ÖLÇÜLMÜŞ erişim olmadan BAŞLAMAZ ═════════════════════
+
+
+def _erisim_var(arac: str) -> bool:
+    """K-14 probu: erişimi DOĞRULAYAN ölçüm — turu başlatan tek durum."""
+    return True
+
+
+async def _tur_kos(db, paket, *, runner, run_id, web_prob=_erisim_var):
+    """`run_audit_round` sarmalayıcısı — probu TEK yerde görünür kılar.
+
+    Kapı bilinçli olarak davranış değiştirdi: `web_prob` verilmeyen bir tur
+    artık BAŞLAMAZ (`PreflightDurumu.OLCULMEDI`). Prob'u 22 çağrı yerine ayrı
+    ayrı yapıştırmak kapıyı görünmez kılardı; sarmalayıcı onu tek satırda
+    beyan eder. **Kapı GEVŞETİLMEDİ:** varsayılan bir ÖLÇÜM sonucudur, kapıyı
+    atlayan bir bayrak değildir, ve kapının kendisi `_tur_kos` üzerinden DEĞİL
+    doğrudan `auditors.run_audit_round` çağıran matris hücrelerinde ölçülür
+    (`on-kontrol` kapısı, 7 hücre).
+    """
+    return await auditors.run_audit_round(
+        db, paket, runner=runner, run_id=run_id, web_prob=web_prob
+    )
+
+
 # ═══ Paket ve koşu kurulumu ═════════════════════════════════════════════════
 
 
@@ -281,7 +306,7 @@ async def _durum(db, run_id: str) -> tuple[str, str | None]:
 
 async def test_two_valid_reports_produce_valid_round(kosu):
     db, run_id, paket = kosu
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(_iki_gecerli_rapor()), run_id=run_id
     )
     assert tur.gecerli is True
@@ -297,7 +322,7 @@ async def test_single_report_blocks_synthesis(kosu):
     ciktilar[auditors.DENETCI_ROLLERI[1]] = auditors.RunnerOutcome(
         durum="hata", stdout="", stderr="araç düştü", exit_code=1
     )
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(ciktilar), run_id=run_id
     )
     assert tur.gecerli is False
@@ -314,7 +339,7 @@ async def test_invalid_format_report_blocks_synthesis(kosu):
     db, run_id, paket = kosu
     ciktilar = _iki_gecerli_rapor()
     ciktilar[auditors.DENETCI_ROLLERI[1]] = _tamam(_rapor_metni(atlanan_bolum=3))
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(ciktilar), run_id=run_id
     )
     assert tur.gecerli is False and tur.reports == ()
@@ -332,7 +357,7 @@ async def test_embedded_instruction_in_report_is_treated_as_data(kosu):
         rol: _tamam(_rapor_metni(ek_govde=zararli))
         for rol in auditors.DENETCI_ROLLERI
     }
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(ciktilar), run_id=run_id
     )
     assert tur.gecerli is True
@@ -347,7 +372,7 @@ async def test_embedded_instruction_in_report_is_treated_as_data(kosu):
 async def test_auditors_run_sequentially(kosu):
     db, run_id, paket = kosu
     runner = SahteRunner(_iki_gecerli_rapor())
-    await auditors.run_audit_round(db, paket, runner=runner, run_id=run_id)
+    await _tur_kos(db, paket, runner=runner, run_id=run_id)
     birinci, ikinci = auditors.DENETCI_ROLLERI
     assert runner.olaylar == [
         ("giris", birinci),
@@ -360,7 +385,7 @@ async def test_auditors_run_sequentially(kosu):
 async def test_auditors_get_separate_working_dirs(kosu):
     db, run_id, paket = kosu
     runner = SahteRunner(_iki_gecerli_rapor())
-    await auditors.run_audit_round(db, paket, runner=runner, run_id=run_id)
+    await _tur_kos(db, paket, runner=runner, run_id=run_id)
     birinci, ikinci = auditors.DENETCI_ROLLERI
     assert runner.cwd_lari[birinci] == paket.kopyalar[birinci]
     assert runner.cwd_lari[ikinci] == paket.kopyalar[ikinci]
@@ -384,7 +409,7 @@ async def test_crash_mid_round_marks_incomplete_and_preserves_files(kosu):
     ciktilar[ikinci] = auditors.RunnerOutcome(
         durum="hata", stdout="", stderr="alt süreç çöktü", exit_code=9
     )
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(ciktilar), run_id=run_id
     )
 
@@ -412,7 +437,7 @@ async def test_second_round_does_not_overwrite_existing_report(kosu):
     """Ham katman salt-eklemedir: ikinci koşum dosyayı EZMEZ, turu düşürür."""
     db, run_id, paket = kosu
     birinci = auditors.DENETCI_ROLLERI[0]
-    await auditors.run_audit_round(
+    await _tur_kos(
         db, paket, runner=SahteRunner(_iki_gecerli_rapor()), run_id=run_id
     )
     ilk_icerik = (paket.kopyalar[birinci] / f"RAPOR-{birinci}.md").read_text(
@@ -420,7 +445,7 @@ async def test_second_round_does_not_overwrite_existing_report(kosu):
     )
 
     farkli = {rol: _tamam(_rapor_metni() + "\nİKİNCİ KOŞUM\n") for rol in auditors.DENETCI_ROLLERI}
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(farkli), run_id=run_id
     )
     assert tur.gecerli is False
@@ -436,7 +461,7 @@ async def test_orchestrator_marks_incomplete_on_timeout(kosu):
     ciktilar[auditors.DENETCI_ROLLERI[0]] = auditors.RunnerOutcome(
         durum="zaman-asimi", stdout="", stderr="", exit_code=None
     )
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(ciktilar), run_id=run_id
     )
     assert tur.gecerli is False
@@ -451,7 +476,7 @@ async def test_orchestrator_marks_incomplete_on_nonzero(kosu):
     ciktilar[auditors.DENETCI_ROLLERI[0]] = auditors.RunnerOutcome(
         durum="hata", stdout="", stderr="", exit_code=3
     )
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(ciktilar), run_id=run_id
     )
     assert tur.gecerli is False
@@ -468,7 +493,7 @@ async def test_incomplete_reason_is_masked(kosu):
     ciktilar[auditors.DENETCI_ROLLERI[0]] = auditors.RunnerOutcome(
         durum="hata", stdout="", stderr=f"api_key={sir} ile bağlanılamadı", exit_code=1
     )
-    await auditors.run_audit_round(
+    await _tur_kos(
         db, paket, runner=SahteRunner(ciktilar), run_id=run_id
     )
     _, sebep = await _durum(db, run_id)
@@ -709,7 +734,7 @@ async def test_round_rejects_report_snapshot_differing_from_packet(
         return auditors.ValidatedReport(bozuk, ())
 
     monkeypatch.setattr(auditors, "validate_report", sapan)
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=SahteRunner(_iki_gecerli_rapor()), run_id=run_id
     )
     assert tur.gecerli is False and tur.reports == ()
@@ -1026,7 +1051,7 @@ async def test_round_refuses_a_run_id_that_is_not_the_packets(kosu, tmp_path):
     runner = SahteRunner(_iki_gecerli_rapor())
 
     with pytest.raises(ValueError, match="paket"):
-        await auditors.run_audit_round(db, paket, runner=runner, run_id=yabanci)
+        await _tur_kos(db, paket, runner=runner, run_id=yabanci)
 
     assert runner.olaylar == [], "kimlik ayrışmasına rağmen alt süreç koştu"
     # Yabancı kimliğe HİÇBİR satır yazılmadı; paketin kendi satırı da el
@@ -1065,7 +1090,7 @@ async def test_round_marks_incomplete_when_the_runner_raises_os_error(
         patlayan_rol=auditors.DENETCI_ROLLERI[0],
         istisna=istisna,
     )
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=runner, run_id=run_id
     )
 
@@ -1084,7 +1109,7 @@ async def test_round_marks_incomplete_and_reraises_on_cancellation(kosu):
         istisna=asyncio.CancelledError(),
     )
     with pytest.raises(asyncio.CancelledError):
-        await auditors.run_audit_round(db, paket, runner=runner, run_id=run_id)
+        await _tur_kos(db, paket, runner=runner, run_id=run_id)
 
     durum, sebep = await _durum(db, run_id)
     assert durum == "tamamlanmadi"
@@ -1102,7 +1127,7 @@ async def test_round_marks_incomplete_and_reraises_unexpected_exception(kosu):
         istisna=RuntimeError("beklenmeyen çöküş"),
     )
     with pytest.raises(RuntimeError, match="beklenmeyen çöküş"):
-        await auditors.run_audit_round(db, paket, runner=runner, run_id=run_id)
+        await _tur_kos(db, paket, runner=runner, run_id=run_id)
 
     durum, _ = await _durum(db, run_id)
     assert durum == "tamamlanmadi"
@@ -1118,7 +1143,7 @@ async def test_os_error_after_the_first_auditor_preserves_its_report(kosu):
         patlayan_rol=ikinci,
         istisna=FileNotFoundError(2, "No such file or directory: 'codex'"),
     )
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=runner, run_id=run_id
     )
 
@@ -1131,27 +1156,41 @@ async def test_os_error_after_the_first_auditor_preserves_its_report(kosu):
 
 
 async def test_exception_path_never_overwrites_an_existing_report(kosu):
-    """İSTİSNA yolunda da salt-eklemelik korunur — var olan dosya EZİLMEZ."""
+    """İSTİSNA yolunda da salt-eklemelik korunur — var olan dosya EZİLMEZ.
+
+    **Dosya tur BAŞLADIKTAN SONRA doğar.** Önceki sürüm dosyayı turdan ÖNCE
+    yazıyordu; o yol artık kabul bölgesindeki çakışma kapısına takılır ve
+    istisna yoluna HİÇ varmaz. Ulaşılabilir senaryo, aracın KENDİSİNİN kendi
+    çalışma dizinine rapor dosyası bırakmasıdır (`cwd` bir yazma sınırı
+    değildir) — kalıcılaştırma o baytları da EZEMEZ.
+    """
     db, run_id, paket = kosu
     birinci, ikinci = auditors.DENETCI_ROLLERI
-    onceki = "ÖNCEKİ KOŞUMUN RAPORU\n"
-    _rapor_yolu(paket, birinci).write_text(onceki, encoding="utf-8")
+    aracin_yazdigi = "ARACIN KENDİ YAZDIĞI RAPOR\n"
 
-    runner = PatlayanRunner(
+    class KendiDosyasiniYazanRunner(PatlayanRunner):
+        def run(self, tool: str, cwd: Path, prompt_path: Path):
+            if tool == birinci:
+                _rapor_yolu(paket, birinci).write_text(
+                    aracin_yazdigi, encoding="utf-8"
+                )
+            return super().run(tool, cwd, prompt_path)
+
+    runner = KendiDosyasiniYazanRunner(
         _iki_gecerli_rapor(),
         patlayan_rol=ikinci,
         istisna=OSError(5, "Input/output error"),
     )
-    tur = await auditors.run_audit_round(
-        db, paket, runner=runner, run_id=run_id
-    )
+    tur = await _tur_kos(db, paket, runner=runner, run_id=run_id)
 
     assert tur.gecerli is False
     # Sebebin İSTİSNAYI adlandırması, yolun gerçekten istisna yolu olduğunu
-    # ölçer: rapor erken yazılsaydı tur denetçi-2'ye VARMADAN "dosya zaten
-    # var" ile düşer ve bu test istisna yolunu HİÇ görmezdi.
+    # ölçer: kabul bölgesindeki çakışma kapısına takılsaydı sebep "hedef rapor
+    # dosyası ZATEN var" olurdu ve bu test istisna yolunu HİÇ görmezdi.
     assert tur.sebep and "OSError" in tur.sebep
-    assert _rapor_yolu(paket, birinci).read_text(encoding="utf-8") == onceki
+    assert _rapor_yolu(paket, birinci).read_text(encoding="utf-8") == (
+        aracin_yazdigi
+    )
 
 
 # ═══ 11. B3 — sızıntı kanalı: denetçi-1 raporu diske GEÇ yazılır ════════════
@@ -1186,7 +1225,7 @@ async def test_first_report_is_not_on_disk_while_the_second_auditor_runs(kosu):
     """
     db, run_id, paket = kosu
     runner = GozlemciRunner(_iki_gecerli_rapor(), paket)
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=runner, run_id=run_id
     )
 
@@ -1230,7 +1269,7 @@ async def test_cwd_is_not_a_security_boundary_and_the_declaration_is_measured(
             kacak[tool] = (kardes / "00-GOREV.md").read_text(encoding="utf-8")
             return super().run(tool, cwd, prompt_path)
 
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db, paket, runner=GezenRunner(_iki_gecerli_rapor()), run_id=run_id
     )
     assert tur.gecerli is True
@@ -1257,7 +1296,7 @@ async def test_round_runs_preflight_before_any_auditor(kosu):
             sira.append(f"runner:{tool}")
             return super().run(tool, cwd, prompt_path)
 
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db,
         paket,
         runner=KayitliRunner(_iki_gecerli_rapor()),
@@ -1284,7 +1323,7 @@ async def test_round_rejects_a_report_declaring_fewer_sources_than_the_packet(
     paket = _paket(tmp_path / "ucluk", run_id, kaynak_sayisi=3)
     assert paket.yetkili_kaynak_sayisi == 3
 
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db,
         paket,
         runner=SahteRunner(_iki_gecerli_rapor(kaynak_sayisi=2)),
@@ -1300,7 +1339,7 @@ async def test_round_accepts_a_report_matching_the_authoritative_count(
     """POZİTİF KONTROL: yetkili sayı eşit + satırlar tam → tur GEÇERLİ."""
     db, run_id, _ = kosu
     paket = _paket(tmp_path / "ucluk", run_id, kaynak_sayisi=3)
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db,
         paket,
         runner=SahteRunner(_iki_gecerli_rapor(kaynak_sayisi=3)),
@@ -1314,7 +1353,7 @@ async def test_round_rejects_the_environment_constraint_when_access_was_measured
 ):
     """Ön kontrol erişimi ÖLÇTÜYSE ortam-kısıtı muafiyeti KABUL EDİLMEZ."""
     db, run_id, paket = kosu
-    tur = await auditors.run_audit_round(
+    tur = await _tur_kos(
         db,
         paket,
         runner=SahteRunner(_iki_gecerli_rapor(ortam_kisiti=True)),
@@ -1325,14 +1364,502 @@ async def test_round_rejects_the_environment_constraint_when_access_was_measured
     assert tur.sebep and "ortam kısıtı" in tur.sebep
 
 
-async def test_environment_constraint_is_legitimate_when_preflight_failed(kosu):
-    """POZİTİF KONTROL: erişim ölçülemediyse muafiyet MEŞRUDUR — tur geçerli."""
+async def test_measured_lack_of_access_stops_the_round_before_the_exemption(
+    kosu,
+):
+    """Ölçülmüş erişimsizlik turu BAŞLATMAZ — muafiyet turdan ERİŞİLEMEZ.
+
+    Önceki sürümde bu test "erişim ölçülemediyse muafiyet meşrudur, tur
+    geçerli" diyordu. K-14 gerçek kapıya çevrildiğinde bu davranış DEĞİŞTİ:
+    plan satır 200-201 "başarısızsa tur BAŞLAMAZ" der, dolayısıyla muafiyetin
+    meşru olduğu tek durum (`ERISIM_YOK`) turun hiç başlamadığı durumdur.
+    Test kapıyı gevşetmek yerine YENİ davranışı ölçer.
+    """
     db, run_id, paket = kosu
-    tur = await auditors.run_audit_round(
+    runner = SahteRunner(_iki_gecerli_rapor(ortam_kisiti=True))
+    tur = await _tur_kos(
         db,
         paket,
-        runner=SahteRunner(_iki_gecerli_rapor(ortam_kisiti=True)),
+        runner=runner,
         run_id=run_id,
         web_prob=lambda arac: False,
     )
-    assert tur.gecerli is True, tur.sebep
+    assert tur.gecerli is False
+    assert tur.sebep and "erisim-yok" in tur.sebep
+    assert runner.olaylar == [], "kapı reddetti ama runner KOŞTU"
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+def test_exemption_is_legitimate_only_for_measured_lack_of_access() -> None:
+    """Muafiyet kapısı DÖRT durumu ayırır — "ölçülmedi" muafiyet ÜRETMEZ.
+
+    Kapı `run_audit_round`'dan bugün ERİŞİLEMEZ (başlama kapısı yalnız
+    `ERISIM_VAR`'ı geçirir), bu yüzden fonksiyon DOĞRUDAN ölçülür. Dürüst
+    etiket: ölçülen şey kapının kendisidir, tur üzerinden erişilebilirliği
+    DEĞİL.
+    """
+    dogrulanmis = _dogrulanmis(
+        auditors.DENETCI_ROLLERI[0], _rapor_metni(ortam_kisiti=True)
+    )
+    assert dogrulanmis.rapor is not None, dogrulanmis.errors
+
+    beklenen_yasak = {
+        auditors.PreflightDurumu.ERISIM_VAR: True,
+        auditors.PreflightDurumu.ERISIM_YOK: False,
+        auditors.PreflightDurumu.OLCULMEDI: True,
+        auditors.PreflightDurumu.OLCUM_ARIZASI: True,
+    }
+    assert set(beklenen_yasak) == set(auditors.PreflightDurumu), (
+        "durum kümesi büyüdü ama muafiyet beklentisi güncellenmedi"
+    )
+    for durum, yasak in beklenen_yasak.items():
+        on_kontrol = auditors.PreflightResult(
+            arac="denetci-1",
+            durum=durum,
+            sebep="" if durum is auditors.PreflightDurumu.ERISIM_VAR else "ölçüm",
+        )
+        hatalar = auditors._tur_url_kapisi(
+            dogrulanmis.rapor,
+            yetkili_kaynak_sayisi=2,
+            on_kontrol=on_kontrol,
+        )
+        muafiyet_reddi = [h for h in hatalar if "ortam kısıtı" in h]
+        assert bool(muafiyet_reddi) is yasak, (
+            f"{durum.value}: muafiyet yasağı {bool(muafiyet_reddi)}, "
+            f"beklenen {yasak} — 'ölçülmedi' ile 'ölçüldü, erişim yok' AYNI "
+            "yetkiyi veremez"
+        )
+
+
+# ═══ 13. Düzeltme turu — kapanışı ÜRETİLMİŞ matris kanıtlar ═════════════════
+#
+# Beş bulgu BEŞ AYRI YAMA DEĞİL, TEK BİR SINIFTI: yeni kontrol verinin
+# ÜRETİLDİĞİ yere kondu, kararın UYGULANDIĞI yere değil. Elle seçilmiş beş
+# vaka o sınıfı kapatmaz — yalnız bulunanı tekrar kontrol eder. Matris bu
+# yüzden KAVRAMDAN türetilir ve `parametrize` ile ÜRETİLİR.
+
+
+class _KacanAriza(BaseException):
+    """`Exception` DEĞİL — `preflight`'ın yutmadığı, koruma bölgesine ait istisna.
+
+    `preflight` `Exception`'ı `OLCUM_ARIZASI`'na çevirir; dolayısıyla ön kontrol
+    rolünden çıkış-yolu üretebilen tek istisna sınıfı KAÇAN olanlardır. Bu
+    ayrım matrisin `on-kontrol` rolünde hangi hücrelerin var olduğunu belirler.
+    """
+
+
+EKSEN_1_KAPI = (
+    "yok",
+    "kimlik-bagi",
+    "on-kontrol",
+    "dosya-cakismasi",
+    "yol-kapisi",
+)
+"""Eksen 1 — giriş kapısı (`yok` = hiçbir kapı ihlal edilmedi)."""
+
+EKSEN_2_CIKIS = (
+    "kapi-reddi",
+    "normal-basari",
+    "normal-ariza",
+    "os-error",
+    "cancelled",
+    "beklenmeyen",
+)
+"""Eksen 2 — çıkış yolu. `kapi-reddi` kabul bölgesinde biten turdur."""
+
+EKSEN_3_ROL = ("yok",) + auditors.DENETCI_ROLLERI + ("ikisi", "on-kontrol")
+"""Eksen 3 — arızanın doğduğu rol (`yok` = rol ayırt edici değil)."""
+
+
+@dataclass(frozen=True)
+class _Hucre:
+    """Matrisin bir hücresi — kurulum ekseni + ÖLÇÜLEN yüklem beklentisi."""
+
+    kapi: str
+    cikis: str
+    rol: str
+    alt: str
+    runner_cagrilari: int
+    """(a) yan etki — kaç alt süreç çağrısı bekleniyor."""
+    rapor_dosyalari: tuple[str, ...]
+    """(b) kanıt — tur bittiğinde diskte hangi rollerin raporu duruyor."""
+    yaratilan_dosya: int
+    """(a) yan etki — çağrının paket kökü altında YARATTIĞI dosya sayısı."""
+    kosu_durumu: str
+    """(c) koşu durumu — `sector_package_runs.durum`."""
+    firlatan: type[BaseException] | None
+
+    @property
+    def kimlik(self) -> str:
+        return f"{self.kapi}|{self.cikis}|{self.rol}|{self.alt or '-'}"
+
+
+def _matris_hucreleri() -> tuple[_Hucre, ...]:
+    """Hücreleri KAVRAMDAN türetir — bulunan örneklerden DEĞİL.
+
+    Türetme kuralı iki cümledir:
+
+    1. **Bir giriş kapısı ihlal edildiğinde koşum bölgesi HİÇ yürümez.** Çıkış
+       yolu ve arıza rolü o hücrede ayırt edici değildir; yerlerini kapının
+       KENDİ ayırt edici alt ekseni alır (yol kapısı: takma ad biçimi × dosya
+       yaratan yüzey; ön kontrol: ölçüm durumu × kapanan rol; dosya çakışması:
+       hangi rolün dosyası kalmış). Kap çarpımı yerine ayırt eden ekseni
+       büyütmek budur.
+    2. **Kapı ihlali yokken çıkış-yolu × arıza-rolü çarpımı ayırt edicidir.**
+       Çarpım kavramla budanır: `normal-basari`nin arızalı rolü yoktur ve
+       `preflight` `Exception`'ı yuttuğu için ön kontrol rolü YALNIZ kaçan
+       istisnalarla (`BaseException`) eşleşir.
+    """
+    hucreler: list[_Hucre] = []
+    birinci, ikinci = auditors.DENETCI_ROLLERI
+
+    # (1a) Kimlik bağı — her şeyden ÖNCE, DB mutasyonu YOK.
+    hucreler.append(
+        _Hucre(
+            "kimlik-bagi", "kapi-reddi", "yok", "yabanci-run-id",
+            0, (), 0, "calisiyor", ValueError,
+        )
+    )
+
+    # (1b) Yol kapısı — takma ad biçimi × dosya yaratan yüzey.
+    for bicim in ("gorece-kok", "nokta-nokta", "symlink-ata"):
+        for yuzey in ("build_packet", "PacketRef"):
+            hucreler.append(
+                _Hucre(
+                    "yol-kapisi", "kapi-reddi", "yok", f"{bicim}@{yuzey}",
+                    0, (), 0, "calisiyor", ValueError,
+                )
+            )
+
+    # (1c) Dosya çakışması — hangi rolün raporu önceki turdan kalmış.
+    for rol, kalanlar in (
+        (birinci, (birinci,)),
+        (ikinci, (ikinci,)),
+        ("ikisi", auditors.DENETCI_ROLLERI),
+    ):
+        hucreler.append(
+            _Hucre(
+                "dosya-cakismasi", "kapi-reddi", rol, "onceki-turdan-kalan",
+                0, kalanlar, 0, "tamamlanmadi", None,
+            )
+        )
+
+    # (1d) Ön kontrol — ölçüm durumu × kapanan rol. `olculmedi` tek yoldan
+    #      (prob YOK) doğar ve İKİ rolü birden kapatır: alt eksen orada tekil.
+    for durum, roller in (
+        ("olculmedi", ("ikisi",)),
+        ("erisim-yok", (birinci, ikinci, "ikisi")),
+        ("olcum-arizasi", (birinci, ikinci, "ikisi")),
+    ):
+        for rol in roller:
+            hucreler.append(
+                _Hucre(
+                    "on-kontrol", "kapi-reddi", rol, durum,
+                    0, (), 0, "tamamlanmadi", None,
+                )
+            )
+
+    # (2a) Kapı ihlali yok — pozitif kontrol.
+    hucreler.append(
+        _Hucre(
+            "yok", "normal-basari", "yok", "",
+            2, auditors.DENETCI_ROLLERI, 2, "calisiyor", None,
+        )
+    )
+
+    # (2b) Kapı ihlali yok — çıkış yolu × denetçi rolü. Arıza n. rolde
+    #      doğarsa n çağrı yapılmıştır ve ONDAN ÖNCEKİ roller kanıttır.
+    for sira, rol in enumerate(auditors.DENETCI_ROLLERI):
+        onceki = auditors.DENETCI_ROLLERI[:sira]
+        for cikis, firlatan in (
+            ("normal-ariza", None),
+            ("os-error", None),
+            ("cancelled", asyncio.CancelledError),
+            ("beklenmeyen", RuntimeError),
+        ):
+            hucreler.append(
+                _Hucre(
+                    "yok", cikis, rol, f"runner-{cikis}",
+                    sira + 1, onceki, len(onceki), "tamamlanmadi", firlatan,
+                )
+            )
+
+    # (2c) Kapı ihlali yok — arıza ÖN KONTROL rolünde doğar. `preflight`
+    #      `Exception`'ı yuttuğu için yalnız KAÇAN istisnalar hücre üretir.
+    for cikis, firlatan in (
+        ("cancelled", asyncio.CancelledError),
+        ("beklenmeyen", _KacanAriza),
+    ):
+        hucreler.append(
+            _Hucre(
+                "yok", cikis, "on-kontrol", f"prob-{cikis}",
+                0, (), 0, "tamamlanmadi", firlatan,
+            )
+        )
+    return tuple(hucreler)
+
+
+MATRIS = _matris_hucreleri()
+
+
+class _SayanRunner:
+    """Çağrı SAYAN ve istenen rolde PATLAYAN runner."""
+
+    def __init__(self, ciktilar, *, ariza_rolu=None, ariza=None) -> None:
+        self.ciktilar = ciktilar
+        self.ariza_rolu = ariza_rolu
+        self.ariza = ariza
+        self.cagrilar: list[str] = []
+
+    def run(self, tool: str, cwd: Path, prompt_path: Path):
+        self.cagrilar.append(tool)
+        if tool == self.ariza_rolu and self.ariza is not None:
+            raise self.ariza
+        return self.ciktilar[tool]
+
+
+def _dosya_goruntusu(kok: Path) -> dict[str, bytes]:
+    """Kök altındaki HER dosyanın baytları — salt-eklemelik ölçümünün tabanı."""
+    if not kok.exists():
+        return {}
+    return {
+        str(yol.relative_to(kok)): yol.read_bytes()
+        for yol in sorted(kok.rglob("*"))
+        if yol.is_file()
+    }
+
+
+def _diskteki_raporlar(kok: Path) -> tuple[str, ...]:
+    return tuple(
+        rol
+        for rol in auditors.DENETCI_ROLLERI
+        if (kok / rol / f"RAPOR-{rol}.md").exists()
+    )
+
+
+def _prob_kur(hucre: _Hucre):
+    """Hücrenin ön kontrol probunu KURAR — durum kapalı kümeden seçilir."""
+    birinci, ikinci = auditors.DENETCI_ROLLERI
+    hedefler = (
+        auditors.DENETCI_ROLLERI if hucre.rol == "ikisi" else (hucre.rol,)
+    )
+    if hucre.kapi == "on-kontrol":
+        if hucre.alt == "olculmedi":
+            return None
+        if hucre.alt == "erisim-yok":
+            return lambda arac: arac not in hedefler
+        def _patlayan(arac: str) -> bool:
+            if arac in hedefler:
+                raise RuntimeError("prob ölçemedi")
+            return True
+        return _patlayan
+    if hucre.rol == "on-kontrol":
+        istisna = (
+            asyncio.CancelledError()
+            if hucre.cikis == "cancelled"
+            else _KacanAriza("prob kaçan istisna fırlattı")
+        )
+        def _kacan(arac: str) -> bool:
+            raise istisna
+        return _kacan
+    return _erisim_var
+
+
+def _yol_kapisi_kurulumu(alt: str, tmp_path: Path, run_id: str, monkeypatch):
+    """Yol kapısı hücresini kurar: (çağrı, ÖLÇÜLEN canonical ağaç kökü).
+
+    Ölçülen ağaç `_paket`'in gerçekten dokunduğu yerdir. Prob ilk sürümde
+    `<dest>/<run_id>` gösteriyordu, oysa `_paket` `dest`'in ALTINA
+    `paketler/` koyar: kap boş bir dizini ölçüyor ve mutasyon altında da
+    yeşil kalıyordu. Prob GERÇEK yüklem zincirine karşı kurulur.
+    """
+    bicim, yuzey = alt.split("@")
+    ad = f"yk-{bicim}"
+    if bicim == "gorece-kok":
+        monkeypatch.chdir(tmp_path)
+        takma_dest = Path(ad)
+        gercek_dest = tmp_path / ad
+    elif bicim == "nokta-nokta":
+        (tmp_path / "ara").mkdir(exist_ok=True)
+        takma_dest = tmp_path / "ara" / ".." / ad
+        gercek_dest = tmp_path / ad
+    else:  # symlink-ata
+        (tmp_path / "gercek").mkdir(exist_ok=True)
+        baglanti = tmp_path / "baglanti"
+        if not baglanti.is_symlink():
+            baglanti.symlink_to(tmp_path / "gercek", target_is_directory=True)
+        takma_dest = baglanti / ad
+        gercek_dest = tmp_path / "gercek" / ad
+
+    if yuzey == "build_packet":
+        return (lambda: _paket(takma_dest, run_id)), gercek_dest
+
+    # PacketRef yüzeyi: paket GERÇEK yola kurulur, sonra TAKMA kökle sarılır.
+    ref = _paket(gercek_dest, run_id)
+    takma_kok = (
+        Path(ad) / "paketler" / run_id
+        if bicim == "gorece-kok"
+        else takma_dest / "paketler" / run_id
+    )
+    kopyalar = {rol: takma_kok / rol for rol in auditors.DENETCI_ROLLERI}
+
+    def _cagri():
+        return auditors.PacketRef(
+            run_id=ref.run_id,
+            yetkili_kaynak_sayisi=ref.yetkili_kaynak_sayisi,
+            sector_id=ref.sector_id,
+            kok=takma_kok,
+            kopyalar=kopyalar,
+            kopya_shalari=dict(ref.kopya_shalari),
+            unit_snapshot=dict(ref.unit_snapshot),
+            unit_snapshot_sha=ref.unit_snapshot_sha,
+        )
+
+    return _cagri, gercek_dest
+
+
+@pytest.mark.parametrize("hucre", MATRIS, ids=lambda h: h.kimlik)
+async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
+    """Her hücrede ÜÇ yüklem ölçülür: yan etki · korunan kanıt · koşu durumu.
+
+    Dördüncü yüklem hücreden BAĞIMSIZ ve her hücrede koşar: çağrıdan ÖNCE
+    diskte duran her baytın çağrıdan SONRA aynı kalması (salt-eklemelik).
+    """
+    db, run_id, paket = kosu
+    birinci, ikinci = auditors.DENETCI_ROLLERI
+
+    # ── Yol kapısı: tur KOŞMAZ, dosya yaratan yüzeyler doğrudan ölçülür ──
+    if hucre.kapi == "yol-kapisi":
+        cagri, beklenen_kok = _yol_kapisi_kurulumu(
+            hucre.alt, tmp_path, run_id, monkeypatch
+        )
+        oncesi = _dosya_goruntusu(beklenen_kok)
+        firlatan: type[BaseException] | None = None
+        try:
+            cagri()
+        except BaseException as exc:  # noqa: BLE001 — tip ÖLÇÜLÜR
+            firlatan = type(exc)
+        sonrasi = _dosya_goruntusu(beklenen_kok)
+        assert firlatan is hucre.firlatan, (
+            f"{hucre.kimlik}: fırlatan {firlatan}, beklenen {hucre.firlatan}"
+        )
+        assert len(sonrasi) - len(oncesi) == hucre.yaratilan_dosya, (
+            f"{hucre.kimlik}: reddedilen girdi {len(sonrasi) - len(oncesi)} "
+            "dosya yarattı — geç reddetme diskte dosya BIRAKIR"
+        )
+        assert _diskteki_raporlar(beklenen_kok) == hucre.rapor_dosyalari
+        assert (await _durum(db, run_id))[0] == hucre.kosu_durumu
+        return
+
+    # ── Tur hücreleri ──
+    if hucre.kapi == "dosya-cakismasi":
+        kalanlar = (
+            auditors.DENETCI_ROLLERI if hucre.rol == "ikisi" else (hucre.rol,)
+        )
+        for rol in kalanlar:
+            _rapor_yolu(paket, rol).write_text(
+                f"ÖNCEKİ TURDAN KALAN {rol}\n", encoding="utf-8"
+            )
+
+    ariza_rolu = hucre.rol if hucre.rol in auditors.DENETCI_ROLLERI else None
+    ariza = {
+        "normal-ariza": None,
+        "os-error": OSError(5, "Input/output error"),
+        "cancelled": asyncio.CancelledError(),
+        "beklenmeyen": RuntimeError("beklenmeyen"),
+    }.get(hucre.cikis)
+    ciktilar = _iki_gecerli_rapor()
+    if hucre.cikis == "normal-ariza" and ariza_rolu is not None:
+        ciktilar[ariza_rolu] = auditors.RunnerOutcome(
+            durum="hata", stdout="", stderr="araç düştü", exit_code=1
+        )
+        ariza = None
+    runner = _SayanRunner(ciktilar, ariza_rolu=ariza_rolu, ariza=ariza)
+
+    kullanilan_run_id = (
+        runs.new_run_id() if hucre.kapi == "kimlik-bagi" else run_id
+    )
+    oncesi = _dosya_goruntusu(paket.kok)
+    firlatan = None
+    try:
+        await auditors.run_audit_round(
+            db,
+            paket,
+            runner=runner,
+            run_id=kullanilan_run_id,
+            web_prob=_prob_kur(hucre),
+        )
+    except BaseException as exc:  # noqa: BLE001 — tip ÖLÇÜLÜR
+        firlatan = type(exc)
+    sonrasi = _dosya_goruntusu(paket.kok)
+
+    assert firlatan is hucre.firlatan, (
+        f"{hucre.kimlik}: fırlatan {firlatan}, beklenen {hucre.firlatan}"
+    )
+    assert runner.cagrilar == list(
+        auditors.DENETCI_ROLLERI[: hucre.runner_cagrilari]
+    ), (
+        f"{hucre.kimlik}: alt süreç çağrıları {runner.cagrilar}, beklenen "
+        f"ilk {hucre.runner_cagrilari} rol"
+    )
+    assert _diskteki_raporlar(paket.kok) == hucre.rapor_dosyalari, (
+        f"{hucre.kimlik}: diskteki raporlar {_diskteki_raporlar(paket.kok)}, "
+        f"beklenen {hucre.rapor_dosyalari} — tamamlanmış kanıt KAYBOLDU"
+    )
+    assert len(sonrasi) - len(oncesi) == hucre.yaratilan_dosya, (
+        f"{hucre.kimlik}: yaratılan dosya {len(sonrasi) - len(oncesi)}, "
+        f"beklenen {hucre.yaratilan_dosya}"
+    )
+    assert (await _durum(db, run_id))[0] == hucre.kosu_durumu, (
+        f"{hucre.kimlik}: koşu durumu yanlış"
+    )
+    # Hücreden BAĞIMSIZ yüklem: var olan hiçbir bayt DEĞİŞMEZ (salt-ekleme).
+    for ad, bayt in oncesi.items():
+        assert sonrasi.get(ad) == bayt, (
+            f"{hucre.kimlik}: {ad} ÜZERİNE YAZILDI — ham katman salt-eklemedir"
+        )
+
+
+def test_closure_matrix_is_not_empty_and_not_trivially_green() -> None:
+    """BOŞ-KÜME KONTROL KOLU — matris hücre üretmiyorsa kapanış kanıtı YOKTUR.
+
+    Üretilmiş bir matrisin iki sessiz arıza biçimi vardır: hiç hücre üretmemek
+    ve ürettiği her hücrede AYNI (dolayısıyla önemsiz) beklentiyi taşımak.
+    İkisi de yeşil görünür. Bu kol ikisini de yakalar; ayrıca her eksenin her
+    değerinin en az bir hücrede geçtiğini ölçer — eksen değeri düşerse matris
+    sessizce daralamaz.
+    """
+    assert MATRIS, "matris HİÇ hücre üretmedi — kapanış kanıtı BOŞ kümedir"
+    for eksen_adi, degerler in (
+        ("kapi", EKSEN_1_KAPI),
+        ("cikis", EKSEN_2_CIKIS),
+        ("rol", EKSEN_3_ROL),
+    ):
+        gorulen = {getattr(h, eksen_adi) for h in MATRIS}
+        eksik = set(degerler) - gorulen
+        assert not eksik, (
+            f"eksen {eksen_adi} değerleri hiç hücre üretmedi: {sorted(eksik)}"
+        )
+        assert gorulen <= set(degerler), (
+            f"eksen {eksen_adi} beyan edilmemiş değer taşıyor: "
+            f"{sorted(gorulen - set(degerler))}"
+        )
+    assert len({h.kimlik for h in MATRIS}) == len(MATRIS), "hücre kimliği TEKİL DEĞİL"
+
+    imzalar = {
+        (h.runner_cagrilari, h.rapor_dosyalari, h.yaratilan_dosya,
+         h.kosu_durumu, h.firlatan)
+        for h in MATRIS
+    }
+    assert len(imzalar) >= 6, (
+        f"matris {len(imzalar)} ayrı beklenti taşıyor — hücreler aynı şeyi "
+        "ölçüyorsa matris TRIVIALLY yeşildir"
+    )
+    # Her yüklemin en az iki AYRI beklenen değeri olmalı; tek değerli bir
+    # yüklem hiçbir mutasyonu ayırt edemez.
+    assert {h.runner_cagrilari for h in MATRIS} >= {0, 1, 2}
+    assert {h.rapor_dosyalari for h in MATRIS} >= {(), auditors.DENETCI_ROLLERI}
+    assert {h.yaratilan_dosya for h in MATRIS} >= {0, 1, 2}
+    assert {h.kosu_durumu for h in MATRIS} == {"calisiyor", "tamamlanmadi"}
+    assert {h.firlatan for h in MATRIS} >= {None, ValueError,
+                                            asyncio.CancelledError}

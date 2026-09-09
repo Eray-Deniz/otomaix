@@ -23,8 +23,10 @@ Bu modülün dört yüzeyi vardır ve dördü de FAIL-CLOSED'dur:
   görmez; eksik envanter motorun mutabakat kapısına "uyum" gibi görünürdü.
   Dönüş tipi arayüz eki R6(a) gereği `ValidatedReport`'tur — plan 1170'in
   `list[str]` yazımı GEÇERSİZDİR.
-* `preflight` — K-14. Ölçülmemiş erişim "var" sayılmaz: probu olmayan ya da
-  patlayan ön kontrol turu BAŞLATMAZ.
+* `preflight` — K-14. Dönüş `PreflightDurumu`'nun KAPALI kümesindendir ve üç
+  başarısızlık AYRIDIR (`OLCULMEDI` · `ERISIM_YOK` · `OLCUM_ARIZASI`): üçü de
+  turu BAŞLATMAZ, ama ortam-kısıtı muafiyetini YALNIZ `ERISIM_YOK`
+  meşrulaştırır. "Ölçmedim" ile "ölçtüm, erişim yok" aynı yetkiyi veremez.
 
 **Kapsam sınırı (dürüst etiket, arayüz eki R6(c)).** Çapraz denetçi mutabakatı
 (iki raporun AYNI anlık görüntüye karşı yazılmış olması) BURADA YAPILMAZ —
@@ -48,6 +50,7 @@ import logging
 import re
 import subprocess
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Protocol, Sequence
@@ -276,6 +279,35 @@ class AuditReport:
             object.__setattr__(self, _alan, _deger)
 
 
+def _kok_yolunu_kapila(kok: Path) -> Path:
+    """Paket KÖKÜ mutlak ve KENDİ canonical'ine eşit olmak ZORUNDA.
+
+    **Neden kökün KENDİSİ ölçülür.** Rol yolu kapısı `kok/<rol>` biçimini ve
+    her rolün canonical eşitliğini sınar. O karşılaştırma kökü ÖNCE
+    canonical'leştirseydi kökün kendi takma adlılığı hiç sınanmazdı: `..`
+    içeren ya da symlink'li bir ata altında iki rol yolu da "kendi
+    canonical'ine eşit" görünür, oysa paketin tamamı beklenenden BAŞKA bir
+    yerde durur ve rol ayrımının dayandığı yol sözleşmesi anlamını yitirir.
+
+    Kapı, dosya yaratan HER yüzeyde ilk yan etkiden ÖNCE koşar: `build_packet`
+    `mkdir`'den önce, `PacketRef` yapımda. Geç reddetme diskte dosya bırakır.
+    """
+    yol = Path(kok)
+    if not yol.is_absolute():
+        raise ValueError(
+            f"paket kökü MUTLAK olmak ZORUNDA: {yol} — göreli kök çalışma "
+            "dizinine göre kayar ve paketin nerede durduğu ölçülemez"
+        )
+    canonical = yol.resolve()
+    if canonical != yol:
+        raise ValueError(
+            f"paket kökü kendi canonical'ine EŞİT DEĞİL ({yol} → {canonical}) "
+            "— takma ad ('..') ya da symlink'li ata, rol yolu sözleşmesini "
+            "görünürde tutup paketin tamamını başka bir yere düşürür"
+        )
+    return yol
+
+
 @dataclass(frozen=True)
 class PacketRef:
     """Kurulmuş denetçi paketinin kaydı (K-79)."""
@@ -341,13 +373,14 @@ class PacketRef:
         bir rol dizini kardeşinin (ya da paket dışının) takma adıysa ayrım
         görünüşte durur, gerçekte iki rol AYNI yeri görür.
 
-        Üç koşul birden: yol `kok/<rol>` biçiminde MUTLAK ve kökün DOĞRUDAN
-        çocuğu; symlink çözümü kendi beklenen canonical'ine EŞİT; iki rolün
-        çözülmüş yolu birbirinden FARKLI.
+        DÖRT koşul birden: KÖKÜN KENDİSİ mutlak ve canonical (`_kok_yolunu_kapila`
+        — kök canonical'leştirilerek karşılaştırılsaydı kendi takma adlılığı
+        hiç sınanmazdı); yol `kok/<rol>` biçiminde MUTLAK ve kökün DOĞRUDAN
+        çocuğu; symlink çözümü kökün HAM hâline karşı ölçülen canonical'ine
+        EŞİT; iki rolün çözülmüş yolu birbirinden FARKLI.
         """
-        kok = Path(self.kok)
+        kok = _kok_yolunu_kapila(self.kok)
         object.__setattr__(self, "kok", kok)
-        kok_canonical = kok.resolve()
         gorulen: dict[Path, str] = {}
         for rol in DENETCI_ROLLERI:
             yol = Path(self.kopyalar[rol])
@@ -358,7 +391,9 @@ class PacketRef:
                     f"ve `kok/{rol}` adında olmak ZORUNDA (kok={kok})"
                 )
             canonical = yol.resolve()
-            if canonical != kok_canonical / rol:
+            # Kök ARTIK canonical'dir (kapı yukarıda koştu): karşılaştırma
+            # kökün HAM hâline karşıdır, ikinci bir canonical'leştirme YOK.
+            if canonical != kok / rol:
                 raise ValueError(
                     f"PacketRef.kopyalar[{rol!r}] rol yolu kendi canonical'ine "
                     f"EŞİT DEĞİL ({yol} → {canonical}) — takma ad/symlink bir "
@@ -404,17 +439,44 @@ class ValidatedReport:
         return self.rapor is not None and not self.errors
 
 
+class PreflightDurumu(str, Enum):
+    """K-14 ön kontrolünün KAPALI sonuç kümesi.
+
+    Tek bir `web_erisimi: bool` üç AYRI olguyu tek "başarısız"a ezerdi ve
+    ikisi aynı yetkiyi üretirdi: "ölçmedim" ile "ölçtüm, erişim yok" birbirine
+    karışır, ikisi de URL doğrulamasını atlatan muafiyete kapı olurdu. Ayrım
+    TİPLİDİR çünkü iki AYRI kapı bu kümeyi farklı böler:
+
+    * **Tur başlama kapısı** — YALNIZ `ERISIM_VAR` turu başlatır (fail-closed).
+    * **Muafiyet kapısı** — ortam-kısıtı muafiyeti YALNIZ `ERISIM_YOK`'ta
+      meşrudur; ölçülmemiş erişim muafiyet ÜRETMEZ.
+    """
+
+    ERISIM_VAR = "erisim-var"
+    """Prob koştu ve erişimi DOĞRULADI — turu başlatan tek durum."""
+
+    ERISIM_YOK = "erisim-yok"
+    """Prob koştu ve erişimin YOKLUĞUNU ölçtü — muafiyeti meşrulaştıran tek durum."""
+
+    OLCULMEDI = "olculmedi"
+    """Prob VERİLMEDİ — erişim hiç ölçülmedi; ne tur başlar ne muafiyet doğar."""
+
+    OLCUM_ARIZASI = "olcum-arizasi"
+    """Prob patladı — istisna erişim kanıtı DEĞİLDİR; ölçüm yapılmamış sayılır."""
+
+
 @dataclass(frozen=True)
 class PreflightResult:
-    """K-14 ön kontrolünün sonucu.
+    """K-14 ön kontrolünün sonucu — ölçülen olgu `durum`dur.
 
-    `web_erisimi` ÖLÇÜLEN olgudur; `tur_baslayabilir` ondan TÜRER. Erişimsiz bir
-    sonuç sebepsiz kurulamaz — "neden başlamadı" sorusunun cevabı kayıtta olmak
-    zorundadır.
+    İki kapı da `durum`dan TÜRER (`tur_baslayabilir` · `muafiyet_mesru`) ve
+    ikisi AYNI değer değildir. Erişimli olmayan bir sonuç sebepsiz kurulamaz:
+    "neden başlamadı" sorusunun cevabı kayıtta olmak zorundadır; erişimli bir
+    sonuç ise sebep TAŞIMAZ — iki hâl vardır, üçüncüsü yoktur.
     """
 
     arac: str
-    web_erisimi: bool
+    durum: PreflightDurumu
     sebep: str
 
     def __post_init__(self) -> None:
@@ -422,15 +484,38 @@ class PreflightResult:
             raise ValueError(
                 f"PreflightResult.arac kimlik taşımak ZORUNDA: {self.arac!r}"
             )
-        if not self.web_erisimi and not self.sebep.strip():
+        if not isinstance(self.durum, PreflightDurumu):
+            raise TypeError(
+                "PreflightResult.durum KAPALI kümeden gelmek ZORUNDA "
+                f"({type(self.durum).__name__} verildi) — serbest bayrak üç "
+                "olguyu tek 'başarısız'a ezer"
+            )
+        if self.durum is PreflightDurumu.ERISIM_VAR:
+            if self.sebep.strip():
+                raise ValueError(
+                    "PreflightResult tutarsız: erişimi DOĞRULAYAN ölçüm sebep "
+                    f"taşıyamaz: {self.sebep!r}"
+                )
+        elif not self.sebep.strip():
             raise ValueError(
                 "PreflightResult sebepsiz başarısızlık taşıyamaz — turu "
                 "durduran ölçüm kayda geçmek zorundadır"
             )
 
     @property
+    def web_erisimi(self) -> bool:
+        """ÖLÇÜLMÜŞ erişim — yalnız `ERISIM_VAR`."""
+        return self.durum is PreflightDurumu.ERISIM_VAR
+
+    @property
     def tur_baslayabilir(self) -> bool:
-        return self.web_erisimi
+        """Tur başlama kapısı — ölçüm erişimi doğrulamıyorsa tur BAŞLAMAZ."""
+        return self.durum is PreflightDurumu.ERISIM_VAR
+
+    @property
+    def muafiyet_mesru(self) -> bool:
+        """Ortam-kısıtı muafiyeti kapısı — YALNIZ ÖLÇÜLMÜŞ erişimsizlikte."""
+        return self.durum is PreflightDurumu.ERISIM_YOK
 
 
 # ─── K-137 anonimleştirme ───────────────────────────────────────────────────
@@ -598,7 +683,8 @@ def build_packet(
                 "kaynağa yapıştırılamaz"
             )
 
-    kok = Path(dest) / run_id
+    # Yol kapısı ilk yan etkiden ÖNCE: reddedilen girdi HİÇBİR dosya yaratmaz.
+    kok = _kok_yolunu_kapila(Path(dest) / run_id)
     if kok.exists():
         raise FileExistsError(
             f"koşu paketi ZATEN var: {kok} — ham katman salt-eklemedir, dosya "
@@ -906,16 +992,22 @@ def preflight(
 ) -> PreflightResult:
     """Denetçi aracının web erişimini sınar — FAIL-CLOSED (K-14).
 
-    `prob` çağıranın sağladığı ölçüm yoludur (CLI katmanı, Task 11). **Prob
-    YOKSA sonuç başarısızdır:** ölçülmemiş erişim "var" sayılmaz. Prob patlarsa
-    istisna da erişim kanıtı DEĞİLDİR; sebep olduğu gibi taşınır.
+    `prob` çağıranın sağladığı ölçüm yoludur (CLI katmanı, Task 11). Dönüş
+    `PreflightDurumu`'nun KAPALI kümesinden gelir ve üç başarısızlık AYRIDIR:
+    prob yoksa `OLCULMEDI`, prob olumsuz dönerse `ERISIM_YOK`, prob patlarsa
+    `OLCUM_ARIZASI`. Üçü de turu başlatmaz; muafiyeti YALNIZ `ERISIM_YOK`
+    meşrulaştırır — ölçülmemiş erişim ne tur başlatır ne muafiyet üretir.
+
+    **Kaçan istisna yutulmaz.** `Exception` `OLCUM_ARIZASI`'na çevrilir, ama
+    `BaseException` (iptal dâhil) OLDUĞU GİBİ geçer: iptal bir ölçüm sonucu
+    değildir ve çağıranın koruma bölgesine ait olmalıdır.
     """
     if not isinstance(tool, str) or not tool.strip():
         raise ValueError(f"preflight araç kimliği bekler: {tool!r}")
     if prob is None:
         return PreflightResult(
             arac=tool,
-            web_erisimi=False,
+            durum=PreflightDurumu.OLCULMEDI,
             sebep="web erişimi probu tanımlı DEĞİL — erişim ölçülmedi, tur "
             "başlamaz (ölçülmemiş erişim 'var' sayılmaz)",
         )
@@ -924,13 +1016,17 @@ def preflight(
     except Exception as exc:  # noqa: BLE001 — her arıza turu DURDURUR
         return PreflightResult(
             arac=tool,
-            web_erisimi=False,
+            durum=PreflightDurumu.OLCUM_ARIZASI,
             sebep=f"web erişimi probu hata verdi: {type(exc).__name__}: {exc}",
+        )
+    if erisim:
+        return PreflightResult(
+            arac=tool, durum=PreflightDurumu.ERISIM_VAR, sebep=""
         )
     return PreflightResult(
         arac=tool,
-        web_erisimi=erisim,
-        sebep="" if erisim else "web erişimi probu olumsuz döndü — tur başlamaz",
+        durum=PreflightDurumu.ERISIM_YOK,
+        sebep="web erişimi probu olumsuz döndü — tur başlamaz",
     )
 
 
@@ -1400,7 +1496,12 @@ def _kalicilastir(packet: PacketRef, ham: Mapping[str, str]) -> str | None:
     Dönüş: hata yoksa `None`, salt-eklemelik çiğnenirse SEBEP. `FileExistsError`
     DIŞINDAKİ `OSError`'lar YUTULMAZ — çağıranın dış koruması onları tipli
     arızaya çevirir.
+
+    **Çakışan rol döngüyü KESMEZ.** Bir rolün dosyası zaten varsa sebep
+    biriktirilir ve KALAN roller yine denenir: erken dönüş, çakışmayan rolün
+    tamamlanmış raporunu kanıt olmaktan çıkarırdı.
     """
+    sebepler: list[str] = []
     for rol in DENETCI_ROLLERI:
         if rol not in ham:
             continue
@@ -1410,12 +1511,40 @@ def _kalicilastir(packet: PacketRef, ham: Mapping[str, str]) -> str | None:
             with open(hedef, "x", encoding="utf-8") as akis:
                 akis.write(ham[rol])
         except FileExistsError:
-            return (
+            sebepler.append(
                 f"denetim turu {rol} raporunu yazamadı: {hedef} ZATEN var — "
                 "ham katman salt-eklemedir, dosya EZİLMEZ (K-82); yeniden "
                 "koşum yeni kimlik alır"
             )
-    return None
+    return " · ".join(sebepler) if sebepler else None
+
+
+def _hedef_rapor_kapisi(packet: PacketRef) -> str | None:
+    """Hedef rapor dosyaları BOŞ olmak ZORUNDA — ilk runner'dan ÖNCE ölçülür.
+
+    Çakışmayı `_kalicilastir` da görür, ama ORADA görmek GEÇTİR: önceki turdan
+    kalmış bir `RAPOR-denetci-1.md`, denetçi-2 koşarken diskte DURUR ve K-79'un
+    kapattığı gözlenebilir sızıntı kanalını yeniden açar. Geç yazım kanalı
+    ancak hedef dizin başlangıçta boşsa kapatır; bu yüzden karar KABUL
+    BÖLGESİNDEDİR ve tur hiç başlamaz.
+
+    `_kalicilastir`'ın `open(..., "x")` açılışı YERİNE GEÇMEZ — o, yarış
+    penceresini kapatan atomik ayaktır; bu kapı ise sızıntıyı kapatan sıra
+    ayağıdır.
+    """
+    var_olanlar = [
+        str(_tur_dosyasi(packet.kopyalar[rol], rol))
+        for rol in DENETCI_ROLLERI
+        if _tur_dosyasi(packet.kopyalar[rol], rol).exists()
+    ]
+    if not var_olanlar:
+        return None
+    return (
+        "denetim turu BAŞLAMADI: hedef rapor dosyası ZATEN var "
+        f"({' · '.join(var_olanlar)}) — ham katman salt-eklemedir (K-82) ve "
+        "önceki turdan kalmış rapor denetçi-2 koşarken diskte durup kör "
+        "bağımsızlığı düşürür; yeniden koşum yeni kimlik alır"
+    )
 
 
 def _tur_url_kapisi(
@@ -1435,15 +1564,18 @@ def _tur_url_kapisi(
         "Kaynak sayısı: 2" yazan bir rapor altı satırla iç tutarlıdır ama
         koşunun ÜÇÜNCÜ kaynağını hiç örneklememiştir.
     (b) **Ortam-kısıtı muafiyeti.** Kaçış cümlesi TÜM satır beklentisini
-        kaldırır. K-14 ön kontrolü erişimi ÖLÇTÜYSE muafiyet KABUL EDİLMEZ:
-        ölçülmüş erişimin üstüne yazılan "erişemedim" beyanı doğrulamayı
-        atlatan tek cümlelik bir kapı olurdu.
+        kaldırır ve muafiyet YALNIZ `PreflightDurumu.ERISIM_YOK`'ta —
+        yani ölçülmüş erişimSİZLİKTE — meşrudur. `ERISIM_VAR`'da muafiyet
+        ölçülmüş erişimin üstüne yazılmış olur; `OLCULMEDI`/`OLCUM_ARIZASI`'nda
+        ise ölçüm hiç yapılmamıştır ve "ölçülmedi" muafiyet ÜRETMEZ. Bu ayrım
+        olmasaydı ölçmemek, ölçüp erişimsiz bulmakla aynı yetkiyi verirdi.
 
-    **Ölçülmüş kapsam sınırı (dürüst etiket).** (b) yalnız ön kontrol BAŞARILI
-    iken bağlar. Prob YOKSA `preflight` fail-closed davranır (`web_erisimi`
-    False) ve muafiyet meşru sayılır — probu sağlayan katman Task 11'dir. Bu
-    turda "erişim gerçekten yoktu" iddiası DOĞRULANMADI, yalnız "erişim
-    ölçüldüyse muafiyet yasak" iddiası ölçüldü.
+    **Ölçülmüş kapsam sınırı (dürüst etiket).** `run_audit_round`'un başlama
+    kapısı YALNIZ `ERISIM_VAR`'ı geçirdiği için (b) o yoldan BUGÜN
+    ERİŞİLEMEZDİR: turu başlatan her ön kontrol muafiyeti zaten yasaklar.
+    Fonksiyon yine de kendi başına doğrudur ve doğrudan çağrıldığında dört
+    durumun dördünü de ayırır; ölçüm o düzeydedir. "Erişim gerçekten yoktu"
+    iddiası bu turda DOĞRULANMADI — probu sağlayan katman Task 11'dir.
     """
     govde = rapor.bolumler[BOLUM_ANAHTARLARI[1]]
     errors: list[str] = []
@@ -1461,12 +1593,13 @@ def _tur_url_kapisi(
             f"{yetkili_kaynak_sayisi} — tamlık raporun kendi beyanıyla "
             "doğrulanamaz, paketi kuran taraf yetkilidir"
         )
-    if _ORTAM_KISITI in govde and on_kontrol.web_erisimi:
+    if _ORTAM_KISITI in govde and not on_kontrol.muafiyet_mesru:
         errors.append(
             f"tur kapısı: {rapor.denetci} raporu ortam kısıtı muafiyeti "
             f"kullandı ({_ORTAM_KISITI}) ama K-14 ön kontrolü "
-            f"{on_kontrol.arac} için web erişimini ÖLÇTÜ — ölçülmüş erişimin "
-            "üstüne yazılan muafiyet URL doğrulamasını atlatır"
+            f"{on_kontrol.arac} için '{on_kontrol.durum.value}' ölçtü — "
+            "muafiyet YALNIZ ÖLÇÜLMÜŞ erişimsizlikte meşrudur; ölçülmemiş "
+            "erişimin üstüne yazılan muafiyet URL doğrulamasını atlatır"
         )
     return errors
 
@@ -1481,6 +1614,18 @@ async def run_audit_round(
 ) -> AuditRound:
     """İki kör denetçiyi SIRAYLA koşturur ve turu mutabakat kapısından geçirir.
 
+    **UYGULAMA SINIRI TEKTİR.** Gövde iki bölgeye ayrılır ve kapılar tek yerde
+    uygulanır — bu sınıfın kapanışı budur (ölçüm kararın uygulandığı yere
+    konur, üretildiği yere değil):
+
+    * **KABUL BÖLGESİ** — ilk yan etkiden (alt süreç · dosya yazımı · DB
+      mutasyonu) ÖNCE biter ve TÜM giriş kapılarını uygular: kimlik bağı, K-14
+      ön kontrol KARARI, hedef rapor dosyalarının çakışma kontrolü. Bir kapı
+      reddederse hiçbir runner koşmaz ve hiçbir rapor dosyası yazılmaz.
+    * **KOŞUM BÖLGESİ** — runner'lar, doğrulama ve mutabakat. Kabul bölgesinin
+      ön-kontrol ayağı DÂHİL her şey `try` korumasının İÇİNDEDİR: prob
+      `BaseException` (iptal) fırlatırsa da koşu satırı işaretsiz kalmaz.
+
     Bağlayıcı invariantlar bu gövdededir:
 
     * **KİMLİK BAĞI** — `run_id` ile `packet.run_id` TAM EŞİT olmak ZORUNDA.
@@ -1491,10 +1636,14 @@ async def run_audit_round(
     * **K-78 SIRALI** — döngü `DENETCI_ROLLERI` üzerinde yürür ve bir rol
       bitmeden diğeri başlamaz; sıra deterministiktir.
     * **K-79 AYRI DİZİN** — her rol kendi `packet.kopyalar[rol]` dizininde
-      koşar, istem dosyası da o dizinden okunur. Rol yollarının takma
-      ad/symlink/kök-dışı olmadığı `PacketRef` kapısında ölçülür.
+      koşar, istem dosyası da o dizinden okunur. KÖKÜN kendisinin ve rol
+      yollarının takma ad/symlink/kök-dışı olmadığı `_kok_yolunu_kapila`'da
+      ölçülür ve kapı İKİ yüzeyde de dosya yaratmadan ÖNCE koşar
+      (`build_packet` `mkdir`'den önce, `PacketRef` yapımda).
     * **K-79 GEÇ YAZIM** — denetçi-1'in raporu denetçi-2 çıkana kadar DİSKE
-      YAZILMAZ; ikisi de bittikten sonra kalıcılaşır (`_kalicilastir`).
+      YAZILMAZ; ikisi de bittikten sonra kalıcılaşır. Geç yazım kanalı ancak
+      hedef dizin BAŞTA boşsa kapatır: `_hedef_rapor_kapisi` bunu kabul
+      bölgesinde ölçer, `_kaniti_kalicilastir` da yazımı tek çıkışta toplar.
     * **K-82 DURUM SAHİPLİĞİ** — terminal arızada `runs.mark_incomplete`
       BURADAN çağrılır (runner'ın `db`'si yoktur) ve yazılmış rapor dosyası
       EZİLMEZ: dosyalar salt-eklemeli (`"x"`) açılır.
@@ -1504,8 +1653,25 @@ async def run_audit_round(
       YENİDEN FIRLATILIR (yutulmaz). Koruma olmasaydı eksik CLI · izin · disk ·
       iptal yollarında satır `calisiyor` olarak ASILI kalırdı — K-82'nin
       kapatmak için var olduğu durum.
-    * **K-14 ÖN KONTROL** — `preflight` runner'lardan ÖNCE koşar; sonucu tur
-      seviyesindeki ortam-kısıtı kapısını besler.
+    * **K-14 GERÇEK KAPI (fail-closed)** — plan satır 200-201 BAĞLAYICIDIR:
+      "HER turdan önce ZORUNLU ve mekanik ... başarısızsa tur BAŞLAMAZ".
+      `preflight` yalnız ÖLÇMEZ, KARAR verir: rollerden birinin durumu
+      `PreflightDurumu.ERISIM_VAR` değilse tur hiç başlamaz, koşu
+      `tamamlanmadi` işaretlenir ve sebep ölçülen durumu adlandırır. Sonuç
+      ayrıca tur seviyesindeki ortam-kısıtı kapısını besler — muafiyet YALNIZ
+      `ERISIM_YOK`'ta meşrudur, "ölçülmedi" muafiyet ÜRETMEZ.
+
+      **Bugünkü davranış (dürüst etiket).** `web_prob=None` bu modüldeki tek
+      yol olduğu için kapı probsuz her çağrıyı BLOKE EDER; probu sağlayan
+      katman Task 11'dir (CLI). Bu bilinçli bir davranış değişikliğidir:
+      ölçülmemiş erişimle tur başlatmak, "ölçmedim" ile "ölçtüm, yok"u aynı
+      yetkiye eşitliyordu.
+    * **KANIT TEK ÇIKIŞTA KALICILAŞIR** — tamamlanmış raporlar DÖRT çıkış
+      yolunun (normal başarı/arıza · `OSError` · iptal · beklenmeyen istisna)
+      dördünde de yazılır; yazım TEK yardımcıdadır (`_kaniti_kalicilastir`) ve
+      `finally`'den çağrılır. Dal başına kopyalanmış yazım, iki dalda
+      unutulduğu için denetçi-1'in raporunu kaybediyordu. Kalıcılaştırma
+      arızası asıl istisnayı MASKELEMEZ.
     * **K-136** — koşu sebebine giden stderr maskeleme süzgecinden geçer.
     * **K-150 FAIL-CLOSED** — iki GEÇERLİ rapor yoksa çift kurulmaz, tur
       geçersizdir ve sentez BAŞLAMAZ.
@@ -1517,7 +1683,10 @@ async def run_audit_round(
     `tamamlanmadi` İŞARETLENMEZ: K-150 "eksik denetçi yeniden koşulur" der ve
     yarım işareti yeniden koşumun önünü keserdi. `tamamlanmadi` yalnız aracın
     KENDİSİ düştüğünde (zaman aşımı · sıfırdan farklı çıkış · boş çıktı · dosya
-    çakışması · alt süreç istisnası) yazılır.
+    çakışması · alt süreç istisnası) ya da tur ÇEVRESEL bir kapıdan hiç
+    başlayamadığında (K-14 ön kontrol · hedef dosya çakışması) yazılır. İkinci
+    küme de yeniden koşuma açıktır; işaretin amacı satırın `calisiyor` olarak
+    ASILI kalmamasıdır.
 
     **KALAN RİSK — dürüst beyan (B3).** `cwd` bir güvenlik sınırı DEĞİLDİR:
     işletim sistemi düzeyinde kum havuzu YOKTUR ve kasıtlı düşmanca bir denetçi
@@ -1562,14 +1731,66 @@ async def run_audit_round(
                 exc_info=True,
             )
 
-    # K-14: erişim runner'lardan ÖNCE ölçülür. Prob yoksa `preflight`
-    # fail-closed davranır ve ortam-kısıtı muafiyeti meşru sayılır (Task 11).
-    on_kontroller = {
-        rol: preflight(rol, prob=web_prob) for rol in DENETCI_ROLLERI
-    }
-
     ham: dict[str, str] = {}
+    _yazim_sonucu: list[str | None] = []
+
+    def _kaniti_kalicilastir(*, yut_hatalari: bool) -> str | None:
+        """Tamamlanmış raporları EN ÇOK BİR KEZ diske indirir (TEK çıkış).
+
+        Dört çıkış yolu da buradan geçer: normal dallar sebebi kullanmak için
+        doğrudan çağırır, istisna yolları `finally`'den. Bellekleme sayesinde
+        ikinci çağrı yeniden yazmaz ve `open(..., "x")` salt-eklemeliliği
+        bozulmaz. `yut_hatalari` YALNIZ `finally` için doğrudur: orada bir
+        `OSError` asıl istisnayı maskelerdi.
+        """
+        if _yazim_sonucu:
+            return _yazim_sonucu[0]
+        try:
+            sebep = _kalicilastir(packet, ham)
+        except OSError:
+            if not yut_hatalari:
+                raise  # normal yol: dış koruma tipli arızaya çevirir
+            _LOG.warning(
+                "denetim turu kısmi raporu istisna yolunda yazılamadı: "
+                "run_id=%s",
+                run_id,
+                exc_info=True,
+            )
+            _yazim_sonucu.append(None)
+            return None
+        _yazim_sonucu.append(sebep)
+        return sebep
+
     try:
+        # ══ KABUL BÖLGESİ — ilk yan etkiden ÖNCE, TÜM giriş kapıları ══
+        #
+        # K-14 KARARI: ölçüm erişimi doğrulamıyorsa tur BAŞLAMAZ (plan 200-201).
+        # Ön kontrol koruma bölgesinin İÇİNDEDİR: prob `BaseException`
+        # fırlatırsa da koşu satırı işaretsiz kalmaz.
+        on_kontroller = {
+            rol: preflight(rol, prob=web_prob) for rol in DENETCI_ROLLERI
+        }
+        kapali = [
+            sonuc
+            for sonuc in on_kontroller.values()
+            if not sonuc.tur_baslayabilir
+        ]
+        if kapali:
+            return await _yarim(
+                "denetim turu BAŞLAMADI — K-14 ön kontrolü erişimi "
+                "DOĞRULAMADI: "
+                + " · ".join(
+                    f"{sonuc.arac} [{sonuc.durum.value}] {sonuc.sebep}"
+                    for sonuc in kapali
+                )
+            )
+        # Hedef dosya çakışması İLK runner'dan ÖNCE: kalmış bir rapor,
+        # denetçi-2 koşarken diskte durup sızıntı kanalını yeniden açardı.
+        cakisma = _hedef_rapor_kapisi(packet)
+        if cakisma is not None:
+            return await _yarim(cakisma)
+
+        # ══ KOŞUM BÖLGESİ — ilk yan etki buradan sonra ══
         for rol in DENETCI_ROLLERI:
             dizin = packet.kopyalar[rol]
             sonuc = runner.run(
@@ -1587,13 +1808,13 @@ async def run_audit_round(
                     + runs.mask_secrets(sonuc.stderr.strip() or "<stderr boş>")
                 )
                 # Düşen rol koşmadı; ondan ÖNCEKİ rolün raporu kanıttır.
-                yazma_sebebi = _kalicilastir(packet, ham)
+                yazma_sebebi = _kaniti_kalicilastir(yut_hatalari=False)
                 if yazma_sebebi is not None:
                     sebep = f"{sebep} · {yazma_sebebi}"
                 return await _yarim(sebep)
             ham[rol] = sonuc.stdout
 
-        yazma_sebebi = _kalicilastir(packet, ham)
+        yazma_sebebi = _kaniti_kalicilastir(yut_hatalari=False)
         if yazma_sebebi is not None:
             return await _yarim(yazma_sebebi)
 
@@ -1629,15 +1850,6 @@ async def run_audit_round(
             f"denetim turu alt süreç arızasıyla düştü ({type(exc).__name__}): "
             + runs.mask_secrets(str(exc) or "<sebep boş>")
         )
-        try:
-            _kalicilastir(packet, ham)  # kanıt kaybolmasın (en iyi çaba)
-        except OSError:
-            _LOG.warning(
-                "denetim turu kısmi raporu istisna yolunda yazılamadı: "
-                "run_id=%s",
-                run_id,
-                exc_info=True,
-            )
         return await _yarim(sebep)
     except asyncio.CancelledError:
         await _en_iyi_cabayla_isaretle(
@@ -1650,3 +1862,7 @@ async def run_audit_round(
             + runs.mask_secrets(str(exc) or "<sebep boş>")
         )
         raise
+    finally:
+        # TEK ÇIKIŞ: dört yolun dördünde de tamamlanmış kanıt en iyi çabayla
+        # yazılır. Normal dallar zaten çağırdıysa bellekleme bunu no-op yapar.
+        _kaniti_kalicilastir(yut_hatalari=True)
