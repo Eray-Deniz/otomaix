@@ -10,8 +10,9 @@ Bağlayıcı invariantlar (plan Task 1):
    adı `otomaix_test` ile değiştirilir.
 3. Yıkıcı işlem (DROP/CREATE DATABASE, migration uygulaması) YALNIZ
    `127.0.0.1:5433` uç noktasındaki KAPALI KÜME veritabanlarına izinlidir:
-   oturum veritabanı `otomaix_test` ve şema-yıkıcı testlerin taze kopyası
-   `otomaix_test_scratch` (`DISPOSABLE_DB_NAMES`). Kapı FAIL-CLOSED'dır:
+   oturum veritabanı `otomaix_test`, şema-yıkıcı testlerin taze kopyası
+   `otomaix_test_scratch` ve ikisinin klonlandığı şablon
+   `otomaix_test_template` (`DISPOSABLE_DB_NAMES`). Kapı FAIL-CLOSED'dır:
    host/port eşleşmiyorsa veya ad bu kümede değilse — takma ad (`localhost`,
    `::1`, `0.0.0.0`), eksik port, eksik host veya canlı `otomaix` adı — işlem
    BAŞLAMADAN reddedilir. Varsayılana düşme YOKTUR.
@@ -36,8 +37,16 @@ TEST_DB_NAME = "otomaix_test"
 # her testte sıfırdan yaratılıp düşürülür.
 SCRATCH_DB_NAME = "otomaix_test_scratch"
 
+# Migration'ları BİR KEZ uygulanmış ŞABLON veritabanı. Oturum veritabanı ve
+# şema-yıkıcı testlerin taze kopyası bundan KLONLANIR (`CREATE DATABASE ...
+# TEMPLATE`); 36 migration test başına yeniden koşmaz. Ölçüldü: kopya 0.24s,
+# migration uygulaması 2.39s — hücre başına 2.30s.
+#
+# Şablona TEST İÇİNDEN yazılmaz; yıkıcı testler kendi KOPYALARINI bozar.
+TEMPLATE_DB_NAME = "otomaix_test_template"
+
 # Yıkıcı işlemlere izinli veritabanı adları — kapalı küme, fail-closed.
-DISPOSABLE_DB_NAMES = frozenset({TEST_DB_NAME, SCRATCH_DB_NAME})
+DISPOSABLE_DB_NAMES = frozenset({TEST_DB_NAME, SCRATCH_DB_NAME, TEMPLATE_DB_NAME})
 
 # Yönetim (CREATE/DROP DATABASE) bağlantısının koştuğu bakım veritabanı.
 MAINTENANCE_DB_NAME = "postgres"
@@ -242,12 +251,24 @@ def _apply_migrations(url: str) -> None:
         )
 
 
-def _recreate_database(url: str) -> None:
-    """Hedef veritabanını DROP + CREATE eder (guard: yalnız atılabilir adlar)."""
+def _recreate_database(url: str, *, template: str | None = None) -> None:
+    """Hedef veritabanını DROP + CREATE eder; `template` verilirse KLONLAR.
+
+    Guard: hem hedef hem ŞABLON adı kapalı kümeden geçer — serbest metin
+    buraya giremez. Postgres, şablona AÇIK BAĞLANTI varken klonlamayı
+    reddeder; şablon yalnız kurulurken bağlantı görür (psql çıkar) ve hiçbir
+    test ona bağlanmaz.
+    """
     database = urlsplit(_require_disposable_database(url)).path.lstrip("/")
     admin_url = _require_admin_database(_with_database(url, MAINTENANCE_DB_NAME))
     _run_psql(admin_url, sql=f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
-    _run_psql(admin_url, sql=f'CREATE DATABASE "{database}"')
+    if template is None:
+        _run_psql(admin_url, sql=f'CREATE DATABASE "{database}"')
+        return
+    sablon = urlsplit(
+        _require_disposable_database(_with_database(url, template))
+    ).path.lstrip("/")
+    _run_psql(admin_url, sql=f'CREATE DATABASE "{database}" TEMPLATE "{sablon}"')
 
 
 def _drop_database(url: str) -> None:
@@ -256,17 +277,35 @@ def _drop_database(url: str) -> None:
     _run_psql(admin_url, sql=f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
 
 
-@pytest.fixture(scope="session")
-def test_db_setup() -> str:
-    """`otomaix_test`i sıfırdan yaratır ve tüm migration'ları uygular.
+def _template_database_url() -> str:
+    """Şablon veritabanı (guard'dan geçmiş)."""
+    return _require_disposable_database(
+        _with_database(test_database_url(), TEMPLATE_DB_NAME)
+    )
 
-    Her oturumda veritabanı DROP + CREATE edilir; migration'ların idempotent
-    olduğu varsayılmaz, durum deterministiktir. Canlı `otomaix` veritabanına
-    dokunulmaz.
+
+@pytest.fixture(scope="session")
+def migrated_template() -> str:
+    """ŞABLON: migration'lar OTURUMDA BİR KEZ uygulanır, kopyalar bundan çıkar.
+
+    Her oturumda DROP + CREATE + tam migration zinciri koşar; şablonun bayat
+    kalması mümkün değildir. Migration'ların idempotent olduğu varsayılmaz.
     """
-    url = test_database_url()
+    url = _template_database_url()
     _recreate_database(url)
     _apply_migrations(url)
+    return url
+
+
+@pytest.fixture(scope="session")
+def test_db_setup(migrated_template: str) -> str:
+    """`otomaix_test`i şablondan KLONLAR (durum yine deterministik).
+
+    Klon, migration zincirini baştan koşmakla BYTE düzeyinde aynı şemayı verir;
+    fark yalnız süredir. Canlı `otomaix` veritabanına dokunulmaz.
+    """
+    url = test_database_url()
+    _recreate_database(url, template=TEMPLATE_DB_NAME)
     return url
 
 
@@ -280,9 +319,7 @@ def _scratch_database_url() -> str:
 def _scratch_database(*, with_migrations: bool):
     """`otomaix_test_scratch`i sıfırdan kurar, test bitince düşürür."""
     url = _scratch_database_url()
-    _recreate_database(url)
-    if with_migrations:
-        _apply_migrations(url)
+    _recreate_database(url, template=TEMPLATE_DB_NAME if with_migrations else None)
     try:
         yield url
     finally:
@@ -290,8 +327,11 @@ def _scratch_database(*, with_migrations: bool):
 
 
 @pytest.fixture
-def scratch_db_migrated():
-    """Tüm migration'ları uygulanmış, şeması bozulabilir taze veritabanı."""
+def scratch_db_migrated(migrated_template: str):
+    """Tüm migration'ları uygulanmış, şeması bozulabilir taze veritabanı.
+
+    Şablondan klonlanır — 36 migration test başına yeniden koşmaz.
+    """
     yield from _scratch_database(with_migrations=True)
 
 

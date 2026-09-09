@@ -29,6 +29,7 @@ import dataclasses
 import hashlib
 import itertools
 import json
+import random
 import re
 import sys
 import unicodedata
@@ -2964,9 +2965,144 @@ def _bilesim_uzayi():
 EKLEME_BILESIMLERI = tuple(_bilesim_uzayi())
 
 
+# ─── NOT KÜMESİ ÖNBELLEĞİ ─────────────────────────────────────────────────
+#
+# Aynı belge, çit süpürmeleri boyunca defalarca AYNI sonuç için baştan analiz
+# ediliyordu. ÖLÇÜLDÜ (çit testleri, 2026-09-09): 18011 `bd.run` çağrısının
+# 8154'ü tekrar (%45.3); süre 115.48s -> 70.64s. Önbellek hiçbir hücre SİLMEZ,
+# hiçbir iddiayı zayıflatmaz — yalnız aynı girdinin ikinci analizini atlar.
+#
+# ANAHTAR MODÜL DURUMUNU TAŞIMAK ZORUNDA: bu dosya `bd`nin iç parçalarını
+# mock'luyor ve mock ALTINDA alınan sonuç mock kalkınca GEÇERSİZDİR. Sessiz
+# yanlış-yeşil buradan doğardı. Parmak izi iki mock biçimini de kapsar:
+# (a) modül özniteliği (`mock.patch.object(bd, ...)`), (b) modülün TUTTUĞU
+# nesnenin özniteliği (`mock.patch.object(bd._MD, "parse", ...)`).
+# Kapsamın YETERLİ olduğu testle kapılanır: `test_onbellek_anahtari_bu_dosyanin
+# _BUTUN_mock_bicimlerini_ayirt_eder` bu dosyanın KENDİ kaynağını ayrıştırıp
+# her `mock.patch` hedefinin iki biçimden birine düştüğünü ölçer.
+_NOT_ONBELLEGI: dict[str, frozenset] = {}
+_ONBELLEK_PARMAK_IZI: tuple | None = None
+
+
+def _mock_hedefleri_bu_dosyada() -> tuple[str, ...]:
+    """`bd.<nesne>` üstünde mock'lanan nesneler — DOSYANIN KAYNAĞINDAN türer.
+
+    Elle liste TUTULMAZ: yeni bir `mock.patch.object(bd.<X>, ...)` yazan gün
+    parmak izi kendiliğinden genişler. Liste elle tutulsaydı bayatlar ve
+    bayatlığı ancak sessiz bir yanlış-yeşille anlaşılırdı.
+    """
+    import ast
+
+    adlar = set()
+    for dugum in ast.walk(ast.parse(Path(__file__).read_text())):
+        if not isinstance(dugum, ast.Call):
+            continue
+        if not ast.unparse(dugum.func).startswith(("mock.patch", "patch")):
+            continue
+        hedef = ast.unparse(dugum.args[0])
+        if hedef.startswith("bd."):
+            adlar.add(hedef[len("bd.") :])
+    return tuple(sorted(adlar))
+
+
+_MOCK_NESNELERI = _mock_hedefleri_bu_dosyada()
+
+
+def _bd_parmak_izi() -> tuple:
+    """`bd`nin mock'lanabilir durumunun kimliği — değişirse önbellek düşer."""
+    return (
+        tuple((ad, id(deger)) for ad, deger in vars(bd).items()),
+        tuple(
+            (
+                ad,
+                tuple(
+                    (alan, id(deger))
+                    for alan, deger in vars(getattr(bd, ad)).items()
+                ),
+            )
+            for ad in _MOCK_NESNELERI
+        ),
+    )
+
+
 def _not_kumesi(metin: str) -> set:
     """Bulguların KENDİSİ — kategori mesaj metninde değil bulgunun üstündedir."""
-    return set(bd.run(metin, source_name="P").notlar)
+    global _ONBELLEK_PARMAK_IZI
+    parmak = _bd_parmak_izi()
+    if parmak != _ONBELLEK_PARMAK_IZI:
+        _NOT_ONBELLEGI.clear()
+        _ONBELLEK_PARMAK_IZI = parmak
+    onbellekli = _NOT_ONBELLEGI.get(metin)
+    if onbellekli is None:
+        onbellekli = frozenset(bd.run(metin, source_name="P").notlar)
+        _NOT_ONBELLEGI[metin] = onbellekli
+    return set(onbellekli)
+
+
+def test_onbellek_anahtari_bu_dosyanin_BUTUN_mock_bicimlerini_ayirt_eder() -> None:
+    """ÖNBELLEK KAPISI — parmak izi bu dosyadaki HER mock biçimini görüyor mu?
+
+    Desen KAVRAMDAN türer, bulunan örnekten değil: dosyanın KENDİ kaynağı
+    ayrıştırılır ve her `mock.patch*` çağrısının hedefi çıkarılır. Hedef ya
+    `bd` modülünün bir özniteliğidir (parmak izinin birinci ayağı) ya da
+    `bd.<nesne>`nin bir özniteliğidir (ikinci ayak). Üçüncü bir biçim çıkarsa
+    -- başka bir modül mock'lanırsa ya da `bd`den iki kat derine inilirse --
+    bu test KIRILIR ve önbelleğin anahtarı o gün genişletilir.
+
+    TRIPWIRE, beyan DEĞİL: kapsam iddiası bayatlarsa burada patlar.
+    """
+    import ast
+
+    kaynak = Path(__file__).read_text()
+    hedefler = []
+    for dugum in ast.walk(ast.parse(kaynak)):
+        if not isinstance(dugum, ast.Call):
+            continue
+        ad = ast.unparse(dugum.func)
+        if not ad.startswith(("mock.patch", "patch")):
+            continue
+        assert ad.endswith(".object"), f"string hedefli mock: {ad}"
+        hedefler.append(ast.unparse(dugum.args[0]))
+
+    assert len(hedefler) >= 30, len(hedefler)
+    modul_ustu = {h for h in hedefler if h == "bd"}
+    nesne_ustu = {h for h in hedefler if h.startswith("bd.")}
+    kapsanmayan = set(hedefler) - modul_ustu - nesne_ustu
+    assert kapsanmayan == set(), sorted(kapsanmayan)
+    # İkinci ayak GERÇEKTEN kullanılıyor -- kol boşa yeşil değil.
+    assert nesne_ustu, "nesne üstü mock kalmadıysa ikinci ayak ölçmüyor"
+    # ...ve parmak izi TAM O kümeyi taşıyor (iki taraf aynı kaynaktan türer,
+    # ama burada BAĞIMSIZ olarak yeniden çıkarılır).
+    assert set(_MOCK_NESNELERI) == {h[len("bd.") :] for h in nesne_ustu}
+    # ...ve hepsi TEK kat derinde: `bd.a.b` parmak izinin dışında kalırdı.
+    assert all(h.count(".") == 1 for h in nesne_ustu), sorted(nesne_ustu)
+
+
+def test_onbellek_mock_altinda_BAYAT_sonuc_dondurmez() -> None:
+    """DAVRANIŞSAL KOL: aynı metin, mock'lu ve mock'suz FARKLI cevap verir.
+
+    Parmak izinin iki ayağı da AYRI AYRI ölçülür. Kol, önbelleği önce
+    ISITARAK kurar: bayat sonuç ancak dolu önbellek üstünde görülebilir.
+    """
+    # PROB SEÇİMİ ÖLÇÜLDÜ: `TEMIZ` hiç not üretmez ve mock'lu hâli de üretmez;
+    # o metinle kol BOŞA yeşil olurdu. Kap boşaltılmış belge not ÜRETİR.
+    metin = KAP_AILELERI[0][2](TEMIZ)
+    temiz_notlar = _not_kumesi(metin)  # önbellek ISINDI
+    assert temiz_notlar, "prob not üretmiyor -- kol boşa yeşil olurdu"
+
+    # (a) modül özniteliği mock'u -- rapor ihlalleri susturulunca sonuç DEĞİŞİR
+    with mock.patch.object(bd, "CHECKS", ()):
+        mocklu = _not_kumesi(metin)
+    assert mocklu != temiz_notlar, "modül mock'u önbelleği düşürmedi"
+
+    # (b) modülün TUTTUĞU nesnenin özniteliği -- ayrıştırıcı düşerse belge
+    #     TAMAMEN literal sayılır ve bütün bölümler EKSİK görünür.
+    with mock.patch.object(bd._MD, "parse", side_effect=RecursionError):
+        nesne_mocklu = _not_kumesi(metin)
+    assert nesne_mocklu != temiz_notlar, "nesne mock'u önbelleği düşürmedi"
+
+    # ...ve mock kalkınca ESKİ cevap geri gelir (tek yönlü bozulma yok).
+    assert _not_kumesi(metin) == temiz_notlar
 
 
 def _mesajlari(bulgular) -> set:
@@ -3875,11 +4011,112 @@ CIT_KAPLARI = tuple(
     for aile, ad, bosalt, ekle, _d in KAP_AILELERI
     if ad == next(x for a, x, *_r in KAP_AILELERI if a == aile)
 )
-CIT_MATRISI = tuple(
+CIT_TAM_UZAY = tuple(
     (f"{aile}/{ad}/{bicim_adi}", dil, govde, govde_satirlari, bosalt, ekle, satirlar)
     for aile, ad, bosalt, ekle in CIT_KAPLARI
     for bicim_adi, dil, govde, govde_satirlari, satirlar in CIT_BICIMLERI
 )
+
+# ─── ÇARPIM DEĞİL, KAPSAMA (2026-09-09) ───────────────────────────────────
+#
+# Eksen ALTI boyutlu ve boyutların hepsi ayırt edici; ama boyutların TAM
+# ÇARPIMI (3240 hücre) değil. Ölçüldü, tam çarpım üstünde:
+#
+#   * çit kuralı TAMAMEN sökülünce dilsiz yarının 924 hücresi YEŞİL kaldı —
+#     en sert mutasyonu bile ayırt etmiyorlar;
+#   * dilli yarının 1080 hücresinin beklentisi zaten BOŞTU (vacuous);
+#   * `tur12` mutantını tam çarpımın HİÇBİR hücresi yakalamıyor (0 kırmızı) —
+#     onu yakalayan şey CommonMark sınır PROBLARI, matris değil.
+#
+# Yani ayırt eden şey EKSEN eklemekti, var olan eksenleri birbiriyle çarpmak
+# değil. Bu dosyanın kendi tarihi de bunu söylüyor: tur 11'de kap ekseni aile
+# temsilcisine indirilmişti (6000 -> 2400) ve kazanılan yer YENİ eksenlere
+# harcanmıştı; tur 11'in iki bulgusunu da o 6000 hücre KAÇIRMIŞTI.
+#
+# Matris bu yüzden ÜÇ-YOLLU KAPSAMA DİZİSİNE indirildi: altı boyutun her ÜÇLÜ
+# değer bileşimi en az bir hücrede geçer. Tarihte bulunan çit hataları
+# (tur 10 · 11 · 13) ikili ve üçlü etkileşimlerdi; üçlü kapsama onları
+# yakalayabilecek en küçük kümedir.
+#
+# **DÜRÜST SINIR — kabul edilmiş risk:** dört ya da beş boyutun AYNI ANDA
+# tuttuğu bir hata kaçabilir. "Gelecekteki her hata en fazla üç yolludur"
+# ölçülemez; ölçülen tek şey bugüne kadar bulunanların hepsinin ≤3 yollu
+# olduğudur. Yeniden açılma koşulu: dört-yollu bir çit hatası bulunursa
+# `_KAPSAMA_DERECESI` 4'e çıkarılır (tek satır).
+#
+# **KÜME ELLE SEÇİLMEZ** — seçilseydi kol kendi kanıtına göre ayarlanmış
+# olurdu. Belirlenimci açgözlü algoritma üretir; kapanış kanıtı aşağıdaki
+# mutasyon kollarındadır, seçimin kendisinde değil.
+_KAPSAMA_DERECESI = 3
+_CIT_BOYUT_SIRASI = ("dil", "govde", "kapanis", "baglam", "isaret")
+
+
+def _cit_kimlikleri() -> tuple[tuple[int, ...], ...]:
+    """Her hücrenin BOYUT KİMLİĞİ — üretim sırasından çözülür, ADDAN DEĞİL.
+
+    Ad ayrıştırmak yanlış: `c-tablolu` gövdesi tire taşıyor ve ad tireyle
+    bölününce boyutlar kayıyor (ölçüldü — kapsama dizisi 280 yerine 500
+    hücreye şişmişti). `CIT_BICIMLERI` iç içe döngüleri `_CIT_BOYUT_SIRASI`
+    ile üretir, dolayısıyla sıra numarası karışık tabanlı bir sayıdır.
+    """
+    radix = [len(CIT_BOYUTLARI[ad]) for ad in _CIT_BOYUT_SIRASI]
+    kimlikler = []
+    for sira in range(len(CIT_TAM_UZAY)):
+        kap, kalan = divmod(sira, len(CIT_BICIMLERI))
+        basamaklar = []
+        for taban in reversed(radix):
+            kalan, basamak = divmod(kalan, taban)
+            basamaklar.append(basamak)
+        kimlikler.append((kap, *reversed(basamaklar)))
+    return tuple(kimlikler)
+
+
+CIT_KIMLIKLERI = _cit_kimlikleri()
+# ÇÖZÜMÜN KONTROLÜ: saklanan alanlarla (dil, gövde) tutuyor mu? Karışık tabanlı
+# çözüm sessizce kaysaydı kapsama dizisi yanlış boyutları kapsardı.
+for _sira, (_ad, _dil, _govde, *_kalan) in enumerate(CIT_TAM_UZAY):
+    _k = CIT_KIMLIKLERI[_sira]
+    assert CIT_BOYUTLARI["dil"][_k[1]] == _dil, _ad
+    assert CIT_BOYUTLARI["govde"][_k[2]] == _govde, _ad
+
+
+def _kapsama_dizisi(derece: int, tohum: int = 0) -> tuple[int, ...]:
+    """Her `derece`-li boyut bileşimini kapsayan en küçük hücre kümesi (açgözlü)."""
+    eksen_kumeleri = list(itertools.combinations(range(6), derece))
+    satir_bilesimleri = [
+        frozenset((e, tuple(kimlik[i] for i in e)) for e in eksen_kumeleri)
+        for kimlik in CIT_KIMLIKLERI
+    ]
+    kalan = set().union(*satir_bilesimleri)
+    sira = list(range(len(CIT_TAM_UZAY)))
+    random.Random(tohum).shuffle(sira)
+    secili: list[int] = []
+    while kalan:
+        en_iyi, en_iyi_kazanc = None, -1
+        for aday in sira:
+            kazanc = len(satir_bilesimleri[aday] & kalan)
+            if kazanc > en_iyi_kazanc:
+                en_iyi, en_iyi_kazanc = aday, kazanc
+        secili.append(en_iyi)
+        kalan -= satir_bilesimleri[en_iyi]
+    return tuple(sorted(secili))
+
+
+CIT_SECILI_SIRALAR = _kapsama_dizisi(_KAPSAMA_DERECESI)
+CIT_MATRISI = tuple(CIT_TAM_UZAY[sira] for sira in CIT_SECILI_SIRALAR)
+_CIT_BOYUT_OLCULERI = (len(CIT_KAPLARI),) + tuple(
+    len(CIT_BOYUTLARI[ad]) for ad in _CIT_BOYUT_SIRASI
+)
+CIT_HUCRE_KIMLIGI = {
+    hucre[0]: CIT_KIMLIKLERI[sira]
+    for hucre, sira in zip(CIT_MATRISI, CIT_SECILI_SIRALAR)
+}
+
+
+def _boyut_degeri(ad: str, boyut: str) -> str:
+    """Hücrenin bir boyuttaki DEĞERİ — addan ayrıştırılmaz, kimlikten okunur."""
+    kimlik = CIT_HUCRE_KIMLIGI[ad]
+    return CIT_BOYUTLARI[boyut][kimlik[1 + _CIT_BOYUT_SIRASI.index(boyut)]]
 
 # ÖLÇÜLMÜŞ PİNLER — sayılar taze koşumdan gelir, tahmin değildir.
 _TUR9_KIRMIZI = 402
@@ -4101,9 +4338,30 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         "C",
     ], [ad for _a, ad, *_ in CIT_KAPLARI]
     # ...ve KÜÇÜLTÜLEN eksen KAYBOLMADI: aile başına bir temsilci ÖLÇÜLÜYOR.
-    assert len(CIT_MATRISI) == 648 * 5 == 3240, len(CIT_MATRISI)
+    # ─── KAPSAMA KAPISI — küme ELLE SEÇİLMEDİ, İDDİA ÖLÇÜLÜYOR ───
+    assert len(CIT_TAM_UZAY) == 648 * 5 == 3240, len(CIT_TAM_UZAY)
+    assert len(CIT_MATRISI) == 280, len(CIT_MATRISI)  # taze koşum, 2026-09-09
     adlar = [h[0] for h in CIT_MATRISI]
     assert len(set(adlar)) == len(adlar), "hücreler ÇAKIŞIYOR"
+    # Her ÜÇLÜ boyut bileşimi seçilmiş kümede GEÇİYOR — beklenti bileşim
+    # uzayından ÜRETİLİR, seçilmiş hücrelerden değil.
+    eksen_kumeleri = list(itertools.combinations(range(6), _KAPSAMA_DERECESI))
+    beklenen = {
+        (eksenler, degerler)
+        for eksenler in eksen_kumeleri
+        for degerler in itertools.product(
+            *[range(_CIT_BOYUT_OLCULERI[i]) for i in eksenler]
+        )
+    }
+    kapsanan = {
+        (eksenler, tuple(CIT_KIMLIKLERI[sira][i] for i in eksenler))
+        for sira in CIT_SECILI_SIRALAR
+        for eksenler in eksen_kumeleri
+    }
+    assert kapsanan == beklenen, sorted(beklenen - kapsanan)[:5]
+    # ...ve kapsama İKİLİ değil ÜÇLÜ: ikili yetseydi küme 55 hücreye inerdi
+    # (ölçüldü), üçlü 280. Derece düşerse bu sayı düşer ve kol uyarır.
+    assert _KAPSAMA_DERECESI == 3 and len(beklenen) == 1505, len(beklenen)
     # Her hücre GERÇEKTEN bir kap boşaltıyor ve boşaltma NOT üretiyor.
     bossuz = [
         ad for ad, _, _, _, bosalt, _, _ in CIT_MATRISI if not _bos_kap_notlari(bosalt)
@@ -4120,7 +4378,7 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         for ad, dil, _g, _gs, b, e, s in CIT_MATRISI
         if dil == "dilli" and _cit_kaybi(b, e, s)
     }
-    assert len(dilli_dusen) == 1140, len(dilli_dusen)
+    assert len(dilli_dusen) == 102, len(dilli_dusen)  # taze koşum, 2026-09-09
     # DİLLİ beklentisinin VACUOUS olduğu hücreler: çitsiz gövde de bir şey
     # kaldırmıyorsa "şeffaflık" iddiası boşta kalır. Sayısı ölçülmüştür.
     vacuous = {
@@ -4128,7 +4386,7 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         for ad, dil, govde, gs, b, e, _s in CIT_MATRISI
         if dil == "dilli" and not _ham_kaybi(b, e, gs)
     }
-    assert len(vacuous) == 1080, len(vacuous)
+    assert len(vacuous) == 100, len(vacuous)  # taze koşum, 2026-09-09
     # ÖLÇÜLMÜŞ dürüst kayıt: `maddeli` gövdenin HİÇBİR hücresi vacuous DEĞİLDİR —
     # şeffaflık beklentisi dilli-maddeli hücrelerin hepsinde GERÇEKTEN ölçülür.
     assert {govde for _ad, govde in vacuous} == {
@@ -4139,10 +4397,23 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         "maddeli",
         "c-tablolu",
     }
-    # ...ve VACUOUS'luk bağlama/ayıraca GÖRE değişmiyor: girinti bir notu
-    # düşürmez, dolayısıyla her (gövde, kapanış) bileşimi tüm 30 bağlam×ayıraç
-    # hücresinde aynı yanıtı verir.
-    assert len(vacuous) % (len(CIT_BAGLAMLARI) * len(CIT_ISARETLERI)) == 0
+    # ESKİ KOL KALDIRILDI — DÜRÜST KAYIT. Burada "vacuous sayısı bağlam×ayıraç
+    # çarpımına tam bölünür" diye bir kol vardı; o iddia TAM ÇARPIMIN bir yan
+    # ürünüydü (her bileşim tam 30 kez geçtiği için), kapsama dizisinde
+    # anlamını yitirir ve sağlamasa da bir kusur göstermez. Yerine iddianın
+    # KENDİSİ ölçülüyor: vacuous'luk bağlam ve ayıraçtan BAĞIMSIZ.
+    #
+    # AYIRAÇ BAĞIMSIZLIĞI KOLU DÜŞÜRÜLDÜ — ÖLÇÜLDÜ, GİZLENMEDİ. Vacuous'luğun
+    # hangi boyutlara bağlı olduğu ölçüldü: KAP + GÖVDE + KAPANIŞ + BAĞLAM
+    # (`ic-ice-madde` gövdeyi iç içe maddenin girintisine sokuyor, çitsiz taban
+    # da hiçbir not düşürmüyor). Geriye "ayıraç biçiminden bağımsız" iddiası
+    # kalıyordu; kapsama dizisinde o iddiayı SINAYAN tek bir grup bile yok —
+    # aynı (kap, gövde, kapanış, bağlam) iki farklı ayıraçla geçmiyor (ölçüldü:
+    # sınayan grup sayısı 0). Boşa yeşil bir kol bırakmak beyanı bayatlatırdı.
+    #
+    # DÜRÜST ETİKET: çözülmedi + bilinçle düşürüldü. Yeniden açılma koşulu:
+    # ayıraç biçimine bağlı gerçek bir çit hatası çıkarsa, iddia kapsama
+    # dizisine bir ayıraç-çifti hücresi EKLENEREK sınanır.
 
 
 def test_kod_citi_ekseni_mutasyona_duyarli() -> None:
@@ -4166,15 +4437,18 @@ def test_kod_citi_ekseni_mutasyona_duyarli() -> None:
     # ÖLÇÜLDÜ: kırılan KAP AİLESİ BEŞTİR — tur 8'de kol yalnız İKİ aileyi
     # (doluluk kapları) kırıyordu. Süpürme kardeş kapları da kapsadığı için
     # mutasyon beş ailenin hepsini birden düşürür.
-    assert len(kirmizi) == 696, len(kirmizi)
-    # ...ve ÇİT BOYUTLARININ HEPSİ kırmızıya katkı veriyor: 270 dilsiz biçimin
-    # 270'i de listede — kol tek bir bileşime dayanmıyor. Bağlam ve ayıraç
-    # değerlerinin hepsi kırmızıda ADIYLA geçiyor.
-    assert len({ad.rsplit("/", 1)[1] for ad in kirmizi}) == 324, kirmizi
-    for baglam in CIT_BOYUTLARI["baglam"]:
-        assert any(ad.endswith(f"-{baglam}-backtick3") for ad in kirmizi), baglam
-    for isaret in CIT_BOYUTLARI["isaret"]:
-        assert any(ad.endswith(f"-{isaret}") for ad in kirmizi), isaret
+    assert len(kirmizi) == 59, len(kirmizi)  # taze koşum, 2026-09-09
+    # ...ve ÇİT BOYUTLARININ HEPSİ kırmızıya katkı veriyor — kol tek bir
+    # bileşime dayanmıyor. İDDİA GÜÇLENDİ: eskiden yalnız `-backtick3` ekli
+    # adlar aranıyordu (tam çarpımın yan ürünü); şimdi her boyutun BÜTÜN
+    # değerleri kırmızıda geçiyor mu diye KİMLİKTEN okunarak sorulur.
+    assert len({ad.rsplit("/", 1)[1] for ad in kirmizi}) == 53, len(kirmizi)
+    for boyut in ("baglam", "isaret", "govde"):
+        gecen = {_boyut_degeri(ad, boyut) for ad in kirmizi}
+        assert gecen == set(CIT_BOYUTLARI[boyut]), (
+            boyut,
+            sorted(set(CIT_BOYUTLARI[boyut]) - gecen),
+        )
     aileler = {ad.split("/")[0] for ad in kirmizi}
     assert aileler == {
         "bolum-a-alani",
@@ -4186,7 +4460,7 @@ def test_kod_citi_ekseni_mutasyona_duyarli() -> None:
     # DÜRÜST BOŞ HÜCRE KAYDI: mutasyon altında da yeşil kalan dilsiz hücreler —
     # hiçbiri `maddeli` DEĞİLDİR; o gövdenin hücrelerinin hepsi kırılır.
     yesil = {ad for ad, dil, *_ in CIT_MATRISI if dil == "dilsiz"} - set(kirmizi)
-    assert len(yesil) == 924, len(yesil)
+    assert len(yesil) == 74, len(yesil)  # taze koşum, 2026-09-09
     # DÜRÜST KAYIT — 4. ayaktan SONRA burası DEĞİŞTİ. `maddeli` gövdenin yeşil
     # hücreleri artık VAR ve hepsi TEK bir aileden geliyor: `c-esleme-kabi`.
     # Sebep yapısaldır, kapsam kaybı değil: sözleşme Bölüm C'yi sabit sütunlu
@@ -4326,8 +4600,11 @@ def test_gramer_maskesi_hicbir_kacis_birakmaz() -> None:
     finally:
         _BOS_KAP_ONBELLEGI.clear()
     assert kayipli == set(), sorted(kayipli)
-    # ...ve küme BOŞ DEĞİL: kol gerçekten hücre koşuyor.
-    assert len(CIT_MATRISI) >= 2700 and len(COMMONMARK_SINIR_PROBLARI) == 2
+    # ...ve küme BOŞ DEĞİL: kol gerçekten hücre koşuyor. Eşik artık ÇARPIMIN
+    # boyutuna değil KAPSAMA derecesine bağlanır — küme küçüldü, kapsadığı
+    # bileşim uzayı küçülmedi.
+    assert len(CIT_MATRISI) == len(CIT_SECILI_SIRALAR) >= 270
+    assert len(COMMONMARK_SINIR_PROBLARI) == 2
 
 
 def test_cit_ayiraci_satirin_tek_anlamli_icerigi_olmali() -> None:
@@ -5013,8 +5290,14 @@ def test_kapanmamis_kok_citinin_bedeli_OLCULUR() -> None:
         for ad, dil, _g, _gs, bosalt, ekle, satirlar in CIT_MATRISI
         if dil == "dilsiz" and _cit_kaybi(bosalt, ekle, satirlar)
     }
-    assert set(ham_kayipli) == HAM_KAYIPLI_HUCRELER, sorted(
-        set(ham_kayipli) ^ HAM_KAYIPLI_HUCRELER
+    # Beklenti KAVRAMDAN türer (kök rejimi × kapanmamış × video havuzu), sonra
+    # kapsama dizisinin SEÇTİĞİ hücrelerle kesiştirilir — matris küçüldüğü için
+    # beklenti listesi elle kısaltılmaz, kesişim ÜRETİLİR.
+    secilenler = {hucre[0] for hucre in CIT_MATRISI}
+    beklenen_ham = HAM_KAYIPLI_HUCRELER & secilenler
+    assert beklenen_ham, "kapsama dizisi bu sınıftan hiç hücre seçmedi"
+    assert set(ham_kayipli) == beklenen_ham, sorted(
+        set(ham_kayipli) ^ beklenen_ham
     )
     for ad, kayip in ham_kayipli.items():
         bosalt, ekle, satirlar = next(
