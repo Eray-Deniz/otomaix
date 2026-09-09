@@ -47,6 +47,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -1001,6 +1002,15 @@ def preflight(
     **Kaçan istisna yutulmaz.** `Exception` `OLCUM_ARIZASI`'na çevrilir, ama
     `BaseException` (iptal dâhil) OLDUĞU GİBİ geçer: iptal bir ölçüm sonucu
     değildir ve çağıranın koruma bölgesine ait olmalıdır.
+
+    **Dönüş TİP kapısından geçer (B5).** Kabul edilen tek değer kümesi
+    `{True, False}`'tur ve kapı `type(...) is bool` ile ölçülür; başka her tip
+    `OLCUM_ARIZASI`'dır. `bool(...)` süzgeci bu kapının YERİNE GEÇMEZ, tam
+    tersine iki yönde de yalan söyler: `"false"` metni truthy'dir ve erişimi
+    UYDURUR, `0` ise falsy'dir ve "ölçtüm, yok" gibi görünüp `ERISIM_YOK`'un
+    meşrulaştırdığı MUAFİYETİ üretirdi. `bool` Python'da `int`'in alt
+    sınıfıdır, ama `1`/`0` yine reddedilir: bir erişim BEYANI değil, bir
+    sayıdır. Özensiz prob girdinin ta kendisidir — tehdit modeli budur.
     """
     if not isinstance(tool, str) or not tool.strip():
         raise ValueError(f"preflight araç kimliği bekler: {tool!r}")
@@ -1012,14 +1022,25 @@ def preflight(
             "başlamaz (ölçülmemiş erişim 'var' sayılmaz)",
         )
     try:
-        erisim = bool(prob(tool))
+        deger = prob(tool)
     except Exception as exc:  # noqa: BLE001 — her arıza turu DURDURUR
         return PreflightResult(
             arac=tool,
             durum=PreflightDurumu.OLCUM_ARIZASI,
             sebep=f"web erişimi probu hata verdi: {type(exc).__name__}: {exc}",
         )
-    if erisim:
+    if type(deger) is not bool:
+        return PreflightResult(
+            arac=tool,
+            durum=PreflightDurumu.OLCUM_ARIZASI,
+            sebep=(
+                "web erişimi probu `bool` DEĞİL bir değer döndürdü "
+                f"({type(deger).__name__}: {deger!r}) — `True`/`False` dışında "
+                "hiçbir şey erişim BEYANI değildir; truthy bir dönüş erişimi "
+                "uydurur, falsy bir dönüş muafiyet üretirdi (K-14 fail-closed)"
+            ),
+        )
+    if deger:
         return PreflightResult(
             arac=tool, durum=PreflightDurumu.ERISIM_VAR, sebep=""
         )
@@ -1493,13 +1514,19 @@ def _kalicilastir(packet: PacketRef, ham: Mapping[str, str]) -> str | None:
     kadar ertelemek onu kapatır. Denetçi-2 DÜŞSE bile denetçi-1'in raporu yine
     yazılır — kanıt kaybolmaz ve düşen rol zaten koşmadığı için sızıntı yoktur.
 
-    Dönüş: hata yoksa `None`, salt-eklemelik çiğnenirse SEBEP. `FileExistsError`
-    DIŞINDAKİ `OSError`'lar YUTULMAZ — çağıranın dış koruması onları tipli
-    arızaya çevirir.
+    Dönüş: hata yoksa `None`, bir ya da daha çok rol yazılamadıysa TOPLU SEBEP.
 
-    **Çakışan rol döngüyü KESMEZ.** Bir rolün dosyası zaten varsa sebep
-    biriktirilir ve KALAN roller yine denenir: erken dönüş, çakışmayan rolün
-    tamamlanmış raporunu kanıt olmaktan çıkarırdı.
+    **Koruma rol BAŞINADIR, döngü başına DEĞİL (B6).** Her rolün yazımı kendi
+    `except OSError` kolundadır: denetçi-1'in izin/disk arızası döngüyü
+    KESMEZ, sebep listesine eklenir ve denetçi-2'nin yazılabilir, TAMAMLANMIŞ
+    raporu yine denenir. Döngü başına tek koruma, arızayı ilk gören rolün
+    ötesindeki kanıtı hiç denemeden düşürürdü — üstelik `finally`'nin yeniden
+    çağırması da işe yaramazdı: süpürme yine ilk roldeki aynı arızaya
+    çarpardı. `FileExistsError` bu kümenin ADLANDIRILMIŞ alt hâlidir (K-82
+    salt-eklemelik) ve kendi sebebini taşır.
+
+    Yutulan şey ARIZANIN İSTİSNASIDIR, arızanın KENDİSİ değil: sebep dönüşe
+    girer, çağıran turu `tamamlanmadi` işaretler (fail-closed korunur).
     """
     sebepler: list[str] = []
     for rol in DENETCI_ROLLERI:
@@ -1515,6 +1542,17 @@ def _kalicilastir(packet: PacketRef, ham: Mapping[str, str]) -> str | None:
                 f"denetim turu {rol} raporunu yazamadı: {hedef} ZATEN var — "
                 "ham katman salt-eklemedir, dosya EZİLMEZ (K-82); yeniden "
                 "koşum yeni kimlik alır"
+            )
+        except OSError as exc:
+            _LOG.warning(
+                "denetim turu %s raporunu yazamadı: %s", rol, hedef,
+                exc_info=True,
+            )
+            sebepler.append(
+                f"denetim turu {rol} raporunu yazamadı "
+                f"({type(exc).__name__}): "
+                + runs.mask_secrets(str(exc) or "<sebep boş>")
+                + " — KALAN roller yine denendi"
             )
     return " · ".join(sebepler) if sebepler else None
 
@@ -1544,6 +1582,181 @@ def _hedef_rapor_kapisi(packet: PacketRef) -> str | None:
         f"({' · '.join(var_olanlar)}) — ham katman salt-eklemedir (K-82) ve "
         "önceki turdan kalmış rapor denetçi-2 koşarken diskte durup kör "
         "bağımsızlığı düşürür; yeniden koşum yeni kimlik alır"
+    )
+
+
+KIRALAMA_DIZIN_ADI = ".kiralama"
+"""Paket başına kiralamanın dizin adı — kökün ALTINDA, rol ağaçlarının DIŞINDA.
+
+Rol ağaçlarının içine konsaydı koşum anı parmak izini kendisi bozardı.
+"""
+
+KIRALAMA_SAHIP_DOSYASI = "sahip"
+"""Kiralamanın adli izi. DEVRALMA GİRDİSİ DEĞİLDİR — okunmaz, yalnız yazılır."""
+
+
+def _kiralama_yolu(packet: PacketRef) -> Path:
+    return packet.kok / KIRALAMA_DIZIN_ADI
+
+
+def _kiralamayi_al(packet: PacketRef) -> str | None:
+    """Paket başına ATOMİK kiralama alır (B7). Dönüş: alınamadıysa SEBEP.
+
+    **Neden kiralama.** Hedef rapor çakışma kontrolü bir SIRA kapısıdır, kilit
+    değildi: iki süreç aynı paket için kabul bölgesinden BİRLİKTE geçebilir ve
+    biri raporlarını yazarken ötekinin denetçi-2'si koşuyor olabilirdi.
+    `open(..., "x")` üzerine yazmayı engeller ama o denetçinin rakip raporu
+    GÖRMESİNİ engellemez — yani eksik olan sıralama değil, K-79 körlüğüydü.
+
+    **Atomiklik dosya sistemindedir.** `mkdir` tek ve bölünmez bir sistem
+    çağrısıdır: iki süreçten yalnız biri kazanır, öteki `FileExistsError` alır.
+    Yeni bir servis ya da bağımlılık EKLENMEZ.
+
+    **ÖLÜ KİLİT DAVRANIŞI — açık seçim ve beyan.** Kiralama HİÇBİR KOŞULDA
+    OTOMATİK DEVRALINMAZ: ne zaman aşımıyla, ne PID canlılığıyla, ne de sahip
+    notundaki damgayla. Bu bir eksiklik değil, gerekçeli bir seçimdir —
+    devralma eşiği, YAVAŞ ama CANLI bir sahibin kiralamasını çalar ve tam da
+    kapatmak için var olduğumuz eşzamanlı-iki-tur durumunu geri açardı; üstelik
+    duvar saati ve PID yeniden kullanımı ölçülemeyen sezgilerdir.
+
+    Devralmanın GEREKMEMESİ yapısaldır: kiralama PAKET KÖKÜ başınadır, kök ise
+    `<dest>/<run_id>` olduğu için koşu kimliği başınadır ve ham katman
+    salt-eklemedir (K-82) — yeniden koşum YENİ kimlik, dolayısıyla YENİ kök ve
+    YENİ kiralama alır. Sahibi düşen bir kiralama yalnız KENDİ koşusunun
+    kökünü kapatır; zaten yeniden koşulamayacak olan kökü. İnsan kurtarması
+    tek işlemdir: o dizini silmek.
+
+    Serbest bırakma sahibin `finally` yolundadır ve sahiplenmeyen tur ASLA
+    silmez (çağıran bunu bayrakla korur).
+    """
+    yol = _kiralama_yolu(packet)
+    try:
+        yol.mkdir()
+    except FileExistsError:
+        return (
+            "denetim turu BAŞLAMADI: paket kiralaması BAŞKASINDA "
+            f"({yol}) — aynı paket için eşzamanlı ikinci bir tur, denetçilerin "
+            "rakip raporları görmesine yol açardı (K-79). Kiralama otomatik "
+            "DEVRALINMAZ; sahibi düştüyse yeniden koşum YENİ kimlik alır"
+        )
+    try:
+        (yol / KIRALAMA_SAHIP_DOSYASI).write_text(
+            f"run_id={packet.run_id}\npid={os.getpid()}\n", encoding="utf-8"
+        )
+    except OSError:  # adli iz yazılamadı — kiralama YİNE geçerlidir
+        _LOG.warning(
+            "kiralama sahip notu yazılamadı: run_id=%s", packet.run_id,
+            exc_info=True,
+        )
+    return None
+
+
+def _kiralamayi_birak(packet: PacketRef) -> None:
+    """Kiralamayı SAHİBİ bırakır — arıza asıl istisnayı MASKELEMEZ."""
+    yol = _kiralama_yolu(packet)
+    try:
+        (yol / KIRALAMA_SAHIP_DOSYASI).unlink(missing_ok=True)
+        yol.rmdir()
+    except OSError:
+        _LOG.warning(
+            "kiralama bırakılamadı: run_id=%s yol=%s", packet.run_id, yol,
+            exc_info=True,
+        )
+
+
+def _rol_agaci_parmagi(dizin: Path) -> tuple[dict[str, str], list[str]]:
+    """Rol ağacının KOŞUM ANI parmak izi + reddedilen düğümler.
+
+    Kural paket KURULUMUNDAKİ kuralın AYNISIDIR (`build_packet`): eşleme
+    `{göreli yol: sha256(baytlar)}` ve özet `identity.canonical_sha`. İki ayrı
+    kural yazılsaydı ölçüm ile beyan aynı ağaç için farklı özet üretir, kapı da
+    her koşumda yalan söylerdi. Kurulum düz dosya yazdığı için özyinelemeli
+    süpürme aynı eşlemeyi verir; alt dizin BELİRİRSE anahtar kümesi ayrışır ve
+    kapı bunu görür.
+
+    Süpürme symlink İZLEMEZ (`os.scandir` + `follow_symlinks=False`): izleyen
+    bir süpürme, symlink çemberinde asılır ve reddetmesi gereken düğümü
+    ölçmeye kalkardı. Symlink ve düzenli-olmayan düğümler parmak izine
+    GİRMEZ, ayrı listede REDDEDİLİR — çünkü bayt-özdeş bir ikize kurulan
+    symlink özeti DEĞİŞTİRMEZ ama rol ağacını paketin dışına açar.
+
+    **Ölçülmemiş kapsam sınırı (dürüst etiket).** BOŞ bir alt dizinin
+    sonradan eklenmesi parmak izini değiştirmez ve bu kapı onu GÖRMEZ; kural
+    kurulumdakiyle özdeş tutulduğu için dosyasız düğüm özete girmez.
+    """
+    parmak: dict[str, str] = {}
+    reddedilen: list[str] = []
+
+    def _gez(kok: Path, onek: str) -> None:
+        with os.scandir(kok) as girisler:
+            sirali = sorted(girisler, key=lambda giris: giris.name)
+        for giris in sirali:
+            goreli = f"{onek}{giris.name}"
+            if giris.is_symlink():
+                reddedilen.append(f"{goreli} (symlink)")
+                continue
+            if giris.is_dir(follow_symlinks=False):
+                _gez(Path(giris.path), f"{goreli}/")
+                continue
+            if not giris.is_file(follow_symlinks=False):
+                reddedilen.append(f"{goreli} (düzenli dosya DEĞİL)")
+                continue
+            parmak[goreli] = hashlib.sha256(
+                Path(giris.path).read_bytes()
+            ).hexdigest()
+
+    _gez(dizin, "")
+    return parmak, reddedilen
+
+
+def _paket_butunluk_kapisi(packet: PacketRef) -> str | None:
+    """KOŞUM ANINDA ölçülen bayt-özdeşlik ve düğüm tipi (B7 · K-79).
+
+    `PacketRef` yalnız YAPIM anında, üstelik iki BEYAN edilen özeti birbirine
+    karşı ölçer; altındaki dosyalar yapımdan sonra değişebilir. Bayat ya da
+    değiştirilmiş bir paket runner'lara ulaşırsa iki denetçi FARKLI girdi görür
+    ve mutabakat kapısı ölçtüğünü sandığı şeyi ölçmez. Bu yüzden parmak izi
+    ilk runner'dan ÖNCE, kiralama ALTINDA yeniden hesaplanır.
+
+    İki karşılaştırma da yapılır: her ağaç kendi SAKLI özetine karşı, ardından
+    iki ağaç BİRBİRİNE karşı. İkincisi bugün birinciden türer (`PacketRef`
+    saklı özetlerin eşitliğini zorlar), yani tek başına hiçbir mutasyonu
+    yakalamaz — kasıtlı bir yedek koldur ve dürüstçe böyle etiketlenir.
+
+    Kapı `_hedef_rapor_kapisi`'nden SONRA koşar: turun KENDİ rapor dosyası o
+    kapı geçtikten sonra provably yoktur, dolayısıyla ağaçtan dışlanacak ad
+    yoktur ve `RAPOR-*` adlı bir kaçak dosya da burada yakalanır.
+    """
+    hatalar: list[str] = []
+    olculen: dict[str, str] = {}
+    for rol in DENETCI_ROLLERI:
+        dizin = packet.kopyalar[rol]
+        parmak, reddedilen = _rol_agaci_parmagi(dizin)
+        if reddedilen:
+            hatalar.append(
+                f"{rol} ağacında symlink/düzensiz alt düğüm var "
+                f"({' · '.join(reddedilen)}) — rol ağacı paketin DIŞINA "
+                "açılamaz; baytlar aynı kalsa bile düğüm tipi kör ayrımı düşürür"
+            )
+            continue
+        sha = identity.canonical_sha(parmak)
+        olculen[rol] = sha
+        if sha != packet.kopya_shalari[rol]:
+            hatalar.append(
+                f"{rol} ağacı paket YAPILDIKTAN SONRA değişti (beyan "
+                f"{packet.kopya_shalari[rol]}, koşum anı ölçümü {sha})"
+            )
+    if not hatalar and len(set(olculen.values())) != 1:
+        hatalar.append(
+            "iki rol ağacı koşum anında bayt-özdeş DEĞİL "
+            f"({olculen}) — farklı girdi gören iki rapor mutabakat "
+            "kanıtlayamaz (K-79)"
+        )
+    if not hatalar:
+        return None
+    return (
+        "denetim turu BAŞLAMADI: paket bütünlük kapısı düştü — "
+        + " · ".join(hatalar)
     )
 
 
@@ -1620,8 +1833,9 @@ async def run_audit_round(
 
     * **KABUL BÖLGESİ** — ilk yan etkiden (alt süreç · dosya yazımı · DB
       mutasyonu) ÖNCE biter ve TÜM giriş kapılarını uygular: kimlik bağı, K-14
-      ön kontrol KARARI, hedef rapor dosyalarının çakışma kontrolü. Bir kapı
-      reddederse hiçbir runner koşmaz ve hiçbir rapor dosyası yazılmaz.
+      ön kontrol KARARI, paket KİRALAMASI, hedef rapor dosyalarının çakışma
+      kontrolü ve paket BÜTÜNLÜĞÜ. Bir kapı reddederse hiçbir runner koşmaz ve
+      hiçbir rapor dosyası yazılmaz.
     * **KOŞUM BÖLGESİ** — runner'lar, doğrulama ve mutabakat. Kabul bölgesinin
       ön-kontrol ayağı DÂHİL her şey `try` korumasının İÇİNDEDİR: prob
       `BaseException` (iptal) fırlatırsa da koşu satırı işaretsiz kalmaz.
@@ -1644,6 +1858,23 @@ async def run_audit_round(
       YAZILMAZ; ikisi de bittikten sonra kalıcılaşır. Geç yazım kanalı ancak
       hedef dizin BAŞTA boşsa kapatır: `_hedef_rapor_kapisi` bunu kabul
       bölgesinde ölçer, `_kaniti_kalicilastir` da yazımı tek çıkışta toplar.
+    * **K-79 PAKET KİRALAMASI (B7)** — kabul bölgesi çakışma kontrolünden ÖNCE
+      paket kökü altında ATOMİK bir kiralama (`mkdir`) alır ve onu SON
+      kalıcılaştırmaya kadar tutar. Çakışma kontrolü tek başına bir SIRA
+      kapısıydı: iki süreç aynı paket için kabulden birlikte geçebilir, biri
+      raporunu yazarken ötekinin denetçi-2'si koşuyor olabilirdi.
+      **Kiralama HİÇBİR KOŞULDA otomatik DEVRALINMAZ** (zaman aşımı · PID
+      canlılığı · damga YOK): devralma eşiği yavaş ama CANLI bir sahibin
+      kilidini çalar ve kapatılan durumu geri açardı. Devralma gerekmez çünkü
+      kiralama koşu kimliği başınadır ve ham katman salt-eklemedir (K-82) —
+      yeniden koşum YENİ kimlik, yeni kök, yeni kiralama alır. Ayrıntı ve
+      insan kurtarma yolu `_kiralamayi_al` gövdesindedir.
+    * **K-79 KOŞUM ANI BÜTÜNLÜĞÜ (B7)** — kiralama altında, ilk runner'dan
+      ÖNCE her rol ağacının parmak izi kurulumdaki KURALLA yeniden hesaplanır
+      ve hem SAKLI özete hem kardeş ağaca karşı ölçülür; symlink ve düzensiz
+      alt düğümler reddedilir. `PacketRef` yalnız YAPIM anında iki BEYANI
+      karşılaştırır — bayat ya da değiştirilmiş bir paket runner'lara ulaşıp
+      iki denetçiye FARKLI girdi gösterebilirdi.
     * **K-82 DURUM SAHİPLİĞİ** — terminal arızada `runs.mark_incomplete`
       BURADAN çağrılır (runner'ın `db`'si yoktur) ve yazılmış rapor dosyası
       EZİLMEZ: dosyalar salt-eklemeli (`"x"`) açılır.
@@ -1683,8 +1914,9 @@ async def run_audit_round(
     `tamamlanmadi` İŞARETLENMEZ: K-150 "eksik denetçi yeniden koşulur" der ve
     yarım işareti yeniden koşumun önünü keserdi. `tamamlanmadi` yalnız aracın
     KENDİSİ düştüğünde (zaman aşımı · sıfırdan farklı çıkış · boş çıktı · dosya
-    çakışması · alt süreç istisnası) ya da tur ÇEVRESEL bir kapıdan hiç
-    başlayamadığında (K-14 ön kontrol · hedef dosya çakışması) yazılır. İkinci
+    çakışması · alt süreç istisnası · rapor YAZILAMADI) ya da tur ÇEVRESEL bir
+    kapıdan hiç başlayamadığında (K-14 ön kontrol · paket kiralaması · hedef
+    dosya çakışması · paket bütünlüğü) yazılır. İkinci
     küme de yeniden koşuma açıktır; işaretin amacı satırın `calisiyor` olarak
     ASILI kalmamasıdır.
 
@@ -1697,6 +1929,8 @@ async def run_audit_round(
     izolasyon dağıtım katmanının işidir ve bu görevin kapsamı DIŞINDADIR.
     `test_cwd_is_not_a_security_boundary_and_the_declaration_is_measured` bu
     beyanı ölçer — izolasyon eklenirse test KIRMIZI olur ve beyan bayat kalamaz.
+    Kiralama ve bütünlük kapısı bu sınırı DEĞİŞTİRMEZ: ikisi de dosya sistemi
+    tabanlıdır, kum havuzu · konteyner · ayrı kullanıcı EKLEMEZ.
     """
     require_run_id(run_id)
     if not isinstance(packet, PacketRef):
@@ -1733,6 +1967,7 @@ async def run_audit_round(
 
     ham: dict[str, str] = {}
     _yazim_sonucu: list[str | None] = []
+    kiralama_alindi = False
 
     def _kaniti_kalicilastir(*, yut_hatalari: bool) -> str | None:
         """Tamamlanmış raporları EN ÇOK BİR KEZ diske indirir (TEK çıkış).
@@ -1784,11 +2019,22 @@ async def run_audit_round(
                     for sonuc in kapali
                 )
             )
+        # Kiralama ÇAKIŞMA KONTROLÜNDEN ÖNCE ve son kalıcılaştırmaya kadar
+        # TUTULUR: çakışma kontrolü bir sıra kapısıdır, kilit değildir.
+        kiralama_sebebi = _kiralamayi_al(packet)
+        if kiralama_sebebi is not None:
+            return await _yarim(kiralama_sebebi)
+        kiralama_alindi = True
         # Hedef dosya çakışması İLK runner'dan ÖNCE: kalmış bir rapor,
         # denetçi-2 koşarken diskte durup sızıntı kanalını yeniden açardı.
         cakisma = _hedef_rapor_kapisi(packet)
         if cakisma is not None:
             return await _yarim(cakisma)
+        # Bütünlük çakışmadan SONRA: turun kendi rapor dosyası artık provably
+        # yoktur, dolayısıyla ağaçtan dışlanacak ad da yoktur.
+        butunluk = _paket_butunluk_kapisi(packet)
+        if butunluk is not None:
+            return await _yarim(butunluk)
 
         # ══ KOŞUM BÖLGESİ — ilk yan etki buradan sonra ══
         for rol in DENETCI_ROLLERI:
@@ -1866,3 +2112,7 @@ async def run_audit_round(
         # TEK ÇIKIŞ: dört yolun dördünde de tamamlanmış kanıt en iyi çabayla
         # yazılır. Normal dallar zaten çağırdıysa bellekleme bunu no-op yapar.
         _kaniti_kalicilastir(yut_hatalari=True)
+        # Kiralama SON kalıcılaştırmadan sonra bırakılır. Sahiplenmeyen tur
+        # ASLA silmez: bayrak yalnız `mkdir`'i KAZANAN turda doğrudur.
+        if kiralama_alindi:
+            _kiralamayi_birak(packet)

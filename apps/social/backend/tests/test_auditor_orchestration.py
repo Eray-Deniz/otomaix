@@ -29,9 +29,11 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import builtins
 import logging
 import subprocess
 import sys
+import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -1279,6 +1281,49 @@ async def test_cwd_is_not_a_security_boundary_and_the_declaration_is_measured(
     )
 
 
+async def test_dead_lease_takeover_declaration_is_in_the_body_and_is_measured(
+    kosu, tmp_path
+):
+    """ÖLÜ KİLİT beyanı gövdededir ve bu test onu ÖLÇER (tripwire).
+
+    Seçim: kiralama HİÇBİR KOŞULDA otomatik DEVRALINMAZ. Davranışı matrisin
+    `kiralama|kapi-reddi|yok|olu-kiralama` hücresi ölçer (sahibi ölmüş bir
+    kiralama turu başlatmaz ve SİLİNMEZ); bu kol beyanın kendisini pinler.
+    Bir gün zaman aşımıyla devralma eklenirse ikisi birden kırmızıya döner ve
+    beyan sessizce bayatlayamaz.
+    """
+    db, run_id, paket = kosu
+    beyan = auditors.run_audit_round.__doc__ or ""
+    assert "DEVRALINMAZ" in beyan, (
+        "ölü kilit beyanı `run_audit_round` gövdesinden KAYBOLMUŞ"
+    )
+
+    # Beyanın ikinci yarısı: devralma GEREKMEZ, çünkü yeniden koşum yeni
+    # kimlik alır. Bu ölçülebilir: AYNI kök altında ikinci bir kiralama
+    # alınamaz, AYRI kök altındaki kiralama ise etkilenmez.
+    kiralama = paket.kok / KIRALAMA_DIZIN_ADI
+    kiralama.mkdir()
+    (kiralama / "sahip").write_text("run_id=olu\npid=4294967295\n", encoding="utf-8")
+
+    sector_id = await db.fetchval(
+        "SELECT sector_id FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    )
+    yeni_run_id = runs.new_run_id()
+    await runs.open_run(
+        db, sector_id=sector_id, run_id=yeni_run_id, kosu_turu="ilk"
+    )
+    yeni_paket = _paket(tmp_path, yeni_run_id)
+    runner = _SayanRunner(_iki_gecerli_rapor())
+    tur = await _tur_kos(db, yeni_paket, runner=runner, run_id=yeni_run_id)
+
+    assert tur.gecerli is True, (
+        f"ölü kiralama BAŞKA bir koşuyu blokladı: {tur.sebep!r} — beyan "
+        "kiralamanın koşu kimliği başına olduğunu söylüyor"
+    )
+    assert kiralama.is_dir(), "ölü kiralama DEVRALINDI/silindi — beyan bayat"
+
+
 # ═══ 12. B4 (F3) — URL tamlığı YETKİLİ kaynağa karşı ölçülür ════════════════
 
 
@@ -1452,15 +1497,23 @@ EKSEN_1_KAPI = (
     "yok",
     "kimlik-bagi",
     "on-kontrol",
+    "kiralama",
     "dosya-cakismasi",
+    "paket-butunlugu",
     "yol-kapisi",
 )
-"""Eksen 1 — giriş kapısı (`yok` = hiçbir kapı ihlal edilmedi)."""
+"""Eksen 1 — giriş kapısı (`yok` = hiçbir kapı ihlal edilmedi).
+
+Sıra kabul bölgesindeki UYGULAMA sırasıdır: kimlik bağı → K-14 ön kontrol →
+kiralama → hedef dosya çakışması → paket bütünlüğü. `yol-kapisi` turdan önce,
+paketin YAPIM yüzeyinde koşar.
+"""
 
 EKSEN_2_CIKIS = (
     "kapi-reddi",
     "normal-basari",
     "normal-ariza",
+    "kalicilastirma-arizasi",
     "os-error",
     "cancelled",
     "beklenmeyen",
@@ -1469,6 +1522,57 @@ EKSEN_2_CIKIS = (
 
 EKSEN_3_ROL = ("yok",) + auditors.DENETCI_ROLLERI + ("ikisi", "on-kontrol")
 """Eksen 3 — arızanın doğduğu rol (`yok` = rol ayırt edici değil)."""
+
+EKSEN_4_PROB_TIPI = (
+    "prob-yok",
+    "dogru-tip-olumlu",
+    "dogru-tip-olumsuz",
+    "yanlis-tip-truthy",
+    "yanlis-tip-falsy",
+    "istisna",
+)
+"""Eksen 4 — ön kontrol probunun DÖNÜŞ TİPİ (kavramdan türetildi).
+
+Prob ya hiç yoktur (`prob-yok`), ya patlar (`istisna`), ya da bir DEĞER döndürür.
+Değer dalı iki ikiliye ayrılır — tip DOĞRU mu (`bool`) ve değer truthy mi — ve
+dört hücrenin dördü de anlamlıdır: yanlış tipin truthy olanı erişimi UYDURUR
+(`"false"` metni truthy'dir), falsy olanı ise "ölçtüm, yok" diyerek MUAFİYET
+üretirdi. İkisi de bir ölçüm DEĞİLDİR.
+"""
+
+PROB_TIPI_BEKLENEN_DURUM = {
+    "prob-yok": auditors.PreflightDurumu.OLCULMEDI,
+    "dogru-tip-olumlu": auditors.PreflightDurumu.ERISIM_VAR,
+    "dogru-tip-olumsuz": auditors.PreflightDurumu.ERISIM_YOK,
+    "yanlis-tip-truthy": auditors.PreflightDurumu.OLCUM_ARIZASI,
+    "yanlis-tip-falsy": auditors.PreflightDurumu.OLCUM_ARIZASI,
+    "istisna": auditors.PreflightDurumu.OLCUM_ARIZASI,
+}
+"""Eksen 4'ün ayırt edici yüklemi. Tur seviyesi bunu GÖREMEZ: dört değerin
+üçü de turu başlatmaz. Ayrım MUAFİYET yetkisindedir ve durumda yaşar."""
+
+EKSEN_5_MUTASYON = (
+    "icerik-degisti",
+    "dosya-eklendi",
+    "dosya-silindi",
+    "symlink-alt-dugum",
+)
+"""Eksen 5 — paketin YAPIMDAN SONRA değişme biçimi (kavramdan türetildi).
+
+`PacketRef` iki BEYAN edilen özeti yapım anında karşılaştırır; altındaki
+dosyalar sonradan değişebilir. Bir ağaç yalnız dört biçimde sapar: var olan
+düğümün BAYTLARI değişir, düğüm EKLENİR, düğüm SİLİNİR ya da düğümün TİPİ
+değişir. Dördüncüsü ayrı bir eksendir çünkü baytlar AYNI kalabilir: parmak izi
+kapısı onu göremez, symlink kapısı görür.
+"""
+
+EKSEN_6_KIRALAMA = ("rakip-kiralama", "olu-kiralama", "rakip-tur")
+"""Eksen 6 — paket başına atomik kiralamanın üç durumu.
+
+`rakip-kiralama` kiralama TUTULUYORken gelen tur; `olu-kiralama` sahibi ölmüş
+bir kiralama (devralma beyanının ölçümü); `rakip-tur` ise kiralama biz
+tutarken AYRI iş parçacığından gelen gerçek eşzamanlı tur.
+"""
 
 
 @dataclass(frozen=True)
@@ -1488,6 +1592,14 @@ class _Hucre:
     kosu_durumu: str
     """(c) koşu durumu — `sector_package_runs.durum`."""
     firlatan: type[BaseException] | None
+    sebep_parcalari: tuple[str, ...] = ()
+    """(d) SEBEP — koşu satırına yazılan gerekçede geçmesi ZORUNLU parçalar.
+
+    Kimi eksen değeri (a)/(b)/(c) yüklemlerinde AYIRT EDİCİ DEĞİLDİR: yanlış
+    tipli falsy bir prob da turu başlatmaz, denetçi-2'nin yazım arızası da
+    denetçi-1'in raporunu diskte bırakır. Ayrımı sebep taşır; bu yüklem onu
+    ölçülebilir kılar.
+    """
 
     @property
     def kimlik(self) -> str:
@@ -1509,6 +1621,11 @@ def _matris_hucreleri() -> tuple[_Hucre, ...]:
        Çarpım kavramla budanır: `normal-basari`nin arızalı rolü yoktur ve
        `preflight` `Exception`'ı yuttuğu için ön kontrol rolü YALNIZ kaçan
        istisnalarla (`BaseException`) eşleşir.
+    3. **Bir eksen (a)/(b)/(c) yüklemlerinde ayırt edici DEĞİLSE eksen
+       küçültülmez, YÜKLEM büyütülür.** Prob dönüş tipinin dört değeri de turu
+       başlatmaz ve kalıcılaştırma arızasının iki hücresi aynı dosya kümesini
+       bırakır; ikisini de SEBEP ayırt eder (`sebep_parcalari`). Kap çarpımını
+       büyütmek yerine ayırt eden yüklemi büyütmek budur.
     """
     hucreler: list[_Hucre] = []
     birinci, ikinci = auditors.DENETCI_ROLLERI
@@ -1544,25 +1661,68 @@ def _matris_hucreleri() -> tuple[_Hucre, ...]:
             )
         )
 
-    # (1d) Ön kontrol — ölçüm durumu × kapanan rol. `olculmedi` tek yoldan
-    #      (prob YOK) doğar ve İKİ rolü birden kapatır: alt eksen orada tekil.
-    for durum, roller in (
-        ("olculmedi", ("ikisi",)),
-        ("erisim-yok", (birinci, ikinci, "ikisi")),
-        ("olcum-arizasi", (birinci, ikinci, "ikisi")),
-    ):
+    # (1d) Ön kontrol — prob DÖNÜŞ TİPİ × kapanan rol. `prob-yok` tek yoldan
+    #      doğar ve İKİ rolü birden kapatır: alt eksen orada tekil.
+    #      `dogru-tip-olumlu` kapı İHLALİ üretmez; hücresi (2a)'dır.
+    for tip in EKSEN_4_PROB_TIPI:
+        if tip == "dogru-tip-olumlu":
+            continue
+        roller = ("ikisi",) if tip == "prob-yok" else (birinci, ikinci, "ikisi")
         for rol in roller:
             hucreler.append(
                 _Hucre(
-                    "on-kontrol", "kapi-reddi", rol, durum,
+                    "on-kontrol", "kapi-reddi", rol, tip,
                     0, (), 0, "tamamlanmadi", None,
+                    (PROB_TIPI_BEKLENEN_DURUM[tip].value,),
                 )
             )
 
-    # (2a) Kapı ihlali yok — pozitif kontrol.
+    # (1e) Kiralama — paket başına ATOMİK kiralama. İki hücre kiralamayı
+    #      RAKİP tutarken gelir (biri sahibi ölmüş kiralama: devralma
+    #      beyanının ölçümü), biri de kiralamayı BİZ tutarken gelen gerçek
+    #      eşzamanlı turdur — orada dıştaki tur normal biter.
+    for alt in EKSEN_6_KIRALAMA:
+        if alt == "rakip-tur":
+            hucreler.append(
+                _Hucre(
+                    "kiralama", "normal-basari", "yok", alt,
+                    2, auditors.DENETCI_ROLLERI, 2, "calisiyor", None,
+                )
+            )
+        else:
+            hucreler.append(
+                _Hucre(
+                    "kiralama", "kapi-reddi", "yok", alt,
+                    0, (), 0, "tamamlanmadi", None, ("kiralama",),
+                )
+            )
+
+    # (1f) Paket bütünlüğü — ağaç YAPIMDAN SONRA saparsa tur başlamaz.
+    #      Rol ekseni burada TEK ağaç × İKİ ağaç ayrımıdır ve dört mutasyon
+    #      biçiminin dördü için de anlamlıdır: tek ağaç saparsa KARDEŞ
+    #      karşılaştırma görür, iki ağaç AYNI biçimde saparsa yalnız SAKLI
+    #      özet görür. `ikisi` hücreleri saklı özet kolunun tek kanıtıdır.
+    #      Symlink hücrelerinin sebebi ayrıca `symlink` taşır: düğüm TİPİ
+    #      kolu, parmak izi kolundan bağımsız ölçülmezse ölçülmemiştir.
+    for alt in EKSEN_5_MUTASYON:
+        parcalar = (
+            ("bütünlük", "symlink")
+            if alt == "symlink-alt-dugum"
+            else ("bütünlük",)
+        )
+        for rol in (birinci, ikinci, "ikisi"):
+            hucreler.append(
+                _Hucre(
+                    "paket-butunlugu", "kapi-reddi", rol, alt,
+                    0, (), 0, "tamamlanmadi", None, parcalar,
+                )
+            )
+
+    # (2a) Kapı ihlali yok — pozitif kontrol. Eksen 4'ün `dogru-tip-olumlu`
+    #      değeri BURADA yaşar: turu başlatan tek prob dönüşü budur.
     hucreler.append(
         _Hucre(
-            "yok", "normal-basari", "yok", "",
+            "yok", "normal-basari", "yok", "dogru-tip-olumlu",
             2, auditors.DENETCI_ROLLERI, 2, "calisiyor", None,
         )
     )
@@ -1584,7 +1744,26 @@ def _matris_hucreleri() -> tuple[_Hucre, ...]:
                 )
             )
 
-    # (2c) Kapı ihlali yok — arıza ÖN KONTROL rolünde doğar. `preflight`
+    # (2c) Kapı ihlali yok — arıza KALICILAŞTIRMADA doğar. Yazım rol BAŞINA
+    #      korunur: bir rolün arızası KALAN rolün tamamlanmış raporunu kanıt
+    #      olmaktan ÇIKARMAZ. İki hücre aynı dosya kümesini bırakır
+    #      (denetçi-2 arızası ile ikisinin arızası ayrışır), ayrımı sebep taşır.
+    for rol in (birinci, ikinci, "ikisi"):
+        basarisiz = (
+            auditors.DENETCI_ROLLERI if rol == "ikisi" else (rol,)
+        )
+        yazilan = tuple(
+            r for r in auditors.DENETCI_ROLLERI if r not in basarisiz
+        )
+        hucreler.append(
+            _Hucre(
+                "yok", "kalicilastirma-arizasi", rol, "yazim-izni-yok",
+                2, yazilan, len(yazilan), "tamamlanmadi", None,
+                tuple(f"{r} raporunu yazamadı" for r in basarisiz),
+            )
+        )
+
+    # (2d) Kapı ihlali yok — arıza ÖN KONTROL rolünde doğar. `preflight`
     #      `Exception`'ı yuttuğu için yalnız KAÇAN istisnalar hücre üretir.
     for cikis, firlatan in (
         ("cancelled", asyncio.CancelledError),
@@ -1637,22 +1816,52 @@ def _diskteki_raporlar(kok: Path) -> tuple[str, ...]:
     )
 
 
+def _yanlis_tipli_deger(tip: str):
+    """Eksen 4'ün `bool` OLMAYAN dönüş değerleri — oracle bağımsız sabitler.
+
+    `"false"` metni truthy'dir: `bool(...)` süzgecinden geçen bir prob dönüşü
+    erişimi UYDURUR. `0` ise falsy'dir ve "ölçtüm, yok" gibi görünüp MUAFİYET
+    üretirdi. İkisi de `bool` DEĞİLDİR, dolayısıyla ikisi de ölçüm değildir.
+    """
+    return "false" if tip == "yanlis-tip-truthy" else 0
+
+
+PROB_TIPI_PROBLARI = {
+    "prob-yok": None,
+    "dogru-tip-olumlu": lambda arac: True,
+    "dogru-tip-olumsuz": lambda arac: False,
+    "yanlis-tip-truthy": lambda arac: _yanlis_tipli_deger("yanlis-tip-truthy"),
+    "yanlis-tip-falsy": lambda arac: _yanlis_tipli_deger("yanlis-tip-falsy"),
+    "istisna": None,  # aşağıda PATLAYAN ile doldurulur (lambda `raise` alamaz)
+}
+
+
+def _patlayan_prob(arac: str):
+    raise RuntimeError("prob ölçemedi")
+
+
+PROB_TIPI_PROBLARI["istisna"] = _patlayan_prob
+
+
 def _prob_kur(hucre: _Hucre):
-    """Hücrenin ön kontrol probunu KURAR — durum kapalı kümeden seçilir."""
+    """Hücrenin ön kontrol probunu KURAR — dönüş tipi Eksen 4'ten seçilir."""
     birinci, ikinci = auditors.DENETCI_ROLLERI
     hedefler = (
         auditors.DENETCI_ROLLERI if hucre.rol == "ikisi" else (hucre.rol,)
     )
     if hucre.kapi == "on-kontrol":
-        if hucre.alt == "olculmedi":
+        if hucre.alt == "prob-yok":
             return None
-        if hucre.alt == "erisim-yok":
-            return lambda arac: arac not in hedefler
-        def _patlayan(arac: str) -> bool:
-            if arac in hedefler:
-                raise RuntimeError("prob ölçemedi")
-            return True
-        return _patlayan
+        hedef_prob = PROB_TIPI_PROBLARI[hucre.alt]
+
+        def _secici(arac: str):
+            # HEDEF OLMAYAN rol her zaman gerçek `True` görür: kapıyı kapatan
+            # şeyin hedef rol olduğu böyle ayırt edilir.
+            if arac not in hedefler:
+                return True
+            return hedef_prob(arac)
+
+        return _secici
     if hucre.rol == "on-kontrol":
         istisna = (
             asyncio.CancelledError()
@@ -1663,6 +1872,83 @@ def _prob_kur(hucre: _Hucre):
             raise istisna
         return _kacan
     return _erisim_var
+
+
+KIRALAMA_DIZIN_ADI = ".kiralama"
+"""Kiralama dizininin adı — üretimden OKUNMAZ, bağımsız sabittir. Üretim adı
+kayarsa bu testler kırmızıya döner; eşleme ölçülür, varsayılmaz."""
+
+PAKET_DOSYA_ADI = "00-GOREV.md"
+"""Mutasyon ekseninin dokunduğu paket dosyası — sözleşmeden yazılmış sabit."""
+
+
+def _mutasyon_kur(alt: str, rol_dizini: Path, disarisi: Path) -> None:
+    """Rol ağacını YAPIMDAN SONRA değiştirir (Eksen 5).
+
+    `symlink-alt-dugum` kasten BAYT-KORUYUCUDUR: dosya, paketin DIŞINDA duran
+    bayt-özdeş bir ikizine symlink'le değiştirilir. Parmak izi kapısı bunu
+    GÖREMEZ (okunan baytlar aynı) — hücreyi ayırt eden şey symlink kapısıdır.
+    """
+    hedef = rol_dizini / PAKET_DOSYA_ADI
+    if alt == "icerik-degisti":
+        hedef.write_bytes(hedef.read_bytes() + b"\nSONRADAN EKLENEN SATIR\n")
+    elif alt == "dosya-eklendi":
+        (rol_dizini / "99-SONRADAN.md").write_text("sonradan", encoding="utf-8")
+    elif alt == "dosya-silindi":
+        hedef.unlink()
+    elif alt == "symlink-alt-dugum":
+        disarisi.mkdir(parents=True, exist_ok=True)
+        ikiz = disarisi / f"{rol_dizini.name}-{PAKET_DOSYA_ADI}"
+        ikiz.write_bytes(hedef.read_bytes())
+        hedef.unlink()
+        hedef.symlink_to(ikiz)
+    else:  # pragma: no cover — eksen değeri kapalı kümedendir
+        raise AssertionError(f"bilinmeyen mutasyon: {alt!r}")
+
+
+class _RakipTurRunner(_SayanRunner):
+    """İLK çağrının içinde — yani kiralama TUTULURKEN — ikinci bir tur koşar.
+
+    Eşzamanlılık gerçektir ve yarışsızdır: rakip tur AYRI bir iş parçacığında
+    kendi olay döngüsünde baştan sona yürürken dıştaki tur `runner.run`
+    içinde SENKRON bekler. Bariyer bu bekleyiştir — kesişim ölçülür, umut
+    edilmez. Tek olay döngüsünde bu hücre KURULAMAZ: kabul bölgesi kiralamayı
+    aldıktan sonra ilk runner'a kadar HİÇ `await` etmez.
+    """
+
+    def __init__(self, ciktilar, paket) -> None:
+        super().__init__(ciktilar)
+        self.paket = paket
+        self.rakip_runner = _SayanRunner(ciktilar)
+        self.rakip_sonuc = None
+        self.rakip_dosya_farki: int | None = None
+        self.kiralama_tutuluyordu: bool | None = None
+
+    def run(self, tool: str, cwd: Path, prompt_path: Path):
+        if not self.cagrilar:
+            kok = self.paket.kok
+            self.kiralama_tutuluyordu = (kok / KIRALAMA_DIZIN_ADI).is_dir()
+            oncesi = _dosya_goruntusu(kok)
+            kutu: dict[str, object] = {}
+
+            def _rakip() -> None:
+                kutu["sonuc"] = asyncio.run(
+                    auditors.run_audit_round(
+                        object(),
+                        self.paket,
+                        runner=self.rakip_runner,
+                        run_id=self.paket.run_id,
+                        web_prob=_erisim_var,
+                    )
+                )
+
+            iplik = threading.Thread(target=_rakip, daemon=True)
+            iplik.start()
+            iplik.join(timeout=30)
+            assert not iplik.is_alive(), "rakip tur 30 s içinde BİTMEDİ"
+            self.rakip_sonuc = kutu.get("sonuc")
+            self.rakip_dosya_farki = len(_dosya_goruntusu(kok)) - len(oncesi)
+        return super().run(tool, cwd, prompt_path)
 
 
 def _yol_kapisi_kurulumu(alt: str, tmp_path: Path, run_id: str, monkeypatch):
@@ -1761,6 +2047,50 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
                 f"ÖNCEKİ TURDAN KALAN {rol}\n", encoding="utf-8"
             )
 
+    if hucre.kapi == "paket-butunlugu":
+        hedefler = (
+            auditors.DENETCI_ROLLERI if hucre.rol == "ikisi" else (hucre.rol,)
+        )
+        for rol in hedefler:
+            _mutasyon_kur(hucre.alt, paket.kopyalar[rol], tmp_path / "disarida")
+
+    if hucre.kapi == "kiralama" and hucre.alt != "rakip-tur":
+        # RAKİP kiralamayı tutuyor. `olu-kiralama` sahibi ölmüş bir kiralamadır
+        # (var olmayan PID): beyan "DEVRALINMAZ" der, bu hücre onu ölçer.
+        rakip = paket.kok / KIRALAMA_DIZIN_ADI
+        rakip.mkdir()
+        (rakip / "sahip").write_text(
+            "run_id=rakip-kosu\npid="
+            + ("4294967295" if hucre.alt == "olu-kiralama" else "1")
+            + "\n",
+            encoding="utf-8",
+        )
+
+    rakip_isaretler: list[str] = []
+    if hucre.cikis == "kalicilastirma-arizasi":
+        basarisiz = (
+            auditors.DENETCI_ROLLERI if hucre.rol == "ikisi" else (hucre.rol,)
+        )
+        yasakli = {str(_rapor_yolu(paket, rol)) for rol in basarisiz}
+        gercek_open = builtins.open
+
+        def _izinsiz_open(dosya, *args, **kwargs):
+            if str(dosya) in yasakli:
+                raise PermissionError(13, "Permission denied")
+            return gercek_open(dosya, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", _izinsiz_open)
+
+    if hucre.alt == "rakip-tur":
+        # Rakip tur AYRI iş parçacığındadır: oradaki asyncpg bağlantısı bu
+        # döngüye bağlı olduğu için yarım-işaret yolu sahtelenir. O yolun
+        # GERÇEK satıra yazdığı matrisin diğer 40+ hücresinde ölçülür; burada
+        # ölçülen şey KİRALAMADIR.
+        async def _sahte_isaret(db_, *, run_id, asama, sebep):
+            rakip_isaretler.append(sebep)
+
+        monkeypatch.setattr(auditors.runs, "mark_incomplete", _sahte_isaret)
+
     ariza_rolu = hucre.rol if hucre.rol in auditors.DENETCI_ROLLERI else None
     ariza = {
         "normal-ariza": None,
@@ -1774,7 +2104,11 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
             durum="hata", stdout="", stderr="araç düştü", exit_code=1
         )
         ariza = None
-    runner = _SayanRunner(ciktilar, ariza_rolu=ariza_rolu, ariza=ariza)
+    runner = (
+        _RakipTurRunner(ciktilar, paket)
+        if hucre.alt == "rakip-tur"
+        else _SayanRunner(ciktilar, ariza_rolu=ariza_rolu, ariza=ariza)
+    )
 
     kullanilan_run_id = (
         runs.new_run_id() if hucre.kapi == "kimlik-bagi" else run_id
@@ -1813,6 +2147,45 @@ async def test_closure_matrix(hucre: _Hucre, kosu, tmp_path, monkeypatch):
     assert (await _durum(db, run_id))[0] == hucre.kosu_durumu, (
         f"{hucre.kimlik}: koşu durumu yanlış"
     )
+    if hucre.sebep_parcalari:
+        _, sebep = await _durum(db, run_id)
+        for parca in hucre.sebep_parcalari:
+            assert parca in (sebep or ""), (
+                f"{hucre.kimlik}: koşu sebebi {parca!r} taşımıyor — ayrım "
+                f"SEBEPTE yaşıyor, ölçülen sebep: {sebep!r}"
+            )
+
+    if hucre.kapi == "kiralama" and hucre.alt != "rakip-tur":
+        assert (paket.kok / KIRALAMA_DIZIN_ADI).is_dir(), (
+            f"{hucre.kimlik}: RAKİBİN kiralaması silinmiş — beyan devralmanın "
+            "OLMADIĞINI söylüyor, ölçüm aksini gösteriyor"
+        )
+
+    if hucre.alt == "rakip-tur":
+        assert runner.kiralama_tutuluyordu is True, (
+            "kiralama koşum bölgesinde TUTULMUYOR — rakip tur onu göremezdi"
+        )
+        assert runner.rakip_runner.cagrilar == [], (
+            f"rakip tur alt süreç çağırdı: {runner.rakip_runner.cagrilar}"
+        )
+        assert runner.rakip_sonuc is not None
+        assert runner.rakip_sonuc.gecerli is False
+        assert "kiralama" in (runner.rakip_sonuc.sebep or ""), (
+            f"rakip turun sebebi kiralamayı adlandırmıyor: "
+            f"{runner.rakip_sonuc.sebep!r}"
+        )
+        assert runner.rakip_dosya_farki == 0, (
+            f"rakip tur {runner.rakip_dosya_farki} dosya yarattı"
+        )
+        assert len(rakip_isaretler) == 1, (
+            f"yarım işareti {len(rakip_isaretler)} kez atıldı — DIŞTAKİ tur da "
+            "düşmüş olabilir; hücre sessizce yeşil olamaz"
+        )
+        assert not (paket.kok / KIRALAMA_DIZIN_ADI).exists(), (
+            "kiralama tur bittikten sonra DİSKTE KALDI — sahibi bıraktığında "
+            "serbest kalmayan kiralama paketi sonsuza kadar kilitler"
+        )
+
     # Hücreden BAĞIMSIZ yüklem: var olan hiçbir bayt DEĞİŞMEZ (salt-ekleme).
     for ad, bayt in oncesi.items():
         assert sonrasi.get(ad) == bayt, (
@@ -1844,6 +2217,15 @@ def test_closure_matrix_is_not_empty_and_not_trivially_green() -> None:
             f"eksen {eksen_adi} beyan edilmemiş değer taşıyor: "
             f"{sorted(gorulen - set(degerler))}"
         )
+    for eksen_adi, degerler in (
+        ("prob-tipi", EKSEN_4_PROB_TIPI),
+        ("mutasyon", EKSEN_5_MUTASYON),
+        ("kiralama", EKSEN_6_KIRALAMA),
+    ):
+        eksik = set(degerler) - {h.alt for h in MATRIS}
+        assert not eksik, (
+            f"eksen {eksen_adi} değerleri hiç hücre üretmedi: {sorted(eksik)}"
+        )
     assert len({h.kimlik for h in MATRIS}) == len(MATRIS), "hücre kimliği TEKİL DEĞİL"
 
     imzalar = {
@@ -1863,3 +2245,27 @@ def test_closure_matrix_is_not_empty_and_not_trivially_green() -> None:
     assert {h.kosu_durumu for h in MATRIS} == {"calisiyor", "tamamlanmadi"}
     assert {h.firlatan for h in MATRIS} >= {None, ValueError,
                                             asyncio.CancelledError}
+    # Yeni eksenlerin ayırt edici yüklemi SEBEPTİR; sebepsiz kalan bir eksen
+    # (a)/(b)/(c) yüklemlerinde başka hücrelerle AYNI olur ve hiçbir mutasyonu
+    # yakalayamaz.
+    assert len({h.sebep_parcalari for h in MATRIS if h.sebep_parcalari}) >= 6, (
+        "sebep yüklemi ayırt edici DEĞİL — eksenler sessizce çakışıyor"
+    )
+
+
+@pytest.mark.parametrize("tip", EKSEN_4_PROB_TIPI)
+def test_preflight_status_is_derived_from_the_probe_return_type(tip: str) -> None:
+    """Eksen 4'ün AYIRT EDİCİ yüklemi: ön kontrol DURUMU.
+
+    Tur seviyesi bu ekseni göremez — dört değerin dördü de turu başlatmaz ve
+    hepsi aynı (a)/(b)/(c) imzasını taşır. Ayrım MUAFİYET yetkisindedir:
+    `ERISIM_YOK` ortam-kısıtı muafiyetini MEŞRULAŞTIRIR, `OLCUM_ARIZASI`
+    etmez. `bool` süzgeci olmayan bir kapıda `"false"` metni `ERISIM_VAR`,
+    `0` ise `ERISIM_YOK` üretirdi; ikisi de ölçüm DEĞİLDİR.
+    """
+    sonuc = auditors.preflight("denetci-1", prob=PROB_TIPI_PROBLARI[tip])
+    assert sonuc.durum is PROB_TIPI_BEKLENEN_DURUM[tip], (
+        f"{tip}: ölçülen durum {sonuc.durum}, beklenen "
+        f"{PROB_TIPI_BEKLENEN_DURUM[tip]}"
+    )
+    assert sonuc.tur_baslayabilir is (tip == "dogru-tip-olumlu")
