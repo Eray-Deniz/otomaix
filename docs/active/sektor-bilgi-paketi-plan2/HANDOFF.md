@@ -5,10 +5,11 @@ written: 2026-09-08
 
 # Resume From
 
-> ## ÖNCE BU — Task 10 BEKLİYOR (Eray kararı, 2026-09-08)
+> ## ÖN KOŞUL BİTTİ (2026-09-09) — sıradaki iş Task 10
 >
-> Sıradaki iş Task 10 DEĞİL. Önce test matrisi küçültülür — kaydı ayrı klasörde değil,
-> **`TASK.md`'nin "ÖN KOŞUL — Task 10'dan ÖNCE" bölümündedir.**
+> Test matrisi küçültme ön koşulu KAPANDI (`458661b`). Tam küme **6416/704.37s → 3458/286.36s**,
+> ikisi de exit 0. Ölçümler ve kabul edilmiş riskler `TASK.md`'nin "ÖN KOŞUL" bölümünde.
+> Aşağıdaki 2026-09-08 ölçümleri TARİHSEL kayıttır, bugünkü durum DEĞİLDİR:
 > Ölçüm: arka uç kümesi **6380 vaka / 715 saniye**; bunun **4414'ü** tek dosyada
 > (`tests/test_brief_doctor.py`), **3240'ı TEK fonksiyonda** (`test_kod_citi_ekseni` =
 > kümenin **%51'i**). Kıyas: Plan 1 kapanışında küme **577 vaka / 105 saniye**ydi.
@@ -18,7 +19,8 @@ written: 2026-09-08
 > her mutasyon sonra da kırmızı kalmalı.
 
 
-**Sıradaki iş: Task 9.** Task 8'in checkpoint'i bu oturumda KAPANDI — önceki oturumun kotaya
+**Sıradaki iş: Task 10.** (Bu satır 2026-09-09'a kadar "Task 9" diyordu; Task 9 2026-09-08'de
+indi ve incelendi, bayat satır düzeltildi.) Task 8'in checkpoint'i 2026-09-08 oturumunda KAPANDI — önceki oturumun kotaya
 takılıp açık bıraktığı iki tur da koştu, ikisi de bulgu üretti, hepsi kapatıldı.
 
 **Komut:** `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
@@ -116,7 +118,11 @@ ya da (b) bir turda dosyaların TEK gizlenme sebebi bu yanlış alarm olursa ve 
 
 1. Arayüz eki **bağlayıcıdır**; ilgili hükümler brief'e **harfiyen kopyalanır**.
 2. Test komutu sanal ortam aktifleştirilerek koşar (aşağıda Verification).
-3. **Taban 6341**; bu sayı düşmeyecek.
+3. **Taban 3458** (2026-09-09'dan itibaren); bu sayı düşmeyecek. **KURAL DEĞİŞTİ, DÜRÜST
+   KAYIT:** taban 2026-09-09'a kadar **6341**'di ve "düşmeyecek" diyordu; o gün 6416'dan
+   3458'e BİLİNÇLE düşürüldü (çit matrisi tam çarpımdan 3-yollu kapsama dizisine indi,
+   `458661b`). Düşüş silme değil TEKRAR temizliğidir ve kapsama kapısıyla kanıtlanır —
+   ama kuralın kendisi bayatlamıştı, tabanı yenilemeden bırakmak beyanı çürütürdü.
 4. `Exec-Kind` **sınıflandırıcıya** karşı seçilir. `.sql` çalıştırılabilir sınıfa GİRMEZ.
 5. `Exec-*` bloğu mesajın SON PARAGRAFI, co-author trailer'ları **aynı paragrafta**.
 6. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY.
@@ -192,6 +198,27 @@ bulgu çıktı, düzeltme turu `4831015` ile indi. Kontrolörün ölçümü, bul
 
 # Verification
 
+## 2026-09-09 oturumu (test matrisi ön koşulu)
+
+- `python -m pytest tests/ -q --durations=0` → **6416 passed in 704.37s** (ÖNCE, `4831015`).
+- `python -m pytest tests/ -q --durations=15` → **3458 passed in 286.36s** (SONRA, `458661b`).
+  İkisi de exit 0, temiz ağaçta.
+- `test_brief_doctor.py` tek başına: **155.5s → 38.8s**; çit alt kümesi 115.48s → 79.30s
+  (yalnız önbellek) → küçültmeyle birlikte tamamı 38.8s'in içinde.
+- Şablon veritabanı ölçümü: drop+create 0.15s + 36 migration 2.39s = **2.54s** ↔ TEMPLATE
+  klonu **0.24s**; 128 kurulum.
+- **Mutasyon kanıtı (küçültmeden ÖNCE alındı):** maske söküldü 696 → 59 · tur9 540 → 48 ·
+  tur10 396 → 35 · tur12 0 → 0.
+- **Bağımsız mutasyon:** üretimdeki `_cit_maskesi` hep-`False` yapıldı → küçültülmüş dosyada
+  **279 test kırmızı**; geri alındı, `git diff` ile üretim modülünün temizliği doğrulandı.
+- `ec_ledger_view a806e29… /root/otomaix - --post-window` → **rc=0**.
+
+**Bu oturumda DENENMEYEN:** hakem turu KOŞULMADI (`458661b` bağımsız hakem GÖRMEDİ);
+paralel koşum (xdist) altında şablon veritabanı denenmedi; dört-yollu boyut etkileşimi
+kapsam dışı (kabul edilmiş risk, koşulu dosyada).
+
+## 2026-09-08 oturumu (tarihsel)
+
 **Koşulan komutlar ve TAZE çıktıları (2026-09-08, hepsi kontrolörün KENDİ koşumları):**
 
 - `cd apps/social/backend && source .venv/bin/activate && python -m pytest tests/ -q`
@@ -216,9 +243,10 @@ bulgu çıktı, düzeltme turu `4831015` ile indi. Kontrolörün ölçümü, bul
 
 **Denenmemiş / doğrulanmamış senaryolar — dürüst liste:**
 
-- **`4831015` ÜSTÜNDE TAM TEST KÜMESİ KOŞMADI.** Eray koşturmayı durdurdu (2026-09-08). Ölçülen
-  tek şey hedef dosyadır (75 passed). **Kalan 6300+ vakanın bu commit'le yeşil kaldığı
-  DOĞRULANMADI** — yeni oturumun ilk mekanik işi budur.
+- ~~**`4831015` ÜSTÜNDE TAM TEST KÜMESİ KOŞMADI.**~~ **KAPANDI 2026-09-09:** taze koşum
+  `python -m pytest tests/ -q` → **6416 passed in 704.37s, exit 0**, temiz ağaçta. (Commit
+  mesajı zaten 6416/718.03s iddia ediyordu; bu satır "koşmadı" diyordu — ikisinden biri
+  bayattı, taze koşum commit'in iddiasını doğruladı.)
 - **`4831015` için MUTASYON KANITI ALINMADI.** Uygulayıcı raporunu yazmadan durduruldu; brief
   her kalem için "şunu bozdum → şu test kırmızı" satırı istiyordu, o satırlar YOK. Testlerin
   VARLIĞI kontrolörce ölçüldü, **ayırt ettikleri ölçülmedi**.

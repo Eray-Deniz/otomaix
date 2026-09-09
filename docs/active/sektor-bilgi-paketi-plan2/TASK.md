@@ -14,7 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** Task 1-8 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 10'un önündeki test matrisi
+ön koşulu BİTTİ — `458661b`; sıradaki iş Task 10.) Task 1-8 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR** — sıradaki iş Task 9. Checkpoint 1, 2 ve **5** hakem
@@ -405,7 +406,7 @@ hakkı, **4. ayak (a) seçeneği Eray'ın kendi kararı** (iddia başına bir sa
   "makineyle DOĞRULANMADI" kapsam beyanı ÜÇ yerden de KALKTI. Serbest düzyazı kaçışı artık
   NOT üretiyor; onu ilan eden tripwire testi ateşlendi ve TERSİNİ ölçüyor.
 
-# ÖN KOŞUL — Task 10'dan ÖNCE: test matrisi küçültme
+# ÖN KOŞUL — Task 10'dan ÖNCE: test matrisi küçültme (BİTTİ 2026-09-09)
 
 > **Eray kararı (2026-09-08): Plan 2'nin yürütmesi bu iş bitene kadar DURAKLAR.** Ayrı görev
 > klasörü AÇILMADI — bu iş Plan 2'nin kendi görevinin (Task 7) ürünüdür ve Task 10'u bekletir,
@@ -490,17 +491,50 @@ kırmızı kaldığı gösterilir. Kaybolan bir kırmızı = geri alınacak kü�
 **Kapsam DIŞI:** diğer test dosyaları (`test_migration_036.py`, `test_pipeline_runs.py`) bu turda
 ellenmez — ikisi birlikte kümenin %14'ü, önce %69'luk kalem ölçülür.
 
-### Açık kalemler
+### Açık kalemler — KAPANDI (2026-09-09, hepsi ölçüldü)
 
-- Küçültmenin süre kazancı ölçülmedi (yukarıda, komutuyla birlikte). İlk adım o ölçüm olmalı;
-  kazanç beklenenden küçükse kapsam yeniden değerlendirilir.
-- `test_kod_citi_ekseni`'nin 3240 vakasının kaçının gerçekten ayırt ettiği bilinmiyor — bu da
-  ölçülecek, varsayılmayacak.
+- ~~Küçültmenin süre kazancı ölçülmedi~~ → **ölçüldü ve ÖNCÜLÜ YALANLADI.** `--durations=0`
+  ile alınan aşama dökümünde `test_kod_citi_ekseni` **33.0s / 704s = %4.7**. Vaka payı (%51)
+  süre payına eşit değilmiş; bu bölümün ilk hâli o eşitliği varsaymıyordu ama kapsamı yine de
+  yanlış hedefe kurmuştu. **Gerçek maliyet setup'tı:** 693.7s'in **355.0s'i** fixture kurulumu,
+  çünkü 128 test veritabanını düşürüp yaratıp 36 migration'ı baştan uyguluyordu.
+- ~~3240 vakanın kaçı ayırt ediyor bilinmiyor~~ → **ölçüldü:** çit kuralı tamamen sökülünce
+  dilsiz yarının **924** hücresi yeşil kalıyor, dilli yarının **1080** hücresi zaten boş
+  beklenti taşıyor (%62 ölü). Ayrıca `tur12` mutantını **hiçbir hücre** yakalamıyor — onu
+  yakalayan şey CommonMark sınır problarıdır, matris değil.
+
+### Sonuç (2026-09-09, commit `458661b`)
+
+Üç kaldıraç indi, üçü de önce/sonra ölçüldü:
+
+| kaldıraç | ölçüm |
+|---|---|
+| şablon veritabanı (`CREATE DATABASE ... TEMPLATE`) | scratch kurulumu **2.54s → 0.24s**, 128 kurulum |
+| not kümesi önbelleği | çit testleri **115.48s → 79.30s**; 18011 çağrının %45.3'ü tekrar |
+| matris → 3-yollu kapsama dizisi | **3240 → 280 hücre**; dosya **155.5s → 38.8s** |
+
+**Tam küme: 6416 passed / 704.37s → 3458 passed / 286.36s, ikisi de exit 0.**
+
+**Kapanış ölçütü (mutasyon) karşılandı, küçültmeden ÖNCE ölçülerek:** maske söküldü
+696 → 59 kırmızı · tur9 540 → 48 · tur10 396 → 35 · tur12 0 → 0 (ikisi de yakalamıyor).
+Ayrıca ÜRETİM kodundaki `_cit_maskesi` gerçekten bozuldu → küçültülmüş dosyada **279 test
+kırmızı**; mutasyon geri alındı, ağaç temiz doğrulandı.
+
+**Kabul edilmiş risk:** dört/beş boyutun aynı anda tuttuğu bir çit hatası kaçabilir. Yeniden
+açılma koşulu ve tek satırlık düzeltmesi (`_KAPSAMA_DERECESI`) dosyanın içinde.
+
+**Düşürülen iddia (park DEĞİL, dürüst etiketli):** "vacuous'luk ayıraç biçiminden bağımsızdır"
+kolu kaldırıldı — küçültülmüş kümede o iddiayı sınayan grup sayısı ölçüldü ve **0**. Boşa yeşil
+kol beyanı bayatlatır. Yeniden açılma koşulu dosyada.
 
 ### Kararlar
 
 - **2026-09-08 — Eray: Task 10'dan ÖNCE.** Plan 2'nin yürütmesi bu iş bitene kadar duraklar.
 - **2026-09-08 — kapanış ölçütü mutasyon kanıtıdır**, vaka sayısı değil.
+- **2026-09-09 — ölçüm hedefi değiştirdi.** İş "matrisi küçült" diye başladı; aşama dökümü
+  alınınca sürenin yarısının DB fixture'ı olduğu çıktı. Matris yine küçültüldü (%8.6'ya) ama
+  kümedeki kazancın büyük kısmı şablon veritabanından geldi. Ders: kapsamı vaka sayısıyla
+  değil, ÖLÇÜLMÜŞ süre payıyla kur.
 - **2026-09-08 — bu kalem Eray sormasaydı çıkmayacaktı.** HANDOFF'ta yalnız *yeni* matrisler için
   yarım bir uyarı vardı ("kap çarpımını değil ayırt eden ekseni büyüt"); var olan 4414 vakaya
   karşı hiç çevrilmemişti. Kayda geçiyor: ölçülmüş bir sürtünme kaynağı, adlandırılmış bir ev
