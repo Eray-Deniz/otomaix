@@ -280,7 +280,7 @@ class AuditReport:
             object.__setattr__(self, _alan, _deger)
 
 
-def _kok_yolunu_kapila(kok: Path) -> Path:
+def kok_yolunu_kapila(kok: Path) -> Path:
     """Paket KÖKÜ mutlak ve KENDİ canonical'ine eşit olmak ZORUNDA.
 
     **Neden kökün KENDİSİ ölçülür.** Rol yolu kapısı `kok/<rol>` biçimini ve
@@ -374,13 +374,13 @@ class PacketRef:
         bir rol dizini kardeşinin (ya da paket dışının) takma adıysa ayrım
         görünüşte durur, gerçekte iki rol AYNI yeri görür.
 
-        DÖRT koşul birden: KÖKÜN KENDİSİ mutlak ve canonical (`_kok_yolunu_kapila`
+        DÖRT koşul birden: KÖKÜN KENDİSİ mutlak ve canonical (`kok_yolunu_kapila`
         — kök canonical'leştirilerek karşılaştırılsaydı kendi takma adlılığı
         hiç sınanmazdı); yol `kok/<rol>` biçiminde MUTLAK ve kökün DOĞRUDAN
         çocuğu; symlink çözümü kökün HAM hâline karşı ölçülen canonical'ine
         EŞİT; iki rolün çözülmüş yolu birbirinden FARKLI.
         """
-        kok = _kok_yolunu_kapila(self.kok)
+        kok = kok_yolunu_kapila(self.kok)
         object.__setattr__(self, "kok", kok)
         gorulen: dict[Path, str] = {}
         for rol in DENETCI_ROLLERI:
@@ -685,7 +685,7 @@ def build_packet(
             )
 
     # Yol kapısı ilk yan etkiden ÖNCE: reddedilen girdi HİÇBİR dosya yaratmaz.
-    kok = _kok_yolunu_kapila(Path(dest) / run_id)
+    kok = kok_yolunu_kapila(Path(dest) / run_id)
     if kok.exists():
         raise FileExistsError(
             f"koşu paketi ZATEN var: {kok} — ham katman salt-eklemedir, dosya "
@@ -1595,7 +1595,7 @@ def _kosum_ani_yol_kapisi(
     değiştirilirse parmak izi, saklı özet ve kardeş karşılaştırma üçü birden
     eşleşir; kapı geçer ve runner paket kökünün DIŞINDA koşar.
 
-    Yeni kural YOKTUR: `PacketRef`'in kendi yol kapısı (`_kok_yolunu_kapila` +
+    Yeni kural YOKTUR: `PacketRef`'in kendi yol kapısı (`kok_yolunu_kapila` +
     rol yolu canonical eşitliği) OLDUĞU GİBİ yeniden çağrılır. KABUL
     BÖLGESİNDEKİ çağrısı kiralama dâhil HİÇBİR mutasyondan önce koşar —
     baştan geçersiz bir paket diskte iz bırakmaz. Rol döngüsündeki çağrısı ise
@@ -1886,7 +1886,7 @@ async def run_audit_round(
       bitmeden diğeri başlamaz; sıra deterministiktir.
     * **K-79 AYRI DİZİN** — her rol kendi `packet.kopyalar[rol]` dizininde
       koşar, istem dosyası da o dizinden okunur. KÖKÜN kendisinin ve rol
-      yollarının takma ad/symlink/kök-dışı olmadığı `_kok_yolunu_kapila`'da
+      yollarının takma ad/symlink/kök-dışı olmadığı `kok_yolunu_kapila`'da
       ölçülür ve kapı İKİ yüzeyde de dosya yaratmadan ÖNCE koşar
       (`build_packet` `mkdir`'den önce, `PacketRef` yapımda).
     * **K-79 GEÇ YAZIM** — denetçi-1'in raporu denetçi-2 çıkana kadar DİSKE

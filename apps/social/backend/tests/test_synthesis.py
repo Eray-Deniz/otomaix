@@ -361,6 +361,17 @@ def test_section_keys_match_pinned_contract() -> None:
     assert synthesis.SENTEZ_BOLUM_ANAHTARLARI == OLCULEN_BOLUM_ANAHTARLARI
 
 
+def test_suggestion_section_anchor_is_the_measured_heading() -> None:
+    """K-75 sayımının okuduğu bölüm ADIYLA çapalanır — konumsal indis kayabilir.
+
+    Üretim `BOLUM_ANAHTARLARI[3]` yazar; demet Task 9'da pinlenmiş denetçi
+    sözleşmesine karşı ölçülüyor, ama İNDİS ölçülmüyor. Sözleşmeye bir bölüm
+    eklenip sıra kayarsa taşma sayacı sessizce başka bir bölümü sayardı.
+    Ölçülen literal: `hakem-denetci-gorevi.md` satır 216.
+    """
+    assert synthesis.ONERI_BOLUMU == "AÇIK SORU ÖNERİLERİ"
+
+
 def test_overflow_caps_match_the_two_contracts() -> None:
     """K-74 ve K-75 AYRI sözleşmelerden gelir; tek karara bağlanmaz."""
     assert synthesis.K74_ACIK_SORU_TAVANI == OLCULEN_ACIK_SORU_TAVANI
@@ -368,6 +379,41 @@ def test_overflow_caps_match_the_two_contracts() -> None:
 
 
 # ═══ 2. Kanonik sıra — yapısal kapı ════════════════════════════════════════
+
+
+DRAFT_YAZICISI = "insert_draft"
+"""Paket tablosuna yazan TEK yüzeyin adı — kavramdan yazıldı, koddan değil."""
+
+YASAM_DONGUSU_MODULU = "app.services.sector_package_lifecycle"
+YASAM_DONGUSU_ADI = "sector_package_lifecycle"
+"""Modülün SON parçası — `from app.services import <ad>` biçimi de ihlaldir."""
+
+
+def _draft_yazici_referanslari(kaynak: str) -> list[str]:
+    """Kaynakta draft yazıcısına yapılan KOD referansları.
+
+    Ham dizge taraması KULLANILMAZ: bu dosyanın kendi adı da o dizgeyi taşır ve
+    düz yazı içindeki bir anma ihlal DEĞİLDİR. Ölçülen şey söz dizimidir —
+    içe aktarım, ad ve öznitelik düğümleri.
+    """
+    agac = ast.parse(kaynak)
+    bulgular: list[str] = []
+    for dugum in ast.walk(agac):
+        if isinstance(dugum, ast.ImportFrom):
+            if YASAM_DONGUSU_ADI in (dugum.module or ""):
+                bulgular.append(f"from {dugum.module}")
+            for ad in dugum.names:
+                if ad.name in (DRAFT_YAZICISI, YASAM_DONGUSU_ADI):
+                    bulgular.append(f"from ... import {ad.name}")
+        elif isinstance(dugum, ast.Import):
+            for ad in dugum.names:
+                if YASAM_DONGUSU_ADI in ad.name:
+                    bulgular.append(f"import {ad.name}")
+        elif isinstance(dugum, ast.Name) and dugum.id == DRAFT_YAZICISI:
+            bulgular.append(f"ad: {dugum.id}")
+        elif isinstance(dugum, ast.Attribute) and dugum.attr == DRAFT_YAZICISI:
+            bulgular.append(f"öznitelik: .{dugum.attr}")
+    return bulgular
 
 
 def test_synthesis_module_does_not_import_insert_draft() -> None:
@@ -379,18 +425,26 @@ def test_synthesis_module_does_not_import_insert_draft() -> None:
     kaynak = (
         REPO_KOK / "apps/social/backend/app/services/sector_pipeline/synthesis.py"
     ).read_text(encoding="utf-8")
-    agac = ast.parse(kaynak)
-    ice_aktarilan: set[str] = set()
-    for dugum in ast.walk(agac):
-        if isinstance(dugum, ast.ImportFrom):
-            assert dugum.module != "app.services.sector_package_lifecycle"
-            for ad in dugum.names:
-                ice_aktarilan.add(ad.name)
-        elif isinstance(dugum, ast.Import):
-            for ad in dugum.names:
-                assert "sector_package_lifecycle" not in ad.name
-    assert "insert_draft" not in ice_aktarilan
-    assert "insert_draft" not in kaynak
+    assert _draft_yazici_referanslari(kaynak) == []
+
+
+@pytest.mark.parametrize(
+    "ekilen",
+    [
+        "from app.services.sector_package_lifecycle import insert_draft\n",
+        "from app.services import sector_package_lifecycle\n",
+        "import app.services.sector_package_lifecycle\n",
+        "def f(db):\n    return db.insert_draft()\n",
+        "def f(insert_draft):\n    return insert_draft\n",
+    ],
+)
+def test_draft_writer_scan_detects_a_planted_violation(ekilen: str) -> None:
+    """Tarayıcının kendi mutasyon kanıtı: ekilen ihlal GÖRÜLÜR.
+
+    Boş küme kontrol kolu ayrı testtedir (gerçek modül temiz döner); bu kol
+    tarayıcının sessizce hiçbir şey görmediği hâli dışlar.
+    """
+    assert _draft_yazici_referanslari(ekilen) != []
 
 
 # ═══ 3. Pozitif kontrol ve kimlik taşıması ═════════════════════════════════
@@ -662,6 +716,31 @@ async def test_churn_guard_blocks_weak_new_over_verified(kosu, tmp_path) -> None
     assert CIKARILACAK_METIN in dict(sonuc.aday_json)["kanca_kaliplari"]
     assert _satirlar(sonuc)[UNIT_CIKAR]["karar"] == "koru"
     assert any(UNIT_CIKAR in soru for soru in sonuc.acik_sorular)
+
+
+async def test_rejected_removal_unlinks_its_replacement(kosu, tmp_path) -> None:
+    """Ret hâlinde `yerine_gecer` bağı ÇÖZÜLÜR — aday düşürülmez, bağ yalan söylemez."""
+    icerik = _tam_icerik(kanca_kaliplari=[KORUNAN_METIN, "Yepyeni zayıf kalıp"])
+    gunluk = [s for s in _model_gunlugu(icerik, atlanan=(UNIT_CIKAR,))
+              if s["oge_yolu"] != "kanca_kaliplari[1]"]
+    gunluk.append(
+        _satir("cikar", UNIT_CIKAR, "kanca_kaliplari[1]", "kanca_kaliplari")
+    )
+    gunluk.append(
+        _satir(
+            "ekle",
+            "ku-777777777777",
+            "kanca_kaliplari[1]",
+            "kanca_kaliplari",
+            yerine_gecer=UNIT_CIKAR,
+        )
+    )
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk)
+
+    ekle = [s for s in _satirlar(sonuc).values() if s["karar"] == "ekle"]
+    assert len(ekle) == 1
+    assert "yerine_gecer" not in ekle[0]
+    assert _satirlar(sonuc)[UNIT_CIKAR]["karar"] == "koru"
 
 
 async def test_not_observed_alone_does_not_license_removal(kosu, tmp_path) -> None:
