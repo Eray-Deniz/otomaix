@@ -66,7 +66,6 @@ import re
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from app.services.sector_content_schema import (
@@ -76,6 +75,7 @@ from app.services.sector_content_schema import (
 )
 from app.services.sector_packages import validate_package_content
 from app.services.sector_pipeline import contracts, identity, runs
+from app.services.sector_pipeline.runs import _require_run_id as require_run_id
 from app.services.sector_pipeline.auditors import (
     ARASTIRMA_DEPOSU_KOKU,
     BOLUM_ANAHTARLARI,
@@ -151,19 +151,16 @@ class SynthesisFailed(RuntimeError):
 class SynthesisResult:
     """Sentezin dört çıktısı + taşma işareti.
 
-    **`aday_json` DERİN KOPYADIR ama derinlemesine DONDURULMAZ — bu bilinçli
-    bir R6(e) sapmasıdır ve gerekçesi ölçüldü.** `identity.donmus` listeyi
-    demete çevirir; oysa paket içeriğinin şeması `list` üzerinden tanımlıdır
-    (`structural_errors` ve `enumerate_content_units` `isinstance(..., list)`
-    sorar). Derin dondurma uygulansaydı ADAY, KENDİ yazım kapısından geçemez
-    hâle gelirdi. Bu yüzden:
+    **Üç koleksiyon da R6(e) kuralıyla DERİNLEMESİNE donar.** İlk yazım
+    `aday_json`'u yalnız üst düzeyde salt-okunur yapıyor ve gerekçe olarak
+    *"şema `list` ister"* diyordu; bu gerekçe ÇÜRÜTÜLDÜ (checkpoint 8, yüksek):
+    çalışma zamanı şeklinin `list` olması, KALICI temsilin de değiştirilebilir
+    olmasını gerektirmez — çözme, şema sınırında yapılır. Doğrulanmış bir
+    sonucun iç içe listesine sonradan öğe eklemek, içerik/günlük çiftini
+    doğrulamadan SONRA tutarsız hâle getirirdi.
 
-      * çağıranın nesnesiyle takma ad PAYLAŞILMAZ (derin kopya),
-      * üst düzey anahtar kümesi salt-okunurdur (`MappingProxyType`),
-      * iç içe listelerin değiştirilebilirliği KAPSAM DIŞIDIR ve burada
-        garanti EDİLMEZ — vaat kadarıyla beyan edilir, fazlası iddia edilmez.
-
-    `karar_gunlugu` ve `acik_sorular` yalnız skaler taşır, onlar TAM donar.
+    Şemaya ya da JSON'a verilecekken `identity.cozulmus` ile çözülür; `donmus`
+    ile birlikte TEK bir çifttir ve ikinci bir kopyası yoktur.
     """
 
     aday_json: Mapping
@@ -178,9 +175,7 @@ class SynthesisResult:
                 f"SynthesisResult.aday_json eşleme olmak ZORUNDA: "
                 f"{type(self.aday_json).__name__}"
             )
-        object.__setattr__(
-            self, "aday_json", MappingProxyType(copy.deepcopy(dict(self.aday_json)))
-        )
+        object.__setattr__(self, "aday_json", identity.donmus(dict(self.aday_json)))
         satirlar = tuple(self.karar_gunlugu)
         for satir in satirlar:
             if not isinstance(satir, Mapping):
@@ -225,7 +220,7 @@ def validate(result: SynthesisResult) -> list[str]:
     şeması) ve `identity.check_unit_integrity` (iki yönlü örtüşme). Buraya
     kural kopyalansaydı yazım kapısıyla sentez kapısı sürüm sürüm ayrışırdı.
     """
-    icerik = dict(result.aday_json)
+    icerik = identity.cozulmus(result.aday_json)
     hatalar = list(structural_errors(icerik))
     gunluk = [dict(satir) for satir in result.karar_gunlugu]
     hatalar.extend(identity.validate_decision_log(gunluk))
@@ -367,42 +362,98 @@ def _aktif_birimler(active_package: Mapping | None) -> dict[str, dict]:
         raise SynthesisFailed(f"aktif paket kimlik kapısını geçmedi: {hata}") from hata
 
 
-def _cikarma_kapisi(unit_id: str, alan: str, tur: AuditRound) -> str | None:
-    """Çıkarma admissible mı — değilse RET SEBEBİ döner (None = kabul).
+def _dogrulanmis_referanslar(rapor) -> set[str]:
+    """Raporun DOĞRULANMIŞ kaynak referansları — TAM EŞLEŞME kümesi.
 
-    Üç sebep de AYRI adlandırılır: hangi kapının düştüğü açık sorunun
+    Doğrulanmış = ADIM 1 örnekleminde hem erişilmiş hem içerikçe uyumlu
+    (sözleşmenin `DOĞRULANDI` sonucu). Küme, o satırın hem URL'sini hem kör
+    kaynak etiketini taşır; `kanit` alanı ikisinden birine TAM eşit olmalıdır.
+
+    **Neden alt dizge değil tam eşleşme.** Serbest metinden *"bu referans
+    doğrulanmıştır"* çıkarmaya çalışmak bypass ile yanlış-pozitif arasında
+    salınan bir sınıftır. Burada pozitif ve KAPALI bir kontrat kullanılır:
+    referans ya kümededir ya değildir.
+    """
+    referanslar: set[str] = set()
+    for kontrol in rapor.url_orneklem:
+        if not (kontrol.erisildi and kontrol.icerik_uyumlu):
+            continue
+        for deger in (kontrol.url, kontrol.kaynak):
+            if isinstance(deger, str) and deger.strip():
+                referanslar.add(deger.strip())
+    return referanslar
+
+
+def _cikarma_kapisi(
+    unit_id: str, alan: str, tur: AuditRound, *, karar: str
+) -> str | None:
+    """Birimin içerikten DÜŞMESİ admissible mı — değilse RET SEBEBİ döner.
+
+    Kapı `cikar` ve `kirp`'in İKİSİNE de uygulanır. Sözleşme churn korumasını
+    *"kırpmanın ve `cikar` kararının SONUCUNA konan bir kısıt"* diye yazar
+    (satır 202-203): karar etiketi değil, aktif bir birimin adaydan DÜŞMESİ
+    tetikler. Etikete bağlansaydı `supported` bir birim `kirp` yazılarak
+    kapıdan geçerdi — ölü kararlar bütünlük kapısına da görünmez.
+
+    İki kol AYRIDIR ve bu bilinçlidir:
+
+      * **K-122 (her iki karar için)** — bir denetçi `supported` diyorsa kalıp
+        doğrulanmıştır ve düşmez.
+      * **K-124 (yalnız `cikar`)** — çıkarma POZİTİF kanıt ister. `kirp` bir
+        BOYUT kararıdır (spec §8.6 kırpma sırası), kanıt kararı değil; ona
+        kanıt eşiği koymak sözleşmede olmayan bir kural olurdu.
+
+    Üç ret sebebi ayrı adlandırılır: hangi kapının düştüğü açık sorunun
     metninden okunabilmelidir.
     """
-    statuler = {
-        rapor.denetci: {
-            satir.statu
-            for satir in rapor.yeniden_dogrulama
-            if satir.unit_id == unit_id
-        }
-        for rapor in tur.reports
-    }
-    dogrulayan = sorted(
-        rol for rol, kume in statuler.items() if CIKARMAYI_ENGELLEYEN_STATU in kume
-    )
-    destekleyen = sorted(
-        rol for rol, kume in statuler.items() if CIKARMAYI_DESTEKLEYEN_STATU in kume
-    )
+    dogrulayan: list[str] = []
+    destekleyen: list[str] = []
+    kanitsiz: list[str] = []
+    for rapor in tur.reports:
+        satirlar = [
+            satir for satir in rapor.yeniden_dogrulama if satir.unit_id == unit_id
+        ]
+        if any(satir.statu == CIKARMAYI_ENGELLEYEN_STATU for satir in satirlar):
+            dogrulayan.append(rapor.denetci)
+        celiskiler = [
+            satir for satir in satirlar if satir.statu == CIKARMAYI_DESTEKLEYEN_STATU
+        ]
+        if not celiskiler:
+            continue
+        referanslar = _dogrulanmis_referanslar(rapor)
+        if any(str(satir.kanit).strip() in referanslar for satir in celiskiler):
+            destekleyen.append(rapor.denetci)
+        else:
+            kanitsiz.append(rapor.denetci)
+
     if dogrulayan:
         return (
-            f"K-122 churn koruması: {dogrulayan} birimi {CIKARMAYI_ENGELLEYEN_STATU!r} "
-            "raporladı; doğrulanmış kalıp yeni bir adayın varlığıyla çıkarılamaz"
+            f"K-122 churn koruması: {sorted(dogrulayan)} birimi "
+            f"{CIKARMAYI_ENGELLEYEN_STATU!r} raporladı; doğrulanmış kalıp yeni bir "
+            "adayın varlığıyla düşürülemez"
         )
+    if karar != "cikar":
+        return None
     if alan in MEVZUAT_ALANLARI:
         if len(destekleyen) < len(DENETCI_ROLLERI):
             return (
-                f"K-124 mevzuat kolu: mevzuat/güvenlik birimi için İKİ denetçinin de "
-                f"{CIKARMAYI_DESTEKLEYEN_STATU!r} satırı gerekir; bulunan {destekleyen}"
+                "K-124 mevzuat kolu: mevzuat/güvenlik birimi için İKİ denetçinin de "
+                f"doğrulanmış referanslı {CIKARMAYI_DESTEKLEYEN_STATU!r} satırı "
+                f"gerekir; çözülen {sorted(destekleyen)}, çözülemeyen "
+                f"{sorted(kanitsiz)}"
             )
         return None
     if not destekleyen:
+        if kanitsiz:
+            return (
+                f"K-124: {sorted(kanitsiz)} {CIKARMAYI_DESTEKLEYEN_STATU!r} dedi ama "
+                "`kanit` doğrulanmış bir referansa ÇÖZÜLMEDİ — sözleşme bu statüde "
+                "doğrulanmış referans ZORUNLU kılar (denetçi sözleşmesi satır 185-186)"
+            )
         return (
-            f"K-124: çıkarma en az bir {CIKARMAYI_DESTEKLEYEN_STATU!r} satırı ister; "
-            "hiçbir denetçi pozitif çelişki kanıtı raporlamadı"
+            f"K-124: çıkarma en az bir doğrulanmış referanslı "
+            f"{CIKARMAYI_DESTEKLEYEN_STATU!r} satırı ister; hiçbir denetçi pozitif "
+            "çelişki kanıtı raporlamadı"
         )
     return None
 
@@ -421,6 +472,17 @@ def _geri_koy(aday: dict, birim: Mapping) -> str:
     """
     yol = str(birim["oge_yolu"])
     deger = copy.deepcopy(birim["deger"])
+
+    # Birim ZATEN yerinde ve DEĞİŞMEMİŞ olabilir: model çıkarmayı günlükte
+    # önerip içerikten hiç düşürmemiş olabilir (düz metin alanı zaten kapalı
+    # alan kümesinin parçasıdır ve düşürülemez). O hâlde geri koyma NO-OP'tur,
+    # yalnız sahiplenme yazılır. Eşitlik YOLA değil HASH'e bakar: aynı yol
+    # başka bir değeri taşıyor olabilir (sıra numaraları KONUMSALDIR) ve o
+    # birimi eski kimlikle sahiplenmek yanlış eşleme üretirdi.
+    mevcut = identity.enumerate_content_units(aday)
+    yerinde = mevcut.get(yol)
+    if yerinde is not None and yerinde["oge_sha"] == birim["oge_sha"]:
+        return yol
 
     eslesme = _VIDEO_YOLU_RE.match(yol)
     if eslesme:
@@ -529,9 +591,9 @@ def _kimlik_bagla(
             )
         kullanilan.add(unit_id)
 
-        if karar == "cikar":
+        if karar in ("cikar", "kirp"):
             sebep = _cikarma_kapisi(
-                unit_id, str(aktif_birimler[unit_id]["alan"]), tur
+                unit_id, str(aktif_birimler[unit_id]["alan"]), tur, karar=karar
             )
             if sebep is not None:
                 reddedilen.append((unit_id, sebep, ham))
@@ -612,8 +674,14 @@ async def _kos(
 ) -> SynthesisResult:
     """Kabul bölgesi + koşum bölgesi. Arıza işaretini ÇAĞIRAN `run` atar."""
     # ── KABUL BÖLGESİ — ilk yan etkiden ÖNCE biter ──────────────────────────
+    # Koşu kimliği ÖNCE gramerden geçer. `Path(dest) / run_id` tek başına bir
+    # sınır DEĞİLDİR: mutlak bir `run_id` `dest`'i sessizce DÜŞÜRÜR (ölçüldü:
+    # Path('/tmp/dest') / '/tmp/kacak' -> '/tmp/kacak'). Kural kardeş yüzeyin
+    # (`build_packet`) kullandığının ta kendisidir — ikinci bir gramer yazılmaz;
+    # `_RUN_ID_RE` yol ayracını, `..`'yı ve boş adı zaten reddeder, `dest`'in
+    # kendi takma adlılığını da `kok_yolunu_kapila` ölçer.
     try:
-        kok = kok_yolunu_kapila(Path(dest) / run_id)
+        kok = kok_yolunu_kapila(Path(dest) / require_run_id(run_id))
     except (ValueError, TypeError) as hata:
         raise SynthesisFailed(f"sentez kökü yol kapısını geçmedi: {hata}") from hata
     if kok.exists():
@@ -622,6 +690,19 @@ async def _kos(
             "EZİLMEZ (K-82); yeniden koşum yeni kimlik alır"
         )
     aktif_birimler = _aktif_birimler(active_package)
+    # Tur ile aktif paket AYNI görüntüye bakmak ZORUNDA. İkisi bağımsız
+    # parametre olduğu için bir çağıran, A sürümüne yazılmış denetçi raporlarını
+    # B sürümünün paketiyle eşleştirebilir; o raporlardaki `contradicted`
+    # satırları başka bir sürümün birimlerini çıkarma yetkisine dönüşürdü.
+    # Ölçüm noktası `PacketRef` ile AYNI: `canonical_sha(decision_units(...))`.
+    beklenen_sha = identity.canonical_sha(aktif_birimler)
+    for rapor in tur.reports:
+        if rapor.unit_snapshot_sha != beklenen_sha:
+            raise SynthesisFailed(
+                f"denetçi raporu {rapor.denetci!r} BAŞKA bir görüntüye yazılmış "
+                f"(rapor {rapor.unit_snapshot_sha}, aktif paket {beklenen_sha}) — "
+                "ayrışan görüntünün kanıtı bu paketten birim çıkaramaz"
+            )
     try:
         gorev_metni = contracts.require_pinned_text(
             PIN_PATH, ARASTIRMA_DEPOSU_KOKU, GOREV_DOSYASI
@@ -745,6 +826,14 @@ async def run(
         raise SynthesisFailed(
             f"tur GEÇERSİZ, sentez başlamaz (K-150): {round.sebep!r}"
         )
+    # Kimlik grameri dış korumanın DIŞINDA, ondan ÖNCE koşar. İçeride koşsaydı
+    # arıza yolu `mark_incomplete`'i geçersiz bir kimlikle çağırır, o da kendi
+    # gramerinden düşer ve özgün sebebi EZERDİ — koşu satırı işaretsiz kalır,
+    # çağıran da yanlış istisnayı görürdü.
+    try:
+        require_run_id(run_id)
+    except (ValueError, TypeError) as hata:
+        raise SynthesisFailed(f"koşu kimliği gramerden geçmedi: {hata}") from hata
     try:
         return await _kos(
             db,

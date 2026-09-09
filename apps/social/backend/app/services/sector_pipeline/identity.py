@@ -734,3 +734,29 @@ def donmus(value: Any) -> Any:
         f"donmus kapalı kümenin dışında bir tip aldı: {type(value).__name__} — "
         "eşleme · dizi · küme · değişmez skaler dışına sessiz geçiş YOKTUR"
     )
+
+
+def cozulmus(value: Any) -> Any:
+    """`donmus`'un TERSİ: salt-okunur yükü düz, değiştirilebilir yapıya çözer.
+
+    Neden gerekli: `donmus` listeyi demete, eşlemeyi `MappingProxyType`'a
+    çevirir. Paket içeriğinin şeması ise `list`/`dict` üzerinden tanımlıdır
+    (`structural_errors` ve `enumerate_content_units` `isinstance(..., list)`
+    sorar) ve asyncpg'nin jsonb kodlayıcısı `mappingproxy`yi serileştiremez.
+    Yani donmuş saklama ile şema/serileştirme sınırı arasında bir ÇÖZME adımı
+    zorunludur.
+
+    Kural burada TEK yerdedir ve `donmus` ile aynı dosyada yaşar; ikisi bir
+    çifttir. İkinci bir kopya yazılsaydı (ve bir süre yazılmıştı) dondurma ile
+    çözme sürüm sürüm ayrışırdı.
+
+    Çözme kümesi dondurmanınkinden DAR değildir ama AYNI da değildir: `set` ve
+    `frozenset` de diziye çözülür, çünkü hedef biçim JSON'dur ve JSON'da küme
+    yoktur. Bu asimetri bilinçlidir — `donmus(cozulmus(x))` özdeşlik VAAT
+    ETMEZ, yalnız *"çözülen yapı şemaya ve JSON'a verilebilir"* vaat edilir.
+    """
+    if isinstance(value, Mapping):
+        return {anahtar: cozulmus(deger) for anahtar, deger in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [cozulmus(oge) for oge in value]
+    return value

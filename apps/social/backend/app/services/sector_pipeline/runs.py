@@ -692,14 +692,14 @@ def _coz(value: Any) -> Any:
 
     `EngineResult` alanları `identity.donmus`'tan geçtiği için `MappingProxyType`
     ve `tuple` taşırlar; asyncpg'nin jsonb kodlayıcısı `json.dumps`'tır ve
-    `mappingproxy`yi serileştiremez (ölçüldü: `TypeError`). Çözme kuralı burada
-    TEK yerdedir; `record_result` kendi dönüşümünü satır satır yazmaz.
+    `mappingproxy`yi serileştiremez (ölçüldü: `TypeError`).
+
+    **Kural artık BURADA DEĞİL** (2026-09-09): çözme, dondurmanın tersidir ve
+    ikisi bir çifttir; `identity.cozulmus` tek evdir. Bu ad yalnız çağıranların
+    okunabilirliği için duruyor ve kendi dönüşümünü YAZMAZ — ikinci bir kopya
+    iki kuralın sürüm sürüm ayrışması demekti.
     """
-    if isinstance(value, Mapping):
-        return {anahtar: _coz(deger) for anahtar, deger in value.items()}
-    if isinstance(value, (list, tuple, frozenset, set)):
-        return [_coz(oge) for oge in value]
-    return value
+    return identity.cozulmus(value)
 
 
 F19_ALANLARI: tuple[str, ...] = (
