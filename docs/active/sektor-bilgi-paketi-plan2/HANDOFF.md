@@ -18,8 +18,9 @@ tipleri). Task 12 indi ve checkpoint 9 kapandı.
 ilerletildi.
 
 **Dal:** `feat/sektor-bilgi-paketi-plan2`, **merge EDİLMEDİ**, **push EDİLDİ** (Eray onayı,
-2026-09-09 oturum sonu). Ölçüldü: `git rev-list --left-right --count origin/<dal>...HEAD` → `0 0`;
-iki uç da `888ba67`. Yeni oturumda taze ölçüm yine o komutla alınır.
+2026-09-09 oturum sonu); sapma `0 0` ölçüldü. **Uç SHA'sı buraya YAZILMAZ** — bu satırı kaydeden
+commit'in kendisi onu bayatlatır ve iki oturum üst üste öyle oldu. Taze ölçüm:
+`git rev-list --left-right --count origin/feat/sektor-bilgi-paketi-plan2...HEAD`.
 
 **Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: son commit `7964ed6`.
 Bu oturumda dokunulmadı; okundu (denetçi ve sentez sözleşmelerinin çıktı biçimleri ölçüldü).
