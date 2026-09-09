@@ -658,3 +658,315 @@ def test_decide_does_not_swallow_input_errors() -> None:
     bozuk = _girdi(kapi=bd.gate_round([]))
     with pytest.raises(engine.EngineInputError):
         engine.decide(bozuk, PolicyConfig())
+
+
+# ═══ 9. Checkpoint 10 hakem turunun kapattığı sınıflar ═════════════════════
+#
+# Altı bulgunun altısı da kontrolörün KENDİ probuyla doğrulandı (ezberden kabul
+# edilmedi); aşağıdaki testler o probların kalıcı hâlidir.
+
+
+def _koru_ihlali_girdisi(*, ek_guncelle: bool = False):
+    """Aday yükü değişmiş ama satır `koru` diyor — "değişmedi" iddiası YALAN."""
+    degismis = "Sessizce degistirilmis kanca kalibi"
+    aday = _tam_icerik(kanca_kaliplari=[degismis, CIKARILACAK_KANCA])
+    degis = {}
+    if ek_guncelle:
+        cikan_yol = _yol(aday, "kanca_kaliplari", CIKARILACAK_KANCA)
+        aday = _tam_icerik(kanca_kaliplari=[degismis, GUNCELLENMIS_KANCA])
+        degis = {
+            _yol(aday, "kanca_kaliplari", GUNCELLENMIS_KANCA): {
+                "karar": "guncelle",
+                "kanit": DOGRULANMIS_KAYNAK,
+            }
+        }
+        del cikan_yol
+    return _girdi(
+        icerik=aday,
+        gunluk=_gunluk(aday, degis=degis),
+        cift=_cift(
+            statuler_1={CIKAN_KIMLIK: "needs_update"},
+            statuler_2={CIKAN_KIMLIK: "needs_update"},
+        ),
+    )
+
+
+def test_changed_value_labelled_koru_is_restored() -> None:
+    """`koru` satırının iddiası uygulanır, aday yükünün iddiası DEĞİL.
+
+    Ölçüldü (checkpoint 10, yüksek): sessizce değiştirilmiş bir kalıp `koru`
+    etiketiyle geçiyor, koşu `no_change` diyordu — kanıt, mutabakat ve bariyer
+    kontrollerinin ÜÇÜ birden atlanıyordu.
+    """
+    sonuc = _karar(_koru_ihlali_girdisi())
+    assert KORUNAN_KANCA in _kancalar(sonuc)
+    assert "Sessizce degistirilmis kanca kalibi" not in _kancalar(sonuc)
+    assert sonuc.sonuc == "no_change"
+
+
+def test_koru_violation_is_traced_in_engine_diff() -> None:
+    """Geri alınan `koru` ihlali SESSİZ olmaz — izi `engine_diff`'e düşer."""
+    sonuc = _karar(_koru_ihlali_girdisi())
+    assert sonuc.engine_diff["koru_ihlalleri"]
+
+
+def test_legitimate_change_survives_next_to_a_koru_violation() -> None:
+    """POZİTİF KONTROL: ihlal geri alınırken meşru karar UYGULANMAYA devam eder."""
+    sonuc = _karar(_koru_ihlali_girdisi(ek_guncelle=True))
+    assert GUNCELLENMIS_KANCA in _kancalar(sonuc)
+    assert KORUNAN_KANCA in _kancalar(sonuc)
+
+
+def test_accepted_cikar_is_counted_logged_and_measured() -> None:
+    """Kabul edilen çıkarma: sonuç · günlük satırı · bariyer payı — ÜÇÜ de.
+
+    Ölçüldü: yol-varlığına bakan sınıflandırma kabul edilen `cikar`'ı hem
+    günlükten hem `uygulanan` kümesinden düşürüyor, koşu `no_change` diyordu.
+    """
+    sonuc = _karar(_cikar_girdisi(mutabik=True))
+    assert sonuc.sonuc == "activation_eligible"
+    assert any(satir.get("karar") == "cikar" for satir in sonuc.final_decision_log)
+    assert sonuc.barrier_report["sayilar"]["degisim"] == 1
+
+
+def test_rejected_cikar_produces_exactly_one_motor_row() -> None:
+    """Bir birim bir günlükte TEK sonuç alır — çift motor satırı şemayı düşürür."""
+    sonuc = _karar(_cikar_girdisi(mutabik=False))
+    satirlar = [
+        satir for satir in sonuc.final_decision_log if satir.get("unit_id") == CIKAN_KIMLIK
+    ]
+    assert len(satirlar) == 1
+    assert satirlar[0]["aktor"] == "motor"
+    assert identity.validate_decision_log(
+        [identity.cozulmus(satir) for satir in sonuc.final_decision_log]
+    ) == []
+
+
+def _cta_girdisi():
+    """Yapılandırılmış (nesne) bir öğenin kanıtsız `guncelle`si."""
+    cta_yol = _yol(AKTIF_ICERIK, "cta_kaliplari", AKTIF_ICERIK["cta_kaliplari"][0])
+    kimlik = KIMLIKLER[cta_yol]
+    aday = _tam_icerik(
+        cta_kaliplari=[
+            {"kalip": "Yeni cta kalibi", "tur": "ziyaret", "gerekce": "Yeni gerekce."}
+        ]
+    )
+    return _girdi(
+        icerik=aday,
+        gunluk=_gunluk(aday, degis={cta_yol: {"karar": "guncelle", "kanit": COZULEMEYEN_KANIT}}),
+        cift=_cift(statuler_1={kimlik: "needs_update"}, statuler_2={kimlik: "needs_update"}),
+    )
+
+
+def test_rejected_update_of_structured_item_does_not_block() -> None:
+    """K-23=B temsil tipine takılmaz: donmuş aktif değer adaya ÇÖZÜLEREK girer.
+
+    Ölçüldü: `mappingproxy` bir CTA öğesi yazım kapısını geçmiyor ve sıradan bir
+    kanıtsız `guncelle` bütün koşuyu BLOKLUYORDU.
+    """
+    sonuc = _karar(_cta_girdisi())
+    assert sonuc.sonuc != "blocked"
+    assert sonuc.final_candidate is not None
+    assert sonuc.final_candidate["cta_kaliplari"][0]["kalip"] == (
+        AKTIF_ICERIK["cta_kaliplari"][0]["kalip"]
+    )
+    assert structural_errors(identity.cozulmus(sonuc.final_candidate)) == []
+
+
+def test_one_unit_counts_once_even_with_two_reasons() -> None:
+    """K-132 motorun ACZİNİ ölçer, kaç kontrolün aynı birime dokunduğunu değil."""
+    yol = _yol(AKTIF_ICERIK, "kanca_kaliplari", KORUNAN_KANCA)
+    kimlik = KIMLIKLER[yol]
+    aday = _tam_icerik(kanca_kaliplari=[GUNCELLENMIS_KANCA, CIKARILACAK_KANCA])
+    girdi = _girdi(
+        icerik=aday,
+        gunluk=_gunluk(aday, degis={yol: {"karar": "guncelle", "kanit": COZULEMEYEN_KANIT}}),
+        cift=_cift(statuler_1={kimlik: "needs_update"}, statuler_2={kimlik: "supported"}),
+    )
+    sonuc = engine.decide(girdi, PolicyConfig())
+    sebepler = {kayit.sebep for kayit in sonuc.policy_report.uygulanmayan_kararlar}
+    assert len(sebepler) == 2, f"fixture iki sebep üretmeli: {sebepler}"
+    assert len(sonuc.policy_report.kararsizlar) == 1
+    assert sonuc.barrier_report["sayilar"]["kararsizlik"] == 1
+
+
+def test_unmatched_key_note_and_application_share_one_predicate(monkeypatch) -> None:
+    """Not üreticisi ile uygulayıcı AYNI yüklemi ÇAĞIRIR — sayı eşitliği değil.
+
+    Sayıların eşitliği iki AYRI döngüyle de sağlanabilirdi; oradan "tek kural"
+    sonucu çıkmaz. Yüklem susturulunca İKİ yolun da susması, paylaşımın kendisini
+    ölçer.
+    """
+    girdi = _girdi(takvim=frozenset())
+    normal_notlar = [
+        satir
+        for satir in engine.run_checks(girdi).notlar
+        if satir["sinif"] == "eslesmeyen-ozel-gun"
+    ]
+    normal_sonuc = engine.decide(girdi, PolicyConfig())
+    assert normal_notlar and normal_sonuc.engine_diff["eslesmeyen_ozel_gunler"] == (
+        TAKVIM_ANAHTARI,
+    )
+
+    monkeypatch.setattr(engine, "_eslesmeyen_ozel_gunler", lambda inputs: ())
+    susturulmus_notlar = [
+        satir
+        for satir in engine.run_checks(girdi).notlar
+        if satir["sinif"] == "eslesmeyen-ozel-gun"
+    ]
+    susturulmus = engine.decide(girdi, PolicyConfig())
+    assert susturulmus_notlar == []
+    assert susturulmus.engine_diff["eslesmeyen_ozel_gunler"] == ()
+    assert TAKVIM_ANAHTARI in susturulmus.final_candidate["ozel_gun"]
+
+
+def test_invalid_final_pair_blocks_instead_of_shipping(monkeypatch) -> None:
+    """POZİTİF KONTROL: çift bütünlük kapısını geçmiyorsa sonuç ÜRETİLMEZ."""
+    gercek = engine._nihai_gunluk
+
+    def bozuk(inputs, outcome, reddedilen, nihai, yollar):
+        gunluk, uygulanan = gercek(inputs, outcome, reddedilen, nihai, yollar)
+        return gunluk + (dict(gunluk[0]),), uygulanan  # aynı birim İKİ satır
+
+    monkeypatch.setattr(engine, "_nihai_gunluk", bozuk)
+    sonuc = _karar()
+    assert sonuc.sonuc == "blocked"
+    assert "uygulanan-cift-butunluk-kapisini-gecmiyor" in sonuc.sebep
+    assert sonuc.final_candidate is None and sonuc.final_decision_log is None
+    assert sonuc.content_sha is None and sonuc.decision_log_sha is None
+
+
+# ── Üretilmiş matris: ekleme × çıkarma × yineleme ─────────────────────────
+#
+# Sınıf, ELLE seçilmiş bir örnekle değil ÜRETİLMİŞ matrisle kapatılır: konum ×
+# kabul × çıkarma × yinelenen değer. Boş-küme kontrol kolu (ekleme yok, çıkarma
+# yok) matrise DÂHİLDİR — hiçbir şey olmayan turda da çift geçerli kalmalı.
+
+_MATRIS = [
+    (konum, ekleme_kabul, cikarma, yinelenen)
+    for konum in (None, 0, 1, 2)
+    for ekleme_kabul in (True, False)
+    for cikarma in (None, "kabul", "red")
+    for yinelenen in (False, True)
+    if not (konum is None and (ekleme_kabul is False or yinelenen))
+]
+
+
+def _matris_girdisi(konum, ekleme_kabul, cikarma, yinelenen):
+    yeni = KORUNAN_KANCA if yinelenen else "Yeni kanca kalibi"
+    liste = [KORUNAN_KANCA, CIKARILACAK_KANCA]
+    if cikarma is not None:
+        liste.remove(CIKARILACAK_KANCA)
+    if konum is not None:
+        liste.insert(min(konum, len(liste)), yeni)
+    aday = _tam_icerik(kanca_kaliplari=liste)
+
+    # Kimlik haritası KONUMU BİLEREK kurulur: yinelenen değerde değere göre
+    # eşleme iki satıra aynı kimliği verirdi (fixture'ın kendi tuzağı).
+    yeni_yol = None
+    harita: dict[str, str] = {}
+    for sira, deger in enumerate(liste):
+        yol = f"kanca_kaliplari[{sira}]"
+        if konum is not None and sira == min(konum, len(liste) - 1) and deger == yeni:
+            harita[yol] = "ku-f00000000001"
+            yeni_yol = yol
+        else:
+            harita[yol] = KIMLIKLER[_yol(AKTIF_ICERIK, "kanca_kaliplari", deger)]
+    for yol in identity.enumerate_content_units(aday):
+        # `setdefault(yol, KIMLIKLER[yol])` OLMAZ: varsayılan, anahtar VARKEN de
+        # değerlendirilir ve adayda doğmuş yol için `KeyError` fırlatır.
+        if yol not in harita:
+            harita[yol] = KIMLIKLER[yol]
+
+    degis = {}
+    if yeni_yol is not None:
+        kanit = (
+            f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}" if ekleme_kabul else DOGRULANMIS_KAYNAK
+        )
+        degis[yeni_yol] = {"karar": "ekle", "kanit": kanit}
+
+    ek: tuple = ()
+    statuler = {}
+    if cikarma is not None:
+        cikan_yol = _yol(AKTIF_ICERIK, "kanca_kaliplari", CIKARILACAK_KANCA)
+        birim = identity.enumerate_content_units(AKTIF_ICERIK)[cikan_yol]
+        ek = (
+            {
+                "tur": "karar",
+                "alan": birim["alan"],
+                "oge_yolu": cikan_yol,
+                "unit_id": CIKAN_KIMLIK,
+                "oge_sha": birim["oge_sha"],
+                "karar": "cikar",
+                "gerekce": "Kaynaklar celisti.",
+                "kanit": DOGRULANMIS_KAYNAK,
+                "aktor": "sentez",
+            },
+        )
+        statuler = {
+            CIKAN_KIMLIK: "contradicted" if cikarma == "kabul" else "supported"
+        }
+    return _girdi(
+        icerik=aday,
+        gunluk=_gunluk(aday, kimlikler=harita, degis=degis, ek=ek),
+        cift=_cift(
+            statuler_1={CIKAN_KIMLIK: "contradicted"} if cikarma else None,
+            statuler_2=statuler or None,
+        ),
+    )
+
+
+@pytest.mark.parametrize("konum,ekleme_kabul,cikarma,yinelenen", _MATRIS)
+def test_addition_removal_matrix_keeps_pair_valid_and_order_stable(
+    konum, ekleme_kabul, cikarma, yinelenen
+) -> None:
+    """Her hücrede: çift geçerli · aktif komşuluk korunur · karar uygulanır."""
+    sonuc = engine.decide(
+        _matris_girdisi(konum, ekleme_kabul, cikarma, yinelenen), PolicyConfig()
+    )
+    assert sonuc.sonuc in SONUCLAR
+    assert sonuc.final_candidate is not None, f"çift üretilemedi: {sonuc.sebep}"
+    icerik = identity.cozulmus(sonuc.final_candidate)
+    gunluk = [identity.cozulmus(satir) for satir in sonuc.final_decision_log]
+    assert structural_errors(icerik) == []
+    assert identity.validate_decision_log(gunluk) == []
+    assert identity.check_unit_integrity(icerik, gunluk) == []
+
+    liste = list(icerik["kanca_kaliplari"])
+    # Çıkarma: kabul edilirse öğe YOK, reddedilirse KORUNUR (K-23=B).
+    assert (CIKARILACAK_KANCA in liste) is (cikarma != "kabul")
+    # Ekleme: çoğunluğu karşılamayan kalıp pakete GİRMEZ.
+    beklenen_korunan = 1 + (1 if (yinelenen and ekleme_kabul) else 0)
+    assert liste.count(KORUNAN_KANCA) == beklenen_korunan
+    if konum is not None and not yinelenen:
+        assert ("Yeni kanca kalibi" in liste) is ekleme_kabul
+    # Aktif komşuluk: iki aktif kalıp da hayattaysa AKTİF sıraları korunur.
+    if CIKARILACAK_KANCA in liste:
+        assert liste.index(KORUNAN_KANCA) < liste.index(CIKARILACAK_KANCA)
+
+
+def test_motor_row_provenance_follows_declared_precedence() -> None:
+    """İki sebep varsa motor satırının provenansı ÖNCELİK sırasıyla seçilir.
+
+    "Son yazan kazanır" bir kural değildir: kontrol çağrı sırası provenansı
+    belirlerse aynı girdi, kontrol kümesinin sırası değiştiğinde başka bir kural
+    kimliği damgalar.
+    """
+    yol = _yol(AKTIF_ICERIK, "kanca_kaliplari", KORUNAN_KANCA)
+    kimlik = KIMLIKLER[yol]
+    aday = _tam_icerik(kanca_kaliplari=[GUNCELLENMIS_KANCA, CIKARILACAK_KANCA])
+    sonuc = engine.decide(
+        _girdi(
+            icerik=aday,
+            gunluk=_gunluk(aday, degis={yol: {"karar": "guncelle", "kanit": COZULEMEYEN_KANIT}}),
+            cift=_cift(statuler_1={kimlik: "needs_update"}, statuler_2={kimlik: "supported"}),
+        ),
+        PolicyConfig(),
+    )
+    motor = [
+        satir
+        for satir in sonuc.final_decision_log
+        if satir.get("unit_id") == kimlik and satir.get("aktor") == "motor"
+    ]
+    assert len(motor) == 1
+    assert motor[0]["kural_kimligi"] == engine.KURAL_KIMLIKLERI["kanit-yok"]
