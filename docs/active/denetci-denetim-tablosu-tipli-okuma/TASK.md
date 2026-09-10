@@ -1,9 +1,9 @@
 ---
 title: Denetçinin denetim tablosu TİPLİ okunsun (çoğunluk sınıfı düz yazıdan çıkarılmasın)
-status: proposed
-started: null
-finished: null
-last-touched: 2026-09-09
+status: done
+started: 2026-09-10
+finished: 2026-09-10
+last-touched: 2026-09-10
 blocked-by: null
 source_task: docs/active/sektor-bilgi-paketi-plan2/TASK.md
 ---
@@ -61,6 +61,37 @@ ondan sonra gelirse o bağlantılar yeniden yazılır.
 **SERT SON TARİH: Task 19 (kuyumculuk pilotunun resmî turu).** Sözleşme/çıktı tarafı pilottan
 sonra değişirse araştırmalar ikinci kez ürettirilir — kardeş görevin gerekçesiyle aynı.
 
+# Current Status
+
+**BİTTİ (2026-09-10).** Üç kapanış maddesinin üçü de indi; iki bağımsız hakem turu koştu ve
+bulguları işlendi.
+
+**Commit'ler:** `31a4656` (dış sözleşme deposu, iki dosya + damga) · `7f27646` (tipli okuma +
+koşu bağı) · `2c429b9` (hakem turu 1 — beş bulgu) · `4408dbe` (kapanış turu — kaynak tabanı +
+tipli bayrak).
+
+**Ölçüm:** tam takım 3929 passed / 298,65 s / exit 0 (taban 3876 → +53 test). Yirmi beş yeni
+kapının YİRMİ BEŞİ ayrı ayrı mutasyonla kanıtlandı.
+
+**Hakem turları:** Tur 1 → 5 bulgu (2 yüksek, 3 orta), beşi de kontrolörün KENDİ probuyla
+doğrulandı ve beşi de kapatıldı. Kapanış turu → F3/F4/F5 CLOSED, F1/F2 INCOMPLETE + 3 yeni
+bulgu (1 yüksek, 1 orta, 1 düşük).
+
+**Kapanmayanlar — dürüst liste:**
+
+- **Yüksek bulgunun kalan ayağı (atıf ADAYA bağlanmalı) ÇÖZÜLMEDİ.** Sözleşme revizyonu ister;
+  yama değildir. **Evi: `docs/active/denetci-atif-aday-kimligi/` (proposed, sert son tarih
+  Task 19).** Aynı eksen üç turda üç varyant verdi; yamamayı bırakma kararı bilinçlidir.
+- **Düşük (kontrolörün ürünü):** `_tur_url_kapisi` docstring'i ve orkestrasyon test yorumu hâlâ
+  yetkili değerin `sources` uzunluğu olduğunu söylüyor — F1'den sonra YANLIŞ. Eray'ın severity
+  kuralı gereği bu turda düzeltilmedi; üç satırlık iş, karar Eray'ın.
+- **Düşük (ÖNCEDEN VAR OLAN, bu görevin ürünü değil):** `engine._katla` noktasız `ı`'yı
+  katlamıyor; sözleşmenin kendi yazımı `[marka-adı]`, `[kanal-bağımlı]`, `[kaynak-bağımlı]`
+  hiçbir bayrak kontrolünde TANINMIYOR (ne yeni tipli kapıda ne Task 12'nin
+  `_bayrak_tuketimi`'nde). Evi YOK — Eray'ın kararını bekliyor.
+- **Uçtan uca koşum YOK.** Motor gerçek denetçi çıktısıyla hiç çağrılmadı; ilk gerçek ölçüm
+  Task 19.
+
 # Decisions Log
 
 - **2026-09-09 — görev AÇILDI (Eray onayı).** Task 12'nin dört turluk kapanış zinciri sırasında
@@ -68,6 +99,20 @@ sonra değişirse araştırmalar ikinci kez ürettirilir — kardeş görevin ge
   sözleşmede") ÖLÇÜMLE DÜZELTİLDİ — sözleşme zaten yapısal.
 - **2026-09-09 — kapsam sınırı:** bu görev motorun bugünkü fail-closed kapısını KALDIRMAZ; kapı
   tipli veri gelene kadar olduğu gibi kalır.
+- **2026-09-10 — Eray kararı (1):** `ekle` kararında hakem satırına atıf ZORUNLU; çoğunluk artık
+  hiçbir yerde düz yazıdan sayılmaz. Bedeli sentez sözleşmesinde küçük bir değişikliktir ve o
+  pencere Task 19'a kadar açıktır.
+- **2026-09-10 — Eray kararı (2):** hakemin `çelişki` dediği satıra dayanan ekleme OTOMATİK
+  GİRMEZ; açık soru olarak operatöre çıkar.
+- **2026-09-10 — Eray kararı (3):** `EngineInputs`'un koşu bağı AYNI turda kapatıldı (ayrı
+  göreve taşınmadı). Motorun girdi alan kümesi AÇILMADI.
+- **2026-09-10 — Eray talimatı (severity):** hakem bulgularından yalnız critical/high
+  düzeltilir; orta/düşük raporlanır. Bu talimat, HANDOFF'taki "gerileme kontrolörün kendi
+  ürünüyse `accepted_risk` yoktur" istisnasının ÜSTÜNE gelir — çelişkide severity yönetir.
+  Tur 1'in üç orta bulgusu talimat gelmeden önce düzeltilmişti; geri alınmadı.
+- **2026-09-10 — kontrolörün inisiyatifi (beyan):** denetim tablosunun ve envanter tablosunun
+  BİREBİR başlık satırı dayatması Eray'ın kararı DEĞİLDİ; ayrıştırıcı başlığı tahmin etmek
+  zorunda kalmasın diye eklendi ve aynı boşluk envanter tablosunda da vardı.
 
 # Open Problems
 

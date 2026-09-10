@@ -13,6 +13,11 @@
 > **Arşiv tetiği: Plan 2 kapanışı** (`/finish-branch-claude-codex`) — o gün ana görevle
 > birlikte `docs/task-archive/YYYY/MM/` altına, kendi bitiş tarihlerine göre taşınırlar.
 
+- **denetci-denetim-tablosu-tipli-okuma** — `status: done`, `finished: 2026-09-10`. Motorun
+  yapısal çoğunluğu artık denetçinin KENDİ kaynak sütunundan okunuyor; düz yazıdan sayma
+  bitti. İki hakem turu koştu. Kapanmayan kalemler ve kalan yüksek ayağın EVİ TASK.md'de.
+  `docs/active/denetci-denetim-tablosu-tipli-okuma/TASK.md`.
+
 - **brief-sozlesmesi-kaynak-bolumu-makine-okunur** — `status: done`, `finished: 2026-09-07`
   (dört ayak da indi). `docs/active/brief-sozlesmesi-kaynak-bolumu-makine-okunur/TASK.md`.
   **2026-09-08 düzeltmesi:** bitmiş olduğu hâlde bir gün boyunca yukarıdaki AKTİF listede
@@ -20,12 +25,11 @@
 
 ## Proposed (spun-off)
 
-- **denetci-denetim-tablosu-tipli-okuma** (proposed, 2026-09-09) — denetçinin sekiz sütunlu
-  denetim tablosu tipli okunsun; motorun yapısal çoğunluk kapısı sınıf/kaynak sütununu okusun,
-  sentezin düz yazı `kanit` alanını SAYMASIN. `brief-sozlesmesi-kaynak-bolumu-makine-okunur`
-  görevinin kardeşi (aynı sınıf, bir katman aşağıda) — fark: sözleşme zaten yapısal, eksik olan
-  tipli okuyucu. **Yuva: Task 13'ten sonra, Task 16'dan önce; sert son tarih Task 19.**
-  Ayrıntı: `docs/active/denetci-denetim-tablosu-tipli-okuma/TASK.md`.
+- **denetci-atif-aday-kimligi** (proposed, 2026-09-10) — sentezin `D1#<no>` atfı, o kararın
+  yetkilendirdiği ADAYA bağlansın. Bugün bağ ALAN düzeyinde; aynı alanın herhangi bir satırı
+  herhangi bir adayı yetkilendirebiliyor. **Sözleşme revizyonu ister, yama değildir** (denetçi
+  tablosunda Görev B dönem adı slug DEĞİL, liste alanlarında iddia kimliği HİÇ YOK).
+  **Sert son tarih: Task 19.** Ayrıntı: `docs/active/denetci-atif-aday-kimligi/TASK.md`.
 
 - **durum-tetikli-kural-kapisi** (proposed, süreç kalemi; DÜŞÜRÜLDÜ — koşullu) —
   Eray'ın gözlemi (2026-09-07): **durum-tetikli** kuralları hafızaya/nota yazmak **yanlış

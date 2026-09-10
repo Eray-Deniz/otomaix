@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-09
+last-touched: 2026-09-10
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -14,8 +14,10 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-09: Task 13 İNDİ ve checkpoint 10 kapandı;
-sıradaki iş **Task 14**.) Task 1-12 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-10: araya giren yan görev
+`denetci-denetim-tablosu-tipli-okuma` BİTTİ — motorun yapısal çoğunluğu artık denetçinin kendi
+kaynak sütunundan okunuyor, düz yazıdan sayma bitti; iki hakem turu koştu. Sıradaki iş
+**Task 14**.) Task 1-12 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
