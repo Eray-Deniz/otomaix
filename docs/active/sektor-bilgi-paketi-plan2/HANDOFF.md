@@ -67,6 +67,9 @@ ve iki tur üst üste kilit-sırası bulgusu verince varyant yamamak bırakılı
 # Risks
 
 - **EN YÜKSEK (işletim) — kimlik doğrulamasız CRM webhook'ları onarılmadı, yalnız KAPATILDI.**
+  **EVİ VAR ve burada adıyla yazılır** (kapanış sweep'i bu işaretçinin eksikliğini yakaladı,
+  2026-09-10): `crm-webhooks-unauthenticated-sql-interpolation` — CURRENT.md'de `proposed`,
+  tetikli. Canlı uç kapalı, onarım açık.
 - **Üretim hattı hâlâ koşamaz:** denetçi web probu yok.
 - **Köken jetonunun kalanı AÇIK ve kapatıldığı İDDİA EDİLMEZ.** Ölçüldü: API kimliği superuser
   ve tablo sahibi, yani `REVOKE` ile kapanmaz — ayrı bir veritabanı rolü ister.
@@ -92,7 +95,17 @@ ve iki tur üst üste kilit-sırası bulgusu verince varyant yamamak bırakılı
 - **Katı Bölüm C biçimi yanlış-pozitif üretebilir ve ÖLÇÜLMEDİ** (ilk gerçek ölçüm Task 19).
 - **KABUL EDİLMİŞ RİSK (M3) — commit geçmişi tek-commit TDD modeline uymuyor.**
 - **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`).
-- **EVSİZ PARK — atomiklik sınıfı depo GENELİ** (değişmedi).
+- **Atomiklik sınıfı (depo geneli) — SÜRESİZ EVSİZ PARK'tan çıkarıldı, DÜŞÜRÜLDÜ
+  (kapanış sweep'i, 2026-09-10).** Ölçülmüş durum: migration dosyaları kendi işlem
+  sarmalayıcılarını taşımaz; onaylı koşum yolu her dosyayı `--single-transaction` ile sarar,
+  bu yüzden o yoldan **bugün zararsızdır**. Sınıf yine de kapalı değildir.
+  **Neden düşürüldü:** checkpoint 5'ten beri "EVSİZ PARK" etiketiyle taşınıyordu ve İlke 7
+  süresiz evsiz-parkı yasaklar — ya gerçek tarihli ev, ya dürüst düşürme.
+  **DÜRÜST ETİKET: çözülmedi, kapsam-dışı-by-design.** Bu plan migration koşum yoluna
+  dokunmuyor; onu değiştirmek dağıtım altyapısının işidir.
+  **YENİDEN AÇILMA KOŞULU:** onaylı koşum yolu DIŞINDA bir migration uygulama yolu doğarsa
+  (elle `psql`, farklı bir dağıtım aracı, CI adımı) — o gün sınıf yeniden açılır ve kendi
+  evini alır.
 
 # Notes For Claude/Codex
 
@@ -181,8 +194,11 @@ Dördü de HEAD git nesnesinden OKUNABİLİYOR — hakeme gidecekse dışlanma c
 - **`sector_packages.sector_id` değişmezliği.** **Ev: `sector-package-sector-id-immutability`
   (CURRENT.md, tetikli).** Tetik koşulu Task 15'te YENİDEN sınandı: bu görev o kolona yazıcı
   EKLEMEDİ, tetik hâlâ kapalı.
-- **Kilit sözleşmesinin örtük-kenar sınırı.** **Ev: yok — dürüst etiketle KALAN RİSK**, yeniden
-  açılma koşulu test dosyasının başında yazılı.
+- **Kilit sözleşmesinin örtük-kenar sınırı — DÜŞÜRÜLDÜ, park EDİLMEDİ.** Hakem turu 4'ün orta
+  bulgusu; disposition terminaldir. **Dürüst etiket:** tarayıcı kaynaktaki kilitleri modeller,
+  veritabanının zorladıklarını değil. **Yeniden açılma koşulu** test dosyasının başında yazılı:
+  ters bir kilit kenarı eklenirse test yeşil kalırken üretimde döngü doğar. Kapatmak isteyen,
+  örtük kenarları da modelleyen bir kilit-grafiği ölçümü kurmalıdır.
 - **Taslak yazarı atfı — KAPSAM DIŞI, düşürüldü.** Yeniden açılma koşulu yazılı. **Task 20
   kapanış belgesine bu etiketle girer.**
 
