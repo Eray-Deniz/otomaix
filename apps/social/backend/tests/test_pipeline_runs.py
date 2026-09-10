@@ -3597,13 +3597,15 @@ def test_evidence_payload_key_set_is_closed():
         "katman1_passed",
         "checklist_approved",
         "expected_active_version",
+        # Plan 2 Task 15'te EKLENDİ. Bu satır ELLE yazıldı ve kapı tam olarak
+        # buydu: alan eklendiği gün test KIRMIZI düştü ve liste elle
+        # güncellendi. Otomatik genişleme olsaydı yeni bir alan sessizce
+        # yüke girer, parmak izini değiştirir ve kimse fark etmezdi.
+        "expected_no_active",
         "run_id",
     }
     assert aktivasyon == beklenen_bugun
     assert "provenance_token" not in aktivasyon
-    assert {"expected_no_active"} == (
-        beklenen_bugun | {"expected_no_active"}
-    ) - aktivasyon
 
 
 def test_yuk_anahtarlari_discovers_a_field_it_was_never_told_about():
@@ -3930,6 +3932,7 @@ def test_evidence_run_id_rejects_str_subclass():
             checklist_approved=True,
             run_id=_AltSinifStr("kosu-1"),
             provenance_token="a" * 64,
+            expected_no_active=True,
         )
 
 

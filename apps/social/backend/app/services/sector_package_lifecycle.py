@@ -133,6 +133,15 @@ class EvidenceMintRefused(RuntimeError):
     """
 
 
+class EvidenceProvenanceInvalid(RuntimeError):
+    """Kanıtın KÖKENİ doğrulanamadı — jeton yok, eşleşmiyor ya da HARCANMIŞ.
+
+    R8(c) kapısının kendisi budur: kanıt sınıfını literalden kurmak serbesttir
+    (Python'da engellenemez), ama o kanıt hiçbir geçişten geçemez. `type()`
+    kontrolü ördek tiplemesini eler, bu kapı KÖKENİ eler.
+    """
+
+
 _HEX_KARAKTERLERI = frozenset("0123456789abcdef")
 
 
@@ -195,6 +204,12 @@ class ActivationGateEvidence:
     # kuran her çağrı anahtar argüman kullanıyor, yani kırılma yoktur.
     run_id: str = field(kw_only=True)  # jetonun basıldığı koşu
     provenance_token: str = field(kw_only=True)  # 64 hex, TEK KULLANIMLIK
+    # ── Plan 2 Task 15 — K-94 TABAN DURUMU.
+    # `expected_active_version` tek başına yetmiyordu: `None` iki ayrı şeyi
+    # birden anlatıyordu — "aktif sürüm YOK, ilk aktivasyon" ve "kontrol
+    # yapma". İkincisi K-94'ü sessizce kapatan bir yoldu. Taban durumu artık
+    # AÇIKÇA beyan edilir ve ikisinden TAM OLARAK BİRİ dolu olmak zorundadır.
+    expected_no_active: bool = field(kw_only=True)
 
     def __post_init__(self) -> None:
         _require_flag(self.activation_eligible, "activation_eligible")
@@ -213,6 +228,18 @@ class ActivationGateEvidence:
         if type(self.run_id) is not str or self.run_id.strip() == "":
             raise ValueError("run_id zorunlu — kökensiz kanıt kurulamaz")
         _require_token(self.provenance_token, "provenance_token")
+        # K-94 TABAN DURUMU (Plan 2 Task 15): iki alandan TAM OLARAK BİRİ dolu.
+        # "İkisi birden" çelişkidir; "hiçbiri" ise eski `None` belirsizliğinin
+        # geri gelmesi olurdu — o hâl K-94 kontrolünü sessizce KAPATIYORDU.
+        # Kapı burada durur çünkü geçersiz kanıtın hiç VAR OLMAMASI gerekir.
+        _require_flag(self.expected_no_active, "expected_no_active")
+        if self.expected_no_active == (self.expected_active_version is not None):
+            raise ValueError(
+                "K-94 taban durumu belirsiz: expected_no_active="
+                f"{self.expected_no_active!r}, expected_active_version="
+                f"{self.expected_active_version!r} — ikisi birden ya da hiçbiri "
+                "bir YAPIM hatasıdır; tam olarak biri beyan edilmelidir"
+            )
 
 
 @dataclass(frozen=True)
@@ -601,6 +628,85 @@ def _evidence_fingerprint_from_payload(cls: type, payload: Mapping[str, Any]) ->
     )
 
 
+_JETON_TABLOSU: dict[type, str] = {
+    ActivationGateEvidence: "sector_package_runs",
+    RollbackGateEvidence: "package_rollback_plans",
+}
+"""Kanıt sınıfı → jetonunun yaşadığı tablo.
+
+Kümenin BASIM tarafındaki ikizi `runs.JETON_TABLOLARI`'dır; ikisi ayrışırsa
+jeton bir tabloya basılıp başka bir tabloda aranır ve kapı sessizce hiçbir şeyi
+doğrulamaz hâle gelir. Ayrışma `tests/test_pipeline_writeback.py::
+test_token_table_mapping_matches_the_minting_side` ile KIRMIZI düşer. Eşleme
+burada yaşar çünkü `runs`'ı import etmek döngü üretir (AÇIK-3).
+"""
+
+_JETON_KOSULU: dict[type, tuple[str, tuple[str, ...]]] = {
+    ActivationGateEvidence: ("run_id = $2", ("run_id",)),
+    RollbackGateEvidence: (
+        "incident_id = $2 AND package_id = $3",
+        ("incident_id", "package_id"),
+    ),
+}
+"""Kanıt sınıfı → (satır koşulu, kanıttan okunacak anahtar alanları).
+
+Anahtarlar ÇAĞIRANDAN değil KANITIN KENDİSİNDEN okunur: jetonun basıldığı satır
+ile kanıtın işaret ettiği satır aynı olmak zorundadır.
+"""
+
+
+async def _consume_provenance(db, evidence: Any) -> None:
+    """Kanıtın köken jetonunu KİLİTLİ satıra karşı doğrular ve HARCAR (R8(c)).
+
+    Kapının BURADA olmasının sebebi ölçülmüştür: `frozen=True` bir dataclass'ın
+    literalden kurulmasını Python'da engellemek MÜMKÜN DEĞİLDİR, dolayısıyla
+    "kanıt uydurulamaz" iddiası kurulum tarafında hiçbir zaman doğru olamazdı.
+    Doğru olabileceği tek yer KABULDÜR: veritabanı destekli fabrikanın bastığı
+    jeton yoksa geçiş olmaz.
+
+    **Tek ifadelik karşılaştır-ve-yaz.** Okuma + karar + yazma ayrı adımlar
+    olsaydı iki eşzamanlı geçiş aynı jetonu okuyup ikisi de harcayabilirdi;
+    `harcandi_at IS NULL` koşulu güncellemenin İÇİNDE durduğu için kaybeden
+    taraf satır bulamaz ve AÇIKÇA düşer.
+
+    **Parmak izi alanları mühürler.** Gerçek bir jetonu alıp kanıtın bir alanını
+    değiştirmek yetmez: basım anında satıra yazılan parmak izi kanıtın jeton
+    DIŞI tüm alanlarından türer, yani değiştirilen alan eşleşmeyi bozar.
+
+    Çağıran AÇIK bir işlemin içinde olmalıdır ve bu fonksiyon işlemin İLK
+    veritabanı dokunuşudur: kilit sırası koşu/olay → sektör → paket olarak
+    kalsın diye. Ters sıra, yazım yoluyla karşılaştığında kilitlenme üretirdi.
+    """
+    tablo = _JETON_TABLOSU.get(type(evidence))
+    kosul, anahtar_alanlari = _JETON_KOSULU.get(type(evidence), ("", ()))
+    if tablo is None or not kosul:
+        raise GateNotSatisfied(
+            f"kanıt sınıfı jeton eşlemesinde YOK: {type(evidence).__name__} — "
+            "köken doğrulanamayan kanıt kabul edilmez"
+        )
+
+    anahtarlar = tuple(getattr(evidence, ad) for ad in anahtar_alanlari)
+    beklenen_parmakizi = _evidence_fingerprint(evidence)
+
+    harcandi = await db.fetchval(
+        f"UPDATE social.{tablo} SET kanit_jetonu_harcandi_at = now() "
+        f"WHERE {kosul} "
+        f"  AND kanit_jetonu = $1 "
+        f"  AND kanit_jetonu_parmakizi = ${len(anahtarlar) + 2} "
+        "  AND kanit_jetonu_harcandi_at IS NULL "
+        "RETURNING kanit_jetonu_basildi_at",
+        evidence.provenance_token,
+        *anahtarlar,
+        beklenen_parmakizi,
+    )
+    if harcandi is None:
+        raise EvidenceProvenanceInvalid(
+            f"{type(evidence).__name__} kökeni doğrulanamadı: jeton yok, satırla "
+            "eşleşmiyor, alanları değiştirilmiş ya da ZATEN harcanmış — kanıt "
+            "yalnız veritabanı destekli fabrikadan gelir ve TEK KULLANIMLIKTIR"
+        )
+
+
 # `_require_actor` TANIMI BURADA DEĞİL, `package_events.require_actor`tadır —
 # davranışı DEĞİŞMEDİ (aynı `ValueError`, aynı mesaj, aynı kırpılmış dönüş) ve
 # bu modüldeki adı da değişmedi. Taşımanın tek sebebi ÖLÇÜLMÜŞ bir döngüdür:
@@ -764,6 +870,79 @@ async def _apply_status_transition(
             await _set_status(db, activate[0], "active", expected=activate[1])
 
 
+async def _gate_content_and_log(
+    db,
+    *,
+    sector_id: UUID,
+    content: dict,
+    decision_log: list[dict] | None,
+) -> None:
+    """İçerik + karar günlüğü yazım kapısı — TEK kopya (Plan 2 Task 15).
+
+    Kapı `insert_draft` gövdesinden BURAYA çıkarıldı çünkü K-106 ikinci bir
+    yazıcı doğurdu (`_update_draft_row`) ve iki yazıcının iki kapı listesi
+    olsaydı yerinde güncelleme, ilk yazımın reddedeceği içeriği kalıcı
+    kılabilirdi. K-135 "tek yazma yüzeyi" ancak kapı da tekse anlamlıdır.
+
+    **SIRA KORUNDU ve ölçülüdür:** şema → takvim → marka → içerik → UYARILAR →
+    çift bütünlüğü. Uyarı döngüsünün bütünlük kapısından ÖNCE olması bilinçli
+    bir gözlemlenebilirlik kararıdır ve kendi testiyle pinlidir
+    (`test_insert_draft_logs_content_warnings_before_pair_gate`).
+    """
+    if decision_log is not None:
+        log_errors = identity.validate_decision_log(decision_log)
+        if log_errors:
+            raise ValueError(
+                "karar günlüğü şemayı geçmedi: " + "; ".join(log_errors)
+            )
+
+    try:
+        holiday_rows = await db.fetch(
+            "SELECT name_tr FROM social.public_holidays WHERE name_tr IS NOT NULL"
+        )
+    except Exception as exc:  # K-112 (b): erişilemez takvim -> fail-closed
+        raise CalendarUnavailable(
+            "sistem takvimi okunamadı — özel gün anahtarı doğrulanamaz, taslak "
+            "YAZILMAZ (K-112 (b): doğrulanmamış anahtar pakete giremez)"
+        ) from exc
+    holiday_keys = {
+        key
+        for key in (normalize_special_day_key(row["name_tr"]) for row in holiday_rows)
+        if key
+    }
+    brand_rows = await db.fetch("SELECT name FROM social.brands WHERE name IS NOT NULL")
+
+    result = validate_package_content(
+        content,
+        banned_brand_names=[row["name"] for row in brand_rows],
+        holiday_keys=holiday_keys,
+    )
+    if not result.ok:
+        raise ValueError("paket içeriği yazım kapısını geçmedi: " + "; ".join(result.errors))
+
+    # SIRA: içerik uyarıları ÖNCE (fix turu 2, Minor). Bütünlük kapısı fix
+    # turu 1'de bu döngünün ÖNÜNE girmişti; reddedilen bir çift, içeriğin
+    # kendi uyarılarını da sessizce yutuyordu. Yazım her iki hâlde de olmuyor
+    # ama gözlemlenebilirlik farkı gerçekti ve sessizce değişmişti.
+    # Sırayı YORUM değil TEST tutar (fix turu 3, B2):
+    # `tests/test_package_lifecycle.py::
+    #  test_insert_draft_logs_content_warnings_before_pair_gate` — kapı bu
+    # döngünün önüne geçerse KIRMIZI düşer (411c767'ye karşı ölçüldü).
+    for warning in result.warnings:
+        logger.warning("paket taslağı uyarısı (sector_id=%s): %s", sector_id, warning)
+
+    if decision_log:
+        # Yaşamayan satırlar (`kirp` · `cikar` · notlar) bu kapıda SAYILMAZ:
+        # kırpılan öğe aday pakete girmez, yani yolu içerikte olmayacaktır.
+        # Kapı "her satırın yolu içerikte olsun" diye yazılsaydı gerçek bir
+        # kırpma taşıyan her paket reddedilirdi.
+        pair_errors = identity.check_unit_integrity(content, decision_log)
+        if pair_errors:
+            raise ValueError(
+                "içerik ile karar günlüğü tutarsız: " + "; ".join(pair_errors)
+            )
+
+
 async def insert_draft(
     db,
     *,
@@ -857,59 +1036,9 @@ async def insert_draft(
     atanacaktır; burada uydurma bir ev VERİLMEZ.
     """
     owner = _require_actor(actor)
-
-    if decision_log is not None:
-        log_errors = identity.validate_decision_log(decision_log)
-        if log_errors:
-            raise ValueError(
-                "karar günlüğü şemayı geçmedi: " + "; ".join(log_errors)
-            )
-
-    try:
-        holiday_rows = await db.fetch(
-            "SELECT name_tr FROM social.public_holidays WHERE name_tr IS NOT NULL"
-        )
-    except Exception as exc:  # K-112 (b): erişilemez takvim -> fail-closed
-        raise CalendarUnavailable(
-            "sistem takvimi okunamadı — özel gün anahtarı doğrulanamaz, taslak "
-            "YAZILMAZ (K-112 (b): doğrulanmamış anahtar pakete giremez)"
-        ) from exc
-    holiday_keys = {
-        key
-        for key in (normalize_special_day_key(row["name_tr"]) for row in holiday_rows)
-        if key
-    }
-    brand_rows = await db.fetch("SELECT name FROM social.brands WHERE name IS NOT NULL")
-
-    result = validate_package_content(
-        content,
-        banned_brand_names=[row["name"] for row in brand_rows],
-        holiday_keys=holiday_keys,
+    await _gate_content_and_log(
+        db, sector_id=sector_id, content=content, decision_log=decision_log
     )
-    if not result.ok:
-        raise ValueError("paket içeriği yazım kapısını geçmedi: " + "; ".join(result.errors))
-
-    # SIRA: içerik uyarıları ÖNCE (fix turu 2, Minor). Bütünlük kapısı fix
-    # turu 1'de bu döngünün ÖNÜNE girmişti; reddedilen bir çift, içeriğin
-    # kendi uyarılarını da sessizce yutuyordu. Yazım her iki hâlde de olmuyor
-    # ama gözlemlenebilirlik farkı gerçekti ve sessizce değişmişti.
-    # Sırayı YORUM değil TEST tutar (fix turu 3, B2):
-    # `tests/test_package_lifecycle.py::
-    #  test_insert_draft_logs_content_warnings_before_pair_gate` — kapı bu
-    # döngünün önüne geçerse KIRMIZI düşer (411c767'ye karşı ölçüldü).
-    for warning in result.warnings:
-        logger.warning("paket taslağı uyarısı (sector_id=%s): %s", sector_id, warning)
-
-    if decision_log:
-        # Yaşamayan satırlar (`kirp` · `cikar` · notlar) bu kapıda SAYILMAZ:
-        # kırpılan öğe aday pakete girmez, yani yolu içerikte olmayacaktır.
-        # Kapı "her satırın yolu içerikte olsun" diye yazılsaydı gerçek bir
-        # kırpma taşıyan her paket reddedilirdi.
-        pair_errors = identity.check_unit_integrity(content, decision_log)
-        if pair_errors:
-            raise ValueError(
-                "içerik ile karar günlüğü tutarsız: " + "; ".join(pair_errors)
-            )
 
     return await db.fetchval(
         """
@@ -932,6 +1061,57 @@ async def insert_draft(
         decision_log if decision_log else [{"event": "draft_created", "actor": owner}],
         run_id,
     )
+
+
+async def _update_draft_row(
+    db,
+    *,
+    package_id: UUID,
+    sector_id: UUID,
+    content: dict,
+    decision_log: list[dict],
+) -> None:
+    """K-106 yerinde güncelleme — ÖZEL ilkel, public API DEĞİL.
+
+    **Yazım kapısı BURADA da koşar.** K-135 paket tablosuna tek yazma yüzeyi
+    olduğunu söyler; iki yazıcının iki kapı listesi olsaydı yerinde güncelleme,
+    ilk yazımın REDDEDECEĞİ bir içeriği kalıcı kılabilirdi. Kapı `insert_draft`
+    ile PAYLAŞILIR (`_gate_content_and_log`) — kopyalanmaz.
+
+    **Neden public bir `update_draft` YOK.** İlk tasarımda
+    `update_draft(package_id, content, decision_log, actor)` diye bir public yol
+    vardı; imzası koşuyu, motor sonucunu, regresyon kanıtını, denetçi
+    envanterini ve dondurulmuş görüntüyü TAŞIMADIĞI için "tüm kapılar yeniden
+    koşar" vaadini teknik olarak karşılayamıyordu. Tek public yol
+    `writeback.update_draft_from_run`'dır ve o, ilk yazımla AYNI doğrulayıcıdan
+    (`runs.load_verified_run`) geçer.
+
+    **Durum kontrolü BURADA, güncellemenin İÇİNDE.** Ayrı bir `SELECT ... FOR
+    UPDATE` + karar + `UPDATE` dizisi, eşzamanlı bir aktivasyonla yarışta
+    kaybeden tarafı SESSİZCE başarılı gösterirdi: aktivasyon satırı `active`
+    yaparken güncelleme hâlâ okuduğu `draft` durumuna göre yazardı. Koşul
+    güncellemenin kendi `WHERE`'inde durduğu için kaybeden taraf satır bulamaz
+    ve `LifecycleError` ile AÇIKÇA düşer.
+
+    Sürüm numarasına DOKUNULMAZ — K-106'nın tamamı budur: ret sonrası düzeltme
+    yeni bir sürüm YAKMAZ.
+    """
+    await _gate_content_and_log(
+        db, sector_id=sector_id, content=content, decision_log=decision_log
+    )
+
+    guncellendi = await db.fetchval(
+        "UPDATE social.sector_packages SET content = $2, decision_log = $3 "
+        "WHERE id = $1 AND status = 'draft' RETURNING id",
+        package_id,
+        content,
+        decision_log,
+    )
+    if guncellendi is None:
+        raise LifecycleError(
+            f"yerinde güncelleme reddedildi: {package_id} artık 'draft' değil — "
+            "yalnız taslak satırı yerinde güncellenir (K-106)"
+        )
 
 
 async def activate_package(
@@ -962,6 +1142,11 @@ async def activate_package(
         raise GateNotSatisfied("aktivasyon kapısı sağlanmadı: " + ", ".join(unmet))
 
     async with db.transaction():
+        # KÖKEN KAPISI İLK (R8(c)): kilit sırası koşu → sektör → paket olarak
+        # kalsın diye jeton, paket satırı kilitlenmeden ÖNCE harcanır. Ters sıra
+        # yazım yoluyla karşılaştığında kilitlenme üretirdi.
+        await _consume_provenance(db, evidence)
+
         sector_id, target = await _lock_and_load(db, package_id)
         if target["status"] != "draft":
             raise LifecycleError(
@@ -972,6 +1157,15 @@ async def activate_package(
         current = await _active_row(db, sector_id)
         current_version = current["version"] if current else None
 
+        # K-94 taban durumu KAPI olarak koşar. `expected_no_active` doluysa
+        # kanıt "bu sektörde aktif sürüm YOKTU" diyordur; kanıt basıldıktan
+        # sonra bir sürüm aktive edildiyse devir teslim SESSİZCE olurdu.
+        if evidence.expected_no_active and current is not None:
+            raise GateNotSatisfied(
+                "expected_no_active uyuşmuyor: kanıt ilk aktivasyon diyor ama "
+                f"sektörde v{current_version} AKTİF — kanıt basıldığından beri "
+                "bir devir teslim olmuş (K-94)"
+            )
         if evidence.expected_active_version is not None and (
             current_version != evidence.expected_active_version
         ):
@@ -1018,6 +1212,10 @@ async def rollback_package(
         raise GateNotSatisfied("rollback kapısı sağlanmadı: " + ", ".join(unmet))
 
     async with db.transaction():
+        # KÖKEN KAPISI İLK (R8(c)) — aktivasyon yoluyla AYNI sıra: jeton satırı
+        # (olay planı) sektör ve paket satırlarından ÖNCE.
+        await _consume_provenance(db, evidence)
+
         await _lock_sector(db, sector_id)
         has_archived = await db.fetchval(
             "SELECT EXISTS (SELECT 1 FROM social.sector_packages "

@@ -164,8 +164,19 @@ _ROLLBACK_DEFAULTS = dict(
 
 
 def _activation_evidence(**overrides) -> ActivationGateEvidence:
+    """Kanıt NESNESİ — henüz MÜHÜRLENMEMİŞ (kökeni yok).
+
+    K-94 taban durumu (Plan 2 Task 15) iki alandan tam olarak birini ister.
+    Çağıran `expected_active_version` verdiyse taban "devir teslim"dir; hiç
+    vermediyse "ilk aktivasyon". Kural burada TÜRETİLİR ki her çağrı yerine
+    ikinci bir alan eklemek gerekmesin — ama TÜRETME de açıkça yazılıdır:
+    sessiz varsayılan, K-94'ün kapatmak için var olduğu belirsizliğin ta
+    kendisiydi.
+    """
     fields = dict(_ACTIVATION_DEFAULTS)
     fields.update(overrides)
+    if "expected_no_active" not in overrides:
+        fields["expected_no_active"] = fields.get("expected_active_version") is None
     return ActivationGateEvidence(**fields)
 
 
@@ -173,6 +184,75 @@ def _rollback_evidence(**overrides) -> RollbackGateEvidence:
     fields = dict(_ROLLBACK_DEFAULTS)
     fields.update(overrides)
     return RollbackGateEvidence(**fields)
+
+
+# ── KÖKEN MÜHRÜ (Plan 2 Task 15, arayüz eki R8(c)) ──────────────────────────
+#
+# Kanıt sınıfları artık TEK KULLANIMLIK bir köken jetonu taşır ve geçiş
+# fonksiyonları o jetonu KİLİTLİ satıra karşı doğrulayıp HARCAR. Literal kanıt
+# artık hiçbir geçişten geçmez — yani bu dosyanın başarı yollarının kanıtı
+# satırda karşılığı OLAN bir jeton taşımak zorundadır.
+#
+# **Bu yardımcı Plan 2'nin fabrikasını TAKLİT eder, onu ÇAĞIRMAZ ve bu bilinçli
+# bir sınırdır (İlke 3).** Fabrikanın kendisi (`writeback.build_activation_evidence`
+# → `runs.mint_evidence_token`) tam bir doğrulanmış koşu zinciri ister; bu
+# dosyanın konusu ise GEÇİŞİN kendisidir, fabrikanın değil. Fabrika ↔ tüketim
+# gidiş-dönüşü `tests/test_pipeline_writeback.py`'de GERÇEK jetonla ölçülür
+# (`test_tampered_evidence_field_is_refused` · `test_provenance_token_is_single_use`
+# · `test_literal_evidence_refused_by_activation`). Burada ölçülen şey "mühürlü
+# kanıt geçer, mühürsüz geçmez"dir.
+
+
+async def _muhurle_aktivasyon(conn, evidence, *, sector_id) -> None:
+    await conn.execute(
+        "INSERT INTO social.sector_package_runs "
+        "(run_id, sector_id, durum, kosu_turu, kanit_jetonu, "
+        " kanit_jetonu_parmakizi, kanit_jetonu_basildi_at) "
+        "VALUES ($1, $2, 'calisiyor', 'ilk', $3, $4, now()) "
+        "ON CONFLICT (run_id) DO UPDATE SET "
+        "  kanit_jetonu = EXCLUDED.kanit_jetonu, "
+        "  kanit_jetonu_parmakizi = EXCLUDED.kanit_jetonu_parmakizi, "
+        "  kanit_jetonu_basildi_at = now(), "
+        "  kanit_jetonu_harcandi_at = NULL",
+        evidence.run_id,
+        sector_id,
+        evidence.provenance_token,
+        sector_package_lifecycle._evidence_fingerprint(evidence),
+    )
+
+
+async def _muhurle_rollback(conn, evidence, *, observed_version: int = 1) -> None:
+    await conn.execute(
+        "INSERT INTO social.package_rollback_plans "
+        "(incident_id, package_id, observed_active_version, target_version, "
+        " evidence_class, reason, durum, kanit_jetonu, kanit_jetonu_parmakizi, "
+        " kanit_jetonu_basildi_at) "
+        "VALUES ($1, $2, $3, 1, 'kanitli', 'test', 'bekliyor', $4, $5, now()) "
+        "ON CONFLICT (incident_id, package_id) DO UPDATE SET "
+        "  kanit_jetonu = EXCLUDED.kanit_jetonu, "
+        "  kanit_jetonu_parmakizi = EXCLUDED.kanit_jetonu_parmakizi, "
+        "  kanit_jetonu_basildi_at = now(), "
+        "  kanit_jetonu_harcandi_at = NULL",
+        evidence.incident_id,
+        evidence.package_id,
+        observed_version,
+        evidence.provenance_token,
+        sector_package_lifecycle._evidence_fingerprint(evidence),
+    )
+
+
+async def _kanit(conn, sector_id, **overrides) -> ActivationGateEvidence:
+    """MÜHÜRLÜ aktivasyon kanıtı — geçişten geçebilen tek biçim."""
+    evidence = _activation_evidence(**overrides)
+    await _muhurle_aktivasyon(conn, evidence, sector_id=sector_id)
+    return evidence
+
+
+async def _geri_alma_kaniti(conn, **overrides) -> RollbackGateEvidence:
+    """MÜHÜRLÜ geri alma kanıtı."""
+    evidence = _rollback_evidence(**overrides)
+    await _muhurle_rollback(conn, evidence)
+    return evidence
 
 
 # ═══ 1. Draft yazımı ════════════════════════════════════════════════════════
@@ -351,7 +431,7 @@ async def test_first_activation_single_step(pkg_db):
     package_id = await _seed_package(pkg_db, sector_id, version=1, status="draft")
 
     await activate_package(
-        pkg_db, package_id=package_id, evidence=_activation_evidence(), actor=ACTOR
+        pkg_db, package_id=package_id, evidence=await _kanit(pkg_db, sector_id), actor=ACTOR
     )
 
     assert await _status(pkg_db, package_id) == "active"
@@ -367,8 +447,13 @@ async def test_activate_archives_previous_then_activates(pkg_db):
     old_id = await _seed_package(pkg_db, sector_id, version=1, status="active")
     new_id = await _seed_package(pkg_db, sector_id, version=2, status="draft")
 
+    # Devir teslimde taban durumu AÇIKÇA beyan edilir (K-94, Plan 2 Task 15):
+    # "ilk aktivasyon" diyen bir kanıt burada geçmez.
     await activate_package(
-        pkg_db, package_id=new_id, evidence=_activation_evidence(), actor=ACTOR
+        pkg_db,
+        package_id=new_id,
+        evidence=await _kanit(pkg_db, sector_id, expected_active_version=1),
+        actor=ACTOR,
     )
 
     assert await _status(pkg_db, old_id) == "archived"
@@ -401,7 +486,7 @@ async def test_activate_rejects_unsatisfied_gate(pkg_db, override):
         await activate_package(
             pkg_db,
             package_id=package_id,
-            evidence=_activation_evidence(**override),
+            evidence=await _kanit(pkg_db, sector_id, **override),
             actor=ACTOR,
         )
 
@@ -419,7 +504,7 @@ async def test_activate_rejects_stale_base_version_when_provided(pkg_db):
         await activate_package(
             pkg_db,
             package_id=new_id,
-            evidence=_activation_evidence(expected_active_version=99),
+            evidence=await _kanit(pkg_db, sector_id, expected_active_version=99),
             actor=ACTOR,
         )
 
@@ -435,25 +520,37 @@ async def test_activate_accepts_matching_base_version(pkg_db):
     await activate_package(
         pkg_db,
         package_id=new_id,
-        evidence=_activation_evidence(expected_active_version=1),
+        evidence=await _kanit(pkg_db, sector_id, expected_active_version=1),
         actor=ACTOR,
     )
     assert await _status(pkg_db, new_id) == "active"
 
 
-async def test_activate_allows_missing_base_version_while_k94_open(pkg_db):
-    """K-94 AÇIK: alan opsiyoneldir, `None` geçişi engellemez."""
+async def test_missing_base_version_is_no_longer_a_bypass(pkg_db):
+    """K-94 KAPANDI (Plan 2 Task 15): `None` artık "kontrol yapma" demiyor.
+
+    Bu test bir DAVRANIŞ TERSİNMESİDİR ve bilinçlidir. Önceki hâli
+    `test_activate_allows_missing_base_version_while_k94_open` adını taşıyor ve
+    `expected_active_version=None`'ın geçişi ENGELLEMEDİĞİNİ ölçüyordu — o
+    boşluk K-94'ün açık kalmasının kod karşılığıydı: `None` hem "aktif sürüm
+    YOK" hem "kontrol yapma" anlamına geliyordu ve ikincisi kapıyı sessizce
+    kapatıyordu. Taban durumu artık AÇIKÇA beyan edilir; "ilk aktivasyon"
+    diyen bir kanıt, sektörde aktif sürüm varken geçemez.
+
+    Kanıt MÜHÜRLENİR ki düşen kapının K-94 olduğu kesin olsun — mühürsüz kanıt
+    daha erken, köken kapısında düşerdi ve test yanlış şeyi ölçerdi.
+    """
     sector_id = await _sub_sector(pkg_db)
     await _seed_package(pkg_db, sector_id, version=1, status="active")
     new_id = await _seed_package(pkg_db, sector_id, version=2, status="draft")
+    kanit = await _kanit(pkg_db, sector_id, expected_active_version=None)
+    assert kanit.expected_no_active is True
 
-    await activate_package(
-        pkg_db,
-        package_id=new_id,
-        evidence=_activation_evidence(expected_active_version=None),
-        actor=ACTOR,
-    )
-    assert await _status(pkg_db, new_id) == "active"
+    with pytest.raises(GateNotSatisfied, match="expected_no_active"):
+        await activate_package(
+            pkg_db, package_id=new_id, evidence=kanit, actor=ACTOR
+        )
+    assert await _status(pkg_db, new_id) == "draft"
 
 
 async def test_activate_rejects_non_draft_package(pkg_db):
@@ -463,7 +560,7 @@ async def test_activate_rejects_non_draft_package(pkg_db):
 
     with pytest.raises(LifecycleError):
         await activate_package(
-            pkg_db, package_id=archived_id, evidence=_activation_evidence(), actor=ACTOR
+            pkg_db, package_id=archived_id, evidence=await _kanit(pkg_db, sector_id), actor=ACTOR
         )
     assert await _status(pkg_db, archived_id) == "archived"
 
@@ -487,7 +584,7 @@ async def test_activate_after_deactivation_has_no_from_version(pkg_db):
     assert await tail.new(pkg_db, sector_id) == [("deactivation", 1, None, ACTOR)]
 
     await activate_package(
-        pkg_db, package_id=second_id, evidence=_activation_evidence(), actor=ACTOR
+        pkg_db, package_id=second_id, evidence=await _kanit(pkg_db, sector_id), actor=ACTOR
     )
 
     assert await _status(pkg_db, second_id) == "active"
@@ -507,7 +604,7 @@ async def test_rollback_restores_previous_version(pkg_db):
         pkg_db,
         sector_id=sector_id,
         to_version=1,
-        evidence=_rollback_evidence(),
+        evidence=await _geri_alma_kaniti(pkg_db),
         actor=ACTOR,
     )
 
@@ -530,7 +627,7 @@ async def test_rollback_rejects_without_manager_approval(pkg_db):
             pkg_db,
             sector_id=sector_id,
             to_version=1,
-            evidence=_rollback_evidence(manager_approved=False),
+            evidence=await _geri_alma_kaniti(pkg_db, manager_approved=False),
             actor=ACTOR,
         )
 
@@ -568,7 +665,7 @@ async def test_rollback_allowed_while_candidate_activation_gates_fail(pkg_db):
         await activate_package(
             pkg_db,
             package_id=candidate_id,
-            evidence=_activation_evidence(activation_eligible=False),
+            evidence=await _kanit(pkg_db, sector_id, activation_eligible=False),
             actor=ACTOR,
         )
 
@@ -577,7 +674,7 @@ async def test_rollback_allowed_while_candidate_activation_gates_fail(pkg_db):
         pkg_db,
         sector_id=sector_id,
         to_version=1,
-        evidence=_rollback_evidence(),
+        evidence=await _geri_alma_kaniti(pkg_db),
         actor=ACTOR,
     )
     assert await _status(pkg_db, old_id) == "active"
@@ -604,7 +701,7 @@ async def test_rollback_rejects_non_archived_target(pkg_db, to_version):
             pkg_db,
             sector_id=sector_id,
             to_version=to_version,
-            evidence=_rollback_evidence(),
+            evidence=await _geri_alma_kaniti(pkg_db),
             actor=ACTOR,
         )
 
@@ -623,7 +720,7 @@ async def test_rollback_rejects_nonexistent_target(pkg_db):
             pkg_db,
             sector_id=sector_id,
             to_version=7,
-            evidence=_rollback_evidence(),
+            evidence=await _geri_alma_kaniti(pkg_db),
             actor=ACTOR,
         )
 
@@ -638,7 +735,7 @@ async def test_first_package_rollback_error_points_to_deactivation(pkg_db):
             pkg_db,
             sector_id=sector_id,
             to_version=1,
-            evidence=_rollback_evidence(),
+            evidence=await _geri_alma_kaniti(pkg_db),
             actor=ACTOR,
         )
 
@@ -683,17 +780,22 @@ async def test_lifecycle_events_recorded(pkg_db):
     v1 = await insert_draft(
         pkg_db, sector_id=sector_id, content=_valid_content(), schema_version=1, actor=ACTOR
     )
-    await activate_package(pkg_db, package_id=v1, evidence=_activation_evidence(), actor=ACTOR)
+    await activate_package(pkg_db, package_id=v1, evidence=await _kanit(pkg_db, sector_id), actor=ACTOR)
     assert await tail.new(pkg_db, sector_id) == [("activation", None, 1, ACTOR)]
 
     v2 = await insert_draft(
         pkg_db, sector_id=sector_id, content=_valid_content(), schema_version=1, actor=ACTOR
     )
-    await activate_package(pkg_db, package_id=v2, evidence=_activation_evidence(), actor=ACTOR)
+    await activate_package(
+        pkg_db,
+        package_id=v2,
+        evidence=await _kanit(pkg_db, sector_id, expected_active_version=1),
+        actor=ACTOR,
+    )
     assert await tail.new(pkg_db, sector_id) == [("activation", 1, 2, ACTOR)]
 
     await rollback_package(
-        pkg_db, sector_id=sector_id, to_version=1, evidence=_rollback_evidence(), actor=ACTOR
+        pkg_db, sector_id=sector_id, to_version=1, evidence=await _geri_alma_kaniti(pkg_db), actor=ACTOR
     )
     assert await tail.new(pkg_db, sector_id) == [("rollback", 2, 1, ACTOR)]
 
@@ -729,7 +831,7 @@ async def test_event_insert_failure_rolls_back_transition(pkg_db, monkeypatch, f
 
     with pytest.raises(Exception):
         await activate_package(
-            pkg_db, package_id=package_id, evidence=_activation_evidence(), actor=ACTOR
+            pkg_db, package_id=package_id, evidence=await _kanit(pkg_db, sector_id), actor=ACTOR
         )
 
     assert await _status(pkg_db, package_id) == "draft", "olaysız geçiş kaldı"
@@ -751,7 +853,7 @@ async def test_transition_failure_leaves_no_event(pkg_db, monkeypatch):
 
     with pytest.raises(RuntimeError):
         await activate_package(
-            pkg_db, package_id=package_id, evidence=_activation_evidence(), actor=ACTOR
+            pkg_db, package_id=package_id, evidence=await _kanit(pkg_db, sector_id), actor=ACTOR
         )
 
     assert await _status(pkg_db, package_id) == "draft"
@@ -871,7 +973,7 @@ async def test_rollback_rejects_activation_evidence(pkg_db):
             pkg_db,
             sector_id=sector_id,
             to_version=1,
-            evidence=_activation_evidence(),
+            evidence=await _kanit(pkg_db, sector_id),
             actor=ACTOR,
         )
 
@@ -899,6 +1001,17 @@ async def _seed_committed_sector(conn) -> uuid.UUID:
 
 async def _drop_committed_sector(conn, sector_id) -> None:
     await conn.execute("DELETE FROM social.package_events WHERE sector_id = $1", sector_id)
+    # Köken mührü satırları da committed'dır (Plan 2 Task 15) — bırakılırsa
+    # sonraki koşumda aynı `run_id` HARCANMIŞ jetonla karşılaşır ve testler
+    # birbirinin kalıntısına bağlı hâle gelirdi.
+    await conn.execute(
+        "DELETE FROM social.package_rollback_plans WHERE package_id IN "
+        "(SELECT id FROM social.sector_packages WHERE sector_id = $1)",
+        sector_id,
+    )
+    await conn.execute(
+        "DELETE FROM social.sector_package_runs WHERE sector_id = $1", sector_id
+    )
     await conn.execute("DELETE FROM social.sector_packages WHERE sector_id = $1", sector_id)
     await conn.execute("DELETE FROM social.sectors WHERE id = $1", sector_id)
 
@@ -950,12 +1063,22 @@ async def test_concurrent_activation_of_same_draft_single_winner(
             await _init_connection(worker)
             workers.append(worker)
 
+        # TEK mühürlü kanıt: jeton tek kullanımlıktır, yani köken kapısı da
+        # kazananı tekleştirir. Sektör kilidi ile jeton kapısı BURADA aynı
+        # sonuca varır ve bu bilinçlidir — iddia "tek kazanan"dır, hangi kapının
+        # tekleştirdiği değil.
+        kanit = await _kanit(
+            setup,
+            sector_id,
+            **({"expected_active_version": 1} if with_previous_active else {}),
+        )
+
         async def _try(conn):
             try:
                 await activate_package(
                     conn,
                     package_id=draft_id,
-                    evidence=_activation_evidence(),
+                    evidence=kanit,
                     actor=ACTOR,
                 )
                 return "ok"
@@ -1087,14 +1210,29 @@ async def test_concurrent_activation_of_different_drafts_is_serializable(test_db
             await _init_connection(worker)
             workers.append(worker)
 
+        # AYRI kanıt, AYRI jeton: bu testin konusu sektör kilidinin
+        # serileştirmesidir. Tek jeton paylaşılsaydı kazananı köken kapısı
+        # belirler ve kilit HİÇ ÖLÇÜLMEMİŞ olurdu. Mühürleme yarıştan ÖNCE ve
+        # TEK bağlantıda yapılır — asyncpg bağlantısı eşzamanlı kullanılamaz.
+        kanitlar = {
+            draft: await _kanit(setup, sector_id, run_id=f"kosu-{draft}")
+            for draft in drafts
+        }
+
         async def _try(conn, draft_id):
             try:
                 await activate_package(
-                    conn, package_id=draft_id, evidence=_activation_evidence(), actor=ACTOR
+                    conn, package_id=draft_id, evidence=kanitlar[draft_id], actor=ACTOR
                 )
                 return "ok"
             except LifecycleError:
                 return "lifecycle-error"
+            except GateNotSatisfied:
+                # K-94 taban durumu (Plan 2 Task 15): kaybeden taraf artık
+                # burada da düşebilir — kazanan aktif satırı yarattığı için
+                # "ilk aktivasyon" diyen kanıt geçersizleşir. Bu AÇIK bir
+                # reddir, testin yasakladığı HAM veritabanı hatası değildir.
+                return "gate-not-satisfied"
             except Exception as exc:
                 return f"RAW:{type(exc).__name__}"
 
@@ -1233,8 +1371,12 @@ async def _race_sector_reassignment(test_db_setup, *, transition, seed_status, w
 
 async def test_activation_rejects_sector_reassignment_under_lock(test_db_setup):
     async def _transition(conn, target_id):
+        sector_id = await conn.fetchval(
+            "SELECT sector_id FROM social.sector_packages WHERE id = $1", target_id
+        )
+        kanit = await _kanit(conn, sector_id, run_id=f"kosu-{target_id}")
         await activate_package(
-            conn, package_id=target_id, evidence=_activation_evidence(), actor=ACTOR
+            conn, package_id=target_id, evidence=kanit, actor=ACTOR
         )
 
     await _race_sector_reassignment(

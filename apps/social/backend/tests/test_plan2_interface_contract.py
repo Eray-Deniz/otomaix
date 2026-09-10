@@ -713,6 +713,53 @@ def test_validate_package_content_documented_signature():
 # ─── Madde 4-5: insert_draft → activate → rollback → deactivate ─────────────
 
 
+from .test_package_lifecycle import (  # noqa: E402
+    _muhurle_aktivasyon,
+    _muhurle_rollback,
+)
+
+
+async def _muhurlu_aktivasyon_kaniti(conn, sector_id, **overrides):
+    """MÜHÜRLÜ aktivasyon kanıtı (Plan 2 Task 15, arayüz eki R8(c)).
+
+    Literal kanıt artık hiçbir geçişten geçmez: köken jetonunun kilitli satırda
+    karşılığı olmak ZORUNDA. Mühürleme yardımcısı `test_package_lifecycle`ten
+    alınır — ikinci bir kopya yazılsaydı iki dosya iki parmak izi kuralına
+    sahip olur ve sessizce ayrışırdı.
+    """
+    alanlar = dict(
+        activation_eligible=True,
+        open_questions_count=0,
+        katman1_passed=True,
+        checklist_approved=True,
+        run_id=_KOKEN_RUN_ID,
+        provenance_token=_KOKEN_JETONU,
+    )
+    alanlar.update(overrides)
+    alanlar.setdefault(
+        "expected_no_active", alanlar.get("expected_active_version") is None
+    )
+    kanit = ActivationGateEvidence(**alanlar)
+    await _muhurle_aktivasyon(conn, kanit, sector_id=sector_id)
+    return kanit
+
+
+async def _muhurlu_geri_alma_kaniti(conn, package_id):
+    """MÜHÜRLÜ geri alma kanıtı — aktivasyonunkiyle AYNI disiplin."""
+    kanit = RollbackGateEvidence(
+        manager_approved=True,
+        katman1_passed=True,
+        incident_id=_KOKEN_OLAYI,
+        # Sürücü `uuid.UUID`in ALT SINIFINI döndürür; kanıt sınıfının şekil
+        # kapısı tam tip eşitliği arar (A4 disiplini) — normalize edilir.
+        package_id=uuid.UUID(str(package_id)),
+        onay_kapsam_sha=_KOKEN_KAPSAM_SHA,
+        provenance_token=_KOKEN_JETONU,
+    )
+    await _muhurle_rollback(conn, kanit)
+    return kanit
+
+
 async def test_insert_draft_and_activate_chain_end_to_end(pkg_db):
     """Geçerli yazım + KANITLI aktivasyon zinciri uçtan uca koşar."""
     sector_id = await _sub_sector(pkg_db)
@@ -728,14 +775,7 @@ async def test_insert_draft_and_activate_chain_end_to_end(pkg_db):
     await activate_package(
         pkg_db,
         package_id=package_id,
-        evidence=ActivationGateEvidence(
-            activation_eligible=True,
-            open_questions_count=0,
-            katman1_passed=True,
-            checklist_approved=True,
-            run_id=_KOKEN_RUN_ID,
-            provenance_token=_KOKEN_JETONU,
-        ),
+        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id),
         actor=ACTOR,
     )
     status = await pkg_db.fetchval(
@@ -750,20 +790,29 @@ async def test_rollback_package_takes_its_own_evidence(pkg_db):
     first = await insert_draft(
         pkg_db, sector_id=sector_id, content=_valid_content(), schema_version=1, actor=ACTOR
     )
-    activation = ActivationGateEvidence(
-        activation_eligible=True,
-        open_questions_count=0,
-        katman1_passed=True,
-        checklist_approved=True,
-        run_id=_KOKEN_RUN_ID,
-        provenance_token=_KOKEN_JETONU,
+    # Her geçiş KENDİ jetonunu ister: jeton tek kullanımlıktır, tek kanıt
+    # nesnesi iki geçişi açamaz (Plan 2 Task 15).
+    await activate_package(
+        pkg_db,
+        package_id=first,
+        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id),
+        actor=ACTOR,
     )
-    await activate_package(pkg_db, package_id=first, evidence=activation, actor=ACTOR)
 
     second = await insert_draft(
         pkg_db, sector_id=sector_id, content=_valid_content(), schema_version=1, actor=ACTOR
     )
-    await activate_package(pkg_db, package_id=second, evidence=activation, actor=ACTOR)
+    await activate_package(
+        pkg_db,
+        package_id=second,
+        evidence=await _muhurlu_aktivasyon_kaniti(
+            pkg_db, sector_id, run_id=f"{_KOKEN_RUN_ID}-2", expected_active_version=1
+        ),
+        actor=ACTOR,
+    )
+    activation = await _muhurlu_aktivasyon_kaniti(
+        pkg_db, sector_id, run_id=f"{_KOKEN_RUN_ID}-3", expected_active_version=2
+    )
 
     # Kanıt tipleri PAYLAŞILMAZ — aktivasyon kanıtıyla rollback yapılamaz.
     with pytest.raises(GateNotSatisfied):
@@ -775,16 +824,7 @@ async def test_rollback_package_takes_its_own_evidence(pkg_db):
         pkg_db,
         sector_id=sector_id,
         to_version=1,
-        evidence=RollbackGateEvidence(
-            manager_approved=True,
-            katman1_passed=True,
-            incident_id=_KOKEN_OLAYI,
-            # Sürücü `uuid.UUID`in ALT SINIFINI döndürür; kanıt sınıfının şekil
-            # kapısı tam tip eşitliği arar (A4 disiplini) — normalize edilir.
-            package_id=uuid.UUID(str(first)),
-            onay_kapsam_sha=_KOKEN_KAPSAM_SHA,
-            provenance_token=_KOKEN_JETONU,
-        ),
+        evidence=await _muhurlu_geri_alma_kaniti(pkg_db, first),
         actor=ACTOR,
     )
     assert (
@@ -804,14 +844,7 @@ async def test_deactivate_package_documented_signature(pkg_db):
     await activate_package(
         pkg_db,
         package_id=package_id,
-        evidence=ActivationGateEvidence(
-            activation_eligible=True,
-            open_questions_count=0,
-            katman1_passed=True,
-            checklist_approved=True,
-            run_id=_KOKEN_RUN_ID,
-            provenance_token=_KOKEN_JETONU,
-        ),
+        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id),
         actor=ACTOR,
     )
     await deactivate_package(pkg_db, package_id=package_id, actor=ACTOR)
