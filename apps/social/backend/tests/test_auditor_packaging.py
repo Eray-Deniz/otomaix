@@ -1215,6 +1215,101 @@ def test_preflight_success_allows_round() -> None:
     )
 
 
+def test_build_packet_rejects_a_round_below_the_source_floor(tmp_path: Path) -> None:
+    """Elemeden sonra TEK kaynak kalan koşuda paket KURULMAZ (K-127).
+
+    Kapanış turunda ölçüldü: `yetkili_kaynak_sayisi`'nı `len(sources)`'tan
+    elenmemiş kimlik sayısına çevirmek, taban ihlalini KAZARA engelleyen
+    davranışı da kaldırdı — üç kaynakla kurulup ikisi elenen bir pakette
+    yetkili sayı 1'e iniyor ve iki tur kapısı da "1 kaynak" diyen bir raporu
+    KABUL ediyordu. Tek kaynakla mutabakat sinyali ilkece üretilemez.
+    """
+    kaynaklar = ["a metni", "b metni", "c metni"]
+    raporlar = [
+        (
+            bd.DoctorReport(
+                sonuc=bd.SONUC_ELENDI,
+                notlar=(),
+                elemeler=(
+                    bd.Bulgu(
+                        kontrol="sahte-kontrol",
+                        aile="bolum-ve-alan-tamligi",
+                        seviye=bd.SEVIYE_ELEME,
+                        mesaj="elenmis kaynak",
+                    ),
+                ),
+                kaynak_adi=f"kaynak-{sira}",
+                icerik_ozeti=identity.canonical_sha(metin),
+            )
+            if sira > 0
+            else bd.DoctorReport(
+                sonuc=bd.SONUC_GECTI,
+                notlar=(),
+                elemeler=(),
+                kaynak_adi=f"kaynak-{sira}",
+                icerik_ozeti=identity.canonical_sha(metin),
+            )
+        )
+        for sira, metin in enumerate(kaynaklar)
+    ]
+    assert bd.gate_round(raporlar).dur is True, "fixture tabanın ALTINDA olmalı"
+
+    with pytest.raises(ValueError, match="tabanın altında"):
+        auditors.build_packet(
+            brief="Kuyumculuk brief metni.",
+            sources=kaynaklar,
+            doctor_reports=raporlar,
+            active_package=None,
+            unit_snapshot={},
+            run_id="kosu-2026-09-08-t9",
+            sector_id=uuid.uuid4(),
+            dest=tmp_path / "taban-alti",
+        )
+
+
+def test_build_packet_accepts_the_floor_exactly(tmp_path: Path) -> None:
+    """BOŞ-KÜME kontrol kolu: TAM tabanda (iki geçerli kaynak) paket KURULUR."""
+    kaynaklar = ["a metni", "b metni", "c metni"]
+    raporlar = [
+        (
+            bd.DoctorReport(
+                sonuc=bd.SONUC_ELENDI,
+                notlar=(),
+                elemeler=(
+                    bd.Bulgu(
+                        kontrol="sahte-kontrol",
+                        aile="bolum-ve-alan-tamligi",
+                        seviye=bd.SEVIYE_ELEME,
+                        mesaj="elenmis kaynak",
+                    ),
+                ),
+                kaynak_adi=f"kaynak-{sira}",
+                icerik_ozeti=identity.canonical_sha(metin),
+            )
+            if sira == 2
+            else bd.DoctorReport(
+                sonuc=bd.SONUC_GECTI,
+                notlar=(),
+                elemeler=(),
+                kaynak_adi=f"kaynak-{sira}",
+                icerik_ozeti=identity.canonical_sha(metin),
+            )
+        )
+        for sira, metin in enumerate(kaynaklar)
+    ]
+    ref = auditors.build_packet(
+        brief="Kuyumculuk brief metni.",
+        sources=kaynaklar,
+        doctor_reports=raporlar,
+        active_package=None,
+        unit_snapshot={},
+        run_id="kosu-2026-09-08-t9",
+        sector_id=uuid.uuid4(),
+        dest=tmp_path / "tam-taban",
+    )
+    assert ref.yetkili_kaynak_sayisi == 2
+
+
 # ═══ Düzeltme turu — B3(2): rol yolları takma ad/symlink/kök-dışı KABUL ETMEZ ═
 
 
@@ -1306,10 +1401,18 @@ def test_packet_ref_accepts_the_paths_build_packet_produced(
 def test_build_packet_carries_the_authoritative_source_count(
     tmp_path: Path,
 ) -> None:
-    """Yetkili sayı `sources`'tan gelir — rapordan DEĞİL, paketi kuran taraftan."""
-    for sayi in (1, 2, 3):
+    """Yetkili sayı paketi KURAN taraftan gelir — rapordan DEĞİL.
+
+    Değer artık ELENMEMİŞ kimlik sayısıdır; elemesiz fixture'da bu `sources`
+    uzunluğuna eşittir. TEK kaynak artık paket bile kurdurmaz (K-127 tabanı),
+    o kol ayrı testte ölçülür.
+    """
+    for sayi in (2, 3):
         ref = _paket(tmp_path / f"kaynak-{sayi}", kaynak_sayisi=sayi)
         assert ref.yetkili_kaynak_sayisi == sayi
+
+    with pytest.raises(ValueError, match="tabanın altında"):
+        _paket(tmp_path / "kaynak-1", kaynak_sayisi=1)
 
 
 @pytest.mark.parametrize("deger", [0, 4, -1, True, "2", 2.0, None])

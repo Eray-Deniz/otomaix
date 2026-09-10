@@ -226,6 +226,7 @@ def _denetim_satiri(
     sinif: str | None = None,
     alan: str = "kanca_kaliplari",
     oneri: str = "al",
+    bayraklar: str = "—",
 ) -> auditors.AuditRow:
     """Tek denetim satırı. `sinif` verilmezse kaynak sayısından TÜRETİLİR."""
     if sinif is None:
@@ -240,7 +241,7 @@ def _denetim_satiri(
         iddia_ozeti=f"iddia {no}",
         kaynaklar=frozenset(kaynaklar),
         sinif=sinif,
-        bayraklar="—",
+        bayraklar=bayraklar,
         oneri=oneri,
         gerekce="Tek cumle gerekce.",
     )
@@ -255,6 +256,16 @@ DENETIM_TABLOSU = (
     _denetim_satiri(4, kaynaklar={1, 2}, sinif="2-2", alan="cta_kaliplari"),
     # Denetçi eklemeye izin VERMEYEN öneri yazmış.
     _denetim_satiri(5, kaynaklar={1, 2}, sinif="2-2", oneri="alma"),
+    # Denetçi TÜKETİLMESİ gereken bir bayrak yazmış; sentez onu düz yazıya
+    # kopyalamamış olabilir — motor artık tipli sütundan okur.
+    #
+    # YAZIM NOTU (ölçüldü, MEVCUT sınırlama — bu turun ürünü DEĞİL): bayrak adı
+    # ASCII yazımla verilir. `_katla` `ç`/`ğ`/`ş`'yi katlar ama NOKTASIZ `ı`'yı
+    # KATLAMAZ; sözleşmenin kendi yazımı olan `[marka-adı]`, `[kanal-bağımlı]`
+    # ve `[kaynak-bağımlı]` bu yüzden `BAYRAKLAR` kümesiyle EŞLEŞMEZ — ne bu
+    # kapıda ne de eskiden beri var olan `_bayrak_tuketimi` kontrolünde.
+    # Fixture kodun BUGÜN tanıdığı yazımı kullanır; sınır açıkça raporlandı.
+    _denetim_satiri(6, kaynaklar={1, 2}, sinif="2-2", bayraklar="[marka-adi]"),
 )
 
 IKI_KAYNAKLI = "D1#1"
@@ -262,6 +273,7 @@ TEK_KAYNAKLI = "D1#2"
 CELISKILI = "D1#3"
 BASKA_ALAN = "D1#4"
 OLUMSUZ_ONERI = "D1#5"
+BAYRAKLI = "D1#6"
 
 
 def _rapor(
@@ -1042,6 +1054,34 @@ def test_special_day_field_prefix_binds_to_the_decision() -> None:
     assert engine._alan_bagi_var("ozel_gun", "ozel_gunler") is False
     assert engine._alan_bagi_var("ozel_gun", "cta_kaliplari") is False
     assert engine._alan_bagi_var("", "ozel_gun") is False
+
+
+def test_an_unconsumed_flag_on_the_typed_row_becomes_an_open_question() -> None:
+    """Bayrak SENTEZİN metninde değil, denetçinin TİPLİ sütununda da aranır.
+
+    Kapanış turu (yüksek): `_bayrak_tuketimi` bayrakları `kanit`/`gerekce`
+    METNİNDE arıyor; sentez bir bayrağı yazmayı ATLARSA kısıt sessizce
+    kayboluyordu — oysa tipli satırda duruyor.
+    """
+    sonuc = engine.run_checks(_ekle_girdisi(kanit=BAYRAKLI))
+    assert "acik_soru" in _siniflar(sonuc)
+    detaylar = " ".join(b.detay for b in sonuc.bulgular)
+    assert "tüketilmemiş bayrak" in detaylar
+
+
+def test_the_surviving_flag_does_not_raise_an_open_question() -> None:
+    """BOŞ-KÜME kontrol kolu: sağ çıkan TEK bayrak (`kanal-bagimli`) sessizdir."""
+    tablo = DENETIM_TABLOSU + (
+        _denetim_satiri(
+            7,
+            kaynaklar={1, 2},
+            sinif="2-2",
+            bayraklar="[kanal-bagimli: whatsapp_hatti]",
+        ),
+    )
+    sonuc = engine.run_checks(_ekle_girdisi(kanit="D1#7", denetim=tablo))
+    assert "acik_soru" not in _siniflar(sonuc)
+    assert sonuc.uygulanmayan_kararlar == ()
 
 
 def test_a_contradiction_row_becomes_an_open_question() -> None:

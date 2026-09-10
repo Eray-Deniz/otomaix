@@ -883,6 +883,32 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                 )
             )
             continue
+        # Kapanış turu (yüksek): bayraklar SENTEZİN düz yazısından değil,
+        # denetçinin TİPLİ sütunundan da okunur. `_bayrak_tuketimi` kontrolü
+        # bayrakları `kanit`/`gerekce` METNİNDE arar; sentez bir bayrağı
+        # yazmayı ATLARSA kısıt sessizce kaybolurdu — oysa tipli satırda
+        # duruyor. Politika DEĞİŞMEDİ, KAYNAK genişledi: sağ çıkan tek bayrak
+        # `kanal-bagimli`'dır, kalan yedi TÜKETİLMİŞ olmalıdır.
+        tukenmeyen_bayraklar = sorted(
+            {
+                bayrak
+                for parca in atiflar
+                for bayrak in _bayraklar(satir_evreni[parca].bayraklar)
+                if bayrak != SAG_CIKAN_BAYRAK
+            }
+        )
+        if tukenmeyen_bayraklar:
+            bulgular.append(
+                BulguIzi(
+                    sinif="acik_soru",
+                    unit_id=satir["unit_id"],
+                    detay=(
+                        "denetçi satırı tüketilmemiş bayrak taşıyor: "
+                        f"{tukenmeyen_bayraklar} — bayrak sentezde TÜKETİLİR; "
+                        "tipli sütunda duruyorsa kısıt karşılanmamış olabilir"
+                    ),
+                )
+            )
         celiskili = sorted(
             {
                 parca

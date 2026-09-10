@@ -887,6 +887,25 @@ def build_packet(
             f"sözleşme en çok {AZAMI_KAYNAK} kaynak adlandırır (EK-B/C/D); "
             f"{len(sources)} verildi"
         )
+    gecerli_kimlikler = kimlik_bolumlemesi(doctor_reports)[0]
+    if len(gecerli_kimlikler) < KAYNAK_TABANI:
+        # KENDİ DÜZELTMEMİN YAN ETKİSİ (2026-09-10, kapanış turu — ÖLÇÜLDÜ).
+        # `yetkili_kaynak_sayisi` `len(sources)` iken taban ihlali KAZARA
+        # engelleniyordu: üç kaynakla kurulup ikisi elenen bir pakette rapor
+        # "1 kaynak" der, kapı "yetkili 3" der ve tur düşerdi. Sayıyı
+        # düzeltince o kaza kalktı ve TEK KAYNAKLI paket kurulabilir hâle
+        # geldi — sözleşmenin K-127 tabanı (2) sessizce delinirdi: tek kaynakla
+        # mutabakat sinyali İLKECE üretilemez.
+        #
+        # Kapı BURAYA konur, `gate_round`'a bırakılmaz: `gate_round` koşuyu
+        # durdurur ama `build_packet`'in çağrılmadığını KANITLAMAZ; paketi
+        # kuran yüzey kendi ön koşulunu kendisi ölçer (fail-closed).
+        raise ValueError(
+            f"denetime giren kaynak sayısı tabanın altında: "
+            f"{len(gecerli_kimlikler)} < {KAYNAK_TABANI} — elemeden sonra tek "
+            "kaynak kalan koşuda denetim YAPILMAZ, koşu durur ve yöneticiye "
+            "bildirilir (K-127)"
+        )
     if len(doctor_reports) != len(sources):
         raise ValueError(
             f"kaynak sayısı ({len(sources)}) ile brief-doctor raporu sayısı "
@@ -950,7 +969,7 @@ def build_packet(
         # B4(1): YETKİLİ kaynak sayısı — paketi KURAN taraftan gelir. Raporun
         # kendi `Kaynak sayısı: <n>` beyanı bu sayıya karşı ölçülür (tur
         # seviyesi); rapor kendi beyanıyla tamlık kapısını geçemez.
-        yetkili_kaynak_sayisi=len(kimlik_bolumlemesi(doctor_reports)[0]),
+        yetkili_kaynak_sayisi=len(gecerli_kimlikler),
         kaynak_seti_sha=kaynak_seti_sha(doctor_reports),
         sector_id=sector_id,
         kok=kok,
