@@ -40,8 +40,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 7
-- last_checkpoint_ref: 33bfae63f5bd6a93bcf1e9a1939a21409becadf8
+- cp_count: 8
+- last_checkpoint_ref: 576569e5b560c5fc1dd8ae61a349e0969eceae62
 
 # References
 
