@@ -1044,14 +1044,23 @@ async def open_correction_run(db, *, parent_run_id: str, actor: str) -> str:
     owner = require_actor(actor)
 
     async with db.transaction():
-        # ÇAPA BURADA YOK ve bu bilinçli (hakem turu 3 sonrası mutasyon ölçümü).
-        # Bu fonksiyon HİÇBİR paket satırı kilitlemez — yalnız koşu satırları
-        # yazar — yani çapa sözleşmesinin ölçtüğü sınıfa GİRMEZ. Savunma amaçlı
-        # bir çapa eklenmişti; mutasyon onu SAHTE-YEŞİL gösterdi, yani hiçbir
-        # test onun varlığını ölçmüyordu. Kanıtlanamayan kapı gereksiz kapıdır
-        # ve KALDIRILDI. Düzeltme turu açmakla yerinde güncelleme arasındaki
-        # yarışı kapatan şey ayrıdır: güncelleme yolu çapayı alır ve yeni açılan
-        # düzeltme koşusunun henüz jetonu YOKTUR, yani yakılacak bir şey de yok.
+        # ÇAPA BURADA YOK — ve gerekçesi hakem turu 4'te DÜZELTİLDİ.
+        #
+        # ÖNCEKİ GEREKÇE YANLIŞTI: "bu fonksiyon hiçbir paket satırı kilitlemez"
+        # diyordu. Ölçüldü ki YANLIŞ — satır `package_id` yabancı anahtarını
+        # taşıyor, dolayısıyla PostgreSQL ekleme sırasında EBEVEYN paket satırına
+        # örtük bir `KEY SHARE` kilidi alır. Kaynakta görünmeyen bir kilit
+        # kenarıdır ve çapa sözleşmesinin tarayıcısı onu MODELLEMEZ.
+        #
+        # ÇAPANIN OLMAMASININ GERÇEK GEREKÇESİ (hakem turu 4'te izlendi): bugün
+        # bu kenarın TERSİ YOKTUR — çapalı yollar paket satırını `FOR UPDATE` ile
+        # alır ve bu fonksiyonun tuttuğu örtük kilidi bekler; bu fonksiyon ise
+        # çapalı yolların tuttuğu hiçbir şeyi beklemez. Grafik döngüsüzdür.
+        # Buraya savunma amaçlı bir çapa eklemek onu SAHTE-YEŞİL bir kapı yapardı
+        # (mutasyon ölçtü: hiçbir test varlığını görmüyordu).
+        #
+        # KALAN RİSK DÜRÜSTÇE: gelecekte ters bir kenar eklenirse tarayıcı bunu
+        # GÖREMEZ. Sınır `tests/test_lock_anchor_contract.py` başında yazılıdır.
         ana = await db.fetchrow(
             "SELECT id, sector_id, package_id, approval_karar "
             "FROM social.sector_package_runs WHERE run_id = $1 FOR UPDATE",

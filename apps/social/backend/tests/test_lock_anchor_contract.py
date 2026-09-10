@@ -16,6 +16,24 @@ hatası da kalmaz.
 TÜM `async def`'leri taranır ve paket satırına dokunan HER biri sözleşmeye tabi
 tutulur. Yarın eklenecek bir fonksiyon da aynı taramaya girer. Muafiyetler
 sessiz değildir — adı ve GEREKÇESİ aşağıdaki tabloda görünür.
+
+**ÖLÇÜLMÜŞ SINIR — bu tarama KAYNAKTAKİ kilitleri modeller, VERİTABANININ
+ZORLADIKLARINI DEĞİL (hakem turu 4, orta bulgu; İlke 3).** `package_id` yabancı
+anahtarını taşıyan bir satır yazıldığında PostgreSQL ebeveyn paket satırına
+örtük bir `KEY SHARE` kilidi alır. O kenar kaynakta HİÇBİR desene benzemez ve
+buradaki tarayıcı onu GÖREMEZ — koşu satırı açan ve geri alma planı yazan yollar
+bu yüzden yeşil kalır.
+
+İddia buna göre DARALTILIR: bu test *"kaynakta görünen paket kilitleri tek bir
+sıradan geçer"* der; *"hiçbir kilitlenme döngüsü kalmadı"* DEMEZ. Bugün grafiğin
+döngüsüz olduğu ayrıca ölçüldü (bağımsız hakem, tur 4: örtük kenarların TERSİ
+yok) ama bu ölçüm KOŞUM-ANLIKTIR, bu testin sürekli koruduğu bir şey değildir.
+
+**Kalan risk ve yeniden açılma koşulu:** ileride ters bir kenar eklenirse bu test
+YEŞİL kalırken üretimde kilitlenme doğabilir. Kapatmak isteyen, örtük kenarları
+da modelleyen bir kilit-grafiği ölçümü kurmalıdır (iki bağlantı + `pg_locks`);
+buraya beş yeni çapa eklemek testi susturur ama sektörler arası YENİ bir sıra
+sorunu açma riski taşır — o yüzden yapılmadı.
 """
 
 from __future__ import annotations
