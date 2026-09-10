@@ -187,6 +187,58 @@ def _cekirdek(goruntu: Mapping[str, Any]) -> dict:
     return {ad: deger for ad, deger in coz.items() if ad not in GORUNTU_KOSU_DISI}
 
 
+async def _paket_kapisi(db, run: runs.VerifiedRun) -> None:
+    """Hedef kimliği bir İLİŞKİDİR — iki bağımsız değer DEĞİL (kapanış turu 3).
+
+    036 iki ayrı yabancı anahtar tutar ve aralarında ilişki ZORLAMAZ; paketin
+    taslak KALDIĞINI da istemez. Bu yüzden özensiz bir bağ, A sektörünün
+    koşusuna B sektörünün paketini ya da zaten aktive edilmiş bir paketi
+    bağlayabilir; olay ise canlı değerlerle yazılır ve denetim izi operatörün
+    gördüğünden başka bir hedefi gösterir.
+
+    Aynı sınıf yaşam döngüsü katmanında yaşandı ve çözümü
+    `sector_package_lifecycle._require_same_sector` oldu. Onun dürüst sınırı
+    burada da geçerlidir: **pencere KAPATILMAZ** — paket satırı ancak okunarak
+    öğrenilebilir — ama pencere FAIL-CLOSED yapılır. Kalıcı çözüm
+    `sector_packages.sector_id`'yi değişmez kılan bir migration'dır; evi
+    kayıtlıdır (`sector-package-sector-id-immutability`, tetikli) ve tetiği bu
+    işle KURULMADI: bu modül o kolona YAZMAZ.
+
+    Kapı dondurmada VE karar anında koşar — çekirdek karşılaştırması paket
+    satırının kendi kaymasını GÖRMEZ (koşunun iki kolonu aynı kalır).
+    """
+    satir = (
+        None
+        if run.package_id is None
+        else await db.fetchrow(
+            "SELECT sector_id, status FROM social.sector_packages WHERE id = $1 "
+            "FOR UPDATE",
+            run.package_id,
+        )
+    )
+    if satir is None:
+        # BOŞ BAĞ ve ÇÖZÜLMEYEN BAĞ aynı kapıda: ikisi de "hedefi olmayan onay"
+        # demektir. Ayrı iki kapı yazılmıştı ve mutasyon ikisinin de BAĞIMSIZ
+        # OLARAK KANITLANAMADIĞINI gösterdi (bu kapı onları zaten yakalıyordu) —
+        # kanıtlanamayan gate, gereksiz gate'tir.
+        raise ApprovalRefused(
+            f"koşunun paket taslağı YOK ya da bağ bir satıra çözülmüyor "
+            f"({run.package_id!r}) — hedefi olmayan onay yazılmaz; yaşam döngüsü "
+            "olayı da paket kimliği ister (R3)"
+        )
+    if satir["sector_id"] != run.sector_id:
+        raise ApprovalRefused(
+            f"paket BAŞKA sektöre ait: paket {satir['sector_id']!r}, koşu "
+            f"{run.sector_id!r} — operatörün gördüğünden başka bir sektöre onay "
+            "yazılamaz"
+        )
+    if satir["status"] != "draft":
+        raise ApprovalRefused(
+            f"paket artık taslak DEĞİL (durum={satir['status']!r}) — onay yüzeyi "
+            "yalnız taslak üzerinde çalışır"
+        )
+
+
 async def build_and_freeze_from_run(db, *, run_id: str, actor: str) -> dict:
     """Görüntüyü kilitli koşudan BASAR ve AYNI işlemde DONDURUR (F18/K-98).
 
@@ -200,14 +252,10 @@ async def build_and_freeze_from_run(db, *, run_id: str, actor: str) -> dict:
     """
     async with db.transaction():
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
-        # Paket bağı DONDURMADA da zorunludur (kapanış turu 2, yüksek): bağsız
+        # Paket kapısı DONDURMADA da koşar (kapanış turu 2+3, yüksek): bağsız
         # dondurulan bir görüntü sonradan HERHANGİ bir pakete bağlanabilir ve
         # operatörün hiç görmediği bir pakete kalıcı onay yazılırdı.
-        if run.package_id is None:
-            raise ApprovalRefused(
-                f"koşu {run_id!r} bir paket taslağına bağlı DEĞİL — bağsız görüntü "
-                "basılmaz; sonradan bağlanan herhangi bir paket onaylanmış görünürdü"
-            )
+        await _paket_kapisi(db, run)
         goruntu = await _goruntu_kur(db, run, actor=actor)
         return await _dondur(db, run_id=run.run_id, goruntu=goruntu)
 
@@ -334,11 +382,7 @@ async def record_decision(
     # karar commit edilir, sonra olay düşerse onay İZSİZ kalırdı.
     async with db.transaction():
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
-        if run.package_id is None:
-            raise ApprovalRefused(
-                f"koşu {run_id!r} bir paket taslağına bağlı DEĞİL — yaşam döngüsü "
-                "olayı paket kimliği ister (R3); onay yazılamadan patlardı"
-            )
+        await _paket_kapisi(db, run)
         # Hash'in VARLIĞI görüntünün gösterildiğinin kanıtı DEĞİLDİR (hakem
         # turu 11, yüksek): 036'da görüntü ile hash kolonunu birbirine bağlayan
         # bir kısıt YOK, yani hash dolu / görüntü boş satır MÜMKÜNDÜR.

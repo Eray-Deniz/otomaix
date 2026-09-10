@@ -1341,3 +1341,97 @@ async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str) -> 
         run_id,
     ) is None
     assert await _olaylar(pkg_db, run_id) == []
+
+
+# ═══ 8. Hedef kimliği bir İLİŞKİDİR (kapanış turu 3) ════════════════════════
+#
+# İki kolon bağımsız yabancı anahtar; 036 aralarında İLİŞKİ zorlamıyor ve
+# paketin taslak KALDIĞINI da istemiyor. Aynı sınıf yaşam döngüsü katmanında
+# yaşandı ve çözümü `_require_same_sector` oldu: pencere kapatılamaz (paket
+# kilitlenmeden önce okunmak zorunda) ama FAIL-CLOSED yapılabilir.
+
+
+async def test_freeze_refuses_package_from_another_sector(pkg_db) -> None:
+    """Paket BAŞKA sektöre aitse görüntü basılmaz."""
+    sector_id = await _sub_sector(pkg_db)
+    yabanci_sektor = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    yabanci_paket = await _taslak(pkg_db, yabanci_sektor)
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET package_id = $2 WHERE run_id = $1",
+        run_id,
+        yabanci_paket,
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="sektör"):
+        await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+
+    assert await pkg_db.fetchval(
+        "SELECT approval_snapshot FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    ) is None
+
+
+async def test_freeze_refuses_non_draft_package(pkg_db) -> None:
+    """Paket artık taslak değilse onay yüzeyi çalışmaz."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET status = 'active' WHERE id = "
+        "(SELECT package_id FROM social.sector_package_runs WHERE run_id = $1)",
+        run_id,
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="taslak"):
+        await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+
+
+async def test_decision_refused_when_package_row_sector_drifts(pkg_db) -> None:
+    """PAKET SATIRI kaydıysa karar YOK — koşu kolonları değişmese bile.
+
+    Bu, çekirdek karşılaştırmasının GÖRMEDİĞİ yoldur: `sector_packages.sector_id`
+    değişince koşunun iki kolonu da aynı kalır ve çekirdek eşit çıkar. Kapı
+    bu yüzden karar anında da koşar.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    yabanci_sektor = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET sector_id = $2 WHERE id = "
+        "(SELECT package_id FROM social.sector_package_runs WHERE run_id = $1)",
+        run_id,
+        yabanci_sektor,
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="sektör"):
+        await approval.record_decision(
+            pkg_db, run_id=run_id, karar="onay", actor=ACTOR, seconds=1,
+            snapshot_sha=identity.canonical_sha(goruntu),
+        )
+
+    assert await _olaylar(pkg_db, run_id) == []
+
+
+async def test_decision_refused_when_package_left_draft_after_freeze(pkg_db) -> None:
+    """Görüntü basıldıktan sonra paket aktive edilmişse karar YOK."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+    await pkg_db.execute(
+        "UPDATE social.sector_packages SET status = 'active' WHERE id = "
+        "(SELECT package_id FROM social.sector_package_runs WHERE run_id = $1)",
+        run_id,
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="taslak"):
+        await approval.record_decision(
+            pkg_db, run_id=run_id, karar="onay", actor=ACTOR, seconds=1,
+            snapshot_sha=identity.canonical_sha(goruntu),
+        )
+
+    assert await _olaylar(pkg_db, run_id) == []
