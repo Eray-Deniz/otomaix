@@ -44,7 +44,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Mapping
 
 from app.services.sector_content_schema import (
@@ -1234,7 +1234,18 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 
     for kontrol in CHECKS:
         cikti = kontrol.calistir(inputs)
-        bulgular.extend(cikti.bulgular)
+        # ATIF TEK YERDE DAMGALANIR (Task 14 önkoşulu). Kontrol gövdeleri kendi
+        # adlarını yazmaz — yazsalardı her yeni kontrol atfı unutabilir ve onay
+        # yüzeyi riskli bir sınıfı sessizce kaybederdi. Gövdenin yazdığı bir atıf
+        # ise EZİLMEZ, DURDURULUR: uydurma atıf, bulgunun onay ekranında başka
+        # bir sınıf gibi görünmesi demektir.
+        for bulgu in cikti.bulgular:
+            if bulgu.kontrol and bulgu.kontrol != kontrol.ad:
+                raise EngineInputError(
+                    f"kontrol {kontrol.ad!r} bulguya BAŞKA bir atıf yazdı: "
+                    f"{bulgu.kontrol!r} — atıf toplayıcının kalemidir"
+                )
+            bulgular.append(replace(bulgu, kontrol=kontrol.ad))
         kayitlar.extend(cikti.uygulanmayan_kararlar)
         notlar.extend(cikti.notlar)
         for anahtar, deger in (cikti.olcumler or {}).items():

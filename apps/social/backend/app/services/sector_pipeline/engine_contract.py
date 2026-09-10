@@ -77,6 +77,16 @@ class BulguIzi:
     sinif: str  # BULGU_SINIFLARI içinden — KAPALI KÜME (R7, altı değer)
     unit_id: str | None  # birime bağlanamayan bulguda None
     detay: str  # bulguyu doğuran ölçümün tek cümlelik ifadesi
+    kontrol: str = ""
+    """Bulguyu ÜRETEN kontrolün adı (`EngineCheck.ad`) — TEK yazıcısı `run_checks`.
+
+    `sinif` riskli sınıfları ayırt ETMEZ: `acik_soru` sınıfını BEŞ ayrı kontrol
+    üretir. Onay yüzeyi (Task 14, K-42) sıralamayı sınıf ADIYLA kurar; bunu
+    `detay` metnini eşleştirerek çözmek referans bütünlüğü olmayan bir bağ
+    olurdu (İlke 1). Varsayılan boştur çünkü değeri kontrol gövdesi DEĞİL
+    toplayıcı yazar; gövdenin yazdığı bir değer `run_checks` tarafından
+    REDDEDİLİR (uydurma atıf = sessiz sınıf kayması).
+    """
 
     def __post_init__(self) -> None:
         if self.sinif not in BULGU_SINIFLARI:
@@ -160,7 +170,12 @@ class PolicyReport:
                 {"unit_id": k.unit_id, "sebep": k.sebep} for k in self.kararsizlar
             ],
             "bulgular": [
-                {"sinif": b.sinif, "unit_id": b.unit_id, "detay": b.detay}
+                {
+                    "sinif": b.sinif,
+                    "unit_id": b.unit_id,
+                    "detay": b.detay,
+                    "kontrol": b.kontrol,
+                }
                 for b in self.bulgular
             ],
             "uygulanmayan_kararlar": [

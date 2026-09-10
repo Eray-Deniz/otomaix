@@ -1297,6 +1297,120 @@ def test_new_item_unrelated_to_removals_emits_no_finding() -> None:
     assert "acik_soru" not in _siniflar(sonuc)
 
 
+# ═══ 12b. Bulgunun ÜRETİCİSİ — atıf (Task 14 önkoşulu) ════════════════════
+#
+# Task 14'ün bağlayıcı sıralama invariantı (K-42) riskli sınıfları ADIYLA
+# ayırır: geri-ekleme çelişkileri · motor kararsızları · çıkarmalar. `sinif`
+# bunu ayırt ETMEZ — `acik_soru` sınıfını BEŞ ayrı kontrol üretiyor (ölçüldü).
+# Onay yüzeyinin bunu `detay` metnini eşleştirerek çözmesi referans bütünlüğü
+# olmayan bir bağ olurdu (İlke 1). Bu yüzden atıf, bulguyu TOPLAYAN yerde
+# damgalanır: tek yazıcı `run_checks`, değer `EngineCheck.ad`.
+
+
+def test_finding_carries_the_check_that_produced_it() -> None:
+    """Geri-ekleme çelişkisi bulgusu, onu üreten kontrolün adını TAŞIR."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(
+            kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}",
+            metin="Geri gelen kanca",
+            cikarmalar=(
+                {
+                    "unit_id": "ku-ffffffffffff",
+                    "alan": "kanca_kaliplari",
+                    "deger": "Geri gelen kanca",
+                    "gerekce": "Onceki turda cikarildi.",
+                },
+            ),
+        )
+    )
+    atifli = [b for b in sonuc.bulgular if b.kontrol == "geri_ekleme_celiskisi"]
+    assert [b.sinif for b in atifli] == ["acik_soru"]
+
+
+def test_every_finding_is_attributed_to_a_real_check() -> None:
+    """Her bulgunun atfı GERÇEK bir kontrol adıdır — boş atıf yok."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(
+            kanit=DOGRULANMIS_KAYNAK,
+            metin="Geri gelen kanca",
+            cikarmalar=(
+                {
+                    "unit_id": "ku-ffffffffffff",
+                    "alan": "kanca_kaliplari",
+                    "deger": "Geri gelen kanca",
+                    "gerekce": "Onceki turda cikarildi.",
+                },
+            ),
+        )
+    )
+    assert sonuc.bulgular, "senaryo bulgu üretmedi — test konusunu ölçemez"
+    assert {b.kontrol for b in sonuc.bulgular} <= set(BEKLENEN_KONTROL_ADLARI)
+    assert all(b.kontrol for b in sonuc.bulgular)
+
+
+def test_collector_stamps_attribution_for_any_check(monkeypatch) -> None:
+    """SINIF KAPANIŞI: atıf tek tek kontrollere değil TOPLAYICIYA yazılıdır.
+
+    Üretilmiş kol — kontrol kümesine sonradan eklenen HERHANGİ bir kontrol de
+    atfını alır; kendi gövdesinde `kontrol=` yazması GEREKMEZ. Aksi tasarımda
+    her yeni kontrol atfı unutabilirdi ve onay yüzeyi sessizce sınıf kaybederdi.
+    """
+    uydurma = engine.EngineCheck(
+        ad="sema_ve_boyut",
+        aciklama="test kolu",
+        calistir=lambda _girdi: engine.CheckOutput(
+            bulgular=(
+                engine.BulguIzi(sinif="acik_soru", unit_id=None, detay="test bulgusu"),
+            )
+        ),
+    )
+    monkeypatch.setattr(engine, "CHECKS", (uydurma,))
+    sonuc = engine.run_checks(_girdi())
+    assert [b.kontrol for b in sonuc.bulgular] == ["sema_ve_boyut"]
+
+
+def test_unrelated_finding_is_not_attributed_to_readd_check() -> None:
+    """NEGATİF KONTROL: başka kontrolün bulgusu geri-ekleme atfı ALMAZ."""
+    hedef = _yol(AKTIF_ICERIK, "kapsam", AKTIF_ICERIK["kapsam"])
+    gunluk = _gunluk(AKTIF_ICERIK, degis={hedef: {"unit_id": "ku-aaaaaaaaaaaa"}})
+    sonuc = engine.run_checks(_girdi(gunluk=gunluk))
+    assert sonuc.bulgular, "senaryo bulgu üretmedi — negatif kontrol anlamsız olur"
+    assert "kapsam_ihlali" in _siniflar(sonuc)
+    assert all(b.kontrol != "geri_ekleme_celiskisi" for b in sonuc.bulgular)
+
+
+def test_check_body_may_not_forge_its_own_attribution(monkeypatch) -> None:
+    """FAIL-CLOSED: kontrol gövdesi kendi atfını UYDURAMAZ.
+
+    Atfı gövdenin yazabilmesi, bir bulgunun onay yüzeyinde BAŞKA bir riskli
+    sınıf gibi görünmesine izin verirdi (sessiz sınıf kayması). Toplayıcı
+    çelişkiyi sessizce EZMEZ, DURUR.
+    """
+    uydurma = engine.EngineCheck(
+        ad="sema_ve_boyut",
+        aciklama="test kolu",
+        calistir=lambda _girdi: engine.CheckOutput(
+            bulgular=(
+                engine.BulguIzi(
+                    sinif="acik_soru",
+                    unit_id=None,
+                    detay="test bulgusu",
+                    kontrol="geri_ekleme_celiskisi",
+                ),
+            )
+        ),
+    )
+    monkeypatch.setattr(engine, "CHECKS", (uydurma,))
+    with pytest.raises(engine.EngineInputError, match="atıf"):
+        engine.run_checks(_girdi())
+
+
+def test_no_findings_yields_no_attributions() -> None:
+    """BOŞ-KÜME KOLU: bulgu yoksa damgalama da bir şey uydurmaz."""
+    sonuc = engine.run_checks(_girdi())
+    assert [b for b in sonuc.bulgular if b.sinif == "acik_soru"] == []
+
+
 # ═══ 13. Kontrol: kategori çakışması (K-03) ═══════════════════════════════
 
 
