@@ -44,16 +44,18 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "kanit-yok",  # spec girdisi satır 1189: kanıt yoksa karar uygulanmaz
     "mutabakat-yok",  # K-125: iki denetçi uyuşmuyor
     "referans-yok",  # sentez sözleşmesi 2.1: `ekle` en az bir D# referansı ister
+    "referans-uyusmuyor",  # atıf BAŞKA bir alanın satırını gösteriyor
+    "oneri-olumsuz",  # denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",  # denetçi satırı `çelişki` sınıfında — sayı yetse de girmez
     "cogunluk-yok",  # yeni öğe 2-3 yapısal çoğunluk kuralı
 )
-"""Aday kararın uygulanmama sebepleri — KAPALI, BEŞ değer. UYDURULMUŞ değer YOK.
+"""Aday kararın uygulanmama sebepleri — KAPALI, YEDİ değer. UYDURULMUŞ değer YOK.
 
 **Sıra ÖNCELİKTİR** (`engine._reddedilenler`): bir birim birden çok sebeple
-reddedilebilir ve rapora yazılan sebep bu sıradan seçilir. `referans-yok` ile
-`celiski`, `cogunluk-yok`'tan ÖNCE gelir — ikisi de sayının hiç okunamadığı
-ya da okunmasının anlamsız olduğu durumlardır; "çoğunluk yok" demek okunmuş
-bir sayı ima ederdi.
+reddedilebilir ve rapora yazılan sebep bu sıradan seçilir. `referans-yok` ·
+`referans-uyusmuyor` · `oneri-olumsuz` · `celiski`, `cogunluk-yok`'tan ÖNCE
+gelir — hepsinde sayı ya hiç okunamamıştır ya da okunması anlamsızdır;
+"çoğunluk yok" demek okunmuş bir sayı ima ederdi.
 """
 
 

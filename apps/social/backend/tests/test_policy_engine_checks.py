@@ -224,7 +224,8 @@ def _denetim_satiri(
     *,
     kaynaklar: set[int],
     sinif: str | None = None,
-    alan: str = "cta_kaliplari",
+    alan: str = "kanca_kaliplari",
+    oneri: str = "al",
 ) -> auditors.AuditRow:
     """Tek denetim satırı. `sinif` verilmezse kaynak sayısından TÜRETİLİR."""
     if sinif is None:
@@ -240,7 +241,7 @@ def _denetim_satiri(
         kaynaklar=frozenset(kaynaklar),
         sinif=sinif,
         bayraklar="—",
-        oneri="al",
+        oneri=oneri,
         gerekce="Tek cumle gerekce.",
     )
 
@@ -250,11 +251,17 @@ DENETIM_TABLOSU = (
     _denetim_satiri(1, kaynaklar={1, 2}, sinif="2-2"),
     _denetim_satiri(2, kaynaklar={1}, sinif=auditors.SINIF_TEKIL),
     _denetim_satiri(3, kaynaklar={1, 2}, sinif=auditors.SINIF_CELISKI),
+    # BAŞKA alanın satırı — `kanca_kaliplari` eklemesi buna dayanamaz.
+    _denetim_satiri(4, kaynaklar={1, 2}, sinif="2-2", alan="cta_kaliplari"),
+    # Denetçi eklemeye izin VERMEYEN öneri yazmış.
+    _denetim_satiri(5, kaynaklar={1, 2}, sinif="2-2", oneri="alma"),
 )
 
 IKI_KAYNAKLI = "D1#1"
 TEK_KAYNAKLI = "D1#2"
 CELISKILI = "D1#3"
+BASKA_ALAN = "D1#4"
+OLUMSUZ_ONERI = "D1#5"
 
 
 def _rapor(
@@ -271,7 +278,7 @@ def _rapor(
     )
 
 
-def _bos_gorunti_cifti(*, kaynak_sha=None):
+def _bos_gorunti_cifti(*, kaynak_sha=None, denetim=None):
     """İlk koşunun çifti: aktif birim YOK, görüntü BOŞ kümenin hash'idir."""
     sha = identity.canonical_sha({})
     raporlar = [
@@ -279,7 +286,7 @@ def _bos_gorunti_cifti(*, kaynak_sha=None):
             denetci=rol,
             ham_metin=f"{rol} ham raporu",
             bolumler={ad: f"{ad} govdesi" for ad in auditors.BOLUM_ANAHTARLARI},
-            denetim_tablosu=DENETIM_TABLOSU,
+            denetim_tablosu=DENETIM_TABLOSU if denetim is None else denetim,
             yeniden_dogrulama=(),
             url_orneklem=_ornekle(),
             unit_snapshot_sha=sha,
@@ -376,6 +383,7 @@ def _girdi(
     acik_sorular=(),
     aktif: bool = True,
     cift=None,
+    denetim=None,
     kapi: bd.RoundGate | None = None,
     takvim: frozenset[str] | None = None,
     kapilar: engine.GateResults | None = None,
@@ -389,9 +397,11 @@ def _girdi(
     # ölçmelidir (kapının kendisi ayrı bir testte ölçülür).
     mekanik = _gecen_kapi() if kapi is None else kapi
     varsayilan_cift = (
-        _cift(kaynak_sha=_kaynak_seti_sha(mekanik))
+        _cift(kaynak_sha=_kaynak_seti_sha(mekanik), denetim=denetim)
         if aktif
-        else _bos_gorunti_cifti(kaynak_sha=_kaynak_seti_sha(mekanik))
+        else _bos_gorunti_cifti(
+            kaynak_sha=_kaynak_seti_sha(mekanik), denetim=denetim
+        )
     )
     return engine.EngineInputs(
         sentez=_sonuc(aday, log, acik_sorular=acik_sorular),
@@ -991,6 +1001,49 @@ def test_an_unresolvable_reference_is_not_applied() -> None:
     assert "referans-yok" in _sebepler(sonuc)
 
 
+def test_a_reference_to_another_field_is_not_applied() -> None:
+    """Atıf BAŞKA bir alanın satırını gösteriyorsa karar UYGULANMAZ.
+
+    Hakem turu 1 (yüksek): motor yalnız `kaynaklar` ve `sinif` okuyordu, yani
+    `kanca_kaliplari` eklemesi `cta_kaliplari` hakkındaki bir satıra dayanıp
+    çoğunluk kapısını geçebiliyordu. Bu olağan sentez sapmasıdır; test
+    fixture'ının kendisi de tam bu eşleşmeyi taşıyor ve hatayı MASKELİYORDU.
+    """
+    sonuc = engine.run_checks(_ekle_girdisi(kanit=BASKA_ALAN))
+    assert "referans-uyusmuyor" in _sebepler(sonuc)
+    assert "cogunluk-yok" not in _sebepler(sonuc)
+
+
+def test_a_negative_recommendation_blocks_the_addition() -> None:
+    """Denetçi `alma` demişse sayı yetse bile kalıp GİRMEZ, açık soru olur."""
+    sonuc = engine.run_checks(_ekle_girdisi(kanit=OLUMSUZ_ONERI))
+    assert "oneri-olumsuz" in _sebepler(sonuc)
+    assert "acik_soru" in _siniflar(sonuc)
+
+
+def test_a_partially_dangling_reference_list_is_not_applied() -> None:
+    """Atıflardan BİRİ bile çözülmüyorsa alan yapısal kanıt TAŞIMAZ.
+
+    Hakem turu 1 (orta): geçerli satır tek başına yetkilendiriyordu ve hatalı
+    satır numarası provenanstan sessizce kayboluyordu.
+    """
+    sonuc = engine.run_checks(_ekle_girdisi(kanit=f"{IKI_KAYNAKLI}, D2#999"))
+    assert "referans-yok" in _sebepler(sonuc)
+
+
+def test_special_day_field_prefix_binds_to_the_decision() -> None:
+    """Görev B yazımı (`ozel_gun/{dönem}/{başlık}`) `ozel_gun` kararına BAĞLIDIR.
+
+    Bağ ÖNEK eşleşmesidir ama serbest alt dizge DEĞİLDİR: komşu bir ad
+    (`ozel_gunler`) kapsanmaz.
+    """
+    assert engine._alan_bagi_var("ozel_gun", "ozel_gun/ramazan/kanca") is True
+    assert engine._alan_bagi_var("ozel_gun", "ozel_gun") is True
+    assert engine._alan_bagi_var("ozel_gun", "ozel_gunler") is False
+    assert engine._alan_bagi_var("ozel_gun", "cta_kaliplari") is False
+    assert engine._alan_bagi_var("", "ozel_gun") is False
+
+
 def test_a_contradiction_row_becomes_an_open_question() -> None:
     """Denetçi `çelişki` dediyse kalıp OTOMATİK GİRMEZ, operatöre çıkar.
 
@@ -1348,6 +1401,11 @@ _KAYNAK_KIMLIGI_EKSENLERI = {
     "ad": (("a", "c"), {}),
     "icerik": (("a", "b"), {"ozet": {"b": "farkli-icerik"}}),
     "eleme": (("a", "b"), {"elenen": "b"}),
+    # Asagidaki iki eksen `sonuc`u DEGISTIRMEZ: ayrim yalniz BULGU METNINDEDIR.
+    # Ilk yazim yalniz ad/ozet/sonuc hash'liyordu ve bu ikisini AYIRT ETMIYORDU;
+    # oysa iki alan da EK-E'ye yazilir, yani denetcinin GORDUGU sey degisir.
+    "not-metni": (("a", "b"), {"not_mesaji": {"b": "bambaska not"}}),
+    "eleme-metni": (("a", "b"), {"elenen": "b", "eleme_mesaji": "bambaska eleme"}),
 }
 
 
@@ -1361,34 +1419,77 @@ def test_source_set_identity_is_sensitive_on_every_axis(eksen: str) -> None:
     """
     adlar, sapma = _KAYNAK_KIMLIGI_EKSENLERI[eksen]
 
-    def _rapor_kur(ad: str, *, ozetler: dict, elenen: str | None) -> bd.DoctorReport:
+    def _rapor_kur(
+        ad: str,
+        *,
+        ozetler: dict,
+        elenen: str | None,
+        not_mesajlari: dict | None = None,
+        eleme_mesaji: str = "elenmis kaynak",
+    ) -> bd.DoctorReport:
         elendi = ad == elenen
+        notlar = ()
+        not_mesaji = (not_mesajlari or {}).get(ad)
+        if not_mesaji is not None:
+            notlar = (
+                bd.Bulgu(
+                    kontrol="sahte-kontrol",
+                    aile="bolum-ve-alan-tamligi",
+                    seviye=bd.SEVIYE_NOT,
+                    mesaj=not_mesaji,
+                ),
+            )
+        elemeler = (
+            (
+                bd.Bulgu(
+                    kontrol="sahte-kontrol",
+                    aile="bolum-ve-alan-tamligi",
+                    seviye=bd.SEVIYE_ELEME,
+                    mesaj=eleme_mesaji,
+                ),
+            )
+            if elendi
+            else ()
+        )
         return bd.DoctorReport(
-            sonuc=bd.SONUC_ELENDI if elendi else bd.SONUC_GECTI,
-            notlar=(),
-            elemeler=(
-                (
-                    bd.Bulgu(
-                        kontrol="sahte-kontrol",
-                        aile="bolum-ve-alan-tamligi",
-                        seviye=bd.SEVIYE_ELEME,
-                        mesaj="elenmis kaynak",
-                    ),
-                )
-                if elendi
-                else ()
-            ),
+            sonuc=bd.sonuc_belirle(notlar, elemeler),
+            notlar=notlar,
+            elemeler=elemeler,
             kaynak_adi=ad,
             icerik_ozeti=_ozet(ozetler.get(ad, ad)),
         )
 
     # TABAN sapmasızdır; sapma YALNIZ karşılaştırılan tarafa uygulanır.
+    # Metin eksenlerinde taban da aynı YAPIDAdır (not/eleme VAR) — ayrım
+    # yalnız METİNDEDİR, yoksa `sonuc` farkı ölçümü kirletirdi.
+    # Taban, eksenin DEĞİŞTİRDİĞİ şey dışında sapan tarafla AYNI YAPIDA olmalı.
+    # `eleme` ekseninde değişen şey elemenin KENDİSİdir → taban elemesizdir.
+    # `eleme-metni` ekseninde değişen şey yalnız MESAJdır → taban da elenmiştir,
+    # yoksa ayrım `sonuc` farkından gelir ve mesaj ekseni ÖLÇÜLMEMİŞ olur.
+    taban_sapmasi: dict = {
+        "elenen": sapma.get("elenen") if "eleme_mesaji" in sapma else None
+    }
+    if "not_mesaji" in sapma:
+        taban_sapmasi["not_mesajlari"] = {ad: "taban not" for ad in sapma["not_mesaji"]}
     taban = bd.kaynak_seti_sha(
-        [_rapor_kur(ad, ozetler={}, elenen=None) for ad in ("a", "b")]
+        [
+            _rapor_kur(ad, ozetler={}, **taban_sapmasi)
+            for ad in ("a", "b")
+        ]
     )
     sapan = bd.kaynak_seti_sha(
         [
-            _rapor_kur(ad, ozetler=sapma.get("ozet", {}), elenen=sapma.get("elenen"))
+            _rapor_kur(
+                ad,
+                ozetler=sapma.get("ozet", {}),
+                elenen=sapma.get("elenen"),
+                not_mesajlari=sapma.get("not_mesaji"),
+                **(
+                    {"eleme_mesaji": sapma["eleme_mesaji"]}
+                    if "eleme_mesaji" in sapma
+                    else {}
+                ),
+            )
             for ad in adlar
         ]
     )

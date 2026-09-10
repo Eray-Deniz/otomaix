@@ -58,7 +58,11 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 from uuid import UUID
 
 from app.services.sector_pipeline import contracts, identity, runs
-from app.services.sector_pipeline.brief_doctor import DoctorReport, kaynak_seti_sha
+from app.services.sector_pipeline.brief_doctor import (
+    DoctorReport,
+    kaynak_seti_sha,
+    kimlik_bolumlemesi,
+)
 from app.services.sector_pipeline.runs import (
     ARASTIRMA_DEPOSU_KOKU as _DEPO_KOKU,
     _require_run_id as require_run_id,
@@ -86,6 +90,15 @@ Hangi rolün hangi araçla koşturulduğu operatörde kalır ve pakete GİRMEZ.
 """
 
 ONERI_DEGERLERI: tuple[str, ...] = ("al", "uyarla", "alma", "açık-soru")
+
+EKLEMEYE_IZIN_VEREN_ONERILER: tuple[str, ...] = ("al", "uyarla")
+"""`ONERI_DEGERLERI`'nin yeni öğe EKLEMEYE izin veren ALT KÜMESİ.
+
+`alma` ve `açık-soru` dışarıda kalır ve bu sözleşmenin kendi anlamıdır: denetçi
+o satırda kalıbın alınmamasını ya da insana sorulmasını önermiştir. Küme burada
+ADLANDIRILIR ki motor `oneri` değerlerini serbestçe yorumlamasın — tüketici
+`engine._yeni_oge_cogunlugu`'dur.
+"""
 """DENETİM TABLOSU `öneri` sütunu — KAPALI, dört değer.
 
 Kaynak: pinlenmiş `hakem-denetci-gorevi.md`, ADIM 2'nin `ÖNERİ:` satırı.
@@ -521,6 +534,17 @@ class PacketRef:
 
     run_id: str
     yetkili_kaynak_sayisi: int
+    """DENETİME GİREN kaynak sayısı — ELENMEMİŞ kimlik sayısıdır, `len(sources)` DEĞİL.
+
+    Hakem turu 1 (yüksek, ÖLÇÜLDÜ): eski yazım `len(sources)` diyordu ve elemeli
+    her meşru tur reddediliyordu. Sözleşme ADIM 2 elemeden sonra hem URL örneklem
+    satır sayısını hem sınıf oranını KALAN kaynak sayısına uyarlatır; denetçi
+    doğru davranıp `Kaynak sayısı: 2` yazdığında iki tur kapısı da (`_tur_url_kapisi`
+    ve `_tur_sinif_kapisi`) "yetkili sayı 3" diyerek raporu düşürüyordu.
+    Kör etiket KONUMDAN türemeye devam eder (elenen kaynağın konumu KAYMAZ);
+    değişen yalnız SAYIdır.
+    """
+
     kaynak_seti_sha: str
     sector_id: UUID
     kok: Path
@@ -926,7 +950,7 @@ def build_packet(
         # B4(1): YETKİLİ kaynak sayısı — paketi KURAN taraftan gelir. Raporun
         # kendi `Kaynak sayısı: <n>` beyanı bu sayıya karşı ölçülür (tur
         # seviyesi); rapor kendi beyanıyla tamlık kapısını geçemez.
-        yetkili_kaynak_sayisi=len(sources),
+        yetkili_kaynak_sayisi=len(kimlik_bolumlemesi(doctor_reports)[0]),
         kaynak_seti_sha=kaynak_seti_sha(doctor_reports),
         sector_id=sector_id,
         kok=kok,
@@ -986,7 +1010,14 @@ def _tablo_satirlari(govde: str, baslik_hucreleri: tuple[str, ...]) -> list[list
         if not duz.startswith("|"):
             continue
         hucreler = [h.strip() for h in duz.strip("|").split("|")]
-        if all(_AYIRAC_HUCRESI_RE.match(h) for h in hucreler if h):
+        # AYIRAC kapısı (hakem turu 1, orta — ÖLÇÜLDÜ): boş hücreler ELENMEDEN
+        # önce sayılır. Eski yazım `... for h in hucreler if h` diyordu; tamamen
+        # boş bir satırda üreteç BOŞ kalıyor, `all(())` True dönüyor ve satır
+        # AYIRAÇ sanılıp sessizce düşüyordu — sütun sayısı ve boş-hücre kapıları
+        # o satırı HİÇ görmüyordu. Ayıraç artık her hücresi DOLU ve ayıraç
+        # dilbilgisine uyan satırdır; kalan her şey VERİ satırıdır ve kendi
+        # kapılarına girer (fail-closed).
+        if hucreler and all(_AYIRAC_HUCRESI_RE.match(h) for h in hucreler):
             continue
         if tuple(h.lower() for h in hucreler) == baslik_hucreleri:
             continue

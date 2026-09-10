@@ -348,11 +348,15 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "kanit-yok",        # spec girdisi satır 1189: kanıt yoksa karar uygulanmaz
     "mutabakat-yok",    # K-125: iki denetçi uyuşmuyor
     "referans-yok",     # 2026-09-10: sentez sözleşmesi 2.1 — `ekle` en az bir D# referansı ister
+                        # VE atıfların HEPSİ çözülmeli (kısmi çözüm fail-closed)
+    "referans-uyusmuyor",  # 2026-09-10: atıf BAŞKA bir alanın satırını gösteriyor
+    "oneri-olumsuz",    # 2026-09-10: denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",          # 2026-09-10: referansın satırı `çelişki` sınıfında; sayı yetse de girmez
     "cogunluk-yok",     # yeni öğe 2-3 yapısal çoğunluk kuralı
-)   # KAPALI — BEŞ değer; kaynağı Task 12'nin bağlayıcı kontrol kümesidir (plan 1376-1381)
+)   # KAPALI — YEDİ değer; kaynağı Task 12'nin bağlayıcı kontrol kümesidir (plan 1376-1381)
     # ve spec girdisi satır 1189; UYDURULMUŞ değer YOKTUR.
-    # SIRA ÖNCELİKTİR (`engine._reddedilenler`): `referans-yok` ve `celiski`,
+    # SIRA ÖNCELİKTİR (`engine._reddedilenler`): `referans-yok` · `referans-uyusmuyor` ·
+    # `oneri-olumsuz` · `celiski`,
     # `cogunluk-yok`'tan ÖNCE gelir — ikisinde de sayı ya hiç okunamamıştır ya da
     # okunması anlamsızdır; "çoğunluk yok" demek okunmuş bir sayı ima ederdi.
 
@@ -747,6 +751,27 @@ Sıraya duyarlıdır.
 girdi alan kümesi kapalıdır ve orada karşılaştırılacak ikinci bir `run_id` taşıyıcısı yoktur.
 Kanıtlanan tam olarak şudur: *"motora verilen mekanik kapı, denetçi paketini kuran kapının ta
 kendisidir."* AYNI kaynaklarla koşulmuş iki ayrı koşuyu birbirinden AYIRMAZ.
+
+**ATIF ADAYA BAĞLIDIR (2026-09-10, hakem turu 1 — YÜKSEK).**
+
+Motor bir `ekle` kararının kanıtını çözerken denetçi satırının YALNIZ `kaynaklar` ve `sinif`
+sütunlarını okuyordu. Ölçüldü: `kanca_kaliplari` eklemesi `cta_kaliplari` hakkındaki bir satırı
+gösterip yapısal çoğunluk kapısını GEÇEBİLİYORDU — olağan bir sentez sapmasıdır ve denetçinin
+açıkça reddettiği bir kalıbı pakete sokar. Testin kendi fixture'ı da tam bu eşleşmeyi taşıyordu
+ve hatayı MASKELİYORDU.
+
+İki ayak bağlandı:
+
+1. **Alan bağı** — denetçi satırının `alan`'ı kararın `alan`'ıyla eşleşmeli. Bağ TAM EŞİTLİK ya
+   da `<alan>/` ÖNEKİDİR (Görev B satırı `ozel_gun/{dönem}/{başlık}` yazar, karar satırı yalnız
+   `ozel_gun`); serbest alt dizge DEĞİL — `ozel_gun` öneki `ozel_gunler`'i KAPSAMAZ. Düşerse
+   `referans-uyusmuyor`.
+2. **Öneri bağı** — satırın `oneri`'si `EKLEMEYE_IZIN_VEREN_ONERILER` içinde olmalı. `alma` ve
+   `açık-soru` kalıbı pakete SOKMAZ; karar AÇIK SORU olarak operatöre çıkar (`oneri-olumsuz`).
+
+Ayrıca **kısmen çözülemeyen atıf listesi** kapatıldı (orta): `D1#1, D2#999` gibi bir alanda
+geçerli satır TEK BAŞINA yetkilendiriyor, hatalı satır numarası provenanstan sessizce
+kayboluyordu. Atıflardan biri bile çözülmüyorsa alan yapısal kanıt TAŞIMAZ.
 
 **M1 — beş bölüm anahtarı ŞİMDİ bağlanmaz; bağımlılık bağlanır (fix turu 1, KISMEN RED).**
 Fix turu 1'de bağımsız hakem *"beş bölüm anahtarını şimdi sabitle"* dedi. **REDDEDİLDİ.**

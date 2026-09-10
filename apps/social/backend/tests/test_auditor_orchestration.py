@@ -1490,6 +1490,59 @@ async def test_round_accepts_a_report_matching_the_authoritative_count(
     assert tur.gecerli is True, tur.sebep
 
 
+async def test_round_accepts_an_eliminated_source_round(kosu, tmp_path):
+    """ÜÇ kaynakla kurulan ama BİRİ ELENEN paket, `2-2` raporunu KABUL EDER.
+
+    Hakem turu 1 (yüksek, ÖLÇÜLDÜ): `yetkili_kaynak_sayisi` `len(sources)`
+    diyordu ve elemeli her meşru tur reddediliyordu — denetçi sözleşmeye uyup
+    oranı kalan kaynak sayısına uyarladığında (`2-2` + altı URL satırı) iki tur
+    kapısı da "yetkili sayı 3" diye raporu düşürüyordu. Yetkili sayı artık
+    ELENMEMİŞ kimlik sayısıdır; kör etiket KONUMDAN türemeye devam eder.
+    """
+    db, run_id, _ = kosu
+    kaynaklar = list(KAYNAK_METINLERI[:3])
+    raporlar = [
+        (
+            bd.DoctorReport(
+                sonuc=bd.SONUC_ELENDI,
+                notlar=(),
+                elemeler=(
+                    bd.Bulgu(
+                        kontrol="sahte-kontrol",
+                        aile="bolum-ve-alan-tamligi",
+                        seviye=bd.SEVIYE_ELEME,
+                        mesaj="elenmis kaynak",
+                    ),
+                ),
+                kaynak_adi=ad,
+                icerik_ozeti=identity.canonical_sha(metin),
+            )
+            if sira == 2
+            else _doctor(ad, metin)
+        )
+        for sira, (ad, metin) in enumerate(zip(KAYNAK_ADLARI[:3], kaynaklar))
+    ]
+    paket = auditors.build_packet(
+        brief="Kuyumculuk brief metni.",
+        sources=kaynaklar,
+        doctor_reports=raporlar,
+        active_package=None,
+        unit_snapshot=_snapshot(UNIT_A, UNIT_B),
+        run_id=run_id,
+        sector_id=uuid.uuid4(),
+        dest=tmp_path / "elemeli",
+    )
+    assert paket.yetkili_kaynak_sayisi == 2, "elenen kaynak yetkili sayıya GİRMEZ"
+
+    tur = await _tur_kos(
+        db,
+        paket,
+        runner=SahteRunner(_iki_gecerli_rapor(kaynak_sayisi=2)),
+        run_id=run_id,
+    )
+    assert tur.gecerli is True, tur.sebep
+
+
 async def test_round_rejects_an_unadapted_class_ratio(kosu, tmp_path):
     """İki kaynakla koşan tur `2-3` yazan satırı GEÇİRMEZ.
 

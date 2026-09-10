@@ -990,25 +990,52 @@ def kaynak_seti_sha(raporlar: Sequence[DoctorReport]) -> str:
     başka bir kaynağı gösterir ve motorun saydığı çoğunluk sessizce başka bir
     koşunun kaynaklarına dayanır. Bu yüzden hash SIRAYA duyarlıdır.
 
-    Her rapordan ÜÇ alan girer ve üçü de bir sebeple girer: `icerik_ozeti`
-    kaynağın METNİNİ bağlar, `kaynak_adi` kimliğini, `sonuc` ise elenme
-    durumunu — motorun kabul ettiği etiket kümesi elemeye bağlıdır, dolayısıyla
-    aynı metinlerin farklı eleme sonuçlarıyla geldiği iki koşu AYNI kimliği
-    taşıyamaz.
+    **Raporun TAMAMI girer — üç alanlık özet YETMEZ (hakem turu 1, orta).**
+    İlk yazım yalnız `kaynak_adi` · `icerik_ozeti` · `sonuc` alıyordu ve
+    beyan ettiği garanti mühürden GENİŞTİ: `notlar` ve `elemeler` denetçi
+    paketinin EK-E bölümüne METİN olarak yazılır (`auditors._ek_e_metni`) —
+    yani denetçinin GÖRDÜĞÜ şeyi değiştirirler.
+
+    **`kapsam_sinirlari` BİLEREK DIŞARIDA.** O alan da EK-E'ye yazılır ama
+    `field(init=False)`'tur ve `_kapsam_beyani()`'nden, yani modül düzeyindeki
+    `CHECKS` kümesinden türer: TEK bir kod sürümü içinde her rapor için AYNIDIR.
+    Karşılaştırmanın iki tarafı da aynı süreçte aynı değeri üretir, dolayısıyla
+    hiçbir ayrım üretemez. Ölçülemeyen bir bileşeni mühre koymak, mührü
+    olduğundan güçlü gösterirdi.
+    Ölçüldü: aynı `sonuc`'u taşıyan iki rapor (`notlu-gecti`) yalnız not
+    METNİYLE ayrılıyor ve eski kimlik ikisini AYIRT ETMİYORDU; mühür
+    "aynı mekanik kapı" diyorken denetçiye başka bir EK-E gitmiş olabilirdi.
+    `sonuc` alanı türetilmiştir ve kabalıktır (`gecti` · `notlu-gecti` ·
+    `elendi`); ayrımı o taşıyamaz.
+
+    Sıraya duyarlıdır: kör kaynak etiketi (`KAYNAK-1/2/3`) KONUMDAN türer, sıra
+    kayarsa aynı etiket başka bir kaynağı gösterir.
 
     **Kapsam sınırı (dürüst etiket).** Bu kimlik koşunun `run_id`'sini ya da
     sektörünü TAŞIMAZ ve taşıyamaz: motorun girdi alan kümesi kapalıdır (R5) ve
     orada karşılaştırılacak ikinci bir `run_id` taşıyıcısı YOKTUR. Kanıtlanan
     tam olarak şudur: *"motora verilen mekanik kapı, denetçi paketini kuran
-    kapının ta kendisidir."* Aynı kaynaklarla iki kez koşulmuş İKİ ayrı koşuyu
+    kapının ta kendisidir."* Aynı raporlarla iki kez koşulmuş İKİ ayrı koşuyu
     birbirinden ayırmaz.
     """
+
+    def _bulgu(bulgu: Bulgu) -> dict:
+        return {
+            "kontrol": bulgu.kontrol,
+            "aile": bulgu.aile,
+            "seviye": bulgu.seviye,
+            "mesaj": bulgu.mesaj,
+            "kategori": bulgu.kategori,
+        }
+
     return identity.canonical_sha(
         [
             {
                 "kaynak_adi": rapor.kaynak_adi,
                 "icerik_ozeti": rapor.icerik_ozeti,
                 "sonuc": rapor.sonuc,
+                "notlar": [_bulgu(b) for b in rapor.notlar],
+                "elemeler": [_bulgu(b) for b in rapor.elemeler],
             }
             for rapor in raporlar
         ]

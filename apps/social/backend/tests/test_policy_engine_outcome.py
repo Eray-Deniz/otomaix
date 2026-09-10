@@ -45,6 +45,7 @@ from app.services.sector_pipeline.engine_contract import (
     UYGULANMAMA_SEBEPLERI,
 )
 from app.services.sector_pipeline.policy_config import PolicyConfig, config_sha
+from app.services.sector_pipeline import auditors
 from tests.test_policy_engine_checks import (
     AKTIF_BIRIMLER,
     AKTIF_ICERIK,
@@ -63,6 +64,7 @@ from tests.test_policy_engine_checks import (
     COZULEMEYEN_KANIT,
     TAKVIM_ANAHTARI,
     _cift,
+    _denetim_satiri,
     _girdi,
     _gunluk,
     _guncelle_girdisi,
@@ -232,15 +234,33 @@ def _basa_ekleme_girdisi(*, kanit: str):
 
 
 def _ilk_kosu_girdisi(*, kanit: str):
-    """İlk paket koşusu — her birim `ekle`; kanıt gücü çağırana bırakılır."""
+    """İlk paket koşusu — her birim `ekle`; kanıt gücü çağırana bırakılır.
+
+    Denetim tablosu ALAN BAŞINA bir satır taşır ve her karar KENDİ alanının
+    satırına atıf yapar. Tek satıra toplu atıf, motorun alan bağını (hakem turu
+    1, yüksek) ölçülmeden geçirir: fixture'ın kendi tutarsızlığı üretim
+    hatasıymış gibi görünürdü.
+    """
+    yollar = identity.enumerate_content_units(AKTIF_ICERIK)
+    alanlar = sorted({identity.enumerate_content_units(AKTIF_ICERIK)[yol]['alan'] for yol in yollar})
+    tablo = tuple(
+        _denetim_satiri(
+            sira + 1,
+            kaynaklar={1, 2} if kanit == IKI_KAYNAKLI else {1},
+            sinif="2-2" if kanit == IKI_KAYNAKLI else auditors.SINIF_TEKIL,
+            alan=alan,
+        )
+        for sira, alan in enumerate(alanlar)
+    )
+    atif = {alan: f"D1#{sira + 1}" for sira, alan in enumerate(alanlar)}
     gunluk = _gunluk(
         AKTIF_ICERIK,
         degis={
-            yol: {"karar": "ekle", "kanit": kanit}
-            for yol in identity.enumerate_content_units(AKTIF_ICERIK)
+            yol: {"karar": "ekle", "kanit": atif[identity.enumerate_content_units(AKTIF_ICERIK)[yol]['alan']]}
+            for yol in yollar
         },
     )
-    return _girdi(gunluk=gunluk, aktif=False)
+    return _girdi(gunluk=gunluk, aktif=False, denetim=tablo)
 
 
 def _kancalar(sonuc: EngineResult) -> list[str]:
@@ -271,6 +291,8 @@ def test_uygulanmama_sebepleri_are_closed() -> None:
         "kanit-yok",
         "mutabakat-yok",
         "referans-yok",
+        "referans-uyusmuyor",
+        "oneri-olumsuz",
         "celiski",
         "cogunluk-yok",
     }

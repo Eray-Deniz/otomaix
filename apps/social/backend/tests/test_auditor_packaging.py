@@ -1539,6 +1539,40 @@ def test_audit_table_rejects_row_without_eight_columns() -> None:
     assert "sekiz" in hatalar
 
 
+def test_audit_table_rejects_a_wholly_empty_row() -> None:
+    """Tamamen boş satır AYIRAÇ değildir — veri satırı olarak kapıya girer.
+
+    Hakem turu 1 (orta, ÖLÇÜLDÜ): ayıraç yüklemi boş hücreleri saymadan ÖNCE
+    eliyordu (`for h in hucreler if h`); tamamen boş bir satırda üreteç boş
+    kalıyor, `all(())` True dönüyor ve satır sessizce düşüyordu — sütun sayısı
+    ve boş-hücre kapıları o satırı HİÇ görmüyordu. Boş-hücre matrisi bunu
+    kaçırdı: matris her seferinde TEK hücreyi boşaltıyor.
+    """
+    sonuc = _dogrula(
+        _rapor_metni(
+            denetim=_denetim_bolumu(
+                [
+                    "| 1 | cta_kaliplari | iddia | 1,2 | 2-3 | — | al | Tek cümle. |",
+                    "|  |  |  |  |  |  |  |  |",
+                ]
+            )
+        )
+    )
+    assert sonuc.rapor is None, "boş satır sessizce DÜŞMEMELİ"
+    # Satır artık VERİ satırıdır ve ilk kapıya takılır: `no` hücresi boştur.
+    # Ölçülen şey "hangi mesaj" değil, satırın kapılara GİRMESİ ve raporu
+    # düşürmesidir — eskiden hiçbir kapıya girmiyordu.
+    hatalar = " · ".join(sonuc.errors)
+    assert "satırı 2" in hatalar and "`no`" in hatalar, hatalar
+
+
+def test_separator_row_is_still_recognised() -> None:
+    """BOŞ-KÜME kontrol kolu: gerçek ayıraç hâlâ ayıraçtır (kapı fazla kapamıyor)."""
+    sonuc = _dogrula(_rapor_metni())
+    assert sonuc.rapor is not None, sonuc.errors
+    assert len(sonuc.rapor.denetim_tablosu) == 2
+
+
 def test_audit_table_rejects_a_different_header_row() -> None:
     """Başlık farklı yazılmışsa VERİ satırı sanılır ve kapı düşer."""
     sonuc = _dogrula(

@@ -56,6 +56,7 @@ from app.services.sector_content_schema import (
 )
 from app.services.sector_pipeline import identity
 from app.services.sector_pipeline.auditors import (
+    EKLEMEYE_IZIN_VEREN_ONERILER,
     KAYNAK_ETIKETI,
     SINIF_CELISKI,
     AuditRow,
@@ -759,6 +760,22 @@ def _denetci_satirlari(inputs: EngineInputs) -> dict[str, AuditRow]:
     return evren
 
 
+def _alan_bagi_var(karar_alani: str, denetci_alani: str) -> bool:
+    """Denetçi satırı BU kararın alanını mı anlatıyor?
+
+    İki yazım vardır ve ikisi de sözleşmenin kendi yazımıdır: Görev A satırında
+    denetçi alanı doğrudan alan adıdır (`cta_kaliplari`); Görev B satırında
+    `ozel_gun/{dönem}/{başlık}` biçimindedir, karar satırı ise yalnız `ozel_gun`
+    taşır. Bu yüzden bağ TAM EŞİTLİK ya da `<alan>/` ÖNEKİDİR — serbest alt dizge
+    DEĞİL: `ozel_gun` öneki `ozel_gunler` gibi bir adı yanlışlıkla kapsamasın.
+    """
+    if not karar_alani or not denetci_alani:
+        return False
+    return denetci_alani == karar_alani or denetci_alani.startswith(
+        f"{karar_alani}/"
+    )
+
+
 def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
     """Yeni öğenin yapısal çoğunluğu — sayı DENETÇİNİN SÜTUNUNDAN okunur.
 
@@ -800,22 +817,77 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                 )
             )
             continue
-        cozulen = [
-            satir_evreni[parca] for parca in bilesenler if parca in satir_evreni
-        ]
-        if not cozulen:
+        atiflar = [parca for parca in bilesenler if _SATIR_ATIF_RE.match(parca)]
+        # F3 (hakem turu 1, orta — ÖLÇÜLDÜ): ÇÖZÜLEMEYEN atıf SESSİZCE ELENMEZ.
+        # Eski yazım `if parca in satir_evreni` ile süzüyordu; `D1#1, D2#999`
+        # gibi bir satır-numarası yazım hatasında geçerli satır kararı TEK
+        # BAŞINA yetkilendiriyor ve hatalı atıf provenanstan kayboluyordu.
+        # Biri bile çözülmüyorsa alan yapısal kanıt TAŞIMAZ (fail-closed).
+        cozulemeyen = [parca for parca in atiflar if parca not in satir_evreni]
+        if not atiflar or cozulemeyen:
             kayitlar.append(
                 UygulanmayanKarar(
                     unit_id=satir["unit_id"], karar="ekle", sebep="referans-yok"
                 )
             )
             continue
+        cozulen = [satir_evreni[parca] for parca in atiflar]
+        # F2 (hakem turu 1, YÜKSEK — ÖLÇÜLDÜ): atıf ADAYA BAĞLI olmak zorunda.
+        # Eski yazım yalnız `kaynaklar` ve `sinif` okuyordu; `kanca_kaliplari`
+        # eklemesi `cta_kaliplari` hakkındaki bir satırı gösterip çoğunluk
+        # kapısını geçebiliyordu. Bu sentez sapmasının OLAĞAN biçimidir.
+        # Görev B satırlarında denetçi alanı `ozel_gun/{dönem}/{başlık}` yazar,
+        # karar satırı ise yalnız `ozel_gun` — bu yüzden bağ ÖNEK eşleşmesidir.
+        karar_alani = _metin(satir.get("alan"))
+        uyusmayan = sorted(
+            {
+                parca
+                for parca in atiflar
+                if not _alan_bagi_var(karar_alani, satir_evreni[parca].alan)
+            }
+        )
+        if uyusmayan:
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"],
+                    karar="ekle",
+                    sebep="referans-uyusmuyor",
+                )
+            )
+            continue
+        # F2'nin ikinci ayağı: denetçi o satırda `alma`/`açık-soru` önermişse
+        # kalıp GİRMEZ. Sayı yetse bile: denetçinin ÖNERİ sütunu tam olarak bu
+        # soruyu cevaplıyor ve motor onu görmezden gelemez.
+        olumsuz = sorted(
+            {
+                parca
+                for parca in atiflar
+                if satir_evreni[parca].oneri not in EKLEMEYE_IZIN_VEREN_ONERILER
+            }
+        )
+        if olumsuz:
+            bulgular.append(
+                BulguIzi(
+                    sinif="acik_soru",
+                    unit_id=satir["unit_id"],
+                    detay=(
+                        "denetçi bu satırda eklemeye izin vermeyen bir öneri "
+                        f"yazdı ({olumsuz}) — `alma`/`açık-soru` kalıbı pakete "
+                        "sokmaz, karar operatöre bırakılır"
+                    ),
+                )
+            )
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"], karar="ekle", sebep="oneri-olumsuz"
+                )
+            )
+            continue
         celiskili = sorted(
             {
                 parca
-                for parca in bilesenler
-                if parca in satir_evreni
-                and satir_evreni[parca].sinif == SINIF_CELISKI
+                for parca in atiflar
+                if satir_evreni[parca].sinif == SINIF_CELISKI
             }
         )
         if celiskili:
@@ -1158,6 +1230,8 @@ KURAL_KIMLIKLERI: Mapping[str, str] = {
     "kanit-yok": "kanit-zorunlulugu",
     "mutabakat-yok": "K-125",
     "referans-yok": "denetci-referans-zorunlulugu",
+    "referans-uyusmuyor": "denetci-referans-alan-bagi",
+    "oneri-olumsuz": "denetci-onerisi-olumsuz",
     "celiski": "denetci-celiski-sinifi",
     "cogunluk-yok": "yeni-oge-cogunlugu",
 }
