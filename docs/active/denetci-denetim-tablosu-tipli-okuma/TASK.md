@@ -68,10 +68,10 @@ bulguları işlendi.
 
 **Commit'ler:** `31a4656` (dış sözleşme deposu, iki dosya + damga) · `7f27646` (tipli okuma +
 koşu bağı) · `2c429b9` (hakem turu 1 — beş bulgu) · `4408dbe` (kapanış turu — kaynak tabanı +
-tipli bayrak).
+tipli bayrak) · `9a603be` (Eray itirazı — bayrak katlaması + bayat belge).
 
-**Ölçüm:** tam takım 3929 passed / 298,65 s / exit 0 (taban 3876 → +53 test). Yirmi beş yeni
-kapının YİRMİ BEŞİ ayrı ayrı mutasyonla kanıtlandı.
+**Ölçüm:** tam takım 3931 passed / 297,25 s / exit 0 (taban 3876 → +55 test). Yirmi altı yeni
+kapının YİRMİ ALTISI ayrı ayrı mutasyonla kanıtlandı.
 
 **Hakem turları:** Tur 1 → 5 bulgu (2 yüksek, 3 orta), beşi de kontrolörün KENDİ probuyla
 doğrulandı ve beşi de kapatıldı. Kapanış turu → F3/F4/F5 CLOSED, F1/F2 INCOMPLETE + 3 yeni

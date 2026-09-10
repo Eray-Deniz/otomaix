@@ -36,10 +36,10 @@ bağı kuruldu; iki bağımsız hakem turu koştu ve sekiz bulgunun yedisi kapat
 
 **Bu oturumda koşulan komutlar ve TAZE çıktıları (hepsi kontrolörün kendi koşumları):**
 
-- `python -m pytest tests/ -q` → **3929 passed in 298.65s**, exit 0 (SON, `4408dbe`).
-  Ara koşumlar: 3909 (`7f27646` öncesi) · 3916 (koşu bağı sonrası) · 3925 (`2c429b9`).
-  Taban 3876 → **+53 test**.
-- **Mutasyon ölçümü: YİRMİ BEŞ yeni kapının YİRMİ BEŞİ** ayrı ayrı susturuldu, her biri hedef
+- `python -m pytest tests/ -q` → **3931 passed in 297.25s**, exit 0 (SON, `9a603be`).
+  Ara koşumlar: 3909 · 3916 (koşu bağı) · 3925 (`2c429b9`) · 3929 (`4408dbe`).
+  Taban 3876 → **+55 test**.
+- **Mutasyon ölçümü: YİRMİ ALTI yeni kapının YİRMİ ALTISI** ayrı ayrı susturuldu, her biri hedef
   testini kırdı. Betik: `mutasyon.py` (oturum scratchpad'i; kalıcı değil).
 - **Prob düzeltmesi (ölçüldü):** ilk mutasyon koşumu DÖRT kapıyı sahte YEŞİL gösterdi. Sebep
   Python bayt kodu önbelleği: her mutasyon aynı dosya BOYUTUNU üretiyor ve aynı saniye içinde
@@ -53,6 +53,9 @@ bağı kuruldu; iki bağımsız hakem turu koştu ve sekiz bulgunun yedisi kapat
 
 **Denenmemiş / doğrulanmamış — dürüst liste:**
 
+- **SON commit (`9a603be`) bağımsız hakem GÖRMEDİ.** Kapanış turu `4408dbe` tabanındaydı;
+  sonraki iki düzeltme (bayrak katlaması + bayat belge) ondan sonra indi. Aralığı Adım 11'in
+  koşulsuz final incelemesi kapsayacak.
 - **Uçtan uca CLI koşumu YAPILMADI.** Motor gerçek bir koşuda hiç çağrılmadı; tüm ölçümler
   fixture ile. İlk gerçek ölçüm Task 19.
 - **Kapanış turunun YÜKSEK bulgusunun kalan ayağı KAPANMADI** (atıf ADAYA bağlı değil, ALAN
@@ -100,7 +103,7 @@ bağı kuruldu; iki bağımsız hakem turu koştu ve sekiz bulgunun yedisi kapat
    orchestration.py` de dışlanıyor — birinci hakem turu o dosyayı GÖRMEDİ, kapanış turu HEAD
    git nesnesinden okuyabildiğini beyan etti. Hakeme gidecekse dışlanma coverage'da BEYAN EDİLİR.
 3. Test komutu sanal ortam aktifleştirilerek koşar (`source .venv/bin/activate`).
-4. **Taban 3929** (2026-09-10'dan itibaren).
+4. **Taban 3931** (2026-09-10'dan itibaren).
 5. `Exec-Kind` **sınıflandırıcıya** göre seçilir. `Exec-*` bloğu mesajın SON PARAGRAFI.
 6. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY.
 7. `Exec-Task` id'sini yazmadan ÖNCE defterde ARA — **pencere içinde**.
