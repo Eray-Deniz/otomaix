@@ -1271,23 +1271,43 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 ## Task 3'ün doğurduğu evler (2026-08-30 kapanış sweep'i — hepsi TARİHLİ)
 
-- **Taslağın yaratıcısı kayboluyor — EŞLİ yükümlülük, Task 6 + Task 15.** Karar günlüğü
-  verildiğinde `insert_draft` artık Plan 1'in `draft_created` satırını yazmıyor ve aktör
-  hiçbir yerde kalmıyor. Ölçüldü: olay türü kümesi hem Python'da hem veritabanı kısıtında
-  kapalı (dokuz değer), `sector_packages` tablosunda aktör kolonu yok, koşu kaydı tablosunda
-  da operatör alanı yok. **Task 6** olay TÜRÜNÜ açar (zaten migration yazan ve olay
-  üreticisine dokunan tek görev), **Task 15** çağrıyı ekler (taslak yazma yüzeyinin sahibi).
-  İkisi ayrı ayrı inemez — yarım iniş görünür olsun diye eşli yazıldı.
-  Dürüst etiket: *çözülmedi; evi ve iki adımı var, tarihi o görevlerin koşmasına bağlı.*
-  Kodun kendi belgesinde de "ÇÖZÜLMEDİ + PARK EDİLDİ" etiketiyle duruyor.
-  **BAĞIMSIZ DOĞRULAMA (checkpoint 2, 2026-08-31):** hakem bunu kendiliğinden **high** olarak
-  buldu ve "kanıt sağlayıcılığı için fail-open" dedi. Kontrolör tahkimi: **kusur onaylandı,
-  "şimdi düzelt" REDDEDİLDİ** — ölçüldü ki `insert_draft`'ın üretimde tek çağıranı YOK
-  (depo geneli tarandı: yalnız testler çağırıyor), yani yol bugün erişilebilir değil ve
-  çağrıyı ekleyecek görev zaten aktörü taşımakla yükümlü. Hakemin önerdiği "aktör taşıyıcısı
-  inene kadar dolu karar günlüğü yazımını reddet" seçeneği fail-closed olurdu ama Task 15'in
-  tasarlanmış yolunu kırar ve sonra geri alınırdı. **Bu bir ERTELEME DEĞİL, evi olan bir
-  borçtur** — ve bağımsız doğrulama kaydı güçlendirir, "halledildi"ye çevirmez.
+- **Taslağın yaratıcısı kayboluyor — KAPSAM DIŞI BIRAKILDI (Eray kararı, 2026-09-10).**
+  Önceki kaydı burada "EŞLİ yükümlülük, Task 6 + Task 15" diyordu ve o kayıt
+  **yanlıştı** — ölçüldü (2026-09-10): bu gereksinim spec girdisinde (0 geçiş),
+  spec'te (0 geçiş) ve arayüz ekinde (0 geçiş) YOK. Plandaki tek geçiş MEVCUT
+  davranışın tarifi; yapılacak işin değil. Spec'in tablo sözleşmesi alanları tek tek
+  sayıyor ve aktör alanı listede yok. Planın "Plan 1 arayüzünde yapılan değişiklikler"
+  listesinde de yok. Plan 037 numaralı bir migration ÖNGÖRMÜYOR. Kalem yürütme
+  sırasında bir hakem bulgusundan doğdu ve **plan hiç güncellenmedi** — Task 6 kendi
+  ayağını bu yüzden indirmedi, çünkü planında öyle bir madde yoktu.
+
+  **Kapatma DENENDİ ve ölçülerek geri alındı (Task 15, 2026-09-10).** Olay türünü açan
+  bir migration yazıldı; yayılma yarıçapı önceki migration'ların sürüm-farkında kabul
+  tablolarına, geri alma script'lerine ve çapraz migration fail-closed testlerine ulaştı.
+  Her yama kapattığı kadar yeni kırık açtı (düşen test: **25 → 21 → 22**). Son harness
+  düzeltmesi, amacı *"üstteki migration uygulanmışken reddetmeli"* olan bir testin
+  premisini yok etti — o noktada şeyin kendisi değil ÖLÇÜM ARACI yamalanıyordu.
+  Yarım inen şema bırakmamak için değişiklik **BÜTÜNÜYLE** geri alındı: iki migration
+  dosyası silindi, dokunulan her dosya eski hâline döndü, takım yeşil.
+
+  **DÜRÜST ETİKET: çözülmedi. "Halledildi" DEĞİL, "kapsam dışı bırakıldı".**
+  **YENİDEN AÇILMA KOŞULU:** ikinci bir operatör eklendiğinde, ya da paket üretimine
+  müşteri/dış taraf eriştiğinde. O gün kendi tasarım turunu ister; kapanışa
+  sıkıştırılmaz.
+
+  **Task 20 kapanış belgesine bu etiketle YAZILIR** (plan Task 20 Step 6: "her kalan iş
+  ya tarihli bir eve gider ya dürüst etiketle DÜŞÜRÜLÜR" — bu, düşürme koludur).
+
+  **Kapsamın dürüst sınırı — bugün atıflı olanlar:** taslağı ÜRETEN koşu (paket
+  satırındaki koşu bağı), kontrol listelerini İMZALAYAN operatör (tasdik yükleri),
+  ONAY/RET veren yönetici ve GERİ ALAN operatör (olay kayıtları). Atıfsız kalan tek
+  halka, taslak yazımını/düzeltmesini TETİKLEYEN kişidir.
+
+  **Plan 2'nin tamamlanmasını ENGELLEMEZ — ölçüldü:** kabul ölçütleri (spec §14.1 +
+  §14.2) bu kalemi içermiyor; yirmi maddelik işletime hazırlık listesinin hiçbir maddesi
+  taslağın yazarını sormuyor; Task 16-20'de "aktör" yalnız geri alma komutunun argümanı
+  ve hazırlık onayının imzası olarak geçiyor — ikisi de kayıtlı.
+
 - **`GIT_DIR`/`GIT_WORK_TREE` ezilmesi ekseni — Task 18 Step 8b, İKİ örnek birden.** Üretim
   tarafı (`contracts.py::_head_commit`) ve test tarafı
   (`test_external_repo_gitignores_run_folder`). Tek süpürme ikisini kapatır; ayrı ayrı

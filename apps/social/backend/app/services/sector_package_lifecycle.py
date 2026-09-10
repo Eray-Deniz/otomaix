@@ -1067,23 +1067,39 @@ async def insert_draft(
     kapısından geçmez (`_check_cta_items` anahtar kümesini eşitlikle ölçer).
     İkisi AYNI işlemde yazıldığı için eşleme bayatlayamaz.
 
-    **ÇÖZÜLMEDİ — taslağın yaratıcısı bu yolda hâlâ KAYBOLUYOR; evi VAR.**
-    Ölçüldü (2026-09-10): karar günlüğü verildiğinde Plan 1'in `draft_created`
-    satırı yazılmaz, `sector_packages` tablosunda aktör kolonu YOKTUR, koşu
-    kaydı tablosunda operatör alanı YOKTUR ve olay türü kümesi hem Python'da
-    hem DB kısıtında KAPALIDIR. Borç TASK.md'de EŞLİ yükümlülük olarak kayıtlı
-    (Task 6 olay TÜRÜNÜ açar, Task 15 çağrıyı ekler) ve **Task 6 kendi ayağını
-    İNDİRMEDİ.**
+    **KAPSAM DIŞI BIRAKILDI — Eray kararı, 2026-09-10. Dürüst etiket:**
+    taslağı KİMİN yazdırdığı bu yolda kayıtlı DEĞİL ve bu **çözülmüş sayılmaz.**
 
-    **Kapatma DENENDİ ve ÖLÇÜLEREK geri alındı (2026-09-10).** Olay türünü açan
-    bir migration yazıldı; ölçülen yayılma yarıçapı beklenenden büyük çıktı —
-    033'ün sürüm-farkında kabul tablosu, 036'nın geri alma script'i, çapraz
-    migration fail-closed testleri ve harness'ın geri alma sırası. Her yama
-    kapattığı kadar yeni kırık açtı (ölçüm: 25 → 21 → 22 düşen test). Yarım
-    inen bir şema değişikliği bırakmamak için değişiklik BÜTÜNÜYLE geri alındı;
-    ayrıntı ve karar kaydı aktif katmandadır.
+    Ölçülen kusur: karar günlüğü verildiğinde Plan 1'in `draft_created` satırı
+    yazılmaz, `sector_packages` tablosunda aktör kolonu YOKTUR, koşu kaydı
+    tablosunda operatör alanı YOKTUR, olay türü kümesi hem Python'da hem DB
+    kısıtında KAPALIDIR.
 
-    KOLON DEĞİL OLAY tercihinin gerekçesi ölçülmüştür ve KORUNUR: K-106 gereği
+    **Neden kapsam dışı — ölçüldü (2026-09-10):** bu gereksinim spec girdisinde
+    (0 geçiş), spec'te (0 geçiş) ve arayüz ekinde (0 geçiş) YOKTUR; plandaki tek
+    geçiş MEVCUT davranışın tarifidir, yapılacak işin değil. Spec'in tablo
+    sözleşmesi alanları tek tek sayar ve aktör alanı listede yoktur. Planın
+    "Plan 1 arayüzünde yapılan değişiklikler" listesinde de yoktur. Plan 037
+    numaralı bir migration ÖNGÖRMEZ. Kalem yürütme sırasında bir hakem
+    bulgusundan doğmuş ve aktif katmana "eşli yükümlülük" diye yazılmıştı; plan
+    hiç güncellenmedi, bu yüzden Task 6 kendi ayağını indirmedi.
+
+    **Kapatma DENENDİ ve ölçülerek geri alındı:** olay türünü açan bir migration
+    yazıldı; yayılma yarıçapı önceki migration'ların sürüm-farkında kabul
+    tablolarına, geri alma script'lerine ve çapraz migration fail-closed
+    testlerine ulaştı. Her yama kapattığı kadar yeni kırık açtı (düşen test:
+    25 → 21 → 22). Yarım inen şema bırakmamak için değişiklik BÜTÜNÜYLE geri
+    alındı.
+
+    **YENİDEN AÇILMA KOŞULU:** ikinci bir operatör eklendiğinde, ya da paket
+    üretimine müşteri/dış taraf eriştiğinde. O gün bu kalem kendi tasarım turunu
+    ister — kapanışa sıkıştırılmaz.
+
+    **Bugün atıflı olanlar (zincirin son halkası hariç hepsi):** taslağı ÜRETEN
+    koşu (`run_id` kolonu), kontrol listelerini İMZALAYAN operatör (tasdik
+    yükleri), ONAY/RET veren yönetici ve GERİ ALAN operatör (olay kayıtları).
+
+    KOLON DEĞİL OLAY tercihinin gerekçesi — o gün için — KORUNUR: K-106 gereği
     düzeltme turu yeni sürüm YAKMAZ, aynı satırı yerinde günceller. Bir
     `created_by`/`updated_by` çifti yalnız SON dokunuşu tutar; arka arkaya gelen
     düzeltmelerin yazarları birbirini ezer.
