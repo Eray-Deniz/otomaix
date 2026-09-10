@@ -91,6 +91,7 @@ async def write_draft_from_run(db, *, run_id: str, actor: str) -> UUID:
     ikinci taraf kilidi aldığında bağı GÖRÜR ve aynı taslağı döndürür.
     """
     async with db.transaction():
+        await runs.anchor_run(db, run_id=run_id)
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
         if run.kosu_turu == "duzeltme":
             raise runs.CorrectionRunRefused(
@@ -140,21 +141,14 @@ async def update_draft_from_run(db, *, run_id: str, actor: str) -> None:
     aynı senaryoyu İKİNCİ ve bağımsız bir kapıyla kapatır; biri diğerinin
     yerine geçmez.
     """
-    # Aktör KANONİK KAPIDAN geçer (fix turu 1, hakem bulgusu). Önceki yazım
-    # parametreyi alıyor ama HİÇ kullanmıyordu: boş ya da yalnız-boşluk bir
-    # aktör sessizce kabul ediliyordu, yani imza tutulmayan bir söz veriyordu.
-    #
-    # DÜRÜST SINIR — bu doğrulama KALICI ATIF DEĞİLDİR. Aktörün nereye
-    # yazılacağı bugün YOK: `sector_packages` tablosunda aktör kolonu, olay türü
-    # kümesinde bir taslak olayı bulunmuyor. Borç TASK.md'de EŞLİ yükümlülük
-    # olarak kayıtlı (Task 6 olay türünü açar, Task 15 çağrıyı ekler) ve Task
-    # 6'nın ayağı İNMEDİ — ölçüldü: depoda `draft_created`/`draft_updated`
-    # diye bir olay türü yok. Burada kapatılan şey yalnız "geçersiz aktör
-    # sessizce kabul ediliyor" ayağıdır.
-    owner = lifecycle._require_actor(actor)
-    del owner  # kalıcı taşıyıcı henüz YOK; değer bilerek kullanılmıyor
+    # Aktör KANONİK KAPIDAN geçer. DÜRÜST SINIR: bu doğrulama KALICI ATIF
+    # DEĞİLDİR — aktörün yazılacağı bir yer bugün YOK (ölçüldü; ayrıntı
+    # `lifecycle.insert_draft` gövdesinde). Kapatılan tek ayak, imzadaki
+    # `actor` parametresinin tutulmayan bir söz olmamasıdır.
+    lifecycle._require_actor(actor)
 
     async with db.transaction():
+        await runs.anchor_run(db, run_id=run_id)
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
         if run.duzeltilen_run_id is None:
             raise WritebackRefused(
@@ -204,10 +198,11 @@ async def build_activation_evidence(db, *, run_id: str) -> lifecycle.ActivationG
     türetme yazılsaydı basılan parmak izi ile kurulan kanıtın parmak izi
     sessizce ayrışır ve köken kapısı hiçbir zaman açılmazdı.
     """
+    await runs.anchor_run(db, run_id=run_id)
     run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
-    # Sektör kilidi AKTİF PAKET satırından ÖNCE (fix turu 1, kilitlenme
-    # döngüsü). Bu fonksiyon `activate_from_snapshot` DIŞINDAN da çağrılabildiği
-    # için sırayı kendisi kurar; iki kez almak aynı işlemde zararsızdır.
+    # Sektör satır kilidi çapadan SONRA gelir; ikisi farklı şeylerdir — çapa
+    # mutasyon yollarını birbirinden ayırır, satır kilidi yaşam döngüsünün
+    # kendi serileştirme çapasıdır ve olduğu gibi korunur.
     await lifecycle._lock_sector(db, run.sector_id)
     aktif = await db.fetchrow(
         "SELECT id, version FROM social.sector_packages "
@@ -255,6 +250,7 @@ async def activate_from_snapshot(db, *, run_id: str, actor: str) -> None:
     olarak burada kapanır.
     """
     async with db.transaction():
+        await runs.anchor_run(db, run_id=run_id)
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
         # SEKTÖR KİLİDİ, HER PAKET KİLİDİNDEN ÖNCE (fix turu 1). Yaşam döngüsü
         # katmanı da aynı sırayı kullanır ve kilidi yeniden almak aynı işlemde

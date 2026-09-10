@@ -251,6 +251,7 @@ async def build_and_freeze_from_run(db, *, run_id: str, actor: str) -> dict:
     yazma arasında satır değişebildiği için YANLIŞ olurdu.
     """
     async with db.transaction():
+        await runs.anchor_run(db, run_id=run_id)
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
         # Paket kapısı DONDURMADA da koşar (kapanış turu 2+3, yüksek): bağsız
         # dondurulan bir görüntü sonradan HERHANGİ bir pakete bağlanabilir ve
@@ -381,6 +382,7 @@ async def record_decision(
     # bakar, olay ve karar yazımı AYNI işlemde iner. Otomatik-commit altında
     # karar commit edilir, sonra olay düşerse onay İZSİZ kalırdı.
     async with db.transaction():
+        await runs.anchor_run(db, run_id=run_id)
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
         await _paket_kapisi(db, run)
         # Hash'in VARLIĞI görüntünün gösterildiğinin kanıtı DEĞİLDİR (hakem

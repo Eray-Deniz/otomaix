@@ -38,6 +38,8 @@ from uuid import UUID
 from app.services.notifications import record_admin_event
 from app.services.sector_package_lifecycle import (
     ActivationGateEvidence,
+    anchor_for_package,
+    anchor_sector,
     EvidenceMintRefused,
     LifecycleError,
     RollbackGateEvidence,
@@ -452,6 +454,31 @@ def run_folder(run_id: str) -> Path:
     Klasör adı DB `run_id`'sine EŞİTTİR; iki kimlik uzayı yoktur.
     """
     return ARASTIRMA_DEPOSU_KOKU / "kosu" / _require_run_id(run_id)
+
+
+async def anchor_run(db, *, run_id: str) -> UUID:
+    """Koşunun sektörünü KİLİTSİZ okur ve SEKTÖR ÇAPASINI alır; sektörü döner.
+
+    Çapanın tanımı `sector_package_lifecycle.anchor_sector`'dadır ve TEK
+    yerdedir; burası yalnız koşu-anahtarlı GİRİŞİDİR. İkinci bir tanım
+    yazılsaydı iki kural iki davranış olurdu.
+
+    Bu giriş `approval` için de zorunludur: o modül yapısal olarak yaşam
+    döngüsünü import EDEMEZ (Task 14 hükmü) ama paket satırını kilitler, yani
+    aynı çapayı almak zorundadır. Kural burada kırılmaz, yalnız taşınır.
+
+    **Kilitsiz arama bilinçlidir:** çapayı seçebilmek için sektörü önce bilmek
+    gerekir. Yanlış çapa seçilirse satır çapadan SONRA yeniden okunur ve kimlik
+    doğrulanmadan hiçbir geçiş olmaz.
+    """
+    _require_run_id(run_id)
+    sector_id = await db.fetchval(
+        "SELECT sector_id FROM social.sector_package_runs WHERE run_id = $1", run_id
+    )
+    if sector_id is None:
+        raise RunNotVerified(f"koşu satırı yok: {run_id!r}")
+    await anchor_sector(db, sector_id)
+    return sector_id
 
 
 async def open_run(
@@ -1017,6 +1044,14 @@ async def open_correction_run(db, *, parent_run_id: str, actor: str) -> str:
     owner = require_actor(actor)
 
     async with db.transaction():
+        # ÇAPA BURADA YOK ve bu bilinçli (hakem turu 3 sonrası mutasyon ölçümü).
+        # Bu fonksiyon HİÇBİR paket satırı kilitlemez — yalnız koşu satırları
+        # yazar — yani çapa sözleşmesinin ölçtüğü sınıfa GİRMEZ. Savunma amaçlı
+        # bir çapa eklenmişti; mutasyon onu SAHTE-YEŞİL gösterdi, yani hiçbir
+        # test onun varlığını ölçmüyordu. Kanıtlanamayan kapı gereksiz kapıdır
+        # ve KALDIRILDI. Düzeltme turu açmakla yerinde güncelleme arasındaki
+        # yarışı kapatan şey ayrıdır: güncelleme yolu çapayı alır ve yeni açılan
+        # düzeltme koşusunun henüz jetonu YOKTUR, yani yakılacak bir şey de yok.
         ana = await db.fetchrow(
             "SELECT id, sector_id, package_id, approval_karar "
             "FROM social.sector_package_runs WHERE run_id = $1 FOR UPDATE",
@@ -1594,6 +1629,10 @@ async def mint_evidence_token(
     if table == "sector_package_runs":
         if run_id is None:
             raise ValueError("aktivasyon yolunda run_id zorunludur")
+        # ÇAPA: bu fonksiyon aktif paket satırını kilitler, yani tek başına
+        # çağrıldığında da mutasyon yollarıyla yarışır. Çapa yeniden girişlidir;
+        # çağıran zaten almışsa bedeli yoktur.
+        await anchor_run(db, run_id=run_id)
         kosu = await _kosu_gorunumu(db, run_id)
         if kosu is None or kosu.durum != "tamamlandi":
             raise EvidenceMintRefused(
@@ -1619,7 +1658,10 @@ async def mint_evidence_token(
     else:
         if incident_id is None or package_id is None:
             raise ValueError("geri alma yolunda incident_id ve package_id zorunludur")
+        # SIRA: olay kilidi EN DIŞTA kalır (A1(b)), sektör çapası onun İÇİNDE.
+        # Tek sıra = döngü yok; geri alma dışı yollar olay kilidini hiç istemez.
         await _lock_incident(db, incident_id)
+        await anchor_for_package(db, package_id)
         plan_satiri = await db.fetchrow(
             "SELECT * FROM social.package_rollback_plans "
             "WHERE incident_id = $1 AND package_id = $2 FOR UPDATE",
@@ -1694,6 +1736,8 @@ async def build_rollback_evidence(
     """
     _require_transaction(db, "build_rollback_evidence")
     await _lock_incident(db, incident_id)
+    # Olay kilidi EN DIŞTA, sektör çapası onun İÇİNDE (hakem turu 3).
+    await anchor_for_package(db, package_id)
 
     plan_satiri = await db.fetchrow(
         "SELECT * FROM social.package_rollback_plans "
@@ -1835,6 +1879,7 @@ async def execute_rollback_plan(db, *, incident_id: str, actor: str) -> Rollback
         package_id = kayit["package_id"]
         async with db.transaction():
             await _lock_incident(db, incident_id)
+            await anchor_for_package(db, package_id)
             satir = await db.fetchrow(
                 "SELECT * FROM social.package_rollback_plans "
                 "WHERE incident_id = $1 AND package_id = $2 FOR UPDATE",

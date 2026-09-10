@@ -453,20 +453,25 @@ async def test_no_change_and_blocked_write_no_draft(pkg_db, sonuc):
 
 
 async def test_writeback_cannot_read_run_row_outside_loader():
-    """YAPISAL: koşu satırının TEK okuma kapısı `load_verified_run`'dır.
+    """YAPISAL: koşu satırının TEK KAPI LİSTESİ `load_verified_run`'dır.
 
-    İkinci bir `SELECT ... FROM social.sector_package_runs` yazıldığı an ikinci
-    bir kapı listesi doğar; yedi kapı orada koşmaz ve doğrulanmamış bir satır
-    yazım yoluna sızabilir. Tarama YAZIMLARI kapsamaz: koşu satırına taslak
-    bağını yazmak bu modülün işidir.
+    İkinci bir kapı listesi doğduğu an yedi kapı orada koşmaz ve doğrulanmamış
+    bir satır yazım yoluna sızabilir.
+
+    Çapa araması (hakem turu 3) bu modülde DEĞİL, `runs.anchor_run` içindedir —
+    tek tanım, tek yer. Bu modül onu çağırır, kendi okumasını yapmaz.
+
+    Tarama YAZIMLARI kapsamaz: koşu satırına taslak bağını yazmak ve bayat
+    jetonu yakmak bu modülün işidir.
     """
     okumalar = re.findall(
-        r"SELECT\b[^;\"']*?\bFROM\s+social\.sector_package_runs",
+        r"SELECT\b[^\"']*?\bFROM\s+social\.sector_package_runs",
         WRITEBACK_KAYNAK,
         flags=re.IGNORECASE | re.DOTALL,
     )
     assert okumalar == [], f"ikinci kapı listesi: {okumalar}"
     assert "load_verified_run" in WRITEBACK_KAYNAK
+    assert "runs.anchor_run" in WRITEBACK_KAYNAK
 
 
 # ═══ 2. Tekrar oynatma ve yarış — tek taslak ════════════════════════════════

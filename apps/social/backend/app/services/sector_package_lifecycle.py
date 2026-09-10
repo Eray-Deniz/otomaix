@@ -789,6 +789,69 @@ def _require_same_sector(observed: UUID, locked: UUID, package_id: UUID) -> None
         )
 
 
+ANCHOR_ONEKI = "sektor-paketi-anchor:"
+"""Danışma kilidinin ad alanı — başka bir alt sistemin anahtarıyla çakışmasın."""
+
+
+async def anchor_sector(db, sector_id: UUID) -> None:
+    """SEKTÖR ÇAPASI — her mutasyon yolunun İLK kilidi (hakem turu 3, çerçeve).
+
+    **Neden satır kilitleri yetmedi.** Üç hakem turunda üç ayrı kilitlenme
+    döngüsü çıktı ve ilk ikisi tek tek SIRA kuralıyla kapatıldı. Üçüncü tur
+    sınıfın kapanmadığını gösterdi ve gerekçesi yapısaldı: sıra kuralı
+    SINIFLAR arasında (koşu → sektör → paket) düzen kurar ama sınıf İÇİNDE
+    kurmaz. Jeton yakma tek bir toplu `UPDATE` ile BİRDEN ÇOK koşu satırını
+    sırasız kilitler; aynı pakete bağlı iki düzeltme, her biri kendi koşusunu
+    tutarken ötekinin koşusunu bekleyebilir. Ayrıca jetonu HENÜZ BOŞ olan bir
+    koşu o toplu güncellemeye HİÇ girmez, yani yakma ile basım yarışabilir.
+    Bu iki delik de "satır kilitlerini doğru sırala" ile kapanmaz.
+
+    **Çözüm tek NOKTA, tek ANAHTAR.** Paket satırlarına dokunan her yol, HERHANGİ
+    bir satır kilidinden ÖNCE sektöre ait bir işlem-ömürlü danışma kilidi alır.
+    Aynı sektörde iki mutasyon artık hiç iç içe geçemez; sıralanacak bir şey
+    kalmadığı için sıralama hatası da kalmaz.
+
+    **Kimlik ARAMASI kilitsizdir, DOĞRULAMASI kilitlidir.** Çapayı seçebilmek
+    için sektörü önce okumak gerekir; o okuma kilitsizdir ve çapa alındıktan
+    SONRA satır yeniden okunup doğrulanır (`_require_same_sector` bu kapıyı
+    zaten taşıyor). Kilitsiz okuma bir güvenlik açığı değildir: yanlış çapa
+    seçilirse doğrulama düşer, geçiş olmaz.
+
+    **İşlem ömürlüdür** (`pg_advisory_xact_lock`): commit ya da rollback ile
+    KENDİLİĞİNDEN bırakılır, elle bırakma yolu yoktur ve unutulamaz.
+    **Yeniden girişlidir:** aynı işlemde ikinci kez almak bedelsizdir, bu yüzden
+    iç içe çağrılan yollar (örn. jeton basımı) çapayı kendileri de alabilir ve
+    tek başına çağrıldıklarında da güvenli olurlar.
+    """
+    await db.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        f"{ANCHOR_ONEKI}{sector_id}",
+    )
+
+
+async def anchor_for_package(db, package_id: UUID) -> UUID | None:
+    """Paketin sektörünü KİLİTSİZ okur ve çapayı alır; sektörü döner.
+
+    **Paket YOKSA çapa ALINMAZ ve HATA da FIRLATILMAZ; `None` döner.** Bu bir
+    fail-open değildir ve gerekçesi ölçülmüştür: çapa bir KAPI değil bir
+    SERİLEŞTİRME adımıdır. Var olmayan bir pakete hiçbir mutasyon inemez —
+    çağıranın kendi kapısı zaten kendi alan hatasını üretir. Buradan hata
+    fırlatmak o kapıları GÖLGELER ve çağırana yanlış hata tipini gösterir
+    (ölçüldü: jeton basımı ve geri alma kanıtı testleri tam bunu yakaladı).
+
+    Kimlik yarışı YOKTUR: paket kimliği çağıran tarafından SEÇİLEMEZ, yazım
+    yolu her zaman YENİ bir kimlik üretir. Yani "arama anında yok, kapı anında
+    var" hâli üretilebilir bir durum değildir.
+    """
+    sector_id = await db.fetchval(
+        "SELECT sector_id FROM social.sector_packages WHERE id = $1", package_id
+    )
+    if sector_id is None:
+        return None
+    await anchor_sector(db, sector_id)
+    return sector_id
+
+
 async def _lock_sector(db, sector_id: UUID) -> None:
     """Sektör satırını kilitler — yaşam döngüsünün TEK serileştirme noktası.
 
@@ -1004,60 +1067,26 @@ async def insert_draft(
     kapısından geçmez (`_check_cta_items` anahtar kümesini eşitlikle ölçer).
     İkisi AYNI işlemde yazıldığı için eşleme bayatlayamaz.
 
-    **ÇÖZÜLMEDİ + PARK EDİLDİ — taslağın yaratıcısı bu yolda KAYBOLUYOR
-    (fix turu 1, F1; evi YOK).** Ölçüldü: `insert_draft` hiç olay yazmaz
-    (`log_package_event`'in bu modüldeki tek çağrısı `_apply_status_transition`
-    içindedir), `package_events.EVENT_TYPES` kapalıdır ve `draft_created`
-    diye bir tür TAŞIMAZ, `sector_packages` tablosunda da `actor`/`created_by`
-    kolonu YOKTUR (migration 032). Yani `actor` şu ana kadar YALNIZ Plan 1'in
-    `draft_created` satırında yaşıyordu; günlük verildiğinde o satır yazılmaz
-    ve yaratıcı hiçbir yerde durmaz. Bu bir kabul edilmiş risk DEĞİL, açık bir
-    kayıptır ve burada çözülemez.
+    **ÇÖZÜLMEDİ — taslağın yaratıcısı bu yolda hâlâ KAYBOLUYOR; evi VAR.**
+    Ölçüldü (2026-09-10): karar günlüğü verildiğinde Plan 1'in `draft_created`
+    satırı yazılmaz, `sector_packages` tablosunda aktör kolonu YOKTUR, koşu
+    kaydı tablosunda operatör alanı YOKTUR ve olay türü kümesi hem Python'da
+    hem DB kısıtında KAPALIDIR. Borç TASK.md'de EŞLİ yükümlülük olarak kayıtlı
+    (Task 6 olay TÜRÜNÜ açar, Task 15 çağrıyı ekler) ve **Task 6 kendi ayağını
+    İNDİRMEDİ.**
 
-    **Yolların ÖLÇÜLMÜŞ bedeli (fix turu 2'de DÜZELTİLDİ).** Önceki yazım
-    "K-56 bildirim bağı" diyordu; bu YANLIŞTI ve ölçümle çürüdü: K-56 yorumu
-    `ADMIN_NOTIFIED_EVENTS`'in üstündedir ve "bu üç olay" derken kendi kümesini
-    kastediyor (`mismatch_fallthrough` · `package_read_error` ·
-    `stale_assignment_fallback`); bildirim kapısı tek koşuldur
-    (`event_type in ADMIN_NOTIFIED_EVENTS`, `package_events.py:275`) ve
-    `LIFECYCLE_EVENTS`'in HİÇBİR üyesi o kümede DEĞİLDİR. Yani yeni bir olay
-    türü eklemek bildirim davranışına DOKUNMAZ. Gerçek bedel şudur:
+    **Kapatma DENENDİ ve ÖLÇÜLEREK geri alındı (2026-09-10).** Olay türünü açan
+    bir migration yazıldı; ölçülen yayılma yarıçapı beklenenden büyük çıktı —
+    033'ün sürüm-farkında kabul tablosu, 036'nın geri alma script'i, çapraz
+    migration fail-closed testleri ve harness'ın geri alma sırası. Her yama
+    kapattığı kadar yeni kırık açtı (ölçüm: 25 → 21 → 22 düşen test). Yarım
+    inen bir şema değişikliği bırakmamak için değişiklik BÜTÜNÜYLE geri alındı;
+    ayrıntı ve karar kaydı aktif katmandadır.
 
-    * **Olay türü yolu:** `033_package_events.sql:40-50` `event_type` CHECK'ini
-      TAM DOKUZ değerle pinler → yeni tür için migration + rollback şart.
-      Üstelik 033 kendi doğrulama bloğunda CHECK tanımının birebir metnini
-      **İKİ AYRI YERDE** bekler ve genişletme İKİSİNİ BİRDEN düşürür:
-      `033:114-119` (`package_events.event_type CHECK` etiketi) ve
-      `033:183-184` (`package_events kısıt kümesi (kapalı)` etiketi — kapalı
-      manifest, CHECK metnini ayrıca taşır). ÖLÇÜLDÜ: dokuz değere onuncu bir
-      değer (`draft_created`) eklenmiş CHECK'le 033 yeniden uygulanınca
-      `rc=3` ve hata mesajı İKİ etiketi birden basıyor. (Bu ikinci kalem fix
-      turu 2'de sayılmamıştı.) `tests/test_migration_033.py::
-      test_widened_event_type_check_is_caught` genişletilmiş CHECK'i
-      yakalamak için VARDIR. Ayrıca `package_events.EVENT_TYPES` (bu görevin
-      Files listesi DIŞINDA) ve `tests/test_package_stamp_and_events.py:118-122`
-      pinli enum testi. Not: `package_events` tablosunda `actor` kolonu ZATEN
-      var ve yaşam döngüsü olayları onu ZORUNLU kılıyor
-      (`package_events.py:223`) — yani taşıyıcı hazır, kapalı olan yalnız
-      türün kendisi.
-    * **Kolon yolu:** `sector_packages`'a `created_by` — yine migration +
-      rollback, ve bu yol da PİNLİ BEKLENTİ güncellemesi taşır (ilk yazım
-      yalnız "migration + rollback" diyordu, eksikti). `032_sector_packages.sql:377`
-      `sector_packages kolon imzası`nı KAPALI küme olarak pinler. ÖLÇÜLDÜ:
-      `sector_packages`'a `created_by TEXT` eklenip 032 yeniden uygulanınca
-      `rc=3`, düşen tek etiket `sector_packages kolon imzası`. Ek olarak
-      `tests/test_plan2_interface_contract.py:366-367` kolon kümesini sözlük
-      EŞİTLİĞİYLE karşılaştırır; ÖLÇÜLDÜ: aynı kolon eklendiğinde `columns`
-      yüzeyi eşit ÇIKMIYOR (`yalnız gözlenende: ['created_by']`), diğer üç
-      yüzey (kısıt · indeks · tetikleyici) eşit kalıyor. (Ölçüm yöntemi:
-      testin KENDİ `_relation_manifest` + `EXPECTED_032_MANIFEST` çifti
-      bozulmuş bir şemaya karşı koşuldu; pytest oturumu şemayı her koşumda
-      yeniden kurduğu için testin kendisi bu yolda koşturulamıyor.)
-    * **Üçüncü `tur` yolu:** karar günlüğü şemasını (ek ile pinli K-84)
-      değiştirmek.
-
-    Üçü de bu görevin kapsamı DIŞINDADIR. Sahibi kontrolör tarafından
-    atanacaktır; burada uydurma bir ev VERİLMEZ.
+    KOLON DEĞİL OLAY tercihinin gerekçesi ölçülmüştür ve KORUNUR: K-106 gereği
+    düzeltme turu yeni sürüm YAKMAZ, aynı satırı yerinde günceller. Bir
+    `created_by`/`updated_by` çifti yalnız SON dokunuşu tutar; arka arkaya gelen
+    düzeltmelerin yazarları birbirini ezer.
     """
     owner = _require_actor(actor)
     await _gate_content_and_log(
@@ -1166,9 +1195,10 @@ async def activate_package(
         raise GateNotSatisfied("aktivasyon kapısı sağlanmadı: " + ", ".join(unmet))
 
     async with db.transaction():
-        # KÖKEN KAPISI İLK (R8(c)): kilit sırası koşu → sektör → paket olarak
-        # kalsın diye jeton, paket satırı kilitlenmeden ÖNCE harcanır. Ters sıra
-        # yazım yoluyla karşılaştığında kilitlenme üretirdi.
+        # SEKTÖR ÇAPASI HER ŞEYDEN ÖNCE (hakem turu 3, çerçeve düzeltmesi).
+        # Çapadan sonra satır kilitlerinin sırası artık bir kilitlenme kaynağı
+        # DEĞİLDİR; yine de anlamlı sıra korunur (köken → paket).
+        await anchor_for_package(db, package_id)
         await _consume_provenance(db, evidence, hedef={"package_id": package_id})
 
         sector_id, target = await _lock_and_load(db, package_id)
@@ -1236,8 +1266,8 @@ async def rollback_package(
         raise GateNotSatisfied("rollback kapısı sağlanmadı: " + ", ".join(unmet))
 
     async with db.transaction():
-        # KÖKEN KAPISI İLK (R8(c)) — aktivasyon yoluyla AYNI sıra: jeton satırı
-        # (olay planı) sektör ve paket satırlarından ÖNCE.
+        # SEKTÖR ÇAPASI HER ŞEYDEN ÖNCE (hakem turu 3, çerçeve düzeltmesi).
+        await anchor_sector(db, sector_id)
         await _consume_provenance(db, evidence, hedef={"target_version": to_version})
 
         await _lock_sector(db, sector_id)
@@ -1305,6 +1335,7 @@ async def deactivate_package(db, *, package_id: UUID, actor: str) -> None:
     owner = _require_actor(actor)
 
     async with db.transaction():
+        await anchor_for_package(db, package_id)
         sector_id, row = await _lock_and_load(db, package_id)
         if row["status"] != "active":
             raise LifecycleError(
