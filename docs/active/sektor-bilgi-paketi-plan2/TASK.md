@@ -14,10 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-10: araya giren yan görev
-`denetci-denetim-tablosu-tipli-okuma` BİTTİ — motorun yapısal çoğunluğu artık denetçinin kendi
-kaynak sütunundan okunuyor, düz yazıdan sayma bitti; iki hakem turu koştu. Sıradaki iş
-**Task 14**.) Task 1-12 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-10: Task 14 indi ve checkpoint 11
+`approve` ile kapandı. Sıradaki iş **Task 15**.) Task 1-14 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -500,6 +498,55 @@ kontrol kolu), elle seçilmiş örnekle değil.
 **DÜRÜST BOŞLUK:** F8'in kapanışını bağımsız hakem GÖRMEDİ (kota). Kapanış kontrolörün ölçümüne
 dayanır; aralığı Adım 11'in koşulsuz final incelemesi kapsayacak.
 
+## Task 14 TAMAM (2026-09-10) — onay yüzeyi + checkpoint 11
+
+Dört commit: `4bbbc3e` (ana) · `83ab8ab` · `cc56fdc` · `576569e` (üç düzeltme turu).
+Tam küme **4002 passed** (`python -m pytest tests/ -q`, 314.46s, exit 0); taban 3931 → 4002.
+Testler: 65 (`tests/test_approval_surface.py`) + 6 (motor atfı, `test_policy_engine_checks.py`).
+
+**Ne kuruldu:** `approval.py` — kilitli koşudan BASILAN değişmez görüntü (F18), K-42 sinyal
+sıralaması, K-41 eşiksiz çıkarma sayısı + bir tık derin tam liste, K-71 açık-soru kapısı,
+K-99 onay/ret olayı. Yönetici kalıp listesi GÖRMEZ (spec §9.6).
+
+**ÖNKOŞUL — motor bulguya ÜRETİCİSİNİ yazıyor** (`BulguIzi.kontrol`). `sinif` riskli sınıfları
+ayırt ETMİYORDU: `acik_soru` sınıfını BEŞ ayrı kontrol üretiyor (ölçüldü). Atıf TEK yazıcıda
+damgalanır (`run_checks`, değer `EngineCheck.ad`); kontrol gövdesi kendi adını yazarsa toplayıcı
+DURUR. Sınıf tek örnekle değil TOPLAYICIDAN kapatıldı — sonradan eklenen herhangi bir kontrol de
+atfını alır. Etki alanı ölçüldü: 13 üretim kurulum noktasının HİÇBİRİ değişmedi.
+
+**Checkpoint 11 — DÖRT tur** (1 tam inceleme + 3 kapanış-doğrulama), taban `33bfae6`.
+Tur 1: `needs-attention`, İKİ yüksek + iki orta + bir düşük. Tur 2: F1 · F3 kapalı doğrulandı,
+F2'nin İKİNCİ ayağı açık. Tur 3: F2'nin ÜÇÜNCÜ ayağı açık → **aynı eksen üç varyant verdi**,
+yamama BIRAKILDI ve çerçeve teşhisi Eray'a götürüldü (kararı: "ev desenini uygula, bir tur daha").
+Tur 4: **`approve`, bulgu YOK.**
+
+**Kapanan yüksek bulgular:** (F1) karar ile denetim olayı atomik değildi — `log_package_event`
+altyapı hatasında `None` döner ve dönüş kontrol edilmiyordu; otomatik-commit'te sonuç İZSİZ ONAY.
+Yaşam döngüsünün F24 deseni uygulandı: olay ÖNCE, `None` HATA, hepsi tek işlemde ·
+(F2) onay, onaylanabilir bir ekranın gösterildiğini KANITLAMADAN kaydedilebiliyordu; üç ayağı
+kapandı (görüntü/hash/çekirdek doğrulaması + `onaylanabilir` kapısı · hedef kimliği çekirdekte ·
+paket İLİŞKİSİ kapısı dondurmada ve karar anında).
+
+**Orta/düşük:** (F3) atıf doğrulaması anahtar VARLIĞINA bakıyordu, `kontrol=""` varsayılanı nötr
+"uyarı"ya düşüyordu — kontrolörün KENDİ ürünü, üç satırlık iş, `accepted_risk`'e ALINMADAN
+düzeltildi · (F4) Task 14 `BulguIzi`'yi Task 8 sözleşmesinin içinden değiştirdi — DÜZELTİLEMEZ
+(yürütücü ek düzenlemez), Open Problems'a yazıldı · (F5) "kendi kırmızısı olmayan test" beyanı
+eksikti ve Task 15'in iki K-94 testini "taşıyor" demek fazla iddiaydı (onlar PLAN kalemi).
+
+**Ölçüm:** OTUZ kapının OTUZU mutasyonla kanıtlandı (rc=0). Mutasyon İKİ gerçek boşluk buldu:
+"ikinci karar reddedilir" kapısı TESTSİZ yazılmıştı ve `package_id is None` için İKİ gereksiz
+kapı vardı (paket kapısı ikisini de yakalıyordu → kanıtlanamayan kapı gereksiz kapıdır, tek
+kapıya indi). Üç autocommit testi işlem sarmallarını kanıtlıyor — fixture'ın DIŞ transaction'ı
+onları maskeliyordu.
+
+**YARIM HAKEM KARARI SAYILMADI:** tur 4 ilk denemede kota sınırında kesildi ve `approve`
+yazıyordu; rc=1, 9 komut, metin GELECEK zamanlı (giriş anlatısı, karar değil). Reset sonrası
+baştan koşuldu (rc=0, 32 komut).
+
+**DÜRÜST BOŞLUK:** uçtan uca koşum hâlâ YOK; motor gerçek bir koşuda hiç çağrılmadı (ilk gerçek
+ölçüm Task 19). Görüntü şeması sürüm 1'de KALDI — canlı veritabanında `sector_package_runs`
+tablosu HİÇ YOK (036 dağıtılmadı, psql ile ölçüldü), yani kalıcı görüntü yoktur.
+
 # ÖN KOŞUL — Task 10'dan ÖNCE: test matrisi küçültme (BİTTİ 2026-09-09)
 
 > **Eray kararı (2026-09-08): Plan 2'nin yürütmesi bu iş bitene kadar DURAKLAR.** Ayrı görev
@@ -894,6 +941,51 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   beş ihlalden biri (`from app.services import sector_package_lifecycle`) hâlâ görülmüyordu.
   Elle seçilmiş örnek değil ÜRETİLMİŞ matris yakaladı.
 
+## Task 14 kararları (2026-09-10)
+
+- **`to_activation_evidence` YAZILMADI.** Plan onu Task 14'ün üretimi sayıyor; bağlayıcı ek (R8)
+  TAMAMEN siliyor. Çağıranın verdiği sözlükten kanıt üreten ikinci kurucu, "kanıt veritabanından
+  okunur" doktrinindeki deliğin kendisiydi. Kanıtın tek kurulum yeri aktivasyon yolunun içidir
+  (Task 15). Modülün böyle bir kurucu göstermediği **AST taramasıyla** kanıtlanır — metin
+  taraması DEĞİL, çünkü ad docstring'te meşru olarak geçiyor.
+
+- **Planın iki testi Task 15'e AİT** (`test_evidence_always_states_base_state` ·
+  `test_first_package_snapshot_yields_expected_no_active`) — konuları silinen fonksiyondu.
+  **DÜZELTME (hakem turu 1, F5):** Task 15'in bunları "TAŞIDIĞI" söylenmişti; doğrusu Task 15
+  PLANI onları listeliyor (`test_first_activation_uses_expected_no_active` ·
+  `test_expected_no_active_rejected_when_active_row_exists`), HEAD'de MEVCUT DEĞİL.
+  **Task 15'e bağlayıcı kalem:** taban durumunun "ikisi birden ya da hiçbiri yapım hatasıdır"
+  ayağı için DOĞRUDAN test de eklenir; aktivasyon-yolu testleri onu ikame etmez.
+
+- **Katman-2 kapı sonucu görüntüye "PASS" olarak YAZILMAZ.** Spec §10.2 onun sonucunun
+  OKUNMADIĞINI söylüyor; koşulması ve sunulması ön koşuldur. Görüntü yalnız `sunuldu` taşır.
+  İlk kırmızı bunu yakaladı: test "PASS" bekliyordu, `attest_katman2` imzasında `sonuc` YOK.
+
+- **K-94 taban durumu görüntüye KONMADI ve taslak satırı OKUNMAZ.** Aktivasyon kanıtını Task 15
+  kilitli satırlardan KENDİSİ türetir; aynı gerçeği görüntüye de yazmak onu iki kaynaklı yapardı
+  (R2'nin yasakladığı desen). Spec §9.6'nın ekran listesinde de yok.
+
+- **Atıf TOPLAYICIDA damgalanır, kontrol gövdesinde DEĞİL.** Gövdeler kendi adlarını yazsaydı her
+  yeni kontrol atfı unutabilir ve onay yüzeyi riskli bir sınıfı sessizce kaybederdi. Gövdenin
+  yazdığı atıf EZİLMEZ, DURDURULUR (uydurma atıf = sessiz sınıf kayması).
+
+- **Hedef kimliği bir İLİŞKİDİR, iki gevşek değer değil** (kapanış turu 3). Kapı dondurmada VE
+  karar anında koşar; ikinci çağrı birincinin tekrarı DEĞİLDİR — çekirdek karşılaştırması paket
+  satırının KENDİ kaymasını görmez (koşunun iki kolonu aynı kalır). Dürüst sınır koda yazıldı:
+  pencere KAPATILMAZ (paket satırı ancak okunarak öğrenilir), FAIL-CLOSED yapılır. Kalıcı çözümün
+  evi zaten kayıtlı (`sector-package-sector-id-immutability`, tetikli) ve tetiği bu işle
+  KURULMADI — bu modül o kolona yazmaz.
+
+- **Kanıtlanamayan kapı gereksiz kapıdır.** `package_id is None` için iki ayrı kapı yazılmıştı;
+  mutasyon ikisinin de bağımsız kanıtlanamadığını gösterdi (paket kapısı zaten yakalıyordu) →
+  üç kapı TEK kapıya indi. Aynı üç yol hâlâ reddediliyor.
+
+- **Adı yalan söyleyen iki test düzeltildi.** `test_run_mutation_after_freeze_invalidates_approval`
+  koşuyu hiç mutasyona sokmuyordu (hakem yakaladı) → adı değiştirmek yerine INVARIANT gerçek
+  yapıldı, eski senaryo `test_foreign_hash_is_refused` olarak kaldı.
+  `test_missing_package_row_refuses_freeze` "satır yok" diyordu ama "bağ NULL"u ölçüyordu
+  (kontrolör yakaladı) → kapsamı başka testte olduğu için SİLİNDİ.
+
 ## Task 13 kararları (2026-09-09)
 
 - **`decide` girdi kapısının istisnasını YUTMAZ.** `EngineInputError` çağırana gider; `blocked`'a
@@ -929,6 +1021,15 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   ayrım sözleşmede kurulur (F8). Kova testi TÜRÜ sınar, varyantı kovalamaz.
 
 # Open Problems
+
+- **[ORTA — EVİ VAR 2026-09-10] `BulguIzi`'nin dördüncü alanı arayüz ekinde SAHİPSİZ.**
+  Task 14, atıf alanını (`kontrol`) Task 8 sözleşmesinin İÇİNDEN ekledi; ek `BulguIzi`'yi ÜÇ
+  alanlı tanımlıyor ve Task 14'ün dosya yüzeyi yalnız `approval.py`. Bağımsız hakem R9'un
+  (bağımlılık yönü) KIRILMADIĞINI teyit etti — kırılan sahiplik/dosya sınırı. Alan gereklidir ve
+  gerekçesi ölçülmüştür (`sinif` riskli sınıfları ayırt etmiyor); eksik olan ekin bunu SÖYLEMESİ
+  ve `policy_report` yükünün şekil sözleşmesini taşıması. Yürütücü spec/plan/ek DÜZENLEMEZ.
+  **EV: arayüz eki revizyonu** — bekleyen kümede K-126 resmîlik ayağı ve K-03 kategori ayağıyla
+  BİRLİKTE; sert son tarih Task 19 (sözleşme penceresi orada kapanıyor).
 
 - **[YÜKSEK — kök sebep, EVİ VAR 2026-09-09] Motor çoğunluğu düz yazıdan sayıyor.**
   Denetçinin sekiz sütunlu denetim tablosu tipli okunmuyor (`validate_report` yalnız iki
