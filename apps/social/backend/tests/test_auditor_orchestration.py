@@ -1458,8 +1458,10 @@ async def test_round_rejects_a_report_declaring_fewer_sources_than_the_packet(
 ):
     """Üç kaynakla koşan bir rapor "Kaynak sayısı: 2" yazıp GEÇEMEZ.
 
-    Yetkili sayı paketi KURAN taraftan gelir (`build_packet`'in `sources`'u),
-    raporun kendi beyanından değil.
+    Yetkili sayı paketi KURAN taraftan gelir — raporun kendi beyanından değil.
+    Değer `len(sources)` DEĞİL, ELENMEMİŞ KİMLİK sayısıdır; bu fixture'da eleme
+    YOKTUR, o yüzden ikisi çakışır. Elemeli kol ayrı testte ölçülür
+    (`test_round_accepts_an_eliminated_source_round`).
     """
     db, run_id, _ = kosu
     paket = _paket(tmp_path / "ucluk", run_id, kaynak_sayisi=3)

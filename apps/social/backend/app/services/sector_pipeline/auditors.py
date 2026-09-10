@@ -2080,9 +2080,14 @@ def _tur_url_kapisi(
     yüzden iki karşılaştırma TUR seviyesindedir ve imza DEĞİŞMEZ:
 
     (a) **Yetkili sayı.** Raporun `Kaynak sayısı: <n>` beyanı, paketi kuran
-        tarafın `sources` uzunluğuna EŞİT olmak zorundadır. Üç kaynakla koşup
-        "Kaynak sayısı: 2" yazan bir rapor altı satırla iç tutarlıdır ama
-        koşunun ÜÇÜNCÜ kaynağını hiç örneklememiştir.
+        tarafın `yetkili_kaynak_sayisi`'sına EŞİT olmak zorundadır. O değer
+        `len(sources)` DEĞİL, **ELENMEMİŞ KİMLİK sayısıdır** (2026-09-10;
+        eskisi elemeli her meşru turu düşürüyordu — sözleşme ADIM 2 hem
+        oranı hem satır sayısını KALAN kaynağa uyarlatır). Örnek: üç kaynakla
+        PAKETLENİP hiçbiri elenmemiş bir koşuda "Kaynak sayısı: 2" yazan rapor
+        altı satırla iç tutarlıdır ama koşunun ÜÇÜNCÜ kaynağını hiç
+        örneklememiştir. Elenen kaynağın KONUMU korunur (kör etiket konumdan
+        türer); düşen yalnız SAYIdır.
     (b) **Ortam-kısıtı muafiyeti.** Kaçış cümlesi TÜM satır beklentisini
         kaldırır ve muafiyet YALNIZ `PreflightDurumu.ERISIM_YOK`'ta —
         yani ölçülmüş erişimSİZLİKTE — meşrudur. `ERISIM_VAR`'da muafiyet

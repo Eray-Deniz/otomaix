@@ -320,10 +320,33 @@ class EngineCheck:
 # ─── Ortak ölçüm yardımcıları ───────────────────────────────────────────────
 
 
+_NOKTASIZ_I = str.maketrans({"ı": "i", "I": "i"})
+"""NOKTASIZ `ı` — Unicode ayrıştırmasının KAPSAMADIĞI tek Türkçe harf.
+
+`ç`/`ğ`/`ş`/`ö`/`ü` birleşen aksan taşır ve NFKD onları taban harfe ayırır;
+`ı` ise KENDİ BAŞINA bir taban harftir, ayrışmaz ve `casefold` onu `i` yapmaz.
+Bu yüzden ayrı bir çeviri gerekir.
+"""
+
+
 def _katla(metin: str) -> str:
-    """Aksanı katlanmış, küçük harfli biçim — `ş`/`s`, `ğ`/`g` aynı sayılır."""
+    """Aksanı katlanmış, küçük harfli biçim — `ş`/`s`, `ğ`/`g`, `ı`/`i` aynı sayılır.
+
+    **`ı` ayağı 2026-09-10'da EKLENDİ (ÖLÇÜLDÜ).** Eksikliği sessiz bir kapı
+    körlüğü üretiyordu: bayrak adları `BAYRAKLAR` kümesinde ASCII yazılıdır,
+    ama sözleşme onları KENDİ yazımıyla ister — `[marka-adı]` ·
+    `[kanal-bağımlı]` · `[kaynak-bağımlı]`. `_katla("marka-adı")` "marka-adı"
+    döndüğü için bu üç bayrak HİÇBİR kontrolde tanınmıyordu; `[marka-adı]`
+    gerçek marka adının pakete girmesini engelleyen bayraktır.
+
+    **Etki alanı ölçüldü (İlke 6) — DÖRT tüketici, dördünde de yön TEMKİNLİ:**
+    mevzuat anahtar kelimesi taraması ve geri-ekleme metin karşılaştırması daha
+    ÇOK eşleşir (daha çok bulgu/açık soru), daha az değil; bayrak taraması
+    kapanır. Hiçbir kolda kapı GEVŞEMEZ.
+    """
     ayrisik = unicodedata.normalize("NFKD", metin)
-    return "".join(ch for ch in ayrisik if not unicodedata.combining(ch)).casefold()
+    suzulmus = "".join(ch for ch in ayrisik if not unicodedata.combining(ch))
+    return suzulmus.translate(_NOKTASIZ_I).casefold()
 
 
 def _aday_icerik(inputs: EngineInputs) -> dict:

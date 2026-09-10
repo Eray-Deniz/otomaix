@@ -57,11 +57,9 @@ bağı kuruldu; iki bağımsız hakem turu koştu ve sekiz bulgunun yedisi kapat
   fixture ile. İlk gerçek ölçüm Task 19.
 - **Kapanış turunun YÜKSEK bulgusunun kalan ayağı KAPANMADI** (atıf ADAYA bağlı değil, ALAN
   düzeyinde). Evi açık: `docs/active/denetci-atif-aday-kimligi/`.
-- **İki düşük bulgu düzeltilmedi** (Eray'ın severity talimatı): (a) `_tur_url_kapisi`
-  docstring'i yetkili değerin `sources` uzunluğu olduğunu söylüyor — artık YANLIŞ, kontrolörün
-  ürünü, üç satır; (b) `engine._katla` noktasız `ı`'yı katlamıyor → `[marka-adı]`,
-  `[kanal-bağımlı]`, `[kaynak-bağımlı]` HİÇBİR bayrak kontrolünde tanınmıyor (ÖNCEDEN VAR OLAN,
-  Task 12'den; **evi YOK**).
+- **İki düşük bulgu ÖNCE bırakılıp SONRA kapatıldı** (Eray itirazı): bayat docstring +
+  bayrak yazım katlaması. İkincisi Task 12'den beri var olan bir körlüktü ve `[marka-adı]`
+  bayrağını etkisiz kılıyordu.
 - **Denetçi web erişim probu YOK** — üretim hattı hâlâ koşamaz (K-14 kapısı her turu bloke eder).
 - **`ruff` bu ortamda kurulu değil** — lint hiç koşmadı. Pyright de koşulmadı.
 - **CRM webhook onarımı YAPILMADI.** Canlıya migration dağıtılmadı; pilot koşulmadı.
@@ -73,7 +71,6 @@ bağı kuruldu; iki bağımsız hakem turu koştu ve sekiz bulgunun yedisi kapat
 - **Üretim hattı hâlâ koşamaz:** denetçi web probu yok.
 - **Atıf ADAYA bağlı DEĞİL** — aynı alanın herhangi bir denetçi satırı herhangi bir adayı
   yetkilendirebiliyor. Sözleşme revizyonu ister; evi açık, sert son tarih Task 19.
-- **Bayrak yazım katlaması yarım** — üç bayrak hiçbir kontrolde tanınmıyor, evi YOK.
 - **Sözleşme penceresi Task 19'da KAPANIYOR.** Pilottan sonra sözleşme değişikliği araştırmaları
   ikinci kez ürettirir. Bekleyen sözleşme işi: atıf-aday kimliği.
 - **Migration `036` yerinde düzenlendi** — kabul edilmiş risk.
@@ -158,13 +155,11 @@ ve `sector_pipeline/runs.py`. Hepsi yanlış alarm, gerçek kimlik bilgisi YOK.
 - **Atıf ADAYA bağlanmalı** (kapanış turu, yüksek — kalan ayak).
   **Ev: `docs/active/denetci-atif-aday-kimligi/` · sert son tarih Task 19.**
 
-**EVİ OLMAYAN — dürüst etiket, karar Eray'ın:**
-- **Bayrak yazım katlaması yarım.** `engine._katla` noktasız `ı`'yı katlamıyor; sözleşmenin
-  kendi yazımı `[marka-adı]` · `[kanal-bağımlı]` · `[kaynak-bağımlı]` hiçbir bayrak kontrolünde
-  TANINMIYOR (Task 12'den beri). **Çözülmedi, park edildi, EVİ YOK.** Yeniden açılma koşulu:
-  bayrak tüketimi gerçek bir denetçi çıktısıyla ilk kez ölçüldüğünde (Task 19).
-- **`_tur_url_kapisi` docstring'i bayat** — yetkili değerin `sources` uzunluğu olduğunu söylüyor,
-  artık yanlış. Kontrolörün ürünü, üç satır. Severity kuralı gereği düzeltilmedi.
+**EVSİZ KALEM YOK.** (2026-09-10 kapanışında iki düşük bulgu "karar Eray'ın" diye buraya
+yazılmıştı; Eray haklı olarak itiraz etti — ikisi de kontrolörün işiydi ve kapatıldı:
+bayrak yazım katlaması + bayat docstring. Ders: küçük ve kapsamı belli bir düzeltmeyi
+"severity kuralı" diye kullanıcıya taşımak kuralın amacı DEĞİLDİR; kural büyük/riskli işleri
+sınırlar, üç satırlık kendi hatanı devretmeyi değil.)
 
 - **Eray'a teknik cümle onaylatma** — karar sorularını sade dille, proje-lokal kod referansı
   OLMADAN sor. Bu oturumda iki karar sorusu bu biçimde soruldu ve ikisi de yanıtlandı.

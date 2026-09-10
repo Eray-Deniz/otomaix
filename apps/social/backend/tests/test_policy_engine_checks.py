@@ -1056,6 +1056,59 @@ def test_special_day_field_prefix_binds_to_the_decision() -> None:
     assert engine._alan_bagi_var("", "ozel_gun") is False
 
 
+def _pinli_sozlesme(ad: str) -> str:
+    """Pinlenmiş sözleşme dosyasını sha256 doğrulayarak okur (fail-closed)."""
+    import json
+
+    kok = Path(__file__).resolve().parents[4]
+    pin = json.loads(
+        (kok / "shared/contracts/research-contracts.pin.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    ham = (Path("/root/otomaix-sosyal-medya-arastirmasi") / ad).read_bytes()
+    assert hashlib.sha256(ham).hexdigest() == pin["files"][ad], (
+        f"{ad} pinden sapmış — sözleşmeden ölçülen bayrak adları doğrulanamaz"
+    )
+    return ham.decode("utf-8")
+
+
+def test_every_contract_flag_spelling_is_recognised() -> None:
+    """ÜRETİLMİŞ KÜME: sözleşmenin YAZDIĞI her bayrak adı tanınır.
+
+    Sınıf, elle seçilmiş bir örnekle değil sözleşmeden ÜRETİLEN kümeyle
+    kapanır. Ölçülen hata şuydu: `_katla` noktasız `ı`'yı katlamıyordu ve
+    sözleşmenin kendi yazımı olan `[marka-adı]` · `[kanal-bağımlı]` ·
+    `[kaynak-bağımlı]` HİÇBİR bayrak kontrolünde tanınmıyordu — `[marka-adı]`
+    gerçek marka adının pakete girmesini engelleyen bayraktır.
+
+    Sözleşmeye yeni bir bayrak eklenip `BAYRAKLAR` güncellenmezse bu test DÜŞER.
+    """
+    import re
+
+    metin = _pinli_sozlesme("hakem-denetci-gorevi.md")
+    blok = re.search(
+        r"^BAYRAKLAR \(geçerli olan tümü\):\n(.*?)\n\nÖNERİ:",
+        metin,
+        re.S | re.M,
+    )
+    assert blok is not None, "BAYRAKLAR bloğu sözleşmede bulunamadı"
+    yazimlar = re.findall(r"^- \[([^\]:]+)", blok.group(1), re.M)
+    assert len(yazimlar) == len(engine.BAYRAKLAR), (
+        f"sözleşme {len(yazimlar)} bayrak yazıyor, modül {len(engine.BAYRAKLAR)}"
+    )
+    taninmayan = [
+        yazim for yazim in yazimlar if not engine._bayraklar(f"[{yazim}]")
+    ]
+    assert not taninmayan, f"sözleşmenin yazdığı bayraklar TANINMIYOR: {taninmayan}"
+
+
+def test_flag_folding_matrix_has_a_negative_arm() -> None:
+    """BOŞ-KÜME kontrol kolu: kümede olmayan bir ad TANINMAZ (tarama körü kabul etmiyor)."""
+    assert engine._bayraklar("[uydurma-bayrak]") == set()
+    assert engine._bayraklar("[]") == set()
+
+
 def test_an_unconsumed_flag_on_the_typed_row_becomes_an_open_question() -> None:
     """Bayrak SENTEZİN metninde değil, denetçinin TİPLİ sütununda da aranır.
 

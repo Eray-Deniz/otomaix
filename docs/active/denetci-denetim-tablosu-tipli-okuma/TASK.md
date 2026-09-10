@@ -82,13 +82,16 @@ bulgu (1 yüksek, 1 orta, 1 düşük).
 - **Yüksek bulgunun kalan ayağı (atıf ADAYA bağlanmalı) ÇÖZÜLMEDİ.** Sözleşme revizyonu ister;
   yama değildir. **Evi: `docs/active/denetci-atif-aday-kimligi/` (proposed, sert son tarih
   Task 19).** Aynı eksen üç turda üç varyant verdi; yamamayı bırakma kararı bilinçlidir.
-- **Düşük (kontrolörün ürünü):** `_tur_url_kapisi` docstring'i ve orkestrasyon test yorumu hâlâ
-  yetkili değerin `sources` uzunluğu olduğunu söylüyor — F1'den sonra YANLIŞ. Eray'ın severity
-  kuralı gereği bu turda düzeltilmedi; üç satırlık iş, karar Eray'ın.
-- **Düşük (ÖNCEDEN VAR OLAN, bu görevin ürünü değil):** `engine._katla` noktasız `ı`'yı
-  katlamıyor; sözleşmenin kendi yazımı `[marka-adı]`, `[kanal-bağımlı]`, `[kaynak-bağımlı]`
-  hiçbir bayrak kontrolünde TANINMIYOR (ne yeni tipli kapıda ne Task 12'nin
-  `_bayrak_tuketimi`'nde). Evi YOK — Eray'ın kararını bekliyor.
+- ~~Düşük (kontrolörün ürünü): bayat docstring~~ — **KAPANDI (2026-09-10).** Eray'a "karar
+  senin" diye taşınmıştı; taşınmamalıydı — kontrolörün kendi ürettiği yanlış belgeydi ve üç
+  satırdı. Düzeltildi.
+- ~~Düşük (önceden var olan): bayrak yazım katlaması~~ — **KAPANDI (2026-09-10).** `_katla`
+  noktasız `ı`'yı katlamıyordu; sözleşmenin kendi yazımı `[marka-adı]`, `[kanal-bağımlı]`,
+  `[kaynak-bağımlı]` hiçbir bayrak kontrolünde TANINMIYORDU — `[marka-adı]` gerçek marka adının
+  pakete girmesini engelleyen bayraktır, yani boş bir kusur değildi. Bu da Eray'a karar diye
+  taşınmıştı; taşınmamalıydı. Sınıf tek örnekle değil SÖZLEŞMEDEN ÜRETİLEN kümeyle kapatıldı
+  (sekiz yazımın sekizi) + negatif kontrol kolu. Etki alanı ölçüldü (İlke 6): `_katla`'nın dört
+  tüketicisinde de yön TEMKİNLİ — hiçbir kolda kapı gevşemiyor.
 - **Uçtan uca koşum YOK.** Motor gerçek denetçi çıktısıyla hiç çağrılmadı; ilk gerçek ölçüm
   Task 19.
 
