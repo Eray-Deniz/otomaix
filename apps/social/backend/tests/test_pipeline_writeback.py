@@ -1810,3 +1810,37 @@ def test_write_path_locks_no_existing_package_row():
     govde = _govde(writeback.write_draft_from_run)
     assert _konumlar(govde, _PAKET_KILIDI) == []
     assert "insert_draft" in govde, "yazım yolu taslak yazmıyor — test bayat"
+
+
+@pytest.mark.parametrize(
+    "hedef",
+    [{}, {"package_id": None, "fazladan": 1}, {"target_version": 1}],
+    ids=["bos", "fazla_anahtar", "yanlis_anahtar"],
+)
+async def test_provenance_refuses_a_malformed_target_binding(pkg_db, hedef):
+    """Hedef bağı EKSİK ya da FAZLA gelirse jeton HİÇ tüketilmez.
+
+    Bu kapı gelecekteki bir çağırana karşıdır: kapı olmadan `hedef={}` geçen bir
+    çağıran, koşulu sessizce yalnız kanıtın kendi alanlarına indirger — yani F1
+    turunda kapatılan hedef bağı tek satırlık bir çağrı hatasıyla geri açılırdı.
+    Mutasyon ölçümü bu kapıyı önce SAHTE-YEŞİL gösterdi; test o ölçümün üzerine
+    yazıldı.
+
+    **Bu test bir kez SESSİZCE SİLİNDİ** (339362c): yapısal kilit testinin
+    yeniden yazımı dosyanın kalanını kırpmıştı ve bunu bağımsız hakem yakaladı.
+    Silinmesi çalışma zamanı davranışını değiştirmedi ama mutasyonla kanıtlanmış
+    regresyon kapısını kaldırdı — geri kondu.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id, hedef_paket = await _yazilmis_ve_onayli(pkg_db, sector_id)
+    async with pkg_db.transaction():
+        kanit = await writeback.build_activation_evidence(pkg_db, run_id=run_id)
+
+    with pytest.raises(GateNotSatisfied, match="hedef bağı"):
+        await lifecycle._consume_provenance(pkg_db, kanit, hedef=hedef)
+
+    # Jeton HARCANMADI: doğru bağla hâlâ geçer.
+    await lifecycle.activate_package(
+        pkg_db, package_id=hedef_paket, evidence=kanit, actor=ACTOR
+    )
+    assert await _durum(pkg_db, hedef_paket) == "active"
