@@ -3,6 +3,8 @@ task: sektor-bilgi-paketi-plan2
 written: 2026-09-10
 ---
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-08-30 11:36) — bu anlatı yürütme öncesine aittir; güncel durum TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+
 # Resume From
 
 **Sıradaki iş: Task 14** (onay yüzeyi — değişmez anlık görüntü · sinyal sıralaması · onay olayı).
