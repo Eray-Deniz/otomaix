@@ -1380,14 +1380,29 @@ async def test_concurrent_update_and_activation_single_winner(test_db_setup):
                 await asyncio.gather(_guncelle(bir), _aktive(iki))
             )
 
-        assert sonuclar.count("ok") >= 1, f"iki taraf da düştü: {sonuclar}"
+        # TEK kazanan — `>= 1` YETMEZ (fix turu 1, hakem bulgusu). Gevşek
+        # oracle testin ADIYLA çelişiyordu: iki taraf da başarılı dönse bile
+        # geçiyordu, yani kayıp-güncelleme yarışı yeşil kalabilirdi.
+        assert sonuclar.count("ok") == 1, f"tek kazanan bekleniyordu: {sonuclar}"
+        kaybeden = [s for s in sonuclar if s != "ok"][0]
+        assert kaybeden in {
+            "ActivationRefused",
+            "LifecycleError",
+        }, f"kaybeden AÇIKÇA düşmeli, ham hata değil: {kaybeden}"
+
         durum = await setup.fetchval(
             "SELECT status FROM social.sector_packages WHERE id = $1", package_id
         )
+        olaylar = await setup.fetchval(
+            "SELECT count(*) FROM social.package_events "
+            "WHERE sector_id = $1 AND event_type = 'activation'",
+            sector_id,
+        )
         if sonuclar[1] == "ok":
-            assert durum == "active"
+            assert durum == "active" and olaylar == 1
         else:
             assert durum == "draft", "aktivasyon düştüyse satır taslak KALMALI"
+            assert olaylar == 0, "düşen aktivasyon olay yazdı"
 
 
 async def test_correction_vs_stale_activation_single_winner(test_db_setup):
@@ -1560,3 +1575,220 @@ async def test_in_place_update_rewrites_content_and_log_together(pkg_db):
     assert identity.check_unit_integrity(
         sonraki["content"], [dict(s) for s in sonraki["decision_log"]]
     ) == []
+
+
+# ═══ 9. HEDEF BAĞI — jeton geçişin HEDEFİNE de bağlıdır (fix turu 1) ════════
+#
+# Hakem bulgusu (yüksek): önceki yazımda köken jetonu yalnız kanıtın KENDİ
+# alanlarıyla eşleşiyordu. Meşru basılmış bir jeton, sıradan bir argüman
+# karışmasıyla BAŞKA bir taslağa ya da onaylanmamış bir hedef sürüme
+# harcanabiliyordu — doğrudan veritabanı erişimi olan bir saldırgan gerekmiyordu.
+
+
+async def _durum(db, package_id) -> str:
+    return await db.fetchval(
+        "SELECT status FROM social.sector_packages WHERE id = $1", package_id
+    )
+
+
+async def _onayli_geri_alma(pkg_db):
+    """Onaylı olay planı + GERÇEK basılmış geri alma kanıtı.
+
+    Kurulum Task 8'in kendi test yardımcılarından gelir — ikinci bir kopya
+    yazmak iki dosyanın sessizce ayrışmasına davetiye olurdu.
+    Dönen: `(sector_id, aktif_paket_id, incident_id, kanit)`; sektörde arşiv v1
+    ve aktif v2 vardır, planın onaylı hedefi v1'dir.
+    """
+    from .test_pipeline_runs import _affected, _bos_evren
+    from .test_pipeline_runs import _geri_alinabilir as _sektor_kur
+
+    await _bos_evren(pkg_db)
+    sector_id, aktif = await _sektor_kur(pkg_db)
+    kume = await _affected(pkg_db)
+    incident_id = await runs.build_rollback_plan(pkg_db, affected=kume, actor=ACTOR)
+    await runs.approve_incident_rollback(pkg_db, incident_id=incident_id, actor=ACTOR)
+    async with pkg_db.transaction():
+        kanit = await runs.build_rollback_evidence(
+            pkg_db, incident_id=incident_id, package_id=aktif
+        )
+    return sector_id, aktif, incident_id, kanit
+
+
+async def test_activation_token_is_bound_to_the_target_package(pkg_db):
+    """Aktivasyon jetonu, koşunun BAĞLI OLDUĞU taslaktan başkasını açamaz."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id, dogru_hedef = await _yazilmis_ve_onayli(pkg_db, sector_id)
+    async with pkg_db.transaction():
+        kanit = await writeback.build_activation_evidence(pkg_db, run_id=run_id)
+
+    yabanci = await pkg_db.fetchval(
+        "INSERT INTO social.sector_packages "
+        "(sector_id, version, status, schema_version, content) "
+        "VALUES ($1, 9, 'draft', 1, $2) RETURNING id",
+        sector_id,
+        _icerik(),
+    )
+
+    with pytest.raises(EvidenceProvenanceInvalid):
+        await lifecycle.activate_package(
+            pkg_db, package_id=yabanci, evidence=kanit, actor=ACTOR
+        )
+    assert await _durum(pkg_db, yabanci) == "draft"
+
+    # POZİTİF KONTROL: aynı kanıt DOĞRU hedefte geçer — kapı hedefi ayırt ediyor,
+    # kanıtı topluca reddetmiyor. (Yabancı taslak v9 olduğu için kanıtın taban
+    # durumu hâlâ geçerlidir: sektörde aktif sürüm YOK.)
+    await lifecycle.activate_package(
+        pkg_db, package_id=dogru_hedef, evidence=kanit, actor=ACTOR
+    )
+    assert await _durum(pkg_db, dogru_hedef) == "active"
+
+
+async def test_rollback_token_is_bound_to_the_approved_target_version(pkg_db):
+    """Geri alma jetonu, onaylanan HEDEF SÜRÜMDEN başkasına harcanamaz.
+
+    `to_version` ÇAĞIRAN parametresidir; plan satırının `target_version`'ı ise
+    onayın kendisiyle mühürlenmiştir. Kapı jeton tüketiminin İÇİNDEDİR, yani
+    hedef sürüm kapısı durum kapısından ÖNCE koşar.
+    """
+    sector_id, aktif, _incident, kanit = await _onayli_geri_alma(pkg_db)
+
+    with pytest.raises(EvidenceProvenanceInvalid):
+        await lifecycle.rollback_package(
+            pkg_db, sector_id=sector_id, to_version=2, evidence=kanit, actor=ACTOR
+        )
+
+    assert await _durum(pkg_db, aktif) == "active", "reddedilen geri alma geçiş yaptı"
+
+
+async def test_rollback_evidence_is_bound_to_the_package_being_rolled_back(pkg_db):
+    """Kanıt, geri alınan paketin KENDİSİ için verilmiş olmalı.
+
+    Kanıt BOZULMAZ — jetonu ve parmak izi geçerlidir, plan satırı da vardır.
+    Değişen tek şey ÇAĞIRANIN verdiği `sector_id`'dir. Bu kapı olmadan A
+    sektörünün onaylı kanıtı B sektörünün aktif sürümünü arşivleyebilirdi.
+    """
+    _a_sector, a_aktif, _incident, kanit = await _onayli_geri_alma(pkg_db)
+
+    b_sector = await _sub_sector(pkg_db)
+    from .test_pipeline_runs import _kokenli_paket
+
+    await _kokenli_paket(pkg_db, b_sector, version=1, status="archived")
+    b_aktif, _ = await _kokenli_paket(pkg_db, b_sector, version=2, status="active")
+
+    with pytest.raises(GateNotSatisfied, match="BAŞKA bir paketi"):
+        await lifecycle.rollback_package(
+            pkg_db, sector_id=b_sector, to_version=1, evidence=kanit, actor=ACTOR
+        )
+
+    assert await _durum(pkg_db, b_aktif) == "active", "yabancı kanıt B'yi arşivledi"
+    assert await _durum(pkg_db, a_aktif) == "active"
+
+
+async def test_rollback_succeeds_on_the_approved_target(pkg_db):
+    """POZİTİF KONTROL: doğru hedef sürümde geri alma iner."""
+    sector_id, aktif, _incident, kanit = await _onayli_geri_alma(pkg_db)
+
+    await lifecycle.rollback_package(
+        pkg_db, sector_id=sector_id, to_version=1, evidence=kanit, actor=ACTOR
+    )
+
+    yeni_aktif = await pkg_db.fetchval(
+        "SELECT version FROM social.sector_packages "
+        "WHERE sector_id = $1 AND status = 'active'",
+        sector_id,
+    )
+    assert yeni_aktif == 1
+    assert await _durum(pkg_db, aktif) == "archived"
+
+
+async def test_update_path_rejects_a_blank_actor(pkg_db):
+    """Yerinde güncelleme geçersiz aktörü SESSİZCE kabul etmez.
+
+    **DÜRÜST SINIR:** bu test kalıcı ATFI ölçmez — aktörün yazılacağı bir yer
+    bugün YOK (Task 6'nın eşli ayağı inmedi, ölçüldü). Ölçtüğü tek şey,
+    imzadaki `actor` parametresinin tutulmayan bir söz olmadığıdır.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    _, duzeltme_run_id, _ = await _duzeltme_kosusu(
+        pkg_db, sector_id, content=_degistirilmis_icerik()
+    )
+
+    with pytest.raises(ValueError):
+        await writeback.update_draft_from_run(
+            pkg_db, run_id=duzeltme_run_id, actor="   "
+        )
+
+
+@pytest.mark.parametrize(
+    "fonksiyon",
+    [writeback.activate_from_snapshot, writeback.build_activation_evidence],
+    ids=["activate_from_snapshot", "build_activation_evidence"],
+)
+def test_sector_lock_is_taken_before_any_package_lock(fonksiyon):
+    """KİLİT SIRASI: sektör kilidi HER paket satırı kilidinden ÖNCE (fix turu 1).
+
+    **Neden yapısal ve neden davranışsal DEĞİL.** Ölçülmek istenen şey bir
+    YOKLUK — "kilitlenme döngüsü yok". Yokluğu koşarak kanıtlamak, döngünün
+    gerçekleşmesini ummayı gerektirir; sonuç zamanlamaya bağlı olur ve kırmızısı
+    güvenilmez olurdu. Döngüyü üreten şey ise yapısaldır ve TAM OLARAK
+    ÖLÇÜLEBİLİR: bir paket satırını sektör kilidinden önce kilitlemek.
+
+    Önceki yazım tam bunu yapıyordu ve kaynak açıklaması "döngü üretmez"
+    diyordu; hakem somut sarmalamayı gösterdi ve iddia ÇÜRÜDÜ — aktivasyon
+    aktif paketi tutup sektörü beklerken, geri alma sektörü tutup aynı aktif
+    paketi bekliyordu.
+    """
+    # Gövde docstring'DEN AYRILIR: anlatı metni bir kilit çağrısı DEĞİLDİR ve
+    # içinde geçen adlar sırayı yanlış ölçtürürdü.
+    kaynak = inspect.getsource(fonksiyon)
+    govde = kaynak.split('"""')[-1]
+    sektor_kilidi = govde.find("_lock_sector")
+    assert sektor_kilidi != -1, "sektör kilidi hiç alınmıyor"
+
+    # SQL bitişik dize parçalarına bölünmüş olabilir (`"... " "... FOR UPDATE"`),
+    # o yüzden desen tırnak ve satır sonlarına toleranslıdır.
+    paket_kilitleri = [
+        m.start()
+        for m in re.finditer(
+            r"FROM social\.sector_packages.{0,240}?FOR UPDATE", govde, re.DOTALL
+        )
+    ]
+    paket_kilitleri += [
+        govde.find(cagri)
+        for cagri in ("lifecycle.activate_package", "_lock_and_load")
+        if govde.find(cagri) != -1
+    ]
+    assert paket_kilitleri, "bu fonksiyon hiç paket satırı kilitlemiyor — test boş küme ölçüyor"
+    assert all(konum > sektor_kilidi for konum in paket_kilitleri), (
+        "paket satırı sektör kilidinden ÖNCE kilitleniyor — kilitlenme döngüsü açılır"
+    )
+
+
+@pytest.mark.parametrize(
+    "hedef",
+    [{}, {"package_id": None, "fazladan": 1}, {"target_version": 1}],
+    ids=["bos", "fazla_anahtar", "yanlis_anahtar"],
+)
+async def test_provenance_refuses_a_malformed_target_binding(pkg_db, hedef):
+    """Hedef bağı EKSİK ya da FAZLA gelirse jeton HİÇ tüketilmez.
+
+    Bu kapı gelecekteki bir çağırana karşıdır ve kendi testini hak eder: kapı
+    olmadan `hedef={}` geçen bir çağıran, koşulu sessizce yalnız kanıtın kendi
+    alanlarına indirger — yani bu turda kapatılan hedef bağı, tek satırlık bir
+    çağrı hatasıyla geri açılırdı. Mutasyon ölçümü bu kapıyı SAHTE-YEŞİL
+    gösterdi ve test o ölçümün üzerine yazıldı.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id, hedef_paket = await _yazilmis_ve_onayli(pkg_db, sector_id)
+    async with pkg_db.transaction():
+        kanit = await writeback.build_activation_evidence(pkg_db, run_id=run_id)
+
+    with pytest.raises(GateNotSatisfied, match="hedef bağı"):
+        await lifecycle._consume_provenance(pkg_db, kanit, hedef=hedef)
+
+    # Jeton HARCANMADI: doğru bağla hâlâ geçer.
+    await lifecycle.activate_package(
+        pkg_db, package_id=hedef_paket, evidence=kanit, actor=ACTOR
+    )
+    assert await _durum(pkg_db, hedef_paket) == "active"

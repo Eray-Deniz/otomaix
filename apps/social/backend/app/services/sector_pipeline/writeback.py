@@ -19,12 +19,13 @@ YAZILMAZ. Yapısal kilidi:
 şekilde başlar, yani iki yol koşu satırında serileşir. Ondan sonra taslak
 satırı, sonra yaşam döngüsü katmanının kendi sırası (sektör → paket) gelir.
 
-**Dürüst sınır:** aktivasyon yolu içerik bağını ölçmek için taslak satırını
-sektör kilidinden ÖNCE alır. Bu, yaşam döngüsünün kendi sırasının tersidir ama
-döngü üretmez: sektör kilidini bekleyen taraf taslak kilidini tutar, sektör
-kilidini TUTAN taraf ise başka bir taslağın kilidini beklemez. Aynı desen Task
-8'in jeton basımında da vardır (aktif paket satırı sektör kilidi olmadan
-kilitlenir); burada yeni bir sınıf açılmıyor, var olan desen izleniyor.
+**Bu sıra fix turu 1'de DÜZELTİLDİ (hakem bulgusu, yüksek).** Önceki yazım
+taslak satırını sektör kilidinden ÖNCE alıyordu ve buradaki açıklama "döngü
+üretmez" diyordu. Hakem somut bir sarmalama gösterdi ve ÖLÇÜLDÜ ki iddia
+YANLIŞTI: aktivasyon aktif paketi tutup sektörü beklerken, geri alma sektörü
+tutup `_active_row`'da AYNI aktif paketi bekler — kapalı bir döngü. İki meşru
+işlem, düşman girdi gerekmiyor. Artık her iki uç da sektör kilidini herhangi
+bir paket satırından ÖNCE alır.
 """
 
 from __future__ import annotations
@@ -134,6 +135,20 @@ async def update_draft_from_run(db, *, run_id: str, actor: str) -> None:
     aynı senaryoyu İKİNCİ ve bağımsız bir kapıyla kapatır; biri diğerinin
     yerine geçmez.
     """
+    # Aktör KANONİK KAPIDAN geçer (fix turu 1, hakem bulgusu). Önceki yazım
+    # parametreyi alıyor ama HİÇ kullanmıyordu: boş ya da yalnız-boşluk bir
+    # aktör sessizce kabul ediliyordu, yani imza tutulmayan bir söz veriyordu.
+    #
+    # DÜRÜST SINIR — bu doğrulama KALICI ATIF DEĞİLDİR. Aktörün nereye
+    # yazılacağı bugün YOK: `sector_packages` tablosunda aktör kolonu, olay türü
+    # kümesinde bir taslak olayı bulunmuyor. Borç TASK.md'de EŞLİ yükümlülük
+    # olarak kayıtlı (Task 6 olay türünü açar, Task 15 çağrıyı ekler) ve Task
+    # 6'nın ayağı İNMEDİ — ölçüldü: depoda `draft_created`/`draft_updated`
+    # diye bir olay türü yok. Burada kapatılan şey yalnız "geçersiz aktör
+    # sessizce kabul ediliyor" ayağıdır.
+    owner = lifecycle._require_actor(actor)
+    del owner  # kalıcı taşıyıcı henüz YOK; değer bilerek kullanılmıyor
+
     async with db.transaction():
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
         if run.duzeltilen_run_id is None:
@@ -174,6 +189,10 @@ async def build_activation_evidence(db, *, run_id: str) -> lifecycle.ActivationG
     sessizce ayrışır ve köken kapısı hiçbir zaman açılmazdı.
     """
     run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
+    # Sektör kilidi AKTİF PAKET satırından ÖNCE (fix turu 1, kilitlenme
+    # döngüsü). Bu fonksiyon `activate_from_snapshot` DIŞINDAN da çağrılabildiği
+    # için sırayı kendisi kurar; iki kez almak aynı işlemde zararsızdır.
+    await lifecycle._lock_sector(db, run.sector_id)
     aktif = await db.fetchrow(
         "SELECT id, version FROM social.sector_packages "
         "WHERE sector_id = $1 AND status = 'active' FOR UPDATE",
@@ -221,6 +240,11 @@ async def activate_from_snapshot(db, *, run_id: str, actor: str) -> None:
     """
     async with db.transaction():
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
+        # SEKTÖR KİLİDİ, HER PAKET KİLİDİNDEN ÖNCE (fix turu 1). Yaşam döngüsü
+        # katmanı da aynı sırayı kullanır ve kilidi yeniden almak aynı işlemde
+        # zararsızdır; kazanılan şey, bu yolun aşağıda alacağı taslak ve aktif
+        # paket kilitlerinin sektör kilidinin ARDINDA kalmasıdır.
+        await lifecycle._lock_sector(db, run.sector_id)
         if run.package_id is None:
             raise ActivationRefused(
                 f"koşu {run_id!r} bir taslağa bağlı DEĞİL — aktive edilecek hedef yok"

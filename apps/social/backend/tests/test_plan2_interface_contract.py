@@ -719,7 +719,7 @@ from .test_package_lifecycle import (  # noqa: E402
 )
 
 
-async def _muhurlu_aktivasyon_kaniti(conn, sector_id, **overrides):
+async def _muhurlu_aktivasyon_kaniti(conn, sector_id, package_id, **overrides):
     """MÜHÜRLÜ aktivasyon kanıtı (Plan 2 Task 15, arayüz eki R8(c)).
 
     Literal kanıt artık hiçbir geçişten geçmez: köken jetonunun kilitli satırda
@@ -740,11 +740,13 @@ async def _muhurlu_aktivasyon_kaniti(conn, sector_id, **overrides):
         "expected_no_active", alanlar.get("expected_active_version") is None
     )
     kanit = ActivationGateEvidence(**alanlar)
-    await _muhurle_aktivasyon(conn, kanit, sector_id=sector_id)
+    await _muhurle_aktivasyon(
+        conn, kanit, sector_id=sector_id, package_id=package_id
+    )
     return kanit
 
 
-async def _muhurlu_geri_alma_kaniti(conn, package_id):
+async def _muhurlu_geri_alma_kaniti(conn, package_id, *, to_version: int = 1):
     """MÜHÜRLÜ geri alma kanıtı — aktivasyonunkiyle AYNI disiplin."""
     kanit = RollbackGateEvidence(
         manager_approved=True,
@@ -756,7 +758,7 @@ async def _muhurlu_geri_alma_kaniti(conn, package_id):
         onay_kapsam_sha=_KOKEN_KAPSAM_SHA,
         provenance_token=_KOKEN_JETONU,
     )
-    await _muhurle_rollback(conn, kanit)
+    await _muhurle_rollback(conn, kanit, target_version=to_version)
     return kanit
 
 
@@ -775,7 +777,7 @@ async def test_insert_draft_and_activate_chain_end_to_end(pkg_db):
     await activate_package(
         pkg_db,
         package_id=package_id,
-        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id),
+        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id, package_id),
         actor=ACTOR,
     )
     status = await pkg_db.fetchval(
@@ -795,7 +797,7 @@ async def test_rollback_package_takes_its_own_evidence(pkg_db):
     await activate_package(
         pkg_db,
         package_id=first,
-        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id),
+        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id, first),
         actor=ACTOR,
     )
 
@@ -806,12 +808,14 @@ async def test_rollback_package_takes_its_own_evidence(pkg_db):
         pkg_db,
         package_id=second,
         evidence=await _muhurlu_aktivasyon_kaniti(
-            pkg_db, sector_id, run_id=f"{_KOKEN_RUN_ID}-2", expected_active_version=1
+            pkg_db, sector_id, second, run_id=f"{_KOKEN_RUN_ID}-2",
+            expected_active_version=1,
         ),
         actor=ACTOR,
     )
     activation = await _muhurlu_aktivasyon_kaniti(
-        pkg_db, sector_id, run_id=f"{_KOKEN_RUN_ID}-3", expected_active_version=2
+        pkg_db, sector_id, second, run_id=f"{_KOKEN_RUN_ID}-3",
+        expected_active_version=2,
     )
 
     # Kanıt tipleri PAYLAŞILMAZ — aktivasyon kanıtıyla rollback yapılamaz.
@@ -824,7 +828,7 @@ async def test_rollback_package_takes_its_own_evidence(pkg_db):
         pkg_db,
         sector_id=sector_id,
         to_version=1,
-        evidence=await _muhurlu_geri_alma_kaniti(pkg_db, first),
+        evidence=await _muhurlu_geri_alma_kaniti(pkg_db, second),
         actor=ACTOR,
     )
     assert (
@@ -844,7 +848,7 @@ async def test_deactivate_package_documented_signature(pkg_db):
     await activate_package(
         pkg_db,
         package_id=package_id,
-        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id),
+        evidence=await _muhurlu_aktivasyon_kaniti(pkg_db, sector_id, package_id),
         actor=ACTOR,
     )
     await deactivate_package(pkg_db, package_id=package_id, actor=ACTOR)

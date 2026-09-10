@@ -641,22 +641,35 @@ test_token_table_mapping_matches_the_minting_side` ile KIRMIZI düşer. Eşleme
 burada yaşar çünkü `runs`'ı import etmek döngü üretir (AÇIK-3).
 """
 
-_JETON_KOSULU: dict[type, tuple[str, tuple[str, ...]]] = {
-    ActivationGateEvidence: ("run_id = $2", ("run_id",)),
-    RollbackGateEvidence: (
-        "incident_id = $2 AND package_id = $3",
-        ("incident_id", "package_id"),
-    ),
+_JETON_KOSULU: dict[type, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    ActivationGateEvidence: (("run_id",), ("package_id",)),
+    RollbackGateEvidence: (("incident_id", "package_id"), ("target_version",)),
 }
-"""Kanıt sınıfı → (satır koşulu, kanıttan okunacak anahtar alanları).
+"""Kanıt sınıfı → (kanıttan okunan anahtar kolonları, ÇAĞIRANIN hedef kolonları).
 
-Anahtarlar ÇAĞIRANDAN değil KANITIN KENDİSİNDEN okunur: jetonun basıldığı satır
-ile kanıtın işaret ettiği satır aynı olmak zorundadır.
+**İki demet iki AYRI soruyu sorar ve biri diğerinin yerine geçmez:**
+
+* Birinci demet — jetonun basıldığı satırı bulur; değerleri KANITIN KENDİSİNDEN
+  okunur, çağırandan değil.
+* İkinci demet — o satırın ÇAĞIRANIN GEÇİŞ HEDEFİYLE aynı şeyi anlattığını
+  doğrular. **Bu ayak fix turu 1'de EKLENDİ (hakem bulgusu, yüksek):** önceki
+  yazım yalnız `run_id`/`(incident_id, package_id)` eşlemesi yapıyordu, yani
+  meşru basılmış bir jeton BAŞKA bir taslağa ya da onaylanmamış bir hedef
+  sürüme harcanabiliyordu — doğrudan veritabanı erişimi olan bir saldırgana
+  gerek yoktu, sıradan bir argüman karışması yetiyordu.
+
+Kolon adları bu KAPALI tabloda yaşar; çağıran yalnız DEĞER verir, kolon adı
+veremez. Bilinmeyen bir kolon adı SQL'e hiç ulaşamaz.
 """
 
 
-async def _consume_provenance(db, evidence: Any) -> None:
+async def _consume_provenance(db, evidence: Any, *, hedef: Mapping[str, Any]) -> None:
     """Kanıtın köken jetonunu KİLİTLİ satıra karşı doğrular ve HARCAR (R8(c)).
+
+    `hedef` ÇAĞIRANIN geçiş hedefidir ve jetonun basıldığı satırla EŞLEŞMEK
+    ZORUNDADIR — kanıtın kendi alanlarıyla değil, geçişin gerçek hedefiyle.
+    Kolon adları kapalı `_JETON_KOSULU` tablosundan gelir; çağıran yalnız DEĞER
+    verir, dolayısıyla bilinmeyen bir kolon adı SQL'e hiç ulaşmaz.
 
     Kapının BURADA olmasının sebebi ölçülmüştür: `frozen=True` bir dataclass'ın
     literalden kurulmasını Python'da engellemek MÜMKÜN DEĞİLDİR, dolayısıyla
@@ -678,25 +691,36 @@ async def _consume_provenance(db, evidence: Any) -> None:
     kalsın diye. Ters sıra, yazım yoluyla karşılaştığında kilitlenme üretirdi.
     """
     tablo = _JETON_TABLOSU.get(type(evidence))
-    kosul, anahtar_alanlari = _JETON_KOSULU.get(type(evidence), ("", ()))
-    if tablo is None or not kosul:
+    anahtar_alanlari, hedef_kolonlari = _JETON_KOSULU.get(type(evidence), ((), ()))
+    if tablo is None or not anahtar_alanlari:
         raise GateNotSatisfied(
             f"kanıt sınıfı jeton eşlemesinde YOK: {type(evidence).__name__} — "
             "köken doğrulanamayan kanıt kabul edilmez"
         )
+    if set(hedef) != set(hedef_kolonlari):
+        raise GateNotSatisfied(
+            f"{type(evidence).__name__} için hedef bağı eksik ya da fazla: "
+            f"beklenen {list(hedef_kolonlari)}, verilen {sorted(hedef)} — "
+            "hedefsiz jeton tüketimi YAPILMAZ"
+        )
 
-    anahtarlar = tuple(getattr(evidence, ad) for ad in anahtar_alanlari)
+    degerler = [getattr(evidence, ad) for ad in anahtar_alanlari]
+    degerler += [hedef[ad] for ad in hedef_kolonlari]
+    kolonlar = tuple(anahtar_alanlari) + tuple(hedef_kolonlari)
+    # Kolon adları KAPALI tablodan gelir (çağıran yalnız DEĞER verir); yer
+    # tutucular $2'den başlar çünkü $1 jetonun kendisidir.
+    kosul = " AND ".join(f"{ad} = ${sira}" for sira, ad in enumerate(kolonlar, start=2))
     beklenen_parmakizi = _evidence_fingerprint(evidence)
 
     harcandi = await db.fetchval(
         f"UPDATE social.{tablo} SET kanit_jetonu_harcandi_at = now() "
         f"WHERE {kosul} "
         f"  AND kanit_jetonu = $1 "
-        f"  AND kanit_jetonu_parmakizi = ${len(anahtarlar) + 2} "
+        f"  AND kanit_jetonu_parmakizi = ${len(degerler) + 2} "
         "  AND kanit_jetonu_harcandi_at IS NULL "
         "RETURNING kanit_jetonu_basildi_at",
         evidence.provenance_token,
-        *anahtarlar,
+        *degerler,
         beklenen_parmakizi,
     )
     if harcandi is None:
@@ -1145,7 +1169,7 @@ async def activate_package(
         # KÖKEN KAPISI İLK (R8(c)): kilit sırası koşu → sektör → paket olarak
         # kalsın diye jeton, paket satırı kilitlenmeden ÖNCE harcanır. Ters sıra
         # yazım yoluyla karşılaştığında kilitlenme üretirdi.
-        await _consume_provenance(db, evidence)
+        await _consume_provenance(db, evidence, hedef={"package_id": package_id})
 
         sector_id, target = await _lock_and_load(db, package_id)
         if target["status"] != "draft":
@@ -1214,7 +1238,7 @@ async def rollback_package(
     async with db.transaction():
         # KÖKEN KAPISI İLK (R8(c)) — aktivasyon yoluyla AYNI sıra: jeton satırı
         # (olay planı) sektör ve paket satırlarından ÖNCE.
-        await _consume_provenance(db, evidence)
+        await _consume_provenance(db, evidence, hedef={"target_version": to_version})
 
         await _lock_sector(db, sector_id)
         has_archived = await db.fetchval(
@@ -1247,6 +1271,17 @@ async def rollback_package(
             raise LifecycleError(
                 "bu sektörde aktif sürüm YOK — geri alınacak bir geçiş yok; "
                 "yeni sürüm açmak activate_package'ın işidir"
+            )
+        # HEDEF BAĞI, ikinci ayak (fix turu 1, hakem bulgusu): jeton kapısı
+        # `target_version`'ı bağlıyor, bu kapı da kanıtın GERİ ALINAN pakete
+        # ait olduğunu bağlıyor. `sector_id` çağıran parametresidir; bu kontrol
+        # olmadan bir sektörün onaylı kanıtı BAŞKA bir sektörün aktif sürümünü
+        # arşivleyebilirdi.
+        if evidence.package_id != current["id"]:
+            raise GateNotSatisfied(
+                f"kanıt BAŞKA bir paketi geri alıyor: kanıt {evidence.package_id}, "
+                f"bu sektörde aktif olan {current['id']} — onay, geri alınan "
+                "paketin KENDİSİ için verilmiştir"
             )
 
         await _apply_status_transition(
