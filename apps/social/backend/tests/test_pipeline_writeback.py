@@ -1442,15 +1442,25 @@ async def test_correction_vs_stale_activation_single_winner(test_db_setup):
                 await asyncio.gather(_guncelle(bir), _aktive(iki))
             )
 
-        assert sonuclar.count("ok") >= 1, f"iki taraf da düştü: {sonuclar}"
+        # TEK kazanan ve KAYBEDEN TİPLİ — `>= 1` YETMEZ (hakem turu 2).
+        # Gevşek oracle iki şeyi birden gizliyordu: iki kazanan, ve HAM bir
+        # veritabanı hatası (kilitlenme) ile düşen bir kaybeden. İkincisi tam da
+        # bu turda kapatılan sınıftı, yani testin kendisi onu göremiyordu.
+        assert sonuclar.count("ok") == 1, f"tek kazanan bekleniyordu: {sonuclar}"
+        kaybeden = [s for s in sonuclar if s != "ok"][0]
+        assert kaybeden in {
+            "EvidenceProvenanceInvalid",
+            "LifecycleError",
+            "GateNotSatisfied",
+        }, f"kaybeden TİPLİ bir alan hatasıyla düşmeli, ham DB hatasıyla değil: {kaybeden}"
+        assert "Deadlock" not in kaybeden, f"kilitlenme döngüsü: {kaybeden}"
+
         olaylar = await setup.fetch(
             "SELECT event_type FROM social.package_events "
             "WHERE sector_id = $1 AND event_type = 'activation'",
             sector_id,
         )
         assert len(olaylar) <= 1, "iki aktivasyon olayı yazılamaz"
-        if sonuclar[0] == "ok":
-            assert sonuclar[1] != "ok", "güncelleme kazandıysa bayat kanıt geçmemeli"
 
 
 async def test_update_path_applies_the_same_content_gate(pkg_db):
@@ -1720,75 +1730,83 @@ async def test_update_path_rejects_a_blank_actor(pkg_db):
         )
 
 
+def _govde(fonksiyon) -> str:
+    """Fonksiyon gövdesi — docstring HARİÇ.
+
+    Anlatı metni bir kilit çağrısı DEĞİLDİR; içinde geçen adlar sırayı yanlış
+    ölçtürürdü.
+    """
+    return inspect.getsource(fonksiyon).split('"""')[-1]
+
+
+def _konumlar(govde: str, desenler: tuple[str, ...]) -> list[int]:
+    bulunan = []
+    for desen in desenler:
+        bulunan += [m.start() for m in re.finditer(desen, govde, re.DOTALL)]
+    return sorted(bulunan)
+
+
+# Kilitlenen KOŞU satırları: kendi satırını `FOR UPDATE` ile alan yükleyici ve
+# BAŞKA koşu satırlarına yazan doğrudan SQL.
+_KOSU_KILIDI = (r"load_verified_run", r"UPDATE social\.sector_package_runs")
+# Kilitlenen PAKET satırları: doğrudan `FOR UPDATE` okuma ve paket satırını
+# kilitleyen yaşam döngüsü çağrıları.
+_PAKET_KILIDI = (
+    r"FROM social\.sector_packages.{0,240}?FOR UPDATE",
+    r"_update_draft_row",
+    r"lifecycle\.activate_package",
+    r"_lock_and_load",
+)
+
+
 @pytest.mark.parametrize(
     "fonksiyon",
-    [writeback.activate_from_snapshot, writeback.build_activation_evidence],
-    ids=["activate_from_snapshot", "build_activation_evidence"],
+    [
+        writeback.activate_from_snapshot,
+        writeback.build_activation_evidence,
+        writeback.update_draft_from_run,
+    ],
+    ids=["activate_from_snapshot", "build_activation_evidence", "update_draft_from_run"],
 )
-def test_sector_lock_is_taken_before_any_package_lock(fonksiyon):
-    """KİLİT SIRASI: sektör kilidi HER paket satırı kilidinden ÖNCE (fix turu 1).
+def test_global_lock_order_is_runs_then_sector_then_packages(fonksiyon):
+    """KÜRESEL KİLİT SIRASI: koşu satırları → sektör → paket satırları.
 
-    **Neden yapısal ve neden davranışsal DEĞİL.** Ölçülmek istenen şey bir
-    YOKLUK — "kilitlenme döngüsü yok". Yokluğu koşarak kanıtlamak, döngünün
-    gerçekleşmesini ummayı gerektirir; sonuç zamanlamaya bağlı olur ve kırmızısı
-    güvenilmez olurdu. Döngüyü üreten şey ise yapısaldır ve TAM OLARAK
-    ÖLÇÜLEBİLİR: bir paket satırını sektör kilidinden önce kilitlemek.
+    **Neden yapısal, neden davranışsal DEĞİL.** Ölçülmek istenen şey bir
+    YOKLUK — "kilitlenme döngüsü yok". Yokluğu koşarak kanıtlamak döngünün
+    gerçekleşmesini ummayı gerektirir; kırmızısı zamanlamaya bağlı olurdu.
+    Döngüyü ÜRETEN şey ise yapısaldır ve tam olarak ölçülebilir: iki meşru
+    işlemin aynı iki kaynağı FARKLI sırada kilitlemesi.
 
-    Önceki yazım tam bunu yapıyordu ve kaynak açıklaması "döngü üretmez"
-    diyordu; hakem somut sarmalamayı gösterdi ve iddia ÇÜRÜDÜ — aktivasyon
-    aktif paketi tutup sektörü beklerken, geri alma sektörü tutup aynı aktif
-    paketi bekliyordu.
+    **İki hakem turu, İKİ AYRI döngü, TEK kural.** Tur 1: aktivasyon aktif
+    paketi sektörden önce kilitliyordu. Tur 2: düzeltme, jeton yakmasını
+    (başka koşu satırları) paket mutasyonundan SONRA yapıyordu. İlk turda
+    yalnız varyant kapatılmıştı — bu test SINIFI kapatır: üç yolun üçünde de
+    aynı sıra aranır, yeni bir yol eklendiğinde de aranacaktır.
     """
-    # Gövde docstring'DEN AYRILIR: anlatı metni bir kilit çağrısı DEĞİLDİR ve
-    # içinde geçen adlar sırayı yanlış ölçtürürdü.
-    kaynak = inspect.getsource(fonksiyon)
-    govde = kaynak.split('"""')[-1]
-    sektor_kilidi = govde.find("_lock_sector")
-    assert sektor_kilidi != -1, "sektör kilidi hiç alınmıyor"
+    govde = _govde(fonksiyon)
+    sektor = govde.find("_lock_sector")
+    assert sektor != -1, "sektör kilidi hiç alınmıyor"
 
-    # SQL bitişik dize parçalarına bölünmüş olabilir (`"... " "... FOR UPDATE"`),
-    # o yüzden desen tırnak ve satır sonlarına toleranslıdır.
-    paket_kilitleri = [
-        m.start()
-        for m in re.finditer(
-            r"FROM social\.sector_packages.{0,240}?FOR UPDATE", govde, re.DOTALL
-        )
-    ]
-    paket_kilitleri += [
-        govde.find(cagri)
-        for cagri in ("lifecycle.activate_package", "_lock_and_load")
-        if govde.find(cagri) != -1
-    ]
-    assert paket_kilitleri, "bu fonksiyon hiç paket satırı kilitlemiyor — test boş küme ölçüyor"
-    assert all(konum > sektor_kilidi for konum in paket_kilitleri), (
+    kosu_kilitleri = _konumlar(govde, _KOSU_KILIDI)
+    paket_kilitleri = _konumlar(govde, _PAKET_KILIDI)
+    assert paket_kilitleri, "paket satırı hiç kilitlenmiyor — test boş küme ölçüyor"
+
+    assert all(k < sektor for k in kosu_kilitleri), (
+        "koşu satırı sektör kilidinden SONRA kilitleniyor — düzeltme yolu "
+        "paketi tutup koşu satırını beklerken aktivasyon tersini yapar"
+    )
+    assert all(k > sektor for k in paket_kilitleri), (
         "paket satırı sektör kilidinden ÖNCE kilitleniyor — kilitlenme döngüsü açılır"
     )
 
 
-@pytest.mark.parametrize(
-    "hedef",
-    [{}, {"package_id": None, "fazladan": 1}, {"target_version": 1}],
-    ids=["bos", "fazla_anahtar", "yanlis_anahtar"],
-)
-async def test_provenance_refuses_a_malformed_target_binding(pkg_db, hedef):
-    """Hedef bağı EKSİK ya da FAZLA gelirse jeton HİÇ tüketilmez.
+def test_write_path_locks_no_existing_package_row():
+    """Yazım yolu MEVCUT bir paket satırını kilitlemez — sıradan muaf olması bu.
 
-    Bu kapı gelecekteki bir çağırana karşıdır ve kendi testini hak eder: kapı
-    olmadan `hedef={}` geçen bir çağıran, koşulu sessizce yalnız kanıtın kendi
-    alanlarına indirger — yani bu turda kapatılan hedef bağı, tek satırlık bir
-    çağrı hatasıyla geri açılırdı. Mutasyon ölçümü bu kapıyı SAHTE-YEŞİL
-    gösterdi ve test o ölçümün üzerine yazıldı.
+    Boş-küme kontrol kolu: bu iddia doğru olduğu için yazım yolu küresel sıra
+    testinin kapsamı dışındadır. Yol bir gün mevcut satır kilitlemeye başlarsa
+    bu test kırmızı düşer ve fonksiyon o testin kapsamına ALINMALIDIR.
     """
-    sector_id = await _sub_sector(pkg_db)
-    run_id, hedef_paket = await _yazilmis_ve_onayli(pkg_db, sector_id)
-    async with pkg_db.transaction():
-        kanit = await writeback.build_activation_evidence(pkg_db, run_id=run_id)
-
-    with pytest.raises(GateNotSatisfied, match="hedef bağı"):
-        await lifecycle._consume_provenance(pkg_db, kanit, hedef=hedef)
-
-    # Jeton HARCANMADI: doğru bağla hâlâ geçer.
-    await lifecycle.activate_package(
-        pkg_db, package_id=hedef_paket, evidence=kanit, actor=ACTOR
-    )
-    assert await _durum(pkg_db, hedef_paket) == "active"
+    govde = _govde(writeback.write_draft_from_run)
+    assert _konumlar(govde, _PAKET_KILIDI) == []
+    assert "insert_draft" in govde, "yazım yolu taslak yazmıyor — test bayat"

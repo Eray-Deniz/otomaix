@@ -14,10 +14,15 @@ Yazım · güncelleme · aktivasyon üçü de ondan geçer; ikinci bir kapı lis
 YAZILMAZ. Yapısal kilidi:
 `tests/test_pipeline_writeback.py::test_writeback_cannot_read_run_row_outside_loader`.
 
-**Kilit sırası — koşu satırı HER ZAMAN İLK.** Her public yol
-`load_verified_run`'ı `FOR UPDATE` ile çağırarak başlar; onay yolu da aynı
-şekilde başlar, yani iki yol koşu satırında serileşir. Ondan sonra taslak
-satırı, sonra yaşam döngüsü katmanının kendi sırası (sektör → paket) gelir.
+**KÜRESEL KİLİT SIRASI — koşu satırları → sektör → paket satırları.** Bu
+modülün üç public yolu da (yazım · güncelleme · aktivasyon) ve ham yaşam
+döngüsü tüketicisi bu tek sırayı izler. Tek sıra = döngü yok; iki farklı sıra
+kullanan iki meşru işlem, düşman girdi olmadan kilitlenir.
+
+Sıra iki hakem turunda İKİ AYRI döngüyle sınandı ve ikisi de bu tek kuralla
+kapandı: aktivasyon aktif paketi sektörden önce kilitliyordu (tur 1), ve
+düzeltme jeton yakmasını paket mutasyonundan SONRA yapıyordu (tur 2). Ölçüm
+yapısaldır — yokluğu koşarak kanıtlamak zamanlamaya bağlı olurdu.
 
 **Bu sıra fix turu 1'de DÜZELTİLDİ (hakem bulgusu, yüksek).** Önceki yazım
 taslak satırını sektör kilidinden ÖNCE alıyordu ve buradaki açıklama "döngü
@@ -161,18 +166,29 @@ async def update_draft_from_run(db, *, run_id: str, actor: str) -> None:
                 f"koşu {run_id!r} bir taslağa bağlı DEĞİL — güncellenecek hedef yok"
             )
 
+        # KÜRESEL KİLİT SIRASI: koşu satırları → sektör → paket satırları.
+        # Jeton yakma BAŞKA koşu satırlarına dokunur ve bu yüzden paket
+        # satırından ÖNCE gelmek ZORUNDADIR. Ters sırada — fix turu 1'in
+        # yazımında öyleydi — bu yol paketi tutup başka bir koşu satırını
+        # beklerken, önceden basılmış kanıtla koşan bir aktivasyon o koşu
+        # satırını tutup paketi bekliyordu: kapalı bir döngü (hakem turu 2,
+        # yüksek). İlk turda kapatılan aktivasyon↔geri-alma döngüsünden AYRI
+        # bir döngüydü; kapatılan şey artık sıranın KENDİSİDİR, tek varyant değil.
+        #
+        # İşlem geri alınırsa yakma da geri alınır; anlam DEĞİŞMEZ.
+        await db.execute(
+            "UPDATE social.sector_package_runs SET kanit_jetonu_harcandi_at = now() "
+            "WHERE package_id = $1 AND kanit_jetonu IS NOT NULL "
+            "  AND kanit_jetonu_harcandi_at IS NULL",
+            run.package_id,
+        )
+        await lifecycle._lock_sector(db, run.sector_id)
         await lifecycle._update_draft_row(
             db,
             package_id=run.package_id,
             sector_id=run.sector_id,
             content=_cozulmus_aday(run),
             decision_log=_cozulmus_gunluk(run),
-        )
-        await db.execute(
-            "UPDATE social.sector_package_runs SET kanit_jetonu_harcandi_at = now() "
-            "WHERE package_id = $1 AND kanit_jetonu IS NOT NULL "
-            "  AND kanit_jetonu_harcandi_at IS NULL",
-            run.package_id,
         )
 
 
