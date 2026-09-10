@@ -635,11 +635,19 @@ async def test_rejection_event_carries_package_id_from_locked_run(pkg_db) -> Non
 
 
 async def test_record_decision_refuses_run_without_package_link(pkg_db) -> None:
-    """R3: taslağı yazılmamış koşuda onay REDDEDİLİR (olay yazılamadan patlardı)."""
+    """R3: paket bağı olmayan koşuda karar REDDEDİLİR (olay yazılamadan patlardı).
+
+    Bağ dondurmada da zorunludur (aşağıdaki test); burada `record_decision`'ın
+    KENDİ kapısı ölçülür: görüntü basıldıktan SONRA bağ koparılırsa karar yok.
+    """
     sector_id = await _sub_sector(pkg_db)
-    run_id = await _onaya_hazir_kosu(pkg_db, sector_id, taslak=False)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
     goruntu = await approval.build_and_freeze_from_run(
         pkg_db, run_id=run_id, actor=ACTOR
+    )
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET package_id = NULL WHERE run_id = $1",
+        run_id,
     )
 
     with pytest.raises(approval.ApprovalRefused, match="paket"):
@@ -1231,3 +1239,105 @@ async def test_refused_second_decision_leaves_no_event_on_autocommit(
         if sector_id is not None:
             await _committed_sektor_sil(kurulum, sector_id)
         await kurulum.close()
+
+
+# ═══ 7. Kapanış turu 2: hedef kimliği bağı (F2'nin kalan ayağı) ═════════════
+
+
+async def test_freeze_refuses_run_without_package_link(pkg_db) -> None:
+    """Paket bağı OLMADAN görüntü BASILMAZ.
+
+    Bağsız dondurmak, sonradan herhangi bir paketin bağlanmasına ve operatörün
+    hiç görmediği bir pakete kalıcı onay yazılmasına izin verirdi.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id, taslak=False)
+
+    with pytest.raises(approval.ApprovalRefused, match="paket"):
+        await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+
+    assert await pkg_db.fetchval(
+        "SELECT approval_snapshot FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    ) is None
+
+
+async def test_snapshot_core_field_set_is_closed(pkg_db) -> None:
+    """ÜRETİLMİŞ KAPANIŞ KOLU: çekirdek alan kümesi BAĞIMSIZ olarak yazılıdır.
+
+    Beklenti burada ELLE yazılır (üretim kodundan türetilmez). Kurucuya yeni bir
+    alan eklenirse bu test KIRMIZI olur ve "bu alanın mutasyon vakası var mı"
+    sorusu sorulmak ZORUNDA kalır — sessizce kapsam dışı kalamaz.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+
+    assert set(approval._cekirdek(goruntu)) == {
+        "sema",
+        "run_id",
+        "paket_id",
+        "sektor_id",
+        "sonuc",
+        "sebep",
+        "onaylanabilir",
+        "icerik_hashleri",
+        "acik_sorular",
+        "geri_ekleme_celiskileri",
+        "kararsizlar",
+        "cikarmalar",
+        "sayilar",
+        "oranlar",
+        "uyarilar",
+        "kapi_sonuclari",
+        "motor_kosu_raporu",
+    }
+    assert approval.GORUNTU_KOSU_DISI == {"actor", "son_dort_tur_cikarmalari"}
+
+
+@pytest.mark.parametrize(
+    "kolon", ["sebep", "package_id", "sector_id", "katman1_attestation"]
+)
+async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str) -> None:
+    """MUTASYON MATRİSİ: çekirdeği besleyen kolon donmadan sonra değişirse karar YOK.
+
+    Kapsam sınırı DÜRÜSTÇE: liste elle yazılmıştır ve çekirdeği besleyen TÜM
+    kolonları kapsadığı MEKANİK OLARAK kanıtlanmamıştır — kanıtlanan şey, yeni
+    bir çekirdek alanının `test_snapshot_core_field_set_is_closed`'u kırarak
+    kapsam sorusunu zorunlu kılmasıdır.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+    sha = identity.canonical_sha(goruntu)
+
+    if kolon == "package_id":
+        yeni_deger = await _taslak(pkg_db, sector_id, version=2)
+    elif kolon == "sector_id":
+        yeni_deger = await _sub_sector(pkg_db)
+    elif kolon == "katman1_attestation":
+        yeni_deger = {"kosum_kimligi": "k1-2", "sonuc": "FAIL", "actor": ACTOR}
+    else:
+        yeni_deger = "sonradan eklenen sebep"
+
+    await pkg_db.execute(
+        f"UPDATE social.sector_package_runs SET {kolon} = $2 WHERE run_id = $1",
+        run_id,
+        yeni_deger,
+    )
+
+    with pytest.raises(approval.ApprovalRefused):
+        await approval.record_decision(
+            pkg_db, run_id=run_id, karar="onay", actor=ACTOR, seconds=1,
+            snapshot_sha=sha,
+        )
+
+    assert await pkg_db.fetchval(
+        "SELECT approval_karar FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    ) is None
+    assert await _olaylar(pkg_db, run_id) == []

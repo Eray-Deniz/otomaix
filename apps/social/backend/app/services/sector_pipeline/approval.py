@@ -200,6 +200,14 @@ async def build_and_freeze_from_run(db, *, run_id: str, actor: str) -> dict:
     """
     async with db.transaction():
         run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
+        # Paket bağı DONDURMADA da zorunludur (kapanış turu 2, yüksek): bağsız
+        # dondurulan bir görüntü sonradan HERHANGİ bir pakete bağlanabilir ve
+        # operatörün hiç görmediği bir pakete kalıcı onay yazılırdı.
+        if run.package_id is None:
+            raise ApprovalRefused(
+                f"koşu {run_id!r} bir paket taslağına bağlı DEĞİL — bağsız görüntü "
+                "basılmaz; sonradan bağlanan herhangi bir paket onaylanmış görünürdü"
+            )
         goruntu = await _goruntu_kur(db, run, actor=actor)
         return await _dondur(db, run_id=run.run_id, goruntu=goruntu)
 
@@ -216,6 +224,16 @@ async def _goruntu_kur(db, run: runs.VerifiedRun, *, actor: str) -> dict:
     goruntu: dict[str, Any] = {
         "sema": SNAPSHOT_SEMA,
         "run_id": run.run_id,
+        # HEDEF KİMLİĞİ ÇEKİRDEKTE (kapanış turu 2, yüksek). Şema bu ikisini
+        # bağımsız ve GÜNCELLENEBİLİR yabancı anahtar bırakıyor; tetikleyici
+        # yalnız görüntüyü koruyor. Kimlik çekirdekte olmasaydı donmadan sonra
+        # paket A→B ya da sektör A→B kaydırılır, çekirdek karşılaştırması geçer
+        # ve olay CANLI değerlerle yazılırdı — operatörün gördüğünden başka bir
+        # pakete kalıcı onay. Değerler METİN olarak yazılır: jsonb'den `UUID`
+        # değil `str` döner ve iki yandaki karşılaştırma tip yüzünden yalan
+        # söylemesin.
+        "paket_id": str(run.package_id),
+        "sektor_id": str(run.sector_id),
         "sonuc": run.sonuc,
         "sebep": run.sebep,
         "actor": actor,
