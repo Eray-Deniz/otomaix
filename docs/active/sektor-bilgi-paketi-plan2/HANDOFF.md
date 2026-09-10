@@ -5,6 +5,10 @@ written: 2026-09-10
 
 # Resume From
 
+> ⚠️ YÜRÜTME AÇIK (başlangıç: 2026-09-10 oturumu) — bu anlatı yürütme öncesine aittir;
+> güncel durum TASK.md "Notes For Claude" + git defterinden okunur, çelişkide onlar esastır.
+
+
 **Sıradaki iş: Task 15** (draft yazımı · yerinde güncelleme K-106 · aktivasyon zinciri ·
 yetki zorlaması K-103). Task 14 indi ve **checkpoint 11 `approve` ile kapandı**.
 
