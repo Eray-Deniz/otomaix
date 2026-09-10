@@ -981,6 +981,40 @@ def _kimlik_kapiya_uygun(raporlar: Sequence[DoctorReport]) -> bool:
     return any(rapor.icerik_ozeti for rapor in raporlar)
 
 
+def kaynak_seti_sha(raporlar: Sequence[DoctorReport]) -> str:
+    """Mekanik kapı rapor kümesinin KANONİK kimliği — TEK üretici.
+
+    **Neyi kanıtlar.** İki taraf (denetçi paketini kuran `build_packet` ve
+    motora verilen `RoundGate`) AYNI rapor kümesini AYNI SIRADA gördü mü. Kör
+    kaynak etiketi (`KAYNAK-1/2/3`) KONUMDAN türer; sıra kayarsa aynı etiket
+    başka bir kaynağı gösterir ve motorun saydığı çoğunluk sessizce başka bir
+    koşunun kaynaklarına dayanır. Bu yüzden hash SIRAYA duyarlıdır.
+
+    Her rapordan ÜÇ alan girer ve üçü de bir sebeple girer: `icerik_ozeti`
+    kaynağın METNİNİ bağlar, `kaynak_adi` kimliğini, `sonuc` ise elenme
+    durumunu — motorun kabul ettiği etiket kümesi elemeye bağlıdır, dolayısıyla
+    aynı metinlerin farklı eleme sonuçlarıyla geldiği iki koşu AYNI kimliği
+    taşıyamaz.
+
+    **Kapsam sınırı (dürüst etiket).** Bu kimlik koşunun `run_id`'sini ya da
+    sektörünü TAŞIMAZ ve taşıyamaz: motorun girdi alan kümesi kapalıdır (R5) ve
+    orada karşılaştırılacak ikinci bir `run_id` taşıyıcısı YOKTUR. Kanıtlanan
+    tam olarak şudur: *"motora verilen mekanik kapı, denetçi paketini kuran
+    kapının ta kendisidir."* Aynı kaynaklarla iki kez koşulmuş İKİ ayrı koşuyu
+    birbirinden ayırmaz.
+    """
+    return identity.canonical_sha(
+        [
+            {
+                "kaynak_adi": rapor.kaynak_adi,
+                "icerik_ozeti": rapor.icerik_ozeti,
+                "sonuc": rapor.sonuc,
+            }
+            for rapor in raporlar
+        ]
+    )
+
+
 def kimlik_bolumlemesi(
     raporlar: Sequence[DoctorReport],
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:

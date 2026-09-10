@@ -71,6 +71,12 @@ sonra değişirse araştırmalar ikinci kez ürettirilir — kardeş görevin ge
 
 # Open Problems
 
-- `EngineInputs` paket/koşu bağı taşımıyor (R5 alan kümesi kapalı): başka bir koşunun mekanik
-  kapısı bu koşuya verilirse motor göremez. Bu görevle AYNI arayüz eki turunda ele alınabilir;
-  ayrı ele alınacaksa kendi evi verilmelidir.
+- ~~`EngineInputs` paket/koşu bağı taşımıyor~~ — **KAPANDI (2026-09-10, Eray kararı: aynı turda
+  kapat).** Bağ, motorun girdi alan kümesi AÇILMADAN kuruldu: kimlik `build_packet`'te mekanik
+  rapor kümesinden TÜRETİLİR (`brief_doctor.kaynak_seti_sha`), `PacketRef` → denetçi çifti
+  üzerinden TAŞINIR, `EngineInputs` yapımında KARŞILAŞTIRILIR. Ayrışma `ValueError`.
+  Kimlik sıraya duyarlıdır ve üç eksende ayrışır (ad · içerik · eleme); dördü de üretilmiş
+  matrisle ölçüldü. **Kapsam sınırı (dürüst etiket):** kimlik `run_id` TAŞIMAZ — motorun alan
+  kümesinde karşılaştırılacak ikinci bir `run_id` taşıyıcısı yok. Kanıtlanan: "motora verilen
+  mekanik kapı, denetçi paketini kuran kapıdır". AYNI kaynaklarla koşulmuş iki ayrı koşuyu
+  ayırmaz. Ayrıntı: arayüz eki, "KOŞU BAĞI" bloğu.

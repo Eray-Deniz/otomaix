@@ -58,7 +58,7 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 from uuid import UUID
 
 from app.services.sector_pipeline import contracts, identity, runs
-from app.services.sector_pipeline.brief_doctor import DoctorReport
+from app.services.sector_pipeline.brief_doctor import DoctorReport, kaynak_seti_sha
 from app.services.sector_pipeline.runs import (
     ARASTIRMA_DEPOSU_KOKU as _DEPO_KOKU,
     _require_run_id as require_run_id,
@@ -84,6 +84,26 @@ DENETCI_ROLLERI: tuple[str, ...] = ("denetci-1", "denetci-2")
 
 Hangi rolün hangi araçla koşturulduğu operatörde kalır ve pakete GİRMEZ.
 """
+
+ONERI_DEGERLERI: tuple[str, ...] = ("al", "uyarla", "alma", "açık-soru")
+"""DENETİM TABLOSU `öneri` sütunu — KAPALI, dört değer.
+
+Kaynak: pinlenmiş `hakem-denetci-gorevi.md`, ADIM 2'nin `ÖNERİ:` satırı.
+Test o satırdan ölçer; burada UYDURULMAZ (İlke 9).
+"""
+
+SINIF_TEKIL = "tekil"
+SINIF_CELISKI = "çelişki"
+"""`sınıf` sütununun İKİ ADLI değeri — geri kalanı ORAN yazımıdır.
+
+**Sözlük KAPALI DEĞİLDİR ve bu ölçüldü.** Sözleşme ADIM 2 elemeden sonra
+oranı kalan kaynak sayısına uyarlatır (*"iki kaynakla: 2-2, 1-2"*), yani
+geçerli oran kümesi koşuya göre değişir. Bu yüzden yapısal çoğunluk oran
+ETİKETİNDEN sayılmaz — `kaynaklar` sütunundaki NUMARALARDAN sayılır; oran
+yalnız o numaralara karşı çapraz kontrol edilir.
+"""
+
+_SINIF_ORAN_RE = re.compile(r"^([1-9]\d*)-([1-9]\d*)$")
 
 BOLUM_ANAHTARLARI: tuple[str, ...] = (
     "DENETİM TABLOSU",
@@ -191,6 +211,16 @@ _AYIRAC_HUCRESI_RE = re.compile(r"^:?-{2,}:?$")
 
 _ENVANTER_BASLIK_HUCRELERI = ("unit_id", "statu", "kanit", "gerekce")
 _URL_BASLIK_HUCRELERI = ("iddia", "kaynak", "sonuç", "not")
+_DENETIM_BASLIK_HUCRELERI = (
+    "no",
+    "alan",
+    "iddia-özeti",
+    "kaynaklar",
+    "sınıf",
+    "bayraklar",
+    "öneri",
+    "gerekçe",
+)
 
 
 def _arac_deseni() -> re.Pattern[str]:
@@ -244,12 +274,187 @@ class UrlCheck:
 
 
 @dataclass(frozen=True)
+class AuditRow:
+    """DENETİM TABLOSU satırı — SEKİZ sütun (çıktı sözleşmesi 1)."""
+
+    no: int
+    alan: str
+    iddia_ozeti: str
+    kaynaklar: frozenset[int]
+    sinif: str
+    bayraklar: str
+    oneri: str
+    gerekce: str
+
+
+def _denetim_tablosu(govde: str) -> tuple[tuple[AuditRow, ...], list[str]]:
+    """DENETİM TABLOSU'nu TİPLİ satırlara çevirir (çıktı sözleşmesi 1).
+
+    **Neden bu tablo tipli okunur.** Motorun yapısal çoğunluk kapısı bu
+    sayıyı bugüne kadar SENTEZİN serbest `kanit` metninden çıkarmaya
+    çalışıyordu; denetçi onu ZATEN kendi sütununda söylüyordu. Aynı eksen
+    Task 12'nin kontrol noktasında dört hakem turunda dört ayrı sızıntı
+    verdi — sınıf düzyazıdan çıkarımla kapanmaz, tipli okumayla kapanır.
+
+    **Çoğunluk `kaynaklar` sütunundan sayılır, `sınıf` etiketinden DEĞİL.**
+    Sözleşme elemeden sonra oranı kalan kaynak sayısına uyarlatır, yani oran
+    sözlüğü koşuya göre değişir; numara kümesi değişmez. `sınıf` burada
+    yalnız numaralara karşı ÇAPRAZ KONTROLDÜR (bkz. `SINIF_TEKIL`).
+
+    **Kapsam sınırı, dürüst etiket.** Oranın SAĞ tarafı ("denetime giren
+    kaynak sayısı") burada yalnız `1..AZAMI_KAYNAK` aralığında ve sol
+    tarafından küçük olmadığı için sınanır; koşunun YETKİLİ kaynak sayısına
+    eşitliği bu imzada ölçülemez (tek rapor görülür, R6). O karşılaştırmanın
+    evi TUR seviyesidir ve DOLUDUR: `_tur_sinif_kapisi`.
+    """
+    errors: list[str] = []
+    satirlar: list[AuditRow] = []
+    ham = _tablo_satirlari(govde, _DENETIM_BASLIK_HUCRELERI)
+    if not ham:
+        errors.append(
+            "DENETİM TABLOSU boş: sözleşmenin dayattığı başlık satırıyla en az "
+            "bir iddia satırı yazılır — boş tablo 'denetim yapılmadı' demektir "
+            "ve motorun çoğunluk kapısı sessizce girdisiz kalırdı"
+        )
+        return (), errors
+
+    onceki_no: int | None = None
+    for sira, hucreler in enumerate(ham, start=1):
+        if len(hucreler) != len(_DENETIM_BASLIK_HUCRELERI):
+            errors.append(
+                f"denetim tablosu satırı {sira} sekiz sütunlu değil "
+                f"({' | '.join(_DENETIM_BASLIK_HUCRELERI)}): {hucreler}"
+            )
+            continue
+        no_h, alan, iddia, kaynak_h, sinif, bayraklar, oneri, gerekce = hucreler
+
+        if not no_h.isdigit() or int(no_h) < 1:
+            errors.append(
+                f"denetim tablosu satırı {sira}: `no` pozitif tam sayı olmalı, "
+                f"{no_h!r} yazılmış — bu sütun SATIR KİMLİĞİDİR"
+            )
+            continue
+        no = int(no_h)
+        if onceki_no is not None and no <= onceki_no:
+            errors.append(
+                f"denetim tablosu satırı {sira}: `no` artan olmak ZORUNDA "
+                f"({onceki_no} → {no}) — sentezin `D1#<no>` referansı buna "
+                "çözülür; tekrar eden numara referansı çözülemez kılar"
+            )
+            continue
+
+        bos = [
+            ad
+            for ad, deger in (
+                ("alan", alan),
+                ("iddia-özeti", iddia),
+                ("bayraklar", bayraklar),
+                ("gerekçe", gerekce),
+            )
+            if not deger
+        ]
+        if bos:
+            errors.append(
+                f"denetim tablosu satırı {sira} boş hücre taşıyor: {bos} — "
+                "boş bırakılmak istenen `bayraklar` hücresine `—` yazılır"
+            )
+            continue
+
+        parcalar = [parca.strip() for parca in kaynak_h.split(",")]
+        if not kaynak_h.strip() or any(not parca.isdigit() for parca in parcalar):
+            errors.append(
+                f"denetim tablosu satırı {sira}: `kaynaklar` sütunu YALNIZ "
+                f"kaynak numarası taşır, {kaynak_h!r} yazılmış — düzyazı, "
+                "kısaltma ya da boş hücre yapısal çoğunluğu SAYILAMAZ kılar"
+            )
+            continue
+        numaralar = [int(parca) for parca in parcalar]
+        disarda = sorted({n for n in numaralar if not 1 <= n <= AZAMI_KAYNAK})
+        if disarda:
+            errors.append(
+                f"denetim tablosu satırı {sira}: kaynak numarası aralık dışında "
+                f"{disarda} — geçerli aralık 1..{AZAMI_KAYNAK}"
+            )
+            continue
+        if numaralar != sorted(set(numaralar)):
+            errors.append(
+                f"denetim tablosu satırı {sira}: `kaynaklar` artan sırada ve "
+                f"tekrarsız yazılır, {kaynak_h!r} yazılmış"
+            )
+            continue
+
+        sinif_hatasi = _sinif_kaynakla_tutarli_mi(sira, sinif, numaralar)
+        if sinif_hatasi is not None:
+            errors.append(sinif_hatasi)
+            continue
+
+        if oneri not in ONERI_DEGERLERI:
+            errors.append(
+                f"denetim tablosu satırı {sira}: `öneri` kapalı kümenin "
+                f"dışında: {oneri!r} — {list(ONERI_DEGERLERI)}"
+            )
+            continue
+
+        onceki_no = no
+        satirlar.append(
+            AuditRow(
+                no=no,
+                alan=alan,
+                iddia_ozeti=iddia,
+                kaynaklar=frozenset(numaralar),
+                sinif=sinif,
+                bayraklar=bayraklar,
+                oneri=oneri,
+                gerekce=gerekce,
+            )
+        )
+    return tuple(satirlar), errors
+
+
+def _sinif_kaynakla_tutarli_mi(
+    sira: int, sinif: str, numaralar: list[int]
+) -> str | None:
+    """`sınıf` etiketi ile numara SAYISI çelişiyorsa sebebi döner."""
+    if sinif == SINIF_TEKIL:
+        if len(numaralar) != 1:
+            return (
+                f"denetim tablosu satırı {sira}: `sınıf` {SINIF_TEKIL!r} TEK "
+                f"kaynak demektir, `kaynaklar` {sorted(numaralar)} taşıyor"
+            )
+        return None
+    if sinif == SINIF_CELISKI:
+        if len(numaralar) < 2:
+            return (
+                f"denetim tablosu satırı {sira}: `sınıf` {SINIF_CELISKI!r} en az "
+                f"iki kaynak ister, `kaynaklar` {sorted(numaralar)} taşıyor — "
+                "tek kaynak kendisiyle çelişemez"
+            )
+        return None
+    oran = _SINIF_ORAN_RE.match(sinif)
+    if oran is None:
+        return (
+            f"denetim tablosu satırı {sira}: `sınıf` tanınmıyor: {sinif!r} — "
+            f"oran yazımı (`n-m`), {SINIF_TEKIL!r} ya da {SINIF_CELISKI!r}"
+        )
+    sol, sag = int(oran.group(1)), int(oran.group(2))
+    if sol != len(numaralar) or not sol <= sag <= AZAMI_KAYNAK:
+        return (
+            f"denetim tablosu satırı {sira}: `sınıf` {sinif!r} ile `kaynaklar` "
+            f"{sorted(numaralar)} çelişiyor — orandaki SOL sayı numara sayısına "
+            f"eşittir, SAĞ sayı denetime giren kaynak sayısıdır "
+            f"(en çok {AZAMI_KAYNAK})"
+        )
+    return None
+
+
+@dataclass(frozen=True)
 class AuditReport:
     """Doğrulanmış tek denetçi raporu."""
 
     denetci: str
     ham_metin: str
     bolumler: Mapping[str, str]
+    denetim_tablosu: tuple[AuditRow, ...]
     yeniden_dogrulama: tuple[InventoryRow, ...]
     url_orneklem: tuple[UrlCheck, ...]
     unit_snapshot_sha: str
@@ -266,6 +471,7 @@ class AuditReport:
         # donmuş dataclass'tır ve `donmus`'un KAPALI kümesinin dışındadır
         # (kural 5 -> TypeError).
         for _alan, _tip in (
+            ("denetim_tablosu", AuditRow),
             ("yeniden_dogrulama", InventoryRow),
             ("url_orneklem", UrlCheck),
         ):
@@ -315,6 +521,7 @@ class PacketRef:
 
     run_id: str
     yetkili_kaynak_sayisi: int
+    kaynak_seti_sha: str
     sector_id: UUID
     kok: Path
     kopyalar: Mapping[str, Path]
@@ -720,6 +927,7 @@ def build_packet(
         # kendi `Kaynak sayısı: <n>` beyanı bu sayıya karşı ölçülür (tur
         # seviyesi); rapor kendi beyanıyla tamlık kapısını geçemez.
         yetkili_kaynak_sayisi=len(sources),
+        kaynak_seti_sha=kaynak_seti_sha(doctor_reports),
         sector_id=sector_id,
         kok=kok,
         kopyalar=kopyalar,
@@ -963,6 +1171,8 @@ def validate_report(
         # kapısı BOZUK bir ayrıştırmanın üstünde koşturulmaz (fail-closed).
         return ValidatedReport(None, tuple(errors))
 
+    denetim, denetim_hatalari = _denetim_tablosu(bolumler[BOLUM_ANAHTARLARI[0]])
+    errors.extend(denetim_hatalari)
     kontroller, url_hatalari = _url_orneklemi(bolumler[BOLUM_ANAHTARLARI[1]])
     errors.extend(url_hatalari)
     satirlar, envanter_hatalari = _envanter(
@@ -977,6 +1187,7 @@ def validate_report(
             denetci=denetci,
             ham_metin=text,
             bolumler=bolumler,
+            denetim_tablosu=denetim,
             yeniden_dogrulama=satirlar,
             url_orneklem=kontroller,
             unit_snapshot_sha=identity.canonical_sha(unit_snapshot),
@@ -1293,6 +1504,7 @@ class ValidatedAuditPair:
     birinci: AuditReport
     ikinci: AuditReport
     unit_snapshot_sha: str
+    kaynak_seti_sha: str
 
     def __post_init__(self) -> None:
         for alan, beklenen_rol in (
@@ -1312,11 +1524,12 @@ class ValidatedAuditPair:
                     f"taşımalı, {rapor.denetci!r} verildi — alan kimliğe "
                     "bağlıdır, konuma değil"
                 )
-        if not isinstance(self.unit_snapshot_sha, str) or not self.unit_snapshot_sha:
-            raise ValueError(
-                f"ValidatedAuditPair.unit_snapshot_sha boş olamaz: "
-                f"{self.unit_snapshot_sha!r}"
-            )
+        for _alan in ("unit_snapshot_sha", "kaynak_seti_sha"):
+            _deger = getattr(self, _alan)
+            if not isinstance(_deger, str) or not _deger:
+                raise ValueError(
+                    f"ValidatedAuditPair.{_alan} boş olamaz: {_deger!r}"
+                )
         for alan in ("birinci", "ikinci"):
             rapor = getattr(self, alan)
             if rapor.unit_snapshot_sha != self.unit_snapshot_sha:
@@ -1415,6 +1628,7 @@ def check_snapshot_agreement(
     validated: tuple[ValidatedReport, ValidatedReport],
     *,
     expected_snapshot_sha: str,
+    expected_kaynak_sha: str,
 ) -> SnapshotAgreement:
     """Çapraz denetçi mutabakatı — TUR seviyesi kapı (arayüz eki R6(c)).
 
@@ -1427,6 +1641,13 @@ def check_snapshot_agreement(
         KEZ kapsar (aynı rolden iki rapor REDDEDİLİR);
     (3) her raporun `unit_snapshot_sha`'sı `expected_snapshot_sha`'ya EŞİT;
     (4) iki raporun `unit_snapshot_sha`'ları birbirine EŞİT (K-79/K-100).
+
+    `expected_kaynak_sha` KAPI DEĞİLDİR, TAŞIMADIR: tek rapor gören bu imzada
+    karşılaştırılacak ikinci bir kaynak-kümesi taşıyıcısı yoktur. Değer paketten
+    gelir (`PacketRef.kaynak_seti_sha`, `build_packet`'in doğruladığı rapor
+    kümesinden TÜRETİLMİŞTİR) ve çifte mühürlenir; karşılaştırma bir katman
+    sonra, `EngineInputs` yapımında yapılır — motora verilen mekanik kapının bu
+    paketi kuran kapı olduğu ORADA ölçülür.
 
     Dördü de geçerse `ValidatedAuditPair` üretilir — BAŞKA ÜRETİCİ YOKTUR. Bir
     koşul düşerse `cift` `None`'dır ve tur GEÇERSİZDİR.
@@ -1496,6 +1717,7 @@ def check_snapshot_agreement(
             birinci=esleme[DENETCI_ROLLERI[0]],
             ikinci=esleme[DENETCI_ROLLERI[1]],
             unit_snapshot_sha=expected_snapshot_sha,
+            kaynak_seti_sha=expected_kaynak_sha,
         ),
         (),
     )
@@ -1852,6 +2074,40 @@ def _tur_url_kapisi(
     return errors
 
 
+def _tur_sinif_kapisi(
+    rapor: AuditReport, *, yetkili_kaynak_sayisi: int
+) -> list[str]:
+    """Oran yazımının SAĞ tarafı koşunun YETKİLİ kaynak sayısına eşit mi.
+
+    `_denetim_tablosu` tek rapor görür (R6) ve orada yalnız oranın İÇ
+    tutarlılığı ölçülebilir: sol sayı `kaynaklar` hücresindeki numara sayısına
+    eşit mi, sağ sayı ondan küçük değil mi. *"Sağ sayı koşuya giren kaynak
+    sayısıdır"* hükmü o imzada ÖLÇÜLEMEZ — yetkili sayıyı paketi kuran taraf
+    taşır. Emsal ve gerekçe `_tur_url_kapisi` ile aynıdır: rapor kendi
+    beyanıyla tamlık kanıtlayamaz.
+
+    Ölçülen tam olarak şudur: elemeden sonra iki kaynakla koşulan bir turda
+    `2-3` yazan satır, koşunun ÜÇÜNCÜ kaynağı varmış gibi sınıflandırılmıştır
+    — sözleşme ADIM 2 o durumda oranı `2-2`'ye uyarlatır. `tekil` ve `çelişki`
+    etiketleri oran taşımaz ve bu kapıya GİRMEZ.
+    """
+    errors: list[str] = []
+    for satir in rapor.denetim_tablosu:
+        oran = _SINIF_ORAN_RE.match(satir.sinif)
+        if oran is None:
+            continue
+        sag = int(oran.group(2))
+        if sag != yetkili_kaynak_sayisi:
+            errors.append(
+                f"tur kapısı: {rapor.denetci} raporu denetim tablosu satırı "
+                f"{satir.no} `sınıf` {satir.sinif!r} yazdı ama koşunun YETKİLİ "
+                f"kaynak sayısı {yetkili_kaynak_sayisi} — eleme sonrası "
+                "sınıflandırma kalan kaynak sayısına uyarlanır (ADIM 2); "
+                "uyarlanmamış oran denetimin kapsamını yanlış gösterir"
+            )
+    return errors
+
+
 async def run_audit_round(
     db,
     packet: PacketRef,
@@ -2137,7 +2393,9 @@ async def run_audit_round(
             for rol in DENETCI_ROLLERI
         )
         anlasma = check_snapshot_agreement(
-            dogrulanmis, expected_snapshot_sha=packet.unit_snapshot_sha
+            dogrulanmis,
+            expected_snapshot_sha=packet.unit_snapshot_sha,
+            expected_kaynak_sha=packet.kaynak_seti_sha,
         )
         if anlasma.cift is None:
             return AuditRound((), False, " · ".join(anlasma.errors))
@@ -2151,6 +2409,11 @@ async def run_audit_round(
                     rapor,
                     yetkili_kaynak_sayisi=packet.yetkili_kaynak_sayisi,
                     on_kontrol=on_kontroller[rol],
+                )
+            )
+            tur_hatalari.extend(
+                _tur_sinif_kapisi(
+                    rapor, yetkili_kaynak_sayisi=packet.yetkili_kaynak_sayisi
                 )
             )
         if tur_hatalari:

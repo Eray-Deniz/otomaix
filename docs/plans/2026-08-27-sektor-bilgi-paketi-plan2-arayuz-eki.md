@@ -347,9 +347,14 @@ def config_sha(config: PolicyConfig) -> str:      # policy_config.py (Task 13) �
 UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "kanit-yok",        # spec girdisi satır 1189: kanıt yoksa karar uygulanmaz
     "mutabakat-yok",    # K-125: iki denetçi uyuşmuyor
+    "referans-yok",     # 2026-09-10: sentez sözleşmesi 2.1 — `ekle` en az bir D# referansı ister
+    "celiski",          # 2026-09-10: referansın satırı `çelişki` sınıfında; sayı yetse de girmez
     "cogunluk-yok",     # yeni öğe 2-3 yapısal çoğunluk kuralı
-)   # KAPALI — üç değer; kaynağı Task 12'nin bağlayıcı kontrol kümesidir (plan 1376-1381)
-    # ve spec girdisi satır 1189; UYDURULMUŞ değer YOKTUR
+)   # KAPALI — BEŞ değer; kaynağı Task 12'nin bağlayıcı kontrol kümesidir (plan 1376-1381)
+    # ve spec girdisi satır 1189; UYDURULMUŞ değer YOKTUR.
+    # SIRA ÖNCELİKTİR (`engine._reddedilenler`): `referans-yok` ve `celiski`,
+    # `cogunluk-yok`'tan ÖNCE gelir — ikisinde de sayı ya hiç okunamamıştır ya da
+    # okunması anlamsızdır; "çoğunluk yok" demek okunmuş bir sayı ima ederdi.
 
 @dataclass(frozen=True)
 class KararsizMadde:
@@ -638,12 +643,31 @@ class UrlCheck:
     icerik_uyumlu: bool          # K-126'nın "canlı URL doğrulaması" ayağı
     not_metni: str
 
+ONERI_DEGERLERI: tuple[str, ...] = ("al", "uyarla", "alma", "açık-soru")
+                                 # KAPALI — dört değer; pinli sözleşmenin ADIM 2 `ÖNERİ:` satırından ÖLÇÜLÜR
+
+SINIF_TEKIL = "tekil"            # `sınıf` sütununun İKİ ADLI değeri; geri kalanı ORAN yazımıdır (`n-m`).
+SINIF_CELISKI = "çelişki"        # Sözlük KAPALI DEĞİLDİR: eleme sonrası oran kalan kaynak sayısına
+                                 # uyarlanır (2-2, 1-2), yani geçerli oran kümesi KOŞUYA göre değişir.
+
+@dataclass(frozen=True)
+class AuditRow:                  # ÇIKTI SÖZLEŞMESİ (1) — DENETİM TABLOSU satırı, SEKİZ sütun
+    no: int                      # SATIR KİMLİĞİ; artan. Sentezin `D1#<no>` referansı BUNA çözülür
+    alan: str
+    iddia_ozeti: str
+    kaynaklar: frozenset[int]    # kaynak NUMARALARI (1..AZAMI_KAYNAK) — yapısal çoğunluğun TEK girdisi
+    sinif: str                   # `n-m` oranı · SINIF_TEKIL · SINIF_CELISKI; `kaynaklar` ile TUTARLI
+    bayraklar: str
+    oneri: str                   # ONERI_DEGERLERI içinden — KAPALI
+    gerekce: str
+
 @dataclass(frozen=True)
 class AuditReport:
     denetci: str                             # DENETCI_ROLLERI içinden
     ham_metin: str
     bolumler: Mapping[str, str]              # anahtar kümesi = BOLUM_ANAHTARLARI (beş, kapalı)
                                              # A1: SALT-OKUNUR — anahtar kümesi bir KAPIDIR
+    denetim_tablosu: tuple[AuditRow, ...]    # 2026-09-10: TİPLİ okunur; varsayılanı YOKTUR
     yeniden_dogrulama: tuple[InventoryRow, ...]
     url_orneklem: tuple[UrlCheck, ...]
     unit_snapshot_sha: str                   # raporun karşı raporladığı görüntünün hash'i (K-79/K-100)
@@ -660,7 +684,11 @@ class AuditReport:
         # bir envanter yapımdan SONRA değiştirilebilirdi. `identity.donmus` burada da
         # KULLANILAMAZ: `InventoryRow`/`UrlCheck` donmuş dataclass'tır ve `donmus`'un
         # KAPALI dönüşüm kümesinin dışındadır (kural 5 → `TypeError`).
-        for _alan, _tip in (("yeniden_dogrulama", InventoryRow), ("url_orneklem", UrlCheck)):
+        for _alan, _tip in (
+            ("denetim_tablosu", AuditRow),
+            ("yeniden_dogrulama", InventoryRow),
+            ("url_orneklem", UrlCheck),
+        ):
             _deger = tuple(getattr(self, _alan))          # KOPYA — takma ad kapanır
             for _oge in _deger:
                 if type(_oge) is not _tip:
@@ -673,6 +701,9 @@ class AuditReport:
 @dataclass(frozen=True)
 class PacketRef:
     run_id: str
+    yetkili_kaynak_sayisi: int              # koşuya giren kaynak sayısı (tur kapılarının yetkili değeri)
+    kaynak_seti_sha: str                    # 2026-09-10: `brief_doctor.kaynak_seti_sha(doctor_reports)`
+                                            # — mekanik kapı rapor kümesinin SIRA-DUYARLI kimliği
     sector_id: UUID
     kok: Path                                # paket kök dizini
     kopyalar: Mapping[str, Path]             # anahtarlar = DENETCI_ROLLERI (iki, kapalı)
@@ -687,6 +718,35 @@ class PacketRef:
         for _alan in ("kopyalar", "kopya_shalari", "unit_snapshot"):
             object.__setattr__(self, _alan, identity.donmus(getattr(self, _alan)))
 ```
+
+**KOŞU BAĞI (2026-09-10) — motorun girdi alan kümesi AÇILMADAN kurulur.**
+
+Açık kalemdi: `EngineInputs` kendisine verilen `mekanik_eleme`'nin BU koşuya ait olduğunu
+göremiyordu. Motorun kabul ettiği kör kaynak etiketi (`KAYNAK-1/2/3`) doğrudan
+`mekanik_eleme.raporlar`'ın SIRASINDAN türer; başka bir koşunun kapısı verilirse aynı etiket
+başka bir kaynağı gösterir ve yapısal çoğunluk sessizce yanlış kaynaklara dayanır.
+
+Çözüm R5'in kapalı alan kümesini KORUR — `EngineInputs`'a alan EKLENMEZ. Kimlik zincirle taşınır:
+
+```
+build_packet(doctor_reports)  →  PacketRef.kaynak_seti_sha        (TÜRETİLİR, çağırandan alınmaz)
+      → check_snapshot_agreement(expected_kaynak_sha=…)           (TAŞIR — kapı değil, mühür)
+            → ValidatedAuditPair.kaynak_seti_sha
+                  → EngineInputs.__post_init__                    (KARŞILAŞTIRIR — kapı BURADA)
+```
+
+`EngineInputs` yapımda `brief_doctor.kaynak_seti_sha(mekanik_eleme.raporlar)` hesaplar ve çiftin
+mührüyle karşılaştırır; ayrışırsa `ValueError`. Emsal F1 ile aynıdır (`unit_snapshot_sha` ↔
+`aktif_birimler`): karşılaştırma İKİ MEVCUT alan arasında yapılır, çağıranın beyanına DEĞİL.
+
+Kimlik ÜÇ alandan türer ve üçü de bir sebeple girer: `icerik_ozeti` (kaynağın metni) ·
+`kaynak_adi` (kimliği) · `sonuc` (elenme durumu — kabul edilen etiket kümesi elemeye bağlıdır).
+Sıraya duyarlıdır.
+
+**Kapsam sınırı (dürüst etiket).** Kimlik koşunun `run_id`'sini TAŞIMAZ ve taşıyamaz: motorun
+girdi alan kümesi kapalıdır ve orada karşılaştırılacak ikinci bir `run_id` taşıyıcısı yoktur.
+Kanıtlanan tam olarak şudur: *"motora verilen mekanik kapı, denetçi paketini kuran kapının ta
+kendisidir."* AYNI kaynaklarla koşulmuş iki ayrı koşuyu birbirinden AYIRMAZ.
 
 **M1 — beş bölüm anahtarı ŞİMDİ bağlanmaz; bağımlılık bağlanır (fix turu 1, KISMEN RED).**
 Fix turu 1'de bağımsız hakem *"beş bölüm anahtarını şimdi sabitle"* dedi. **REDDEDİLDİ.**
@@ -925,6 +985,8 @@ class ValidatedAuditPair:
     birinci: AuditReport           # DENETCI_ROLLERI[0] ("denetci-1") raporu
     ikinci: AuditReport            # DENETCI_ROLLERI[1] ("denetci-2") raporu
     unit_snapshot_sha: str         # ikisinin de üzerinde mutabık kaldığı görüntü hash'i
+    kaynak_seti_sha: str           # 2026-09-10 KOŞU BAĞI: paketten TAŞINAN kaynak kümesi kimliği;
+                                   # burada kapı DEĞİL mühürdür — karşılaştırma EngineInputs'ta
 
 @dataclass(frozen=True)
 class SnapshotAgreement:

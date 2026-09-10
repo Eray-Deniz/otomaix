@@ -55,8 +55,17 @@ from app.services.sector_content_schema import (
     structural_errors,
 )
 from app.services.sector_pipeline import identity
-from app.services.sector_pipeline.auditors import KAYNAK_ETIKETI, ValidatedAuditPair
-from app.services.sector_pipeline.brief_doctor import RoundGate, kimlik_bolumlemesi
+from app.services.sector_pipeline.auditors import (
+    KAYNAK_ETIKETI,
+    SINIF_CELISKI,
+    AuditRow,
+    ValidatedAuditPair,
+)
+from app.services.sector_pipeline.brief_doctor import (
+    RoundGate,
+    kaynak_seti_sha,
+    kimlik_bolumlemesi,
+)
 from app.services.sector_pipeline.engine_contract import (
     BulguIzi,
     EngineResult,
@@ -232,6 +241,24 @@ class EngineInputs:
         # türetilmiş birimler, eski çifte takılmadan kabul edildi: kimlikler
         # kalıcı olduğu için bayat statüler değişmiş içeriğe cevap veriyor ve
         # R6'nın görüntü sınırı sessizce düşüyordu. Bağ ARTIK YAPIMDA kurulur.
+        # KOŞU BAĞI (2026-09-10): `mekanik_eleme` bu koşuya ait mi?
+        #
+        # `ValidatedAuditPair` iki raporun bir BİRİM görüntüsü üzerinde
+        # uyuştuğunu kanıtlar (F1) ama hangi KAYNAK kümesiyle çalışıldığını
+        # kanıtlamazdı. Motorun kabul ettiği kör etiket kümesi (`KAYNAK-1/2/3`)
+        # doğrudan `mekanik_eleme.raporlar`'ın SIRASINDAN türer; başka bir
+        # koşunun kapısı verilirse aynı etiket başka bir kaynağı gösterir ve
+        # yapısal çoğunluk sessizce yanlış kaynaklara dayanır. Alan kümesi
+        # KAPALI kaldı (R5): bağ yeni bir girdi alanıyla değil, paketin
+        # türettiği kimliğin çift üzerinden taşınmasıyla kurulur.
+        _kaynak = kaynak_seti_sha(self.mekanik_eleme.raporlar)
+        if _kaynak != self.denetci_envanterleri.kaynak_seti_sha:
+            raise ValueError(
+                "mekanik_eleme BU denetçi paketine ait değil: çift "
+                f"{self.denetci_envanterleri.kaynak_seti_sha}, verilen kapı "
+                f"{_kaynak} — kör kaynak etiketi konumdan türer; başka bir "
+                "koşunun kapısı aynı etiketi başka bir kaynağa bağlar"
+            )
         _gorunti = identity.canonical_sha(self.aktif_birimler)
         if _gorunti != self.denetci_envanterleri.unit_snapshot_sha:
             raise ValueError(
@@ -654,8 +681,19 @@ def _bilesen_kabul_edilir(parca: str, kabul_edilen_etiketler: set[str]) -> bool:
     return bool(_SATIR_ATIF_RE.match(parca))
 
 
-def sayilan_kaynaklar(kanit: Any, kabul_edilen_etiketler: set[str]) -> set[str]:
-    """`kanit` metninin SAYILAN kaynak etiketleri — TEK kanonik ayrıştırıcı.
+def kanit_bilesenleri(
+    kanit: Any, kabul_edilen_etiketler: set[str]
+) -> tuple[str, ...] | None:
+    """`kanit` alanının KAPALI dilbilgisine göre bileşenleri; ihlalde `None`.
+
+    **Ad ve dönüş tipi 2026-09-10'da DEĞİŞTİ (eski adı `sayilan_kaynaklar`).**
+    Fonksiyon eskiden alandaki kör kaynak etiketlerini SAYIYORDU ve motorun
+    yapısal çoğunluğu o sayıya bakıyordu. Çoğunluk artık denetçinin KENDİ
+    `kaynaklar` sütunundan okunuyor (bkz. `_yeni_oge_cogunlugu`); geriye kalan
+    iş dilbilgisi kapısıdır ve ad onu söyler. Eski ad "sayı buradan gelir"
+    diyordu ve artık YALAN olurdu.
+
+    Dilbilgisi ve gerekçesi DEĞİŞMEDİ — aşağısı olduğu gibi geçerlidir.
 
     **Alan BÜTÜN olarak doğrulanır, bileşen bileşen SÜZÜLMEZ.** Üçüncü kapanış
     turu (checkpoint 9) bunun neden gerektiğini ölçtü: bileşen bazlı süzme, bir
@@ -683,26 +721,126 @@ def sayilan_kaynaklar(kanit: Any, kabul_edilen_etiketler: set[str]) -> set[str]:
     alanına çevirmektir ve o, arayüz eki revizyonudur (açık borç).
     """
     if not isinstance(kanit, str) or not kanit.strip():
-        return set()
+        return None
     # Bileşenler KAYIPSIZ ayrılır: boş bileşen (çift virgül, baştaki/sondaki
     # virgül) SESSİZCE DÜŞÜRÜLMEZ, alanı düşürür. Düşürülseydi biçimi bozuk bir
     # alan "temiz" görünürdü — dilbilgisinin kendisi de bir kapıdır.
     parcalar = [parca.strip() for parca in kanit.split(",")]
     if any(parca == "" for parca in parcalar):
-        return set()
+        return None
     if not all(_bilesen_kabul_edilir(p, kabul_edilen_etiketler) for p in parcalar):
-        return set()
-    return {parca for parca in parcalar if parca in kabul_edilen_etiketler}
+        return None
+    return tuple(parcalar)
+
+
+def _denetci_onegi(rol: str) -> str:
+    """`denetci-1` → `D1`. Ön ek rolün ADINDAN türer, konumdan DEĞİL."""
+    return "D" + rol.rsplit("-", 1)[1]
+
+
+def _denetci_satirlari(inputs: EngineInputs) -> dict[str, AuditRow]:
+    """`D1#7` → o denetçi satırı — sentez referanslarının ÇÖZÜM tablosu.
+
+    Sentez sözleşmesi *"D# referansları denetçi tablolarındaki `no` kolonuna
+    işaret eder"* der; bugüne kadar bu referansın çözüldüğü BİR YER YOKTU ve
+    motor çoğunluğu `kanit` düzyazısından saymak zorunda kalıyordu.
+
+    Evren İKİ raporun satırlarından üretilir ve rapor KİMLİĞİNE anahtarlanır
+    (`rapor.denetci`), çifteki KONUMUNA değil. `ValidatedAuditPair` konum ile
+    kimliği zaten bağlar; burada kimliği okumak o bağın ikinci bir yerde
+    varsayıma çevrilmesini önler.
+    """
+    cift = inputs.denetci_envanterleri
+    evren: dict[str, AuditRow] = {}
+    for rapor in (cift.birinci, cift.ikinci):
+        onek = _denetci_onegi(rapor.denetci)
+        for satir in rapor.denetim_tablosu:
+            evren[f"{onek}#{satir.no}"] = satir
+    return evren
 
 
 def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
+    """Yeni öğenin yapısal çoğunluğu — sayı DENETÇİNİN SÜTUNUNDAN okunur.
+
+    **Sınıf 2026-09-10'da kapandı.** Motor çoğunluğu sentezin `kanit`
+    DÜZYAZISINDAN sayıyordu; aynı eksen Task 12'nin kontrol noktasında dört
+    hakem turunda dört ayrı sızıntı verdi. Denetçi o sayıyı zaten kendi
+    `kaynaklar` sütununda söylüyordu — eksik olan tipli okuyucuydu.
+
+    Üç ret kolu AYRI adlandırılır; hangi kapının düştüğü rapordan okunur:
+
+    * `kanit-yok` — alan kapalı dilbilgisini İHLAL ediyor (düzyazı karıştı).
+    * `referans-yok` — dilbilgisi tamam ama ÇÖZÜLEBİLİR bir `D#` referansı yok.
+      Sentez sözleşmesi `ekle` satırında en az bir referans ZORUNLU kılar
+      (2.1); referanssız satır denetçinin sütununa hiç ulaşamaz.
+    * `celiski` — referansın gösterdiği satırı denetçi `çelişki` diye
+      sınıflandırmış. Sayı yetse bile kalıp OTOMATİK GİRMEZ: hakemin en güçlü
+      uyarı sinyali bugüne kadar motora hiç ulaşmıyordu (iki kaynak aynı
+      konuya değindiği için "desteklendi" sayılıyordu, oysa denetçi tersini
+      söylüyor). Karar operatöre AÇIK SORU olarak çıkar.
+    * `cogunluk-yok` — referans çözüldü, satırın kaynak sayısı tabanın altında.
+
+    `KAYNAK-N` ve URL bileşenleri alanda MEŞRUDUR ama SAYILMAZ (sentez
+    sözleşmesi 2.1 bunu açıkça yazar): sayının serbest metinden gelmesi,
+    kapatılan sınıfın ta kendisidir.
+    """
     kabul_edilen = _kabul_edilen_etiketler(inputs)
+    satir_evreni = _denetci_satirlari(inputs)
     kayitlar: list[UygulanmayanKarar] = []
+    bulgular: list[BulguIzi] = []
     for satir in _karar_satirlari(inputs):
         if satir.get("karar") != "ekle":
             continue
         kanit = satir.get("kanit") or ""
-        kaynaklar = sayilan_kaynaklar(kanit, kabul_edilen)
+        bilesenler = kanit_bilesenleri(kanit, kabul_edilen)
+        if bilesenler is None:
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"], karar="ekle", sebep="kanit-yok"
+                )
+            )
+            continue
+        cozulen = [
+            satir_evreni[parca] for parca in bilesenler if parca in satir_evreni
+        ]
+        if not cozulen:
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"], karar="ekle", sebep="referans-yok"
+                )
+            )
+            continue
+        celiskili = sorted(
+            {
+                parca
+                for parca in bilesenler
+                if parca in satir_evreni
+                and satir_evreni[parca].sinif == SINIF_CELISKI
+            }
+        )
+        if celiskili:
+            bulgular.append(
+                BulguIzi(
+                    sinif="acik_soru",
+                    unit_id=satir["unit_id"],
+                    detay=(
+                        "denetçi bu iddiayı `çelişki` sınıflandırdı "
+                        f"({celiskili}) — kaynaklar birbirine ters; yeni kalıp "
+                        "otomatik girmez, karar operatöre bırakılır"
+                    ),
+                )
+            )
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"], karar="ekle", sebep="celiski"
+                )
+            )
+            continue
+        kaynaklar = {
+            KAYNAK_ETIKETI.format(no)
+            for denetci_satiri in cozulen
+            for no in denetci_satiri.kaynaklar
+        } & kabul_edilen
         if len(kaynaklar) >= KAYNAK_TABANI_YENI_OGE:
             continue
         # K-126 TEK-KAYNAK İSTİSNASI BU KATMANDA İŞLEMEZ — ve bu, fail-closed
@@ -726,7 +864,9 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                 unit_id=satir["unit_id"], karar="ekle", sebep="cogunluk-yok"
             )
         )
-    return CheckOutput(uygulanmayan_kararlar=tuple(kayitlar))
+    return CheckOutput(
+        bulgular=tuple(bulgular), uygulanmayan_kararlar=tuple(kayitlar)
+    )
 
 
 def _bayrak_tuketimi(inputs: EngineInputs) -> CheckOutput:
@@ -1017,6 +1157,8 @@ SEBEP_CIFT_GECERSIZ = "uygulanan-cift-butunluk-kapisini-gecmiyor"
 KURAL_KIMLIKLERI: Mapping[str, str] = {
     "kanit-yok": "kanit-zorunlulugu",
     "mutabakat-yok": "K-125",
+    "referans-yok": "denetci-referans-zorunlulugu",
+    "celiski": "denetci-celiski-sinifi",
     "cogunluk-yok": "yeni-oge-cogunlugu",
 }
 """K-145: uygulanmayan her kararın KURAL kimliği — `UYGULANMAMA_SEBEPLERI` ile

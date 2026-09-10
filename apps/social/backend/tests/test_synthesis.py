@@ -229,6 +229,18 @@ def _rapor(
         denetci=rol,
         ham_metin=f"{rol} ham raporu — Claude Code ile üretildi",
         bolumler=bolumler,
+        denetim_tablosu=(
+            auditors.AuditRow(
+                no=1,
+                alan="cta_kaliplari",
+                iddia_ozeti="iddia 1",
+                kaynaklar=frozenset({1, 2}),
+                sinif="2-3",
+                bayraklar="—",
+                oneri="al",
+                gerekce="Tek cümle.",
+            ),
+        ),
         yeniden_dogrulama=envanter,
         url_orneklem=_dogrulanmis_ornekle() if ornekle is None else ornekle,
         unit_snapshot_sha=_aktif_gorunti_sha() if snapshot_sha is None else snapshot_sha,

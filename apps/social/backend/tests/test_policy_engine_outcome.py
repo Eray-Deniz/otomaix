@@ -51,7 +51,8 @@ from tests.test_policy_engine_checks import (
     CIKAN_KIMLIK,
     CIKARILACAK_KANCA,
     DOGRULANMIS_KAYNAK,
-    IKINCI_KAYNAK,
+    IKI_KAYNAKLI,
+    TEK_KAYNAKLI,
     KIMLIKLER,
     KORUNAN_KANCA,
     MEVZUAT_ALANI,
@@ -266,7 +267,13 @@ def test_bulgu_izi_class_values_are_closed() -> None:
 
 
 def test_uygulanmama_sebepleri_are_closed() -> None:
-    assert set(UYGULANMAMA_SEBEPLERI) == {"kanit-yok", "mutabakat-yok", "cogunluk-yok"}
+    assert set(UYGULANMAMA_SEBEPLERI) == {
+        "kanit-yok",
+        "mutabakat-yok",
+        "referans-yok",
+        "celiski",
+        "cogunluk-yok",
+    }
 
 
 def test_engine_result_carries_version_and_config_sha() -> None:
@@ -479,15 +486,13 @@ def test_cikar_with_agreement_is_applied() -> None:
 
 def test_new_item_needs_two_of_three() -> None:
     """Tek kaynaklı yeni kalıp nihai adaya YAZILMAZ."""
-    sonuc = _karar(_basa_ekleme_girdisi(kanit=DOGRULANMIS_KAYNAK))
+    sonuc = _karar(_basa_ekleme_girdisi(kanit=TEK_KAYNAKLI))
     assert "Yeni kanca kalibi" not in _kancalar(sonuc)
 
 
 def test_new_item_with_two_sources_is_written() -> None:
     """POZİTİF KONTROL: iki kaynak çoğunluğu karşılar, kalıp pakete girer."""
-    sonuc = _karar(
-        _basa_ekleme_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}")
-    )
+    sonuc = _karar(_basa_ekleme_girdisi(kanit=IKI_KAYNAKLI))
     assert "Yeni kanca kalibi" in _kancalar(sonuc)
 
 
@@ -531,7 +536,7 @@ def test_barrier_with_set_threshold_blocks() -> None:
 
 def test_first_run_zero_denominator_uses_absolute_limits() -> None:
     """İlk koşuda payda 0: oran hesaplanmaz, mutlak limit uygulanır."""
-    girdi = _ilk_kosu_girdisi(kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}")
+    girdi = _ilk_kosu_girdisi(kanit=IKI_KAYNAKLI)
     gevsek = engine.decide(girdi, PolicyConfig())
     assert gevsek.barrier_report["oranlar"]["ekleme"] is None
     assert gevsek.sonuc == "activation_eligible"
@@ -546,7 +551,7 @@ def test_first_run_zero_denominator_uses_absolute_limits() -> None:
 
 def test_first_run_no_change_is_invalid() -> None:
     """K-91: ilk koşuda hiçbir karar uygulanmadıysa `no_change` GEÇERSİZDİR."""
-    sonuc = _karar(_ilk_kosu_girdisi(kanit=DOGRULANMIS_KAYNAK))
+    sonuc = _karar(_ilk_kosu_girdisi(kanit=TEK_KAYNAKLI))
     assert sonuc.sonuc == "blocked"
     assert SEBEP_ILK_KOSU in sonuc.sebep
 
@@ -880,9 +885,7 @@ def _matris_girdisi(konum, ekleme_kabul, cikarma, yinelenen):
 
     degis = {}
     if yeni_yol is not None:
-        kanit = (
-            f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK}" if ekleme_kabul else DOGRULANMIS_KAYNAK
-        )
+        kanit = IKI_KAYNAKLI if ekleme_kabul else TEK_KAYNAKLI
         degis[yeni_yol] = {"karar": "ekle", "kanit": kanit}
 
     ek: tuple = ()

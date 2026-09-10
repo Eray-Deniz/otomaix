@@ -134,6 +134,21 @@ def _envanter_bolumu(unit_ids: tuple[str, ...]) -> str:
     return "\n".join(satirlar)
 
 
+def _denetim_bolumu(sinif_sagi: int) -> str:
+    """DENETİM TABLOSU — oranın SAĞ tarafı koşunun kaynak sayısıdır.
+
+    Sözleşme ADIM 2 elemeden sonra oranı kalan kaynak sayısına uyarlatır; bu
+    yüzden sağ taraf fixture'da SABİT yazılmaz, koşudan TÜRETİLİR.
+    """
+    return (
+        "| no | alan | iddia-özeti | kaynaklar | sınıf | bayraklar | öneri "
+        "| gerekçe |\n"
+        "|---|---|---|---|---|---|---|---|\n"
+        f"| 1 | cta_kaliplari | örnek iddia | 1,2 | 2-{sinif_sagi} | — | al "
+        "| Tek cümle. |"
+    )
+
+
 def _rapor_metni(
     *,
     unit_ids: tuple[str, ...] = (UNIT_A, UNIT_B),
@@ -141,12 +156,11 @@ def _rapor_metni(
     ek_govde: str = "",
     kaynak_sayisi: int = 2,
     ortam_kisiti: bool = False,
+    sinif_sagi: int | None = None,
 ) -> str:
     """Beş bölümlü geçerli rapor. `atlanan_bolum` biçim kapısını düşürür."""
     govdeler = {
-        1: "| no | alan | iddia | kaynaklar | sınıf | bayraklar | öneri | gerekçe |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
-        "| 1 | cta_kaliplari | örnek iddia | 1,2 | 2-3 | — | koru | Tek cümle. |",
+        1: _denetim_bolumu(kaynak_sayisi if sinif_sagi is None else sinif_sagi),
         2: _url_bolumu(kaynak_sayisi, ortam_kisiti=ortam_kisiti),
         3: "KAYNAK-1 kaynak gösterme disiplini yeterli." + ek_govde,
         4: "- Mevzuat tarihi operatöre sorulmalı mı?",
@@ -236,6 +250,17 @@ def _doctor(kaynak_adi: str, metin: str) -> bd.DoctorReport:
     )
 
 
+def _kaynak_seti_sha(kaynak_sayisi: int = 2) -> str:
+    """`_paket`'in kurduğu rapor kümesinin kimliği — fixture'la AYNI kaynaktan."""
+    kaynaklar = list(KAYNAK_METINLERI[:kaynak_sayisi])
+    return bd.kaynak_seti_sha(
+        [
+            _doctor(ad, metin)
+            for ad, metin in zip(KAYNAK_ADLARI[:kaynak_sayisi], kaynaklar)
+        ]
+    )
+
+
 KAYNAK_METINLERI = (
     "Kaynak metni bir.",
     "Kaynak metni iki.",
@@ -246,6 +271,9 @@ KAYNAK_ADLARI = (
     "arastirma-kaynagi-beta",
     "arastirma-kaynagi-gama",
 )
+
+KAYNAK_SETI_SHA = _kaynak_seti_sha()
+"""İki kaynaklı varsayılan koşunun kaynak kümesi kimliği (`_paket` ile AYNI)."""
 
 
 def _paket(
@@ -562,6 +590,7 @@ def test_agreement_yields_pair_when_all_four_conditions_hold() -> None:
             _dogrulanmis(auditors.DENETCI_ROLLERI[1]),
         ),
         expected_snapshot_sha=_sha(),
+        expected_kaynak_sha=KAYNAK_SETI_SHA,
     )
     assert anlasma.gecerli is True
     assert anlasma.errors == ()
@@ -580,6 +609,7 @@ def test_invalid_report_yields_no_pair() -> None:
             ),
         ),
         expected_snapshot_sha=_sha(),
+        expected_kaynak_sha=KAYNAK_SETI_SHA,
     )
     assert anlasma.cift is None
     assert anlasma.gecerli is False
@@ -594,6 +624,7 @@ def test_same_role_twice_yields_no_pair() -> None:
             _dogrulanmis(auditors.DENETCI_ROLLERI[0]),
         ),
         expected_snapshot_sha=_sha(),
+        expected_kaynak_sha=KAYNAK_SETI_SHA,
     )
     assert anlasma.cift is None
     assert any("rol" in hata.lower() for hata in anlasma.errors)
@@ -612,6 +643,7 @@ def test_snapshot_mismatch_yields_no_pair() -> None:
             ),
         ),
         expected_snapshot_sha=_sha(),
+        expected_kaynak_sha=KAYNAK_SETI_SHA,
     )
     assert anlasma.cift is None
     assert any("görüntü" in hata for hata in anlasma.errors)
@@ -625,6 +657,7 @@ def test_agreement_rejects_pair_diverging_from_the_packet() -> None:
             _dogrulanmis(auditors.DENETCI_ROLLERI[1]),
         ),
         expected_snapshot_sha="f" * 64,
+        expected_kaynak_sha=KAYNAK_SETI_SHA,
     )
     assert anlasma.cift is None
 
@@ -635,6 +668,7 @@ def _sha_ile(rapor: auditors.AuditReport, sha: str) -> auditors.ValidatedReport:
             denetci=rapor.denetci,
             ham_metin=rapor.ham_metin,
             bolumler=dict(rapor.bolumler),
+            denetim_tablosu=rapor.denetim_tablosu,
             yeniden_dogrulama=rapor.yeniden_dogrulama,
             url_orneklem=rapor.url_orneklem,
             unit_snapshot_sha=sha,
@@ -665,6 +699,7 @@ def test_snapshot_gate_matrix_over_hash_axes() -> None:
                 anlasma = auditors.check_snapshot_agreement(
                     (_sha_ile(birinci, r1), _sha_ile(ikinci, r2)),
                     expected_snapshot_sha=beklenen,
+                    expected_kaynak_sha=KAYNAK_SETI_SHA,
                 )
                 (kabul if anlasma.cift is not None else ret).append((r1, r2, beklenen))
     # Boş-küme kontrol kolu: matris hem kabul hem ret üretmeli, yoksa ölçmüyor.
@@ -695,7 +730,7 @@ def test_snapshot_agreement_gecerli_is_false_without_a_pair() -> None:
 
 def test_snapshot_agreement_rejects_inconsistent_construction() -> None:
     birinci, ikinci = _iki_rapor()
-    cift = auditors.ValidatedAuditPair(birinci, ikinci, _sha())
+    cift = auditors.ValidatedAuditPair(birinci, ikinci, _sha(), KAYNAK_SETI_SHA)
     with pytest.raises(ValueError, match="tutarsız"):
         auditors.SnapshotAgreement(cift, ("x",))
     with pytest.raises(ValueError, match="tutarsız"):
@@ -706,13 +741,13 @@ def test_inventory_rejects_divergent_snapshot_hash() -> None:
     """Motorun kabul ettiği envanter TUTARSIZ KURULAMAZ (ek R6(d))."""
     birinci, ikinci = _iki_rapor()
     with pytest.raises(ValueError):
-        auditors.ValidatedAuditPair(birinci, ikinci, "f" * 64)
+        auditors.ValidatedAuditPair(birinci, ikinci, "f" * 64, KAYNAK_SETI_SHA)
 
 
 def test_inventory_rejects_wrong_role_order() -> None:
     birinci, ikinci = _iki_rapor()
     with pytest.raises(ValueError):
-        auditors.ValidatedAuditPair(ikinci, birinci, _sha())
+        auditors.ValidatedAuditPair(ikinci, birinci, _sha(), KAYNAK_SETI_SHA)
 
 
 async def test_round_rejects_report_snapshot_differing_from_packet(
@@ -730,6 +765,7 @@ async def test_round_rejects_report_snapshot_differing_from_packet(
             denetci=sonuc.rapor.denetci,
             ham_metin=sonuc.rapor.ham_metin,
             bolumler=dict(sonuc.rapor.bolumler),
+            denetim_tablosu=sonuc.rapor.denetim_tablosu,
             yeniden_dogrulama=sonuc.rapor.yeniden_dogrulama,
             url_orneklem=sonuc.rapor.url_orneklem,
             unit_snapshot_sha="e" * 64,
@@ -1454,6 +1490,48 @@ async def test_round_accepts_a_report_matching_the_authoritative_count(
     assert tur.gecerli is True, tur.sebep
 
 
+async def test_round_rejects_an_unadapted_class_ratio(kosu, tmp_path):
+    """İki kaynakla koşan tur `2-3` yazan satırı GEÇİRMEZ.
+
+    Rapor kendi içinde tutarlıdır (`kaynaklar` iki numara, oranın solu iki);
+    sapma YALNIZ yetkili sayıya karşı görülür — `_denetim_tablosu` bu
+    karşılaştırmayı yapamaz, tur seviyesi yapar.
+    """
+    db, run_id, _ = kosu
+    paket = _paket(tmp_path / "ikilik", run_id, kaynak_sayisi=2)
+    assert paket.yetkili_kaynak_sayisi == 2
+
+    tur = await _tur_kos(
+        db,
+        paket,
+        runner=SahteRunner(_iki_gecerli_rapor(kaynak_sayisi=2, sinif_sagi=3)),
+        run_id=run_id,
+    )
+    assert tur.gecerli is False
+    assert tur.sebep and "sınıf" in tur.sebep and "YETKİLİ" in tur.sebep
+
+
+@pytest.mark.asyncio
+async def test_round_accepts_an_adapted_class_ratio(kosu, tmp_path):
+    """Kontrol kolu: uyarlanmış oran (`2-2`) aynı turda GEÇER.
+
+    Boş-küme kolu olmadan yukarıdaki kırmızı "kapı her şeyi reddediyor"
+    ihtimalinden ayırt edilemezdi.
+    """
+    db, run_id, _ = kosu
+    paket = _paket(tmp_path / "ikilik-uyarlanmis", run_id, kaynak_sayisi=2)
+
+    tur = await _tur_kos(
+        db,
+        paket,
+        runner=SahteRunner(_iki_gecerli_rapor(kaynak_sayisi=2)),
+        run_id=run_id,
+    )
+    assert tur.gecerli is True, tur.sebep
+    assert tur.reports[0].denetim_tablosu[0].sinif == "2-2"
+
+
+@pytest.mark.asyncio
 async def test_round_rejects_the_environment_constraint_when_access_was_measured(
     kosu,
 ):
@@ -2153,6 +2231,7 @@ def _yol_kapisi_kurulumu(alt: str, tmp_path: Path, run_id: str, monkeypatch):
         return auditors.PacketRef(
             run_id=ref.run_id,
             yetkili_kaynak_sayisi=ref.yetkili_kaynak_sayisi,
+            kaynak_seti_sha=ref.kaynak_seti_sha,
             sector_id=ref.sector_id,
             kok=takma_kok,
             kopyalar=kopyalar,

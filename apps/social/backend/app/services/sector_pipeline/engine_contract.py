@@ -43,9 +43,18 @@ yazılıdır: `PolicyReport` Task 8'in `record_result`'ında imza tipidir.
 UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "kanit-yok",  # spec girdisi satır 1189: kanıt yoksa karar uygulanmaz
     "mutabakat-yok",  # K-125: iki denetçi uyuşmuyor
+    "referans-yok",  # sentez sözleşmesi 2.1: `ekle` en az bir D# referansı ister
+    "celiski",  # denetçi satırı `çelişki` sınıfında — sayı yetse de girmez
     "cogunluk-yok",  # yeni öğe 2-3 yapısal çoğunluk kuralı
 )
-"""Aday kararın uygulanmama sebepleri — KAPALI, ÜÇ değer. UYDURULMUŞ değer YOK."""
+"""Aday kararın uygulanmama sebepleri — KAPALI, BEŞ değer. UYDURULMUŞ değer YOK.
+
+**Sıra ÖNCELİKTİR** (`engine._reddedilenler`): bir birim birden çok sebeple
+reddedilebilir ve rapora yazılan sebep bu sıradan seçilir. `referans-yok` ile
+`celiski`, `cogunluk-yok`'tan ÖNCE gelir — ikisi de sayının hiç okunamadığı
+ya da okunmasının anlamsız olduğu durumlardır; "çoğunluk yok" demek okunmuş
+bir sayı ima ederdi.
+"""
 
 
 # ─── Rapor öğeleri ──────────────────────────────────────────────────────────
