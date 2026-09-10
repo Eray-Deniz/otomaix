@@ -1214,6 +1214,15 @@ kendisi `test_checks_set_matches_the_binding_list` ile pinlidir.
 """
 
 
+KONTROL_ADLARI: frozenset[str] = frozenset(kontrol.ad for kontrol in CHECKS)
+"""Kayıtlı kontrol adları — `CHECKS`'ten ÜRETİLİR, elle sayılmaz.
+
+Tüketicisi onay yüzeyidir: bir bulgunun atfı bu kümenin İÇİNDE olmak zorundadır.
+Elle yazılmış ikinci bir liste, kümeye eklenen bir kontrolün adını sessizce
+"bilinmeyen" yapardı.
+"""
+
+
 def run_checks(inputs: EngineInputs) -> CheckOutcome:
     """§9.2 kontrollerini SIRAYLA koşar ve dört ölçüm kanalını birleştirir.
 

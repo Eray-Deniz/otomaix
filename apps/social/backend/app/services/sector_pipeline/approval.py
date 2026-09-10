@@ -33,6 +33,7 @@ from typing import Any, Mapping
 
 from ..package_events import log_package_event
 from . import identity, runs
+from .engine import KONTROL_ADLARI
 
 KARARLAR: tuple[str, ...] = ("onay", "ret")
 """Onay kararları — KAPALI küme (036 CHECK'iyle birebir)."""
@@ -114,13 +115,15 @@ def _bulgu_ayrimi(run: runs.VerifiedRun) -> tuple[list[dict], list[dict]]:
         # ile geçiştirmek, atfı olmayan bir geri-ekleme çelişkisini sessizce
         # NÖTR "uyarı"ya düşürürdü — riskli sınıfın sessiz kaybı. Atıf
         # `run_checks` damgasıdır; taşımayan satır bu şemadan ESKİdir.
-        if "kontrol" not in bulgu:
+        atif = bulgu.get("kontrol")
+        if type(atif) is not str or atif not in KONTROL_ADLARI:
             raise ApprovalRefused(
-                f"bulgu atıf TAŞIMIYOR (sınıf={bulgu.get('sinif')!r}) — riskli "
-                "sınıf ayrımı yapılamaz; bu koşu atıf damgasından ÖNCEKİ şemayla "
-                "yazılmış, görüntü sınıf uydurmaz"
+                f"bulgu atfı KAYITLI bir kontrol adı DEĞİL ({atif!r}, "
+                f"sınıf={bulgu.get('sinif')!r}) — riskli sınıf ayrımı yapılamaz. "
+                "Anahtarın VARLIĞI kimlik doğrulaması değildir: boş varsayılan "
+                "ya da yazım hatası riskli sınıfı sessizce nötr uyarıya düşürürdü"
             )
-        if bulgu["kontrol"] == RISKLI_ATIF_GERI_EKLEME:
+        if atif == RISKLI_ATIF_GERI_EKLEME:
             geri_ekleme.append(
                 {"unit_id": bulgu["unit_id"], "detay": bulgu["detay"]}
             )
@@ -168,15 +171,48 @@ async def _son_dort_tur(db, *, sector_id, run_id: str) -> list[dict]:
     ]
 
 
+GORUNTU_KOSU_DISI: frozenset[str] = frozenset({"actor", "son_dort_tur_cikarmalari"})
+"""Görüntünün KOŞU DURUMUNDAN türemeyen alanları — mutasyon kapısından muaf.
+
+`actor` görüntüyü KİM gördüğüdür (karar başka bir yöneticiden gelebilir);
+`son_dort_tur_cikarmalari` sektörün BAŞKA koşularından türer ve donmadan sonra
+yeni bir tur inince meşru olarak değişir. Kalan her alan koşu satırının
+kendisinden gelir ve dondurmadan sonra DEĞİŞMEMELİDİR.
+"""
+
+
+def _cekirdek(goruntu: Mapping[str, Any]) -> dict:
+    """Görüntünün KOŞUDAN türeyen çekirdeği — muaf alanlar düşürülür."""
+    coz = identity.cozulmus(goruntu)
+    return {ad: deger for ad, deger in coz.items() if ad not in GORUNTU_KOSU_DISI}
+
+
 async def build_and_freeze_from_run(db, *, run_id: str, actor: str) -> dict:
-    """Görüntüyü kilitli koşudan BASAR ve aynı işlemde DONDURUR (F18/K-98).
+    """Görüntüyü kilitli koşudan BASAR ve AYNI işlemde DONDURUR (F18/K-98).
 
     Çağıranın kurduğu bir görüntüyü kabul eden parametre YOKTUR: olsaydı bir
     görüntü üzerinden onay alıp başka bir koşuyu aktive etmek mümkün olurdu.
+
+    **İŞLEM SARMALI ZORUNLUDUR** (hakem turu 11, yüksek): `FOR UPDATE` kilidi
+    işlem-ömürlüdür. Otomatik-commit altında kilit KENDİ ifadesinin sonunda
+    düşerdi — yani "kilitli satırdan okundu ve donduruldu" vaadi, okuma ile
+    yazma arasında satır değişebildiği için YANLIŞ olurdu.
     """
-    run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
+    async with db.transaction():
+        run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
+        goruntu = await _goruntu_kur(db, run, actor=actor)
+        return await _dondur(db, run_id=run.run_id, goruntu=goruntu)
+
+
+async def _goruntu_kur(db, run: runs.VerifiedRun, *, actor: str) -> dict:
+    """Görüntünün TEK kurucusu — dondurma ve mutasyon kapısı AYNI kuralı kullanır.
+
+    İki kurucu olsaydı mutasyon kapısı kendi türetimiyle dondurulmuşu
+    karşılaştırır ve fark ÜRETİRDİ (kuralların ayrışması yanlış-pozitif).
+    """
     acik_sorular = list(run.policy_report["acik_soru_kimlikleri"])
     geri_ekleme, uyarilar = _bulgu_ayrimi(run)
+    kapilar = _kapi_sonuclari(run)
     goruntu: dict[str, Any] = {
         "sema": SNAPSHOT_SEMA,
         "run_id": run.run_id,
@@ -188,9 +224,17 @@ async def build_and_freeze_from_run(db, *, run_id: str, actor: str) -> dict:
             "decision_log_sha": run.decision_log_sha,
         },
         "acik_sorular": acik_sorular,
-        # K-71: açık soru varsa onaylanabilir sonuç SUNULMAZ. Motor böyle bir
-        # koşuyu zaten `blocked` yapar; bu İKİNCİ katmandır.
-        "onaylanabilir": run.sonuc == "activation_eligible" and not acik_sorular,
+        # K-71 + spec §10.2. Motor açık soruyu zaten `blocked` yapar; bu İKİNCİ
+        # katmandır. Kapılar da OKUNUR: Katman-1 yedi kapının İÇİNDE DEĞİLDİR,
+        # yani doğrulanmış bir koşunun tasdiki `FAIL` olabilir — görüntü onu
+        # gösteriyor ama "onaylanabilir" demeye devam ederdi.
+        # Karşılaştırma NORMALİZASYONSUZDUR (strip/lower YOK — A4 disiplini).
+        "onaylanabilir": (
+            run.sonuc == "activation_eligible"
+            and not acik_sorular
+            and kapilar["katman1"] == "PASS"
+            and kapilar["katman2"]["sunuldu"] is True
+        ),
         "geri_ekleme_celiskileri": geri_ekleme,
         "kararsizlar": [
             {"unit_id": madde["unit_id"], "sebep": madde["sebep"]}
@@ -203,14 +247,14 @@ async def build_and_freeze_from_run(db, *, run_id: str, actor: str) -> dict:
         "sayilar": _sayilar(run),
         "oranlar": identity.cozulmus(run.barrier_report.get("oranlar", {})),
         "uyarilar": uyarilar,
-        "kapi_sonuclari": _kapi_sonuclari(run),
+        "kapi_sonuclari": kapilar,
         "motor_kosu_raporu": {
             "engine_version": run.engine_version,
             "engine_config_sha": run.engine_config_sha,
             "barrier_report": identity.cozulmus(run.barrier_report),
         },
     }
-    return await _dondur(db, run_id=run.run_id, goruntu=goruntu)
+    return goruntu
 
 
 async def _dondur(db, *, run_id: str, goruntu: dict) -> dict:
@@ -259,45 +303,98 @@ async def record_decision(
             f"karar kapalı kümenin dışında: {karar!r} — kabul edilenler: "
             f"{list(KARARLAR)}"
         )
-    run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
-    if run.package_id is None:
+    # K-42(b) EŞİK koymaz ama anlamsız değeri de kaydetmez. `bool` AYRICA
+    # reddedilir: `True` bir `int` alt sınıfıdır ve "1 saniyede onaylandı" diye
+    # kalıcılaşırdı.
+    if type(seconds) is not int or seconds < 0:
         raise ApprovalRefused(
-            f"koşu {run_id!r} bir paket taslağına bağlı DEĞİL — yaşam döngüsü "
-            "olayı paket kimliği ister (R3); onay yazılamadan patlardı"
-        )
-    if not run.snapshot_sha:
-        raise ApprovalRefused(
-            f"koşu {run_id!r} için dondurulmuş görüntü YOK — karar bağlanacağı "
-            "hash'i olmayan bir görüntüye verilemez"
-        )
-    if snapshot_sha != run.snapshot_sha:
-        raise ApprovalRefused(
-            "karar BAŞKA bir görüntüye ait: verilen hash "
-            f"{snapshot_sha!r}, satırdaki {run.snapshot_sha!r} — onay yalnız "
-            "gösterilen görüntüye verilir (F18)"
+            f"saniye değeri anlamsız: {seconds!r} — negatif olmayan tam sayı olmalı"
         )
 
-    yazildi = await db.fetchval(
-        "UPDATE social.sector_package_runs "
-        "SET approval_karar = $2, approval_seconds = $3, approved_at = now() "
-        "WHERE run_id = $1 AND approval_karar IS NULL "
-        "RETURNING id",
-        run_id,
-        karar,
-        seconds,
-    )
-    if yazildi is None:
-        raise ApprovalRefused(
-            f"koşu {run_id!r} için karar ZATEN verilmiş — ikinci karar yazılmaz"
+    # İŞLEM SARMALI ZORUNLUDUR (hakem turu 11, yüksek): kapılar kilitli satıra
+    # bakar, olay ve karar yazımı AYNI işlemde iner. Otomatik-commit altında
+    # karar commit edilir, sonra olay düşerse onay İZSİZ kalırdı.
+    async with db.transaction():
+        run = await runs.load_verified_run(db, run_id=run_id, for_update=True)
+        if run.package_id is None:
+            raise ApprovalRefused(
+                f"koşu {run_id!r} bir paket taslağına bağlı DEĞİL — yaşam döngüsü "
+                "olayı paket kimliği ister (R3); onay yazılamadan patlardı"
+            )
+        # Hash'in VARLIĞI görüntünün gösterildiğinin kanıtı DEĞİLDİR (hakem
+        # turu 11, yüksek): 036'da görüntü ile hash kolonunu birbirine bağlayan
+        # bir kısıt YOK, yani hash dolu / görüntü boş satır MÜMKÜNDÜR.
+        if run.approval_snapshot is None:
+            raise ApprovalRefused(
+                f"koşu {run_id!r} için dondurulmuş görüntü YOK — hash'in varlığı "
+                "ekranın gösterildiğini kanıtlamaz"
+            )
+        goruntu = run.approval_snapshot
+        _sema_kapisi(goruntu)
+        if goruntu.get("run_id") != run_id:
+            raise ApprovalRefused(
+                f"dondurulmuş görüntü BAŞKA koşuya ait: {goruntu.get('run_id')!r}"
+            )
+        beklenen = identity.canonical_sha(identity.cozulmus(goruntu))
+        if run.snapshot_sha != beklenen:
+            raise ApprovalRefused(
+                f"satırdaki hash, satırdaki görüntünün hash'i DEĞİL: "
+                f"{run.snapshot_sha!r} != {beklenen!r} — iki kolon ayrışmış"
+            )
+        if snapshot_sha != run.snapshot_sha:
+            raise ApprovalRefused(
+                "karar BAŞKA bir görüntüye ait: verilen hash "
+                f"{snapshot_sha!r}, satırdaki {run.snapshot_sha!r} — onay yalnız "
+                "gösterilen görüntüye verilir (F18)"
+            )
+        # F18'in ASIL iddiası: dondurmadan sonra koşu satırı değiştiyse
+        # gösterilen ekran artık koşuyu ANLATMIYOR. Çekirdek YENİDEN türetilir
+        # ve birebir karşılaştırılır (muaf alanlar `GORUNTU_KOSU_DISI`).
+        taze = await _goruntu_kur(db, run, actor=goruntu.get("actor", actor))
+        if _cekirdek(taze) != _cekirdek(goruntu):
+            raise ApprovalRefused(
+                f"koşu {run_id!r} dondurmadan SONRA değişti — gösterilen görüntü "
+                "artık koşuyu anlatmıyor; karar verilmez"
+            )
+        if karar == "onay" and goruntu.get("onaylanabilir") is not True:
+            raise ApprovalRefused(
+                f"görüntü onaylanabilir DEĞİL (onaylanabilir="
+                f"{goruntu.get('onaylanabilir')!r}) — ekranda reddedileni kayıtta "
+                "kabul etmek denetim izini yalan yapardı. Ret yazılabilir."
+            )
+
+        # OLAY ÖNCE (yaşam döngüsünün F24 deseni): `log_package_event` altyapı
+        # hatasında `None` DÖNER ve çağıranı düşürmez — o dönüş BURADA hatadır.
+        # İzsiz bir onay sessiz bir yalandır.
+        olay_id = await log_package_event(
+            db,
+            event_type="approval" if karar == "onay" else "rejection",
+            sector_id=run.sector_id,
+            package_id=run.package_id,
+            actor=actor,
+            detail={
+                "run_id": run_id,
+                "seconds": seconds,
+                "snapshot_sha": snapshot_sha,
+            },
         )
-    await log_package_event(
-        db,
-        event_type="approval" if karar == "onay" else "rejection",
-        sector_id=run.sector_id,
-        package_id=run.package_id,
-        actor=actor,
-        detail={"run_id": run_id, "seconds": seconds, "snapshot_sha": snapshot_sha},
-    )
+        if olay_id is None:
+            raise ApprovalRefused(
+                f"{karar!r} olayı YAZILAMADI — izsiz karar kaydedilmez (K-99)"
+            )
+        yazildi = await db.fetchval(
+            "UPDATE social.sector_package_runs "
+            "SET approval_karar = $2, approval_seconds = $3, approved_at = now() "
+            "WHERE run_id = $1 AND approval_karar IS NULL "
+            "RETURNING id",
+            run_id,
+            karar,
+            seconds,
+        )
+        if yazildi is None:
+            raise ApprovalRefused(
+                f"koşu {run_id!r} için karar ZATEN verilmiş — ikinci karar yazılmaz"
+            )
 
 
 # ─── Gösterim ───────────────────────────────────────────────────────────────

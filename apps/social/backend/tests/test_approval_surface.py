@@ -37,6 +37,8 @@ from app.services.sector_pipeline.engine_contract import (
     PolicyReport,
 )
 
+from .conftest import _require_test_database
+
 ACTOR = "admin@otomaix"
 MOTOR_SURUM = "engine-1.0.0"
 CONFIG_SHA = "c" * 64
@@ -669,8 +671,14 @@ async def test_record_decision_takes_no_caller_supplied_package_id() -> None:
     ]
 
 
-async def test_run_mutation_after_freeze_invalidates_approval(pkg_db) -> None:
-    """F18: karar dondurulmuş görüntünün HASH'ine bağlanır."""
+async def test_foreign_hash_is_refused(pkg_db) -> None:
+    """F18: çağıranın verdiği hash satırdakiyle eşleşmezse karar YAZILMAZ.
+
+    (Bu test eskiden `test_run_mutation_after_freeze_invalidates_approval` adını
+    taşıyordu ve ADI YANLIŞTI: koşu satırını hiç mutasyona sokmuyor, yalnız
+    alakasız bir hash veriyordu. Adın iddia ettiği invariant AYRI testte ölçülür:
+    `test_run_mutation_after_freeze_invalidates_approval`, aşağıda.)
+    """
     sector_id = await _sub_sector(pkg_db)
     run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
     await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
@@ -796,10 +804,430 @@ async def test_finding_without_attribution_refuses_snapshot(pkg_db) -> None:
         bayat,
     )
 
-    with pytest.raises(approval.ApprovalRefused, match="atıf"):
+    with pytest.raises(approval.ApprovalRefused, match="kontrol adı DEĞİL"):
         await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
 
     assert await pkg_db.fetchval(
         "SELECT approval_snapshot FROM social.sector_package_runs WHERE run_id = $1",
         run_id,
     ) is None
+
+
+# ═══ 5. Hakem turu 11'in kapattığı sınıflar ═════════════════════════════════
+
+
+async def test_decision_and_event_are_one_transaction(pkg_db, monkeypatch) -> None:
+    """Olay YAZILAMAZSA karar da yazılmaz — izsiz onay sessiz bir yalandır.
+
+    `log_package_event` altyapı hatasında `None` DÖNER ve çağıranı düşürmez
+    (bilinçli); o dönüş burada HATA sayılır. Yaşam döngüsünün `F24` deseniyle
+    aynı: olay önce yazılır, kimliği yoksa işlem geri alınır.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+
+    async def _olay_yazilamadi(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(approval, "log_package_event", _olay_yazilamadi)
+
+    with pytest.raises(approval.ApprovalRefused, match="olay"):
+        await approval.record_decision(
+            pkg_db,
+            run_id=run_id,
+            karar="onay",
+            actor=ACTOR,
+            seconds=1,
+            snapshot_sha=identity.canonical_sha(goruntu),
+        )
+
+    assert await pkg_db.fetchval(
+        "SELECT approval_karar FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    ) is None, "olay yazılamadığı hâlde karar KALDI"
+
+
+@pytest.mark.parametrize("aktor", ["", "   "])
+async def test_blank_actor_leaves_no_decision(pkg_db, aktor: str) -> None:
+    """Boş/yalnız-boşluk kimlik onay SAYILMAZ ve satırda iz BIRAKMAZ."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+
+    with pytest.raises(Exception):
+        await approval.record_decision(
+            pkg_db,
+            run_id=run_id,
+            karar="onay",
+            actor=aktor,
+            seconds=1,
+            snapshot_sha=identity.canonical_sha(goruntu),
+        )
+
+    assert await pkg_db.fetchval(
+        "SELECT approval_karar FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    ) is None
+
+
+@pytest.mark.parametrize("saniye", [-1, True, 1.5, None, "3"])
+async def test_nonsense_seconds_refused(pkg_db, saniye) -> None:
+    """K-42(b) EŞİK koymaz ama anlamsız değer de KAYDETMEZ."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="saniye"):
+        await approval.record_decision(
+            pkg_db,
+            run_id=run_id,
+            karar="onay",
+            actor=ACTOR,
+            seconds=saniye,
+            snapshot_sha=identity.canonical_sha(goruntu),
+        )
+
+
+async def test_decision_refused_when_snapshot_missing_though_sha_present(
+    pkg_db,
+) -> None:
+    """Hash'in VARLIĞI görüntünün gösterildiğinin kanıtı DEĞİLDİR."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET snapshot_sha = $2 WHERE run_id = $1",
+        run_id,
+        "a" * 64,
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="görüntü"):
+        await approval.record_decision(
+            pkg_db,
+            run_id=run_id,
+            karar="onay",
+            actor=ACTOR,
+            seconds=1,
+            snapshot_sha="a" * 64,
+        )
+
+
+async def test_decision_refused_when_stored_hash_is_not_the_snapshot_hash(
+    pkg_db,
+) -> None:
+    """Satırdaki hash, satırdaki görüntünün hash'i OLMAK ZORUNDA."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+    # Tetikleyici görüntüyü korur ama hash kolonu güncellenebilir: ikisi ayrışabilir.
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET snapshot_sha = $2 WHERE run_id = $1",
+        run_id,
+        "b" * 64,
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="hash"):
+        await approval.record_decision(
+            pkg_db,
+            run_id=run_id,
+            karar="onay",
+            actor=ACTOR,
+            seconds=1,
+            snapshot_sha="b" * 64,
+        )
+
+
+async def test_run_mutation_after_freeze_invalidates_approval(pkg_db) -> None:
+    """F18'in ASIL iddiası: dondurmadan SONRA koşu satırı değişirse onay YOK.
+
+    Karar, kilitli satırdan YENİDEN türetilen çekirdeğin dondurulmuş çekirdekle
+    birebir eşleşmesini ister. Eşleşmezse gösterilen ekran artık koşuyu
+    anlatmıyordur.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+    # Görüntünün taşıdığı bir koşu alanı DEĞİŞTİRİLİR (görüntünün kendisi
+    # tetikleyiciyle korunuyor; değişen satırdır).
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET sebep = $2 WHERE run_id = $1",
+        run_id,
+        "sonradan eklenen sebep",
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="değişti"):
+        await approval.record_decision(
+            pkg_db,
+            run_id=run_id,
+            karar="onay",
+            actor=ACTOR,
+            seconds=1,
+            snapshot_sha=identity.canonical_sha(goruntu),
+        )
+
+    assert await _olaylar(pkg_db, run_id) == []
+
+
+async def test_approval_refused_when_snapshot_says_not_approvable(pkg_db) -> None:
+    """K-71 KARAR yolunda da bağlar — gösterimde reddedip kayıtta kabul etmez.
+
+    Ret ise MEŞRUDUR: onaylanamayan bir tur reddedilebilir.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(
+        pkg_db,
+        sector_id,
+        policy_report=_policy_report(acik_soru_kimlikleri=("as-1",)),
+    )
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+    sha = identity.canonical_sha(goruntu)
+    assert goruntu["onaylanabilir"] is False
+
+    with pytest.raises(approval.ApprovalRefused, match="onaylanabilir"):
+        await approval.record_decision(
+            pkg_db, run_id=run_id, karar="onay", actor=ACTOR, seconds=1, snapshot_sha=sha
+        )
+
+    # Ret yazılabilir.
+    await approval.record_decision(
+        pkg_db, run_id=run_id, karar="ret", actor=ACTOR, seconds=1, snapshot_sha=sha
+    )
+    assert [o["event_type"] for o in await _olaylar(pkg_db, run_id)] == ["rejection"]
+
+
+async def test_failed_katman1_is_not_approvable(pkg_db) -> None:
+    """Katman-1 `PASS` DEĞİLSE onaylanabilir olamaz (spec §10.2).
+
+    Katman-1 yedi kapının İÇİNDE değildir: koşu doğrulanmış olsa da tasdiki
+    `FAIL` olabilir. Görüntü onu gösteriyordu ama `onaylanabilir` okumuyordu.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET katman1_attestation = $2 "
+        "WHERE run_id = $1",
+        run_id,
+        {"kosum_kimligi": "k1-1", "sonuc": "FAIL", "actor": ACTOR},
+    )
+
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+
+    assert goruntu["kapi_sonuclari"]["katman1"] == "FAIL"
+    assert goruntu["onaylanabilir"] is False
+    assert "ONAYLANAMAZ" in approval.render_summary(goruntu)
+
+
+@pytest.mark.parametrize(
+    "atif", ["", "geri_ekleme_celiski", "bilinmeyen_kontrol", 5, None]
+)
+async def test_attribution_must_name_a_registered_producer(pkg_db, atif) -> None:
+    """Atıf VARLIĞI yetmez: KAYITLI bir kontrol adı olmalı.
+
+    Boş varsayılan (`kontrol=""`) ya da yazım hatası, riskli sınıfı sessizce
+    nötr "uyarı"ya düşürürdü — anahtar VARLIĞINI kimlik doğrulaması sanmak.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET policy_report = $2 WHERE run_id = $1",
+        run_id,
+        {
+            "kararsizlar": [],
+            "bulgular": [
+                {
+                    "sinif": "acik_soru",
+                    "unit_id": "ku-cccccccccccc",
+                    "detay": "x",
+                    "kontrol": atif,
+                }
+            ],
+            "uygulanmayan_kararlar": [],
+            "acik_soru_kimlikleri": [],
+        },
+    )
+
+    with pytest.raises(approval.ApprovalRefused, match="kontrol adı DEĞİL"):
+        await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+
+
+def test_registered_producers_come_from_the_engine_not_a_hand_list() -> None:
+    """POZİTİF KONTROL: kayıtlı ad kümesi motorun KENDİ kümesinden türetilir."""
+    from app.services.sector_pipeline import engine
+
+    assert engine.KONTROL_ADLARI == frozenset(k.ad for k in engine.CHECKS)
+    assert approval.RISKLI_ATIF_GERI_EKLEME in engine.KONTROL_ADLARI
+
+
+# ═══ 6. Otomatik-commit yolu — işlem sarmalının ASIL kanıtı ═════════════════
+#
+# Fixture'ın DIŞ transaction'ı sarmalı MASKELİYOR: sarmal kaldırılsa bile
+# gözlemlenebilir bir şey değişmiyor (mutasyonla ölçüldü: SAHTE-YEŞİL). Bu
+# bölüm gerçek üretim yolunu — otomatik-commit bağlantısını — koşar.
+
+
+async def _committed_sektor_sil(conn, sector_id) -> None:
+    """Commit edilmiş test verisini FK sırasına UYARAK siler."""
+    await conn.execute(
+        "DELETE FROM social.package_events WHERE sector_id = $1", sector_id
+    )
+    await conn.execute(
+        "UPDATE social.sector_package_runs SET package_id = NULL WHERE sector_id = $1",
+        sector_id,
+    )
+    await conn.execute(
+        "DELETE FROM social.sector_package_runs WHERE sector_id = $1", sector_id
+    )
+    await conn.execute(
+        "DELETE FROM social.sector_packages WHERE sector_id = $1", sector_id
+    )
+    await conn.execute("DELETE FROM social.sectors WHERE id = $1", sector_id)
+
+
+async def test_decision_rolls_back_on_autocommit_when_event_fails(
+    test_db_setup, monkeypatch
+) -> None:
+    """OTOMATİK-COMMIT: olay düşerse karar da GERİ ALINIR.
+
+    Sarmal olmadan `UPDATE` kendi ifadesinde commit edilir ve olay sonradan
+    düşse bile karar KALIR — izsiz onay. Bu testin fixture'ın dış transaction'ı
+    OLMADAN koşması sözleşmenin parçasıdır.
+    """
+    url = _require_test_database(test_db_setup)
+    kurulum = await asyncpg.connect(url)
+    await _init_connection(kurulum)
+    sector_id = None
+    try:
+        sector_id = await _sub_sector(kurulum)
+        run_id = await _onaya_hazir_kosu(kurulum, sector_id)
+        goruntu = await approval.build_and_freeze_from_run(
+            kurulum, run_id=run_id, actor=ACTOR
+        )
+        assert not kurulum.is_in_transaction(), "test otomatik-commit'te koşmalı"
+
+        async def _olay_yazilamadi(*_args, **_kwargs):
+            return None
+
+        monkeypatch.setattr(approval, "log_package_event", _olay_yazilamadi)
+
+        with pytest.raises(approval.ApprovalRefused, match="olay"):
+            await approval.record_decision(
+                kurulum,
+                run_id=run_id,
+                karar="onay",
+                actor=ACTOR,
+                seconds=1,
+                snapshot_sha=identity.canonical_sha(goruntu),
+            )
+
+        assert await kurulum.fetchval(
+            "SELECT approval_karar FROM social.sector_package_runs WHERE run_id = $1",
+            run_id,
+        ) is None, "otomatik-commit'te karar KALDI — işlem sarmalı yok"
+    finally:
+        if sector_id is not None:
+            await _committed_sektor_sil(kurulum, sector_id)
+        await kurulum.close()
+
+
+async def test_freeze_holds_the_row_lock_on_autocommit(test_db_setup) -> None:
+    """OTOMATİK-COMMIT: dondurma boyunca satır kilidi TUTULUR.
+
+    Kilit işlem-ömürlüdür; sarmal olmadan `FOR UPDATE` kendi ifadesinin sonunda
+    düşer ve "kilitli satırdan okundu ve donduruldu" vaadi yanlış olurdu. Ölçüm
+    dondurma SIRASINDA ikinci bir bağlantıdan `FOR UPDATE NOWAIT` dener.
+    """
+    url = _require_test_database(test_db_setup)
+    kurulum = await asyncpg.connect(url)
+    await _init_connection(kurulum)
+    okuyucu = await asyncpg.connect(url)
+    sector_id = None
+    try:
+        sector_id = await _sub_sector(kurulum)
+        run_id = await _onaya_hazir_kosu(kurulum, sector_id)
+        assert not kurulum.is_in_transaction()
+
+        kilit_gorundu: list[bool] = []
+        gercek_kur = approval._goruntu_kur
+
+        async def _kur_ve_olc(db, run, *, actor):
+            # Görüntü kurulurken kilit HÂLÂ tutulmalı.
+            try:
+                await okuyucu.fetchval(
+                    "SELECT id FROM social.sector_package_runs WHERE run_id = $1 "
+                    "FOR UPDATE NOWAIT",
+                    run.run_id,
+                )
+                kilit_gorundu.append(False)
+            except asyncpg.LockNotAvailableError:
+                kilit_gorundu.append(True)
+            return await gercek_kur(db, run, actor=actor)
+
+        approval._goruntu_kur = _kur_ve_olc
+        try:
+            await approval.build_and_freeze_from_run(
+                kurulum, run_id=run_id, actor=ACTOR
+            )
+        finally:
+            approval._goruntu_kur = gercek_kur
+
+        assert kilit_gorundu == [True], "kilit dondurma sırasında DÜŞMÜŞ"
+    finally:
+        if sector_id is not None:
+            await _committed_sektor_sil(kurulum, sector_id)
+        await kurulum.close()
+        await okuyucu.close()
+
+
+async def test_refused_second_decision_leaves_no_event_on_autocommit(
+    test_db_setup,
+) -> None:
+    """OTOMATİK-COMMIT, TERS YÖNDE SIZINTI: olay yazılıp karar düşerse iz KALMAZ.
+
+    Olay-önce sırası "karar var, olay yok" yönünü kapatıyor; bu test ÖTEKİ yönü
+    ölçer. İkinci karar denemesinde olay INSERT'i koşar, sonra `approval_karar
+    IS NULL` kapısı düşer. Sarmal olmadan olay KENDİ ifadesinde commit edilir ve
+    denetim izinde KARARI OLMAYAN bir onay olayı kalırdı.
+    """
+    url = _require_test_database(test_db_setup)
+    kurulum = await asyncpg.connect(url)
+    await _init_connection(kurulum)
+    sector_id = None
+    try:
+        sector_id = await _sub_sector(kurulum)
+        run_id = await _onaya_hazir_kosu(kurulum, sector_id)
+        goruntu = await approval.build_and_freeze_from_run(
+            kurulum, run_id=run_id, actor=ACTOR
+        )
+        sha = identity.canonical_sha(goruntu)
+        assert not kurulum.is_in_transaction(), "test otomatik-commit'te koşmalı"
+        await approval.record_decision(
+            kurulum, run_id=run_id, karar="onay", actor=ACTOR, seconds=1,
+            snapshot_sha=sha,
+        )
+
+        with pytest.raises(approval.ApprovalRefused, match="ZATEN"):
+            await approval.record_decision(
+                kurulum, run_id=run_id, karar="ret", actor=ACTOR, seconds=2,
+                snapshot_sha=sha,
+            )
+
+        olaylar = await _olaylar(kurulum, run_id)
+        assert [o["event_type"] for o in olaylar] == ["approval"], (
+            "reddedilen ikinci karar denetim izine olay bıraktı"
+        )
+    finally:
+        if sector_id is not None:
+            await _committed_sektor_sil(kurulum, sector_id)
+        await kurulum.close()
