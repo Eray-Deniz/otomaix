@@ -62,12 +62,35 @@ gelir — hepsinde sayı ya hiç okunamamıştır ya da okunması anlamsızdır;
 # ─── Rapor öğeleri ──────────────────────────────────────────────────────────
 
 
+def _metin_alani(deger: Any, etiket: str, *, bos_serbest: bool = False) -> None:
+    """Metin alanının TİPİNİ zorlar — anotasyon bunu yapmaz.
+
+    `bool` da dâhil doğru-görünen hiçbir değer kabul edilmez (`type(...) is not
+    str`, alt sınıf da RED — A4 disiplini).
+    """
+    if type(deger) is not str:
+        raise TypeError(
+            f"{etiket} metin olmalı — {type(deger).__name__} verildi "
+            "(doğru-görünen değer sözleşme kanıtı DEĞİLDİR)"
+        )
+    if not bos_serbest and not deger.strip():
+        raise ValueError(f"{etiket} boş olamaz")
+
+
 @dataclass(frozen=True)
 class KararsizMadde:
     """K-23=B — motorun karar veremediği birim. Aktivasyonu BLOKLAMAZ."""
 
     unit_id: str
     sebep: str  # serbest metin; kapalı küme DEĞİL (dürüst etiket)
+
+    def __post_init__(self) -> None:
+        # Anotasyon çalışma zamanı kapısı DEĞİLDİR (hakem turu 3, yüksek):
+        # `{"unit_id": 7, "sebep": []}` biçiminde bir öğe kalıcı yükten geri
+        # okunduğunda "geçerli rapor" sayılıyordu. Kapı DEĞİŞMEZE kondu ki her
+        # kurulum yolu — motor da, tipli okuyucu da — aynı gramerden geçsin.
+        _metin_alani(self.unit_id, "KararsizMadde.unit_id")
+        _metin_alani(self.sebep, "KararsizMadde.sebep")
 
 
 @dataclass(frozen=True)
@@ -89,6 +112,10 @@ class BulguIzi:
     """
 
     def __post_init__(self) -> None:
+        if self.unit_id is not None:
+            _metin_alani(self.unit_id, "BulguIzi.unit_id")
+        _metin_alani(self.detay, "BulguIzi.detay")
+        _metin_alani(self.kontrol, "BulguIzi.kontrol", bos_serbest=True)
         if self.sinif not in BULGU_SINIFLARI:
             raise ValueError(
                 f"BulguIzi.sinif kapalı kümenin dışında: {self.sinif!r} — "
@@ -105,6 +132,7 @@ class UygulanmayanKarar:
     sebep: str  # UYGULANMAMA_SEBEPLERI içinden — KAPALI
 
     def __post_init__(self) -> None:
+        _metin_alani(self.unit_id, "UygulanmayanKarar.unit_id")
         if self.karar not in identity.KARAR_DEGERLERI:
             raise ValueError(
                 f"UygulanmayanKarar.karar kapalı kümenin dışında: {self.karar!r}"

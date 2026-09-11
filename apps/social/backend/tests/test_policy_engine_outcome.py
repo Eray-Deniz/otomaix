@@ -1152,3 +1152,62 @@ def test_policy_report_from_payload_refuses_malformed(yuk) -> None:
     with pytest.raises((TypeError, ValueError)):
         PolicyReport.from_payload(yuk)
 
+
+def _kanonik_yuk() -> dict:
+    """Her alanı DOLU kanonik yük — mutasyon matrisinin tabanı."""
+    return {
+        "kararsizlar": [{"unit_id": "ku-000000000001", "sebep": "kanıt yok"}],
+        "bulgular": [
+            {
+                "sinif": "acik_soru",
+                "unit_id": "ku-000000000001",
+                "detay": "açık soru var",
+                "kontrol": "acik-soru",
+            }
+        ],
+        "uygulanmayan_kararlar": [
+            {
+                "unit_id": "ku-000000000001",
+                "karar": "koru",
+                "sebep": next(iter(UYGULANMAMA_SEBEPLERI)),
+            }
+        ],
+        "acik_soru_kimlikleri": ["as-1"],
+    }
+
+
+def _yaprak_matrisi() -> list:
+    """Her öğe alanı × her yanlış tip — ÜRETİLMİŞ matris, elle seçim YOK."""
+    yanlis_degerler = (7, True, None, [], {}, 1.5)
+    vakalar = []
+    taban = _kanonik_yuk()
+    for liste_adi in ("kararsizlar", "bulgular", "uygulanmayan_kararlar"):
+        for alan in taban[liste_adi][0]:
+            for deger in yanlis_degerler:
+                if alan == "unit_id" and liste_adi == "bulgular" and deger is None:
+                    continue  # `BulguIzi.unit_id` MEŞRU olarak None olabilir
+                vakalar.append((liste_adi, alan, deger))
+    return vakalar
+
+
+@pytest.mark.parametrize(
+    ("liste_adi", "alan", "deger"),
+    _yaprak_matrisi(),
+    ids=lambda d: str(d),
+)
+def test_policy_report_from_payload_refuses_every_malformed_leaf(
+    liste_adi, alan, deger
+) -> None:
+    """YAPRAK alanların tipi de sözleşmenin parçasıdır (hakem turu 3, yüksek).
+
+    Anotasyonlar çalışma zamanında tip ZORLAMAZ; kapı yalnız anahtar kümesine
+    baksaydı `{"unit_id": 7, "sebep": []}` biçiminde bir öğe geçerdi ve hazırlık
+    listesi onu "geçerli, temiz rapor" diye okurdu. Kapanış elle seçilmiş bir
+    örnekle değil, ÜRETİLMİŞ matrisle kanıtlanır.
+    """
+    yuk = _kanonik_yuk()
+    yuk[liste_adi][0][alan] = deger
+
+    with pytest.raises((TypeError, ValueError)):
+        PolicyReport.from_payload(yuk)
+
