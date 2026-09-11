@@ -119,6 +119,63 @@ dispatch'i öncesi kontrolör kararıyla yazıldılar. Evleri var: final incelem
 
 ---
 
+## Revizyon kaydı — 2026-09-11 (Task 18 dispatch'inden ÖNCE)
+
+Ek en son 2026-09-08'de revize edildi; aradan Task 8 · 10 · 11 · 13 · 14 · 16 · 17 geçti.
+**Kod YEDİ yerde ekin metnini geride bıraktı.** İkisi hakem turlarında, **BEŞİ bu turun
+tarama koşumunda** bulundu.
+
+**Neden tarama, neden spot değil (İlke 6 — blast radius).** Bilinen sapmalar dört AYRI
+hakem turunda TESADÜFEN çıkmıştı. Onları üreten süreç ("kod ekin önüne geçer, ek
+güncellenmez") **süreç-İÇKİNDİR**: ekin beyan ettiği BÜTÜN yüzeyler aynı risk altındadır.
+Bu sınıfta spot kontrol final karar üretemez, o yüzden ekin ```python bloklarında beyan
+ettiği **65 yüzeyin (32 blok) HEPSİ** koddaki karşılığıyla imza ve alan kümesi düzeyinde
+karşılaştırıldı.
+
+**Taramanın ölçülmüş sınırı — DÜRÜST ETİKET, liste TAM DEĞİLDİR.** Kapsanan: kod
+bloklarında beyan edilen 65 yüzey. **Kapsanmayan:** ekin **düz yazıda** beyan ettiği
+yüzeyler. `readiness.evaluate` tam olarak böyle bir yüzeydir ve taramayla DEĞİL, hakem
+turuyla bulunmuştu. Düz yazı kolu için güvenilir bir üretilmiş kontrol yazılamadı (serbest
+metinden imza çıkarmak yanlış-pozitif ile kaçırma arasında salınıyor); o kol için
+**sapma olmadığı İDDİA EDİLMEZ**.
+
+| # | ne değişti | yön | nasıl bulundu |
+|---|---|---|---|
+| **R-G1** | `BulguIzi` ÜÇ alanlıydı; kodda DÖRT (`kontrol`) | metin koda uyarlandı | hakem turu (Task 14) |
+| **R-G2** | `ChecklistItem` ÜÇ alanlıydı; kodda DÖRT (`baslik`) | metin koda uyarlandı | **bu turun taraması** |
+| **R-G3** | `check_snapshot_agreement` tek mühür parametresi taşıyordu; kodda İKİ (`expected_kaynak_sha`) | metin koda uyarlandı | **bu turun taraması** |
+| **R-G4** | `verify_pin` iki parametreliydi; kodda üçüncü bir anahtar-kelime parametresi var (`snapshots`) | metin koda uyarlandı | **bu turun taraması** |
+| **R-G5** | `_consume_provenance` `(table, evidence, keys)` alıyordu; kodda `(evidence, *, hedef)` | metin koda uyarlandı | **bu turun taraması** |
+| **R-G6** | `readiness.evaluate(db)` koşu kimliği almıyordu; kodda alıyor | metin koda uyarlandı | hakem turu (Task 17) |
+| **R-G7** | AÇIK-2 kararı "A — `geri-al` KALIR" diyordu; komut KALDIRILDI | **KARAR DEĞİŞTİ** (Eray, 2026-09-11) | yürütme ölçümü |
+| **R-G8** | `policy_report` kolonuna yazılan **kalıcı yük şekli** ekte SAHİPSİZDİ (`as_payload`/`from_payload` hiç geçmiyordu) | eksik sözleşme eklendi | `BulguIzi` kaydının ikinci ayağı |
+
+**R-G8 taramanın ürünü DEĞİLDİR** — tarama yalnız ekte ADI GEÇEN yüzeyleri kodla
+karşılaştırır, ekte HİÇ GEÇMEYEN bir yüzeyi göremez. Bu kalem `BulguIzi` açık sorununun
+ikinci ayağından geldi ve **aynı sınıfın taramayla kapatılamayan kolunu gösterir**: eksik
+beyan, yanlış beyandan farklı bir kusurdur.
+
+**R-G1…R-G6 ve R-G8 yeni kapsam AÇMAZ** — altısı da kodun ZATEN yaptığını ekin metnine yazar; kapı
+kümesi hiçbirinde büyümez (R-G3 ve R-G4 bunu açıkça söyler: taşıma/ölçüm biçimi değişir,
+kapı sayısı değişmez).
+
+**R-G7 bir metin uyarlaması DEĞİLDİR — bağlayıcı bir kararın tersine dönmesidir.** Tam
+gerekçesi ve yeniden açılma koşulu AÇIK-2 bölümünün başındaki blokta yazılıdır.
+
+**Bu revizyonun kendi sınırı — dürüst etiket.** Yedisini de **bağımsız hakem GÖRMEDİ**;
+kontrolör ölçümüyle yazıldılar. **Evleri var:** dış araştırma sözleşmesi turunun sonundaki
+hakem turu ve dal kapanışındaki final inceleme (tabanı `a806e29`, bu commit oraya
+kendiliğinden girer).
+
+**Sınıfın kendisi KAPANMADI — yalnız bugünkü örnekleri kapandı.** Ek ile kodun sessizce
+ıraksaması bir SÜREÇ kusurudur; bu revizyon onu üreten süreci değiştirmez. Kalıcı kapanış,
+ekin beyan ettiği yüzeyleri koda karşı ölçen ÜRETİLMİŞ bir kapıdır (bugünkü tarama elle
+koşuldu ve düz yazı kolunu kapsamıyor). **Bu, kontrolörün önerisidir, ölçülmüş bir çözüm
+DEĞİLDİR** — kapının yanlış-pozitif maliyeti ölçülmedi ve düz yazı kolu için yazılabilir
+olduğu GÖSTERİLMEDİ.
+
+---
+
 ## R1 — Koşu klasörleri pinlenen dış depoya ASLA commit edilmez
 
 **Kusur (plan satırları):** `runs.run_folder(run_id) -> <arastirma-deposu>/kosu/<run_id>/`
@@ -144,7 +201,12 @@ açık bir **NEGATİF invariant** kazanır.
 
 ```python
 # apps/social/backend/app/services/sector_pipeline/contracts.py  (Task 1)
-def verify_pin(pin: ContractPin, repo_root: Path) -> list[str]: ...
+def verify_pin(
+    pin: ContractPin,
+    repo_root: Path,
+    *,
+    snapshots: Mapping[str, bytes | None] | None = None,   # R-G4 (2026-09-11)
+) -> list[str]: ...
 ```
 
 `verify_pin` invariantları — pozitif küme DEĞİŞMEZ (dört kapı, plan 423-426), üstüne
@@ -156,6 +218,12 @@ def verify_pin(pin: ContractPin, repo_root: Path) -> list[str]: ...
   `hakem-denetci-gorevi.md` · `hakem-sentez-gorevi.md`) sha256'sı, (b) dış deponun HEAD
   commit sha'sı, (c) depo dizininin varlığı.
 - `verify_pin` `git status`/`git diff` çağırmaz ve dış depoda hiçbir şey değiştirmez.
+- **`snapshots` KAPI EKLEMEZ (R-G4, 2026-09-11)** — kapı kümesi TAM OLARAK dört kalır;
+  yalnız kapının HANGİ BAYTLARI ölçtüğünü değiştirir. Çağıran bir sözleşme dosyasını
+  zaten okuduysa o anlık görüntüyü verir ve hash kapısı diskten İKİNCİ bir okuma
+  yapmadan aynı baytları ölçer. Gerekçe ölçülmüş: doğrulanan bayt ile kullanılan bayt
+  iki AYRI okumadan gelirse aradaki pencerede dosya değişebilir ve pinlenmemiş içerik
+  doğrulanmış sayılırdı. Anlık görüntü `None` ise dosya okunamamıştır — ikinci kapı düşer.
 - Pinlenen üç dosyanın baytı değişirse kapı zaten (a) ile düşer; bu **kirlilik değil içerik
   drift'idir** ve iki hâl karıştırılmaz.
 
@@ -373,6 +441,16 @@ class BulguIzi:
     unit_id: str | None              # birime bağlanamayan bulguda None
                                      # (ör. `regresyon_kapisi`, `ikinci_aktif`)
     detay: str                       # bulguyu doğuran ölçümün tek cümlelik ifadesi
+    kontrol: str = ""                # R-G1 (2026-09-11): bulguyu ÜRETEN kontrolün adı
+                                     # (`EngineCheck.ad`). TEK yazıcısı `run_checks`'tir;
+                                     # kontrol GÖVDESİNİN yazdığı bir değer REDDEDİLİR
+                                     # (uydurma atıf = sessiz sınıf kayması). Varsayılan
+                                     # BOŞTUR çünkü değeri gövde değil TOPLAYICI yazar.
+                                     # Gerekçe ölçülmüş: `sinif` riskli sınıfları ayırt
+                                     # ETMEZ — `acik_soru` sınıfını BEŞ ayrı kontrol
+                                     # üretir ve onay yüzeyi (Task 14, K-42) sıralamayı
+                                     # sınıf ADIYLA kurar. Alternatifi `detay` metnini
+                                     # eşleştirmekti: referans bütünlüğü olmayan bağ (İlke 1).
 
 @dataclass(frozen=True)
 class UygulanmayanKarar:
@@ -396,6 +474,27 @@ class PolicyReport:
     uygulanmayan_kararlar: tuple[UygulanmayanKarar, ...]
     acik_soru_kimlikleri: tuple[str, ...]   # R7: `acik_soru` bulgusunu doğuran birimler;
                                             # sayaç DEĞİL, iz — K-71 kapısı R8'in yolunda
+
+    # ── R-G8 (2026-09-11): KALICI YÜK ŞEKLİ — ekte SAHİPSİZDİ, artık burada.
+    # `policy_report` kolonu `jsonb`'dir ve dataclass demetleri kendiliğinden
+    # serileşmez. Çeviri BURADA doğar ki `record_result` kendi çevirisini
+    # YAZMASIN — iki çeviri iki biçim demektir.
+    def as_payload(self) -> dict[str, Any]: ...
+    #   {"kararsizlar":            [{"unit_id", "sebep"}],
+    #    "bulgular":               [{"sinif", "unit_id", "detay", "kontrol"}],   # R-G1
+    #    "uygulanmayan_kararlar":  [{"unit_id", "karar", "sebep"}],
+    #    "acik_soru_kimlikleri":   [str]}
+    #
+    # `from_payload` ÜRETİM YOLU DEĞİL, OKUYUCUDUR (H2 korunur): yalnız
+    # `as_payload`'ın ürettiği biçimi kabul eder ve her öğeyi kendi
+    # dataclass'ına kurarak kapalı kümeleri YENİDEN uygular. Gerekçesi hakem
+    # turu 2'nin yüksek bulgusudur: ham sözlüğü okuyan tüketiciler (hazırlık
+    # listesi, Task 17) alan VARLIĞINI şekil kanıtı sanıyordu ve
+    # `{"kararsizlar": 1, "bulgular": [{}], ...}` biçimindeki bir yük "motor
+    # kontrolleri tamam + bulgu yok" diye okunabiliyordu. Tüketicinin kendi
+    # doğrulama listesini yazması İKİNCİ BİR SÖZLEŞME olurdu.
+    @classmethod
+    def from_payload(cls, payload: Any) -> "PolicyReport": ...
 
     _OGE_TIPLERI = {                        # KAPALI eşleme — dört alan, beşincisi YOK
         "kararsizlar": KararsizMadde,
@@ -1034,6 +1133,7 @@ def check_snapshot_agreement(
     validated: tuple[ValidatedReport, ValidatedReport],
     *,
     expected_snapshot_sha: str,        # PacketRef.unit_snapshot_sha
+    expected_kaynak_sha: str,          # R-G3 (2026-09-11): PacketRef.kaynak_seti_sha
 ) -> SnapshotAgreement:
     """Girdi HAM rapor DEĞİL, `validate_report`'un dönüşüdür. DÖRT koşul birden aranır:
 
@@ -1043,6 +1143,12 @@ def check_snapshot_agreement(
         (aynı rolden iki rapor REDDEDİLİR);
     (3) her raporun `unit_snapshot_sha`'sı `expected_snapshot_sha`'ya EŞİT;
     (4) iki raporun `unit_snapshot_sha`'ları birbirine EŞİT (K-79/K-100).
+
+    **`expected_kaynak_sha` KAPI DEĞİLDİR, TAŞIMADIR (R-G3, 2026-09-11).** Kapı kümesi
+    DÖRT koşulda kalır — beşinci koşul EKLENMEZ. Tek rapor gören bu imzada
+    karşılaştırılacak ikinci bir kaynak-kümesi taşıyıcısı yoktur; değer pakete
+    mühürlenir ve karşılaştırma BİR KATMAN SONRA, `EngineInputs` yapımında yapılır
+    (motora verilen mekanik kapının bu paketi kuran kapı olduğu ORADA ölçülür).
 
     Dördü de geçerse `ValidatedAuditPair` üretilir — BAŞKA ÜRETİCİ YOKTUR. Bir koşul
     düşerse `cift` `None`'dır ve tur GEÇERSİZDİR.
@@ -1826,7 +1932,14 @@ eklenir (`table="package_rollback_plans"`, `incident_id`/`package_id` dolu, `run
 
 ```python
 # sector_package_lifecycle.py  (Task 15 MODIFY)
-async def _consume_provenance(db, *, table: str, evidence: Any, keys: dict) -> None:
+async def _consume_provenance(db, evidence: Any, *, hedef: Mapping[str, Any]) -> None:
+    # R-G5 (2026-09-11) — imza DEĞİŞTİ: `table` + `keys` yerine `hedef`. Gerekçe fix
+    # turu 1'in yüksek hakem bulgusudur: jeton, kanıtın KENDİ alanlarına karşı
+    # doğrulanırsa meşru basılmış bir jeton BAŞKA bir taslağa ya da onaylanmamış bir
+    # hedefe karşı harcanabiliyordu. `hedef` artık ÇAĞIRANIN geçiş hedefidir ve jetonun
+    # basıldığı satırla EŞLEŞMEK ZORUNDADIR. Kolon adları kapalı `_JETON_KOSULU`
+    # tablosundan gelir — çağıran yalnız DEĞER verir, bilinmeyen bir kolon adı SQL'e
+    # hiç ulaşmaz (eski imzanın `table`/`keys` çiftinin kapattığı şey de buydu).
     """Kilitli satırdaki jetonu ATOMİK olarak tüketir — okuma ile yazma AYRILMAZ,
     dolayısıyla iki eşzamanlı geçişten yalnız biri kazanır.
 
@@ -2062,6 +2175,11 @@ class ChecklistItem:
     madde_id: str        # kanonik madde kimliği
     sinif: str           # MADDE_SINIFLARI içinden — KAPALI
     otomatik: bool       # otomatik ön-kontrolle ölçülebiliyor mu (Task 17 tüketir)
+    baslik: str          # R-G2 (2026-09-11): maddenin insan-okunur etiketi.
+                         # `MADDE_KUMESI_SHA`ya GİRMEZ — başlık bir insan etiketidir ve
+                         # bir yazım düzeltmesi eski tasdikleri geçersizleştirmemelidir.
+                         # Kimlik · sınıf · ölçülebilirlik kapının ANLAMINI değiştirir,
+                         # onlar hash'e girer.
 
 MADDELER: tuple[ChecklistItem, ...]
 # YİRMİ madde. Kimlikler ve sınıflar spec §13.4'ün YİRMİ maddesinden ÖLÇÜLEREK
@@ -2199,7 +2317,10 @@ EKLENMEDİ.
   `tests/test_auditor_orchestration.py`.
 
 **KALAN yüzeyler (Task 17, değişmez):** `readiness.CHECKLIST: tuple[Item, ...]` (plan 1891) ·
-`readiness.evaluate(db) -> ReadinessReport` (plan 1892) · `kapi`/`sinyal` sınıflandırması
+`readiness.evaluate(db, *, run_id) -> ReadinessReport` (plan 1892; **imza R-G6 ile
+düzeltildi, 2026-09-11** — koşu kimliği olmadan ön-kontrolün okuyacağı artefakt YOKTUR:
+yirmi maddenin otomatik ölçülen HEPSİ koşu satırını ya da o koşunun ham artefaktlarını
+okur) · `kapi`/`sinyal` sınıflandırması
 (plan 1909-1914 · 1920-1925) · CLI alt komutu **`hazirlik-onayla`** (plan 1893-1897) — komut
 `readiness.evaluate`'i çağırır, operatörün TEK onayını alır ve **`runs.attest_readiness`**'e
 yazdırır. **Tek fark (H5):** `readiness.CHECKLIST` ikinci bir liste DEĞİLDİR — kimlik ve
@@ -2773,9 +2894,9 @@ harcaması **AYNI bağlantıda ve AYNI dış işlemde** koşar. `rollback_packag
 `async with db.transaction()` bloğu bu dış işlemin İÇİNDE bir savepoint'tir; ayrı bir
 işlem AÇMAZ. Bu, kilidin "doğrula → harca" aralığının tamamını kapsamasının tek yoludur ve
 bu ekte **bağlayıcı olan budur** — iç içe işlem bloğunun savepoint'e karşılık gelmesi
-sürücü davranışıdır, kapının kendisi değil. Tek paketlik yol (`geri-al --incident-id
---package-id`, AÇIK-2) aynı sarmalayıcıyı kullanır: kilidi alır, kanıtı kurar, harcar,
-commit eder.
+sürücü davranışıdır, kapının kendisi değil. Tek paketlik yol **ayrı bir komut DEĞİLDİR** (R-G7,
+2026-09-11 — AÇIK-2'nin kararı DEĞİŞTİ): tek satırlık bir olay açılır ve `olay-geri-al`
+aynı sarmalayıcıyı kullanır — kilidi alır, kanıtı kurar, harcar, commit eder.
 
 **A1(c) — KEMER VE ASKI: `onay_kapsam_sha` parmak izine BAĞLANIR (fix turu 3, yüksek, KABUL).**
 Kilit doğru kurulursa (b) tek başına yeterlidir. Buna rağmen `RollbackGateEvidence`
@@ -3251,6 +3372,42 @@ ve değişmez**; değişecek olan yalnız iki yardımcının hangi dosyada ve ha
 doğduğudur.
 
 ## AÇIK-2 KAPANDI — kontrolör kararı, 2026-08-30
+
+> # ⚠️ BU KARAR DEĞİŞTİ — R-G7, Eray kararı 2026-09-11
+>
+> **Yeni karar: `geri-al` alt komutu KALDIRILDI (aşağıdaki A seçeneği UYGULANMADI).**
+> Aşağıdaki metin tarihsel kayıttır; **bağlayıcı olan bu bloktur.**
+>
+> **Neden A kapanmadı — ölçüldü (hakem turu 13 + kapanış turu, Task 16).** Komut olayın
+> üyeliğini doğruladıktan SONRA, paket filtresi ALMAYAN olay-kapsamlı yürütücüyü
+> çağırıyordu; doğrulama ile yürütmenin kilidi arasında bir pencere kalıyor ve o pencerede
+> üyeliği değiştiren ikinci bir operatör, **adlandırılmayan bir paketin geri alınmasına**
+> yol açabiliyordu. A1(b)'nin tek-kilit sarmalayıcısı bu yolu kapsamıyordu.
+>
+> **Pencereyi kapatmanın yolu** olay kilidini baştan sona tutan PAKET-HEDEFLİ bir
+> yürütücüdür; o yüzey servis katmanındadır ve Task 16'nın beyan ettiği dosya kümesinin
+> DIŞINDADIR. Yani seçim "kapat ya da kapsam aç" ikilemiydi.
+>
+> **Karar (Eray, 2026-09-11): komutu kapat, olay yolunu TEK yol yap.**
+>
+> **Yetenek KAYBOLMUYOR — kaybolan kısayoldur, kanıt zinciri değil.** Tek paketlik geri
+> alma da `olay-plani` ile tek satırlık bir olay açılarak yapılır; `olay-onayla` ve
+> `olay-geri-al` aynen koşar. **Tek satırlık olay AÇIK-2'nin kendi kararında zaten
+> MEŞRUDUR** ("`olay-plani` bir paketle çağrılabilir"), yani bu karar yeni bir kavram
+> ÜRETMEZ — yalnız ikinci giriş noktasını kaldırır.
+>
+> **`deaktive-et` yine ETKİLENMEZ** (K-38): kanıt zinciri istemez, tek komuttur, acil kol
+> olarak kalır. A'nın kabul edilebilirliğinin sebebi buydu ve kaldırma kararından SONRA da
+> geçerlidir — "aktif paketi hemen indir" hâlâ TEK komuttur.
+>
+> **Aşağıdaki kanıt testlerinden `geri-al`e ait ÜÇÜ DÜŞER**
+> (`test_geri_al_requires_incident_id` · `test_geri_al_refuses_when_plan_row_unapproved` ·
+> `test_geri_al_succeeds_on_approved_single_row_incident`); yerlerine komutun VAR OLMADIĞINI
+> ölçen kapı geçer. `test_deaktive_et_needs_no_incident_and_no_evidence` AYNEN KALIR.
+>
+> **Sessiz geri ekleme YASAĞI:** komut yeniden eklenirse kapanmamış yarış da geri gelir.
+> Yeniden açılma koşulu TEK: paket-hedefli, olay kilidini baştan sona tutan yürütücü
+> yazılırsa.
 
 **Karar: A seçeneği — `geri-al` olay kimliği İSTER.** Alt komut listede KALIR, ama imzası
 `geri-al --incident-id <id> --package-id <id>` olur ve kanıtını R8(c) jetonundan, yani

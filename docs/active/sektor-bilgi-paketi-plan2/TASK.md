@@ -1049,6 +1049,30 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 - **Farklı TÜRLER farklı kovalara konur.** Toplayan tarafın türleri ayırt etmesi beklenemez;
   ayrım sözleşmede kurulur (F8). Kova testi TÜRÜ sınar, varyantı kovalamaz.
 
+## Arayüz eki revizyonu 2 + Task 19 penceresi (2026-09-11)
+
+- **2026-09-11 — Eray kararı (F1):** hazırlık onayı **mühürlenmiş kanıta BAĞLANIR ve kapı
+  FAIL-CLOSED olur.** Onay anında görülen kanıt kümesinin parmak izi tasdike YAZILIR;
+  aktivasyon aynı izi yeniden hesaplar ve tutmuyorsa paketi AKTİVE ETMEZ, operatörü yeniden
+  onaya çağırır. Reddedilen iki seçenek: "uyar ama devam et" (fark okunmazsa bugünkü
+  durumdan farkı yok) ve "bugünkü hâli Task 20'ye taşı" (yüksek bulgu açık kalırdı).
+  **Eray-seviyesinde sorulan şey mekanizma DEĞİL, risk tercihiydi** (İlke 8).
+
+- **2026-09-11 — Eray kararı (tur şekli):** dış araştırma sözleşmesi turu **hafif yolla**
+  koşar — tasarım bu oturumda yapılır, sonunda TEK bağımsız hakem turu. `/spec-claude-codex`
+  zinciri açılmadı; gerekçe süreç ağırlığının risk ağırlığına denk olması.
+
+- **2026-09-11 — arayüz eki REVİZE EDİLDİ (R-G1…R-G8).** Sekiz kalem; altısı ekin metnini
+  kodun yaptığına uyarladı, biri (R-G7) bağlayıcı bir kararı TERSİNE çevirdi, biri (R-G8)
+  ekte hiç olmayan bir sözleşmeyi ekledi. **Beşi bu turun taramasında bulundu** — ekin kod
+  bloklarında beyan ettiği 65 yüzeyin hepsi kodla karşılaştırıldı; tarama fix'ten sonra
+  yeniden koştu ve **kalan fark 0**.
+  **Kapsam sınırı (dürüst etiket):** tarama ekin DÜZ YAZIDA beyan ettiği yüzeyleri
+  KAPSAMIYOR ve ekte HİÇ GEÇMEYEN bir yüzeyi (R-G8 gibi) göremez. "Sapma kalmadı"
+  İDDİA EDİLMEZ; iddia edilen, kod bloğu kolunun bugün temiz olduğudur.
+  **Sınıfın kendisi kapanmadı** — ek↔kod ıraksaması süreç kusurudur; üretilmiş bir kapı
+  önerisi ekin revizyon kaydında ÖLÇÜLMEMİŞ ÖNERİ etiketiyle duruyor.
+
 # Open Problems
 
 - **[YÜKSEK — AÇIK, sahibinin kararıyla 2026-09-11] Hazırlık onayı mühürlenmiş bir kanıt
@@ -1063,7 +1087,9 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   prob kapısını yazıcıya koymak `runs → readiness` bağımlılığı demek olurdu, **R9 yasaklıyor**.
   **EV: arayüz eki revizyonu · sert son tarih Task 19** (bekleyen kümeye katılır).
 
-- **[ORTA — EVİ VAR 2026-09-11] `readiness.evaluate` imzası ekten IRAKSIYOR.** Ek yüzeyi
+- **[KAPANDI 2026-09-11 — R-G6] `readiness.evaluate` imzası ekten IRAKSIYOR.** Ek
+  `evaluate(db, *, run_id)` yazacak biçimde düzeltildi; gerekçe (koşu kimliği olmadan
+  okunacak artefakt YOKTUR) ekin metnine girdi. Kayıt tarihsel bağlam olarak duruyor: Ek yüzeyi
   `evaluate(db)` yazıyor; kod `evaluate(db, *, run_id)`. Koşu kimliği olmadan ön-kontrolün
   okuyacağı artefakt YOKTUR — on bir probun on biri koşu satırını ya da o koşunun ham
   artefaktlarını okur. Hakem ıraksamayı GEREKÇELİ buldu ve bloker saymadı.
@@ -1081,7 +1107,11 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   **EV: Task 18 (ön-pilot dağıtım — şema ayağı), Eray kararı 2026-09-11.** Kod tarafındaki
   kaydı: `scripts/sector_pipeline_cli.py::SEMA_DISI_ARTEFAKT_TURLERI`.
 
-- **[ORTA — EVİ VAR 2026-09-10] `BulguIzi`'nin dördüncü alanı arayüz ekinde SAHİPSİZ.**
+- **[KAPANDI 2026-09-11 — R-G1 + R-G8] `BulguIzi`'nin dördüncü alanı arayüz ekinde SAHİPSİZ.**
+  İKİ ayak da indi: (a) dördüncü alan gerekçesiyle ekin tip tanımına yazıldı (R-G1);
+  (b) kaydın istediği ikinci ayak — `policy_report` kolonuna yazılan **kalıcı yük şekli** —
+  ekte HİÇ GEÇMİYORDU ve `as_payload`/`from_payload` sözleşmesi olarak eklendi (R-G8).
+  Kayıt tarihsel bağlam olarak duruyor:
   Task 14, atıf alanını (`kontrol`) Task 8 sözleşmesinin İÇİNDEN ekledi; ek `BulguIzi`'yi ÜÇ
   alanlı tanımlıyor ve Task 14'ün dosya yüzeyi yalnız `approval.py`. Bağımsız hakem R9'un
   (bağımlılık yönü) KIRILMADIĞINI teyit etti — kırılan sahiplik/dosya sınırı. Alan gereklidir ve
@@ -1104,10 +1134,15 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   Yeniden değerlendirme yeri: Adım 11 final incelemesi (tabanı `a806e29` olduğu için oraya
   kendiliğinden girer) ve `/review-claude-codex`.
 
-- **[accepted_risk, medium — 2026-09-09] `EngineInputs` paket/koşu bağı taşımıyor.** Başka
-  bir koşunun mekanik kapısı bu koşuya verilirse motor göremez (R5 alan kümesi kapalı).
-  F1'in görüntü bağının karşılığı burada YOK. Aynı arayüz eki turunda ele alınabilir; ayrı
-  ele alınacaksa kendi evi verilmelidir (bkz. yeni görevin Open Problems'ı).
+- **[KAPANDI 2026-09-10 — bu kayıt 2026-09-11'e kadar BAYAT DURDU] `EngineInputs` paket/koşu
+  bağı taşımıyor.** Kardeş görevde (`denetci-denetim-tablosu-tipli-okuma`) Eray kararıyla AYNI
+  turda kapatıldı: bağ, motorun girdi alan kümesi AÇILMADAN kuruldu — kimlik `build_packet`'te
+  mekanik rapor kümesinden TÜRETİLİR, denetçi çifti üzerinden TAŞINIR, `EngineInputs` yapımında
+  KARŞILAŞTIRILIR. **Kalan kapsam sınırı (dürüst etiket):** kimlik `run_id` TAŞIMAZ, yani AYNI
+  kaynaklarla koşulmuş iki ayrı koşuyu ayırmaz.
+  **Defter dersi:** kapanış kardeş görevin dosyasına yazıldı, buraya YAZILMADI; kalem bu
+  listede bir gün boyunca (2026-09-10 → 2026-09-11) "kabul edilmiş risk" göründü ve bu turun
+  denetimiyle yakalandı. Bir kalem iki deftere bakıyorsa kapanışı İKİSİNE de işlenir.
 
 - **[accepted_risk, medium — 2026-09-09] K-03'ün takvim-kategorisi ayağı UYGULANMADI.**
   `takvim_anahtarlari` yalnız anahtar taşır, kategori taşımaz. Motor yalnız paket içi tür
