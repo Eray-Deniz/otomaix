@@ -32,7 +32,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import subprocess
 import sys
 from pathlib import Path
 from uuid import UUID
@@ -444,45 +443,47 @@ def _kaynaklari_oku(kok: Path) -> tuple[str, list[str], list[str]]:
     return brief_yolu.read_text(encoding="utf-8"), kaynaklar, adlar
 
 
+class WebProbeUnavailable(RuntimeError):
+    """Doğrulanabilir bir web erişim ölçümü KURULAMADI.
+
+    `preflight` bunu ÖLÇÜM ARIZASI sayar ve tur başlamaz. `False` dönmekten
+    FARKLIDIR ve fark bilinçlidir: `False` "ölçtüm, erişim yok" demektir ve
+    K-14'ün muafiyet kolunu MEŞRULAŞTIRIR; ölçüm arızası hiçbir muafiyet
+    üretmez."""
+
+
 def _web_probu(zaman_asimi_sn: float):
-    """K-14 ön kontrolünün ÜRETİM probu — erişimi GERÇEKTEN ölçer.
+    """K-14 ön kontrolünün probu — UYDURULABİLİR BAŞARI YOLU TAŞIMAZ.
 
-    Araç, kendi donmuş komut satırıyla koşulur ve web'den ancak getirilerek
-    öğrenilebilecek bir değeri basması istenir. Dönüş `True`/`False` dışında
-    bir şey olamaz: `preflight` `bool` olmayan her değeri ölçüm arızası sayar
-    ve tur yine BAŞLAMAZ (fail-closed).
+    **Neden başarı yolu yok (hakem turu 13, yüksek bulgu).** İlk yazım aracı
+    kendi donmuş komut satırıyla koşturuyor, `example.com`'un H1 metnini
+    istiyor ve stdout'ta o alt dizeyi arıyordu. O metin statiktir ve yaygın
+    biçimde bilinir: ağa HİÇ çıkmayan bir model onu eğitim bilgisinden
+    üretebilir. Yani erişimi OLMAYAN bir denetçi `True` alıp resmî turu
+    başlatabilirdi — K-14'ün kapatmak için var olduğu deliğin ta kendisi.
+    İlk yazımın docstring'i bunu "yanlış-pozitif yönü açık" diye ETİKETLEMİŞTİ
+    ve "yanlış-negatif yönü kapalı" diyordu; ikinci cümle de FAZLA GÜÇLÜYDÜ.
+    Etiketlemek kapatmak değildir.
 
-    **ÖLÇÜLMÜŞ SINIR — dürüst etiket.** Prob "araç bu değeri getirebildi mi"
-    sorusunu sorar; "araç bu değeri UYDURDU mu" sorusunu KAPATMAZ. Beklenen
-    değer sabit bir sayfadan geldiği için yeterince bilgili bir model onu
-    getirmeden de basabilir; yani prob yanlış-POZİTİF verebilir. Yanlış-NEGATİF
-    yönü kapalıdır ve kapının koruduğu yön budur: erişimi olmayan araç bu
-    değeri üretemez ve tur başlamaz. Kapatıcı olan şey araç tarafında
-    denetlenebilir bir erişim günlüğüdür ve bugün YOKTUR.
+    **Doğrulanabilir bir prob neyi ister:** aracın ancak GERÇEKTEN getirerek
+    öğrenebileceği, isteme GÖMÜLMEMİŞ, kısa ömürlü bir değer — ya bizim
+    denetlediğimiz bir uçtan basılan bir nonce, ya da aracın kendi
+    doğrulanabilir erişim telemetrisi. İkisi de bugün YOKTUR ve ikisi de bu
+    görevin dosya kümesinin dışındadır (yeni bir servis ya da uç gerektirir).
+
+    **Bugünkü dürüst davranış:** prob ölçüm KURAMADIĞINI söyler. `denetim`
+    turu başlamaz, muafiyet de doğmaz. Bu, hattın bugünkü gerçek durumudur
+    (denetçi web probu yok) ve artık kodda da öyle yazılıdır.
     """
 
     def prob(tool: str) -> bool:
-        spec = auditors.ARAC_KOMUTLARI[tool]
-        sonuc = subprocess.run(  # noqa: S603 — argv DONMUŞ, kabuk YOK
-            list(spec.argv),
-            input=WEB_PROB_ISTEMI,
-            capture_output=True,
-            text=True,
-            timeout=zaman_asimi_sn,
+        raise WebProbeUnavailable(
+            f"{tool}: doğrulanabilir web erişim ölçümü YOK — statik ve "
+            "önceden bilinebilir bir cevap erişim kanıtı sayılmaz; tur "
+            "başlamaz ve muafiyet üretilmez (K-14 fail-closed)"
         )
-        if sonuc.returncode != 0:
-            return False
-        return WEB_PROB_BEKLENEN in sonuc.stdout
 
     return prob
-
-
-WEB_PROB_ISTEMI = (
-    "Fetch https://example.com over the network and reply with ONLY the exact "
-    "text of its <h1> element. If you cannot reach the network, reply with the "
-    "single word UNREACHABLE."
-)
-WEB_PROB_BEKLENEN = "Example Domain"
 
 
 async def _kos_denetim(conn, args) -> Sonuc:
@@ -914,6 +915,17 @@ async def _kos_olay_onayla(conn, args) -> Sonuc:
     damgalanan = await runs.approve_incident_rollback(
         conn, incident_id=args.incident_id, actor=args.actor
     )
+    if damgalanan == 0:
+        # Sıfır satır damgalamak "onaylandı" DEĞİLDİR: bilinmeyen olay, tamamen
+        # onaylanmış olay ve bekleyen satırı olmayan olay aynı sonucu verir ve
+        # otomasyon onayın gerçekleştiğini sanıp sonraki adıma geçerdi.
+        return (
+            [
+                f"incident_id: {args.incident_id}",
+                "damgalanan: 0 — bekleyen satır yok; onay YAZILMADI",
+            ],
+            RC_REFUSED,
+        )
     return (
         [f"incident_id: {args.incident_id}", f"damgalanan: {damgalanan}"],
         RC_OK,
@@ -963,13 +975,19 @@ async def _kos_geri_al(conn, args) -> Sonuc:
     olurdu ve kanıt zinciri ikiye ayrılırdı. Çok satırlı olayda operatör
     `olay-geri-al` koşar.
     """
-    satir = await conn.fetchrow(
-        "SELECT durum FROM social.package_rollback_plans "
-        "WHERE incident_id = $1 AND package_id = $2",
+    # ÜÇ KOŞUL BİRDEN, TEK okumada. Ölçülen kusur (hakem turu 13, yüksek):
+    # önceki yazım yalnız satırın olayda BULUNDUĞUNU doğruluyor, sonra olay
+    # genelindeki `bekliyor` sayısına bakıp paket filtresi ALMAYAN yürütücüyü
+    # çağırıyordu. Adlandırılan satır tamamlanmışken olayın tek bekleyen satırı
+    # BAŞKA bir paketse, operatörün adlandırmadığı paket geri alınıyordu —
+    # probda ölçüldü (`active → archived`). Yürütücünün kapsamı OLAYDIR; o
+    # yüzden kapı "bu olay TAM OLARAK bu tek işi taşıyor mu" diye sorar.
+    satirlar = await conn.fetch(
+        "SELECT package_id, durum FROM social.package_rollback_plans "
+        "WHERE incident_id = $1",
         args.incident_id,
-        args.package_id,
     )
-    if satir is None:
+    if not satirlar:
         return (
             [
                 f"plan satırı yok: incident={args.incident_id} "
@@ -977,17 +995,28 @@ async def _kos_geri_al(conn, args) -> Sonuc:
             ],
             RC_REFUSED,
         )
-
-    bekleyen = await conn.fetchval(
-        "SELECT count(*) FROM social.package_rollback_plans "
-        "WHERE incident_id = $1 AND durum = 'bekliyor'",
-        args.incident_id,
-    )
-    if bekleyen > 1:
+    if len(satirlar) != 1:
         return (
             [
-                f"olay {args.incident_id} {bekleyen} bekleyen satır taşıyor — "
+                f"olay {args.incident_id} {len(satirlar)} satır taşıyor — "
                 "tek paket daraltması YOK; `olay-geri-al` koş"
+            ],
+            RC_REFUSED,
+        )
+    tek = satirlar[0]
+    if tek["package_id"] != args.package_id:
+        return (
+            [
+                f"olayın tek satırı {tek['package_id']} — adlandırılan paket "
+                f"{args.package_id} DEĞİL; yürütme yapılmadı"
+            ],
+            RC_REFUSED,
+        )
+    if tek["durum"] != "bekliyor":
+        return (
+            [
+                f"plan satırının durumu {tek['durum']!r} — yalnız `bekliyor` "
+                "satır yürütülür; yürütme yapılmadı"
             ],
             RC_REFUSED,
         )

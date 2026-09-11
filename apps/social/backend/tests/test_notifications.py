@@ -1324,9 +1324,11 @@ def test_error_notifier_reads_no_process_env():
 def test_error_notifier_credentials_are_bound():
     """Her credential atıfı GERÇEK bir kimliğe bağlı — yer tutucu kalmaz.
 
-    Eşik `>= 2`: bu workflow'un iki credential tüketicisi vardır (yönetici
-    chat'ini okuyan Postgres düğümü ve Telegram düğümü). Eşik başka dosyadan
-    KOPYALANMADI, bu dosyanın düğüm kümesinden okundu.
+    Eşik `>= 1`: bu workflow'un TEK credential tüketicisi Telegram düğümüdür.
+    Eşik başka dosyadan KOPYALANMADI, bu dosyanın düğüm kümesinden okundu ve
+    hakem turu 13'te DÜŞTÜ: yönetici chat'ini tenant tablosundan okuyan Postgres
+    düğümü kaldırıldı (o düğüm rastgele bir müşterinin kanalını yönetici hedefi
+    sanıyordu), dolayısıyla ikinci credential tüketicisi de kalmadı.
     """
     workflow = _error_notifier_workflow()
 
@@ -1338,7 +1340,7 @@ def test_error_notifier_credentials_are_bound():
             assert "REPLACE" not in ref["id"].upper(), (
                 f"{node['name']}: {kind} hâlâ yer tutucu id taşıyor ({ref['id']})"
             )
-    assert seen >= 2, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
+    assert seen >= 1, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
 
 
 def test_admin_workflow_routes_failures_to_the_error_notifier():
@@ -1355,3 +1357,30 @@ def test_admin_workflow_routes_failures_to_the_error_notifier():
     assert admin["settings"].get("errorWorkflow") == notifier["id"], (
         "yönetici workflow'unun `errorWorkflow` ayarı hata bildirimine bağlı değil"
     )
+
+
+def test_error_notifier_does_not_target_a_tenant_chat():
+    """Bildirici müşteri workspace'ini yönetici hedefi SAYMAZ (hakem, yüksek).
+
+    Ölçülen kusur: ilk yazım yönetici chat kimliğini `social.workspaces`ten
+    `LIMIT 1` ile seçiyordu. O alan her müşterinin kendi ayarlar ucundan
+    yazdığı TENANT alanıdır (ölçüldü: `routers/settings.py` onu hesap kapsamlı
+    UPDATE ediyor). Birden çok müşteri olduğunda n8n arıza metni rastgele bir
+    müşterinin Telegram kanalına giderdi.
+
+    Bugünkü sözleşme: hedef AÇIKÇA kurulur ve kurulmamışsa akış GÖRÜNÜR biçimde
+    durur — sessizce bir tenant'a düşmez.
+    """
+    import json
+
+    workflow = _error_notifier_workflow()
+    blob = json.dumps(workflow, ensure_ascii=False)
+
+    assert "social.workspaces" not in blob, (
+        "hata bildiricisi tenant tablosundan hedef seçiyor — müşteriler arası sızıntı"
+    )
+    adlar = {node["name"] for node in workflow["nodes"]}
+    assert "Hedef Kurulu mu?" in adlar, "hedef kapısı yok — hedefsiz akış sessizce tükenir"
+    assert any(
+        node["type"] == "n8n-nodes-base.stopAndError" for node in workflow["nodes"]
+    ), "hedefsiz dal görünür biçimde durmuyor"

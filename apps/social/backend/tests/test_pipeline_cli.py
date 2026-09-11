@@ -913,3 +913,159 @@ async def test_package_status_owner_scoped(pkg_db):
         )
 
     assert exc.value.status_code == 404
+
+
+# ─── 10. Hakem turu 13 — kapanan üç yüksek bulgu ────────────────────────────
+
+
+async def test_geri_al_refuses_when_named_package_is_not_the_incident_row(pkg_db):
+    """ADLANDIRILAN paket olayın satırı DEĞİLSE komut YÜRÜTMEZ (hakem, yüksek).
+
+    Ölçülen kusur: komut yalnız satırın olayda BULUNDUĞUNU doğruluyor, sonra
+    paket filtresi ALMAYAN yürütücüyü çağırıyordu; probda ölçüldü, adlandırılmayan
+    paket `active → archived` oldu.
+
+    **Bu test tam olarak KİMLİK karşılaştırmasını ölçer.** Olay TEK satır taşır
+    (yani satır-sayısı kapısı geçilir) ve satırın durumu `bekliyor`dur (yani
+    durum kapısı da geçilir); düşen tek kapı kimlik kapısıdır. Kanıt mesajda
+    aranır — yalnız çıkış koduna bakmak, komşu kapının reddini bu kapının
+    reddi sanmaya açıktı (ilk yazımda tam bu oldu: mutasyon sahte-yeşil geldi).
+    """
+    incident_id, olayin_paketi = await _onayli_olay(pkg_db)
+    yabanci = uuid.uuid4()
+    once = await pkg_db.fetchval(
+        "SELECT status FROM social.sector_packages WHERE id = $1", olayin_paketi
+    )
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args(
+            "geri-al",
+            "--incident-id",
+            incident_id,
+            "--package-id",
+            str(yabanci),
+            "--actor",
+            ACTOR,
+        ),
+    )
+    rapor = "\n".join(satirlar)
+
+    assert rc == cli.RC_REFUSED
+    assert "adlandırılan paket" in rapor, rapor
+    assert str(yabanci) in rapor
+    assert (
+        await pkg_db.fetchval(
+            "SELECT status FROM social.sector_packages WHERE id = $1", olayin_paketi
+        )
+        == once
+    ), "adlandırılmayan paket değiştirildi"
+
+
+async def test_geri_al_refuses_a_multi_row_incident(pkg_db):
+    """Çok satırlı olayda tek paket daraltması YOK — `olay-geri-al`'a yönlendirir."""
+    incident_id, paketler = await _iki_paketli_onayli_olay(pkg_db)
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args(
+            "geri-al",
+            "--incident-id",
+            incident_id,
+            "--package-id",
+            str(paketler[0]),
+            "--actor",
+            ACTOR,
+        ),
+    )
+    rapor = "\n".join(satirlar)
+
+    assert rc == cli.RC_REFUSED
+    assert "olay-geri-al" in rapor, rapor
+    assert (
+        await pkg_db.fetchval(
+            "SELECT count(*) FROM social.package_rollback_plans "
+            "WHERE incident_id = $1 AND durum = 'tamamlandi'",
+            incident_id,
+        )
+        == 0
+    ), "reddedilen çağrı yine de satır yürüttü"
+
+
+async def test_geri_al_refuses_when_row_is_not_pending(pkg_db):
+    """Satır `bekliyor` DEĞİLSE yürütme yok — `hata` satırı sessizce yeniden denenmez.
+
+    Kanıt yine mesajdadır: mutasyonla durum kapısı susturulduğunda komut
+    yürütücüye geçer ve raporunu basar; o rapor bu cümleyi TAŞIMAZ.
+    """
+    incident_id, aktif = await _onayli_olay(pkg_db)
+    await pkg_db.execute(
+        "UPDATE social.package_rollback_plans SET durum = 'hata' "
+        "WHERE incident_id = $1 AND package_id = $2",
+        incident_id,
+        aktif,
+    )
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args(
+            "geri-al",
+            "--incident-id",
+            incident_id,
+            "--package-id",
+            str(aktif),
+            "--actor",
+            ACTOR,
+        ),
+    )
+    rapor = "\n".join(satirlar)
+
+    assert rc == cli.RC_REFUSED
+    assert "yalnız `bekliyor` satır yürütülür" in rapor, rapor
+
+
+def test_web_probe_never_claims_access_it_cannot_prove():
+    """K-14 probu BAŞARI YOLU TAŞIMAZ — uydurulabilir cevap erişim kanıtı değildir.
+
+    Ölçülen kusur: prob `example.com` H1 metnini soruyor ve stdout'ta alt dize
+    arıyordu. Ağa hiç çıkmayan bir model o metni eğitim bilgisinden üretebilir;
+    yani erişimi OLMAYAN denetçi `True` alıp resmî turu başlatabilirdi.
+
+    Bugünkü sözleşme: prob doğrulanabilir bir ölçüm KURAMADIĞINI söyler ve
+    `preflight` bunu ÖLÇÜM ARIZASI sayar. Fark önemlidir — `False` dönmek
+    "ölçtüm, erişim yok" demektir ve muafiyeti MEŞRULAŞTIRIR; arıza hiçbir
+    muafiyet üretmez.
+    """
+    prob = cli._web_probu(1.0)
+
+    with pytest.raises(cli.WebProbeUnavailable):
+        prob(auditors_rolleri()[0])
+
+
+def auditors_rolleri():
+    from app.services.sector_pipeline import auditors
+
+    return auditors.DENETCI_ROLLERI
+
+
+def test_web_probe_failure_blocks_the_round_without_granting_exemption():
+    """Prob arızası turu DURDURUR ve `ERISIM_YOK` muafiyeti ÜRETMEZ."""
+    from app.services.sector_pipeline import auditors
+
+    sonuc = auditors.preflight(
+        auditors.DENETCI_ROLLERI[1], prob=cli._web_probu(1.0)
+    )
+
+    assert sonuc.durum == auditors.PreflightDurumu.OLCUM_ARIZASI
+    assert sonuc.durum != auditors.PreflightDurumu.ERISIM_VAR
+    assert sonuc.durum != auditors.PreflightDurumu.ERISIM_YOK
+
+
+async def test_olay_onayla_refuses_when_nothing_was_stamped(pkg_db):
+    """Sıfır satır damgalandıysa komut BAŞARI DÖNMEZ (hakem, orta → düzeltildi)."""
+    _satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args("olay-onayla", "--incident-id", f"olay-{uuid.uuid4().hex}", "--actor", ACTOR),
+    )
+
+    assert rc == cli.RC_REFUSED
