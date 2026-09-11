@@ -115,17 +115,27 @@
   - **Kök tarih:** üç kopuşun üçü de 2026-08-11 15:06'da konteynerler yeniden başladığında oldu —
     Coolify SSH anahtarı olayıyla aynı an ([[reference_coolify_ssh_key]]).
 
-  **(b) Bildirim HÂLÂ YOK — çözülmedi + park edildi.** Ölçüldü (2026-08-27): 18 workflow'un
-  **hiçbirinde** `errorWorkflow` ayarı yok. Yani bugün de başarısız bir n8n turu kimseye
-  ulaşmıyor; bu maddeyi doğuran sessizlik aynen duruyor.
+  **(b) Bildirim — DEPO TARAFI İNDİ (2026-09-11), CANLI TARAF DURUYOR.**
+  Önceki ölçüm (2026-08-27): 18 workflow'un **hiçbirinde** `errorWorkflow` ayarı yoktu.
+  **Task 16 bunu depoda kapattı:** `n8n-error-notifier.json` yazıldı ve
+  `sector-package-admin-events.json`'a `errorWorkflow` olarak bağlandı; dört sözleşme testi
+  (sabit kimlik · `$env` yasağı · credential bağı · kurulu teslim hedefi) mutasyonla kanıtlandı.
+  **Hakem turu ayrıca bir YÜKSEK bulgu yakaladı ve o da kapandı:** ilk yazım yönetici hedefini
+  `social.workspaces`ten `LIMIT 1` ile seçiyordu — o alan her müşterinin kendi ayarlar ucundan
+  yazdığı TENANT alanıdır, yani arıza metni rastgele bir müşterinin kanalına gidebilirdi.
+  Aynı kusur **kardeş workflow'da da vardı** (`sector-package-admin-events.json`) ve ikisi
+  birden kapatıldı; kapı artık sınıf düzeyinde iki dosyayı da tarıyor.
+  **CANLIDA HÂLÂ SESSİZ:** artefaktlar import EDİLMEDİ ve sentetik bir arıza ile teslim
+  GÖZLENMEDİ. Yani bugün başarısız bir n8n turu hâlâ kimseye ulaşmıyor.
   **Bugün neden hâlâ önemli:** bu kalem CRM yüzünden doğdu ama CRM'e ait değil — sektör paketi
   yönetici bildirim zinciri CANLI ve aynı sessizliğin altında koşuyor. Düşürülmüyor.
-  **EV VERİLDİ (2026-08-27, plan onaylandı):** Plan 2 → **Task 16, Step 7 + 7b** —
-  `n8n-error-notifier.json` yazılır ve `sector-package-admin-events.json`'a `errorWorkflow`
-  olarak bağlanır, üç sözleşme testiyle birlikte.
+  **EV TÜKENDİ, YENİDEN VERİLDİ (2026-09-11).** Eski ev Plan 2 → Task 16, Step 7 + 7b idi;
+  o adım KOŞTU ve depo tarafını kapattı. **Kalan ayak — import + sentetik arıza ile teslim
+  ölçümü — yeni evini aldı: Plan 2 → Task 18** (ön-pilot dağıtım; workflow'lar zaten o görevin
+  beyan ettiği kalemler arasında). Bu bir park DEĞİL, tarihli bir hedeftir.
   **Kapsam bilinçle DAR:** yalnız sektör paketi yönetici olay workflow'u. Kalan 17 workflow
   (CRM-4/CRM-5 dâhil) o turda da sessiz kalmaya devam eder — onların evi CRM turudur.
-  **Tarih:** Task 16 koşana kadar yok; yürütme başlamadı.
+  **Tarih:** Task 18 koşana kadar canlı teslim kanıtı yok.
   **(c) CRM ayağı DÜŞÜRÜLDÜ — Eray kararı 2026-08-27:** CRM henüz kullanılmıyor (Otomaix'in
   kendisi bitmedi) ve CRM bütün olarak ayrı bir turda ele alınacak. Dolayısıyla CRM-4/CRM-5
   turlarının bugün `success` dönmesini beklemek aktif borç DEĞİL. Bilinen durum kayda geçsin:

@@ -1,12 +1,12 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-09-10
+written: 2026-09-11
 ---
 
 # Resume From
 
-**Sıradaki iş: Task 16** (komut ailesi — repo CLI + ince adaptörler + bildirim ayakları).
-Task 15 indi ve **checkpoint 12 `approve` ile kapandı**.
+**Sıradaki iş: Task 17** (işletime hazırlık kontrol listesi kapısı — K-69/K-70).
+Task 16 indi ve **checkpoint 13 `approve` ile kapandı** (dört hakem turu).
 
 **Komut:** `/execute-plan-claude-codex docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`
 → resume dalı: TASK.md `active`, yürütme durumu dolu, **(a) devam**.
@@ -25,140 +25,124 @@ KOPYALANMAZ.**
 
 ## Bu oturum ne yaptı — tek cümle
 
-Task 15 uçtan uca yapıldı (kanıtın veritabanından okunduğu taslak yazımı, yerinde güncelleme,
-aktivasyon zinciri), dört hakem turu koştu, üç yüksek + üç orta bulgunun hepsi karara bağlandı,
-ve iki tur üst üste kilit-sırası bulgusu verince varyant yamamak bırakılıp **tek sektör
-çapasıyla sınıf kapatıldı**.
+Task 16 (operatör komut ailesi, 19 alt komut + `recovered` müşteri bandı + n8n hata bildirimi)
+uçtan uca yazıldı, dört hakem turu koştu, dört yüksek bulgunun dördü de kapandı ve zincir
+`approve` ile bitti; kapanışın bedeli, **üç kez kendi testimin yanlış çıkması** oldu.
 
 # Verification
 
 **Bu oturumda koşulan komutlar ve TAZE çıktıları (hepsi kontrolörün kendi koşumları):**
 
-- `python -m pytest tests/ -q` → **4085 passed in 310.25s**, exit 0 (SON, `2097390`).
-  Ara koşumlar: 4066 · 4076 · 4075 · 4078 · 4085. Taban 4002 → **+83 test**.
-- **Mutasyon: 38 kapının 38'i** ayrı ayrı susturuldu, her biri hedef testini kırdı.
-  Betikler: `mutasyon.py` · `mutasyon2.py` · `mutasyon3.py` · `mutasyon4.py` (oturum
-  scratchpad'i; kalıcı DEĞİL).
-  **SEKİZ tur SAHTE-YEŞİL geldi ve hepsi ayrıştırıldı:** ikisi GERÇEK boşluktu ve düzeltildi
-  (kanıtlanamayan kapı tek kapıya birleştirildi · görüntü kapısı sırasını ölçen kendi testini
-  aldı); altısı PROB kusuruydu ve prob düzeltilip yeniden ölçüldü.
-- **`prompt_regression` 124 passed** — tek bayt fark yok.
-- **Dört Codex turu KOŞTU** (`run_codex_scan`, base-review). Koşum sayıları stderr'den ölçüldü:
-  **38 · 48 · 21 · 30** komut. Son tur `verdict: approve`.
-- **Canlı veritabanı ölçümü (K-103(b), Step 6):** API kimliği `otomaix`, **superuser VE tablo
-  sahibi**. Rapor: `docs/research/2026-09-10-k103b-etkin-yetki-olcumu.md`.
-- Defter kapısı her commit'te `rc=0`; bir kez `rc=2` verdi (yanlış `Exec-Kind`) ve
-  `--amend` ile düzeltildi.
+- `python -m pytest tests/ -q` → **4134 passed**, exit 0 (SON, `086985a`).
+  Ara koşumlar: 4124 · 4130 · 4131 · 4127 · 4133 · 4134. Taban 4085 → **+49 test**.
+- **Dört Codex turu KOŞTU** (`run_codex_scan`, base-review). Koşum sayıları **stderr'den**
+  ölçüldü: **44 · 41 · 28 · 38**. Dördü de `rc=0` ve kesintisiz. Son tur `verdict: approve`,
+  **bulgu YOK**.
+- **Mutasyon:** bu batch'te AÇILAN her yeni kapı ayrı ayrı susturuldu ve hedef testini kırdı.
+  **ÜÇ kez yanlış çıktı ve üçü de düzeltildi** (ayrıntı aşağıda, Notes).
+- **Referans taraması:** CLI'deki **79 modül atfı** çözüldü; tarama üç gerçek hata yakaladı
+  (olmayan alan adı · yanlış tipte kapı girdisi · olmayan tablo adı).
+- **Sözleşme pini** temiz ölçüldü (`contracts.require_pin`), pozitif kontrol testte.
+- Defter kapısı her commit'te `rc=0`.
 
 **Denenmemiş / doğrulanmamış — dürüst liste:**
 
-- **Uçtan uca CLI koşumu YAPILMADI.** Yazım/güncelleme/aktivasyon gerçek bir koşuda hiç
-  çağrılmadı; tüm ölçümler fixture ile. İlk gerçek ölçüm Task 19.
-- **Kilitlenme YOKLUĞU davranışsal olarak ölçülmedi — YAPISAL ölçüldü.** Bilinçli: yokluğu
-  koşarak kanıtlamak döngünün gerçekleşmesini ummayı gerektirir, kırmızısı zamanlamaya bağlı
-  olurdu. Sınırı aşağıda, Risks'te.
-- **Denetçi web erişim probu YOK** — üretim hattı hâlâ koşamaz (K-14 her turu bloke eder).
+- **Web probunun OLUMLU yolu CANLI koşulmadı.** Bugünkü denetçi-2 komut satırında web bayrağı
+  YOK, dolayısıyla bugün beklenen sonuç `False`. İlk canlı ölçüm Task 19.
+- **`denetim` / `sentez` / `motor` gövdelerinin DAVRANIŞ testi YOK** — planın Step 1 test
+  listesi istemiyor. Onlar için yalnız statik referans taraması koştu.
+- **Uçtan uca CLI koşumu YAPILMADI.** Tüm ölçümler fixture ile; ilk gerçek koşum Task 19.
+- **n8n hata bildirimi canlıda sınanmadı** — sentetik arıza ile teslim gözlenmedi (Task 18).
 - **`ruff` ve `pyright` bu ortamda koşmadı.**
 - **CRM webhook onarımı YAPILMADI.** Canlıya migration dağıtılmadı; pilot koşulmadı.
-- Task 16-20 hiç yazılmadı.
-- **K-103(b) ölçümünün iki ayağı KOŞULAMADI:** iki jeton tablosu canlıda YOK (036
-  dağıtılmadı), yani kolon-bazlı yetki ve o iki tablonun negatif yazma denemesi ölçülmedi.
+- Task 17-20 hiç yazılmadı.
 
 # Risks
 
 - **EN YÜKSEK (işletim) — kimlik doğrulamasız CRM webhook'ları onarılmadı, yalnız KAPATILDI.**
-  **EVİ VAR ve burada adıyla yazılır** (kapanış sweep'i bu işaretçinin eksikliğini yakaladı,
-  2026-09-10): `crm-webhooks-unauthenticated-sql-interpolation` — CURRENT.md'de `proposed`,
-  tetikli. Canlı uç kapalı, onarım açık.
-- **Üretim hattı hâlâ koşamaz:** denetçi web probu yok.
-- **Köken jetonunun kalanı AÇIK ve kapatıldığı İDDİA EDİLMEZ.** Ölçüldü: API kimliği superuser
-  ve tablo sahibi, yani `REVOKE` ile kapanmaz — ayrı bir veritabanı rolü ister.
-  **Ev: Task 18 dağıtım listesi, M-1 ve M-2** (araştırma raporunda adıyla yazılı).
+  Ev: `crm-webhooks-unauthenticated-sql-interpolation` — CURRENT.md'de `proposed`, tetikli.
+- **YENİ, EVİ YOK — arşiv dosyasında ÇIPLAK Telegram bot token'ı.** Ölçüldü bu oturumda:
+  `docs/archive/CLAUDE_crm_pre_cleanup.md` gerçek bir bot token'ı taşıyor ve depo geçmişine
+  yazılmış. Plan 2'nin kapsamı DIŞI. **Dürüst etiket: çözülmedi, evi YOK.** Eray'a bildirildi;
+  ev kararı (ayrı task mı, sessiz kabul mü) verilmedi. **Süresiz evsiz park YASAK — bir sonraki
+  oturumun açılışında karara bağlanmalı.**
+- **Üretim hattı hâlâ koşamaz:** denetçi-2'nin web erişimi yok (araç gerçeği, kod değil).
+  Prob artık dürüstçe ölçüyor ama ölçtüğü şey "erişim yok".
+- **Bağlayıcı ek AÇIK-2 ile KOD IRAKSADI.** Ek hâlâ seçenek A'yı ("`geri-al` kalsın, olay
+  kimliği istesin") yazıyor; kod komutu KALDIRDI (Eray kararı). Hakem bunu bloker SAYMADI ve
+  ıraksamanın açıkça kaydedilmiş olmasını yeterli buldu. **Ev: arayüz eki revizyonu · son
+  tarih Task 19** (sözleşme penceresi orada kapanıyor).
+- **Köken jetonunun kalanı AÇIK.** API kimliği superuser ve tablo sahibi → `REVOKE` ile
+  kapanmaz. **Ev: Task 18 dağıtım listesi, M-1 ve M-2.**
 - **Kilit sözleşmesi KAYNAKTAKİ kilitleri modeller, veritabanının ZORLADIKLARINI değil.**
-  Yabancı anahtar taşıyan bir satır yazıldığında ebeveyn paket satırına örtük kilit alınır ve
-  tarayıcı onu göremez. Bugün o kenarların TERSİ yok (bağımsız hakem, tur 4 izledi) ama bu
-  ölçüm KOŞUM-ANLIKTIR. Sınır `tests/test_lock_anchor_contract.py` başında yazılı.
-  **Yeniden açılma koşulu:** ters bir kenar eklenirse test yeşil kalırken üretimde döngü doğar.
-- **Taslağı kimin yazdırdığı KAYITLI DEĞİL — KAPSAM DIŞI (Eray kararı, 2026-09-10).**
-  Dürüst etiket: çözülmedi, "halledildi" değil. **Yeniden açılma koşulu:** ikinci bir operatör
-  eklendiğinde ya da paket üretimine müşteri/dış taraf eriştiğinde. Task 20 kapanış belgesine
-  bu etiketle yazılır (plan Task 20 Step 6'nın "düşürme" kolu).
-- **Atıf ADAYA bağlı DEĞİL** — sentezin atfı ALAN düzeyinde. Ev açık
-  (`docs/active/denetci-atif-aday-kimligi/`), sert son tarih Task 19.
-- **`BulguIzi`'nin dördüncü alanı arayüz ekinde sahipsiz.** Ev: arayüz eki revizyonu.
-- **Sözleşme penceresi Task 19'da KAPANIYOR.** Bekleyen: atıf-aday kimliği + `BulguIzi` alan
-  sahipliği + K-126 resmîlik ayağı + K-03 kategori ayağı.
+  Yeniden açılma koşulu `tests/test_lock_anchor_contract.py` başında yazılı.
+- **`recovered` sorgusu bakım penceresini TAM modellemiyor** (hakem, orta → `accepted_risk`).
+  Atama başlangıcı ile aktivasyon anını karşılaştırıyor; kesintisiz sürüm geçişi yapan bir
+  marka da `recovered` görebilir. **Dürüst etiket: çözülmedi, kabul edildi.**
+- **Genel `ValueError` yakalama teşhisi yanlış yöne çekiyor** (hakem, orta → `accepted_risk`).
+- **Taslağı kimin yazdırdığı KAYITLI DEĞİL — KAPSAM DIŞI** (Eray kararı, 2026-09-10).
+  Task 20 kapanış belgesine bu etiketle girer.
+- **Atıf ADAYA bağlı DEĞİL.** Ev: `docs/active/denetci-atif-aday-kimligi/`, sert son tarih Task 19.
+- **Sözleşme penceresi Task 19'da KAPANIYOR.** Bekleyen: atıf-aday kimliği · `BulguIzi` alan
+  sahipliği · K-126 resmîlik ayağı · K-03 kategori ayağı · **AÇIK-2 uzlaştırması (YENİ)**.
 - **Paket satırı kayma penceresi FAIL-CLOSED, KAPALI DEĞİL.** Kalıcı çözüm
-  `sector-package-sector-id-immutability` (tetikli, ev kayıtlı). **Task 15 o kolona YAZICI
-  EKLEMEDİ** — tetik koşulu bu turda da sınandı ve tutmadı.
+  `sector-package-sector-id-immutability` (tetikli). **Task 16 o kolona YAZICI EKLEMEDİ** —
+  tetik koşulu bu turda da ölçüldü (CLI o tabloya yalnız SELECT yapıyor) ve tutmadı.
 - **Migration `036` yerinde düzenlendi** — kabul edilmiş risk.
-- **Katı Bölüm C biçimi yanlış-pozitif üretebilir ve ÖLÇÜLMEDİ** (ilk gerçek ölçüm Task 19).
 - **KABUL EDİLMİŞ RİSK (M3) — commit geçmişi tek-commit TDD modeline uymuyor.**
 - **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`).
-- **Atomiklik sınıfı (depo geneli) — SÜRESİZ EVSİZ PARK'tan çıkarıldı, DÜŞÜRÜLDÜ
-  (kapanış sweep'i, 2026-09-10).** Ölçülmüş durum: migration dosyaları kendi işlem
-  sarmalayıcılarını taşımaz; onaylı koşum yolu her dosyayı `--single-transaction` ile sarar,
-  bu yüzden o yoldan **bugün zararsızdır**. Sınıf yine de kapalı değildir.
-  **Neden düşürüldü:** checkpoint 5'ten beri "EVSİZ PARK" etiketiyle taşınıyordu ve İlke 7
-  süresiz evsiz-parkı yasaklar — ya gerçek tarihli ev, ya dürüst düşürme.
-  **DÜRÜST ETİKET: çözülmedi, kapsam-dışı-by-design.** Bu plan migration koşum yoluna
-  dokunmuyor; onu değiştirmek dağıtım altyapısının işidir.
-  **YENİDEN AÇILMA KOŞULU:** onaylı koşum yolu DIŞINDA bir migration uygulama yolu doğarsa
-  (elle `psql`, farklı bir dağıtım aracı, CI adımı) — o gün sınıf yeniden açılır ve kendi
-  evini alır.
 
 # Notes For Claude/Codex
 
 **Süreç ağırlığı — Eray'ın talimatları, BAĞLAYICI:**
-1. **Hakem bulgularından YALNIZ critical/high düzeltilir**; orta/düşük RAPORLANIR ve devam
-   edilir. **İSTİSNANIN İSTİSNASI:** gerileme kontrolörün KENDİ ürünüyse ve iş üç satırsa
-   devredilmez. **Bu oturumda ÜÇ kez uygulandı** (tek-kazanan oracle · silinen regresyon
-   kapısı · aşırı-iddia daraltması).
-2. Mutasyon kanıtı yalnız **YENİ** kapıya istenir; kanıtlanmış kapı tekrar ölçülmez.
+1. **Hakem bulgularından YALNIZ critical/high düzeltilir**; orta/düşük RAPORLANIR ve devam edilir.
+   **İSTİSNANIN İSTİSNASI:** gerileme kontrolörün KENDİ ürünüyse ve iş küçükse devredilmez.
+   Bu oturumda bir kez uygulandı (`olay-onayla` sıfır damgada başarı dönüyordu).
+2. Mutasyon kanıtı yalnız **YENİ** kapıya istenir.
 3. İnceleme turu üretim/test diye **BÖLÜNMEZ** — tek tur.
 4. Düzeltme brief'leri **KISA**.
 5. **Aynı eksen üst üste turlarda varyant üretiyorsa yamamayı bırak**, çerçeve teşhisiyle
-   kullanıcıya git. **Bu oturumun ANA DERSİ:** kilit ekseni iki tur varyant verdi; üçüncü turda
-   hakemden ÇERÇEVE teşhisi istendi, alındı, Eray karar verdi, çözüm tur 4'te doğrulandı.
-   Prompt'a "üçüncü kez bulursan spot bulgu olarak RAPORLAMA, çerçeve teşhisi ver" yazmak işe
-   yaradı — hakem tam da onu döndü.
+   kullanıcıya git. Bu oturumda uygulandı ve **YARISI YANLIŞTI** — aşağıya bak.
 
-**YENİ — bu oturumda öğrenilenler, Task 16 dispatch'ine ZORUNLU:**
-1. **TASARIM BELGESİNDE OLMAYAN İŞE BAŞLAMA.** Bu oturumda aktif katmandaki bir nota dayanıp
-   planda/spec'te/spec girdisinde HİÇ geçmeyen bir şema değişikliği denendi; migration
-   zincirinin sürüm-farkında kabul tabloları onu (haklı olarak) reddetti ve iş bütünüyle geri
-   alındı. **Yürütmeye başlamadan ÖNCE ölç:** bu kalem spec girdisinde/spec'te/planda geçiyor
-   mu, planın öngördüğü migration numaraları neler.
-2. **Kilit çapası artık BAĞLAYICI bir sözleşmedir.** Paket satırına dokunan yeni her yol,
-   herhangi bir satır kilidinden ÖNCE sektör çapasını alır. Sözleşme
-   `tests/test_lock_anchor_contract.py`'te sınıf düzeyinde tutulur; muafiyet eklemek
-   GEREKÇESİYLE görünür olur.
-3. **Kanıt yalnız fabrikadan gelir.** Task 16'nın komutları kanıtı ELLE KURMAZ; yazım yüzeyi
-   üzerinden geçerler. Elle kurulan kanıt hiçbir geçişten geçmez (jeton kapısı).
-4. **Aktivasyonun tek üretim yolu anlık görüntü üzerindendir.** Ham yaşam döngüsü çağrısı
-   içerik mührünü kontrol ETMEZ; adaptörler o yolu KULLANMAZ.
-5. **Yol sıra numaraları KONUMSAL** — karşılaştıran her tüketici kimliğe anahtarlar, yola asla.
-   Task 15 sürümler arası yol karşılaştıran bir tüketici ÜRETMEDİ (ölçüldü: turlar arası tek
-   çapraz tüketici çıkarma SAYAR, yol eşleştirmez).
-6. **Exec footer'ın iki mekanik kuralı.** `Exec-Kind` uzantıya değil YOL KÜMESİNE bakılarak
-   seçilir — **bu oturumda bir kez ihlal edildi** (`docs-only` seçildi ama üretim dosyası
-   docstring'i de değişmişti), defter kapısı `rc=2` ile yakaladı, `--amend` ile düzeltildi.
-7. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY.
-8. `Exec-Task` id'sini yazmadan ÖNCE defterde ARA — **pencere içinde**.
-9. Her commit'ten SONRA defter kapısı koşulur (`ec_ledger_view … --post-window`, rc=0).
-10. Uygulayıcı kendi alt-ajanını çağırmaz. **`docs/active/` altına yazmaz.**
-11. **İSKELET ÖNCE — her testin kendi kırmızısı ayrı ölçülür.** Task 15'te **BEŞ testin**
-    kendi kırmızısı yoktu ve öyle raporlandı: üçü zaten doğru olan bir özelliği kilitleyen
-    regresyon kilidi, ikisi mutasyonla ölçülen yapısal/pozitif kontrol.
-12. **Kapanış üretilmiş matrisle** kanıtlanır, **boş-küme kontrol kolu** eklenir.
+**BU OTURUMUN ANA DERSLERİ — Task 17 dispatch'ine ZORUNLU:**
+
+1. **ÖLÇMEDEN "YOK" DEME. Bu oturumda İKİ KEZ yapıldı ve ikisini de Eray yakaladı.**
+   (a) Adımlar arası devrin tasarımda olmadığını iddia edip karar turu açtım — **spec-input
+   §7.5'te yazılıydı** ("dosya çalışma kopyası, veri tabanı kalıcı kanıt katmanı; komut ailesi
+   ekleri bu yoldan toplar"). (b) "Depoda kanonik yönetici hedefi yok" dedim — **sekiz yerde
+   kuruluydu**. İkisinde de tek bir yere bakıp yokluk ilan ettim.
+   **KURAL: karar sorusu sormadan ÖNCE spec-input + spec + ek + mevcut benzer artefaktlar.**
+2. **MUTASYON KAPININ VAR OLDUĞUNU KANITLAR, DOĞRU OLDUĞUNU DEĞİL.** Bu oturumda üç kez
+   yakalandı: iki sahte-yeşil (test komşu kapının reddini kendi kapısının reddi sanıyordu) ve
+   **bir yanlış beklenti** (sahte-yeşili kapatmak için yazdığım test HATALI davranışı kilitledi:
+   `False` bekliyordu, oysa tüketici `False`'u "ölçülmüş erişimsizlik" sayıp muafiyet üretiyordu).
+   **KURAL: iddiayı ÜRETİCİNİN dönüşünde değil TÜKETİCİNİN sözleşmesinde ölç.**
+3. **Sızıntıyı kapatan fix yeteneği de kapatabilir.** Üç yüksek bulgunun üçünde de ilk
+   düzeltmem "kaldır" oldu ve kapanış turu haklı olarak itiraz etti (prob olumlu yolu sildi,
+   bildirici teslim yolunu sildi). **Fix'in kendi yan etkisini ölç.**
+4. **Sınıfı kapat, varyantı değil.** Hata bildirimindeki tenant kusurunu ilk turda yalnız YENİ
+   dosyada düzeltip kardeşini "önceden var olan borç" diye bıraktım; ikinci turda ikisi birden
+   kapatıldı ve kapı SINIF düzeyine çıkarıldı (iki workflow'u da tarıyor). İlk karar yanlıştı.
+5. **TASARIM BELGESİNDE OLMAYAN İŞE BAŞLAMA** — ama "yok" demeden ÖNCE 1. maddeyi uygula.
+6. **Kapsam dışına çıkacaksan ÖNDEN görünür sor.** Bu oturumda bir kez gerekti (servis
+   katmanına yazmak); sorulunca Eray daha ucuz bir yol seçti (komutu kaldır).
+7. **Exec footer'ın iki mekanik kuralı** — `Exec-Kind` uzantıya değil YOL KÜMESİNE bakılarak
+   seçilir; `Exec-*` bloğu mesajın SON paragrafıdır. Bu oturumda ihlal YOK.
+8. **Commit başlığı ≤72 karakter** — `git log -1 --format=%s | wc -c` ile SAY.
+9. `Exec-Task` id'sini yazmadan ÖNCE defterde ARA — **pencere içinde**.
+10. Her commit'ten SONRA defter kapısı koşulur (`ec_ledger_view … --post-window`, rc=0).
+11. Uygulayıcı kendi alt-ajanını çağırmaz.
+12. **İSKELET ÖNCE — her testin kendi kırmızısı ayrı ölçülür.** Bu oturumda uygulandı: iskelet
+    kuruldu, 24 test kendi kırmızısını verdi, 11'i (ayrıştırıcı/pin kapısı) iskeletin gerçek
+    parçası olduğu için yeşildi. Üç regresyon kilidi kırmızısız geldi ve **mutasyonla** ayrıca
+    kanıtlandı.
 13. **Gönderilen düzyazıya sayı yazma** — ya üreten komutu yanına koy, ya "doğrulanmadı" etiketle.
-14. **Hakem/kontrolör önerisi ADAYDIR** — dosyayı açmadan tekrarlanmaz. Bu oturumda dört
-    yüksek bulgunun dördü de kontrolörün KENDİ probuyla doğrulandı; biri (eşli yükümlülük
-    iddiası) ölçülünce YANLIŞ çıktı.
-15. **Kontrolörün tam test kümesi, veritabanına dokunan bir alt-ajanla ASLA üst üste binmez.**
+14. **Hakem/kontrolör önerisi ADAYDIR** — dosyayı açmadan tekrarlanmaz. Bu oturumda beş yüksek
+    bulgunun beşi de kontrolörün KENDİ probuyla doğrulandı; biri (yanlış paket geri alma)
+    koşularak ölçüldü (`active → archived` görüldü).
+15. **`geri-al` KALDIRILDI** — komut sessizce geri eklenirse kapanmamış yarış da geri gelir;
+    karar kilidi testi var.
 16. Canlıya hiçbir n8n dosyası körlemesine yüklenmez.
-17. **`git checkout -- <dosya>` KAYDEDİLMEMİŞ İŞİ SİLER.** Bu oturumda bir mutasyon denemesini
-    geri alırken commit edilmemiş bir düzeltmeyi yok etti ve yeniden yazmak gerekti.
 
 **Codex çağrısı kurarken — çağrıdan ÖNCE bas:**
 1. `COMPANION` **ve** `PROMPT` **çağıran kabukta** kurulu mu (kabuk durumu taşınmaz).
@@ -167,19 +151,17 @@ ve iki tur üst üste kilit-sırası bulgusu verince varyant yamamak bırakılı
 4. **Turun koştuğunu STDERR'den ölç:** `grep -c '^\[codex\] Running command'` **çağrının stderr
    çıktısında** — `$CODEX_LOG`'da DEĞİL.
 5. **Uzun turları arka planda koştur.** `CSS_CALL_TIMEOUT` 1200s dört turda da YETTİ.
-6. **Kota sınırı gerçek bir daldır.** Belirtisi: `rc=1` + `You've hit your usage limit` + kesik
-   çıktı. **Üç şeyi birden kontrol et: `rc` · koşum sayısı · son cümlenin karar mı anlatı mı
-   olduğu.** Bu oturumda dört turun dördü de `rc=0` ve kesintisizdi.
-7. **Mutasyon probunun kendi deseni bayatlar ve YANILTIR.** Bu oturumda ALTI SAHTE-YEŞİL prob
-   kusuru çıktı: mutasyon "taşımak" yerine "silmek" olduğunda iddia boşaldı; tarayıcı yorum
-   satırlarını kod saydı; bir fonksiyonun KENDİ adını gövdesinde görmeyi dokunuş saydı.
-   **Sahte-yeşil gelince ÖNCE probu sorgula.**
+6. **Kota sınırı gerçek bir daldır.** Üçünü birden kontrol et: `rc` · koşum sayısı · son cümlenin
+   karar mı anlatı mı olduğu. Bu oturumda dört turun dördü de `rc=0` ve kesintisizdi; son turun
+   SON satırı bloklamayan bir öneriydi, `verdict` satırı gövdenin içindeydi.
+7. **TEHDİT MODELİNİ ÖNDEN SÖYLE** — girdi araştırma çıktısıdır, ÖZENSİZ olabilir, SALDIRGAN
+   değil. Dört turda da prompt'a konuldu.
 
 **Sır tarayıcısı yanlış alarmı (her oturumda yeniden onay ister).** Substrat şunları dışlıyor:
-`tests/test_auditor_orchestration.py` · arayüz eki · `tests/test_plan2_interface_contract.py` ·
-`sector_pipeline/runs.py` · `docs/tools/codex-scan-substrate-harness.sh`. Hepsi yanlış alarm.
-Dördü de HEAD git nesnesinden OKUNABİLİYOR — hakeme gidecekse dışlanma coverage'da BEYAN EDİLİR
-(dört turda dördü de okudu ve beyan etti).
+`CURRENT.md` · backend `CLAUDE.md` · `runs.py` · `tests/test_auditor_orchestration.py` ·
+arayüz eki · `tests/test_plan2_interface_contract.py` · `docs/tools/codex-scan-substrate-harness.sh`.
+Hepsi yanlış alarm; HEAD git nesnesinden OKUNABİLİYOR ve hakem dördüncü turda dördünü de okuyup
+beyan etti.
 
 **EVİ OLAN, TAŞINAN KALEMLER — rolling yeniden yazımda DÜŞÜRÜLMESİN:**
 - **`markdown-it-py` bir ÜRETİM bağımlılığıdır** (pinli `4.2.0`), canlıya dağıtılmadı.
@@ -187,30 +169,31 @@ Dördü de HEAD git nesnesinden OKUNABİLİYOR — hakeme gidecekse dışlanma c
 - **K-126 tek-kaynak istisnası KAPALI.** **Ev: arayüz eki revizyonu + denetçi sözleşmesi.**
 - **K-03'ün kategori ayağı UYGULANMADI.** **Ev: arayüz eki revizyonu.**
 - **`BulguIzi` dördüncü alanının sahipliği.** **Ev: arayüz eki revizyonu.**
+- **AÇIK-2 uzlaştırması (YENİ).** **Ev: arayüz eki revizyonu · son tarih Task 19.**
 - **Task 10'un TEST dosyaları bağımsız hakem GÖRMEDİ.** **Ev: Adım 11 final inceleme.**
-- **Denetçi web probunun üretim sahibi Task 16'dır.**
+- **Web probunun CANLI olumlu ölçümü.** **Ev: Task 19.**
+- **n8n hata bildiriminin sentetik arıza ile teslim ölçümü.** **Ev: Task 18.**
 - **Atıf ADAYA bağlanmalı.** **Ev: `docs/active/denetci-atif-aday-kimligi/` · son tarih Task 19.**
-- **Ayrı veritabanı rolü (jeton kalanı).** **Ev: Task 18, M-1 + M-2** — araştırma raporunda yazılı.
+- **Ayrı veritabanı rolü (jeton kalanı).** **Ev: Task 18, M-1 + M-2.**
 - **`sector_packages.sector_id` değişmezliği.** **Ev: `sector-package-sector-id-immutability`
-  (CURRENT.md, tetikli).** Tetik koşulu Task 15'te YENİDEN sınandı: bu görev o kolona yazıcı
-  EKLEMEDİ, tetik hâlâ kapalı.
-- **Kilit sözleşmesinin örtük-kenar sınırı — DÜŞÜRÜLDÜ, park EDİLMEDİ.** Hakem turu 4'ün orta
-  bulgusu; disposition terminaldir. **Dürüst etiket:** tarayıcı kaynaktaki kilitleri modeller,
-  veritabanının zorladıklarını değil. **Yeniden açılma koşulu** test dosyasının başında yazılı:
-  ters bir kilit kenarı eklenirse test yeşil kalırken üretimde döngü doğar. Kapatmak isteyen,
-  örtük kenarları da modelleyen bir kilit-grafiği ölçümü kurmalıdır.
-- **Taslak yazarı atfı — KAPSAM DIŞI, düşürüldü.** Yeniden açılma koşulu yazılı. **Task 20
-  kapanış belgesine bu etiketle girer.**
+  (CURRENT.md, tetikli).** Tetik koşulu Task 16'da YENİDEN ölçüldü: CLI o tabloya yalnız SELECT
+  yapıyor, tetik hâlâ kapalı.
+- **Katı Bölüm C biçimi yanlış-pozitif üretebilir ve ÖLÇÜLMEDİ.** **Ev: Task 19.**
+- **Kilit sözleşmesinin örtük-kenar sınırı — DÜŞÜRÜLDÜ, park EDİLMEDİ.** Yeniden açılma koşulu
+  test dosyasının başında yazılı.
+- **Taslak yazarı atfı — KAPSAM DIŞI, düşürüldü.** **Task 20 kapanış belgesine bu etiketle girer.**
+- **Atomiklik sınıfı — DÜŞÜRÜLDÜ** (kapsam-dışı-by-design). Yeniden açılma koşulu: onaylı koşum
+  yolu DIŞINDA bir migration uygulama yolu doğarsa.
+- **`denetim`/`sentez`/`motor` davranış testi — DÜŞÜRÜLDÜ, park EDİLMEDİ.** Dürüst etiket:
+  planın Step 1 test listesi bu testleri İSTEMİYOR; kapsam-dışı-by-design. **Yeniden açılma
+  koşulu:** o gövdeler değişirse ya da Task 19'un ilk gerçek koşumu orada bir kusur gösterirse.
 
-**EVSİZ KALEM YOK.**
+**EVSİZ KALEM: BİR TANE** — arşivdeki çıplak bot token'ı (yukarıda Risks'te). Bu oturumda
+bulundu, Eray'a bildirildi, ev kararı VERİLMEDİ. **Bir sonraki oturum açılışında karara
+bağlanmalı; süresiz evsiz park yasaktır.**
 
 - **Eray'a teknik cümle onaylatma** — karar sorularını sade dille, proje-lokal kod referansı
-  OLMADAN sor. **Bu oturumda bir kez ihlal edildi** (tablo adı sızdı), İlke-8 kapısı yakaladı
-  ve soru yeniden yazıldı.
-- **Karar sorusundan ÖNCE kaynakları oku.** Bu oturumun en pahalı hatası: "şimdi mi sonra mı"
-  diye sorarken **planda yeri olup olmadığına bakılmamıştı**; karar için gereken en önemli
-  bilgi eksik verildi ve iş geri alınmak zorunda kaldı.
-- **TEHDİT MODELİNİ ÖNDEN SÖYLE.** Girdi araştırma çıktısıdır — ÖZENSİZ olabilir, SALDIRGAN
-  değil. Dört turda da prompt'a konuldu ve bulguların hepsi doğru katmandan geldi.
+  OLMADAN sor. Bu oturumda üç karar sorusu soruldu; üçü de sade dilde ve ölçülmüş bedelliydi.
+  **Ama biri hiç sorulmamalıydı** (bkz. ders 1a) — soru sormadan önce kaynak okunmamıştı.
 - **Bu dosya ROLLING'dir** — her oturumda BAŞTAN yazılır; karar izi `TASK.md` Decisions Log'una gider.
 - Diskte bekleyen düzeltme YOK; çalışma ağacı temiz (bu yazım hariç).
