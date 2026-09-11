@@ -1176,8 +1176,30 @@ def _kanonik_yuk() -> dict:
     }
 
 
+class _SahteMetin(str):
+    """`str` ALT SINIFI — üyelik eşitliğini geçer, tip kapısından GEÇMEMELİ."""
+
+
+class _EsitlikTaklidi:
+    """Metin OLMAYAN ama eşitliği taklit eden nesne (alias vakası)."""
+
+    def __init__(self, deger: str) -> None:
+        self._deger = deger
+
+    def __eq__(self, other: object) -> bool:
+        return other == self._deger
+
+    def __hash__(self) -> int:
+        return hash(self._deger)
+
+
 def _yaprak_matrisi() -> list:
-    """Her öğe alanı × her yanlış tip — ÜRETİLMİŞ matris, elle seçim YOK."""
+    """Her öğe alanı × her yanlış tip — ÜRETİLMİŞ matris, elle seçim YOK.
+
+    Kapalı-küme alanları (`sinif` · `karar` · `sebep`) için iki vaka AYRICA
+    üretilir: `str` alt sınıfı ve eşitliği taklit eden nesne. Üyelik eşitliği
+    ikisini de "üye" sayar; tip kapısı ikisini de reddetmelidir (hakem turu 4).
+    """
     yanlis_degerler = (7, True, None, [], {}, 1.5)
     vakalar = []
     taban = _kanonik_yuk()
@@ -1187,6 +1209,14 @@ def _yaprak_matrisi() -> list:
                 if alan == "unit_id" and liste_adi == "bulgular" and deger is None:
                     continue  # `BulguIzi.unit_id` MEŞRU olarak None olabilir
                 vakalar.append((liste_adi, alan, deger))
+    kapali_kume_alanlari = (
+        ("bulgular", "sinif", "acik_soru"),
+        ("uygulanmayan_kararlar", "karar", "koru"),
+        ("uygulanmayan_kararlar", "sebep", next(iter(UYGULANMAMA_SEBEPLERI))),
+    )
+    for liste_adi, alan, gecerli in kapali_kume_alanlari:
+        vakalar.append((liste_adi, alan, _SahteMetin(gecerli)))
+        vakalar.append((liste_adi, alan, _EsitlikTaklidi(gecerli)))
     return vakalar
 
 

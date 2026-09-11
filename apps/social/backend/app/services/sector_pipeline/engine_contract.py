@@ -116,6 +116,10 @@ class BulguIzi:
             _metin_alani(self.unit_id, "BulguIzi.unit_id")
         _metin_alani(self.detay, "BulguIzi.detay")
         _metin_alani(self.kontrol, "BulguIzi.kontrol", bos_serbest=True)
+        # KAPALI KÜME ALANI DA METİNDİR (hakem turu 4, yüksek): üyelik eşitliği
+        # tip kapısı DEĞİLDİR — `str` alt sınıfı ve eşitliği taklit eden bir
+        # nesne kümeye "üye" görünür ve tipli rapor sayılırdı.
+        _metin_alani(self.sinif, "BulguIzi.sinif")
         if self.sinif not in BULGU_SINIFLARI:
             raise ValueError(
                 f"BulguIzi.sinif kapalı kümenin dışında: {self.sinif!r} — "
@@ -133,6 +137,8 @@ class UygulanmayanKarar:
 
     def __post_init__(self) -> None:
         _metin_alani(self.unit_id, "UygulanmayanKarar.unit_id")
+        _metin_alani(self.karar, "UygulanmayanKarar.karar")
+        _metin_alani(self.sebep, "UygulanmayanKarar.sebep")
         if self.karar not in identity.KARAR_DEGERLERI:
             raise ValueError(
                 f"UygulanmayanKarar.karar kapalı kümenin dışında: {self.karar!r}"
