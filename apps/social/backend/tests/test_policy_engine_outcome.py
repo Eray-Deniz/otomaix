@@ -49,6 +49,7 @@ from app.services.sector_pipeline import auditors
 from tests.test_policy_engine_checks import (
     AKTIF_BIRIMLER,
     AKTIF_ICERIK,
+    BEKLENEN_KONTROL_ADLARI,
     CIKAN_KIMLIK,
     CIKARILACAK_KANCA,
     DOGRULANMIS_KAYNAK,
@@ -301,6 +302,59 @@ def test_uygulanmama_sebepleri_are_closed() -> None:
         "celiski",
         "cogunluk-yok",
     }
+
+
+def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
+    """Damga KURAL YÜZEYİNE bağlıdır — tautolojik bir sürüm testi DEĞİL.
+
+    `ENGINE_VERSION` kendi belgesinde *"uygulama kuralı değiştiğinde ARTAR"*
+    der. Bu hüküm 2026-09-11'de İKİ commit boyunca İHLAL EDİLDİ: yetkilendirme
+    iddia düzeyine taşındı · K-126 istisnası açıldı · K-03 kategori ayağı
+    çalışmaya başladı · sebep kümesi yediden on bire çıktı — damga `2.13.0`
+    kaldı. Aynı damgayı taşıyan iki koşu maddi olarak FARKLI kurallarla karar
+    veriyordu ve denetim ikisini ayırt edemezdi.
+
+    Bu test sürümü TEK BAŞINA pinlemez (o tautoloji olurdu); sürümü kural
+    yüzeyinin ÖLÇÜLEBİLİR parmak iziyle BİRLİKTE pinler. Kural yüzeyi
+    değişip damga değişmezse test DÜŞER ve kararı insana taşır.
+    """
+    kural_yuzeyi = (
+        len(UYGULANMAMA_SEBEPLERI),
+        tuple(sorted(engine.KURAL_KIMLIKLERI)),
+        tuple(sorted(etki.sinif for etki in engine.BULGU_ETKILERI)),
+        tuple(kontrol.ad for kontrol in engine.CHECKS),
+    )
+    assert (engine.ENGINE_VERSION, kural_yuzeyi) == (
+        "2.14.0",
+        (
+            11,
+            (
+                "celiski",
+                "cogunluk-yok",
+                "donem-kimligi-cozulemedi",
+                "iddia-arastirmada-yok",
+                "iddia-denetcide-yok",
+                "kanit-yok",
+                "kaynak-iddia-yok",
+                "mutabakat-yok",
+                "oneri-olumsuz",
+                "referans-uyusmuyor",
+                "referans-yok",
+            ),
+            (
+                "acik_soru",
+                "ikinci_aktif",
+                "kapsam_ihlali",
+                "mevzuat_dogrulanamadi",
+                "mevzuat_uyusmazligi",
+                "regresyon_kapisi",
+            ),
+            BEKLENEN_KONTROL_ADLARI,
+        ),
+    ), (
+        "kural yüzeyi değişti ama ENGINE_VERSION değişmedi (ya da tersi) — "
+        "damga kendi hükmünü ihlal ediyor; kararı insan verir"
+    )
 
 
 def test_engine_result_carries_version_and_config_sha() -> None:

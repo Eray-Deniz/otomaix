@@ -2,8 +2,8 @@
 title: Sektör Bilgi Paketi — Plan 2/2 Arayüz Eki (BAĞLAYICI)
 status: binding-addendum
 date: 2026-08-30
-revised: 2026-09-08
-revisions: 6
+revised: 2026-09-11
+revisions: 9
 binds_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 source_spec: docs/specs/2026-08-21-sektor-bilgi-paketi.md
 canonical_input: docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md
@@ -208,10 +208,10 @@ kötü bir sessiz ara durum üretirdi.
 | **R-H2** | `DoctorReport` `iddialar: tuple[CIddia, ...]` taşır; `run` onu belgeden ÜRETİR | YENİ taşıyıcı | EVET — yapıcı kimlik değişmezlerini zorlar |
 | **R-H3** | Denetim tablosu DOKUZ sütun (`kaynak-iddialari`); `AuditRow` aynı adlı alanı taşır | sözleşme koda uyarlandı | **EVET** — biçim + `kaynaklar` ile ÇİFT YÖNLÜ tutarlılık |
 | **R-H4** | KAYNAK PROFİLİ düz yazıdan TABLOYA döndü; `AuditReport.kaynak_profili` | sözleşme koda uyarlandı | **EVET** — `resmi` kapalı kümesi, numara tekrarsızlığı, dolu not |
-| **R-H5** | Motor atfı ALAN düzeyinden İDDİA düzeyine taşıdı; bağ İKİ UÇLU | YENİ kapı | **EVET** — üç yeni uygulanmama sebebi |
-| **R-H6** | K-126 tek-kaynak istisnası AÇILDI (iki ayağı da artık ölçülüyor) | kapı DAVRANIŞI değişti | EVET — istisna artık İŞLER |
+| **R-H5** | Motor atfı ALAN düzeyinden İDDİA düzeyine taşıdı; bağ İKİ UÇLU | YENİ kapı | **EVET** — üç yeni uygulanmama sebebi (kapanış turunda dördüncüsü eklendi: `donem-kimligi-cozulemedi`) |
+| **R-H6** | K-126 tek-kaynak istisnası AÇILDI (resmîlik ayağı TAM; URL ayağı KAYNAK düzeyi — ZAYIF, bkz. F4 borcu) | kapı DAVRANIŞI değişti | EVET — istisna artık İŞLER |
 | **R-H7** | `kaynak_seti_sha` mührü `iddialar`ı da kapsar | mühür GENİŞLEDİ | EVET |
-| **R-H8** | `EngineInputs` `takvim_kategorileri` alanını kazandı; K-03'ün tür↔kategori ayağı ÇALIŞIR | **R5 ALAN KÜMESİ REVİZYONU** | EVET — çatışma karar günlüğüne NOT olarak yazılır (blok DEĞİL) |
+| **R-H8** | `EngineInputs` `takvim_kategorileri` alanını kazandı; K-03'ün tür↔kategori ayağı ÇALIŞIR | **R5 ALAN KÜMESİ REVİZYONU** | EVET — çatışma ÖLÇÜM olarak taşınır (blok DEĞİL; günlük ayağı AÇIK borç — bkz. 2026-09-11/c) |
 
 **R-H5 ve R-H6 metin uyarlaması DEĞİLDİR — motorun davranışını değiştirirler.**
 
@@ -252,9 +252,12 @@ YÖNLÜDÜR (kural yön seçmez): sistem `commercial` ↔ paket `kutlama`/`anma`
 için hiçbir kategoriyle çelişmez. Kategorisi BİLİNMEYEN gün hakkında hiçbir şey iddia edilmez
 (etiketsiz gün davranışı K-15(a) kapsamında AÇIKTIR ve normatifleştirilmez).
 
-**Üstünlük yönü değişmedi — bu bir BLOK DEĞİLDİR.** Motor içeriği değiştirmez; çatışmayı karar
-günlüğüne `tur-kategori-catismasi` sınıfıyla NOT olarak yazar. Ölçüm iki ayaklıdır ve testte
-ikisi birden aranır: not ÜRETİLİR **ve** uygulanmama listesi BOŞ kalır.
+**Üstünlük yönü değişmedi — bu bir BLOK DEĞİLDİR.** Motor içeriği değiştirmez.
+
+**DÜZELTME (2026-09-11/c — hakem turu F1).** Bu bölüm ilk yazımda çatışmanın karar günlüğüne
+`tur-kategori-catismasi` sınıfıyla NOT olarak yazıldığını söylüyordu. O sınıf DIŞ SÖZLEŞMEDE kapalı
+kümenin DIŞINDAYDI ve `decide()` her çatışmada koşuyu DÜŞÜRÜYORDU. Not artık ÜRETİLMEZ; çatışma
+`kategori_cakismalari` ÖLÇÜMÜ olarak taşınır. Günlük ayağı AÇIK BORÇTUR.
 
 **İlk öneri KURALDAN DARDI ve Eray düzeltti (2026-09-11).** Kontrolör "yalnız riskli yönü
 kaydet" önermişti (sistem dinî/ulusal ↔ paket ticari); kural *"ikisi çeliştiğinde"* der, "riskli
@@ -558,14 +561,19 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "referans-yok",     # 2026-09-10: sentez sözleşmesi 2.1 — `ekle` en az bir D# referansı ister
                         # VE atıfların HEPSİ çözülmeli (kısmi çözüm fail-closed)
     "referans-uyusmuyor",  # 2026-09-10: atıf BAŞKA bir alanın satırını gösteriyor
+    "kaynak-iddia-yok",       # 2026-09-11: sentez sözleşmesi 2.2 — `ekle` `kaynak_iddia` ZORUNLU
+    "iddia-arastirmada-yok",  # 2026-09-11: numaranın gösterdiği iddia yok ya da alanı örtüşmüyor
+    "iddia-denetcide-yok",    # 2026-09-11: bağın ÇİFT YÖNÜ — iddia satırda yok VEYA atıf iddiasız
+    "donem-kimligi-cozulemedi",  # 2026-09-11/c: araştırmanın dönem adı SİSTEM takviminde yok
     "oneri-olumsuz",    # 2026-09-10: denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",          # 2026-09-10: referansın satırı `çelişki` sınıfında; sayı yetse de girmez
     "cogunluk-yok",     # yeni öğe 2-3 yapısal çoğunluk kuralı
-)   # KAPALI — YEDİ değer; kaynağı Task 12'nin bağlayıcı kontrol kümesidir (plan 1376-1381)
-    # ve spec girdisi satır 1189; UYDURULMUŞ değer YOKTUR.
-    # SIRA ÖNCELİKTİR (`engine._reddedilenler`): `referans-yok` · `referans-uyusmuyor` ·
-    # `oneri-olumsuz` · `celiski`,
-    # `cogunluk-yok`'tan ÖNCE gelir — ikisinde de sayı ya hiç okunamamıştır ya da
+)   # KAPALI — ON BİR değer (2026-09-11/c; yedi → on bir). Kaynağı Task 12'nin bağlayıcı kontrol
+    # kümesidir (plan 1376-1381), spec girdisi satır 1189 ve dış sözleşme `12beec1`;
+    # UYDURULMUŞ değer YOKTUR. **Sayı 2026-09-11'de bayattı ve kapanış turu yakaladı** —
+    # bu blok kodla birlikte güncellenmemişti.
+    # SIRA ÖNCELİKTİR (`engine._reddedilenler`): referans/iddia aileleri
+    # `cogunluk-yok`'tan ÖNCE gelir — hepsinde sayı ya hiç okunamamıştır ya da
     # okunması anlamsızdır; "çoğunluk yok" demek okunmuş bir sayı ima ederdi.
 
 @dataclass(frozen=True)

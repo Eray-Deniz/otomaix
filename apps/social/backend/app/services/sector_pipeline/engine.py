@@ -28,9 +28,14 @@ uygulanmama sebebi eklemek sözleşme revizyonudur (`engine_contract`, Task 8).
 1. **K-123 resmîlik ölçütü** hâlâ metinsel bir YARGIDIR ve motor onu
    ÇIKARSAMAZ — ama artık OKUR: denetçi sözleşmesi 2.2 KAYNAK PROFİLİ'ni
    tabloya çevirdi ve `resmi` sütununu ekledi (dış depo `12beec1`). K-126
-   istisnasının iki ayağı da (resmîlik + canlı URL doğrulaması) bu yüzden
-   ölçülür (`_tek_kaynak_istisnasi`). Motorun ÖLÇMEDİĞİ şey yargının kendisinin
-   DOĞRU olup olmadığıdır; o denetçinin işidir.
+   istisnasının BİRİNCİ ayağı (resmîlik) bu yüzden tam ölçülür; motorun
+   ölçmediği şey yargının DOĞRU olup olmadığıdır — o denetçinin işidir.
+   **İKİNCİ ayak (canlı URL doğrulaması) KAYNAK düzeyindedir, İDDİA düzeyinde
+   DEĞİL — beyan edildiğinden ZAYIF (kapanış turu bulgusu).** Sözleşmenin URL
+   örneklem tablosu iddia NUMARASI taşımıyor, dolayısıyla `UrlCheck` de
+   taşıyamıyor: o kaynağın örneklemdeki HERHANGİ bir doğrulanmış URL'si, o
+   kaynağın pakete giren HER tekil iddiasına yetiyor. Kapanışı DIŞ SÖZLEŞME
+   revizyonu ister (URL satırı `K<kaynak>#<iddia>` taşımalı).
 2. **Takvim KATEGORİSİ** artık girdidedir (`takvim_kategorileri`, 2026-09-11) ve
    K-03'ün tür↔kategori ayağı motorda ÇALIŞIR. ÖLÇÜLMEYEN şey iki sözlüğün TAM
    eşlemesidir: `religious`/`national` ayrımının paket sözlüğünde karşılığı
@@ -69,6 +74,7 @@ from app.services.sector_pipeline.auditors import (
     kaynak_iddialari_coz,
 )
 from app.services.sector_pipeline.brief_doctor import (
+    TEMEL_ALANLAR,
     CIddia,
     RoundGate,
     alan_karsilastirma_anahtari,
@@ -836,6 +842,11 @@ def _arastirma_iddialari(inputs: EngineInputs) -> dict[str, CIddia]:
     return evren
 
 
+_TEMEL_ALAN_ANAHTARLARI = frozenset(
+    alan_karsilastirma_anahtari(ad) for ad in TEMEL_ALANLAR
+)
+"""Bölüm A alan adlarının karşılaştırma anahtarları — TEK kural, tek yer."""
+
 IDDIA_BAGI_VAR = "bagli"
 IDDIA_BAGI_YOK = "bagsiz"
 IDDIA_BAGI_DONEM_COZULEMEDI = "donem-cozulemedi"
@@ -886,6 +897,15 @@ def _iddia_alani_bagli_mi(
     # değil, AD UZAYIDIR — rapor bunu `iddia-arastirmada-yok` diye söylerse
     # yanlış yeri gösterir. Karşılık buluyorsa ama BAŞKA bir güne düşüyorsa
     # iddia gerçekten bu kararın dönemini anlatmıyordur.
+    # AŞIRI GENİŞLEME KAPATILDI (kapanış turu, orta — iki hakem de buldu).
+    # İlk yazım "takvimde yok" ⇒ "dönem kimliği çözülemedi" diyordu; o yüklem
+    # *"dönem adı mı"* sorusunu DEĞİL *"takvimde var mı"* sorusunu cevaplıyor.
+    # ÖLÇÜLDÜ: `cta_kaliplari` gibi bilinen bir ALAN adı da bu etiketi alıyordu —
+    # oysa o, iki uçlu bağın yakalamak için kurulduğu sentez sapmasının ta
+    # kendisi. Operatör onu bilinen sözleşme borcu sanıp araştırmayı bırakırdı.
+    # Bilinen bir Bölüm A alan adı DÖNEM DEĞİLDİR: yanlış ALAN olarak raporlanır.
+    if alan_karsilastirma_anahtari(iddia_alani) in _TEMEL_ALAN_ANAHTARLARI:
+        return IDDIA_BAGI_YOK
     if anahtar not in takvim_anahtarlari:
         return IDDIA_BAGI_DONEM_COZULEMEDI
     return IDDIA_BAGI_YOK
@@ -1500,7 +1520,10 @@ CHECKS: tuple[EngineCheck, ...] = (
     ),
     EngineCheck(
         ad="yeni_oge_cogunlugu",
-        aciklama="Yeni öğe `2-3` yapısal çoğunluğu; K-126 istisnası dar ve kapalı.",
+        aciklama=(
+            "Yeni öğe `2-3` yapısal çoğunluğu (atıf İDDİAYA bağlı, iki uçlu); "
+            "K-126 istisnası AÇIK — resmîlik ayağı tam, URL ayağı kaynak düzeyi."
+        ),
         calistir=_yeni_oge_cogunlugu,
     ),
     EngineCheck(
@@ -1515,7 +1538,10 @@ CHECKS: tuple[EngineCheck, ...] = (
     ),
     EngineCheck(
         ad="kategori_cakismasi",
-        aciklama="K-03: paket tür etiketi değişimi kaydedilir; kategori ayağı girdide YOK.",
+        aciklama=(
+            "K-03: paket tür etiketi değişimi VE tür↔kategori çatışması "
+            "kaydedilir; çatışmada PAKET TÜRÜ üstündür (blok DEĞİL)."
+        ),
         calistir=_kategori_cakismasi,
     ),
     EngineCheck(
@@ -1611,11 +1637,19 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 # ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
 # bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
 
-ENGINE_VERSION: str = "2.13.0"
+ENGINE_VERSION: str = "2.14.0"
 """Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
 
 Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
 kuralı değiştiğinde eski koşuların sonucu yenisiyle karşılaştırılamaz.
+
+**2.13.0 → 2.14.0 (2026-09-11, kapanış turu — hakem bulgusu).** İki commit
+boyunca UYGULAMA KURALI değişti ve damga SABİT kalmıştı: yetkilendirme artık
+iddia düzeyinde ve iki uçlu · K-126 tek-kaynak istisnası KAPALI'dan AÇIK'a
+geçti · K-03 kategori ayağı çalışmaya başladı · uygulanmama sebepleri kapalı
+kümesi yediden on bire çıktı. Aynı damgayı taşıyan iki koşu maddi olarak FARKLI
+kurallarla karar veriyordu; yeniden doğrulama ve denetim karşılaştırması ikisini
+ayırt edemezdi — bu bloğun kendi hükmünün ihlaliydi.
 """
 
 ETKI_BLOKLAR = "bloklar"

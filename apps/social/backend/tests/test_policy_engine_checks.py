@@ -1450,6 +1450,32 @@ def test_a_daily_language_period_name_reports_the_HONEST_reason() -> None:
     assert "iddia-arastirmada-yok" not in _sebepler(sonuc)
 
 
+def test_a_known_field_name_is_NOT_diagnosed_as_a_period_problem() -> None:
+    """Yeni sebep AŞIRI GENİŞ olmamalı (kapanış turu, orta — iki hakem de buldu).
+
+    `anahtar not in takvim_anahtarlari` yüklemi *"dönem adı mı"* sorusunu DEĞİL
+    *"takvimde var mı"* sorusunu cevaplıyor. ÖLÇÜLDÜ: `cta_kaliplari` gibi
+    bilinen bir ALAN adı da `donem-kimligi-cozulemedi` etiketi alıyordu — oysa o,
+    iki uçlu bağın yakalamak için kurulduğu sentez sapmasının ta kendisi.
+    Operatör onu bilinen sözleşme borcu sanıp araştırmayı bırakırdı.
+    """
+    for alan in ("cta_kaliplari", "kanca_kaliplari", "yasaklar_ve_hassasiyetler"):
+        sonuc = engine.run_checks(
+            _ozel_gun_ekle_girdisi(
+                kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", donem_adi=alan
+            )
+        )
+        assert "iddia-arastirmada-yok" in _sebepler(sonuc), alan
+        assert "donem-kimligi-cozulemedi" not in _sebepler(sonuc), alan
+    # POZİTİF KONTROL: gerçek bir dönem adı HÂLÂ dönem teşhisi alır.
+    gercek = engine.run_checks(
+        _ozel_gun_ekle_girdisi(
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", donem_adi="14 Şubat"
+        )
+    )
+    assert "donem-kimligi-cozulemedi" in _sebepler(gercek)
+
+
 def test_a_claim_about_another_period_does_not_authorise() -> None:
     """BAŞKA dönemin iddiası bu dönemi yetkilendirmez.
 
