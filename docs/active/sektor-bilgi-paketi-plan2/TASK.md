@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11: Task 16 indi ve checkpoint 13
-`approve` ile kapandı — DÖRT hakem turu sürdü. Sıradaki iş **Task 17**.) Task 1-16 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11: Task 17 indi ve checkpoint 14
+`approve` ile kapandı — BEŞ hakem turu sürdü. Sıradaki iş **Task 18**.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -38,8 +38,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 10
-- last_checkpoint_ref: 086985a7a20c5a0bbe662ea14c57ddd586ad7f4d
+- cp_count: 11
+- last_checkpoint_ref: 4a9d98f8ae30c5eb19f97e5fd2d5e31fda5eb361
 
 > **`cp_count` ile düz yazıdaki checkpoint NUMARASI aynı şey DEĞİLDİR — sapma değil, iki ayrı
 > sayaç (2026-09-11'de bir oturum açılışını yanılttı, o yüzden burada yazılı).** Numara KOŞAN
@@ -709,6 +709,17 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Decisions Log
 
+- **2026-09-11 — Task 17 hazırlık kapısı = indi; checkpoint 14 BEŞ turda kapandı:**
+  hakem F1-F5 üretti; F2 (üretici kimliği damgadan değil `model`'den), F3 (kalıcı raporun TİPLİ
+  okuyucusu + yaprak tip değişmezleri), F4 (bloklayan sınıflar motorun etki tablosundan türetilir),
+  F5 (artefakt türü kapısı test taramasından YAZICININ değişmezine yükseltildi) kapandı ve tur 5
+  `approve` verdi. F1 sahibinin kararıyla açık kaldı (yukarıda, Open Problems).
+  **Süreç kararı:** dört turun dördü de gerçek kusur bulduğu için beşinci doğrulama turu koşuldu
+  (Eray onayı); "muhtemelen temizdir" varsayımı bu zincirde beş kez de yanlış çıkardı.
+- **2026-09-11 — hazırlık maddelerinin DÖRT `otomatik` bayrağı düzeltildi (md-04 · md-08 · md-17 ·
+  md-20):** ölçülemedikleri görüldü, planın açık izniyle `readiness_items`'ta `False` yapıldı.
+  `MADDE_KUMESI_SHA` değişti; eski tasdikler kendiliğinden geçersizleşir (zaten yoktu).
+- **2026-09-11 — arşiv dosyasındaki bot token'ı = kapandı, yeni iş açılmaz** (yukarıdaki kayıt).
 - **2026-09-11 — arşivdeki Telegram bot token'ı = KAPANDI, yeni iş AÇILMAZ (Eray):**
   geçen oturumun "EVSİZ KALEM" ilanı bayattı. Token 2026-09-06'da döndürülmüştü
   (`n8n-workflow-sir-hijyeni` (a) ayağı, `dadb343`); eskisi `401 Unauthorized` ölçülmüştü.
@@ -1039,6 +1050,24 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   ayrım sözleşmede kurulur (F8). Kova testi TÜRÜ sınar, varyantı kovalamaz.
 
 # Open Problems
+
+- **[YÜKSEK — AÇIK, sahibinin kararıyla 2026-09-11] Hazırlık onayı mühürlenmiş bir kanıt
+  kümesine bağlı DEĞİL.** Checkpoint 14'ün F1'i; beş hakem turunun ikisinde aynı eksende çıktı.
+  Onay, okuduğu kanıtın (ham artefakt satırları) o ANKİ hâlini belgeler; tablo EKLEMELİDİR ve
+  tasdik kaydının "ne gördüm" alanı YOKTUR (Task 8 sözleşmesi). **Daraltıldı:** değerlendirme ile
+  yazım tek işlemde, koşu satırı `FOR UPDATE` kilitli ve yazımdan hemen önce kanıt kümesinin
+  parmak izi TAZE okunup karşılaştırılıyor (`T17-fix3`). **Kapanmadı:** onaydan SONRA düşen bir
+  satır damgayı hâlâ geçerli gösterir; ayrıca `runs.attest_readiness` prob sonuçlarını görmez,
+  çağıranın küme iddiasını yazar. Gerçek kapanış iki yoldan birini ister — tasdik gördüğü kümeyi
+  KAYDETSİN ya da aktivasyon hazırlığı YENİDEN ölçsün — ve ikisi de sözleşme kararıdır;
+  prob kapısını yazıcıya koymak `runs → readiness` bağımlılığı demek olurdu, **R9 yasaklıyor**.
+  **EV: arayüz eki revizyonu · sert son tarih Task 19** (bekleyen kümeye katılır).
+
+- **[ORTA — EVİ VAR 2026-09-11] `readiness.evaluate` imzası ekten IRAKSIYOR.** Ek yüzeyi
+  `evaluate(db)` yazıyor; kod `evaluate(db, *, run_id)`. Koşu kimliği olmadan ön-kontrolün
+  okuyacağı artefakt YOKTUR — on bir probun on biri koşu satırını ya da o koşunun ham
+  artefaktlarını okur. Hakem ıraksamayı GEREKÇELİ buldu ve bloker saymadı.
+  **EV: arayüz eki revizyonu · son tarih Task 19** (AÇIK-2 ile aynı partide).
 
 - **[YÜKSEK — EVİ VAR 2026-09-11] Mekanik kapı raporunun artefakt türü şemada YOK.**
   Task 17 dispatch'inde ölçüldü (canlı yerel veritabanı, `sector_research_artifacts_kind_check`):
