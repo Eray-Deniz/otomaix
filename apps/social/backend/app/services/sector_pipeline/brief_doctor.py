@@ -300,6 +300,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
+import dataclasses
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Callable, Iterable, Sequence
@@ -450,6 +451,7 @@ C_TABLOSU_SUTUNLARI = (
 # ad→konum türetmesi sözleşme yeniden sıra değiştirdiğinde kendiliğinden uyar.
 C_NO_INDEKSI = C_TABLOSU_SUTUNLARI.index("no")
 C_ALAN_INDEKSI = C_TABLOSU_SUTUNLARI.index("alan/dönem")
+C_URL_INDEKSI = C_TABLOSU_SUTUNLARI.index("URL")
 # `no` hücresi: 1'den başlayan ARTAN TAM SAYI, o raporda iddianın KALICI
 # kimliği. Biçim burada, DİZİ kuralı `_c_no_dizisi_ihlalleri`'nde ölçülür.
 _C_NO_RE = re.compile(r"^[1-9]\d*$")
@@ -887,6 +889,11 @@ class DoctorReport:
                 "DoctorReport.iddialar `alan` hücresi BOŞ olamaz — motor "
                 "kararın alanıyla örtüşmeyi o hücrede ölçer"
             )
+        if any(not isinstance(iddia.url, str) for iddia in self.iddialar):
+            raise TypeError(
+                "DoctorReport.iddialar `url` metin olmak zorunda — K-126 URL eşitliği "
+                "metin karşılaştırmasıdır"
+            )
         for iddia in self.iddialar:
             if not isinstance(iddia.anahtarlar, tuple) or any(
                 not isinstance(a, str) or not _SISTEM_ANAHTARI_RE.match(a)
@@ -1180,8 +1187,18 @@ def kaynak_seti_sha(raporlar: Sequence[DoctorReport]) -> str:
                 # dardır: `DoctorReport`'u `run`'ı ATLAYARAK elle kuran bir
                 # çağıranın iddia kümesi. O yolun kökeni zaten doğrulanmamıştır
                 # (alanın kendi docstring'i böyle der); mühür onu da kapsar.
+                # Attempt-3 F5 (düşük, gönüllü): alan kümesi ELLE sayılmaz, tipin
+                # alanlarından türer — yeni bir yetkilendirme kolu (anahtarlar, url)
+                # eklendiğinde mühür kendiliğinden kapsar.
                 "iddialar": [
-                    {"no": iddia.no, "alan": iddia.alan}
+                    {
+                        alan.name: (
+                            list(getattr(iddia, alan.name))
+                            if isinstance(getattr(iddia, alan.name), tuple)
+                            else getattr(iddia, alan.name)
+                        )
+                        for alan in dataclasses.fields(CIddia)
+                    }
                     for iddia in rapor.iddialar
                 ],
             }
@@ -2375,12 +2392,24 @@ _ADAY_TAKVIM_SADE: dict[str, tuple[str, ...]] = {
 
 
 def _aday_kopyasi_mi(donem: str, anahtarlar: tuple[str, ...]) -> bool:
-    """ADAY TAKVİM'deki dönem için hücre şablonun AYNEN kopyası mı? (Aday değilse: evet.)
+    """Hücre sözleşmenin o dönem için İZİN VERDİĞİ değer mi? TEK yüklem, İKİ tüketici.
 
-    TEK yüklem, İKİ tüketici: hücre kontrolü (not üretir) ve köprü (bağ kurmaz).
+    * ADAY TAKVİM'deki dönem → şablondaki demetin AYNEN kopyası.
+    * Aday listesinde OLMAYAN dönem → `—` (boş demet) YA DA yalnız aday-dışı sistem
+      günü anahtarları (`ADAY_DISI_SISTEM_ANAHTARLARI` — şablon: *"sektöre özgü ekleme
+      olarak bunlardan birini seçersen anahtarını buradan al"*). Bir ADAY dönemin
+      anahtarı aday dışı bir ad altında TAŞINAMAZ.
+
+    **Attempt-3 F1 (both-agree, yüksek — ÖLÇÜLDÜ):** ilk yazım aday dışı dönemde
+    "kopya kuralı yok, geç" diyordu; geriye yalnız üyelik kalıyor ve `Sezon Açılışı
+    → black-friday` notsuz geçip köprü kuruyordu — yani ilgisiz bir sezon araştırması
+    Black Friday kararlarını yetkilendirebiliyordu. Sözleşme: *"tablodakinden farklıysa
+    o dönemin HİÇBİR iddiası hiçbir paket kararını yetkilendiremez."*
     """
     beklenen = _ADAY_TAKVIM_SADE.get(donem)
-    return beklenen is None or anahtarlar == beklenen
+    if beklenen is not None:
+        return anahtarlar == beklenen
+    return all(anahtar in ADAY_DISI_SISTEM_ANAHTARLARI for anahtar in anahtarlar)
 
 
 def _donem_anahtarlari(tablo_satirlari: Sequence[str]) -> dict[str, tuple[str, ...]]:
@@ -3007,6 +3036,15 @@ class CIddia:
     no: int
     alan: str
     anahtarlar: tuple[str, ...] = ()
+    url: str = ""
+    """Bölüm C satırının `URL` hücresi, AYNEN (attempt-3 F2, both-agree, yüksek).
+
+    K-126'nın ikinci ayağı bu iddianın URL'sinin canlı doğrulanmasıdır; denetçi
+    sözleşmesi 2.3 örneklem satırının `URL` hücresini *"o Bölüm C satırının URL
+    hücresidir — aynen kopyala"* diye bağlar. Motor eşitliği BURADAN ölçer: kimlik
+    doğru ama URL başka bir adresse istisna AÇILMAZ. `run`'ı atlayan çağıranda boş
+    kalır ve boş URL hiçbir örneklem satırıyla eşleşmez (fail-closed).
+    """
 
 
 def _c_iddialari(belge: _Belge) -> tuple[CIddia, ...]:
@@ -3032,6 +3070,7 @@ def _c_iddialari(belge: _Belge) -> tuple[CIddia, ...]:
                 no=int(ham_no),
                 alan=alan,
                 anahtarlar=belge.donem_anahtarlari.get(_sadelestir(alan), ()),
+                url=hucreler[C_URL_INDEKSI].strip(),
             )
         )
     # Tekrar eden numara KİMLİK DEĞİLDİR: hangi satırı gösterdiği belirsiz olan
@@ -3163,11 +3202,19 @@ def _kontrol_sistem_anahtari(belge: _Belge) -> list[str]:
             )
             continue
         if not _aday_kopyasi_mi(donem, anahtarlar):
-            mesajlar.append(
-                f"Gerekçe tablosu `sistem anahtarı` hücresi ADAY TAKVİM'in kopyası "
-                f"değil: dönem {hucreler[GEREKCE_DONEM_INDEKSI]!r} için şablon "
-                f"{', '.join(aday[donem])!r} der, hücre {hucre!r}: {kisa!r}"
-            )
+            if donem in aday:
+                mesajlar.append(
+                    f"Gerekçe tablosu `sistem anahtarı` hücresi ADAY TAKVİM'in kopyası "
+                    f"değil: dönem {hucreler[GEREKCE_DONEM_INDEKSI]!r} için şablon "
+                    f"{', '.join(aday[donem])!r} der, hücre {hucre!r}: {kisa!r}"
+                )
+            else:
+                mesajlar.append(
+                    f"Gerekçe tablosu: aday listesinde OLMAYAN dönem "
+                    f"{hucreler[GEREKCE_DONEM_INDEKSI]!r} yalnız `{SISTEM_ANAHTARI_YOK}` ya da "
+                    f"aday-dışı sistem günü anahtarı taşır ({', '.join(ADAY_DISI_SISTEM_ANAHTARLARI)}); "
+                    f"başka bir dönemin anahtarı sahiplenilemez, hücre {hucre!r}: {kisa!r}"
+                )
             continue
         if donem in gorulen and gorulen[donem] != anahtarlar:
             mesajlar.append(

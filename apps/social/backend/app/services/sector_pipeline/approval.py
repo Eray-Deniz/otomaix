@@ -38,8 +38,14 @@ from .engine import KONTROL_ADLARI
 KARARLAR: tuple[str, ...] = ("onay", "ret")
 """Onay kararları — KAPALI küme (036 CHECK'iyle birebir)."""
 
-SNAPSHOT_SEMA: int = 1
-"""Görüntü şeması sürümü — okuyucu bilinmeyen şemada DURUR."""
+SNAPSHOT_SEMA: int = 2
+"""Görüntü şeması sürümü — okuyucu bilinmeyen şemada DURUR.
+
+**1 → 2 (2026-09-11, attempt-3 F3):** görüntü `kategori_catismalari` alanını kazandı —
+karar günlüğündeki `tur-kategori-catismasi` notlarının `konu` üçlüsü (anahtar · paket
+türü · sistem kategorisi). Dondurulmuş sema-1 görüntü hiçbir ortamda YOK (pilot koşmadı;
+koşu tablosu canlıda henüz dağıtılmadı — ölçüldü), bu yüzden okuyucu geriye uyum taşımaz.
+"""
 
 
 class ApprovalRefused(RuntimeError):
@@ -104,6 +110,33 @@ def _sayilar(run: runs.VerifiedRun) -> dict:
             continue
         alan_bazli[alan] = alan_bazli.get(alan, 0) + 1
     return {"alan_bazli": alan_bazli, "toplam": sum(alan_bazli.values())}
+
+
+def _kategori_catismalari(run: runs.VerifiedRun) -> list[dict]:
+    """K-03 çatışma NOTLARI — karar günlüğünden, operatörün onay anında GÖRMESİ için.
+
+    Sentez sözleşmesi 2.3: not *"çatışmanın karar günlüğünde DURMASI ve operatörün
+    onay anında GÖRMESİ içindir"*. Attempt-3 F3 (both-agree, yüksek — ÖLÇÜLDÜ):
+    not günlüğe yazılıyor ama görüntü uyarıları yalnız politika bulgularından
+    kuruyordu; operatör anahtar/paket türü/sistem kategorisi üçlüsünü görmeden
+    onay verebiliyordu. Bu alan BLOKLAMAZ (K-03: paket türü üstündür); yalnız
+    görünür kılar. `konu` şema kapısından geçmiştir (üç dolu metin alanı) —
+    burada yeniden doğrulanmaz, olduğu gibi taşınır.
+    """
+    catismalar: list[dict] = []
+    for satir in run.final_decision_log:
+        if satir.get("tur") != "not" or satir.get("sinif") != identity.NOT_KONU_SINIFI:
+            continue
+        konu = satir.get("konu") or {}
+        catismalar.append(
+            {
+                "anahtar": konu.get("anahtar"),
+                "paket_turu": konu.get("paket_turu"),
+                "sistem_kategorisi": konu.get("sistem_kategorisi"),
+                "gerekce": satir.get("gerekce"),
+            }
+        )
+    return catismalar
 
 
 def _bulgu_ayrimi(run: runs.VerifiedRun) -> tuple[list[dict], list[dict]]:
@@ -314,6 +347,7 @@ async def _goruntu_kur(db, run: runs.VerifiedRun, *, actor: str) -> dict:
         "sayilar": _sayilar(run),
         "oranlar": identity.cozulmus(run.barrier_report.get("oranlar", {})),
         "uyarilar": uyarilar,
+        "kategori_catismalari": _kategori_catismalari(run),
         "kapi_sonuclari": kapilar,
         "motor_kosu_raporu": {
             "engine_version": run.engine_version,
@@ -562,6 +596,15 @@ def render_summary(snapshot: Mapping[str, Any]) -> str:
     )
     satirlar += _satirlar(
         "Uyarılar", [f"{k['sinif']}: {k['detay']}" for k in snapshot["uyarilar"]]
+    )
+    # K-03 (spec §11.2): çatışma BLOKLAMAZ — paket türü üstündür; operatör onay
+    # anında görür (sentez sözleşmesi 2.3). Üç alan da basılır, günlük özeti değil.
+    satirlar += _satirlar(
+        "K-03 tür↔kategori çatışmaları (bloklamaz, paket türü üstün)",
+        [
+            f"{k['anahtar']}: paket={k['paket_turu']} · sistem={k['sistem_kategorisi']}"
+            for k in snapshot["kategori_catismalari"]
+        ],
     )
     motor = snapshot["motor_kosu_raporu"]
     satirlar.append(

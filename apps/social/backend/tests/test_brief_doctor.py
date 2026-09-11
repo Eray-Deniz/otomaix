@@ -1204,6 +1204,56 @@ def test_aday_donemde_anahtar_sablonun_kopyasi_olmali() -> None:
     assert yanlis.anahtarlar == (), "kopya kuralını ihlal eden satır bağ kuramaz"
 
 
+def test_aday_disi_donem_baska_donemin_anahtarini_sahiplenemez() -> None:
+    """Attempt-3 F1 (both-agree, yüksek — ÖLÇÜLDÜ): `Sezon Açılışı → black-friday` notsuz geçip
+    köprü kuruyordu; ilgisiz sezon araştırması Black Friday kararlarını yetkilendirebilirdi."""
+    for hucre in ("black-friday", "sevgililer-gunu, cumhuriyet-bayrami", "okula-donus"):
+        metin = kaynak(sektore_ozgu_donem=True).replace(
+            f"| {SEKTORE_OZGU_DONEM} | — |", f"| {SEKTORE_OZGU_DONEM} | {hucre} |"
+        )
+        assert metin != kaynak(sektore_ozgu_donem=True)
+        rapor = bd.run(metin, source_name="P")
+        assert "aday listesinde OLMAYAN dönem" in _mesajlar(rapor), hucre
+        iddia = next(i for i in rapor.iddialar if i.alan == SEKTORE_OZGU_DONEM)
+        assert iddia.anahtarlar == (), f"{hucre}: sahiplenilen anahtar köprü KURMAMALI"
+
+
+def test_aday_disi_donem_aday_disi_sistem_gununu_tasiyabilir() -> None:
+    """POZİTİF KONTROL: şablonun adıyla saydığı aday-dışı sistem günü aday dışı dönemde MEŞRU."""
+    metin = kaynak(sektore_ozgu_donem=True).replace(
+        f"| {SEKTORE_OZGU_DONEM} | — |", f"| {SEKTORE_OZGU_DONEM} | emek-ve-dayanisma-gunu |"
+    )
+    rapor = bd.run(metin, source_name="P")
+    assert rapor.notlar == (), _mesajlar(rapor)
+    iddia = next(i for i in rapor.iddialar if i.alan == SEKTORE_OZGU_DONEM)
+    assert iddia.anahtarlar == ("emek-ve-dayanisma-gunu",)
+
+
+def test_ciddia_bolum_c_url_hucresini_aynen_tasir() -> None:
+    """Attempt-3 F2: K-126 URL eşitliği bu alandan ölçülür — Bölüm C `URL` hücresi aynen."""
+    rapor = _rapor()
+    assert all(i.url.startswith("https://") for i in rapor.iddialar), [i.url for i in rapor.iddialar]
+    ilk = rapor.iddialar[0]
+    satir = next(
+        s for s in kaynak().splitlines() if s.startswith(f"| {ilk.no} |")
+    )
+    assert ilk.url == [h.strip() for h in satir.strip().strip("|").split("|")][bd.C_URL_INDEKSI]
+
+
+def test_kaynak_seti_sha_anahtarlari_ve_urlyi_kapsar() -> None:
+    """Attempt-3 F5 (düşük, gönüllü): mühür yetkilendirme kollarını (anahtarlar, url) kapsar."""
+    def rapor(**degis):
+        return bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi="K",
+            icerik_ozeti="0" * 64,
+            iddialar=(bd.CIddia(no=1, alan="Sevgililer Günü", **degis),),
+        )
+    taban = bd.kaynak_seti_sha([rapor()])
+    assert bd.kaynak_seti_sha([rapor(anahtarlar=("sevgililer-gunu",))]) != taban
+    assert bd.kaynak_seti_sha([rapor(url="https://a.example/x")]) != taban
+    assert bd.kaynak_seti_sha([rapor()]) == taban, "deterministik"
+
+
 def test_sektore_ozgu_donem_cizgi_ile_notsuz_gecer() -> None:
     rapor = _rapor(sektore_ozgu_donem=True)
     assert rapor.notlar == (), _mesajlar(rapor)

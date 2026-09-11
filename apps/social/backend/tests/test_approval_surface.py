@@ -339,6 +339,54 @@ def _cikarma_satiri(unit_id: str, *, alan: str = "kanca_kaliplari") -> dict:
     )
 
 
+def _k03_notu(anahtar: str = "cumhuriyet-bayrami") -> dict:
+    return {
+        "tur": "not",
+        "sinif": "tur-kategori-catismasi",
+        "alan": "ozel_gun",
+        "gerekce": f"K-03: {anahtar} paket türü ile sistem kategorisi çelişiyor.",
+        "konu": {
+            "anahtar": anahtar,
+            "paket_turu": "ticari-firsat",
+            "sistem_kategorisi": "national",
+        },
+    }
+
+
+async def test_k03_conflict_note_reaches_the_approval_surface(pkg_db) -> None:
+    """Attempt-3 F3 (both-agree, yüksek — ÖLÇÜLDÜ): not günlükte duruyor, görüntüye girmiyordu.
+
+    Sentez sözleşmesi 2.3: not *"operatörün onay anında GÖRMESİ içindir"*. Görüntü
+    üç `konu` alanını yapılandırılmış taşır, özet basar; onaylanabilirlik DEĞİŞMEZ
+    (K-03: paket türü üstündür, blok değil).
+    """
+    sector_id = await _sub_sector(pkg_db)
+    gunluk = [_karar_satiri(), _k03_notu()]
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id, final_decision_log=gunluk)
+    goruntu = await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+    assert goruntu["kategori_catismalari"] == [
+        {
+            "anahtar": "cumhuriyet-bayrami",
+            "paket_turu": "ticari-firsat",
+            "sistem_kategorisi": "national",
+            "gerekce": "K-03: cumhuriyet-bayrami paket türü ile sistem kategorisi çelişiyor.",
+        }
+    ]
+    assert goruntu["onaylanabilir"] is True, "K-03 çatışması BLOKLAMAZ"
+    ozet = approval.render_summary(goruntu)
+    assert "cumhuriyet-bayrami: paket=ticari-firsat · sistem=national" in ozet
+    assert "K-03" in ozet
+
+
+async def test_no_k03_note_means_empty_conflict_list(pkg_db) -> None:
+    """Boş-küme kolu: not yoksa alan boş liste, özet 'yok' der."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(pkg_db, sector_id)
+    goruntu = await approval.build_and_freeze_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+    assert goruntu["kategori_catismalari"] == []
+    assert "K-03 tür↔kategori çatışmaları (bloklamaz, paket türü üstün): yok" in approval.render_summary(goruntu)
+
+
 async def test_removal_count_without_threshold_and_detail_available(pkg_db) -> None:
     """K-41: özet SAYI verir (eşik YOK); tam liste bir tık derinde."""
     sector_id = await _sub_sector(pkg_db)
@@ -782,7 +830,7 @@ async def test_second_decision_is_refused(pkg_db) -> None:
     ) == "onay"
 
 
-@pytest.mark.parametrize("sema", [None, 0, 2, "1"])
+@pytest.mark.parametrize("sema", [None, 0, 1, 3, "2"])
 def test_renderers_refuse_unknown_snapshot_schema(sema) -> None:
     """Bilinmeyen şema OKUNMAZ — iki gösterici de fail-closed durur."""
     goruntu = {"sema": sema} if sema is not None else {}
@@ -1291,6 +1339,7 @@ async def test_snapshot_core_field_set_is_closed(pkg_db) -> None:
         "sayilar",
         "oranlar",
         "uyarilar",
+        "kategori_catismalari",  # 2026-09-11 attempt-3 F3 — mutasyon vakası: `final_decision_log`
         "kapi_sonuclari",
         "motor_kosu_raporu",
     }
@@ -1298,7 +1347,8 @@ async def test_snapshot_core_field_set_is_closed(pkg_db) -> None:
 
 
 @pytest.mark.parametrize(
-    "kolon", ["sebep", "package_id", "sector_id", "katman1_attestation"]
+    "kolon",
+    ["sebep", "package_id", "sector_id", "katman1_attestation", "final_decision_log"],
 )
 async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str) -> None:
     """MUTASYON MATRİSİ: çekirdeği besleyen kolon donmadan sonra değişirse karar YOK.
@@ -1321,6 +1371,10 @@ async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str) -> 
         yeni_deger = await _sub_sector(pkg_db)
     elif kolon == "katman1_attestation":
         yeni_deger = {"kosum_kimligi": "k1-2", "sonuc": "FAIL", "actor": ACTOR}
+    elif kolon == "final_decision_log":
+        # `kategori_catismalari` (attempt-3 F3) bu kolondan türer: donduktan sonra
+        # bir K-03 notu eklenirse görüntü ayrışır ve karar YAZILMAZ.
+        yeni_deger = [_karar_satiri(), _k03_notu()]
     else:
         yeni_deger = "sonradan eklenen sebep"
 
@@ -1330,7 +1384,10 @@ async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str) -> 
         yeni_deger,
     )
 
-    with pytest.raises(approval.ApprovalRefused):
+    # `final_decision_log` sapması DAHA ERKEN bir kapıda düşer (koşu doğrulaması:
+    # `decision_log_sha` günlükle eşleşmiyor → `RunNotVerified`); öteki kolonlar
+    # görüntü çekirdeği karşılaştırmasında (`ApprovalRefused`). İkisi de karar YAZMAZ.
+    with pytest.raises((approval.ApprovalRefused, runs.RunNotVerified)):
         await approval.record_decision(
             pkg_db, run_id=run_id, karar="onay", actor=ACTOR, seconds=1,
             snapshot_sha=sha,

@@ -474,8 +474,15 @@ def _arastirma_iddialari(denetim=None) -> tuple[bd.CIddia, ...]:
     iddialar = {satir.no: satir.alan for satir in tablo}
     iddialar[YENI_DONEM_IDDIA_NO] = YENI_DONEM_ADI
     iddialar[MEVCUT_DONEM_IDDIA_NO] = MEVCUT_DONEM_ADI
+    # Her araştırma satırı fixture'ın doğrulanmış URL'sini taşır: K-126 ikinci
+    # ayağı kimlik VE URL eşitliğini birlikte arar (attempt-3 F2).
     return tuple(
-        bd.CIddia(no=no, alan=alan, anahtarlar=DONEM_ANAHTARLARI.get(alan, ()))
+        bd.CIddia(
+            no=no,
+            alan=alan,
+            anahtarlar=DONEM_ANAHTARLARI.get(alan, ()),
+            url=DOGRULANMIS_URL,
+        )
         for no, alan in sorted(iddialar.items())
     )
 
@@ -1425,6 +1432,7 @@ def _ozel_gun_ekle_girdisi(
                 no=iddia.no,
                 alan=YENI_DONEM_ADI if donem_adi is None else donem_adi,
                 anahtarlar=(YENI_DONEM_ANAHTARI,) if anahtarlar is None else anahtarlar,
+                url=DOGRULANMIS_URL,
             )
             if iddia.no == YENI_DONEM_IDDIA_NO
             else iddia
@@ -1800,6 +1808,41 @@ def test_single_source_exception_needs_the_URL_of_THAT_claim() -> None:
     assert "cogunluk-yok" in _sebepler(kimliksiz)
 
 
+def test_single_source_exception_needs_the_URL_of_THAT_claim_not_just_its_id() -> None:
+    """Attempt-3 F2 (both-agree — ÖLÇÜLDÜ): doğru kimlik + BAŞKA URL istisnayı açıyordu.
+
+    Sözleşme örneklem satırının URL'sini Bölüm C satırının URL'sine bağlar ("aynen
+    kopyala"); motor eşitliği araştırma satırının kendi URL'siyle ölçer. Boş URL de
+    eşleşmez (bypass yolunda `CIddia.url` boştur — fail-closed).
+    """
+    yanlis_url = (
+        auditors.UrlCheck(
+            url="https://baska.example/alakasiz",
+            kaynak=DOGRULANMIS_KAYNAK,
+            erisildi=True,
+            icerik_uyumlu=True,
+            not_metni="",
+            iddia=TEK_KAYNAKLI_IDDIA,
+        ),
+    )
+    sonuc = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False), profil_2=_profil(True, False), ornekle=yanlis_url
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)
+    # Boş URL — ne örneklemde ne araştırmada eşleşme kurar.
+    assert engine._url_esit("", bd.CIddia(no=2, alan="kanca_kaliplari", url=DOGRULANMIS_URL)) is False
+    assert engine._url_esit(DOGRULANMIS_URL, bd.CIddia(no=2, alan="kanca_kaliplari")) is False
+    assert engine._url_esit(DOGRULANMIS_URL, None) is False
+    # İKİ taraf da boş: bypass yolunda `CIddia.url` boştur ve kimliksiz-adresli bir
+    # örneklem satırı "boş == boş" ile eşleşmemeli (mutasyon kolu yakaladı: eşitlik
+    # kapısı tek başına bunu geçiriyordu).
+    assert engine._url_esit("", bd.CIddia(no=2, alan="kanca_kaliplari")) is False
+    # POZİTİF: aynı URL (kırpma toleransı) → eşit.
+    assert engine._url_esit(f" {DOGRULANMIS_URL} ", bd.CIddia(no=2, alan="x", url=DOGRULANMIS_URL)) is True
+
+
 def test_single_source_exception_stays_closed_without_officiality() -> None:
     """İkinci ayak TEK BAŞINA yetmez: canlı URL resmîlik KANITI değildir."""
     sonuc = engine.run_checks(_tek_kaynak_girdisi())
@@ -1910,6 +1953,7 @@ def test_the_exception_does_not_apply_to_a_two_source_addition() -> None:
         ),
         {"KAYNAK-1", "KAYNAK-2"},
         {TEK_KAYNAKLI_IDDIA},
+        {},
     ) is False
 
 

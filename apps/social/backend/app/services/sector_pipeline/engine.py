@@ -30,12 +30,12 @@ uygulanmama sebebi eklemek sözleşme revizyonudur (`engine_contract`, Task 8).
    tabloya çevirdi ve `resmi` sütununu ekledi (dış depo `12beec1`). K-126
    istisnasının BİRİNCİ ayağı (resmîlik) bu yüzden tam ölçülür; motorun
    ölçmediği şey yargının DOĞRU olup olmadığıdır — o denetçinin işidir.
-   **İKİNCİ ayak (canlı URL doğrulaması) KAYNAK düzeyindedir, İDDİA düzeyinde
-   DEĞİL — beyan edildiğinden ZAYIF (kapanış turu bulgusu).** Sözleşmenin URL
-   örneklem tablosu iddia NUMARASI taşımıyor, dolayısıyla `UrlCheck` de
-   taşıyamıyor: o kaynağın örneklemdeki HERHANGİ bir doğrulanmış URL'si, o
-   kaynağın pakete giren HER tekil iddiasına yetiyor. Kapanışı DIŞ SÖZLEŞME
-   revizyonu ister (URL satırı `K<kaynak>#<iddia>` taşımalı).
+   **İKİNCİ ayak (canlı URL doğrulaması) artık İDDİA düzeyindedir** (denetçi
+   sözleşmesi 2.3, dış depo `d9dc289`): örneklem satırı `K<kaynak>#<iddia>` kimliği
+   ve o Bölüm C satırının URL'sini taşır; motor kararın `kaynak_iddia` kümesindeki
+   kimliği VE araştırma satırının URL'siyle TAM eşitliği birlikte arar. Ölçülmeyen
+   şey URL'nin gerçekten AÇILDIĞIDIR — o denetçinin beyanıdır ve motor ağ çağrısı
+   yapmaz; kasıtlı yanlış beyan bu kapıyla yakalanmaz (dürüst sınır).
 2. **Takvim KATEGORİSİ** artık girdidedir (`takvim_kategorileri`, 2026-09-11) ve
    K-03'ün tür↔kategori ayağı motorda ÇALIŞIR. ÖLÇÜLMEYEN şey iki sözlüğün TAM
    eşlemesidir: `religious`/`national` ayrımının paket sözlüğünde karşılığı
@@ -1234,7 +1234,7 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         # Kök çözüm koda değil SÖZLEŞMEYE yapıldı — motor hâlâ hiçbir şey
         # ÇIKARSAMAZ, okur.
         if len(kaynaklar) == 1 and _tek_kaynak_istisnasi(
-            inputs, kaynaklar, iddia_kumesi
+            inputs, kaynaklar, iddia_kumesi, iddia_evreni
         ):
             continue
         kayitlar.append(
@@ -1248,7 +1248,10 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
 
 
 def _tek_kaynak_istisnasi(
-    inputs: EngineInputs, etiketler: set[str], iddialar: set[KaynakIddiasi]
+    inputs: EngineInputs,
+    etiketler: set[str],
+    iddialar: set[KaynakIddiasi],
+    iddia_evreni: Mapping[str, CIddia],
 ) -> bool:
     """K-126: tek kaynaklı iddia pakete girebilir mi? — İKİ ayak BİRLİKTE.
 
@@ -1269,6 +1272,10 @@ def _tek_kaynak_istisnasi(
       tekil iddiasına yetiyordu. Sözleşme 2.3 örneklem satırına iddia kimliği
       koydu; ayak artık kararın `kaynak_iddia` kümesindeki bir kimliği taşıyan
       satırdan okunur. Kimliksiz satır (`iddia is None`) istisna AÇMAZ.
+      **URL de eşit olmalı (attempt-3 F2, both-agree — ÖLÇÜLDÜ):** kimlik doğru
+      ama URL başka bir adresken istisna açılıyordu. Örneklem satırının URL'si
+      araştırma satırının (`CIddia.url`) URL'siyle TAM eşit olmalıdır; araştırma
+      satırı URL taşımıyorsa (bypass yolu) eşleşme YOK (fail-closed).
 
     Etiket uzayı ile numara uzayı arasındaki köprü `KAYNAK_ETIKETI`'dir; ikinci
     bir numaralandırma kuralı yazılmaz.
@@ -1307,9 +1314,22 @@ def _tek_kaynak_istisnasi(
         and kontrol.kaynak == etiket
         and kontrol.erisildi
         and kontrol.icerik_uyumlu
+        and _url_esit(kontrol.url, iddia_evreni.get(kontrol.iddia.etiket))
         for rapor in raporlar
         for kontrol in rapor.url_orneklem
     )
+
+
+def _url_esit(orneklem_url: str, iddia: CIddia | None) -> bool:
+    """Örneklem satırının URL'si, araştırma satırının URL'siyle TAM eşit mi?
+
+    Kırpma dışında normalizasyon YOK: sözleşme "aynen kopyala" der; farklı
+    yazımı eşit saymak, kapının ölçtüğü şeyi (dikkatli kopya) gevşetirdi.
+    Araştırma satırı yok ya da URL'si boşsa eşitlik KURULMAZ.
+    """
+    if iddia is None or not iddia.url.strip() or not orneklem_url.strip():
+        return False
+    return orneklem_url.strip() == iddia.url.strip()
 
 
 def _bayrak_tuketimi(inputs: EngineInputs) -> CheckOutput:
