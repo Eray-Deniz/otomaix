@@ -380,3 +380,29 @@ async def test_malformed_artifact_stamp_fails_only_its_own_probe(pkg_db):  # noq
     assert _satir(rapor, "md-03").durum == "gecmedi"
     assert "damga" in _satir(rapor, "md-03").detay.lower()
     assert _satir(rapor, "md-11").durum == "gecti", "komşu prob etkilenmemeli"
+
+
+async def test_partially_typed_policy_report_is_refused(pkg_db):  # noqa: F811
+    """Alan VARLIĞI şekil kanıtı değildir (hakem turu 2, yüksek).
+
+    İlk şekil kapısı yalnız dört anahtarın varlığına, `bulgular`ın dizi
+    olmasına ve öğelerinin eşleme olmasına bakıyordu. Aşağıdaki yük o kapıdan
+    GEÇİYOR, `md-16` ise `bulgu.get("sinif")` ile boş bulguyu sessizce atlayıp
+    "temiz" diyordu.
+    """
+    run_id = await _hazir_kosu(pkg_db)
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET policy_report = $2 WHERE run_id = $1",
+        run_id,
+        {
+            "kararsizlar": 1,
+            "bulgular": [{}],
+            "uygulanmayan_kararlar": None,
+            "acik_soru_kimlikleri": [],
+        },
+    )
+
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+
+    assert _satir(rapor, "md-09").durum == "gecmedi"
+    assert _satir(rapor, "md-16").durum == "gecmedi"

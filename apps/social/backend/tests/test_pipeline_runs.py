@@ -4765,3 +4765,88 @@ async def test_transaction_required_propagates_out_of_the_rollback_executor(
     )
     assert satir["durum"] == "bekliyor", satir["durum"]
     assert satir["reason"] is None or "SENTETİK" not in satir["reason"]
+
+
+# ═══ Damga grameri ve artefakt türü — hakem turu 2 (yüksek) ════════════════
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "model=a; model=b; surum=1; tarih=2026-09-11; girdi_ozeti=x",
+        "model=a; surum=1; tarih=2026-09-11; girdi_ozeti=x; bilinmeyen=z",
+        "onek model=a; surum=1; tarih=2026-09-11; girdi_ozeti=x",
+        "model=a; surum=1; tarih=2026-09-11; girdi_ozeti=x sonek=y",
+    ],
+    ids=["tekrar-eden-alan", "bilinmeyen-alan", "onek-artigi", "sonek-artigi"],
+)
+def test_parse_stamp_rejects_ambiguous_stamps(source):
+    """Damga KİMLİK otoritesidir; belirsiz damga ayrıştırılamaz (fail-closed).
+
+    Hakem turu 2 (yüksek): ayrıştırıcı çapasız `finditer` + sözlük kurgusuydu.
+    Tekrar eden `model` alanında SON değer kazanıyordu, bilinmeyen alanlar ve
+    artık metin sessizce yok sayılıyordu. Hazırlık listesi bu çıktıyı ÜRETİCİ
+    KİMLİĞİ olarak tükettiği için belirsiz iki damga "iki ayrı hakem" diye
+    okunabiliyordu.
+    """
+    with pytest.raises(runs.ArtifactStampMissing):
+        runs.parse_stamp(source)
+
+
+def test_parse_stamp_accepts_the_canonical_stamp():
+    """POZİTİF KONTROL: kanonik damga geçer ve dört alanı da çözer."""
+    damga = runs.build_stamp(
+        model="arac-1", surum="2026-09", tarih="2026-09-11", girdi_ozeti="brief-sha"
+    )
+
+    assert runs.parse_stamp(damga) == {
+        "model": "arac-1",
+        "surum": "2026-09",
+        "tarih": "2026-09-11",
+        "girdi_ozeti": "brief-sha",
+    }
+
+
+def test_artifact_kinds_constant_mirrors_the_migration_check():
+    """İzinli tür kümesi ŞEMADAN okunur — ikinci kanonik liste yazılmaz."""
+    import re
+
+    kok = Path(__file__).resolve().parents[4]
+    metin = (kok / "shared/db/migrations/032_sector_packages.sql").read_text(
+        encoding="utf-8"
+    )
+    esles = re.search(r"kind TEXT NOT NULL CHECK \(kind IN \(([^)]*)\)\)", metin)
+    assert esles is not None
+    assert set(runs.ARTEFAKT_TURLERI) == set(re.findall(r"'([^']+)'", esles.group(1)))
+
+
+async def test_record_artifact_refuses_a_kind_the_schema_rejects(pkg_db):
+    """DEĞİŞMEZ yazıcıda: şemanın kabul etmediği tür veritabanına GİTMEZ.
+
+    Hakem turu 2 (orta): kapıyı yalnız bir test taraması tutuyordu ve dolaylı
+    çağrı biçimlerini (takma ad, `**kwargs`) göremiyordu. Kural, yazıcının
+    kendi değişmezine yükseltildi.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+
+    with pytest.raises(ValueError, match="artefakt türü"):
+        await runs.record_artifact(
+            pkg_db,
+            run_id=run_id,
+            sector_slug="kuyumculuk",
+            kind="denetci-raporu",
+            source=runs.build_stamp(
+                model="arac-1", surum="1", tarih="2026-09-11", girdi_ozeti="x"
+            ),
+            content_md="# ham",
+        )
+
+    assert (
+        await pkg_db.fetchval(
+            "SELECT count(*) FROM social.sector_research_artifacts WHERE run_id = $1",
+            run_id,
+        )
+        == 0
+    )

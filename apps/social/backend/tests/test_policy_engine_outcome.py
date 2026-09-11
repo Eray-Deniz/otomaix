@@ -1095,3 +1095,60 @@ def test_dropped_unit_count_excludes_calendar_keys() -> None:
     sonuc = _karar(_takvimden_dusen_donem_girdisi(takvim=frozenset(), mutabik=False))
     assert sonuc.engine_diff["eslesmeyen_ozel_gunler"] == (TAKVIM_ANAHTARI,)
     assert sonuc.engine_diff["dusen_birim_sayisi"] == len(SPECIAL_DAY_SLOTS)
+
+
+# ═══ Kalıcı yükün TİPLİ okuyucusu (hakem turu 2, yüksek) ═══════════════════
+
+
+def test_policy_report_payload_roundtrips_through_the_typed_reader() -> None:
+    """POZİTİF KONTROL: kanonik yük tam olarak geri okunur."""
+    rapor = _karar(_girdi()).policy_report
+
+    assert PolicyReport.from_payload(rapor.as_payload()) == rapor
+
+
+@pytest.mark.parametrize(
+    "yuk",
+    [
+        {
+            "kararsizlar": 1,
+            "bulgular": [{}],
+            "uygulanmayan_kararlar": None,
+            "acik_soru_kimlikleri": [],
+        },
+        {"kararsizlar": [], "bulgular": [], "uygulanmayan_kararlar": []},
+        {
+            "kararsizlar": [],
+            "bulgular": [],
+            "uygulanmayan_kararlar": [],
+            "acik_soru_kimlikleri": [],
+            "fazladan": 1,
+        },
+        {
+            "kararsizlar": [],
+            "bulgular": [
+                {"sinif": "uydurma", "unit_id": None, "detay": "x", "kontrol": ""}
+            ],
+            "uygulanmayan_kararlar": [],
+            "acik_soru_kimlikleri": [],
+        },
+        {
+            "kararsizlar": [],
+            "bulgular": [],
+            "uygulanmayan_kararlar": [],
+            "acik_soru_kimlikleri": [1],
+        },
+    ],
+    ids=[
+        "tipsiz-alanlar",
+        "eksik-anahtar",
+        "fazladan-anahtar",
+        "kapali-kume-disi-sinif",
+        "metin-olmayan-acik-soru",
+    ],
+)
+def test_policy_report_from_payload_refuses_malformed(yuk) -> None:
+    """Sözleşmeye uymayan yük SESSİZ boş rapora düşmez."""
+    with pytest.raises((TypeError, ValueError)):
+        PolicyReport.from_payload(yuk)
+

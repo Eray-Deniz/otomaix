@@ -26,6 +26,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from app.services.sector_pipeline import auditors, engine, readiness_items, runs
+from app.services.sector_pipeline.engine_contract import PolicyReport
 
 OLCUM_BICIMLERI: tuple[str, ...] = ("otomatik", "elle")
 """Maddenin nasıl işaretlendiği — KAPALI küme."""
@@ -151,39 +152,21 @@ burası onu OKUR, yeniden yazmaz.
 bağımlılığıdır (R9 yönü: motor Task 12/13, hazırlık Task 17 — geriye bağımlılık).
 """
 
-POLITIKA_RAPORU_ALANLARI: tuple[str, ...] = (
-    "kararsizlar",
-    "bulgular",
-    "uygulanmayan_kararlar",
-    "acik_soru_kimlikleri",
-)
-"""`PolicyReport.as_payload()`'ın DÖRT anahtarı — eksiği olan rapor OKUNMAZ."""
+def _politika_raporu(kanit: _Kanit) -> PolicyReport | None:
+    """Koşu satırındaki politika raporunu TİPLİ okur; uymayan yükte `None`.
 
-
-def _politika_raporu(kanit: _Kanit) -> Mapping | None:
-    """Koşu satırındaki politika raporunu ŞEKLE KARŞI doğrular; düşerse `None`.
-
-    **Eksik alan boş-temiz kanıta GENİŞLEMEZ** (hakem turu 1, yüksek). `evaluate`
-    satırı HAM okur — `load_verified_run` politika raporunun şeklini zaten
-    doğrulamıyor — bu yüzden doğrulama burada yapılır. `{}` ya da alanı eksik bir
-    rapor "motor kontrolleri tamam + bulgu yok" diye okunuyordu.
+    **Şekil listesi BURADA yazılmaz** (hakem turu 2, yüksek). İlk yazım dört
+    anahtarın VARLIĞINA ve iki dizinin tipine bakıyordu; `{"kararsizlar": 1,
+    "bulgular": [{}], "uygulanmayan_kararlar": None, "acik_soru_kimlikleri": []}`
+    o kapıdan geçiyor ve `md-16` boş bulguyu sessizce atlayıp "temiz" diyordu.
+    Tüketicinin kendi doğrulama listesini yazması ikinci bir sözleşme demekti;
+    sözleşme zaten yapısaldır — eksik olan tipli okuyucuydu ve o okuyucu artık
+    sözleşmenin kendi evinde: `PolicyReport.from_payload`.
     """
-    rapor = kanit.kosu["policy_report"]
-    if not isinstance(rapor, Mapping):
+    try:
+        return PolicyReport.from_payload(kanit.kosu["policy_report"])
+    except (TypeError, ValueError):
         return None
-    if any(alan not in rapor for alan in POLITIKA_RAPORU_ALANLARI):
-        return None
-    if not isinstance(rapor["bulgular"], Sequence) or isinstance(
-        rapor["bulgular"], (str, bytes)
-    ):
-        return None
-    if any(not isinstance(bulgu, Mapping) for bulgu in rapor["bulgular"]):
-        return None
-    if not isinstance(rapor["acik_soru_kimlikleri"], Sequence) or isinstance(
-        rapor["acik_soru_kimlikleri"], (str, bytes)
-    ):
-        return None
-    return rapor
 
 
 def _uc_arac_ayni_brief(kanit: _Kanit) -> tuple[bool, str]:
@@ -288,11 +271,9 @@ def _bloklayan_uyusmazlik_yok(kanit: _Kanit) -> tuple[bool, str]:
             "koşu satırı: politika raporu YOK ya da ŞEKLİ BOZUK — bulgu sayılamaz",
         )
     bulgular = [
-        bulgu
-        for bulgu in rapor["bulgular"]
-        if bulgu.get("sinif") in BLOKLAYAN_BULGU_SINIFLARI
+        bulgu for bulgu in rapor.bulgular if bulgu.sinif in BLOKLAYAN_BULGU_SINIFLARI
     ]
-    acik_sorular = rapor["acik_soru_kimlikleri"]
+    acik_sorular = rapor.acik_soru_kimlikleri
     return (
         not bulgular and not acik_sorular,
         f"politika raporu: {len(bulgular)} bloklayıcı bulgu, "

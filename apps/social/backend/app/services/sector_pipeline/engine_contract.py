@@ -16,7 +16,7 @@ mantığının bir parçası veri sözleşmesine sızardı.
 from __future__ import annotations
 
 from dataclasses import dataclass, fields as dataclass_fields
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.services.sector_pipeline import identity
 
@@ -184,6 +184,77 @@ class PolicyReport:
             ],
             "acik_soru_kimlikleri": list(self.acik_soru_kimlikleri),
         }
+
+    @classmethod
+    def from_payload(cls, payload: Any) -> "PolicyReport":
+        """Kalıcı yükü TİPLİ olarak geri okur; sözleşmeye uymayan yük REDDEDİLİR.
+
+        **Bu bir ÜRETİM yolu değildir, bir OKUYUCUdur** (H2 korunur): yalnız
+        `as_payload`'ın ürettiği biçimi kabul eder ve her öğeyi kendi
+        dataclass'ına kurarak sınıfların kapalı kümelerini yeniden uygular.
+
+        **Neden var (hakem turu 2, yüksek).** Kalıcı raporu HAM sözlük olarak
+        okuyan tüketiciler (hazırlık listesi, Task 17) alan VARLIĞINI şekil
+        kanıtı sanıyordu: `{"kararsizlar": 1, "bulgular": [{}],
+        "uygulanmayan_kararlar": None, "acik_soru_kimlikleri": []}` biçiminde
+        bir yük "motor kontrolleri tamam + bulgu yok" diye okunabiliyordu.
+        Tüketicinin kendi doğrulama listesini yazması ikinci bir sözleşme
+        demekti; sözleşme zaten yapısaldır, eksik olan TİPLİ OKUYUCUYDU.
+
+        Uymayan yükte `ValueError` / `TypeError` yükselir — sessiz boş rapora
+        düşülmez.
+        """
+        if not isinstance(payload, Mapping):
+            raise TypeError("politika raporu yükü eşleme olmalı")
+        beklenen = {
+            "kararsizlar",
+            "bulgular",
+            "uygulanmayan_kararlar",
+            "acik_soru_kimlikleri",
+        }
+        if set(payload) != beklenen:
+            raise ValueError(
+                f"politika raporu yükünün anahtar kümesi sözleşmeye uymuyor: "
+                f"{sorted(payload)} — beklenen {sorted(beklenen)}"
+            )
+
+        def _oge_listesi(ad: str) -> list[Mapping]:
+            deger = payload[ad]
+            if not isinstance(deger, Sequence) or isinstance(deger, (str, bytes)):
+                raise TypeError(f"{ad} dizi olmalı")
+            if any(not isinstance(oge, Mapping) for oge in deger):
+                raise TypeError(f"{ad} öğeleri eşleme olmalı")
+            return list(deger)
+
+        def _kur(tip, oge: Mapping, alanlar: tuple[str, ...]):
+            if set(oge) != set(alanlar):
+                raise ValueError(
+                    f"{tip.__name__} öğesinin alan kümesi sözleşmeye uymuyor: "
+                    f"{sorted(oge)} — beklenen {sorted(alanlar)}"
+                )
+            return tip(**oge)
+
+        acik = payload["acik_soru_kimlikleri"]
+        if not isinstance(acik, Sequence) or isinstance(acik, (str, bytes)):
+            raise TypeError("acik_soru_kimlikleri dizi olmalı")
+        if any(type(kimlik) is not str for kimlik in acik):
+            raise TypeError("acik_soru_kimlikleri öğeleri metin olmalı")
+
+        return cls(
+            kararsizlar=tuple(
+                _kur(KararsizMadde, oge, ("unit_id", "sebep"))
+                for oge in _oge_listesi("kararsizlar")
+            ),
+            bulgular=tuple(
+                _kur(BulguIzi, oge, ("sinif", "unit_id", "detay", "kontrol"))
+                for oge in _oge_listesi("bulgular")
+            ),
+            uygulanmayan_kararlar=tuple(
+                _kur(UygulanmayanKarar, oge, ("unit_id", "karar", "sebep"))
+                for oge in _oge_listesi("uygulanmayan_kararlar")
+            ),
+            acik_soru_kimlikleri=tuple(acik),
+        )
 
 
 @dataclass(frozen=True)

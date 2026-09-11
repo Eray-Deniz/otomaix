@@ -1051,9 +1051,13 @@ async def test_olay_onayla_refuses_when_nothing_was_stamped(pkg_db):
 # veritabanına karşı koşmadığı için kusur 4134 yeşil testin altında görünmedi ve
 # ilk gerçek koşumda (Task 19) her ham artefakt yazımı düşerdi.
 #
-# Kapı SINIF düzeyindedir: tek tek seçilmiş örneği değil, CLI'deki TÜM
-# `record_artifact` çağrılarının tür argümanını ÜRETİLMİŞ olarak tarar ve izinli
-# kümeyi ŞEMANIN KENDİSİNDEN okur (ikinci bir kanonik liste yazılmaz).
+# KAPSAM — dürüst etiket (hakem turu 2, orta). Bu tarama DOĞRUDAN çağrı
+# yerlerini kapsar: `record_artifact(kind=...)` biçimini adıyla ve statik
+# değerle görür. Takma adla çağırma, bir değişkene bağlama ya da `**kwargs` ile
+# iletme biçimleri GÖRÜNMEZ. Bu yüzden kural DEĞİŞMEZE yükseltildi ve asıl kapı
+# artık yazıcının kendisindedir (`runs.record_artifact`, şemanın kapalı kümesine
+# karşı fail-closed). Buradaki tarama ön-uyarıdır: kusuru veritabanına gitmeden
+# ÖNCE, testte gösterir.
 
 
 def _migration_izinli_artefakt_turleri() -> frozenset[str]:

@@ -578,7 +578,28 @@ async def new_retry_run_id(db, *, parent_run_id: str) -> str:
 # ─── 2. Ham artefakt (salt-ekleme) ──────────────────────────────────────────
 
 _DAMGA_ALANLARI: tuple[str, ...] = ("model", "surum", "tarih", "girdi_ozeti")
-_DAMGA_RE = re.compile(r"(?P<anahtar>[a-z_]+)\s*=\s*(?P<deger>[^;]+)")
+_DAMGA_RE = re.compile(
+    r"model=(?P<model>[^;=]+);\s*surum=(?P<surum>[^;=]+);\s*"
+    r"tarih=(?P<tarih>[^;=]+);\s*girdi_ozeti=(?P<girdi_ozeti>[^;=]+)"
+)
+"""Damganın TAM grameri — `fullmatch` ile uygulanır.
+
+**Çapasız ayrıştırıcı KİMLİK otoritesi olamaz (hakem turu 2, yüksek).** Önceki
+biçim `finditer` + sözlük kurgusuydu: tekrar eden `model` alanında SON değer
+kazanıyor, bilinmeyen alanlar ve önek/sonek artıkları sessizce yok sayılıyordu.
+Hazırlık listesi (Task 17) bu çıktıyı ÜRETİCİ KİMLİĞİ olarak tükettiği andan
+itibaren belirsiz iki damga "iki ayrı hakem" diye okunabilir hâle geldi.
+
+Değerlerde `=` KABUL EDİLMEZ: `girdi_ozeti` serbest bir özet olsa da eşittir
+işareti alan sınırını belirsizleştirir ve sonek artığını değere gizlerdi.
+"""
+
+ARTEFAKT_TURLERI: tuple[str, ...] = ("research", "review", "synthesis")
+"""`sector_research_artifacts.kind`in KAPALI kümesi — migration 032'nin CHECK'i.
+
+Değerler ŞEMANIN aynasıdır; `tests/test_pipeline_runs.py` ikisinin eşitliğini
+migration dosyasından okuyarak doğrular (ikinci kanonik liste yazılmaz).
+"""
 
 
 def parse_stamp(source: str) -> dict[str, str]:
@@ -590,15 +611,18 @@ def parse_stamp(source: str) -> dict[str, str]:
     """
     if type(source) is not str:
         raise ArtifactStampMissing("source metin olmalı")
-    bulunan = {
-        eslesme.group("anahtar"): eslesme.group("deger").strip()
-        for eslesme in _DAMGA_RE.finditer(source)
-    }
+    eslesme = _DAMGA_RE.fullmatch(source.strip())
+    if eslesme is None:
+        raise ArtifactStampMissing(
+            "K-80 tekrar-üretilebilirlik damgası kanonik biçimde DEĞİL — beklenen "
+            "'model=<...>; surum=<...>; tarih=YYYY-MM-DD; girdi_ozeti=<...>'; "
+            "tekrar eden alan, bilinmeyen alan ve artık metin REDDEDİLİR"
+        )
+    bulunan = {ad: eslesme.group(ad).strip() for ad in _DAMGA_ALANLARI}
     eksik = [ad for ad in _DAMGA_ALANLARI if not bulunan.get(ad)]
     if eksik:
         raise ArtifactStampMissing(
-            f"K-80 tekrar-üretilebilirlik damgası eksik: {eksik} — beklenen biçim "
-            "'model=<...>; surum=<...>; tarih=YYYY-MM-DD; girdi_ozeti=<...>'"
+            f"K-80 tekrar-üretilebilirlik damgası eksik: {eksik}"
         )
     try:
         date.fromisoformat(bulunan["tarih"])
@@ -634,6 +658,13 @@ async def record_artifact(
     """
     _require_run_id(run_id)
     parse_stamp(source)
+    if kind not in ARTEFAKT_TURLERI:
+        # DEĞİŞMEZ, kural DEĞİL (hakem turu 2): kapıyı bir test taramasına
+        # bırakmak dolaylı çağrı biçimlerini (takma ad, `**kwargs`) görmüyordu.
+        raise ValueError(
+            f"şemanın kabul etmediği artefakt türü: {kind!r} — "
+            f"kabul edilenler: {list(ARTEFAKT_TURLERI)}"
+        )
     return await db.fetchval(
         "INSERT INTO social.sector_research_artifacts "
         "(run_id, sector_slug, kind, source, brief_ref, content_md) "
