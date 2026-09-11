@@ -5,112 +5,136 @@ written: 2026-09-11
 
 # Resume From
 
-**Sıradaki iş: DIŞ SÖZLEŞMENİN KOD UYARLAMASI.** Task 18'den ÖNCE gelir — sözleşme ilerledi,
-kod ilerlemedi ve **ağaçta iki kırmızı test var** (bilinçli; aşağıda).
+**Sıradaki iş: DIŞ SÖZLEŞME TURU — üç borç TEK revizyonda.** Task 18'den ÖNCE gelir
+(Eray kararı 2026-09-11). Tam gövde `TASK.md` `# Open Problems`'ın ilk kaleminde.
 
-**İlk komut — kırmızıyı gör, listeyi oradan al:**
-`cd apps/social/backend && .venv/bin/python -m pytest tests/ -q`
-Beklenen: `4252 passed, 2 failed`. Düşen ikisi sapma alarmıdır ve uyarlanacak iki noktanın
-adını söyler:
-- `test_auditor_packaging.py::test_denetim_basligi_matches_pinned_contract_header`
-- `test_brief_doctor.py::test_bolum_c_sabitleri_pinlenmis_sablondan_okunur`
+**Neden tek tur:** üçü de aynı sınıftan — *sözleşme bugün taşımadığı bir KİMLİĞİ taşımadıkça
+kod onu uyduramaz.* Ayrı ayrı kapatmak sözleşme-turu makinesini (dış depo commit → pin →
+kod uyarlaması → hakem turu) üç kez çalıştırmak demek.
 
-**Uyarlama listesi (hiçbiri yazılmadı):**
-1. `brief_doctor` — Bölüm C başlığı artık YEDİ sütun (`no` eklendi). Bugün yalnız yapısal
-   sözleşme doğrulanıyor; **satır düzeyinde `no` + `alan/dönem` okunmalı** ki motor iddianın
-   varlığını ve alanını doğrulayabilsin. **UYARI (ölçüldü):** sabiti değiştirmek
-   `test_brief_doctor.py`'yi TOPLAMA aşamasında kırıyor — fixture satırları indeksle kuruluyor.
-2. `auditors.validate_report` — denetim tablosu artık DOKUZ sütun (`kaynak-iddialari` eklendi);
-   `_DENETIM_BASLIK_HUCRELERI` güncellenmeli ve sütun TİPLİ okunmalı. Ayrıca KAYNAK PROFİLİ
-   düz yazıdan TABLOYA döndü (`kaynak | resmi | not`) — yeni bir tipli okuyucu ister.
-3. Motor — `_alan_bagi_var` yerine **iddia bağı**: `ekle` kararının `kaynak_iddia`'sı, atıf
-   yapılan denetçi satırının `kaynak-iddialari`'nda geçmeli VE araştırma raporunda o numara
-   gerçekten olmalı (alanı da örtüşmeli).
-4. **K-126 resmîlik ayağı** — `resmi` sütunu motorun tek-kaynak istisnası kapısına bağlanmalı.
-5. **K-03 kategori ayağı** — DIŞ SÖZLEŞMEYE DOKUNMAZ. Kategori `social.public_holidays.category`
-   kolonunda (ölçüldü); eksik olan onu `EngineInputs`'a taşımak = **R5 alan kümesi değişikliği**,
-   yani arayüz eki revizyonu ister.
-6. Arayüz eki R5 güncellemesi + yeni tiplerin sözleşmesi.
+**Neden ŞİMDİ:** pencere bugün BEDELSİZ — araştırmalar bu biçimde henüz ÜRETİLMEDİ. Pilot
+(Task 19) araştırma ürettiği an kapanır ve aynı değişiklik BÜTÜN araştırmaları ikinci kez
+ürettirir. Uyarı sözleşmenin kendi commit mesajında yazılı (`12beec1`).
 
-**Task 18 (ön-pilot dağıtım) BUNDAN SONRA.** Eray 2026-09-11'de canlıya bu oturumda
-GİRMEME kararı verdi; o görevin senin elini gerektiren adımları önden listelenmiştir
-(kalite kapısı · canlı migration · arka uç+CLI dağıtımı · n8n import · DB rol yetkisi).
+**Üç kalem:**
+1. Bölüm C dönem satırı **kanonik sistem anahtarı** taşımalı (bugün günlük dil ↔ sistem adı
+   köprüsü yok; ölçüldü: 15 aday adın yalnız 4'ü eşleşiyor). Bedeli: bu kapanana kadar
+   Görev B eklemelerinin pratikte tamamı reddedilir.
+2. URL örneklem satırı **iddia numarası** taşımalı (`K<kaynak>#<iddia>`); K-126'nın ikinci
+   ayağı bugün kaynak düzeyinde ve beyan edildiğinden zayıf.
+3. **Üçüncü not sınıfı** yetkilendirilmeli; K-03 çatışması bu yüzden karar günlüğüne
+   yazılamıyor ve bugün hiçbir operatör yüzeyine ulaşmıyor (N2).
+
+**İlk komut — tabanı gör:**
+`cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → beklenen `4335 passed`.
+
+**Task 18 (ön-pilot dağıtım) BUNDAN SONRA.** Canlıya girme kararı hâlâ Eray'da.
 
 **Dal:** `feat/sektor-bilgi-paketi-plan2`. Push durumu buraya YAZILMAZ, ölç:
 `git rev-list --left-right --count origin/feat/sektor-bilgi-paketi-plan2...HEAD`.
 **Yürütme durumu:** kip `inline` · başlangıç çapası `a806e29` · defter penceresi `a806e29`.
-`cp_count` ve `last_checkpoint_ref` TASK.md'nin `Execution State` bölümündedir — KOPYALANMAZ.
 
-**Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi`: **BU OTURUMDA DEĞİŞTİ**
-(`12beec1`). Pin monorepo'da `4636847` ile yenilendi.
+**Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi` @ `12beec1`; pin monorepo'da
+`4636847`. Üç dosyanın sha256'sı pinle byte-eşit (hakem turunda iki kez ayrı ayrı doğrulandı).
 
 ## Bu oturum ne yaptı — tek cümle
 
-Arayüz eki sekiz noktada koddan geride kalmıştı ve düzeltildi; F1 (onayın kanıta bağlanması)
-Eray kararıyla fail-closed kapandı; dış araştırma sözleşmesi atıfı araştırma iddiasının
-numarasına kadar bağlayacak biçimde revize edilip pinlendi — kod uyarlaması AÇIK.
+Dış sözleşmenin kod uyarlaması altı kalemde yazıldı, iki dual hakem turundan geçti (attempt-1 +
+kapanış) ve kod içinde kapanabilen her bulgu kapatıldı; kapanamayan üç ayak tek bir sözleşme
+turuna EV olarak taşındı.
 
 # Verification
 
 **Bu oturumda koşulan komutlar ve TAZE çıktıları (hepsi kontrolörün kendi koşumları):**
 
-- `.venv/bin/python -m pytest tests/ -q` → **SON koşum: 4252 passed, 2 failed**, 320 s.
-  Ara koşumlar: 4250 · 4252 · 4254 (hepsi exit 0, pin yenilenmeden ÖNCE).
-  Taban 4234 → **+20 test** (F1). İki kırmızı pin yenilemesinin BİLİNÇLİ sonucudur.
+- `.venv/bin/python -m pytest tests/ -q` → **SON koşum: 4335 passed, exit 0**, 316 s.
+  Ara koşumlar: 4301 · 4306 · 4307 · 4323 · 4333. Taban 4252 passed + 2 failed
+  (iki sapma alarmı) → **+83 test, kırmızılar kapandı.**
   **Sanal ortam `.venv/bin/python`'dır**; çıplak `python` bu kabukta YOKTUR.
-- **Ek↔kod sapma taraması** — ekin `python` bloklarında beyan ettiği **65 yüzey (32 blok)**
-  kodla imza ve alan kümesi düzeyinde karşılaştırıldı. Fix'ten SONRA yeniden koştu:
-  **kalan fark 0**. Betiğin ilk sürümü GÜRÜLTÜLÜYDÜ (docstring'den kelime topluyordu, 14
-  aday); her aday tek tek dosyadan doğrulandı, 5'i gerçek çıktı.
-- **Mutasyon: DOKUZ yeni kapı ayrı ayrı susturuldu, DOKUZU da hedef testini KIRDI.**
-- **Canlı yerel veritabanı sorguları (çıkarım değil, ölçüm):**
-  `sector_research_artifacts` → `..._append_only` tetikleyicisi `BEFORE DELETE OR UPDATE`
-  (satır DÜŞEMEZ) · `sector_package_runs` tablosu yerelde **YOK** (036 hiçbir yere
-  uygulanmadı) · `social.public_holidays.category` kolonu VAR.
-- **Defter kapısı** her commit'ten sonra koşuldu → `rc=0` (dört kez).
+- **Mutasyon — toplam ON SEKİZ yeni kapı ayrı ayrı susturuldu.** İlk partide 8/8 kırıldı;
+  düzeltme partisinde 7/7; kapanış partisinde 3/3. **İKİ kez sağ kalan oldu ve ikisi de
+  gerçek boşluktu:** (a) biçim kapısının boş-hücre kolu — test yalnız sütun adını arıyordu ve
+  tutarlılık mesajı da o adı taşıyor; (b) F2'nin ikinci katmanı — birinci katman ayaktayken
+  erişilemiyordu. İkisi de düzeltilip yeniden ölçüldü.
+- **İki DUAL hakem turu** (fresh Claude subagent + Codex), ikisi de pinli worktree'de:
+  attempt-1 → 1 critical + 4 high + 2 medium + 3 low; kapanış → yeni critical YOK,
+  7 yeni bulgu (Codex rc=0/49 koşum · alt-hakem 58 araç çağrısı).
+- **Canlı yerel veritabanı sorguları:** `social.public_holidays` kategori dağılımı
+  (`religious` 9 · `national` 8 · `commercial` 5) ve 22 `name_tr` değeri;
+  `normalize_special_day_key` çıktıları tek tek ölçüldü.
+- **Defter kapısı** her commit'ten sonra koşuldu → `rc=0` (üç kez).
 
 **Denenmemiş / doğrulanmamış — dürüst liste:**
 
-- **Kod uyarlaması HİÇ yazılmadı** (yukarıdaki altı kalem). İki kırmızı test bunun alarmıdır.
 - **Uçtan uca CLI koşumu YAPILMADI.** Tüm ölçümler fixture ile; ilk gerçek koşum Task 19.
 - **Yeni sözleşme biçiminde üretilmiş gerçek araştırma çıktısı YOK** — yeni sütunların
   araçlar tarafından düzgün doldurulup doldurulmayacağı ÖLÇÜLMEDİ. İlk ölçüm Task 19 Step 5.
-- **Sözleşme revizyonunu BAĞIMSIZ HAKEM GÖRMEDİ.** Eray "hafif yol: sonunda tek hakem turu"
-  dedi; o tur **HENÜZ KOŞMADI**. Kod uyarlamasıyla BİRLİKTE koşacak.
-- **Arayüz eki revizyonunun (R-G1…R-G9) hakem turu da KOŞMADI** — aynı turda.
-- **Taramanın DÜZ YAZI kolu kapsanmadı**; ekte düz yazıda beyan edilen yüzeyler için
-  "sapma yok" İDDİA EDİLMEZ.
-- **`ruff` ve `pyright` bu ortamda koşmadı.**
+- **Kapanış partisinin kendisini bağımsız hakem GÖRMEDİ** (attempt-3 koşmadı).
+- **Review defteri (ledger locator) KURULMADI** — sözleşme aynılığı hash'le değil kurulum
+  gereğiyle taşındı. Sonraki turlarda kurulmalı.
+- **`ruff` ve `pyright` bu ortamda YOK, koşmadı.**
 - **CRM webhook onarımı YAPILMADI.** Canlıya migration dağıtılmadı; pilot koşulmadı.
 - Task 18-20 hiç yazılmadı.
 
 # Risks
 
-- **AĞAÇ KIRMIZI (bilinçli, EN YÜKSEK).** İki sapma alarmı düşüyor; kapanışı bir sonraki
-  oturumun ilk işidir. Yarım uyarlama (sütunu ayrıştırıp TÜKETMEMEK) bundan DAHA kötüdür.
+- **EN YÜKSEK (işlevsel) — Görev B eklemeleri bugün PRATİKTE TAMAMEN reddediliyor.**
+  Fail-closed ve teşhis dürüst, ama pilot bu hâliyle koşarsa paketin özel gün yarısı boş gelir.
+  Ev: sözleşme turu kalem 1.
+- **K-126 istisnası AÇIK ama ikinci ayağı ZAYIF** — URL doğrulaması iddiaya değil kaynağa bağlı.
+  Ev: sözleşme turu kalem 2.
+- **K-03 çatışması hiçbir operatör yüzeyine ULAŞMIYOR** — kayıt yalnız denetim içindir
+  (Eray kararı B: geçici tüketici eklenmedi). Ev: sözleşme turu kalem 3.
 - **EN YÜKSEK (işletim) — kimlik doğrulamasız CRM webhook'ları onarılmadı, yalnız KAPATILDI.**
   Ev: `crm-webhooks-unauthenticated-sql-interpolation` (CURRENT.md, tetikli).
 - **F1'in kapanmayan yarısı:** `attest_readiness` prob SONUÇLARINI görmez; gerçek kapı
-  CLI'dadır ve "başka üretim çağıranı yok" iddiası artık testle pinli. Kapanış DEĞİL,
-  adı konmuş sınır (R9 yasağı yüzünden).
+  CLI'dadır ve "başka üretim çağıranı yok" iddiası testle pinli. Adı konmuş sınır (R9).
 - **Üretim hattı hâlâ koşamaz:** denetçi-2'nin web erişimi yok (araç gerçeği, kod değil).
 - **Yeni sözleşme sütunları araçlar tarafından doldurulacak** — biçim disiplini ölçülmedi;
   katı biçim yanlış-pozitif üretebilir. İlk ölçüm Task 19.
-- **Mekanik kapı raporunun artefakt türü şemada YOK** — `brief-doctor` alt komutu ham
-  artefakt yazımında DÜŞER. **EV: Task 18 şema ayağı.**
+- **Mekanik kapı raporunun artefakt türü şemada YOK.** EV: Task 18 şema ayağı.
 - **Köken jetonunun kalanı AÇIK.** Ev: Task 18 dağıtım listesi, M-1 ve M-2.
 - **Kilit sözleşmesi KAYNAKTAKİ kilitleri modeller**, veritabanının ZORLADIKLARINI değil.
 - **`recovered` sorgusu bakım penceresini TAM modellemiyor** (kabul edilmiş risk).
 - **Genel `ValueError` yakalama teşhisi yanlış yöne çekiyor** (kabul edilmiş risk).
-- **Taslağı kimin yazdırdığı KAYITLI DEĞİL — KAPSAM DIŞI** (Eray kararı 2026-09-10);
-  Task 20 kapanış belgesine bu etiketle girer.
-- **Paket satırı kayma penceresi FAIL-CLOSED, KAPALI DEĞİL.** Tetik Task 17'de yeniden
-  ölçüldü ve tutmadı.
+- **Taslağı kimin yazdırdığı KAYITLI DEĞİL — KAPSAM DIŞI** (Eray kararı 2026-09-10).
+- **Paket satırı kayma penceresi FAIL-CLOSED, KAPALI DEĞİL.**
 - **Migration `036` yerinde düzenlendi** — kabul edilmiş risk.
 - **KABUL EDİLMİŞ RİSK (M3) — commit geçmişi tek-commit TDD modeline uymuyor.**
 - **Plan, hakem görmeden onaylanmıştı** (`approved-by-iteration-limit`).
 
 # Notes For Claude/Codex
+
+**HAKEM TURUNDAN GELEN — BİR SONRAKİ OTURUMUN GİRDİSİ (2026-09-11):**
+
+Dış sözleşmenin kod uyarlaması indi ve **iki dual hakem turundan** geçti (attempt-1 + kapanış).
+On adlandırılmış bulgunun yedisi tam kapandı, biri davranış ayağıyla kapandı; kapanış turunda
+doğan yedi yeni bulgunun altısı kapandı. **Hiçbir bulgu gerilemedi; contract-widening talep
+edilmedi.** Raporlar: `docs/reviews/2026-09-11-feat-sektor-bilgi-paketi-plan2.md` ve
+`…-closure.md`.
+
+**SIRADAKİ İŞ: DIŞ SÖZLEŞME TURU — üç borç TEK revizyonda** (Eray kararı). Tam gövde TASK.md
+`# Open Problems`'ın ilk kaleminde; özet: Bölüm C dönem satırı kanonik sistem anahtarı taşımalı ·
+URL örneklem satırı iddia numarası taşımalı · üçüncü not sınıfı yetkilendirilmeli.
+**Pencere BEDELSİZ ama kapanıyor:** pilot araştırma ürettiği an aynı değişiklik bütün
+araştırmaları ikinci kez ürettirir.
+
+**Bu turun kalıcı dersleri — bir sonraki dispatch'e:**
+1. **`run_checks` yeşil, `decide()` kırmızı olabilir.** F1 tam buydu: not üretiliyordu ama son
+   montaj kapısı reddediyordu ve sonuç `blocked` oluyordu. Yeni bir günlük satırı sınıfı
+   eklerken testi UÇTAN UCA koş; emsali aynı dosyada duruyordu ve uygulanmamıştı.
+2. **Kapalı bir kümeye değer eklemek YETMEZ — damgayı da ilerlet.** `ENGINE_VERSION` iki commit
+   boyunca sabit kaldı; aynı damgayı taşıyan iki koşu farklı kurallarla karar veriyordu. Damga
+   artık kural yüzeyine test'le bağlı.
+3. **Tek noktayı düzeltince KARDEŞ SİTELERİ süpür.** Aynı iddiayı yapan modül beyanı, arayüz eki
+   satırı ve kontrol açıklaması bu turda üç kez geride kaldı.
+4. **Savunma derinliği ölçülmemişse yoktur.** F2'nin ikinci katmanı ilk mutasyon koşumunda SAĞ
+   KALDI — birinci katman ayaktayken erişilemiyordu. Ayrı bir yardımcıya çıkarılıp bağımsız
+   ölçüldü.
+5. **Fixture çakışması kusuru maskeler.** F3'ün pozitif testi `Sevgililer Günü` kullanıyordu —
+   iki ad uzayında da aynı yazılan dört addan biri. İki adın AYRIŞTIĞI vaka hiç test edilmemişti.
+6. **Kapanış turunda review defteri (ledger locator) KURULMADI** — sözleşme aynılığı hash'le
+   değil kurulum gereğiyle taşındı. Sonraki turlarda defter kurulmalı.
 
 **Süreç ağırlığı — Eray'ın talimatları, BAĞLAYICI:**
 1. **Hakem bulgularından YALNIZ critical/high düzeltilir**; orta/düşük RAPORLANIR.

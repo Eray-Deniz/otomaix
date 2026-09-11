@@ -1104,8 +1104,44 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Open Problems
 
-- **[YÜKSEK — AÇIK, BİLİNÇLİ 2026-09-11] Dış sözleşme ilerledi, kod uyarlanmadı — ağaçta
-  İKİ KIRMIZI TEST var.** `test_denetim_basligi_matches_pinned_contract_header` ve
+- **[YÜKSEK — AÇIK 2026-09-11, hakem turu] DIŞ SÖZLEŞME REVİZYONU — üç borç, TEK tur.**
+  İki dual hakem turu (attempt-1 + kapanış) üç kalemi kod içinde KAPANAMAZ buldu. Üçü de aynı
+  sınıftan: **sözleşme bugün taşımadığı bir KİMLİĞİ taşımadıkça kod onu uyduramaz.** Ayrı ayrı
+  kapatmak sözleşme-turu makinesini üç kez çalıştırmak demek; tek revizyonda kapanırlar.
+  **PENCERE:** revizyon bugün BEDELSİZ — araştırmalar bu biçimde henüz ÜRETİLMEDİ. Pilot
+  (Task 19) araştırma ürettiği an kapanır ve aynı değişiklik BÜTÜN araştırmaları ikinci kez
+  ürettirir (uyarı sözleşmenin kendi commit mesajında yazılı, `12beec1`).
+  **EV: Task 18'den ÖNCE, tek sözleşme turu** (Eray kararı 2026-09-11).
+
+  1. **F3 — Bölüm C dönem satırı KANONİK SİSTEM ANAHTARI taşımalı.** Araştırma dönem adını
+     GÜNLÜK DİLDE yazıyor (`29 Ekim`), karar satırı SİSTEM adının slug'ını (`cumhuriyet-bayrami`);
+     köprü YOK. ÖLÇÜLDÜ: şablonun 15 aday adından yalnız 4'ü sistem slug'ına düşüyor.
+     **Bedeli: bu kapanana kadar Görev B (özel gün) eklemelerinin pratikte TAMAMI reddedilir.**
+     Kod fail-closed ve teşhis dürüst (`donem-kimligi-cozulemedi`); sessiz bulanık eşleştirme
+     YAZILMAZ.
+  2. **F4 — URL örneklem satırı İDDİA NUMARASI taşımalı** (`K<kaynak>#<iddia>`). Bugün K-126
+     istisnasının ikinci ayağı KAYNAK düzeyinde: o kaynağın örneklemdeki herhangi bir doğrulanmış
+     URL'si, o kaynağın pakete giren HER tekil iddiasına yetiyor. **İstisna AÇIK ve ikinci ayağı
+     beyan edildiğinden ZAYIF.**
+  3. **F1 günlük ayağı — ÜÇÜNCÜ NOT SINIFI yetkilendirilmeli.** Not satırının alan kümesi
+     `hakem-sentez-gorevi.md`'de KAPALI (iki değer); K-03 çatışması bu yüzden karar günlüğüne
+     yazılamıyor. Bugün ölçüm olarak `engine_diff`'te duruyor.
+
+- **[YÜKSEK — AÇIK 2026-09-11, kapanış turu N2] K-03 çatışması hiçbir OPERATÖR yüzeyine
+  ulaşmıyor.** ÖLÇÜLDÜ (iki hakem + kontrolör, üçü de aynı sonuç): `kategori_cakismalari`
+  koşu satırında kalıcılaşıyor ama onu ADIYLA okuyan tüketici YOK — onay anlık görüntüsü
+  sürüm/ayar/bariyer taşıyor, CLI koşu kimliği ve sonucu basıyor, hazırlık kontrolü diff'in boş
+  olup olmadığına bakıyor. **Bugün operatör bu çatışmayı hiçbir yerde görmez; kayıt yalnız
+  denetim içindir.**
+  **HAKEMLER AYRIŞTI** — Codex: yüksek bulgu (*"operatör çatışmayı görmeden onaylayabilir"*);
+  alt-hakem: beyan dürüst, bulgu değil. Severity otonom İNDİRİLMEDİ.
+  **Eray kararı (2026-09-11): B — geçici tüketici EKLENMEZ**, beyan sonucuyla birlikte yazılır.
+  Gerekçe: aynı sözleşme turu gerçek günlük kaydını getirecek, geçici tüketici çöpe giderdi;
+  risk penceresi kapalı, pilot koşmadan hiçbir çatışma operatöre ulaşamaz.
+  **EV: yukarıdaki sözleşme turunun 3. kalemi ile BİRLİKTE kapanır.**
+
+- **[KAPANDI 2026-09-11 — hakem turu + kapanış turu] Dış sözleşme ilerledi, kod uyarlanmadı —
+  ağaçta İKİ KIRMIZI TEST vardı.** `test_denetim_basligi_matches_pinned_contract_header` ve
   `test_bolum_c_sabitleri_pinlenmis_sablondan_okunur`. İkisi de **sapma alarmıdır ve
   görevlerini yapıyorlar**: koddaki başlık sabitlerini pinlenmiş sözleşmeye karşı ölçüyorlar.
   Kırmızı, uyarlanacak iki noktanın ADINI söylüyor.
@@ -1113,7 +1149,9 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   TOPLAMA aşamasında kırıyor (fixture satırları indeksle kuruluyor) ve motor tarafı (iddia
   bağı · K-126 resmîlik · K-03 kategori) hiç yazılmadı. Yeni sütunları ayrıştırıp TÜKETMEYEN
   yarım bir uyarlama sessiz bir ara durum olurdu; kırmızı alarm daha dürüsttür.
-  **EV: bir sonraki oturumun İLK İŞİ.** Tam liste HANDOFF'un "Resume From" bölümünde.
+  **KAPANIŞ:** altı kalemin altısı uygulandı (`080aa7f`), iki dual hakem turundan geçti
+  (`2188e06` + `T18-review-fix2`) ve iki kırmızı test kapandı. Tam takım 4335 passed.
+  Kapanamayan üç ayak yukarıdaki sözleşme turu kalemine taşındı — düşürülmedi, EV verildi.
 
 - **[KAPANDI 2026-09-11 — R-G9; KALAN YARISI ETİKETLİ] Hazırlık onayı mühürlenmiş bir kanıt
   kümesine bağlı DEĞİL.** Eray kararı: **fail-closed** — onay anında görülen kanıt kümesinin

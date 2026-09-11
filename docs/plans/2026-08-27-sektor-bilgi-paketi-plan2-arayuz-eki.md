@@ -304,6 +304,14 @@ uygulandı.
    eder (iki değer). K-03 çatışmasının günlüğe yazılabilmesi için sözleşmenin üçüncü bir sınıf
    yetkilendirmesi gerekir. Bugün çatışma `engine_diff`'te ölçüm olarak durur — **kaybolmaz**, ama
    spec §11.2'nin *"karar günlüğüne yazılır"* hükmü YERİNE GETİRİLMEMİŞTİR.
+   **VE SONUCU (kapanış turu N2, Eray kararı 2026-09-11):** ölçüm kaydediliyor ama onu ADIYLA
+   okuyan HİÇBİR tüketici yok — ÖLÇÜLDÜ (iki hakem + kontrolör). Onay anlık görüntüsü yalnız
+   sürüm/ayar/bariyer taşır; CLI koşu kimliği ve sonucu basar; hazırlık kontrolü diff'in boş olup
+   olmadığına bakar. **Bugün operatör bu çatışmayı hiçbir yerde GÖRMEZ; kayıt yalnız DENETİM
+   içindir.** Geçici bir tüketici bilinçli olarak EKLENMEDİ: aynı sözleşme turu gerçek günlük
+   kaydını getirecek ve o tüketici çöpe giderdi. Risk penceresi kapalı — pilot koşmadan hiçbir
+   çatışma operatöre ulaşamaz. Hakemler bu kalemde AYRIŞTI (Codex: yüksek bulgu; alt-hakem: beyan
+   dürüst, bulgu değil); severity otonom İNDİRİLMEDİ, karar kullanıcıya taşındı ve B seçildi.
 2. **F3 — dönem kanonik anahtarı.** `_SABLON.md` Bölüm C dönem satırı araştırmanın GÜNLÜK DİLDEKİ
    adını taşır; karar satırı SİSTEM adının slug'ını. Köprü yok. ÖLÇÜLDÜ: şablonun 15 aday adından
    yalnız 4'ü sistem slug'ına düşüyor. **Bedeli açıkça yazılır: bu kapanana kadar Görev B

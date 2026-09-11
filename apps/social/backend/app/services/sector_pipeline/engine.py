@@ -1390,6 +1390,19 @@ def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
     kapanışı DIŞ SÖZLEŞME revizyonu ister (üçüncü not sınıfının yetkilendirilmesi)
     — uydurulan bir sınıf, koşuyu düşüren bir kapıya dönüşür.
 
+    **BEYANIN SONUCU DA YAZILIR (kapanış turu, N2 — hakemler ayrıştı, Eray
+    kararı).** "Ölçüm olarak taşınır" cümlesi TEK BAŞINA yanıltıcıdır: okuyan
+    birinin olduğunu ima eder. ÖLÇÜLDÜ (iki hakem + kontrolör, üçü de aynı
+    sonucu buldu): `kategori_cakismalari` anahtarını ADIYLA okuyan HİÇBİR
+    tüketici yoktur — onay anlık görüntüsü yalnız sürüm/ayar/bariyer taşır, CLI
+    koşu kimliği ve sonucu basar, hazırlık kontrolü diff'in boş olup olmadığına
+    bakar. Yani **bugün operatör bu çatışmayı hiçbir yerde GÖRMEZ**; kayıt
+    yalnız DENETİM içindir.
+
+    Bilinçli seçim (Eray, 2026-09-11): geçici bir tüketici EKLENMEZ, çünkü aynı
+    sözleşme turu gerçek günlük kaydını getirecek ve o tüketici çöpe giderdi.
+    Risk penceresi kapalı: pilot koşmadan hiçbir çatışma operatöre ulaşamaz.
+
     İki ölçüm AYRI adlandırılır çünkü AYRI şeylerdir: `kategori_cakismalari`
     tür↔kategori çatışmasıdır; `paket_turu_degisiklikleri` sıradan bir tür
     revizyonudur (aktif tür ↔ aday tür). İlk yazım ikincisini birincinin adıyla
