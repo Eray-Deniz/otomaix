@@ -6,6 +6,10 @@
   *(Buraya durum cümlesi YAZILMAZ — kanonik ayrım gereği status TASK.md'nin malıdır ve
   burada tutulan kopya her görevde bayatlıyordu: Task 8 → 9 → 10 → 11 dört kez.)*
 
+- **denetci-atif-aday-kimligi** — sentezin `D1#<no>` atfını, o kararın yetkilendirdiği
+  ADAYA bağlama işi. Plan 2'nin içinden doğdu ve onunla birlikte yürür.
+  `docs/active/denetci-atif-aday-kimligi/TASK.md`.
+
 ## Bitti — arşivi Plan 2 ile BİRLİKTE yapılacak
 
 > Bunlar AKTİF DEĞİL; iş beklemiyorlar. `docs/active/` altında duruyorlar çünkü Plan 2'nin
@@ -25,11 +29,6 @@
 
 ## Proposed (spun-off)
 
-- **denetci-atif-aday-kimligi** (proposed, 2026-09-10) — sentezin `D1#<no>` atfı, o kararın
-  yetkilendirdiği ADAYA bağlansın. Bugün bağ ALAN düzeyinde; aynı alanın herhangi bir satırı
-  herhangi bir adayı yetkilendirebiliyor. **Sözleşme revizyonu ister, yama değildir** (denetçi
-  tablosunda Görev B dönem adı slug DEĞİL, liste alanlarında iddia kimliği HİÇ YOK).
-  **Sert son tarih: Task 19.** Ayrıntı: `docs/active/denetci-atif-aday-kimligi/TASK.md`.
 
 - **durum-tetikli-kural-kapisi** (proposed, süreç kalemi; DÜŞÜRÜLDÜ — koşullu) —
   Eray'ın gözlemi (2026-09-07): **durum-tetikli** kuralları hafızaya/nota yazmak **yanlış

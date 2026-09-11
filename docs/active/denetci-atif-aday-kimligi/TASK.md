@@ -1,9 +1,9 @@
 ---
 title: Denetçi atfı ADAYA bağlansın (alan düzeyi yetmiyor)
-status: proposed
-started: null
+status: active
+started: 2026-09-11
 finished: null
-last-touched: 2026-09-10
+last-touched: 2026-09-11
 blocked-by: sözleşme revizyonu (iki dosya) — kod tarafı tek başına kapatamaz
 source_task: docs/active/denetci-denetim-tablosu-tipli-okuma/TASK.md
 ---
@@ -54,8 +54,49 @@ sonra değişirse araştırmalar İKİNCİ KEZ ürettirilir. Kardeş görevlerin
 **Yuva: Task 16'dan önce tercih edilir** (motorun üretim çağıranı orada doğuyor); zorunlu
 değildir, çünkü değişecek yer motorun İÇİDİR, çağıran arayüzü değil.
 
+# Current Status
+
+**SÖZLEŞME AYAĞI İNDİ (2026-09-11, dış depo `12beec1`); KOD AYAĞI AÇIK.**
+
+Eray kararı: **tam bağ** — yetkilendirme araştırma iddiasının NUMARASINA kadar izlenir.
+Reddedilen iki ucuz seçenek kayıtta (aşağıda).
+
+**İnen (sözleşme):**
+1. `_SABLON.md` Bölüm C tablosu `no` sütunu kazandı — her iddia o raporda KALICI kimlik taşır.
+2. Denetçi tablosu `kaynak-iddialari` sütunu kazandı (`K<kaynak>#<iddia>`), `kaynaklar`
+   sütunuyla tutarlılık zorunlu.
+3. Sentezin `karar="ekle"` satırı `kaynak_iddia` alanı kazandı.
+4. **Ölçülen engel kalktı:** Görev B satırlarında `{dönem}` artık EK-J sistem adının SLUG'ı.
+   Bu hüküm olmadan tam yol bağı meşru satırları reddederdi.
+
+**Bağ İKİ UÇLU tasarlandı — ve bu bilinçli:** (a) numaranın gösterdiği satır araştırma
+raporunda GERÇEKTEN var ve alanı kararın alanıyla örtüşüyor (**mekanik ayrıştırıcı**
+doğrular, beyan değil); (b) atıf yapılan denetçi satırı aynı numarayı taşıyor. Tek uçlu
+olsaydı bağ kendini onaylardı: iki beyanı da aynı model yazıyor ve sentez denetçi raporunu
+okuyabiliyor, yani numarayı kopyalayıp her zaman eşleştirebilirdi. Üçüncü taraf (ayrıştırıcı)
+zinciri kırar.
+
+**KALAN — kod ayağı, hiç yazılmadı:**
+- `brief_doctor` Bölüm C'yi satır düzeyinde okumalı (`no` + `alan`), bugün yalnız yapısal
+  sözleşmeyi doğruluyor.
+- `auditors.validate_report` `kaynak-iddialari` sütununu tipli okumalı.
+- Motor `_alan_bagi_var` yerine iddia bağı kurmalı.
+- `EngineInputs` bu veriyi taşımalı (R5 alan kümesi değişikliği → arayüz eki).
+- **Ağaçta iki kırmızı test var** (sapma alarmı); ayrıntı ana görevin Open Problems'ında.
+
+**Dürüst etiket:** bu görev KAPANMADI. Sözleşme penceresi kapandı (pin `4636847`), kod
+penceresi açık — ama artık pilotu ikinci kez ürettirmeden çalışılabilir.
+
 # Decisions Log
 
+- **2026-09-11 — Eray kararı: TAM BAĞ.** Araştırma satırına kadar izleme seçildi; "iki ucuz
+  ayak" (özel gün yol bağı + bir satır bir ekleme) ve "yalnız özel gün ayağı" REDDEDİLDİ.
+  Gerekçe ölçülmüş: araştırmalar bu biçimde henüz üretilmedi, yani biçim değişikliği bugün
+  bedelsiz; Task 19 pilotundan sonra aynı değişiklik bütün araştırmaları ikinci kez
+  ürettirirdi.
+- **2026-09-11 — `oge_yolu` bağı ELENDİ (ölçüm).** İlk tasarım denetçinin sentezin
+  `oge_yolu`'na atıf yapmasıydı; ölçüldü ki `oge_yolu` KONUMSALDIR ve ADAY PAKETE aittir —
+  denetçi aday paketi hiç görmez, yeni öğe denetçi çalışırken henüz YOKTUR. Yol kapalı.
 - **2026-09-10 — görev AÇILDI.** Kapanış turunun yüksek bulgusunun KALAN ayağı. Kontrolör
   yamamayı bıraktı ve çerçeve teşhisini kullanıcıya götürdü; bu dosya o teşhisin EVİDİR.
   Dürüst etiket: **çözülmedi, ertelendi, evi BURASI.**

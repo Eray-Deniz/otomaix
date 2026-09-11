@@ -1086,7 +1086,34 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   değişikliği aktivasyonu düşürüyor; testin pozitif kontrolü de var (değişiklikten ÖNCE kapı
   gerçekten AÇIK).
 
+- **2026-09-11 — Eray kararı (atıf bağı): TAM BAĞ.** Yeni bir kalıbın pakete girmesi artık
+  araştırma iddiasının NUMARASINA kadar izlenir. Reddedilen iki seçenek: "iki ucuz ayak"
+  (özel gün yol bağı + bir satır bir ekleme) ve "yalnız özel gün ayağı". Gerekçe: pencere
+  Task 19'da kapanıyor — araştırmalar bu biçimde henüz üretilmedi, yani bugün bedelsiz;
+  pilottan sonra aynı değişiklik bütün araştırmaları ikinci kez ürettirirdi.
+
+- **2026-09-11 — dış sözleşme deposu `12beec1`e ilerledi; pin yenilendi (`4636847`).**
+  Üç dosya: araştırma şablonunda Bölüm C `no` sütunu · denetçi tablosunda
+  `kaynak-iddialari` sütunu · sentezin `ekle` satırında `kaynak_iddia` alanı. Ayrıca Görev B
+  dönem adı EK-J slug'ına bağlandı (tam yol bağının ölçülmüş engeli buydu) ve KAYNAK PROFİLİ
+  tipli tabloya çevrildi (K-126). Üç dosyanın sürüm damgası da artırıldı — "her içerik
+  değişikliği yeni damga alır" kuralı gereği.
+  **Bağ İKİ UÇLU kuruldu:** numaranın gösterdiği satır araştırma raporunda gerçekten var mı
+  (mekanik ayrıştırıcı doğrular, beyan değil) VE atıf yapılan denetçi satırı aynı numarayı
+  taşıyor mu. Tek uçlu olsaydı iki tarafı da aynı model yazdığı için bağ kendini onaylardı.
+
 # Open Problems
+
+- **[YÜKSEK — AÇIK, BİLİNÇLİ 2026-09-11] Dış sözleşme ilerledi, kod uyarlanmadı — ağaçta
+  İKİ KIRMIZI TEST var.** `test_denetim_basligi_matches_pinned_contract_header` ve
+  `test_bolum_c_sabitleri_pinlenmis_sablondan_okunur`. İkisi de **sapma alarmıdır ve
+  görevlerini yapıyorlar**: koddaki başlık sabitlerini pinlenmiş sözleşmeye karşı ölçüyorlar.
+  Kırmızı, uyarlanacak iki noktanın ADINI söylüyor.
+  **Neden yarım bırakılmadı:** ölçüldü — sabitleri değiştirmek `test_brief_doctor.py`'yi
+  TOPLAMA aşamasında kırıyor (fixture satırları indeksle kuruluyor) ve motor tarafı (iddia
+  bağı · K-126 resmîlik · K-03 kategori) hiç yazılmadı. Yeni sütunları ayrıştırıp TÜKETMEYEN
+  yarım bir uyarlama sessiz bir ara durum olurdu; kırmızı alarm daha dürüsttür.
+  **EV: bir sonraki oturumun İLK İŞİ.** Tam liste HANDOFF'un "Resume From" bölümünde.
 
 - **[KAPANDI 2026-09-11 — R-G9; KALAN YARISI ETİKETLİ] Hazırlık onayı mühürlenmiş bir kanıt
   kümesine bağlı DEĞİL.** Eray kararı: **fail-closed** — onay anında görülen kanıt kümesinin
@@ -1182,8 +1209,19 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   etiketi değişimini ölçer ve ölçümün adı artık bunu iddia eder
   (`paket_turu_degisiklikleri`). Kategori ayağı arayüz eki revizyonu ister.
 
-- **[EVSİZ — dürüst etiket, 2026-09-09 kapanış denetimi] K-126'nın resmîlik ayağı ve K-03'ün
-  kategori ayağı ÇÖZÜLMEDİ ve TARİHLİ EVİ YOK.** İkisi de aynı eksiğe bakar: denetçi sözleşmesi
+- **[EV BULDU ve SÖZLEŞME AYAĞI İNDİ 2026-09-11] K-126'nın resmîlik ayağı ve K-03'ün
+  kategori ayağı.** Yeniden açılma koşulu ("arayüz eki revizyonu için bir spec açıldığında")
+  GERÇEKLEŞTİ ve ikisi de ele alındı. **Ölçümle ayrıştılar — aynı kalem DEĞİLLERMİŞ:**
+  · **K-126 resmîlik:** yargı denetçide yaşıyor ve düz yazıya gömülüydü. Sözleşme ayağı
+    İNDİ (`12beec1`): KAYNAK PROFİLİ tabloya çevrildi, `resmi` sütunu (evet/hayır) eklendi.
+    **Kalan:** denetçi raporu ayrıştırıcısının bu sütunu tipli okuması + motorun K-126
+    kapısının onu tüketmesi. **EV: bir sonraki oturumun kod uyarlaması.**
+  · **K-03 kategori:** DIŞ SÖZLEŞMEYE HİÇ DOKUNMUYOR. Kategori zaten sistemin takvim
+    tablosunda (`social.public_holidays.category`, ölçüldü); eksik olan onu `EngineInputs`'a
+    taşımak — yani R5 alan kümesi değişikliği, tamamen İÇERİDE. Eski kayıt bunu denetçi
+    sözleşmesi eksiği sanıyordu; **yanlıştı, düzeltiliyor.**
+    **EV: bir sonraki oturumun kod uyarlaması.**
+  Aşağıdaki eski kayıt tarihsel bağlam olarak duruyor: İkisi de aynı eksiğe bakar: denetçi sözleşmesi
   bu iki bilgiyi (kaynağın resmî/birincil olması · takvim anahtarının kategorisi) TİPLİ
   taşımıyor, o yüzden motor onları ölçemiyor. Bugüne dek "arayüz eki revizyonu ister" diye
   yazılıydılar — bu bir AD, tarih değil; hiçbir plana, faza ya da göreve bağlı değiller.
