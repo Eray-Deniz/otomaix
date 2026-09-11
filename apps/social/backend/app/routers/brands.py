@@ -9,7 +9,10 @@ from app.core.security import assert_brand_owned, assert_workspace_owned, get_cu
 from app.core.utils import brand_kit_merge_sql
 from app.models.schemas import BrandCreate, BrandKitUpdate, BrandOut, BrandUpdate, OkResponse
 from app.routers.billing import check_plan_limit
-from app.services.notifications import MAINTENANCE_BANNER_MESSAGE
+from app.services.notifications import (
+    MAINTENANCE_BANNER_MESSAGE,
+    RECOVERED_BANNER_MESSAGE,
+)
 from app.services.sector_packages import validate_channels
 from app.services.sector_resolver import resolve_sector
 from app.services.storage import r2
@@ -209,12 +212,35 @@ async def get_package_status(
     if not sub_sector_id:
         return OkResponse(data={"mode": "unpackaged", "message": None})
 
-    has_active = await db.fetchval(
-        "SELECT 1 FROM social.sector_packages "
+    active = await db.fetchrow(
+        "SELECT activated_at FROM social.sector_packages "
         "WHERE sector_id = $1 AND status = 'active' LIMIT 1",
         sub_sector_id,
     )
-    if has_active:
+    if active is not None:
+        # K-45 geri-dönüş ayağı. `recovered` RETROAKTİF ÜRETİLMEZ: markanın o
+        # alt sektöre atanma aralığı aktivasyondan ÖNCE başlamış olmalıdır,
+        # yani marka bakım penceresini GERÇEKTEN yaşamış olmalıdır. Kanıt
+        # `brand_sub_sector_history` kesişimidir (036 tetikleyicisi yazar).
+        #
+        # Geçmişi olmayan marka bildirim ALMAZ ve `activated_at` boşsa kesişim
+        # ÖLÇÜLEMEZ — iki durumda da fail-closed yön `packaged`'dır: olmayan
+        # bir bakımın "tamamlandı"sını duyurmak, müşteriye yanlış bir olay
+        # anlatmak olurdu.
+        maruziyet = None
+        if active["activated_at"] is not None:
+            maruziyet = await db.fetchval(
+                "SELECT 1 FROM social.brand_sub_sector_history "
+                "WHERE brand_id = $1 AND sub_sector_id = $2 "
+                "  AND assigned_at < $3 LIMIT 1",
+                brand_id,
+                sub_sector_id,
+                active["activated_at"],
+            )
+        if maruziyet:
+            return OkResponse(
+                data={"mode": "recovered", "message": RECOVERED_BANNER_MESSAGE}
+            )
         return OkResponse(data={"mode": "packaged", "message": None})
 
     return OkResponse(

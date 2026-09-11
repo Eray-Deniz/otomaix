@@ -89,6 +89,17 @@ MAINTENANCE_BANNER_MESSAGE = (
     "En kısa sürede sektöre özel gönderi moduna geçilecektir."
 )
 
+# K-45 SABİT geri-dönüş metni — bakım penceresi KAPANDIĞINDA gösterilir.
+# Devre-dışı metniyle AYNI kaynaktan okunur; önyüz ikisini de KOPYALAMAZ.
+#
+# Metnin burada durmasının sebebi ölçülmüş bir kusurdur: ilk yazım yalnız
+# yönetici olay kuyruğuna dokunuyordu, oysa kuyruk YÖNETİCİYE teslim eder —
+# marka sahibine değil. Müşterinin bu cümleyi göreceği tek yol marka panelinin
+# bandıdır ve bandın kaynağı bu sabittir.
+RECOVERED_BANNER_MESSAGE = (
+    "Bakım çalışması tamamlandı, sektöre özel gönderi modu kullanıma açıldı."
+)
+
 Sender = Callable[[dict], Awaitable[None]]
 
 

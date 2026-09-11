@@ -5,7 +5,8 @@
     "executionOrder": "v1",
     "timezone": "Europe/Istanbul",
     "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "errorWorkflow": "sectorPkgErrNotify"
   },
   "nodes": [
     {

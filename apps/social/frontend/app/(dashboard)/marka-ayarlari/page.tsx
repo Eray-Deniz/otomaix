@@ -991,10 +991,29 @@ function MarkaAyarlariContent() {
         <SaveIndicator state={saveState} />
       </div>
 
-      {/* Paket durumu bandı — metin BACKEND'den gelir (K-45 sabit metni). */}
+      {/* Paket durumu bandı — metin BACKEND'den gelir (K-45 sabit metni).
+          Metin BURADA KOPYALANMAZ; kopya iki yerde ıraksayan bir vaat üretir.
+          Değişen tek şey RENKTİR: `maintenance` bir uyarıdır (kehribar),
+          `recovered` bir çözülmedir (yeşil). İkisi aynı kehribar bantta
+          gösterilseydi "bakım tamamlandı" cümlesi hâlâ süren bir arıza gibi
+          okunurdu — bant müşteri yüzeyidir, ton bilginin parçasıdır. */}
       {packageStatus?.message && (
-        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm text-amber-900">{packageStatus.message}</p>
+        <div
+          className={
+            packageStatus.mode === 'recovered'
+              ? 'mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3'
+              : 'mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3'
+          }
+        >
+          <p
+            className={
+              packageStatus.mode === 'recovered'
+                ? 'text-sm text-emerald-900'
+                : 'text-sm text-amber-900'
+            }
+          >
+            {packageStatus.message}
+          </p>
         </div>
       )}
 

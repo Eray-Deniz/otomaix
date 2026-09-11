@@ -1280,3 +1280,78 @@ async def test_package_status_maintenance_message_exact(notif_db):
     )
     # Metin backend'de TEK yerde yaşar — önyüz onu kopyalamaz, okur.
     assert response.data["message"] == MAINTENANCE_BANNER_MESSAGE
+
+
+# ─── 6d. Hata bildirimi workflow'u — AYNI üçlü sözleşme (plan Task 16) ──────
+#
+# Üçlü bugüne dek YALNIZ yönetici ve takvim workflow'ları üzerinde koşuyordu;
+# yeni artefakt aynı tuzaklara açıktı (bağımsız hakem itirazı, 2026-08-27).
+# Gerekçe ÖLÇÜLÜ: canlı n8n `N8N_BLOCK_ENV_ACCESS_IN_NODE=true` ile koşuyor ve
+# `n8n import:workflow` id'siz dosyayı reddediyor
+# ([[decisions/2026-08-26-n8n-credential-over-env]], 2026-08-26 ölçümleri).
+
+
+def _error_notifier_workflow() -> dict:
+    import json
+
+    path = infra_repo_root() / "shared" / "n8n-workflows" / "n8n-error-notifier.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_error_notifier_carries_stable_id():
+    """Hata bildirimi artefaktı SABİT bir `id` taşır — import onsuz REDDEDER."""
+    workflow = _error_notifier_workflow()
+
+    wid = workflow.get("id")
+    assert wid, "hata bildirimi workflow'u `id` taşımıyor — n8n CLI importu reddeder"
+    assert isinstance(wid, str) and wid.isalnum(), (
+        f"workflow id alfanümerik tek parça olmalı (bulunan: {wid!r})"
+    )
+
+
+def test_error_notifier_reads_no_process_env():
+    """Hata bildirimi `$env` OKUMAZ — canlı n8n bu ifadeyi çözmez."""
+    import json
+
+    blob = json.dumps(_error_notifier_workflow(), ensure_ascii=False)
+
+    assert "$env" not in blob, (
+        "hata bildirimi workflow'u `$env` okuyor — canlı n8n "
+        "`N8N_BLOCK_ENV_ACCESS_IN_NODE=true` ile koşuyor, bu ifade orada çözülmez"
+    )
+
+
+def test_error_notifier_credentials_are_bound():
+    """Her credential atıfı GERÇEK bir kimliğe bağlı — yer tutucu kalmaz.
+
+    Eşik `>= 2`: bu workflow'un iki credential tüketicisi vardır (yönetici
+    chat'ini okuyan Postgres düğümü ve Telegram düğümü). Eşik başka dosyadan
+    KOPYALANMADI, bu dosyanın düğüm kümesinden okundu.
+    """
+    workflow = _error_notifier_workflow()
+
+    seen = 0
+    for node in workflow["nodes"]:
+        for kind, ref in (node.get("credentials") or {}).items():
+            seen += 1
+            assert ref.get("id"), f"{node['name']}: {kind} credential id'si boş"
+            assert "REPLACE" not in ref["id"].upper(), (
+                f"{node['name']}: {kind} hâlâ yer tutucu id taşıyor ({ref['id']})"
+            )
+    assert seen >= 2, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
+
+
+def test_admin_workflow_routes_failures_to_the_error_notifier():
+    """Yönetici workflow'u arızasını hata bildirimine BAĞLAR (plan Task 16, Step 7).
+
+    Bağ ölçülmeseydi "bağlandı" cümlesi dosyada duran ama hiçbir şeye işaret
+    etmeyen bir artefaktla da doğru görünürdü. Ölçüm 2026-08-27'de yapılmıştı:
+    canlıdaki 18 workflow'un HİÇBİRİ `settings.errorWorkflow` taşımıyordu, yani
+    başarısız bir tur kimseye ulaşmıyordu.
+    """
+    admin = _admin_workflow()
+    notifier = _error_notifier_workflow()
+
+    assert admin["settings"].get("errorWorkflow") == notifier["id"], (
+        "yönetici workflow'unun `errorWorkflow` ayarı hata bildirimine bağlı değil"
+    )

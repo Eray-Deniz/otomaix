@@ -1,0 +1,79 @@
+{
+  "id": "sectorPkgErrNotify",
+  "name": "Sektör Paketi Hata Bildirimi",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Istanbul",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "err-trigger",
+      "name": "Hata Tetikleyici",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [400, -80]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT telegram_chat_id FROM social.workspaces WHERE telegram_chat_id IS NOT NULL AND telegram_chat_id <> '' LIMIT 1;",
+        "options": {}
+      },
+      "id": "pg-admin-chat",
+      "name": "Yönetici Chat'ini Oku",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [620, -80],
+      "credentials": {
+        "postgres": {
+          "id": "LRCmorU07F9lRpjV",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arıza özetini kurar. Sır TAŞIMAZ: yalnız workflow adı, çalıştırma\n// kimliği, düğüm adı ve hata mesajı basılır; `stack` ve ham `data`\n// DIŞARIDA bırakılır — yığın izi bağlantı dizesi ve başlık taşıyabilir.\nconst hata = $('Hata Tetikleyici').first().json || {};\nconst is = hata.workflow || {};\nconst kosum = hata.execution || {};\nconst ayrinti = kosum.error || {};\nconst satirlar = [\n  '🔴 n8n arızası',\n  `workflow: ${is.name || is.id || 'bilinmiyor'}`,\n  `calistirma: ${kosum.id || 'bilinmiyor'}`,\n  `dugum: ${ayrinti.node && ayrinti.node.name ? ayrinti.node.name : '-'}`,\n  `hata: ${ayrinti.message || 'mesaj yok'}`,\n];\nif (kosum.url) { satirlar.push(`kayit: ${kosum.url}`); }\nreturn [{ json: { message: satirlar.join('\\n') } }];"
+      },
+      "id": "code-message",
+      "name": "Mesaj Hazırla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, -80]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Yönetici Chat\\'ini Oku').item.json.telegram_chat_id }}",
+        "text": "={{ $('Mesaj Hazırla').item.json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "telegram-notify",
+      "name": "Telegram Bildir",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1060, -80],
+      "credentials": {
+        "telegramApi": {
+          "id": "VMbwUuFB8BzVhxEz",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Hata Tetikleyici": {
+      "main": [[{ "node": "Yönetici Chat'ini Oku", "type": "main", "index": 0 }]]
+    },
+    "Yönetici Chat'ini Oku": {
+      "main": [[{ "node": "Mesaj Hazırla", "type": "main", "index": 0 }]]
+    },
+    "Mesaj Hazırla": {
+      "main": [[{ "node": "Telegram Bildir", "type": "main", "index": 0 }]]
+    }
+  }
+}
