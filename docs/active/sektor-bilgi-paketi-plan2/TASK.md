@@ -14,8 +14,10 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11: Task 17 indi ve checkpoint 14
-`approve` ile kapandı — BEŞ hakem turu sürdü. Sıradaki iş **Task 18**.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11 ikinci oturum: dış sözleşmenin KOD UYARLAMASI
+indi ve **İKİ DUAL HAKEM TURUNDAN** geçti — attempt-1 + kapanış. Kod içinde kapanabilen her
+bulgu kapandı; kapanamayan üç ayak TEK sözleşme turuna taşındı. **Sıradaki iş: DIŞ SÖZLEŞME
+TURU**, Task 18'den ÖNCE — gövde `# Open Problems`'ın ilk kaleminde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;

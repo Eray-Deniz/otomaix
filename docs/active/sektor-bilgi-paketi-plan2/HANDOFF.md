@@ -119,6 +119,19 @@ URL örneklem satırı iddia numarası taşımalı · üçüncü not sınıfı y
 **Pencere BEDELSİZ ama kapanıyor:** pilot araştırma ürettiği an aynı değişiklik bütün
 araştırmaları ikinci kez ürettirir.
 
+**EVSİZ KALEM: YOK — oturum kapanışında tek tek tarandı (2026-09-11).**
+Bu oturumda doğan/ertelenen dört kalemin dördüne de GERÇEK ev verildi:
+1. **Üç sözleşme borcu** (F3 · F4 · F1 günlük ayağı) → `TASK.md` `# Open Problems` kalem 1;
+   tetik **Task 18'den ÖNCE**, pencere pilot araştırma üretimiyle kapanıyor.
+2. **N2** (çatışma operatöre ulaşmıyor) → aynı sözleşme turunun 3. kalemi; Eray kararı B yazılı.
+3. **Kapanış partisini bağımsız hakem görmedi (attempt-3 koşmadı)** → **EV: dalın FİNAL
+   incelemesi** (plan Adım 11 / `finish-branch` kapanış denetimi). Taban `execute_start_ref`
+   = `a806e29` ve ÖLÇÜLDÜ: bu taban bugünkü commit'lerin HEPSİNİ kapsıyor (230 commit).
+   Yani kalem kendiliğinden o turun kapsamına giriyor — söz değil, mekanik.
+4. **Review defteri (ledger locator) kurulmadı** → **EV: bir sonraki `/review-claude-codex`
+   turunun Adım 1'i.** Bu turda atlandı ve sonucu şu oldu: kapanış turu sözleşme aynılığını
+   HASH'le değil kurulum gereğiyle taşıdı. Sonraki tur defteri kurmazsa aynı boşluk sürer.
+
 **Bu turun kalıcı dersleri — bir sonraki dispatch'e:**
 1. **`run_checks` yeşil, `decide()` kırmızı olabilir.** F1 tam buydu: not üretiliyordu ama son
    montaj kapısı reddediyordu ve sonuç `blocked` oluyordu. Yeni bir günlük satırı sınıfı
