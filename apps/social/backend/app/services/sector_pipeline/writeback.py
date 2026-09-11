@@ -213,6 +213,10 @@ async def build_activation_evidence(db, *, run_id: str) -> lifecycle.ActivationG
         run,
         aktif,
         beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        # F1: tasdikin belgelediği kanıt kümesi ile AKTİVASYON ANINDAKİ küme
+        # karşılaştırılır; ayrışma varsa `checklist_approved` düşer ve
+        # `activate_package` paketi aktive ETMEZ (fail-closed).
+        beklenen_kanit_parmakizi=await runs.kanit_parmakizi(db, run_id=run_id),
     )
     jeton = await runs.mint_evidence_token(
         db,

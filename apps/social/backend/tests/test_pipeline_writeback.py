@@ -217,10 +217,22 @@ async def _onayli(db, run_id: str, *, karar: str = "onay") -> None:
 async def _yazilmis_ve_onayli(
     db, sector_id: uuid.UUID, **kosu_kwargs
 ) -> tuple[str, uuid.UUID]:
-    """Aktivasyona HAZIR zincir: koşu → taslak → dondurulmuş görüntü → onay."""
-    run_id = await _kosu(db, sector_id, **kosu_kwargs)
+    """Aktivasyona HAZIR zincir: koşu → taslak → dondurulmuş görüntü → onay →
+    HAZIRLIK TASDİKİ.
+
+    **Tasdik onaydan SONRA gelir ve bu sıra keyfi DEĞİLDİR (F1, 2026-09-11).**
+    Hazırlık listesinin `md-19` maddesi bir KAPI maddesidir ve koşu satırının
+    `approval_snapshot` + `approval_karar` alanlarını okur; yani onay
+    yazılmadan o madde geçemez ve `hazirlik-onayla` komutu tasdiki REDDEDER.
+    Fixture eskiden tasdiki onaydan ÖNCE yazıyordu — üretimde ulaşılamayan bir
+    sıraydı ve yalnız kanıt bağı olmadığı için görünmüyordu.
+    """
+    hazirlik = kosu_kwargs.pop("hazirlik", True)
+    run_id = await _kosu(db, sector_id, hazirlik=False, **kosu_kwargs)
     package_id = await writeback.write_draft_from_run(db, run_id=run_id, actor=ACTOR)
     await _onayli(db, run_id)
+    if hazirlik:
+        await _hazirlik_tasdiki(db, run_id)
     return run_id, package_id
 
 
@@ -1277,9 +1289,10 @@ async def test_update_invalidates_previous_snapshot(pkg_db):
     await runs.attest_katman2(
         pkg_db, run_id=ilk_duzeltme, kosum_kimligi="k2-2", ozet="tur", actor=ACTOR
     )
-    await _hazirlik_tasdiki(pkg_db, ilk_duzeltme)
     await writeback.update_draft_from_run(pkg_db, run_id=ilk_duzeltme, actor=ACTOR)
     await _onayli(pkg_db, ilk_duzeltme)
+    # Tasdik onaydan SONRA: `md-19` kapı maddesi onay kaydını okur (F1).
+    await _hazirlik_tasdiki(pkg_db, ilk_duzeltme)
 
     async with pkg_db.transaction():
         bekleyen = await writeback.build_activation_evidence(
@@ -1332,9 +1345,10 @@ async def _duzeltme_zinciri_committed(setup, sector_id):
     await runs.attest_katman2(
         setup, run_id=onayli, kosum_kimligi="k2-2", ozet="tur", actor=ACTOR
     )
-    await _hazirlik_tasdiki(setup, onayli)
     await writeback.update_draft_from_run(setup, run_id=onayli, actor=ACTOR)
     await _onayli(setup, onayli)
+    # Tasdik onaydan SONRA: `md-19` kapı maddesi onay kaydını okur (F1).
+    await _hazirlik_tasdiki(setup, onayli)
 
     ikinci = await runs.open_correction_run(setup, parent_run_id=ana, actor=ACTOR)
     ikinci_icerik = _icerik(kapsam="Kuyumculuk: yalnız gümüş takı perakendesi.")
@@ -1849,3 +1863,57 @@ async def test_provenance_refuses_a_malformed_target_binding(pkg_db, hedef):
         pkg_db, package_id=hedef_paket, evidence=kanit, actor=ACTOR
     )
     assert await _durum(pkg_db, hedef_paket) == "active"
+
+
+async def test_kanit_baska_baglantidan_degisirse_aktivasyon_DUSER(test_db_setup):
+    """F1 — onay ↔ kanıt bağı İKİ AYRI BAĞLANTIDA ölçülür, süreç içinde değil.
+
+    Bu testin evi, F1 kararı verilene kadar bilerek BOŞ bırakılan yerdir:
+    mekanizma kararlaştırılmadan yazılan bir yarış testi, henüz seçilmemiş bir
+    davranışı kilitlerdi. Karar (2026-09-11, Eray: *fail-closed*) verildiği
+    için test aynı partide yazıldı.
+
+    **Neden bağlantı bazlı:** kapı tek süreçte de yeşil görünebilirdi (aynı
+    işlemin kendi görüntüsü). Ölçülen iddia şudur: BAŞKA bir bağlantının
+    COMMIT ettiği kanıt değişikliği, aktivasyonu yürüten bağlantıda GÖRÜLÜR ve
+    kapıyı düşürür.
+
+    **Neden EKLEME ile ölçülüyor:** ham artefakt tablosu veritabanı düzeyinde
+    salt-eklemedir (ölçüldü: `sector_research_artifacts_append_only`), yani
+    "satır düşürme" yolu YOKTUR. Erişilebilir yön EKLEMEDİR.
+    """
+    async with _committed_ortam(test_db_setup) as (url, setup, sector_id):
+        run_id, _package_id = await _yazilmis_ve_onayli(setup, sector_id)
+
+        # POZİTİF KONTROL — kanıt değişmeden ÖNCE kapı gerçekten AÇIK mı?
+        # Bu olmadan test, hep-kapalı bir kapıyla da yeşil kalırdı.
+        async with _isciler(url) as (bir, _iki):
+            async with bir.transaction():
+                kanit = await writeback.build_activation_evidence(bir, run_id=run_id)
+            assert kanit.checklist_approved is True
+
+        async with _isciler(url) as (yazan, aktive_eden):
+            await runs.record_artifact(
+                yazan,
+                run_id=run_id,
+                sector_slug="kuyumculuk",
+                kind="research",
+                source=runs.build_stamp(
+                    model="arac-4",
+                    surum="2026-09",
+                    tarih="2026-09-11",
+                    girdi_ozeti="brief-sha",
+                ),
+                brief_ref="brief-v1",
+                content_md="# onaydan SONRA eklenen kanıt",
+            )
+
+            with pytest.raises(GateNotSatisfied):
+                await writeback.activate_from_snapshot(
+                    aktive_eden, run_id=run_id, actor=ACTOR
+                )
+
+        durum = await setup.fetchval(
+            "SELECT status FROM social.sector_packages WHERE run_id = $1", run_id
+        )
+        assert durum != "active", "kanıt kaymış koşu AKTİVE EDİLMEMELİ"

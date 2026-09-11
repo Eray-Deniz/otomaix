@@ -1307,3 +1307,52 @@ async def test_hazirlik_onayla_refuses_when_evidence_changed_after_evaluation(
         )
         is None
     )
+
+
+async def test_aktive_et_kanit_degisince_operatore_NE_YAPACAGINI_soyler(pkg_db):
+    """F1 kararının İKİNCİ yarısı: kapı yalnız DURMAZ, yeniden onaya ÇAĞIRIR.
+
+    Ham `checklist_approved` reddi İKİ ayrı sebebi örter — tasdik hiç yok ya da
+    onaydan sonra kanıt değişti. Operatör hangisi olduğunu görmezse karar
+    ("dursun ve yeniden onay istesin") yarım kalır: komut "kapı kapalı" der ama
+    ne yapacağını söylemez.
+    """
+    from .test_pipeline_writeback import _hazirlik_tasdiki
+    from .test_readiness_checklist import _artefakt, _hazir_kosu
+
+    run_id = await _hazir_kosu(pkg_db)
+    await _hazirlik_tasdiki(pkg_db, run_id)
+    # Onaydan SONRA kanıt kümesi büyür (tablo salt-eklemedir; erişilebilir
+    # tek yön budur ve ölçüldü).
+    await _artefakt(pkg_db, run_id, kind="research", model="arac-4", brief_ref="b")
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db, _args("aktive-et", "--run-id", run_id, "--actor", ACTOR)
+    )
+
+    assert rc == cli.RC_REFUSED
+    metin = " ".join(satirlar)
+    assert "kanit kumesi degisti" in metin
+    assert "hazirlik-onayla" in metin
+
+
+async def test_aktive_et_BASKA_bir_kapi_dusunce_ham_hatayi_SAKLAMAZ(pkg_db):
+    """Negatif kontrol: özel mesaj yalnız KANIT KAYMASINA aittir.
+
+    Tasdik hiç yazılmamışsa sebep kayma DEĞİLDİR; o durumda komut kendi
+    mesajını uydurmaz, alan hatasını olduğu gibi yüzeye bırakır. Aksi hâlde
+    iki ayrı arıza tek mesajın altında birleşir.
+    """
+    from .test_readiness_checklist import _hazir_kosu
+
+    run_id = await _hazir_kosu(pkg_db)  # hazırlık tasdiki YAZILMADI
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db, _args("aktive-et", "--run-id", run_id, "--actor", ACTOR)
+    )
+
+    metin = " ".join(satirlar)
+    assert rc == cli.RC_REFUSED          # alan hatası — dispatch zaten çevirir
+    assert "GateNotSatisfied" in metin   # HAM hata yüzeyde
+    assert "kanit kumesi degisti" not in metin
+    assert "hazirlik-onayla" not in metin

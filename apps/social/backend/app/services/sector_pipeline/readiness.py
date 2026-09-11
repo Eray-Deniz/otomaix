@@ -28,7 +28,6 @@ from dataclasses import dataclass
 from app.services.sector_pipeline import (
     auditors,
     engine,
-    identity,
     readiness_items,
     runs,
 )
@@ -356,23 +355,16 @@ async def _artefakt_satirlari(db, run_id: str) -> list:
     )
 
 
-def _parmakizi(artefaktlar) -> str:
-    """Okunan kanıt kümesinin KANONİK parmak izi — tek türetme kuralı."""
-    return identity.canonical_sha(
-        [
-            {
-                "kind": satir["kind"],
-                "source": satir["source"],
-                "brief_ref": satir["brief_ref"],
-            }
-            for satir in artefaktlar
-        ]
-    )
-
-
 async def kanit_parmakizi(db, *, run_id: str) -> str:
-    """Koşunun O ANKİ kanıt kümesinin parmak izi (yazım öncesi tazelik kapısı)."""
-    return _parmakizi(await _artefakt_satirlari(db, run_id))
+    """Koşunun O ANKİ kanıt kümesinin parmak izi (yazım öncesi tazelik kapısı).
+
+    **Türetme BURADA YAŞAMAZ** — `runs.kanit_parmakizi` (Task 8) tek türeticidir
+    ve bu ad ona vekildir. Gerekçe F1'dir: aynı parmak izini onay YAZAR
+    (`runs.attest_readiness`) ve aktivasyon KARŞILAŞTIRIR
+    (`lifecycle.activation_evidence_payload`); üç yerde üç hesap yazılsaydı
+    onayın belgelediği küme ile aktivasyonun ölçtüğü küme sessizce ayrışırdı.
+    """
+    return await runs.kanit_parmakizi(db, run_id=run_id)
 
 
 async def evaluate(db, *, run_id: str) -> ReadinessReport:
@@ -414,5 +406,5 @@ async def evaluate(db, *, run_id: str) -> ReadinessReport:
     return ReadinessReport(
         run_id=run_id,
         satirlar=tuple(satirlar),
-        kanit_parmakizi=_parmakizi(artefaktlar),
+        kanit_parmakizi=await runs.kanit_parmakizi(db, run_id=run_id),
     )

@@ -994,6 +994,66 @@ async def attest_katman2(
     )
 
 
+async def kanit_parmakizi(db, *, run_id: str) -> str:
+    """Koşunun O ANKİ hazırlık KANIT KÜMESİNİN kanonik parmak izi — TEK türetme.
+
+    **Kanıt kümesi İKİ kaynaktan oluşur** ve ikisi de hazırlık problarının
+    GERÇEKTEN okuduğu şeydir:
+
+      (a) koşunun ham artefakt satırları (`kind` · `source` · `brief_ref`);
+      (b) koşu satırının `readiness_items.KANIT_KOLONLARI` kolonları — küme
+          probların kendisinden ÜRETİLİR, elle seçilmez.
+
+    **Neden ikisi birden (F1).** Ham artefakt tablosu veritabanı düzeyinde
+    append-only'dir, yani bir satır DÜŞEMEZ — ama YENİ satır eklenebilir ve
+    koşu satırının sekiz probe-kolonu serbestçe güncellenebilir. Yalnız
+    artefaktları kapsayan bir parmak izi, sınıfın korunmayan yarısını açık
+    bırakırdı.
+
+    **TEK türetici BURASIDIR.** `readiness.kanit_parmakizi` (Task 17) bunu
+    ÇAĞIRIR, kendi hesabını YAZMAZ; iki hesap iki kural demektir.
+
+    **Artefaktın `content_md`'si hash'e GİRMEZ** ve bu bir ihmal değil ölçüme
+    dayanan bir sınırdır: tablo veritabanı düzeyinde salt-eklemedir (032'nin
+    `sector_research_artifacts_append_only` tetikleyicisi `BEFORE DELETE OR
+    UPDATE` kapatır), yani var olan bir satırın içeriği DEĞİŞEMEZ. Değişebilen
+    tek şey küme ÜYELİĞİdir ve onu `kind`/`source`/`brief_ref` üçlüsü taşır.
+    """
+    _require_run_id(run_id, "run_id")
+    kolonlar = sorted(readiness_items.KANIT_KOLONLARI)
+    # Kolon adları KAPALI bir sabitten gelir; yine de SQL'e gömülmeden önce
+    # düz tanımlayıcı oldukları doğrulanır — sabitin kendisi bir gün yanlışlıkla
+    # genişlerse kapı burada düşer, sorgu metninde değil.
+    for ad in kolonlar:
+        if not ad.isidentifier():
+            raise ValueError(f"kanıt kolonu tanımlayıcı değil: {ad!r}")
+    kosu = await db.fetchrow(
+        f"SELECT {', '.join(kolonlar)} FROM social.sector_package_runs "
+        "WHERE run_id = $1",
+        run_id,
+    )
+    if kosu is None:
+        raise RunNotVerified(f"koşu satırı yok: {run_id!r}")
+    artefaktlar = await db.fetch(
+        "SELECT kind, source, brief_ref FROM social.sector_research_artifacts "
+        "WHERE run_id = $1 ORDER BY kind, source, brief_ref",
+        run_id,
+    )
+    return identity.canonical_sha(
+        {
+            "kosu": {ad: kosu[ad] for ad in kolonlar},
+            "artefaktlar": [
+                {
+                    "kind": satir["kind"],
+                    "source": satir["source"],
+                    "brief_ref": satir["brief_ref"],
+                }
+                for satir in artefaktlar
+            ],
+        }
+    )
+
+
 async def attest_readiness(
     db,
     *,
@@ -1042,6 +1102,12 @@ async def attest_readiness(
     if eksik:
         raise ReadinessAttestationRefused(f"eksik kapı maddesi: {eksik}")
 
+    # F1 (Eray kararı, 2026-09-11): tasdik, dayandığı kanıt kümesini de
+    # BELGELER. Değer PARAMETRE DEĞİLDİR — burada, veritabanından türetilir
+    # (R8: kanıt çağırandan alınmaz). Aktivasyon aynı izi yeniden hesaplar ve
+    # ayrışma varsa paketi AKTİVE ETMEZ; onay, ölçüldüğü kanıta kilitlenir.
+    parmakizi = await kanit_parmakizi(db, run_id=run_id)
+
     await _write_attestation(
         db,
         run_id=run_id,
@@ -1052,6 +1118,7 @@ async def attest_readiness(
             "kapi_maddeleri": sorted(kapi),
             "sinyal_maddeleri": sorted(sinyal),
             "madde_kumesi_sha": readiness_items.MADDE_KUMESI_SHA,
+            "kanit_parmakizi": parmakizi,
         },
     )
 
@@ -1687,10 +1754,14 @@ async def mint_evidence_token(
         # Plan 1 modülünün import kenarından GEÇEMEZ (AÇIK-3), o yüzden değeri
         # ÇAĞIRAN taşır. Kaynak kapalıdır ve buradadır — dış dünyadan gelen
         # hiçbir girdi bu parametreye ulaşamaz.
+        # F1'in BEŞİNCİ koşulu: kanıt kümesinin TAZE parmak izi. Çağıran onu
+        # etkileyemez — değer bu satırda, kilitli koşunun kendi verisinden
+        # türetilir ve tasdikte yazılı olanla karşılaştırılmak üzere taşınır.
         payload = activation_evidence_payload(
             kosu,
             aktif,
             beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=await kanit_parmakizi(db, run_id=run_id),
         )
         parmakizi = _evidence_fingerprint_from_payload(ActivationGateEvidence, payload)
         anahtarlar: tuple[Any, ...] = (run_id,)

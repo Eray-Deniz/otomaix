@@ -1004,9 +1004,36 @@ async def _kos_onay(conn, args) -> Sonuc:
 
 
 async def _kos_aktive_et(conn, args) -> Sonuc:
-    await writeback.activate_from_snapshot(
-        conn, run_id=args.run_id, actor=args.actor
-    )
+    try:
+        await writeback.activate_from_snapshot(
+            conn, run_id=args.run_id, actor=args.actor
+        )
+    except lifecycle.GateNotSatisfied as hata:
+        if "checklist_approved" not in str(hata):
+            raise
+        # F1 (Eray karari, 2026-09-11): kapi "dursun ve YENIDEN ONAY ISTESIN"
+        # diye kuruldu. `checklist_approved` tek basina IKI ayri sebebi
+        # ortuyor -- tasdik hic yok/eksik madde VEYA onaydan sonra kanit
+        # degisti. Operatore hangisi oldugu SOYLENMEZSE karar yarim kalir:
+        # "kapi kapali" der ama ne yapacagini soylemez.
+        tasdik = await conn.fetchval(
+            "SELECT readiness_attestation FROM social.sector_package_runs "
+            "WHERE run_id = $1",
+            args.run_id,
+        )
+        yazili = (tasdik or {}).get("kanit_parmakizi")
+        taze = await runs.kanit_parmakizi(conn, run_id=args.run_id)
+        if yazili is not None and yazili != taze:
+            return (
+                [
+                    f"run_id: {args.run_id}",
+                    "aktivasyon REDDEDILDI — hazirlik onayindan SONRA kanit "
+                    "kumesi degisti",
+                    "yapilacak: `hazirlik-onayla` komutunu YENIDEN kosun",
+                ],
+                RC_REFUSED,
+            )
+        raise
     return ([f"run_id: {args.run_id}", "paket: aktive edildi"], RC_OK)
 
 

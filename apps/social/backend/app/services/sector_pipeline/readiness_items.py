@@ -113,6 +113,41 @@ anlamını değiştirir ve hash'e girer.
 """
 
 
+KANIT_KOLONLARI: frozenset[str] = frozenset(
+    {
+        "approval_karar",
+        "approval_snapshot",
+        "barrier_report",
+        "engine_diff",
+        "final_decision_log",
+        "katman1_attestation",
+        "package_id",
+        "policy_report",
+        "sonuc",
+    }
+)
+"""Hazırlık PROBLARININ koşu satırından okuduğu kolonların KAPALI kümesi.
+
+**Neden burada (R9).** Bu bir KİMLİK kümesidir — kolon ADLARI taşır, değerlendirme
+mantığı ya da veritabanı erişimi TAŞIMAZ; modülün kendi sözleşmesiyle (yalnız kimlik +
+sınıflandırma) tutarlıdır. Türetmeyi yapan `runs.kanit_parmakizi` (Task 8) ve probları
+yazan `readiness` (Task 17) İKİSİ de buradan okur; küme Task 17'de doğsaydı yazıcı
+ileri-bağımlı olurdu.
+
+**Küme ELLE SEÇİLMİŞ DEĞİLDİR — probların kendisinden ÜRETİLİR ve kapısı vardır:**
+`test_readiness_checklist.py::test_kanit_kolonlari_probes_okuduklarinin_tam_kumesidir`
+`readiness.py`'yi AST ile ayrıştırıp her `kanit.kosu["..."]` okumasını toplar ve bu
+kümeye BİREBİR eşit olmasını arar. Yeni bir prob yeni bir kolon okursa test KIRILIR;
+kolon parmak izinin dışında sessizce kalamaz.
+
+**Neden gerekli (F1).** Onay damgası, dayandığı kanıt kümesine bağlanır. Ham artefakt
+tablosu veritabanı düzeyinde append-only'dir (ölçüldü: `sector_research_artifacts`
+BEFORE DELETE OR UPDATE tetikleyicisi), ama koşu satırının bu dokuz kolonundan yalnız
+`approval_snapshot` değişmezdir (036'nın tetikleyici listesi) — kalan sekizi onaydan
+SONRA değişebilir ve operatörün onayladığı ölçümü sessizce geçersizleştirir.
+"""
+
+
 def sinif(madde_id: str) -> str:
     """Maddenin sınıfı; tanınmayan kimlikte `KeyError` (fail-closed)."""
     for item in MADDELER:

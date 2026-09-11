@@ -3554,7 +3554,8 @@ def test_payload_helper_refuses_object_missing_a_view_field(eksik):
     # geçiyordu. Şimdi iki kol YALNIZ eksik görünüm alanında farklılaşır.
     with pytest.raises(TypeError):
         lifecycle.activation_evidence_payload(
-            sahte, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+            sahte, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         )
     with pytest.raises(TypeError):
         lifecycle.rollback_evidence_payload({}, sahte)
@@ -3909,7 +3910,8 @@ async def test_activation_token_minted_from_locked_run_row(pkg_db):
     beklenen = lifecycle._evidence_fingerprint_from_payload(
         ActivationGateEvidence,
         lifecycle.activation_evidence_payload(
-            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         ),
     )
     assert satir["kanit_jetonu_parmakizi"] == beklenen
@@ -4012,6 +4014,15 @@ def test_rollback_evidence_package_id_must_be_uuid():
 # ANAHTAR bir parametreyle gelir; `runs.py` onu `readiness_items`ten okur.
 
 
+KANIT_IZI_ORNEGI: str = "c" * 64
+"""F1 — birim testlerinin kullandığı sahte kanıt parmak izi.
+
+Değer KEYFİDİR ve öyle olması GEREKİR: bu testler kapının KARŞILAŞTIRMA
+davranışını ölçer, gerçek türetmeyi değil. Türetmenin kendisi
+`test_readiness_checklist.py`'de canlı veritabanına karşı ölçülür.
+"""
+
+
 def _kosu_gorunumu_ornegi(**overrides) -> runs.KosuSatiriGorunumu:
     """Kilitli koşu görünümünün TAM ve GEÇERLİ örneği — alanlar tek tek ezilir."""
     alanlar = {
@@ -4025,6 +4036,7 @@ def _kosu_gorunumu_ornegi(**overrides) -> runs.KosuSatiriGorunumu:
         "readiness_attestation": {
             "onaylandi": True,
             "madde_kumesi_sha": readiness_items.MADDE_KUMESI_SHA,
+            "kanit_parmakizi": KANIT_IZI_ORNEGI,
         },
     }
     alanlar.update(overrides)
@@ -4038,7 +4050,15 @@ def test_activation_payload_takes_expected_sha_as_keyword_only_parameter():
         "kosu",
         "aktif_paket_satiri",
         "beklenen_madde_kumesi_sha",
+        "beklenen_kanit_parmakizi",
     ]
+    assert (
+        parametreler["beklenen_kanit_parmakizi"].kind
+        is inspect.Parameter.KEYWORD_ONLY
+    )
+    assert (
+        parametreler["beklenen_kanit_parmakizi"].default is inspect.Parameter.empty
+    )
     assert (
         parametreler["beklenen_madde_kumesi_sha"].kind
         is inspect.Parameter.KEYWORD_ONLY
@@ -4052,6 +4072,7 @@ def test_activation_payload_checklist_true_for_canonical_sha():
         _kosu_gorunumu_ornegi(),
         None,
         beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
     )
     assert yuk["checklist_approved"] is True
     assert yuk["open_questions_count"] == 0
@@ -4077,6 +4098,7 @@ def test_activation_payload_checklist_false_when_sha_is_not_canonical(sha):
         ),
         None,
         beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
     )
     assert yuk["checklist_approved"] is False
 
@@ -4086,7 +4108,7 @@ def test_activation_payload_rejects_malformed_expected_sha():
     for bozuk in ("", "   ", "a" * 63, "A" * 64, None, 1):
         with pytest.raises((TypeError, ValueError)):
             lifecycle.activation_evidence_payload(
-                _kosu_gorunumu_ornegi(), None, beklenen_madde_kumesi_sha=bozuk
+                _kosu_gorunumu_ornegi(), None, beklenen_madde_kumesi_sha=bozuk, beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI
             )
 
 
@@ -4098,6 +4120,7 @@ def test_activation_payload_refuses_missing_approval_snapshot(anlik):
             _kosu_gorunumu_ornegi(approval_snapshot=anlik),
             None,
             beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         )
 
 
@@ -4239,6 +4262,7 @@ def test_activation_payload_counts_open_questions_for_sequences(acik_sorular, be
         _kosu_gorunumu_ornegi(approval_snapshot={"acik_sorular": acik_sorular}),
         None,
         beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
     )
     assert yuk["open_questions_count"] == beklenen
 
@@ -4251,6 +4275,7 @@ def test_activation_payload_refuses_malformed_open_questions_shape(acik_sorular)
             _kosu_gorunumu_ornegi(approval_snapshot={"acik_sorular": acik_sorular}),
             None,
             beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         )
 
 
@@ -4262,6 +4287,7 @@ def test_activation_payload_refuses_non_mapping_approval_snapshot(anlik):
             _kosu_gorunumu_ornegi(approval_snapshot=anlik),
             None,
             beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         )
 
 
@@ -4273,6 +4299,7 @@ def test_activation_payload_refuses_non_mapping_katman1_attestation(tasdik):
             _kosu_gorunumu_ornegi(katman1_attestation=tasdik),
             None,
             beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         )
 
 
@@ -4284,6 +4311,7 @@ def test_activation_payload_refuses_non_mapping_readiness_attestation(tasdik):
             _kosu_gorunumu_ornegi(readiness_attestation=tasdik),
             None,
             beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         )
 
 
@@ -4293,6 +4321,7 @@ def test_activation_payload_keeps_none_attestations_as_closed_gates():
         _kosu_gorunumu_ornegi(katman1_attestation=None, readiness_attestation=None),
         None,
         beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+        beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
     )
     assert yuk["katman1_passed"] is False
     assert yuk["checklist_approved"] is False
@@ -4415,7 +4444,8 @@ async def test_mint_activation_token_records_checklist_gate_from_attestation(pkg
     async with pkg_db.transaction():
         kosu = await runs._kosu_gorunumu(pkg_db, run_id)
         onaysiz = lifecycle.activation_evidence_payload(
-            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=KANIT_IZI_ORNEGI,
         )
     assert onaysiz["checklist_approved"] is False
 
@@ -4428,8 +4458,13 @@ async def test_mint_activation_token_records_checklist_gate_from_attestation(pkg
     )
     async with pkg_db.transaction():
         kosu = await runs._kosu_gorunumu(pkg_db, run_id)
+        # F1: bu çağrı GERÇEK tasdike bakıyor, o yüzden beklenen iz de GERÇEK
+        # türetmeden gelir — sahte sabit burada kapıyı haklı olarak düşürürdü.
         onayli = lifecycle.activation_evidence_payload(
-            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA
+            kosu, None, beklenen_madde_kumesi_sha=readiness_items.MADDE_KUMESI_SHA,
+            beklenen_kanit_parmakizi=await runs.kanit_parmakizi(
+                pkg_db, run_id=run_id
+            ),
         )
     assert onayli["checklist_approved"] is True
 

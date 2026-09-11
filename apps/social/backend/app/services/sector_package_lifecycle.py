@@ -434,6 +434,7 @@ def activation_evidence_payload(
     aktif_paket_satiri: Mapping[str, Any] | None,
     *,
     beklenen_madde_kumesi_sha: str,
+    beklenen_kanit_parmakizi: str,
 ) -> Mapping[str, Any]:
     """`ActivationGateEvidence`'ın jeton DIŞI alanlarını KİLİTLİ satırlardan TÜRETİR.
 
@@ -464,6 +465,7 @@ def activation_evidence_payload(
     """
     _require_kosu_gorunumu(kosu, "kosu")
     _require_kapsam_sha(beklenen_madde_kumesi_sha, "beklenen_madde_kumesi_sha")
+    _require_kapsam_sha(beklenen_kanit_parmakizi, "beklenen_kanit_parmakizi")
 
     # F1(b), fix turu 1: ÖNCEKİ yazım `approval_snapshot is None` iken
     # `open_questions_count = 0` yazıyordu. Sıfır, K-71 kapısını GEÇİREN tek
@@ -489,6 +491,7 @@ def activation_evidence_payload(
         "checklist_approved": _checklist_approved(
             _esleme_alan(kosu.readiness_attestation, "readiness_attestation"),
             beklenen_madde_kumesi_sha,
+            beklenen_kanit_parmakizi,
         ),
         "expected_active_version": (
             aktif_paket_satiri["version"] if aktif_paket_satiri is not None else None
@@ -502,8 +505,9 @@ def activation_evidence_payload(
 def _checklist_approved(
     readiness_attestation: Mapping[str, Any] | None,
     beklenen_madde_kumesi_sha: str,
+    beklenen_kanit_parmakizi: str,
 ) -> bool:
-    """A4 kapısının DÖRT koşulunun DÖRDÜ — hiçbiri başka göreve devredilmez.
+    """A4 kapısının DÖRT koşulu + F1'in BEŞİNCİSİ — hiçbiri başka göreve devredilmez.
 
     Koşullar: (1) tasdik VAR ve `onaylandi is True`; (2) `madde_kumesi_sha`
     anahtarı VAR ve değeri `type(...) is str`; (3) `strip()` sonrası BOŞ DEĞİL;
@@ -536,10 +540,25 @@ def _checklist_approved(
     if "madde_kumesi_sha" not in readiness_attestation:
         return False
     sha = readiness_attestation["madde_kumesi_sha"]
-    return (
+    if not (
         type(sha) is str
         and sha.strip() != ""
         and sha == beklenen_madde_kumesi_sha
+    ):
+        return False
+    # BEŞİNCİ koşul (F1, Eray kararı 2026-09-11): tasdik, dayandığı kanıt
+    # kümesinin parmak izini TAŞIMAK ZORUNDADIR ve o iz aktivasyon anında
+    # TAZE ölçülenle BİREBİR eşleşmelidir. Alan yoksa kapı DÜŞER — parmak
+    # izsiz eski biçimli tasdik için geriye uyum yedeği YOKTUR, çünkü yedek
+    # tam olarak kapatılmak istenen hâli (onay ölçmediği bir kümeye dayanır)
+    # meşrulaştırırdı.
+    if "kanit_parmakizi" not in readiness_attestation:
+        return False
+    iz = readiness_attestation["kanit_parmakizi"]
+    return (
+        type(iz) is str
+        and iz.strip() != ""
+        and iz == beklenen_kanit_parmakizi
     )
 
 

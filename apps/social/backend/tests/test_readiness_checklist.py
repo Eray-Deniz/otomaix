@@ -14,14 +14,18 @@
 
 from __future__ import annotations
 
+import ast
 import inspect
 import uuid
+from pathlib import Path
 
 import pytest
 
+from app.services import sector_package_lifecycle as lifecycle
 from app.services.sector_pipeline import readiness, readiness_items, runs
 
 from .test_pipeline_writeback import (  # noqa: F401 — fixture yeniden dışa vurulur
+    _hazirlik_tasdiki,
     _kosu,
     _sub_sector,
     _yazilmis_ve_onayli,
@@ -406,3 +410,205 @@ async def test_partially_typed_policy_report_is_refused(pkg_db):  # noqa: F811
 
     assert _satir(rapor, "md-09").durum == "gecmedi"
     assert _satir(rapor, "md-16").durum == "gecmedi"
+
+
+# ── F1 — onay ↔ MÜHÜRLENMİŞ kanıt bağı ──────────────────────────────────────
+#
+# Eray kararı (2026-09-11): onay verildikten SONRA dayandığı kanıt değişmişse
+# aktivasyon DURUR ve operatör yeniden onaya çağrılır (fail-closed). Aşağıdaki
+# testler o kararın üç ayağını ölçer: kanıt kümesinin NE olduğu · onayın onu
+# KAYDETTİĞİ · aktivasyonun YENİDEN ÖLÇÜP karşılaştırdığı.
+
+
+def test_kanit_kolonlari_problarin_okuduklarinin_TAM_kumesidir():
+    """Kolon kümesi ELLE SEÇİLMEZ — probların KAYNAĞINDAN üretilir.
+
+    Elle tutulan bir liste, yeni bir prob yeni bir kolon okuduğunda sessizce
+    eksik kalırdı; parmak izi o kolonu kapsamaz ve onay, ölçmediği bir şeye
+    dayanmış olurdu. Kapı bu yüzden üretilmiş kümeye karşı koşar.
+    """
+    okunan: set[str] = set()
+    for dugum in ast.walk(ast.parse(inspect.getsource(readiness))):
+        if (
+            isinstance(dugum, ast.Subscript)
+            and isinstance(dugum.value, ast.Attribute)
+            and dugum.value.attr == "kosu"
+            and isinstance(dugum.slice, ast.Constant)
+            and isinstance(dugum.slice.value, str)
+        ):
+            okunan.add(dugum.slice.value)
+
+    # POZİTİF KONTROL: dedektör gerçekten okuma buluyor mu? Bulmuyorsa test
+    # boş kümeyi boş kümeyle karşılaştırıp sessizce GEÇERDİ.
+    assert okunan, "prob okuması HİÇ bulunamadı — dedektör bozuk, kapı ölçmüyor"
+    assert okunan == set(readiness_items.KANIT_KOLONLARI)
+
+
+async def test_kanit_parmakizi_yeni_artefaktla_degisir(pkg_db):
+    """Ham artefakt tablosu salt-eklemedir; değişebilen tek yön EKLEMEDİR."""
+    run_id = await _hazir_kosu(pkg_db)
+    once = await runs.kanit_parmakizi(pkg_db, run_id=run_id)
+
+    await _artefakt(pkg_db, run_id, kind="research", model="arac-4", brief_ref="b")
+
+    assert await runs.kanit_parmakizi(pkg_db, run_id=run_id) != once
+
+
+@pytest.mark.parametrize(
+    ("kolon", "yeni_deger"),
+    [
+        ("approval_karar", "ret"),
+        ("barrier_report", {"degisti": True}),
+        ("engine_diff", {"degisti": True}),
+        ("final_decision_log", [{"unit_id": "u-x", "karar": "ekle"}]),
+        ("katman1_attestation", {"sonuc": "FAIL"}),
+        ("package_id", None),
+        ("policy_report", {"bulgular": []}),
+        ("sonuc", "no_change"),
+    ],
+)
+async def test_kanit_parmakizi_her_prob_kolonunda_degisir(pkg_db, kolon, yeni_deger):
+    """ÜRETİLMİŞ MATRİS — elle seçilmiş tek örnek sınıfı kapatmaz.
+
+    `approval_snapshot` bu matriste YOKTUR ve sebebi ayrı testtedir: o kolon
+    veritabanı tetikleyicisiyle DEĞİŞMEZDİR, yani mutasyonu hiç koşamaz.
+    """
+    run_id = await _hazir_kosu(pkg_db)
+    once = await runs.kanit_parmakizi(pkg_db, run_id=run_id)
+
+    await pkg_db.execute(
+        f"UPDATE social.sector_package_runs SET {kolon} = $2 WHERE run_id = $1",
+        run_id,
+        yeni_deger,
+    )
+
+    assert await runs.kanit_parmakizi(pkg_db, run_id=run_id) != once
+
+
+async def test_approval_snapshot_veritabaninda_degismez(pkg_db):
+    """Matrisin dışarıda bıraktığı dokuzuncu kolon — ÖLÇÜLMÜŞ gerekçe.
+
+    İddia "bu kolonu unuttuk" DEĞİL, "bu kolon zaten değişemez"dir; ve bu
+    iddia çıkarım değil, veritabanının reddiyle ölçülür (K-98 tetikleyicisi).
+    """
+    run_id = await _hazir_kosu(pkg_db)
+
+    with pytest.raises(Exception):
+        await pkg_db.execute(
+            "UPDATE social.sector_package_runs SET approval_snapshot = $2 "
+            "WHERE run_id = $1",
+            run_id,
+            {"acik_sorular": []},
+        )
+
+
+async def test_attest_readiness_kanit_parmakizini_KENDISI_yazar(pkg_db):
+    """Parmak izi ÇAĞIRANDAN alınmaz — yazıcı onu veritabanından TÜRETİR (R8).
+
+    Parametre olsaydı herhangi bir iç çağıran onaylandığı kümeden BAŞKA bir
+    parmak izi yazdırabilir ve aktivasyon kapısını boşa düşürebilirdi.
+    """
+    run_id = await _hazir_kosu(pkg_db)
+    beklenen = await runs.kanit_parmakizi(pkg_db, run_id=run_id)
+
+    await _hazirlik_tasdiki(pkg_db, run_id)
+
+    satir = await pkg_db.fetchrow(
+        "SELECT readiness_attestation FROM social.sector_package_runs "
+        "WHERE run_id = $1",
+        run_id,
+    )
+    assert satir["readiness_attestation"]["kanit_parmakizi"] == beklenen
+    assert "kanit_parmakizi" not in inspect.signature(runs.attest_readiness).parameters
+
+
+def test_checklist_kapisi_kanit_degisince_REDDEDER():
+    """F1'in kapısı: tasdikteki parmak izi TAZE ölçümle uyuşmuyorsa onay DÜŞER."""
+    tasdik = {
+        "onaylandi": True,
+        "madde_kumesi_sha": readiness_items.MADDE_KUMESI_SHA,
+        "kanit_parmakizi": "a" * 64,
+    }
+
+    assert (
+        lifecycle._checklist_approved(
+            tasdik, readiness_items.MADDE_KUMESI_SHA, "b" * 64
+        )
+        is False
+    )
+
+
+def test_checklist_kapisi_kanit_ayniyken_GECER():
+    """Pozitif kontrol — kapı her şeyi reddediyorsa bir şey ölçmüyor demektir."""
+    tasdik = {
+        "onaylandi": True,
+        "madde_kumesi_sha": readiness_items.MADDE_KUMESI_SHA,
+        "kanit_parmakizi": "a" * 64,
+    }
+
+    assert (
+        lifecycle._checklist_approved(
+            tasdik, readiness_items.MADDE_KUMESI_SHA, "a" * 64
+        )
+        is True
+    )
+
+
+def test_checklist_kapisi_parmakizi_ALANI_YOKSA_reddeder():
+    """Eski biçimli (parmak izsiz) tasdik GERİYE UYUM YEDEĞİ ALMAZ — fail-closed."""
+    tasdik = {
+        "onaylandi": True,
+        "madde_kumesi_sha": readiness_items.MADDE_KUMESI_SHA,
+    }
+
+    assert (
+        lifecycle._checklist_approved(
+            tasdik, readiness_items.MADDE_KUMESI_SHA, "a" * 64
+        )
+        is False
+    )
+
+
+def test_readiness_IKINCI_bir_parmakizi_hesabi_yazmaz():
+    """TEK türetme kuralı — `readiness` kendi hash'ini hesaplamaz, vekildir."""
+    kaynak = inspect.getsource(readiness)
+
+    assert "canonical_sha" not in kaynak
+    assert "runs.kanit_parmakizi" in kaynak
+
+
+def test_attest_readiness_URETIM_cagirani_YALNIZ_cli_onay_yoludur():
+    """F1'in KAPANMAYAN yarısı bir VARSAYIM değil, ÖLÇÜLEN bir sınır olsun.
+
+    `runs.attest_readiness` prob SONUÇLARINI görmez — çağıranın madde kümesi
+    iddiasını yazar. Probları yazıcıya koymak `runs` → `readiness` bağımlılığı
+    demek olurdu ve arayüz eki R9 bunu yasaklar. Bugün gerçek kapı
+    `hazirlik-onayla` komutundadır: otomatik ölçümü DÜŞEN bir kapı maddesi
+    varsa tasdiki reddeder.
+
+    Dolayısıyla güvenlik iddiası şudur: **üretimde o komuttan BAŞKA çağıran
+    YOKTUR.** Bu cümle bugüne dek bir tarama sonucuydu; burada tekrar
+    koşulabilir bir kapıya çevriliyor. Yeni bir üretim çağıranı eklenirse test
+    KIRILIR ve ekleyen kişi prob kapısını da taşımak zorunda kalır.
+    """
+    kok = Path(__file__).resolve().parents[1]
+    cagiranlar: set[str] = set()
+    for yol in list((kok / "app").rglob("*.py")) + list((kok / "scripts").rglob("*.py")):
+        agac = ast.parse(yol.read_text(encoding="utf-8"))
+        for dugum in ast.walk(agac):
+            if not isinstance(dugum, ast.Call):
+                continue
+            hedef = dugum.func
+            adi = (
+                hedef.attr
+                if isinstance(hedef, ast.Attribute)
+                else getattr(hedef, "id", None)
+            )
+            if adi != "attest_readiness":
+                continue
+            # Tanımın kendisi çağrı değildir; yalnız ÇAĞIRAN dosyalar sayılır.
+            cagiranlar.add(str(yol.relative_to(kok)))
+
+    # POZİTİF KONTROL: dedektör gerçekten çağrı buluyor mu?
+    assert cagiranlar, "hiç çağıran bulunamadı — dedektör bozuk, kapı ölçmüyor"
+    assert cagiranlar == {"scripts/sector_pipeline_cli.py"}
