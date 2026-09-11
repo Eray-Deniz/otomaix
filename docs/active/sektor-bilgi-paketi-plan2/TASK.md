@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-10
+last-touched: 2026-09-11
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -14,8 +14,8 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-10: Task 15 indi ve checkpoint 12
-`approve` ile kapandı. Sıradaki iş **Task 16**.) Task 1-15 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11: Task 16 indi ve checkpoint 13
+`approve` ile kapandı — DÖRT hakem turu sürdü. Sıradaki iş **Task 17**.) Task 1-16 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -38,8 +38,8 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
 - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
 - execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 9
-- last_checkpoint_ref: 2097390adc5540e55d105941bee66acdff1cb617
+- cp_count: 10
+- last_checkpoint_ref: 086985a7a20c5a0bbe662ea14c57ddd586ad7f4d
 
 > **`cp_count` ile düz yazıdaki checkpoint NUMARASI aynı şey DEĞİLDİR — sapma değil, iki ayrı
 > sayaç (2026-09-11'de bir oturum açılışını yanılttı, o yüzden burada yazılı).** Numara KOŞAN
