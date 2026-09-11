@@ -2409,7 +2409,13 @@ def _aday_kopyasi_mi(donem: str, anahtarlar: tuple[str, ...]) -> bool:
     beklenen = _ADAY_TAKVIM_SADE.get(donem)
     if beklenen is not None:
         return anahtarlar == beklenen
-    return all(anahtar in ADAY_DISI_SISTEM_ANAHTARLARI for anahtar in anahtarlar)
+    # Şablon: *"bunlardan BİRİNİ seçersen"* — aday dışı dönem en fazla TEK aday-dışı
+    # gün taşır (kapanış turu N1/2). Dönem ADI ile o günün bağı burada ölçülemez:
+    # şablon üç günün anahtarını verir, günlük dildeki adını vermez — tam kapanış
+    # dış sözleşme revizyonu ister (ad→anahtar satırı); dürüst sınır.
+    return len(anahtarlar) <= 1 and all(
+        anahtar in ADAY_DISI_SISTEM_ANAHTARLARI for anahtar in anahtarlar
+    )
 
 
 def _donem_anahtarlari(tablo_satirlari: Sequence[str]) -> dict[str, tuple[str, ...]]:

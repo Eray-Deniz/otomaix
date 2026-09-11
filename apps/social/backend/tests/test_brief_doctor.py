@@ -1207,7 +1207,15 @@ def test_aday_donemde_anahtar_sablonun_kopyasi_olmali() -> None:
 def test_aday_disi_donem_baska_donemin_anahtarini_sahiplenemez() -> None:
     """Attempt-3 F1 (both-agree, yüksek — ÖLÇÜLDÜ): `Sezon Açılışı → black-friday` notsuz geçip
     köprü kuruyordu; ilgisiz sezon araştırması Black Friday kararlarını yetkilendirebilirdi."""
-    for hucre in ("black-friday", "sevgililer-gunu, cumhuriyet-bayrami", "okula-donus"):
+    for hucre in (
+        "black-friday",
+        "sevgililer-gunu, cumhuriyet-bayrami",
+        "okula-donus",
+        # Kapanış turu N1/2: şablon "bunlardan BİRİNİ" der — iki aday-dışı gün birden
+        # sahiplenilemez; karma hücre de (aday-dışı + aday) geçemez.
+        "emek-ve-dayanisma-gunu, canakkale-sehitlerini-anma-gunu",
+        "emek-ve-dayanisma-gunu, black-friday",
+    ):
         metin = kaynak(sektore_ozgu_donem=True).replace(
             f"| {SEKTORE_OZGU_DONEM} | — |", f"| {SEKTORE_OZGU_DONEM} | {hucre} |"
         )

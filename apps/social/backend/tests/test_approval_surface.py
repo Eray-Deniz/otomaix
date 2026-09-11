@@ -1347,10 +1347,19 @@ async def test_snapshot_core_field_set_is_closed(pkg_db) -> None:
 
 
 @pytest.mark.parametrize(
-    "kolon",
-    ["sebep", "package_id", "sector_id", "katman1_attestation", "final_decision_log"],
+    "kolon,istisna",
+    [
+        ("sebep", approval.ApprovalRefused),
+        ("package_id", approval.ApprovalRefused),
+        ("sector_id", approval.ApprovalRefused),
+        ("katman1_attestation", approval.ApprovalRefused),
+        # Günlük sapması DAHA ERKEN kapıda düşer (koşu doğrulaması: `decision_log_sha`
+        # eşleşmiyor). Beklenen istisna KOLONA bağlıdır — kapanış turu N2: tek bir
+        # geniş demet, eski dört kolonun hangi kapıda düştüğünü ölçemez hâle getiriyordu.
+        ("final_decision_log", runs.RunNotVerified),
+    ],
 )
-async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str) -> None:
+async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str, istisna) -> None:
     """MUTASYON MATRİSİ: çekirdeği besleyen kolon donmadan sonra değişirse karar YOK.
 
     Kapsam sınırı DÜRÜSTÇE: liste elle yazılmıştır ve çekirdeği besleyen TÜM
@@ -1387,7 +1396,7 @@ async def test_post_freeze_column_drift_refuses_decision(pkg_db, kolon: str) -> 
     # `final_decision_log` sapması DAHA ERKEN bir kapıda düşer (koşu doğrulaması:
     # `decision_log_sha` günlükle eşleşmiyor → `RunNotVerified`); öteki kolonlar
     # görüntü çekirdeği karşılaştırmasında (`ApprovalRefused`). İkisi de karar YAZMAZ.
-    with pytest.raises((approval.ApprovalRefused, runs.RunNotVerified)):
+    with pytest.raises(istisna):
         await approval.record_decision(
             pkg_db, run_id=run_id, karar="onay", actor=ACTOR, seconds=1,
             snapshot_sha=sha,
