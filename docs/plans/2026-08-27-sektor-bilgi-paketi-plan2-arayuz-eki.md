@@ -149,6 +149,7 @@ metinden imza çıkarmak yanlış-pozitif ile kaçırma arasında salınıyor); 
 | **R-G6** | `readiness.evaluate(db)` koşu kimliği almıyordu; kodda alıyor | metin koda uyarlandı | hakem turu (Task 17) |
 | **R-G7** | AÇIK-2 kararı "A — `geri-al` KALIR" diyordu; komut KALDIRILDI | **KARAR DEĞİŞTİ** (Eray, 2026-09-11) | yürütme ölçümü |
 | **R-G8** | `policy_report` kolonuna yazılan **kalıcı yük şekli** ekte SAHİPSİZDİ (`as_payload`/`from_payload` hiç geçmiyordu) | eksik sözleşme eklendi | `BulguIzi` kaydının ikinci ayağı |
+| **R-G9** | Hazırlık onayı dayandığı kanıt kümesine BAĞLI DEĞİLDİ (checkpoint 14 · F1, yüksek) | **YENİ HÜKÜM** — kapı eklendi (Eray kararı, 2026-09-11) | hakem turu, iki turda aynı eksen |
 
 **R-G8 taramanın ürünü DEĞİLDİR** — tarama yalnız ekte ADI GEÇEN yüzeyleri kodla
 karşılaştırır, ekte HİÇ GEÇMEYEN bir yüzeyi göremez. Bu kalem `BulguIzi` açık sorununun
@@ -161,6 +162,23 @@ kapı sayısı değişmez).
 
 **R-G7 bir metin uyarlaması DEĞİLDİR — bağlayıcı bir kararın tersine dönmesidir.** Tam
 gerekçesi ve yeniden açılma koşulu AÇIK-2 bölümünün başındaki blokta yazılıdır.
+
+**R-G9 de metin uyarlaması değildir — YENİ bir bağlayıcı kapıdır.** Onay, gördüğü kanıt
+kümesinin parmak izini tasdike YAZAR; aktivasyon aynı izi yeniden hesaplar ve ayrışma varsa
+paket AKTİVE EDİLMEZ. Eray'a sorulan şey mekanizma değil risk tercihiydi (İlke 8): reddedilen
+iki seçenek *"uyar ama devam et"* ve *"bugünkü hâli Task 20'ye taşı"*dır.
+
+**R-G9'un ÖLÇÜLMÜŞ sınırı — kapanan ve KAPANMAYAN yarı.** Açık sorunun tarif ettiği arıza
+(*"onaydan SONRA DÜŞEN bir satır"*) canlı ölçümle **ulaşılamaz** çıktı: ham artefakt tablosu
+veritabanı düzeyinde salt-eklemedir (`sector_research_artifacts_append_only`, `BEFORE DELETE
+OR UPDATE`). Erişilebilir yönler EKLEME ve koşu satırının sekiz prob-kolonunun
+GÜNCELLENMESİDİR — parmak izi ikisini de kapsar. **Kapanmayan yarı:** `attest_readiness` prob
+SONUÇLARINI hâlâ görmez, çağıranın madde kümesi iddiasını yazar; probları yazıcıya koymak
+`runs` → `readiness` bağımlılığı demek olurdu ve R9 yasaklar. Gerçek kapı `hazirlik-onayla`
+komutundadır ve **üretimde başka çağıran olmadığı artık tekrar koşulabilir bir testle
+pinlenmiştir** (`test_attest_readiness_URETIM_cagirani_YALNIZ_cli_onay_yoludur`); ikinci bir
+üretim çağıranı eklenirse test kırılır. Bu bir kapanış DEĞİL, adı konmuş ve ölçülen bir
+sınırdır.
 
 **Bu revizyonun kendi sınırı — dürüst etiket.** Yedisini de **bağımsız hakem GÖRMEDİ**;
 kontrolör ölçümüyle yazıldılar. **Evleri var:** dış araştırma sözleşmesi turunun sonundaki
@@ -1504,6 +1522,12 @@ async def activate_from_snapshot(db, *, run_id: str, actor: str) -> None:
             and type(_sha) is str                  # `bool`/alt sınıf/`None` RED
             and _sha.strip() != ""                 # boş ya da yalnız-boşluk RED (boşluk kapısı)
             and _sha == readiness_items.MADDE_KUMESI_SHA   # NORMALİZASYONSUZ — yedek yol YOK
+            # R-G9 (F1) — BEŞİNCİ koşul: tasdik dayandığı kanıt kümesinin izini
+            # TAŞIMALI ve iz, aktivasyon anında TAZE ölçülene BİREBİR eşit olmalı.
+            # Alan yoksa kapı DÜŞER; parmak izsiz eski tasdik için yedek yol YOKTUR.
+            and type(_att.get("kanit_parmakizi")) is str
+            and _att["kanit_parmakizi"].strip() != ""
+            and _att["kanit_parmakizi"] == beklenen_kanit_parmakizi
         )
         expected_active_version / expected_no_active  = K-94 taban durumu (plan 1685-1687)
 
@@ -2189,6 +2213,15 @@ MADDELER: tuple[ChecklistItem, ...]
 #   (b) 15. madde ("kör değerlendirmede sektörel ayrışma gözlendi") `sinif="sinyal"`dir
 #       ve tamamlanma kapısına GİRMEZ (plan 1919-1921 · 1924-1925).
 
+KANIT_KOLONLARI: frozenset[str]
+# R-G9 (F1, 2026-09-11) — hazırlık PROBLARININ koşu satırından okuduğu kolonların
+# KAPALI kümesi. Burada yaşar çünkü kolon ADLARIDIR: kimlik, değerlendirme mantığı
+# değil; modülün "yalnız kimlik + sınıflandırma, DB YOK" sözleşmesini bozmaz.
+# Küme ELLE SEÇİLMEZ — `readiness.py` AST ile ayrıştırılıp her `kanit.kosu["..."]`
+# okuması toplanır ve kümeye BİREBİR eşitlik aranır (kapının pozitif kontrolü de
+# vardır: hiç okuma bulunmazsa test DÜŞER). Yeni bir prob yeni bir kolon okursa
+# test KIRILIR; kolon parmak izinin dışında sessizce kalamaz.
+
 KAPI_MADDELERI:   frozenset[str]   # {i.madde_id for i in MADDELER if i.sinif == "kapi"}
 SINYAL_MADDELERI: frozenset[str]   # {i.madde_id for i in MADDELER if i.sinif == "sinyal"}
 
@@ -2219,7 +2252,23 @@ async def attest_readiness(
     actor: str,
 ) -> None:
     """F18: operatörün TEK onayını koşu satırının `readiness_attestation` alanına kalıcı
-    yazar (kim · ne zaman · hangi maddeler).
+    yazar (kim · ne zaman · hangi maddeler · **hangi kanıta dayanarak**).
+
+    **R-G9 (F1, Eray kararı 2026-09-11) — yük `kanit_parmakizi` TAŞIR.** Değer
+    PARAMETRE DEĞİLDİR; yazıcı onu `kanit_parmakizi(db, run_id=...)` ile
+    veritabanından TÜRETİR (R8: kanıt çağırandan alınmaz). Aktivasyon aynı izi
+    yeniden hesaplar ve ayrışma varsa paketi AKTİVE ETMEZ.
+
+```python
+# runs.py  (Task 8) — TEK türetici
+async def kanit_parmakizi(db, *, run_id: str) -> str: ...
+#   kanıt kümesi = (a) koşunun ham artefakt satırları (kind · source · brief_ref)
+#                + (b) koşu satırının `readiness_items.KANIT_KOLONLARI` kolonları
+#   `readiness.kanit_parmakizi` (Task 17) BUNA VEKİLDİR, kendi hesabını yazmaz.
+#   `content_md` hash'e GİRMEZ: tablo salt-eklemedir (032 tetikleyicisi), var olan
+#   satırın içeriği DEĞİŞEMEZ; değişebilen tek şey küme ÜYELİĞİdir.
+```
+
 
     **`onaylandi` PARAMETRE DEĞİLDİR — burada TÜRETİLİR:**
 
@@ -2268,8 +2317,9 @@ async def attest_readiness(
 - Parametreler **ilkel tiplerdir**, `ReadinessReport` DEĞİL: `ReadinessReport` Task 17'de
   doğar ve Task 15'in ona bağımlı olması bağımlılığı yine ters çevirirdi. `readiness_items`
   ise Task 8'de doğduğu için ileri-bağımlılık YOKTUR (R9'un kendi kuralı).
-- `activate_from_snapshot` (Task 15) DÖRT koşulu birden arar (A4, fix turu 3'te
-  KESKİNLEŞTİRİLDİ): (1) `onaylandi is True`; (2) `madde_kumesi_sha` anahtarı VAR ve
+- `activate_from_snapshot` (Task 15) **BEŞ** koşulu birden arar — dördü A4'ün (fix turu
+  3'te KESKİNLEŞTİRİLDİ), beşincisi R-G9'un (F1, 2026-09-11: tasdikteki `kanit_parmakizi`
+  aktivasyon anındaki TAZE izle BİREBİR eşit olmalı; alan yoksa kapı düşer): (1) `onaylandi is True`; (2) `madde_kumesi_sha` anahtarı VAR ve
   değeri `type(...) is str`; (3) `strip()` sonrası BOŞ DEĞİL; (4) değerin KENDİSİ —
   kırpılmamış, küçültülmemiş hâliyle — `readiness_items.MADDE_KUMESI_SHA`'ya EŞİT.
   **Karşılaştırma NORMALİZASYONSUZDUR:** `strip()` yalnız (3)'ün boşluk kapısında,

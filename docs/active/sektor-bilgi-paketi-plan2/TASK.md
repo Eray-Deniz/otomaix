@@ -1073,10 +1073,43 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   **Sınıfın kendisi kapanmadı** — ek↔kod ıraksaması süreç kusurudur; üretilmiş bir kapı
   önerisi ekin revizyon kaydında ÖLÇÜLMEMİŞ ÖNERİ etiketiyle duruyor.
 
+- **2026-09-11 — F1 UYGULANDI (R-G9).** Kapı kod tarafında indi: `runs.kanit_parmakizi`
+  (TEK türetici) · `readiness_items.KANIT_KOLONLARI` (üretilmiş küme) · tasdik yükünde
+  `kanit_parmakizi` · `_checklist_approved`'ın BEŞİNCİ koşulu · iki çağıranın taze ölçümü ·
+  operatöre "yeniden onaya gel" diyen CLI mesajı.
+  **Ölçüm:** tam takım **4254 passed**, exit 0 (taban 4234 → **+20 test**);
+  komut `.venv/bin/python -m pytest tests/ -q`, süre 318 s.
+  **Mutasyon: DOKUZ yeni kapının DOKUZU da ayrı ayrı susturuldu ve hedef testini KIRDI**
+  (sahte yeşil YOK).
+  **Bekleyen bir taahhüt de bu partide kapandı:** F1 kararına bağlanmış olan *iki bağlantılı
+  eşzamanlılık DAVRANIŞ testi* yazıldı — başka bir bağlantının COMMIT ettiği kanıt
+  değişikliği aktivasyonu düşürüyor; testin pozitif kontrolü de var (değişiklikten ÖNCE kapı
+  gerçekten AÇIK).
+
 # Open Problems
 
-- **[YÜKSEK — AÇIK, sahibinin kararıyla 2026-09-11] Hazırlık onayı mühürlenmiş bir kanıt
-  kümesine bağlı DEĞİL.** Checkpoint 14'ün F1'i; beş hakem turunun ikisinde aynı eksende çıktı.
+- **[KAPANDI 2026-09-11 — R-G9; KALAN YARISI ETİKETLİ] Hazırlık onayı mühürlenmiş bir kanıt
+  kümesine bağlı DEĞİL.** Eray kararı: **fail-closed** — onay anında görülen kanıt kümesinin
+  parmak izi tasdike YAZILIR, aktivasyon onu YENİDEN hesaplar, ayrışma varsa paket AKTİVE
+  EDİLMEZ ve operatör yeniden onaya çağrılır (komut bunu açıkça söyler).
+  **Kanıt kümesinin TANIMI genişletildi:** yalnız ham artefaktlar değil, hazırlık
+  PROBLARININ okuduğu dokuz koşu satırı kolonu da kapsanır. Kolon kümesi elle tutulmaz —
+  probların kaynağından AST ile üretilir ve kapısı vardır (yeni prob yeni kolon okursa test
+  kırılır).
+  **Açık sorunun tarif ettiği arıza ölçümle ÇÜRÜDÜ:** *"onaydan sonra DÜŞEN satır"* yolu
+  yoktur — ham artefakt tablosu veritabanı düzeyinde salt-eklemedir (canlı ölçüm:
+  `sector_research_artifacts_append_only`). Erişilebilir yönler EKLEME ve koşu satırı
+  kolonlarının GÜNCELLENMESİDİR; kapı ikisini de kapsar.
+  **KAPANMAYAN yarı — dürüst etiket:** `runs.attest_readiness` prob SONUÇLARINI hâlâ görmez,
+  çağıranın madde kümesi iddiasını yazar. Probları yazıcıya koymak `runs` → `readiness`
+  bağımlılığı olurdu, **R9 yasaklıyor**. Gerçek kapı `hazirlik-onayla` komutundadır ve
+  "üretimde başka çağıran yok" iddiası artık tarama sonucu DEĞİL, tekrar koşulabilir bir
+  testtir (`test_attest_readiness_URETIM_cagirani_YALNIZ_cli_onay_yoludur`); ikinci bir
+  üretim çağıranı eklenirse kırılır.
+  **Bir sıra hatası da bu turda ortaya çıktı:** test fixture'ları hazırlık tasdikini yönetici
+  onayından ÖNCE yazıyordu — `md-19` kapı maddesi onay kaydını okuduğu için üretimde
+  ULAŞILAMAZ bir sıraydı ve yalnız kanıt bağı olmadığı için görünmüyordu. Sıra düzeltildi.
+  Önceki kayıt tarihsel bağlam olarak duruyor: Checkpoint 14'ün F1'i; beş hakem turunun ikisinde aynı eksende çıktı.
   Onay, okuduğu kanıtın (ham artefakt satırları) o ANKİ hâlini belgeler; tablo EKLEMELİDİR ve
   tasdik kaydının "ne gördüm" alanı YOKTUR (Task 8 sözleşmesi). **Daraltıldı:** değerlendirme ile
   yazım tek işlemde, koşu satırı `FOR UPDATE` kilitli ve yazımdan hemen önce kanıt kümesinin
