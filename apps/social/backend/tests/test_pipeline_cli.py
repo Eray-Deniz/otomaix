@@ -936,15 +936,46 @@ def test_web_probe_rejects_a_value_buried_in_prose():
     assert prob(auditors_rolleri()[1]) is False
 
 
-def test_web_probe_rejects_a_crashed_tool_even_if_it_printed_the_value():
-    """Araç sıfırdan farklı çıkarsa cevabı KABUL EDİLMEZ.
+def test_crashed_tool_is_a_measurement_failure_not_measured_absence():
+    """Araç sıfırdan farklı çıkarsa bu ÖLÇÜM ARIZASIDIR — muafiyet doğurmaz.
 
-    Kapı mutasyonda sahte-yeşil geldi: hiçbir test "araç çöktü ama doğru değeri
-    bastı" hâlini ölçmüyordu. Çöken bir araç cevabını yarım bir durumdan
-    üretmiş olabilir; o cevap erişim beyanı sayılmaz.
+    İki aşamalı bir ders. Önce kapı mutasyonda sahte-yeşil geldi: hiçbir test
+    "araç çöktü ama doğru değeri bastı" hâlini ölçmüyordu. Eklenen ilk test
+    `False` bekliyordu — ve o beklenti YANLIŞTI: `preflight` her `False`'u
+    ÖLÇÜLMÜŞ ERİŞİMSİZLİK sayar ve o durum K-14'ün muafiyet yetkisini taşır.
+    Yani eksik kimlik bilgisi ya da çöken bir CLI, "ölçtüm, ağ yok" diye
+    kaydediliyordu (ölçüldü: `muafiyet_mesru=True`).
+
+    Bu test artık kapıyı TÜKETİCİ üzerinden ölçer: probun dönüşüne değil,
+    `preflight`in ürettiği duruma bakar — asıl iddia orada yaşıyor.
     """
+    from app.services.sector_pipeline import auditors
+
     prob = _prob("abc123", "abc123\n", rc=1)
+
+    with pytest.raises(cli.WebProbeUnavailable):
+        prob(auditors_rolleri()[1])
+
+    sonuc = auditors.preflight(auditors.DENETCI_ROLLERI[1], prob=prob)
+    assert sonuc.durum == auditors.PreflightDurumu.OLCUM_ARIZASI
+    assert not sonuc.tur_baslayabilir
+    assert not sonuc.muafiyet_mesru, "ölçülmemiş arıza muafiyet üretti"
+
+
+def test_clean_exit_with_wrong_value_is_measured_absence(auditors_roller=None):
+    """`False` YALNIZ temiz çıkışlı yanlış cevaba ayrılmıştır.
+
+    Bu, yukarıdaki testin karşı kolu: ikisi ayrışmazsa "ölçülmüş erişimsizlik"
+    ile "ölçülemedi" aynı kovaya düşer ve muafiyet ayrımı anlamını yitirir.
+    """
+    from app.services.sector_pipeline import auditors
+
+    prob = _prob("abc123", "UNREACHABLE\n", rc=0)
+
     assert prob(auditors_rolleri()[1]) is False
+    sonuc = auditors.preflight(auditors.DENETCI_ROLLERI[1], prob=prob)
+    assert sonuc.durum == auditors.PreflightDurumu.ERISIM_YOK
+    assert sonuc.muafiyet_mesru
 
 
 def test_web_probe_reports_measurement_failure_when_challenge_cannot_be_fetched():

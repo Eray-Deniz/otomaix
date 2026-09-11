@@ -534,7 +534,20 @@ def _web_probu(zaman_asimi_sn: float, *, getirici=None, kosucu=None):
                 "erişim ÖLÇÜLEMEDİ"
             ) from hata
         if sonuc.returncode != 0:
-            return False
+            # SIFIRDAN FARKLI ÇIKIŞ ÖLÇÜM DEĞİLDİR (kapanış turu 3, yüksek).
+            # Önceki yazım burada `False` dönüyordu; `preflight` her `False`'u
+            # `ERISIM_YOK` sayar ve o durumun `muafiyet_mesru`su DOĞRUdur —
+            # yani eksik bir kimlik bilgisi, çöken bir CLI ya da sinyalle biten
+            # bir süreç "ölçtüm, ağ yok" diye kaydediliyor ve K-14'ün muafiyet
+            # yetkisini taşıyordu. Ölçüldü: rc=1 → `muafiyet_mesru=True`.
+            # Bu fonksiyonun KENDİ vaadi de zaten "araç çökerse ölçüm arızası"
+            # diyordu; kod o vaadi tutmuyordu.
+            raise WebProbeUnavailable(
+                f"{tool}: prob sıfırdan farklı çıktı (rc={sonuc.returncode}) — "
+                "erişim ÖLÇÜLMEDİ; muafiyet üretilmez"
+            )
+        # `False` YALNIZ şuna ayrılmıştır: araç temiz çıktı ama taze meydan
+        # okumanın karşılığını basamadı. Ölçülmüş erişimsizlik budur.
         return sonuc.stdout.strip() == str(beklenen).strip()
 
     return prob
