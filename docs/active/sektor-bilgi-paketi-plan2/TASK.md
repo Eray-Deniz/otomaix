@@ -41,6 +41,19 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 - cp_count: 9
 - last_checkpoint_ref: 2097390adc5540e55d105941bee66acdff1cb617
 
+> **`cp_count` ile düz yazıdaki checkpoint NUMARASI aynı şey DEĞİLDİR — sapma değil, iki ayrı
+> sayaç (2026-09-11'de bir oturum açılışını yanılttı, o yüzden burada yazılı).** Numara KOŞAN
+> denetimleri sayar (bugün 12); `cp_count` §8.6 mutasyon protokolünün ilerlettiklerini, yani
+> Clean/Accepted-risk kapanışlarını sayar (bugün 9). Fark = hakem `approve`'u ALMADAN kapanan
+> üç checkpoint (3 · 4 · Task 7-8'inki); üçünde de ilerletmeme BİLEREKTİ ve gerekçesi bu
+> dosyada kendi bölümlerinde yazılı. Yön fail-safe: taban geride kaldığı için hakem görmemiş
+> commit'ler sonraki turun kapsamına kendiliğinden girer.
+>
+> **ÖLÇÜLMÜŞ SONUÇ (2026-09-11, `ec_ceiling 20` → 9 · `ec_should_checkpoint 1 9 9` →
+> `CEILING_RISK`):** sayaç TAVANA dayandı. Sıradaki riskli task otomatik `RUN_RISK` ALMAZ,
+> §8.3a insan-checkpoint'ine düşer. Eray 2026-09-11'de Task 16 için ÖNDEN `RUN-anyway` onayı
+> verdi (audit etiketi `ceiling-exceed`); bu onay Task 16 ile SINIRLIDIR.
+
 # References
 
 - Spec: `docs/specs/2026-08-21-sektor-bilgi-paketi.md` (`spec-approved`)
