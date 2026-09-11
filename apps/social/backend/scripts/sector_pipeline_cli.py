@@ -100,7 +100,6 @@ RUN_SUBCOMMANDS: frozenset[str] = frozenset(
         "olay-plani",
         "olay-onayla",
         "olay-geri-al",
-        "geri-al",
         "vade-bildirimi",
     }
 )
@@ -283,11 +282,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = _ekle("olay-geri-al", "Olay planını paket paket yürütür.")
     p.add_argument("--incident-id", required=True)
-    p.add_argument("--actor", required=True)
-
-    p = _ekle("geri-al", "Tek paketi geri alır — olay kimliği ZORUNLU (AÇIK-2).")
-    p.add_argument("--incident-id", required=True)
-    p.add_argument("--package-id", required=True, type=_uuid)
     p.add_argument("--actor", required=True)
 
     # ── Bildirim + okuma ────────────────────────────────────────────────
@@ -966,65 +960,26 @@ async def _kos_olay_geri_al(conn, args) -> Sonuc:
     return _yurutme_raporu(rapor)
 
 
-async def _kos_geri_al(conn, args) -> Sonuc:
-    """Tek paketlik geri alma — olay kimliği ZORUNLU (AÇIK-2 seçenek A).
-
-    Kanıt R8(c) köken jetonundan, yani onaylanmış plan satırından gelir; olay
-    kimliği olmayan geri alma yolu YOKTUR. Komut çok satırlı bir olayı TEK
-    pakete daraltmaz: kapsamı daraltmak yürütücünün sözleşmesini değiştirmek
-    olurdu ve kanıt zinciri ikiye ayrılırdı. Çok satırlı olayda operatör
-    `olay-geri-al` koşar.
-    """
-    # ÜÇ KOŞUL BİRDEN, TEK okumada. Ölçülen kusur (hakem turu 13, yüksek):
-    # önceki yazım yalnız satırın olayda BULUNDUĞUNU doğruluyor, sonra olay
-    # genelindeki `bekliyor` sayısına bakıp paket filtresi ALMAYAN yürütücüyü
-    # çağırıyordu. Adlandırılan satır tamamlanmışken olayın tek bekleyen satırı
-    # BAŞKA bir paketse, operatörün adlandırmadığı paket geri alınıyordu —
-    # probda ölçüldü (`active → archived`). Yürütücünün kapsamı OLAYDIR; o
-    # yüzden kapı "bu olay TAM OLARAK bu tek işi taşıyor mu" diye sorar.
-    satirlar = await conn.fetch(
-        "SELECT package_id, durum FROM social.package_rollback_plans "
-        "WHERE incident_id = $1",
-        args.incident_id,
-    )
-    if not satirlar:
-        return (
-            [
-                f"plan satırı yok: incident={args.incident_id} "
-                f"package={args.package_id} — önce `olay-plani` koş"
-            ],
-            RC_REFUSED,
-        )
-    if len(satirlar) != 1:
-        return (
-            [
-                f"olay {args.incident_id} {len(satirlar)} satır taşıyor — "
-                "tek paket daraltması YOK; `olay-geri-al` koş"
-            ],
-            RC_REFUSED,
-        )
-    tek = satirlar[0]
-    if tek["package_id"] != args.package_id:
-        return (
-            [
-                f"olayın tek satırı {tek['package_id']} — adlandırılan paket "
-                f"{args.package_id} DEĞİL; yürütme yapılmadı"
-            ],
-            RC_REFUSED,
-        )
-    if tek["durum"] != "bekliyor":
-        return (
-            [
-                f"plan satırının durumu {tek['durum']!r} — yalnız `bekliyor` "
-                "satır yürütülür; yürütme yapılmadı"
-            ],
-            RC_REFUSED,
-        )
-
-    rapor = await runs.execute_rollback_plan(
-        conn, incident_id=args.incident_id, actor=args.actor
-    )
-    return _yurutme_raporu(rapor)
+# `geri-al` alt komutu YOKTUR — KALDIRILDI (Eray kararı, 2026-09-11).
+#
+# Arayüz eki AÇIK-2 üç seçenek arasından **A**'yı seçmişti: komut kalsın, yalnız
+# olay kimliği istesin. Uygulamada o seçenek kapanmadı. Ölçüldü (hakem turu 13
+# + kapanış turu): komut olayın üyeliğini doğruladıktan SONRA, paket filtresi
+# ALMAYAN olay-kapsamlı yürütücüyü çağırıyor; doğrulama ile yürütmenin kilidi
+# arasında bir pencere kalıyor ve o pencerede üyeliği değiştiren ikinci bir
+# operatör, adlandırılmayan paketin geri alınmasına yol açabiliyor.
+#
+# Pencereyi kapatmak, olay kilidini baştan sona tutan PAKET-HEDEFLİ bir
+# yürütücü ister; o yüzey servis katmanındadır ve bu görevin beyan ettiği dosya
+# kümesinin DIŞINDADIR. Kullanıcı kararı: komutu kapat, olay yolunu tek yol yap.
+#
+# **Yetenek kaybolmuyor:** tek paketlik geri alma da `olay-plani` ile tek
+# satırlık bir olay açılarak yapılır; `olay-onayla` ve `olay-geri-al` aynen
+# koşar. Kaybolan şey kısayoldur, kanıt zinciri değil.
+#
+# **AÇIK-2 METNİ HÂLÂ "A" DİYOR** — arayüz eki bu kararla ıraksadı ve
+# düzeltilmesi tasarım katmanının işidir; yürütücü bağlayıcı eki kendi başına
+# yeniden yazmaz.
 
 
 # ─── K-26 vade bildirimi + salt-okunur görünüm ──────────────────────────────
@@ -1095,7 +1050,6 @@ GOVDELER = {
     "olay-plani": _kos_olay_plani,
     "olay-onayla": _kos_olay_onayla,
     "olay-geri-al": _kos_olay_geri_al,
-    "geri-al": _kos_geri_al,
     "vade-bildirimi": _kos_vade_bildirimi,
     "durum": _kos_durum,
 }

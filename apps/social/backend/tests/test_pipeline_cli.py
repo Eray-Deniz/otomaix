@@ -270,8 +270,9 @@ async def test_deaktive_et_subcommand_calls_deactivate_package(pkg_db, monkeypat
 def test_deaktive_et_needs_no_incident_and_no_evidence():
     """K-38 acil kolu AÇIK-2'den ETKİLENMEZ: olay kimliği İSTEMEZ.
 
-    `geri-al` üç argüman isterken bu komutun iki argümanı vardır; "acil durumda
-    üç komut" yanlış hatırlamasına karşı yapısal kanıt.
+    Kanıt zinciri isteyen geri alma yolu artık YALNIZ olay yoludur; bu komut o
+    yoldan ayrıdır ve tek başına koşar. "Acil durumda önce olay aç" yanlış
+    hatırlamasına karşı yapısal kanıt.
     """
     alt = cli.build_parser()._subparsers._group_actions[0].choices["deaktive-et"]
     zorunlu = {
@@ -644,66 +645,39 @@ async def test_olay_geri_al_does_not_auto_deactivate_hedefsiz(pkg_db):
     ), "hedefsiz paket komut tarafından indirildi"
 
 
-# ─── 6. AÇIK-2 — `geri-al` üç zorunlu argüman ───────────────────────────────
+# ─── 6. AÇIK-2 — komut KALDIRILDI, tek yol olay yoludur ────────────────────
 
 
-def test_geri_al_requires_incident_id():
-    """Olay kimliğisiz `geri-al` REDDEDİLİR — kanıtsız geri alma yolu YOK."""
+def test_geri_al_subcommand_no_longer_exists():
+    """`geri-al` alt komutu YOKTUR (Eray kararı, 2026-09-11).
+
+    Arayüz eki AÇIK-2 seçenek **A**'yı (komut kalsın, olay kimliği istesin)
+    seçmişti; uygulamada o seçenek kapanmadı. Ölçüldü: komut üyeliği
+    doğruladıktan sonra paket filtresi ALMAYAN olay-kapsamlı yürütücüyü
+    çağırıyor ve aradaki pencerede adlandırılmayan paket geri alınabiliyor.
+    Pencereyi kapatmak servis katmanında paket-hedefli bir yürütücü ister; o
+    yüzey bu görevin dosya kümesinin dışındadır.
+
+    **Bu test bir KARAR KİLİDİDİR:** komut sessizce geri eklenirse kapanmamış
+    yarış da onunla birlikte geri gelir.
+    """
     with pytest.raises(SystemExit):
-        _args("geri-al", "--package-id", str(uuid.uuid4()), "--actor", ACTOR)
+        _args("geri-al", "--incident-id", "olay-1", "--actor", ACTOR)
+
+    assert "geri-al" not in cli.GOVDELER
+    assert "geri-al" not in cli.RUN_SUBCOMMANDS
 
 
-async def test_geri_al_refuses_when_plan_row_unapproved(pkg_db):
-    """NEGATİF KONTROL — onaylanmamış plan satırıyla geri alma olmaz."""
-    await _bos_evren(pkg_db)
-    _sector_id, aktif = await _geri_alinabilir(pkg_db)
-    kume = await runs.affected_packages(
-        pkg_db,
-        engine_version=MOTOR_SURUM,
-        engine_config_sha=CONFIG_SHA,
-        kural_kimligi=KURAL,
-        kural_surumu=KURAL_V1,
-    )
-    incident_id = await runs.build_rollback_plan(pkg_db, affected=kume, actor=ACTOR)
-    # ONAY YOK — `olay-onayla` bilerek koşturulmadı.
+async def test_single_package_rollback_still_possible_through_the_incident_path(pkg_db):
+    """Yetenek KAYBOLMADI — tek paketlik geri alma tek satırlık olayla yapılır.
 
-    _satirlar, rc = await cli.dispatch(
-        pkg_db,
-        _args(
-            "geri-al",
-            "--incident-id",
-            incident_id,
-            "--package-id",
-            str(aktif),
-            "--actor",
-            ACTOR,
-        ),
-    )
-
-    assert rc == cli.RC_REFUSED
-    assert (
-        await pkg_db.fetchval(
-            "SELECT status FROM social.sector_packages WHERE id = $1", aktif
-        )
-        == "active"
-    )
-
-
-async def test_geri_al_succeeds_on_approved_single_row_incident(pkg_db):
-    """POZİTİF KONTROL — tek satırlık ONAYLI olayda geri alma koşar."""
+    Kaybolan şey kısayoldur, kanıt zinciri değil: `olay-plani` → `olay-onayla`
+    → `olay-geri-al` aynen koşar ve tek paketi geri alır.
+    """
     incident_id, aktif = await _onayli_olay(pkg_db)
 
     _satirlar, rc = await cli.dispatch(
-        pkg_db,
-        _args(
-            "geri-al",
-            "--incident-id",
-            incident_id,
-            "--package-id",
-            str(aktif),
-            "--actor",
-            ACTOR,
-        ),
+        pkg_db, _args("olay-geri-al", "--incident-id", incident_id, "--actor", ACTOR)
     )
 
     assert rc == cli.RC_OK
@@ -916,112 +890,6 @@ async def test_package_status_owner_scoped(pkg_db):
 
 
 # ─── 10. Hakem turu 13 — kapanan üç yüksek bulgu ────────────────────────────
-
-
-async def test_geri_al_refuses_when_named_package_is_not_the_incident_row(pkg_db):
-    """ADLANDIRILAN paket olayın satırı DEĞİLSE komut YÜRÜTMEZ (hakem, yüksek).
-
-    Ölçülen kusur: komut yalnız satırın olayda BULUNDUĞUNU doğruluyor, sonra
-    paket filtresi ALMAYAN yürütücüyü çağırıyordu; probda ölçüldü, adlandırılmayan
-    paket `active → archived` oldu.
-
-    **Bu test tam olarak KİMLİK karşılaştırmasını ölçer.** Olay TEK satır taşır
-    (yani satır-sayısı kapısı geçilir) ve satırın durumu `bekliyor`dur (yani
-    durum kapısı da geçilir); düşen tek kapı kimlik kapısıdır. Kanıt mesajda
-    aranır — yalnız çıkış koduna bakmak, komşu kapının reddini bu kapının
-    reddi sanmaya açıktı (ilk yazımda tam bu oldu: mutasyon sahte-yeşil geldi).
-    """
-    incident_id, olayin_paketi = await _onayli_olay(pkg_db)
-    yabanci = uuid.uuid4()
-    once = await pkg_db.fetchval(
-        "SELECT status FROM social.sector_packages WHERE id = $1", olayin_paketi
-    )
-
-    satirlar, rc = await cli.dispatch(
-        pkg_db,
-        _args(
-            "geri-al",
-            "--incident-id",
-            incident_id,
-            "--package-id",
-            str(yabanci),
-            "--actor",
-            ACTOR,
-        ),
-    )
-    rapor = "\n".join(satirlar)
-
-    assert rc == cli.RC_REFUSED
-    assert "adlandırılan paket" in rapor, rapor
-    assert str(yabanci) in rapor
-    assert (
-        await pkg_db.fetchval(
-            "SELECT status FROM social.sector_packages WHERE id = $1", olayin_paketi
-        )
-        == once
-    ), "adlandırılmayan paket değiştirildi"
-
-
-async def test_geri_al_refuses_a_multi_row_incident(pkg_db):
-    """Çok satırlı olayda tek paket daraltması YOK — `olay-geri-al`'a yönlendirir."""
-    incident_id, paketler = await _iki_paketli_onayli_olay(pkg_db)
-
-    satirlar, rc = await cli.dispatch(
-        pkg_db,
-        _args(
-            "geri-al",
-            "--incident-id",
-            incident_id,
-            "--package-id",
-            str(paketler[0]),
-            "--actor",
-            ACTOR,
-        ),
-    )
-    rapor = "\n".join(satirlar)
-
-    assert rc == cli.RC_REFUSED
-    assert "olay-geri-al" in rapor, rapor
-    assert (
-        await pkg_db.fetchval(
-            "SELECT count(*) FROM social.package_rollback_plans "
-            "WHERE incident_id = $1 AND durum = 'tamamlandi'",
-            incident_id,
-        )
-        == 0
-    ), "reddedilen çağrı yine de satır yürüttü"
-
-
-async def test_geri_al_refuses_when_row_is_not_pending(pkg_db):
-    """Satır `bekliyor` DEĞİLSE yürütme yok — `hata` satırı sessizce yeniden denenmez.
-
-    Kanıt yine mesajdadır: mutasyonla durum kapısı susturulduğunda komut
-    yürütücüye geçer ve raporunu basar; o rapor bu cümleyi TAŞIMAZ.
-    """
-    incident_id, aktif = await _onayli_olay(pkg_db)
-    await pkg_db.execute(
-        "UPDATE social.package_rollback_plans SET durum = 'hata' "
-        "WHERE incident_id = $1 AND package_id = $2",
-        incident_id,
-        aktif,
-    )
-
-    satirlar, rc = await cli.dispatch(
-        pkg_db,
-        _args(
-            "geri-al",
-            "--incident-id",
-            incident_id,
-            "--package-id",
-            str(aktif),
-            "--actor",
-            ACTOR,
-        ),
-    )
-    rapor = "\n".join(satirlar)
-
-    assert rc == cli.RC_REFUSED
-    assert "yalnız `bekliyor` satır yürütülür" in rapor, rapor
 
 
 def test_web_probe_never_claims_access_it_cannot_prove():
