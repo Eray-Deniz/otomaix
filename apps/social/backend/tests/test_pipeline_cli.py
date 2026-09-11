@@ -892,41 +892,113 @@ async def test_package_status_owner_scoped(pkg_db):
 # ─── 10. Hakem turu 13 — kapanan üç yüksek bulgu ────────────────────────────
 
 
-def test_web_probe_never_claims_access_it_cannot_prove():
-    """K-14 probu BAŞARI YOLU TAŞIMAZ — uydurulabilir cevap erişim kanıtı değildir.
+class _SahteKosum:
+    """Alt süreç sonucunun asgari ikizi — `subprocess.run` dönüşü taklit edilir."""
 
-    Ölçülen kusur: prob `example.com` H1 metnini soruyor ve stdout'ta alt dize
-    arıyordu. Ağa hiç çıkmayan bir model o metni eğitim bilgisinden üretebilir;
-    yani erişimi OLMAYAN denetçi `True` alıp resmî turu başlatabilirdi.
+    def __init__(self, stdout: str, returncode: int = 0) -> None:
+        self.stdout = stdout
+        self.stderr = ""
+        self.returncode = returncode
 
-    Bugünkü sözleşme: prob doğrulanabilir bir ölçüm KURAMADIĞINI söyler ve
-    `preflight` bunu ÖLÇÜM ARIZASI sayar. Fark önemlidir — `False` dönmek
-    "ölçtüm, erişim yok" demektir ve muafiyeti MEŞRULAŞTIRIR; arıza hiçbir
-    muafiyet üretmez.
+
+def _prob(beklenen, cikti, *, rc=0):
+    """Probu enjekte edilmiş getirici ve koşucuyla kurar."""
+    return cli._web_probu(
+        1.0,
+        getirici=lambda _sn: beklenen,
+        kosucu=lambda *a, **k: _SahteKosum(cikti, rc),
+    )
+
+
+def test_web_probe_accepts_only_the_exact_fresh_value():
+    """POZİTİF KONTROL — aracın TAM değeri basması erişim kanıtıdır."""
+    assert _prob("abc123", "abc123\n")(auditors_rolleri()[1]) is True
+
+
+def test_web_probe_rejects_a_stale_or_invented_answer():
+    """Ağa çıkmayan ama makul görünen cevap REDDEDİLİR.
+
+    Ölçülen kusur: ilk yazım statik ve yaygın bilinen bir metni soruyordu;
+    ağa hiç çıkmayan bir model onu ezberden üretebilirdi. Meydan okuma değeri
+    artık TAZE olduğu için ezberden üretilemez.
     """
-    prob = cli._web_probu(1.0)
+    prob = _prob("abc123", "UNREACHABLE\n")
+    assert prob(auditors_rolleri()[1]) is False
 
+
+def test_web_probe_rejects_a_value_buried_in_prose():
+    """Karşılaştırma TAM EŞİTLİKTİR — değeri metne gömen cevap geçmez.
+
+    Alt dize eşleşmesi kabul edilseydi, değeri doğru tahmin etmeden etrafına
+    laf dolayan bir cevap da erişim sayılırdı.
+    """
+    prob = _prob("abc123", "The sha appears to be abc123, I think.\n")
+    assert prob(auditors_rolleri()[1]) is False
+
+
+def test_web_probe_rejects_a_crashed_tool_even_if_it_printed_the_value():
+    """Araç sıfırdan farklı çıkarsa cevabı KABUL EDİLMEZ.
+
+    Kapı mutasyonda sahte-yeşil geldi: hiçbir test "araç çöktü ama doğru değeri
+    bastı" hâlini ölçmüyordu. Çöken bir araç cevabını yarım bir durumdan
+    üretmiş olabilir; o cevap erişim beyanı sayılmaz.
+    """
+    prob = _prob("abc123", "abc123\n", rc=1)
+    assert prob(auditors_rolleri()[1]) is False
+
+
+def test_web_probe_reports_measurement_failure_when_challenge_cannot_be_fetched():
+    """Beklenen değer ALINAMAZSA bu bir ÖLÇÜM ARIZASIDIR — muafiyet doğmaz.
+
+    `False` dönmek "ölçtüm, erişim yok" demektir ve K-14'ün muafiyet kolunu
+    meşrulaştırır; ölçülemeyen bir şey muafiyet üretemez.
+    """
+
+    def _patla(_sn):
+        raise OSError("ağ yok")
+
+    prob = cli._web_probu(1.0, getirici=_patla, kosucu=lambda *a, **k: _SahteKosum(""))
     with pytest.raises(cli.WebProbeUnavailable):
-        prob(auditors_rolleri()[0])
+        prob(auditors_rolleri()[1])
+
+
+def test_web_probe_measurement_failure_grants_no_exemption():
+    """Ölçüm arızası turu DURDURUR ve `ERISIM_YOK` muafiyeti ÜRETMEZ."""
+    from app.services.sector_pipeline import auditors
+
+    def _patla(_sn):
+        raise OSError("ağ yok")
+
+    sonuc = auditors.preflight(
+        auditors.DENETCI_ROLLERI[1],
+        prob=cli._web_probu(1.0, getirici=_patla, kosucu=lambda *a, **k: _SahteKosum("")),
+    )
+
+    assert sonuc.durum == auditors.PreflightDurumu.OLCUM_ARIZASI
+    assert not sonuc.tur_baslayabilir
+    assert not sonuc.muafiyet_mesru
+
+
+def test_web_probe_success_opens_the_round():
+    """POZİTİF KONTROL — doğrulanmış erişim turun başlamasına İZİN VERİR.
+
+    Bu test olmasaydı prob "her koşulda reddet" hâline düşürülebilir ve kapanış
+    turunun yakaladığı kusur (olumlu yolun tümden silinmesi) geri gelirdi.
+    """
+    from app.services.sector_pipeline import auditors
+
+    sonuc = auditors.preflight(
+        auditors.DENETCI_ROLLERI[1], prob=_prob("abc123", "abc123")
+    )
+
+    assert sonuc.durum == auditors.PreflightDurumu.ERISIM_VAR
+    assert sonuc.tur_baslayabilir
 
 
 def auditors_rolleri():
     from app.services.sector_pipeline import auditors
 
     return auditors.DENETCI_ROLLERI
-
-
-def test_web_probe_failure_blocks_the_round_without_granting_exemption():
-    """Prob arızası turu DURDURUR ve `ERISIM_YOK` muafiyeti ÜRETMEZ."""
-    from app.services.sector_pipeline import auditors
-
-    sonuc = auditors.preflight(
-        auditors.DENETCI_ROLLERI[1], prob=cli._web_probu(1.0)
-    )
-
-    assert sonuc.durum == auditors.PreflightDurumu.OLCUM_ARIZASI
-    assert sonuc.durum != auditors.PreflightDurumu.ERISIM_VAR
-    assert sonuc.durum != auditors.PreflightDurumu.ERISIM_YOK
 
 
 async def test_olay_onayla_refuses_when_nothing_was_stamped(pkg_db):

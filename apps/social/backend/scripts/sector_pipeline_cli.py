@@ -438,44 +438,104 @@ def _kaynaklari_oku(kok: Path) -> tuple[str, list[str], list[str]]:
 
 
 class WebProbeUnavailable(RuntimeError):
-    """Doğrulanabilir bir web erişim ölçümü KURULAMADI.
+    """Erişim ölçümü KURULAMADI — meydan okuma değeri alınamadı.
 
-    `preflight` bunu ÖLÇÜM ARIZASI sayar ve tur başlamaz. `False` dönmekten
-    FARKLIDIR ve fark bilinçlidir: `False` "ölçtüm, erişim yok" demektir ve
-    K-14'ün muafiyet kolunu MEŞRULAŞTIRIR; ölçüm arızası hiçbir muafiyet
-    üretmez."""
+    `preflight` bunu ÖLÇÜM ARIZASI sayar. `False` dönmekten FARKLIDIR ve fark
+    bilinçlidir: `False` "ölçtüm, erişim yok" demektir ve K-14'ün muafiyet
+    kolunu meşrulaştırır; ölçüm arızası hiçbir muafiyet üretmez."""
 
 
-def _web_probu(zaman_asimi_sn: float):
-    """K-14 ön kontrolünün probu — UYDURULABİLİR BAŞARI YOLU TAŞIMAZ.
+WEB_PROB_KAYNAGI = "https://api.github.com/repos/torvalds/linux/commits?per_page=1"
+"""Meydan okumanın kaynağı — TAZE ve ÖNCEDEN BİLİNEMEZ bir değer üretir.
 
-    **Neden başarı yolu yok (hakem turu 13, yüksek bulgu).** İlk yazım aracı
-    kendi donmuş komut satırıyla koşturuyor, `example.com`'un H1 metnini
-    istiyor ve stdout'ta o alt dizeyi arıyordu. O metin statiktir ve yaygın
-    biçimde bilinir: ağa HİÇ çıkmayan bir model onu eğitim bilgisinden
-    üretebilir. Yani erişimi OLMAYAN bir denetçi `True` alıp resmî turu
-    başlatabilirdi — K-14'ün kapatmak için var olduğu deliğin ta kendisi.
-    İlk yazımın docstring'i bunu "yanlış-pozitif yönü açık" diye ETİKETLEMİŞTİ
-    ve "yanlış-negatif yönü kapalı" diyordu; ikinci cümle de FAZLA GÜÇLÜYDÜ.
-    Etiketlemek kapatmak değildir.
+Neden bu biçim: en üstteki commit kimliği saatler içinde değişir, yani hiçbir
+modelin eğitim verisinde bugünkü değeri BULUNMAZ; ama tek bir koşum boyunca
+sabit kalır, yani TAM EŞİTLİKLE karşılaştırılabilir ve tolerans penceresi
+uydurmak gerekmez (ölçülmemiş sayı yazılmaz).
 
-    **Doğrulanabilir bir prob neyi ister:** aracın ancak GERÇEKTEN getirerek
-    öğrenebileceği, isteme GÖMÜLMEMİŞ, kısa ömürlü bir değer — ya bizim
-    denetlediğimiz bir uçtan basılan bir nonce, ya da aracın kendi
-    doğrulanabilir erişim telemetrisi. İkisi de bugün YOKTUR ve ikisi de bu
-    görevin dosya kümesinin dışındadır (yeni bir servis ya da uç gerektirir).
+Kendi sunucumuzu gerektirmemesi bilinçli: bu görev yeni bir uç kuramaz.
+"""
 
-    **Bugünkü dürüst davranış:** prob ölçüm KURAMADIĞINI söyler. `denetim`
-    turu başlamaz, muafiyet de doğmaz. Bu, hattın bugünkü gerçek durumudur
-    (denetçi web probu yok) ve artık kodda da öyle yazılıdır.
+
+def _meydan_okuma_degeri(zaman_asimi_sn: float) -> str:
+    """Beklenen değeri KONTROLÖR kendisi getirir — modele sorulmaz."""
+    import json as _json
+    import urllib.request
+
+    with urllib.request.urlopen(
+        WEB_PROB_KAYNAGI, timeout=zaman_asimi_sn
+    ) as yanit:  # noqa: S310 — sabit https URL, kullanıcı girdisi yok
+        yuk = _json.loads(yanit.read().decode("utf-8"))
+    return str(yuk[0]["sha"])
+
+
+def _web_probu(zaman_asimi_sn: float, *, getirici=None, kosucu=None):
+    """K-14 ön kontrolünün ÜRETİM probu — TAZE MEYDAN OKUMA ile ölçer.
+
+    **Neden meydan okuma (hakem turu 13, yüksek bulgu).** İlk yazım aracı kendi
+    komut satırıyla koşturuyor, `example.com`'un H1 metnini istiyor ve stdout'ta
+    o alt dizeyi arıyordu. O metin statiktir ve yaygın biçimde bilinir: ağa HİÇ
+    çıkmayan bir model onu eğitim bilgisinden üretebilir, yani erişimi OLMAYAN
+    denetçi resmî turu başlatabilirdi. İlk düzeltme bunu "ölçemiyorum" diyerek
+    kapattı; kapanış turu haklı olarak itiraz etti — o da OLUMLU YOLU tümden
+    siliyordu, yani araç erişim kazandığı gün bile tur başlayamazdı.
+
+    **Bugünkü sözleşme — üç yol, üçü de ayrı:**
+
+    * Beklenen değer ALINAMAZSA (kontrolörün kendi getirişi düşerse) ölçüm
+      KURULAMAMIŞTIR → `WebProbeUnavailable` → ölçüm arızası, muafiyet YOK.
+    * Araç koşamazsa (zaman aşımı, alt süreç arızası) yine ölçüm arızasıdır.
+    * Araç koşar ama TAM değeri basamazsa → `False` → ölçülmüş erişimsizlik.
+    * Araç TAM değeri basarsa → `True`.
+
+    Karşılaştırma TAM EŞİTLİKTİR, alt dize değil: alt dize eşleşmesi, değeri
+    başka bir metnin içine gömen bir cevabı da geçirirdi.
+
+    **ÖLÇÜLMEMİŞ AYAK — dürüst etiket:** olumlu yol CANLI olarak koşulmadı.
+    Bugünkü denetçi-2 komut satırında web arama bayrağı YOKTUR (bu kod tabanında
+    daha önce ölçülüp yazılı), dolayısıyla bugün beklenen sonuç `False`'tur.
+    Olumlu yolun canlı ilk ölçümü Task 19'dur.
     """
+    import subprocess
+
+    getirici = getirici or _meydan_okuma_degeri
+    kosucu = kosucu or subprocess.run
 
     def prob(tool: str) -> bool:
-        raise WebProbeUnavailable(
-            f"{tool}: doğrulanabilir web erişim ölçümü YOK — statik ve "
-            "önceden bilinebilir bir cevap erişim kanıtı sayılmaz; tur "
-            "başlamaz ve muafiyet üretilmez (K-14 fail-closed)"
+        spec = auditors.ARAC_KOMUTLARI[tool]
+        try:
+            beklenen = getirici(zaman_asimi_sn)
+        except Exception as hata:  # noqa: BLE001 — ölçüm kurulamadı
+            raise WebProbeUnavailable(
+                f"{tool}: meydan okuma değeri alınamadı ({type(hata).__name__}) — "
+                "erişim ÖLÇÜLEMEDİ; tur başlamaz ve muafiyet üretilmez"
+            ) from hata
+        if not beklenen or not str(beklenen).strip():
+            raise WebProbeUnavailable(
+                f"{tool}: meydan okuma değeri BOŞ — erişim ölçülemedi"
+            )
+
+        istem = (
+            f"Fetch {WEB_PROB_KAYNAGI} over the network. Reply with ONLY the "
+            "value of the first element's \"sha\" field, nothing else. If you "
+            "cannot reach the network, reply with the single word UNREACHABLE."
         )
+        try:
+            sonuc = kosucu(  # noqa: S603 — argv DONMUŞ, kabuk YOK
+                list(spec.argv),
+                input=istem,
+                capture_output=True,
+                text=True,
+                timeout=zaman_asimi_sn,
+            )
+        except Exception as hata:  # noqa: BLE001 — araç koşturulamadı
+            raise WebProbeUnavailable(
+                f"{tool}: prob koşturulamadı ({type(hata).__name__}) — "
+                "erişim ÖLÇÜLEMEDİ"
+            ) from hata
+        if sonuc.returncode != 0:
+            return False
+        return sonuc.stdout.strip() == str(beklenen).strip()
 
     return prob
 

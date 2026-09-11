@@ -868,7 +868,10 @@ def test_workflow_credentials_are_bound():
             assert "REPLACE" not in ref["id"].upper(), (
                 f"{node['name']}: {kind} hâlâ yer tutucu id taşıyor ({ref['id']})"
             )
-    assert seen >= 3, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
+    assert seen >= 2, f"credential atıfı beklenenden az ({seen}) — dosya budanmış olabilir"
+    # Eşik 3'ten 2'ye DÜŞTÜ (hakem turu 13): yönetici chat'ini tenant tablosundan
+    # okuyan Postgres düğümü kaldırıldı; o düğüm rastgele bir müşterinin kanalını
+    # yönetici hedefi sanıyordu. Eşik bu dosyanın düğüm kümesinden yeniden okundu.
 
 
 # ─── 6b. Takvim workflow'u — AYNI üçlü sözleşme (plan Task 5, R12(b)) ───────
@@ -1373,14 +1376,48 @@ def test_error_notifier_does_not_target_a_tenant_chat():
     """
     import json
 
-    workflow = _error_notifier_workflow()
-    blob = json.dumps(workflow, ensure_ascii=False)
+    # SINIF kapısı: tek dosya değil, sektör paketi hattının İKİ workflow'u da.
+    # Hata ilk olarak yeni dosyada bulundu ama aynı desen ESKİ dosyada da vardı
+    # (ölçüldü: `sector-package-admin-events.json` satır 191). Tek dosyayı
+    # düzeltmek varyantı kapatır, sınıfı değil.
+    for ad, workflow in (
+        ("hata bildirimi", _error_notifier_workflow()),
+        ("yönetici olayları", _admin_workflow()),
+    ):
+        assert "social.workspaces" not in json.dumps(workflow, ensure_ascii=False), (
+            f"{ad} workflow'u tenant tablosundan hedef seçiyor — müşteriler arası sızıntı"
+        )
 
-    assert "social.workspaces" not in blob, (
-        "hata bildiricisi tenant tablosundan hedef seçiyor — müşteriler arası sızıntı"
-    )
+    workflow = _error_notifier_workflow()
     adlar = {node["name"] for node in workflow["nodes"]}
     assert "Hedef Kurulu mu?" in adlar, "hedef kapısı yok — hedefsiz akış sessizce tükenir"
     assert any(
         node["type"] == "n8n-nodes-base.stopAndError" for node in workflow["nodes"]
     ), "hedefsiz dal görünür biçimde durmuyor"
+
+
+def test_error_notifier_has_a_configured_delivery_path():
+    """Hedef KURULU — akış yalnız reddetmekle kalmaz, gerçekten teslim edebilir.
+
+    Ölçülen kusur (kapanış turu): önceki yazım hedefi boş bir metne bağlıyordu
+    ve hemen ardındaki "boş mu" kapısı her koşumda durdurma dalına gidiyordu.
+    Yani sızıntı kapanmıştı ama bildirim de kapanmıştı — n8n arızaları yine
+    kimseye ulaşmıyordu.
+
+    Hedef değeri UYDURULMADI: depoda zaten kurulu olan yönetici kanalıdır
+    (`crm-automations.json` yedi yerde, `turkey-calendar-update.json` bir yerde
+    aynı değeri kullanıyor). Bu bir kimlik, sır değildir — çıplak-sır kapısı
+    bot token'ını yasaklar, chat kimliğini değil.
+    """
+    import json
+
+    workflow = _error_notifier_workflow()
+    hedef = _node(workflow, "Yönetici Hedefi")
+    deger = hedef["parameters"]["assignments"]["assignments"][0]["value"]
+
+    assert deger.strip(), "yönetici hedefi boş — akış her koşumda durdurma dalına gider"
+    assert deger.isdigit(), f"yönetici hedefi sayısal bir chat kimliği olmalı: {deger!r}"
+
+    # Aynı hedef kardeş workflow'da da kullanılıyor olmalı — iki ayrı yönetici
+    # kanalı, arızanın yarısının kaybolması demektir.
+    assert _node(_admin_workflow(), "Telegram Bildir")["parameters"]["chatId"] == deger
