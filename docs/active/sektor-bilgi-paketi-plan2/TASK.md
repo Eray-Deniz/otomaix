@@ -14,11 +14,14 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11 üçüncü oturum: DIŞ SÖZLEŞME TURU KOŞTU — dış
-depo `d9dc289`, pin `2739797`, kod uyarlaması `4cf6aa3`; dual hakem turu (attempt-3) ÜÇ YÜKSEK
-bulgu verdi, üçü de kontrolör ölçümüyle doğrulandı. **Sıradaki iş: üç yüksek bulgunun
-düzeltme partisi → kapanış turu (attempt-2, pinli sözleşme `a76100bd…`)** — gövde `# Open
-Problems`'ın ilk kaleminde; sonra Task 18.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11 üçüncü oturum: DIŞ SÖZLEŞME TURU BİTTİ — dış
+depo `d9dc289`, pin `2739797`, kod uyarlaması `4cf6aa3`; dual hakem turu üç yüksek verdi, düzeltme
+`171c1e5` + kapanış turu (**Claude-only** — Codex kotaya takıldı) üçünü KAPANDI ölçtü; iki düşük
+`90aee2c`'de kapandı. **Eray kararı (2026-09-11 kapanış): YALNIZ bu düzeltme partisi için tekrar review YOK — genel bir
+kural DEĞİL, sonraki oturumlarda düzeltme → tekrar review düzeni aynen sürer.**
+Kapanış tek-hakem kaldı (`dual-review: false`); `/security-review-claude-codex`'a geçerken explicit
+dual-review override kararı gerekir. **Sıradaki iş: Task 18 (ön-pilot dağıtım).** Gövde `# Open
+Problems`'ın ilk kaleminde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -1107,8 +1110,25 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Open Problems
 
-- **[YÜKSEK — AÇIK 2026-09-11, attempt-3 hakem turu] ÜÇ FIX-REQUIRED BULGU — düzeltme partisi +
-  kapanış turu.** Rapor: `docs/reviews/2026-09-11-feat-sektor-bilgi-paketi-plan2-attempt3.md`.
+- **[ORTA — AÇIK, KOŞULLU EV] Kapanış turu tek-hakem kaldı → zincir ilerlerken dual-review override
+  kararı.** Kapanış Claude-only koştu (Codex: ilk çağrı kesik `exit=1`, tekrar "usage limit").
+  Rapor `docs/reviews/2026-09-11-feat-sektor-bilgi-paketi-plan2-attempt3-closure.md`
+  (`dual-review: false`, `review_confidence: reduced`). **Eray kararı (2026-09-11): YALNIZ bu düzeltme
+  partisi için tekrar review yapılmadı** (genel kural değil; sonraki oturumlarda eski düzen) — Codex
+  kapanış tekrarı bu kalem için İPTAL. **Ev:** `/security-review-claude-codex`
+  başlatılırken (Task 18 sonrası, dal kapanışı öncesi) chain-advance gate'i explicit dual-review
+  override sorar; o anda karar verilir. `90aee2c` de bağımsız hakem görmedi (test-ağırlıklı, tek yüklem).
+
+- **[DÜŞÜK — accepted_risk, KOŞULLU] N1/1 — aday-dışı sistem gününün ADI ile anahtarı arasındaki
+  bağ ölçülemiyor.** Aday dışı bir dönem `emek-ve-dayanisma-gunu` gibi bir aday-dışı anahtarı
+  adıyla bağ kurulmadan taşıyabilir (tek anahtar şartı `90aee2c`'de kapandı; ad↔anahtar bağı
+  KODA KAPANMAZ — şablon üç günün günlük dildeki adını vermez). İkinci kapı var: tür↔kategori
+  çatışması notu onay yüzeyinde. **Yeniden açılma koşulu:** pilot araştırması aday-dışı bir günü
+  sektöre özgü dönem olarak seçerse. **Ev adayı:** bir sonraki dış sözleşme revizyonu (ad→anahtar
+  satırı) — TARİHİ YOK, evsiz-park olarak dürüstçe etiketli; borç değil, koşullu kalem.
+
+- **[KAPANDI 2026-09-11 — düzeltme `171c1e5` + Claude-only kapanış turu; `90aee2c` iki düşük]
+  attempt-3 hakem turu: ÜÇ FIX-REQUIRED BULGU.** Rapor: `docs/reviews/2026-09-11-feat-sektor-bilgi-paketi-plan2-attempt3.md`.
   Üçü de iki hakem tarafından bulundu ve kontrolör taze ölçümle doğruladı:
   1. **F1** (cluster `brief-doctor/aday-disi-donem-anahtar-sahiplenme`): aday takvimde olmayan
      dönem herhangi bir bilinen sistem anahtarını taşıyıp köprü kurabiliyor (ölçüldü: `Sezon
@@ -1806,19 +1826,27 @@ Authoritative state (stop-rule; locator `docs/reviews/.ledger-index/296deb840d9a
   (7 alan: threat_model `2ce27a1e…f871` · lens `code-review` · rubric `chml-v1` ·
   residual `threat-model-bounded` · closure_scope_rule `{fix-touched}U{direct-caller/callee}U{adjacent-test}U{touched-surface config/generated}` ·
   prompt_profile `closure-v1:339b0920…891e1` · policy `ch-only-v1`)
-- `completed_evaluations`: 1 · `total_invocations`: 1 · `consecutive_degraded`: 0
+- `completed_evaluations`: 2 · `total_invocations`: 2 · `consecutive_degraded`: 1
+  (attempt-2 kapanış: Claude ran / Codex failed — kota; single-reviewer evaluation)
 
 **Per-cluster**
 
 | cluster_key | first_seen | review_attempts | fix_attempts | reopen | severity_trajectory | temporal_origin | finding_relation | evidence_basis | evidence_confidence | current_disposition | bound_contract |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `brief-doctor/aday-disi-donem-anahtar-sahiplenme` (F1) | attempt-3 (2026-09-11) | 1 | 0 | 0 | [high] | introduced_by_fix (`4cf6aa3`) | original_finding | kontrolör probu: `Sezon Açılışı → black-friday` 0 not, köprü kuruldu | confirmed | open | `a76100bd…` |
-| `engine/k126-url-esitligi` (F2) | attempt-3 | 1 | 0 | 0 | [high] (raw: codex high, claude low) | introduced_by_fix (`4cf6aa3`) | original_finding | kontrolör probu: doğru kimlik + yanlış URL → istisna açık | confirmed | open | `a76100bd…` |
-| `approval/k03-notu-onay-yuzeyi` (F3) | attempt-3 | 1 | 0 | 0 | [high] (raw: codex high, claude medium) | pre_existing (N2'nin devamı) | original_finding | `approval.py` okuma: not satırı görüntüye girmiyor | confirmed | open | `a76100bd…` |
-| `engine/modul-docstring-k126-bayat` (F4) | attempt-3 | 1 | 0 | 0 | [medium] | introduced_by_fix | original_finding | alt-hakem grep | confirmed | accepted_risk (policy_accepted; gönüllü düzeltme planlı) | `a76100bd…` |
-| `brief-doctor/kaynak-seti-sha-anahtarlar` (F5) | attempt-3 | 1 | 0 | 0 | [low] | introduced_by_fix | original_finding | alt-hakem ölçümü: üç küme aynı mühür | confirmed | accepted_risk (policy_accepted; gönüllü düzeltme planlı) | `a76100bd…` |
+| `brief-doctor/aday-disi-donem-anahtar-sahiplenme` (F1) | attempt-3 (2026-09-11) | 2 | 1 (`171c1e5`) | 0 | [high, high→fixed] | introduced_by_fix (`4cf6aa3`) | original_finding | kapanış: alt-hakem 8 vakalık hücre matrisi, exploit kapalı | confirmed | **fixed** (`fixed_confirmed`, single-reviewer — reduced) | `a76100bd…` |
+| `engine/k126-url-esitligi` (F2) | attempt-3 | 2 | 1 (`171c1e5`) | 0 | [high] (raw: codex high, claude low) | introduced_by_fix (`4cf6aa3`) | original_finding | kapanış: 10 vakalık URL matrisi, exploit kapalı, pozitif kol açık | confirmed | **fixed** (`fixed_confirmed`, reduced) | `a76100bd…` |
+| `approval/k03-notu-onay-yuzeyi` (F3) | attempt-3 | 2 | 1 (`171c1e5`) | 0 | [high] (raw: codex high, claude medium) | pre_existing (N2'nin devamı) | original_finding | kapanış: karışık günlük probu + DB'li takım 122 PASS + CLI özet yolu | confirmed | **fixed** (`fixed_confirmed`, reduced) | `a76100bd…` |
+| `engine/modul-docstring-k126-bayat` (F4) | attempt-3 | 2 | 1 (`171c1e5`) | 0 | [medium] | introduced_by_fix | original_finding | kapanış: grep boş | confirmed | fixed (gönüllü; policy_accepted kaydı duruyor) | `a76100bd…` |
+| `brief-doctor/kaynak-seti-sha-anahtarlar` (F5) | attempt-3 | 2 | 1 (`171c1e5`) | 0 | [low] | introduced_by_fix | original_finding | kapanış: mühür kalıcılaşmıyor, sapma kolu yok | confirmed | fixed (gönüllü) | `a76100bd…` |
 | `auditors/kaynak-basina-3-satir` (F6) | attempt-3 | 1 | 0 | 0 | [low] | pre_existing | original_finding | alt-hakem okuma | confirmed | accepted_risk (policy_accepted; ev Task 18) | `a76100bd…` |
+| `brief-doctor/aday-disi-gun-ad-anahtar-bagi` (N1) | attempt-2 kapanış (2026-09-11) | 1 | 1 (`90aee2c`, yalnız (2) tek-anahtar şartı) | 0 | [low] | introduced_by_fix (`171c1e5`) | same_cluster_residual (F1) | alt-hakem probu: `Sezon Açılışı → emek-ve-dayanisma-gunu` notsuz | confirmed | accepted_risk ((1) sözleşme-bağımlı; yeniden-açılma koşullu) | `a76100bd…` |
+| `tests/approval-mutasyon-matrisi-kapi-ayirt-edicilik` (N2) | attempt-2 kapanış | 1 | 1 (`90aee2c`) | 0 | [low] | introduced_by_fix (`171c1e5`) | touched_surface_regression | alt-hakem okuma; mutasyonla ölçüldü | confirmed | fixed (gönüllü; bağımsız hakem GÖRMEDİ) | `a76100bd…` |
 
 **Event log (append-only)**
 - 2026-09-11 attempt-3 · `closure_observation`: attempt-1 (tam dual) tamamlandı; sözleşme pinlendi.
 - 2026-09-11 attempt-3 · `policy_accepted`: F4 · F5 · F6 (medium/low, ch-only-v1).
+- 2026-09-11 fix · `171c1e5` (T18-review3-fix1): F1 · F2 · F3 (+ F4 · F5 gönüllü); tam takım 4379 passed; 5/5 mutasyon kırıldı.
+- 2026-09-11 attempt-2 (kapanış) · `closure_observation`: contract hash EŞİT (`a76100bd…`); Claude ran, Codex failed (kesik `exit=1` → kanıt değil; tekrar "usage limit") — single-reviewer; kullanıcı kararı: Claude-only devam.
+- 2026-09-11 attempt-2 · `fixed_confirmed`: F1 · F2 · F3 (reduced confidence — dual eksik). Unresolved C/H: YOK.
+- 2026-09-11 attempt-2 · `policy_accepted`: N1 · N2 (low). Gönüllü düzeltme `90aee2c` (T18-review3-fix2): N2 + N1/(2); bağımsız hakem GÖRMEDİ.
+- 2026-09-11 · chain-advance: **dual-review eksik** → `/security-review-claude-codex` explicit override ister; bugün ilerletilmedi.
