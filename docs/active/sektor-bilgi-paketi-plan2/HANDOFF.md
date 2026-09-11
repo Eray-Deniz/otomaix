@@ -61,11 +61,11 @@ uçtan uca yazıldı, dört hakem turu koştu, dört yüksek bulgunun dördü de
 
 - **EN YÜKSEK (işletim) — kimlik doğrulamasız CRM webhook'ları onarılmadı, yalnız KAPATILDI.**
   Ev: `crm-webhooks-unauthenticated-sql-interpolation` — CURRENT.md'de `proposed`, tetikli.
-- **YENİ, EVİ YOK — arşiv dosyasında ÇIPLAK Telegram bot token'ı.** Ölçüldü bu oturumda:
-  `docs/archive/CLAUDE_crm_pre_cleanup.md` gerçek bir bot token'ı taşıyor ve depo geçmişine
-  yazılmış. Plan 2'nin kapsamı DIŞI. **Dürüst etiket: çözülmedi, evi YOK.** Eray'a bildirildi;
-  ev kararı (ayrı task mı, sessiz kabul mü) verilmedi. **Süresiz evsiz park YASAK — bir sonraki
-  oturumun açılışında karara bağlanmalı.**
+- **Arşiv dosyasındaki Telegram bot token'ı — RİSK DEĞİL, KAPANDI (2026-09-11 Eray).** Token
+  2026-09-06'da operatör tarafından döndürülmüştü ve eskisi `401 Unauthorized` ölçülmüştü
+  (CURRENT.md, `n8n-workflow-sir-hijyeni` (a) ayağı, commit `dadb343`). Geçen oturum
+  `docs/archive/CLAUDE_crm_pre_cleanup.md`'de karakter dizisini yeniden bulup EVSİZ KALEM ilan
+  etti; **bu ilan bayattı — dizi ölü metindir.** Geçmiş temizliği yapılmadı ve gerekmiyor.
 - **Üretim hattı hâlâ koşamaz:** denetçi-2'nin web erişimi yok (araç gerçeği, kod değil).
   Prob artık dürüstçe ölçüyor ama ölçtüğü şey "erişim yok".
 - **Bağlayıcı ek AÇIK-2 ile KOD IRAKSADI.** Ek hâlâ seçenek A'yı ("`geri-al` kalsın, olay
@@ -188,9 +188,10 @@ beyan etti.
   planın Step 1 test listesi bu testleri İSTEMİYOR; kapsam-dışı-by-design. **Yeniden açılma
   koşulu:** o gövdeler değişirse ya da Task 19'un ilk gerçek koşumu orada bir kusur gösterirse.
 
-**EVSİZ KALEM: BİR TANE** — arşivdeki çıplak bot token'ı (yukarıda Risks'te). Bu oturumda
-bulundu, Eray'a bildirildi, ev kararı VERİLMEDİ. **Bir sonraki oturum açılışında karara
-bağlanmalı; süresiz evsiz park yasaktır.**
+**EVSİZ KALEM: YOK.** Geçen oturumun tek evsiz kalemi (arşivdeki bot token'ı) 2026-09-11'de
+kapandı: zaten döndürülmüş bir token'ın ölü dizisiydi, yeni iş değildi. **Ders: bir sır
+bulgusunu EVSİZ ilan etmeden ÖNCE CURRENT.md'de o sırrın kapanmış kaydını ARA** — bu kalem
+bir kez çözülüp ikinci kez "yeni bulgu" diye açıldı.
 
 - **Eray'a teknik cümle onaylatma** — karar sorularını sade dille, proje-lokal kod referansı
   OLMADAN sor. Bu oturumda üç karar sorusu soruldu; üçü de sade dilde ve ölçülmüş bedelliydi.

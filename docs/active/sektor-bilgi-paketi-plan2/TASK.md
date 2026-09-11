@@ -709,6 +709,11 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Decisions Log
 
+- **2026-09-11 — arşivdeki Telegram bot token'ı = KAPANDI, yeni iş AÇILMAZ (Eray):**
+  geçen oturumun "EVSİZ KALEM" ilanı bayattı. Token 2026-09-06'da döndürülmüştü
+  (`n8n-workflow-sir-hijyeni` (a) ayağı, `dadb343`); eskisi `401 Unauthorized` ölçülmüştü.
+  `docs/archive/CLAUDE_crm_pre_cleanup.md`'deki dizi ölü metindir; geçmiş temizliği
+  yapılmıyor. HANDOFF'un evsiz kovası artık BOŞ.
 - **2026-08-27 — K-84 = A:** kalıp kimliği sürümler arası korunur. Değeri eşleştirmek
   değil, sentez ajanının atladıklarını motorun yakalayabilmesi. Doğurduğu teknik kalemler
   K-151/K-152/K-86/K-154 planın işi.
