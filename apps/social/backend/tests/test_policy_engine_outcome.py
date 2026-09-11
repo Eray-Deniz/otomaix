@@ -296,6 +296,7 @@ def test_uygulanmama_sebepleri_are_closed() -> None:
         "kaynak-iddia-yok",
         "iddia-arastirmada-yok",
         "iddia-denetcide-yok",
+        "donem-kimligi-cozulemedi",
         "oneri-olumsuz",
         "celiski",
         "cogunluk-yok",

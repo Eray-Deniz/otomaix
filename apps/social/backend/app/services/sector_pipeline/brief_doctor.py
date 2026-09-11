@@ -1085,13 +1085,20 @@ def kaynak_seti_sha(raporlar: Sequence[DoctorReport]) -> str:
                 "sonuc": rapor.sonuc,
                 "notlar": [_bulgu(b) for b in rapor.notlar],
                 "elemeler": [_bulgu(b) for b in rapor.elemeler],
-                # `iddialar` MÜHRE GİRER (2026-09-11). Bu alan EK-E'ye
-                # YAZILMAZ, yani denetçinin gördüğünü değiştirmez — ama motorun
+                # `iddialar` MÜHRE GİRER (2026-09-11). Alan EK-E'ye YAZILMAZ,
+                # yani denetçinin gördüğünü değiştirmez — ama motorun
                 # YETKİLENDİRME kapısını besler: `ekle` kararının dayandığı
-                # araştırma iddiası buradan çözülür. Mühür "motora verilen
-                # mekanik kapı, paketi kuran kapının ta kendisidir" diyorsa,
-                # kapının yetki taşıyan yarısını dışarıda bırakamaz; aksi hâlde
-                # iddia kümesi değişmiş bir rapor mühürden SESSİZCE geçerdi.
+                # araştırma iddiası buradan çözülür.
+                #
+                # **Gerekçenin DÜRÜST sınırı (hakem turu 1, F9/düşük).** İlk
+                # yazım "iddia kümesi değişmiş bir rapor mühürden SESSİZCE
+                # geçerdi" diyordu; bu ABARTILIYDI. `run` yolunda `iddialar`
+                # kaynak METNİNDEN saf olarak türer ve metnin kimliği
+                # `icerik_ozeti` ile ZATEN aynı mührün içindedir — o yolda alan
+                # bağımsız bir ayrım üretmez. Alanın gerçekten kapattığı şey
+                # dardır: `DoctorReport`'u `run`'ı ATLAYARAK elle kuran bir
+                # çağıranın iddia kümesi. O yolun kökeni zaten doğrulanmamıştır
+                # (alanın kendi docstring'i böyle der); mühür onu da kapsar.
                 "iddialar": [
                     {"no": iddia.no, "alan": iddia.alan}
                     for iddia in rapor.iddialar
@@ -2792,6 +2799,11 @@ def _c_no_dizisi_ihlalleri(belge: _Belge) -> list[str]:
     numaralar = [int(ham) for ham in hamlar if _C_NO_RE.match(ham)]
     if not numaralar:
         return []
+    # F8 (hakem turu 1, düşük — ÖLÇÜLDÜ): "aynı arıza iki kez sayılmaz" beyanı
+    # BOŞLUK kolunda TUTMUYORDU. Bozuk hücre `numaralar`dan düşünce N küçülüyor
+    # ve boşluk kuralı SAHTE bir eksik üretiyordu: `1,2,3a,4` → "eksik numara:
+    # [3]". 3 eksik DEĞİL, BOZUK — ve onu satır denetimi zaten bildirdi.
+    bozuk_var = len(numaralar) != len(hamlar)
     mesajlar: list[str] = []
     tekrar = sorted({no for no in numaralar if numaralar.count(no) > 1})
     if tekrar:
@@ -2801,7 +2813,7 @@ def _c_no_dizisi_ihlalleri(belge: _Belge) -> list[str]:
         )
     beklenen = set(range(1, len(numaralar) + 1))
     eksik = sorted(beklenen - set(numaralar))
-    if eksik and not tekrar:
+    if eksik and not tekrar and not bozuk_var:
         mesajlar.append(
             "Bölüm C `no` sütunu 1'den başlayıp boşluksuz artmalı — eksik "
             f"numara: {eksik}"

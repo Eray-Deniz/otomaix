@@ -34,6 +34,7 @@ import pytest
 from app.services.sector_content_schema import structural_errors
 from app.services.sector_pipeline import auditors, brief_doctor as bd, identity
 from app.services.sector_pipeline import engine
+from app.services.sector_pipeline.policy_config import PolicyConfig
 from app.services.sector_pipeline.engine_contract import (
     BULGU_SINIFLARI,
     SONUCLAR,
@@ -1238,6 +1239,76 @@ def test_the_two_ended_claim_link_passes_when_both_ends_hold() -> None:
     assert sonuc.uygulanmayan_kararlar == ()
 
 
+def test_an_unrelated_row_cannot_supply_the_majority() -> None:
+    """F2 (hakem turu 1, yüksek — ÖLÇÜLDÜ): SAYIM da iddiaya bağlıdır.
+
+    Kapatıldığı iddia edilen sınıf yetkilendirme ayağında kapanmış, SAYIM
+    ayağında yaşamaya devam ediyordu: tek kaynaklı bir iddiadan türetildiği
+    BEYAN EDİLEN kalıp, atfa aynı alandan alakasız bir satır eklenerek
+    iki-kaynaklık çoğunluk devralıyor ve bu turda açılan K-126 istisnasını
+    (resmîlik + canlı URL) tamamen ATLIYORDU.
+    """
+    # TABAN: tek kaynaklı iddia yalnız başına çoğunluğu geçemez.
+    tek = engine.run_checks(_ekle_girdisi(kanit=TEK_KAYNAKLI, kaynak_iddia="K1#2"))
+    assert "cogunluk-yok" in _sebepler(tek)
+    # Alakasız KOMŞU satır eklenince de geçemez — sayım iddiaya bağlı.
+    komsulu = engine.run_checks(
+        _ekle_girdisi(kanit=f"{TEK_KAYNAKLI}, {IKI_KAYNAKLI}", kaynak_iddia="K1#2")
+    )
+    assert "cogunluk-yok" not in _sebepler(komsulu), (
+        "komşu satır artık sayıma girmemeli; onun yerine ATIF kapısı düşmeli"
+    )
+    assert "iddia-denetcide-yok" in _sebepler(komsulu)
+
+
+def test_a_cited_row_carrying_no_declared_claim_is_rejected() -> None:
+    """Bağın İKİNCİ yönü: her atıf yapılan satır en az bir iddiayı taşımalı.
+
+    Tek yönlü bir bağ ("her iddia bir satırda geçsin") atfa istenen sayıda
+    alakasız satır eklenmesine izin verir; o satırlar sayıma girmese bile
+    provenans yalan söyler — karar, dayanmadığı satırlara atıf yapmış olur.
+    """
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=f"{IKI_KAYNAKLI}, {TEK_KAYNAKLI}", kaynak_iddia="K1#1, K2#1")
+    )
+    assert "iddia-denetcide-yok" in _sebepler(sonuc)
+
+
+def test_the_majority_narrowing_holds_even_if_the_citation_gate_falls() -> None:
+    """F2'nin İKİNCİ katmanı BAĞIMSIZ ölçülür (savunma derinliği gerçek mi?).
+
+    Çift yönlü atıf kapısı ayaktayken sayım daraltması ERİŞİLEMEZ — mutasyon
+    ölçümü bunu yakaladı: daraltmayı söktüğümde hiçbir test düşmedi, yani
+    "ikinci katman" ölçülmemiş koddu. Ölçmenin tek yolu BİRİNCİ katmanı
+    devre dışı bırakıp ikincisini tek başına sınamaktır; aksi hâlde
+    "savunma derinliği" iddiası doğrulanmamış kalırdı.
+    """
+    girdi = _ekle_girdisi(
+        kanit=f"{TEK_KAYNAKLI}, {IKI_KAYNAKLI}", kaynak_iddia="K1#2"
+    )
+    # Kontrol kolu: birinci katman ayakta → atıf kapısı düşürüyor.
+    assert "iddia-denetcide-yok" in _sebepler(engine.run_checks(girdi))
+
+    # BİRİNCİ katman sökülür ("her atıf bir iddia taşıyor" gibi davranır);
+    # ikinci katman tek başına ayakta mı?
+    with mock.patch.object(engine, "_iddiasiz_atiflar", lambda atiflar, tasiyan: []):
+        sonuc = engine.run_checks(girdi)
+    assert "cogunluk-yok" in _sebepler(sonuc), (
+        "atıf kapısı düşünce sayım daraltması TEK BAŞINA tutmalı"
+    )
+
+
+def test_the_claim_bound_majority_still_admits_a_genuine_two_source_claim() -> None:
+    """POZİTİF KONTROL: daraltma MEŞRU çoğunluğu kapatmıyor.
+
+    Bu kol olmadan F2 düzeltmesi "her şeyi reddet" hâliyle de yeşil kalırdı.
+    """
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#1, K2#1")
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
 def test_the_claim_link_gates_are_separately_measurable() -> None:
     """MUTASYON: her ayak AYRI sökülür; komşusu ayakta kalır.
 
@@ -1252,7 +1323,9 @@ def test_the_claim_link_gates_are_separately_measurable() -> None:
         temiz = _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#1, K2#1")
         assert "iddia-arastirmada-yok" in _sebepler(engine.run_checks(temiz))
     with mock.patch.object(
-        engine, "_iddia_alani_bagli_mi", lambda karar, yol, iddia: True
+        engine,
+        "_iddia_alani_bagli_mi",
+        lambda karar, yol, iddia, takvim=frozenset(): engine.IDDIA_BAGI_VAR,
     ):
         # Alan bağı sökülünce BAŞKA alanın iddiası geçer; (b) ayağı hâlâ ayakta
         # olduğu için sebep `iddia-denetcide-yok`a kayar, karar YİNE uygulanmaz.
@@ -1263,7 +1336,7 @@ def test_the_claim_link_gates_are_separately_measurable() -> None:
 # ── Görev B: bağ ALANA değil O DÖNEME kurulur ─────────────────────────────
 
 
-def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str):
+def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str, donem_adi: str | None = None):
     """`ozel_gun` alanına yeni bir kanca ekleyen karar.
 
     Denetçi satırı Görev B yazımındadır (`ozel_gun/{dönem}/{başlık}`), araştırma
@@ -1313,7 +1386,29 @@ def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str):
         },
         denetim=tablo,
     )
-    mekanik = _gecen_kapi(tablo)
+    if donem_adi is None:
+        mekanik = _gecen_kapi(tablo)
+    else:
+        # Araştırmanın YAZDIĞI ad değiştirilir; sistem anahtarı aynı kalır.
+        iddialar = tuple(
+            bd.CIddia(no=iddia.no, alan=donem_adi)
+            if iddia.no == YENI_DONEM_IDDIA_NO
+            else iddia
+            for iddia in _arastirma_iddialari(tablo)
+        )
+        mekanik = bd.gate_round(
+            [
+                bd.DoctorReport(
+                    sonuc=bd.SONUC_GECTI,
+                    notlar=(),
+                    elemeler=(),
+                    kaynak_adi=ad,
+                    icerik_ozeti=_ozet(ad),
+                    iddialar=iddialar,
+                )
+                for ad in (DOGRULANMIS_KAYNAK, IKINCI_KAYNAK)
+            ]
+        )
     return _girdi(
         icerik=aday,
         gunluk=gunluk,
@@ -1329,6 +1424,30 @@ def test_a_special_day_claim_binds_to_that_period() -> None:
         _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}")
     )
     assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_a_daily_language_period_name_reports_the_HONEST_reason() -> None:
+    """F3 (hakem turu 1, yüksek — ÖLÇÜLDÜ): teşhis doğru yeri göstermeli.
+
+    Araştırma şablonunun ADAY TAKVİMİ dönem adını GÜNLÜK DİLDE yazar
+    (`29 Ekim`); sistem takvimi RESMÎ adı taşır (`Cumhuriyet Bayramı` →
+    `cumhuriyet-bayrami`). ÖLÇÜLDÜ: `normalize_special_day_key('29 Ekim')` →
+    `'29-ekim'` ve şablonun 15 aday adından yalnız 4'ü sistem slug'ına düşüyor.
+
+    Kapı FAIL-CLOSED kalır — uydurma eşleştirme YAPILMAZ, kalıp girmez. Düzelen
+    şey TEŞHİSTİR: eskiden `iddia-arastirmada-yok` deniyordu ve bu YANLIŞTI
+    (iddia araştırmada VAR; çözülemeyen DÖNEM KİMLİĞİ). Kalıcı kapanış dış
+    sözleşme revizyonu ister: Bölüm C dönem satırı kanonik sistem anahtarını
+    TAŞIMALIDIR.
+    """
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}",
+            donem_adi="14 Şubat",
+        )
+    )
+    assert "donem-kimligi-cozulemedi" in _sebepler(sonuc)
+    assert "iddia-arastirmada-yok" not in _sebepler(sonuc)
 
 
 def test_a_claim_about_another_period_does_not_authorise() -> None:
@@ -1590,6 +1709,53 @@ def test_a_contested_officiality_judgement_does_not_open_the_exception() -> None
     assert "cogunluk-yok" in _sebepler(sonuc)
 
 
+def test_a_missing_profile_row_from_one_auditor_closes_the_exception() -> None:
+    """F5 (hakem turu 1, yüksek — ÖLÇÜLDÜ): satırı YAZMAMAK şüpheyi susturamaz.
+
+    İlk yazım yargıları iki raporun satırlarından TOPLUYOR ve "yazan herkes
+    evet demiş olmalı" diyordu. Ölçüldü: bir denetçi o kaynak için satırı hiç
+    yazmazsa liste `[evet]` kalıyor, `all()` geçiyor ve istisna AÇILIYORDU —
+    docstring'in kapattığını söylediği şeyin ta kendisi. Hiçbir katman profilin
+    HER kaynağı kapsadığını ölçmüyor (`_kaynak_profili` bunu R6 kapsam sınırı
+    olarak açıkça beyan eder), o yüzden kapı MOTORDA kuruldu.
+    """
+    # D2 kaynak-1 için satır HİÇ YOK (yalnız kaynak-2 profillenmiş).
+    eksik = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False),
+            profil_2=(
+                auditors.KaynakProfili(kaynak=2, resmi=False, not_metni="Not."),
+            ),
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(eksik)
+    # POZİTİF KONTROL: iki rapor da o kaynağı profillerse istisna AÇILIR.
+    tam = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False), profil_2=_profil(True, False)
+        )
+    )
+    assert tam.uygulanmayan_kararlar == ()
+
+
+def test_a_duplicated_profile_row_does_not_open_the_exception() -> None:
+    """Aynı kaynağa İKİ yargı da kapıyı açmaz — kimlik tek olmalı.
+
+    Rapor düzeyinde tekrar zaten reddedilir; motor kapısı o katmana GÜVENMEZ
+    (tek yerde tutulan değişmez, o yer değişince sessizce kaybolur).
+    """
+    sonuc = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=(
+                auditors.KaynakProfili(kaynak=1, resmi=True, not_metni="A."),
+                auditors.KaynakProfili(kaynak=1, resmi=True, not_metni="B."),
+            ),
+            profil_2=_profil(True, False),
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)
+
+
 def test_an_absent_officiality_judgement_does_not_open_the_exception() -> None:
     """Yargı HİÇ yazılmamışsa istisna AÇILMAZ — sessizlik `evet` değildir."""
     sonuc = engine.run_checks(
@@ -1677,20 +1843,67 @@ def test_kategorisiz_gun_hakkinda_hicbir_sey_iddia_edilmez() -> None:
     assert _catismalar(sonuc) == ()
 
 
-def test_tur_kategori_catismasi_karar_gunlugune_NOT_olarak_yazilir() -> None:
-    """K-03: çatışma kayda geçer — ama içerik DEĞİŞMEZ, paket türü üstündür.
+def test_tur_kategori_catismasi_KOSUYU_BLOKLAMAZ() -> None:
+    """K-03 çatışması UÇTAN UCA bloklamamalı — hakem turu 1, F1 (critical).
 
-    Blok hâline getirmek K-03'ün kendi hükmünü tersine çevirirdi; bu yüzden
-    ölçüm İKİ ayaklıdır: not ÜRETİLİR **ve** karar uygulanmama listesi BOŞ kalır.
+    **Bu test `decide()` yolunu koşar, `run_checks()` değil** — ve sebebi
+    ölçülmüştür: ilk yazım çatışmayı bir NOT satırıyla kaydediyordu, o sınıf
+    DIŞ SÖZLEŞMEDE kapalı kümenin dışındaydı, `decide()` kendi ürettiği günlüğü
+    doğruladığı için sonuç `blocked` oluyordu. Yani her çatışma paketi
+    DÜŞÜRÜYORDU — K-03'ün hükmünün TAM TERSİ. `run_checks` bunu GÖREMEZ:
+    notu üretmek onu geçerli kılmaz, son montaj kapısı reddeder.
+
+    Emsal bu dosyada zaten duruyordu (`test_notes_pass_the_decision_log_schema`)
+    ve yeni sınıfa uygulanmamıştı; sınıf artık uçtan uca kapanıyor.
     """
+    girdi = _kategorili_girdi(paket_turu="ticari-firsat", kategori="national")
+    sonuc = engine.decide(girdi, PolicyConfig())
+    assert sonuc.sonuc != "blocked", sonuc.sebep
+    assert sonuc.final_decision_log is not None
+    assert sonuc.final_candidate is not None
+    # Çatışma KAYBOLMUYOR: ölçüm olarak koşunun diff'ine geçer.
+    assert sonuc.engine_diff["kategori_cakismalari"], sonuc.engine_diff
+
+
+def test_tur_kategori_catismasi_olcum_olarak_tasinir() -> None:
+    """Çatışmanın İÇERİĞİ ölçümde tam — anahtar, paket türü, sistem kategorisi."""
     sonuc = engine.run_checks(
         _kategorili_girdi(paket_turu="ticari-firsat", kategori="national")
     )
-    notlar = [n for n in sonuc.notlar if n["sinif"] == "tur-kategori-catismasi"]
-    assert len(notlar) == 1, sonuc.notlar
-    assert TAKVIM_ANAHTARI in notlar[0]["gerekce"]
-    assert "PAKET TÜRÜ üstündür" in notlar[0]["gerekce"]
+    catisma = _catismalar(sonuc)
+    assert len(catisma) == 1, catisma
+    assert catisma[0] == {
+        "anahtar": TAKVIM_ANAHTARI,
+        "paket_turu": "ticari-firsat",
+        "sistem_kategorisi": "national",
+    }
+    # Paket türü ÜSTÜNDÜR: hiçbir karar bu yüzden uygulanmaz hâle gelmez.
     assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_motorun_urettigi_her_NOT_sinifi_KAPALI_kumeden_gelir() -> None:
+    """SINIF KAPANIŞI: kapı elle seçilmiş örnekle değil, ÜRETİLMİŞ kümeyle.
+
+    F1 tek bir not sınıfının kaçak olmasıydı; kapanış "o sınıfı kaldırdım"
+    değil, "motorun ürettiği HER sınıf sözleşmenin kümesindedir" olmalıdır —
+    yoksa yarın eklenen dördüncü sınıf aynı deliği yeniden açar.
+    """
+    girdiler = [
+        _kategorili_girdi(paket_turu="ticari-firsat", kategori="national"),
+        _kategorili_girdi(paket_turu="kutlama", kategori="commercial"),
+        _girdi(takvim=frozenset()),
+        _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#1, K2#1"),
+        _ekle_girdisi(kanit=TEK_KAYNAKLI, kaynak_iddia="K1#2"),
+    ]
+    gorulen: set[str] = set()
+    for girdi in girdiler:
+        for not_satiri in engine.run_checks(girdi).notlar:
+            gorulen.add(not_satiri["sinif"])
+    assert gorulen, "hiç not üretilmedi — tarama hiçbir şey kanıtlamıyor"
+    assert gorulen <= identity.NOT_SINIFLARI, (
+        f"motor sözleşmenin kapalı kümesi dışında not sınıfı üretti: "
+        f"{sorted(gorulen - identity.NOT_SINIFLARI)}"
+    )
 
 
 def test_tur_revizyonu_kategori_catismasindan_AYRI_olculur() -> None:

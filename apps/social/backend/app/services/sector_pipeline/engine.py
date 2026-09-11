@@ -836,7 +836,17 @@ def _arastirma_iddialari(inputs: EngineInputs) -> dict[str, CIddia]:
     return evren
 
 
-def _iddia_alani_bagli_mi(karar_alani: str, oge_yolu: str, iddia_alani: str) -> bool:
+IDDIA_BAGI_VAR = "bagli"
+IDDIA_BAGI_YOK = "bagsiz"
+IDDIA_BAGI_DONEM_COZULEMEDI = "donem-cozulemedi"
+
+
+def _iddia_alani_bagli_mi(
+    karar_alani: str,
+    oge_yolu: str,
+    iddia_alani: str,
+    takvim_anahtarlari: frozenset[str] = frozenset(),
+) -> str:
     """Araştırma iddiasının `alan/dönem` hücresi BU kararın alanını mı anlatıyor?
 
     Sözleşme Bölüm C'de hücreyi İKİ yazımla kapalı tutar: *"ya Bölüm A alan
@@ -858,14 +868,37 @@ def _iddia_alani_bagli_mi(karar_alani: str, oge_yolu: str, iddia_alani: str) -> 
         alan_karsilastirma_anahtari(karar_alani),
         alan_karsilastirma_anahtari(iddia_alani),
     ):
-        return True
+        return IDDIA_BAGI_VAR
+    # F10 (hakem turu 1, düşük): iki ayak AYNI kuralı okur. İlk yazımda birinci
+    # ayak `alan_karsilastirma_anahtari`'den geçiyor, ikincisi HAM
+    # karşılaştırıyordu — "tek kural" iddiasıyla çelişen iki okuma.
     eslesme = _OZEL_GUN_YOLU.match(oge_yolu)
-    if karar_alani != "ozel_gun" or eslesme is None:
-        return False
+    if alan_karsilastirma_anahtari(karar_alani) != "ozel_gun" or eslesme is None:
+        return IDDIA_BAGI_YOK
     try:
-        return normalize_special_day_key(iddia_alani) == eslesme.group("anahtar")
+        anahtar = normalize_special_day_key(iddia_alani)
     except ValueError:
-        return False
+        return IDDIA_BAGI_DONEM_COZULEMEDI
+    if anahtar == eslesme.group("anahtar"):
+        return IDDIA_BAGI_VAR
+    # AYRIM ÖLÇÜLEBİLİR ve dürüst teşhis onu gerektirir (F3): araştırmanın
+    # yazdığı ad SİSTEM takviminde hiç karşılık bulmuyorsa sorun "yanlış dönem"
+    # değil, AD UZAYIDIR — rapor bunu `iddia-arastirmada-yok` diye söylerse
+    # yanlış yeri gösterir. Karşılık buluyorsa ama BAŞKA bir güne düşüyorsa
+    # iddia gerçekten bu kararın dönemini anlatmıyordur.
+    if anahtar not in takvim_anahtarlari:
+        return IDDIA_BAGI_DONEM_COZULEMEDI
+    return IDDIA_BAGI_YOK
+
+
+def _iddiasiz_atiflar(atiflar: list[str], tasiyan: set[str]) -> list[str]:
+    """Beyan edilen iddiaların HİÇBİRİNİ taşımayan atıflar.
+
+    Ayrı bir fonksiyondur ki mutasyon kolu BİRİNCİ katmanı sökebilsin: sayım
+    daraltması (İKİNCİ katman) ancak bu kapı devre dışıyken tek başına
+    ölçülebilir. Aksi hâlde "savunma derinliği" ölçülmemiş bir iddia kalırdı.
+    """
+    return sorted(set(atiflar) - tasiyan)
 
 
 def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
@@ -967,17 +1000,21 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         #     alanı kararın alanıyla örtüşüyor. Doğrulayan MEKANİK ayrıştırıcıdır,
         #     sentezin beyanı DEĞİL — tek uçlu bir bağ kendini onaylardı, çünkü
         #     iki beyanı da aynı model yazıyor.
-        arastirmada_yok = sorted(
-            atif.etiket
-            for atif in iddialar
-            if atif.etiket not in iddia_evreni
-            or not _iddia_alani_bagli_mi(
-                karar_alani,
-                _metin(satir.get("oge_yolu")),
-                iddia_evreni[atif.etiket].alan,
+        oge_yolu = _metin(satir.get("oge_yolu"))
+        baglar = {
+            atif.etiket: (
+                IDDIA_BAGI_YOK
+                if atif.etiket not in iddia_evreni
+                else _iddia_alani_bagli_mi(
+                    karar_alani,
+                    oge_yolu,
+                    iddia_evreni[atif.etiket].alan,
+                    inputs.takvim_anahtarlari,
+                )
             )
-        )
-        if arastirmada_yok:
+            for atif in iddialar
+        }
+        if any(bag == IDDIA_BAGI_YOK for bag in baglar.values()):
             kayitlar.append(
                 UygulanmayanKarar(
                     unit_id=satir["unit_id"],
@@ -986,15 +1023,44 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                 )
             )
             continue
+        # DÜRÜST TEŞHİS (F3): iddia araştırmada VAR, çözülemeyen DÖNEM KİMLİĞİ.
+        if any(
+            bag == IDDIA_BAGI_DONEM_COZULEMEDI for bag in baglar.values()
+        ):
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"],
+                    karar="ekle",
+                    sebep="donem-kimligi-cozulemedi",
+                )
+            )
+            continue
         # (b) `kanit`te gösterilen denetçi satırı AYNI numarayı taşıyor. Üçüncü
         #     taraf olmadan zincir kapanmaz: denetçinin sütunu, sentezin beyanını
         #     bağımsız bir belgede doğrular.
+        #
+        # BAĞ ÇİFT YÖNLÜDÜR (hakem turu 1, F2/yüksek — ÖLÇÜLDÜ). İlk yazım yalnız
+        # "her iddia BİR satırda geçsin" diyordu ve SAYIMI `cozulen`in TAMAMINDAN
+        # topluyordu. Ölçüldü: tek kaynaklı bir iddia (`K1#2`), atfa AYNI ALANDAN
+        # alakasız bir satır eklenerek iki-kaynaklık çoğunluk devralıyor ve bu turda
+        # açılan K-126 istisnası tamamen ATLANIYOR. Yani kapatıldığı iddia edilen
+        # sınıf — "aynı alandaki HERHANGİ bir denetçi satırı yetkilendirir" —
+        # yetkilendirme ayağında kapanmış, SAYIM ayağında yaşamaya devam ediyordu.
+        # Varyant yamamak yerine bağ simetrik kuruldu: her iddia bir satırda
+        # geçmeli VE her atıf yapılan satır en az bir iddiayı taşımalıdır.
+        iddia_kumesi = set(iddialar)
+        tasiyan = {
+            parca
+            for parca in atiflar
+            if iddia_kumesi & satir_evreni[parca].kaynak_iddialari
+        }
         denetcide_yok = sorted(
             atif.etiket
             for atif in iddialar
-            if not any(atif in denetci_satiri.kaynak_iddialari for denetci_satiri in cozulen)
+            if not any(atif in satir_evreni[parca].kaynak_iddialari for parca in atiflar)
         )
-        if denetcide_yok:
+        iddiasiz_atif = _iddiasiz_atiflar(atiflar, tasiyan)
+        if denetcide_yok or iddiasiz_atif:
             kayitlar.append(
                 UygulanmayanKarar(
                     unit_id=satir["unit_id"],
@@ -1082,10 +1148,16 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                 )
             )
             continue
+        # SAYIM YALNIZ İDDİA TAŞIYAN SATIRLARDAN toplanır (F2). `cozulen`in
+        # tamamını kullanmak, beyan edilen iddiayla hiçbir bağı olmayan bir
+        # satırın kaynaklarını çoğunluğa katardı. Yukarıdaki çift yönlü kapı
+        # `tasiyan == set(atiflar)` olmasını zaten garanti eder; küme yine de
+        # BURADA da daraltılır — tek bir yerde tutulan bir değişmez, o yer
+        # değişince sessizce kaybolur.
         kaynaklar = {
             KAYNAK_ETIKETI.format(no)
-            for denetci_satiri in cozulen
-            for no in denetci_satiri.kaynaklar
+            for parca in tasiyan
+            for no in satir_evreni[parca].kaynaklar
         } & kabul_edilen
         if len(kaynaklar) >= KAYNAK_TABANI_YENI_OGE:
             continue
@@ -1140,13 +1212,26 @@ def _tek_kaynak_istisnasi(inputs: EngineInputs, etiketler: set[str]) -> bool:
         inputs.denetci_envanterleri.birinci,
         inputs.denetci_envanterleri.ikinci,
     )
-    yargilar = [
-        profil.resmi
-        for rapor in raporlar
-        for profil in rapor.kaynak_profili
-        if KAYNAK_ETIKETI.format(profil.kaynak) == etiket
-    ]
-    if not yargilar or not all(yargilar):
+    # KAPSAMA ÖNCE, DEĞER SONRA (hakem turu 1, F5/yüksek — ÖLÇÜLDÜ). İlk yazım
+    # yargıları iki raporun satırlarından TOPLUYOR ve "yazan herkes evet demiş
+    # olmalı" diyordu; ama hiçbir katman profilin HER kaynağı kapsadığını
+    # ölçmüyor (`_kaynak_profili` bunu R6 kapsam sınırı olarak açıkça beyan
+    # eder). Ölçüldü: bir denetçi o kaynak için satırı HİÇ YAZMAZSA liste
+    # `[True]` kalıyor, `all()` geçiyor ve istisna AÇILIYORDU — yani bir
+    # denetçinin şüphesi, satırı yazmamasıyla susturulabiliyordu; docstring'in
+    # kapattığını söylediği şeyin ta kendisi. Artık HER rapor o kaynak için
+    # TAM BİR yargı taşımak zorundadır (eksik yargı = istisna KAPALI).
+    yargilar: list[bool] = []
+    for rapor in raporlar:
+        rapor_yargisi = [
+            profil.resmi
+            for profil in rapor.kaynak_profili
+            if KAYNAK_ETIKETI.format(profil.kaynak) == etiket
+        ]
+        if len(rapor_yargisi) != 1:
+            return False
+        yargilar.append(rapor_yargisi[0])
+    if not all(yargilar):
         return False
     return any(
         kontrol.kaynak == etiket and kontrol.erisildi and kontrol.icerik_uyumlu
@@ -1217,7 +1302,17 @@ TICARI_PAKET_TURU = "ticari-firsat"
 """Paket tür etiketlerinin TİCARİ olanı — `brief_doctor.TUR_ETIKETLERI` içinden."""
 
 KARMA_PAKET_TURU = "karma"
-"""Hem kutlamayı hem ölçülü ticariyi taşıyan etiket — hiçbir kategoriyle ÇELİŞMEZ."""
+"""Hem kutlamayı hem ölçülü ticariyi taşıyan etiket — hiçbir kategoriyle ÇELİŞMEZ.
+
+**Muafiyet FIAT DEĞİL, kanonik girdiden TÜRER (hakem turu 1, F7/orta).** İlk
+yazım muafiyeti yalnız gerekçelendiriyor ama YETKİSİNİ göstermiyordu; iki hakem
+de onu "uydurulmuş kural" saydı. Yetki spec girdisindedir ve AYNEN şöyle der:
+*"`karma` kutlama ile ölçülü ticariyi birlikte taşır"*
+(`docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md`, tür etiketinin
+davranışsal karşılığı bölümü). Ticari ekseni HEM taşıyan HEM taşımayan bir
+etiket, o eksende hiçbir değerle çelişemez — muafiyet tanımın kendisinden çıkar,
+kontrolörün tercihinden değil.
+"""
 
 
 def _tur_kategori_catismasi_mi(paket_turu: str, sistem_kategorisi: str) -> bool:
@@ -1258,9 +1353,22 @@ def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
     ile geldi ve kapı ÇALIŞIYOR.
 
     **ÜSTÜNLÜK yönü değişmez — bu bir BLOK DEĞİLDİR.** Paket türü üretim
-    davranışında üstündür; motor içeriği DEĞİŞTİRMEZ, çatışmayı karar günlüğüne
-    NOT olarak yazar. Blok hâline getirmek K-03'ün kendi hükmünü tersine
-    çevirirdi.
+    davranışında üstündür ve motor içeriği DEĞİŞTİRMEZ.
+
+    **KAPANMAYAN AYAK — dürüst etiket (hakem turu 1, F1/critical).** Spec §11.2
+    *"çatışma karar günlüğüne yazılır"* der ve ilk yazım bunu bir NOT satırıyla
+    yapıyordu. ÖLÇÜLDÜ: not sınıfı kümesi DIŞ SÖZLEŞMEDE kapalıdır
+    (`hakem-sentez-gorevi.md`: *"Not satırı (alan kümesi KAPALI): sinif:
+    reddedilen-aday|eslesmeyen-ozel-gun"*) ve `identity.NOT_SINIFLARI` onu
+    aynen taşır. Yetkisiz üçüncü bir sınıf yazmak günlüğü şema kapısına
+    takıyordu; `decide()` kendi ürettiği günlüğü doğruladığı için sonuç
+    `blocked` oluyordu — yani her çatışma paketi DÜŞÜRÜYORDU, K-03'ün hükmünün
+    TAM TERSİ (taze ölçümle üretildi ve kapatıldı).
+
+    Bu yüzden çatışma bugün YALNIZ ÖLÇÜM olarak taşınır
+    (`kategori_cakismalari` → `engine_diff`). Günlük ayağı AÇIK bir borçtur ve
+    kapanışı DIŞ SÖZLEŞME revizyonu ister (üçüncü not sınıfının yetkilendirilmesi)
+    — uydurulan bir sınıf, koşuyu düşüren bir kapıya dönüşür.
 
     İki ölçüm AYRI adlandırılır çünkü AYRI şeylerdir: `kategori_cakismalari`
     tür↔kategori çatışmasıdır; `paket_turu_degisiklikleri` sıradan bir tür
@@ -1271,7 +1379,6 @@ def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
     onceki = _aktif_ozel_gunler(inputs)
     degisiklikler = []
     catismalar = []
-    notlar = []
     for anahtar in sorted(aday):
         yeni_tur = _metin((aday.get(anahtar) or {}).get("tur"))
         onceki_tur = (onceki.get(anahtar) or {}).get("tur")
@@ -1289,20 +1396,7 @@ def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
                 "sistem_kategorisi": kategori,
             }
         )
-        notlar.append(
-            {
-                "tur": "not",
-                "sinif": "tur-kategori-catismasi",
-                "alan": "ozel_gun",
-                "gerekce": (
-                    f"{anahtar!r}: paket tür etiketi {yeni_tur!r}, sistem takvimi "
-                    f"kategorisi {kategori!r} — K-03 gereği PAKET TÜRÜ üstündür "
-                    "ve içerik değişmez; çatışma kayda geçer"
-                ),
-            }
-        )
     return CheckOutput(
-        notlar=tuple(notlar),
         olcumler={
             "paket_turu_degisiklikleri": tuple(degisiklikler),
             "kategori_cakismalari": tuple(catismalar),
@@ -1543,6 +1637,7 @@ KURAL_KIMLIKLERI: Mapping[str, str] = {
     "kaynak-iddia-yok": "sentez-kaynak-iddia-zorunlulugu",
     "iddia-arastirmada-yok": "arastirma-iddia-bagi",
     "iddia-denetcide-yok": "denetci-iddia-bagi",
+    "donem-kimligi-cozulemedi": "arastirma-donem-kimligi",
     "cogunluk-yok": "yeni-oge-cogunlugu",
 }
 """K-145: uygulanmayan her kararın KURAL kimliği — `UYGULANMAMA_SEBEPLERI` ile

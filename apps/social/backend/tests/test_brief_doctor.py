@@ -2033,6 +2033,22 @@ def test_bolum_c_hucre_matrisi_mutasyona_duyarli() -> None:
 # okunması gerekir — kapı satırı zaten ayrıştırıyordu, eksik olan taşıyıcıydı.
 
 
+def test_bozuk_no_hucresi_SAHTE_bosluk_uretmez() -> None:
+    """F8 (hakem turu 1, düşük — ÖLÇÜLDÜ): aynı arıza İKİ kez sayılmaz.
+
+    Bozuk hücre `numaralar`dan düşünce N küçülüyor ve boşluk kuralı sahte bir
+    "eksik" üretiyordu (`1,2,3a,4` → `eksik numara: [3]`). 3 eksik DEĞİL,
+    BOZUK — ve onu satır denetimi zaten bildirdi.
+    """
+    bozuk = _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "3a")
+    notlar = _notlari(bozuk)
+    assert "artan TAM SAYI değil" in notlar
+    assert "boşluksuz artmalı" not in notlar, notlar
+    # POZİTİF KONTROL: GERÇEK boşluk hâlâ bildirilir (kapı fazla kapamıyor).
+    gercek = _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "999")
+    assert "boşluksuz artmalı" in _notlari(gercek)
+
+
 def test_c_iddialari_temiz_kaynaktan_tipli_okunur() -> None:
     rapor = bd.run(TEMIZ, source_name="KAYNAK-1")
     numaralar = [iddia.no for iddia in rapor.iddialar]

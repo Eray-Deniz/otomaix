@@ -266,6 +266,56 @@ kapanışındaki final inceleme.
 
 ---
 
+## Revizyon kaydı — 2026-09-11/c (hakem turunun düzeltme partisi)
+
+İlk dual hakem turu (`docs/reviews/2026-09-11-feat-sektor-bilgi-paketi-plan2.md`) `080aa7f`
+üzerinde **1 critical + 4 high + 2 medium + 3 low** buldu; iki hakem yedi eksende BAĞIMSIZ olarak
+aynı kusurları gösterdi, hakemler-arası çelişki YOKTU. Bu parti onların **kod-içi kapanabilen**
+kısmını kapatır.
+
+| # | bulgu | kapanış | kapanmayan ayak |
+|---|---|---|---|
+| **F1** (critical) | K-03 çatışması tüm koşuyu blokluyordu | yetkisiz NOT sınıfı ÜRETİLMİYOR; çatışma ölçüm olarak taşınıyor | günlük ayağı — **sözleşme turu** |
+| **F2** (high) | çoğunluk SAYIMI hâlâ alan düzeyindeydi | bağ SİMETRİK: her iddia bir satırda geçer VE her atıf bir iddia taşır; sayım yalnız iddia taşıyan satırlardan | — |
+| **F3** (high) | Görev B meşru dönem adını reddediyor | **TEŞHİS** düzeltildi (`donem-kimligi-cozulemedi`); kapı fail-closed KALIR | ad uzayı köprüsü — **sözleşme turu** |
+| **F4** (high) | K-126 URL ayağı iddiaya değil kaynağa bağlı | — | URL örnekleminde iddia numarası — **sözleşme turu** |
+| **F5** (high) | profil satırı yazılmamışsa çekişme garantisi atlanıyor | HER rapor o kaynak için TAM BİR yargı taşımak zorunda | — |
+| **F6** (medium) | ek kendi içinde çelişiyordu | R5 bloğuna `takvim_kategorileri` yazıldı; çelişen cümle düzeltildi | — |
+| **F7** (medium) | `karma` muafiyeti yetkisizdi | muafiyet spec GİRDİSİNDEN alıntıyla dayandırıldı (davranış DEĞİŞMEDİ) | — |
+| **F8** (low) | bozuk `no` hücresi SAHTE boşluk üretiyordu | bozuk hücre varken boşluk İDDİA EDİLMEZ | — |
+| **F9** (low) | mühür gerekçesi abartılıydı | gerekçe ölçülen kadarına indirildi (davranış DEĞİŞMEDİ) | — |
+| **F10** (low) | iki ayak iki normalizasyon kuralı okuyordu | iki ayak da AYNI kuralı okur | — |
+
+**Medium/low'un hiçbiri `accepted_risk` YAZILMADI.** Politika onları kabul edilmiş risk sayardı;
+beşi de bu commit'in KENDİ ürünü olduğu için *"kendi açtığın gerilemeyi park etme"* istisnası
+uygulandı.
+
+**R5 ALAN KÜMESİ — F3'ün teşhis ayrımı yeni alan İSTEMEDİ.** `donem-kimligi-cozulemedi` ayrımı
+`takvim_anahtarlari`'ndan okunur (zaten alan kümesinde). Yeni alan YALNIZ R-H8 ile geldi
+(`takvim_kategorileri`) ve R5 bloğunda yazılıdır.
+
+**AÇIK BORÇ — dış sözleşme revizyonu (F1 günlük ayağı · F3 · F4).** Üçü de aynı sınıftandır:
+**sözleşme bugün taşımadığı bir KİMLİĞİ taşımadıkça kod onu uyduramaz.**
+
+1. **F1 — üçüncü not sınıfı.** `hakem-sentez-gorevi.md` not satırının alan kümesini KAPALI ilan
+   eder (iki değer). K-03 çatışmasının günlüğe yazılabilmesi için sözleşmenin üçüncü bir sınıf
+   yetkilendirmesi gerekir. Bugün çatışma `engine_diff`'te ölçüm olarak durur — **kaybolmaz**, ama
+   spec §11.2'nin *"karar günlüğüne yazılır"* hükmü YERİNE GETİRİLMEMİŞTİR.
+2. **F3 — dönem kanonik anahtarı.** `_SABLON.md` Bölüm C dönem satırı araştırmanın GÜNLÜK DİLDEKİ
+   adını taşır; karar satırı SİSTEM adının slug'ını. Köprü yok. ÖLÇÜLDÜ: şablonun 15 aday adından
+   yalnız 4'ü sistem slug'ına düşüyor. **Bedeli açıkça yazılır: bu kapanana kadar Görev B
+   (özel gün) eklemelerinin pratikte tamamı reddedilir.** Kapanış: Bölüm C dönem satırı kanonik
+   sistem anahtarını TAŞIMALI. Sessiz bulanık eşleştirme YAZILMAZ.
+3. **F4 — URL örnekleminde iddia numarası.** Sözleşmenin URL tablosu (`iddia | kaynak | sonuç | not`)
+   iddia NUMARASI taşımıyor; `UrlCheck` de taşıyamıyor. K-126'nın ikinci ayağı bu yüzden KAYNAK
+   düzeyindedir: o kaynağın örneklemdeki herhangi bir doğrulanmış URL'si, o kaynağın her tekil
+   iddiasına yetiyor. **Dürüst etiket:** istisna AÇIK ve ikinci ayağı beyan edildiğinden ZAYIF.
+
+**Bu partinin kendi sınırı.** Düzeltmeler bağımsız hakem GÖRMEDİ — kapanış turu (attempt-2)
+koşmadı. **Ev:** aynı review-target üzerinde closure turu, aynı pinli sözleşme ile.
+
+---
+
 ## R1 — Koşu klasörleri pinlenen dış depoya ASLA commit edilmez
 
 **Kusur (plan satırları):** `runs.run_folder(run_id) -> <arastirma-deposu>/kosu/<run_id>/`
@@ -1078,12 +1128,26 @@ class EngineInputs:
                                                           # 2026-09-11: `raporlar[i].iddialar` motorun
                                                           # İDDİA EVRENİDİR (`brief_doctor.CIddia`)
     takvim_anahtarlari: frozenset[str]                   # §9.1: sistem özel gün listesi (normalize anahtarlar)
+    takvim_kategorileri: Mapping[str, str]               # 2026-09-11 (R-H8): normalize anahtar → sistem
+                                                          # kategorisi. Anahtar kümesi `takvim_anahtarlari`
+                                                          # ile AYNI sorgudan gelir (ayrı toplanırlarsa
+                                                          # ayrışırlar). Değer kümesi ÖLÇÜLDÜ:
+                                                          # `religious` · `national` · `commercial`; kategorisi
+                                                          # BOŞ gün meşrudur ve hakkında hiçbir şey iddia
+                                                          # EDİLMEZ (K-15(a) açık). A1: `identity.donmus`'tan
+                                                          # geçer — K-03 kapısının okuduğu eşleme yapımdan
+                                                          # SONRA değiştirilemez.
     otomatik_kapilar: GateResults                        # §9.1: otomatik kapı sonuçları
 ```
 
 - **`PolicyConfig` `EngineInputs`'a GİRMEZ** — `decide(inputs, config)` onu ayrı alır
   (plan 1469); tek kanonik yer korunur.
-- **2026-09-11 — alan kümesi DEĞİŞMEDİ; iddia bağı YENİ ALAN İSTEMEDİ (ölçüldü).** Sentezin
+- **2026-09-11 — İDDİA BAĞI yeni alan İSTEMEDİ; K-03 kategori ayağı İSTEDİ (ikisi AYRI).**
+  **Düzeltme (hakem turu 1, F6/orta):** bu madde ilk yazımda düpedüz *"alan kümesi DEĞİŞMEDİ"*
+  diyordu ve AYNI commit'teki R-H8 satırı *"R5 ALAN KÜMESİ REVİZYONU"* diyordu — belge kendi
+  içinde çelişiyor, hangisinin bağlayıcı olduğu okunamıyordu. Doğrusu: alan kümesi
+  `takvim_kategorileri` ile **BİR alan büyüdü** (yukarıdaki blokta yazılı); iddia bağı ise
+  gerçekten yeni alan istemedi. Sentezin
   `kaynak_iddia` beyanı iki uçtan doğrulanır ve iki ucun da taşıyıcısı ZATEN buradadır:
   araştırma ucu `mekanik_eleme.raporlar[i].iddialar` (kaynak numarası KONUMDAN türer — bu
   `_kabul_edilen_etiketler`in kuralının AYNISIDIR, ikinci bir numaralandırma kuralı

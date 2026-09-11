@@ -48,6 +48,7 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "kaynak-iddia-yok",  # sentez sözleşmesi 2.2: `ekle` `kaynak_iddia` ZORUNLU
     "iddia-arastirmada-yok",  # numaranın gösterdiği iddia yok ya da alanı örtüşmüyor
     "iddia-denetcide-yok",  # atıf yapılan denetçi satırı o numarayı taşımıyor
+    "donem-kimligi-cozulemedi",  # araştırmanın dönem adı SİSTEM takviminde karşılık bulmuyor
     "oneri-olumsuz",  # denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",  # denetçi satırı `çelişki` sınıfında — sayı yetse de girmez
     "cogunluk-yok",  # yeni öğe 2-3 yapısal çoğunluk kuralı
@@ -57,7 +58,8 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
 **Sıra ÖNCELİKTİR** (`engine._reddedilenler`): bir birim birden çok sebeple
 reddedilebilir ve rapora yazılan sebep bu sıradan seçilir. `referans-yok` ·
 `referans-uyusmuyor` · `kaynak-iddia-yok` · `iddia-arastirmada-yok` ·
-`iddia-denetcide-yok` · `oneri-olumsuz` · `celiski`, `cogunluk-yok`'tan ÖNCE
+`iddia-denetcide-yok` · `donem-kimligi-cozulemedi` · `oneri-olumsuz` · `celiski`,
+`cogunluk-yok`'tan ÖNCE
 gelir — hepsinde sayı ya hiç okunamamıştır ya da okunması anlamsızdır;
 "çoğunluk yok" demek okunmuş bir sayı ima ederdi.
 
@@ -66,6 +68,15 @@ düştüğü rapordan okunabilmelidir: alan YOK/bozuk · numaranın gösterdiği
 araştırma iddiası yok ya da alanı örtüşmüyor · denetçi satırı o numarayı
 taşımıyor. Bağ İKİ UÇLUDUR (sentez sözleşmesi 2.2); tek uçlu bir bağ kendini
 onaylardı, çünkü iki beyanı da aynı model yazar.
+
+**`donem-kimligi-cozulemedi` AYRI bir sebeptir ve bilinçli olarak DÜRÜST bir
+etikettir (hakem turu 1, F3/yüksek).** Araştırma raporu dönem adını GÜNLÜK
+DİLDE yazar (`29 Ekim`), sistem takvimi RESMÎ adı taşır (`Cumhuriyet Bayramı`);
+iki ad uzayı arasında bugün makine-okunur bir köprü YOKTUR. Bu hâli
+`iddia-arastirmada-yok` diye raporlamak YANLIŞ teşhisti — iddia araştırmada
+VARDIR, çözülemeyen şey DÖNEM KİMLİĞİDİR. Kapı fail-closed kalır (uydurma
+eşleştirme YAPILMAZ) ama rapor artık doğru yeri gösterir. Kapanışı DIŞ SÖZLEŞME
+revizyonu ister: Bölüm C dönem satırı kanonik sistem anahtarını TAŞIMALIDIR.
 """
 
 
