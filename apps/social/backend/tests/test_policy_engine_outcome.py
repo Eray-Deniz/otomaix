@@ -323,9 +323,13 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
         tuple(sorted(engine.KURAL_KIMLIKLERI)),
         tuple(sorted(etki.sinif for etki in engine.BULGU_ETKILERI)),
         tuple(kontrol.ad for kontrol in engine.CHECKS),
+        # 2.15.0: not sınıfı kümesi de kural yüzeyidir — motorun günlüğe
+        # yazabildiği sınıflar değişince eski koşuların günlüğü yenisiyle
+        # karşılaştırılamaz.
+        tuple(sorted(engine.identity.NOT_SINIFLARI)),
     )
     assert (engine.ENGINE_VERSION, kural_yuzeyi) == (
-        "2.14.0",
+        "2.15.0",
         (
             11,
             (
@@ -350,6 +354,7 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
                 "regresyon_kapisi",
             ),
             BEKLENEN_KONTROL_ADLARI,
+            ("eslesmeyen-ozel-gun", "reddedilen-aday", "tur-kategori-catismasi"),
         ),
     ), (
         "kural yüzeyi değişti ama ENGINE_VERSION değişmedi (ya da tersi) — "

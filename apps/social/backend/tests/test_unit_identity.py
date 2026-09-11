@@ -150,9 +150,48 @@ def test_rejects_unknown_actor():
 
 
 def test_note_row_classes_are_closed():
-    """`sinif` İKİ değer taşır; üçüncüsü RED."""
+    """`sinif` ÜÇ değer taşır (sentez sözleşmesi 2.3); dördüncüsü RED."""
     errors = identity.validate_decision_log([_not_row(sinif="uydurma-sinif")])
     assert any("sinif değeri kapalı kümenin dışında" in e for e in errors), errors
+
+
+_KONU = {"anahtar": "cumhuriyet-bayrami", "paket_turu": "ticari-firsat", "sistem_kategorisi": "national"}
+
+
+def test_conflict_note_with_full_konu_passes():
+    """POZİTİF: üçüncü sınıf, tam `konu` ile ŞEMAYI GEÇER — motorun yazdığı satır."""
+    satir = _not_row(sinif="tur-kategori-catismasi", alan="ozel_gun", konu=dict(_KONU))
+    assert identity.validate_decision_log([satir]) == []
+
+
+def test_conflict_note_requires_konu():
+    errors = identity.validate_decision_log([_not_row(sinif="tur-kategori-catismasi")])
+    assert any("`konu` nesne olmak ZORUNDA" in e for e in errors), errors
+
+
+@pytest.mark.parametrize(
+    "konu",
+    [
+        {k: v for k, v in _KONU.items() if k != "sistem_kategorisi"},  # eksik
+        {**_KONU, "fazla": "x"},  # fazla
+        {**_KONU, "paket_turu": ""},  # boş
+        {**_KONU, "anahtar": 3},  # metin değil
+        "serbest metin",  # nesne değil
+    ],
+)
+def test_conflict_note_konu_shape_is_closed(konu):
+    """`konu` tam üç dolu metin alanı — eksiği, fazlası, boşu ve serbest metni RED."""
+    errors = identity.validate_decision_log(
+        [_not_row(sinif="tur-kategori-catismasi", konu=konu)]
+    )
+    assert errors and all("`konu`" in e for e in errors), errors
+
+
+@pytest.mark.parametrize("sinif", ["reddedilen-aday", "eslesmeyen-ozel-gun"])
+def test_konu_is_forbidden_outside_the_conflict_class(sinif):
+    """Öteki iki sınıfta `konu` YAZILMAZ — satır anahtar kümesi kapalıdır."""
+    errors = identity.validate_decision_log([_not_row(sinif=sinif, konu=dict(_KONU))])
+    assert any("şema dışı alan" in e and "konu" in e for e in errors), errors
 
 
 def test_kismi_tur_tasima_as_note_rejected():

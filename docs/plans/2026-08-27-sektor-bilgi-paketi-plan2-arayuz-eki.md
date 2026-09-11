@@ -209,9 +209,9 @@ kötü bir sessiz ara durum üretirdi.
 | **R-H3** | Denetim tablosu DOKUZ sütun (`kaynak-iddialari`); `AuditRow` aynı adlı alanı taşır | sözleşme koda uyarlandı | **EVET** — biçim + `kaynaklar` ile ÇİFT YÖNLÜ tutarlılık |
 | **R-H4** | KAYNAK PROFİLİ düz yazıdan TABLOYA döndü; `AuditReport.kaynak_profili` | sözleşme koda uyarlandı | **EVET** — `resmi` kapalı kümesi, numara tekrarsızlığı, dolu not |
 | **R-H5** | Motor atfı ALAN düzeyinden İDDİA düzeyine taşıdı; bağ İKİ UÇLU | YENİ kapı | **EVET** — üç yeni uygulanmama sebebi (kapanış turunda dördüncüsü eklendi: `donem-kimligi-cozulemedi`) |
-| **R-H6** | K-126 tek-kaynak istisnası AÇILDI (resmîlik ayağı TAM; URL ayağı KAYNAK düzeyi — ZAYIF, bkz. F4 borcu) | kapı DAVRANIŞI değişti | EVET — istisna artık İŞLER |
+| **R-H6** | K-126 tek-kaynak istisnası AÇILDI (resmîlik ayağı TAM; URL ayağı KAYNAK düzeyi — ZAYIF, bkz. F4 borcu → **2026-09-11/d'de İDDİA düzeyine indi**) | kapı DAVRANIŞI değişti | EVET — istisna artık İŞLER |
 | **R-H7** | `kaynak_seti_sha` mührü `iddialar`ı da kapsar | mühür GENİŞLEDİ | EVET |
-| **R-H8** | `EngineInputs` `takvim_kategorileri` alanını kazandı; K-03'ün tür↔kategori ayağı ÇALIŞIR | **R5 ALAN KÜMESİ REVİZYONU** | EVET — çatışma ÖLÇÜM olarak taşınır (blok DEĞİL; günlük ayağı AÇIK borç — bkz. 2026-09-11/c) |
+| **R-H8** | `EngineInputs` `takvim_kategorileri` alanını kazandı; K-03'ün tür↔kategori ayağı ÇALIŞIR | **R5 ALAN KÜMESİ REVİZYONU** | EVET — çatışma ÖLÇÜM olarak taşınır (blok DEĞİL; günlük ayağı 2026-09-11/c'de AÇIK borçtu → **2026-09-11/d'de KAPANDI**: `tur-kategori-catismasi` notu) |
 
 **R-H5 ve R-H6 metin uyarlaması DEĞİLDİR — motorun davranışını değiştirirler.**
 
@@ -234,8 +234,10 @@ istemez: yargı `denetci_envanterleri` içindeki raporların kendi profil tablos
 ADIDIR (araştırmanın kendi yazımı: `Sevgililer Günü`), karar satırı ise `ozel_gun` taşır ve
 dönemi `oge_yolu`nun slug'ında saklar. Bağ bu yüzden O DÖNEME kurulur, `ozel_gun` alanına
 DEĞİL — alana kurulsaydı kapatılan sınıf bir basamak aşağıda aynen sürerdi (herhangi bir dönem
-iddiası herhangi bir özel günü yetkilendirirdi). Normalizasyon kuralı kopyalanmaz:
-`normalize_special_day_key` tek kaynaktır.
+iddiası herhangi bir özel günü yetkilendirirdi). ~~Normalizasyon kuralı kopyalanmaz:
+`normalize_special_day_key` tek kaynaktır.~~ **2026-09-11/d:** bağ artık addan normalize
+edilerek DEĞİL, Bölüm B `sistem anahtarı` köprüsünden (`CIddia.anahtarlar`) kurulur; motor
+`normalize_special_day_key`'i bu yolda ÇAĞIRMAZ (F3 kapanışı, aşağıdaki revizyon kaydı).
 
 **R-H8 — K-03 kategori ayağı: neden TAM EŞLEME yazılmadı.** Sistem takvimi `religious` ·
 `national` · `commercial` yazıyor (yerel veritabanında sayıldı: 9 · 8 · 5; ölçüm komutu
@@ -256,8 +258,10 @@ için hiçbir kategoriyle çelişmez. Kategorisi BİLİNMEYEN gün hakkında hi�
 
 **DÜZELTME (2026-09-11/c — hakem turu F1).** Bu bölüm ilk yazımda çatışmanın karar günlüğüne
 `tur-kategori-catismasi` sınıfıyla NOT olarak yazıldığını söylüyordu. O sınıf DIŞ SÖZLEŞMEDE kapalı
-kümenin DIŞINDAYDI ve `decide()` her çatışmada koşuyu DÜŞÜRÜYORDU. Not artık ÜRETİLMEZ; çatışma
-`kategori_cakismalari` ÖLÇÜMÜ olarak taşınır. Günlük ayağı AÇIK BORÇTUR.
+kümenin DIŞINDAYDI ve `decide()` her çatışmada koşuyu DÜŞÜRÜYORDU. Not o partide ÜRETİLMEDİ; çatışma
+yalnız `kategori_cakismalari` ÖLÇÜMÜ olarak taşındı. **2026-09-11/d — KAPANDI:** sentez sözleşmesi
+2.3 (dış depo `d9dc289`) üçüncü sınıfı YETKİLENDİRDİ; motor her çatışma için `konu`lu NOT satırı
+yazar, ölçüm aynen sürer (ikisi aynı döngüden). Sentez bu sınıfı yazarsa `acik_soru` bulgusu üretilir.
 
 **İlk öneri KURALDAN DARDI ve Eray düzeltti (2026-09-11).** Kontrolör "yalnız riskli yönü
 kaydet" önermişti (sistem dinî/ulusal ↔ paket ticari); kural *"ikisi çeliştiğinde"* der, "riskli
@@ -266,6 +270,39 @@ yön çeliştiğinde" demez. Risk filtresini kuralın üstüne koymak, kuralın 
 **Bu revizyonun kendi sınırı.** Yedi kalemin hiçbirini bağımsız hakem GÖRMEDİ. **Ev:** dış
 araştırma sözleşmesi turunun sonundaki tek hakem turu (Eray'ın "hafif yol" kararı) ve dal
 kapanışındaki final inceleme.
+
+---
+
+## Revizyon kaydı — 2026-09-11/d (dış sözleşme turu: üç borç TEK revizyonda)
+
+**Kaynak:** dış depo `d9dc289` (denetçi 2.3 · sentez 2.3 · şablon ikinci revizyon), pin `2739797`.
+Sözleşme turunun gerekçesi ve pencere hesabı TASK.md'dedir; burada yalnız ARAYÜZE dokunan kısım.
+
+| # | ne değişti | yön | kapı büyüyor mu |
+|---|---|---|---|
+| **R-D1** | Bölüm B gerekçe tablosu BEŞ sütun (`sistem anahtarı`); `GEREKCE_TABLOSU_SUTUNLARI` beş üyeli; `_Belge.donem_anahtarlari` köprüsü; `CIddia.anahtarlar: tuple[str, ...]` | sözleşme koda uyarlandı + YENİ taşıyıcı | **EVET** — hücre `—` ya da şablonun tanıdığı anahtarlar; aday dönemde AYNEN kopya; çelişen ikinci satır köprüyü bozmaz, ihlal eden satır köprü KURMAZ |
+| **R-D2** | Şablon sabitleri `ADAY_TAKVIM_ANAHTARLARI` · `ADAY_DISI_SISTEM_ANAHTARLARI` · `SISTEM_ANAHTARI_YOK` pinli şablonun TABLOSUNDAN ölçülür (test) | YENİ alarm | EVET — şablon değişip sabit güncellenmezse düşer |
+| **R-D3** | Motor Görev B bağını `CIddia.anahtarlar` KÜMESİNDEN kurar; `normalize_special_day_key` bu yolda ÇAĞRILMAZ; `_iddia_alani_bagli_mi(karar_alani, oge_yolu, iddia)` imzası | kapı DAVRANIŞI değişti | EVET — küme boşsa `donem-kimligi-cozulemedi` (dürüst teşhis KORUNDU), başka dönemin anahtarı `iddia-arastirmada-yok` |
+| **R-D4** | Denetçi Görev B satırı DÖNEM bazında eşleşir (`_denetci_donem_bagi_var`): denetçinin anahtarı ile kararın anahtarı aynı ya da ikisi de bağlanan iddiaların küme üyesi | YENİ kapı | **EVET** — `ozel_gun/` öneki tek başına yetmez; sebep `referans-uyusmuyor` |
+| **R-D5** | URL ÖRNEKLEM tablosu `iddia \| URL \| sonuç \| not`; `UrlCheck.iddia: KaynakIddiasi \| None` (SONDA, varsayılan `None`); `kaynak` kimlikten türer | sözleşme koda uyarlandı | **EVET** — kimliksiz/çok kimlikli/eski biçim satır TAŞINMAZ (rapor geçersiz) |
+| **R-D6** | K-126 ikinci ayağı İDDİA düzeyinde: `_tek_kaynak_istisnasi(inputs, etiketler, iddialar)`; kararın `kaynak_iddia` kümesindeki kimliği taşıyan DOĞRULANDI satırı aranır | kapı DAVRANIŞI değişti | EVET — aynı kaynağın başka iddiasının URL'si istisna açmaz |
+| **R-D7** | `identity.NOT_SINIFLARI` ÜÇ değer; `NOT_KONU_SINIFI` · `NOT_KONU_ALANLARI`; `konu` yalnız o sınıfta ve orada zorunlu (tam üç dolu metin alanı, `Mapping` kabul) | şema GENİŞLEDİ | **EVET** — öteki sınıflarda `konu` şema dışı; eksik/fazla/boş alan RED |
+| **R-D8** | `_kategori_cakismasi` her çatışma için `konu`lu NOT üretir (yazar MOTOR); sentezin yazdığı aynı sınıf → `acik_soru` bulgusu (`unit_id=None`) | kapı DAVRANIŞI değişti | EVET — ölçüm (`kategori_cakismalari`) aynen sürer, not ile aynı döngüden |
+| **R-D9** | `ENGINE_VERSION` 2.14.0 → **2.15.0**; kural yüzeyi parmak izine `NOT_SINIFLARI` eklendi | damga | EVET — not sınıfı değişip damga değişmezse düşer |
+| **R-D10** | URL başlığı ve not sınıfı kümesi için pinli sözleşmeye karşı ALARM testleri eklendi (sözleşme turunda ölçülen boşluk: üç değişiklikten yalnız Bölüm B alarm taşıyordu) | YENİ alarm | EVET |
+
+**R5 alan kümesi (`EngineInputs`) yine DEĞİŞMEDİ:** köprü `mekanik_eleme.raporlar` içindeki
+`DoctorReport.iddialar`da taşınır; URL kimliği `denetci_envanterleri` içindeki raporun kendi
+`url_orneklem`inde. `takvim_anahtarlari` alanı `_ozel_gun_anahtari` için kalır (eşleşmeyen dönem notu).
+
+**Kabul edilen sınır — dürüst etiket:** kontrol ailesi kümesi DONDURULMUŞTUR (K-89, sekiz aile);
+`sistem-anahtari` kontrolü dokuzuncu aile açmaz, `ozel-gun-gerekce-tablosu` ailesinde yaşar
+(`bicim-kurallari` emsali). Kapı anahtarın SİSTEM TAKVİMİNDE gerçekten var olduğunu ölçmez
+(veritabanı görmez); üyelik pinlenmiş şablonun tablosuna karşıdır — takvim ile şablon ayrışırsa
+sentezin yazım kapısı (EK-J) yakalar.
+
+**Ölçüldü:** tam takım 4370 passed (taban 4334 + 1 kırmızı alarm); 12 yeni kapı ayrı ayrı susturuldu,
+12/12 kırıldı (sağ kalan yok). Komutlar TASK.md/HANDOFF'ta.
 
 ---
 
@@ -294,11 +331,14 @@ beşi de bu commit'in KENDİ ürünü olduğu için *"kendi açtığın gerileme
 uygulandı.
 
 **R5 ALAN KÜMESİ — F3'ün teşhis ayrımı yeni alan İSTEMEDİ.** `donem-kimligi-cozulemedi` ayrımı
-`takvim_anahtarlari`'ndan okunur (zaten alan kümesinde). Yeni alan YALNIZ R-H8 ile geldi
-(`takvim_kategorileri`) ve R5 bloğunda yazılıdır.
+o partide `takvim_anahtarlari`'ndan okunuyordu; **2026-09-11/d'den beri** `CIddia.anahtarlar`
+kümesinin boşluğundan okunur (köprü `mekanik_eleme.raporlar` içinde taşınır — R5 yine değişmedi).
+Yeni alan YALNIZ R-H8 ile geldi (`takvim_kategorileri`) ve R5 bloğunda yazılıdır.
 
-**AÇIK BORÇ — dış sözleşme revizyonu (F1 günlük ayağı · F3 · F4).** Üçü de aynı sınıftandır:
-**sözleşme bugün taşımadığı bir KİMLİĞİ taşımadıkça kod onu uyduramaz.**
+**AÇIK BORÇ — dış sözleşme revizyonu (F1 günlük ayağı · F3 · F4). → ÜÇÜ DE 2026-09-11/d'de KAPANDI
+(dış depo `d9dc289`, pin `2739797`); aşağıdaki üç kalem tarihsel kayıttır, kapanış en alttaki
+revizyon kaydındadır.** Üçü de aynı sınıftandı: **sözleşme taşımadığı bir KİMLİĞİ taşımadıkça kod onu
+uyduramaz.**
 
 1. **F1 — üçüncü not sınıfı.** `hakem-sentez-gorevi.md` not satırının alan kümesini KAPALI ilan
    eder (iki değer). K-03 çatışmasının günlüğe yazılabilmesi için sözleşmenin üçüncü bir sınıf
@@ -572,7 +612,7 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "kaynak-iddia-yok",       # 2026-09-11: sentez sözleşmesi 2.2 — `ekle` `kaynak_iddia` ZORUNLU
     "iddia-arastirmada-yok",  # 2026-09-11: numaranın gösterdiği iddia yok ya da alanı örtüşmüyor
     "iddia-denetcide-yok",    # 2026-09-11: bağın ÇİFT YÖNÜ — iddia satırda yok VEYA atıf iddiasız
-    "donem-kimligi-cozulemedi",  # 2026-09-11/c: araştırmanın dönem adı SİSTEM takviminde yok
+    "donem-kimligi-cozulemedi",  # 2026-09-11/c: dönem adı takvimde yok → /d: dönem satırı SİSTEM ANAHTARI taşımıyor (Bölüm B köprüsü boş)
     "oneri-olumsuz",    # 2026-09-10: denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",          # 2026-09-10: referansın satırı `çelişki` sınıfında; sayı yetse de girmez
     "cogunluk-yok",     # yeni öğe 2-3 yapısal çoğunluk kuralı
@@ -897,10 +937,14 @@ class InventoryRow:              # K-100 — dört alan; spec-input satır 1031 
 @dataclass(frozen=True)
 class UrlCheck:
     url: str
-    kaynak: str
+    kaynak: str                  # kör etiket `KAYNAK-N` — 2026-09-11/d'den beri `iddia.kaynak`tan TÜRER
     erisildi: bool
     icerik_uyumlu: bool          # K-126'nın "canlı URL doğrulaması" ayağı
     not_metni: str
+    iddia: KaynakIddiasi | None = None
+                                 # 2026-09-11/d (denetçi sözleşmesi 2.3): satırın İDDİA KİMLİĞİ.
+                                 # `None` = kimliksiz satır (eski biçim) — K-126 ayağını AÇMAZ.
+                                 # SONDADIR ve varsayılanlıdır: eski konumsal kurucular kırılmaz.
 
 ONERI_DEGERLERI: tuple[str, ...] = ("al", "uyarla", "alma", "açık-soru")
                                  # KAPALI — dört değer; pinli sözleşmenin ADIM 2 `ÖNERİ:` satırından ÖLÇÜLÜR

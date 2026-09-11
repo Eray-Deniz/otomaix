@@ -48,7 +48,7 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "kaynak-iddia-yok",  # sentez sözleşmesi 2.2: `ekle` `kaynak_iddia` ZORUNLU
     "iddia-arastirmada-yok",  # numaranın gösterdiği iddia yok ya da alanı örtüşmüyor
     "iddia-denetcide-yok",  # atıf yapılan denetçi satırı o numarayı taşımıyor
-    "donem-kimligi-cozulemedi",  # araştırmanın dönem adı SİSTEM takviminde karşılık bulmuyor
+    "donem-kimligi-cozulemedi",  # araştırmanın dönem satırı SİSTEM ANAHTARI taşımıyor (Bölüm B `—`/çözülmedi)
     "oneri-olumsuz",  # denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",  # denetçi satırı `çelişki` sınıfında — sayı yetse de girmez
     "cogunluk-yok",  # yeni öğe 2-3 yapısal çoğunluk kuralı
@@ -72,11 +72,13 @@ onaylardı, çünkü iki beyanı da aynı model yazar.
 **`donem-kimligi-cozulemedi` AYRI bir sebeptir ve bilinçli olarak DÜRÜST bir
 etikettir (hakem turu 1, F3/yüksek).** Araştırma raporu dönem adını GÜNLÜK
 DİLDE yazar (`29 Ekim`), sistem takvimi RESMÎ adı taşır (`Cumhuriyet Bayramı`);
-iki ad uzayı arasında bugün makine-okunur bir köprü YOKTUR. Bu hâli
-`iddia-arastirmada-yok` diye raporlamak YANLIŞ teşhisti — iddia araştırmada
-VARDIR, çözülemeyen şey DÖNEM KİMLİĞİDİR. Kapı fail-closed kalır (uydurma
-eşleştirme YAPILMAZ) ama rapor artık doğru yeri gösterir. Kapanışı DIŞ SÖZLEŞME
-revizyonu ister: Bölüm C dönem satırı kanonik sistem anahtarını TAŞIMALIDIR.
+iki ad uzayı arasında 2026-09-11'e kadar makine-okunur köprü YOKTU. Sözleşme
+revizyonu (dış depo `d9dc289`) köprüyü Bölüm B gerekçe tablosunun `sistem
+anahtarı` sütunu olarak kurdu; `brief_doctor.CIddia.anahtarlar` onu taşır ve
+motor Görev B bağını O KÜMEDEN kurar — günlük addan anahtar TÜRETMEZ. Sebep
+artık şunu söyler: *iddia araştırmada VAR ama dönem satırı sistem anahtarı
+TAŞIMIYOR* (Bölüm B'de `—`, çözülemeyen ya da kopya kuralını ihlal eden hücre,
+ya da tablo yok). Kapı fail-closed kalır; uydurma eşleştirme YAPILMAZ.
 """
 
 

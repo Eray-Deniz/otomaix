@@ -189,12 +189,14 @@ def _url_bolumu(
     beklenen = 0 if kaynak_sayisi < 2 else kaynak_sayisi * 3
     yazilan = beklenen if satir_sayisi is None else satir_sayisi
     satirlar = [
-        "| iddia | kaynak | sonuç | not |",
+        "| iddia | URL | sonuç | not |",
         "| --- | --- | --- | --- |",
     ]
     for sira in range(yazilan):
+        # Sözleşme 2.3: ilk sütun İDDİA KİMLİĞİ (`K<kaynak>#<iddia>`), ayrı
+        # kaynak sütunu yok — kaynak numarası kimliğin içindedir.
         satirlar.append(
-            f"| https://ornek.example/{sira} | KAYNAK-{sira % 3 + 1} | "
+            f"| K{sira % 3 + 1}#{sira // 3 + 1} | https://ornek.example/{sira} | "
             "DOĞRULANDI | tek cümle not |"
         )
     if yazilan == 0:
@@ -845,6 +847,52 @@ def test_url_sample_rows_are_parsed_into_checks() -> None:
     ilk = sonuc.rapor.url_orneklem[0]
     assert isinstance(ilk, auditors.UrlCheck)
     assert ilk.erisildi and ilk.icerik_uyumlu
+    # Sözleşme 2.3: satır İDDİA KİMLİĞİ taşır; kör etiket kimlikten TÜRER.
+    assert ilk.iddia == auditors.KaynakIddiasi(kaynak=1, iddia=1)
+    assert ilk.kaynak == "KAYNAK-1"
+    assert ilk.url == "https://ornek.example/0"
+
+
+def test_url_basligi_matches_pinned_contract_header() -> None:
+    """URL ÖRNEKLEM başlığı da pinli sözleşmeden ÖLÇÜLÜR (sözleşme 2.3).
+
+    2.3'e kadar bu bölümün başlığı düzyazıda yaşıyordu ve modül onu tahmin
+    ediyordu; sözleşme turu bu yüzeyin alarmsız kaldığını ölçtü (Bölüm B
+    alarmı düştü, URL ve not sınıfı sessiz kaldı). Artık ölçülür.
+    """
+    olculen = _pinli_baslik_hucreleri(
+        _pinli("hakem-denetci-gorevi.md"), "2) URL ÖRNEKLEM SONUCU"
+    )
+    # `_tablo_satirlari` başlığı küçük harfle karşılaştırır (`URL` → `url`).
+    assert tuple(h.lower() for h in olculen) == auditors._URL_BASLIK_HUCRELERI
+
+
+def _url_satiri(iddia: str) -> str:
+    return (
+        "Kaynak sayısı: 2 — beklenen satır: 6\n"
+        "| iddia | URL | sonuç | not |\n| --- | --- | --- | --- |\n"
+        + "\n".join(
+            f"| {iddia if sira == 0 else f'K{sira % 3 + 1}#{sira // 3 + 1}'} | "
+            f"https://ornek.example/{sira} | DOĞRULANDI | tek cümle not |"
+            for sira in range(6)
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "iddia",
+    ["https://ornek.example/0", "KAYNAK-1", "", "K1#1, K1#2", "K9#1", "hepsi"],
+)
+def test_url_sample_row_needs_exactly_one_claim_id(iddia: str) -> None:
+    """Kimliksiz / çok kimlikli / eski biçimli satır TAŞINMAZ (fail-closed).
+
+    K-126'nın ikinci ayağı iddiaya bağlıdır; "hangi iddia" bilinmeyen bir
+    doğrulama istisna açamaz. Eski biçim (URL ilk sütunda) da burada düşer —
+    sessiz bir geri dönüş yolu yoktur.
+    """
+    sonuc = _dogrula(_rapor_metni(url=_url_satiri(iddia)))
+    assert not sonuc.gecerli
+    assert any("TEK iddia kimliği" in hata for hata in sonuc.errors), sonuc.errors
 
 
 # ─── K-100 veri kapısı ──────────────────────────────────────────────────────

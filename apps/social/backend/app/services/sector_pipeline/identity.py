@@ -88,8 +88,17 @@ YASAYAN_KARARLAR = frozenset({"koru", "guncelle", "ekle"})
 
 AKTOR_DEGERLERI = frozenset({"sentez", "motor", "insan"})
 
-# İKİ değer, kapalı. `kismi-tur-tasima` bir not sınıfı DEĞİLDİR.
-NOT_SINIFLARI = frozenset({"reddedilen-aday", "eslesmeyen-ozel-gun"})
+# ÜÇ değer, kapalı (sentez sözleşmesi 2.3, dış depo `d9dc289`). `kismi-tur-tasima`
+# bir not sınıfı DEĞİLDİR. Üçüncü sınıfı YALNIZ MOTOR yazar: sistem kategorisi
+# sentezde yoktur (EK-J anahtar taşır, kategori taşımaz).
+NOT_SINIFLARI = frozenset(
+    {"reddedilen-aday", "eslesmeyen-ozel-gun", "tur-kategori-catismasi"}
+)
+
+# `konu` alanı YALNIZ bu sınıfta bulunur ve orada ZORUNLUDUR; nesne tam olarak
+# bu üç alanı taşır — eksiği ve fazlası reddedilir (sözleşme ADIM 2B).
+NOT_KONU_SINIFI = "tur-kategori-catismasi"
+NOT_KONU_ALANLARI = ("anahtar", "paket_turu", "sistem_kategorisi")
 
 # `koru` satırının ek alanı — K-107'nin doğru temsili.
 KAPSAM_DEGERLERI = frozenset({"kismi-tur-tasima"})
@@ -115,6 +124,8 @@ _NOT_ZORUNLU_ALANLAR = ("sinif", "gerekce")
 # genişletecek görev bu kümeyi bilerek büyütür; kaçak alan büyütmez.
 _KARAR_ISTEGE_BAGLI = frozenset(KURAL_DAMGA_ALANLARI)
 _NOT_ISTEGE_BAGLI = frozenset({"alan", "kanit"})
+# `konu` isteğe bağlı DEĞİL, sınıfa bağlıdır: `_validate_not_row` onu sınıfa göre
+# zorunlu ya da yasak sayar. Bu kümede yer almaz ki iki sınıfta kaçak taşınmasın.
 
 # ── İKİ kapalı küme, İKİ AYRI soru — bilinçli olarak BİRLEŞTİRİLMEDİ ───────
 #
@@ -507,6 +518,8 @@ def _validate_karar_row(
 
 def _validate_not_row(row: dict, label: str, errors: list[str]) -> None:
     izinli = set(_NOT_ZORUNLU_ALANLAR) | _NOT_ISTEGE_BAGLI | {"tur"}
+    if row.get("sinif") == NOT_KONU_SINIFI:
+        izinli.add("konu")
     bilinmeyen = sorted(set(row) - izinli)
     if bilinmeyen:
         errors.append(
@@ -528,11 +541,42 @@ def _validate_not_row(row: dict, label: str, errors: list[str]) -> None:
     elif sinif not in NOT_SINIFLARI:
         errors.append(
             f"{label} sinif değeri kapalı kümenin dışında: {sinif!r} — "
-            f"İKİ değer: {sorted(NOT_SINIFLARI)}"
+            f"ÜÇ değer: {sorted(NOT_SINIFLARI)}"
         )
+    elif sinif == NOT_KONU_SINIFI:
+        _validate_not_konu(row.get("konu"), label, errors)
 
     if "gerekce" in row:
         _require_meaningful(row["gerekce"], f"{label}.gerekce", errors)
+
+
+def _validate_not_konu(konu: object, label: str, errors: list[str]) -> None:
+    """`tur-kategori-catismasi` notunun `konu` nesnesi: tam üç dolu metin alanı.
+
+    Sözleşme (2.3): *"Nesne, tam olarak üç alan — eksiği ve fazlası reddedilir"*.
+    Serbest metin ya da eksik alan geçseydi, operatörün onay anında GÖRMESİ
+    için yazılan kayıt hangi günün hangi çatışması olduğunu söyleyemezdi.
+    """
+    # `Mapping` kabul edilir: motor girdisi `donmus`'tan geçer ve iç nesne
+    # `mappingproxy` olur; yalnız `dict` aramak, dondurulmuş meşru satırı
+    # reddederdi (ölçüldü: sentez günlüğündeki not `mappingproxy` ile düşüyordu).
+    if not isinstance(konu, Mapping):
+        errors.append(
+            f"{label} `konu` nesne olmak ZORUNDA (sinif={NOT_KONU_SINIFI!r}): "
+            f"{type(konu).__name__}"
+        )
+        return
+    eksik = [ad for ad in NOT_KONU_ALANLARI if ad not in konu]
+    fazla = sorted(set(konu) - set(NOT_KONU_ALANLARI))
+    if eksik or fazla:
+        errors.append(
+            f"{label} `konu` alan kümesi kapalıdır {list(NOT_KONU_ALANLARI)} — "
+            f"eksik {eksik}, fazla {fazla}"
+        )
+        return
+    bos = [ad for ad in NOT_KONU_ALANLARI if not isinstance(konu[ad], str) or not konu[ad].strip()]
+    if bos:
+        errors.append(f"{label} `konu` alan(lar)ı boş ya da metin değil: {bos}")
 
 
 def validate_decision_log(rows: list[dict]) -> list[str]:

@@ -25,6 +25,7 @@ Beş sözleşme burada pinlenir:
 from __future__ import annotations
 
 import hashlib
+import re
 from unittest import mock
 from pathlib import Path
 from dataclasses import fields as dataclass_fields
@@ -238,7 +239,18 @@ DOGRULANMIS_URL = "https://resmi.example/mevzuat-2026"
 COZULEMEYEN_KANIT = "D1#42"
 
 
-def _ornekle(*, erisildi: bool = True, uyumlu: bool = True) -> tuple[auditors.UrlCheck, ...]:
+# Varsayılan örneklem satırı TEK KAYNAKLI denetim satırının (D1#2) iddiasını
+# taşır: `K1#2`. K-126'nın ikinci ayağı İDDİA düzeyindedir (sözleşme 2.3);
+# başka iddianın URL'si istisnayı açmaz — o kol kendi testinde ölçülür.
+TEK_KAYNAKLI_IDDIA = auditors.KaynakIddiasi(kaynak=1, iddia=2)
+
+
+def _ornekle(
+    *,
+    erisildi: bool = True,
+    uyumlu: bool = True,
+    iddia: auditors.KaynakIddiasi | None = TEK_KAYNAKLI_IDDIA,
+) -> tuple[auditors.UrlCheck, ...]:
     return (
         auditors.UrlCheck(
             url=DOGRULANMIS_URL,
@@ -246,6 +258,7 @@ def _ornekle(*, erisildi: bool = True, uyumlu: bool = True) -> tuple[auditors.Ur
             erisildi=erisildi,
             icerik_uyumlu=uyumlu,
             not_metni="",
+            iddia=iddia,
         ),
     )
 
@@ -462,8 +475,17 @@ def _arastirma_iddialari(denetim=None) -> tuple[bd.CIddia, ...]:
     iddialar[YENI_DONEM_IDDIA_NO] = YENI_DONEM_ADI
     iddialar[MEVCUT_DONEM_IDDIA_NO] = MEVCUT_DONEM_ADI
     return tuple(
-        bd.CIddia(no=no, alan=alan) for no, alan in sorted(iddialar.items())
+        bd.CIddia(no=no, alan=alan, anahtarlar=DONEM_ANAHTARLARI.get(alan, ()))
+        for no, alan in sorted(iddialar.items())
     )
+
+
+# Bölüm B `sistem anahtarı` köprüsü (dış depo `d9dc289`): dönem satırının
+# anahtar kümesi. Görev A alanları anahtar TAŞIMAZ.
+DONEM_ANAHTARLARI = {
+    YENI_DONEM_ADI: (YENI_DONEM_ANAHTARI,),
+    MEVCUT_DONEM_ADI: (TAKVIM_ANAHTARI,),
+}
 
 
 def _gecen_kapi(denetim=None) -> bd.RoundGate:
@@ -1336,12 +1358,20 @@ def test_the_claim_link_gates_are_separately_measurable() -> None:
 # ── Görev B: bağ ALANA değil O DÖNEME kurulur ─────────────────────────────
 
 
-def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str, donem_adi: str | None = None):
+def _ozel_gun_ekle_girdisi(
+    *,
+    kaynak_iddia: str,
+    donem_adi: str | None = None,
+    anahtarlar: tuple[str, ...] | None = None,
+    denetci_anahtari: str | None = None,
+):
     """`ozel_gun` alanına yeni bir kanca ekleyen karar.
 
-    Denetçi satırı Görev B yazımındadır (`ozel_gun/{dönem}/{başlık}`), araştırma
-    iddiası ise DÖNEM ADINI taşır (`Cumhuriyet Bayramı`) — sözleşmenin kendi
-    iki ayrı yazımı. Bağ bu yüzden normalizasyonla kurulur.
+    Denetçi satırı Görev B yazımındadır (`ozel_gun/{anahtar}/{başlık}`),
+    araştırma iddiası DÖNEM ADINI taşır ve anahtar kümesi Bölüm B köprüsünden
+    gelir (`CIddia.anahtarlar`, dış depo `d9dc289`). `donem_adi` araştırmanın
+    yazdığı adı, `anahtarlar` o satırın köprü kümesini, `denetci_anahtari`
+    denetçi satırının alanındaki anahtarı değiştirir.
     """
     aday = _tam_icerik()
     aday["ozel_gun"] = {
@@ -1366,7 +1396,7 @@ def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str, donem_adi: str | None = None):
             7,
             kaynaklar={1, 2},
             sinif="2-2",
-            alan=f"ozel_gun/{YENI_DONEM_ANAHTARI}/kanca",
+            alan=f"ozel_gun/{denetci_anahtari or YENI_DONEM_ANAHTARI}/kanca",
             kaynak_iddialari={
                 auditors.KaynakIddiasi(kaynak=1, iddia=YENI_DONEM_IDDIA_NO),
                 auditors.KaynakIddiasi(kaynak=2, iddia=YENI_DONEM_IDDIA_NO),
@@ -1386,12 +1416,16 @@ def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str, donem_adi: str | None = None):
         },
         denetim=tablo,
     )
-    if donem_adi is None:
+    if donem_adi is None and anahtarlar is None:
         mekanik = _gecen_kapi(tablo)
     else:
-        # Araştırmanın YAZDIĞI ad değiştirilir; sistem anahtarı aynı kalır.
+        # Araştırmanın YAZDIĞI ad ve/veya köprü kümesi değiştirilir.
         iddialar = tuple(
-            bd.CIddia(no=iddia.no, alan=donem_adi)
+            bd.CIddia(
+                no=iddia.no,
+                alan=YENI_DONEM_ADI if donem_adi is None else donem_adi,
+                anahtarlar=(YENI_DONEM_ANAHTARI,) if anahtarlar is None else anahtarlar,
+            )
             if iddia.no == YENI_DONEM_IDDIA_NO
             else iddia
             for iddia in _arastirma_iddialari(tablo)
@@ -1419,35 +1453,84 @@ def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str, donem_adi: str | None = None):
 
 
 def test_a_special_day_claim_binds_to_that_period() -> None:
-    """POZİTİF: dönem adı kararın `oge_yolu` slug'ıyla NORMALİZE eşleşiyor."""
+    """POZİTİF: kararın `oge_yolu` anahtarı iddianın köprü kümesinde."""
     sonuc = engine.run_checks(
         _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}")
     )
     assert sonuc.uygulanmayan_kararlar == ()
 
 
-def test_a_daily_language_period_name_reports_the_HONEST_reason() -> None:
-    """F3 (hakem turu 1, yüksek — ÖLÇÜLDÜ): teşhis doğru yeri göstermeli.
+def test_a_daily_language_period_name_binds_through_the_bolum_b_bridge() -> None:
+    """F3 KAPANDI (dış depo `d9dc289`): bağ ADDAN değil KÖPRÜDEN kurulur.
 
-    Araştırma şablonunun ADAY TAKVİMİ dönem adını GÜNLÜK DİLDE yazar
-    (`29 Ekim`); sistem takvimi RESMÎ adı taşır (`Cumhuriyet Bayramı` →
-    `cumhuriyet-bayrami`). ÖLÇÜLDÜ: `normalize_special_day_key('29 Ekim')` →
-    `'29-ekim'` ve şablonun 15 aday adından yalnız 4'ü sistem slug'ına düşüyor.
-
-    Kapı FAIL-CLOSED kalır — uydurma eşleştirme YAPILMAZ, kalıp girmez. Düzelen
-    şey TEŞHİSTİR: eskiden `iddia-arastirmada-yok` deniyordu ve bu YANLIŞTI
-    (iddia araştırmada VAR; çözülemeyen DÖNEM KİMLİĞİ). Kalıcı kapanış dış
-    sözleşme revizyonu ister: Bölüm C dönem satırı kanonik sistem anahtarını
-    TAŞIMALIDIR.
+    Araştırma dönem adını GÜNLÜK DİLDE yazar (`29 Ekim`); eski yazım bu adı
+    slug'a çevirip kararın anahtarıyla karşılaştırıyordu ve 15 aday adın 11'i
+    düşüyordu. Köprü artık Bölüm B'nin `sistem anahtarı` sütunudur: ad ne
+    olursa olsun, küme kararın anahtarını taşıyorsa bağ VARDIR.
     """
     sonuc = engine.run_checks(
         _ozel_gun_ekle_girdisi(
             kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}",
-            donem_adi="14 Şubat",
+            donem_adi="29 Ekim",
+            anahtarlar=(YENI_DONEM_ANAHTARI,),
+        )
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_no_key_is_derived_from_the_period_name() -> None:
+    """Köprüsü BOŞ satır, adı kararın slug'ına düşse bile bağ KURMAZ.
+
+    Adı `Sevgililer Günü` olan bir satır eski yazımda `sevgililer-gunu`ya
+    normalize edilip geçerdi. Köprü boşsa (Bölüm B `—`, çözülemeyen ya da
+    kopyası bozuk hücre) motor addan anahtar TÜRETMEZ — dürüst teşhis:
+    `donem-kimligi-cozulemedi`, `iddia-arastirmada-yok` DEĞİL (iddia
+    araştırmada vardır, eksik olan anahtardır).
+    """
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}",
+            donem_adi=YENI_DONEM_ADI,
+            anahtarlar=(),
         )
     )
     assert "donem-kimligi-cozulemedi" in _sebepler(sonuc)
     assert "iddia-arastirmada-yok" not in _sebepler(sonuc)
+
+
+def test_a_multi_key_period_binds_any_of_its_keys() -> None:
+    """Bayram arifesi + günleri: kümenin HER üyesi o dönemin anahtarıdır."""
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}",
+            donem_adi="Ramazan Bayramı",
+            anahtarlar=("ramazan-bayrami-arife", YENI_DONEM_ANAHTARI, "ramazan-bayrami-1-gun"),
+        )
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_an_auditor_row_keyed_to_a_sibling_day_of_the_same_period_binds() -> None:
+    """Denetçi sözleşmesi 2.3: eşleşme anahtar bazında değil DÖNEM bazında."""
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}",
+            anahtarlar=(YENI_DONEM_ANAHTARI, "ramazan-bayrami-1-gun"),
+            denetci_anahtari="ramazan-bayrami-1-gun",
+        )
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_an_auditor_row_keyed_to_another_period_does_not_authorise() -> None:
+    """`ozel_gun/` öneki yetmez: BAŞKA dönemin denetçi satırı bu eklemeyi yetkilendiremez."""
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}",
+            denetci_anahtari=TAKVIM_ANAHTARI,
+        )
+    )
+    assert "referans-uyusmuyor" in _sebepler(sonuc)
 
 
 def test_a_known_field_name_is_NOT_diagnosed_as_a_period_problem() -> None:
@@ -1462,15 +1545,15 @@ def test_a_known_field_name_is_NOT_diagnosed_as_a_period_problem() -> None:
     for alan in ("cta_kaliplari", "kanca_kaliplari", "yasaklar_ve_hassasiyetler"):
         sonuc = engine.run_checks(
             _ozel_gun_ekle_girdisi(
-                kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", donem_adi=alan
+                kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", donem_adi=alan, anahtarlar=()
             )
         )
         assert "iddia-arastirmada-yok" in _sebepler(sonuc), alan
         assert "donem-kimligi-cozulemedi" not in _sebepler(sonuc), alan
-    # POZİTİF KONTROL: gerçek bir dönem adı HÂLÂ dönem teşhisi alır.
+    # POZİTİF KONTROL: köprüsüz gerçek bir dönem adı HÂLÂ dönem teşhisi alır.
     gercek = engine.run_checks(
         _ozel_gun_ekle_girdisi(
-            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", donem_adi="14 Şubat"
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", donem_adi="14 Şubat", anahtarlar=()
         )
     )
     assert "donem-kimligi-cozulemedi" in _sebepler(gercek)
@@ -1692,6 +1775,31 @@ def test_single_source_exception_opens_when_both_legs_hold() -> None:
     assert sonuc.uygulanmayan_kararlar == ()
 
 
+def test_single_source_exception_needs_the_URL_of_THAT_claim() -> None:
+    """F4 KAPANDI (sözleşme 2.3): ikinci ayak KAYNAK değil İDDİA düzeyinde.
+
+    Eski yazım o kaynağın örneklemdeki HERHANGİ bir doğrulanmış URL'sini
+    yeterli sayıyordu. Aynı kaynağın BAŞKA iddiasının URL'si (`K1#1`) ya da
+    kimliksiz satır (`iddia=None`, eski biçim) artık istisnayı AÇMAZ.
+    """
+    baska_iddia = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False),
+            profil_2=_profil(True, False),
+            ornekle=_ornekle(iddia=auditors.KaynakIddiasi(kaynak=1, iddia=1)),
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(baska_iddia)
+    kimliksiz = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False),
+            profil_2=_profil(True, False),
+            ornekle=_ornekle(iddia=None),
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(kimliksiz)
+
+
 def test_single_source_exception_stays_closed_without_officiality() -> None:
     """İkinci ayak TEK BAŞINA yetmez: canlı URL resmîlik KANITI değildir."""
     sonuc = engine.run_checks(_tek_kaynak_girdisi())
@@ -1801,6 +1909,7 @@ def test_the_exception_does_not_apply_to_a_two_source_addition() -> None:
             profil_1=_profil(True, False), profil_2=_profil(True, False)
         ),
         {"KAYNAK-1", "KAYNAK-2"},
+        {TEK_KAYNAKLI_IDDIA},
     ) is False
 
 
@@ -1889,6 +1998,80 @@ def test_tur_kategori_catismasi_KOSUYU_BLOKLAMAZ() -> None:
     assert sonuc.final_candidate is not None
     # Çatışma KAYBOLMUYOR: ölçüm olarak koşunun diff'ine geçer.
     assert sonuc.engine_diff["kategori_cakismalari"], sonuc.engine_diff
+    # ...VE artık GÜNLÜĞE de yazılır (sözleşme 2.3, üçüncü not sınıfı): son
+    # montaj kapısından GEÇEN bir not satırı, `konu` ile.
+    notlar = [
+        satir
+        for satir in sonuc.final_decision_log
+        if satir.get("tur") == "not" and satir.get("sinif") == "tur-kategori-catismasi"
+    ]
+    assert len(notlar) == 1, sonuc.final_decision_log
+    assert notlar[0]["konu"] == {
+        "anahtar": TAKVIM_ANAHTARI,
+        "paket_turu": "ticari-firsat",
+        "sistem_kategorisi": "national",
+    }
+    assert identity.validate_decision_log([dict(s) for s in sonuc.final_decision_log]) == []
+
+
+def test_tur_kategori_catismasi_notu_ve_olcumu_ayni_kaynaktan_yazilir() -> None:
+    """Not ile ölçüm AYRIŞAMAZ: ikisi de aynı döngüden, aynı `konu` ile üretilir."""
+    sonuc = engine.run_checks(
+        _kategorili_girdi(paket_turu="kutlama", kategori="commercial")
+    )
+    notlar = [n for n in sonuc.notlar if n["sinif"] == "tur-kategori-catismasi"]
+    assert len(notlar) == len(_catismalar(sonuc)) == 1
+    assert notlar[0]["konu"] == _catismalar(sonuc)[0]
+    assert notlar[0]["alan"] == "ozel_gun"
+    # Çatışma YOKSA not da YOK — not yalnız çatışmanın kaydıdır.
+    temiz = engine.run_checks(_kategorili_girdi(paket_turu="karma", kategori="national"))
+    assert not [n for n in temiz.notlar if n["sinif"] == "tur-kategori-catismasi"]
+
+
+def test_sentezin_yazdigi_catisma_notu_bulgu_uretir() -> None:
+    """Sözleşme 2.3: üçüncü sınıfı YALNIZ motor yazar — sentez yazarsa açık soru.
+
+    Sessiz kopyalama da sessiz düşürme de YOK: iki yazar aynı çatışmayı iki kez
+    kaydederdi; karar operatöre çıkar (birime bağlanamayan bulgu).
+    """
+    girdi = _kategorili_girdi(paket_turu="ticari-firsat", kategori="national")
+    gunluk = list(girdi.sentez.karar_gunlugu) + [
+        {
+            "tur": "not",
+            "sinif": "tur-kategori-catismasi",
+            "gerekce": "Sentez de yazdı.",
+            "konu": {
+                "anahtar": TAKVIM_ANAHTARI,
+                "paket_turu": "ticari-firsat",
+                "sistem_kategorisi": "national",
+            },
+        }
+    ]
+    sonuc = engine.run_checks(
+        _girdi(
+            icerik=dict(girdi.sentez.aday_json),
+            gunluk=gunluk,
+            kategoriler={TAKVIM_ANAHTARI: "national"},
+        )
+    )
+    bulgular = [b for b in sonuc.bulgular if "YALNIZ motora" in b.detay]
+    assert len(bulgular) == 1 and bulgular[0].sinif == "acik_soru"
+    assert bulgular[0].unit_id is None and bulgular[0].kontrol == "kategori_cakismasi"
+
+
+def test_not_siniflari_pinlenmis_sentez_sozlesmesinden_okunur() -> None:
+    """Not sınıfı kümesi ve `konu` alanları sözleşmeden ÖLÇÜLÜR — uydurulmaz.
+
+    Sözleşme turu bu yüzeyin alarmsız kaldığını ölçtü (URL başlığı ve not
+    sınıfı için kodda pinli sözleşmeye karşı test YOKTU). Artık var.
+    """
+    metin = _pinli_sozlesme("hakem-sentez-gorevi.md")
+    eslesme = re.search(r'"sinif": "([a-z\-|]+)"', metin)
+    assert eslesme is not None, "sözleşmede not satırı şeması bulunamadı"
+    assert set(eslesme.group(1).split("|")) == set(identity.NOT_SINIFLARI)
+    konu = re.search(r'\{"anahtar": <[^>]+>, "paket_turu": <[^>]+>,\s*"sistem_kategorisi": <[^>]+>\}', metin)
+    assert konu is not None, "sözleşmede `konu` nesnesi bulunamadı"
+    assert tuple(re.findall(r'"([a-z_]+)":', konu.group(0))) == identity.NOT_KONU_ALANLARI
 
 
 def test_tur_kategori_catismasi_olcum_olarak_tasinir() -> None:

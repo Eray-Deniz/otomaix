@@ -223,7 +223,11 @@ _BEKLENEN_SATIR_RE = re.compile(r"[Bb]eklenen satır(?:[ \t]*sayısı)?[ \t]*:[ 
 _AYIRAC_HUCRESI_RE = re.compile(r"^:?-{2,}:?$")
 
 _ENVANTER_BASLIK_HUCRELERI = ("unit_id", "statu", "kanit", "gerekce")
-_URL_BASLIK_HUCRELERI = ("iddia", "kaynak", "sonuç", "not")
+# Denetçi sözleşmesi 2.3 (dış depo `d9dc289`): URL ÖRNEKLEM SONUCU birebir
+# başlık satırlı tablo; ilk sütun İDDİA KİMLİĞİ (`K<kaynak>#<iddia>`), ayrı
+# kaynak sütunu YOK (numara kimliğin içindedir). `_tablo_satirlari` başlığı
+# küçük harfle karşılaştırır — `URL` burada `url` yazılır.
+_URL_BASLIK_HUCRELERI = ("iddia", "url", "sonuç", "not")
 _KAYNAK_PROFIL_BASLIK_HUCRELERI = ("kaynak", "resmi", "not")
 RESMI_DEGERLERI = ("evet", "hayır")
 """`resmi` sütununun KAPALI kümesi — sözleşmenin kendi yazımı.
@@ -284,10 +288,13 @@ class InventoryRow:
 class UrlCheck:
     """ADIM 1 URL örneklem satırı.
 
-    **Ad ile sütun arasındaki fark BEYAN EDİLİR:** sözleşmenin çıktı bölümü ilk
-    sütuna `iddia` der ve o hücre iddianın URL referansını taşır; alan adı
-    arayüz eki R5'te `url` olarak BAĞLIDIR ve hücre AYNEN taşınır. `erisildi` ve
-    `icerik_uyumlu` sözleşmenin üç sonucundan TÜRETİLİR, ayrıca yazılmaz.
+    Sözleşme 2.3 (dış depo `d9dc289`, F4): satır artık İDDİA KİMLİĞİ taşır —
+    `iddia` sütunu `K<kaynak>#<iddia>`, `URL` o Bölüm C satırının adresi.
+    `kaynak` (kör etiket, `KAYNAK-N`) kimliğin kaynak numarasından TÜRER; ayrı
+    sütun yoktur. `erisildi` ve `icerik_uyumlu` sözleşmenin üç sonucundan
+    türetilir. `iddia` alanı SONDADIR ve varsayılanı `None`'dır ki eski
+    konumsal kurucular kırılmasın; `None` "kimliksiz satır" demektir ve K-126
+    ikinci ayağını AÇMAZ (fail-closed) — eski biçim istisna kuramaz.
     """
 
     url: str
@@ -295,6 +302,7 @@ class UrlCheck:
     erisildi: bool
     icerik_uyumlu: bool
     not_metni: str
+    iddia: "KaynakIddiasi | None" = None
 
 
 _KAYNAK_IDDIA_RE = re.compile(r"^K(\d+)#(\d+)$")
@@ -1266,26 +1274,45 @@ def _url_orneklemi(govde: str) -> tuple[tuple[UrlCheck, ...], list[str]]:
     ham_satirlar = _tablo_satirlari(govde, _URL_BASLIK_HUCRELERI)
     kontroller: list[UrlCheck] = []
     for sira, hucreler in enumerate(ham_satirlar, start=1):
-        if len(hucreler) != 4:
+        if len(hucreler) != len(_URL_BASLIK_HUCRELERI):
             errors.append(
-                f"URL örneklem satırı {sira} dört sütunlu değil "
-                f"(iddia | kaynak | sonuç | not): {hucreler}"
+                f"URL örneklem satırı {sira} {len(_URL_BASLIK_HUCRELERI)} sütunlu "
+                f"değil ({' | '.join(_URL_BASLIK_HUCRELERI)}): {hucreler}"
             )
             continue
-        url, kaynak, sonuc, not_metni = hucreler
+        iddia_h, url, sonuc, not_metni = hucreler
+        # İDDİA KİMLİĞİ — tek ayrıştırıcı (`kaynak_iddialari_coz`), TEK kimlik.
+        # Boş, düzyazı, URL ya da birden çok kimlik → satır kimliksizdir ve
+        # taşınmaz: K-126'nın ikinci ayağı iddiaya bağlıdır, "hangi iddia"
+        # bilinmeyen bir doğrulama istisna açamaz (sözleşme 2.3: fail-closed).
+        kimlikler = kaynak_iddialari_coz(iddia_h)
+        if kimlikler is None or len(kimlikler) != 1:
+            errors.append(
+                f"URL örneklem satırı {sira}: `iddia` hücresi TEK iddia kimliği "
+                f"olmalı (`K<kaynak>#<iddia>`), {iddia_h!r} yazılmış"
+            )
+            continue
+        if not url.strip():
+            errors.append(
+                f"URL örneklem satırı {sira}: `URL` hücresi BOŞ — Bölüm C "
+                "satırının adresi aynen kopyalanır"
+            )
+            continue
         if sonuc not in _URL_SONUCLARI:
             errors.append(
                 f"URL örneklem satırı {sira} kapalı sonuç kümesinin dışında: "
                 f"{sonuc!r} — {list(_URL_SONUCLARI)}"
             )
             continue
+        (kimlik,) = kimlikler
         kontroller.append(
             UrlCheck(
                 url=url,
-                kaynak=kaynak,
+                kaynak=KAYNAK_ETIKETI.format(kimlik.kaynak),
                 erisildi=sonuc != "URL AÇILMADI",
                 icerik_uyumlu=sonuc == "DOĞRULANDI",
                 not_metni=not_metni,
+                iddia=kimlik,
             )
         )
 

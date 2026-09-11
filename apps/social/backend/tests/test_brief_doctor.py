@@ -104,6 +104,22 @@ _DONEM_TURLERI = (
     "kutlama",
 )
 
+# Fixture'ın gerekçe tablosu başlığı: sözleşmenin BEŞ sütunu, "tür etiketi"
+# bilerek "tür" diye kısaltılmış (tanıma kanonik başlığı TAM eşleşmeyle aramaz —
+# `GEREKCE_BASLIK_ASGARI`). Sütun SAYISI sözleşmenindir; kısaltma değil.
+GEREKCE_BASLIGI = "| dönem | sistem anahtarı | karar | tür | gerekçe |"
+
+# Aday listesinde OLMAYAN, sektöre özgü bir dönem — sözleşme `—` ister.
+SEKTORE_OZGU_DONEM = "Sezon Açılışı"
+
+
+def _sistem_anahtari(donem_adi: str) -> str:
+    """Fixture'ın `sistem anahtarı` hücresi: ADAY TAKVİM'in aynen kopyası, ya da `—`."""
+    anahtarlar = bd.ADAY_TAKVIM_ANAHTARLARI.get(donem_adi)
+    if anahtarlar is None:
+        return bd.SISTEM_ANAHTARI_YOK
+    return ", ".join(anahtarlar)
+
 
 def kaynak(
     *,
@@ -128,6 +144,8 @@ def kaynak(
     birlesik_madde: bool = False,
     yeniden_adlandirilmis_baslik: bool = False,
     bozuk_kanal_anahtari: bool = False,
+    bozuk_sistem_anahtari: bool = False,
+    sektore_ozgu_donem: bool = False,
 ) -> str:
     """`_SABLON.md` biçimine uyan bir araştırma çıktısı üretir.
 
@@ -145,6 +163,10 @@ def kaynak(
     if anma_donemi is not None and donem_adlari:
         donem_adlari[-1] = "10 Kasım"
         donem_turleri[-1] = "anma"
+    if sektore_ozgu_donem:
+        # Aday listesinde OLMAYAN dönem: sözleşme `—` ister (sistemde yok).
+        donem_adlari.append(SEKTORE_OZGU_DONEM)
+        donem_turleri.append("karma")
 
     # ── Bölüm A ──────────────────────────────────────────────────────────
     if eksik_bolum != "A":
@@ -209,12 +231,17 @@ def kaynak(
     if eksik_bolum != "B":
         satirlar += ["## Bölüm B — GÖREV B çıktısı", ""]
         if tablo:
-            satirlar += ["| dönem | karar | tür | gerekçe |", "|---|---|---|---|"]
+            satirlar += [GEREKCE_BASLIGI, "|---|---|---|---|---|"]
             for sira, (ad, tur) in enumerate(zip(donem_adlari, donem_turleri)):
                 yazim = tur
                 if bozuk_tur_etiketi and sira == 0:
                     yazim = "ticari-fırsat"
-                satirlar += [f"| {ad} | secildi | {yazim} | Gerekce cumlesi. |"]
+                anahtar = _sistem_anahtari(ad)
+                if bozuk_sistem_anahtari and sira == 0:
+                    anahtar = "uydurma-anahtar"
+                satirlar += [
+                    f"| {ad} | {anahtar} | secildi | {yazim} | Gerekce cumlesi. |"
+                ]
             satirlar += [""]
 
         for ad, tur in zip(donem_adlari, donem_turleri):
@@ -1016,8 +1043,9 @@ def tablo_sutunlarini_boz(metin: str, sutun: int) -> str:
                 cikti.append(satir)
                 continue
             hucreler = [h.strip() for h in satir.strip().strip("|").split("|")]
-            tur = hucreler[2] if len(hucreler) > 2 else hucreler[0]
-            yeni = ([tur] + [h for i, h in enumerate(hucreler) if i != 2])[:sutun]
+            tur_i = bd.GEREKCE_TABLOSU_SUTUNLARI.index("tür etiketi")
+            tur = hucreler[tur_i] if len(hucreler) > tur_i else hucreler[0]
+            yeni = ([tur] + [h for i, h in enumerate(hucreler) if i != tur_i])[:sutun]
             while len(yeni) < sutun:
                 yeni.append(yeni[-1])
             cikti.append("| " + " | ".join(yeni) + " |\n")
@@ -1066,7 +1094,7 @@ def _sozlesme_tablo_sutunlari() -> tuple[str, ...]:
 
 def test_gerekce_tablosu_sutunlari_pinlenmis_sablondan_okunur() -> None:
     assert _sozlesme_tablo_sutunlari() == bd.GEREKCE_TABLOSU_SUTUNLARI
-    assert len(bd.GEREKCE_TABLOSU_SUTUNLARI) == 4
+    assert len(bd.GEREKCE_TABLOSU_SUTUNLARI) == 5
 
 
 # ─── Bölüm C sabitleri: DÖRDÜ de pinlenmiş sözleşmeden okunur ───────────────
@@ -1103,6 +1131,129 @@ def test_bolum_c_sabitleri_pinlenmis_sablondan_okunur() -> None:
 
     tek = re.search(r"`tek kaynak` hücresi `(\w+)` ya da `([\wıİğĞşŞçÇöÖüÜ]+)`", metin)
     assert tek is not None and tek.groups() == bd.C_TEK_KAYNAK_DEGERLERI
+
+
+# ─── Bölüm B `sistem anahtarı` sütunu — DÖNEM KİMLİĞİ köprüsü (dış depo d9dc289) ─
+#
+# F3 (hakem turu, yüksek): araştırma dönem adını GÜNLÜK DİLDE yazar, karar
+# satırı sistem anahtarını; köprü yoktu ve 15 aday adın 4'ü düşüyordu. Köprü
+# artık Bölüm B'nin `sistem anahtarı` sütunudur. Üç sabit (aday takvim eşlemesi,
+# aday dışı anahtarlar, `—` işareti) modülde UYDURULMAZ — pinlenmiş şablondan
+# okunur; şablon değişip sabit güncellenmezse bu testler DÜŞER.
+
+
+def _sozlesme_aday_takvimi() -> dict[str, tuple[str, ...]]:
+    metin = _pinli_sablon()
+    blok = re.search(
+        r"\| dönem \| sistem anahtarı \|\s*\n\|---\|---\|\s*\n((?:\|.*\|[ \t]*\n)+)",
+        metin,
+    )
+    assert blok is not None, "şablonda ADAY TAKVİM tablosu bulunamadı"
+    esleme: dict[str, tuple[str, ...]] = {}
+    for satir in blok.group(1).strip().splitlines():
+        donem, anahtarlar = [h.strip() for h in satir.strip().strip("|").split("|")]
+        esleme[donem] = tuple(a.strip() for a in anahtarlar.split(","))
+    return esleme
+
+
+def test_aday_takvim_anahtarlari_pinlenmis_sablondan_okunur() -> None:
+    assert _sozlesme_aday_takvimi() == bd.ADAY_TAKVIM_ANAHTARLARI
+    assert len(bd.ADAY_TAKVIM_ANAHTARLARI) == 15
+
+
+def test_aday_disi_sistem_anahtarlari_pinlenmis_sablondan_okunur() -> None:
+    metin = _pinli_sablon()
+    blok = re.search(r"aday listesinde OLMAYAN günler:(.*?)— sektöre", metin, re.S)
+    assert blok is not None, "şablonda aday dışı günler satırı bulunamadı"
+    assert tuple(re.findall(r"`([a-z0-9-]+)`", blok.group(1))) == (
+        bd.ADAY_DISI_SISTEM_ANAHTARLARI
+    )
+    assert bd.SISTEM_ANAHTARLARI == set(bd.ADAY_DISI_SISTEM_ANAHTARLARI) | {
+        a for demet in bd.ADAY_TAKVIM_ANAHTARLARI.values() for a in demet
+    }
+
+
+def test_sistem_anahtari_yok_isareti_pinlenmis_sablondan_okunur() -> None:
+    assert f"eklediğin dönemde `{bd.SISTEM_ANAHTARI_YOK}` yaz" in _pinli_sablon()
+
+
+def test_uydurma_sistem_anahtari_not_duser() -> None:
+    rapor = _rapor(bozuk_sistem_anahtari=True)
+    assert "ozel-gun-gerekce-tablosu" in _aileler(rapor)
+    mesajlar = _mesajlar(rapor)
+    assert "hücresi çözülemedi" in mesajlar and "uydurma-anahtar" in mesajlar
+    assert rapor.sonuc == bd.SONUC_NOTLU_GECTI
+    # Uydurma anahtar KÖPRÜ kurmaz: o dönemin iddiası anahtar TAŞIMAZ.
+    bozuk = next(i for i in rapor.iddialar if i.alan == _DONEM_ADLARI[0])
+    assert bozuk.anahtarlar == ()
+
+
+def test_bos_sistem_anahtari_hucresi_not_duser() -> None:
+    metin = kaynak().replace("| Sevgililer Günü | sevgililer-gunu |", "| Sevgililer Günü |  |")
+    assert metin != kaynak()
+    assert "hücresi çözülemedi" in _notlari(metin)
+
+
+def test_aday_donemde_anahtar_sablonun_kopyasi_olmali() -> None:
+    """Geçerli ama BAŞKA dönemin anahtarı: biçim geçer, kopya kuralı düşürür — köprü de KURULMAZ."""
+    metin = kaynak().replace("| Sevgililer Günü | sevgililer-gunu |", "| Sevgililer Günü | yilbasi |")
+    assert metin != kaynak()
+    assert "ADAY TAKVİM'in kopyası değil" in _notlari(metin)
+    rapor = bd.run(metin, source_name="P")
+    yanlis = next(i for i in rapor.iddialar if i.alan == "Sevgililer Günü")
+    assert yanlis.anahtarlar == (), "kopya kuralını ihlal eden satır bağ kuramaz"
+
+
+def test_sektore_ozgu_donem_cizgi_ile_notsuz_gecer() -> None:
+    rapor = _rapor(sektore_ozgu_donem=True)
+    assert rapor.notlar == (), _mesajlar(rapor)
+    iddia = next(i for i in rapor.iddialar if i.alan == SEKTORE_OZGU_DONEM)
+    assert iddia.anahtarlar == ()
+
+
+def test_ciddia_anahtarlar_bolum_b_koprusunden_gelir() -> None:
+    rapor = _rapor()
+    donemler = {i.alan: i.anahtarlar for i in rapor.iddialar if i.alan in _DONEM_ADLARI}
+    assert donemler == {ad: bd.ADAY_TAKVIM_ANAHTARLARI[ad] for ad in _DONEM_ADLARI[:6]}
+    assert all(i.anahtarlar == () for i in rapor.iddialar if i.alan in bd.TEMEL_ALANLAR)
+
+
+def test_cok_anahtarli_donem_koprude_butun_anahtarlari_tasir() -> None:
+    """Bayram arifesi + günleri: Bölüm C satırı dönemin BÜTÜN anahtarlarına bağlanır."""
+    demet = bd.ADAY_TAKVIM_ANAHTARLARI["Ramazan Bayramı"]
+    assert len(demet) == 4
+    metin = kaynak().replace(
+        "| Sevgililer Günü | sevgililer-gunu |", f"| Ramazan Bayramı | {', '.join(demet)} |"
+    ).replace("Sevgililer Günü", "Ramazan Bayramı")
+    rapor = bd.run(metin, source_name="P")
+    assert rapor.notlar == (), _mesajlar(rapor)
+    iddia = next(i for i in rapor.iddialar if i.alan == "Ramazan Bayramı")
+    assert iddia.anahtarlar == demet
+
+
+def test_ayni_donem_celisen_anahtarla_ikinci_kez_gecerse_kopru_kurulmaz() -> None:
+    satir = "| Sevgililer Günü | sevgililer-gunu | secildi | ticari-firsat | Gerekce cumlesi. |"
+    assert satir in kaynak()
+    # Aynı dönem, aday dışı bir anahtarla ikinci satır: biçim geçer, kopya kuralı düşer.
+    ikinci = satir.replace("sevgililer-gunu", "emek-ve-dayanisma-gunu")
+    metin = kaynak().replace(satir, satir + "\n" + ikinci)
+    notlar = _notlari(metin)
+    assert "ADAY TAKVİM'in kopyası değil" in notlar
+    rapor = bd.run(metin, source_name="P")
+    iddia = next(i for i in rapor.iddialar if i.alan == "Sevgililer Günü")
+    assert iddia.anahtarlar == ("sevgililer-gunu",), "kopyası ihlal eden ikinci satır köprüyü BOZMAZ"
+
+
+def test_sistem_anahtari_kapisi_ve_koprusu_mutasyona_duyarli() -> None:
+    """İki kol ayrı ayrı sökülür: kontrol susar, köprü boşalır — ikisi de gerçekten eliyor."""
+    bozuk = kaynak(bozuk_sistem_anahtari=True)
+    assert "hücresi çözülemedi" in _notlari(bozuk)
+    with mock.patch.object(bd, "sistem_anahtarlarini_coz", lambda hucre: ("yilbasi",)):
+        assert "hücresi çözülemedi" not in _notlari(bozuk)
+    with mock.patch.object(bd, "_donem_anahtarlari", lambda satirlar: {}):
+        rapor = bd.run(kaynak(), source_name="P")
+        assert rapor.notlar == ()
+        assert all(i.anahtarlar == () for i in rapor.iddialar)
 
 
 TEMIZ = kaynak()
@@ -1146,7 +1297,7 @@ ALAN_SIRA_MATRISI = tuple(
 )
 TABLO_SEKIL_MATRISI = tuple(
     (f"{n}-sutun", tablo_sutunlarini_boz(TEMIZ, n), "sütun")
-    for n in (1, 2, 3, 5, 6)
+    for n in (1, 2, 3, 4, 6)  # 5 sözleşmenin sayısıdır — o değil, komşuları
 )
 TEKIL_BOZMALAR = (
     (
@@ -1688,8 +1839,9 @@ def gerekce_tablosunu_boz(metin: str) -> str:
                 cikti.append(satir)
                 continue
             hucreler = [h.strip() for h in satir.strip().strip("|").split("|")]
+            dusen = bd.GEREKCE_TABLOSU_SUTUNLARI.index("tür etiketi")
             cikti.append(
-                "| " + " | ".join(h for i, h in enumerate(hucreler) if i != 2) + " |\n"
+                "| " + " | ".join(h for i, h in enumerate(hucreler) if i != dusen) + " |\n"
             )
         return "".join(cikti)
 
@@ -2161,11 +2313,11 @@ def test_alakasiz_tablo_uydurma_bulgu_uretmez(metin: str) -> None:
 def test_gercek_gerekce_tablosu_bozuksa_hala_gorunur() -> None:
     """Kontrol kolu: körelme YOK — bozuk GERÇEK tablo hâlâ not üretir."""
     mesajlar = _notlari(gerekce_tablosunu_boz(TEMIZ))
-    assert "3 sütunlu satır" in mesajlar
+    assert "4 sütunlu satır" in mesajlar
     assert "tür etiketi yok" in mesajlar
     # ...alakasız tablo EKLENSE bile bozuk gerçek tablo görünmeye devam eder.
     ikili = _notlari(bolum_b_alakasiz_tablo(gerekce_tablosunu_boz(TEMIZ), 2))
-    assert "3 sütunlu satır" in ikili
+    assert "4 sütunlu satır" in ikili
 
 
 def test_tablo_donemlerden_sonra_hala_gorunur() -> None:
@@ -2414,17 +2566,17 @@ def test_ozet_kapisi_mutasyona_duyarli() -> None:
 _EK_TABLOLAR = {
     # Alakasız ölçüm tablosu — kanonik gerekçe başlığını TAŞIMAZ.
     "jenerik": (
-        "| ay | trafik | dönüşüm | serbest not |\n",
-        "|---|---|---|---|\n",
-        "| ocak | yuksek | orta | ilk ceyrek |\n",
-        "| subat | orta | orta | ilk ceyrek |\n",
+        "| ay | trafik | dönüşüm | serbest not | kanal |\n",
+        "|---|---|---|---|---|\n",
+        "| ocak | yuksek | orta | ilk ceyrek | ig |\n",
+        "| subat | orta | orta | ilk ceyrek | ig |\n",
     ),
     # Aynı boydaki tablo ama kanonik gerekçe BAŞLIĞIYLA — v3'ü kandıran yem.
     "kanonik": (
-        "| dönem | karar | tür | gerekçe |\n",
-        "|---|---|---|---|\n",
-        "| ocak | secildi | kutlama | Uydurma gerekce. |\n",
-        "| subat | secildi | kutlama | Uydurma gerekce. |\n",
+        GEREKCE_BASLIGI + "\n",
+        "|---|---|---|---|---|\n",
+        "| ocak | — | secildi | kutlama | Uydurma gerekce. |\n",
+        "| subat | — | secildi | kutlama | Uydurma gerekce. |\n",
     ),
 }
 _ALAKASIZ_4_SUTUN = _EK_TABLOLAR["jenerik"]
@@ -2517,7 +2669,7 @@ def bolum_b_tablo_ekle(metin: str, konum: str, tablo: tuple[str, ...]) -> str:
 
 def gerekce_basligini_jeneriklestir(metin: str) -> str:
     """GERÇEK gerekçe tablosunun BAŞLIĞINI kanonik olmayan bir başlığa çevirir."""
-    yeni = metin.replace("| dönem | karar | tür | gerekçe |", "| a | b | c | d |")
+    yeni = metin.replace(GEREKCE_BASLIGI, "| a | b | c | d | e |")
     assert yeni != metin, "cerrahi gerekçe tablosunun başlığını bulamadı"
     return yeni
 
@@ -2529,12 +2681,12 @@ _GERCEK_TABLO_DURUMLARI = (
     (
         "satirlari-bozuk",
         gerekce_tablosunu_boz,
-        ("tür etiketi yok", "3 sütunlu satır"),
+        ("tür etiketi yok", "4 sütunlu satır"),
     ),
     (
         "jenerik-baslik-ve-bozuk",
         lambda m: gerekce_tablosunu_boz(gerekce_basligini_jeneriklestir(m)),
-        ("tür etiketi yok", "3 sütunlu satır"),
+        ("tür etiketi yok", "4 sütunlu satır"),
     ),
 )
 
@@ -2744,7 +2896,7 @@ def test_iki_donem_oncesi_tablo_belirsizlik_notu_duser() -> None:
     mesajlar = _notlari(ikili)
     assert "2 tablo var" in mesajlar, mesajlar[:400]
     # Fail-closed: belirsizlikte hepsi denetlenir, gerçek tablo GİZLENMEZ.
-    assert "tür etiketi yok" in mesajlar and "3 sütunlu satır" in mesajlar
+    assert "tür etiketi yok" in mesajlar and "4 sütunlu satır" in mesajlar
 
 
 def test_kanonik_baslik_yoksa_tanima_notu_duser() -> None:
@@ -2772,7 +2924,7 @@ def test_gerekce_denetim_kapisi_iki_ayri_yerden_mutasyona_duyarli() -> None:
     gizleyen = bolum_b_tablo_ekle(
         gerekce_tablosunu_boz(TEMIZ), DENETLENEN_KONUM, _ALAKASIZ_4_SUTUN
     )
-    assert "3 sütunlu satır" in _notlari(gizleyen)
+    assert "4 sütunlu satır" in _notlari(gizleyen)
     # (a) Denetim kümesini sök: dönem-SONRASI tablolar da denetime girsin.
     with mock.patch.object(bd, "_gerekce_tablosu", lambda bloklar: (bloklar, 1)):
         bozuk = _notlari(bolum_b_alakasiz_tablo(TEMIZ, 2))
@@ -2823,8 +2975,12 @@ def test_sozlesme_onem_sirasi_dayatir_ama_kapi_olcemez() -> None:
     assert "73-75" in birlesik, "beyan sözleşme satırını göstermeli"
 
 
-def test_kapsam_beyani_yedinci_kalemi_tasir() -> None:
-    """Beyan sayısı ALTI değil YEDİ: çit kuralının KAPSAMI ayrı bir kalem oldu.
+def test_kapsam_beyani_sekizinci_kalemi_tasir() -> None:
+    """Beyan sayısı YEDİ değil SEKİZ: `sistem-anahtari` kontrolü kendi sınırını beyan eder.
+
+    (Yedinci kalem tur 9'da çit kuralının kapsamıydı; sekizinci 2026-09-11'in
+    ikinci revizyonuyla geldi — anahtarın sistem takviminde VAR olduğu kapıda
+    ölçülmez, üyelik pinlenmiş şablona karşıdır.)
 
     Kalem sayısı `CHECKS`'ten TÜRER; beyan bir kontrolün alanında yaşar ve rapor
     onu kopyalar. Yeni bir ölçüm sınırı yazılırsa bu kapı düşer ve beyanın
@@ -2834,8 +2990,8 @@ def test_kapsam_beyani_yedinci_kalemi_tasir() -> None:
     """
     beyanlar = bd.run(TEMIZ, source_name="P").kapsam_sinirlari
     turetilen = sum(len(check.kapsam_sinirlari) for check in bd.CHECKS)
-    assert len(beyanlar) == turetilen == 7, beyanlar
-    assert len(set(beyanlar)) == 7, "beyanlar tekrar ediyor"
+    assert len(beyanlar) == turetilen == 8, beyanlar
+    assert len(set(beyanlar)) == 8, "beyanlar tekrar ediyor"
     doluluk = [b for b in beyanlar if b.startswith("bolum-ve-alan-tamligi/doluluk")]
     assert len(doluluk) == 1 and "markdown TABLOSU" in doluluk[0], beyanlar
     kapsam = [b for b in beyanlar if b.startswith("bolum-ve-alan-tamligi/cit-kapsami")]
@@ -3266,8 +3422,8 @@ def _mesru_gerekce_tablosu_ekle(metin: str) -> str:
     """Bölüm B'nin başına sözleşmeye UYAN gerçek bir gerekçe tablosu koyar."""
     satirlar = metin.splitlines(True)
     b_bas, _ = _b_bolgesi(satirlar)
-    mesru = ["\n", "| dönem | karar | tür | gerekçe |\n", "|---|---|---|---|\n"] + [
-        f"| {ad} | secildi | {tur} | Gerekce cumlesi. |\n"
+    mesru = ["\n", GEREKCE_BASLIGI + "\n", "|---|---|---|---|---|\n"] + [
+        f"| {ad} | {_sistem_anahtari(ad)} | secildi | {tur} | Gerekce cumlesi. |\n"
         for ad, tur in zip(_DONEM_ADLARI[:6], _DONEM_TURLERI[:6])
     ] + ["\n"]
     return "".join(satirlar[: b_bas + 1] + mesru + satirlar[b_bas + 1 :])

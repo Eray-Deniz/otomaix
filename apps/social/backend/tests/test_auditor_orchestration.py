@@ -108,10 +108,10 @@ def _snapshot(*unit_ids: str) -> dict[str, dict]:
 
 def _url_bolumu(kaynak_sayisi: int = 2, *, ortam_kisiti: bool = False) -> str:
     beklenen = kaynak_sayisi * 3 if kaynak_sayisi >= 2 else 0
-    satirlar = ["| iddia | kaynak | sonuç | not |", "| --- | --- | --- | --- |"]
+    satirlar = ["| iddia | URL | sonuç | not |", "| --- | --- | --- | --- |"]
     for sira in range(beklenen):
         satirlar.append(
-            f"| https://ornek.example/{sira} | KAYNAK-{sira % 3 + 1} | "
+            f"| K{sira % 3 + 1}#{sira // 3 + 1} | https://ornek.example/{sira} | "
             "DOĞRULANDI | tek cümle not |"
         )
     if beklenen == 0 or ortam_kisiti:

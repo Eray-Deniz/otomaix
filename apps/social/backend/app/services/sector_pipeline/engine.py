@@ -63,7 +63,6 @@ from app.services.sector_content_schema import (
     structural_errors,
 )
 from app.services.sector_pipeline import identity
-from app.services.sector_packages import normalize_special_day_key
 from app.services.sector_pipeline.auditors import (
     EKLEMEYE_IZIN_VEREN_ONERILER,
     KAYNAK_ETIKETI,
@@ -852,63 +851,75 @@ IDDIA_BAGI_YOK = "bagsiz"
 IDDIA_BAGI_DONEM_COZULEMEDI = "donem-cozulemedi"
 
 
-def _iddia_alani_bagli_mi(
-    karar_alani: str,
-    oge_yolu: str,
-    iddia_alani: str,
-    takvim_anahtarlari: frozenset[str] = frozenset(),
-) -> str:
-    """Araştırma iddiasının `alan/dönem` hücresi BU kararın alanını mı anlatıyor?
+def _iddia_alani_bagli_mi(karar_alani: str, oge_yolu: str, iddia: CIddia) -> str:
+    """Araştırma iddiası BU kararın alanını/dönemini mi anlatıyor?
 
     Sözleşme Bölüm C'de hücreyi İKİ yazımla kapalı tutar: *"ya Bölüm A alan
     adıdır (`cta_kaliplari` gibi) ya da Bölüm B dönem adıdır (`Sevgililer Günü`
     gibi) — aynen o yazımla"*. İki yazımın karar satırıyla bağı FARKLI kurulur:
 
     * **Görev A** — hücre doğrudan alan adıdır; bağ `_alan_bagi_var`'dır.
-    * **Görev B** — hücre DÖNEM ADIDIR (araştırmanın kendi yazımı), karar satırı
-      ise yalnız `ozel_gun` taşır ve dönemi `oge_yolu`nun slug'ında saklar. Bağ
-      bu yüzden O DÖNEME kurulur, `ozel_gun` alanına DEĞİL: "herhangi bir dönem
-      satırı herhangi bir özel gün eklemesini yetkilendirir" tam olarak
-      2026-09-11'de kapatılan sınıfın bir basamak aşağısıdır.
+    * **Görev B** — hücre DÖNEM ADIDIR, karar satırı ise yalnız `ozel_gun` taşır
+      ve dönemi `oge_yolu`nun anahtarında saklar. Bağ O DÖNEME kurulur:
+      kararın anahtarı, iddianın dönem satırının SİSTEM ANAHTARI KÜMESİNDE mi?
+      Küme Bölüm B gerekçe tablosunun `sistem anahtarı` sütunundan gelir
+      (`CIddia.anahtarlar`, dış depo `d9dc289`); birden çok anahtarlı dönemde
+      (bayram arifesi + günleri) kümenin HER üyesi o dönemin anahtarıdır.
 
-    Normalizasyon kuralı KOPYALANMAZ: `normalize_special_day_key` tek kaynaktır
-    (sistem takvimi anahtarları da onunla üretilir). Çözümlenemeyen ad anahtar
-    ÜRETMEZ ve burada bağ KURULMAZ (fail-closed) — uydurma anahtar yasağı.
+    **Günlük addan anahtar TÜRETİLMEZ (F3'ün kapattığı sınıf).** İlk yazım
+    araştırmanın dönem adını `normalize_special_day_key` ile slug'a çevirip
+    kararın anahtarıyla karşılaştırıyordu; ÖLÇÜLDÜ: aday takvimin 15 adından
+    yalnız 4'ü sistem slug'ına düşüyordu (`29 Ekim` ↔ `cumhuriyet-bayrami`),
+    Görev B eklemelerinin pratikte tamamı reddediliyordu. Köprü artık açık bir
+    sütundur; motor okur, tahmin etmez. Kümesi BOŞ olan dönem satırı (Bölüm B
+    `—`, çözülemeyen ya da kopyası bozuk hücre) bağ KURAMAZ ve dürüst teşhisle
+    `donem-kimligi-cozulemedi` alır — `iddia-arastirmada-yok` DEĞİL: iddia
+    araştırmada vardır, eksik olan anahtardır.
     """
     if _alan_bagi_var(
         alan_karsilastirma_anahtari(karar_alani),
-        alan_karsilastirma_anahtari(iddia_alani),
+        alan_karsilastirma_anahtari(iddia.alan),
     ):
         return IDDIA_BAGI_VAR
-    # F10 (hakem turu 1, düşük): iki ayak AYNI kuralı okur. İlk yazımda birinci
-    # ayak `alan_karsilastirma_anahtari`'den geçiyor, ikincisi HAM
-    # karşılaştırıyordu — "tek kural" iddiasıyla çelişen iki okuma.
     eslesme = _OZEL_GUN_YOLU.match(oge_yolu)
     if alan_karsilastirma_anahtari(karar_alani) != "ozel_gun" or eslesme is None:
         return IDDIA_BAGI_YOK
-    try:
-        anahtar = normalize_special_day_key(iddia_alani)
-    except ValueError:
-        return IDDIA_BAGI_DONEM_COZULEMEDI
-    if anahtar == eslesme.group("anahtar"):
+    if eslesme.group("anahtar") in iddia.anahtarlar:
         return IDDIA_BAGI_VAR
-    # AYRIM ÖLÇÜLEBİLİR ve dürüst teşhis onu gerektirir (F3): araştırmanın
-    # yazdığı ad SİSTEM takviminde hiç karşılık bulmuyorsa sorun "yanlış dönem"
-    # değil, AD UZAYIDIR — rapor bunu `iddia-arastirmada-yok` diye söylerse
-    # yanlış yeri gösterir. Karşılık buluyorsa ama BAŞKA bir güne düşüyorsa
-    # iddia gerçekten bu kararın dönemini anlatmıyordur.
-    # AŞIRI GENİŞLEME KAPATILDI (kapanış turu, orta — iki hakem de buldu).
-    # İlk yazım "takvimde yok" ⇒ "dönem kimliği çözülemedi" diyordu; o yüklem
-    # *"dönem adı mı"* sorusunu DEĞİL *"takvimde var mı"* sorusunu cevaplıyor.
-    # ÖLÇÜLDÜ: `cta_kaliplari` gibi bilinen bir ALAN adı da bu etiketi alıyordu —
-    # oysa o, iki uçlu bağın yakalamak için kurulduğu sentez sapmasının ta
-    # kendisi. Operatör onu bilinen sözleşme borcu sanıp araştırmayı bırakırdı.
-    # Bilinen bir Bölüm A alan adı DÖNEM DEĞİLDİR: yanlış ALAN olarak raporlanır.
-    if alan_karsilastirma_anahtari(iddia_alani) in _TEMEL_ALAN_ANAHTARLARI:
+    # Bilinen bir Bölüm A alan adı DÖNEM DEĞİLDİR: yanlış ALAN olarak raporlanır
+    # (kapanış turu, orta — iki hakem de buldu: aşırı geniş dönem teşhisi).
+    if alan_karsilastirma_anahtari(iddia.alan) in _TEMEL_ALAN_ANAHTARLARI:
         return IDDIA_BAGI_YOK
-    if anahtar not in takvim_anahtarlari:
+    if not iddia.anahtarlar:
         return IDDIA_BAGI_DONEM_COZULEMEDI
+    # Anahtar taşıyor ama BAŞKA bir dönemin: iddia bu kararın dönemini anlatmıyor.
     return IDDIA_BAGI_YOK
+
+
+_DENETCI_OZEL_GUN_ALANI = re.compile(r"^ozel_gun/(?P<anahtar>[^/]+)/")
+
+
+def _denetci_donem_bagi_var(
+    oge_yolu: str, denetci_alani: str, donem_anahtarlari: frozenset[str]
+) -> bool:
+    """Görev B'de denetçi satırının anahtarı KARARIN DÖNEMİNE mi ait?
+
+    Denetçi sözleşmesi 2.3: *"motor senin satırınla sentezin kararını anahtar
+    bazında değil DÖNEM bazında eşleştirir (ikisi de aynı Bölüm B satırının
+    anahtar kümesindeyse eşleşir)"*. Görev A satırında (önek yok) soru
+    sorulmaz — `_alan_bagi_var` zaten cevaplamıştır. Kararın anahtarı ile
+    denetçinin anahtarı AYNIYSA doğrudan eşleşir; değilse ikisi de bağlanan
+    iddiaların dönem anahtar kümesinde olmalıdır. Küme boşsa (Görev A kararı)
+    yalnız eşitlik geçer.
+    """
+    eslesme = _DENETCI_OZEL_GUN_ALANI.match(denetci_alani)
+    karar = _OZEL_GUN_YOLU.match(oge_yolu)
+    if eslesme is None or karar is None:
+        return True
+    denetci_anahtari = eslesme.group("anahtar")
+    if denetci_anahtari == karar.group("anahtar"):
+        return True
+    return denetci_anahtari in donem_anahtarlari and karar.group("anahtar") in donem_anahtarlari
 
 
 def _iddiasiz_atiflar(atiflar: list[str], tasiyan: set[str]) -> list[str]:
@@ -982,8 +993,10 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         # Eski yazım yalnız `kaynaklar` ve `sinif` okuyordu; `kanca_kaliplari`
         # eklemesi `cta_kaliplari` hakkındaki bir satırı gösterip çoğunluk
         # kapısını geçebiliyordu. Bu sentez sapmasının OLAĞAN biçimidir.
-        # Görev B satırlarında denetçi alanı `ozel_gun/{dönem}/{başlık}` yazar,
-        # karar satırı ise yalnız `ozel_gun` — bu yüzden bağ ÖNEK eşleşmesidir.
+        # Görev B satırlarında denetçi alanı `ozel_gun/{anahtar}/{başlık}` yazar,
+        # karar satırı ise yalnız `ozel_gun` — bu ilk kapı ÖNEK eşleşmesidir; dönemin
+        # KENDİSİ aşağıda, iddia bağı kurulduktan sonra ayrıca ölçülür
+        # (`_denetci_donem_bagi_var`, sözleşme 2.3).
         karar_alani = _metin(satir.get("alan"))
         uyusmayan = sorted(
             {
@@ -1026,10 +1039,7 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                 IDDIA_BAGI_YOK
                 if atif.etiket not in iddia_evreni
                 else _iddia_alani_bagli_mi(
-                    karar_alani,
-                    oge_yolu,
-                    iddia_evreni[atif.etiket].alan,
-                    inputs.takvim_anahtarlari,
+                    karar_alani, oge_yolu, iddia_evreni[atif.etiket]
                 )
             )
             for atif in iddialar
@@ -1052,6 +1062,34 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                     unit_id=satir["unit_id"],
                     karar="ekle",
                     sebep="donem-kimligi-cozulemedi",
+                )
+            )
+            continue
+        # GÖREV B: denetçi satırının anahtarı KARARIN DÖNEMİNE ait olmalı
+        # (denetçi sözleşmesi 2.3). `_alan_bagi_var` yalnız `ozel_gun/` önekini
+        # ölçer; "herhangi bir dönemin denetçi satırı herhangi bir özel gün
+        # eklemesini yetkilendirir" o önekle AÇIK kalırdı. Eşleşme anahtar
+        # bazında değil DÖNEM bazındadır: bağlanan iddiaların anahtar kümesi.
+        donem_anahtarlari = frozenset(
+            anahtar
+            for atif in iddialar
+            for anahtar in iddia_evreni[atif.etiket].anahtarlar
+        )
+        donem_uyusmayan = sorted(
+            {
+                parca
+                for parca in atiflar
+                if not _denetci_donem_bagi_var(
+                    oge_yolu, satir_evreni[parca].alan, donem_anahtarlari
+                )
+            }
+        )
+        if donem_uyusmayan:
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"],
+                    karar="ekle",
+                    sebep="referans-uyusmuyor",
                 )
             )
             continue
@@ -1195,7 +1233,9 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         # sütununu ekledi (dış depo `12beec1`); yargı artık TİPLİ taşınıyor.
         # Kök çözüm koda değil SÖZLEŞMEYE yapıldı — motor hâlâ hiçbir şey
         # ÇIKARSAMAZ, okur.
-        if len(kaynaklar) == 1 and _tek_kaynak_istisnasi(inputs, kaynaklar):
+        if len(kaynaklar) == 1 and _tek_kaynak_istisnasi(
+            inputs, kaynaklar, iddia_kumesi
+        ):
             continue
         kayitlar.append(
             UygulanmayanKarar(
@@ -1207,7 +1247,9 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
     )
 
 
-def _tek_kaynak_istisnasi(inputs: EngineInputs, etiketler: set[str]) -> bool:
+def _tek_kaynak_istisnasi(
+    inputs: EngineInputs, etiketler: set[str], iddialar: set[KaynakIddiasi]
+) -> bool:
     """K-126: tek kaynaklı iddia pakete girebilir mi? — İKİ ayak BİRLİKTE.
 
     Spec §9.4 istisnayı iki koşula bağlar ve ikisi de burada ölçülür:
@@ -1219,8 +1261,14 @@ def _tek_kaynak_istisnasi(inputs: EngineInputs, etiketler: set[str]) -> bool:
       olmalıdır. ÇEKİŞMELİ yargı (biri `evet`, öteki `hayır`) istisnayı AÇMAZ:
       bir denetçinin şüphesini öbürünün iyimserliğiyle susturmak, sözleşmenin
       *"emin değilsen `hayır` yaz"* hükmünü tersine çevirirdi.
-    * **(2) CANLI URL DOĞRULAMASI — en az bir denetçi** o kaynak için hem
-      erişmiş hem içerik uyumunu kaydetmiş olmalıdır (`erisildi ∧ icerik_uyumlu`).
+    * **(2) CANLI URL DOĞRULAMASI — en az bir denetçi O İDDİANIN URL'sini**
+      hem açmış hem içerik uyumunu kaydetmiş olmalıdır (`erisildi ∧
+      icerik_uyumlu`). **İDDİA düzeyinde (F4, hakem turu 1 — yüksek; dış depo
+      `d9dc289`).** İlk yazım kaynak düzeyinde ölçüyordu: o kaynağın
+      örneklemdeki HERHANGİ bir doğrulanmış URL'si, o kaynağın pakete giren HER
+      tekil iddiasına yetiyordu. Sözleşme 2.3 örneklem satırına iddia kimliği
+      koydu; ayak artık kararın `kaynak_iddia` kümesindeki bir kimliği taşıyan
+      satırdan okunur. Kimliksiz satır (`iddia is None`) istisna AÇMAZ.
 
     Etiket uzayı ile numara uzayı arasındaki köprü `KAYNAK_ETIKETI`'dir; ikinci
     bir numaralandırma kuralı yazılmaz.
@@ -1254,7 +1302,11 @@ def _tek_kaynak_istisnasi(inputs: EngineInputs, etiketler: set[str]) -> bool:
     if not all(yargilar):
         return False
     return any(
-        kontrol.kaynak == etiket and kontrol.erisildi and kontrol.icerik_uyumlu
+        kontrol.iddia is not None
+        and kontrol.iddia in iddialar
+        and kontrol.kaynak == etiket
+        and kontrol.erisildi
+        and kontrol.icerik_uyumlu
         for rapor in raporlar
         for kontrol in rapor.url_orneklem
     )
@@ -1375,33 +1427,28 @@ def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
     **ÜSTÜNLÜK yönü değişmez — bu bir BLOK DEĞİLDİR.** Paket türü üretim
     davranışında üstündür ve motor içeriği DEĞİŞTİRMEZ.
 
-    **KAPANMAYAN AYAK — dürüst etiket (hakem turu 1, F1/critical).** Spec §11.2
-    *"çatışma karar günlüğüne yazılır"* der ve ilk yazım bunu bir NOT satırıyla
-    yapıyordu. ÖLÇÜLDÜ: not sınıfı kümesi DIŞ SÖZLEŞMEDE kapalıdır
-    (`hakem-sentez-gorevi.md`: *"Not satırı (alan kümesi KAPALI): sinif:
-    reddedilen-aday|eslesmeyen-ozel-gun"*) ve `identity.NOT_SINIFLARI` onu
-    aynen taşır. Yetkisiz üçüncü bir sınıf yazmak günlüğü şema kapısına
-    takıyordu; `decide()` kendi ürettiği günlüğü doğruladığı için sonuç
-    `blocked` oluyordu — yani her çatışma paketi DÜŞÜRÜYORDU, K-03'ün hükmünün
-    TAM TERSİ (taze ölçümle üretildi ve kapatıldı).
+    **GÜNLÜK AYAĞI KAPANDI (dış depo `d9dc289`, sentez sözleşmesi 2.3).** Spec
+    §11.2 *"çatışma karar günlüğüne yazılır"* der. Tarihçe: ilk yazım bunu bir
+    NOT satırıyla yapıyordu ama not sınıfı kümesi dış sözleşmede İKİ değerle
+    kapalıydı; yetkisiz üçüncü sınıf günlüğü şema kapısına takıyor, `decide()`
+    kendi ürettiği günlüğü doğruladığı için sonuç `blocked` oluyordu — her
+    çatışma paketi düşürüyordu, K-03'ün hükmünün tam tersi (hakem turu 1,
+    F1/critical; ölçüldü ve kapatıldı). Ara dönemde çatışma YALNIZ ÖLÇÜM olarak
+    taşındı ve onu adıyla okuyan tüketici yoktu (kapanış turu N2 — hakemler
+    ayrıştı; Eray kararı: geçici tüketici eklenmedi, gerçek günlük kaydı
+    sözleşme turundan beklendi).
 
-    Bu yüzden çatışma bugün YALNIZ ÖLÇÜM olarak taşınır
-    (`kategori_cakismalari` → `engine_diff`). Günlük ayağı AÇIK bir borçtur ve
-    kapanışı DIŞ SÖZLEŞME revizyonu ister (üçüncü not sınıfının yetkilendirilmesi)
-    — uydurulan bir sınıf, koşuyu düşüren bir kapıya dönüşür.
+    Sözleşme 2.3 üçüncü sınıfı YETKİLENDİRDİ: `tur-kategori-catismasi`, yazarı
+    MOTOR (sistem kategorisi sentezde yoktur — EK-J anahtar taşır), `konu`
+    nesnesi ZORUNLU (anahtar · paket türü · sistem kategorisi). Bu kontrol artık
+    her çatışma için o NOT satırını üretir; not karar günlüğünde kalıcılaşır ve
+    onay anında GÖRÜLÜR. Ölçüm (`kategori_cakismalari` → `engine_diff`) aynen
+    sürer: not ile ölçüm aynı kaynaktan yazılır, ayrışamaz.
 
-    **BEYANIN SONUCU DA YAZILIR (kapanış turu, N2 — hakemler ayrıştı, Eray
-    kararı).** "Ölçüm olarak taşınır" cümlesi TEK BAŞINA yanıltıcıdır: okuyan
-    birinin olduğunu ima eder. ÖLÇÜLDÜ (iki hakem + kontrolör, üçü de aynı
-    sonucu buldu): `kategori_cakismalari` anahtarını ADIYLA okuyan HİÇBİR
-    tüketici yoktur — onay anlık görüntüsü yalnız sürüm/ayar/bariyer taşır, CLI
-    koşu kimliği ve sonucu basar, hazırlık kontrolü diff'in boş olup olmadığına
-    bakar. Yani **bugün operatör bu çatışmayı hiçbir yerde GÖRMEZ**; kayıt
-    yalnız DENETİM içindir.
-
-    Bilinçli seçim (Eray, 2026-09-11): geçici bir tüketici EKLENMEZ, çünkü aynı
-    sözleşme turu gerçek günlük kaydını getirecek ve o tüketici çöpe giderdi.
-    Risk penceresi kapalı: pilot koşmadan hiçbir çatışma operatöre ulaşamaz.
+    **Sentez bu notu YAZMAZ** (sözleşme: *"iki yazar aynı çatışmayı iki kez
+    kaydeder"*). Sentezin günlüğünde bu sınıftan bir satır görülürse bulgu
+    üretilir (`acik_soru`, birime bağlanmaz): motor onu sessizce ne kopyalar ne
+    düşürür — karar operatöre çıkar.
 
     İki ölçüm AYRI adlandırılır çünkü AYRI şeylerdir: `kategori_cakismalari`
     tür↔kategori çatışmasıdır; `paket_turu_degisiklikleri` sıradan bir tür
@@ -1412,6 +1459,7 @@ def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
     onceki = _aktif_ozel_gunler(inputs)
     degisiklikler = []
     catismalar = []
+    notlar = []
     for anahtar in sorted(aday):
         yeni_tur = _metin((aday.get(anahtar) or {}).get("tur"))
         onceki_tur = (onceki.get(anahtar) or {}).get("tur")
@@ -1422,14 +1470,47 @@ def _kategori_cakismasi(inputs: EngineInputs) -> CheckOutput:
         kategori = _metin(inputs.takvim_kategorileri.get(anahtar))
         if not _tur_kategori_catismasi_mi(yeni_tur, kategori):
             continue
-        catismalar.append(
+        konu = {
+            "anahtar": anahtar,
+            "paket_turu": yeni_tur,
+            "sistem_kategorisi": kategori,
+        }
+        catismalar.append(dict(konu))
+        notlar.append(
             {
-                "anahtar": anahtar,
-                "paket_turu": yeni_tur,
-                "sistem_kategorisi": kategori,
+                "tur": "not",
+                "sinif": identity.NOT_KONU_SINIFI,
+                "alan": "ozel_gun",
+                "gerekce": (
+                    f"K-03: özel gün {anahtar!r} paket türü {yeni_tur!r} ile sistem "
+                    f"kategorisi {kategori!r} çelişiyor — üretimde PAKET TÜRÜ üstündür, "
+                    "sistem kategorisi günün kimliği için korunur; blok DEĞİLDİR"
+                ),
+                "konu": konu,
             }
         )
+    bulgular = []
+    sentezin_yazdigi = [
+        satir
+        for satir in _gunluk(inputs)
+        if satir.get("tur") == "not" and satir.get("sinif") == identity.NOT_KONU_SINIFI
+    ]
+    if sentezin_yazdigi:
+        bulgular.append(
+            BulguIzi(
+                sinif="acik_soru",
+                unit_id=None,
+                detay=(
+                    f"sentez {len(sentezin_yazdigi)} adet "
+                    f"{identity.NOT_KONU_SINIFI!r} notu yazdı — sözleşme 2.3 bu "
+                    "sınıfı YALNIZ motora verir (iki yazar aynı çatışmayı iki kez "
+                    "kaydeder); karar operatöre bırakılır"
+                ),
+            )
+        )
     return CheckOutput(
+        bulgular=tuple(bulgular),
+        notlar=tuple(notlar),
         olcumler={
             "paket_turu_degisiklikleri": tuple(degisiklikler),
             "kategori_cakismalari": tuple(catismalar),
@@ -1650,7 +1731,7 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 # ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
 # bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
 
-ENGINE_VERSION: str = "2.14.0"
+ENGINE_VERSION: str = "2.15.0"
 """Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
 
 Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
@@ -1663,6 +1744,15 @@ geçti · K-03 kategori ayağı çalışmaya başladı · uygulanmama sebepleri 
 kümesi yediden on bire çıktı. Aynı damgayı taşıyan iki koşu maddi olarak FARKLI
 kurallarla karar veriyordu; yeniden doğrulama ve denetim karşılaştırması ikisini
 ayırt edemezdi — bu bloğun kendi hükmünün ihlaliydi.
+
+**2.14.0 → 2.15.0 (2026-09-11, dış sözleşme turu — dış depo `d9dc289`).** Üç
+uygulama kuralı değişti: Görev B bağı günlük addan slug türetmez, Bölüm B
+`sistem anahtarı` kümesinden kurulur ve denetçi satırı DÖNEM bazında eşleşir ·
+K-126'nın canlı URL ayağı KAYNAK düzeyinden İDDİA düzeyine indi (kimliksiz
+satır istisna açmaz) · K-03 çatışması `tur-kategori-catismasi` NOT satırı
+olarak günlüğe yazılır (`konu` ile), sentezin yazdığı aynı sınıf bulgu üretir.
+Sebep kümesi ve kontrol adları DEĞİŞMEDİ; kural yüzeyi parmak izine not sınıfı
+kümesi eklendi ki bu sınıftaki değişiklik de damgayı zorlasın.
 """
 
 ETKI_BLOKLAR = "bloklar"

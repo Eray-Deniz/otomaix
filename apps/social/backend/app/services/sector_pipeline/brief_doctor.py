@@ -340,9 +340,80 @@ METIN_ALANLARI = ("kapsam", "ton_ve_dil")
 LISTE_ALANLARI = tuple(ad for ad in TEMEL_ALANLAR if ad not in METIN_ALANLARI)
 
 # `_SABLON.md` ═══ 5. ÇIKTI FORMATI ═══ Bölüm B: "önce seçim/eleme/ekleme
-# gerekçeleri tablosu (dönem + karar + tür etiketi + gerekçe), sonra dönem dönem
-# dört başlık". SÜTUN SAYISI ve SIRA sözleşmenindir; test onu pinden okur.
-GEREKCE_TABLOSU_SUTUNLARI = ("dönem", "karar", "tür etiketi", "gerekçe")
+# gerekçeleri tablosu (dönem + sistem anahtarı + karar + tür etiketi + gerekçe),
+# sonra dönem dönem dört başlık". SÜTUN SAYISI ve SIRA sözleşmenindir; test onu
+# pinden okur. `sistem anahtarı` sütunu 2026-09-11'in ikinci revizyonuyla geldi
+# (dış depo `d9dc289`): dönem satırının SİSTEM ANAHTARINA köprüsü BU sütundur —
+# Bölüm C dönem adını taşımaya devam eder, anahtar buradan okunur.
+GEREKCE_TABLOSU_SUTUNLARI = (
+    "dönem",
+    "sistem anahtarı",
+    "karar",
+    "tür etiketi",
+    "gerekçe",
+)
+GEREKCE_DONEM_INDEKSI = GEREKCE_TABLOSU_SUTUNLARI.index("dönem")
+GEREKCE_ANAHTAR_INDEKSI = GEREKCE_TABLOSU_SUTUNLARI.index("sistem anahtarı")
+
+# Sözleşme (Bölüm B): *"Aday listesinde olmayan, sektöre özgü eklediğin dönemde
+# `—` yaz"*. Bu değer "anahtar YOK" demektir; boş hücre DEĞİLDİR (boş hücre
+# ayrı bir ihlaldir — yazılmamış ile bilinçle yok arasındaki fark korunur).
+SISTEM_ANAHTARI_YOK = "—"
+
+# Sistem anahtarının BİÇİMİ — `sector_packages.normalize_special_day_key`'in
+# ürettiği slug uzayı: küçük harf/rakam öbekleri, tek tire ile ayrılmış. Biçim
+# burada yalnız TANINIR; anahtar burada ÜRETİLMEZ (uydurma anahtar yasağı,
+# spec §4.4). Üretici tek modüldür ve bu kapı onu çağırmaz.
+_SISTEM_ANAHTARI_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+# `_SABLON.md` ═══ 4. GÖREV B ═══ ADIM 1 — ADAY TAKVİM tablosu: günlük dildeki
+# dönem adı → o dönemin SİSTEM ANAHTARLARI (birden çok anahtar = bayram arifesi
+# + günleri). Test bu eşlemeyi pinlenmiş şablonun TABLOSUNDAN okur; burada
+# elle yazılı bir liste değil, sözleşmenin kopyasıdır — sözleşme değişip bu
+# demet güncellenmezse alarm düşer. Kapı bu eşlemeyi ÜÇ yerde kullanır:
+# hücre biçimi (`—` ya da bilinen anahtarlar), aday dönemde AYNEN kopya kuralı,
+# ve `CIddia.anahtarlar`'ın kaynağı (dolaylı — kopya doğrulandıysa hücre).
+ADAY_TAKVIM_ANAHTARLARI: dict[str, tuple[str, ...]] = {
+    "Yılbaşı": ("yilbasi",),
+    "Sevgililer Günü": ("sevgililer-gunu",),
+    "8 Mart Dünya Kadınlar Günü": ("dunya-kadinlar-gunu",),
+    "Ramazan Bayramı": (
+        "ramazan-bayrami-arife",
+        "ramazan-bayrami-1-gun",
+        "ramazan-bayrami-2-gun",
+        "ramazan-bayrami-3-gun",
+    ),
+    "Kurban Bayramı": (
+        "kurban-bayrami-arife",
+        "kurban-bayrami-1-gun",
+        "kurban-bayrami-2-gun",
+        "kurban-bayrami-3-gun",
+        "kurban-bayrami-4-gun",
+    ),
+    "Anneler Günü": ("anneler-gunu",),
+    "Babalar Günü": ("babalar-gunu",),
+    "23 Nisan": ("ulusal-egemenlik-ve-cocuk-bayrami",),
+    "19 Mayıs": ("ataturk-u-anma-genclik-ve-spor-bayrami",),
+    "30 Ağustos": ("zafer-bayrami",),
+    "29 Ekim": ("cumhuriyet-bayrami",),
+    "10 Kasım": ("10-kasim-ataturk-u-anma-gunu",),
+    "24 Kasım Öğretmenler Günü": ("24-kasim-ogretmenler-gunu",),
+    "Kasım indirim dönemi": ("black-friday",),
+    "okula dönüş (Eylül)": ("okula-donus",),
+}
+
+# Sistemde olup aday listesinde OLMAYAN günler — şablonun tablo altı satırı.
+# Sektöre özgü ekleme olarak seçilirse anahtarı buradan gelir.
+ADAY_DISI_SISTEM_ANAHTARLARI: tuple[str, ...] = (
+    "canakkale-sehitlerini-anma-gunu",
+    "demokrasi-ve-mill-birlik-gunu",
+    "emek-ve-dayanisma-gunu",
+)
+
+SISTEM_ANAHTARLARI: frozenset[str] = frozenset(
+    anahtar for anahtarlar in ADAY_TAKVIM_ANAHTARLARI.values() for anahtar in anahtarlar
+) | frozenset(ADAY_DISI_SISTEM_ANAHTARLARI)
+"""Şablonun tanıdığı BÜTÜN sistem anahtarları — hücre üyeliğinin kapalı kümesi."""
 
 # Gerekçe tablosunun KANONİK BAŞLIK anahtarları — sütun adlarının çekirdek
 # sözcükleri. İkinci bir liste YAZILMAZ: küme sözleşmeden okunan sabitin
@@ -816,6 +887,16 @@ class DoctorReport:
                 "DoctorReport.iddialar `alan` hücresi BOŞ olamaz — motor "
                 "kararın alanıyla örtüşmeyi o hücrede ölçer"
             )
+        for iddia in self.iddialar:
+            if not isinstance(iddia.anahtarlar, tuple) or any(
+                not isinstance(a, str) or not _SISTEM_ANAHTARI_RE.match(a)
+                for a in iddia.anahtarlar
+            ):
+                raise ValueError(
+                    "DoctorReport.iddialar `anahtarlar` yalnız slug biçimli "
+                    f"sistem anahtarı taşır: {iddia.anahtarlar!r} — motor Görev B "
+                    "bağını bu kümeden kurar, serbest metin bağ kuramaz"
+                )
         ihlaller = _rapor_ihlalleri(self.sonuc, self.notlar, self.elemeler)
         if ihlaller:
             raise ValueError(
@@ -1387,6 +1468,12 @@ class _Belge:
     video_havuz_sirasi: tuple[str, ...] = ()
     donem_sirasi: tuple[str, ...] = ()
     c_esleme_satirlari: tuple[str, ...] = ()
+    # Bölüm B gerekçe tablosundan okunan DÖNEM → SİSTEM ANAHTARLARI köprüsü
+    # (sadeleştirilmiş dönem adı → anahtar demeti; `—` → boş demet). Yalnız
+    # sözleşmenin sütun sayısını taşıyan ve hücresi ÇÖZÜLEN satırlar girer;
+    # çözülmeyen hücre ihlal olarak AYRICA bildirilir ve köprüye GİRMEZ
+    # (fail-closed: uydurma ya da bozuk anahtar köprü kurmaz).
+    donem_anahtarlari: dict[str, tuple[str, ...]] = field(default_factory=dict)
     c_esleme_izleri: tuple[str, ...] = ()
 
 
@@ -2144,6 +2231,7 @@ def _ayristir(source_text: str) -> _Belge:
             if not _TABLO_AYIRAC_RE.match(satir)
         ]
     tablo_sutun_sayilari = tuple(sutun_sayilari)
+    donem_anahtarlari = _donem_anahtarlari(tablo_veri_satirlari)
 
     c_satirlari = bolumler.get("C", [])
     # Eşleme satırı sayımı da çit-farkındadır (tur 9): ölçüldü ki Bölüm C'nin
@@ -2191,6 +2279,7 @@ def _ayristir(source_text: str) -> _Belge:
         donem_sirasi=tuple(_sadelestir(donem.ad) for donem in donemler),
         c_esleme_satirlari=c_esleme_satirlari,
         c_esleme_izleri=tuple(_sadelestir(satir) for satir in c_esleme_satirlari),
+        donem_anahtarlari=donem_anahtarlari,
     )
 
 
@@ -2254,6 +2343,78 @@ def _gerekce_basligi_puani(satir: str) -> int:
         for anahtar in GEREKCE_BASLIK_ANAHTARLARI
         if anahtar.casefold() in govde
     )
+
+
+def sistem_anahtarlarini_coz(hucre: str) -> tuple[str, ...] | None:
+    """Bölüm B `sistem anahtarı` hücresi → anahtar demeti; bozuksa `None`.
+
+    TEK ayrıştırıcıdır: kapı (hücre denetimi) ve köprü (`CIddia.anahtarlar`)
+    aynı fonksiyonu çağırır, yoksa kapı "geçerli" derken köprü boş kalabilirdi.
+    Sözleşme yazımı: `—` (anahtar YOK) ya da virgülle ayrılmış, tekrarsız,
+    slug biçimli anahtarlar. Boş hücre, düzyazı, bilinmeyen anahtar → `None`.
+    `—` → BOŞ demet (çözüldü, anahtar yok).
+    """
+    hucre = hucre.strip()
+    if not hucre:
+        return None
+    if hucre == SISTEM_ANAHTARI_YOK:
+        return ()
+    parcalar = [parca.strip() for parca in hucre.split(",")]
+    if any(not _SISTEM_ANAHTARI_RE.match(parca) for parca in parcalar):
+        return None
+    if any(parca not in SISTEM_ANAHTARLARI for parca in parcalar):
+        return None
+    if len(set(parcalar)) != len(parcalar):
+        return None
+    return tuple(parcalar)
+
+
+_ADAY_TAKVIM_SADE: dict[str, tuple[str, ...]] = {
+    _sadelestir(ad): demet for ad, demet in ADAY_TAKVIM_ANAHTARLARI.items()
+}
+
+
+def _aday_kopyasi_mi(donem: str, anahtarlar: tuple[str, ...]) -> bool:
+    """ADAY TAKVİM'deki dönem için hücre şablonun AYNEN kopyası mı? (Aday değilse: evet.)
+
+    TEK yüklem, İKİ tüketici: hücre kontrolü (not üretir) ve köprü (bağ kurmaz).
+    """
+    beklenen = _ADAY_TAKVIM_SADE.get(donem)
+    return beklenen is None or anahtarlar == beklenen
+
+
+def _donem_anahtarlari(tablo_satirlari: Sequence[str]) -> dict[str, tuple[str, ...]]:
+    """Gerekçe tablosundan DÖNEM → ANAHTARLAR köprüsü — yalnız çözülen satırlar.
+
+    Aynı dönem iki satırda geçiyorsa ve anahtarları ÇELİŞİYORSA köprü o dönemi
+    TAŞIMAZ (hangisinin doğru olduğu bilinemez; birini seçmek sessiz varsayım
+    olurdu). Aynı anahtarla tekrar zararsızdır.
+
+    KOPYA KURALI köprüde de yaşar (fail-closed): ADAY TAKVİM'deki bir dönem
+    şablondakinden BAŞKA bir anahtar taşıyorsa satır not alır ve köprüye de
+    GİRMEZ. Aksi hâlde "Sevgililer Günü" satırına yazılmış bir Ramazan anahtarı
+    notlu geçer ama motor Ramazan kararlarını o satırla yetkilendirirdi — not,
+    kapıyı kapatmaz; köprünün kendisi kapatır.
+    """
+    kopru: dict[str, tuple[str, ...]] = {}
+    celisen: set[str] = set()
+    for satir in tablo_satirlari:
+        hucreler = _hucreler(satir)
+        if len(hucreler) != len(GEREKCE_TABLOSU_SUTUNLARI):
+            continue
+        donem = _sadelestir(hucreler[GEREKCE_DONEM_INDEKSI])
+        anahtarlar = sistem_anahtarlarini_coz(hucreler[GEREKCE_ANAHTAR_INDEKSI])
+        if not donem or anahtarlar is None:
+            continue
+        if not _aday_kopyasi_mi(donem, anahtarlar):
+            continue
+        if donem in kopru and kopru[donem] != anahtarlar:
+            celisen.add(donem)
+            continue
+        kopru[donem] = anahtarlar
+    for donem in celisen:
+        kopru.pop(donem, None)
+    return kopru
 
 
 def _gerekce_tablosu(
@@ -2834,10 +2995,18 @@ class CIddia:
 
     Hücrenin yalnız İKİ sütunu taşınır. `iddia` metni bilinçli olarak DIŞARIDA:
     motor onunla bir şey ölçmez, taşımak onu bir karar girdisi gibi gösterirdi.
+
+    `anahtarlar` (dış depo `d9dc289`, F3): satır bir DÖNEM satırıysa o dönemin
+    SİSTEM ANAHTARLARI — Bölüm B gerekçe tablosunun `sistem anahtarı`
+    sütunundan köprüyle gelir (`_Belge.donem_anahtarlari`). Görev A satırında
+    ve köprüsü kurulamayan dönem satırında BOŞTUR. Motor Görev B bağını bu
+    kümeden kurar: kararın `oge_yolu` anahtarı kümede mi? Günlük dildeki dönem
+    adından anahtar TÜRETİLMEZ — o tahmin, F3'ün kapattığı sınıftır.
     """
 
     no: int
     alan: str
+    anahtarlar: tuple[str, ...] = ()
 
 
 def _c_iddialari(belge: _Belge) -> tuple[CIddia, ...]:
@@ -2858,7 +3027,13 @@ def _c_iddialari(belge: _Belge) -> tuple[CIddia, ...]:
         alan = hucreler[C_ALAN_INDEKSI]
         if not _C_NO_RE.match(ham_no) or not alan:
             continue
-        iddialar.append(CIddia(no=int(ham_no), alan=alan))
+        iddialar.append(
+            CIddia(
+                no=int(ham_no),
+                alan=alan,
+                anahtarlar=belge.donem_anahtarlari.get(_sadelestir(alan), ()),
+            )
+        )
     # Tekrar eden numara KİMLİK DEĞİLDİR: hangi satırı gösterdiği belirsiz olan
     # bir numara motorda iki ayrı iddiaya çözülürdü. İhlali `_c_no_dizisi_-
     # ihlalleri` NOT olarak bildirir; taşıyıcı o numaraların HİÇBİRİNİ almaz
@@ -2954,6 +3129,55 @@ def _c_kapsama_ihlalleri(belge: _Belge) -> list[str | _Mesaj]:
             f"taşımıyor: {', '.join(eksik)}"
         )
     ]
+
+
+def _kontrol_sistem_anahtari(belge: _Belge) -> list[str]:
+    """Bölüm B `sistem anahtarı` hücresi: çözülür, kopyadır, çelişmez.
+
+    Üç kural, üçü de sözleşmenin kendi cümlesi (dış depo `d9dc289`):
+    (1) hücre `—` ya da şablonun tanıdığı anahtarlardır — biçim ve üyelik
+        `sistem_anahtarlarini_coz` ile ölçülür (uydurma anahtar köprü kurmaz);
+    (2) ADAY TAKVİM'deki bir dönem için hücre tablodaki demetin AYNEN
+        kopyasıdır ("AYNEN kopyalanır — hepsi, tablodaki sırayla");
+    (3) aynı dönem iki satırda farklı anahtar taşıyamaz (köprü belirsizleşir).
+    Tablonun VARLIĞI ve sütun SAYISI bu kontrolün konusu değildir (o
+    `ozel-gun-gerekce-tablosu` ailesindedir); sütun sayısı tutmayan satırda
+    hücrenin hangisi olduğu bilinmez, burada ölçülmez.
+    """
+    mesajlar: list[str] = []
+    gorulen: dict[str, tuple[str, ...]] = {}
+    aday = _ADAY_TAKVIM_SADE
+    for satir in belge.tablo_satirlari:
+        hucreler = _hucreler(satir)
+        if len(hucreler) != len(GEREKCE_TABLOSU_SUTUNLARI):
+            continue
+        kisa = satir.strip()[:80]
+        donem = _sadelestir(hucreler[GEREKCE_DONEM_INDEKSI])
+        hucre = hucreler[GEREKCE_ANAHTAR_INDEKSI]
+        anahtarlar = sistem_anahtarlarini_coz(hucre)
+        if anahtarlar is None:
+            mesajlar.append(
+                f"Gerekçe tablosu `sistem anahtarı` hücresi çözülemedi: {hucre!r} — "
+                f"`{SISTEM_ANAHTARI_YOK}` ya da ADAY TAKVİM'deki anahtarlar, "
+                f"virgülle, tekrarsız: {kisa!r}"
+            )
+            continue
+        if not _aday_kopyasi_mi(donem, anahtarlar):
+            mesajlar.append(
+                f"Gerekçe tablosu `sistem anahtarı` hücresi ADAY TAKVİM'in kopyası "
+                f"değil: dönem {hucreler[GEREKCE_DONEM_INDEKSI]!r} için şablon "
+                f"{', '.join(aday[donem])!r} der, hücre {hucre!r}: {kisa!r}"
+            )
+            continue
+        if donem in gorulen and gorulen[donem] != anahtarlar:
+            mesajlar.append(
+                f"Gerekçe tablosunda aynı dönem iki FARKLI anahtar kümesiyle "
+                f"geçiyor ({hucreler[GEREKCE_DONEM_INDEKSI]!r}) — köprü kurulamaz: "
+                f"{kisa!r}"
+            )
+            continue
+        gorulen.setdefault(donem, anahtarlar)
+    return mesajlar
 
 
 _TICARI_FIRSAT_RE = re.compile(r"ticari[\s_\-]*f[ıi]rsat", re.IGNORECASE)
@@ -3369,6 +3593,28 @@ CHECKS: tuple[Check, ...] = (
         seviye=SEVIYE_NOT,
         aciklama="Tür etiketi dörtle kapalı, tek değerli, ASCII yazım",
         kural=_kontrol_tur_etiketi,
+    ),
+    Check(
+        kimlik="sistem-anahtari",
+        # Aile kümesi DONDURULMUŞTUR (K-89, spec-input §7.3 — sekiz aile). Bu
+        # kontrol gerekçe TABLOSUNUN bir hücresini ölçer; ailesi o tablonun
+        # ailesidir, dokuzuncu bir aile açılmaz (`bicim-kurallari` emsali:
+        # bir aile birden çok `Check` paketleyebilir).
+        aile="ozel-gun-gerekce-tablosu",
+        seviye=SEVIYE_NOT,
+        aciklama=(
+            "Bölüm B `sistem anahtarı` hücresi: `—` ya da şablonun tanıdığı "
+            "anahtarlar; aday dönemde ADAY TAKVİM'in aynen kopyası; çelişmez"
+        ),
+        kural=_kontrol_sistem_anahtari,
+        kapsam_sinirlari=(
+            (
+                "sistem-anahtari: anahtarın SİSTEM TAKVİMİNDE gerçekten var "
+                "olduğu burada ölçülmez (kapı veritabanı görmez); üyelik "
+                "pinlenmiş şablonun tablosuna karşıdır. Takvim ile şablon "
+                "ayrışırsa sentezin yazım kapısı (EK-J) yakalar, bu kapı değil."
+            ),
+        ),
     ),
     Check(
         kimlik="ozel-gun-gerekce-tablosu",
