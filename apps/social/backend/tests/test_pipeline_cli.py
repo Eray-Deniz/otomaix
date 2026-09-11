@@ -19,6 +19,7 @@ burada ölçülür: `recovered` durumu maruziyet kanıtı olmadan ÜRETİLMEZ.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 import uuid
@@ -1267,3 +1268,42 @@ def test_hazirlik_onayla_evaluates_and_writes_under_one_locked_transaction():
     assert "conn.transaction()" in kaynak
     assert "FOR UPDATE" in kaynak
     assert kaynak.index("conn.transaction()") < kaynak.index("readiness.evaluate")
+
+
+async def test_hazirlik_onayla_refuses_when_evidence_changed_after_evaluation(
+    pkg_db, monkeypatch
+):
+    """Değerlendirmeden SONRA kanıt değiştiyse onay YAZILMAZ (hakem turu 2, F1).
+
+    Kanıtın bir kısmı EKLEMELİ bir tabloda durur ve tasdik kaydının "ne
+    gördüm" alanı yoktur. Pencere tamamen kapanmıyor — kapanışı sözleşme
+    revizyonuna bağlı (son tarih Task 19) — ama yazımdan hemen önceki taze
+    okuma, bayat değerlendirmeyi belgelemeyi ENGELLER.
+    """
+    from .test_readiness_checklist import _hazir_kosu
+    from app.services.sector_pipeline import readiness
+
+    run_id = await _hazir_kosu(pkg_db)
+    gercek = readiness.evaluate
+
+    async def _bayat(db, *, run_id):
+        rapor = await gercek(db, run_id=run_id)
+        return dataclasses.replace(rapor, kanit_parmakizi="bayat-parmakizi")
+
+    monkeypatch.setattr(readiness, "evaluate", _bayat)
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args("hazirlik-onayla", "--run-id", run_id, "--actor", ACTOR, "--onayla"),
+    )
+
+    assert rc == cli.RC_REFUSED
+    assert any("kanit" in satir.lower() for satir in satirlar)
+    assert (
+        await pkg_db.fetchval(
+            "SELECT readiness_attestation FROM social.sector_package_runs "
+            "WHERE run_id = $1",
+            run_id,
+        )
+        is None
+    )

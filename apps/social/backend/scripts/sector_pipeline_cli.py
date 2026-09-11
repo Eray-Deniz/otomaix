@@ -944,6 +944,16 @@ async def _kos_hazirlik_onayla(conn, args) -> Sonuc:
             )
             return (satirlar, RC_REFUSED)
 
+        taze = await readiness.kanit_parmakizi(conn, run_id=args.run_id)
+        if taze != rapor.kanit_parmakizi:
+            # Degerlendirmeden sonra kanit kumesi DEGISTI: yazilacak tasdik artik
+            # dogru olmayan bir olcumu belgelerdi (hakem turu 2, F1).
+            satirlar.append(
+                "onay REDDEDILDI — degerlendirmeden SONRA kanit kumesi degisti; "
+                "komutu yeniden kosun"
+            )
+            return (satirlar, RC_REFUSED)
+
         await runs.attest_readiness(
             conn,
             run_id=args.run_id,

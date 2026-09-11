@@ -25,7 +25,13 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from app.services.sector_pipeline import auditors, engine, readiness_items, runs
+from app.services.sector_pipeline import (
+    auditors,
+    engine,
+    identity,
+    readiness_items,
+    runs,
+)
 from app.services.sector_pipeline.engine_contract import PolicyReport
 
 OLCUM_BICIMLERI: tuple[str, ...] = ("otomatik", "elle")
@@ -71,6 +77,16 @@ class ReadinessReport:
 
     run_id: str
     satirlar: tuple[MaddeSonucu, ...]
+    kanit_parmakizi: str = ""
+    """Değerlendirmenin OKUDUĞU ham artefakt kümesinin parmak izi.
+
+    Tasdik kaydının "ne gördüm" alanı YOKTUR (Task 8 sözleşmesi) ve artefakt
+    tablosu EKLEMELİDİR: onaydan sonra satır düşebilir. Bu alan, yazımdan hemen
+    önce TAZE bir okumayla karşılaştırılır; bayat bir değerlendirme belgelenemez.
+    **Pencereyi DARALTIR, kapatmaz** — gerçek kapanış (tasdiğin gördüğünü
+    kaydetmesi ya da aktivasyonun yeniden ölçmesi) sözleşme revizyonundadır,
+    son tarih Task 19 (hakem turu 2, F1; Eray kararı 2026-09-11).
+    """
 
     @property
     def bloklayan_kapi_maddeleri(self) -> tuple[str, ...]:
@@ -332,6 +348,33 @@ ELLE_GEREKCELERI: dict[str, str] = {
 """`madde_id` → neden otomatik ölçülemediği. Beyan, ölçüm gibi sunulmaz."""
 
 
+async def _artefakt_satirlari(db, run_id: str) -> list:
+    return await db.fetch(
+        "SELECT kind, source, brief_ref FROM social.sector_research_artifacts "
+        "WHERE run_id = $1 ORDER BY kind, source",
+        run_id,
+    )
+
+
+def _parmakizi(artefaktlar) -> str:
+    """Okunan kanıt kümesinin KANONİK parmak izi — tek türetme kuralı."""
+    return identity.canonical_sha(
+        [
+            {
+                "kind": satir["kind"],
+                "source": satir["source"],
+                "brief_ref": satir["brief_ref"],
+            }
+            for satir in artefaktlar
+        ]
+    )
+
+
+async def kanit_parmakizi(db, *, run_id: str) -> str:
+    """Koşunun O ANKİ kanıt kümesinin parmak izi (yazım öncesi tazelik kapısı)."""
+    return _parmakizi(await _artefakt_satirlari(db, run_id))
+
+
 async def evaluate(db, *, run_id: str) -> ReadinessReport:
     """Koşunun hazırlık listesini değerlendirir — HİÇBİR ŞEY YAZMAZ (K-70)."""
     if type(run_id) is not str or not run_id.strip():
@@ -341,11 +384,7 @@ async def evaluate(db, *, run_id: str) -> ReadinessReport:
     )
     if kosu is None:
         raise runs.RunNotVerified(f"koşu satırı yok: {run_id!r}")
-    artefaktlar = await db.fetch(
-        "SELECT kind, source, brief_ref FROM social.sector_research_artifacts "
-        "WHERE run_id = $1",
-        run_id,
-    )
+    artefaktlar = await _artefakt_satirlari(db, run_id)
     kanit = _Kanit(kosu=kosu, artefaktlar=artefaktlar)
 
     satirlar: list[MaddeSonucu] = []
@@ -372,4 +411,8 @@ async def evaluate(db, *, run_id: str) -> ReadinessReport:
                 detay=detay,
             )
         )
-    return ReadinessReport(run_id=run_id, satirlar=tuple(satirlar))
+    return ReadinessReport(
+        run_id=run_id,
+        satirlar=tuple(satirlar),
+        kanit_parmakizi=_parmakizi(artefaktlar),
+    )
