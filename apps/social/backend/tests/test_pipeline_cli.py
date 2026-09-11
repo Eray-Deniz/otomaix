@@ -1067,50 +1067,73 @@ def _migration_izinli_artefakt_turleri() -> frozenset[str]:
     return frozenset(re.findall(r"'([^']+)'", esles.group(1)))
 
 
-def _cli_artefakt_turleri() -> dict[int, str]:
-    """CLI'deki her `record_artifact` çağrısının tür argümanı — satır: değer."""
+def _uretim_dosyalari() -> list[Path]:
+    """Taranacak ÜRETİM dosyaları — kavramdan türetilir, elle sayılmaz.
+
+    Kapsam `app/` + `scripts/` altındaki her `.py`'dir. İlk yazım YALNIZ
+    `sector_pipeline_cli.py`'yi tarıyordu ve "sınıf düzeyinde koruma" diye
+    sunuluyordu; hakem turu 1 (orta) iddianın kapsamdan GENİŞ olduğunu ölçtü —
+    başka bir serviste açılacak yeni bir çağrı yeri kapıya hiç uğramazdı.
+    """
+    kokler = (BACKEND_KOKU / "app", BACKEND_KOKU / "scripts")
+    return sorted(
+        yol
+        for kok in kokler
+        for yol in kok.rglob("*.py")
+        if "__pycache__" not in yol.parts
+    )
+
+
+def _uretim_artefakt_turleri() -> dict[str, str]:
+    """Üretimdeki her `record_artifact` çağrısının tür argümanı — yer: değer."""
     import ast
 
-    kaynak = (BACKEND_KOKU / "scripts/sector_pipeline_cli.py").read_text(
-        encoding="utf-8"
-    )
-    agac = ast.parse(kaynak)
-    sabitler = {
-        hedef.id: dugum.value.value
-        for dugum in ast.walk(agac)
-        if isinstance(dugum, ast.Assign) and isinstance(dugum.value, ast.Constant)
-        for hedef in dugum.targets
-        if isinstance(hedef, ast.Name) and isinstance(dugum.value.value, str)
-    }
-    sabitler.update(
-        {
-            dugum.target.id: dugum.value.value
+    bulunan: dict[str, str] = {}
+    for yol in _uretim_dosyalari():
+        kaynak = yol.read_text(encoding="utf-8")
+        if "record_artifact" not in kaynak:
+            continue
+        agac = ast.parse(kaynak)
+        sabitler = {
+            hedef.id: dugum.value.value
             for dugum in ast.walk(agac)
-            if isinstance(dugum, ast.AnnAssign)
-            and isinstance(dugum.target, ast.Name)
-            and isinstance(dugum.value, ast.Constant)
-            and isinstance(dugum.value.value, str)
+            if isinstance(dugum, ast.Assign) and isinstance(dugum.value, ast.Constant)
+            for hedef in dugum.targets
+            if isinstance(hedef, ast.Name) and isinstance(dugum.value.value, str)
         }
-    )
-    bulunan: dict[int, str] = {}
-    for dugum in ast.walk(agac):
-        if not isinstance(dugum, ast.Call):
-            continue
-        ad = dugum.func
-        if not (isinstance(ad, ast.Attribute) and ad.attr == "record_artifact"):
-            continue
-        for anahtar in dugum.keywords:
-            if anahtar.arg != "kind":
+        sabitler.update(
+            {
+                dugum.target.id: dugum.value.value
+                for dugum in ast.walk(agac)
+                if isinstance(dugum, ast.AnnAssign)
+                and isinstance(dugum.target, ast.Name)
+                and isinstance(dugum.value, ast.Constant)
+                and isinstance(dugum.value.value, str)
+            }
+        )
+        for dugum in ast.walk(agac):
+            if not isinstance(dugum, ast.Call):
                 continue
-            if isinstance(anahtar.value, ast.Constant):
-                bulunan[dugum.lineno] = anahtar.value.value
-            elif isinstance(anahtar.value, ast.Name):
-                bulunan[dugum.lineno] = sabitler[anahtar.value.id]
-            else:
-                raise AssertionError(
-                    f"satır {dugum.lineno}: `kind` argümanı statik olarak "
-                    "okunamıyor — kapı bu biçimi ölçemez"
-                )
+            ad = dugum.func
+            adi = ad.attr if isinstance(ad, ast.Attribute) else getattr(ad, "id", "")
+            if adi != "record_artifact":
+                continue
+            if isinstance(ad, ast.Name) and ad.id == "record_artifact":
+                # tanımın kendisi degil, cagri; tanim `def` dugumudur
+                pass
+            for anahtar in dugum.keywords:
+                if anahtar.arg != "kind":
+                    continue
+                yer = f"{yol.relative_to(BACKEND_KOKU)}:{dugum.lineno}"
+                if isinstance(anahtar.value, ast.Constant):
+                    bulunan[yer] = anahtar.value.value
+                elif isinstance(anahtar.value, ast.Name):
+                    bulunan[yer] = sabitler[anahtar.value.id]
+                else:
+                    raise AssertionError(
+                        f"{yer}: `kind` argümanı statik olarak okunamıyor — "
+                        "kapı bu biçimi ölçemez (fail-closed)"
+                    )
     return bulunan
 
 
@@ -1118,9 +1141,9 @@ def test_cli_records_artifacts_with_schema_accepted_kinds():
     """CLI'nin yazdığı her artefakt türü ŞEMANIN kabul ettiği kümededir."""
     izinli = _migration_izinli_artefakt_turleri()
     borclu = cli.SEMA_DISI_ARTEFAKT_TURLERI
-    bulunan = _cli_artefakt_turleri()
+    bulunan = _uretim_artefakt_turleri()
 
-    assert bulunan, "CLI'de hiç `record_artifact` çağrısı bulunamadı — kapı boşa koşuyor"
+    assert bulunan, "üretimde hiç `record_artifact` çağrısı bulunamadı — kapı boşa koşuyor"
     ihlaller = {
         satir: tur
         for satir, tur in bulunan.items()
@@ -1135,7 +1158,7 @@ def test_known_out_of_schema_artifact_kinds_are_still_used_and_still_invalid():
     """Borç kaydı BAYATLAMAZ: kayıtlı her tür hâlâ kullanılıyor ve hâlâ şema dışı."""
     izinli = _migration_izinli_artefakt_turleri()
     borclu = cli.SEMA_DISI_ARTEFAKT_TURLERI
-    kullanilan = set(_cli_artefakt_turleri().values())
+    kullanilan = set(_uretim_artefakt_turleri().values())
 
     assert not (borclu & izinli), (
         "borç kaydında şemanın ZATEN kabul ettiği bir tür var — kayıt bayat"
@@ -1222,3 +1245,21 @@ async def test_hazirlik_onayla_refuses_when_a_gate_item_failed(pkg_db):
         )
         is None
     )
+
+
+def test_hazirlik_onayla_evaluates_and_writes_under_one_locked_transaction():
+    """Değerlendirme ile yazım AYNI işlemde ve koşu satırı KİLİTLİ olmalı.
+
+    **Yapısal kapı, davranışsal değil — dürüst etiket.** Yarış penceresini
+    davranışla ölçmek eşzamanlı iki koşum ister; burada kilidin ve işlemin
+    KURULDUĞU doğrulanır. Hakem turu 1 (yüksek) ilk yazımda ikisinin ayrı
+    autocommit ifadeleri olduğunu ölçtü: iki operatör aynı anda onaylayabiliyor
+    ve değerlendirme ile yazım arasında koşu satırı değişebiliyordu.
+    """
+    import inspect
+
+    kaynak = inspect.getsource(cli._kos_hazirlik_onayla)
+
+    assert "conn.transaction()" in kaynak
+    assert "FOR UPDATE" in kaynak
+    assert kaynak.index("conn.transaction()") < kaynak.index("readiness.evaluate")

@@ -902,43 +902,57 @@ async def _kos_hazirlik_onayla(conn, args) -> Sonuc:
 
     `onaylandi` burada ÜRETİLMEZ: `runs.attest_readiness` onu kapı kümesinden
     TÜRETİR. Komut yalnız kimlik kümesini ve aktörü taşır.
+
+    **DEĞERLENDİRME ve YAZIM TEK İŞLEMDE, koşu satırı KİLİTLİ** (hakem turu 1,
+    yüksek). Ayrı autocommit ifadeleriyken iki operatör aynı anda onaylayabilir
+    ve değerlendirme ile yazım arasında koşu satırı değişebilirdi; yazılan
+    tasdik o an ARTIK DOĞRU OLMAYAN bir değerlendirmeyi belgelerdi.
     """
-    rapor = await readiness.evaluate(conn, run_id=args.run_id)
-    satirlar = [
-        f"{satir.madde_id} [{satir.sinif}/{satir.olcum}] {satir.durum}: "
-        f"{satir.baslik} — {satir.detay}"
-        for satir in rapor.satirlar
-    ]
-    bloklayan = rapor.bloklayan_kapi_maddeleri
-    satirlar.append(
-        "bloklayan kapi maddeleri: "
-        + (" · ".join(bloklayan) if bloklayan else "yok")
-    )
-    satirlar.append(
-        "elle beyan bekleyen maddeler: "
-        + (" · ".join(rapor.elle_bekleyen_maddeler) or "yok")
-    )
-
-    if not args.onayla:
-        satirlar.append("onay YAZILMADI — yazmak icin --onayla")
-        return (satirlar, RC_OK)
-
-    if bloklayan:
-        satirlar.append(
-            "onay REDDEDILDI — otomatik olcumu dusen kapi maddesi var: "
-            + " · ".join(bloklayan)
+    async with conn.transaction():
+        kilit = await conn.fetchval(
+            "SELECT run_id FROM social.sector_package_runs WHERE run_id = $1 "
+            "FOR UPDATE",
+            args.run_id,
         )
-        return (satirlar, RC_REFUSED)
+        if kilit is None:
+            raise runs.RunNotVerified(f"koşu satırı yok: {args.run_id!r}")
 
-    await runs.attest_readiness(
-        conn,
-        run_id=args.run_id,
-        kapi_maddeleri=tuple(sorted(readiness_items.KAPI_MADDELERI)),
-        sinyal_maddeleri=tuple(sorted(readiness_items.SINYAL_MADDELERI)),
-        actor=args.actor,
-    )
-    satirlar.append("hazirlik tasdiki: yazildi")
-    return (satirlar, RC_OK)
+        rapor = await readiness.evaluate(conn, run_id=args.run_id)
+        satirlar = [
+            f"{satir.madde_id} [{satir.sinif}/{satir.olcum}] {satir.durum}: "
+            f"{satir.baslik} — {satir.detay}"
+            for satir in rapor.satirlar
+        ]
+        bloklayan = rapor.bloklayan_kapi_maddeleri
+        satirlar.append(
+            "bloklayan kapi maddeleri: "
+            + (" · ".join(bloklayan) if bloklayan else "yok")
+        )
+        satirlar.append(
+            "elle beyan bekleyen maddeler: "
+            + (" · ".join(rapor.elle_bekleyen_maddeler) or "yok")
+        )
+
+        if not args.onayla:
+            satirlar.append("onay YAZILMADI — yazmak icin --onayla")
+            return (satirlar, RC_OK)
+
+        if bloklayan:
+            satirlar.append(
+                "onay REDDEDILDI — otomatik olcumu dusen kapi maddesi var: "
+                + " · ".join(bloklayan)
+            )
+            return (satirlar, RC_REFUSED)
+
+        await runs.attest_readiness(
+            conn,
+            run_id=args.run_id,
+            kapi_maddeleri=tuple(sorted(readiness_items.KAPI_MADDELERI)),
+            sinyal_maddeleri=tuple(sorted(readiness_items.SINYAL_MADDELERI)),
+            actor=args.actor,
+        )
+        satirlar.append("hazirlik tasdiki: yazildi")
+        return (satirlar, RC_OK)
 
 
 async def _kos_onay(conn, args) -> Sonuc:

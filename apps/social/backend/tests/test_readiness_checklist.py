@@ -267,3 +267,116 @@ def test_blocking_finding_classes_are_a_subset_of_the_engine_contract():
 
     assert readiness.BLOKLAYAN_BULGU_SINIFLARI <= set(BULGU_SINIFLARI)
     assert readiness.BLOKLAYAN_BULGU_SINIFLARI, "boş küme hiçbir bulguyu saymaz"
+
+
+# ═══ 5. Hakem turu 1 bulguları — üretici kimliği ve şekil kapısı ════════════
+
+
+async def test_md03_refuses_three_stamps_from_one_producer(pkg_db):  # noqa: F811
+    """Üç DAMGA üç ARAÇ değildir (hakem turu 1, yüksek).
+
+    Damga `model; surum; tarih; girdi_ozeti` bileşiğidir. İlk yazım farklı
+    damgaları farklı kaynak sayıyordu: TEK aracın üç ayrı tarihle ürettiği üç
+    çıktı "üç araçta koşuldu" maddesini geçiriyordu.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id, _ = await _yazilmis_ve_onayli(pkg_db, sector_id, hazirlik=False)
+    for tarih in ("2026-09-09", "2026-09-10", "2026-09-11"):
+        await runs.record_artifact(
+            pkg_db,
+            run_id=run_id,
+            sector_slug="kuyumculuk",
+            kind="research",
+            source=runs.build_stamp(
+                model="arac-1", surum="2026-09", tarih=tarih, girdi_ozeti="brief-sha"
+            ),
+            brief_ref="brief-v1",
+            content_md="# tek araç",
+        )
+
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+
+    assert _satir(rapor, "md-03").durum == "gecmedi"
+
+
+async def test_md05_requires_both_blind_auditor_roles(pkg_db):  # noqa: F811
+    """İki rapor, İKİ HAKEM demek değildir — rol uzayı sözleşmede kapalı."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id, _ = await _yazilmis_ve_onayli(pkg_db, sector_id, hazirlik=False)
+    for tarih in ("2026-09-10", "2026-09-11"):
+        await runs.record_artifact(
+            pkg_db,
+            run_id=run_id,
+            sector_slug="kuyumculuk",
+            kind="review",
+            source=runs.build_stamp(
+                model="denetci-1", surum="2026-09", tarih=tarih, girdi_ozeti="paket-sha"
+            ),
+            content_md="# tek hakem",
+        )
+
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+
+    assert _satir(rapor, "md-05").durum == "gecmedi"
+
+
+async def test_malformed_policy_report_blocks_instead_of_reading_clean(pkg_db):  # noqa: F811
+    """Eksik alan BOŞ-TEMİZ kanıta genişlemez (hakem turu 1, yüksek).
+
+    İlk yazım md-09 için `is not None`, md-16 için `.get(..., ())` kullanıyordu:
+    `{}` biçiminde bir rapor "motor kontrolleri tamam + bulgu yok" diye okunurdu.
+    """
+    run_id = await _hazir_kosu(pkg_db)
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET policy_report = $2 WHERE run_id = $1",
+        run_id,
+        {},
+    )
+
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+
+    assert _satir(rapor, "md-09").durum == "gecmedi"
+    assert _satir(rapor, "md-16").durum == "gecmedi"
+
+
+def test_blocking_finding_classes_come_from_the_engine_effect_table():
+    """Bloklayan sınıflar MOTORUN etki tablosundan TÜRETİLİR — elle yazılmaz.
+
+    `mevzuat_dogrulanamadi` bayrağa bağlıdır (K-128, varsayılan KAPALI); elle
+    yazılmış kümede bloklayıcı sayılıyordu ve hazırlık kapısı motorun İZİN
+    VERDİĞİ koşuyu reddediyordu (hakem turu 1, orta — kendi gerilemem).
+    """
+    from app.services.sector_pipeline import engine
+
+    assert "mevzuat_dogrulanamadi" not in readiness.BLOKLAYAN_BULGU_SINIFLARI
+    assert "kapsam_ihlali" in readiness.BLOKLAYAN_BULGU_SINIFLARI
+    bayraga_bagli = {
+        etki.sinif
+        for etki in engine.BULGU_ETKILERI
+        if etki.etki == engine.ETKI_BAYRAGA_BAGLI
+    }
+    assert not (readiness.BLOKLAYAN_BULGU_SINIFLARI & bayraga_bagli)
+
+
+async def test_malformed_artifact_stamp_fails_only_its_own_probe(pkg_db):  # noqa: F811
+    """Bozuk damga RAPORU ÖLDÜRMEZ, kendi maddesini düşürür (fail-closed).
+
+    `record_artifact` damgayı yazarken doğrular; bu satır oraya BAKMAYAN bir
+    yoldan (elle bakım, ileriki bir yazıcı) gelmiş olabilir.
+    """
+    run_id = await _hazir_kosu(pkg_db)
+    await pkg_db.execute(
+        "INSERT INTO social.sector_research_artifacts "
+        "(run_id, sector_slug, kind, source, content_md) VALUES ($1, $2, $3, $4, $5)",
+        run_id,
+        "kuyumculuk",
+        "research",
+        "damgasiz-kaynak",
+        "# bozuk",
+    )
+
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+
+    assert _satir(rapor, "md-03").durum == "gecmedi"
+    assert "damga" in _satir(rapor, "md-03").detay.lower()
+    assert _satir(rapor, "md-11").durum == "gecti", "komşu prob etkilenmemeli"

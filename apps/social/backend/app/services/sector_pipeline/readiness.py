@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
-from app.services.sector_pipeline import readiness_items, runs
+from app.services.sector_pipeline import auditors, engine, readiness_items, runs
 
 OLCUM_BICIMLERI: tuple[str, ...] = ("otomatik", "elle")
 """Maddenin nasıl işaretlendiği — KAPALI küme."""
@@ -108,9 +108,22 @@ class _Kanit:
     kosu: Mapping
     artefaktlar: Sequence[Mapping]
 
-    def _kaynaklar(self, kind: str) -> set[str]:
+    def ureticiler(self, kind: str) -> set[str]:
+        """O türdeki artefaktları ÜRETEN kimlikler (damgadaki `model`).
+
+        **Damga kimlik DEĞİLDİR, damga BİLEŞİKTİR** (hakem turu 1, yüksek):
+        `model; surum; tarih; girdi_ozeti`. İlk yazım ham `source` dizelerini
+        sayıyordu, yani TEK aracın üç ayrı tarihli çıktısı "üç araç" diye
+        okunuyordu. Kimlik yalnız `model` alanıdır.
+
+        Damgası ayrıştırılamayan satır SESSİZCE atlanmaz — `ArtifactStampMissing`
+        fırlatılır; `evaluate` onu YALNIZ o maddenin düşüşüne çevirir (komşu
+        maddeler etkilenmez, rapor üretilmeye devam eder).
+        """
         return {
-            satir["source"] for satir in self.artefaktlar if satir["kind"] == kind
+            runs.parse_stamp(satir["source"])["model"]
+            for satir in self.artefaktlar
+            if satir["kind"] == kind
         }
 
 
@@ -121,40 +134,93 @@ class _Kanit:
 # bir hâl YOKTUR — İlke 9'un bu modüldeki karşılığı budur.
 
 BLOKLAYAN_BULGU_SINIFLARI: frozenset[str] = frozenset(
-    {"mevzuat_uyusmazligi", "mevzuat_dogrulanamadi", "kapsam_ihlali", "ikinci_aktif"}
+    etki.sinif
+    for etki in engine.BULGU_ETKILERI
+    if etki.etki in (engine.ETKI_BLOKLAR, engine.ETKI_AKTIVASYONU_ENGELLER)
 )
-"""16. maddenin saydığı bulgu sınıfları — `engine_contract.BULGU_SINIFLARI` alt kümesi.
+"""16. maddenin saydığı bulgu sınıfları — MOTORUN etki tablosundan TÜRETİLİR.
 
-`acik_soru` ve `regresyon_kapisi` DIŞARIDADIR: birincisi maddenin "eksik karar"
-ayağında ayrıca sayılır, ikincisi 13./14. maddelerin (Katman-1) konusudur.
+**Elle yazılmış küme, motorun politikasını sessizce EZİYORDU** (hakem turu 1,
+orta; kendi gerilemem). İlk yazım `mevzuat_dogrulanamadi`'yı koşulsuz bloklayıcı
+sayıyordu; oysa o sınıf `ETKI_BAYRAGA_BAGLI`dır (K-128) ve varsayılan
+`block_on_legislation=False` altında motor onu BLOKLAMAZ — hazırlık kapısı,
+motorun izin verdiği koşuyu reddediyordu. Bloklayıcılık tek yerde tanımlıdır ve
+burası onu OKUR, yeniden yazmaz.
+
+`POLITIKA_RAPORU_ALANLARI` ile birlikte bu modülün motor sözleşmesine tek
+bağımlılığıdır (R9 yönü: motor Task 12/13, hazırlık Task 17 — geriye bağımlılık).
 """
+
+POLITIKA_RAPORU_ALANLARI: tuple[str, ...] = (
+    "kararsizlar",
+    "bulgular",
+    "uygulanmayan_kararlar",
+    "acik_soru_kimlikleri",
+)
+"""`PolicyReport.as_payload()`'ın DÖRT anahtarı — eksiği olan rapor OKUNMAZ."""
+
+
+def _politika_raporu(kanit: _Kanit) -> Mapping | None:
+    """Koşu satırındaki politika raporunu ŞEKLE KARŞI doğrular; düşerse `None`.
+
+    **Eksik alan boş-temiz kanıta GENİŞLEMEZ** (hakem turu 1, yüksek). `evaluate`
+    satırı HAM okur — `load_verified_run` politika raporunun şeklini zaten
+    doğrulamıyor — bu yüzden doğrulama burada yapılır. `{}` ya da alanı eksik bir
+    rapor "motor kontrolleri tamam + bulgu yok" diye okunuyordu.
+    """
+    rapor = kanit.kosu["policy_report"]
+    if not isinstance(rapor, Mapping):
+        return None
+    if any(alan not in rapor for alan in POLITIKA_RAPORU_ALANLARI):
+        return None
+    if not isinstance(rapor["bulgular"], Sequence) or isinstance(
+        rapor["bulgular"], (str, bytes)
+    ):
+        return None
+    if any(not isinstance(bulgu, Mapping) for bulgu in rapor["bulgular"]):
+        return None
+    if not isinstance(rapor["acik_soru_kimlikleri"], Sequence) or isinstance(
+        rapor["acik_soru_kimlikleri"], (str, bytes)
+    ):
+        return None
+    return rapor
 
 
 def _uc_arac_ayni_brief(kanit: _Kanit) -> tuple[bool, str]:
-    kaynaklar = kanit._kaynaklar("research")
+    """ÜÇ AYRI ÜRETİCİ + TEK brief referansı.
+
+    Araçların HANGİLERİ olduğu doğrulanamaz: üç araçlı araştırma dış depoda elle
+    koşulur ve kanonik bir araç kimliği listesi YOKTUR. Ölçülen şey "üç ayrı
+    üretici kimliği"dir; `detay` bunu olduğu gibi söyler (İlke 9).
+    """
+    ureticiler = kanit.ureticiler("research")
     briefler = {
         satir["brief_ref"]
         for satir in kanit.artefaktlar
         if satir["kind"] == "research"
     }
-    yeterli = len(kaynaklar) >= 3 and len(briefler) == 1 and None not in briefler
+    yeterli = len(ureticiler) >= 3 and len(briefler) == 1 and None not in briefler
     return (
         yeterli,
-        f"ham artefakt katmanı: {len(kaynaklar)} araştırma kaynağı, "
-        f"{len(briefler)} ayrı brief referansı",
+        f"ham artefakt katmanı: {len(ureticiler)} AYRI üretici kimliği "
+        f"({', '.join(sorted(ureticiler)) or 'yok'}), {len(briefler)} ayrı brief "
+        "referansı — araç kimlikleri doğrulanamaz, yalnız ayrıklık ölçülür",
     )
 
 
 def _iki_kor_hakem(kanit: _Kanit) -> tuple[bool, str]:
-    kaynaklar = kanit._kaynaklar("review")
+    """Hakem ROL UZAYI kapalıdır — iki rapor iki hakem demek değildir."""
+    ureticiler = kanit.ureticiler("review")
+    beklenen = set(auditors.DENETCI_ROLLERI)
     return (
-        len(kaynaklar) >= 2,
-        f"ham artefakt katmanı: {len(kaynaklar)} hakem raporu",
+        ureticiler == beklenen,
+        f"ham artefakt katmanı: hakem kimlikleri {sorted(ureticiler) or 'yok'}; "
+        f"beklenen rol uzayı {sorted(beklenen)}",
     )
 
 
 def _sentez_ve_karar_gunlugu(kanit: _Kanit) -> tuple[bool, str]:
-    sentezler = kanit._kaynaklar("synthesis")
+    sentezler = kanit.ureticiler("synthesis")
     gunluk = kanit.kosu["final_decision_log"]
     return (
         bool(sentezler) and bool(gunluk),
@@ -164,11 +230,11 @@ def _sentez_ve_karar_gunlugu(kanit: _Kanit) -> tuple[bool, str]:
 
 
 def _motor_kontrolleri(kanit: _Kanit) -> tuple[bool, str]:
-    rapor = kanit.kosu["policy_report"]
+    rapor = _politika_raporu(kanit)
     return (
         rapor is not None,
         "koşu satırı: politika raporu "
-        + ("yazılı" if rapor is not None else "YOK"),
+        + ("dört alanıyla yazılı" if rapor is not None else "YOK ya da ŞEKLİ BOZUK"),
     )
 
 
@@ -215,15 +281,18 @@ def _katman1_pass(kanit: _Kanit) -> tuple[bool, str]:
 
 
 def _bloklayan_uyusmazlik_yok(kanit: _Kanit) -> tuple[bool, str]:
-    rapor = kanit.kosu["policy_report"]
+    rapor = _politika_raporu(kanit)
     if rapor is None:
-        return (False, "koşu satırı: politika raporu YOK — bulgu sayılamaz")
+        return (
+            False,
+            "koşu satırı: politika raporu YOK ya da ŞEKLİ BOZUK — bulgu sayılamaz",
+        )
     bulgular = [
         bulgu
-        for bulgu in rapor.get("bulgular", ())
+        for bulgu in rapor["bulgular"]
         if bulgu.get("sinif") in BLOKLAYAN_BULGU_SINIFLARI
     ]
-    acik_sorular = rapor.get("acik_soru_kimlikleri", ())
+    acik_sorular = rapor["acik_soru_kimlikleri"]
     return (
         not bulgular and not acik_sorular,
         f"politika raporu: {len(bulgular)} bloklayıcı bulgu, "
@@ -301,7 +370,12 @@ async def evaluate(db, *, run_id: str) -> ReadinessReport:
     satirlar: list[MaddeSonucu] = []
     for madde in CHECKLIST:
         if madde.otomatik:
-            gecti, detay = PROBLAR[madde.madde_id](kanit)
+            try:
+                gecti, detay = PROBLAR[madde.madde_id](kanit)
+            except runs.ArtifactStampMissing as hata:
+                # Bozuk damga ölçülemezliktir, temizlik DEĞİLDİR: madde düşer,
+                # rapor ayakta kalır ve sebebi operatöre görünür.
+                gecti, detay = False, f"ölçülemedi — bozuk K-80 damgası: {hata}"
             durum = "gecti" if gecti else "gecmedi"
             olcum = "otomatik"
         else:
