@@ -14,10 +14,11 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11 ikinci oturum: dış sözleşmenin KOD UYARLAMASI
-indi ve **İKİ DUAL HAKEM TURUNDAN** geçti — attempt-1 + kapanış. Kod içinde kapanabilen her
-bulgu kapandı; kapanamayan üç ayak TEK sözleşme turuna taşındı. **Sıradaki iş: DIŞ SÖZLEŞME
-TURU**, Task 18'den ÖNCE — gövde `# Open Problems`'ın ilk kaleminde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11 üçüncü oturum: DIŞ SÖZLEŞME TURU KOŞTU — dış
+depo `d9dc289`, pin `2739797`, kod uyarlaması `4cf6aa3`; dual hakem turu (attempt-3) ÜÇ YÜKSEK
+bulgu verdi, üçü de kontrolör ölçümüyle doğrulandı. **Sıradaki iş: üç yüksek bulgunun
+düzeltme partisi → kapanış turu (attempt-2, pinli sözleşme `a76100bd…`)** — gövde `# Open
+Problems`'ın ilk kaleminde; sonra Task 18.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -1106,7 +1107,27 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Open Problems
 
-- **[YÜKSEK — AÇIK 2026-09-11, hakem turu] DIŞ SÖZLEŞME REVİZYONU — üç borç, TEK tur.**
+- **[YÜKSEK — AÇIK 2026-09-11, attempt-3 hakem turu] ÜÇ FIX-REQUIRED BULGU — düzeltme partisi +
+  kapanış turu.** Rapor: `docs/reviews/2026-09-11-feat-sektor-bilgi-paketi-plan2-attempt3.md`.
+  Üçü de iki hakem tarafından bulundu ve kontrolör taze ölçümle doğruladı:
+  1. **F1** (cluster `brief-doctor/aday-disi-donem-anahtar-sahiplenme`): aday takvimde olmayan
+     dönem herhangi bir bilinen sistem anahtarını taşıyıp köprü kurabiliyor (ölçüldü: `Sezon
+     Açılışı → black-friday` notsuz geçti, köprü kuruldu). Sözleşme aday dışı dönemde `—` ya da
+     adıyla sayılan üç aday-dışı gün anahtarını ister.
+  2. **F2** (cluster `engine/k126-url-esitligi`): K-126 ikinci ayağı iddia kimliğine bağlı, o
+     iddianın URL'sine değil (ölçüldü: doğru kimlik + başka URL ile istisna açıldı). Severity
+     ayrıştı (Codex high, alt-hakem low); en yüksek alındı, indirme yok.
+  3. **F3** (cluster `approval/k03-notu-onay-yuzeyi`): K-03 notu günlüğe yazılıyor ama onay
+     görüntüsüne/özetine girmiyor — sözleşme 2.3 "onay anında görür" der (N2'nin devamı).
+  Politika `accepted_risk`: F4 (engine modül docstring'i bayat — kendi ürünümüz, gönüllü
+  düzeltilir) · F5 (`kaynak_seti_sha` anahtarları kapsamıyor — F2 ile aynı dokunuş, gönüllü) ·
+  F6 (kaynak başına 3 satır ölçülmüyor — önceden var olan; **ev: Task 18 ön-pilot listesi**).
+  **Chain-advance HARD-BLOCK** (unresolved high) — güvenlik incelemesine geçilmez.
+
+- **[KAPANDI 2026-09-11 — dış sözleşme turu koştu] DIŞ SÖZLEŞME REVİZYONU — üç borç, TEK tur.**
+  Dış depo `d9dc289` (denetçi 2.3 · sentez 2.3 · şablon ikinci revizyon), pin `2739797`, kod
+  uyarlaması `4cf6aa3` (tam takım 4370 passed; 12 yeni kapı mutasyonla kanıtlandı). Kalan iş
+  yukarıdaki attempt-3 bulgularıdır. Tarihsel gövde aşağıda aynen durur.
   İki dual hakem turu (attempt-1 + kapanış) üç kalemi kod içinde KAPANAMAZ buldu. Üçü de aynı
   sınıftan: **sözleşme bugün taşımadığı bir KİMLİĞİ taşımadıkça kod onu uyduramaz.** Ayrı ayrı
   kapatmak sözleşme-turu makinesini üç kez çalıştırmak demek; tek revizyonda kapanırlar.
@@ -1129,8 +1150,9 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
      `hakem-sentez-gorevi.md`'de KAPALI (iki değer); K-03 çatışması bu yüzden karar günlüğüne
      yazılamıyor. Bugün ölçüm olarak `engine_diff`'te duruyor.
 
-- **[YÜKSEK — AÇIK 2026-09-11, kapanış turu N2] K-03 çatışması hiçbir OPERATÖR yüzeyine
-  ulaşmıyor.** ÖLÇÜLDÜ (iki hakem + kontrolör, üçü de aynı sonuç): `kategori_cakismalari`
+- **[DÖNÜŞTÜ 2026-09-11 — günlük ayağı KAPANDI (`4cf6aa3`), onay yüzeyi ayağı attempt-3 F3
+  olarak AÇIK] K-03 çatışması hiçbir OPERATÖR yüzeyine ulaşmıyor.** Not artık karar günlüğüne
+  `konu` ile yazılıyor; onay görüntüsüne taşınması F3'ün konusu. Tarihsel gövde aynen: ÖLÇÜLDÜ (iki hakem + kontrolör, üçü de aynı sonuç): `kategori_cakismalari`
   koşu satırında kalıcılaşıyor ama onu ADIYLA okuyan tüketici YOK — onay anlık görüntüsü
   sürüm/ayar/bariyer taşıyor, CLI koşu kimliği ve sonucu basıyor, hazırlık kontrolü diff'in boş
   olup olmadığına bakıyor. **Bugün operatör bu çatışmayı hiçbir yerde görmez; kayıt yalnız
@@ -1772,3 +1794,31 @@ kayda geçer. Sonraki turlar `T8-fixB`, `T8-fixB5`, `T8-fixB6` ile çakışması
 Clean/Accepted-risk dallarında koşar; son bağımsız hakem verdict'i `needs-attention`'dı ve
 onun blokeri (B5) bağımsız yeniden-doğrulama GÖRMEDEN kapatıldı. Fail-safe yön: taban
 `2b468e8d` KALIR ve Task 7 + Task 8 + bütün düzeltmeleri kendiliğinden yeniden kapsar.
+
+# Review Ledger
+
+Authoritative state (stop-rule; locator `docs/reviews/.ledger-index/296deb840d9ac9fc3e47894a398a585ddeea3cb2ac4f90e9a3b3956c2ae542d3.locator`).
+
+**Per-target header**
+- `review_target_id`: `code-review:feat-sektor-bilgi-paketi-plan2:10f22da4ff72ae2c2cacd53d0f4c0060a566c08c`
+- `ledger_locator`: `task:sektor-bilgi-paketi-plan2` (attempt-1'de kuruldu, immutable)
+- `pinned_contract_hash`: `a76100bd551cefc7474b35b6c68ecec85cb4b87deb201770a503770b905808d0`
+  (7 alan: threat_model `2ce27a1e…f871` · lens `code-review` · rubric `chml-v1` ·
+  residual `threat-model-bounded` · closure_scope_rule `{fix-touched}U{direct-caller/callee}U{adjacent-test}U{touched-surface config/generated}` ·
+  prompt_profile `closure-v1:339b0920…891e1` · policy `ch-only-v1`)
+- `completed_evaluations`: 1 · `total_invocations`: 1 · `consecutive_degraded`: 0
+
+**Per-cluster**
+
+| cluster_key | first_seen | review_attempts | fix_attempts | reopen | severity_trajectory | temporal_origin | finding_relation | evidence_basis | evidence_confidence | current_disposition | bound_contract |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `brief-doctor/aday-disi-donem-anahtar-sahiplenme` (F1) | attempt-3 (2026-09-11) | 1 | 0 | 0 | [high] | introduced_by_fix (`4cf6aa3`) | original_finding | kontrolör probu: `Sezon Açılışı → black-friday` 0 not, köprü kuruldu | confirmed | open | `a76100bd…` |
+| `engine/k126-url-esitligi` (F2) | attempt-3 | 1 | 0 | 0 | [high] (raw: codex high, claude low) | introduced_by_fix (`4cf6aa3`) | original_finding | kontrolör probu: doğru kimlik + yanlış URL → istisna açık | confirmed | open | `a76100bd…` |
+| `approval/k03-notu-onay-yuzeyi` (F3) | attempt-3 | 1 | 0 | 0 | [high] (raw: codex high, claude medium) | pre_existing (N2'nin devamı) | original_finding | `approval.py` okuma: not satırı görüntüye girmiyor | confirmed | open | `a76100bd…` |
+| `engine/modul-docstring-k126-bayat` (F4) | attempt-3 | 1 | 0 | 0 | [medium] | introduced_by_fix | original_finding | alt-hakem grep | confirmed | accepted_risk (policy_accepted; gönüllü düzeltme planlı) | `a76100bd…` |
+| `brief-doctor/kaynak-seti-sha-anahtarlar` (F5) | attempt-3 | 1 | 0 | 0 | [low] | introduced_by_fix | original_finding | alt-hakem ölçümü: üç küme aynı mühür | confirmed | accepted_risk (policy_accepted; gönüllü düzeltme planlı) | `a76100bd…` |
+| `auditors/kaynak-basina-3-satir` (F6) | attempt-3 | 1 | 0 | 0 | [low] | pre_existing | original_finding | alt-hakem okuma | confirmed | accepted_risk (policy_accepted; ev Task 18) | `a76100bd…` |
+
+**Event log (append-only)**
+- 2026-09-11 attempt-3 · `closure_observation`: attempt-1 (tam dual) tamamlandı; sözleşme pinlendi.
+- 2026-09-11 attempt-3 · `policy_accepted`: F4 · F5 · F6 (medium/low, ch-only-v1).
