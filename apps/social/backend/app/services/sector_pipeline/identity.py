@@ -410,6 +410,13 @@ def _validate_karar_row(
     if karar == "ekle":
         # K-154: `cikar` + `ekle` çiftinin bağı YALNIZ `ekle` satırında yaşar.
         izinli.add("yerine_gecer")
+        # Sentez sözleşmesi 2.2 (dış depo `12beec1`): yeni kalıbın HANGİ
+        # araştırma iddiasından türetildiği. Şema katmanı alanın VARLIĞINI ve
+        # METİN olmasını ölçer; kapalı BİÇİMİ (`K<kaynak>#<iddia>`) ve iki uçlu
+        # bağı MOTOR ölçer. Ayrım bilinçlidir: bağı düşen bir satır KARARIN
+        # uygulanmamasına yol açar (`iddia-arastirmada-yok`), koşunun tamamının
+        # reddine değil — sözleşmenin kendi yaptırımı budur.
+        izinli.add("kaynak_iddia")
     if karar == "koru":
         # K-107: kısmi tür taşımasının DOĞRU temsili.
         izinli.add("kapsam")
@@ -466,6 +473,12 @@ def _validate_karar_row(
         errors.append(
             f"{label} kapsam değeri kapalı kümenin dışında: {row['kapsam']!r} — "
             f"{sorted(KAPSAM_DEGERLERI)}"
+        )
+
+    if "kaynak_iddia" in row and not isinstance(row["kaynak_iddia"], str):
+        errors.append(
+            f"{label}.kaynak_iddia metin değil: "
+            f"{type(row['kaynak_iddia']).__name__}"
         )
 
     if "yerine_gecer" in row:

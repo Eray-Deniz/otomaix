@@ -265,7 +265,7 @@ def kaynak(
             if bozuk_url and sira == 1:
                 url = "sektor-yayini.example/kaynak-01"
             satirlar += [
-                f"| {anahtar} | Sektore ozgu bulgu {sira:02d} | "
+                f"| {sira} | {anahtar} | Sektore ozgu bulgu {sira:02d} | "
                 f"Sektor Yayini {sira:02d} | {url} | 2025-03 | hayır |"
             ]
         satirlar += [""]
@@ -1092,7 +1092,7 @@ def _sozlesme_c_sutunlari() -> tuple[str, ...]:
 def test_bolum_c_sabitleri_pinlenmis_sablondan_okunur() -> None:
     metin = _pinli_sablon()
     assert _sozlesme_c_sutunlari() == bd.C_TABLOSU_SUTUNLARI
-    assert len(bd.C_TABLOSU_SUTUNLARI) == 6
+    assert len(bd.C_TABLOSU_SUTUNLARI) == 7
 
     sinir = re.search(r"`iddia` hücresi EN FAZLA (\d+) KELİME", metin)
     assert sinir is not None, "sözleşmede `iddia` kelime sınırı bulunamadı"
@@ -1856,30 +1856,86 @@ C_DOLULUK_MATRISI = tuple(
 _UZUN_IDDIA = " ".join(
     f"kelime{i}" for i in range(1, bd.C_IDDIA_KELIME_UST_SINIRI + 2)
 )
+# İNDEKSLER ADDAN TÜRER. Sözleşme 2026-09-11'de başa `no` sütununu ekledi;
+# elle yazılmış her indeks o gün sessizce KAYDI (bir hücreyi bozduğunu sanıp
+# komşusunu bozan bir matris hâlâ yeşil görünür). Ad→konum türetmesi bu sınıfı
+# kapatır: sözleşme yeniden sıra değiştirdiğinde matris kendiliğinden uyar.
+def _c_ix(ad: str) -> int:
+    return bd.C_TABLOSU_SUTUNLARI.index(ad)
+
+
 C_DEGER_MATRISI = (
     (
+        "no-sayi-degil",
+        _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "3a"),
+        "artan TAM SAYI değil",
+    ),
+    (
+        "no-sifir",
+        _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "0"),
+        "artan TAM SAYI değil",
+    ),
+    (
         "alan-disi",
-        _c_hucreleri_degistir(TEMIZ, 0, "bilinmeyen_alan"),
+        _c_hucreleri_degistir(TEMIZ, _c_ix("alan/dönem"), "bilinmeyen_alan"),
         "ne bir Bölüm A alan adı",
     ),
-    ("iddia-uzun", _c_hucreleri_degistir(TEMIZ, 1, _UZUN_IDDIA), "kelime — sözleşme"),
-    ("url-ciplak", _c_hucreleri_degistir(TEMIZ, 3, "ornek.example/x"), "TEK bir açılabilir"),
+    (
+        "iddia-uzun",
+        _c_hucreleri_degistir(TEMIZ, _c_ix("iddia"), _UZUN_IDDIA),
+        "kelime — sözleşme",
+    ),
+    (
+        "url-ciplak",
+        _c_hucreleri_degistir(TEMIZ, _c_ix("URL"), "ornek.example/x"),
+        "TEK bir açılabilir",
+    ),
     (
         "url-http",
-        _c_hucreleri_degistir(TEMIZ, 3, "http://ornek.example/x"),
+        _c_hucreleri_degistir(TEMIZ, _c_ix("URL"), "http://ornek.example/x"),
         "`http://` bağlantı taşıyor",
     ),
     (
         "url-iki-adres",
-        _c_hucreleri_degistir(TEMIZ, 3, "https://a.example/x https://b.example/y"),
+        _c_hucreleri_degistir(
+            TEMIZ, _c_ix("URL"), "https://a.example/x https://b.example/y"
+        ),
         "TEK bir açılabilir",
     ),
-    ("tarih-serbest", _c_hucreleri_degistir(TEMIZ, 4, "2025 bahari"), "`tarih` hücresi"),
+    (
+        "tarih-serbest",
+        _c_hucreleri_degistir(TEMIZ, _c_ix("tarih"), "2025 bahari"),
+        "`tarih` hücresi",
+    ),
     (
         "tek-kaynak-disi",
-        _c_hucreleri_degistir(TEMIZ, 5, "belki"),
+        _c_hucreleri_degistir(TEMIZ, _c_ix("tek kaynak"), "belki"),
         "`tek kaynak` hücresi",
     ),
+)
+
+# `no` KİMLİK ekseni: satır düzeyinde GÖRÜNMEYEN iki bozma. Ayrı demettir
+# çünkü ayrı bir kural (`_c_no_dizisi_ihlalleri`) tarafından yakalanır ve
+# mutasyon kolu ikisini ayrı ayrı söker.
+C_DIZI_MATRISI = (
+    (
+        "no-tekrar",
+        _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "2"),
+        "tekrar edemez",
+    ),
+    (
+        "no-bosluk",
+        _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "999"),
+        "boşluksuz artmalı",
+    ),
+)
+
+# Geçerli sütun sayısı ARTIK 7'dir; bozma kümesi sözleşmenin sütun sayısından
+# TÜRER, elle sayılmaz — yoksa sütun eklendiği gün "7 sütunlu" bozması sessizce
+# GEÇERLİ bir satıra dönüşür ve kapı ölçülmemiş kalırdı.
+_C_SUTUN_SAYISI = len(bd.C_TABLOSU_SUTUNLARI)
+_C_BOZUK_SUTUN_SAYILARI = tuple(
+    n for n in range(1, _C_SUTUN_SAYISI + 2) if n != _C_SUTUN_SAYISI
 )
 
 C_SEKIL_MATRISI = (
@@ -1888,10 +1944,12 @@ C_SEKIL_MATRISI = (
     ("kapsam-eksik", c_ilk_satiri_kaldir(TEMIZ), "kaynak satırı taşımıyor"),
 ) + tuple(
     (f"sutun-{n}", c_sutun_sayisini_boz(TEMIZ, n), f"{n} sütunlu")
-    for n in (1, 2, 3, 5, 7)
+    for n in _C_BOZUK_SUTUN_SAYILARI
 )
 
-C_HUCRE_MATRISI = C_DOLULUK_MATRISI + C_DEGER_MATRISI + C_SEKIL_MATRISI
+C_HUCRE_MATRISI = (
+    C_DOLULUK_MATRISI + C_DEGER_MATRISI + C_DIZI_MATRISI + C_SEKIL_MATRISI
+)
 
 
 @pytest.mark.parametrize(
@@ -1906,8 +1964,11 @@ def test_bolum_c_hucre_sozlesmesi(metin: str, iz: str) -> None:
 
 def test_bolum_c_hucre_matrisi_bos_kume_ve_taban_kollari() -> None:
     """Matris gerçekten ÜRETİLDİ mi, taban BOŞA yeşil mi?"""
-    assert len(C_DOLULUK_MATRISI) == len(bd.C_TABLOSU_SUTUNLARI) == 6
-    assert len(C_HUCRE_MATRISI) == 6 + 7 + 8 == 21, len(C_HUCRE_MATRISI)
+    assert len(C_DOLULUK_MATRISI) == len(bd.C_TABLOSU_SUTUNLARI) == 7
+    assert len(C_DEGER_MATRISI) == 9
+    assert len(C_DIZI_MATRISI) == 2
+    assert len(C_SEKIL_MATRISI) == 3 + len(_C_BOZUK_SUTUN_SAYILARI) == 10
+    assert len(C_HUCRE_MATRISI) == 7 + 9 + 2 + 10 == 28, len(C_HUCRE_MATRISI)
     adlar = [ad for ad, *_ in C_HUCRE_MATRISI]
     assert len(set(adlar)) == len(adlar), "hücreler ÇAKIŞIYOR"
     # Her hücre belgeyi GERÇEKTEN değiştiriyor.
@@ -1930,13 +1991,27 @@ def test_bolum_c_hucre_matrisi_mutasyona_duyarli() -> None:
     """
     satir_izleri = [
         iz for _ad, _m, iz in C_DOLULUK_MATRISI + C_DEGER_MATRISI
-    ] + [f"{n} sütunlu" for n in (1, 2, 3, 5, 7)]
+    ] + [f"{n} sütunlu" for n in _C_BOZUK_SUTUN_SAYILARI]
     with mock.patch.object(bd, "_c_satir_ihlalleri", lambda satir, belge: []):
         for (ad, metin, iz) in C_DOLULUK_MATRISI + C_DEGER_MATRISI:
             assert iz not in _notlari(metin), ad
-        for n in (1, 2, 3, 5, 7):
+        for n in _C_BOZUK_SUTUN_SAYILARI:
             assert f"{n} sütunlu" not in _notlari(c_sutun_sayisini_boz(TEMIZ, n))
     assert satir_izleri, "izler üretilmedi"
+
+    # KİMLİK ekseni AYRI bir kuraldır: satır denetimi sökülünce dizi izleri
+    # AYAKTA kalır, dizi kuralı sökülünce yalnız onlar düşer. Bu, `no`
+    # sütununun iki farklı şeyle korunduğunun ölçümüdür.
+    with mock.patch.object(bd, "_c_satir_ihlalleri", lambda satir, belge: []):
+        for ad, metin, iz in C_DIZI_MATRISI:
+            assert iz in _notlari(metin), ad
+    with mock.patch.object(bd, "_c_no_dizisi_ihlalleri", lambda belge: []):
+        for ad, metin, iz in C_DIZI_MATRISI:
+            assert iz not in _notlari(metin), ad
+        # ...ve KOMŞU kural ayakta: mutasyon dar.
+        assert "artan TAM SAYI değil" in _notlari(
+            _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "3a")
+        )
 
     with mock.patch.object(bd, "_c_kapsama_ihlalleri", lambda belge: []):
         assert "kaynak satırı taşımıyor" not in _notlari(c_ilk_satiri_kaldir(TEMIZ))
@@ -1947,6 +2022,68 @@ def test_bolum_c_hucre_matrisi_mutasyona_duyarli() -> None:
     # Bu, "kapı gerçekten o satırı arıyor mu" sorusunun ölçümüdür.
     with mock.patch.object(bd, "C_TABLOSU_SUTUNLARI", ("a", "b", "c")):
         assert "başlık satırını taşımıyor" in _notlari(TEMIZ)
+
+
+# ─── Bölüm C TİPLİ OKUNUR: motorun iddia bağı buradan beslenir ─────────────
+#
+# Sözleşme 2026-09-11'de (dış depo `12beec1`) atfı ADAYA bağladı: sentezin
+# `kaynak_iddia` alanı bir araştırma iddiasının NUMARASINI gösterir ve motor o
+# numaranın gerçekten VAR olduğunu, alanının da kararın alanıyla örtüştüğünü
+# doğrular. Doğrulamayı yapabilmesi için Bölüm C'nin DÜZ YAZI değil, TİPLİ
+# okunması gerekir — kapı satırı zaten ayrıştırıyordu, eksik olan taşıyıcıydı.
+
+
+def test_c_iddialari_temiz_kaynaktan_tipli_okunur() -> None:
+    rapor = bd.run(TEMIZ, source_name="KAYNAK-1")
+    numaralar = [iddia.no for iddia in rapor.iddialar]
+    assert numaralar == list(range(1, len(numaralar) + 1)), numaralar
+    assert numaralar, "temiz kaynak tek bir iddia bile taşımıyor"
+    # Alan hücresi AYNEN taşınır: motor onu kararın alanıyla karşılaştırır.
+    ilk = rapor.iddialar[0]
+    assert ilk.alan == list(bd.TEMEL_ALANLAR)[0]
+    assert all(iddia.alan for iddia in rapor.iddialar)
+
+
+def test_c_iddialari_bozuk_satiri_TASIMAZ() -> None:
+    """Ayrıştırılamayan satır iddia ÜRETMEZ — fail-closed.
+
+    Numarası çözülemeyen bir satır motorda `K1#3`'e karşılık gelemez; onu
+    "sanki 3'müş gibi" taşımak, kapatılan sınıfın (alan düzeyinde
+    yetkilendirme) sessiz bir geri dönüşü olurdu.
+    """
+    bozuk = _c_hucreleri_degistir(TEMIZ, _c_ix("no"), "3a")
+    numaralar = [iddia.no for iddia in bd.run(bozuk, source_name="KAYNAK-1").iddialar]
+    assert 1 not in numaralar
+    assert len(numaralar) == len(bd.run(TEMIZ, source_name="KAYNAK-1").iddialar) - 1
+    # Sütun sayısı bozuksa hangi hücrenin ne olduğu BİLİNMEZ: satır düşer.
+    kayik = c_sutun_sayisini_boz(TEMIZ, 3)
+    assert len(bd.run(kayik, source_name="KAYNAK-1").iddialar) == len(numaralar)
+
+
+def test_c_iddialari_cagirandan_uydurulamaz() -> None:
+    """Taşıyıcı bir KİMLİK kümesidir; çelişkili küme yapımda REDDEDİLİR."""
+    temiz = bd.run(TEMIZ, source_name="KAYNAK-1")
+    gecerli = temiz.iddialar
+
+    def _kur(iddialar):
+        return bd.DoctorReport(
+            sonuc=temiz.sonuc,
+            notlar=temiz.notlar,
+            elemeler=temiz.elemeler,
+            kaynak_adi="KAYNAK-1",
+            icerik_ozeti=temiz.icerik_ozeti,
+            iddialar=iddialar,
+        )
+
+    assert _kur(gecerli).iddialar == gecerli
+    with pytest.raises(ValueError):  # aynı numara İKİ satırda — kimlik çoğa bölünür
+        _kur(gecerli + (bd.CIddia(no=gecerli[0].no, alan="cta_kaliplari"),))
+    with pytest.raises(ValueError):  # numara kimlik değil
+        _kur((bd.CIddia(no=0, alan="cta_kaliplari"),))
+    with pytest.raises(ValueError):  # alansız iddia motorda hiçbir şey bağlamaz
+        _kur((bd.CIddia(no=1, alan="  "),))
+    with pytest.raises(TypeError):
+        _kur((("no", 1),))
 
 
 # ─── M2: kapsam beyanı ÇAĞIRAN tarafından uydurulamaz ──────────────────────

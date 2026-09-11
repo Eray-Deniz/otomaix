@@ -704,7 +704,7 @@ async def _kos_sentez(conn, args) -> Sonuc:
         run_id=args.run_id,
         active_package=aktif,
         removed_history=await _cikarma_gecmisi(conn, satir["sector_id"]),
-        holiday_keys=await _takvim_anahtarlari(conn),
+        holiday_keys=set(await _takvim(conn)),
         runner=auditors.SubprocessRunner(zaman_asimi_sn=args.zaman_asimi_sn),
         dest=_kosu_klasoru_koku(),
     )
@@ -758,29 +758,34 @@ async def _cikarma_gecmisi(conn, sector_id):
     return tuple(cikarmalar)
 
 
-async def _takvim_anahtarlari(conn) -> set[str]:
-    """Sistem özel gün anahtarları — `social.public_holidays`ten NORMALİZE.
+async def _takvim(conn) -> dict[str, str]:
+    """Sistem özel günleri: NORMALİZE anahtar → kategori (boş olabilir).
 
     Normalizasyon kuralı KOPYALANMAZ: `sector_packages.normalize_special_day_key`
     tek kaynaktır ve taslak yazımı da onu kullanır. Erişilemez takvim
     FAIL-CLOSED'dır (K-112 (b)): doğrulanmamış anahtar hatta giremez.
+
+    **Kategori 2026-09-11'de eklendi** — K-03'ün tür↔kategori ayağı motorda
+    bununla çalışır (spec §11.2). Anahtar kümesi ile kategori eşlemesi AYNI
+    sorgudan gelir: ikisi ayrı ayrı toplansaydı ayrışabilirlerdi ve motor
+    kategorisi olmayan bir anahtarı "kategorisiz" mi yoksa "hiç yok" mu
+    sayacağını bilemezdi.
     """
     try:
         satirlar = await conn.fetch(
-            "SELECT name_tr FROM social.public_holidays WHERE name_tr IS NOT NULL"
+            "SELECT name_tr, category FROM social.public_holidays "
+            "WHERE name_tr IS NOT NULL"
         )
     except Exception as hata:  # noqa: BLE001 — K-112 (b)
         raise CliError(
             "sistem takvimi okunamadı — özel gün anahtarları doğrulanamaz"
         ) from hata
-    return {
-        anahtar
-        for anahtar in (
-            sector_packages.normalize_special_day_key(satir["name_tr"])
-            for satir in satirlar
-        )
-        if anahtar
-    }
+    takvim: dict[str, str] = {}
+    for satir in satirlar:
+        anahtar = sector_packages.normalize_special_day_key(satir["name_tr"])
+        if anahtar:
+            takvim[anahtar] = satir["category"] or ""
+    return takvim
 
 
 async def _kos_motor(conn, args) -> Sonuc:
@@ -822,6 +827,7 @@ async def _kos_motor(conn, args) -> Sonuc:
         )
         > 1
     )
+    takvim = await _takvim(conn)
     ayar = policy_config.PolicyConfig()
     if args.politika_ayari is not None:
         ayar = policy_config.PolicyConfig(
@@ -838,7 +844,8 @@ async def _kos_motor(conn, args) -> Sonuc:
         son_turlarin_cikarmalari=await _cikarma_gecmisi(conn, satir["sector_id"]),
         denetci_envanterleri=anlasma.cift,
         mekanik_eleme=brief_doctor.gate_round(doktor),
-        takvim_anahtarlari=frozenset(await _takvim_anahtarlari(conn)),
+        takvim_anahtarlari=frozenset(takvim),
+        takvim_kategorileri=takvim,
         otomatik_kapilar=engine.GateResults(
             katman1_passed=bool(tasdik and tasdik.get("sonuc") == "PASS"),
             tek_aktif_ihlali=tek_aktif_ihlali,

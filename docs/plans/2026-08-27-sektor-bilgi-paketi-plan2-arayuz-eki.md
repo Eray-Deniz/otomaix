@@ -194,6 +194,78 @@ olduğu GÖSTERİLMEDİ.
 
 ---
 
+## Revizyon kaydı — 2026-09-11/b (dış sözleşmenin KOD uyarlaması)
+
+Aynı gün ikinci revizyon. Öncekinden farkı YÖNÜDÜR: o revizyon **ekin metnini koda**
+uyarlıyordu (kod ilerlemiş, ek geride kalmıştı); bu revizyon **kodun sözleşmeye** uyarlanmasını
+kaydeder. Dış araştırma sözleşmesi `12beec1` ile üç noktada değişti ve kod o gün uyarlanmamıştı;
+ağaç bilerek KIRMIZI bırakılmıştı (iki sapma alarmı) — yarım uyarlama, kırmızı alarmdan daha
+kötü bir sessiz ara durum üretirdi.
+
+| # | ne değişti | yön | kapı büyüyor mu |
+|---|---|---|---|
+| **R-H1** | Bölüm C tablosu `no` sütunu kazandı; `C_TABLOSU_SUTUNLARI` YEDİ üyeli | sözleşme koda uyarlandı | **EVET** — `no` biçimi ve tablo boyu DİZİSİ (tekrarsız, boşluksuz) |
+| **R-H2** | `DoctorReport` `iddialar: tuple[CIddia, ...]` taşır; `run` onu belgeden ÜRETİR | YENİ taşıyıcı | EVET — yapıcı kimlik değişmezlerini zorlar |
+| **R-H3** | Denetim tablosu DOKUZ sütun (`kaynak-iddialari`); `AuditRow` aynı adlı alanı taşır | sözleşme koda uyarlandı | **EVET** — biçim + `kaynaklar` ile ÇİFT YÖNLÜ tutarlılık |
+| **R-H4** | KAYNAK PROFİLİ düz yazıdan TABLOYA döndü; `AuditReport.kaynak_profili` | sözleşme koda uyarlandı | **EVET** — `resmi` kapalı kümesi, numara tekrarsızlığı, dolu not |
+| **R-H5** | Motor atfı ALAN düzeyinden İDDİA düzeyine taşıdı; bağ İKİ UÇLU | YENİ kapı | **EVET** — üç yeni uygulanmama sebebi |
+| **R-H6** | K-126 tek-kaynak istisnası AÇILDI (iki ayağı da artık ölçülüyor) | kapı DAVRANIŞI değişti | EVET — istisna artık İŞLER |
+| **R-H7** | `kaynak_seti_sha` mührü `iddialar`ı da kapsar | mühür GENİŞLEDİ | EVET |
+| **R-H8** | `EngineInputs` `takvim_kategorileri` alanını kazandı; K-03'ün tür↔kategori ayağı ÇALIŞIR | **R5 ALAN KÜMESİ REVİZYONU** | EVET — çatışma karar günlüğüne NOT olarak yazılır (blok DEĞİL) |
+
+**R-H5 ve R-H6 metin uyarlaması DEĞİLDİR — motorun davranışını değiştirirler.**
+
+* **R-H5** aynı eksenin ÜÇ hakem turunda ürettiği üç varyantı kapatır: yetkilendirme bağı
+  ALAN düzeyindeydi, yani `kanca_kaliplari` hakkındaki HERHANGİ bir denetçi satırı o listeye
+  giren HERHANGİ bir kalıbı yetkilendirebiliyordu. Varyant yamamak bırakıldı; üç beyan da
+  (araştırma · denetçi · sentez) aynı üst kaynağa — iddia NUMARASINA — çivilendi. Bağ iki
+  uçlu aranır çünkü tek uçlu bir bağ KENDİNİ ONAYLAR: sentez beyanını da denetçi beyanını da
+  aynı model yazar, üçüncü taraf (mekanik ayrıştırıcı) olmadan zincir kapanmaz.
+* **R-H6** bir AND koşulunun kapalı kalan yarısını açar. İstisna bugüne kadar KAPALIYDI ve
+  bu bilinçliydi: resmîlik yargısı serbest düzyazıya gömülüydü, motor onu göremiyordu. Kök
+  çözüm yine KODA değil SÖZLEŞMEYE yapıldı — motor hâlâ hiçbir şey ÇIKARSAMAZ, okur.
+
+**R5 alan kümesi (`EngineInputs`) DEĞİŞMEDİ — ve bu ölçüldü.** İddia evreni yeni bir alandan
+değil, `mekanik_eleme.raporlar`dan türetilir; kaynak numarası KONUMDAN gelir ve bu
+`_kabul_edilen_etiketler`in kuralının AYNISIDIR. K-126'nın resmîlik ayağı da yeni alan
+istemez: yargı `denetci_envanterleri` içindeki raporların kendi profil tablosunda taşınır.
+
+**Görev B bağının ölçülmüş inceliği.** Bölüm C'nin `alan/dönem` hücresi bir dönem için DÖNEM
+ADIDIR (araştırmanın kendi yazımı: `Sevgililer Günü`), karar satırı ise `ozel_gun` taşır ve
+dönemi `oge_yolu`nun slug'ında saklar. Bağ bu yüzden O DÖNEME kurulur, `ozel_gun` alanına
+DEĞİL — alana kurulsaydı kapatılan sınıf bir basamak aşağıda aynen sürerdi (herhangi bir dönem
+iddiası herhangi bir özel günü yetkilendirirdi). Normalizasyon kuralı kopyalanmaz:
+`normalize_special_day_key` tek kaynaktır.
+
+**R-H8 — K-03 kategori ayağı: neden TAM EŞLEME yazılmadı.** Sistem takvimi `religious` ·
+`national` · `commercial` yazıyor (yerel veritabanında sayıldı: 9 · 8 · 5; ölçüm komutu
+`SELECT category, count(*) FROM social.public_holidays GROUP BY 1`), paket tür etiketi ise
+`kutlama` · `anma` · `ticari-firsat` · `karma`. İki sözlük arasındaki TAM karşılık ne spec'te
+ne spec girdisinde yazılıdır ve UYDURULMADI — uydurulan bir eşleme ölçülmemiş bir kuralı
+kapıya çevirirdi (İlke 9(3)).
+
+Kural (*"ikisi çeliştiğinde paket kazanır, çatışma kayda geçer"*) yalnız iki sözlüğün GERÇEKTEN
+paylaştığı eksende uygulanır: **ticari mi, değil mi.** `religious`/`national` ayrımının paket
+sözlüğünde karşılığı YOKTUR, dolayısıyla orada çelişecek bir şey de yoktur. Karşılaştırma ÇİFT
+YÖNLÜDÜR (kural yön seçmez): sistem `commercial` ↔ paket `kutlama`/`anma` da, sistem
+`religious`/`national` ↔ paket `ticari-firsat` da çatışmadır. `karma` iki ekseni birden taşıdığı
+için hiçbir kategoriyle çelişmez. Kategorisi BİLİNMEYEN gün hakkında hiçbir şey iddia edilmez
+(etiketsiz gün davranışı K-15(a) kapsamında AÇIKTIR ve normatifleştirilmez).
+
+**Üstünlük yönü değişmedi — bu bir BLOK DEĞİLDİR.** Motor içeriği değiştirmez; çatışmayı karar
+günlüğüne `tur-kategori-catismasi` sınıfıyla NOT olarak yazar. Ölçüm iki ayaklıdır ve testte
+ikisi birden aranır: not ÜRETİLİR **ve** uygulanmama listesi BOŞ kalır.
+
+**İlk öneri KURALDAN DARDI ve Eray düzeltti (2026-09-11).** Kontrolör "yalnız riskli yönü
+kaydet" önermişti (sistem dinî/ulusal ↔ paket ticari); kural *"ikisi çeliştiğinde"* der, "riskli
+yön çeliştiğinde" demez. Risk filtresini kuralın üstüne koymak, kuralın kendisini daraltmaktı.
+
+**Bu revizyonun kendi sınırı.** Yedi kalemin hiçbirini bağımsız hakem GÖRMEDİ. **Ev:** dış
+araştırma sözleşmesi turunun sonundaki tek hakem turu (Eray'ın "hafif yol" kararı) ve dal
+kapanışındaki final inceleme.
+
+---
+
 ## R1 — Koşu klasörleri pinlenen dış depoya ASLA commit edilmez
 
 **Kusur (plan satırları):** `runs.run_folder(run_id) -> <arastirma-deposu>/kosu/<run_id>/`
@@ -771,11 +843,43 @@ SINIF_TEKIL = "tekil"            # `sınıf` sütununun İKİ ADLI değeri; geri
 SINIF_CELISKI = "çelişki"        # Sözlük KAPALI DEĞİLDİR: eleme sonrası oran kalan kaynak sayısına
                                  # uyarlanır (2-2, 1-2), yani geçerli oran kümesi KOŞUYA göre değişir.
 
+RESMI_DEGERLERI: tuple[str, ...] = ("evet", "hayır")
+                                 # KAPALI — KAYNAK PROFİLİ `resmi` sütunu (2026-09-11, dış depo `12beec1`).
+                                 # K-123'ün resmîlik yargısı ARTIK TİPLİ taşınır; K-126 istisnasının
+                                 # BİRİNCİ ayağı motorda buradan okunur.
+
+@dataclass(frozen=True, order=True)
+class KaynakIddiasi:             # `K<kaynak>#<iddia>` — bir ARAŞTIRMA İDDİASININ kimliği
+    kaynak: int                  # 1..AZAMI_KAYNAK
+    iddia: int                   # araştırma raporunun Bölüm C `no` sütunu (≥1)
+
+    @property
+    def etiket(self) -> str: ...                 # "K1#3"
+
+def kaynak_iddialari_coz(ham: str) -> tuple[KaynakIddiasi, ...] | None: ...
+                                 # TEK ayrıştırıcı, İKİ çağıran: denetçinin `kaynak-iddialari`
+                                 # sütunu ve sentezin `kaynak_iddia` alanı. Biçim KAPALI:
+                                 # virgülle ayrılmış, ARTAN, tekrarsız. Bozuk girdi → None
+                                 # (fail-closed). SIRA kuralı da burada yaşar, çağıranda DEĞİL:
+                                 # iki uç farklı biçimleri kabul ederse BAĞ sessizce gevşer.
+
 @dataclass(frozen=True)
-class AuditRow:                  # ÇIKTI SÖZLEŞMESİ (1) — DENETİM TABLOSU satırı, SEKİZ sütun
+class KaynakProfili:             # ÇIKTI SÖZLEŞMESİ (3) — KAYNAK PROFİLİ satırı
+    kaynak: int                  # kaynak numarası; rapor içinde TEKRARSIZ (kimlik)
+    resmi: bool                  # RESMI_DEGERLERI'nden ÇÖZÜLÜR
+    not_metni: str               # 2-3 cümle; BOŞ olamaz
+
+@dataclass(frozen=True)
+class AuditRow:                  # ÇIKTI SÖZLEŞMESİ (1) — DENETİM TABLOSU satırı, DOKUZ sütun
     no: int                      # SATIR KİMLİĞİ; artan. Sentezin `D1#<no>` referansı BUNA çözülür
     alan: str
     iddia_ozeti: str
+    kaynak_iddialari: frozenset[KaynakIddiasi]
+                                 # 2026-09-11: satırın DAYANDIĞI araştırma iddiaları. Geçen kaynak
+                                 # numaralarının kümesi `kaynaklar` ile ÇİFT YÖNLÜ EŞİTTİR — tek
+                                 # yönlü bir kapı ("⊆") üç kaynakta gördüğünü söyleyen bir satırın
+                                 # tek iddia göstermesine izin verirdi ve o satır motorda hâlâ ÜÇ
+                                 # kaynaklık çoğunluk sayardı.
     kaynaklar: frozenset[int]    # kaynak NUMARALARI (1..AZAMI_KAYNAK) — yapısal çoğunluğun TEK girdisi
     sinif: str                   # `n-m` oranı · SINIF_TEKIL · SINIF_CELISKI; `kaynaklar` ile TUTARLI
     bayraklar: str
@@ -789,6 +893,12 @@ class AuditReport:
     bolumler: Mapping[str, str]              # anahtar kümesi = BOLUM_ANAHTARLARI (beş, kapalı)
                                              # A1: SALT-OKUNUR — anahtar kümesi bir KAPIDIR
     denetim_tablosu: tuple[AuditRow, ...]    # 2026-09-10: TİPLİ okunur; varsayılanı YOKTUR
+    kaynak_profili: tuple[KaynakProfili, ...]
+                                             # 2026-09-11: TİPLİ okunur; varsayılanı YOKTUR.
+                                             # KAPSAM SINIRI (R6): bu imza koşunun YETKİLİ kaynak
+                                             # sayısını GÖRMEZ, yani "her kaynak kapsandı mı"
+                                             # sorusu burada CEVAPLANMAZ — yalnız satırların iç
+                                             # tutarlılığı ölçülür.
     yeniden_dogrulama: tuple[InventoryRow, ...]
     url_orneklem: tuple[UrlCheck, ...]
     unit_snapshot_sha: str                   # raporun karşı raporladığı görüntünün hash'i (K-79/K-100)
@@ -807,6 +917,7 @@ class AuditReport:
         # KAPALI dönüşüm kümesinin dışındadır (kural 5 → `TypeError`).
         for _alan, _tip in (
             ("denetim_tablosu", AuditRow),
+            ("kaynak_profili", KaynakProfili),           # 2026-09-11
             ("yeniden_dogrulama", InventoryRow),
             ("url_orneklem", UrlCheck),
         ):
@@ -964,12 +1075,22 @@ class EngineInputs:
                                                           # TİP ZORUNLUDUR: ham `AuditReport` KABUL EDİLMEZ
                                                           # (R6'nın H3 düzeltmesi; K-150: tam iki rapor)
     mekanik_eleme: RoundGate                             # §9.1: mekanik eleme sonucu (Task 7)
+                                                          # 2026-09-11: `raporlar[i].iddialar` motorun
+                                                          # İDDİA EVRENİDİR (`brief_doctor.CIddia`)
     takvim_anahtarlari: frozenset[str]                   # §9.1: sistem özel gün listesi (normalize anahtarlar)
     otomatik_kapilar: GateResults                        # §9.1: otomatik kapı sonuçları
 ```
 
 - **`PolicyConfig` `EngineInputs`'a GİRMEZ** — `decide(inputs, config)` onu ayrı alır
   (plan 1469); tek kanonik yer korunur.
+- **2026-09-11 — alan kümesi DEĞİŞMEDİ; iddia bağı YENİ ALAN İSTEMEDİ (ölçüldü).** Sentezin
+  `kaynak_iddia` beyanı iki uçtan doğrulanır ve iki ucun da taşıyıcısı ZATEN buradadır:
+  araştırma ucu `mekanik_eleme.raporlar[i].iddialar` (kaynak numarası KONUMDAN türer — bu
+  `_kabul_edilen_etiketler`in kuralının AYNISIDIR, ikinci bir numaralandırma kuralı
+  yazılmaz), denetçi ucu `denetci_envanterleri` içindeki satırların `kaynak_iddialari`
+  sütunu. Aynı şey K-126'nın resmîlik ayağı için de geçerlidir (`kaynak_profili`).
+  İlk tasarımda bu alanların `EngineInputs`'a EKLENECEĞİ sanılmıştı; taşıyıcıların
+  zaten var olduğu ölçülünce R5 revizyonuna gerek kalmadı.
 - `mevcut_birim_sayisi == len(aktif_birimler)` invariantı yapımda zorlanır. **A1
   (fix turu 2; KODA fix turu 3'te indi — A3):** bu invariantın anlamlı kalabilmesi için
   `aktif_paket` · `aktif_birimler` · `son_turlarin_cikarmalari` (ve `takvim_anahtarlari`)

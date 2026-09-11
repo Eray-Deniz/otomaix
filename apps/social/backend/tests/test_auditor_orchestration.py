@@ -141,12 +141,25 @@ def _denetim_bolumu(sinif_sagi: int) -> str:
     yüzden sağ taraf fixture'da SABİT yazılmaz, koşudan TÜRETİLİR.
     """
     return (
-        "| no | alan | iddia-özeti | kaynaklar | sınıf | bayraklar | öneri "
-        "| gerekçe |\n"
-        "|---|---|---|---|---|---|---|---|\n"
-        f"| 1 | cta_kaliplari | örnek iddia | 1,2 | 2-{sinif_sagi} | — | al "
-        "| Tek cümle. |"
+        "| " + " | ".join(auditors._DENETIM_BASLIK_HUCRELERI) + " |\n"
+        "|" + "---|" * len(auditors._DENETIM_BASLIK_HUCRELERI) + "\n"
+        f"| 1 | cta_kaliplari | örnek iddia | K1#1, K2#1 | 1,2 | 2-{sinif_sagi} "
+        "| — | al | Tek cümle. |"
     )
+
+
+def _kaynak_profili_bolumu(kaynak_sayisi: int) -> str:
+    """KAYNAK PROFİLİ — 2026-09-11'de düz yazıdan TABLOYA döndü (dış depo `12beec1`)."""
+    satirlar = [
+        "| " + " | ".join(auditors._KAYNAK_PROFIL_BASLIK_HUCRELERI) + " |",
+        "|" + "---|" * len(auditors._KAYNAK_PROFIL_BASLIK_HUCRELERI),
+    ]
+    satirlar += [
+        f"| {no} | {'evet' if no == 1 else 'hayır'} | Kaynak gösterme "
+        "disiplini ölçüldü. |"
+        for no in range(1, kaynak_sayisi + 1)
+    ]
+    return "\n".join(satirlar)
 
 
 def _rapor_metni(
@@ -162,7 +175,7 @@ def _rapor_metni(
     govdeler = {
         1: _denetim_bolumu(kaynak_sayisi if sinif_sagi is None else sinif_sagi),
         2: _url_bolumu(kaynak_sayisi, ortam_kisiti=ortam_kisiti),
-        3: "KAYNAK-1 kaynak gösterme disiplini yeterli." + ek_govde,
+        3: _kaynak_profili_bolumu(kaynak_sayisi) + ek_govde,
         4: "- Mevzuat tarihi operatöre sorulmalı mı?",
         5: _envanter_bolumu(unit_ids),
     }
@@ -669,6 +682,7 @@ def _sha_ile(rapor: auditors.AuditReport, sha: str) -> auditors.ValidatedReport:
             ham_metin=rapor.ham_metin,
             bolumler=dict(rapor.bolumler),
             denetim_tablosu=rapor.denetim_tablosu,
+            kaynak_profili=rapor.kaynak_profili,
             yeniden_dogrulama=rapor.yeniden_dogrulama,
             url_orneklem=rapor.url_orneklem,
             unit_snapshot_sha=sha,
@@ -766,6 +780,7 @@ async def test_round_rejects_report_snapshot_differing_from_packet(
             ham_metin=sonuc.rapor.ham_metin,
             bolumler=dict(sonuc.rapor.bolumler),
             denetim_tablosu=sonuc.rapor.denetim_tablosu,
+            kaynak_profili=sonuc.rapor.kaynak_profili,
             yeniden_dogrulama=sonuc.rapor.yeniden_dogrulama,
             url_orneklem=sonuc.rapor.url_orneklem,
             unit_snapshot_sha="e" * 64,

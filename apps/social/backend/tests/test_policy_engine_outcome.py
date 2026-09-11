@@ -259,6 +259,7 @@ def _ilk_kosu_girdisi(*, kanit: str):
             yol: {"karar": "ekle", "kanit": atif[identity.enumerate_content_units(AKTIF_ICERIK)[yol]['alan']]}
             for yol in yollar
         },
+        denetim=tablo,
     )
     return _girdi(gunluk=gunluk, aktif=False, denetim=tablo)
 
@@ -292,6 +293,9 @@ def test_uygulanmama_sebepleri_are_closed() -> None:
         "mutabakat-yok",
         "referans-yok",
         "referans-uyusmuyor",
+        "kaynak-iddia-yok",
+        "iddia-arastirmada-yok",
+        "iddia-denetcide-yok",
         "oneri-olumsuz",
         "celiski",
         "cogunluk-yok",

@@ -266,8 +266,9 @@ Beyan bir BULGU değildir: rapor sonucunu bozmaz, temiz kaynak `gecti` kalır.
   `CIT_KURALI_DISINDA` demetlerinde sayılıdır; kapsam beyanı metnini onlardan
   ÜRETİR ve test her kalemi uçtan uca ölçer.
 * Gerekçe tablosunda sütun SAYISI ölçülür, sütun başlıklarının ANLAMI değil.
-* Bölüm C OLUMLU bir yapısal sözleşme olarak doğrulanır: birebir başlık satırı · altı
-  sabit sütun · hücre doluluğu · `alan/dönem` kapalı kümesi · `iddia` kelime sınırı ·
+* Bölüm C OLUMLU bir yapısal sözleşme olarak doğrulanır: birebir başlık satırı ·
+  sözleşmenin SABİT sütun kümesi · hücre doluluğu · `no` biçimi ve DİZİSİ (kimlik:
+  tekrarsız, boşluksuz) · `alan/dönem` kapalı kümesi · `iddia` kelime sınırı ·
   `URL` adres biçimi · `tarih` yazımı · `tek kaynak` kapalı kümesi; ayrıca BÜTÜNLÜK
   (her alan/dönem için en az bir satır). Önceki sürümün ayıraç vekili KALDIRILDI —
   serbest düzyazıdan "bu bir eşleme DEĞİL" sonucunu çıkarmak semantik-negatif bir
@@ -298,6 +299,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Callable, Iterable, Sequence
@@ -364,6 +366,7 @@ GEREKCE_BASLIK_ASGARI = 2
 # başlık satırı kapının OLUMLU sözleşmesidir — hangi hücrenin ne olduğu ona
 # dayanır, gevşetilirse sütun anlamı yeniden TAHMİNE düşer.
 C_TABLOSU_SUTUNLARI = (
+    "no",
     "alan/dönem",
     "iddia",
     "kaynak adı",
@@ -371,6 +374,14 @@ C_TABLOSU_SUTUNLARI = (
     "tarih",
     "tek kaynak",
 )
+# Hücre KONUMLARI addan TÜRER, elle sayılmaz. Sözleşme 2026-09-11'de başa bir
+# sütun (`no`) ekledi ve elle yazılmış her indeks bir kaydırma hatası adayıydı;
+# ad→konum türetmesi sözleşme yeniden sıra değiştirdiğinde kendiliğinden uyar.
+C_NO_INDEKSI = C_TABLOSU_SUTUNLARI.index("no")
+C_ALAN_INDEKSI = C_TABLOSU_SUTUNLARI.index("alan/dönem")
+# `no` hücresi: 1'den başlayan ARTAN TAM SAYI, o raporda iddianın KALICI
+# kimliği. Biçim burada, DİZİ kuralı `_c_no_dizisi_ihlalleri`'nde ölçülür.
+_C_NO_RE = re.compile(r"^[1-9]\d*$")
 # Sözleşme `iddia` hücresine ÜST SINIR koyar: "EN FAZLA 15 KELİME". Uydurma
 # eşik DEĞİL — sözleşme metninden okunur, testi pinden doğrular.
 C_IDDIA_KELIME_UST_SINIRI = 15
@@ -716,6 +727,20 @@ class DoctorReport:
     elemeler: tuple[Bulgu, ...]
     kaynak_adi: str
     icerik_ozeti: str = ""
+    iddialar: tuple[CIddia, ...] = ()
+    """Bölüm C'nin TİPLİ satırları — motorun iddia bağının BİR ucu.
+
+    `run` bunu belgeden ÜRETİR. Alan `icerik_ozeti`nin emsalini izler: BİÇİMİ
+    fail-closed zorlanır (numara kimliktir: pozitif, tekrarsız; alan boş
+    olamaz), KÖKENİ (gerçekten bu metnin Bölüm C'si mi) doğrulanmaz — `run`
+    yolunu atlayan bir çağıran belgeye sahip olmayabilir ve burada uydurma bir
+    değer ÜRETİLMEZ (dürüst etiket, İlke 9(4)).
+
+    **DİZİ kuralı (1..N, boşluksuz) burada zorlanMAZ ve bu bilinçlidir:** o bir
+    BULGU'dur (`_c_no_dizisi_ihlalleri`), yapıcı değişmezi değil. Aksi hâlde
+    numarası bozuk bir araştırma çıktısı kapının RAPOR üretmesini engeller,
+    yani kapı ölçmesi gereken belgede ÇÖKERDİ.
+    """
     kapsam_sinirlari: tuple[str, ...] = field(init=False, default=())
     """Kapının NE KADARINI ölçtüğünün dürüst beyanı — `CHECKS`'ten TÜRER.
 
@@ -766,6 +791,30 @@ class DoctorReport:
                 "DoctorReport.icerik_ozeti KANONİK bir özet olmak zorunda "
                 f"(sha256 onaltılık ya da boş): {self.icerik_ozeti!r} — "
                 "serbest metin kimlik kararına giremez"
+            )
+        object.__setattr__(self, "iddialar", tuple(self.iddialar))
+        if not all(type(iddia) is CIddia for iddia in self.iddialar):
+            raise TypeError(
+                "DoctorReport.iddialar yalnız `CIddia` taşır: "
+                f"{[type(i).__name__ for i in self.iddialar]} — benzeyen nesne "
+                "kimlik değişmezlerini taşımaz"
+            )
+        numaralar = [iddia.no for iddia in self.iddialar]
+        if any(not isinstance(no, int) or isinstance(no, bool) or no < 1 for no in numaralar):
+            raise ValueError(
+                f"DoctorReport.iddialar numarası 1'den küçük olamaz: {numaralar} "
+                "— numara sözleşmede KİMLİKTİR (dış depo `12beec1`)"
+            )
+        if len(set(numaralar)) != len(numaralar):
+            raise ValueError(
+                f"DoctorReport.iddialar numarası TEKRAR EDEMEZ: {numaralar} — "
+                "tekrar eden numara motorda iki ayrı iddiaya çözülür ve "
+                "yetkilendirme yeniden alan düzeyine düşer"
+            )
+        if any(not iddia.alan.strip() for iddia in self.iddialar):
+            raise ValueError(
+                "DoctorReport.iddialar `alan` hücresi BOŞ olamaz — motor "
+                "kararın alanıyla örtüşmeyi o hücrede ölçer"
             )
         ihlaller = _rapor_ihlalleri(self.sonuc, self.notlar, self.elemeler)
         if ihlaller:
@@ -1036,6 +1085,17 @@ def kaynak_seti_sha(raporlar: Sequence[DoctorReport]) -> str:
                 "sonuc": rapor.sonuc,
                 "notlar": [_bulgu(b) for b in rapor.notlar],
                 "elemeler": [_bulgu(b) for b in rapor.elemeler],
+                # `iddialar` MÜHRE GİRER (2026-09-11). Bu alan EK-E'ye
+                # YAZILMAZ, yani denetçinin gördüğünü değiştirmez — ama motorun
+                # YETKİLENDİRME kapısını besler: `ekle` kararının dayandığı
+                # araştırma iddiası buradan çözülür. Mühür "motora verilen
+                # mekanik kapı, paketi kuran kapının ta kendisidir" diyorsa,
+                # kapının yetki taşıyan yarısını dışarıda bırakamaz; aksi hâlde
+                # iddia kümesi değişmiş bir rapor mühürden SESSİZCE geçerdi.
+                "iddialar": [
+                    {"no": iddia.no, "alan": iddia.alan}
+                    for iddia in rapor.iddialar
+                ],
             }
             for rapor in raporlar
         ]
@@ -1407,6 +1467,17 @@ _YUVA_DESENI = _yuva_deseni(OZEL_GUN_YUVALARI)
 def _sadelestir(metin: str) -> str:
     """Karşılaştırma için sadeleştirme: kırp, markdown vurgusunu ve tırnağı at."""
     return metin.strip().strip("*`_ ").strip().casefold()
+
+
+def alan_karsilastirma_anahtari(hucre: str) -> str:
+    """Bölüm C `alan/dönem` hücresinin KARŞILAŞTIRMA anahtarı — TEK kural.
+
+    Kapı, hücrenin kapalı kümeye üyeliğini `_sadelestir` ile ölçer; motor da
+    aynı hücreyi kararın alanıyla karşılaştırır. İkinci bir sadeleştirme kuralı
+    YAZILMAZ: iki taraf farklı normalleştirirse meşru bir satır motorda sessizce
+    eşleşmez (kapı "geçerli" der, motor "bulamadım" der).
+    """
+    return _sadelestir(hucre)
 
 
 def _baslik_metni(satir: str) -> str:
@@ -2638,7 +2709,17 @@ def _c_satir_ihlalleri(satir: str, belge: _Belge) -> list[str]:
     for ad, hucre in zip(C_TABLOSU_SUTUNLARI, hucreler):
         if not hucre:
             mesajlar.append(f"Bölüm C satırında `{ad}` hücresi BOŞ: {kisa!r}")
-    alan, iddia, _kaynak_adi, url, tarih, tek_kaynak = hucreler
+    no, alan, iddia, _kaynak_adi, url, tarih, tek_kaynak = hucreler
+
+    # `no` HÜCRESİNİN BİÇİMİ (dizi kuralı ayrı ölçülür). Sözleşme: *"1'den
+    # başlayan ARTAN TAM SAYIDIR ve bu raporda o iddianın KALICI KİMLİĞİDİR"*.
+    # Kimlik makine tarafından ÇÖZÜLEBİLİR olmak zorundadır: denetçinin
+    # `kaynak-iddialari` sütunu ve sentezin `kaynak_iddia` alanı bu numarayı
+    # gösterir; serbest yazım (`3a` · `#3` · `üç`) bağı sessizce koparırdı.
+    if no and not _C_NO_RE.match(no):
+        mesajlar.append(
+            f"Bölüm C `no` hücresi 1'den başlayan artan TAM SAYI değil: {no!r}"
+        )
 
     # Dönem ayağı belgeden geldiği için, Bölüm B HİÇ ayrıştırılamamışsa kapalı
     # küme yarım kalır ve her dönem satırı haksızca yanlışlanırdı. O hâl AYRI
@@ -2685,6 +2766,95 @@ def _c_satir_ihlalleri(satir: str, belge: _Belge) -> list[str]:
     return mesajlar
 
 
+def _c_no_dizisi_ihlalleri(belge: _Belge) -> list[str]:
+    """`no` sütununun DİZİ kuralı — tekrar YOK, boşluk YOK, 1'den başlar.
+
+    Ayrı bir fonksiyondur çünkü ayrı bir şey ölçer: `_c_satir_ihlalleri` TEK
+    satıra bakar ve bir satırın kendi içinde "3" kusursuz bir numaradır; kimlik
+    ise TABLONUN BÜTÜNÜNDE anlamlıdır. İki satırın aynı numarayı taşıması ya da
+    `1, 2, 4` gibi bir boşluk, satır düzeyinde GÖRÜNMEZ.
+
+    **Neden kimlik bu kadar sert.** Numara, denetçinin *"hangi iddiaya baktım"*
+    ve sentezin *"yeni kalıbı hangi iddiadan türettim"* beyanlarını aynı üst
+    kaynağa çivileyen TEK makine-okunur bağdır (dış depo `12beec1`). Tekrar
+    eden bir numara o bağı ÇOĞA böler: motor `K1#3`'ün hangi satırı gösterdiğini
+    bilemez ve yetkilendirme yeniden alan düzeyine düşerdi — kapatılan sınıfın
+    ta kendisi. Bu yüzden küme TAM OLARAK `1..N`'dir.
+    """
+    hamlar = [
+        _hucreler(satir)[C_NO_INDEKSI]
+        for satir in belge.c_veri_satirlari
+        if len(_hucreler(satir)) == len(C_TABLOSU_SUTUNLARI)
+    ]
+    # Biçimi bozuk hücre BURADA sayılmaz: onu `_c_satir_ihlalleri` zaten
+    # bildirdi ve aynı arıza iki kez sayılmaz. Dizi kuralı yalnız ÇÖZÜLEBİLEN
+    # numaralar üstünde iddiada bulunur.
+    numaralar = [int(ham) for ham in hamlar if _C_NO_RE.match(ham)]
+    if not numaralar:
+        return []
+    mesajlar: list[str] = []
+    tekrar = sorted({no for no in numaralar if numaralar.count(no) > 1})
+    if tekrar:
+        mesajlar.append(
+            "Bölüm C `no` sütunu KİMLİKTİR, tekrar edemez — şu numaralar "
+            f"birden çok satırda: {tekrar}"
+        )
+    beklenen = set(range(1, len(numaralar) + 1))
+    eksik = sorted(beklenen - set(numaralar))
+    if eksik and not tekrar:
+        mesajlar.append(
+            "Bölüm C `no` sütunu 1'den başlayıp boşluksuz artmalı — eksik "
+            f"numara: {eksik}"
+        )
+    return mesajlar
+
+
+@dataclass(frozen=True)
+class CIddia:
+    """Bölüm C'nin TEK satırının MAKİNE-OKUNUR özü: kimlik + alan.
+
+    Kapı bu satırı zaten ayrıştırıyordu ve sonucu ATIYORDU; taşıyıcı eksikti.
+    Motor, sentezin `kaynak_iddia` alanındaki `K<kaynak>#<iddia>` numarasının
+    gerçekten VAR olduğunu ve alanının kararın alanıyla örtüştüğünü bu demet
+    üstünde ölçer — beyandan değil, MEKANİK ayrıştırıcıdan (dış depo `12beec1`,
+    sentez sözleşmesi 2.2: *"bunu mekanik ayrıştırıcı doğrular, senin beyanın
+    değil"*).
+
+    Hücrenin yalnız İKİ sütunu taşınır. `iddia` metni bilinçli olarak DIŞARIDA:
+    motor onunla bir şey ölçmez, taşımak onu bir karar girdisi gibi gösterirdi.
+    """
+
+    no: int
+    alan: str
+
+
+def _c_iddialari(belge: _Belge) -> tuple[CIddia, ...]:
+    """Bölüm C'nin ÇÖZÜLEBİLEN satırları — ayrıştırılamayan satır DÜŞER.
+
+    Fail-closed: sütun sayısı tutmayan ya da numarası çözülemeyen satır iddia
+    ÜRETMEZ. "Sanki 3'müş gibi" taşımak, kapatılan sınıfın — atfın alan
+    düzeyinde yetkilendirilmesi — sessiz geri dönüşü olurdu. Düşen satır
+    zaten `_c_satir_ihlalleri` tarafından NOT olarak bildirilmiştir; burada
+    ikinci bir not üretilmez, yalnız taşıyıcıya girmez.
+    """
+    iddialar: list[CIddia] = []
+    for satir in belge.c_veri_satirlari:
+        hucreler = _hucreler(satir)
+        if len(hucreler) != len(C_TABLOSU_SUTUNLARI):
+            continue
+        ham_no = hucreler[C_NO_INDEKSI]
+        alan = hucreler[C_ALAN_INDEKSI]
+        if not _C_NO_RE.match(ham_no) or not alan:
+            continue
+        iddialar.append(CIddia(no=int(ham_no), alan=alan))
+    # Tekrar eden numara KİMLİK DEĞİLDİR: hangi satırı gösterdiği belirsiz olan
+    # bir numara motorda iki ayrı iddiaya çözülürdü. İhlali `_c_no_dizisi_-
+    # ihlalleri` NOT olarak bildirir; taşıyıcı o numaraların HİÇBİRİNİ almaz
+    # (birini seçmek, seçimi sessiz bir varsayıma çevirirdi).
+    sayim = Counter(iddia.no for iddia in iddialar)
+    return tuple(iddia for iddia in iddialar if sayim[iddia.no] == 1)
+
+
 def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
     """Bölüm C SABİT SÜTUNLU bir tablodur; sütunları ve hücreleri denetlenir.
 
@@ -2699,9 +2869,9 @@ def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
     Kök çözüm koda değil SÖZLEŞMEYE yapıldı: `_SABLON.md` artık Bölüm C'yi
     sabit sütunlu bir tablo olarak İSTİYOR (dış depo `7964ed6`). Kapı bu
     yüzden hiçbir şey tahmin etmez; olumlu bir yapıyı doğrular — birebir
-    başlık satırı · sütun sayısı · hücre doluluğu · `alan/dönem` kapalı
-    kümesi · `iddia` kelime sınırı · `URL` adres biçimi · `tarih` yazımı ·
-    `tek kaynak` kapalı kümesi.
+    başlık satırı · sütun sayısı · hücre doluluğu · `no` biçimi ve DİZİSİ ·
+    `alan/dönem` kapalı kümesi · `iddia` kelime sınırı · `URL` adres biçimi ·
+    `tarih` yazımı · `tek kaynak` kapalı kümesi.
 
     **Kapsam sınırı (kalan, gerçek):** bağlantının gerçekten AÇILDIĞI ölçülmez
     (ağ çağrısı yapılmaz) ve `iddia` hücresinin kaynağı gerçekten ÖZETLEDİĞİ
@@ -2735,6 +2905,7 @@ def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
         return mesajlar
     for satir in belge.c_veri_satirlari:
         mesajlar.extend(_c_satir_ihlalleri(satir, belge))
+    mesajlar.extend(_c_no_dizisi_ihlalleri(belge))
     mesajlar.extend(_c_kapsama_ihlalleri(belge))
     return mesajlar
 
@@ -2757,7 +2928,7 @@ def _c_kapsama_ihlalleri(belge: _Belge) -> list[str | _Mesaj]:
     satırı EKLEMEK onu haklı olarak düşürür.
     """
     gorulen = {
-        _sadelestir(_hucreler(satir)[0])
+        _sadelestir(_hucreler(satir)[C_ALAN_INDEKSI])
         for satir in belge.c_veri_satirlari
         if len(_hucreler(satir)) == len(C_TABLOSU_SUTUNLARI)
     }
@@ -3149,15 +3320,19 @@ CHECKS: tuple[Check, ...] = (
         aile="url-bicimi",
         seviye=SEVIYE_NOT,
         aciklama=(
-            "Bölüm C SABİT SÜTUNLU tablodur: birebir başlık satırı, altı "
-            "sütun, dolu hücreler, açılabilir `https://` adres"
+            "Bölüm C SABİT SÜTUNLU tablodur: birebir başlık satırı, "
+            "sözleşmenin sütun kümesi, tekrarsız `no` kimliği, dolu "
+            "hücreler, açılabilir `https://` adres"
         ),
         kural=_kontrol_url_bicimi,
         kapsam_sinirlari=(
             (
                 "url-bicimi: Bölüm C artık OLUMLU bir yapısal sözleşme olarak "
-                "doğrulanır — sözleşmenin BİREBİR başlık satırı, altı sabit "
-                "sütun, hücre doluluğu, `alan/dönem` hücresinin kapalı kümesi "
+                "doğrulanır — sözleşmenin BİREBİR başlık satırı, SABİT sütun "
+                "kümesi, hücre doluluğu, `no` hücresinin biçimi ve tablo "
+                "boyunca tekrarsız-boşluksuz DİZİSİ (kimlik ayağı: denetçi ve "
+                "sentez bu numarayla aynı iddiayı gösterir), `alan/dönem` "
+                "hücresinin kapalı kümesi "
                 "(Bölüm A alan adları + Bölüm B'de İŞLENMİŞ dönemler), `iddia` "
                 "hücresinin kelime sınırı, `URL` hücresinin tek açılabilir "
                 "`https://` adresi, `tarih` yazımı ve `tek kaynak` kapalı "
@@ -3313,6 +3488,9 @@ def run(source_text: str, *, source_name: str) -> DoctorReport:
         # BAĞIMSIZ kaynak ister). Kural `identity.canonical_sha`'dır, ikinci
         # bir hash kuralı YAZILMAZ.
         icerik_ozeti=identity.canonical_sha(source_text),
+        # Bölüm C'nin TİPLİ satırları: motorun iddia bağı bunu tüketir. Kapı
+        # satırı zaten ayrıştırıyordu; burada yalnız SONUCU taşınır.
+        iddialar=_c_iddialari(belge),
         # `kapsam_sinirlari` BURADA verilmez: İlke 9(4)'ün beyanı çağıranın
         # yazdığı bir alan olamaz, `__post_init__` onu `CHECKS`'ten türetir.
     )

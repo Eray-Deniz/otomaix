@@ -45,17 +45,27 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "mutabakat-yok",  # K-125: iki denetçi uyuşmuyor
     "referans-yok",  # sentez sözleşmesi 2.1: `ekle` en az bir D# referansı ister
     "referans-uyusmuyor",  # atıf BAŞKA bir alanın satırını gösteriyor
+    "kaynak-iddia-yok",  # sentez sözleşmesi 2.2: `ekle` `kaynak_iddia` ZORUNLU
+    "iddia-arastirmada-yok",  # numaranın gösterdiği iddia yok ya da alanı örtüşmüyor
+    "iddia-denetcide-yok",  # atıf yapılan denetçi satırı o numarayı taşımıyor
     "oneri-olumsuz",  # denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",  # denetçi satırı `çelişki` sınıfında — sayı yetse de girmez
     "cogunluk-yok",  # yeni öğe 2-3 yapısal çoğunluk kuralı
 )
-"""Aday kararın uygulanmama sebepleri — KAPALI, YEDİ değer. UYDURULMUŞ değer YOK.
+"""Aday kararın uygulanmama sebepleri — KAPALI küme. UYDURULMUŞ değer YOK.
 
 **Sıra ÖNCELİKTİR** (`engine._reddedilenler`): bir birim birden çok sebeple
 reddedilebilir ve rapora yazılan sebep bu sıradan seçilir. `referans-yok` ·
-`referans-uyusmuyor` · `oneri-olumsuz` · `celiski`, `cogunluk-yok`'tan ÖNCE
+`referans-uyusmuyor` · `kaynak-iddia-yok` · `iddia-arastirmada-yok` ·
+`iddia-denetcide-yok` · `oneri-olumsuz` · `celiski`, `cogunluk-yok`'tan ÖNCE
 gelir — hepsinde sayı ya hiç okunamamıştır ya da okunması anlamsızdır;
 "çoğunluk yok" demek okunmuş bir sayı ima ederdi.
+
+**Üç ATIF sebebi AYRI adlandırılır** çünkü ayrı kapılardır ve hangisinin
+düştüğü rapordan okunabilmelidir: alan YOK/bozuk · numaranın gösterdiği
+araştırma iddiası yok ya da alanı örtüşmüyor · denetçi satırı o numarayı
+taşımıyor. Bağ İKİ UÇLUDUR (sentez sözleşmesi 2.2); tek uçlu bir bağ kendini
+onaylardı, çünkü iki beyanı da aynı model yazar.
 """
 
 

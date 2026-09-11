@@ -220,8 +220,9 @@ def _envanter_bolumu(satirlar: list[str] | None) -> str:
 
 
 DENETIM_BASLIGI = (
-    "| no | alan | iddia-özeti | kaynaklar | sınıf | bayraklar | öneri | gerekçe |\n"
-    "|---|---|---|---|---|---|---|---|"
+    "| no | alan | iddia-özeti | kaynak-iddialari | kaynaklar | sınıf "
+    "| bayraklar | öneri | gerekçe |\n"
+    "|---|---|---|---|---|---|---|---|---|"
 )
 
 
@@ -229,10 +230,26 @@ def _denetim_bolumu(satirlar: list[str] | None = None) -> str:
     """DENETİM TABLOSU gövdesi — başlık sözleşmenin BİREBİR yazımıdır."""
     if satirlar is None:
         satirlar = [
-            "| 1 | cta_kaliplari | ilk iddia | 1,2 | 2-3 | — | al | Tek cümle. |",
-            "| 2 | kanca_kaliplari | ikinci iddia | 3 | tekil | — | uyarla | Tek cümle. |",
+            "| 1 | cta_kaliplari | ilk iddia | K1#1, K2#4 | 1,2 | 2-3 | — | al "
+            "| Tek cümle. |",
+            "| 2 | kanca_kaliplari | ikinci iddia | K3#2 | 3 | tekil | — "
+            "| uyarla | Tek cümle. |",
         ]
     return "\n".join([DENETIM_BASLIGI] + satirlar)
+
+
+KAYNAK_PROFIL_BASLIGI = "| kaynak | resmi | not |\n|---|---|---|"
+
+
+def _kaynak_profili_bolumu(satirlar: list[str] | None = None) -> str:
+    """KAYNAK PROFİLİ gövdesi — 2026-09-11'de düz yazıdan TABLOYA döndü."""
+    if satirlar is None:
+        satirlar = [
+            "| 1 | evet | Mevzuat metninin kendisi; yerel ve tutarlı. |",
+            "| 2 | hayır | Haberleştiren kaynak; yerel değil. |",
+            "| 3 | hayır | Derleme; özgüllük zayıf. |",
+        ]
+    return "\n".join([KAYNAK_PROFIL_BASLIGI] + satirlar)
 
 
 def _rapor_metni(
@@ -240,6 +257,7 @@ def _rapor_metni(
     denetim: str | None = None,
     envanter: str | None = None,
     url: str | None = None,
+    profil: str | None = None,
     atlanan_bolum: int | None = None,
     takas: tuple[int, int] | None = None,
 ) -> str:
@@ -251,7 +269,7 @@ def _rapor_metni(
     govdeler = {
         1: _denetim_bolumu(None) if denetim is None else denetim,
         2: _url_bolumu() if url is None else url,
-        3: "KAYNAK-1 kaynak gösterme disiplini yeterli; KAYNAK-2 yerel değil.",
+        3: _kaynak_profili_bolumu() if profil is None else profil,
         4: "- Mevzuat tarihi operatöre sorulmalı mı?",
         5: _envanter_bolumu(None) if envanter is None else envanter,
     }
@@ -1066,6 +1084,7 @@ def test_audit_report_rejects_foreign_row_type() -> None:
             ham_metin=rapor.ham_metin,
             bolumler=dict(rapor.bolumler),
             denetim_tablosu=rapor.denetim_tablosu,
+            kaynak_profili=rapor.kaynak_profili,
             yeniden_dogrulama=(yabanci,),
             url_orneklem=rapor.url_orneklem,
             unit_snapshot_sha=rapor.unit_snapshot_sha,
@@ -1088,6 +1107,11 @@ YABANCI_SATIR_VAKALARI = (
         "UrlCheck",
         auditors.InventoryRow(UNIT_A, "supported", "#1", "Tek cümle."),
     ),
+    (
+        "kaynak_profili",
+        "KaynakProfili",
+        auditors.InventoryRow(UNIT_A, "supported", "#1", "Tek cümle."),
+    ),
 )
 
 
@@ -1106,6 +1130,7 @@ def test_audit_report_rejects_a_foreign_row_in_each_sequence_field(
         "ham_metin": rapor.ham_metin,
         "bolumler": dict(rapor.bolumler),
         "denetim_tablosu": rapor.denetim_tablosu,
+        "kaynak_profili": rapor.kaynak_profili,
         "yeniden_dogrulama": rapor.yeniden_dogrulama,
         "url_orneklem": rapor.url_orneklem,
         "unit_snapshot_sha": rapor.unit_snapshot_sha,
@@ -1142,6 +1167,7 @@ def test_audit_report_does_not_alias_the_caller_sections() -> None:
         ham_metin=rapor.ham_metin,
         bolumler=cagiran,
         denetim_tablosu=rapor.denetim_tablosu,
+        kaynak_profili=rapor.kaynak_profili,
         yeniden_dogrulama=rapor.yeniden_dogrulama,
         url_orneklem=rapor.url_orneklem,
         unit_snapshot_sha=rapor.unit_snapshot_sha,
@@ -1452,7 +1478,7 @@ def _pinli_baslik_hucreleri(metin: str, isaret: str) -> tuple[str, ...]:
 
 
 def test_denetim_basligi_matches_pinned_contract_header() -> None:
-    """Sekiz sütunun ADI ve SIRASI pinli sözleşmeden ölçülür."""
+    """Sütunların ADI ve SIRASI pinli sözleşmeden ölçülür (sayı da oradan)."""
     olculen = _pinli_baslik_hucreleri(
         _pinli("hakem-denetci-gorevi.md"), "1) DENETİM TABLOSU"
     )
@@ -1487,6 +1513,10 @@ def test_validate_report_returns_parsed_audit_table() -> None:
     assert [s.no for s in satirlar] == [1, 2]
     assert satirlar[0].kaynaklar == frozenset({1, 2})
     assert satirlar[1].kaynaklar == frozenset({3})
+    assert satirlar[0].kaynak_iddialari == frozenset(
+        {auditors.KaynakIddiasi(1, 1), auditors.KaynakIddiasi(2, 4)}
+    )
+    assert satirlar[1].kaynak_iddialari == frozenset({auditors.KaynakIddiasi(3, 2)})
     assert satirlar[0].alan == "cta_kaliplari"
     assert satirlar[0].sinif == "2-3"
     assert satirlar[0].oneri == "al"
@@ -1500,46 +1530,201 @@ def _denetim_hatasi(satir: str) -> str:
     return " · ".join(sonuc.errors)
 
 
+# TEMİZ satır ve KONUMLAR sözleşmenin sütun listesinden TÜRER. Sözleşme
+# 2026-09-11'de araya bir sütun (`kaynak-iddialari`) ekledi; elle yazılmış her
+# hücre dizisi o gün kaydı ve "şu sütunu bozdum" diyen bir test aslında
+# KOMŞUSUNU bozuyor olurdu — sessiz yeşil.
+_TEMIZ_DENETIM_HUCRELERI = {
+    "no": "1",
+    "alan": "cta_kaliplari",
+    "iddia-özeti": "iddia",
+    "kaynak-iddialari": "K1#1, K2#4",
+    "kaynaklar": "1,2",
+    "sınıf": "2-3",
+    "bayraklar": "—",
+    "öneri": "al",
+    "gerekçe": "Tek cümle.",
+}
+
+
+def _denetim_satiri(**sapma: str) -> str:
+    """Sözleşme sırasında TEMİZ bir satır; `sapma` adlandırılmış hücreyi bozar."""
+    hucreler = dict(_TEMIZ_DENETIM_HUCRELERI)
+    bilinmeyen = set(sapma) - set(hucreler)
+    assert not bilinmeyen, f"sözleşmede olmayan sütun: {bilinmeyen}"
+    hucreler.update(sapma)
+    return (
+        "| "
+        + " | ".join(hucreler[ad] for ad in auditors._DENETIM_BASLIK_HUCRELERI)
+        + " |"
+    )
+
+
+def test_temiz_denetim_satiri_sozlesmenin_sutunlariyla_ortusur() -> None:
+    """TABAN: kurucunun anahtarları sözleşmenin sütunlarıdır — eksiksiz."""
+    assert tuple(_TEMIZ_DENETIM_HUCRELERI) == auditors._DENETIM_BASLIK_HUCRELERI
+    assert _dogrula(_rapor_metni(denetim=_denetim_bolumu([_denetim_satiri()]))).rapor
+
+
 def test_audit_table_rejects_prose_in_source_column() -> None:
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | hepsi | 3-3 | — | al | Tek cümle. |"
+        _denetim_satiri(**{"kaynaklar": "hepsi", "sınıf": "3-3"})
     )
     assert "kaynaklar" in hatalar
 
 
 def test_audit_table_rejects_empty_source_column() -> None:
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia |  | tekil | — | al | Tek cümle. |"
+        _denetim_satiri(**{"kaynaklar": "", "sınıf": "tekil"})
     )
     assert "kaynaklar" in hatalar
 
 
-_BOS_HUCRE_SUTUNLARI = {
-    "alan": 1,
-    "iddia-özeti": 2,
-    "bayraklar": 5,
-    "gerekçe": 7,
-}
-"""Boş bırakılamayan METİN sütunları → satırdaki konumları.
+_BOS_HUCRE_SUTUNLARI = ("alan", "iddia-özeti", "bayraklar", "gerekçe")
+"""Boş bırakılamayan METİN sütunları.
 
-`kaynaklar` · `sınıf` · `öneri` burada YOKTUR: onların boşluğunu kendi kapalı
-değer kapıları yakalar ve o kapılar ayrıca ölçülür. `no` da yoktur (tip kapısı).
+`kaynaklar` · `kaynak-iddialari` · `sınıf` · `öneri` burada YOKTUR: onların
+boşluğunu kendi kapalı değer kapıları yakalar ve o kapılar ayrıca ölçülür.
+`no` da yoktur (tip kapısı).
 """
 
 
-@pytest.mark.parametrize("sutun", sorted(_BOS_HUCRE_SUTUNLARI))
+@pytest.mark.parametrize("sutun", _BOS_HUCRE_SUTUNLARI)
 def test_audit_table_rejects_an_empty_text_cell(sutun: str) -> None:
     """ÜRETİLMİŞ MATRİS: boş bırakılan HER metin hücresi satırı düşürür.
 
     Elle tek sütun seçilseydi kapının öteki üç sütunu ölçülmemiş kalırdı;
     mutasyon ölçümü tam olarak bu boşluğu yakaladı (kapı testsiz eklenmişti).
     """
-    hucreler = [
-        "1", "cta_kaliplari", "iddia", "1,2", "2-3", "—", "al", "Tek cümle.",
-    ]
-    hucreler[_BOS_HUCRE_SUTUNLARI[sutun]] = ""
-    hatalar = _denetim_hatasi("| " + " | ".join(hucreler) + " |")
+    hatalar = _denetim_hatasi(_denetim_satiri(**{sutun: ""}))
     assert "boş hücre" in hatalar and sutun in hatalar
+
+
+# ─── `kaynak-iddialari`: atıf ADAYA bağlanır (dış depo `12beec1`) ───────────
+
+
+def test_kaynak_iddialari_sutunu_pinli_sozlesmede_yazili() -> None:
+    """Sütunun VARLIĞI da biçimi de sözleşmeden ölçülür, uydurulmaz."""
+    metin = _pinli("hakem-denetci-gorevi.md")
+    assert "kaynak-iddialari" in auditors._DENETIM_BASLIK_HUCRELERI
+    assert re.search(r"Biçim `K<kaynak-no>#<iddia-no>`", metin)
+    # TUTARLILIK kuralı da sözleşmenin kendi cümlesidir.
+    assert "İKİ SÜTUN TUTARLI OLMAK ZORUNDADIR" in metin
+
+
+_BICIM_IZI = "`K<kaynak>#<iddia>` taşır"
+"""BİÇİM kapısının KENDİ izi.
+
+Yalnız sütun adını aramak yetmez: tutarlılık kapısının mesajı da o adı taşır,
+yani biçim kapısı sökülse bile test yeşil kalırdı. Mutasyon ölçümü tam olarak
+bunu yakaladı (boş hücre kolu sağ kaldı).
+"""
+
+
+@pytest.mark.parametrize(
+    "deger",
+    ["", "hepsi", "K1", "1#1", "K1#1 K2#4", "K2#4, K1#1", "K1#1, K1#1", "K1#0"],
+    ids=[
+        "bos", "duzyazi", "iddiasiz", "kaynaksiz", "ayracsiz",
+        "azalan", "tekrar", "sifir-iddia",
+    ],
+)
+def test_kaynak_iddialari_bicimi_kapalidir(deger: str) -> None:
+    """Biçim kapalı: serbest yazım bağı sessizce koparırdı (fail-closed)."""
+    hatalar = _denetim_hatasi(_denetim_satiri(**{"kaynak-iddialari": deger}))
+    assert _BICIM_IZI in hatalar, hatalar
+
+
+def test_kaynak_iddialari_kaynaklar_sutunuyla_tutarli_olmak_zorunda() -> None:
+    """Sözleşme: geçen kaynak numaralarının kümesi `kaynaklar`a EŞİTTİR.
+
+    Eşitlik ÇİFT YÖNLÜ ölçülür: eksik taraf da fazla taraf da düşer. Tek yönlü
+    bir kapı (`⊆`) "üç kaynakta gördüm" diyen bir satırın tek iddia göstermesine
+    izin verirdi ve o satır motorda hâlâ ÜÇ kaynaklık çoğunluk sayardı.
+    """
+    eksik = _denetim_hatasi(
+        _denetim_satiri(**{"kaynak-iddialari": "K1#1", "kaynaklar": "1,2"})
+    )
+    assert "tutarlı" in eksik
+    fazla = _denetim_hatasi(
+        _denetim_satiri(
+            **{"kaynak-iddialari": "K1#1, K2#4", "kaynaklar": "1", "sınıf": "tekil"}
+        )
+    )
+    assert "tutarlı" in fazla
+
+
+# ─── KAYNAK PROFİLİ: düz yazıdan TABLOYA, `resmi` TİPLİ (K-126'nın ayağı) ───
+
+
+def test_kaynak_profili_basligi_matches_pinned_contract_header() -> None:
+    olculen = _pinli_baslik_hucreleri(
+        _pinli("hakem-denetci-gorevi.md"), "3) KAYNAK PROFİLİ"
+    )
+    assert olculen == auditors._KAYNAK_PROFIL_BASLIK_HUCRELERI
+
+
+def test_kaynak_profili_resmi_degerleri_pinli_sozlesmeden_olculur() -> None:
+    """`resmi` kapalı kümesi sözleşmenin kendi cümlesinden okunur."""
+    metin = _pinli("hakem-denetci-gorevi.md")
+    eslesme = re.search(
+        r"`resmi` sütunu `(\w+)` ya da `([\wıİğĞşŞçÇöÖüÜ]+)`", metin
+    )
+    assert eslesme is not None, "sözleşmede `resmi` kapalı kümesi bulunamadı"
+    assert eslesme.groups() == auditors.RESMI_DEGERLERI
+
+
+def test_validate_report_returns_parsed_source_profile() -> None:
+    """Profil TİPLİ okunur: resmîlik yargısı artık motorun görebileceği yerde."""
+    sonuc = _dogrula(_rapor_metni())
+    assert sonuc.rapor is not None, sonuc.errors
+    profil = sonuc.rapor.kaynak_profili
+    assert [p.kaynak for p in profil] == [1, 2, 3]
+    assert [p.resmi for p in profil] == [True, False, False]
+    assert profil[0].not_metni.startswith("Mevzuat")
+
+
+def _profil_hatasi(satirlar: list[str]) -> str:
+    sonuc = _dogrula(_rapor_metni(profil=_kaynak_profili_bolumu(satirlar)))
+    assert sonuc.rapor is None, "bozuk profil tablosu rapor ÜRETMEMELİ"
+    return " · ".join(sonuc.errors)
+
+
+@pytest.mark.parametrize(
+    "satir,iz",
+    [
+        ("| 1 | belki | Not. |", "resmi"),
+        ("| 1 | EVET | Not. |", "resmi"),
+        ("| 1 |  | Not. |", "resmi"),
+        ("| bir | evet | Not. |", "kaynak"),
+        ("| 0 | evet | Not. |", "kaynak"),
+        ("| 1 | evet |  |", "not"),
+    ],
+    ids=["kapali-kume", "buyuk-harf", "bos", "sayi-degil", "sifir", "notsuz"],
+)
+def test_kaynak_profili_hucre_sozlesmesi(satir: str, iz: str) -> None:
+    assert iz in _profil_hatasi([satir])
+
+
+def test_kaynak_profili_kaynak_numarasi_tekrar_edemez() -> None:
+    """Numara KİMLİKTİR: aynı kaynağa iki resmîlik yargısı çözülemez.
+
+    Motor K-126 istisnasını kaynak numarasından çözer; tekrar eden numara
+    "hangi yargı geçerli" sorusunu sessiz bir seçime çevirirdi.
+    """
+    hatalar = _profil_hatasi(
+        ["| 1 | evet | Not. |", "| 1 | hayır | Başka not. |"]
+    )
+    assert "TEKRAR" in hatalar
+
+
+def test_kaynak_profili_tablosuz_rapor_reddedilir() -> None:
+    """Düz yazı profil ARTIK geçmez — sözleşme tabloyu dayatıyor."""
+    sonuc = _dogrula(
+        _rapor_metni(profil="KAYNAK-1 disiplini yeterli; KAYNAK-2 yerel değil.")
+    )
+    assert sonuc.rapor is None
+    assert any("KAYNAK PROFİLİ" in hata for hata in sonuc.errors), sonuc.errors
 
 
 def test_empty_cell_matrix_covers_the_gates_own_column_list() -> None:
@@ -1556,21 +1741,21 @@ def test_empty_cell_matrix_covers_the_gates_own_column_list() -> None:
 
 def test_audit_table_rejects_unordered_sources() -> None:
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | 2,1 | 2-3 | — | al | Tek cümle. |"
+        _denetim_satiri(**{"kaynaklar": "2,1"})
     )
     assert "artan" in hatalar
 
 
 def test_audit_table_rejects_repeated_sources() -> None:
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | 1,1 | 2-3 | — | al | Tek cümle. |"
+        _denetim_satiri(**{"kaynaklar": "1,1"})
     )
     assert "artan" in hatalar
 
 
 def test_audit_table_rejects_source_number_out_of_range() -> None:
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | 1,4 | 2-3 | — | al | Tek cümle. |"
+        _denetim_satiri(**{"kaynaklar": "1,4"})
     )
     assert "kaynak numarası" in hatalar
 
@@ -1578,14 +1763,14 @@ def test_audit_table_rejects_source_number_out_of_range() -> None:
 def test_audit_table_rejects_ratio_contradicting_source_count() -> None:
     """`2-3` diyorsa kaynak hücresinde İKİ numara olmak zorunda."""
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | 1 | 2-3 | — | al | Tek cümle. |"
+        _denetim_satiri(**{"kaynak-iddialari": "K1#1", "kaynaklar": "1"})
     )
     assert "sınıf" in hatalar
 
 
 def test_audit_table_rejects_tekil_with_two_sources() -> None:
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | 1,2 | tekil | — | al | Tek cümle. |"
+        _denetim_satiri(**{"sınıf": "tekil"})
     )
     assert "tekil" in hatalar
 
@@ -1593,7 +1778,14 @@ def test_audit_table_rejects_tekil_with_two_sources() -> None:
 def test_audit_table_rejects_celiski_with_single_source() -> None:
     """Tek kaynak KENDİSİYLE çelişemez — sözleşmenin kendi hükmü."""
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | 2 | çelişki | — | açık-soru | Tek cümle. |"
+        _denetim_satiri(
+            **{
+                "kaynak-iddialari": "K2#4",
+                "kaynaklar": "2",
+                "sınıf": "çelişki",
+                "öneri": "açık-soru",
+            }
+        )
     )
     assert "çelişki" in hatalar
 
@@ -1604,8 +1796,9 @@ def test_audit_table_accepts_celiski_with_two_sources() -> None:
         _rapor_metni(
             denetim=_denetim_bolumu(
                 [
-                    "| 1 | cta_kaliplari | iddia | 1,2 | çelişki | — | açık-soru "
-                    "| Tek cümle. |"
+                    _denetim_satiri(
+                        **{"sınıf": "çelişki", "öneri": "açık-soru"}
+                    )
                 ]
             )
         )
@@ -1616,7 +1809,7 @@ def test_audit_table_accepts_celiski_with_two_sources() -> None:
 
 def test_audit_table_rejects_recommendation_outside_closed_set() -> None:
     hatalar = _denetim_hatasi(
-        "| 1 | cta_kaliplari | iddia | 1,2 | 2-3 | — | belki | Tek cümle. |"
+        _denetim_satiri(**{"öneri": "belki"})
     )
     assert "öneri" in hatalar
 
@@ -1627,8 +1820,8 @@ def test_audit_table_rejects_non_increasing_row_numbers() -> None:
         _rapor_metni(
             denetim=_denetim_bolumu(
                 [
-                    "| 2 | cta_kaliplari | iddia | 1,2 | 2-3 | — | al | Tek cümle. |",
-                    "| 1 | kanca_kaliplari | iddia | 1,2 | 2-3 | — | al | Tek cümle. |",
+                    _denetim_satiri(**{"no": "2"}),
+                    _denetim_satiri(**{"no": "1", "alan": "kanca_kaliplari"}),
                 ]
             )
         )
@@ -1637,9 +1830,10 @@ def test_audit_table_rejects_non_increasing_row_numbers() -> None:
     assert "artan" in " · ".join(sonuc.errors)
 
 
-def test_audit_table_rejects_row_without_eight_columns() -> None:
+def test_audit_table_rejects_a_row_with_too_few_columns() -> None:
+    """Sütun SAYISI sözleşmeden okunur — mesaj da o sayıyı söyler."""
     hatalar = _denetim_hatasi("| 1 | cta_kaliplari | iddia | 1,2 | 2-3 | al |")
-    assert "sekiz" in hatalar
+    assert f"{len(auditors._DENETIM_BASLIK_HUCRELERI)} sütunlu değil" in hatalar
 
 
 def test_audit_table_rejects_a_wholly_empty_row() -> None:
@@ -1655,8 +1849,8 @@ def test_audit_table_rejects_a_wholly_empty_row() -> None:
         _rapor_metni(
             denetim=_denetim_bolumu(
                 [
-                    "| 1 | cta_kaliplari | iddia | 1,2 | 2-3 | — | al | Tek cümle. |",
-                    "|  |  |  |  |  |  |  |  |",
+                    _denetim_satiri(),
+                    "|" + "  |" * len(auditors._DENETIM_BASLIK_HUCRELERI),
                 ]
             )
         )
@@ -1681,10 +1875,9 @@ def test_audit_table_rejects_a_different_header_row() -> None:
     sonuc = _dogrula(
         _rapor_metni(
             denetim=(
-                "| no | alan | iddia | kaynaklar | sınıf | bayraklar | öneri "
-                "| gerekçe |\n"
-                "|---|---|---|---|---|---|---|---|\n"
-                "| 1 | cta_kaliplari | iddia | 1,2 | 2-3 | — | al | Tek cümle. |"
+                DENETIM_BASLIGI.replace("iddia-özeti", "iddia")
+                + "\n"
+                + _denetim_satiri()
             )
         )
     )

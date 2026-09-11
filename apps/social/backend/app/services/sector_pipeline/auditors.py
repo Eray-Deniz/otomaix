@@ -224,10 +224,21 @@ _AYIRAC_HUCRESI_RE = re.compile(r"^:?-{2,}:?$")
 
 _ENVANTER_BASLIK_HUCRELERI = ("unit_id", "statu", "kanit", "gerekce")
 _URL_BASLIK_HUCRELERI = ("iddia", "kaynak", "sonuç", "not")
+_KAYNAK_PROFIL_BASLIK_HUCRELERI = ("kaynak", "resmi", "not")
+RESMI_DEGERLERI = ("evet", "hayır")
+"""`resmi` sütununun KAPALI kümesi — sözleşmenin kendi yazımı.
+
+K-123'ün resmîlik yargısı denetçide YAPILIYORDU ama serbest düzyazıya gömülüydü
+ve K-126'nın tek-kaynak istisnası onu hiç göremiyordu (motor bir AND koşulunun
+tek ayağını ölçebiliyor, öbürünü ölçemiyordu). 2026-09-11'de sözleşme profili
+TABLOYA çevirdi (dış depo `12beec1`); yargı artık TİPLİ taşınıyor.
+"""
+
 _DENETIM_BASLIK_HUCRELERI = (
     "no",
     "alan",
     "iddia-özeti",
+    "kaynak-iddialari",
     "kaynaklar",
     "sınıf",
     "bayraklar",
@@ -286,13 +297,143 @@ class UrlCheck:
     not_metni: str
 
 
+_KAYNAK_IDDIA_RE = re.compile(r"^K(\d+)#(\d+)$")
+
+
+@dataclass(frozen=True, order=True)
+class KaynakIddiasi:
+    """Bir ARAŞTIRMA İDDİASININ kimliği: `K<kaynak>#<iddia>`.
+
+    Numaranın sağ yarısı araştırma raporunun Bölüm C tablosundaki `no`
+    sütunudur (`brief_doctor.CIddia`). Bu tip, denetçinin *"hangi iddiaya
+    baktım"* beyanı ile sentezin *"yeni kalıbı hangi iddiadan türettim"*
+    beyanını AYNI üst kaynağa çivileyen bağın taşıyıcısıdır.
+    """
+
+    kaynak: int
+    iddia: int
+
+    @property
+    def etiket(self) -> str:
+        return f"K{self.kaynak}#{self.iddia}"
+
+
+def kaynak_iddialari_coz(ham: str) -> tuple[KaynakIddiasi, ...] | None:
+    """`K1#3, K2#7` → tipli demet; biçim bozuksa `None` (fail-closed).
+
+    TEK kuraldır ve İKİ yerde çağrılır: denetçinin `kaynak-iddialari` sütunu ve
+    sentezin `kaynak_iddia` alanı. İki ayrı ayrıştırıcı yazılsaydı bağın iki
+    ucu farklı biçimleri kabul edebilir, yani bağ sessizce gevşerdi.
+
+    Sözleşme yazımı KAPALIDIR: virgülle ayrılmış, ARTAN, tekrarsız; düzyazı,
+    ayraç, "hepsi"/"tümü" ya da boş hücre YOK. Artan-tekrarsız şartı biçimsel
+    bir titizlik değil: aynı numaranın iki kez geçmesi ya da sıranın bozulması,
+    kümenin `kaynaklar` sütunuyla karşılaştırılmasını sessizce kaydırırdı.
+
+    **SIRA kuralı da BURADA yaşar, çağıranda değil.** İlk yazımda sıralama
+    denetçi sütununda ayrıca ölçülüyordu; sentezin `kaynak_iddia` alanı AYNI
+    ayrıştırıcıyı çağırdığı hâlde o kuralı MİRAS ALMIYORDU — bağın iki ucu
+    farklı biçimleri kabul ediyordu, yani bağ sessizce gevşiyordu.
+    """
+    if not ham.strip():
+        return None
+    parcalar = [parca.strip() for parca in ham.split(",")]
+    iddialar: list[KaynakIddiasi] = []
+    for parca in parcalar:
+        eslesme = _KAYNAK_IDDIA_RE.match(parca)
+        if eslesme is None:
+            return None
+        kaynak, iddia = int(eslesme.group(1)), int(eslesme.group(2))
+        if not 1 <= kaynak <= AZAMI_KAYNAK or iddia < 1:
+            return None
+        iddialar.append(KaynakIddiasi(kaynak=kaynak, iddia=iddia))
+    if iddialar != sorted(set(iddialar)):
+        return None
+    return tuple(iddialar)
+
+
+@dataclass(frozen=True)
+class KaynakProfili:
+    """KAYNAK PROFİLİ satırı — kaynak numarası, RESMÎLİK yargısı, not."""
+
+    kaynak: int
+    resmi: bool
+    not_metni: str
+
+
+def _kaynak_profili(govde: str) -> tuple[tuple[KaynakProfili, ...], list[str]]:
+    """KAYNAK PROFİLİ'ni TİPLİ satırlara çevirir (çıktı sözleşmesi 3).
+
+    **Kapsam sınırı, dürüst etiket (R6).** Sözleşme *"denetime giren HER
+    kaynak için TEK satır"* der; bu imza koşunun YETKİLİ kaynak sayısını
+    GÖRMEZ (tek rapor okunur), dolayısıyla burada yalnız satırların kendi iç
+    tutarlılığı ölçülür — numara aralığı, tekrarsızlık, kapalı küme, dolu not.
+    "Her kaynak kapsandı mı" sorusu bu katmanda CEVAPLANMAZ.
+    """
+    errors: list[str] = []
+    ham = _tablo_satirlari(govde, _KAYNAK_PROFIL_BASLIK_HUCRELERI)
+    if not ham:
+        errors.append(
+            "KAYNAK PROFİLİ boş ya da sözleşmenin başlık satırını taşımıyor "
+            f"({' | '.join(_KAYNAK_PROFIL_BASLIK_HUCRELERI)}): profil 2026-09-11'de "
+            "düz yazıdan TABLOYA çevrildi — `resmi` sütunu K-126 tek-kaynak "
+            "istisnasının ayağıdır ve düz yazıdan okunamaz"
+        )
+        return (), errors
+    satirlar: list[KaynakProfili] = []
+    gorulen: set[int] = set()
+    for sira, hucreler in enumerate(ham, start=1):
+        if len(hucreler) != len(_KAYNAK_PROFIL_BASLIK_HUCRELERI):
+            errors.append(
+                f"kaynak profili satırı {sira} "
+                f"{len(_KAYNAK_PROFIL_BASLIK_HUCRELERI)} sütunlu değil: {hucreler}"
+            )
+            continue
+        kaynak_h, resmi_h, not_h = hucreler
+        if not kaynak_h.isdigit() or not 1 <= int(kaynak_h) <= AZAMI_KAYNAK:
+            errors.append(
+                f"kaynak profili satırı {sira}: `kaynak` sütunu 1..{AZAMI_KAYNAK} "
+                f"aralığında bir numara olmalı, {kaynak_h!r} yazılmış"
+            )
+            continue
+        kaynak = int(kaynak_h)
+        if kaynak in gorulen:
+            errors.append(
+                f"kaynak profili satırı {sira}: `kaynak` {kaynak} TEKRAR ediyor "
+                "— numara kimliktir, aynı kaynağa iki resmîlik yargısı çözülemez"
+            )
+            continue
+        if resmi_h not in RESMI_DEGERLERI:
+            errors.append(
+                f"kaynak profili satırı {sira}: `resmi` kapalı kümenin dışında: "
+                f"{resmi_h!r} — {list(RESMI_DEGERLERI)} (emin değilsen "
+                f"{RESMI_DEGERLERI[1]!r}; iyimser doldurma K-126 kapısını "
+                "sessizce açar)"
+            )
+            continue
+        if not not_h:
+            errors.append(
+                f"kaynak profili satırı {sira}: `not` hücresi BOŞ — sözleşme "
+                "2-3 cümle ister (disiplin · yerellik · özgüllük · tutarlılık)"
+            )
+            continue
+        gorulen.add(kaynak)
+        satirlar.append(
+            KaynakProfili(
+                kaynak=kaynak, resmi=resmi_h == RESMI_DEGERLERI[0], not_metni=not_h
+            )
+        )
+    return tuple(satirlar), errors
+
+
 @dataclass(frozen=True)
 class AuditRow:
-    """DENETİM TABLOSU satırı — SEKİZ sütun (çıktı sözleşmesi 1)."""
+    """DENETİM TABLOSU satırı — sözleşmenin SABİT sütun kümesi (çıktı 1)."""
 
     no: int
     alan: str
     iddia_ozeti: str
+    kaynak_iddialari: frozenset[KaynakIddiasi]
     kaynaklar: frozenset[int]
     sinif: str
     bayraklar: str
@@ -335,11 +476,22 @@ def _denetim_tablosu(govde: str) -> tuple[tuple[AuditRow, ...], list[str]]:
     for sira, hucreler in enumerate(ham, start=1):
         if len(hucreler) != len(_DENETIM_BASLIK_HUCRELERI):
             errors.append(
-                f"denetim tablosu satırı {sira} sekiz sütunlu değil "
+                f"denetim tablosu satırı {sira} "
+                f"{len(_DENETIM_BASLIK_HUCRELERI)} sütunlu değil "
                 f"({' | '.join(_DENETIM_BASLIK_HUCRELERI)}): {hucreler}"
             )
             continue
-        no_h, alan, iddia, kaynak_h, sinif, bayraklar, oneri, gerekce = hucreler
+        (
+            no_h,
+            alan,
+            iddia,
+            iddia_atiflari_h,
+            kaynak_h,
+            sinif,
+            bayraklar,
+            oneri,
+            gerekce,
+        ) = hucreler
 
         if not no_h.isdigit() or int(no_h) < 1:
             errors.append(
@@ -396,6 +548,33 @@ def _denetim_tablosu(govde: str) -> tuple[tuple[AuditRow, ...], list[str]]:
             )
             continue
 
+        # ATIF ADAYA BAĞLANIR (dış depo `12beec1`). Bu sütun raporu kısaltmak
+        # için değil BAĞ kurmak için vardır: sentez yeni bir kalıbı pakete
+        # sokarken hangi araştırma iddiasından türettiğini yazar, motor da
+        # denetçinin AYNI iddiayı gösterdiğini burada doğrular.
+        iddia_atiflari = kaynak_iddialari_coz(iddia_atiflari_h)
+        if iddia_atiflari is None:
+            errors.append(
+                f"denetim tablosu satırı {sira}: `kaynak-iddialari` sütunu "
+                f"YALNIZ `K<kaynak>#<iddia>` taşır — virgülle ayrılmış, ARTAN, "
+                f"tekrarsız; {iddia_atiflari_h!r} yazılmış. Düzyazı, ayraç, "
+                "'hepsi', bozuk sıra ya da boş hücre satırı hiçbir adaya "
+                "bağlamaz ve ona dayanan `ekle` kararı UYGULANMAZ"
+            )
+            continue
+        # İKİ SÜTUN TUTARLI OLMAK ZORUNDA (sözleşmenin kendi cümlesi) ve
+        # eşitlik ÇİFT YÖNLÜ ölçülür. Tek yönlü bir kapı ("⊆") üç kaynakta
+        # gördüğünü söyleyen bir satırın tek iddia göstermesine izin verirdi;
+        # o satır motorda hâlâ ÜÇ kaynaklık çoğunluk sayardı.
+        if {atif.kaynak for atif in iddia_atiflari} != set(numaralar):
+            errors.append(
+                f"denetim tablosu satırı {sira}: `kaynak-iddialari` ile "
+                f"`kaynaklar` tutarlı değil ({iddia_atiflari_h!r} ↔ "
+                f"{kaynak_h!r}) — geçen kaynak numaralarının kümesi EŞİT olmak "
+                "zorundadır"
+            )
+            continue
+
         sinif_hatasi = _sinif_kaynakla_tutarli_mi(sira, sinif, numaralar)
         if sinif_hatasi is not None:
             errors.append(sinif_hatasi)
@@ -414,6 +593,7 @@ def _denetim_tablosu(govde: str) -> tuple[tuple[AuditRow, ...], list[str]]:
                 no=no,
                 alan=alan,
                 iddia_ozeti=iddia,
+                kaynak_iddialari=frozenset(iddia_atiflari),
                 kaynaklar=frozenset(numaralar),
                 sinif=sinif,
                 bayraklar=bayraklar,
@@ -468,6 +648,7 @@ class AuditReport:
     ham_metin: str
     bolumler: Mapping[str, str]
     denetim_tablosu: tuple[AuditRow, ...]
+    kaynak_profili: tuple[KaynakProfili, ...]
     yeniden_dogrulama: tuple[InventoryRow, ...]
     url_orneklem: tuple[UrlCheck, ...]
     unit_snapshot_sha: str
@@ -477,7 +658,7 @@ class AuditReport:
         # `validate_report`'un KAPISIDIR; yapımdan sonra anahtar eklemek/silmek
         # o kapıyı geçmiş bir raporu kapıdan geçmemiş hâle çevirirdi.
         object.__setattr__(self, "bolumler", identity.donmus(self.bolumler))
-        # İki dizi alanı DA kopyalanır ve ÖĞE TİPLERİ sınanır. Anotasyon çalışma
+        # DİZİ alanlarının HEPSİ kopyalanır ve ÖĞE TİPLERİ sınanır. Anotasyon çalışma
         # zamanında hiçbir şey yapmaz; çağıran liste verirse takma ad paylaşılır
         # ve kapıdan geçmiş envanter yapımdan SONRA değiştirilebilirdi.
         # `identity.donmus` burada KULLANILAMAZ: `InventoryRow`/`UrlCheck`
@@ -485,6 +666,7 @@ class AuditReport:
         # (kural 5 -> TypeError).
         for _alan, _tip in (
             ("denetim_tablosu", AuditRow),
+            ("kaynak_profili", KaynakProfili),
             ("yeniden_dogrulama", InventoryRow),
             ("url_orneklem", UrlCheck),
         ):
@@ -1225,6 +1407,8 @@ def validate_report(
     errors.extend(denetim_hatalari)
     kontroller, url_hatalari = _url_orneklemi(bolumler[BOLUM_ANAHTARLARI[1]])
     errors.extend(url_hatalari)
+    profil, profil_hatalari = _kaynak_profili(bolumler[BOLUM_ANAHTARLARI[2]])
+    errors.extend(profil_hatalari)
     satirlar, envanter_hatalari = _envanter(
         bolumler[BOLUM_ANAHTARLARI[4]], unit_snapshot
     )
@@ -1238,6 +1422,7 @@ def validate_report(
             ham_metin=text,
             bolumler=bolumler,
             denetim_tablosu=denetim,
+            kaynak_profili=profil,
             yeniden_dogrulama=satirlar,
             url_orneklem=kontroller,
             unit_snapshot_sha=identity.canonical_sha(unit_snapshot),

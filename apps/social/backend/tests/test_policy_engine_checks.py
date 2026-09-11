@@ -25,6 +25,7 @@ Beş sözleşme burada pinlenir:
 from __future__ import annotations
 
 import hashlib
+from unittest import mock
 from pathlib import Path
 from dataclasses import fields as dataclass_fields
 
@@ -73,12 +74,31 @@ BEKLENEN_GIRDI_ALANLARI = (
     "denetci_envanterleri",
     "mekanik_eleme",
     "takvim_anahtarlari",
+    "takvim_kategorileri",
     "otomatik_kapilar",
 )
 
 MEVZUAT_ALANI = "yasaklar_ve_hassasiyetler"
 
 TAKVIM_ANAHTARI = "cumhuriyet-bayrami"
+SISTEM_KATEGORISI = "national"
+"""Sistem takviminin bu gün için yazdığı kategori — ÖLÇÜLMÜŞ değer kümesinden.
+
+`social.public_holidays.category` bugün üç değer taşıyor: `religious` ·
+`national` · `commercial` (2026-09-11, yerel veritabanında sayıldı).
+"""
+MEVCUT_DONEM_ADI = "Cumhuriyet Bayramı"
+YENI_DONEM_ADI = "Sevgililer Günü"
+YENI_DONEM_ANAHTARI = "sevgililer-gunu"
+"""Araştırmanın Bölüm C'de yazdığı DÖNEM ADI — sistem anahtarının slug'ı DEĞİL.
+
+Sözleşme (`_SABLON.md` Bölüm C): *"`alan/dönem` hücresi ya Bölüm A alan adıdır
+ya da Bölüm B dönem adıdır (`Sevgililer Günü` gibi) — aynen o yazımla"*. Karar
+satırı ise `ozel_gun` taşır ve dönemi `oge_yolu`nun slug'ında saklar; ikisinin
+bağı bu yüzden NORMALİZASYONLA kurulur. Değerler ÖLÇÜLDÜ:
+`normalize_special_day_key('Cumhuriyet Bayramı')` → `cumhuriyet-bayrami` ve
+`normalize_special_day_key('Sevgililer Günü')` → `sevgililer-gunu`.
+"""
 
 
 # ═══ İçerik kurucuları ═════════════════════════════════════════════════════
@@ -150,6 +170,7 @@ def _gunluk(
     degis: dict[str, dict] | None = None,
     ek: tuple[dict, ...] = (),
     dus: tuple[str, ...] = (),
+    denetim=None,
 ) -> list[dict]:
     """Yaşayan her yola bir satır (varsayılan `koru`) + istenen ek satırlar."""
     harita = KIMLIKLER if kimlikler is None else kimlikler
@@ -170,9 +191,32 @@ def _gunluk(
             "aktor": "sentez",
         }
         satir.update((degis or {}).get(yol, {}))
+        _kaynak_iddiasini_tamamla(satir, denetim)
         satirlar.append(satir)
     satirlar.extend(ek)
     return satirlar
+
+
+def _kaynak_iddiasini_tamamla(satir: dict, denetim=None) -> None:
+    """`ekle` satırına `kaynak_iddia`'yı TÜRETİR — testi yazan elle yazmasın.
+
+    Sentez sözleşmesi 2.2 bu alanı `ekle` satırında ZORUNLU kılar. Fixture'lar
+    onu elle taşısaydı, alanı ölçmeyen onlarca test bu turda tek tek
+    düzenlenirdi ve her biri bir yazım hatası adayı olurdu. Türetme, bağın
+    KURULU hâlini üretir: `kanit`teki D# referansının gösterdiği denetçi
+    satırının `kaynak-iddialari` sütunu. Bağı BOZAN vakalar alanı AÇIKÇA verir.
+    """
+    if satir.get("karar") != "ekle" or "kaynak_iddia" in satir:
+        return
+    etiketler: set[str] = set()
+    for parca in str(satir.get("kanit") or "").split(","):
+        parca = parca.strip()
+        for denetci_satiri in DENETIM_TABLOSU if denetim is None else denetim:
+            if parca in (f"D1#{denetci_satiri.no}", f"D2#{denetci_satiri.no}"):
+                etiketler |= {
+                    atif.etiket for atif in denetci_satiri.kaynak_iddialari
+                }
+    satir["kaynak_iddia"] = ", ".join(sorted(etiketler))
 
 
 AKTIF_GUNLUK = _gunluk(AKTIF_ICERIK)
@@ -227,8 +271,18 @@ def _denetim_satiri(
     alan: str = "kanca_kaliplari",
     oneri: str = "al",
     bayraklar: str = "—",
+    kaynak_iddialari: set[auditors.KaynakIddiasi] | None = None,
 ) -> auditors.AuditRow:
-    """Tek denetim satırı. `sinif` verilmezse kaynak sayısından TÜRETİLİR."""
+    """Tek denetim satırı. `sinif` verilmezse kaynak sayısından TÜRETİLİR.
+
+    `kaynak-iddialari` da verilmezse TÜRETİLİR: satır kimliği `no` ile aynı
+    numaralı iddiaya, her kaynaktan bir tane. Fixture'ın sözleşmenin tutarlılık
+    kuralına (geçen kaynak kümesi = `kaynaklar`) kendiliğinden uyması için.
+    """
+    if kaynak_iddialari is None:
+        kaynak_iddialari = {
+            auditors.KaynakIddiasi(kaynak=k, iddia=no) for k in kaynaklar
+        }
     if sinif is None:
         sinif = (
             auditors.SINIF_TEKIL
@@ -239,6 +293,7 @@ def _denetim_satiri(
         no=no,
         alan=alan,
         iddia_ozeti=f"iddia {no}",
+        kaynak_iddialari=frozenset(kaynak_iddialari),
         kaynaklar=frozenset(kaynaklar),
         sinif=sinif,
         bayraklar=bayraklar,
@@ -277,13 +332,14 @@ BAYRAKLI = "D1#6"
 
 
 def _rapor(
-    rol: str, *, statuler=None, ornekle=None, denetim=None
+    rol: str, *, statuler=None, ornekle=None, denetim=None, profil=None
 ) -> auditors.AuditReport:
     return auditors.AuditReport(
         denetci=rol,
         ham_metin=f"{rol} ham raporu",
         bolumler={ad: f"{ad} govdesi" for ad in auditors.BOLUM_ANAHTARLARI},
         denetim_tablosu=DENETIM_TABLOSU if denetim is None else denetim,
+        kaynak_profili=KAYNAK_PROFILI if profil is None else profil,
         yeniden_dogrulama=_envanter(statuler),
         url_orneklem=_ornekle() if ornekle is None else ornekle,
         unit_snapshot_sha=AKTIF_GORUNTU_SHA,
@@ -299,6 +355,7 @@ def _bos_gorunti_cifti(*, kaynak_sha=None, denetim=None):
             ham_metin=f"{rol} ham raporu",
             bolumler={ad: f"{ad} govdesi" for ad in auditors.BOLUM_ANAHTARLARI},
             denetim_tablosu=DENETIM_TABLOSU if denetim is None else denetim,
+            kaynak_profili=KAYNAK_PROFILI,
             yeniden_dogrulama=(),
             url_orneklem=_ornekle(),
             unit_snapshot_sha=sha,
@@ -316,7 +373,7 @@ def _bos_gorunti_cifti(*, kaynak_sha=None, denetim=None):
 
 def _cift(
     *, statuler_1=None, statuler_2=None, ornekle_1=None, ornekle_2=None,
-    denetim=None, kaynak_sha=None,
+    denetim=None, kaynak_sha=None, profil_1=None, profil_2=None,
 ):
     """`ValidatedAuditPair` — TEK üreticisinden (mutabakat kapısı) geçerek."""
     mutabakat = auditors.check_snapshot_agreement(
@@ -327,6 +384,7 @@ def _cift(
                     statuler=statuler_1,
                     ornekle=ornekle_1,
                     denetim=denetim,
+                    profil=profil_1,
                 ),
                 (),
             ),
@@ -336,6 +394,7 @@ def _cift(
                     statuler=statuler_2,
                     ornekle=ornekle_2,
                     denetim=denetim,
+                    profil=profil_2,
                 ),
                 (),
             ),
@@ -357,7 +416,56 @@ def _kaynak_seti_sha(kapi: bd.RoundGate) -> str:
     return bd.kaynak_seti_sha(kapi.raporlar)
 
 
-def _gecen_kapi() -> bd.RoundGate:
+def _profil(*resmi: bool) -> tuple[auditors.KaynakProfili, ...]:
+    """Denetçinin RESMÎLİK yargısı — K-126 istisnasının motordaki birinci ayağı."""
+    return tuple(
+        auditors.KaynakProfili(
+            kaynak=no, resmi=deger, not_metni="Kaynak profili notu."
+        )
+        for no, deger in enumerate(resmi, start=1)
+    )
+
+
+KAYNAK_PROFILI = _profil(False, False)
+"""VARSAYILAN profil: hiçbir kaynak resmî DEĞİL.
+
+Bilinçli olarak KAPALI taraftan kurulur. K-126 istisnası açıkken varsayılanı
+"resmî" yapmak, çoğunluk kapısını ölçen onlarca testi sessizce istisna koluna
+kaydırırdı — sayımı ölçtüğünü sanan bir test aslında istisnayı ölçerdi.
+İstisnayı ölçen testler profili AÇIKÇA verir.
+"""
+
+
+# Araştırma iddiaları: `K<kaynak>#<iddia>` evreni mekanik kapının
+# raporlarından TÜRER (kaynak numarası KONUMDAN gelir — motorun kendi kuralı).
+# Numaralar DENETİM_TABLOSU'nun satır numaralarıyla hizalı tutulur ki fixture
+# okunur kalsın: `D1#4` başka alanın satırıysa `K1#4` da başka alanın iddiasıdır.
+YENI_DONEM_IDDIA_NO = 101
+MEVCUT_DONEM_IDDIA_NO = 102
+"""Dönem iddialarının numaraları — denetim tablosu satır numaralarıyla ÇAKIŞMAZ."""
+
+
+def _arastirma_iddialari(denetim=None) -> tuple[bd.CIddia, ...]:
+    """Araştırma raporunun Bölüm C iddiaları — DENETİM TABLOSUNDAN türetilir.
+
+    Hizalama fixture'ı okunur kılar ve GERÇEĞE de uyar: denetçi satırı hangi
+    alanı anlatıyorsa, dayandığı araştırma iddiası da o alanı anlatır. Elle
+    yazılmış bir evren, tabloya satır ekleyen her testte sessizce eksik kalırdı.
+
+    İki DÖNEM iddiası ayrıca eklenir: Görev B bağı (`ozel_gun` kararı ↔ dönem
+    adı) tablo satırlarından türetilemez, çünkü denetçi alanı `ozel_gun/...`
+    yazımındadır, araştırma ise dönem ADINI yazar.
+    """
+    tablo = DENETIM_TABLOSU if denetim is None else denetim
+    iddialar = {satir.no: satir.alan for satir in tablo}
+    iddialar[YENI_DONEM_IDDIA_NO] = YENI_DONEM_ADI
+    iddialar[MEVCUT_DONEM_IDDIA_NO] = MEVCUT_DONEM_ADI
+    return tuple(
+        bd.CIddia(no=no, alan=alan) for no, alan in sorted(iddialar.items())
+    )
+
+
+def _gecen_kapi(denetim=None) -> bd.RoundGate:
     return bd.gate_round(
         [
             bd.DoctorReport(
@@ -366,6 +474,7 @@ def _gecen_kapi() -> bd.RoundGate:
                 elemeler=(),
                 kaynak_adi=ad,
                 icerik_ozeti=_ozet(ad),
+                iddialar=_arastirma_iddialari(denetim),
             )
             for ad in (DOGRULANMIS_KAYNAK, IKINCI_KAYNAK)
         ]
@@ -398,6 +507,7 @@ def _girdi(
     denetim=None,
     kapi: bd.RoundGate | None = None,
     takvim: frozenset[str] | None = None,
+    kategoriler: dict[str, str] | None = None,
     kapilar: engine.GateResults | None = None,
     cikarmalar: tuple = (),
 ) -> engine.EngineInputs:
@@ -407,7 +517,7 @@ def _girdi(
     # Kapı DEĞİŞTİYSE çiftin taşıdığı kaynak kimliği de o kapıdan türer: koşu
     # bağı kapısı fixture'ın kendi tutarsızlığını değil, ÜRETİM tutarsızlığını
     # ölçmelidir (kapının kendisi ayrı bir testte ölçülür).
-    mekanik = _gecen_kapi() if kapi is None else kapi
+    mekanik = _gecen_kapi(denetim) if kapi is None else kapi
     varsayilan_cift = (
         _cift(kaynak_sha=_kaynak_seti_sha(mekanik), denetim=denetim)
         if aktif
@@ -426,6 +536,9 @@ def _girdi(
         denetci_envanterleri=varsayilan_cift if cift is None else cift,
         mekanik_eleme=mekanik,
         takvim_anahtarlari=frozenset({TAKVIM_ANAHTARI}) if takvim is None else takvim,
+        takvim_kategorileri=(
+            {TAKVIM_ANAHTARI: SISTEM_KATEGORISI} if kategoriler is None else kategoriler
+        ),
         otomatik_kapilar=(
             engine.GateResults(katman1_passed=True, tek_aktif_ihlali=False)
             if kapilar is None
@@ -506,6 +619,7 @@ def test_engine_inputs_rejects_inconsistent_unit_count() -> None:
             denetci_envanterleri=_cift(),
             mekanik_eleme=_gecen_kapi(),
             takvim_anahtarlari=frozenset({TAKVIM_ANAHTARI}),
+            takvim_kategorileri={TAKVIM_ANAHTARI: SISTEM_KATEGORISI},
             otomatik_kapilar=engine.GateResults(True, False),
         )
 
@@ -936,19 +1050,39 @@ def test_unverified_plain_item_emits_no_legislation_finding() -> None:
 def _ekle_girdisi(
     *,
     kanit: str,
+    kaynak_iddia: str | None = None,
     metin: str = "Yeni kanca kalibi",
     ornekle=None,
     cikarmalar=(),
     denetim=None,
     kaynak_sha=None,
     kapi=None,
+    profil_1=None,
+    profil_2=None,
 ):
     aday = _tam_icerik(kanca_kaliplari=[KORUNAN_KANCA, CIKARILACAK_KANCA, metin])
     harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
     yeni_yol = _yol(aday, "kanca_kaliplari", metin)
     gunluk = _gunluk(
-        aday, kimlikler=harita, degis={yeni_yol: {"karar": "ekle", "kanit": kanit}}
+        aday,
+        kimlikler=harita,
+        degis={
+            yeni_yol: (
+                {"karar": "ekle", "kanit": kanit}
+                if kaynak_iddia is None
+                else {
+                    "karar": "ekle",
+                    "kanit": kanit,
+                    "kaynak_iddia": kaynak_iddia,
+                }
+            )
+        },
+        denetim=DENETIM_TABLOSU if denetim is None else denetim,
     )
+    # Mekanik kapı ile çiftin taşıdığı kaynak kimliği AYNI kapıdan türer:
+    # denetim tablosu değişince iddia evreni de değişir ve evren mühre girer
+    # (`kaynak_seti_sha`), yani sabit bir hash koşu bağı kapısını düşürürdü.
+    mekanik = _gecen_kapi(denetim) if kapi is None else kapi
     return _girdi(
         icerik=aday,
         gunluk=gunluk,
@@ -956,9 +1090,13 @@ def _ekle_girdisi(
             ornekle_1=ornekle,
             ornekle_2=ornekle,
             denetim=denetim,
-            kaynak_sha=_kaynak_seti_sha(kapi) if kapi is not None else kaynak_sha,
+            profil_1=profil_1,
+            profil_2=profil_2,
+            kaynak_sha=(
+                _kaynak_seti_sha(mekanik) if kaynak_sha is None else kaynak_sha
+            ),
         ),
-        kapi=kapi,
+        kapi=mekanik,
         cikarmalar=cikarmalar,
     )
 
@@ -1024,6 +1162,186 @@ def test_a_reference_to_another_field_is_not_applied() -> None:
     sonuc = engine.run_checks(_ekle_girdisi(kanit=BASKA_ALAN))
     assert "referans-uyusmuyor" in _sebepler(sonuc)
     assert "cogunluk-yok" not in _sebepler(sonuc)
+
+
+# ── Atıf ADAYA bağlanır: iki uçlu iddia bağı (dış depo `12beec1`) ─────────
+#
+# Yetkilendirme bağı 2026-09-11'e kadar ALAN düzeyindeydi: `kanca_kaliplari`
+# hakkındaki HERHANGİ bir denetçi satırı, o listeye giren HERHANGİ bir kalıbı
+# yetkilendirebiliyordu. Aynı eksen üç hakem turunda üç varyant üretti; varyant
+# yamamak bırakıldı ve sınıf, üç beyanı da AYNI üst kaynağa — araştırma
+# iddiasının numarasına — çivileyerek kapatıldı.
+
+
+def test_an_addition_without_a_claim_reference_is_not_applied() -> None:
+    """Sentez sözleşmesi 2.2: `kaynak_iddia` `ekle` satırında ZORUNLU."""
+    sonuc = engine.run_checks(_ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia=""))
+    assert "kaynak-iddia-yok" in _sebepler(sonuc)
+
+
+@pytest.mark.parametrize(
+    "deger", ["hepsi", "K1", "1#1", "K1#1 K2#1", "K2#1, K1#1", "K1#1, K1#1"],
+    ids=["duzyazi", "iddiasiz", "kaynaksiz", "ayracsiz", "azalan", "tekrar"],
+)
+def test_a_malformed_claim_reference_is_not_applied(deger: str) -> None:
+    """Biçim KAPALI — ayrıştırıcı denetçi sütunuyla AYNI, ikinci kural yok."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia=deger)
+    )
+    assert "kaynak-iddia-yok" in _sebepler(sonuc)
+
+
+def test_a_claim_that_is_not_in_the_research_is_not_applied() -> None:
+    """(a) ayağı: numaranın gösterdiği satır araştırmada GERÇEKTEN olmalı."""
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#404")
+    )
+    assert "iddia-arastirmada-yok" in _sebepler(sonuc)
+
+
+def test_a_claim_about_another_field_is_not_applied() -> None:
+    """(a) ayağının İKİNCİ yarısı: iddianın ALANI kararla örtüşmek zorunda.
+
+    `K1#4` araştırmada VARDIR ama `cta_kaliplari` hakkındadır; `kanca_kaliplari`
+    eklemesi ona dayanamaz. Varlık kontrolü tek başına bırakılsaydı kapatılan
+    sınıf bir basamak aşağıda aynen sürerdi.
+    """
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#4")
+    )
+    assert "iddia-arastirmada-yok" in _sebepler(sonuc)
+
+
+def test_a_claim_the_cited_auditor_row_does_not_carry_is_not_applied() -> None:
+    """(b) ayağı: `kanit`teki denetçi satırı AYNI numarayı taşımalı.
+
+    `K1#2` araştırmada vardır ve alanı da örtüşür — ama atıf yapılan satır
+    (`D1#1`) kendi `kaynak-iddialari` sütununda `K1#1` yazmıştır. Tek uçlu bir
+    bağ burada geçerdi: iki beyanı da AYNI model yazar, üçüncü taraf (denetçinin
+    tipli sütunu) olmadan zincir kapanmaz.
+    """
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#2")
+    )
+    assert "iddia-denetcide-yok" in _sebepler(sonuc)
+
+
+def test_the_two_ended_claim_link_passes_when_both_ends_hold() -> None:
+    """POZİTİF KONTROL: bağın iki ucu da duruyorsa karar UYGULANIR.
+
+    Bu kol olmadan yukarıdaki beş test "kapı her şeyi reddediyor" hâliyle de
+    yeşil kalırdı.
+    """
+    sonuc = engine.run_checks(
+        _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#1, K2#1")
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_the_claim_link_gates_are_separately_measurable() -> None:
+    """MUTASYON: her ayak AYRI sökülür; komşusu ayakta kalır.
+
+    Tek kaba mutasyon üç kapıyı birden düşürür ve hangisinin gerçekten
+    çalıştığını AYIRT ETMEZ.
+    """
+    bozuk = _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#404")
+    assert "iddia-arastirmada-yok" in _sebepler(engine.run_checks(bozuk))
+    with mock.patch.object(engine, "_arastirma_iddialari", lambda inputs: {}):
+        # Evren boşalırsa (a) ayağı HER atfı düşürür — kapı gerçekten o
+        # evrenden okuyor.
+        temiz = _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#1, K2#1")
+        assert "iddia-arastirmada-yok" in _sebepler(engine.run_checks(temiz))
+    with mock.patch.object(
+        engine, "_iddia_alani_bagli_mi", lambda karar, yol, iddia: True
+    ):
+        # Alan bağı sökülünce BAŞKA alanın iddiası geçer; (b) ayağı hâlâ ayakta
+        # olduğu için sebep `iddia-denetcide-yok`a kayar, karar YİNE uygulanmaz.
+        baska = _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#4")
+        assert "iddia-denetcide-yok" in _sebepler(engine.run_checks(baska))
+
+
+# ── Görev B: bağ ALANA değil O DÖNEME kurulur ─────────────────────────────
+
+
+def _ozel_gun_ekle_girdisi(*, kaynak_iddia: str):
+    """`ozel_gun` alanına yeni bir kanca ekleyen karar.
+
+    Denetçi satırı Görev B yazımındadır (`ozel_gun/{dönem}/{başlık}`), araştırma
+    iddiası ise DÖNEM ADINI taşır (`Cumhuriyet Bayramı`) — sözleşmenin kendi
+    iki ayrı yazımı. Bağ bu yüzden normalizasyonla kurulur.
+    """
+    aday = _tam_icerik()
+    aday["ozel_gun"] = {
+        **aday["ozel_gun"],
+        YENI_DONEM_ANAHTARI: {
+            "tur": "kutlama",
+            "mesaj_ekseni": "Hediye secimi ekseni",
+            "kanca": "Sevgiliye ozel vitrin",
+            "cta": "Hediyenizi secmek icin ugrayin",
+            "gorsel_vurgu": "Kirmizi kadife ve altin",
+        },
+    }
+    harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
+    yeni_yollar = sorted(
+        yol
+        for yol in identity.enumerate_content_units(aday)
+        if yol.startswith(f"ozel_gun/{YENI_DONEM_ANAHTARI}/")
+    )
+    assert yeni_yollar, "fixture yeni dönem birimi ÜRETMEDİ"
+    tablo = DENETIM_TABLOSU + (
+        _denetim_satiri(
+            7,
+            kaynaklar={1, 2},
+            sinif="2-2",
+            alan=f"ozel_gun/{YENI_DONEM_ANAHTARI}/kanca",
+            kaynak_iddialari={
+                auditors.KaynakIddiasi(kaynak=1, iddia=YENI_DONEM_IDDIA_NO),
+                auditors.KaynakIddiasi(kaynak=2, iddia=YENI_DONEM_IDDIA_NO),
+            },
+        ),
+    )
+    gunluk = _gunluk(
+        aday,
+        kimlikler=harita,
+        degis={
+            yol: {
+                "karar": "ekle",
+                "kanit": "D1#7",
+                "kaynak_iddia": kaynak_iddia,
+            }
+            for yol in yeni_yollar
+        },
+        denetim=tablo,
+    )
+    mekanik = _gecen_kapi(tablo)
+    return _girdi(
+        icerik=aday,
+        gunluk=gunluk,
+        cift=_cift(denetim=tablo, kaynak_sha=_kaynak_seti_sha(mekanik)),
+        kapi=mekanik,
+        takvim=frozenset({TAKVIM_ANAHTARI, YENI_DONEM_ANAHTARI}),
+    )
+
+
+def test_a_special_day_claim_binds_to_that_period() -> None:
+    """POZİTİF: dönem adı kararın `oge_yolu` slug'ıyla NORMALİZE eşleşiyor."""
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}")
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_a_claim_about_another_period_does_not_authorise() -> None:
+    """BAŞKA dönemin iddiası bu dönemi yetkilendirmez.
+
+    Bu, kapatılan sınıfın bir basamak aşağısıdır: `ozel_gun` alanına bakan bir
+    bağ, `Sevgililer Günü` iddiasını `Cumhuriyet Bayramı` kancasına
+    yetkilendirirdi.
+    """
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{MEVCUT_DONEM_IDDIA_NO}")
+    )
+    assert "iddia-arastirmada-yok" in _sebepler(sonuc)
 
 
 def test_a_negative_recommendation_blocks_the_addition() -> None:
@@ -1202,31 +1520,189 @@ def test_a_non_contradiction_row_with_two_sources_emits_no_open_question() -> No
     assert "acik_soru" not in _siniflar(sonuc)
 
 
-def test_single_source_exception_is_closed_until_officiality_is_typed() -> None:
-    """K-126 İKİ koşulu BİRLİKTE ister; biri ölçülemiyorsa istisna İŞLEMEZ.
+# ── K-126 tek-kaynak istisnası: İKİ ayak BİRLİKTE (spec §9.4) ─────────────
+#
+# İstisna 2026-09-11'e kadar KAPALIYDI ve bu bilinçliydi: resmîlik yargısı
+# denetçinin serbest düzyazısına gömülüydü, motor onu göremiyordu ve bir AND
+# koşulunun tek ayağını zorlamak istisnayı canlı HER kaynağa açardı. Denetçi
+# sözleşmesi 2.2 KAYNAK PROFİLİ'ni tabloya çevirip `resmi` sütununu ekledi;
+# yargı artık TİPLİ taşınıyor ve kapı ÇALIŞIYOR.
 
-    Canlı ve içerikçe uyumlu bir URL (ikinci ayak) TEK BAŞINA yetmez: kaynağın
-    resmî/birincil olduğu (K-123, birinci ayak) tipli girdide taşınmıyor. Bir
-    AND koşulunun tek ayağını zorlamak istisnayı canlı HER kaynağa açardı.
 
-    Tipli okumadan SONRA da kapalıdır: tek kaynaklı denetçi satırının yanına
-    canlı bir URL konması sayıyı değiştirmez.
-    """
-    canli = engine.run_checks(
-        _ekle_girdisi(kanit=f"{TEK_KAYNAKLI}, {DOGRULANMIS_URL}")
+def _tek_kaynak_girdisi(*, profil_1=None, profil_2=None, ornekle=None):
+    """Tek kaynaklı `ekle` (D1#2, yalnız `KAYNAK-1`) — çoğunluk tabanın ALTINDA."""
+    return _ekle_girdisi(
+        kanit=TEK_KAYNAKLI,
+        profil_1=profil_1,
+        profil_2=profil_2,
+        ornekle=ornekle,
     )
-    assert "cogunluk-yok" in _sebepler(canli)
 
+
+def test_single_source_exception_opens_when_both_legs_hold() -> None:
+    """POZİTİF: kaynak RESMÎ + canlı URL doğrulaması → kalıp GİRER."""
+    sonuc = engine.run_checks(
+        _tek_kaynak_girdisi(profil_1=_profil(True, False), profil_2=_profil(True, False))
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_single_source_exception_stays_closed_without_officiality() -> None:
+    """İkinci ayak TEK BAŞINA yetmez: canlı URL resmîlik KANITI değildir."""
+    sonuc = engine.run_checks(_tek_kaynak_girdisi())
+    assert "cogunluk-yok" in _sebepler(sonuc)
+
+
+def test_single_source_exception_stays_closed_without_a_live_url() -> None:
+    """Birinci ayak TEK BAŞINA da yetmez — AND koşulunun öteki yarısı ölçülür."""
     olu = engine.run_checks(
-        _ekle_girdisi(
-            kanit=f"{TEK_KAYNAKLI}, {DOGRULANMIS_URL}",
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False),
+            profil_2=_profil(True, False),
             ornekle=_ornekle(uyumlu=False),
         )
     )
     assert "cogunluk-yok" in _sebepler(olu)
+    erisilemeyen = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False),
+            profil_2=_profil(True, False),
+            ornekle=_ornekle(erisildi=False),
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(erisilemeyen)
+
+
+def test_a_contested_officiality_judgement_does_not_open_the_exception() -> None:
+    """ÇEKİŞMELİ yargı istisnayı AÇMAZ — fail-closed.
+
+    Bir denetçi `evet`, öteki `hayır` diyorsa yargı çekişmelidir. Sözleşme
+    *"emin değilsen `hayır` yaz — iyimser doldurma kapıyı sessizce açar"* der;
+    şüpheyi iyimserlikle susturmak o hükmü tersine çevirirdi. Nicelik ayrımı
+    UYDURMA değil: spec ikinci ayak için AÇIKÇA "en az bir denetçi" der,
+    birinci ayak için demez.
+    """
+    sonuc = engine.run_checks(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False), profil_2=_profil(False, False)
+        )
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)
+
+
+def test_an_absent_officiality_judgement_does_not_open_the_exception() -> None:
+    """Yargı HİÇ yazılmamışsa istisna AÇILMAZ — sessizlik `evet` değildir."""
+    sonuc = engine.run_checks(
+        _tek_kaynak_girdisi(profil_1=(), profil_2=())
+    )
+    assert "cogunluk-yok" in _sebepler(sonuc)
+
+
+def test_the_exception_does_not_apply_to_a_two_source_addition() -> None:
+    """BOŞ-KÜME kontrol kolu: istisna yalnız TEK kaynaklı kolda çağrılır.
+
+    İki kaynaklı ekleme zaten tabanı karşılar; istisna oraya hiç uğramaz —
+    yoksa kapı "her şeyi geçiriyor" hâliyle de yeşil görünürdü.
+    """
+    assert engine._tek_kaynak_istisnasi(
+        _tek_kaynak_girdisi(
+            profil_1=_profil(True, False), profil_2=_profil(True, False)
+        ),
+        {"KAYNAK-1", "KAYNAK-2"},
+    ) is False
 
 
 # ═══ 11. Kontrol: bayrak tüketimi ═════════════════════════════════════════
+
+
+# ── K-03: paket tür etiketi ↔ SİSTEM KATEGORİSİ (spec §11.2) ──────────────
+
+
+def _kategorili_girdi(*, paket_turu: str, kategori: str):
+    """Özel günün tür etiketi ve sistem kategorisi AYRI AYRI kurulur."""
+    aday = _tam_icerik()
+    gun = dict(aday["ozel_gun"][TAKVIM_ANAHTARI])
+    gun["tur"] = paket_turu
+    aday["ozel_gun"] = {TAKVIM_ANAHTARI: gun}
+    return _girdi(
+        icerik=aday,
+        gunluk=_gunluk(aday, kimlikler=_kimlik_haritasi(AKTIF_ICERIK, aday)),
+        kategoriler={TAKVIM_ANAHTARI: kategori},
+    )
+
+
+def _catismalar(sonuc) -> tuple:
+    return sonuc.olcumler["kategori_cakismalari"]
+
+
+# ÜRETİLMİŞ MATRİS: iki sözlüğün ORTAK ekseni (ticari mi değil mi) üstünde TAM
+# çarpım. Elle seçilmiş örnek, kuralın çift yönlü olduğunu KANITLAMAZ.
+_KATEGORI_MATRISI = tuple(
+    (kategori, tur, (kategori == "commercial") != (tur == "ticari-firsat"))
+    for kategori in ("commercial", "national", "religious")
+    for tur in ("ticari-firsat", "kutlama", "anma")
+)
+
+
+@pytest.mark.parametrize(
+    "kategori,tur,catisir",
+    _KATEGORI_MATRISI,
+    ids=[f"{k}-{t}" for k, t, _ in _KATEGORI_MATRISI],
+)
+def test_tur_kategori_catismasi_iki_yonlu_olculur(
+    kategori: str, tur: str, catisir: bool
+) -> None:
+    """Çelişki ÇİFT YÖNLÜDÜR — kural 'ikisi çeliştiğinde' der, yön seçmez."""
+    sonuc = engine.run_checks(_kategorili_girdi(paket_turu=tur, kategori=kategori))
+    assert bool(_catismalar(sonuc)) is catisir, _catismalar(sonuc)
+
+
+def test_tur_kategori_matrisi_iki_kolu_da_tasiyor() -> None:
+    """TABAN: matris hem çelişen hem çelişmeyen vaka üretiyor mu?"""
+    assert len(_KATEGORI_MATRISI) == 9
+    assert sum(1 for *_, c in _KATEGORI_MATRISI if c) == 4
+    assert sum(1 for *_, c in _KATEGORI_MATRISI if not c) == 5
+
+
+@pytest.mark.parametrize("kategori", ["commercial", "national", "religious"])
+def test_karma_tur_hicbir_kategoriyle_catismaz(kategori: str) -> None:
+    """`karma` iki ekseni birden taşır — hiçbir kategoriyle çelişemez."""
+    sonuc = engine.run_checks(_kategorili_girdi(paket_turu="karma", kategori=kategori))
+    assert _catismalar(sonuc) == ()
+
+
+def test_kategorisiz_gun_hakkinda_hicbir_sey_iddia_edilmez() -> None:
+    """Etiketsiz gün davranışı K-15(a) kapsamında AÇIK — burada uydurulmaz."""
+    sonuc = engine.run_checks(_kategorili_girdi(paket_turu="ticari-firsat", kategori=""))
+    assert _catismalar(sonuc) == ()
+
+
+def test_tur_kategori_catismasi_karar_gunlugune_NOT_olarak_yazilir() -> None:
+    """K-03: çatışma kayda geçer — ama içerik DEĞİŞMEZ, paket türü üstündür.
+
+    Blok hâline getirmek K-03'ün kendi hükmünü tersine çevirirdi; bu yüzden
+    ölçüm İKİ ayaklıdır: not ÜRETİLİR **ve** karar uygulanmama listesi BOŞ kalır.
+    """
+    sonuc = engine.run_checks(
+        _kategorili_girdi(paket_turu="ticari-firsat", kategori="national")
+    )
+    notlar = [n for n in sonuc.notlar if n["sinif"] == "tur-kategori-catismasi"]
+    assert len(notlar) == 1, sonuc.notlar
+    assert TAKVIM_ANAHTARI in notlar[0]["gerekce"]
+    assert "PAKET TÜRÜ üstündür" in notlar[0]["gerekce"]
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_tur_revizyonu_kategori_catismasindan_AYRI_olculur() -> None:
+    """İki ölçüm ayrı adlandırılır çünkü ayrı şeylerdir (checkpoint 9, orta)."""
+    sonuc = engine.run_checks(
+        _kategorili_girdi(paket_turu="ticari-firsat", kategori="national")
+    )
+    assert sonuc.olcumler["paket_turu_degisiklikleri"], "tür revizyonu ölçülmedi"
+    assert _catismalar(sonuc), "kategori çatışması ölçülmedi"
+    assert (
+        sonuc.olcumler["paket_turu_degisiklikleri"] != _catismalar(sonuc)
+    )
 
 
 def test_unconsumed_flag_becomes_an_open_question() -> None:
@@ -1587,6 +2063,7 @@ def test_engine_rejects_a_mechanical_gate_from_another_run() -> None:
             denetci_envanterleri=_cift(),          # varsayılan kapının kimliği
             mekanik_eleme=baska,                   # BAŞKA koşunun kapısı
             takvim_anahtarlari=frozenset({TAKVIM_ANAHTARI}),
+            takvim_kategorileri={TAKVIM_ANAHTARI: SISTEM_KATEGORISI},
             otomatik_kapilar=engine.GateResults(
                 katman1_passed=True, tek_aktif_ihlali=False
             ),
@@ -1749,6 +2226,7 @@ def test_stale_audit_pair_is_rejected() -> None:
             denetci_envanterleri=_cift(),  # AKTIF_ICERIK'in görüntüsü — bayat
             mekanik_eleme=_gecen_kapi(),
             takvim_anahtarlari=frozenset({TAKVIM_ANAHTARI}),
+            takvim_kategorileri={TAKVIM_ANAHTARI: SISTEM_KATEGORISI},
             otomatik_kapilar=engine.GateResults(True, False),
         )
 
@@ -1779,6 +2257,11 @@ def test_eliminated_source_does_not_count() -> None:
     hizayı fail-closed zorlar); ad uzaylarını karşılaştırmak F8'in kırığıydı.
     """
     adlar = ("kuyumculuk-rehberi.md", "sektor-notlari.md", "vitrin-analizi.md")
+    # Denetçi satırı ELENEN konumu gösteriyor: iki numaradan biri düşer.
+    elenen_tablo = (
+        _denetim_satiri(1, kaynaklar={1, 2}, sinif="2-3"),
+        _denetim_satiri(2, kaynaklar={1, 3}, sinif="2-3"),
+    )
     raporlar = [
         bd.DoctorReport(
             sonuc=bd.SONUC_ELENDI if sira == 1 else bd.SONUC_GECTI,
@@ -1797,17 +2280,13 @@ def test_eliminated_source_does_not_count() -> None:
             ),
             kaynak_adi=ad,
             icerik_ozeti=_ozet(ad),
+            iddialar=_arastirma_iddialari(elenen_tablo),
         )
         for sira, ad in enumerate(adlar)
     ]
     kapi = bd.gate_round(raporlar)
     assert kapi.dur is False, "fixture kapıyı durdurmamalı — ölçülen şey SAYIM"
 
-    # Denetçi satırı ELENEN konumu gösteriyor: iki numaradan biri düşer.
-    elenen_tablo = (
-        _denetim_satiri(1, kaynaklar={1, 2}, sinif="2-3"),
-        _denetim_satiri(2, kaynaklar={1, 3}, sinif="2-3"),
-    )
     girdi = _kapili_girdi(kapi, kanit="D1#1", denetim=elenen_tablo)
     assert "cogunluk-yok" in _sebepler(engine.run_checks(girdi))
 
@@ -1947,6 +2426,7 @@ def test_auditor_row_reference_counts_as_evidence() -> None:
                 ham_metin=f"{rol} ham raporu",
                 bolumler={ad: f"{ad} govdesi" for ad in auditors.BOLUM_ANAHTARLARI},
                 denetim_tablosu=DENETIM_TABLOSU,
+                kaynak_profili=KAYNAK_PROFILI,
                 yeniden_dogrulama=_envanter_kanitli(hedef),
                 url_orneklem=_ornekle(),
                 unit_snapshot_sha=AKTIF_GORUNTU_SHA,
@@ -1959,7 +2439,7 @@ def test_auditor_row_reference_counts_as_evidence() -> None:
                 auditors.ValidatedReport(raporlar[1], ()),
             ),
             expected_snapshot_sha=AKTIF_GORUNTU_SHA,
-        expected_kaynak_sha=KAYNAK_SETI_SHA,
+            expected_kaynak_sha=KAYNAK_SETI_SHA,
         )
         assert mutabakat.gecerli, mutabakat.errors
         return mutabakat.cift
@@ -1975,6 +2455,7 @@ def test_auditor_row_reference_counts_as_evidence() -> None:
         denetci_envanterleri=_cift_kanitli(KANCA_KIMLIGI),
         mekanik_eleme=girdi.mekanik_eleme,
         takvim_anahtarlari=girdi.takvim_anahtarlari,
+        takvim_kategorileri=girdi.takvim_kategorileri,
         otomatik_kapilar=girdi.otomatik_kapilar,
     )
     assert engine.run_checks(dogru).uygulanmayan_kararlar == ()
@@ -1990,6 +2471,7 @@ def test_auditor_row_reference_counts_as_evidence() -> None:
         denetci_envanterleri=_cift_kanitli(MEVZUAT_KIMLIGI),
         mekanik_eleme=girdi.mekanik_eleme,
         takvim_anahtarlari=girdi.takvim_anahtarlari,
+        takvim_kategorileri=girdi.takvim_kategorileri,
         otomatik_kapilar=girdi.otomatik_kapilar,
     )
     assert "kanit-yok" in _sebepler(engine.run_checks(yanlis))

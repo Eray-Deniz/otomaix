@@ -234,12 +234,22 @@ def _rapor(
                 no=1,
                 alan="cta_kaliplari",
                 iddia_ozeti="iddia 1",
+                kaynak_iddialari=frozenset(
+                    {
+                        auditors.KaynakIddiasi(kaynak=1, iddia=1),
+                        auditors.KaynakIddiasi(kaynak=2, iddia=1),
+                    }
+                ),
                 kaynaklar=frozenset({1, 2}),
                 sinif="2-3",
                 bayraklar="—",
                 oneri="al",
                 gerekce="Tek cümle.",
             ),
+        ),
+        kaynak_profili=(
+            auditors.KaynakProfili(kaynak=1, resmi=True, not_metni="Asıl kaynak."),
+            auditors.KaynakProfili(kaynak=2, resmi=False, not_metni="Aktaran."),
         ),
         yeniden_dogrulama=envanter,
         url_orneklem=_dogrulanmis_ornekle() if ornekle is None else ornekle,
@@ -585,6 +595,41 @@ async def test_guncelle_preserves_unit_id(kosu, tmp_path) -> None:
     assert satir["karar"] == "guncelle"
     assert satir["unit_id"] == UNIT_KORU
     assert satir["oge_sha"] == identity.canonical_sha(yeni)
+
+
+async def test_ekle_row_carries_the_source_claim_field(kosu, tmp_path) -> None:
+    """Sentezin `kaynak_iddia` beyanı motora ULAŞIR — sessizce DÜŞMEZ.
+
+    Alan 2026-09-11'de sözleşmeye eklendi (dış depo `12beec1`) ve `ekle`
+    satırında ZORUNLUDUR; motor atfı onunla adaya bağlar. Satır kurucusu
+    isteğe bağlı alanları AD AD taşır — listeye yazılmayan alan sessizce
+    düşer ve modelin doğru yazdığı her `ekle` kararı üretimde
+    `kaynak-iddia-yok` diye reddedilirdi. Kusur KAPIYA değil TAŞIMAYA aittir
+    ve yalnız uçtan uca ölçülür.
+    """
+    yeni_metin = "Kaynak iddiali yeni kalip"
+    icerik = _tam_icerik(kanca_kaliplari=[KORUNAN_METIN, yeni_metin])
+    gunluk = _model_gunlugu(icerik, atlanan=(UNIT_CIKAR,))
+    gunluk = [s for s in gunluk if s["oge_yolu"] != "kanca_kaliplari[1]"]
+    gunluk.append(
+        _satir("cikar", UNIT_CIKAR, "kanca_kaliplari[1]", "kanca_kaliplari")
+    )
+    gunluk.append(
+        _satir(
+            "ekle",
+            "ku-999999999999",
+            "kanca_kaliplari[1]",
+            "kanca_kaliplari",
+            yerine_gecer=UNIT_CIKAR,
+            kaynak_iddia="K1#3, K2#7",
+        )
+    )
+    tur = _tur(envanter_1=_envanter((UNIT_CIKAR, "contradicted")))
+    sonuc, _ = await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, tur=tur)
+
+    ekle = [s for s in _satirlar(sonuc).values() if s["karar"] == "ekle"]
+    assert len(ekle) == 1
+    assert ekle[0]["kaynak_iddia"] == "K1#3, K2#7"
 
 
 async def test_cikar_ekle_pair_links_via_yerine_gecer(kosu, tmp_path) -> None:

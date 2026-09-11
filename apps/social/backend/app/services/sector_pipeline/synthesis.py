@@ -528,7 +528,12 @@ def _satir_kur(ham: Mapping, **zorunlu) -> dict:
         "kanit": ham.get("kanit", ""),
         "aktor": "sentez",
     }
-    for istege_bagli in ("yerine_gecer", "kapsam"):
+    # İsteğe bağlı alanlar AD AD taşınır; listeye yazılmayan alan SESSİZCE DÜŞER.
+    # `kaynak_iddia` 2026-09-11'de eklendi (sentez sözleşmesi 2.2): motor atfı
+    # onunla adaya bağlar. Listeye alınmasaydı modelin DOĞRU yazdığı her `ekle`
+    # kararı üretimde `kaynak-iddia-yok` diye reddedilirdi — kapı çalışır, taşıma
+    # kırıktır; bu ancak uçtan uca bir testle görünür.
+    for istege_bagli in ("yerine_gecer", "kapsam", "kaynak_iddia"):
         if istege_bagli in ham:
             satir[istege_bagli] = ham[istege_bagli]
     satir.update(zorunlu)
