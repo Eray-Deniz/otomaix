@@ -375,8 +375,29 @@ async def _kos_brief_doctor(conn, args) -> Sonuc:
 
 KAYNAK_KALIBI = "KAYNAK-{}.md"
 BRIEF_DOSYASI = "brief.md"
-SENTEZ_ARTEFAKTI = "sentez-sonucu"
-DENETIM_ARTEFAKTI = "denetci-raporu"
+SENTEZ_ARTEFAKTI = "synthesis"
+DENETIM_ARTEFAKTI = "review"
+"""Ham artefakt TÜRLERİ — değerler şemanın kapalı kümesinden gelir.
+
+`sector_research_artifacts.kind` migration 032'de `research` · `review` ·
+`synthesis` ile KISITLIDIR. Sabitlerin adı Türkçe kalır (hattın adımlarını
+adlandırır), DEĞERİ şemanın kabul ettiğidir; 2026-09-11'e dek Türkçe değerler
+yazılıyordu ve ilk gerçek koşumda her ham artefakt yazımı düşerdi.
+"""
+
+SEMA_DISI_ARTEFAKT_TURLERI: frozenset[str] = frozenset({"brief-doctor-raporu"})
+"""Şemanın kabul ETMEDİĞİ, bilinen ve EVİ OLAN artefakt türleri.
+
+**Dürüst etiket: ÇÖZÜLMEDİ.** Mekanik kapı raporu şemanın üç türünden hiçbirine
+oturmuyor — `research` ham araştırma çıktısıdır, `review` kör hakem raporudur
+(hazırlık listesinin "iki hakem raporu" maddesi o türü SAYAR; mekanik rapor
+oraya yazılırsa o ölçüm kirlenir), `synthesis` sentez çıktısıdır. Türü eklemek
+şema değişikliği ister.
+
+**Ev: Task 18 (ön-pilot dağıtım — şema ayağı), Eray kararı 2026-09-11.** Orada
+ya yeni tür migration ile eklenir ya da bu yazım kaldırılıp rapor koşu klasörüne
+alınır. O güne dek `brief-doctor` alt komutu ham artefakt yazımında düşer.
+"""
 
 
 def _kosu_klasoru_koku() -> Path:

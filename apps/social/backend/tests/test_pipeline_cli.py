@@ -1040,3 +1040,106 @@ async def test_olay_onayla_refuses_when_nothing_was_stamped(pkg_db):
     )
 
     assert rc == cli.RC_REFUSED
+
+
+# ═══ 5. Ham artefakt türü şemayla uyumlu mu ═════════════════════════════════
+#
+# 2026-09-11'de ÖLÇÜLDÜ: komut ailesi ham artefakt satırlarını şemanın kabul
+# etmediği türlerle yazıyordu. Canlı kısıt (`sector_research_artifacts_kind_check`,
+# migration 032) yalnız `research` · `review` · `synthesis` kabul ediyor; CLI ise
+# üç çağrı yerinde Türkçe etiketler geçiyordu. Hiçbir test o değerleri gerçek
+# veritabanına karşı koşmadığı için kusur 4134 yeşil testin altında görünmedi ve
+# ilk gerçek koşumda (Task 19) her ham artefakt yazımı düşerdi.
+#
+# Kapı SINIF düzeyindedir: tek tek seçilmiş örneği değil, CLI'deki TÜM
+# `record_artifact` çağrılarının tür argümanını ÜRETİLMİŞ olarak tarar ve izinli
+# kümeyi ŞEMANIN KENDİSİNDEN okur (ikinci bir kanonik liste yazılmaz).
+
+
+def _migration_izinli_artefakt_turleri() -> frozenset[str]:
+    """İzinli tür kümesini migration 032'nin CHECK'inden ÇIKARIR."""
+    import re
+
+    yol = BACKEND_KOKU.parents[2] / "shared/db/migrations/032_sector_packages.sql"
+    metin = yol.read_text(encoding="utf-8")
+    esles = re.search(r"kind TEXT NOT NULL CHECK \(kind IN \(([^)]*)\)\)", metin)
+    assert esles is not None, "032'de `kind` CHECK bulunamadı — kapı ölçemez"
+    return frozenset(re.findall(r"'([^']+)'", esles.group(1)))
+
+
+def _cli_artefakt_turleri() -> dict[int, str]:
+    """CLI'deki her `record_artifact` çağrısının tür argümanı — satır: değer."""
+    import ast
+
+    kaynak = (BACKEND_KOKU / "scripts/sector_pipeline_cli.py").read_text(
+        encoding="utf-8"
+    )
+    agac = ast.parse(kaynak)
+    sabitler = {
+        hedef.id: dugum.value.value
+        for dugum in ast.walk(agac)
+        if isinstance(dugum, ast.Assign) and isinstance(dugum.value, ast.Constant)
+        for hedef in dugum.targets
+        if isinstance(hedef, ast.Name) and isinstance(dugum.value.value, str)
+    }
+    sabitler.update(
+        {
+            dugum.target.id: dugum.value.value
+            for dugum in ast.walk(agac)
+            if isinstance(dugum, ast.AnnAssign)
+            and isinstance(dugum.target, ast.Name)
+            and isinstance(dugum.value, ast.Constant)
+            and isinstance(dugum.value.value, str)
+        }
+    )
+    bulunan: dict[int, str] = {}
+    for dugum in ast.walk(agac):
+        if not isinstance(dugum, ast.Call):
+            continue
+        ad = dugum.func
+        if not (isinstance(ad, ast.Attribute) and ad.attr == "record_artifact"):
+            continue
+        for anahtar in dugum.keywords:
+            if anahtar.arg != "kind":
+                continue
+            if isinstance(anahtar.value, ast.Constant):
+                bulunan[dugum.lineno] = anahtar.value.value
+            elif isinstance(anahtar.value, ast.Name):
+                bulunan[dugum.lineno] = sabitler[anahtar.value.id]
+            else:
+                raise AssertionError(
+                    f"satır {dugum.lineno}: `kind` argümanı statik olarak "
+                    "okunamıyor — kapı bu biçimi ölçemez"
+                )
+    return bulunan
+
+
+def test_cli_records_artifacts_with_schema_accepted_kinds():
+    """CLI'nin yazdığı her artefakt türü ŞEMANIN kabul ettiği kümededir."""
+    izinli = _migration_izinli_artefakt_turleri()
+    borclu = cli.SEMA_DISI_ARTEFAKT_TURLERI
+    bulunan = _cli_artefakt_turleri()
+
+    assert bulunan, "CLI'de hiç `record_artifact` çağrısı bulunamadı — kapı boşa koşuyor"
+    ihlaller = {
+        satir: tur
+        for satir, tur in bulunan.items()
+        if tur not in izinli and tur not in borclu
+    }
+    assert not ihlaller, (
+        f"şemanın kabul etmediği artefakt türü: {ihlaller} — izinli küme {sorted(izinli)}"
+    )
+
+
+def test_known_out_of_schema_artifact_kinds_are_still_used_and_still_invalid():
+    """Borç kaydı BAYATLAMAZ: kayıtlı her tür hâlâ kullanılıyor ve hâlâ şema dışı."""
+    izinli = _migration_izinli_artefakt_turleri()
+    borclu = cli.SEMA_DISI_ARTEFAKT_TURLERI
+    kullanilan = set(_cli_artefakt_turleri().values())
+
+    assert not (borclu & izinli), (
+        "borç kaydında şemanın ZATEN kabul ettiği bir tür var — kayıt bayat"
+    )
+    assert borclu <= kullanilan, (
+        f"borç kaydında artık kullanılmayan tür var: {sorted(borclu - kullanilan)}"
+    )
