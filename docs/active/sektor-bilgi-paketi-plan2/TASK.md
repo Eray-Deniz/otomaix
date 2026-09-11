@@ -1040,6 +1040,18 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Open Problems
 
+- **[YÜKSEK — EVİ VAR 2026-09-11] Mekanik kapı raporunun artefakt türü şemada YOK.**
+  Task 17 dispatch'inde ölçüldü (canlı yerel veritabanı, `sector_research_artifacts_kind_check`):
+  şema yalnız `research` · `review` · `synthesis` kabul ediyor; CLI üç yerde Türkçe etiket
+  yazıyordu ve hiçbir test o değerleri gerçek veritabanına karşı koşmadığı için kusur 4134 yeşil
+  testin altında görünmüyordu. **İki ayak `T16-fix5` ile kapandı** (`review` · `synthesis`,
+  sınıf düzeyinde AST kapısı + bayat-borç kapısı, ikisi de mutasyonla kanıtlandı).
+  **Üçüncü ayak ÇÖZÜLMEDİ:** mekanik kapı raporu üç türden hiçbirine oturmuyor — `review`'a
+  yazılırsa hazırlık listesinin "iki hakem raporu" ölçümü kirlenir. Yeni tür şema değişikliği
+  ister; o güne dek `brief-doctor` alt komutu ham artefakt yazımında DÜŞER.
+  **EV: Task 18 (ön-pilot dağıtım — şema ayağı), Eray kararı 2026-09-11.** Kod tarafındaki
+  kaydı: `scripts/sector_pipeline_cli.py::SEMA_DISI_ARTEFAKT_TURLERI`.
+
 - **[ORTA — EVİ VAR 2026-09-10] `BulguIzi`'nin dördüncü alanı arayüz ekinde SAHİPSİZ.**
   Task 14, atıf alanını (`kontrol`) Task 8 sözleşmesinin İÇİNDEN ekledi; ek `BulguIzi`'yi ÜÇ
   alanlı tanımlıyor ve Task 14'ün dosya yüzeyi yalnız `approval.py`. Bağımsız hakem R9'un
