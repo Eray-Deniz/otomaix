@@ -65,11 +65,11 @@ MADDELER: tuple[ChecklistItem, ...] = (
     ChecklistItem("md-01", "kapi", False, "Alt sektör kapsamı ve kök sektörü onaylandı"),
     ChecklistItem("md-02", "kapi", False, "Bloklayıcı politika/teknik kararlar kapatıldı"),
     ChecklistItem("md-03", "kapi", True, "Güncel brief üç araçta aynı metinle çalıştırıldı"),
-    ChecklistItem("md-04", "kapi", True, "Mekanik kapı raporu üretildi"),
+    ChecklistItem("md-04", "kapi", False, "Mekanik kapı raporu üretildi"),
     ChecklistItem("md-05", "kapi", True, "İki bağımsız ve kör hakem raporu üretildi"),
     ChecklistItem("md-06", "kapi", False, "URL örneklem kısıtları dürüstçe raporlandı"),
     ChecklistItem("md-07", "kapi", True, "Alan bazlı sentez ve karar günlüğü üretildi"),
-    ChecklistItem("md-08", "kapi", True, "Aktif paketteki bütün kalıplar için karar kapsamı tam"),
+    ChecklistItem("md-08", "kapi", False, "Aktif paketteki bütün kalıplar için karar kapsamı tam"),
     ChecklistItem("md-09", "kapi", True, "Motor şema/kanıt/mutabakat/fallback kontrollerini tamamladı"),
     ChecklistItem("md-10", "kapi", True, "Canonical diff, değişim oranları ve bariyer sonuçları üretildi"),
     ChecklistItem("md-11", "kapi", True, "Koşu sonucu activation_eligible"),
@@ -78,10 +78,10 @@ MADDELER: tuple[ChecklistItem, ...] = (
     ChecklistItem("md-14", "kapi", True, "Paketli prompt yapısal kontrolleri geçti"),
     ChecklistItem("md-15", "sinyal", False, "Kör çıktı değerlendirmesinde sektörel ayrışma gözlendi"),
     ChecklistItem("md-16", "kapi", True, "Bloklayıcı mevzuat/güvenlik uyuşmazlığı veya eksik karar yok"),
-    ChecklistItem("md-17", "kapi", True, "Post sürüm damgası doğrulandı"),
+    ChecklistItem("md-17", "kapi", False, "Post sürüm damgası doğrulandı"),
     ChecklistItem("md-18", "kapi", False, "Aktivasyon ve geri alma prosedürü test edildi"),
     ChecklistItem("md-19", "kapi", True, "Yönetici koşu özetini ve anlık görüntüyü görerek onayladı"),
-    ChecklistItem("md-20", "kapi", True, "Onay anındaki aktif sürüm motorun değerlendirdiği sürümle aynı"),
+    ChecklistItem("md-20", "kapi", False, "Onay anındaki aktif sürüm motorun değerlendirdiği sürümle aynı"),
 )
 """Spec §13.4'ün YİRMİ maddesi — KAPALI küme."""
 

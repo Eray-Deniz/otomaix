@@ -1143,3 +1143,82 @@ def test_known_out_of_schema_artifact_kinds_are_still_used_and_still_invalid():
     assert borclu <= kullanilan, (
         f"borç kaydında artık kullanılmayan tür var: {sorted(borclu - kullanilan)}"
     )
+
+
+# ═══ 6. İşletime hazırlık onayı (plan Task 17, K-69/K-70) ═══════════════════
+
+
+def test_hazirlik_onayla_requires_run_id(capsys):
+    """Koşu kimliği OLMADAN çağrılamaz — tasdik koşusuz yazılamaz."""
+    with pytest.raises(SystemExit) as cikis:
+        _args("hazirlik-onayla", "--actor", ACTOR)
+
+    assert cikis.value.code != 0
+    assert "--run-id" in capsys.readouterr().err
+
+
+async def test_hazirlik_onayla_writes_attestation(pkg_db):
+    """`--onayla` ile TEK onay kalıcı tasdike döner (F18)."""
+    from .test_readiness_checklist import _hazir_kosu
+
+    run_id = await _hazir_kosu(pkg_db)
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args("hazirlik-onayla", "--run-id", run_id, "--actor", ACTOR, "--onayla"),
+    )
+
+    assert rc == cli.RC_OK, satirlar
+    tasdik = await pkg_db.fetchval(
+        "SELECT readiness_attestation FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    )
+    assert tasdik is not None
+    assert tasdik["onaylandi"] is True
+    assert tasdik["actor"] == ACTOR
+
+
+async def test_hazirlik_onayla_without_flag_only_reports(pkg_db):
+    """Bayraksız çağrı RAPORDUR — K-70: ön-kontrol kendi kendini onaylamaz."""
+    from .test_readiness_checklist import _hazir_kosu
+
+    run_id = await _hazir_kosu(pkg_db)
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db, _args("hazirlik-onayla", "--run-id", run_id, "--actor", ACTOR)
+    )
+
+    assert rc == cli.RC_OK
+    assert satirlar, "rapor boş — operatör neyi onaylayacağını göremez"
+    assert (
+        await pkg_db.fetchval(
+            "SELECT readiness_attestation FROM social.sector_package_runs "
+            "WHERE run_id = $1",
+            run_id,
+        )
+        is None
+    )
+
+
+async def test_hazirlik_onayla_refuses_when_a_gate_item_failed(pkg_db):
+    """Otomatik ölçümü DÜŞEN kapı maddesi varken onay YAZILMAZ (fail-closed)."""
+    from .test_pipeline_writeback import _kosu, _sub_sector
+
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _kosu(pkg_db, sector_id, sonuc="no_change", hazirlik=False)
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args("hazirlik-onayla", "--run-id", run_id, "--actor", ACTOR, "--onayla"),
+    )
+
+    assert rc == cli.RC_REFUSED
+    assert any("md-11" in satir for satir in satirlar)
+    assert (
+        await pkg_db.fetchval(
+            "SELECT readiness_attestation FROM social.sector_package_runs "
+            "WHERE run_id = $1",
+            run_id,
+        )
+        is None
+    )

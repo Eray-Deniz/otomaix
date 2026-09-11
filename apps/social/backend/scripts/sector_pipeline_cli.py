@@ -52,6 +52,8 @@ from app.services.sector_pipeline import (  # noqa: E402
     engine,
     identity,
     policy_config,
+    readiness,
+    readiness_items,
     runs,
     synthesis,
     writeback,
@@ -91,6 +93,7 @@ RUN_SUBCOMMANDS: frozenset[str] = frozenset(
         "motor",
         "katman1",
         "katman2",
+        "hazirlik-onayla",
         "duzeltme-baslat",
         "yazim",
         "duzeltme-yaz",
@@ -243,6 +246,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--kosum-kimligi", required=True)
     p.add_argument("--ozet", required=True)
     p.add_argument("--actor", required=True)
+
+    p = _ekle(
+        "hazirlik-onayla",
+        "İşletime hazırlık listesini sunar; --onayla ile operatörün TEK onayını yazar.",
+    )
+    p.add_argument("--run-id", required=True)
+    p.add_argument("--actor", required=True)
+    p.add_argument(
+        "--onayla",
+        action="store_true",
+        help="Listeyi ONAYLAR ve tasdiki yazar. Verilmezse yalnız rapor basılır.",
+    )
 
     # ── Onay ve aktivasyon ──────────────────────────────────────────────
     p = _ekle("onay", "Onay görüntüsünü dondurur; kararla çağrılırsa kaydeder.")
@@ -877,6 +892,55 @@ async def _kos_katman2(conn, args) -> Sonuc:
     )
 
 
+async def _kos_hazirlik_onayla(conn, args) -> Sonuc:
+    """İşletime hazırlık listesi — K-69 kapısı, K-70 TEK onay.
+
+    Bayraksız çağrı YALNIZ rapordur: ön-kontrol kendi kendini onaylamaz.
+    `--onayla` verildiğinde önce otomatik ölçümü DÜŞEN kapı maddeleri aranır;
+    bir tanesi bile varsa tasdik YAZILMAZ (fail-closed) — operatör yanlış
+    zemine imza atmış olurdu.
+
+    `onaylandi` burada ÜRETİLMEZ: `runs.attest_readiness` onu kapı kümesinden
+    TÜRETİR. Komut yalnız kimlik kümesini ve aktörü taşır.
+    """
+    rapor = await readiness.evaluate(conn, run_id=args.run_id)
+    satirlar = [
+        f"{satir.madde_id} [{satir.sinif}/{satir.olcum}] {satir.durum}: "
+        f"{satir.baslik} — {satir.detay}"
+        for satir in rapor.satirlar
+    ]
+    bloklayan = rapor.bloklayan_kapi_maddeleri
+    satirlar.append(
+        "bloklayan kapi maddeleri: "
+        + (" · ".join(bloklayan) if bloklayan else "yok")
+    )
+    satirlar.append(
+        "elle beyan bekleyen maddeler: "
+        + (" · ".join(rapor.elle_bekleyen_maddeler) or "yok")
+    )
+
+    if not args.onayla:
+        satirlar.append("onay YAZILMADI — yazmak icin --onayla")
+        return (satirlar, RC_OK)
+
+    if bloklayan:
+        satirlar.append(
+            "onay REDDEDILDI — otomatik olcumu dusen kapi maddesi var: "
+            + " · ".join(bloklayan)
+        )
+        return (satirlar, RC_REFUSED)
+
+    await runs.attest_readiness(
+        conn,
+        run_id=args.run_id,
+        kapi_maddeleri=tuple(sorted(readiness_items.KAPI_MADDELERI)),
+        sinyal_maddeleri=tuple(sorted(readiness_items.SINYAL_MADDELERI)),
+        actor=args.actor,
+    )
+    satirlar.append("hazirlik tasdiki: yazildi")
+    return (satirlar, RC_OK)
+
+
 async def _kos_onay(conn, args) -> Sonuc:
     """Kararsız çağrı görüntüyü DONDURUR ve özeti basar; kararlı çağrı kaydeder.
 
@@ -1137,6 +1201,7 @@ GOVDELER = {
     "duzeltme-yaz": _kos_duzeltme_yaz,
     "katman1": _kos_katman1,
     "katman2": _kos_katman2,
+    "hazirlik-onayla": _kos_hazirlik_onayla,
     "onay": _kos_onay,
     "aktive-et": _kos_aktive_et,
     "deaktive-et": _kos_deaktive_et,
