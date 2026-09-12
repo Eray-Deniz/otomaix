@@ -119,10 +119,14 @@ fail-closed döner — **bu çıktının kendisi bağlantının kurulduğunu kan
   `durum --run-id 2026-09-12-yok-0001` → `koşu yok: 2026-09-12-yok-0001`
   (fail-closed çıktı, bağlantının kurulduğunun KANITI) ·
   `sector_sweep.py --dry-run` → `differences: 0`, iki marka eşlendi.
-- **KOŞULMADI — SERVİS AYAĞI.** Coolify servisi (`otomaix-social-backend`) hâlâ
-  ESKİ imajı koşuyor: bu dal push EDİLMEDİ ve deploy TETİKLENMEDİ. Yukarıdaki
+- **ERTELENDİ — SERVİS AYAĞI (Eray kararı 2026-09-12, seçenek C).** Yukarıdaki
   ölçümler CLI'yi çalışma ağacından canlı VERİTABANINA karşı koşar; canlı API'nin
   yeni kodu taşıdığını GÖSTERMEZ.
+  **ÖLÇÜLDÜ:** Coolify `api.otomaix.com` **`main` dalından** dağıtıyor; canlıdaki
+  commit `d395200` (2026-08-26) ve Plan 2'nin `sector_pipeline/` modülleri main'de
+  YOK — "deploy" demek Plan 2 kodunu dağıtmaz. Dal push EDİLDİ (`08607f8`), ama
+  Coolify o dalı izlemiyor.
+  **EV:** Task 19 — Step 11'den ÖNCE Coolify deploy'u. Adım 5 ve 6 aynı anda kapanır.
 
 ### Adım 4 — Dış sözleşme deposu
 

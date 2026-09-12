@@ -1245,6 +1245,24 @@ değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkil
 
 # Open Problems
 
+- **[ORTA — EVİ VAR 2026-09-12, Eray kararı: seçenek C] Backend SERVİSİ dağıtılmadı; Task 18'in
+  üç adımı (5 · 6 · 7) buna bağlı kaldı.** ÖLÇÜLDÜ: Coolify `api.otomaix.com` uygulaması
+  **`main` dalından** dağıtıyor; canlıda koşan commit `d395200` (2026-08-26), `origin/main` ondan
+  7 commit ileride (bu eskilik ÖNCEDEN vardı). Plan 2'nin `sector_pipeline/` modülleri main'de
+  **YOK** — yani Coolify'a "deploy" demek Plan 2 kodunu dağıtmaz. Dal main'den 254 commit ileride;
+  97 dosya, 24'ü backend uygulama kodu (`routers/calendar.py` dâhil — takvim ucunun dönem alanı
+  tam olarak bu dağıtıma bağlı).
+  **Üç yol tartışıldı:** (A) Coolify'ı geçici olarak dala yönlendir · (B) şimdi main'e merge et
+  (kalite zincirinin sırasını atlar) · (C) servis dağıtımını ertele.
+  **KARAR: C.** Gerekçe (Eray): pilotun ÜRETİM zinciri tamamen operatör CLI'sinden koşuyor ve o
+  canlı veritabanına karşı çalışıyor (ölçüldü); servise bağlı olan yalnız takvim ucu kontrolü ve
+  pilot sonundaki gözle arayüz doğrulamasıdır.
+  **EV (tarihli):** **Task 19 — Step 11'den ÖNCE Coolify deploy'u yapılır.** Step 11 zaten
+  "Eray'ın gözüyle, marka ayarları + onboarding sayfalarında" diyor ve dağıtılmış servis olmadan
+  koşamaz. Task 18 Step 5 ve 6 da aynı anda kapanır.
+  **DÜRÜST ETİKET:** Task 18 bu üç adım açıkken TAMAMLANMIŞ SAYILMAZ; "dağıtım bitti" denmez.
+
+
 - **[YÜKSEK — EVİ VAR 2026-09-12, Eray kararı] M-1: uygulama veritabanına KÖK kimlikle bağlanıyor.**
   ÖLÇÜLDÜ (036 dağıtıldıktan SONRA, M-2 gereği): API kimliği `otomaix` hem **`rolsuper=True`**
   hem dört kanıt tablosunun **sahibi**; negatif yazma denemesi tablo başına ayrı koşuldu, üçü de
