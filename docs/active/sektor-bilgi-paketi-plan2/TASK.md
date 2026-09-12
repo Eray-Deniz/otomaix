@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-11
+last-touched: 2026-09-12
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -21,7 +21,7 @@ türetildi ve pin güncellendi (`ab91495`), canlı şema dağıtımı ve ölçü
 (`6d671f6`), M-1 ve servis dağıtımı kararları tarihli evlere bağlandı (`08607f8`, `8daad2f`).
 Tam takım **4412 passed / 0 failed**; mutasyon 8/8; canlı prova 6/6 rc=0.
 **Task 18 TAMAMLANMADI:** Step 5·6·7 servis dağıtımına bağlı ve Eray kararıyla Task 19'a taşındı.
-**Sıradaki iş: Task 19 (kuyumculuk pilotu), TAZE OTURUMDA — ilk adım dört operatör kararı.**
+**2026-09-12 BEŞİNCİ OTURUM — Task 19 Step 1-4 İNDİ:** dört operatör kararı kapandı, canlıda test markası (`Deniz Kuyumculuk (TEST)`) ve `kuyumculuk` alt sektör satırı açıldı, R-35'in iki ayağı ölçüldü. Brief'in iki kusuru bulundu ve düzeltildi (GÖREV KAPSAMI 'yalnız B' → A+B · K-04b yansıtıldı), pin `abb1850`'a bump edildi (`2f9157a`). **Sıradaki iş: Task 19 Step 5 — ELLE üç araştırma koşusu; iş EMEKTE, Eray'da.**
 Gövde `# Open Problems`'ın ilk kalemlerinde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
@@ -1082,6 +1082,23 @@ Yani satır açmak mevcut markaların kök eşlemesini DEĞİŞTİRMEDİ.
 ayağı yürütücü koşar, sonucu onay kapısında Eray teyit eder. **Bu bir öneridir, karar değil**
 — Eray aksini söylerse değişir; kalıcı politika Task 20 kapanışında yazılır.
 
+## Spec-input bayat satırı (2026-09-12, Task 20 kapanış sweep'ine girdi)
+
+**Spec-input Bölüm 17 tablosu K-138 ve K-139'u hâlâ `[AÇIK]` gösteriyor.** İkisi de
+**2026-08-23'te Eray tarafından KAPATILDI** ve kararlar spec §3.3'te yazılı:
+K-138 = **KAYDEDİLİR** (araç kimliği artefakt satırının `source` alanında; kanıt zinciri
+bilgi→rapor→araç→tarih) · K-139 = **ham katman + eşlemeyi YALNIZ operatör/yönetici okur**
+(denetçiye yapısal kapalı — K-137; müşteriye kapalı — K-16). Kararlar spec-input'tan
+SONRA alındığı için o belgenin tablosuna işlenmemiş.
+
+**Ölçülen zarar:** bu bayat satır bu oturumda yürütücüyü yanılttı — K-138 "açık karar"
+sanılıp Eray'a gereksiz bir tercih sorusu soruldu (Eray itiraz etti: belgede ne yazıyorsa
+o yapılır). **Planda K-138 hiç geçmiyor** (tarandı, 0 isabet), yani plan tarafında
+bağlanmamış.
+
+**Ev:** Task 20 Step 5 (30 devredilen teknik kalemin sweep'i) — bu iki satırın statüsü
+orada düzeltilir. **Bu oturumda yapılmadı.**
+
 ## Task 10 kararları (2026-09-09)
 
 - **Hakem bulgusunun severity'si kontrolör tarafından İNDİRİLDİ — bir kez, gerekçesiyle.**
@@ -1316,6 +1333,14 @@ ayağı yürütücü koşar, sonucu onay kapısında Eray teyit eder. **Bu bir �
   onay isteğinde sessiz kayıp.
 
 # Open Problems
+
+- **[ORTA — AÇIK, EVİ VAR 2026-09-12] Canlıdaki kurgu test markasının pilottan sonraki
+  akıbeti kararlaştırılmadı.** `Deniz Kuyumculuk (TEST)` (`cb1dd79e-5ed4-452e-90cb-9ae1e88a5319`)
+  CANLI veritabanında ve Eray'ın marka listesinde görünür. Pilot bitince silinecek mi, `is_active`
+  kapatılacak mı, yoksa kalıcı regresyon markası mı olacak — üçü de savunulabilir ve karar
+  verilmedi. **Dürüst etiket: çözülmedi.** Ev: **Task 20 Step 6** (kapanış raporu — kabul edilen
+  riskler ve hâlâ açık ürün kararları listesi). Bugün düşürülmedi çünkü marka pilot boyunca
+  GEREKLİ; karar ancak pilot bitince anlamlı.
 
 - **[YÜKSEK — AÇIK, EVİ VAR 2026-09-12] Bu oturumun KOD ve ŞEMA commit'leri bağımsız hakem
   GÖRMEDİ — ve şema bu hâliyle CANLIYA indi.** Kapsam: `12d1743` (artefakt türü + kusur sınıfı

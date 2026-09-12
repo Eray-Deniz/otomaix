@@ -5,129 +5,99 @@ written: 2026-09-12
 
 # Resume From
 
-**Sıradaki iş: Task 19 (kuyumculuk pilotu) — TAZE OTURUMDA başlar (Eray kararı).**
+**Sıradaki iş: Task 19 Step 5 — üç araştırma koşusu, ELLE. İş Eray'da, yürütücüde değil.**
 
-İlk iş **Step 1: dört operatör kararını kapatmak** (K-04a–d). Dördü de "pakete ne girecek"
-kararıdır, birbirinden bağımsızdır ve tasarım bunları bilinçle Eray'a bırakmıştır. Öneriler
-`docs/research/2026-08-21-sektor-bilgi-paketi-spec-input.md` satır 2470-2473'te:
-- **K-04a** gümüş pakete girsin mi? → öneri: **girsin**
-- **K-04b** kasım indirim dönemi girsin mi? → öneri: **girmesin** (sistemde `Black Friday` adıyla)
-- **K-04c** kampanya-aciliyet istisnası tanımlansın mı? → öneri: **tanımlanmasın**
-- **K-04d** kaynaksız kültürel sahne eklentileri Faz 1'e mi? → öneri: **Faz 2**
+Eray'ın yapacağı (spec §8.1'in yazdığı hâliyle):
+1. `/root/otomaix-sosyal-medya-arastirmasi/kuyumculuk.md` dosyasının TAMAMINI üç derin
+   araştırma aracına AYRI AYRI ver — üçüne de AYNI metin.
+2. Çıktıları `KAYNAK-1.md` · `KAYNAK-2.md` · `KAYNAK-3.md` olarak kaydet
+   (**kör adlandırma dosya adından itibaren** — spec §8.1).
+3. Her kaynak için damga bilgisi: **model + sürüm + tarih** (K-80 ZORUNLU; komut tarih
+   üretmez). Araç kimliği KAYDEDİLİR (K-138 kapalı) ve yalnız operatör/yönetici okur
+   (K-139 kapalı); denetçiye yapısal olarak kapalıdır (K-137).
 
-Dördü de `Bloklamaz` etiketli ama **paket taslağı yazılmadan ÖNCE** kapanmalı.
-**Karar turu kuralı:** her `AskUserQuestion` TEK karar taşır, altına sade dille senaryo özeti.
+Çıktılar gelince yürütücü devam eder: `tur-ac` (sektör kimliği
+`7353a672-148f-4add-8920-619f05e839c7`, `--kosu-turu ilk`) → `brief-doctor` (kaynak başına,
+damgayla) → `denetim` → `sentez`. **`motor` BURADA KOŞMAZ** — Step 7'de operatörün
+YALNIZ-SENTEZ yargısı önce kaydedilir (K-134 çatalı; körlük kalibrasyonun ön koşulu).
 
 **İlk komut — tabanı gör:**
 `cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → beklenen `4412 passed`.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, **push EDİLDİ** (`08607f8`'e kadar; `8daad2f` bu
-oturumun son commit'i ve HENÜZ push edilmedi — ölç: `git rev-list --left-right --count
-origin/feat/sektor-bilgi-paketi-plan2...HEAD`).
-**Yürütme durumu:** kip `inline` · başlangıç çapası `a806e29` · defter penceresi `a806e29`.
-
-**Dış sözleşme deposu:** `/root/otomaix-sosyal-medya-arastirmasi`, HEAD `c3f0d30`,
-pin bu commit'e güncel (`shared/contracts/research-contracts.pin.json`).
-
-**Bu oturumun commit'leri (7):** `12d1743` artefakt türü + sınıf kapısı · `be538ed` F6 ·
-`ac0b896` runbook · `ab91495` pin bump · `6d671f6` canlı dağıtım kaydı · `08607f8` M-1 kararı ·
-`8daad2f` servis dağıtımı kararı.
-
-**Defter kapısı (`ec_mechanical_sweep`) rc=1 — BU COMMIT'LERDEN DEĞİL.** T18/T19/T20 henüz
-düz kimlikli (`Exec-Task: T<N>`) bir commit almadı; tamamlanan görevlerin hepsi (T1..T17) almış.
-HEAD~1'de de aynı çıktı ölçüldü. Kapı, görevler bitince kendiliğinden yeşile döner.
+**Dal:** `feat/sektor-bilgi-paketi-plan2`. **Yürütme durumu:** kip `inline` ·
+başlangıç çapası `a806e29` · defter penceresi `a806e29`.
+**Dış sözleşme deposu:** `/root/otomaix-sosyal-medya-arastirmasi`, HEAD `abb1850`
+(uzak sunucusu YOK — yalnız yerel), pin bu commit'e güncel.
 
 # Bu oturum ne yaptı — tek cümle
 
-Task 18'in canlıya dokunmayan bütün kalemlerini kapattı (artefakt türü + kusur sınıfı · F6 ·
-brief yeniden türetme · runbook), ardından Eray onayıyla canlıya **şemayı** dağıttı (prova →
-geri dönüş noktası → 035/036) ve dağıtımın üç ayağını ölçülmüş gerekçelerle tarihli evlere bağladı.
+Task 19'un ilk dört adımını indirdi (dört operatör kararı · canlıda test markası + alt sektör
+satırı · R-35'in ölçülebilen iki ayağı) ve pahalı elle adıma girmeden ÖNCE brief'te iki kusur
+buldu: brief temel paketi ATLA diyordu ve K-04b'yi yansıtmıyordu.
 
 # Verification
 
 **Bu oturumda koşulan komutlar ve TAZE çıktıları:**
 
 - Tam takım `.venv/bin/python -m pytest tests/ -q`:
-  - oturum başı tabanı → **4404 passed / 321.43s**
-  - `12d1743` sonrası → **4411 passed / 320.20s**
-  - `be538ed` sonrası → **4412 passed / 318.44s**
-  - `ab91495` sonrası → **4412 passed / 320.03s**
-  - `6d671f6` sonrası → **4412 passed / 316.20s** (hepsi 0 failed)
-- Migration dosyaları (`test_migration_036` + `032` + `032_rollback` + `object_identity`) →
-  **583 passed**. Sözleşme pin'i `test_contract_pin.py` → **32 passed**.
-- **Mutasyon 8/8:** artefakt türü ayağında 6 (CLI türü · yazıcı değişmezi · 036 genişletmesi ·
-  geri alma daraltması · Python sabiti ıraksaması · eşleşme tablosu eksilmesi), F6 ayağında 2
-  (dağılım kapısı susturuldu · kaynak başına sabit 3→2).
-- **Canlı prova (klonda):** 6 koşum, 6'sı rc=0; üç tablo VAR→YOK→VAR; `public_holidays.end_date`
-  1→0→1.
-- **Canlı uygulama:** `035` rc=0 · `036` rc=0. Geri dönüş noktası
-  `/root/otomaix-deploy-backups/canli-035-036-oncesi-20260912-145056.dump` (188 KB, 0600,
-  `pg_restore -l` ile 242 nesne okunabilir). Canlı doğrulama: beş tablo VAR · `end_date` VAR ·
-  üç tetikleyici kurulu · artefakt tür kümesi DÖRT değerli.
-- **Canlı CLI:** `--help` rc=0 · `durum --run-id <yok>` → `koşu yok: …` (bağlantının kanıtı) ·
-  `sector_sweep --dry-run` → `differences: 0`.
-- **Canlı pin:** `require_pin` sessiz dönüş = geçti. **`git` ortamı:** `git version 2.43.0`,
-  `GIT_DIR`/`GIT_WORK_TREE` set DEĞİL.
-- **Yetki ölçümü (M-2):** API kimliği `otomaix`, `rolsuper=True`, tabloların sahibi; negatif
-  yazma denemesi üç tabloda da KABUL EDİLDİ.
+  - oturum başı tabanı → **4412 passed / 318.42s / exit 0**
+  - pin bump sonrası → **4412 passed / 322.21s / exit 0** (regresyon yok)
+- `tests/test_contract_pin.py` → **32 passed**.
+- Gerçek iki depoya karşı **`require_pin` sessiz dönüş = GEÇTİ** (canlı kapı, test değil).
+- R-35 bariyer testleri (beş hedef test, ayrı ayrı adlandırılmış) → **5 passed / 0.55s**.
+- `sector_sweep.py` önce/sonra: `brands_total 3` · `root_anchored 3` · `sub_sector_rows 0→1` ·
+  `remapped 0` · `removed 0` · `added 0` · `differences 0` · **rc=0**.
+- Canlı veritabanı kimliği ÖLÇÜLDÜ (varsayılmadı): `127.0.0.1:5433/otomaix` üzerinde canlı iki
+  marka + 2026-09-12 dağıtımının dört Plan 2 tablosu.
+- Takvimde `Black Friday` satırı ÖLÇÜLDÜ: 2026-11-27, `category=commercial`.
 
 **Denenmemiş / doğrulanmamış — dürüst liste:**
 
-- **Bu oturumun hiçbir commit'i bağımsız hakem GÖRMEDİ.** Ne `/review-claude-codex` ne
-  `/security-review-claude-codex` bu dört kod/şema commit'i üzerinde koşuldu. Şema canlıya
-  hakem görmeden indi — bilinçli, Eray onaylı, ama **doğrulanmamış**.
-- **Backend SERVİSİ dağıtılmadı** → Task 18 Step 5 · 6 · 7 KOŞULMADI.
-- **Yetki KALDIRMA ayağı yapılmadı** (M-1 kararla ertelendi).
-- Uçtan uca CLI koşumu YOK; yeni sözleşme biçiminde gerçek araştırma çıktısı YOK (ilk ölçüm Task 19).
+- **R-35'in ÜÇÜNCÜ ayağı (paket İÇERİĞİ) ölçülmedi ve bugün ÖLÇÜLEMEZ** — paket içeriği yok.
+  Evi: Step 9'dan sonra, Step 10 aktivasyonundan ÖNCE. "R-35 doğrulandı" DENMEZ.
+- **Bu oturumun commit'leri bağımsız hakem GÖRMEDİ.** İkisi de docs + pin (`abb1850`,
+  `2f9157a`); yürütülebilir kod değişmedi. Önceki oturumun KOD/ŞEMA commit'lerinin hakem
+  görmemesi ayrı ve daha ağır bir kalemdir — Open Problems'ta duruyor, kapanmadı.
+- **Uçtan uca CLI koşumu YOK; yeni sözleşme biçiminde gerçek araştırma çıktısı YOK** (Step 5).
+- **Backend SERVİSİ hâlâ dağıtılmadı** — Task 18 Step 5·6·7 açık; Step 11'den ÖNCE koşulur.
+- Test markası arayüzde GÖRÜLMEDİ (marka listesi önbelleği 300 s; kod okundu, ekran değil).
+- `ec_mechanical_sweep` bu oturumda KOŞULMADI. T19 artık düz kimlikli commit aldı
+  (`2f9157a`, `Exec-Task: T19`); T20 almadı — kapı yine rc=1 verir, görevler bitince yeşile döner.
 - `ruff` / `pyright` ortamda YOK.
-- 22 tabloluk API yazma kümesi **üst sınırdır** (ithal kapanışından türetildi; "modül yükleniyor"
-  ile "fonksiyon çağrılıyor" ayrı şeyler). 4 kanıt tablosunun okuma/yazma ayrımı ise fonksiyon
-  düzeyinde ölçüldü.
 
 # Risks
 
-- **Canlı şema ileride, kod geride.** Veritabanında Plan 2 tabloları var; canlı API onları
-  tanımayan eski imajı koşuyor. **Bu tasarım gereği güvenlidir** (yeni tablolara eski kod
-  dokunmaz) ama unutulursa "neden çalışmıyor" karmaşası üretir.
-- **S-7 (critical, `accepted_risk`)** — Telegram onay/ret uçları kimliksiz; Eray kararıyla açık
-  risk kabulü, iki workflow canlıda AKTİF. Yeniden açılma koşulu: gerçek müşteri kullanımı.
+- **Canlı şema ileride, kod geride** — veritabanında Plan 2 tabloları var, canlı API onları
+  tanımayan eski imajı koşuyor. Tasarım gereği güvenli; unutulursa "neden çalışmıyor" üretir.
+- **Canlıda kurgu marka var.** `Deniz Kuyumculuk (TEST)` prod verisidir ve Eray'ın marka
+  listesinde görünür. Pilot bitince akıbeti kararlaştırılmalı — şu an evi YOK, dürüst etiket:
+  **çözülmedi, park edildi**; yeniden açılma anı Task 20 kapanışıdır.
+- **S-7 (critical, `accepted_risk`)** — Telegram onay/ret uçları kimliksiz; iki workflow canlıda
+  AKTİF. Yeniden açılma koşulu: gerçek müşteri kullanımı.
 - **S-6 (medium, kanıt boşluğu)** — takvim workflow'u SQL'i string birleştirmeyle kuruyor;
-  **Task 18 Step 7 (n8n import) o dosyayı import ediyor** → karar o adımdan önce gerekli.
-- **M-1 (yüksek)** — uygulama veritabanına KÖK kimlikle bağlanıyor; kanıt katmanının güvencesi
-  şu an yalnız Python'da. Ev: depo/anahtar temizliği turu.
+  n8n import adımı (Task 18 Step 7) o dosyayı import ediyor → karar o adımdan ÖNCE gerekli.
+- **M-1 (yüksek)** — uygulama veritabanına KÖK kimlikle bağlanıyor. Ev: depo/anahtar temizliği turu.
 - **`repo-public-exposed-live-credentials`** — depo public, anahtarlar ilk commit'ten beri açıkta.
   Ev: Plan 2 yürütmesi biter bitmez, ilk iş.
-- **İstemci/sunucu sürüm farkı** — sunucu PostgreSQL 18.3, host araçları 16.15; `pg_dump`
-  reddediyor. Döküm/klon konteyner araçlarıyla yapılır. Host'a 18 istemcisi kurulmadı.
-- Önceki oturumlardan devralınan kabul edilmiş riskler aynen (N1/1 · çok günlü bayramlar ·
-  normalize edicinin `î` düşürmesi · attest_readiness prob sonuçlarını görmez · kilit sözleşmesi ·
-  `recovered` bakım penceresi · commit geçmişi tek-commit TDD modeline uymuyor · plan hakem
-  görmeden onaylandı · kapanış turu tek-hakem kaldı).
+- **İstemci/sunucu sürüm farkı** — sunucu PostgreSQL 18.3, host araçları 16.15; döküm/klon
+  konteyner araçlarıyla yapılır.
+- Önceki oturumlardan devralınan kabul edilmiş riskler aynen.
 
 # Notes For Claude/Codex
 
-**Sonraki oturumun girdisi:** Task 19 Step 1 (dört karar) → Step 2 (test markası) → Step 3
-(alt sektör satırı) → Step 4 (kişisel veri doğrulaması) → Step 5 (K-18 yeniden üretim).
-**Step 11'den ÖNCE Coolify deploy'u** yapılır (Task 18'in 5-6-7'si orada kapanır).
-
 **Bu oturumda öğrenilenler:**
-1. **Kusur sınıfını kapatmak varyantı yamamaktan ucuz.** Artefakt türü kusuru tekil değildi;
-   aynı süreç yedi kapalı küme üretmişti ve yalnız biri korumalıydı. Tek sınıf kapısı + kapsama
-   kapısı ikisini de kapattı ve yazıldığı anda bir kalem daha buldu.
-2. **Metin okuyan kapı bir sonraki migration'a kördür.** İki kapı 032'nin satır içi CHECK
-   METNİNİ regex'liyordu; 036'nın genişletmesi ölçüme hiç girmiyordu. Kaynak kataloğa taşındı.
-3. **Fixture kusuru taşıyorsa kapı yazınca ortaya çıkar.** F6'nın dağılım kuralını üç test
-   yardımcısı ihlal ediyordu — kapı eklenince 41 test kırmızıya döndü ve kusuru gösterdi.
-4. **`git checkout` mutasyonu geri almaz, DOSYAYI geri alır.** Mutasyon testinden dönerken o
-   dosyadaki tüm yeni testler silindi. Mutasyon geri alması DOSYA YEDEĞİYLE yapılır.
-5. **İstemci sürümü sessiz bloker olabilir.** İlk prova düştü çünkü `pg_dump` 16, sunucu 18.
-   Hata "sürüm" demiyordu; zincir "döküm boş → restore boş → migration tabansız" diye ilerledi.
-6. **Dar ölçüm ile geniş ölçüm ayrı sorulara cevap verir.** "API bu tablolara yazıyor mu"
-   sorusu router'ların DOĞRUDAN referansıyla ve geçişli ithal kapanışıyla FARKLI çıktı; doğru
-   ölçüm fonksiyon düzeyindeydi. Kaba kapanış modülün YÜKLENDİĞİNİ gösterir, ÇAĞRILDIĞINI değil.
-7. **Dağıtım hedefi varsayılmaz, ölçülür.** Coolify `main` dalını izliyor; "deploy et" demek
-   Plan 2 kodunu dağıtmazdı.
+
+1. **Pilot içerik detayını mimari karara çevirme.** K-04a bir konumlandırma tradeoff'u gibi
+   sunuldu; kuyumculuk yalnız ÖRNEK sektör ve karar zaten dondurulmuş brief'te kapalıydı.
+   Eray itiraz etti. Karar sorusundan ÖNCE sözleşme ölçülür.
+2. **Spec-input bayat olabilir; spec daha yeni kararı taşır.** K-138/K-139 spec-input'ta
+   `[AÇIK]`, spec §3.3'te **2026-08-23'te KAPALI**. Yürütücü spec-input'a bakıp spec'e
+   bakmadan "açık karar" dedi ve Eray'a kendi tercihini önerdi — iki kat hata. Kayıt: TASK.md.
+3. **Pahalı elle adımdan ÖNCE girdiyi oku.** Brief'in iki kusuru ancak dosya açılınca çıktı;
+   üç aracı o hâliyle koşturmak turu çöpe atardı.
+4. **Alt sektör satırı açmak ölçülür, varsayılmaz.** `sector_sweep` önce/sonra ikilisi tam
+   eşleme listesi karşılaştırıyor; "kök bağlı kaldı" tek başına yeterli değil.
 
 **Codex çağrısı kurarken:** COMPANION + PROMPT çağıran kabukta; prompt dosyası SETUP fence
-sonrası Write ile; uzun turlar arka planda 1200 s; çağrı sonrası `rc` + koşum sayısı + son cümle
-üçünü kontrol et. Aynı oturumda ikinci uzun turdan önce kotayı TAZE ölç.
+sonrası Write ile; uzun turlar arka planda 1200 s; çağrı sonrası `rc` + koşum sayısı + son
+cümle üçünü kontrol et. Aynı oturumda ikinci uzun turdan önce kotayı TAZE ölç.
