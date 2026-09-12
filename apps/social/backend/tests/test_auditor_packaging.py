@@ -196,7 +196,7 @@ def _url_bolumu(
         # Sözleşme 2.3: ilk sütun İDDİA KİMLİĞİ (`K<kaynak>#<iddia>`), ayrı
         # kaynak sütunu yok — kaynak numarası kimliğin içindedir.
         satirlar.append(
-            f"| K{sira % 3 + 1}#{sira // 3 + 1} | https://ornek.example/{sira} | "
+            f"| K{sira // 3 + 1}#{sira % 3 + 1} | https://ornek.example/{sira} | "
             "DOĞRULANDI | tek cümle not |"
         )
     if yazilan == 0:
@@ -853,6 +853,62 @@ def test_url_sample_rows_are_parsed_into_checks() -> None:
     assert ilk.url == "https://ornek.example/0"
 
 
+def _url_bolumu_dagilimla(
+    *, kaynak_sayisi: int, dagilim: dict[int, int]
+) -> str:
+    """URL bölümünü VERİLEN kaynak→satır dağılımıyla kurar (F6 kapısı için)."""
+    beklenen = 0 if kaynak_sayisi < 2 else kaynak_sayisi * 3
+    satirlar = [
+        "| iddia | URL | sonuç | not |",
+        "| --- | --- | --- | --- |",
+    ]
+    sira = 0
+    for kaynak, adet in sorted(dagilim.items()):
+        for n in range(1, adet + 1):
+            satirlar.append(
+                f"| K{kaynak}#{n} | https://ornek.example/{sira} | "
+                "DOĞRULANDI | tek cümle not |"
+            )
+            sira += 1
+    return "\n".join(
+        [f"Kaynak sayısı: {kaynak_sayisi} — beklenen satır: {beklenen}"] + satirlar
+    )
+
+
+def test_url_sample_measures_rows_per_source_not_only_the_total() -> None:
+    """F6: TOPLAM doğru olsa da DAĞILIM bozuksa bölüm geçmez.
+
+    ÖLÇÜLEN KUSUR (attempt-3 hakem turu, `accepted_risk`, ev Task 18): kapı
+    yalnız `kaynak × 3` TOPLAMINI sayıyordu. Dokuz satırın dokuzu da `K1#…`
+    olsa geçerdi — yani tek kaynağın örneklemi üç kaynağın örneklemi gibi
+    görünürdü. Kaynak numarası artık iddia kimliğinin İÇİNDE olduğu için
+    dağılım ilk kez mekanik ölçülebilir.
+    """
+    # Toplam DOĞRU (3 kaynak × 3 = 9) ama hepsi tek kaynaktan.
+    tek_kaynak = _dogrula(
+        _rapor_metni(url=_url_bolumu_dagilimla(kaynak_sayisi=3, dagilim={1: 9}))
+    )
+    assert not tek_kaynak.gecerli
+    assert any("kaynak başına" in hata for hata in tek_kaynak.errors), tek_kaynak.errors
+
+    # Toplam DOĞRU, kaynak sayısı doğru, ama dağılım dengesiz (4+3+2).
+    dengesiz = _dogrula(
+        _rapor_metni(
+            url=_url_bolumu_dagilimla(kaynak_sayisi=3, dagilim={1: 4, 2: 3, 3: 2})
+        )
+    )
+    assert not dengesiz.gecerli
+    assert any("kaynak başına" in hata for hata in dengesiz.errors), dengesiz.errors
+
+    # POZİTİF KONTROL: her kaynağa tam üç satır → geçer.
+    dengeli = _dogrula(
+        _rapor_metni(
+            url=_url_bolumu_dagilimla(kaynak_sayisi=3, dagilim={1: 3, 2: 3, 3: 3})
+        )
+    )
+    assert dengeli.gecerli, dengeli.errors
+
+
 def test_url_basligi_matches_pinned_contract_header() -> None:
     """URL ÖRNEKLEM başlığı da pinli sözleşmeden ÖLÇÜLÜR (sözleşme 2.3).
 
@@ -872,7 +928,7 @@ def _url_satiri(iddia: str) -> str:
         "Kaynak sayısı: 2 — beklenen satır: 6\n"
         "| iddia | URL | sonuç | not |\n| --- | --- | --- | --- |\n"
         + "\n".join(
-            f"| {iddia if sira == 0 else f'K{sira % 3 + 1}#{sira // 3 + 1}'} | "
+            f"| {iddia if sira == 0 else f'K{sira // 3 + 1}#{sira % 3 + 1}'} | "
             f"https://ornek.example/{sira} | DOĞRULANDI | tek cümle not |"
             for sira in range(6)
         )

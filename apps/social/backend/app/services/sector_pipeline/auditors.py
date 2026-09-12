@@ -215,6 +215,12 @@ _URL_SONUCLARI: tuple[str, ...] = ("DOĞRULANDI", "KAYNAKTA YOK", "URL AÇILMADI
 KAYNAK_TABANI = 2
 """Sözleşmenin asgari kaynak tabanı: altına düşen koşuda örneklem hiç doldurulmaz."""
 
+URL_SATIRI_PER_KAYNAK = 3
+"""Sözleşmenin URL örneklem kuralı: KAYNAK BAŞINA üç satır.
+
+Toplam satır sayısı (`kaynak × 3`) bu kuralın SONUCUdur, kendisi değil — ikisi
+tek sabitten türer ki toplam kapısı ile dağılım kapısı ıraksayamasın."""
+
 _BOLUM_BASLIGI_RE = re.compile(
     r"^(\d)\)[ \t]+([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ ]*?)[ \t]*(?:—.*)?$", re.M
 )
@@ -1263,7 +1269,11 @@ def _url_orneklemi(govde: str) -> tuple[tuple[UrlCheck, ...], list[str]]:
 
     kaynak_sayisi = int(kaynak_e.group(1))
     beyan = int(beklenen_e.group(1))
-    kural = kaynak_sayisi * 3 if kaynak_sayisi >= KAYNAK_TABANI else 0
+    kural = (
+        kaynak_sayisi * URL_SATIRI_PER_KAYNAK
+        if kaynak_sayisi >= KAYNAK_TABANI
+        else 0
+    )
     if beyan != kural:
         errors.append(
             f"URL örneklem beyanı kuralla çelişiyor: {kaynak_sayisi} kaynak "
@@ -1329,7 +1339,41 @@ def _url_orneklemi(govde: str) -> tuple[tuple[UrlCheck, ...], list[str]]:
             f"{kaynak_sayisi} kaynak → {kural} satır beklenir, "
             f"{len(ham_satirlar)} yazılmış"
         )
+    else:
+        errors.extend(_url_dagilimi(kontroller, kaynak_sayisi))
     return tuple(kontroller), errors
+
+
+def _url_dagilimi(
+    kontroller: list[UrlCheck], kaynak_sayisi: int
+) -> list[str]:
+    """KAYNAK BAŞINA satır sayısı — toplam doğru olsa da dağılım bozuk olabilir.
+
+    **ÖLÇÜLEN KUSUR (attempt-3 hakem turu F6).** Kapı yalnız `kaynak × 3`
+    TOPLAMINI sayıyordu: dokuz satırın dokuzu da `K1#…` olsa geçerdi ve tek
+    kaynağın örneklemi üç kaynağın örneklemi gibi görünürdü. Sözleşme "kaynak
+    başına 3 satır" der; toplam o kuralın SONUCUdur, kendisi değil.
+
+    Bu ölçüm ancak iddia kimliği kaynak numarasını TAŞIDIĞI için mümkün
+    (sözleşme 2.3); eski biçimde satırın hangi kaynağa ait olduğu makine
+    tarafından bilinemiyordu.
+    """
+    if kaynak_sayisi < KAYNAK_TABANI:
+        return []
+    sayim: dict[int, int] = {}
+    for kontrol in kontroller:
+        sayim[kontrol.iddia.kaynak] = sayim.get(kontrol.iddia.kaynak, 0) + 1
+
+    sapan = {k: n for k, n in sayim.items() if n != URL_SATIRI_PER_KAYNAK}
+    if len(sayim) != kaynak_sayisi or sapan:
+        dokum = ", ".join(f"K{k}:{n}" for k, n in sorted(sayim.items())) or "<boş>"
+        return [
+            f"URL örneklem dağılımı kuralla çelişiyor: kaynak başına "
+            f"{URL_SATIRI_PER_KAYNAK} satır beklenir ve {kaynak_sayisi} ayrı "
+            f"kaynak yazılmalıdır; yazılan dağılım {dokum} — toplam doğru olsa "
+            "da tek kaynağın örneklemi çok kaynak gibi görünür"
+        ]
+    return []
 
 
 def _envanter(

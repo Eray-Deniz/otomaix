@@ -146,7 +146,7 @@ def _url_bolumu(kaynak_sayisi: int = 2, *, ortam_kisiti: bool = False) -> str:
     satirlar = ["| iddia | URL | sonuç | not |", "| --- | --- | --- | --- |"]
     for sira in range(beklenen):
         satirlar.append(
-            f"| K{sira % 3 + 1}#{sira // 3 + 1} | https://ornek.example/{sira} | "
+            f"| K{sira // 3 + 1}#{sira % 3 + 1} | https://ornek.example/{sira} | "
             "DOĞRULANDI | tek cümle not |"
         )
     if beklenen == 0 or ortam_kisiti:
