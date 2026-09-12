@@ -842,13 +842,27 @@ TELEGRAM_APPROVAL_AUTH_HEADER = "X-Telegram-Approval-Key"
 TELEGRAM_APPROVAL_WEBHOOK_PATH = "telegram-content-approval"
 
 
+def _telegram_approval_kanali_hazir() -> bool:
+    """Kanal yapılandırılmış mı? Mutasyondan ÖNCE sorulur."""
+    from app.core.config import settings
+
+    return bool(settings.N8N_TELEGRAM_APPROVAL_SECRET)
+
+
 async def _notify_telegram_approval(payload: dict) -> None:
-    """Telegram onay webhook'una fire-and-forget bildirim gönder.
+    """Telegram onay webhook'una bildirim gönderir; BAŞARISIZLIK İSTİSNA ile bildirilir.
 
     **Kabul kontrolü fail-closed'dır (2026-09-12 güvenlik review'ı, S-1 sınıfı):**
     sır yapılandırılmamışsa çağrı HİÇ yapılmaz. Bu uç, yükünde çalışma alanının
     Telegram bot token'ını taşır; kimliksiz bir webhook'a yollamak o token'ı
     ucu bilen herkese açık bir kanala koymak demekti.
+
+    **Sessiz yutma YOK (kapanış turu bulgusu, high — ÖLÇÜLDÜ).** İlk yazım hem
+    atlamayı hem hatayı `None` ile aynı sonuca indiriyordu; çağıran ise gönderiyi
+    ZATEN `reviewing` yapmış ve kullanıcıya başarı dönmüştü. `reviewing` onaya
+    yeniden gönderilebilir durumlar kümesinde olmadığı için gönderi ne bildirim
+    alıyor ne de kurtarılabiliyordu. HTTP 4xx/5xx de başarısızlıktır —
+    `raise_for_status` olmadan n8n'in reddettiği çağrı "gitti" sayılırdı.
     """
     import httpx
 
@@ -856,15 +870,15 @@ async def _notify_telegram_approval(payload: dict) -> None:
 
     secret = settings.N8N_TELEGRAM_APPROVAL_SECRET
     if not secret:
-        return  # fail-closed: kimliksiz çağrı yola çıkmaz
+        raise RuntimeError(
+            "N8N_TELEGRAM_APPROVAL_SECRET boş — kimliksiz webhook çağrısı YAPILMAZ"
+        )
     url = f"{settings.N8N_BASE_URL}/webhook/{TELEGRAM_APPROVAL_WEBHOOK_PATH}"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                url, json=payload, headers={TELEGRAM_APPROVAL_AUTH_HEADER: secret}
-            )
-    except Exception:
-        pass  # fire-and-forget — n8n ulaşılamasa bile devam et
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        yanit = await client.post(
+            url, json=payload, headers={TELEGRAM_APPROVAL_AUTH_HEADER: secret}
+        )
+        yanit.raise_for_status()
 
 
 @router.post("/{post_id}/request-approval", response_model=OkResponse)
@@ -912,19 +926,41 @@ async def request_approval(
             detail="Telegram konfigürasyonu bulunamadı. Ayarlar sayfasından Bot Token ve Chat ID girin.",
         )
 
-    # Post durumunu 'reviewing' yap
+    # SIRA BAĞLAYICI (kapanış turu bulgusu, high — ÖLÇÜLDÜ): önce yapılandırma
+    # kapısı, sonra bildirim, EN SON durum yazımı. Eski sıra (önce yaz, sonra
+    # gönder, hatayı yut) bildirimi gitmeyen gönderiyi `reviewing`de bırakıyordu
+    # ve `reviewing` onaya yeniden gönderilebilir durumlar kümesinde DEĞİL —
+    # yani gönderi hem sessizce kayboluyor hem kurtarılamıyordu.
+    if not _telegram_approval_kanali_hazir():
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Telegram onay kanalı yapılandırılmamış (N8N_TELEGRAM_APPROVAL_SECRET). "
+                "İçerik durumu değiştirilmedi, yeniden deneyebilirsiniz."
+            ),
+        )
+
+    try:
+        await _notify_telegram_approval({
+            "post_id": str(post_id),
+            "brand_id": str(post["brand_id"]),
+            "telegram_bot_token": workspace["telegram_bot_token"],
+            "telegram_chat_id": workspace["telegram_chat_id"],
+        })
+    except Exception as exc:  # noqa: BLE001 — ham metin BASILMAZ (sır sızabilir)
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "Telegram bildirimi gönderilemedi "
+                f"({type(exc).__name__}). İçerik durumu değiştirilmedi, "
+                "yeniden deneyebilirsiniz."
+            ),
+        ) from None
+
     await db.execute(
         "UPDATE social.posts SET status = 'reviewing' WHERE id = $1",
         post_id,
     )
-
-    # n8n webhook'unu tetikle (fire-and-forget)
-    await _notify_telegram_approval({
-        "post_id": str(post_id),
-        "brand_id": str(post["brand_id"]),
-        "telegram_bot_token": workspace["telegram_bot_token"],
-        "telegram_chat_id": workspace["telegram_chat_id"],
-    })
 
     return OkResponse(data={"status": "reviewing"})
 

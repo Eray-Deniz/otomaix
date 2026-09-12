@@ -17,9 +17,9 @@ sayı basıyordu ve kökten köke kaymayı `differences: 0` ile geçiriyordu.)
 
 Kullanım deseni — Plan 2'nin satır-açma adımı:
 
-    sector_sweep.py --database-url ... > before.txt
+    sector_sweep.py --database-url-env OTOMAIX_DSN > before.txt
     <satır açma adımı>
-    sector_sweep.py --database-url ... --baseline before.txt
+    sector_sweep.py --database-url-env OTOMAIX_DSN --baseline before.txt
 
 `--baseline` karşılaştırması YALNIZ eşlemeye bakar; taksonomi sayıları
 (`sub_sector_rows`) satır açılınca DOĞAL olarak değişir ve karşılaştırmaya
@@ -33,7 +33,9 @@ Sözleşme:
   reddedilir. Testte ayrıca salt-okunur ROL ile koşulur.
 * **Deterministik.** Rapor zaman damgası, süre, rastgele sıra içermez; satırlar
   marka kimliğine göre sıralıdır. Aynı veri → bayt-aynı çıktı.
-* **Ortamdan miras almaz.** Bağlantı dizesi `--database-url` ile AÇIKÇA verilir;
+* **Ortamdan miras almaz.** Bağlantı dizesi `--database-url-env <DEĞİŞKEN ADI>`
+  ya da `--database-url-file <0600 dosya>` ile AÇIKÇA verilir (argv'ye YAZILMAZ —
+  2026-09-12 güvenlik review'ı S-3);
   `DATABASE_URL` ortam değişkeni okunmaz (yanlış veritabanına koşma riski yok).
 * **Taban hedefe BAĞLI.** Rapor, üretildiği veritabanının kimliğini taşır:
   küme kimliği / oid / ad **artı bağlantı ucu** (`sunucu:port/veritabanı`).
@@ -59,7 +61,7 @@ Sözleşme:
 
 Kullanım:
 
-    python scripts/sector_sweep.py --database-url postgresql://... --dry-run
+    OTOMAIX_DSN="$(...)" python scripts/sector_sweep.py --database-url-env OTOMAIX_DSN --dry-run
 """
 
 from __future__ import annotations

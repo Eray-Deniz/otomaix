@@ -65,3 +65,51 @@ def test_masking_is_derived_from_the_field_name_not_a_hand_list():
         assert _sir_alani_mi(ad), ad
     for ad in ("APP_URL", "ENVIRONMENT", "IMAGE_MODEL", "N8N_BASE_URL"):
         assert not _sir_alani_mi(ad), ad
+
+
+# ─── Kapanış turu bulgusu (Codex, high): ad-tabanlı kural YETMEDİ ───────────
+#
+# İlk yazımda sınıflandırma yalnız alan ADINA bakıyordu ve `REDIS_URL` adında
+# KEY/SECRET/TOKEN/PASSWORD geçmediği için sır SAYILMIYORDU — oysa değeri
+# `redis://:<parola>@host` biçiminde bir kimlik taşıyor. Ölçüldü (değer-siz prob):
+# repr ve str parolayı basıyordu. Ders: ad sezgisi, kimlik TAŞIYAN bağlantı
+# URL'lerini kaçırır. Kapı artık ÜRETİLMİŞ matristir — her alana nişan değer
+# konur ve hiçbirinin temsile sızmadığı ölçülür.
+
+
+def test_no_settings_field_leaks_a_credential_bearing_url():
+    """HER alan, kimlik taşıyan bir URL ile doldurulduğunda maskelenir.
+
+    Matris `Settings.model_fields`ten türer: yarın eklenen `SOMETHING_URL` de
+    kendiliğinden kapsanır. Elle seçilmiş alan listesi YOK.
+    """
+    nisan = "NISAN-PAROLA-9f3a"
+    alanlar = [
+        ad
+        for ad, alan in Settings.model_fields.items()
+        if alan.annotation is str
+    ]
+    assert len(alanlar) >= 20, f"matris beklenenden küçük ({len(alanlar)}) — alan türetme bozuk"
+
+    ayarlar = Settings(**{ad: f"scheme://kullanici:{nisan}@ornek.invalid/yol" for ad in alanlar})
+    metin = repr(ayarlar) + str(ayarlar)
+
+    assert nisan not in metin, (
+        "kimlik taşıyan bağlantı URL'si temsile SIZIYOR — ad sezgisi bu alanı "
+        "sır saymadı; sınıflandırma değerin biçimini de görmeli"
+    )
+
+
+def test_redis_url_specifically_is_masked():
+    """Ölçülmüş vakanın kendisi — kapanış turunda `REDIS_URL` sızıyordu."""
+    ayarlar = Settings(REDIS_URL="redis://:GIZLI-REDIS@10.0.0.1:6379")
+    assert "GIZLI-REDIS" not in repr(ayarlar)
+    assert "GIZLI-REDIS" not in str(ayarlar)
+
+
+def test_public_url_without_credentials_stays_visible():
+    """POZİTİF KONTROL — kimliksiz URL maskelenmez, teşhis ölmez."""
+    ayarlar = Settings(R2_PUBLIC_URL="https://pub-abc.r2.dev", REDIS_URL="redis://localhost:6379")
+    metin = repr(ayarlar)
+    assert "https://pub-abc.r2.dev" in metin
+    assert "redis://localhost:6379" in metin, "kimliksiz bağlantı gereksiz maskelendi"

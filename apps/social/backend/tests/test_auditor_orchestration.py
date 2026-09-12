@@ -72,6 +72,10 @@ OLCULEN_ARGV: dict[str, tuple[str, ...]] = {
         "text",
         "--permission-mode",
         "plan",
+        "--safe-mode",
+        "--restricted",
+        "--tools",
+        "Read,Glob,Grep",
         "--strict-mcp-config",
         "--disallowedTools",
         "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task",
@@ -93,6 +97,10 @@ OLCULEN_ARGV: dict[str, tuple[str, ...]] = {
         "text",
         "--permission-mode",
         "plan",
+        "--safe-mode",
+        "--restricted",
+        "--tools",
+        "Read,Glob,Grep",
         "--strict-mcp-config",
         "--disallowedTools",
         "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task",
@@ -2667,7 +2675,17 @@ def test_preflight_status_is_derived_from_the_probe_return_type(tip: str) -> Non
 
 IZOLASYON_PROFILLERI: dict[str, tuple[str, ...]] = {
     # ikili → argv'de MUTLAKA bulunması gereken parçalar
-    "claude": ("--permission-mode", "plan", "--strict-mcp-config", "--disallowedTools"),
+    # Pozitif araç kümesi ZORUNLU: yasak listesi açık uçludur (CLI'ya eklenen yeni
+    # araç kendiliğinden izinli olurdu) — kapanış turu bunu high olarak ölçtü.
+    "claude": (
+        "--permission-mode",
+        "plan",
+        "--safe-mode",
+        "--restricted",
+        "--tools",
+        "--strict-mcp-config",
+        "--disallowedTools",
+    ),
     "codex": ("--sandbox", "read-only"),
 }
 
@@ -2698,6 +2716,21 @@ def test_every_tool_argv_carries_an_isolation_boundary() -> None:
         + " · ".join(sorted(eksik))
         + " — dış kaynaklı metin kısıtsız ajan bağlamına girer"
     )
+
+
+def test_claude_tool_set_is_a_positive_read_only_allowlist() -> None:
+    """İzinli küme POZİTİF ve salt-okunur — yazan/çalıştıran araç KÜMEDE YOK."""
+    for ad, spec in auditors.ARAC_KOMUTLARI.items():
+        if spec.argv[0] != "claude":
+            continue
+        i = spec.argv.index("--tools")
+        izinli = {parca.strip() for parca in spec.argv[i + 1].split(",")}
+        assert izinli, f"{ad}: izinli araç kümesi BOŞ — denetçi paketi okuyamaz"
+        yazan = izinli & {
+            "Bash", "Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch",
+            "Task", "Agent", "Skill",
+        }
+        assert not yazan, f"{ad}: izinli kümede yazan/çalıştıran araç var: {sorted(yazan)}"
 
 
 def test_claude_tools_deny_the_dangerous_tool_set() -> None:

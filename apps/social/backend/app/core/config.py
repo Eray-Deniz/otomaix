@@ -1,3 +1,5 @@
+import re
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Alan ADINDAN sır teşhisi — elle bakılan liste DEĞİL (2026-09-12 güvenlik
@@ -9,11 +11,27 @@ _SIR_ISTISNALARI = frozenset({"R2_BUCKET_NAME", "R2_PUBLIC_URL"})
 """Adında ipucu geçse de sır OLMAYAN alanlar — açıkça sayılır, sessizce değil."""
 
 
+_KIMLIKLI_URL = re.compile(r"://[^/\s:@]*:[^/\s@]+@")
+"""`scheme://kullanıcı:parola@host` — bağlantı URL'sinin kimlik taşıyan biçimi.
+
+**Neden ada bakmak YETMEDİ (kapanış turu bulgusu, 2026-09-12):** ilk yazım yalnız
+alan ADINI sınıflandırıyordu; `REDIS_URL` adında hiçbir ipucu geçmediği için sır
+sayılmadı ve değeri (`redis://:<parola>@host`) temsile aynen girdi — ölçüldü.
+Ad sezgisi, kimlik TAŞIYAN bağlantı URL'lerini yapısal olarak kaçırır; bu yüzden
+sınıflandırma artık DEĞERİN biçimini de görür.
+"""
+
+
 def _sir_alani_mi(ad: str) -> bool:
-    """Alan adı bir sır taşıyor mu? Tek kural, iki tüketici (temsil + testler)."""
+    """Alan ADI bir sır taşıyor mu? Tek kural, iki tüketici (temsil + testler)."""
     if ad in _SIR_ISTISNALARI:
         return False
     return any(ipucu in ad.upper() for ipucu in _SIR_IPUCLARI)
+
+
+def _sir_degeri_mi(deger: object) -> bool:
+    """DEĞER kimlik taşıyor mu? Adı masum bir alan da sır tutuyor olabilir."""
+    return isinstance(deger, str) and bool(_KIMLIKLI_URL.search(deger))
 
 
 class Settings(BaseSettings):
@@ -85,7 +103,7 @@ class Settings(BaseSettings):
         parcalar = []
         for ad in type(self).model_fields:
             deger = getattr(self, ad, None)
-            if _sir_alani_mi(ad):
+            if _sir_alani_mi(ad) or _sir_degeri_mi(deger):
                 parcalar.append(f"{ad}={'<gizli:dolu>' if deger else '<gizli:boş>'}")
             else:
                 parcalar.append(f"{ad}={deger!r}")

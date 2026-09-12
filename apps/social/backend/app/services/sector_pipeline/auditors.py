@@ -1568,19 +1568,57 @@ doğrulaması daha koşmadan dosya/ortam okuyabilir, komut çalıştırabilir ya
 üzerinden sızdırabilirdi. `cwd` bir güvenlik sınırı DEĞİLDİR — sınırı argv kurar.
 """
 
+_CLAUDE_ARAC_KUMESI = "Read,Glob,Grep"
+"""Denetçinin KULLANABİLECEĞİ araçların TAMAMI — POZİTİF küme, yasak listesi değil.
+
+**Neden pozitif (kapanış turu bulgusu, high — ÖLÇÜLDÜ):** ilk sertleştirme yalnız
+bir yasak listesi taşıyordu ve `Read`/`Glob`/`Grep`/`Agent`/`Skill` açık kalıyordu;
+yani enjekte edilmiş bir talimat paket DIŞINDAKİ dosyaları okuyup şema-geçerli bir
+raporun içine koyabilirdi. Yasak listesi AÇIK UÇLUDUR — CLI'ya yarın eklenen her
+araç kendiliğinden izinli olurdu. Pozitif küme tersini yapar: adı geçmeyen her şey
+kapalıdır. Denetçinin işi paket dosyalarını OKUMAKTIR, o yüzden küme okuma
+araçlarıdır.
+"""
+
 _CLAUDE_IZOLASYON = (
     "--permission-mode",
     "plan",
+    "--safe-mode",
+    "--restricted",
+    "--tools",
+    _CLAUDE_ARAC_KUMESI,
     "--strict-mcp-config",
     "--disallowedTools",
     _CLAUDE_YASAK_ARACLAR,
 )
 """`codex`in `--sandbox read-only`'sinin `claude` karşılığı — simetri KASITLIDIR.
 
-`plan` kipi yazma/çalıştırma yollarını kapatır, `--strict-mcp-config` kullanıcının
-MCP sunucularını devre dışı bırakır (aksi hâlde ajan, bu boru hattının hiç
-tanımadığı araçları devralırdı), yasak liste de tehlikeli çekirdek araçları
-adıyla kapatır. Üç katman da argv'dedir; hiçbiri prompt metnine dayanmaz.
+Katmanlar: `plan` kipi yazma/çalıştırma yollarını kapatır · `--safe-mode`
+kullanıcının CLAUDE.md'si, skill'leri, hook'ları, eklentileri ve özel komutlarını
+devre dışı bırakır (aksi hâlde denetçi, bu boru hattının hiç tanımadığı yerel
+talimatları devralırdı — ayrıca o metinler de bir enjeksiyon yüzeyidir) ·
+`--restricted` komut/kod çalıştıran yerleşik araçları kaldırır ve kullanıcı
+özelleştirmelerini yok sayar · `--tools` izinli kümeyi POZİTİF olarak sayar ·
+`--strict-mcp-config` MCP sunucularını devre dışı bırakır · yasak liste ise
+derinlemesine savunmadır. Hepsi argv'dedir; hiçbiri prompt metnine dayanmaz.
+
+**ÖLÇÜLEN SINIR (2026-09-12, kurulu CLI ile üç prob koşumu):** `--restricted`
+dosya araçlarını ÇALIŞMA DİZİNİNE hapsediyor — aracın kendi hata metni:
+*"<yol> is outside <cwd>; --restricted confines the file tools to the working
+directory"*. Ölçüm iki zararsız hedefle yapıldı (göreli `../disarida.txt` ve
+mutlak `/etc/hostname`); ikisi de ENGELLENDİ, paket içindeki dosya OKUNDU. Yani
+`~/.claude/.credentials.json` · `.env` · `/proc/<ppid>/environ` gibi hedefler
+paket dizininin dışında kaldıkları için bu kapının ARKASINDADIR.
+
+**KALAN — dürüst etiket:** hapsi işleten CLI'nın kendisidir, işletim sistemi
+DEĞİL. Alt süreç hâlâ aynı kullanıcı altında koşar; CLI'da bir gerileme ya da
+bayrak adı değişikliği sınırı sessizce kaldırabilir (bu yüzden bayrakların
+kurulu yardıma karşı ölçüldüğü tripwire testi vardır — ama o bayrağın VARLIĞINI
+ölçer, DAVRANIŞINI değil). Kimlik dosyalarının kendisiyle doğrudan prob
+YAPILAMADI: model o hedefleri okumayı reddediyor, yani ölçüm modelin kararına
+karışıyor — sınır zararsız hedeflerle ölçüldü. Gerçek süreç izolasyonu
+(kapsayıcı/ad-alanı ya da araçsız yapılandırılmış-çıktı API'si) bu turda
+YAPILMADI (güvenlik review'ı S-2 kalıntısı).
 """
 
 

@@ -13,6 +13,8 @@ import json
 from datetime import datetime, timezone
 
 import asyncpg
+import logging
+
 import httpx
 import sentry_sdk
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -143,7 +145,16 @@ async def _notify_crm_n8n(path: str, payload: dict) -> None:
     """
     secret = settings.N8N_CRM_EVENT_SECRET
     if not secret:
-        return  # fail-closed: kimliksiz çağrı yola çıkmaz
+        # Fail-closed ama SESSİZ DEĞİL: atlama görünür olmalı, yoksa "bildirim
+        # gidiyor" sanılır (kapanış turu, Telegram yolunda ölçülmüş sınıf).
+        # Burada durum mutasyonu bildirime BAĞLI DEĞİL — CRM uyarısı düşse de
+        # abonelik akışı doğru; o yüzden istisna değil, uyarı.
+        logging.getLogger(__name__).warning(
+            "CRM bildirimi ATLANDI (yol=%s): N8N_CRM_EVENT_SECRET boş — "
+            "kimliksiz webhook çağrısı yapılmaz",
+            path,
+        )
+        return
     try:
         url = f"{settings.N8N_BASE_URL}/webhook/{path}"
         async with httpx.AsyncClient(timeout=5) as client:

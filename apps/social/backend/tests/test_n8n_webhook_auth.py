@@ -46,8 +46,13 @@ class _FakeClient:
     async def __aexit__(self, *exc):
         return False
 
+    durum_gonderim_aninda = None
+
     async def post(self, url, json=None, headers=None):
         _FakeClient.captured = {"url": url, "json": json, "headers": headers or {}}
+        _FakeClient.durum_gonderim_aninda = (
+            _SahteBaglanti.aktif.durum_yazildi if _SahteBaglanti.aktif else None
+        )
         return _FakeResponse()
 
 
@@ -111,12 +116,18 @@ async def test_crm_notify_uses_a_dedicated_secret(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_telegram_approval_fails_closed_without_secret(monkeypatch):
-    """Sır yoksa Telegram onay webhook'una çağrı YAPILMAZ."""
+    """Sır yoksa çağrı YAPILMAZ **ve** bu sessizce geçilmez — istisna ile bildirilir.
+
+    İlk yazımda yardımcı sessizce dönüyordu; kapanış turu ölçtü ki çağıran o
+    sessizliği "gitti" sayıp gönderiyi `reviewing`e çekiyordu. Atlama artık
+    çağıranın GÖREBİLECEĞİ bir sonuçtur.
+    """
     monkeypatch.setattr(_posts_settings(), "N8N_TELEGRAM_APPROVAL_SECRET", "")
     monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
     _FakeClient.captured = {}
 
-    await posts._notify_telegram_approval({"post_id": "p-1"})
+    with pytest.raises(RuntimeError):
+        await posts._notify_telegram_approval({"post_id": "p-1"})
 
     assert _FakeClient.captured == {}, "sırsızken kimliksiz çağrı YAPILDI"
 
@@ -135,3 +146,105 @@ async def test_telegram_approval_sends_auth_header(monkeypatch):
     assert captured["headers"][posts.TELEGRAM_APPROVAL_AUTH_HEADER] == "gizli-onay"
     assert captured["url"].endswith("/webhook/telegram-content-approval")
     assert captured["json"] == {"post_id": "p-1"}
+
+
+# ─── Kapanış turu bulgusu (Codex, high): fail-closed SESSİZ KAYIP üretiyordu ──
+#
+# Düzeltmenin kendi yan etkisi ölçüldü: `_notify_telegram_approval` sır boşken
+# sessizce dönüyordu, ama çağıran `request_approval` gönderiyi ZATEN `reviewing`
+# yapmış ve kullanıcıya başarı dönmüştü. `reviewing`, onaya yeniden gönderilebilir
+# durumlar kümesinde DEĞİL — yani gönderi ne bildirim almış ne de kurtarılabilir
+# oluyordu. Kapanış: yapılandırma mutasyondan ÖNCE doğrulanır, durum ancak
+# bildirim KABUL EDİLDİKTEN sonra değişir.
+
+
+class _SahteBaglanti:
+    """asyncpg bağlantısı yerine geçen, çağrıları sayan sahte."""
+
+    aktif = None
+
+    def __init__(self, post_status="ready"):
+        self.calls: list[tuple] = []
+        self._post_status = post_status
+        _SahteBaglanti.aktif = self
+
+    async def fetchrow(self, sql, *args):
+        self.calls.append(("fetchrow", sql.split()[0], args))
+        if "FROM social.posts" in sql:
+            return {"id": args[0], "brand_id": "b-1", "status": self._post_status}
+        if "FROM social.workspaces" in sql:
+            return {"telegram_bot_token": "bot-sifre", "telegram_chat_id": "12345"}
+        return None
+
+    async def execute(self, sql, *args):
+        self.calls.append(("execute", sql, args))
+        return "UPDATE 1"
+
+    @property
+    def durum_yazildi(self) -> bool:
+        return any(c[0] == "execute" for c in self.calls)
+
+
+@pytest.mark.asyncio
+async def test_request_approval_refuses_before_mutating_when_channel_unconfigured(monkeypatch):
+    """Kanal yapılandırılmamışsa gönderi DURUMU DEĞİŞMEZ ve çağıran hata alır.
+
+    Eski davranış: durum `reviewing` olur, kullanıcıya başarı dönerdi, bildirim
+    hiç gitmezdi ve gönderi kurtarılamaz hâlde kalırdı (sessiz kayıp).
+    """
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(_posts_settings(), "N8N_TELEGRAM_APPROVAL_SECRET", "")
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
+    _FakeClient.captured = {}
+    db = _SahteBaglanti()
+
+    with pytest.raises(HTTPException) as hata:
+        await posts.request_approval("p-1", user={"sub": "u-1"}, db=db)
+
+    assert hata.value.status_code == 503
+    assert not db.durum_yazildi, "bildirim gitmeyecekken gönderi durumu DEĞİŞTİ"
+    assert _FakeClient.captured == {}
+
+
+@pytest.mark.asyncio
+async def test_request_approval_marks_reviewing_only_after_delivery(monkeypatch):
+    """Durum ancak bildirim KABUL EDİLDİKTEN sonra `reviewing` olur."""
+    monkeypatch.setattr(_posts_settings(), "N8N_TELEGRAM_APPROVAL_SECRET", "gizli-onay")
+    monkeypatch.setattr(httpx, "AsyncClient", _FakeClient)
+    _FakeClient.captured = {}
+    db = _SahteBaglanti()
+
+    sonuc = await posts.request_approval("p-1", user={"sub": "u-1"}, db=db)
+
+    assert _FakeClient.captured, "bildirim gönderilmedi"
+    assert db.durum_yazildi, "bildirim gitti ama durum yazılmadı"
+    yazim = [c for c in db.calls if c[0] == "execute"][0]
+    assert "reviewing" in yazim[1]
+    assert sonuc.data["status"] == "reviewing"
+    # SIRA ÖLÇÜMÜ: sahte istemci, çağrıldığı ANDA durumun yazılıp yazılmadığını
+    # kaydeder. Bu olmadan test yalnız "execute son db çağrısı" derdi — mutasyon
+    # bildirimden ÖNCE de olsa yeşil kalırdı (ilk yazımda öyleydi, ölçüldü).
+    assert _FakeClient.durum_gonderim_aninda is False, (
+        "durum bildirimden ÖNCE yazılmış — bildirim düşerse gönderi mahsur kalır"
+    )
+
+
+@pytest.mark.asyncio
+async def test_request_approval_does_not_strand_post_when_delivery_fails(monkeypatch):
+    """Bildirim HATA verirse gönderi `reviewing`e ÇEKİLMEZ — yeniden denenebilir kalır."""
+    from fastapi import HTTPException
+
+    class _PatlayanIstemci(_FakeClient):
+        async def post(self, url, json=None, headers=None):
+            raise httpx.ConnectError("n8n ulaşılamıyor")
+
+    monkeypatch.setattr(_posts_settings(), "N8N_TELEGRAM_APPROVAL_SECRET", "gizli-onay")
+    monkeypatch.setattr(httpx, "AsyncClient", _PatlayanIstemci)
+    db = _SahteBaglanti()
+
+    with pytest.raises(HTTPException) as hata:
+        await posts.request_approval("p-1", user={"sub": "u-1"}, db=db)
+
+    assert hata.value.status_code == 502
+    assert not db.durum_yazildi, "bildirim düştü ama gönderi `reviewing`e çekildi"

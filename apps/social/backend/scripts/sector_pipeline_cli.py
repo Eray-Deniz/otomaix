@@ -10,7 +10,8 @@ döner.
 Desen `scripts/sector_sweep.py`'den alınır ve BAĞLAYICIDIR:
 
 * **argparse** — alt komutlar ve argümanlar açıkça adlandırılır.
-* **Açık `--database-url`** — bağlantı dizesi ortamdan MİRAS ALINMAZ; yanlış
+* **Açık kanal** (`--database-url-env` / `--database-url-file`; argv'ye yazılmaz,
+  2026-09-12 güvenlik review'ı S-3) — bağlantı dizesi ortamdan sessizce MİRAS ALINMAZ; yanlış
   veritabanına koşma yolu yoktur.
 * **Deterministik çıktı** — zaman damgası, süre, rastgele sıra içermez; aynı
   girdi bayt-aynı çıktı üretir. Operatör iki koşumu `diff`'leyebilir.
