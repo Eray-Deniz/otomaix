@@ -14,14 +14,15 @@ Sektör bilgi paketini ÜRETEN ve AKTİVE EDEN işletim hattını kurmak: sözle
 komut ailesi → migration'lar → kuyumculuk pilotu. Plan 1 runtime çekirdeğini kurdu ve
 main'de; Plan 2 onun "Plan 2'ye teslim edilen arayüzler" listesini tüketir.
 
-Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-11 üçüncü oturum: DIŞ SÖZLEŞME TURU BİTTİ — dış
-depo `d9dc289`, pin `2739797`, kod uyarlaması `4cf6aa3`; dual hakem turu üç yüksek verdi, düzeltme
-`171c1e5` + kapanış turu (**Claude-only** — Codex kotaya takıldı) üçünü KAPANDI ölçtü; iki düşük
-`90aee2c`'de kapandı. **Eray kararı (2026-09-11 kapanış): YALNIZ bu düzeltme partisi için tekrar review YOK — genel bir
-kural DEĞİL, sonraki oturumlarda düzeltme → tekrar review düzeni aynen sürer.**
-Kapanış tek-hakem kaldı (`dual-review: false`); `/security-review-claude-codex`'a geçerken explicit
-dual-review override kararı gerekir. **Sıradaki iş: Task 18 (ön-pilot dağıtım).** Gövde `# Open
-Problems`'ın ilk kaleminde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
+Şu anki aşama: **YÜRÜTME AÇIK.** (2026-09-12 dördüncü oturum: **Task 18'in canlıya dokunmayan
+kalemleri BİTTİ ve ŞEMA CANLIYA İNDİ.** Artefakt türü kusuru + kusur SINIFI kapandı (`12d1743`),
+F6 kapandı (`be538ed`), dağıtım runbook'u yazıldı (`ac0b896`), `kuyumculuk.md` şablondan yeniden
+türetildi ve pin güncellendi (`ab91495`), canlı şema dağıtımı ve ölçülmüş sınırları kayda geçti
+(`6d671f6`), M-1 ve servis dağıtımı kararları tarihli evlere bağlandı (`08607f8`, `8daad2f`).
+Tam takım **4412 passed / 0 failed**; mutasyon 8/8; canlı prova 6/6 rc=0.
+**Task 18 TAMAMLANMADI:** Step 5·6·7 servis dağıtımına bağlı ve Eray kararıyla Task 19'a taşındı.
+**Sıradaki iş: Task 19 (kuyumculuk pilotu), TAZE OTURUMDA — ilk adım dört operatör kararı.**
+Gövde `# Open Problems`'ın ilk kalemlerinde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
 kanıtlandı. **Durum `active` KALIYOR.** Checkpoint 1, 2 ve **5** hakem `approve`'uyla kapandı;
@@ -1245,6 +1246,21 @@ değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkil
 
 # Open Problems
 
+- **[YÜKSEK — AÇIK, EVİ VAR 2026-09-12] Bu oturumun KOD ve ŞEMA commit'leri bağımsız hakem
+  GÖRMEDİ — ve şema bu hâliyle CANLIYA indi.** Kapsam: `12d1743` (artefakt türü + kusur sınıfı
+  kapısı; migration 032/036/036_down düzenlemeleri dâhil) · `be538ed` (F6 dağılım kapısı).
+  Ne `/review-claude-codex` ne `/security-review-claude-codex` bu aralık üzerinde koşuldu.
+  **Mekanik doğrulama var ve güçlü** (tam takım 4412 passed · migration dosyaları 583 passed ·
+  mutasyon 8/8 · canlı prova 6/6 rc=0 · canlı doğrulama) **ama mekanik doğrulama adversarial
+  review'ın YERİNE GEÇMEZ** — kural bu defterde yazılı.
+  **Neden böyle oldu:** oturum yürütme kipinde ilerledi ve dağıtım onayı alındı; hakem turu
+  açıkça sorulmadan atlandı. **Dürüst etiket: atlandı, çözülmedi.**
+  **EV (tarihli):** **Task 19 öncesi ya da Task 20 kapanış zincirinde**, `/review-claude-codex`
+  bu aralığı (`7068a0b..8daad2f`) kapsayacak şekilde koşulur. Zincir zaten
+  `/security-review-claude-codex` ile devam ediyor ve o turun bekleyen **dual-review override**
+  kararı aşağıdaki kalemdedir — ikisi AYNI turda kapanır.
+
+
 - **[ORTA — EVİ VAR 2026-09-12, Eray kararı: seçenek C] Backend SERVİSİ dağıtılmadı; Task 18'in
   üç adımı (5 · 6 · 7) buna bağlı kaldı.** ÖLÇÜLDÜ: Coolify `api.otomaix.com` uygulaması
   **`main` dalından** dağıtıyor; canlıda koşan commit `d395200` (2026-08-26), `origin/main` ondan
@@ -1316,11 +1332,15 @@ değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkil
 
 - **[MEDIUM — AÇIK, kanıt boşluğu] S-6: takvim workflow'u SQL'i string birleştirmeyle kuruyor.**
   Mekanizma doğrulandı (elle yazılmış kaçış + `executeQuery`), istismar doğrulanmadı; politika
-  gereği otonom `accepted_risk` ALAMAZ. **Task 18 Step 6 o dosyayı import ediyor** →
-  karar o adımdan önce gerekli.
+  gereği otonom `accepted_risk` ALAMAZ. **EV GÜNCELLENDİ 2026-09-12:** n8n import adımı
+  (runbook'ta Adım 7) servis dağıtımıyla birlikte **Task 19'a taşındı**; karar o adımdan ÖNCE
+  gerekli. Tarihsel gövde: "Task 18 Step 6 o dosyayı import ediyor".
 
-- **[ORTA — AÇIK] Kapanış düzeltmeleri (`60a62b4`) bağımsız hakem görmedi.** Stop-rule otomatik
-  üçüncü pas açmaz. İstenirse dar kapsamlı bir tur koşulur; koşulmazsa bu satır dürüst etikettir.
+- **[ORTA — AÇIK, EVİ VERİLDİ 2026-09-12 kapanış sweep'i] Kapanış düzeltmeleri (`60a62b4`)
+  bağımsız hakem görmedi.** Stop-rule otomatik üçüncü pas açmaz.
+  **Evsizdi** — "istenirse koşulur" bir ev DEĞİL, koşulsuz bir temennidir (İlke 7).
+  **EV:** yukarıdaki hakem turu kalemiyle AYNI tur; kapsam `60a62b4`'ü de içerecek şekilde
+  `60a62b4^..8daad2f` alınır. İki kalem tek turda kapanır, ayrı tur açılmaz.
 
 
 - **[ORTA — AÇIK, KOŞULLU EV] Kapanış turu tek-hakem kaldı → zincir ilerlerken dual-review override
@@ -1543,8 +1563,9 @@ değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkil
   Task 11'in eksik bir parçası değil — Task 11 zaten kurulmuş bir `AuditRound`'dan sonra
   başlar. Gerçek ev, üretim orkestrasyonunu kuran CLI'dır:
   `apps/social/backend/scripts/sector_pipeline_cli.py` (**Task 16, planda zamanlanmış**).
-  **Etiket dürüst: ÇÖZÜLMEDİ.** Bugün K-14 kapısı probsuz her turu bloke ediyor (doğru
-  davranış), yani hat üretimde HÂLÂ koşamaz.
+  **KAPANDI 2026-09-12 kapanış sweep'i:** ev onurlandırıldı — prob Task 16'da indi
+  (`scripts/sector_pipeline_cli.py::_web_probu`, `denetim` alt komutunda bağlı). Tarihsel gövde
+  yukarıda aynen durur. Kalan dürüst etiket: canlı denetçi aracına karşı koşum Task 19'dadır.
 
 - **[accepted_risk, medium] Reddedilen çıkarmanın metin/özel-gün kolu (2026-09-09).**
   `_geri_koy` birim hâlâ yerindeyse NO-OP'tur (yaygın hâl kapandı), ama gerçekten adaydan
@@ -1562,10 +1583,14 @@ değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkil
   (`openat`/`fchdir`) ister. Kodda beyan + tripwire testi var. Yeniden açılma koşulu:
   tehdit modeli değişirse (çok kullanıcılı ya da ağ erişimli hat) bu KAPANMALIDIR.
 
-- **[Task 11'in devraldığı] Denetçi web erişim probu YOK.** K-14 kapısı bugün probsuz her
-  turu bloke ediyor — doğru davranış, ama probu sağlayacak katman Task 11. Bu yüzden
-  "erişim gerçekten yoktu" iddiası hâlâ DOĞRULANMADI; yalnız "erişim ölçüldüyse muafiyet
-  yasak" ölçüldü. Task 11 dispatch'ine ZORUNLU kalem.
+- **[KAPANDI 2026-09-12 kapanış sweep'i — ev ONURLANDIRILDI] Denetçi web erişim probu YOK.**
+  **ÖLÇÜLDÜ:** prob üretimde VAR ve bağlı — `scripts/sector_pipeline_cli.py::_web_probu`
+  (taze meydan okuma ile ölçer; statik metin ezberi kabul etmez) ve `denetim` alt komutunda
+  `web_prob=` ile `run_audit_round`'a geçiriliyor.
+  **Bu kayıt iki kez bayatlamıştı:** önce "ev Task 11" yazıyordu (2026-09-09'da Task 16 olarak
+  düzeltildi), sonra Task 16 indiği hâlde kalem AÇIK kaldı. Kapanış sweep'i yakaladı.
+  **Kalan dürüst etiket:** probun CANLI bir denetçi aracına karşı koşumu YAPILMADI — ilk gerçek
+  ölçüm Task 19'dur.
 
 - **[düşük] Tip denetleyicisi uyarıları (2026-09-09, ölçülmedi).** Pyright
   `auditors.py::check_snapshot_agreement`'ta 11, `test_auditor_orchestration.py`'de 10 uyarı
