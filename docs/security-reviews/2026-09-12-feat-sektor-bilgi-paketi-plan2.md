@@ -309,15 +309,65 @@ Push-back ile kapatılan: 0.
 BAŞLAMAZ" diyor. Step 0'ın diğer üç ayağı bu oturumda ölçüldü ve geçti:
 tam takım `4379 passed` · Katman-1 sweep + pin testleri `156 passed` (tek bayt fark yok).
 
+## Kapanış turu (attempt-2, dual) — 2026-09-12
+
+Düzeltme commit'i `e2b3396` iki bağımsız hakeme verildi (fresh Claude subagent + Codex
+`adversarial-review --base b7e3fd8`), pinli ikinci worktree'de, sabit kapanış prompt'uyla.
+**İkisi de aynı iki kalemi ACIK ölçtü** ve ikisi de düzeltmenin KENDİ açtığı gerilemeyi buldu.
+
+| Bulgu | Kapanış kararı | Dayanak |
+|---|---|---|
+| S-1 | **KAPANDI** (kod); canlı ayak operatörde | 7 webhook düğümünün 5'i `headerAuth`+credential; 2'si S-7 olarak açık beyan; sorgu `$1`/`queryReplacement` |
+| S-2 | **AÇIKTI → bu turda kapatıldı** | yasak liste açık uçluydu; alt-hakem eski argv'yle `/etc/hostname` ve depo dosyalarını OKUDU |
+| S-3 | **KAPANDI** (argv yolu) | ham bayrak reddediliyor, dosya kipi denetleniyor, hata metinleri değeri basmıyor |
+| S-8 | **AÇIKTI → bu turda kapatıldı** | `REDIS_URL` ad sezgisinin dışında kaldı; değer-siz probla sızıntı ölçüldü |
+
+**Düzeltme turunun açtığı gerileme (iki hakem de buldu, F-3):** `request_approval` gönderiyi
+`reviewing` yapıp başarı dönüyordu, oysa sır boşken bildirim hiç gitmiyordu; `reviewing` onaya
+yeniden gönderilebilir kümenin DIŞINDA olduğu için gönderi hem sessizce kayboluyor hem
+kurtarılamıyordu. Sıra bağlayıcı hâle getirildi (yapılandırma kapısı → bildirim → durum yazımı).
+**Ayrıca F-4 (low):** script başlıklarındaki örnekler hâlâ eski bayrağı öğretiyordu.
+
+**Kapanış düzeltmeleri `60a62b4`** — tam takım `4404 passed, 0 failed`; bu turun yedi kapısı
+mutasyonla 7/7 kırıldı.
+
+### S-2'nin ölçülen sınırı (iddia değil, koşum)
+
+Yeni argv (`--permission-mode plan --safe-mode --restricted --tools Read,Glob,Grep
+--strict-mcp-config --disallowedTools ...`) kurulu CLI ile üç kez koşuldu:
+
+- paket içi dosya (`./EK-B-KAYNAK-1.md`) → **OKUNDU**
+- göreli paket dışı (`../disarida.txt`) → **ENGELLENDİ**
+- mutlak paket dışı (`/etc/hostname`) → **ENGELLENDİ**, aracın kendi metni:
+  *"is outside <cwd>; --restricted confines the file tools to the working directory"*
+
+Yani `~/.claude/.credentials.json` · `.env` · `/proc/<ppid>/environ` gibi hedefler bu kapının
+arkasındadır. **Prob kirlenmesi dürüstçe:** kimlik dosyalarıyla DOĞRUDAN prob yapılamadı — model
+o hedefleri okumayı reddediyor, yani ölçüm modelin kararına karışıyor; sınır zararsız hedeflerle
+ölçüldü. **Kalan:** hapsi işleten CLI'dır, işletim sistemi değil; alt süreç aynı kullanıcı altında
+koşar. Gerçek süreç izolasyonu (kapsayıcı/ad-alanı ya da araçsız yapılandırılmış-çıktı API'si)
+YAPILMADI — S-2 kalıntısı.
+
+### Kapanış turunun kendi sınırı
+
+Bu turda inen düzeltmeler (`60a62b4`) **bağımsız hakem GÖRMEDİ** — stop-rule gereği otomatik
+üçüncü pas açılmaz, karar insana gider. Ayrıca hakemlerin ölçemediği kalemler: veritabanı isteyen
+171 test vakası worktree'de `.env` olmadığı için koşmadı (kontrolör ana ağaçta tam takımı koştu),
+`queryReplacement` bağlaması canlı n8n'de sınanmadı, canlı n8n/Coolify durumu incelenmedi.
+
+---
+
 ## Prosedürel kapanış
 
-Tanımlı pas bütçesi tamamlandı (1 attempt; `total_invocations=1`, `consecutive_degraded=0`);
+Tanımlı pas bütçesi tamamlandı (**2 attempt**; `total_invocations=2`, `consecutive_degraded=0`);
 adlandırılmış güvenlik kategorileri (6 grup) iki hakem tarafından da tarandı.
 Kapsanan alanlar: boru hattı modülleri, CLI, router diff'i, üç migration + rollback, dört n8n
 workflow'u, frontend diff'i. Kapsanmayan/denenmeyen: `docs/**` ve `tests/**` (görev tanımı gereği),
 `brief_doctor.py`'nin 3855 satırlık ayrıştırıcı mantığının satır satır semantik denetimi (desen
 taraması yapıldı), canlı n8n durumu, canlı enjeksiyon koşumu, `standard_conforming_strings` ölçümü.
-Residual'lar: S-5 (`accepted_risk`), S-6 (evidence gap, karar bekliyor).
+Residual'lar: S-5 (`accepted_risk`), S-6 (evidence gap, karar bekliyor), S-2 kalıntısı (süreç
+izolasyonu yok — CLI düzeyi hapis ölçüldü), S-7 (critical, AÇIK — tasarım kararı bekliyor),
+kapanış düzeltmelerinin kendisi hakem görmedi.
 **Exhaustiveness iddiası yok.**
 
 ## Ham kanıt — işaretçiler (bu makinede, bu kökten)
