@@ -6,16 +6,18 @@
   *(Buraya durum cümlesi YAZILMAZ — kanonik ayrım gereği status TASK.md'nin malıdır ve
   burada tutulan kopya her görevde bayatlıyordu: Task 8 → 9 → 10 → 11 dört kez.)*
 
-- **denetci-atif-aday-kimligi** — sentezin `D1#<no>` atfını, o kararın yetkilendirdiği
-  ADAYA bağlama işi. Plan 2'nin içinden doğdu ve onunla birlikte yürür.
-  `docs/active/denetci-atif-aday-kimligi/TASK.md`.
-
 ## Bitti — arşivi Plan 2 ile BİRLİKTE yapılacak
 
 > Bunlar AKTİF DEĞİL; iş beklemiyorlar. `docs/active/` altında duruyorlar çünkü Plan 2'nin
 > içinden doğdular ve plan koşarken kayıtları ana görevle aynı yerde kalsın isteniyor.
 > **Arşiv tetiği: Plan 2 kapanışı** (`/finish-branch-claude-codex`) — o gün ana görevle
 > birlikte `docs/task-archive/YYYY/MM/` altına, kendi bitiş tarihlerine göre taşınırlar.
+
+- **denetci-atif-aday-kimligi** — `status: done`, `finished: 2026-09-12`. Sentezin atfı artık
+  araştırma iddiasının NUMARASINA bağlı; bağ iki uçlu. `docs/active/denetci-atif-aday-kimligi/TASK.md`.
+  **2026-09-12 düzeltmesi:** kod ayağı 2026-09-11 gecesi inmişti, kayıt bir gün boyunca "hiç
+  yazılmadı" diyordu ve yukarıdaki AKTİF listede duruyordu — aynı hata bir önceki görevde de
+  olmuştu (aşağıdaki 2026-09-08 notu).
 
 - **denetci-denetim-tablosu-tipli-okuma** — `status: done`, `finished: 2026-09-10`. Motorun
   yapısal çoğunluğu artık denetçinin KENDİ kaynak sütunundan okunuyor; düz yazıdan sayma

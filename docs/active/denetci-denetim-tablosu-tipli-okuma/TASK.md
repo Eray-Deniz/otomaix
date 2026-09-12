@@ -79,9 +79,12 @@ bulgu (1 yüksek, 1 orta, 1 düşük).
 
 **Kapanmayanlar — dürüst liste:**
 
-- **Yüksek bulgunun kalan ayağı (atıf ADAYA bağlanmalı) ÇÖZÜLMEDİ.** Sözleşme revizyonu ister;
+- ~~**Yüksek bulgunun kalan ayağı (atıf ADAYA bağlanmalı) ÇÖZÜLMEDİ.** Sözleşme revizyonu ister;
   yama değildir. **Evi: `docs/active/denetci-atif-aday-kimligi/` (proposed, sert son tarih
-  Task 19).** Aynı eksen üç turda üç varyant verdi; yamamayı bırakma kararı bilinçlidir.
+  Task 19).** Aynı eksen üç turda üç varyant verdi; yamamayı bırakma kararı bilinçlidir.~~ —
+  **KAPANDI (2026-09-12), evinde.** Sözleşme ayağı 2026-09-11 (dış depo revizyonu + pin), kod
+  ayağı `4cf6aa3`. Atıf artık araştırma iddiasının numarasına bağlı ve bağ iki uçlu; ölçüm ve
+  kalan koşullu kalemler `docs/active/denetci-atif-aday-kimligi/TASK.md`'de.
 - ~~Düşük (kontrolörün ürünü): bayat docstring~~ — **KAPANDI (2026-09-10).** Eray'a "karar
   senin" diye taşınmıştı; taşınmamalıydı — kontrolörün kendi ürettiği yanlış belgeydi ve üç
   satırdı. Düzeltildi.

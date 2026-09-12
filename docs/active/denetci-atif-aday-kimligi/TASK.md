@@ -1,10 +1,10 @@
 ---
 title: Denetçi atfı ADAYA bağlansın (alan düzeyi yetmiyor)
-status: active
+status: done
 started: 2026-09-11
-finished: null
-last-touched: 2026-09-11
-blocked-by: sözleşme revizyonu (iki dosya) — kod tarafı tek başına kapatamaz
+finished: 2026-09-12
+last-touched: 2026-09-12
+blocked-by: null
 source_task: docs/active/denetci-denetim-tablosu-tipli-okuma/TASK.md
 ---
 
@@ -56,7 +56,11 @@ değildir, çünkü değişecek yer motorun İÇİDİR, çağıran arayüzü de�
 
 # Current Status
 
-**SÖZLEŞME AYAĞI İNDİ (2026-09-11, dış depo `12beec1`); KOD AYAĞI AÇIK.**
+**KAPANDI (2026-09-12).** Sözleşme ayağı 2026-09-11'de indi (dış depo `12beec1`, pin
+`4636847`; aynı turun devamında `d9dc289` / pin `2739797`), kod ayağı `4cf6aa3` ile indi ve
+hakem turunun düzeltmeleriyle (`171c1e5`, `90aee2c`) sağlamlaştı. **Bu blok 2026-09-12'de
+DÜZELTİLDİ:** kod ayağı 2026-09-11 gecesi inmiş olmasına rağmen kayıt bir gün boyunca
+"hiç yazılmadı" diyordu ve bir oturum açılışını yanılttı.
 
 Eray kararı: **tam bağ** — yetkilendirme araştırma iddiasının NUMARASINA kadar izlenir.
 Reddedilen iki ucuz seçenek kayıtta (aşağıda).
@@ -76,18 +80,46 @@ olsaydı bağ kendini onaylardı: iki beyanı da aynı model yazıyor ve sentez 
 okuyabiliyor, yani numarayı kopyalayıp her zaman eşleştirebilirdi. Üçüncü taraf (ayrıştırıcı)
 zinciri kırar.
 
-**KALAN — kod ayağı, hiç yazılmadı:**
-- `brief_doctor` Bölüm C'yi satır düzeyinde okumalı (`no` + `alan`), bugün yalnız yapısal
-  sözleşmeyi doğruluyor.
-- `auditors.validate_report` `kaynak-iddialari` sütununu tipli okumalı.
-- Motor `_alan_bagi_var` yerine iddia bağı kurmalı.
-- `EngineInputs` bu veriyi taşımalı (R5 alan kümesi değişikliği → arayüz eki).
-- **Ağaçta iki kırmızı test var** (sapma alarmı); ayrıntı ana görevin Open Problems'ında.
+**İNEN — kod ayağı** (dördü de 2026-09-12'de kaynaktan tek tek ölçüldü; commit `4cf6aa3`):
 
-**Dürüst etiket:** bu görev KAPANMADI. Sözleşme penceresi kapandı (pin `4636847`), kod
-penceresi açık — ama artık pilotu ikinci kez ürettirmeden çalışılabilir.
+1. **`brief_doctor` Bölüm C'yi SATIR düzeyinde okuyor.** `no` sütunu tipli okunuyor ve o
+   raporda kimlik olarak zorlanıyor: tekrar eden numara ve 1'den boşluksuz artmayan dizi ayrı
+   ayrı ihlal. Satır başına hücre sözleşmesi de ölçülüyor (alan/dönem · iddia kelime tavanı ·
+   `https://` URL · tarih biçimi · tek-kaynak kapalı kümesi).
+2. **`auditors` `kaynak-iddialari` sütununu tipli okuyor.** Denetim tablosu dokuz sütun;
+   `K<kaynak>#<iddia>` TEK ayrıştırıcıdan (`kaynak_iddialari_coz`) geçiyor ve `kaynaklar`
+   sütunuyla ÇİFT YÖNLÜ tutarlılık zorunlu. Satır `kaynak_iddialari` alanını `frozenset`
+   olarak taşıyor.
+3. **Motor bağı İDDİA düzeyinde kuruyor.** `_alan_bagi_var` silinmedi ama artık TEK
+   yetkilendirici değil: ilk kapı (önek eşleşmesi) → `kaynak_iddia` çözümü → iki uçlu bağ
+   (her iddia bir denetçi satırında geçmeli VE atıf yapılan her satır en az bir iddiayı
+   taşımalı) → Görev B'de ayrıca dönem bağı (`_denetci_donem_bagi_var`). Yeni uygulanmama
+   sebepleri: `kaynak-iddia-yok` · `donem-kimligi-cozulemedi`.
+4. **`EngineInputs` veriyi taşıyor — YENİ ALAN GEREKMEDİ.** İddia evreni mevcut
+   `mekanik_eleme.raporlar` üzerinden geliyor (`_arastirma_iddialari`; kaynak numarası
+   KONUMDAN türer, `build_packet` sıra kaymasını fail-closed durdurur). R5 alan kümesi
+   revizyonu arayüz ekinde ayrıca kayıtlı (R-H5 · R-H8, revizyon kaydı 2026-09-11/d).
+
+**İki kırmızı test KALMADI.** Taze ölçüm (2026-09-12,
+`cd apps/social/backend && .venv/bin/python -m pytest tests/ -q`):
+**`4379 passed in 319.80s`, 0 failed.** Kırmızılar pinin bıraktığı Bölüm B sütun alarmıydı;
+`4cf6aa3` onları kapattı.
+
+**Dürüst etiket — bu görev kapandı, ama şunlar bu göreve DEĞİL ana göreve yazılı:**
+- **N1/1** (aday-dışı günün adı ile anahtarı arasındaki bağ ölçülemiyor) — koşullu
+  `accepted_risk`, evi ana görevin `# Open Problems`'ı.
+- **Uçtan uca CLI koşumu YOK**; bu bağ gerçek araştırma çıktısıyla hiç çalışmadı — ilk gerçek
+  ölçüm Task 19 pilotu.
+- Kapanış hakem turu bu partide **tek hakemli** kaldı (Codex kotaya takıldı; Eray kararı
+  yalnız o parti için). Ayrıntı ana görevde.
 
 # Decisions Log
+
+- **2026-09-12 — görev KAPATILDI (defter düzeltmesi).** Kod ayağı 2026-09-11 gecesi inmişti;
+  bu dosya bir gün boyunca "hiç yazılmadı" diyordu. Kapanış iddiası değil ÖLÇÜM üzerine
+  yazıldı: dört ayağın dördü kaynaktan tek tek doğrulandı, tam takım taze koşuldu
+  (`4379 passed`, 0 failed). Kalan kalemler uydurma eve değil ana görevin kendi
+  `# Open Problems`'ına bağlandı.
 
 - **2026-09-11 — Eray kararı: TAM BAĞ.** Araştırma satırına kadar izleme seçildi; "iki ucuz
   ayak" (özel gün yol bağı + bir satır bir ekleme) ve "yalnız özel gün ayağı" REDDEDİLDİ.
@@ -103,5 +135,9 @@ penceresi açık — ama artık pilotu ikinci kez ürettirmeden çalışılabili
 
 # Open Problems
 
-- Sözleşme revizyonu İKİ dosyaya dokunur (denetçi + sentez) ve pin yenilenmesi ister; bu
-  görevle aynı turda yapılmalı, ayrı ayrı iki pin turu israftır.
+- ~~Sözleşme revizyonu İKİ dosyaya dokunur (denetçi + sentez) ve pin yenilenmesi ister; bu
+  görevle aynı turda yapılmalı, ayrı ayrı iki pin turu israftır.~~ — **KAPANDI (2026-09-11).**
+  Üç borç TEK dış-depo revizyonunda kapandı, pin bir kez ilerledi. Ayrı tur israfı olmadı.
+
+**Bu görevin kendi açık kalemi YOK.** Bağın gerçek araştırma çıktısıyla ilk sınavı (Task 19
+pilotu) ve N1/1 koşullu riski ana görevin defterinde yaşıyor — buraya ikinci kopya YAZILMAZ.
