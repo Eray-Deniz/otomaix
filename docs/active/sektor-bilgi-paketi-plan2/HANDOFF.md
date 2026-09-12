@@ -23,7 +23,10 @@ ileri düzeltme) · mekanik kapı raporunun artefakt türü · köken jetonu (M-
 
 **Bu oturumun commit'leri (6):** `b7e3fd8` defter düzeltmesi · `e2b3396` güvenlik düzeltmeleri ·
 `608cc25` güvenlik raporu · `60a62b4` kapanış turu düzeltmeleri · `bc5ea96` kapanış kaydı ·
-`0389ef0` telegram arıza ölçümü. Defter kapısı her commit sonrası `rc=0`.
+`2e88de8` telegram arıza ölçümü + artefakt hizalaması. Defter kapısı her commit sonrası `rc=0`
+— **bir istisnayla:** bu commit ilk yazımda `docs-only` etiketlenmişti, kapı `MECH-FAIL` verdi
+(n8n artefaktı çalıştırılabilir yol sayılır), etiket `green-only` olarak düzeltilip commit
+yeniden yazıldı (push edilmemişti). Kapı sonra `rc=0`.
 
 **Güvenlik raporu:** `docs/security-reviews/2026-09-12-feat-sektor-bilgi-paketi-plan2.md`
 (dual, attempt-2 kapanışıyla birlikte). Ham kanıt: `~/.claude/logs/otomaix--ffc87809/`
