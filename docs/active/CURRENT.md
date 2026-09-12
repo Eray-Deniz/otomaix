@@ -359,6 +359,26 @@
   Bunlar yapılmadan CRM bildirimleri GİTMEZ (bilinçli fail-closed) ve workflow'lar pasif kalır.
   **Ev / tetik:** CRM yeniden aktive edilmeden ÖNCE — artık "onarım yaz" değil, "canlıyı kur".
 
+- **telegram-onay-akisi-canli-arizali** (proposed, ARIZA — tetikli) — 2026-09-12'de n8n API'siyle
+  ÖLÇÜLDÜ: `Telegram İçerik Onay` (`D49KNE35cONz2APb`) workflow'unun son gerçek koşumu
+  **2026-04-13**; o tarihten beri tek koşum yok. Aynı turda ölçüldü ki canlı webhook
+  **başlıksız ve yanlış başlıklı isteği de kabul ediyor** (ikisi de `200`) — yani düğümde
+  `authentication: headerAuth` + `Header Auth account` (`1TJ4S6zPWbdXlSEY`) yazılı olmasına
+  rağmen koruma fiilen çalışmıyor. **Çıkarım:** backend çağırmış olsaydı n8n'de koşum kaydı
+  görünürdü; görünmüyor → istek n8n'e HİÇ ULAŞMIYOR, arıza backend/arayüz tarafında.
+  **Kapanmayan ölçüm:** hangi kapının kapattığı belirlenemedi (dört aday: gönderi durumu ·
+  sahiplik · workspace Telegram ayarları · erken hata). Operatör o sırada onay gönderemedi,
+  arayüz düzenleniyordu. **Ev / tetik:** onay akışına dokunan bir sonraki iş.
+  **Yan etki dürüstçe:** ölçüm sırasında iki hatalı koşum (`55910`, `55911`) benim probumdur.
+
+- **telegram-onay-credential-baglanmadi** (proposed, KURULUM — tetikli) — `Otomaix Telegram
+  Approval Key` Header Auth kimliği 2026-09-12'de n8n'de YARATILDI (`qbPEK2DKQgMmFor8`;
+  başlık `X-Telegram-Approval-Key`, sır `/root/otomaix-tg-approval.secret`), ama webhook
+  düğümüne **BAĞLANMADI** — bilinçli: bağlansaydı koruma gerçekten devreye girer ve başlık
+  göndermeyen BUGÜNKÜ backend 403 almaya başlardı. Depodaki artefakt bu kimlik numarasına
+  hizalandı. **Doğru sıra:** yeni backend deploy + `N8N_TELEGRAM_APPROVAL_SECRET` set +
+  düğüme bağlama, üçü birlikte. **Ev / tetik:** bu dalın deploy'u.
+
 - **telegram-approval-token-in-query-string** (proposed, güvenlik; TETİKLİ — bugün aktif borç
   DEĞİL) — `telegram-content-approval.json` onay/ret düğmelerinin adresini kurarken müşterinin
   kendi bot şifresini **URL sorgu parametresine** gömüyor
