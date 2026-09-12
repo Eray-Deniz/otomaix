@@ -307,8 +307,11 @@
   `docs/archive/CLAUDE_crm_pre_cleanup.md` şu anki ağaçta aynı (artık ölü) token'ı taşıyor ve
   kapı onu görmez. Zararsız ama duruyor.
 
-- **telegram-credential-live-token-unverified** (proposed, doğrulama borcu; TETİKLİ —
-  CANLI bir zinciri ilgilendiriyor) — n8n'in `Telegram account` credential'ı
+- **telegram-credential-live-token-unverified** (**KAPANDI 2026-09-12 — operatör teyidi**) —
+  Eray doğruladı: n8n'deki `Telegram account` credential'ı YENİ tokenla güncellendi.
+  **Dürüst etiket:** bu bir operatör beyanıdır; Telegram düğümüne ULAŞAN bir koşumla ölçülmedi
+  (aşağıdaki "nasıl ölçülür" yolu hâlâ geçerli, isteyen bir dakikada doğrular). Gövde tarihsel
+  kayıt olarak duruyor. — n8n'in `Telegram account` credential'ı
   (`VMbwUuFB8BzVhxEz`) **canlı bir token taşıyor mu, ÖLÇÜLMEDİ.** Token 2026-09-06'da
   operatör tarafından BotFather'da döndürüldü ve eskisinin öldüğü doğrulandı (`401`), ama
   n8n credential'ının YENİ tokenla güncellenip güncellenmediği hiçbir yerde ölçülmedi.
@@ -346,11 +349,15 @@
   **YAPILAN (Eray kararı 2026-09-07): üç workflow canlıda PASİFE ALINDI.** Doğrulandı: üçü de
   `active=False` ve `POST` artık `404` dönüyor. İşlevsel kayıp YOK — n8n çalıştırma geçmişinde
   bu üç workflow'un **sıfır** koşumu var.
-  **AÇIK KALAN — çözülmedi:** gerçek onarım (header auth credential'ı + parametreli sorgu +
-  backend'in `billing.py` çağrısına başlığı eklemesi). Pasifleştirme bir **kapatmadır**,
-  düzeltme değil.
-  **Ev / tetik:** CRM'in bütün olarak ele alınacağı tur — CRM yeniden aktive edilmeden ÖNCE bu
-  üç kalem yapılmak ZORUNDA; aksi hâlde aktive etmek ucu geri açar.
+  **ONARIM İNDİ (2026-09-12, güvenlik review'ı S-1 düzeltme turu):** üç kalemin ÜÇÜ de yapıldı —
+  webhook'lar `headerAuth` + `Otomaix CRM Event Key`, ödeme sorgusu `$1`/`queryReplacement` ile
+  parametreli, `billing._notify_crm_n8n` başlığı gönderiyor ve sır boşken çağrıyı hiç yapmıyor
+  (fail-closed). Sınıf kapıları kondu (dizindeki HER webhook + HER Postgres düğümü), 6/6 mutasyon
+  kapıları düşürdü. Rapor: `docs/security-reviews/2026-09-12-feat-sektor-bilgi-paketi-plan2.md`.
+  **AÇIK KALAN — canlı ayak:** n8n'de `otomaixCrmEvtKey` Header Auth kimliği yaratılmalı,
+  `N8N_CRM_EVENT_SECRET` ortam değişkeni set edilmeli ve dosya yeniden import edilmeli.
+  Bunlar yapılmadan CRM bildirimleri GİTMEZ (bilinçli fail-closed) ve workflow'lar pasif kalır.
+  **Ev / tetik:** CRM yeniden aktive edilmeden ÖNCE — artık "onarım yaz" değil, "canlıyı kur".
 
 - **telegram-approval-token-in-query-string** (proposed, güvenlik; TETİKLİ — bugün aktif borç
   DEĞİL) — `telegram-content-approval.json` onay/ret düğmelerinin adresini kurarken müşterinin
