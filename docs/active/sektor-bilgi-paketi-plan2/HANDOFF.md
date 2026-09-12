@@ -1,114 +1,126 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-09-11
+written: 2026-09-12
 ---
 
 # Resume From
 
-**Sıradaki iş: Task 18 (ön-pilot dağıtım).** Dış sözleşme turu BİTTİ: dış depo `d9dc289`,
-pin `2739797`, kod uyarlaması `4cf6aa3`, hakem turu (dual) üç yüksek → düzeltme `171c1e5` →
-kapanış turu (**Claude-only**) üçünü KAPANDI ölçtü → iki düşük `90aee2c`. Canlıya girme kararı
-hâlâ Eray'da.
-
-**Eray kararı (oturum kapanışı):** YALNIZ bu düzeltme partisi için tekrar review yok — **genel kural
-DEĞİL**, sonraki oturumlarda düzeltme → tekrar review düzeni aynen sürer. Kapanış tek-hakem kaldı
-(`dual-review: false`); `/security-review-claude-codex` başlatılırken chain-advance gate'i explicit
-dual-review override soracak — karar o anda. Codex kapanış tekrarı İPTAL (aktif katman kaydı
-TASK.md `# Open Problems` ilk kalem).
+**Sıradaki iş: Task 18 (ön-pilot dağıtım) — ama canlıya dokunan adımları KAPALI.**
+Task 18'in kendi Step 0(d) kapısı "açık critical varken dağıtım başlamaz" diyor ve **S-7 açık**
+(aşağıda). Canlıya dokunmayan kısımlar serbest ve sıradaki iş oradan başlar:
+dağıtım runbook'u (`docs/plans/PLAN2-DAGITIM-RUNBOOK.md`, henüz YOK) · migration uygulama ve
+**iki ayrı geri alma rejimi** (F20: pilot-öncesi şema geri alması · pilot-sonrası veri-koruyan
+ileri düzeltme) · mekanik kapı raporunun artefakt türü · köken jetonu (M-1/M-2) · F6 ·
+`kuyumculuk.md`'nin şablondan yeniden türetilmesi. Canlıya girme kararı Eray'da.
 
 **İlk komut — tabanı gör:**
-`cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → beklenen `4379 passed`.
+`cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → beklenen `4404 passed`.
 
 **Dal:** `feat/sektor-bilgi-paketi-plan2`. Push durumu buraya YAZILMAZ, ölç:
-`git rev-list --left-right --count origin/feat/sektor-bilgi-paketi-plan2...HEAD` (oturum sonunda
-origin'in ÖNÜNDE, push edilmedi — Eray onayı olmadan push yok).
+`git rev-list --left-right --count origin/feat/sektor-bilgi-paketi-plan2...HEAD`
+(oturum sonunda origin'in ÖNÜNDE, push edilmedi — Eray onayı olmadan push yok).
 **Yürütme durumu:** kip `inline` · başlangıç çapası `a806e29` · defter penceresi `a806e29`.
 
-**Dış sözleşme deposu** `/root/otomaix-sosyal-medya-arastirmasi` @ `d9dc289`; pin monorepo'da
-`2739797`. Üç dosyanın sha256'sı pinle byte-eşit (iki hakem turunda ayrı ayrı doğrulandı).
-`kuyumculuk.md` (pilot brief kopyası) 2026-08-17 tarihli ve şablonun ESKİ hâli — pilotta şablondan
-yeniden türetilmeli (Task 19 girdisi; pin'de DEĞİL).
+**Bu oturumun commit'leri (6):** `b7e3fd8` defter düzeltmesi · `e2b3396` güvenlik düzeltmeleri ·
+`608cc25` güvenlik raporu · `60a62b4` kapanış turu düzeltmeleri · `bc5ea96` kapanış kaydı ·
+`0389ef0` telegram arıza ölçümü. Defter kapısı her commit sonrası `rc=0`.
 
-**Review defteri:** locator `task:sektor-bilgi-paketi-plan2`, hedef
-`code-review:feat-sektor-bilgi-paketi-plan2:10f22da…`, pinli sözleşme `a76100bd…`. Authoritative
-state TASK.md `# Review Ledger` (bu oturumda KURULDU — önceki oturumun "kurulmalı" borcu kapandı).
+**Güvenlik raporu:** `docs/security-reviews/2026-09-12-feat-sektor-bilgi-paketi-plan2.md`
+(dual, attempt-2 kapanışıyla birlikte). Ham kanıt: `~/.claude/logs/otomaix--ffc87809/`
+`2026-09-12-secreview-*-1.md` (Codex tur 1) · `-1.claude.md` (alt-hakem tur 1) · `-2.md` (Codex kapanış).
 
 ## Bu oturum ne yaptı — tek cümle
 
-Üç sözleşme borcu tek dış-depo revizyonunda kapatıldı, pin ilerletildi, kod üç kimliği tüketecek
-şekilde uyarlandı; dual hakem turunun üç yüksek bulgusu düzeltilip Claude-only kapanış turuyla
-kapalı ölçüldü, iki düşük de kapatıldı.
+Task 18'in Step 0(d) kapısı olarak dual güvenlik review'ı koştu; bir critical + üç high bulundu,
+Eray kararıyla aynı oturumda düzeltildi, kapanış turu iki kalemi hâlâ açık ölçtü ve düzeltmenin
+kendi açtığı gerilemeyi buldu — üçü de kapatıldı; ayrıca Telegram onay akışının Nisan'dan beri
+canlıda çalışmadığı ölçüldü.
 
 # Verification
 
-**Bu oturumda koşulan komutlar ve TAZE çıktıları (kontrolörün kendi koşumları):**
+**Bu oturumda koşulan komutlar ve TAZE çıktıları:**
 
 - Tam takım `.venv/bin/python -m pytest tests/ -q`:
-  - `2739797` (pin) → **4334 passed, 1 failed** (Bölüm B sütun alarmı — beklenen kırmızı), 315 s
-  - `4cf6aa3` (kod uyarlaması) → **4370 passed**, 318 s
-  - `171c1e5` (düzeltme) → **4379 passed**, 315 s (alt-hakem kendi kopyasında da 4379 ölçtü)
-  - `90aee2c` (iki düşük) → üç takım 1753 passed; tam takım: aşağıdaki satır
-  - `90aee2c` tam takım → **4379 passed in 313.83s (0:05:13)**
-- **Mutasyon:** kod uyarlaması 12 kapı → 12/12 kırıldı · düzeltme partisi 5 kapı → ilk 4/5, sağ kalan
-  ("iki taraf da boş URL") gerçek boşluktu, test güçlendirildi → 5/5 · iki düşük 2/2. Alt-hakem
-  bağımsız 4 mutasyon: 4/4.
-- **Pin testleri** (`test_contract_pin.py`) 32 passed; pin geçici hash'le ölçüldü: 1829 passed / 1 alarm.
-- **Canlı yerel DB:** `social.public_holidays` 22 satır + anahtarları (şablon tablosunun kaynağı);
-  `social.sector_package_runs` tablosu yerelde YOK (03x migration'lar uygulanmamış) → sema-1
-  dondurulmuş görüntü yerelde imkânsız.
-- **Hakem turları:** attempt-1 dual (Claude 67 araç / 1010 s; Codex rc=0 / 52 komut) → 3 high both-agree,
-  üçü kontrolör ölçümüyle doğrulandı · kapanış Claude-only (63 araç / 1104 s): F1-F3 kapandı, 2 low.
-- **Defter kapısı** her commit'ten sonra `rc=0` (6 commit: pin · kod · review · fix1 · fix2 · kapanış docs).
+  - `b7e3fd8` (defter düzeltmesi) → **4379 passed**, 320 s
+  - `e2b3396` (güvenlik düzeltmeleri) → **4397 passed**, 320 s
+  - `60a62b4` (kapanış düzeltmeleri) → **4404 passed in 322.65s**, 0 failed
+- Katman-1 sweep + pin testleri (`tests/prompt_regression/` + `test_contract_pin.py`) → **156 passed**,
+  tek bayt fark yok (Task 18 Step 0(b)+(c)).
+- **Mutasyon:** birinci parti 6/6 · ikinci parti 7/7 kapı düştü (toplam 13/13). Betik:
+  scratchpad'de, kapılar üretimden tek tek susturulup ilgili test koşuldu.
+- **Hakem turları:** attempt-1 dual (alt-hakem 66 araç / 671 s; Codex ilk çağrı `rc=124` timeout →
+  120 s canlılık probu `PROBE-OK` → 1200 s tekrar `rc=0`) · attempt-2 dual kapanış (alt-hakem
+  51 araç / 793 s; Codex `rc=0`, 91 komut).
+- **Sertleştirilmiş denetçi komutu gerçekten koşuldu** (3 prob): paket içi dosya OKUNDU, göreli
+  (`../disarida.txt`) ve mutlak (`/etc/hostname`) paket dışı hedefler ENGELLENDİ — aracın kendi
+  metni: *"is outside <cwd>; --restricted confines the file tools to the working directory"*.
+- **Canlı n8n ölçümü (API, salt-okunur + iki yazma):** `Telegram İçerik Onay` son gerçek koşum
+  **2026-04-13**, o tarihten beri yok · canlı webhook başlıksız ve yanlış başlıklı isteği de
+  kabul etti (ikisi de `200`) · CRM-1/2/3 `active=False` (defter doğru) · `Telegram Onayla` ve
+  `Telegram Reddet` **`active=True`** (S-7 canlı) · `Otomaix Telegram Approval Key` kimliği
+  YARATILDI (`qbPEK2DKQgMmFor8`), düğüme **bağlanmadı**.
 
 **Denenmemiş / doğrulanmamış — dürüst liste:**
 
-- **Codex kapanış hakemi KOŞMADI** (ilk çağrı kesik `exit=1` → kanıt değil; tekrar "usage limit").
-  Eray kararıyla bu parti için tekrar edilmedi (tek seferlik); `dual-review: false` etiketi bu
-  kapanışa özgü.
-- **`90aee2c` bağımsız hakem GÖRMEDİ** (test-ağırlıklı + tek yüklem değişikliği).
-- **Uçtan uca CLI koşumu YAPILMADI**; yeni sözleşme biçiminde gerçek araştırma çıktısı YOK (ilk ölçüm Task 19).
-- **Üretim DB'sinde sema-1 dondurulmuş görüntü yokluğu bu kökten ölçülemedi** (koşu tablosu canlıda
-  da dağıtılmadı — HANDOFF'un önceki iddiası; fail-closed: olursa `RC_REFUSED`).
-- **`ruff`/`pyright` ortamda YOK.** CRM webhook onarımı YAPILMADI. Task 18-20 yazılmadı.
+- **`60a62b4` (kapanış düzeltmeleri) bağımsız hakem GÖRMEDİ** — stop-rule otomatik üçüncü pas
+  açmaz, karar insana bırakılır. Üçüncü tur istenirse dar kapsamlı koşulur.
+- **S-7 kapatılmadı** (aşağıda) · **S-6 kanıt-boşluğu kararı verilmedi**.
+- **`queryReplacement` bağlaması canlı n8n'de koşularak doğrulanmadı** (yerel n8n yok) — CRM-3
+  import edildikten sonra tırnaklı bir `account_id` ile tek prob şart.
+- **Telegram arızasının hangi kapıda kırıldığı BELİRLENEMEDİ** — Eray o sırada onay gönderemedi
+  (arayüz düzenleniyor). Dört aday aktif katmanda yazılı.
+- **DSN kanalının canlı veritabanına bağlandığı uçtan uca koşulmadı** (`.env` okuması izin
+  kurallarınca reddediliyor).
+- **Uçtan uca CLI koşumu YOK**; yeni sözleşme biçiminde gerçek araştırma çıktısı YOK (ilk ölçüm Task 19).
+- `ruff`/`pyright` ortamda YOK.
 
 # Risks
 
-- **Dual-review eksik kapanış** — üç yüksek yalnız Claude hakemiyle "kapandı" ölçüldü; Codex'in kesik
-  ilk çıktısı iki şüphe bırakmıştı (URL kırpma toleransı · özette gerekçe metni); ikisi de kontrolör
-  tarafından ölçüldü ve kabul edildi (kırpma gerçek yolda fark yaratmaz; özet üç kimlik alanını basar).
-- **N1/1 — aday-dışı gün ad↔anahtar bağı ölçülemiyor** (accepted_risk, koşullu; yeniden açılma:
-  pilot aday-dışı bir gün seçerse). İkinci kapı: tür↔kategori çatışması notu artık onay yüzeyinde.
-- **F6 — kaynak başına 3 URL satırı dağılımı ölçülmüyor** (önceden var olan; ev Task 18 listesi).
-- **Çok günlü bayramlar** (Ramazan 4, Kurban 5 sistem satırı): mevcut kural paket girdisi başına bir
-  anahtar ister — sözleşmede ilk kez AÇIKÇA yazıldı; paket şişmesi pilotta ölçülür. Dönem düzeyinde tek
-  anahtar çalışma zamanı (K-01b) değişikliğidir; ev: pilot ölçümü sonrası spec K-01b takibi.
-- **Normalize edici "Millî"nin î'sini düşürüyor** (`demokrasi-ve-mill-birlik-gunu`); tablo bu hâliyle
-  yazıldı; düzeltmesi sektör slug kuralına dokunur (kapsam dışı, kayıtlı).
-- **035 migration dağıtılana kadar** şablondaki üç dönem (10 Kasım · 24 Kasım · okula dönüş)
-  "sistemde yok" gibi davranır — şablonda yazılı; Task 18 dağıtım sırası.
-- **K-03 notu operatör yüzeyinde ama CLI çıktısı uçtan uca koşulmadı** (yalnız render testi + CLI testi).
-- **EN YÜKSEK (işletim) — kimlik doğrulamasız CRM webhook'ları onarılmadı, yalnız KAPATILDI**
-  (CURRENT.md tetikli kalem).
-- Önceki oturumlardan devralınan kabul edilmiş riskler aynen (attest_readiness prob sonuçlarını görmez ·
-  kilit sözleşmesi kaynaktaki kilitleri modeller · `recovered` bakım penceresi · migration 036 yerinde ·
+- **S-7 (critical, AÇIK, canlıda aktif)** — `tg-approve` / `tg-reject` uçları kimliksiz GET ve
+  n8n'in yetkili kimliğiyle sahiplik denetlenmeden yayına alma/reddetme yaptırıyor. **Task 18'in
+  Step 0(d) kapısını kapalı tutan tek kalem budur.** Üç seçenek kayıtlı: (a) iki workflow'u
+  pasife al — dakikalar, defterde "gerçek müşteride koşmuyor" ölçümü var; (b) imzalı/süreli/tek
+  kullanımlık bağlantı jetonu — tasarım turu ister; (c) explicit risk kabulü.
+- **Canlı kurulum eksik (deploy ön koşulu):** `N8N_TELEGRAM_APPROVAL_SECRET` (değer
+  `/root/otomaix-tg-approval.secret`, 0600) + kimliğin düğüme bağlanması. Bu dal deploy edilir de
+  değişken set edilmezse onay isteği **503** döner (sessiz kayıp DEĞİL, açık hata). CRM tarafı
+  (kimlik + `N8N_CRM_EVENT_SECRET` + import) **Eray kararıyla ertelendi** — o üç workflow canlıda
+  zaten pasif, maliyetsiz.
+- **S-2 kalıntısı** — denetçi hapsi CLI düzeyindedir, işletim sistemi değil; alt süreç aynı
+  kullanıcı altında koşar. Gerçek süreç izolasyonu (kapsayıcı/ad-alanı ya da araçsız
+  yapılandırılmış-çıktı API'si) YAPILMADI.
+- **S-6 (medium, kanıt boşluğu)** — takvim workflow'u SQL'i string birleştirmeyle kuruyor;
+  mekanizma doğrulandı, istismar doğrulanmadı. **Task 18 Step 6 o dosyayı import ediyor** → karar
+  o adımdan önce gerekli.
+- **`repo-public-exposed-live-credentials`** — depo public, anahtarlar ilk commit'ten beri açıkta
+  ve bugünkülerle aynı (2026-09-06 ölçümü). Evi verilmiş: **Plan 2 yürütmesi biter bitmez, ilk iş.**
+- Önceki oturumlardan devralınan kabul edilmiş riskler aynen (N1/1 · F6 · çok günlü bayramlar ·
+  normalize edicinin `î` düşürmesi · 035 dağıtılana kadar üç dönem "sistemde yok" · attest_readiness
+  prob sonuçlarını görmez · kilit sözleşmesi · `recovered` bakım penceresi · migration 036 yerinde ·
   commit geçmişi tek-commit TDD modeline uymuyor · plan hakem görmeden onaylandı).
 
 # Notes For Claude/Codex
 
-**Sonraki oturumun girdisi:** Task 18 (ön-pilot dağıtım) — TASK.md'deki liste: migration dağıtım
-sırası (035/036 + n8n takvim işi) · mekanik kapı raporu artefakt türü · köken jetonu (M-1/M-2) · F6 ·
-`kuyumculuk.md`'nin şablondan yeniden türetilmesi. Canlıya girme kararı Eray'da.
+**Sonraki oturumun girdisi:** Task 18'in canlıya dokunmayan kalemleri (runbook + F20 iki rejim +
+artefakt türü + köken jetonu + F6 + `kuyumculuk.md` yeniden türetme). Canlı adımlar S-7 kararına bağlı.
 
-**Sözleşme turunda öğrenilenler (bu oturum):**
-1. **Tek sözleşme turu iyi çalıştı** — üç borç bir revizyonda, pencere (araştırma üretilmemiş) hâlâ açık.
-2. **Denetçi paketinde EK-J yok** — 2.2 denetçiden görmediği bir listeye uymasını istiyordu; anahtarın
-   kaynağı artık araştırmanın Bölüm B sütunu. Sözleşme yazarken "hangi ek hangi hakeme gidiyor" ölç.
-3. **Sözleşme değişikliğinin üçte biri alarm taşıyordu** — URL başlığı ve not sınıfı için pinli
-   sözleşmeye karşı test yoktu; eklendi. Yeni sözleşme yüzeyi eklerken alarm testini aynı commit'e koy.
-4. **Kesik Codex kararı kanıt değildir** — `exit=1` + 28 komut + yarım cümle; retry kotaya takıldı.
-   Kota kapısı "stale" derken uzun tur planlıyorsan önce taze ölç.
-5. **Mutasyon kolu iki gerçek boşluk yakaladı** (boş==boş URL; aday-dışı çoklu anahtar) — kapı
-   eklerken sınır vakalarını (boş/çift/karma) mutasyonla ayrıca sına.
+**Bu oturumda öğrenilenler:**
+1. **Hakem kapsamını docs'tan ayırmak giderim kaydını kör eder.** "docs/ içinde bulgu arama"
+   talimatı yüzünden iki hakem de Telegram token'ının 2026-09-06'da döndürüldüğünü göremedi ve
+   yanlış bir high üretti. Kontrolör "bu daha önce çözüldü mü" taramasını KENDİ yapmalı.
+2. **Sınıf kapısı varyant yamamaktan fazlasını bulur.** CRM webhook'u için yazılan kapı üç webhook
+   daha buldu (ikisi diff dışındaydı, iki hakem de görmemişti) — biri düzeltildi, ikisi S-7 oldu.
+3. **Yasak listesi açık uçludur.** İlk sertleştirme `Read`/`Glob`/`Grep`/`Skill` + 20 aracı açık
+   bıraktı; kapanış turu bunu koşarak ölçtü. Pozitif küme (`--tools`) + `--restricted` gerekti.
+4. **Ad sezgisi kimlik taşıyan URL'leri kaçırır.** `REDIS_URL` maskelenmiyordu; sınıflandırma
+   değerin biçimine de bakmalı.
+5. **Fail-closed kapı, çağıranın durum mutasyonundan ÖNCE gelmeli.** Aksi hâlde "gönderildi"
+   görünen ama gitmemiş ve kurtarılamayan kayıt üretir (kapanış turu bunu yakaladı).
+6. **Depo↔canlı sapması gerçek:** `telegram-content-approval.json` canlıdan farklıydı; körlemesine
+   import canlıdaki ayarı silerdi. n8n'e yazmadan ÖNCE canlıyı oku, düğüm bazında karşılaştır.
+7. **Canlı uca prob atmak yan etki üretir** — iki hatalı koşum (`55910`, `55911`) benim probumdur;
+   kayda geçirildi.
 
 **Codex çağrısı kurarken:** COMPANION + PROMPT çağıran kabukta; prompt dosyası SETUP fence sonrası
-Write ile; uzun turlar arka planda 1200 s; çağrı sonrası `rc` + koşum sayısı + son cümle üçünü kontrol et.
+Write ile; uzun turlar arka planda 1200 s; çağrı sonrası `rc` + koşum sayısı + son cümle üçünü
+kontrol et. 480 s'de `rc=124` alırsan reflekssel degrade etme — önce canlılık probu.

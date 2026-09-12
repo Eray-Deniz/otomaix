@@ -1108,7 +1108,38 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   (mekanik ayrıştırıcı doğrular, beyan değil) VE atıf yapılan denetçi satırı aynı numarayı
   taşıyor mu. Tek uçlu olsaydı iki tarafı da aynı model yazdığı için bağ kendini onaylardı.
 
+- **GÜVENLİK İNCELEMESİ KOŞTU (2026-09-12) — Task 18 Step 0(d) kapısı.** Dual review
+  (fresh Claude subagent + Codex), kapsam `origin/main..HEAD`. Bulgular: 1 critical + 3 high
+  + 1 medium (kanıt boşluğu) + 1 low; **S-4 premis çürümesiyle düştü** (token 2026-09-06'da
+  zaten döndürülmüştü — hakemlere "docs okuma" denmişti, giderim kaydı oradaydı).
+  **Eray kararıyla düzeltmeler aynı oturumda indi** (`e2b3396`), kapanış turu iki kalemi hâlâ
+  AÇIK ölçtü ve düzeltmenin kendi açtığı gerilemeyi buldu; üçü de kapatıldı (`60a62b4`).
+  Test tabanı 4379 → 4404; iki partinin kapıları mutasyonla 13/13 düştü.
+  Rapor: `docs/security-reviews/2026-09-12-feat-sektor-bilgi-paketi-plan2.md`.
+  **Kapanan sınıflar:** kimliksiz webhook + SQL'e gömülü gövde alanı · kum havuzsuz denetçi alt
+  süreci (hapis CLI düzeyinde ÖLÇÜLDÜ) · DSN'in argv'den çıkması · ayar temsilinin sır basması ·
+  onay isteğinde sessiz kayıp.
+
 # Open Problems
+
+- **[CRITICAL — AÇIK, CANLIDA AKTİF] S-7: `tg-approve` / `tg-reject` kimliksiz GET ile yetkili
+  vekil işlem.** Sorgu dizesindeki `post_id` ile n8n'in yetkili kimliği kullanılarak sahiplik
+  denetlenmeden yayına alma/reddetme yapılabiliyor; bot şifresi de sorgu dizesinde dolaşıyor
+  (o ayak `telegram-approval-token-in-query-string` kaleminde zaten kayıtlı). Ölçüldü
+  (2026-09-12, n8n API): iki workflow da `active=True`.
+  **Bu kalem Task 18'in Step 0(d) kapısını kapalı tutuyor.** Üç yol: (a) iki workflow'u pasife al
+  (dakikalar; defterde "gerçek müşteride koşmuyor" ölçümü var) · (b) imzalı/süreli/tek kullanımlık
+  bağlantı jetonu — backend'i de değiştirir, tasarım turu ister · (c) explicit risk kabulü.
+  **Ev / tetik:** Task 18 başlamadan ÖNCE, Eray kararı.
+
+- **[MEDIUM — AÇIK, kanıt boşluğu] S-6: takvim workflow'u SQL'i string birleştirmeyle kuruyor.**
+  Mekanizma doğrulandı (elle yazılmış kaçış + `executeQuery`), istismar doğrulanmadı; politika
+  gereği otonom `accepted_risk` ALAMAZ. **Task 18 Step 6 o dosyayı import ediyor** →
+  karar o adımdan önce gerekli.
+
+- **[ORTA — AÇIK] Kapanış düzeltmeleri (`60a62b4`) bağımsız hakem görmedi.** Stop-rule otomatik
+  üçüncü pas açmaz. İstenirse dar kapsamlı bir tur koşulur; koşulmazsa bu satır dürüst etikettir.
+
 
 - **[ORTA — AÇIK, KOŞULLU EV] Kapanış turu tek-hakem kaldı → zincir ilerlerken dual-review override
   kararı.** Kapanış Claude-only koştu (Codex: ilk çağrı kesik `exit=1`, tekrar "usage limit").
