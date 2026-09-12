@@ -126,12 +126,28 @@ PADDLE_PRICE_IDS: dict[str, str] = {
 
 # ─── n8n CRM Bildirim Yardımcısı ─────────────────────────────────────────────
 
+CRM_EVENT_AUTH_HEADER = "X-Crm-Event-Key"
+"""CRM webhook'larının kabul başlığı — artefaktta `headerAuth` credential'ı bekler."""
+
+
 async def _notify_crm_n8n(path: str, payload: dict) -> None:
-    """n8n CRM webhook'una fire-and-forget bildirim gönder."""
+    """n8n CRM webhook'una fire-and-forget bildirim gönder.
+
+    **Kabul kontrolü fail-closed'dır (2026-09-12 güvenlik review'ı, S-1/critical):**
+    sır yapılandırılmamışsa çağrı HİÇ yapılmaz. Üç CRM webhook'u kimlik
+    doğrulamasızdı; artefakt `headerAuth` isteyecek şekilde düzeltildi, çağıran
+    da başlığı göndermek zorunda. Sırsızken kimliksiz göndermek, uç 401
+    döndürürken çağıranın "gönderdim" sanmasına yol açardı — kapı boşa çıkardı.
+
+    Bildirim kritik değildir, o yüzden akış durmaz; yapılmayan şey ÇAĞRIDIR.
+    """
+    secret = settings.N8N_CRM_EVENT_SECRET
+    if not secret:
+        return  # fail-closed: kimliksiz çağrı yola çıkmaz
     try:
         url = f"{settings.N8N_BASE_URL}/webhook/{path}"
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(url, json=payload)
+            await client.post(url, json=payload, headers={CRM_EVENT_AUTH_HEADER: secret})
     except Exception:
         pass  # CRM bildirimleri kritik değil — hata durumunda sessizce devam et
 

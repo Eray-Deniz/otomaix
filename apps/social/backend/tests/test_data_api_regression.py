@@ -313,13 +313,21 @@ def readonly_role(scratch_db_migrated: str):
 
 def _run_sweep(dsn: str, baseline: Path | None = None) -> subprocess.CompletedProcess:
     """Script'i ÇIPLAK ortamda koşar — bağlantı dizesi ortamdan miras ALINMAZ."""
-    argv = [sys.executable, str(SWEEP_SCRIPT), "--database-url", dsn, "--dry-run"]
+    # DSN argv'ye YAZILMAZ (2026-09-12 güvenlik review'ı, S-3): kanal, adı
+    # açıkça verilen bir ortam değişkenidir.
+    argv = [
+        sys.executable,
+        str(SWEEP_SCRIPT),
+        "--database-url-env",
+        "OTOMAIX_SWEEP_DSN",
+        "--dry-run",
+    ]
     if baseline is not None:
         argv += ["--baseline", str(baseline)]
     return subprocess.run(
         argv,
         cwd=str(BACKEND_ROOT),
-        env={"PATH": "/usr/bin:/bin"},
+        env={"PATH": "/usr/bin:/bin", "OTOMAIX_SWEEP_DSN": dsn},
         capture_output=True,
         text=True,
     )

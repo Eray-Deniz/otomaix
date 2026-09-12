@@ -1559,9 +1559,36 @@ class ToolSpec:
         object.__setattr__(self, "argv", deger)
 
 
+_CLAUDE_YASAK_ARACLAR = "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task"
+"""`claude` alt süreçlerinin KULLANAMAYACAĞI araçlar (2026-09-12 güvenlik review'ı, S-2).
+
+Girdi metni DIŞ kaynaklıdır: araştırma ekleri web'den derlenir ve denetçi paketine
+AYNEN kopyalanır. Kısıtsız bir ajan bağlamında o metne gömülü bir talimat, şema
+doğrulaması daha koşmadan dosya/ortam okuyabilir, komut çalıştırabilir ya da ağ
+üzerinden sızdırabilirdi. `cwd` bir güvenlik sınırı DEĞİLDİR — sınırı argv kurar.
+"""
+
+_CLAUDE_IZOLASYON = (
+    "--permission-mode",
+    "plan",
+    "--strict-mcp-config",
+    "--disallowedTools",
+    _CLAUDE_YASAK_ARACLAR,
+)
+"""`codex`in `--sandbox read-only`'sinin `claude` karşılığı — simetri KASITLIDIR.
+
+`plan` kipi yazma/çalıştırma yollarını kapatır, `--strict-mcp-config` kullanıcının
+MCP sunucularını devre dışı bırakır (aksi hâlde ajan, bu boru hattının hiç
+tanımadığı araçları devralırdı), yasak liste de tehlikeli çekirdek araçları
+adıyla kapatır. Üç katman da argv'dedir; hiçbiri prompt metnine dayanmaz.
+"""
+
+
 ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
     {
-        DENETCI_ROLLERI[0]: ToolSpec(("claude", "-p", "--output-format", "text")),
+        DENETCI_ROLLERI[0]: ToolSpec(
+            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON)
+        ),
         DENETCI_ROLLERI[1]: ToolSpec(
             (
                 "codex",
@@ -1574,7 +1601,9 @@ ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
                 "-",
             )
         ),
-        SENTEZ_ARACI: ToolSpec(("claude", "-p", "--output-format", "text")),
+        SENTEZ_ARACI: ToolSpec(
+            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON)
+        ),
     }
 )
 """Araç → komut satırı — KAPALI, ÜÇ giriş (iki denetçi + sentez).
@@ -1705,6 +1734,19 @@ class SubprocessRunner:
             runs.mask_secrets(stderr),
         )
 
+    @staticmethod
+    def _alt_surec_ortami() -> dict[str, str]:
+        """Alt sürecin göreceği ortam — BEYAZ LİSTE (2026-09-12 güvenlik review'ı, S-2).
+
+        Miras alınan ortam, enjekte edilmiş bir talimat için hazır bir sızdırma
+        kanalıydı: çağıranın ortamına yüklenmiş her anahtar (veritabanı, fal.ai,
+        R2, ElevenLabs, Anthropic) çocuğun `os.environ`'ında duruyordu. Liste
+        ÇALIŞMAK için gerekenle sınırlıdır; araç kimlikleri `HOME` altındaki
+        kendi yapılandırmalarından okunur, ortamdan DEĞİL.
+        """
+        izinli = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR")
+        return {ad: os.environ[ad] for ad in izinli if ad in os.environ}
+
     def run(self, tool: str, cwd: Path, prompt_path: Path) -> RunnerOutcome:
         # Eşleme ÇAĞRI ANINDA okunur: testler onu yerinden oynatarak gerçek alt
         # süreç davranışını zararsız bir komutla ölçebilsin diye.
@@ -1719,6 +1761,7 @@ class SubprocessRunner:
             tamamlanan = subprocess.run(  # noqa: S603 — argv KAPALI eşlemeden
                 list(spec.argv),
                 cwd=str(cwd),
+                env=self._alt_surec_ortami(),
                 input=istem,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

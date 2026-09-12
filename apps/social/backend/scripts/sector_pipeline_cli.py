@@ -36,6 +36,7 @@ import sys
 from pathlib import Path
 from uuid import UUID
 
+import _dsn_channel
 import asyncpg
 
 _BACKEND_KOKU = Path(__file__).resolve().parents[1]
@@ -66,6 +67,9 @@ RC_OK = 0
 
 RC_REFUSED = 1
 """Alan kuralı REDDETTİ: kapı sağlanmadı, kanıt kurulamadı, onay yok."""
+
+dsn_coz = _dsn_channel.dsn_coz
+"""Bağlantı dizesi çözücüsü — kanal sözleşmesi `scripts/_dsn_channel.py`'de."""
 
 RC_USAGE = 2
 """Çağrı ya da ortam hatası: argüman, sözleşme pini sürüklenmiş, bağlanılamadı."""
@@ -139,11 +143,10 @@ def build_parser() -> argparse.ArgumentParser:
             "Bağlantı dizesi AÇIKÇA verilir, ortamdan miras alınmaz."
         ),
     )
-    parser.add_argument(
-        "--database-url",
-        required=True,
-        help="Bağlantı dizesi — AÇIKÇA verilir; DATABASE_URL ortam değişkeni OKUNMAZ.",
-    )
+    # Bağlantı dizesi argv'ye YAZILMAZ (2026-09-12 güvenlik review'ı, S-3):
+    # kanal ya 0600 bir dosya ya da ADI açıkça verilen bir ortam değişkenidir.
+    # "Ortamdan sessiz miras YOK" tasarım kararı korunur — değişken adlandırılır.
+    _dsn_channel.kanal_argumanlarini_ekle(parser)
     alt = parser.add_subparsers(dest="komut", required=True, metavar="<alt komut>")
 
     def _ekle(ad: str, yardim: str) -> argparse.ArgumentParser:
@@ -1331,8 +1334,8 @@ def require_contract_pin() -> None:
     contracts.require_pin(PIN_PATH, PIN_DEPO_KOKU)
 
 
-async def _baglan_ve_kos(args) -> Sonuc:
-    connection = await asyncpg.connect(args.database_url)
+async def _baglan_ve_kos(args, dsn: str) -> Sonuc:
+    connection = await asyncpg.connect(dsn)
     try:
         return await dispatch(connection, args)
     finally:
@@ -1340,7 +1343,8 @@ async def _baglan_ve_kos(args) -> Sonuc:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     # SIRA BAĞLAYICI: pin kapısı BAĞLANTIDAN ÖNCE. Sürüklenmiş sözleşmeyle
     # açılmış bir oturum bile istenmez; kapı ayrıca veritabanına erişimi
@@ -1352,8 +1356,12 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"sözleşme pini sürüklenmiş — koşu başlamadı: {exc}\n")
             return RC_USAGE
 
+    # DSN kanalı pin kapısından SONRA çözülür: sürüklenmiş sözleşmede sırrı hiç
+    # okumaya gerek yok, koşu zaten başlamayacak.
+    dsn = dsn_coz(args, parser)
+
     try:
-        satirlar, rc = asyncio.run(_baglan_ve_kos(args))
+        satirlar, rc = asyncio.run(_baglan_ve_kos(args, dsn))
     except CliError as exc:
         sys.stderr.write(f"{exc}\n")
         return RC_REFUSED

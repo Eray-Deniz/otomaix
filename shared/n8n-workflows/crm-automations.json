@@ -13,11 +13,18 @@
           300
         ],
         "webhookId": "crm-new-customer-v1",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "otomaixCrmEvtKey",
+            "name": "Otomaix CRM Event Key"
+          }
+        },
         "parameters": {
           "httpMethod": "POST",
           "path": "crm/new-customer",
           "responseMode": "onReceived",
-          "options": {}
+          "options": {},
+          "authentication": "headerAuth"
         }
       },
       {
@@ -112,11 +119,18 @@
           300
         ],
         "webhookId": "crm-plan-upgrade-v1",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "otomaixCrmEvtKey",
+            "name": "Otomaix CRM Event Key"
+          }
+        },
         "parameters": {
           "httpMethod": "POST",
           "path": "crm/plan-upgrade",
           "responseMode": "onReceived",
-          "options": {}
+          "options": {},
+          "authentication": "headerAuth"
         }
       },
       {
@@ -211,11 +225,18 @@
           300
         ],
         "webhookId": "crm-payment-failed-v1",
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "otomaixCrmEvtKey",
+            "name": "Otomaix CRM Event Key"
+          }
+        },
         "parameters": {
           "httpMethod": "POST",
           "path": "crm/payment-failed",
           "responseMode": "onReceived",
-          "options": {}
+          "options": {},
+          "authentication": "headerAuth"
         }
       },
       {
@@ -235,8 +256,10 @@
         },
         "parameters": {
           "operation": "executeQuery",
-          "query": "INSERT INTO crm.account_tags (account_id, tag, added_by) VALUES ('{{ $json.body.account_id }}', 'Ödeme Sorunu', 'n8n-otomatik') ON CONFLICT (account_id, tag) DO NOTHING",
-          "options": {}
+          "query": "INSERT INTO crm.account_tags (account_id, tag, added_by) VALUES ($1, 'Ödeme Sorunu', 'n8n-otomatik') ON CONFLICT (account_id, tag) DO NOTHING",
+          "options": {
+            "queryReplacement": "={{ $json.body.account_id }}"
+          }
         }
       },
       {

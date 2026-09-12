@@ -10,11 +10,18 @@
         0,
         0
       ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "otomaixTgApprovalKey",
+          "name": "Otomaix Telegram Approval Key"
+        }
+      },
       "parameters": {
         "path": "telegram-content-approval",
         "httpMethod": "POST",
         "responseMode": "onReceived",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
       "webhookId": "b57df16b-5092-48fe-8b8e-9a4cc4d6ee8f"
     },

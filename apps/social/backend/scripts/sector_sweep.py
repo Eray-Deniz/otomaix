@@ -65,6 +65,8 @@ Kullanım:
 from __future__ import annotations
 
 import argparse
+
+import _dsn_channel
 import asyncio
 import sys
 from pathlib import Path
@@ -400,11 +402,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Marka → kök sektör tam sweep'i (salt-okunur)."
     )
-    parser.add_argument(
-        "--database-url",
-        required=True,
-        help="Bağlantı dizesi — AÇIKÇA verilir, ortamdan miras alınmaz.",
-    )
+    # Bağlantı dizesi argv'ye YAZILMAZ (2026-09-12 güvenlik review'ı, S-3 —
+    # kardeş CLI'da bulundu, aynı sınıf burada da vardı). Kanal sözleşmesi tek
+    # yerde: `scripts/_dsn_channel.py`. "Ortamdan sessiz miras YOK" korunur.
+    _dsn_channel.kanal_argumanlarini_ekle(parser)
     parser.add_argument(
         "--baseline",
         type=Path,
@@ -424,6 +425,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    dsn = _dsn_channel.dsn_coz(args, parser)
 
     baseline = None
     if args.baseline is not None:
@@ -436,7 +438,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     try:
-        report, violations = asyncio.run(sweep(args.database_url, baseline))
+        report, violations = asyncio.run(sweep(dsn, baseline))
     except BaselineMismatch as exc:
         sys.stderr.write(f"baseline okunamadı: {exc}\n")
         return 2
@@ -449,7 +451,7 @@ def main(argv: list[str] | None = None) -> int:
         # Ham istisna metni BASILMAZ: bağlantı dizesini (dolayısıyla parolayı)
         # taşıyabilir. Yalnız tür adı + kimlik bilgisi taşımayan uç basılır.
         try:
-            where = canonical_endpoint(args.database_url)
+            where = canonical_endpoint(dsn)
         except InvalidTarget:
             where = "<kanonik olmayan uç>"
         sys.stderr.write(f"sweep koşulamadı ({type(exc).__name__}) — hedef: {where}\n")

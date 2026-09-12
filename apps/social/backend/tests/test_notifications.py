@@ -1421,3 +1421,138 @@ def test_error_notifier_has_a_configured_delivery_path():
     # Aynı hedef kardeş workflow'da da kullanılıyor olmalı — iki ayrı yönetici
     # kanalı, arızanın yarısının kaybolması demektir.
     assert _node(_admin_workflow(), "Telegram Bildir")["parameters"]["chatId"] == deger
+
+
+# ─── 6e. Webhook kimliği ve SQL parametrelendirmesi — SINIF kapıları ────────
+#
+# 2026-09-12 güvenlik review'ı (dual) bir **critical** buldu: `crm-automations.json`
+# içindeki üç webhook düğümünün hiçbiri kimlik doğrulaması istemiyordu ve
+# `CRM-3 → Add Payment Tag` düğümü istek gövdesinden gelen `account_id`'yi
+# tırnaklı bir SQL literal'inin İÇİNE gömüp canlı Postgres credential'ıyla
+# koşuyordu. İnternete açık, kimliksiz bir uç, `crm` ve `social` şemalarına
+# erişen bir rol altında sorgu yapısını değiştirebiliyordu.
+#
+# Kapı ELLE SEÇİLMİŞ düğüme değil, dizindeki HER webhook ve HER Postgres
+# düğümüne kurulur: tek dosyayı yamamak, bir sonraki workflow'da aynı sınıfı
+# geri açardı (ölçüldü: `test_workflow_webhook_requires_authentication` yalnız
+# yönetici-olay artefaktına bakıyordu ve bu critical'i görmedi).
+
+
+# Kimlik doğrulaması İSTEMEYEN düğümler — her satır bir GEREKÇE ve bir EV taşır.
+# Muafiyet listesi "sessiz geçiş" değildir: satır eklemek, o ucun AÇIK bir
+# güvenlik kalemi olduğunu beyan etmektir.
+WEBHOOK_KIMLIK_ISTISNALARI = {
+    # 2026-09-12 güvenlik review'ı sırasında bu SINIF KAPISININ kendisi buldu
+    # (iki hakem de görmedi — dosyalar incelenen diff'in DIŞINDAydı): bulgu S-7,
+    # **critical, AÇIK**. İki uç da GET'tir ve Telegram mesajındaki butona
+    # tıklayan TARAYICI çağırır — özel başlık gönderemez, yani `headerAuth`
+    # kapatılacak kapı DEĞİLDİR. Doğru kapanış imzalı/süreli bir bağlantı
+    # jetonudur ve backend tarafını da değiştirir → tasarım kararı, bu turda
+    # YAPILMADI. Dürüst etiket: çözülmedi, park edildi, evi S-7.
+    "telegram-onayla.json:Telegram Onayla/Webhook",
+    "telegram-reddet.json:Telegram Reddet/Webhook",
+}
+
+
+def test_no_webhook_node_is_unauthenticated():
+    """HER webhook düğümü kimlik doğrulaması İSTER — düğümden türetilmiş matris.
+
+    `authentication` alanı yoksa n8n ucu kimliksiz açar: yükü kim gönderirse
+    gönderdi, akış koşar. Credential ATFI da aranır — `authentication` yazıp
+    credential bağlamamak, import edilen workflow'u çalışma anında kırar
+    (aynı arıza modu Postgres kapısında ölçülmüştü).
+    """
+    kimliksiz: list[str] = []
+    baglanmamis: list[str] = []
+    gorulen_istisnalar: set[str] = set()
+    olculen = 0
+    for etiket, workflow in _workflow_definitions():
+        for node in workflow.get("nodes", []):
+            if not node.get("type", "").endswith(".webhook"):
+                continue
+            olculen += 1
+            yer = f"{etiket}/{node['name']}"
+            kip = (node.get("parameters") or {}).get("authentication") or ""
+            if not str(kip).strip():
+                if yer in WEBHOOK_KIMLIK_ISTISNALARI:
+                    gorulen_istisnalar.add(yer)
+                    continue
+                kimliksiz.append(yer)
+                continue
+            if not (node.get("credentials") or {}):
+                baglanmamis.append(f"{yer}: authentication={kip}")
+
+    assert olculen >= 1, "hiç webhook düğümü bulunamadı — matris boşa koştu"
+    assert not kimliksiz, (
+        "webhook kimlik doğrulamasız: "
+        + " · ".join(sorted(kimliksiz))
+        + " — internete açık uç, yükü gönderen herkes akışı tetikler"
+    )
+    assert not baglanmamis, (
+        "webhook kimlik kipi var ama credential BAĞLANMAMIŞ: "
+        + " · ".join(sorted(baglanmamis))
+        + " — import edilirse düğüm çalışma anında kırılır"
+    )
+    bayat = WEBHOOK_KIMLIK_ISTISNALARI - gorulen_istisnalar
+    assert not bayat, (
+        "istisna listesi BAYAT — bu uçlar artık kimliksiz değil ya da yok: "
+        + " · ".join(sorted(bayat))
+        + " — satırı listeden çıkar, muafiyet sessizce durmasın"
+    )
+
+
+# Sorgu metninde n8n ifadesi taşımasına İZİN VERİLEN düğümler — her satır bir
+# GEREKÇE ve bir EV taşır. Boş bırakılamaz bir istisna listesi değildir: yeni
+# satır eklemek, o düğümün açık bir güvenlik kalemi olduğunu beyan etmektir.
+SQL_IFADESI_ISTISNALARI = {
+    # 2026-09-12 güvenlik review'ı, bulgu S-6 (medium, kanıt boşluğu — AÇIK).
+    # Düğüm, `SQL Oluştur` kod düğümünün ürettiği TÜM cümleyi `{{ $json.sql }}`
+    # ile alır; değerler üçüncü taraf takvim beslemesinden gelir ve elle yazılmış
+    # bir kaçış fonksiyonundan geçer. Parametreli biçime çevirmek çok satırlı
+    # VALUES listesinin yeniden yazımını ister ve n8n koşumu olmadan
+    # doğrulanamaz → istisna BEYAN EDİLDİ, kapatılması S-6'nın evinde.
+    "turkey-calendar-update.json:Türkiye Takvimi Güncelleme/Tatilleri Kaydet",
+}
+
+
+def test_no_postgres_query_embeds_an_n8n_expression():
+    """HER Postgres sorgusu parametre bağlar — sorgu metnine değer GÖMMEZ.
+
+    `{{ ... }}` ifadesi sorgu metnine girdiğinde n8n onu çalışma anında metin
+    olarak yerleştirir; tırnak içine düşen bir değer tırnaktan çıkabilir. Doğru
+    kanal `options.queryReplacement`'tır: değer `$1`/`$2` olarak bağlanır ve
+    sorgu yapısını değiştiremez.
+
+    İstisnalar `SQL_IFADESI_ISTISNALARI` içinde AÇIKÇA sayılır; bilinmeyen bir
+    düğüm istisna listesinde kalmışsa (düğüm silinmiş/yeniden adlandırılmış) kapı
+    da düşer — bayat istisna sessizce muafiyet üretmesin.
+    """
+    ihlaller: list[str] = []
+    gorulen_istisnalar: set[str] = set()
+    olculen = 0
+    for etiket, workflow in _workflow_definitions():
+        for node in workflow.get("nodes", []):
+            if node.get("type") != "n8n-nodes-base.postgres":
+                continue
+            olculen += 1
+            sorgu = str((node.get("parameters") or {}).get("query") or "")
+            if "{{" not in sorgu:
+                continue
+            yer = f"{etiket}/{node['name']}"
+            if yer in SQL_IFADESI_ISTISNALARI:
+                gorulen_istisnalar.add(yer)
+                continue
+            ihlaller.append(yer)
+
+    assert olculen >= 1, "hiç Postgres düğümü bulunamadı — matris boşa koştu"
+    assert not ihlaller, (
+        "Postgres sorgusu metne n8n ifadesi gömüyor: "
+        + " · ".join(sorted(ihlaller))
+        + " — değer `options.queryReplacement` ile `$1` olarak bağlanmalı"
+    )
+    bayat = SQL_IFADESI_ISTISNALARI - gorulen_istisnalar
+    assert not bayat, (
+        "istisna listesi BAYAT — bu düğümler artık ifade taşımıyor ya da yok: "
+        + " · ".join(sorted(bayat))
+        + " — satırı listeden çıkar, muafiyet sessizce durmasın"
+    )

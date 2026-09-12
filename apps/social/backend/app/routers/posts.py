@@ -836,6 +836,37 @@ async def publish_post_now(
     return OkResponse(data=result)
 
 
+TELEGRAM_APPROVAL_AUTH_HEADER = "X-Telegram-Approval-Key"
+"""Telegram onay webhook'unun kabul başlığı — artefakt `headerAuth` bekler."""
+
+TELEGRAM_APPROVAL_WEBHOOK_PATH = "telegram-content-approval"
+
+
+async def _notify_telegram_approval(payload: dict) -> None:
+    """Telegram onay webhook'una fire-and-forget bildirim gönder.
+
+    **Kabul kontrolü fail-closed'dır (2026-09-12 güvenlik review'ı, S-1 sınıfı):**
+    sır yapılandırılmamışsa çağrı HİÇ yapılmaz. Bu uç, yükünde çalışma alanının
+    Telegram bot token'ını taşır; kimliksiz bir webhook'a yollamak o token'ı
+    ucu bilen herkese açık bir kanala koymak demekti.
+    """
+    import httpx
+
+    from app.core.config import settings
+
+    secret = settings.N8N_TELEGRAM_APPROVAL_SECRET
+    if not secret:
+        return  # fail-closed: kimliksiz çağrı yola çıkmaz
+    url = f"{settings.N8N_BASE_URL}/webhook/{TELEGRAM_APPROVAL_WEBHOOK_PATH}"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                url, json=payload, headers={TELEGRAM_APPROVAL_AUTH_HEADER: secret}
+            )
+    except Exception:
+        pass  # fire-and-forget — n8n ulaşılamasa bile devam et
+
+
 @router.post("/{post_id}/request-approval", response_model=OkResponse)
 async def request_approval(
     post_id: UUID,
@@ -888,17 +919,12 @@ async def request_approval(
     )
 
     # n8n webhook'unu tetikle (fire-and-forget)
-    n8n_url = f"{settings.N8N_BASE_URL}/webhook/telegram-content-approval"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(n8n_url, json={
-                "post_id": str(post_id),
-                "brand_id": str(post["brand_id"]),
-                "telegram_bot_token": workspace["telegram_bot_token"],
-                "telegram_chat_id": workspace["telegram_chat_id"],
-            })
-    except Exception:
-        pass  # fire-and-forget — n8n ulaşılamasa bile devam et
+    await _notify_telegram_approval({
+        "post_id": str(post_id),
+        "brand_id": str(post["brand_id"]),
+        "telegram_bot_token": workspace["telegram_bot_token"],
+        "telegram_chat_id": workspace["telegram_chat_id"],
+    })
 
     return OkResponse(data={"status": "reviewing"})
 

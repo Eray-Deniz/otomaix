@@ -57,8 +57,25 @@ UNIT_B = "ku-abcdef012345"
 # `--help` çıktısı. Bu demetler `auditors.ARAC_KOMUTLARI`'ndan TÜRETİLMEZ;
 # türetilseydi yanlış bir eşleme de testi geçerdi (totolojik test).
 
+# 2026-09-12 güvenlik review'ı (S-2, high — iki hakem de bağımsız buldu):
+# `claude` çağrıları hiçbir izin/araç kısıtı taşımıyordu, `codex` ise
+# `--sandbox read-only` ile koşuyordu. Girdi metni DIŞ kaynaklıdır (araştırma
+# ekleri web'den gelir), yani kısıtsız ajan bağlamına saldırgan metni giriyordu.
+# Aşağıdaki bayraklar kurulu CLI'nın `--help` çıktısından ÖLÇÜLDÜ (2026-09-12)
+# ve `test_toolspec_flags_exist_in_the_installed_cli_help` her koşumda yeniden
+# ölçer — bayat bayrak sessizce kalamaz.
 OLCULEN_ARGV: dict[str, tuple[str, ...]] = {
-    "denetci-1": ("claude", "-p", "--output-format", "text"),
+    "denetci-1": (
+        "claude",
+        "-p",
+        "--output-format",
+        "text",
+        "--permission-mode",
+        "plan",
+        "--strict-mcp-config",
+        "--disallowedTools",
+        "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task",
+    ),
     "denetci-2": (
         "codex",
         "exec",
@@ -69,7 +86,17 @@ OLCULEN_ARGV: dict[str, tuple[str, ...]] = {
         "never",
         "-",
     ),
-    "sentez": ("claude", "-p", "--output-format", "text"),
+    "sentez": (
+        "claude",
+        "-p",
+        "--output-format",
+        "text",
+        "--permission-mode",
+        "plan",
+        "--strict-mcp-config",
+        "--disallowedTools",
+        "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task",
+    ),
 }
 
 OLCULEN_ARAC_ADLARI = ("denetci-1", "denetci-2", "sentez")
@@ -2629,3 +2656,78 @@ def test_preflight_status_is_derived_from_the_probe_return_type(tip: str) -> Non
         f"{PROB_TIPI_BEKLENEN_DURUM[tip]}"
     )
     assert sonuc.tur_baslayabilir is (tip == "dogru-tip-olumlu")
+
+
+# ═══ 9. İzolasyon sınırı — SINIF kapısı (2026-09-12 güvenlik review'ı, S-2) ══
+#
+# Bulgu: dış kaynaklı araştırma metni, kum havuzsuz ve ortamı miras alan bir
+# ajana veriliyordu. Kapı TEK araca değil, eşlemedeki HER araca kurulur ve
+# bilinmeyen ikili FAIL-CLOSED düşer: yeni bir araç eklendiğinde izolasyon
+# profilini beyan etmeden geçemez.
+
+IZOLASYON_PROFILLERI: dict[str, tuple[str, ...]] = {
+    # ikili → argv'de MUTLAKA bulunması gereken parçalar
+    "claude": ("--permission-mode", "plan", "--strict-mcp-config", "--disallowedTools"),
+    "codex": ("--sandbox", "read-only"),
+}
+
+YASAK_ARACLAR = ("Bash", "Write", "Edit", "WebFetch", "WebSearch")
+
+
+def test_every_tool_argv_carries_an_isolation_boundary() -> None:
+    """HER araç bir izolasyon sınırı beyan eder — araçtan türetilmiş matris.
+
+    `cwd` bir güvenlik sınırı DEĞİLDİR (üretim kodu bunu kendi yorumunda
+    söylüyor). Sınırı argv kurar: `codex` için kum havuzu, `claude` için izin
+    kipi + araç yasak listesi. Bilinmeyen ikili beyan etmeden geçemez.
+    """
+    eksik: list[str] = []
+    for ad, spec in auditors.ARAC_KOMUTLARI.items():
+        ikili = spec.argv[0]
+        profil = IZOLASYON_PROFILLERI.get(ikili)
+        assert profil is not None, (
+            f"{ad}: {ikili!r} için izolasyon profili BEYAN EDİLMEMİŞ — "
+            "yeni araç, sınırını ilan etmeden eşlemeye giremez (fail-closed)"
+        )
+        for parca in profil:
+            if parca not in spec.argv:
+                eksik.append(f"{ad}({ikili}): {parca}")
+
+    assert not eksik, (
+        "araç izolasyon sınırı olmadan koşuyor: "
+        + " · ".join(sorted(eksik))
+        + " — dış kaynaklı metin kısıtsız ajan bağlamına girer"
+    )
+
+
+def test_claude_tools_deny_the_dangerous_tool_set() -> None:
+    """`claude` araçlarının yasak listesi tehlikeli araçların HEPSİNİ kapsar."""
+    for ad, spec in auditors.ARAC_KOMUTLARI.items():
+        if spec.argv[0] != "claude":
+            continue
+        i = spec.argv.index("--disallowedTools")
+        yasak = {parca.strip() for parca in spec.argv[i + 1].split(",")}
+        eksik = [arac for arac in YASAK_ARACLAR if arac not in yasak]
+        assert not eksik, f"{ad}: yasak listesinde eksik araç: {eksik}"
+
+
+def test_runner_child_environment_is_whitelisted(monkeypatch, tmp_path) -> None:
+    """Alt süreç ÇAĞIRANIN ortamını miras ALMAZ — beyaz liste dışı değer geçmez.
+
+    Ölçüm gerçek bir alt süreçle yapılır (kwargs iddiası değil): tohumlanmış
+    `OTOMAIX_SIR_KANARYASI` değişkeni çocukta GÖRÜNMEMELİ, ama `PATH` gibi
+    çalışmak için gereken değişkenler görünmeli.
+    """
+    monkeypatch.setenv("OTOMAIX_SIR_KANARYASI", "sizdi")
+    sonuc = _kos(
+        monkeypatch,
+        tmp_path,
+        "import os; print('KANARYA' if 'OTOMAIX_SIR_KANARYASI' in os.environ "
+        "else 'YOK'); print('PATH' if os.environ.get('PATH') else 'PATHSIZ')",
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    assert "KANARYA" not in sonuc.stdout, (
+        "çağıranın sırrı alt sürece miras kaldı — `/proc/<pid>/environ` ve "
+        "enjekte edilmiş bir talimat için doğrudan sızdırma kanalı"
+    )
+    assert "PATHSIZ" not in sonuc.stdout, "beyaz liste çalışmayı kırdı (PATH yok)"

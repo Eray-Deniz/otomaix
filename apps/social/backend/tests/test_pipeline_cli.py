@@ -60,7 +60,7 @@ SAHTE_URL = "postgresql://kullanici:parola@127.0.0.1:5432/otomaix_test"
 
 def _args(*argv: str):
     """Alt komut argümanlarını ayrıştırır; bağlantı dizesi AÇIKÇA verilir."""
-    return cli.build_parser().parse_args(["--database-url", SAHTE_URL, *argv])
+    return cli.build_parser().parse_args(["--database-url-env", "OTOMAIX_TEST_DSN", *argv])
 
 
 def _dortlu() -> list[str]:
@@ -142,7 +142,9 @@ def test_every_run_subcommand_requires_pin(surukklenmis_pin, monkeypatch):
     monkeypatch.setattr(cli.asyncpg, "connect", _asla)
 
     for komut in sorted(cli.RUN_SUBCOMMANDS):
-        rc = cli.main(["--database-url", SAHTE_URL, komut, *_asgari_argumanlar(komut)])
+        rc = cli.main(
+            ["--database-url-env", "OTOMAIX_TEST_DSN", komut, *_asgari_argumanlar(komut)]
+        )
         assert rc != 0, f"{komut}: sürüklenmiş pinde koşu başladı (rc={rc})"
         assert rc == cli.RC_USAGE, f"{komut}: beklenen çıkış kodu {cli.RC_USAGE}, {rc}"
 
@@ -170,14 +172,23 @@ def test_database_url_not_inherited_from_env(monkeypatch, capsys):
 
     `sector_sweep.py` deseninin sebebi ölçülmüş bir risktir: ortamdan miras
     alınan bir dize, operatörü farkında olmadan YANLIŞ veritabanına koşturur.
+
+    **Ölçüm KATMANI değişti, iddia DEĞİŞMEDİ (2026-09-12, S-3):** zorunluluk
+    artık `required=True` bayrağında değil, kanal çözümündedir — çünkü değerin
+    kendisi argv'den çıkarıldı. Kanal seçilmemişse komut ortamdaki
+    `DATABASE_URL`'e DÜŞMEZ, durur.
     """
     monkeypatch.setenv("DATABASE_URL", "postgresql://kacak@127.0.0.1:5432/yanlis")
 
+    parser = cli.build_parser()
+    args = parser.parse_args(["durum", "--run-id", "kosu-1"])
     with pytest.raises(SystemExit) as cikis:
-        cli.build_parser().parse_args(["durum", "--run-id", "kosu-1"])
+        cli.dsn_coz(args, parser)
 
     assert cikis.value.code != 0
-    assert "--database-url" in capsys.readouterr().err
+    hata = capsys.readouterr().err
+    assert "kanalı verilmedi" in hata
+    assert "kacak" not in hata, "ortamdaki değer hata metnine sızdı"
 
 
 async def test_cli_output_is_deterministic(pkg_db):
@@ -1356,3 +1367,94 @@ async def test_aktive_et_BASKA_bir_kapi_dusunce_ham_hatayi_SAKLAMAZ(pkg_db):
     assert "GateNotSatisfied" in metin   # HAM hata yüzeyde
     assert "kanit kumesi degisti" not in metin
     assert "hazirlik-onayla" not in metin
+
+
+# ─── 2b. Bağlantı dizesinin KANALI — argv değil (güvenlik review'ı S-3) ─────
+#
+# 2026-09-12 dual güvenlik review'ı: DSN zorunlu bir argv değeriydi. Argv gizli
+# değildir — `/proc/<pid>/cmdline` bu makinede `hidepid` olmadan bağlı (ölçüldü),
+# `ps` ve kabuk geçmişi de aynı değeri taşır. Kanal DEĞİŞTİ; korunan tasarım
+# kararı "ortamdan sessiz miras YOK" aynen sürüyor (yukarıdaki test).
+
+
+def test_raw_database_url_flag_is_rejected(capsys):
+    """Eski bayrak SESSİZCE kaldırılmadı — kullanan operatöre sebebi söylenir.
+
+    Tanımsız bırakmak "bilinmeyen argüman" derdi ve operatör bunu yazım hatası
+    sanabilirdi; üstelik o koşumda değer ZATEN argv'ye yazılmış olurdu.
+    """
+    with pytest.raises(SystemExit) as cikis:
+        cli.build_parser().parse_args(["--database-url", SAHTE_URL, "durum", "--run-id", "k-1"])
+
+    assert cikis.value.code != 0
+    hata = capsys.readouterr().err
+    assert "--database-url-file" in hata and "--database-url-env" in hata
+    assert "/proc" in hata, "sebep söylenmiyor — operatör neden değiştiğini bilmeli"
+
+
+def test_dsn_file_must_not_be_readable_by_others(tmp_path, capsys):
+    """Sırrı taşıyan dosya başkalarına açıksa kanal REDDEDER (fail-closed)."""
+    dosya = tmp_path / "dsn.txt"
+    dosya.write_text(SAHTE_URL, encoding="utf-8")
+    dosya.chmod(0o644)
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["--database-url-file", str(dosya), "durum", "--run-id", "k-1"])
+    with pytest.raises(SystemExit):
+        cli.dsn_coz(args, parser)
+
+    assert "başkalarına açık" in capsys.readouterr().err
+
+
+def test_dsn_file_channel_reads_the_value(tmp_path):
+    """0600 dosya kabul edilir ve değer okunur — argv'de görünmez."""
+    dosya = tmp_path / "dsn.txt"
+    dosya.write_text(SAHTE_URL + "\n", encoding="utf-8")
+    dosya.chmod(0o600)
+
+    parser = cli.build_parser()
+    args = parser.parse_args(["--database-url-file", str(dosya), "durum", "--run-id", "k-1"])
+
+    assert cli.dsn_coz(args, parser) == SAHTE_URL
+
+
+def test_dsn_env_channel_reads_the_named_variable(monkeypatch):
+    """Değişkenin ADI verilir, değeri değil — `DATABASE_URL` sessizce okunmaz."""
+    monkeypatch.setenv("OTOMAIX_TEST_DSN", SAHTE_URL)
+    monkeypatch.setenv("DATABASE_URL", "postgresql://kacak@127.0.0.1:5432/yanlis")
+
+    parser = cli.build_parser()
+    args = parser.parse_args(
+        ["--database-url-env", "OTOMAIX_TEST_DSN", "durum", "--run-id", "k-1"]
+    )
+
+    assert cli.dsn_coz(args, parser) == SAHTE_URL
+
+
+def test_exactly_one_dsn_channel_is_required(tmp_path, capsys, monkeypatch):
+    """Ne sıfır ne iki kanal — belirsizlik sessizce çözülmez."""
+    parser = cli.build_parser()
+
+    yok = parser.parse_args(["durum", "--run-id", "k-1"])
+    with pytest.raises(SystemExit):
+        cli.dsn_coz(yok, parser)
+    assert "kanalı verilmedi" in capsys.readouterr().err
+
+    dosya = tmp_path / "dsn.txt"
+    dosya.write_text(SAHTE_URL, encoding="utf-8")
+    dosya.chmod(0o600)
+    monkeypatch.setenv("OTOMAIX_TEST_DSN", SAHTE_URL)
+    ikisi = parser.parse_args(
+        [
+            "--database-url-file",
+            str(dosya),
+            "--database-url-env",
+            "OTOMAIX_TEST_DSN",
+            "durum",
+            "--run-id",
+            "k-1",
+        ]
+    )
+    with pytest.raises(SystemExit):
+        cli.dsn_coz(ikisi, parser)
+    assert "tek kanal seçin" in capsys.readouterr().err
