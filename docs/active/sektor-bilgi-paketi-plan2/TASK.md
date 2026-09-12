@@ -1011,6 +1011,77 @@ değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkil
 - **Adım 7 (n8n)** — S-6 kararı açık; ayrıca depo↔canlı sapması düğüm bazında
   karşılaştırılmadan import yapılmaz.
 
+## Task 19 Step 1 — dört operatör kararı KAPANDI (2026-09-12)
+
+Dördü de **2026-07-11 tasarım seansında Eray tarafından zaten karara bağlanmıştı**
+(`docs/specs/2026-07-11-sektor-bilgi-paketi.md` §12); 2026-08-21 spec-input'u onları
+*"veri tabanına yazımdan önce teyit et"* diye yeniden AÇIK saymıştı. Bu turda teyit alındı,
+yön DEĞİŞMEDİ.
+
+- **K-04a — gümüş pakete GİRER.** ⚠️ Bu karar fiilen SÖZLEŞMEDE kapanmıştı: pin'li araştırma
+  brief'i (`kuyumculuk.md` KAPSAM satırı) gümüşü zaten sayıyor. "Girmesin" demek üretilecek
+  çıktının bir kısmını atmak olurdu. **Öneride yazılı gerekçe ("araştırma kapsamında zaten
+  var") spec-input'un kendisinde geçersiz sayılır** — geçerli gerekçe, dondurulmuş brief'in
+  kapsam satırıdır, araştırma kapsamı değil.
+- **K-04b — kasım indirim dönemi pakete GİRMEZ.** Dönem sistem takviminde `Black Friday`
+  adıyla kayıtlı (ölçüldü: geliştirme veritabanı `social.public_holidays`, 2026-11-27,
+  `category=commercial`). Kampanya içeriği ayrı bir tür; ele alındığında evi orasıdır.
+- **K-04c — kampanya-aciliyet istisnası TANIMLANMAZ.** Sistem istemindeki sahte-kıtlık
+  yasağı sınırı çiziyor; istisna eklememek mevcut davranıştır.
+- **K-04d — kaynaksız kültürel sahne eklentileri FAZ 2.** Tercih değil **yapısal engel**:
+  Faz 1'e almak brief sözleşmesinin kaynaksız üretim yasağıyla karşılaşır ve içeriğin
+  nereden geleceğine dair AYRI bir karar gerektirir (spec-input md. 2366 o yolu açmaz).
+
+**Süreç notu (Eray itirazı, 2026-09-12):** Bu dört kalem pilot paketin İÇERİK detayıdır;
+kuyumculuk yalnızca örnek sektördür. İlk sunumda K-04a bir konumlandırma tradeoff'u gibi
+sunuldu ve dondurulmuş brief ÖLÇÜLMEDEN karar sorusuna çevrildi. Eray haklı olarak itiraz
+etti. Kural: karar sorusundan önce sözleşme ölçülür; ölçüm kararı zaten kapatmışsa soru
+sorulmaz, kayıt düşülür.
+
+## Task 19 Step 2-3-4 (2026-09-12) — canlıya iki satır + R-35'in ölçülebilen ayakları
+
+**Hedef veritabanı CANLIDIR — ölçüldü, varsayılmadı.** `127.0.0.1:5433/otomaix` üzerinde
+canlı iki marka (Otomaix, MyGoodShoes) ve 2026-09-12 dağıtımının Plan 2 tabloları duruyor.
+Bu bölümdeki iki yazım prod verisidir; **Eray onayıyla** koşuldu (ad da Eray'ın).
+
+**Step 2 — test markası AÇILDI.** `Deniz Kuyumculuk (TEST)`,
+`cb1dd79e-5ed4-452e-90cb-9ae1e88a5319`, workspace `0743cf1c…` (canlı iki markanın workspace'i),
+kök sektör `e-ticaret-perakende`, `sub_sector_id` **NULL bırakıldı**.
+Açıklama alanı kurgu olduğunu ve gerçek kişi/müşteri verisi taşımadığını yazar.
+Yazım doğrudan SQL ile yapıldı; `POST /brands` uçtan farkı YOK (uç de aynı yedi kolonu yazar,
+ölçüldü) — tek fark uçtaki Redis geçersizleştirmesi; marka listesi önbelleği **300 s**
+olduğundan arayüzde en geç beş dakikada görünür. **Atama bilinçle yapılmadı:** plandaki
+bağlayıcı sıra markaya öneri/teyit adımını AKTİVASYONDAN SONRAYA koyar (Step 11).
+
+**Step 3 — `kuyumculuk` alt sektör satırı AÇILDI**, ebeveyni `e-ticaret-perakende`,
+sekiz anahtar kelime. **Ölçüm (taze):** `sector_sweep.py` önce/sonra —
+`brands_total: 3` · `brands_root_anchored: 3` · `sub_sector_rows: 0 → 1` ·
+`remapped: 0` · `removed: 0` · `added: 0` · `differences: 0` · **rc=0**.
+Yani satır açmak mevcut markaların kök eşlemesini DEĞİŞTİRMEDİ.
+
+**Step 4 — R-35 (kişisel veri) — İKİ AYAK ÖLÇÜLDÜ, ÜÇÜNCÜSÜ HENÜZ ÖLÇÜLEMEZ.**
+
+1. **Bariyer kodda ve testli.** `[marka-adı]`, sekiz üyeli kapalı bayrak kümesinin üyesi;
+   sentezden **yalnız `kanal-bağımlı` sağ çıkar**, kalan yedi tüketilir; tüketilmemiş bayrak
+   sessizce geçmez, **açık soruya** döner. Taze koşum: beş hedef test, **5 passed** (0,55 s) —
+   `test_only_the_channel_flag_may_appear_in_package_content` ·
+   `test_every_contract_flag_spelling_is_recognised` ·
+   `test_an_unconsumed_flag_on_the_typed_row_becomes_an_open_question` ·
+   `test_the_surviving_flag_does_not_raise_an_open_question` ·
+   `test_flag_folding_matrix_has_a_negative_arm`.
+2. **Ham katman üretim yolunda DEĞİL.** `sector_research_artifacts` tablosunu okuyan üç modül
+   de hattın operatör tarafındadır (`readiness_items` · `readiness` · `runs`); üretim yolu
+   (`routers/ai.py`, `routers/posts.py`) yalnız `resolve_package_context` ile PAKETİ okur.
+   Ham rapordaki gerçek firma adı müşteri içeriğine bu yoldan ULAŞAMAZ.
+3. **ÖLÇÜLEMEYEN ayak — paket İÇERİĞİ.** Bugün paket içeriği YOK; "paket kişisel veri
+   içermez" iddiası ancak taslak üretildikten sonra ölçülebilir. **Evi: Step 9 sonrası,
+   Step 10 aktivasyonundan ÖNCE** — spec'in "gerçek veri yazımı ve aktivasyon öncesi"
+   hükmü tam olarak orayı gösterir. Bugün "R-35 doğrulandı" DENMEZ.
+
+**K-68 (R-35 doğrulamasını KİM yürütür) hâlâ açık.** Pilot için işletilen biçim: mekanik
+ayağı yürütücü koşar, sonucu onay kapısında Eray teyit eder. **Bu bir öneridir, karar değil**
+— Eray aksini söylerse değişir; kalıcı politika Task 20 kapanışında yazılır.
+
 ## Task 10 kararları (2026-09-09)
 
 - **Hakem bulgusunun severity'si kontrolör tarafından İNDİRİLDİ — bir kez, gerekçesiyle.**
