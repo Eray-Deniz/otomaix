@@ -972,6 +972,44 @@ diye açıkça etiketlidir; her adımın Ölçüm satırı boştur.
 2. `durum` alt komutu `--run-id` ZORUNLU ister; koşu yokken bağlantı smoke'u var olmayan bir
    kimlikle koşulur ve `koşu satırı yok` fail-closed çıktısı bağlantının kurulduğunu KANITLAR.
 
+## Task 18 — CANLI DAĞITIM (2026-09-12, Eray onayı "A ile devam")
+
+**Koşulan adımlar:** 1 (prova) · 2 (canlı şema) · 3'ün CLI ayağı · 4 (pin) · 8b (git) ·
+9'un ÖLÇÜM ayağı. Ayrıntı ve taze çıktılar: `docs/plans/PLAN2-DAGITIM-RUNBOOK.md`.
+
+**ORTAM BLOKERİ ÖLÇÜLDÜ VE ÇÖZÜLDÜ.** Sunucu **PostgreSQL 18.3**
+(`pgvector/pgvector:pg18`, 5433), host istemcisi **16.15**. `pg_dump` daha yeni sunucuyu
+REDDEDER — yani host aracıyla geri dönüş noktası ALINAMIYOR. İlk prova tam bu yüzden düştü
+(döküm boş → restore boş → migration'lar tabansız). Döküm/klon konteynerin KENDİ araçlarıyla
+koşuldu; `psql` ile migration uygulamak 16→18 yönünde sorunsuz (ölçüldü). **Bu, runbook'un
+yazıldığı anda GÖRÜNMEYEN bir dağıtım blokeriydi ve ancak koşularak çıktı** — belgeye işlendi.
+
+**Prova (Adım 1) — 6 koşum, 6'sı rc=0.** Klon canlının birebir kopyası (242 nesne, 31 tablo).
+up-down-up yapısal olarak doğrulandı: üç tablo VAR → YOK → VAR; 035'in kolon ayağı ayrıca
+ölçüldü (`public_holidays.end_date` 1 → 0 → 1, yani geri alma kolonu gerçekten düşürüyor).
+
+**Canlı (Adım 2) — 035 rc=0, 036 rc=0.** Geri dönüş noktası
+`/root/otomaix-deploy-backups/canli-035-036-oncesi-20260912-145056.dump` (188 KB, 0600,
+`pg_restore -l` ile okunabilirliği doğrulandı), o anki HEAD `ab91495`.
+Canlı doğrulama: beş tablo VAR · `end_date` VAR · üç tetikleyici kurulu · artefakt tür kümesi
+DÖRT değerli (bu oturumun şema değişikliği canlıda).
+
+**Adım 9 ölçümü (M-2 — 036'dan SONRA yeniden koşuldu): YETKİ VAR, üç tabloda da.**
+API kimliği `otomaix`, **`rolsuper=True` VE tabloların sahibi**. Negatif yazma denemesi tablo
+başına ayrı koşuldu; üçü de kabul edildi. Jeton kolonlarının dördü de yerinde.
+**KALDIRMA AYAĞI `REVOKE` İLE UYGULANAMAZ:** superuser grant denetimini atlar, sahip zaten tam
+haklıdır. Gereken **M-1**'dir — superuser OLMAYAN, sahip OLMAYAN ayrı uygulama rolü + DSN
+değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkiler.
+**AÇIK — Eray kararı gerektirir; yürütücü tek başına uygulamaz.**
+
+**KOŞULMAYANLAR (dürüst liste, sebebiyle):**
+- **Adım 3'ün SERVİS ayağı** — dal push EDİLMEDİ, Coolify deploy TETİKLENMEDİ. Canlı API hâlâ
+  eski imajı koşuyor. CLI ölçümleri çalışma ağacından canlı VERİTABANINA karşıdır; canlı
+  servisin yeni kodu taşıdığını göstermez.
+- **Adım 5 (adaptör)** ve **Adım 6 (takvim ucu)** — ikisi de servis ayağına bağlı.
+- **Adım 7 (n8n)** — S-6 kararı açık; ayrıca depo↔canlı sapması düğüm bazında
+  karşılaştırılmadan import yapılmaz.
+
 ## Task 10 kararları (2026-09-09)
 
 - **Hakem bulgusunun severity'si kontrolör tarafından İNDİRİLDİ — bir kez, gerekçesiyle.**

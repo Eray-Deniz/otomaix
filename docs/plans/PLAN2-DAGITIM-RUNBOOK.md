@@ -4,9 +4,19 @@
 > **Bağlayıcı ek:** `docs/plans/2026-08-27-sektor-bilgi-paketi-plan2-arayuz-eki.md` (R1).
 > Çelişkide EK GEÇERLİDİR.
 
-**Bu belge yazıldığı anda HİÇBİR ADIM KOŞULMAMIŞTIR.** Aşağıdaki her adımın
-"Ölçüm" satırı dağıtımı yapan kişi tarafından TAZE çıktıyla doldurulur;
-"koşmalı" / "geçmeli" bir ölçüm değildir (İlke 3 + İlke 9).
+**KOŞUM DURUMU — 2026-09-12.** Adım 1·2·3(CLI ayağı)·4·8b KOŞULDU ve ölçümleri
+aşağıda taze çıktıyla yazılıdır. Adım 3'ün SERVİS ayağı · Adım 5 · 6 · 7 ve
+Adım 9'un yetki KALDIRMA ayağı KOŞULMADI; her biri kendi satırında sebebiyle
+etiketlidir. "koşmalı" / "geçmeli" bir ölçüm DEĞİLDİR (İlke 3 + İlke 9).
+
+**ORTAM ÖLÇÜMÜ (bloker çıktı, çözüldü):** veritabanı sunucusu **PostgreSQL
+18.3** (Docker: `pgvector/pgvector:pg18`, 5433'e eşlenmiş); host üzerindeki
+istemci araçları **16.15**. `pg_dump` daha yeni sunucuyu **reddeder**
+(`server version: 18.3; pg_dump version: 16.15`) — yani host'un `pg_dump`'ı ile
+geri dönüş noktası ALINAMAZ. Çözüm: döküm ve klon işlemleri konteynerin KENDİ
+araçlarıyla (`docker exec … pg_dump/createdb/pg_restore`) koşulur. `psql` ile
+migration UYGULAMAK 16→18 yönünde sorunsuzdur (ölçüldü). Host'a 18 istemcisi
+kurmak da bir seçenektir; kurulmadı.
 
 ---
 
@@ -60,7 +70,14 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f shared/db/migrations/rollback/035_dow
 - Veri varken aynı yolun fail-closed durduğu Task 6'nın testlerinde kanıtlanır,
   burada DEĞİL.
 - Geri alma: prova klonu atılır.
-- **Ölçüm:** _(doldurulacak — üç koşumun da rc'si)_
+- **Ölçüm (2026-09-12, KOŞULDU — PROVA GEÇTİ):** klon canlının `pg_dump -Fc` +
+  `pg_restore` kopyasıdır (242 nesne, `social` şemasında 31 tablo — canlıyla aynı).
+  İleri `035`→`036` rc=0/0 · geri `036_down`→`035_down` rc=0/0 · tekrar ileri
+  rc=0/0. **Toplam 6 koşum, 6'sı da rc=0.**
+  Yapısal doğrulama: ileri sonrası `sector_package_runs` · `package_rollback_plans` ·
+  `brand_sub_sector_history` VAR → geri sonrası ÜÇÜ DE YOK → tekrar ileri sonrası
+  ÜÇÜ DE VAR. 035'in kolon ayağı ayrıca ölçüldü: `public_holidays.end_date`
+  1 → 0 → 1 (geri alma kolonu gerçekten DÜŞÜRÜYOR, sessizce bırakmıyor).
 
 ### Adım 2 — Canlıya uygula
 
@@ -68,7 +85,14 @@ Aynı komut biçimi, dosya dosya. **Geri dönüş noktası:** uygulamadan hemen 
 alınan `pg_dump` ve o anın HEAD sha'sı buraya yazılır.
 
 - Geri alma: §4'e bak — hangi rejimde olduğun veriye bağlıdır.
-- **Ölçüm:** _(doldurulacak — geri dönüş noktası + iki dosyanın rc'si)_
+- **Ölçüm (2026-09-12, KOŞULDU):** geri dönüş noktası
+  `/root/otomaix-deploy-backups/canli-035-036-oncesi-20260912-145056.dump`
+  (188 KB, 0600, `pg_restore -l` ile 242 nesne okunabilir doğrulandı); o andaki
+  HEAD `ab91495`, dal `feat/sektor-bilgi-paketi-plan2`.
+  `035` rc=0 · `036` rc=0 (yalnız üç `NOTICE: trigger … does not exist, skipping`).
+  Canlı doğrulama: beş tablonun beşi de VAR · `public_holidays.end_date` VAR ·
+  üç tetikleyicinin üçü de kurulu · artefakt tür kümesi dört değerli
+  (`research`/`review`/`synthesis`/`mechanical_gate`).
 
 ### Adım 3 — Arka uç + CLI dağıtımı
 
@@ -91,7 +115,14 @@ fail-closed döner — **bu çıktının kendisi bağlantının kurulduğunu kan
 `python scripts/sector_sweep.py --database-url-env DATABASE_URL --dry-run`.
 
 - Geri alma: önceki imaja dön (şemaya DOKUNMAZ).
-- **Ölçüm:** _(doldurulacak — iki komutun canlıdaki çıktısı)_
+- **Ölçüm (2026-09-12, CLI ayağı KOŞULDU):** `--help` rc=0 ·
+  `durum --run-id 2026-09-12-yok-0001` → `koşu yok: 2026-09-12-yok-0001`
+  (fail-closed çıktı, bağlantının kurulduğunun KANITI) ·
+  `sector_sweep.py --dry-run` → `differences: 0`, iki marka eşlendi.
+- **KOŞULMADI — SERVİS AYAĞI.** Coolify servisi (`otomaix-social-backend`) hâlâ
+  ESKİ imajı koşuyor: bu dal push EDİLMEDİ ve deploy TETİKLENMEDİ. Yukarıdaki
+  ölçümler CLI'yi çalışma ağacından canlı VERİTABANINA karşı koşar; canlı API'nin
+  yeni kodu taşıdığını GÖSTERMEZ.
 
 ### Adım 4 — Dış sözleşme deposu
 
@@ -107,7 +138,8 @@ contracts.require_pin(PIN_PATH, REPO_ROOT)   # sessiz dönüş = geçti
 - **Pin dış deponun HEAD commit'ini de karşılaştırır** — depoda yapılan HER
   commit pin'i bayatlatır ve `commit` alanı güncellenmeden koşu başlamaz.
 - Geri alma: dış depoyu önceki commit'e al + pin'i geri çevir.
-- **Ölçüm:** _(doldurulacak)_
+- **Ölçüm (2026-09-12, KOŞULDU):** `contracts.require_pin(pin, /root/otomaix-sosyal-medya-arastirmasi)`
+  → sessiz dönüş = GEÇTİ. Pin commit'i `c3f0d30` (yeniden türetilen brief).
 
 ### Adım 5 — Operatör adaptörü
 
@@ -119,13 +151,15 @@ ortamında da kurulu olduğunu göstermez — adaptör operatörün makinesinde 
 ve dağıtım hedefine göre ayrıca doğrulanır.
 
 - Geri alma: dosyayı kaldır.
-- **Ölçüm:** _(doldurulacak — çağrılan alt komut + çıktısı)_
+- **KOŞULMADI.** Adaptör geliştirme makinesinde mevcut ama dağıtım hedefinde
+  doğrulanmadı; hedef, servis ayağı dağıtılana kadar belirsizdir.
 
 ### Adım 6 — Takvim ucu
 
 Takvim ucunun dönem alanını döndürdüğü ve önbelleğin bayat kalmadığı ölçülür.
 
-- **Ölçüm:** _(doldurulacak)_
+- **KOŞULMADI.** Takvim ucu dağıtılmış SERVİSTE yaşar; servis ayağı henüz
+  dağıtılmadı (Adım 3).
 
 ### Adım 7 — n8n workflow'ları
 
@@ -141,7 +175,9 @@ Takvim ucunun dönem alanını döndürdüğü ve önbelleğin bayat kalmadığ�
 - Sentetik bir olayla TEK teslim smoke'u, sentetik bir hatayla TEK
   hata-bildirimi smoke'u koşulur.
 - Geri alma: workflow'ları pasife al + önceki JSON'u geri yükle.
-- **Ölçüm:** _(doldurulacak — üç import + iki smoke)_
+- **KOŞULMADI — ÖN KOŞUL AÇIK.** S-6 kararı verilmedi; takvim workflow'u bu
+  adımda import ediliyor. Ayrıca depo↔canlı sapması düğüm bazında
+  karşılaştırılmadan import YAPILMAZ.
 
 ### Adım 8 — `git` ikilisi ve ortam değişkenleri (Step 8b)
 
@@ -156,7 +192,9 @@ env | grep -E '^(GIT_DIR|GIT_WORK_TREE)=' && echo "SET — pin YABANCI depoyu ok
 - `GIT_DIR`/`GIT_WORK_TREE` set ise `rev-parse` yanlış depoyu okur ve pin
   yabancı bir commit'e karşı karşılaştırılır. İkili yoksa bu bir **dağıtım
   blokeridir**, sessizce geçilmez.
-- **Ölçüm:** _(doldurulacak)_
+- **Ölçüm (2026-09-12, KOŞULDU):** `git version 2.43.0` — ikili VAR.
+  `GIT_DIR` / `GIT_WORK_TREE` **set DEĞİL** (pin kendi deposunu okur). Bu adım
+  bloker üretmedi.
 
 ### Adım 9 — Yazma yetkisinin kaldırılması (K-103 (b))
 
@@ -175,7 +213,21 @@ o iki tabloya `UPDATE` edebilen kod **kendi kanıtı için jeton basabilir**.
 - Önceki ölçüm: `docs/research/2026-09-10-k103b-etkin-yetki-olcumu.md`
   (M-1: uygulama için superuser OLMAYAN rol · M-2: 036 dağıtıldıktan SONRA
   ölçüm yeniden koşulur).
-- **Ölçüm:** _(doldurulacak — tablo başına ayrı)_
+- **Ölçüm (2026-09-12, M-2 gereği 036 DAĞITILDIKTAN SONRA koşuldu):**
+  - (a) API kimliği `otomaix`; **`rolsuper = True`**; `social.sector_packages`
+    tablosunun **sahibi de aynı rol**.
+  - (b) Katalog grant'ları üç tabloda da tam küme
+    (`DELETE,INSERT,REFERENCES,SELECT,TRIGGER,TRUNCATE,UPDATE`).
+  - (c) Jeton kolonlarının dördü de her iki tabloda YERİNDE.
+  - (d) Negatif yazma denemesi (geri alınan işlem + eşleşmeyen `WHERE`), tablo
+    başına AYRI: **üçü de KABUL EDİLDİ** → yazma yetkisi ETKİN olarak VAR.
+- **YETKİ KALDIRMA AYAĞI KOŞULMADI — ve `REVOKE` ile KOŞULAMAZ.** Rol hem
+  **superuser** hem **tablo sahibi**: superuser grant denetimini atlar, sahip
+  zaten tam haklıdır. Yani "API rolünün yazma yetkisini kaldır" hükmü bu kimlikle
+  uygulanamaz; gereken şey **M-1**'dir — uygulama için superuser OLMAYAN, tabloların
+  sahibi OLMAYAN ayrı bir rol ve DSN değişikliği. Bu, canlı kimliği değiştirir ve
+  uygulamanın TAMAMINI etkiler; **Eray kararı gerektirir**, yürütücü tek başına
+  uygulamaz.
 
 ---
 
