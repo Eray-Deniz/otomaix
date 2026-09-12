@@ -934,6 +934,44 @@ KENDİ garanti doğrulaması durdurur (beklenen/görülen farkıyla) · (4) geri
 `036_down` doğrulama bloğu EKSİK KALDI der · (5) `DURUMLAR` Python'da genişletilir → ıraksama testi
 kalemi adıyla gösterir · (6) eşleşme tablosundan kalem silinir → kapsama testi düşer.
 
+## Task 18 — F6 · brief yeniden türetme · runbook (2026-09-12)
+
+### F6 kapandı — URL örneklem DAĞILIMI ölçülüyor
+Kapı yalnız `kaynak × 3` TOPLAMINI sayıyordu; dokuz satırın dokuzu da `K1#…` olsa geçerdi.
+Dağılım kapısı eklendi: ayrı kaynak sayısı beyanla eşit VE kaynak başına tam üç satır.
+Toplam kuralı da aynı sabitten (`URL_SATIRI_PER_KAYNAK`) türer, iki kapı ıraksayamaz.
+**Kusur fixture'larda da vardı:** üç test yardımcısı satırları `K{sira%3+1}` ile üretiyordu,
+yani 6 satırı ÜÇ kaynağa İKİŞER dağıtıyordu — tam da kuralın ihlali. Düzeltildi.
+Mutasyon 2/2 düştü. Tam takım 4412 passed / 318.44s.
+
+### `kuyumculuk.md` şablondan yeniden türetildi
+Brief 2026-07-07'de şablonun 2026-07-11 ÖNCESİ sürümünden türetilmişti; o günden beri şablon
+üç kez revize edildi. **ÖLÇÜLDÜ: 2-5. bölümlerde 211 satırlık sapma.** Brief kanal-bağımlılığı
+anahtar uzayını (dört kapalı değer), `video_kodlar` 6a/6b ayrımını, Bölüm C'nin sabit sütunlu
+tablosunu ve dönem kimliğinin SİSTEM ANAHTARINA bağlanmasını HİÇ taşımıyordu — bu hâliyle üç
+araca verilse sözleşme 2.3 biçiminde çıktı üretilemezdi.
+Şablon açıkça *"yalnız 1. SEKTÖR BLOĞU doldurulur, diğer bölümler sabittir"* der; sektöre
+uyarlanmış ifadeler (ör. "lüks segment estetiği") bu yüzden SAPMAYDI ve kaldırıldı.
+**İki yarı da byte-exact doğrulandı:** 2-5. bölümler şablonla birebir, 1. bölüm eski dosyayla
+birebir. 157 → 341 satır. Dış depo commit'i `c3f0d30`, pin buna güncellendi (32 pin testi PASS).
+**ÖNCELENMEDİ:** dört operatör kararı (K-04a–d) sektör bloğunun İÇERİĞİNİ etkiler ve
+**Task 19 Step 1'e** aittir; bu türetme yalnız sabit bölümleri hizalar.
+
+### Dağıtım runbook'u yazıldı
+`docs/plans/PLAN2-DAGITIM-RUNBOOK.md` — Step 0 kalite kapısı, dokuz adımın her biri kendi geri
+alma karşılığıyla, **F20'nin İKİ REJİMİ ayrı başlıkta** (pilot-öncesi şema geri alması geçerli ·
+pilot-sonrası şema geri alma YOK, veri-koruyan ileri düzeltme). Belge "hiçbir adım koşulmadı"
+diye açıkça etiketlidir; her adımın Ölçüm satırı boştur.
+
+### Runbook yazarken ÖLÇÜLEN iki sapma
+1. **Planın komut biçimi BAYAT.** Plan Task 19 Step 3 `sector_sweep.py --database-url …` yazıyor;
+   S-3 güvenlik düzeltmesinden sonra böyle bir argüman YOK — DSN `--database-url-file` (0600) ya da
+   `--database-url-env` (değişken ADI) ile verilir, argv'ye yazılmaz. Aynı biçim `sector_pipeline_cli`
+   için de geçerli. **Yürütücü planı DÜZENLEMEZ**; runbook doğru biçimi yazar, bu kayıt sapmayı
+   belgeler. **Ev:** Task 20 kabul eşlemesi (plan ile gerçek arayüz farkları orada raporlanır).
+2. `durum` alt komutu `--run-id` ZORUNLU ister; koşu yokken bağlantı smoke'u var olmayan bir
+   kimlikle koşulur ve `koşu satırı yok` fail-closed çıktısı bağlantının kurulduğunu KANITLAR.
+
 ## Task 10 kararları (2026-09-09)
 
 - **Hakem bulgusunun severity'si kontrolör tarafından İNDİRİLDİ — bir kez, gerekçesiyle.**
