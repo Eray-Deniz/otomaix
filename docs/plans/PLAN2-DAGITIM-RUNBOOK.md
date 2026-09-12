@@ -228,6 +228,11 @@ o iki tabloya `UPDATE` edebilen kod **kendi kanıtı için jeton basabilir**.
   sahibi OLMAYAN ayrı bir rol ve DSN değişikliği. Bu, canlı kimliği değiştirir ve
   uygulamanın TAMAMINI etkiler; **Eray kararı gerektirir**, yürütücü tek başına
   uygulamaz.
+- **KARAR (2026-09-12, Eray):** M-1 `repo-public-exposed-live-credentials` turunda
+  yapılacak — ikisi de canlı kimliği oynatır, tek seferde değiştirilir. Yetki
+  dağılımı ölçüldü ve aktif katmanda yazılı (22 tablo yazma · 4 kanıt tablosu
+  yalnız okuma · şema düzeyi yetki yok). Uygulamadan önce **klonda tam tur**
+  zorunludur. Bu adım Task 18'i bloklamaz; ölçüm yapıldı, kaldırma TARİHLİ eve bağlandı.
 
 ---
 

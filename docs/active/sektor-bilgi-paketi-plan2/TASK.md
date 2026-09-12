@@ -1245,6 +1245,36 @@ değişikliği. Bu canlı kimliği değiştirir ve uygulamanın tamamını etkil
 
 # Open Problems
 
+- **[YÜKSEK — EVİ VAR 2026-09-12, Eray kararı] M-1: uygulama veritabanına KÖK kimlikle bağlanıyor.**
+  ÖLÇÜLDÜ (036 dağıtıldıktan SONRA, M-2 gereği): API kimliği `otomaix` hem **`rolsuper=True`**
+  hem dört kanıt tablosunun **sahibi**; negatif yazma denemesi tablo başına ayrı koşuldu, üçü de
+  kabul edildi. **Plan Task 18 Step 7'nin "yazma yetkisini kaldır" hükmü bu kimlikle `REVOKE` ile
+  UYGULANAMAZ** — superuser grant denetimini atlar, sahip zaten tam haklıdır.
+  **Çözüm (kabul edilen tasarım):** uygulama için superuser OLMAYAN, tabloların sahibi OLMAYAN
+  ayrı bir rol + Coolify'da DSN değişikliği.
+  **Yetki dağılımı ÖLÇÜLDÜ:**
+  - **Yazma — 22 tablo** (router'dan ulaşılabilen kodun yazdığı küme; ÜST SINIR, "yükleniyor ≠
+    çağrılıyor" olduğu için fazla yetki verir, eksik değil): `accounts` · `admin_events` ·
+    `autoposting_configs` · `brand_documents` · `brand_products` · `brand_reference_images` ·
+    `brand_social_accounts` · `brand_trend_cache` · `brands` · `competitor_analyses` ·
+    `generation_stamps` · `package_events` · `post_publications` · `posts` · `product_documents` ·
+    `product_images` · `sector_reports` · `sector_trend_cache` · `subscriptions` · `trend_usage` ·
+    `workspace_members` · `workspaces`.
+  - **Yalnız okuma — 4 kanıt tablosu:** `sector_packages` · `sector_package_runs` ·
+    `package_rollback_plans` · `sector_research_artifacts`. Bu ayrım **fonksiyon düzeyinde**
+    ölçüldü: bu dördüne yazan 17 fonksiyonun HİÇBİRİ `app/routers/` içinde geçmiyor; yazan tek
+    yüzey operatör CLI'sidir ve o mevcut tam yetkili kimlikle koşmaya devam eder.
+  - Şema düzeyi yetki (tablo yaratma/silme, tetikleyici devre dışı bırakma) ve `crm` şeması: YOK.
+  - **Müşteri izolasyonu bu rolden GELMEZ** — tek teknik kullanıcı bütün müşteriler adına yazar;
+    marka/workspace sahiplik denetimi uygulama katmanındadır ve değişmez.
+  **EV (Eray kararı 2026-09-12): `repo-public-exposed-live-credentials` turu** — "Plan 2
+  yürütmesi biter bitmez, ilk iş" olarak zaten tarihli. Gerekçe: ikisi de canlı kimliği
+  oynatır; ayrı ayrı yapmak kimliği iki kez değiştirmek olur. Uygulamadan önce klonda tam tur
+  (yetkiler verilip uygulama baştan sona koşulur) ZORUNLUDUR — eksik izin orada patlasın.
+  **Bu kalem Task 18'i BLOKLAMAZ; yetki ölçümü yapıldı ve kaldırma kararla ertelendi —
+  "handled" DEĞİL, "ölçüldü + tarihli eve bağlandı".**
+
+
 - **[CRITICAL — `accepted_risk` 2026-09-12, Eray kararı] S-7: `tg-approve` / `tg-reject`
   kimliksiz GET ile yetkili vekil işlem.** Seçenek **(c) explicit risk kabulü** alındı.
   **Eray'ın gerekçesi (birebir dayanak):** *"Telegram onay/ret bağlantıları olduğu gibi kalsın.
