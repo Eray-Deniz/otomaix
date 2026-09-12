@@ -23,6 +23,7 @@ import ast
 import asyncio
 import inspect
 import logging
+import re
 import uuid
 from dataclasses import dataclass, fields as dataclass_fields
 from datetime import date, datetime
@@ -4842,17 +4843,28 @@ def test_parse_stamp_accepts_the_canonical_stamp():
     }
 
 
-def test_artifact_kinds_constant_mirrors_the_migration_check():
-    """İzinli tür kümesi ŞEMADAN okunur — ikinci kanonik liste yazılmaz."""
-    import re
+async def test_artifact_kinds_constant_mirrors_the_applied_schema(pkg_db):
+    """İzinli tür kümesi UYGULANMIŞ ŞEMADAN okunur — metinden DEĞİL.
 
-    kok = Path(__file__).resolve().parents[4]
-    metin = (kok / "shared/db/migrations/032_sector_packages.sql").read_text(
-        encoding="utf-8"
+    Önceki biçim migration 032'nin satır içi CHECK METNİNİ regex'liyordu ve
+    ölçüm 036'nın genişletmesini HİÇ görmüyordu: kümeyi tek bir dosyada arayan
+    bir okuma, kısıtı sonradan değiştiren her migration'a kördür. Kaynak artık
+    kataloğun kendisi (`pg_constraint`) — yani kodun karşılaştırıldığı şey
+    gerçekten veritabanının uyguladığı kuraldır.
+    """
+    tanim = await pkg_db.fetchval(
+        "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+        " WHERE c.conrelid = 'social.sector_research_artifacts'::regclass "
+        "   AND c.conname = 'sector_research_artifacts_kind_check'"
     )
-    esles = re.search(r"kind TEXT NOT NULL CHECK \(kind IN \(([^)]*)\)\)", metin)
-    assert esles is not None
-    assert set(runs.ARTEFAKT_TURLERI) == set(re.findall(r"'([^']+)'", esles.group(1)))
+    assert tanim, "sector_research_artifacts_kind_check YOK"
+    sema_turleri = set(re.findall(r"'([a-z_]+)'::text", tanim))
+
+    assert sema_turleri == set(runs.ARTEFAKT_TURLERI), (
+        f"şema ile ARTEFAKT_TURLERI ıraksadı\n"
+        f"yalnız şemada: {sorted(sema_turleri - set(runs.ARTEFAKT_TURLERI))}\n"
+        f"yalnız Python'da: {sorted(set(runs.ARTEFAKT_TURLERI) - sema_turleri)}"
+    )
 
 
 async def test_record_artifact_refuses_a_kind_the_schema_rejects(pkg_db):

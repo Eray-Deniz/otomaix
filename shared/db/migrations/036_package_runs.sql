@@ -119,6 +119,17 @@ DECLARE
         ' ''rollback''::text, ''deactivation''::text, ''approval''::text,'
         ' ''rejection''::text])))';
     k09_kanonik CONSTANT TEXT := 'UNIQUE (run_id, source, kind)';
+    -- Artefakt TÜR kümesi: 032'nin dar hâli ve 036'nın genişlettiği hâli.
+    -- Dördüncü tür (`mechanical_gate`) mekanik kapı raporunun sınıfıdır;
+    -- üç mevcut türün hiçbirine oturmuyordu (`review` KÖR HAKEM raporudur ve
+    -- hazırlık listesi o türü SAYAR — mekanik rapor oraya yazılırsa "iki hakem
+    -- raporu" ölçümü kirlenirdi). Genişletme kapalı kümeyi AÇMAZ.
+    artefakt_check_dar CONSTANT TEXT :=
+        'CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+        ' ''synthesis''::text])))';
+    artefakt_check_genis CONSTANT TEXT :=
+        'CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+        ' ''synthesis''::text, ''mechanical_gate''::text])))';
 
     -- TETİKLEYİCİ TANIMLARI `pg_get_triggerdef`in ÜRETTİĞİ BİÇİMDEDİR ve
     -- ÖLÇÜLEREK pinlenmiştir (tahmin değil). Tek metin ÜÇ işi birden görür:
@@ -342,6 +353,29 @@ BEGIN
             mevcut_tur, mevcut_valid, mevcut_def
             USING ERRCODE = 'integrity_constraint_violation',
                   HINT = 'Beklenen tanim: UNIQUE (run_id, source, kind).';
+    END IF;
+
+    -- ── KAPI 3b — ARTEFAKT TÜR CHECK'İNİN KİMLİĞİ ──────────────────────────
+    -- KAPI 2'nin aynısı, bu kez `kind` kümesi için: `DROP CONSTRAINT` nesneyi
+    -- yalnız ADIYLA arar. Kabul edilen İKİ tanım vardır — 032'nin dar kümesi ve
+    -- 036'nın geniş kümesi (ikinci koşum). Üçüncü bir metin fail-closed reddedilir.
+    SELECT pg_get_constraintdef(c.oid), c.contype, c.convalidated
+      INTO mevcut_def, mevcut_tur, mevcut_valid
+      FROM pg_constraint c
+     WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+       AND c.conname = 'sector_research_artifacts_kind_check';
+
+    IF mevcut_def IS NULL
+       OR mevcut_tur <> 'c'
+       OR NOT mevcut_valid
+       OR mevcut_def NOT IN (artefakt_check_dar, artefakt_check_genis) THEN
+        RAISE EXCEPTION
+            'migration 036: sector_research_artifacts_kind_check adini KANONIK OLMAYAN bir kisit tutuyor (contype=%, convalidated=%, tanim=%)',
+            coalesce(mevcut_tur::text, '<yok>'),
+            coalesce(mevcut_valid::text, '<yok>'),
+            coalesce(mevcut_def, '<yok>')
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Beklenen: 032 nin dar kumesi ya da 036 nin genis kumesi.';
     END IF;
 
     -- ── KAPI 4 — FONKSİYON VE TETİKLEYİCİ KİMLİĞİ ADdan DEĞİL TANIMdan ─────
@@ -666,6 +700,22 @@ BEGIN
                 'UNIQUE (run_id, source, kind)';
     END IF;
 
+    -- ── 5b. Artefakt tür kümesi genişler (mekanik kapı raporu) ──────────────
+    -- Yalnız DB CHECK'ini genişletmek raporu YAZILABİLİR YAPMAZ:
+    -- `app/services/sector_pipeline/runs.py` bilinmeyen türü SQL'e VARMADAN
+    -- reddeder (`ARTEFAKT_TURLERI` değişmezi). İki kapının tek küme olduğu
+    -- `test_artifact_kinds_constant_mirrors_the_applied_schema` ile ölçülür.
+    IF (SELECT pg_get_constraintdef(c.oid)
+          FROM pg_constraint c
+         WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+           AND c.conname = 'sector_research_artifacts_kind_check') = artefakt_check_dar THEN
+        EXECUTE 'ALTER TABLE social.sector_research_artifacts '
+                'DROP CONSTRAINT sector_research_artifacts_kind_check';
+        EXECUTE 'ALTER TABLE social.sector_research_artifacts '
+                'ADD CONSTRAINT sector_research_artifacts_kind_check CHECK (kind IN ('
+                '''research'', ''review'', ''synthesis'', ''mechanical_gate''))';
+    END IF;
+
     -- ── 6. K-99 — olay kümesi genişler ──────────────────────────────────────
     -- Yalnız DB CHECK'ini genişletmek onay/ret olayını YAZILABİLİR YAPMAZ:
     -- `app/services/package_events.py` bilinmeyen türü SQL'e VARMADAN reddeder.
@@ -765,6 +815,8 @@ BEGIN
              trg_plan_kanonik || '|enabled=O'),
             ('sector_research_artifacts K-09 kısıtı',
              'u|UNIQUE (run_id, source, kind)|enforced=true validated=true'),
+            ('sector_research_artifacts.kind CHECK (genişlemiş)',
+             'c|' || artefakt_check_genis),
             ('package_events.event_type CHECK (genişlemiş)',
              'c|CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text, ''package_read_error''::text, ''stale_assignment_fallback''::text, ''stamp_missing''::text, ''stamp_invalid''::text, ''stamp_stale_at_persist''::text, ''activation''::text, ''rollback''::text, ''deactivation''::text, ''approval''::text, ''rejection''::text])))')
     ),
@@ -928,6 +980,11 @@ BEGIN
                 FROM pg_constraint k
                WHERE k.conrelid = 'social.sector_research_artifacts'::regclass
                  AND k.conname = 'sector_research_artifacts_run_source_kind_key')),
+            ('sector_research_artifacts.kind CHECK (genişlemiş)',
+             (SELECT format('%s|%s', k.contype, pg_get_constraintdef(k.oid))
+                FROM pg_constraint k
+               WHERE k.conrelid = 'social.sector_research_artifacts'::regclass
+                 AND k.conname = 'sector_research_artifacts_kind_check')),
             ('package_events.event_type CHECK (genişlemiş)',
              (SELECT format('%s|%s', k.contype, pg_get_constraintdef(k.oid))
                 FROM pg_constraint k

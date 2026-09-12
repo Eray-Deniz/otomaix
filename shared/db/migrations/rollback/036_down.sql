@@ -92,6 +92,12 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 DO $preflight$
 DECLARE
+    artefakt_check_dar CONSTANT TEXT :=
+        'CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+        ' ''synthesis''::text])))';
+    artefakt_check_genis CONSTANT TEXT :=
+        'CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+        ' ''synthesis''::text, ''mechanical_gate''::text])))';
     olay_check_dar CONSTANT TEXT :=
         'CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text,'
         ' ''package_read_error''::text, ''stale_assignment_fallback''::text,'
@@ -242,6 +248,20 @@ BEGIN
                   HINT = 'Beklenen: 033 un dar kumesi ya da 036 nin genis kumesi.';
     END IF;
 
+    SELECT pg_get_constraintdef(c.oid) INTO mevcut_def
+      FROM pg_constraint c
+     WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+       AND c.conname = 'sector_research_artifacts_kind_check';
+
+    IF mevcut_def IS NULL
+       OR mevcut_def NOT IN (artefakt_check_dar, artefakt_check_genis) THEN
+        RAISE EXCEPTION
+            'migration 036 geri alma REDDEDILDI: sector_research_artifacts_kind_check adini KANONIK OLMAYAN bir kisit tutuyor (tanim=%)',
+            coalesce(mevcut_def, '<yok>')
+            USING ERRCODE = 'integrity_constraint_violation',
+                  HINT = 'Beklenen: 032 nin dar kumesi ya da 036 nin genis kumesi.';
+    END IF;
+
     -- ── KİMLİK KAPISI (F7) — `DROP` ADIN gördüğünü düşürür ──────────────────
     -- İleri dosyadaki KAPI 4'ün aynadaki eşi. `DROP FUNCTION IF EXISTS` ve
     -- `DROP TRIGGER IF EXISTS` nesneyi yalnız ADIYLA arar; aynı adı taşıyan
@@ -332,6 +352,9 @@ ALTER TABLE social.sector_research_artifacts
 
 DO $narrow_events$
 DECLARE
+    artefakt_check_genis CONSTANT TEXT :=
+        'CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+        ' ''synthesis''::text, ''mechanical_gate''::text])))';
     olay_check_genis CONSTANT TEXT :=
         'CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text,'
         ' ''package_read_error''::text, ''stale_assignment_fallback''::text,'
@@ -352,6 +375,18 @@ BEGIN
                 '''stale_assignment_fallback'', ''stamp_missing'', '
                 '''stamp_invalid'', ''stamp_stale_at_persist'', ''activation'', '
                 '''rollback'', ''deactivation''))';
+    END IF;
+
+    -- Artefakt tür kümesi: 036'nın eklediği dördüncü tür geri alınır.
+    IF (SELECT pg_get_constraintdef(c.oid)
+          FROM pg_constraint c
+         WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+           AND c.conname = 'sector_research_artifacts_kind_check') = artefakt_check_genis THEN
+        EXECUTE 'ALTER TABLE social.sector_research_artifacts '
+                'DROP CONSTRAINT sector_research_artifacts_kind_check';
+        EXECUTE 'ALTER TABLE social.sector_research_artifacts '
+                'ADD CONSTRAINT sector_research_artifacts_kind_check CHECK (kind IN ('
+                '''research'', ''review'', ''synthesis''))';
     END IF;
 END
 $narrow_events$;
@@ -374,6 +409,9 @@ DROP FUNCTION IF EXISTS social.reject_approved_rollback_plan_mutation();
 
 DO $verify_down$
 DECLARE
+    artefakt_check_dar CONSTANT TEXT :=
+        'CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+        ' ''synthesis''::text])))';
     olay_check_dar CONSTANT TEXT :=
         'CHECK ((event_type = ANY (ARRAY[''mismatch_fallthrough''::text,'
         ' ''package_read_error''::text, ''stale_assignment_fallback''::text,'
@@ -425,6 +463,22 @@ BEGIN
                AND c.contype = 'c'
                AND c.convalidated
                AND pg_get_constraintdef(c.oid) = olay_check_dar
+         )
+        UNION ALL
+        SELECT 'sector_research_artifacts.kind CHECK daraltilmadi: '
+               || coalesce(
+                    (SELECT pg_get_constraintdef(c.oid)
+                       FROM pg_constraint c
+                      WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+                        AND c.conname = 'sector_research_artifacts_kind_check'),
+                    '<yok>')
+         WHERE NOT EXISTS (
+            SELECT 1 FROM pg_constraint c
+             WHERE c.conrelid = 'social.sector_research_artifacts'::regclass
+               AND c.conname = 'sector_research_artifacts_kind_check'
+               AND c.contype = 'c'
+               AND c.convalidated
+               AND pg_get_constraintdef(c.oid) = artefakt_check_dar
          )
       ) AS remaining;
 

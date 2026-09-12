@@ -182,7 +182,7 @@ EXPECTED_032_MANIFEST = {
             "sector_research_artifacts_pkey": "PRIMARY KEY (id)",
             "sector_research_artifacts_kind_check": (
                 "CHECK ((kind = ANY (ARRAY['research'::text, 'review'::text, "
-                "'synthesis'::text])))"
+                "'synthesis'::text, 'mechanical_gate'::text])))"
             ),
         },
         "indexes": {

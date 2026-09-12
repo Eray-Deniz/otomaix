@@ -887,6 +887,53 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   yani tam da F7'nin adlandırdığı kör noktayı taşır. **Bu turda bilerek dokunulmadı** (kapsam
   Task 6'nın dosyaları); aktif katmana tetikli madde olarak yazıldı, sessizce düşürülmedi.
 
+## Task 18 şema ayağı (2026-09-12) — artefakt tür kümesi + sınıf kapısı
+
+**Ne indi.** `sector_research_artifacts.kind` kapalı kümesi dördüncü türle genişledi:
+`mechanical_gate`. Genişletme migration 036'nın içindedir (032 CANLIDA UYGULANMIŞ — ölçüldü:
+`sector_research_artifacts` ve `sector_packages` var, 035/036 tabloları YOK, artefakt satırı 0),
+yani kısıt ALTER ile değişir, 032 yerinde düzenlenmez. 032'nin sürüm-farkında beklenti bloğu
+(`expected_036`) genişlemiş metni taşır; 032 TEK BAŞINA uygulandığında beklenti DEĞİŞMEDİ.
+
+**Neden yeni tür, neden koşu klasörüne indirgeme değil.** Mekanik kapı raporu üç eski türden
+hiçbirine oturmuyor: `research` ham araştırma çıktısıdır, `review` KÖR HAKEM raporudur ve
+hazırlık listesi o türü SAYAR (mekanik rapor oraya yazılsaydı "iki hakem raporu" ölçümü
+kirlenirdi), `synthesis` sentezdir. Spec-input §7.5 veri tabanını KALICI KANIT katmanı sayar;
+raporu yalnız koşu klasöründe bırakmak onu düzenlenebilir çalışma kopyasına indirirdi.
+
+**Geri alma simetrik.** `036_down` kümeyi üç değere daraltır; preflight kimlik kapısı yalnız
+kanonik iki metni (dar/geniş) kabul eder, üçüncü bir metin fail-closed reddedilir; doğrulama
+bloğu daraltma yapılmadığında EKSİK KALDI diye durur.
+
+**Muafiyet listesi kaldırıldı.** CLI'deki `SEMA_DISI_ARTEFAKT_TURLERI` borç kaydı sildi —
+kapı artık istisnasız fail-closed. Borcun ödendiği yerde muafiyet kancasını bırakmak yeni
+borca açık kapı olurdu.
+
+**BLAST-RADIUS (İlke 6) — kusur TEKİL DEĞİLDİ.** Kusuru doğuran süreç "Python sabiti ile DB
+CHECK'i ayrı ayrı bakımlanıyor, ikisi hiç karşılaştırılmıyor". Aynı süreç yedi kapalı küme
+üretmiş; ÖLÇÜLDÜ (AST taraması, test gövdelerinde `pg_constraint` sorgusu arandı): yalnız
+`EVENT_TYPES` pinliydi. Kalan beşi (`DURUMLAR` · `KOSU_TURLERI` · `PLAN_DURUMLARI` ·
+`SONUCLAR` · `KARARLAR`) korumasızdı.
+**Kapanış varyant yamamayla değil SINIF kapısıyla kuruldu:**
+- `test_closed_set_checks_agree_with_their_python_mirrors` — her eşleşmede DB kümesi = Python kümesi.
+- `test_every_closed_set_check_has_a_declared_mirror` — Plan 2 tablolarındaki HER değer-kümesi
+  CHECK'i ya bir aynaya ya da BEYANA bağlı; yeni bir kapalı küme sessizce kapının dışında kalamaz.
+  Kapı yazıldığı anda bir kalem buldu (`package_rollback_plans_onay_butun` — sayısal aritelik
+  kontrolü, metin kümesi değil) ve beyana yazıldı.
+- **Bugün ıraksama YOK** (yedi eşleşmenin yedisi de uyumlu ölçüldü) — yani bu kapı mevcut bir
+  kusuru değil, kusur SINIFINI kapatır.
+
+**Okuma kaynağı METİNDEN KATALOĞA taşındı.** Eski iki kapı migration 032'nin satır içi CHECK
+METNİNİ regex'liyordu ve 036'nın genişletmesine KÖRDÜ — kusur tam da bundan doğmuştu. İkisi de
+artık `pg_get_constraintdef` okuyor, yani karşılaştırılan şey veritabanının gerçekten uyguladığı
+kuraldır.
+
+**Mutasyon kanıtı — 6/6 kapı düştü:** (1) CLI eski şema-dışı türe döner → iki test kırmızı ·
+(2) yazıcı değişmezi daraltılır → iki test kırmızı · (3) 036 genişletmesi susturulur → migration'ın
+KENDİ garanti doğrulaması durdurur (beklenen/görülen farkıyla) · (4) geri alma daraltmayı atlar →
+`036_down` doğrulama bloğu EKSİK KALDI der · (5) `DURUMLAR` Python'da genişletilir → ıraksama testi
+kalemi adıyla gösterir · (6) eşleşme tablosundan kalem silinir → kapsama testi düşer.
+
 ## Task 10 kararları (2026-09-09)
 
 - **Hakem bulgusunun severity'si kontrolör tarafından İNDİRİLDİ — bir kez, gerekçesiyle.**
@@ -1122,8 +1169,19 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Open Problems
 
-- **[CRITICAL — AÇIK, CANLIDA AKTİF] S-7: `tg-approve` / `tg-reject` kimliksiz GET ile yetkili
-  vekil işlem.** Sorgu dizesindeki `post_id` ile n8n'in yetkili kimliği kullanılarak sahiplik
+- **[CRITICAL — `accepted_risk` 2026-09-12, Eray kararı] S-7: `tg-approve` / `tg-reject`
+  kimliksiz GET ile yetkili vekil işlem.** Seçenek **(c) explicit risk kabulü** alındı.
+  **Eray'ın gerekçesi (birebir dayanak):** *"Telegram onay/ret bağlantıları olduğu gibi kalsın.
+  şuanda otomaix zaten aktif olarak kullanılmıyor. sadece local de ben test ediyorum. o aşamaya
+  gelince tekrar bakarız."* — yani maruziyet gerçek müşteri trafiği değil, tek operatörün yerel
+  testidir; defterdeki ölçüm de bunu destekliyor (son gerçek koşum 2026-04-13).
+  **İki workflow canlıda AKTİF KALDI; hiçbir n8n değişikliği yapılmadı.**
+  **Yeniden açılma koşulu (bağlayıcı):** Otomaix gerçek müşteri kullanımına açılmadan ÖNCE —
+  imzalı/süreli/tek kullanımlık bağlantı jetonu (seçenek b) ya da workflow'ların pasife alınması
+  (seçenek a) kararı verilir. Bu kalem o güne dek AÇIK kaydedilir, KAPANMIŞ sayılmaz.
+  **Task 18 Step 0(d) kapısına etkisi:** kapı "açık critical varken dağıtım başlamaz" der; bu
+  critical artık `accepted_risk` etiketlidir ve kapıyı bloklamaz — ama etiket dürüsttür, kalem
+  çözülmedi. Tarihsel gövde aynen: Sorgu dizesindeki `post_id` ile n8n'in yetkili kimliği kullanılarak sahiplik
   denetlenmeden yayına alma/reddetme yapılabiliyor; bot şifresi de sorgu dizesinde dolaşıyor
   (o ayak `telegram-approval-token-in-query-string` kaleminde zaten kayıtlı). Ölçüldü
   (2026-09-12, n8n API): iki workflow da `active=True`.
@@ -1268,7 +1326,13 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   artefaktlarını okur. Hakem ıraksamayı GEREKÇELİ buldu ve bloker saymadı.
   **EV: arayüz eki revizyonu · son tarih Task 19** (AÇIK-2 ile aynı partide).
 
-- **[YÜKSEK — EVİ VAR 2026-09-11] Mekanik kapı raporunun artefakt türü şemada YOK.**
+- **[KAPANDI 2026-09-12 — Task 18 şema ayağı] Mekanik kapı raporunun artefakt türü şemada YOK.**
+  Şema dördüncü türle genişletildi: `mechanical_gate` (migration 036, `sector_research_artifacts_kind_check`).
+  Adı ürettiği ŞEYİ adlandırır, üreten modülü değil. Geri alma (`036_down`) kümeyi daraltır ve
+  kendi doğrulama bloğu daraltılmadığında fail-closed durur. CLI'deki muafiyet listesi
+  (`SEMA_DISI_ARTEFAKT_TURLERI`) KALDIRILDI — kapı artık istisnasız.
+  **Ölçüm:** `brief-doctor` uçtan uca koşumu artefaktı gerçekten yazıyor (`pkg_db` pozitif kontrolü);
+  altı mutasyonun altısı da ilgili kapıyı düşürdü. Tarihsel gövde aynen:
   Task 17 dispatch'inde ölçüldü (canlı yerel veritabanı, `sector_research_artifacts_kind_check`):
   şema yalnız `research` · `review` · `synthesis` kabul ediyor; CLI üç yerde Türkçe etiket
   yazıyordu ve hiçbir test o değerleri gerçek veritabanına karşı koşmadığı için kusur 4134 yeşil

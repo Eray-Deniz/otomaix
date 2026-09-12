@@ -594,11 +594,21 @@ Değerlerde `=` KABUL EDİLMEZ: `girdi_ozeti` serbest bir özet olsa da eşittir
 işareti alan sınırını belirsizleştirir ve sonek artığını değere gizlerdi.
 """
 
-ARTEFAKT_TURLERI: tuple[str, ...] = ("research", "review", "synthesis")
-"""`sector_research_artifacts.kind`in KAPALI kümesi — migration 032'nin CHECK'i.
+ARTEFAKT_TURLERI: tuple[str, ...] = (
+    "research",
+    "review",
+    "synthesis",
+    "mechanical_gate",
+)
+"""`sector_research_artifacts.kind`in KAPALI kümesi — 032 + 036'nın CHECK'i.
 
-Değerler ŞEMANIN aynasıdır; `tests/test_pipeline_runs.py` ikisinin eşitliğini
-migration dosyasından okuyarak doğrular (ikinci kanonik liste yazılmaz).
+Değerler ŞEMANIN aynasıdır; `tests/test_pipeline_runs.py` eşitliği UYGULANMIŞ
+şemadan (`pg_constraint`) okuyarak doğrular — migration METNİNDEN değil. Kusurun
+kendisi metin okumanın yetmediğini ölçtü: 032'nin satır içi CHECK'i doğru
+okunuyordu ama 036'nın genişletmesi o okumaya hiç girmiyordu.
+
+`mechanical_gate` mekanik kapı (`brief-doctor`) raporunun sınıfıdır; ürettiği
+ŞEYİ adlandırır, onu üreten modülü değil.
 """
 
 

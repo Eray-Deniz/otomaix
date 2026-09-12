@@ -751,6 +751,54 @@ async def test_due_notice_skips_packages_inside_the_period(pkg_db):
 # ─── 8. Yerel arıza — n8n errorWorkflow'un GÖREMEDİĞİ hat ───────────────────
 
 
+async def test_brief_doctor_writes_the_mechanical_gate_artifact(pkg_db, tmp_path):
+    """POZİTİF KONTROL: mekanik kapı raporu ham artefakt katmanına GERÇEKTEN iner.
+
+    ÖLÇÜLEN KUSUR (Task 17 dispatch'i): şema `mechanical_gate` türünü
+    tanımıyordu ve bu çağrı ilk gerçek koşumda `ValueError` ile düşüyordu —
+    4134 yeşil testin hiçbiri değerleri GERÇEK veritabanına karşı koşmadığı
+    için kusur görünmüyordu. Kapanış bu yüzden şemaya karşı koşan bir testle
+    kurulur, tür sabitini okuyan bir testle değil.
+    """
+    await _bos_evren(pkg_db)
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+
+    kaynak = tmp_path / "KAYNAK-1.md"
+    kaynak.write_text("# kaynak\n\nmekanik kapı girdisi\n", encoding="utf-8")
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args(
+            "brief-doctor",
+            "--run-id",
+            run_id,
+            "--kaynak-dosya",
+            str(kaynak),
+            "--kaynak-adi",
+            "KAYNAK-1",
+            "--sektor-slug",
+            "kuyumculuk",
+            "--damga",
+            runs.build_stamp(
+                model="brief-doctor",
+                surum="1",
+                tarih="2026-09-12",
+                girdi_ozeti="test",
+            ),
+        ),
+    )
+
+    assert rc == cli.RC_OK, satirlar
+    tur = await pkg_db.fetchval(
+        "SELECT kind FROM social.sector_research_artifacts WHERE run_id = $1", run_id
+    )
+    assert tur == cli.MEKANIK_KAPI_ARTEFAKTI, (
+        f"mekanik kapı raporu yazılmadı ya da başka türle yazıldı: {tur!r}"
+    )
+
+
 async def test_cli_terminal_failure_produces_admin_event(pkg_db, monkeypatch):
     """Hat adımı yerelde düşerse koşu YARIM işaretlenir ve yönetici bildirimi yazılır.
 
@@ -1072,15 +1120,22 @@ async def test_olay_onayla_refuses_when_nothing_was_stamped(pkg_db):
 # ÖNCE, testte gösterir.
 
 
-def _migration_izinli_artefakt_turleri() -> frozenset[str]:
-    """İzinli tür kümesini migration 032'nin CHECK'inden ÇIKARIR."""
+async def _sema_izinli_artefakt_turleri(db) -> frozenset[str]:
+    """İzinli tür kümesini UYGULANMIŞ şemadan okur — migration METNİNDEN değil.
+
+    Önceki biçim yalnız 032'nin satır içi CHECK'ini regex'liyordu; kısıtı
+    sonradan genişleten migration'lara (036) KÖRDÜ. Kapının ölçtüğü şey artık
+    veritabanının gerçekten uyguladığı kuraldır.
+    """
     import re
 
-    yol = BACKEND_KOKU.parents[2] / "shared/db/migrations/032_sector_packages.sql"
-    metin = yol.read_text(encoding="utf-8")
-    esles = re.search(r"kind TEXT NOT NULL CHECK \(kind IN \(([^)]*)\)\)", metin)
-    assert esles is not None, "032'de `kind` CHECK bulunamadı — kapı ölçemez"
-    return frozenset(re.findall(r"'([^']+)'", esles.group(1)))
+    tanim = await db.fetchval(
+        "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c "
+        " WHERE c.conrelid = 'social.sector_research_artifacts'::regclass "
+        "   AND c.conname = 'sector_research_artifacts_kind_check'"
+    )
+    assert tanim, "sector_research_artifacts_kind_check YOK — kapı ölçemez"
+    return frozenset(re.findall(r"'([a-z_]+)'::text", tanim))
 
 
 def _uretim_dosyalari() -> list[Path]:
@@ -1153,34 +1208,20 @@ def _uretim_artefakt_turleri() -> dict[str, str]:
     return bulunan
 
 
-def test_cli_records_artifacts_with_schema_accepted_kinds():
-    """CLI'nin yazdığı her artefakt türü ŞEMANIN kabul ettiği kümededir."""
-    izinli = _migration_izinli_artefakt_turleri()
-    borclu = cli.SEMA_DISI_ARTEFAKT_TURLERI
+async def test_cli_records_artifacts_with_schema_accepted_kinds(pkg_db):
+    """CLI'nin yazdığı her artefakt türü ŞEMANIN kabul ettiği kümededir.
+
+    **MUAFİYET YOKTUR.** Eski biçimde bir borç listesi (`SEMA_DISI_ARTEFAKT_TURLERI`)
+    kapının dışında kalmaya izin veriyordu; borç Task 18'de ödendi ve liste
+    KALDIRILDI — kapı artık istisnasız fail-closed.
+    """
+    izinli = await _sema_izinli_artefakt_turleri(pkg_db)
     bulunan = _uretim_artefakt_turleri()
 
     assert bulunan, "üretimde hiç `record_artifact` çağrısı bulunamadı — kapı boşa koşuyor"
-    ihlaller = {
-        satir: tur
-        for satir, tur in bulunan.items()
-        if tur not in izinli and tur not in borclu
-    }
+    ihlaller = {satir: tur for satir, tur in bulunan.items() if tur not in izinli}
     assert not ihlaller, (
         f"şemanın kabul etmediği artefakt türü: {ihlaller} — izinli küme {sorted(izinli)}"
-    )
-
-
-def test_known_out_of_schema_artifact_kinds_are_still_used_and_still_invalid():
-    """Borç kaydı BAYATLAMAZ: kayıtlı her tür hâlâ kullanılıyor ve hâlâ şema dışı."""
-    izinli = _migration_izinli_artefakt_turleri()
-    borclu = cli.SEMA_DISI_ARTEFAKT_TURLERI
-    kullanilan = set(_uretim_artefakt_turleri().values())
-
-    assert not (borclu & izinli), (
-        "borç kaydında şemanın ZATEN kabul ettiği bir tür var — kayıt bayat"
-    )
-    assert borclu <= kullanilan, (
-        f"borç kaydında artık kullanılmayan tür var: {sorted(borclu - kullanilan)}"
     )
 
 

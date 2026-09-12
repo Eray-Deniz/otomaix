@@ -1578,6 +1578,55 @@ async def test_artifacts_unique_run_source_kind_rejects_duplicate_upload(db):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 6b. Mekanik kapı raporu — `kind` kümesi `mechanical_gate` ile genişler
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ÖLÇÜLEN KUSUR (Task 17 dispatch'i, 2026-09-11): şema yalnız `research` ·
+# `review` · `synthesis` kabul ediyordu; `brief-doctor` alt komutu mekanik kapı
+# raporunu ham artefakt katmanına yazamıyordu ve ilk gerçek koşumda DÜŞÜYORDU.
+# Rapor üç türden hiçbirine oturmaz: `research` ham araştırma çıktısıdır,
+# `review` KÖR HAKEM raporudur (hazırlık listesi o türü SAYAR — mekanik rapor
+# oraya yazılırsa "iki hakem raporu" ölçümü kirlenir), `synthesis` sentezdir.
+# Dördüncü tür bu yüzden gerekli; ADI ürettiği ŞEYİ adlandırır, üreten modülü
+# değil.
+
+
+@pytest.mark.parametrize("kind", ["research", "review", "synthesis", "mechanical_gate"])
+async def test_artifacts_kind_check_accepts_every_pipeline_stage(db, kind):
+    """POZİTİF KONTROL: hattın DÖRT artefakt sınıfı da yazılabilir."""
+    row_id = await db.fetchval(
+        "INSERT INTO social.sector_research_artifacts "
+        "    (run_id, sector_slug, kind, source, content_md) "
+        "VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        f"run-kind-{kind}",
+        "alt-sektor",
+        kind,
+        "claude",
+        "# icerik",
+    )
+    assert row_id is not None
+
+
+async def test_artifacts_kind_check_still_rejects_unknown_kind(db):
+    """KAPALILIK KORUNDU: küme genişledi, AÇILMADI."""
+    error = await _attempt(
+        db,
+        lambda: db.execute(
+            "INSERT INTO social.sector_research_artifacts "
+            "    (run_id, sector_slug, kind, source, content_md) "
+            "VALUES ($1, $2, $3, $4, $5)",
+            "run-kind-bilinmeyen",
+            "alt-sektor",
+            "brief-doctor-raporu",
+            "claude",
+            "# icerik",
+        ),
+    )
+    assert isinstance(error, asyncpg.exceptions.CheckViolationError), error
+    assert "sector_research_artifacts_kind_check" in str(error), str(error)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 7. K-99 — olay kümesi `approval` ve `rejection` ile genişler
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -2314,6 +2363,118 @@ async def test_db_check_and_python_gate_agree(db):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 7b. SINIF KAPISI — her kapalı küme CHECK'i Python aynasıyla EŞLEŞİR
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# ÖLÇÜLEN KUSUR SINIFI (Task 18 şema ayağı): `sector_research_artifacts.kind`
+# kusuru TEKİL DEĞİLDİ — yedi Python sabitinin yalnız ikisi (`EVENT_TYPES` ve
+# yeni pinlenen `ARTEFAKT_TURLERI`) UYGULANMIŞ CHECK'e karşı ölçülüyordu.
+# İki liste ayrı bakımlanırsa ıraksarlar ve ıraksama ancak GERÇEK bir koşumda
+# görünür — `kind` kusuru tam olarak böyle 4134 yeşil testin altında kalmıştı.
+#
+# Kapanış VARYANT yamamayla değil SINIF kapısıyla kurulur: eşleşme tablosu
+# eksik kalırsa kapsama testi düşer, yani yeni bir kapalı küme sessizce kapının
+# dışında kalamaz.
+
+_PLAN2_TABLOLARI = (
+    "social.sector_research_artifacts",
+    "social.sector_packages",
+    "social.package_events",
+    "social.admin_events",
+    "social.sector_package_runs",
+    "social.package_rollback_plans",
+)
+
+# kısıt adı -> (modül yolu, sabit adı). Bağ ELLE kurulur çünkü bir kolonun
+# hangi Python sabitini aynaladığı katalogtan TÜRETİLEMEZ.
+_KAPALI_KUME_AYNALARI: dict[str, tuple[str, str]] = {
+    "sector_research_artifacts_kind_check": (
+        "app.services.sector_pipeline.runs", "ARTEFAKT_TURLERI"),
+    "sector_package_runs_durum_check": (
+        "app.services.sector_pipeline.runs", "DURUMLAR"),
+    "sector_package_runs_kosu_turu_check": (
+        "app.services.sector_pipeline.runs", "KOSU_TURLERI"),
+    "package_rollback_plans_durum_check": (
+        "app.services.sector_pipeline.runs", "PLAN_DURUMLARI"),
+    "sector_package_runs_sonuc_check": (
+        "app.services.sector_pipeline.engine_contract", "SONUCLAR"),
+    "sector_package_runs_approval_karar_check": (
+        "app.services.sector_pipeline.approval", "KARARLAR"),
+    "package_events_type_check": ("app.services.package_events", "EVENT_TYPES"),
+}
+
+# Python aynası OLMAYAN kapalı kümeler — yokluk BEYAN EDİLİR, sessiz geçilmez.
+_AYNASIZ_KAPALI_KUMELER: dict[str, str] = {
+    "sector_packages_status_check":
+        "yaşam döngüsü durumları SQL içinde yazılı; Python sabiti YOK",
+    "admin_events_delivery_state_check":
+        "teslim durumu yalnız SQL'de; Python sabiti YOK",
+    "package_rollback_plans_onay_butun":
+        "SAYISAL aritelik kontrolü (num_nonnulls IN (0,3)) — metin değer kümesi "
+        "DEĞİL; aynalayacak bir Python sabiti kavramsal olarak yok",
+}
+
+
+async def _kapali_kume_checkleri(db) -> dict[str, str]:
+    """Plan 2 tablolarındaki DEĞER KÜMESİ CHECK'leri — katalogtan türetilir."""
+    satirlar = await db.fetch(
+        "SELECT c.conname, pg_get_constraintdef(c.oid) AS tanim "
+        "  FROM pg_constraint c "
+        " WHERE c.contype = 'c' "
+        "   AND c.conrelid = ANY($1::regclass[]) "
+        "   AND pg_get_constraintdef(c.oid) LIKE '%= ANY (ARRAY[%'",
+        list(_PLAN2_TABLOLARI),
+    )
+    return {r["conname"]: r["tanim"] for r in satirlar}
+
+
+async def test_every_closed_set_check_has_a_declared_mirror(db):
+    """KAPSAMA: her kapalı küme ya bir Python aynasına ya da BEYANA bağlı.
+
+    Bu kapı olmadan yeni bir CHECK sessizce eşleşmesiz kalırdı ve aşağıdaki
+    ıraksama testi onu HİÇ görmezdi — kapsam elle sayılmış olurdu.
+    """
+    katalog = await _kapali_kume_checkleri(db)
+    assert katalog, "Plan 2 tablolarında hiç kapalı küme CHECK'i bulunamadı"
+
+    beyan = set(_KAPALI_KUME_AYNALARI) | set(_AYNASIZ_KAPALI_KUMELER)
+    eksik = set(katalog) - beyan
+    assert not eksik, (
+        f"kapalı küme CHECK'i eşleşme tablosunda YOK: {sorted(eksik)} — "
+        "ya Python aynasını bildir ya aynasızlığını BEYAN et"
+    )
+
+    bayat = beyan - set(katalog)
+    assert not bayat, f"eşleşme tablosunda artık var olmayan kısıt: {sorted(bayat)}"
+
+
+async def test_closed_set_checks_agree_with_their_python_mirrors(db):
+    """IRAKSAMA: her eşleşmede DB'nin kabul ettiği küme ile Python'ınki AYNI.
+
+    Python'ın yazabildiği ama DB'nin reddettiği bir değer akışı düşürür;
+    DB'nin kabul ettiği ama Python'dan geçemeyen bir değer ölü koddur.
+    """
+    import importlib
+
+    katalog = await _kapali_kume_checkleri(db)
+    iraksamalar = []
+    for kisit, (modul_yolu, sabit_adi) in _KAPALI_KUME_AYNALARI.items():
+        tanim = katalog.get(kisit)
+        assert tanim, f"{kisit} katalogda YOK — eşleşme bayat"
+        db_kumesi = set(re.findall(r"'([a-z_]+)'::text", tanim))
+        py_kumesi = set(getattr(importlib.import_module(modul_yolu), sabit_adi))
+        if db_kumesi != py_kumesi:
+            iraksamalar.append(
+                f"{kisit} \u2194 {modul_yolu}.{sabit_adi}: "
+                f"yalnız DB'de {sorted(db_kumesi - py_kumesi)} · "
+                f"yalnız Python'da {sorted(py_kumesi - db_kumesi)}"
+            )
+    assert not iraksamalar, (
+        "kapalı küme ıraksamaları:\n  - " + "\n  - ".join(iraksamalar)
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 8. K-45 — atama geçmişi TETİKLEYİCİSİ (üretici ZORUNLU)
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -2755,6 +2916,15 @@ def test_036_down_succeeds_on_empty_plan2_data(scratch_db_migrated):
         ).count("approval")
         == 0
     ), "olay CHECK'i daraltılmadı"
+    assert (
+        _scalar(
+            url,
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conrelid = 'social.sector_research_artifacts'::regclass "
+            "AND conname = 'sector_research_artifacts_kind_check'",
+        ).count("mechanical_gate")
+        == 0
+    ), "artefakt tür CHECK'i daraltılmadı"
     assert (
         _scalar(
             url,

@@ -373,7 +373,7 @@ async def _kos_brief_doctor(conn, args) -> Sonuc:
         conn,
         run_id=args.run_id,
         sector_slug=args.sektor_slug,
-        kind="brief-doctor-raporu",
+        kind=MEKANIK_KAPI_ARTEFAKTI,
         source=args.damga,
         content_md=rapor.metin if hasattr(rapor, "metin") else str(rapor),
     )
@@ -404,18 +404,18 @@ adlandırır), DEĞERİ şemanın kabul ettiğidir; 2026-09-11'e dek Türkçe de
 yazılıyordu ve ilk gerçek koşumda her ham artefakt yazımı düşerdi.
 """
 
-SEMA_DISI_ARTEFAKT_TURLERI: frozenset[str] = frozenset({"brief-doctor-raporu"})
-"""Şemanın kabul ETMEDİĞİ, bilinen ve EVİ OLAN artefakt türleri.
+MEKANIK_KAPI_ARTEFAKTI = "mechanical_gate"
+"""Mekanik kapı (`brief-doctor`) raporunun artefakt sınıfı.
 
-**Dürüst etiket: ÇÖZÜLMEDİ.** Mekanik kapı raporu şemanın üç türünden hiçbirine
-oturmuyor — `research` ham araştırma çıktısıdır, `review` kör hakem raporudur
+Şemanın dördüncü türüdür (migration 036 ekledi). Üç eski türden hiçbirine
+oturmuyordu: `research` ham araştırma çıktısıdır, `review` KÖR HAKEM raporudur
 (hazırlık listesinin "iki hakem raporu" maddesi o türü SAYAR; mekanik rapor
-oraya yazılırsa o ölçüm kirlenir), `synthesis` sentez çıktısıdır. Türü eklemek
-şema değişikliği ister.
+oraya yazılsaydı o ölçüm kirlenirdi), `synthesis` sentez çıktısıdır.
 
-**Ev: Task 18 (ön-pilot dağıtım — şema ayağı), Eray kararı 2026-09-11.** Orada
-ya yeni tür migration ile eklenir ya da bu yazım kaldırılıp rapor koşu klasörüne
-alınır. O güne dek `brief-doctor` alt komutu ham artefakt yazımında düşer.
+**Şema dışı tür için MUAFİYET LİSTESİ YOKTUR** (eski `SEMA_DISI_ARTEFAKT_TURLERI`
+kaldırıldı, Task 18 şema ayağı). Kapı artık istisnasız fail-closed: üretimde
+şemanın kabul etmediği bir tür yazılırsa test taraması DA yazıcının kendi
+değişmezi DE reddeder.
 """
 
 

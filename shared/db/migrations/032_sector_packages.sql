@@ -604,6 +604,9 @@ BEGIN
     -- `CONSTRAINT sector_research_artifacts_run_source_kind_key
     --  UNIQUE (run_id, source, kind)` ekler; PostgreSQL aynı ADLA hem KISIT hem
     -- İNDEKS üretir, yani iki kapalı küme de kaçınılmaz olarak genişler.
+    -- 036 AYRICA `sector_research_artifacts_kind_check`i dördüncü türle
+    -- (`mechanical_gate` — mekanik kapı raporu) genişletir: KISIT ADI AYNI
+    -- KALIR, TANIMI değişir. Aşağıdaki metin 036 SONRASI geçerli olandır.
     --
     -- Aşağıdaki tablo 036 UYGULANMIŞSA geçerli olan İKİNCİ kabul edilebilir
     -- metni taşır; adı burada GEÇMEYEN her label için karşılaştırma
@@ -620,8 +623,11 @@ BEGIN
     -- ───────────────────────────────────────────────────────────────────────
     expected_036(label, want) AS (
         VALUES
+            ('sector_research_artifacts.kind CHECK',
+             'c|CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text,'
+             ' ''synthesis''::text, ''mechanical_gate''::text])))'),
             ('sector_research_artifacts kısıt kümesi (kapalı)',
-             'sector_research_artifacts_kind_check|CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text, ''synthesis''::text]))) && sector_research_artifacts_pkey|PRIMARY KEY (id) && sector_research_artifacts_run_source_kind_key|UNIQUE (run_id, source, kind)'),
+             'sector_research_artifacts_kind_check|CHECK ((kind = ANY (ARRAY[''research''::text, ''review''::text, ''synthesis''::text, ''mechanical_gate''::text]))) && sector_research_artifacts_pkey|PRIMARY KEY (id) && sector_research_artifacts_run_source_kind_key|UNIQUE (run_id, source, kind)'),
             ('sector_research_artifacts indeks kümesi (kapalı)',
              'CREATE INDEX idx_sector_research_artifacts_slug_run ON social.sector_research_artifacts USING btree (sector_slug, run_id)|f|live && CREATE UNIQUE INDEX sector_research_artifacts_pkey ON social.sector_research_artifacts USING btree (id)|t|live && CREATE UNIQUE INDEX sector_research_artifacts_run_source_kind_key ON social.sector_research_artifacts USING btree (run_id, source, kind)|t|live')
     ),
