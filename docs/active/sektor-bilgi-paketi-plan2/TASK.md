@@ -22,6 +22,7 @@ türetildi ve pin güncellendi (`ab91495`), canlı şema dağıtımı ve ölçü
 Tam takım **4412 passed / 0 failed**; mutasyon 8/8; canlı prova 6/6 rc=0.
 **Task 18 TAMAMLANMADI:** Step 5·6·7 servis dağıtımına bağlı ve Eray kararıyla Task 19'a taşındı.
 **2026-09-12 BEŞİNCİ OTURUM — Task 19 Step 1-4 İNDİ:** dört operatör kararı kapandı, canlıda test markası (`Deniz Kuyumculuk (TEST)`) ve `kuyumculuk` alt sektör satırı açıldı, R-35'in iki ayağı ölçüldü. Brief'in iki kusuru bulundu ve düzeltildi (GÖREV KAPSAMI 'yalnız B' → A+B · K-04b yansıtıldı), pin `abb1850`'a bump edildi (`2f9157a`). **Sıradaki iş: Task 19 Step 5 — ELLE üç araştırma koşusu; iş EMEKTE, Eray'da.**
+**2026-09-14 ALTINCI OTURUM — Step 5 İNDİ, Step 6 kapı ayağı KOŞTU:** Eray üç araştırmayı üretti (`Kuyumculuk/Kaynak-1..3.md`); kapı üçüne de koştu. Kapının KENDİ dört kusuru bulundu ve kapatıldı (aşağıda). **Sıradaki iş: Task 19 Step 6'nın `denetim` ayağı — iki kör denetçi.**
 Gövde `# Open Problems`'ın ilk kalemlerinde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
@@ -1037,6 +1038,63 @@ kuyumculuk yalnızca örnek sektördür. İlk sunumda K-04a bir konumlandırma t
 sunuldu ve dondurulmuş brief ÖLÇÜLMEDEN karar sorusuna çevrildi. Eray haklı olarak itiraz
 etti. Kural: karar sorusundan önce sözleşme ölçülür; ölçüm kararı zaten kapatmışsa soru
 sorulmaz, kayıt düşülür.
+
+## Task 19 Step 5-6 (2026-09-14) — kaynaklar üretildi, kapı koştu, kapının DÖRT kusuru kapandı
+
+**Step 5 İNDİ (Eray).** Üç araştırma `Kuyumculuk/Kaynak-1..3.md` olarak üretildi; brief
+`Kuyumculuk/kuyumculuk.md` (depo HEAD `abb1850`, pin SAĞLAM — dosyalar commit EDİLMEDİ,
+pin bu yüzden bayatlamadı). Damga eşlemesi kalıcı olarak veritabanındadır
+(`sector_research_artifacts.source`): **KAYNAK-1 = Gemini · KAYNAK-2 = ChatGPT ·
+KAYNAK-3 = Claude**, sürüm `bilinmiyor` (dürüst etiket — Eray sürümü bilmiyordu),
+tarih `2026-09-14`, `girdi_ozeti` = brief sha `984b79ec…`.
+
+**Körlük korundu:** üç kaynak araç kimliği sızıntısına karşı tarandı (vendor adları +
+öz-referans); Kaynak-2/3'te sıfır, Kaynak-1'de iki isabet ve ikisi de KONU olarak yapay
+zekadan bahsediyor (mücevher fotoğrafçılığı), aracın kendini tanıtması DEĞİL.
+
+**KAPININ DÖRT KUSURU — hepsi ÖLÇÜLDÜ, kapatıldı, testlendi.** Ortak sınıf: *"sözleşmenin
+EMRETTİĞİ yazım, kapının TANIDIĞI yazım olmalı."*
+
+1. **Markdown süsü yapı okumayı bozuyordu.** `**Bölüm A**` · `ton\_ve\_dil` · `1\.` ·
+   `BÖLÜM A` · `*` madde — beş eksen. Modülün niyeti zaten bu yöndeydi ve PARÇA PARÇA
+   tutuluyordu (`_yuva_deseni` docstring'i `**ad**`'ı DESTEKLENEN sayar, `_ILK_SOZCUK_RE`
+   `\*{0,2}` taşır, `_BOLUM_RE` hiçbirini taşımaz). **Kapatma:** `_yapi_gorunumu()` —
+   yapı okurken kaçış ve vurgu saydam, içerikte KORUNUR; yedi yapı-okuma noktasına uygulandı.
+2. **K-120 `içerik-önerilmez` yalnız SATIR-İÇİ tanınıyordu.** Brief `####` başlıklarını
+   ZORUNLU kılar; o biçimde yazılan resmî boşluk muafiyet ALAMIYORDU. Kontrollü ölçüm:
+   aynı içerik satır-içi 0 not, başlık+gövde 6 not. **Kapatma:** `_Yuva.tek_anlamli_satir`.
+3. **`elendi` satırında BOŞ tür etiketi not alıyordu.** Sözleşmenin kendi cümlesi:
+   *"(elenen dönemde boş bırakılabilir)"*. **Kapatma:** `_kontrol_tur_etiketi` artık `karar`
+   sütununu okuyor.
+4. **Kapalı küme DEĞERİ kaçışa takılıyordu.** `eticaret\_sitesi\` ve `[eski-kaynak\]`.
+   **Kapatma:** kanal ve bağımlılık etiketi yollarının ikisi de `_yapi_gorunumu` kullanıyor.
+
+**Ek hizalama:** belge başlığı (`#`) artık "sözleşme dışı bölüm" SAYILMAZ — brief §5 düzeyleri
+SAYARAK kısıtlar (`##`/`###`/`####`) ve `#` o sayımın DIŞINDADIR. İKİNCİ bir `#` hâlâ fazladır.
+
+**Madde işareti genişletmesi — SÖZLEŞME KARARI (Eray onayı 2026-09-14).** `_MADDE_RE` artık
+`-` · `*` · `+` sayar. Tur 11 bilerek *"`*` ihlaldir"* demişti ve testle kilitlemişti; o ayrım
+(markdown TANIMASI ≠ sözleşme KURALI) **KORUNDU** — değişen tek şey ihlalin CEZASI: madde
+artık SAYILIR, biçim notu yine DÜŞER (`madde işareti '*' — sözleşme '-' ister; madde SAYILDI`).
+
+**Ölçülmüş yan etki (kendi düzeltmemin):** `dilli_dusen` pinli sayısı 102 → 107. Sebebi izlendi:
+dilli kod çiti içindeki `*`/`+` maddeleri artık madde sayıldığı için o gövdeler 5 hücrede daha
+kabı dolduruyor. YENİ sınıf DEĞİL — dilli çitin maskelenmemesi `ACIK_BLOK_BICIMLERI`'nde zaten
+ölçülmüş-açık kalem; tur 12 o boşluğu 5 hücre GENİŞLETTİ. Sayı sessizce bump edilmedi.
+
+**Kapı sonuçları (taze, `kosu-a4d4b59607384a30b072cd0395d0f750`):** üçü de `notlu-gecti`,
+hiçbiri ELENMEDİ. ChatGPT **1** not (1 çeşit) · Claude **45** (2 çeşit) · Gemini **119**
+(3 çeşit). Düzeltme ÖNCESİ aynı dosyalar: 17 · 50 · 34 (Gemini'nin 34'ü yanıltıcıydı — beş
+bölümü hiç okunamadığı için çoğu kontrol HİÇ koşmamıştı).
+
+**İki yarım koşu, gerekçeleriyle kapalı:** `kosu-c88412d1…` (ayrıştırıcı düzeltilecekti) ve
+`kosu-602e1d80…` (kapı kusurları düzeltilecekti). K-82 gereği `tamamlanmadi`; her biri bir
+yönetici bildirim satırı yazdı (tasarım gereği, uydurma değil).
+
+**Ayar değişikliği (Eray talebi):** `~/.claude/settings.json` deny listesinden düz `.env`
+kalemleri kaldırıldı; `.env.*` varyantları ve diğer tüm sır dosyaları korumada KALDI (21 → 19
+kural). Gerekçe: CLI'ın DSN'e ihtiyacı var ve komut DSN'i argüman olarak kabul etmiyor (S-3).
+
 
 ## Task 19 Step 2-3-4 (2026-09-12) — canlıya iki satır + R-35'in ölçülebilen ayakları
 
