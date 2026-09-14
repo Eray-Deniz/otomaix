@@ -355,6 +355,14 @@ GEREKCE_TABLOSU_SUTUNLARI = (
 )
 GEREKCE_DONEM_INDEKSI = GEREKCE_TABLOSU_SUTUNLARI.index("dönem")
 GEREKCE_ANAHTAR_INDEKSI = GEREKCE_TABLOSU_SUTUNLARI.index("sistem anahtarı")
+GEREKCE_KARAR_INDEKSI = GEREKCE_TABLOSU_SUTUNLARI.index("karar")
+GEREKCE_TUR_INDEKSI = GEREKCE_TABLOSU_SUTUNLARI.index("tür etiketi")
+
+# Sözleşme (Bölüm B): *"`tür etiketi` sütunu ADIM 2'nin dört değerinden biridir
+# (elenen dönemde boş bırakılabilir)."* İstisna YAZILIDIR ve YALNIZ bu karar
+# değeriyle birlikte geçerlidir. Kapının KENDİ `SONUC_ELENDI`'siyle karışmaz:
+# o kapının rapor sonucudur, bu tablo satırının kararıdır.
+GEREKCE_KARAR_ELENDI = "elendi"
 
 # Sözleşme (Bölüm B): *"Aday listesinde olmayan, sektöre özgü eklediğin dönemde
 # `—` yaz"*. Bu değer "anahtar YOK" demektir; boş hücre DEĞİLDİR (boş hücre
@@ -1425,6 +1433,30 @@ class _Yuva:
         maddeler = self.maddeler
         return maddeler[0] if len(maddeler) == 1 else None
 
+    @property
+    def tek_anlamli_satir(self) -> str | None:
+        """Yuvanın TEK anlamlı içerik satırı — madde işareti/satır-içi ARANMAZ.
+
+        **Neden ayrı bir yüzey (tur 12, ölçüldü 2026-09-14):** `_ogeler` yalnız
+        İKİ yazımı öğe sayar — satır-içi değer ve madde işaretli satır. Brief'in
+        ZORUNLU kıldığı `#### <yuva>` + çıplak gövde biçimi ikisi de değildir,
+        dolayısıyla sözleşmenin EMRETTİĞİ yazım K-120 muafiyetini ALAMIYORDU
+        (kontrollü ölçüm: aynı içerik satır-içi 0 not, başlık+gövde 6 not).
+
+        **FAIL-CLOSED yön korunur:** HAM satırlar okunur (dilsiz çit DAHİL) —
+        `maddeler`'in gerekçesiyle aynı yönde: çite saklanmış ikinci bir içerik
+        muafiyeti DÜŞÜRMELİDİR, gizlememelidir. Satır-içi değer de anlamlı
+        içeriktir ve sayılır; iki kaynak birden doluysa sonuç `None`'dır.
+        """
+        anlamli = [self.inline.strip()] if self.inline.strip() else []
+        anlamli += [
+            satir.strip()
+            for satir in self.satirlar
+            if satir.strip()
+            and not _BASLIK_GORUNUMU_RE.match(_yapi_gorunumu(satir))
+        ]
+        return anlamli[0] if len(anlamli) == 1 else None
+
 
 @dataclass
 class _Donem:
@@ -1435,11 +1467,17 @@ class _Donem:
 
     @property
     def bilincli_bos(self) -> bool:
-        """K-120: DÖRT yuvanın hepsi AYNEN `içerik-önerilmez` mi?"""
+        """K-120: DÖRT yuvanın hepsi AYNEN `içerik-önerilmez` mi?
+
+        Yazım BİÇİMİ muafiyeti belirlemez (tur 12): satır-içi · madde işaretli ·
+        brief'in dayattığı `####` + gövde — üçü de AYNI değeri taşır. Değişmeyen
+        şart: DÖRT yuva, TEK anlamlı içerik, AYNEN `içerik-önerilmez` yazımı.
+        """
         if set(self.yuvalar) != set(OZEL_GUN_YUVALARI):
             return False
         return all(
-            yuva.tek_degeri == BILINCLI_BOS for yuva in self.yuvalar.values()
+            BILINCLI_BOS in (yuva.tek_degeri, yuva.tek_anlamli_satir)
+            for yuva in self.yuvalar.values()
         )
 
 
@@ -1494,16 +1532,30 @@ class _Belge:
     c_esleme_izleri: tuple[str, ...] = ()
 
 
-_BOLUM_RE = re.compile(r"^\s*(?:#{1,6}\s*)?Bölüm\s+([^\s—\-:]+)")
-_UST_BASLIK_RE = re.compile(r"^\s*#{1,2}\s+(\S.*?)\s*$")
-_MADDE_RE = re.compile(r"^\s*-\s+(\S.*)$")
+# `Bölüm` anahtarı HARF DUYARSIZ eşleşir (ölçüldü 2026-09-14: bir araç
+# `## BÖLÜM A` yazıyordu). Bölüm HARFİ zaten çağıran tarafta `.upper()` edilir.
+_BOLUM_RE = re.compile(r"^\s*(?:#{1,6}\s*)?(?i:Bölüm)\s+([^\s—\-:]+)")
+# Sözleşme dışı BÖLÜM başlığı — `##` ve altı. TEK `#` belge BAŞLIĞIDIR ve
+# bölüm sayılmaz (tur 12): brief §5 düzeyleri sayarak kısıtlar
+# (*"başka `##`/`###`/`####` başlığı AÇMA"*) ve `#` o sayımın DIŞINDADIR.
+# Rapora ad vermek bölüm eklemek değildir; ölçüldü ki üç kaynağın ikisi
+# doğal bir rapor başlığı yazdığı için not alıyordu. İKİNCİ bir belge başlığı
+# ise fazladır ve `_BELGE_BASLIGI_RE` yolunda tek sefere indirgenir.
+_UST_BASLIK_RE = re.compile(r"^\s*#{2}\s+(\S.*?)\s*$")
+_BELGE_BASLIGI_RE = re.compile(r"^\s*#\s+(\S.*?)\s*$")
+# Madde işareti: markdown'ın ÜÇ eşdeğer işareti. Sözleşme metni `-` der ama
+# kuralın kendi gerekçesi "her kalıp AYRI madde olsun, paragrafta birleşmesin"
+# — hangi harfle başladığı değil (Eray onayı 2026-09-14, sözleşme genişletmesi).
+_MADDE_RE = re.compile(r"^\s*[-*+]\s+(\S.*)$")
 _TABLO_RE = re.compile(r"^\s*\|")
 _TABLO_AYIRAC_RE = re.compile(r"^\s*\|[\s:\-|]+\|?\s*$")
 _BASLIK_GORUNUMU_RE = re.compile(
     r"^\s*(?:#{1,6}\s+|\d+[a-z]?\s*[.)]\s+|\*\*[^*]+\*\*\s*:?\s*$|[A-Za-zÇĞİÖŞÜ_"
     r"çğıöşü][\w_]*\s*:)"
 )
-_ILK_SOZCUK_RE = re.compile(r"^\s*(?:#{1,6}\s+|\d+[a-z]?\s*[.)]\s*)?\*{0,2}`?([a-z_]+)")
+_ILK_SOZCUK_RE = re.compile(
+    r"^\s*(?:#{1,6}\s+|\d+[a-z]?\s*[.)]\s*)?\*{0,2}`?([a-z_]+)", re.IGNORECASE
+)
 # Markdown YATAY ÇİZGİSİ — bir AYRAÇTIR, içerik değil.
 _YATAY_CIZGI_RE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
 # Markdown KOD ÇİTİ açıcı/kapatıcı satırı. İkinci grup INFO dizesidir: BOŞsa çit
@@ -1566,7 +1618,8 @@ def _yuva_deseni(isimler: Sequence[str]) -> re.Pattern[str]:
     return re.compile(
         r"^\s*(?:#{1,6}\s+)?(?:\d+[a-z]?\s*[.)]\s*)?\*{0,2}`?("
         + alternatif
-        + r")`?\*{0,2}\s*(?::\s*(.*?))?\s*$"
+        + r")`?\*{0,2}\s*(?::\s*(.*?))?\s*$",
+        re.IGNORECASE,
     )
 
 
@@ -1593,6 +1646,32 @@ def alan_karsilastirma_anahtari(hucre: str) -> str:
 
 def _baslik_metni(satir: str) -> str:
     return satir.strip().lstrip("#").strip().strip("*`").strip()
+
+
+# Markdown SÜSÜ — anlamı DEĞİŞTİRMEYEN işaretler: vurgu (`*`), kod tırnağı
+# (`` ` ``) ve ters eğik çizgi kaçışı (`\_` · `\.`). Yapı okunurken SAYDAMDIR;
+# içerikte KORUNUR — sadeleştirme yalnız "bu satır yapı kuruyor mu" kararında
+# kullanılır, saklanan/sayılan metne uygulanmaz.
+#
+# Neden TEK kural: modülün niyeti zaten bu yöndeydi ama parça parça tutuluyordu
+# — `_yuva_deseni` docstring'i `**ad**` biçimini DESTEKLENEN sayar, `_ILK_SOZCUK_RE`
+# `\*{0,2}` taşır, `_BOLUM_RE` hiçbirini taşımaz. Varyantı tek tek yamamak sınıfı
+# kapatmaz (ölçüldü 2026-09-14: elle bulunan üç eksenin yanına iki eksen daha
+# çıktı — harf durumu ve kaçışlı nokta). Kural burada TEK yerde yaşar.
+_MD_KACILABILIR = r"\\`*_{}\[\]()#+\-.!|~<>\"'$%&,/:;=?@^"
+# Sondaki ters eğik çizgi de düşer: `[kanal-bağımlı: eticaret\_sitesi\]`
+# yazımında `\]` kaçışının ters eğik çizgisi, `]`'e kadar okuyan yakalayıcıda
+# DEĞERİN içinde kalır (ölçüldü: yakalanan anahtar `eticaret\_sitesi\`).
+_SUS_RE = re.compile(rf"\\(?=[{_MD_KACILABILIR}])|\\$|[*`]")
+
+
+def _yapi_gorunumu(satir: str) -> str:
+    """Satırın YAPI görünümü: markdown kaçışı ve vurgusu düşer, sözcük kalır.
+
+    `_` KORUNUR — alan adlarının içinde geçer (`ton_ve_dil`); düşen yalnız onu
+    kaçıran ters eğik çizgidir.
+    """
+    return _SUS_RE.sub("", satir)
 
 
 # ─── Doluluk kontrolünün AÇIK BIRAKTIĞI markdown blok biçimleri ────────────
@@ -2074,9 +2153,13 @@ def _bloklara_ayir(
     sira: list[str] = []
     aktif: _Yuva | None = None
     for satir in satirlar:
-        eslesme = None if _yapi_kurmaz(satir) else desen.match(satir)
+        eslesme = (
+            None if _yapi_kurmaz(satir) else desen.match(_yapi_gorunumu(satir))
+        )
         if eslesme:
-            ad = eslesme.group(1)
+            # Desen HARF DUYARSIZ eşleşir; sözlük anahtarı KANONİK yazımdır —
+            # kapalı kümenin tamamı küçük harftir, ikinci bir yazım doğmaz.
+            ad = eslesme.group(1).lower()
             aktif = _Yuva(ad=ad, inline=(eslesme.group(2) or "").strip())
             bloklar[ad] = aktif
             sira.append(ad)
@@ -2103,6 +2186,7 @@ def _ayristir(source_text: str) -> _Belge:
     bolumler: dict[str, list[str]] = {}
     bolum_sirasi: list[str] = []
     fazla: list[str] = []
+    basliklar_gorulen = 0  # görülen belge (`#`) başlığı sayısı — ilki serbest
     aktif: str | None = None
 
     for satir in _maskeli_satirlar(source_text):
@@ -2111,7 +2195,7 @@ def _ayristir(source_text: str) -> _Belge:
             if aktif is not None:
                 bolumler[aktif].append(satir)
             continue
-        bolum = _BOLUM_RE.match(satir)
+        bolum = _BOLUM_RE.match(_yapi_gorunumu(satir))
         if bolum:
             harf = bolum.group(1).strip().upper()
             if harf in BOLUM_HARFLERI:
@@ -2122,9 +2206,18 @@ def _ayristir(source_text: str) -> _Belge:
                 fazla.append(_baslik_metni(satir))
                 aktif = None
             continue
-        ust = _UST_BASLIK_RE.match(satir)
+        ust = _UST_BASLIK_RE.match(_yapi_gorunumu(satir))
         if ust:
             fazla.append(ust.group(1).strip())
+            aktif = None
+            continue
+        belge_basligi = _BELGE_BASLIGI_RE.match(_yapi_gorunumu(satir))
+        if belge_basligi:
+            # İLK `#` belge adıdır — serbest. İKİNCİSİ ve sonrası fazladır:
+            # bir belgenin TEK adı olur, ikincisi gövdeye açılmış bir bölümdür.
+            if basliklar_gorulen:
+                fazla.append(belge_basligi.group(1).strip())
+            basliklar_gorulen += 1
             aktif = None
             continue
         if aktif is not None:
@@ -2152,10 +2245,12 @@ def _ayristir(source_text: str) -> _Belge:
     for satir in a_satirlari:
         if _yapi_kurmaz(satir):
             continue
-        if _ALAN_DESENI.match(satir) or not _BASLIK_GORUNUMU_RE.match(satir):
+        gorunum = _yapi_gorunumu(satir)
+        if _ALAN_DESENI.match(gorunum) or not _BASLIK_GORUNUMU_RE.match(gorunum):
             continue
-        ilk = _ILK_SOZCUK_RE.match(satir)
-        if ilk and ilk.group(1) in TEMEL_ALANLAR:
+        ilk = _ILK_SOZCUK_RE.match(gorunum)
+        # Desen HARF DUYARSIZ; üyelik KANONİK (küçük harfli) yazımla ölçülür.
+        if ilk and ilk.group(1).lower() in TEMEL_ALANLAR:
             yeniden_adlandirilmis.append(_baslik_metni(satir))
 
     video = alanlar.get("video_kodlar")
@@ -2187,7 +2282,7 @@ def _ayristir(source_text: str) -> _Belge:
             continue
         if _TABLO_RE.match(satir):
             ham_tablo_izleri.append((sira, satir))
-        yuva = _YUVA_DESENI.match(satir)
+        yuva = _YUVA_DESENI.match(_yapi_gorunumu(satir))
         if yuva and yuva.group(1) == "mesaj_ekseni":
             aktif_donem = _Donem(
                 ad=son_baslik or f"dönem-{len(donemler) + 1}",
@@ -2198,7 +2293,7 @@ def _ayristir(source_text: str) -> _Belge:
             if donem_bolgesi_basi is None:
                 donem_bolgesi_basi = _ilk_donem_baslangici(son_baslik_sirasi, sira)
             continue
-        if not yuva and _BASLIK_GORUNUMU_RE.match(satir):
+        if not yuva and _BASLIK_GORUNUMU_RE.match(_yapi_gorunumu(satir)):
             # Yuva olmayan bir başlık dönemi KAPATIR: sonraki dönemin adı budur.
             son_baslik = _baslik_metni(satir)
             son_baslik_sirasi = sira
@@ -3244,9 +3339,19 @@ def _kontrol_tur_etiketi(belge: _Belge) -> list[str]:
     """
     mesajlar: list[str] = []
     for satir in belge.tablo_satirlari:
-        etiketler = [
-            hucre for hucre in _hucreler(satir) if hucre in TUR_ETIKETLERI
-        ]
+        hucreler = _hucreler(satir)
+        # Sözleşmenin YAZILI istisnası: "(elenen dönemde boş bırakılabilir)".
+        # Kural DARALTILMAZ — yalnız bu tek hâl muaf tutulur; elenen satırda
+        # GEÇERSİZ etiket, seçilen satırda BOŞ etiket ve sütun sayısı tutmayan
+        # satır aynen not almaya devam eder (ölçüldü 2026-09-14: iki araçta
+        # toplam 13 not bu istisna tanınmadığı için doğmuştu).
+        if (
+            len(hucreler) == len(GEREKCE_TABLOSU_SUTUNLARI)
+            and hucreler[GEREKCE_KARAR_INDEKSI] == GEREKCE_KARAR_ELENDI
+            and not hucreler[GEREKCE_TUR_INDEKSI]
+        ):
+            continue
+        etiketler = [hucre for hucre in hucreler if hucre in TUR_ETIKETLERI]
         if not etiketler:
             mesajlar.append(
                 "Gerekçe tablosu satırında kapalı kümeden tür etiketi yok "
@@ -3397,9 +3502,27 @@ def _kontrol_bicim_ayri_madde(belge: _Belge) -> list[str]:
         for satir in _citsiz_satirlar(yuva.satirlar):
             if not satir.strip():
                 continue
-            if _MADDE_RE.match(satir) or _TABLO_RE.match(satir):
+            # İKİ AYRI SORU, AYRI CEVAP (tur 12 — Eray onayı 2026-09-14):
+            #   (a) ADET SAYIMI: `-` · `*` · `+` üçü de markdown maddesidir ve
+            #       üçü de SAYILIR. Kuralın kendi gerekçesi "her kalıp ayrı
+            #       madde olsun, paragrafta birleşmesin" — hangi harf değil.
+            #       Ölçüldü: `*` kullanan bir araç 106 maddeyi SIFIR saydırıyordu.
+            #   (b) SÖZLEŞME BİÇİMİ: sözleşme `-` yazar; farklı işaret ihlaldir
+            #       ve NOT alır. Tur 11'in ayrımı (tanıma ≠ kural) KORUNUR —
+            #       değişen tek şey, ihlalin artık içeriği YOK ETMEMESİ.
+            if _TABLO_RE.match(satir):
                 continue
-            if _BASLIK_GORUNUMU_RE.match(satir):
+            madde = _MADDE_RE.match(satir)
+            if madde:
+                isaret = satir.strip()[0]
+                if isaret != "-":
+                    mesajlar.append(
+                        f"{etiket}: madde işareti {isaret!r} — sözleşme '-' "
+                        f"ister; madde SAYILDI, biçim düzeltilmeli: "
+                        f"{satir.strip()[:60]!r}"
+                    )
+                continue
+            if _BASLIK_GORUNUMU_RE.match(_yapi_gorunumu(satir)):
                 continue
             mesajlar.append(
                 f"{etiket}: madde işareti olmayan içerik satırı — kalıplar "
@@ -3447,14 +3570,21 @@ def _kontrol_bicim_etiket_yazimi(belge: _Belge) -> list[str]:
     """Bağımlılık ve güncellik etiketlerinin YAZIMI — anahtar uzayı kapalıdır."""
     mesajlar: list[str] = []
     for eslesme in _KANAL_ETIKET_RE.finditer(belge.ham):
-        anahtar = eslesme.group(1).strip()
+        # Kapalı küme ÜYELİĞİ markdown süsüne takılmaz (tur 12) — `_yapi_gorunumu`
+        # ile AYNI TEK kural: kaçış ve vurgu düşer, sözcük kalır. Ölçüldü:
+        # `eticaret\_sitesi` yazımı bir araçta 6 nota mal oluyordu. Not METNİ ham
+        # yazımı gösterir; düzeltilecek şey odur.
+        anahtar = _yapi_gorunumu(eslesme.group(1)).strip()
         if anahtar not in KANAL_ANAHTARLARI:
             mesajlar.append(
                 f"Kanal etiketi anahtarı kapalı kümenin dışında: {anahtar!r} — "
                 f"{list(KANAL_ANAHTARLARI)}"
             )
     for eslesme in _BAGIMLILIK_ETIKET_RE.finditer(belge.ham):
-        icerik = eslesme.group(1).strip()
+        # Kanal etiketiyle AYNI kural — kapalı küme üyeliği markdown süsüne
+        # takılmaz (`[eski-kaynak\]` ölçüldü). İki etiket yolunda iki farklı
+        # normalleştirme YAZILMAZ.
+        icerik = _yapi_gorunumu(eslesme.group(1)).strip()
         if icerik not in ("kaynak-bağımlı", "eski-kaynak"):
             mesajlar.append(
                 f"Bağımlılık/güncellik etiketi yazımı sözleşmede yok: "

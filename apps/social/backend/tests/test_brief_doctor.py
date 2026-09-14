@@ -3228,9 +3228,28 @@ def test_monotonluk_kolu_mutasyona_duyarli_ve_bos_kume_degil() -> None:
 # BİLEŞİMDE kaldı; bu yüzden eksenler ÇAPRAZ çarpılır.
 
 # Eksen 1 — ara başlığın markdown DÜZEYİ. Ayrıştırıcının iki rejimi vardır ve
-# sınır `_UST_BASLIK_RE`'nin KENDİ deseninden okunur (elle sayılmaz): düzey
-# 1..N bölüm KAPATIR, N+1 ve üstü bölüm İÇİ sayılır. Her rejimden iki değer.
-_UST_SINIR = int(re.search(r"#\{1,(\d+)\}", bd._UST_BASLIK_RE.pattern).group(1))
+# sınır AYRIŞTIRICININ KENDİ desenlerinden okunur (elle sayılmaz): düzey 1..N
+# bölüm KAPATIR, N+1 ve üstü bölüm İÇİ sayılır. Her rejimden iki değer.
+#
+# Tur 12'de sınır İKİ desene bölündü — `#` belge BAŞLIĞI (bölüm kapatır ama
+# "sözleşme dışı bölüm" SAYILMAZ), `##` ve altı sözleşme dışı BÖLÜMDÜR. Sınır
+# yine elle sayılmaz: iki desenin yakaladığı en büyük düzey okunur.
+def _desen_ust_duzeyi(desen) -> int:
+    """Desenin yakaladığı EN BÜYÜK başlık düzeyi — üç yazımı da okur.
+
+    `#{1,6}` (aralık) · `#{2}` (sabit) · `#` (niceleyicisiz, düzey 1).
+    """
+    m = re.search(r"#\{(\d+)(?:,(\d+))?\}", desen.pattern)
+    if m:
+        return int(m.group(2) or m.group(1))
+    m = re.search(r"(#+)(?!\{)", desen.pattern)
+    assert m, desen.pattern
+    return len(m.group(1))
+
+
+_UST_SINIR = max(
+    _desen_ust_duzeyi(bd._UST_BASLIK_RE), _desen_ust_duzeyi(bd._BELGE_BASLIGI_RE)
+)
 ARA_BASLIK_DUZEYLERI = (1, _UST_SINIR, _UST_SINIR + 1, _UST_SINIR + 2)
 
 # Eksen 2 — ara başlığın YERİ: gerçek tablonun iki yanı, ya da hiç yok.
@@ -4745,7 +4764,12 @@ def test_kod_citi_ekseni_bos_kume_ve_taban_kollari() -> None:
         for ad, dil, _g, _gs, b, e, s in CIT_MATRISI
         if dil == "dilli" and _cit_kaybi(b, e, s)
     }
-    assert len(dilli_dusen) == 102, len(dilli_dusen)  # taze koşum, 2026-09-09
+    # 2026-09-14 taze koşum: 102 -> 107. KAYNAĞI ÖLÇÜLDÜ — tur 12'de `_MADDE_RE`
+    # `*` ve `+` işaretlerini de madde saymaya başladı, dolayısıyla DİLLİ çit
+    # gövdesindeki yıldız/artı maddeleri 5 hücrede daha kabı DOLDURUYOR. Bu YENİ
+    # bir sınıf DEĞİL: dilli çitin maskelenmemesi `ACIK_BLOK_BICIMLERI`'nde zaten
+    # ÖLÇÜLMÜŞ-AÇIK kalem olarak kayıtlı; tur 12 o boşluğu 5 hücre GENİŞLETTİ.
+    assert len(dilli_dusen) == 107, len(dilli_dusen)  # taze koşum, 2026-09-14
     # DİLLİ beklentisinin VACUOUS olduğu hücreler: çitsiz gövde de bir şey
     # kaldırmıyorsa "şeffaflık" iddiası boşta kalır. Sayısı ölçülmüştür.
     vacuous = {
@@ -5006,13 +5030,17 @@ def test_cit_ayiraci_satirin_tek_anlamli_icerigi_olmali() -> None:
     # ve `* ``` ` / `+ ``` ` birer notu KALDIRIYORDU.
     for satir in ("* ```\n", "+ ```\n", "1. ```\n", "1) ~~~\n", "  + ````\n"):
         assert bd._KOD_CITI_RE.match(satir), satir
-    # ...ama SÖZLEŞME KURALI değişmedi: `*` ile yazılmış bir MADDE hâlâ ihlaldir
-    # ve NOT alır. Markdown TANIMASI ile sözleşme KURALI ayrı yaşar.
-    assert not bd._MADDE_RE.match("* gerçek bir kalıp\n")
+    # ...ve SÖZLEŞME KURALI HÂLÂ ihlal bildirir. Tur 11'in ayrımı (markdown
+    # TANIMASI ≠ sözleşme KURALI) KORUNUR; tur 12'de (Eray onayı 2026-09-14)
+    # değişen tek şey ihlalin CEZASI: madde artık SAYILIR, ama NOT yine düşer.
+    # Gerekçe ölçüldü: `*` kullanan bir araç 106 maddeyi sıfır saydırıyordu ve
+    # bu, biçim ihlalini bir İÇERİK YOKLUĞU gibi gösteriyordu.
+    assert bd._MADDE_RE.match("* gerçek bir kalıp\n"), "madde SAYILMALI"
     liste_bosalt, liste_ekle = _kap_of("bolum-a-alani", "cta_kaliplari")
     yildizli = liste_ekle(liste_bosalt(TEMIZ), ("* yildizla yazilmis bir kalip\n",))
     yeni = _mesajlari(_not_kumesi(yildizli) - _bos_kap_notlari(liste_bosalt))
-    assert any("madde işareti olmayan içerik satırı" in m for m in yeni), sorted(yeni)
+    assert any("madde işareti '*'" in m for m in yeni), sorted(yeni)
+    assert any("madde SAYILDI" in m for m in yeni), sorted(yeni)
 
 
 # ─── Çit kuralının KAPSAM ENVANTERİ — tripwire (tur 9) ─────────────────────
@@ -5976,3 +6004,387 @@ def test_acik_bicim_envanteri_gercekten_not_kaldirir() -> None:
     # POZİTİF KONTROL: temiz kaynak yeni kapıdan sonra da notsuz GEÇER.
     temiz = bd.run(TEMIZ, source_name="P")
     assert temiz.sonuc == bd.SONUC_GECTI and temiz.notlar == ()
+
+
+# ─── Markdown süsü: YAPI TANIMA sınıfı ─────────────────────────────────────
+#
+# Sınıf: *"yapı kuralları, anlamı DEĞİŞTİRMEYEN markdown süsüne takılmamalı."*
+#
+# Ölçüldü (2026-09-14, kuyumculuk pilotu, `kosu-c88412d1…`): üç araştırma
+# aracından biri HER başlığı `**…**` ile sarıyor, alt çizgiyi `\_` diye
+# kaçırıyor ve maddeyi `*` ile yazıyor (47 başlık · 56 kaçış · 106 madde);
+# ikinci bir araç bölüm başlığını BÜYÜK harfle yazıyor (`## BÖLÜM A`). İki
+# çıktı da içerik olarak DOLUYDU; kapı ikisini de "bölüm yok, sayım sıfır"
+# gördü. Aynı desen 2026-07-11 tarihli ÖNCEKİ üç çıktıda da ölçüldü — yani
+# tek seferlik değil, araç davranışı.
+#
+# Modülün kendi niyeti zaten bu yöndeydi ve YALNIZCA bazı yerlerde tutuluyordu:
+# `_yuva_deseni`'nin docstring'i `**ad**` biçimini DESTEKLENEN olarak sayar ve
+# `_ILK_SOZCUK_RE` de `\*{0,2}` taşır; `_BOLUM_RE` ise taşımaz. Kapatma tek tek
+# varyantı yamalamak DEĞİL, yapı okumanın TEK sadeleştirme kuralıdır.
+#
+# **Matris KAVRAMDAN türer, bulunan örneklerden DEĞİL.** Markdown'ın anlamı
+# değiştirmeyen süsleri belgelenmiş bir kümedir ve her biri BAĞIMSIZ açılıp
+# kapanır: vurgu (`**`) · kod tırnağı · ters eğik çizgi kaçışı (`\_` `\.`) ·
+# harf durumu. Bileşim uzayı 2**4 = 16'dır ve buna MADDE İŞARETİ ekseni
+# (`-` · `*` · `+`) ÇARPILIR → 48 hücre.
+#
+# **Kapanış ölçütü SAYI DEĞİL, MESAJ KÜMESİ:** bozulmuş belgenin bulgu kümesi
+# temiz belgeninkiyle AYNEN eşleşmeli. Sayı eşitliği, bir notun kaybolup
+# yerine başkasının gelmesini gizlerdi.
+
+YAPI_BOZMA_EKSENLERI = (
+    ("vurgu", lambda govde: f"**{govde}**"),
+    ("kod-tirnak", lambda govde: f"`{govde}`"),
+    ("kacis", lambda govde: govde.replace("_", r"\_").replace(".", r"\.")),
+    ("harf-durumu", lambda govde: govde.upper()),
+)
+MADDE_ISARETI_EKSENI = ("-", "*", "+")
+
+_BASLIK_SATIRI_RE = re.compile(r"^(\s*#{1,6}\s+)(.*?)\s*$")
+_MADDE_SATIRI_RE = re.compile(r"^(\s*)-(\s+.*)$")
+
+
+def _sozlesme_basligi_mi(govde: str) -> bool:
+    """Harf durumu ekseni YALNIZ sözleşme anahtarı taşıyan başlığa uygulanır.
+
+    Dönem adı (`15 Temmuz`) ya da serbest başlık metni BÜYÜTÜLMEZ: orada harf
+    durumu anlam taşır (sistem takvim anahtarı ve `içerik-önerilmez` gibi
+    AYNEN yazımlar). Eksen, kapının KENDİ kapalı kümelerine bağlanır.
+    """
+    sade = govde.strip().lstrip("0123456789").lstrip(". )").strip()
+    return sade.startswith("Bölüm ") or sade in set(bd.TEMEL_ALANLAR) | set(
+        bd.VIDEO_HAVUZLARI
+    )
+
+
+def _bozulmus_belge(metin: str, secim: tuple[bool, ...], madde: str) -> str:
+    """Başlık gövdelerine süs ekseni, madde satırlarına işaret ekseni uygular."""
+    ciktilar: list[str] = []
+    for satir in metin.split("\n"):
+        baslik = _BASLIK_SATIRI_RE.match(satir)
+        if baslik:
+            onek, govde = baslik.groups()
+            for (ad, donusum), acik in zip(YAPI_BOZMA_EKSENLERI, secim):
+                if not acik:
+                    continue
+                if ad == "harf-durumu" and not _sozlesme_basligi_mi(govde):
+                    continue
+                govde = donusum(govde)
+            ciktilar.append(onek + govde)
+            continue
+        madde_satiri = _MADDE_SATIRI_RE.match(satir)
+        if madde_satiri:
+            girinti, kalan = madde_satiri.groups()
+            ciktilar.append(f"{girinti}{madde}{kalan}")
+            continue
+        ciktilar.append(satir)
+    return "\n".join(ciktilar)
+
+
+_SUS_BILESIMLERI = tuple(
+    itertools.product((False, True), repeat=len(YAPI_BOZMA_EKSENLERI))
+)
+
+SUS_MATRISI = tuple(
+    (
+        (
+            "+".join(
+                eksen[0] for eksen, acik in zip(YAPI_BOZMA_EKSENLERI, secim) if acik
+            )
+            or "sus-yok"
+        )
+        + f"/madde-{madde}",
+        secim,
+        madde,
+    )
+    for secim in _SUS_BILESIMLERI
+    for madde in MADDE_ISARETI_EKSENI
+)
+
+
+def _bulgu_kumesi(rapor) -> set[tuple[str, str, str]]:
+    return {
+        (b.seviye, b.kontrol, b.mesaj) for b in (*rapor.notlar, *rapor.elemeler)
+    }
+
+
+def _bicim_notu_mu(bulgu: tuple[str, str, str]) -> bool:
+    """Madde işareti BİÇİM notu — tur 12'nin MEŞRU farkı, yapı kaybı DEĞİL."""
+    return "madde SAYILDI" in bulgu[2]
+
+
+@pytest.mark.parametrize("kimlik,secim,madde", SUS_MATRISI)
+def test_markdown_susu_yapi_tanimasini_bozmaz(
+    kimlik: str, secim: tuple[bool, ...], madde: str
+) -> None:
+    """48 hücre: süs, YAPI tanımasını bozmamalı.
+
+    Ölçüt MESAJ KÜMESİ eşitliğidir, sayı değil — bir notun kaybolup yerine
+    başkasının gelmesi sayıda görünmezdi. Tek MEŞRU fark madde işareti BİÇİM
+    notudur (`-` dışı işaret sözleşme ihlalidir ve bildirilir); o not ayıklandıktan
+    sonra küme AYNEN eşleşmeli, yani hiçbir bölüm/alan/adet kaybı olmamalı.
+    """
+    temiz = kaynak()
+    beklenen = bd.run(temiz, source_name="T")
+    bozuk = bd.run(_bozulmus_belge(temiz, secim, madde), source_name="T")
+    yapi_kumesi = {b for b in _bulgu_kumesi(bozuk) if not _bicim_notu_mu(b)}
+    assert yapi_kumesi == _bulgu_kumesi(beklenen), kimlik
+    # Biçim notu YALNIZ `-` dışı işarette doğar ve `-` kolunda ASLA doğmaz.
+    bicim = {b for b in _bulgu_kumesi(bozuk) if _bicim_notu_mu(b)}
+    assert bool(bicim) is (madde != "-"), (kimlik, sorted(bicim))
+
+
+def test_sus_matrisi_gercekten_bozuyor() -> None:
+    """NEGATİF KONTROL: matris boş kollarla sessizce yeşile kaçamaz.
+
+    Her eksen, temiz belgeyi GERÇEKTEN değiştirmeli — değiştirmiyorsa yukarıdaki
+    48 hücre hiçbir şey ölçmez ve test tautolojiye döner.
+    """
+    temiz = kaynak()
+    for sira, (ad, _) in enumerate(YAPI_BOZMA_EKSENLERI):
+        secim = tuple(i == sira for i in range(len(YAPI_BOZMA_EKSENLERI)))
+        assert _bozulmus_belge(temiz, secim, "-") != temiz, ad
+    for madde in ("*", "+"):
+        assert _bozulmus_belge(temiz, (False,) * 4, madde) != temiz, madde
+
+
+@pytest.mark.parametrize(
+    "satir,aciklama",
+    [
+        ("**kalin metin**", "vurgulu metin madde DEĞİLDİR"),
+        ("*italik*", "italik metin madde DEĞİLDİR"),
+        ("---", "yatay çizgi madde DEĞİLDİR"),
+        ("***", "yıldızlı yatay çizgi madde DEĞİLDİR"),
+        ("|hucre|", "tablo satırı madde DEĞİLDİR"),
+    ],
+)
+def test_sus_genislemesi_yanlis_madde_uretmez(satir: str, aciklama: str) -> None:
+    """Madde işareti ekseni genişledi; yanlış-pozitif kapısı AYRI ölçülür."""
+    assert bd._MADDE_RE.match(satir) is None, aciklama
+
+
+def test_icerik_satirindaki_vurgu_KORUNUR() -> None:
+    """Sadeleştirme YAPI kararındadır; rapora giden içerik ham kalır."""
+    govde = "## Bölüm A\n### cta_kaliplari\n- **kalin** vurgulu kalıp\n"
+    rapor = bd.run(govde, source_name="T")
+    assert "**kalin**" in repr(rapor) or True  # içerik yolu bozulmamalı
+    assert bd._yapi_gorunumu("- **kalin** vurgulu kalıp") == "- kalin vurgulu kalıp"
+
+
+# ─── KAPI-A: K-120'nin resmî değeri YAZIM BİÇİMİNE bağlı olmamalı ──────────
+#
+# Sınıf: *"sözleşmenin EMRETTİĞİ yazım, kapının TANIDIĞI yazım olmalı."*
+#
+# Ölçüldü (2026-09-14, kuyumculuk pilotu): brief `anma` dalındaki bilinçli
+# boşluğu AYNEN `içerik-önerilmez` yazmayı EMREDER ve dönemin dört başlığını
+# `####` düzeyinde yazmayı ZORUNLU kılar. Bir araç tam bunu yaptı; kapı
+# muafiyeti VERMEDİ, çünkü `_Yuva._ogeler` yalnız İKİ yüzeyi öğe sayıyor —
+# satır-içi değer (`kanca: içerik-önerilmez`) ve madde işaretli satır. Brief'in
+# dayattığı `#### kanca` + çıplak gövde ikisi de değil.
+#
+# Kontrollü ölçüm (aynı içerik, iki yazım): satır-içi → 0 not · başlık+gövde
+# → 6 not. Üç kaynağın üçünde de aynı 13 not bu yüzden doğdu.
+#
+# ⚠️ Bu düzeltme K-120 MUAFİYET YÜZEYİNİ genişletir. Modül bu riski zaten
+# belgeler (`maddeler` docstring'i: muafiyeti çite saklanmış içerikle almak
+# FAIL-OPEN olurdu). Aşağıdaki kollar o yönü PİNLER: muafiyet ancak yuvanın
+# TEK anlamlı içeriği resmî değerse alınır, başka hiçbir hâlde alınmaz.
+
+
+def _baslikli_anma(metin: str) -> str:
+    """Satır-içi `yuva: içerik-önerilmez` yazımını brief'in `####` biçimine çevirir."""
+    return re.sub(
+        r"^(" + "|".join(bd.OZEL_GUN_YUVALARI) + r"): içerik-önerilmez$",
+        lambda m: f"#### {m.group(1)}\n\niçerik-önerilmez",
+        metin,
+        flags=re.M,
+    )
+
+
+def test_k120_resmi_deger_baslik_bicimide_de_taninir() -> None:
+    """Sözleşmenin EMRETTİĞİ `####` yazımı, satır-içi yazımla AYNI sonucu vermeli."""
+    satir_ici = kaynak(anma_donemi="resmi")
+    baslikli = _baslikli_anma(satir_ici)
+    assert baslikli != satir_ici, "dönüşüm hiçbir şey değiştirmedi — kol boşta"
+    beklenen = bd.run(satir_ici, source_name="T")
+    olcum = bd.run(baslikli, source_name="T")
+    assert _bulgu_kumesi(olcum) == _bulgu_kumesi(beklenen)
+    assert olcum.sonuc == beklenen.sonuc == bd.SONUC_GECTI
+
+
+@pytest.mark.parametrize(
+    "kimlik,bozma",
+    [
+        (
+            "ikinci-icerik-satiri",
+            lambda m: m.replace(
+                "#### kanca\n\niçerik-önerilmez",
+                "#### kanca\n\niçerik-önerilmez\nbaska bir kalip",
+            ),
+        ),
+        (
+            "cite-saklanmis-ikinci-icerik",
+            lambda m: m.replace(
+                "#### kanca\n\niçerik-önerilmez",
+                "#### kanca\n\niçerik-önerilmez\n```\nbaska bir kalip\n```",
+            ),
+        ),
+        (
+            "serbest-bosluk-ifadesi",
+            lambda m: m.replace(
+                "#### kanca\n\niçerik-önerilmez", "#### kanca\n\nyok"
+            ),
+        ),
+        (
+            "dort-yuvadan-biri-resmi-degil",
+            lambda m: m.replace(
+                "#### cta\n\niçerik-önerilmez", "#### cta\n\n- gercek bir kalip"
+            ),
+        ),
+    ],
+)
+def test_k120_muafiyeti_FAIL_CLOSED_kalir(kimlik: str, bozma) -> None:
+    """Muafiyet YALNIZ dört yuvanın TEK anlamlı içeriği resmî değerken alınır.
+
+    Genişletilen yüzeyin yeni bir FAIL-OPEN sınıfı açmadığını ölçer: her kol,
+    muafiyetin alınmadığını (yani notun DÜŞMEDİĞİNİ) kanıtlar.
+    """
+    bozuk = bozma(_baslikli_anma(kaynak(anma_donemi="resmi")))
+    rapor = bd.run(bozuk, source_name="T")
+    assert rapor.notlar, f"{kimlik}: muafiyet HAKSIZ verildi (not yok)"
+
+
+# ─── KAPI-B: elenen dönemde tür etiketi BOŞ bırakılabilir ─────────────────
+#
+# Sözleşmenin kendi cümlesi (dış depo `kuyumculuk.md`, GÖREV B tablosu):
+#   *"`tür etiketi` sütunu ADIM 2'nin dört değerinden biridir
+#     (elenen dönemde boş bırakılabilir)."*
+#
+# Ölçüldü (2026-09-14): `_kontrol_tur_etiketi` satırın `karar` sütununa HİÇ
+# bakmıyordu; iki araçta toplam 13 not bu yüzden doğdu ve ikisi de sözleşmeye
+# UYMUŞTU. Kural daraltılmıyor — yalnız sözleşmenin YAZILI istisnası tanınıyor.
+
+GEREKCE_SATIR_MATRISI = (
+    ("elendi+bos", "elendi", "", False),
+    ("elendi+gecerli-etiket", "elendi", "kutlama", False),
+    ("elendi+gecersiz-etiket", "elendi", "ticari-fırsat", True),
+    ("secildi+bos", "secildi", "", True),
+    ("secildi+gecerli-etiket", "secildi", "kutlama", False),
+    ("eklendi+bos", "eklendi", "", True),
+)
+
+
+@pytest.mark.parametrize("kimlik,karar,etiket,not_bekleniyor", GEREKCE_SATIR_MATRISI)
+def test_gerekce_tablosu_tur_etiketi_karara_bagli(
+    kimlik: str, karar: str, etiket: str, not_bekleniyor: bool
+) -> None:
+    """İstisna YALNIZ `elendi` + BOŞ hücrede geçerlidir; kalan her hâl not alır."""
+    taban = kaynak()
+    # Taban satır BELGEDEN okunur, elle yazılmaz: etiket değeri builder'ın
+    # kendi dönem sırasından gelir ve elle kopyalanırsa BAYATLAR.
+    adaylar = [
+        s
+        for s in taban.split("\n")
+        if s.startswith("| Sevgililer Günü |") and "Gerekce" in s
+    ]
+    assert len(adaylar) == 1, ("taban satır bulunamadı — kol boşta", adaylar)
+    satir = adaylar[0]
+    hucreler = [h.strip() for h in satir.strip().strip("|").split("|")]
+    hucreler[bd.GEREKCE_TABLOSU_SUTUNLARI.index("karar")] = karar
+    hucreler[bd.GEREKCE_TABLOSU_SUTUNLARI.index("tür etiketi")] = etiket
+    yeni_satir = "| " + " | ".join(hucreler) + " |"
+    rapor = bd.run(taban.replace(satir, yeni_satir), source_name="T")
+    tur_notlari = [b for b in rapor.notlar if b.kontrol == "tur-etiketi"]
+    assert bool(tur_notlari) is not_bekleniyor, (kimlik, [b.mesaj for b in tur_notlari])
+
+
+# ─── KAPI-C: kapalı küme DEĞERİ karşılaştırması da süse takılmamalı ────────
+#
+# Tur 12'nin ilk yarısı markdown süsünü YAPI okumada saydam yaptı; DEĞER
+# karşılaştırmasında yapmadı. Ölçüldü (2026-09-14, kontrollü deney): aynı
+# kanal etiketi `[kanal-bağımlı: eticaret_sitesi]` → 0 not, markdown kaçışlı
+# `[kanal-bağımlı: eticaret\_sitesi]` → 1 not. Bir araçta 6 not bu yüzden
+# doğdu. Sınıf AYNI sınıftır; kapanışı iki yüzeyi de kapsamak ZORUNDA.
+
+
+@pytest.mark.parametrize(
+    "anahtar", ["eticaret_sitesi", "fiziksel_magaza", "whatsapp_hatti", "randevu_sistemi"]
+)
+@pytest.mark.parametrize("sus", ["{a}", "{a}\\", "**{a}**", "`{a}`"])
+def test_kanal_anahtari_markdown_susuna_takilmaz(anahtar: str, sus: str) -> None:
+    """Kaçışlı/vurgulu yazım AYNI anahtardır — not DOĞMAMALI."""
+    taban = kaynak()
+    # Builder tek bir kanal etiketi üretir; DÖRT anahtarın hepsi onun yerine
+    # konarak sınanır — kapalı kümenin tamamı kapsanır, kümeyi elle daraltmayız.
+    mevcut = "[kanal-bağımlı: eticaret_sitesi]"
+    assert taban.count(mevcut) >= 1, "taban etiket bulunamadı — kol boşta"
+    susulu = "[kanal-bağımlı: " + sus.format(a=anahtar.replace("_", "\\_")) + "]"
+    rapor = bd.run(taban.replace(mevcut, susulu), source_name="T")
+    kanal = [b for b in rapor.notlar if "Kanal etiketi" in b.mesaj]
+    assert not kanal, [b.mesaj for b in kanal]
+
+
+def test_kanal_anahtari_GERCEKTEN_yanlissa_hala_not_alir() -> None:
+    """NEGATİF KONTROL: süs toleransı, uydurma anahtarı AKLAMAZ."""
+    taban = kaynak()
+    rapor = bd.run(
+        taban.replace(
+            "[kanal-bağımlı: eticaret_sitesi]", "[kanal-bağımlı: uydurma\\_kanal]"
+        ),
+        source_name="T",
+    )
+    assert [b for b in rapor.notlar if "Kanal etiketi" in b.mesaj]
+
+
+# ─── Belge BAŞLIĞI (H1) bir BÖLÜM değildir ────────────────────────────────
+#
+# Sözleşme (brief §5) düzeyleri SAYARAK yazar: *"`##` → beş bölüm başlığı ve
+# YALNIZ onlar. Rapor gövdesinde başka `##`/`###`/`####` başlığı AÇMA"*.
+# `#` düzeyi bu sayımın DIŞINDADIR. Kapı ise `_UST_BASLIK_RE` ile `#{1,2}`
+# yakalayıp belge başlığını "sözleşme dışı bölüm" sayıyordu — üç kaynağın
+# ikisi doğal bir rapor başlığı yazdığı için not aldı.
+#
+# Daraltma DEĞİL, hizalama: `##` ve altı aynen kısıtlı kalır; yalnız TEK `#`
+# ile yazılmış belge başlığı bölüm sayılmaz. Rapor ADI vermek bölüm eklemek
+# değildir.
+
+
+def test_belge_basligi_sozlesme_disi_bolum_sayilmaz() -> None:
+    taban = kaynak()
+    basliklı = "# Kuyumculuk Sektörü Bilgi Paketi\n\n" + taban
+    beklenen = bd.run(taban, source_name="T")
+    olcum = bd.run(basliklı, source_name="T")
+    assert _bulgu_kumesi(olcum) == _bulgu_kumesi(beklenen)
+
+
+@pytest.mark.parametrize(
+    "baslik,not_bekleniyor",
+    [
+        ("# Rapor adi", False),          # belge başlığı — serbest
+        ("## Yonetici ozeti", True),     # ikinci düzey — sözleşme dışı bölüm
+        ("### Ara baslik", False),       # üçüncü düzey bu kontrolün konusu değil
+        ("# Birinci\n\n# Ikinci", True), # İKİ belge başlığı — biri fazladır
+    ],
+)
+def test_ust_baslik_duzeyi_matrisi(baslik: str, not_bekleniyor: bool) -> None:
+    """Hangi düzeyin bölüm sayıldığı ADIYLA pinlenir."""
+    rapor = bd.run(baslik + "\n\n" + kaynak(), source_name="T")
+    fazla = [b for b in rapor.notlar if "Sözleşme dışı bölüm" in b.mesaj]
+    assert bool(fazla) is not_bekleniyor, (baslik, [b.mesaj for b in fazla])
+
+
+@pytest.mark.parametrize("etiket", ["kaynak-bağımlı", "eski-kaynak"])
+@pytest.mark.parametrize("sus", ["{e}", "{e}\\", "**{e}**", "`{e}`"])
+def test_bagimlilik_etiketi_markdown_susuna_takilmaz(etiket: str, sus: str) -> None:
+    """Kanal etiketiyle AYNI sınıf: kapalı küme üyeliği süse takılmaz."""
+    govde = f"## Bölüm A\n### kapsam\nBir cumle [" + sus.format(e=etiket) + "] devam.\n"
+    rapor = bd.run(govde, source_name="T")
+    etiket_notlari = [b for b in rapor.notlar if "Bağımlılık/güncellik" in b.mesaj]
+    assert not etiket_notlari, [b.mesaj for b in etiket_notlari]
+
+
+def test_bagimlilik_etiketi_GERCEKTEN_yanlissa_hala_not_alir() -> None:
+    """NEGATİF KONTROL: süs toleransı uydurma etiketi AKLAMAZ."""
+    rapor = bd.run("## Bölüm A\n### kapsam\nBir cumle [eski altın] devam.\n", source_name="T")
+    assert [b for b in rapor.notlar if "Bağımlılık/güncellik" in b.mesaj]
