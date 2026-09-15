@@ -5039,7 +5039,10 @@ def test_cit_ayiraci_satirin_tek_anlamli_icerigi_olmali() -> None:
     liste_bosalt, liste_ekle = _kap_of("bolum-a-alani", "cta_kaliplari")
     yildizli = liste_ekle(liste_bosalt(TEMIZ), ("* yildizla yazilmis bir kalip\n",))
     yeni = _mesajlari(_not_kumesi(yildizli) - _bos_kap_notlari(liste_bosalt))
-    assert any("madde işareti '*'" in m for m in yeni), sorted(yeni)
+    # Tur 14 (2026-09-15): not artık İHLAL BAŞINA değil, kaynak başına TEK
+    # ÖZET olarak düşer. Bu iddianın konusu notun SAYISI değil VARLIĞIDIR —
+    # ihlal bildiriliyor mu ve madde sayılıyor mu; ikisi de aynen duruyor.
+    assert any("'*' 1" in m for m in yeni), sorted(yeni)
     assert any("madde SAYILDI" in m for m in yeni), sorted(yeni)
 
 
@@ -6388,3 +6391,223 @@ def test_bagimlilik_etiketi_GERCEKTEN_yanlissa_hala_not_alir() -> None:
     """NEGATİF KONTROL: süs toleransı uydurma etiketi AKLAMAZ."""
     rapor = bd.run("## Bölüm A\n### kapsam\nBir cumle [eski altın] devam.\n", source_name="T")
     assert [b for b in rapor.notlar if "Bağımlılık/güncellik" in b.mesaj]
+
+
+# ─── KAPI-D/E/F (tur 14, 2026-09-15): ikinci kaynak partisinin ölçümü ───────
+#
+# ÖLÇÜLDÜ (2026-09-15, `Kuyumculuk/Kaynak-1..6.md`, kapı veritabanına
+# dokunmadan koşturuldu): altı kaynağın TOPLAM 378 notunun 351'i ÜÇ yazım
+# ekseninden doğuyor ve üçü de araştırmanın İÇERİĞİYLE ilgili DEĞİL:
+#
+#   * 286 not — madde işareti `*` (ihlal başına bir not; 28 kapta)
+#   *  34 not — Bölüm C `alan/dönem` hücresinde markdown kaçışı (`ton\_ve\_dil`)
+#   *  31 not — `tek kaynak` hücresinde `hayir` (ASCII yazım)
+#
+# Gerçek içerik bulgusu 27'dir. Yani kapı doğru şeyleri buluyor ama sinyali
+# kendi gürültüsünde boğuyordu: dün Gemini'nin 34 notunu yanlış okumamızın
+# sebebi de buydu.
+#
+# KAPI-D — TABLO HÜCRESİ, süs matrisinin EKSİK YÜZEYİYDİ. Tur 12 markdown
+# süsünü yapı okumada saydam yaptı ve 48 hücrelik ÜRETİLMİŞ bir matrisle
+# kapattı. Ama matrisi üreten `_bozulmus_belge` yalnız BAŞLIK ve MADDE
+# satırlarını bozuyor; `| … |` satırlarına hiç dokunmuyordu. Sınıf bir yüzeyde
+# kapandı, ötekinde açık kaldı — ve kaçış tam orada, Bölüm C'de hayatta kaldı.
+# Kapanış: AYNI süs eksenleri tablonun KİMLİK hücresine de uygulanır.
+#
+# KAPI-E — ihlal başına not, ihlalin KENDİSİNİ görünmez yapıyordu. Sözleşme
+# kuralı ve cezası tur 12'de kararlaştırıldı (madde SAYILIR, not DÜŞER); orada
+# kararlaştırılmayan tek şey notun KAÇ KERE düşeceğiydi. 183 kez düşünce not
+# bilgi taşımıyor, gürültü taşıyor.
+#
+# KAPI-F — kapalı küme DEĞERİ, ASCII yazımda da aynı değerdir. Küme modülden
+# TÜRETİLİR (Türkçe karakter taşıyan her kapalı küme sabiti), elle seçilmez:
+# bugün iki üyesi var (`hayır` · `içerik-önerilmez`); üçüncüsü eklenirse test
+# onu kendiliğinden kapsar.
+
+
+_C_VERI_SATIRI_RE = re.compile(r"^\s*\|\s*\d+\s*\|")
+_SUS_EKSENLERI_HUCRE = tuple(
+    eksen for eksen in YAPI_BOZMA_EKSENLERI if eksen[0] != "harf-durumu"
+)
+"""Hücre yüzeyinde harf durumu ekseni YOK — dönem adı Türkçedir ve büyütmek
+`I`/`ı` ayrımında anlam değiştirir. Yapı satırlarında da aynı sebeple yalnız
+sözleşme anahtarlarına uygulanıyor (`_sozlesme_basligi_mi`); kural aynı kural."""
+
+_HUCRE_SUS_BILESIMLERI = tuple(
+    itertools.product((False, True), repeat=len(_SUS_EKSENLERI_HUCRE))
+)
+
+
+def _hucre_susle(metin: str, secim: tuple[bool, ...], indeks: int) -> str:
+    """Bölüm C veri satırlarının TEK bir hücresine süs ekseni uygular."""
+    ciktilar: list[str] = []
+    for satir in metin.split("\n"):
+        if not _C_VERI_SATIRI_RE.match(satir):
+            ciktilar.append(satir)
+            continue
+        parcalar = satir.split("|")
+        govde = parcalar[indeks + 1].strip()
+        for (ad, donusum), acik in zip(_SUS_EKSENLERI_HUCRE, secim):
+            if not acik:
+                continue
+            govde = donusum(govde)
+        parcalar[indeks + 1] = f" {govde} "
+        ciktilar.append("|".join(parcalar))
+    return "\n".join(ciktilar)
+
+
+@pytest.mark.parametrize("secim", _HUCRE_SUS_BILESIMLERI)
+def test_c_alan_hucresi_markdown_susuna_takilmaz(secim: tuple[bool, ...]) -> None:
+    """Süslenmiş `alan/dönem` hücresi AYNI anahtardır — bulgu kümesi DEĞİŞMEZ."""
+    temiz = kaynak()
+    beklenen = bd.run(temiz, source_name="T")
+    bozuk = bd.run(_hucre_susle(temiz, secim, bd.C_ALAN_INDEKSI), source_name="T")
+    assert _bulgu_kumesi(bozuk) == _bulgu_kumesi(beklenen), secim
+
+
+def test_hucre_sus_matrisi_GERCEKTEN_bozuyor() -> None:
+    """NEGATİF KONTROL: matris, hiçbir şeyi bozmayan bir eksenle yeşile kaçamaz.
+
+    Her eksen TEK BAŞINA açıldığında düzeltmeden ÖNCEKİ kapıda not üretmiş
+    olmalı; üretmiyorsa o kol boştur ve matris tautolojidir.
+    """
+    temiz = kaynak()
+    for sira, (ad, _) in enumerate(_SUS_EKSENLERI_HUCRE):
+        secim = tuple(i == sira for i in range(len(_SUS_EKSENLERI_HUCRE)))
+        bozuk = _hucre_susle(temiz, secim, bd.C_ALAN_INDEKSI)
+        assert bozuk != temiz, f"{ad} ekseni hücreyi HİÇ değiştirmiyor"
+
+
+def test_c_alan_hucresi_GERCEKTEN_yanlissa_hala_not_alir() -> None:
+    """NEGATİF KONTROL: süs toleransı uydurma alan adını AKLAMAZ."""
+    temiz = kaynak()
+    bozuk = temiz.replace("| kapsam |", "| uydurma\\_alan |")
+    rapor = bd.run(bozuk, source_name="T")
+    assert [b for b in rapor.notlar if "`alan/dönem` hücresi" in b.mesaj]
+
+
+def test_alan_karsilastirma_anahtari_kacisa_takilmaz() -> None:
+    """Motorla PAYLAŞILAN anahtar — kapı ile motor aynı satırı aynı görmeli."""
+    assert bd.alan_karsilastirma_anahtari(r"ton\_ve\_dil") == (
+        bd.alan_karsilastirma_anahtari("ton_ve_dil")
+    )
+
+
+# ── KAPI-E: madde işareti notu kaynak başına TEK ────────────────────────────
+
+
+def _madde_notlari(rapor) -> list[str]:
+    return [b.mesaj for b in rapor.notlar if "madde SAYILDI" in b.mesaj]
+
+
+def test_madde_isareti_notu_kaynak_basina_TEK_duser() -> None:
+    """183 ihlal 183 not değil, TEK özet not üretir — ve sayıyı TAŞIR."""
+    temiz = kaynak()
+    bozuk = _bozulmus_belge(temiz, (False, False, False, False), "*")
+    rapor = bd.run(bozuk, source_name="T")
+    notlar = _madde_notlari(rapor)
+    assert len(notlar) == 1, notlar
+
+
+@pytest.mark.parametrize("adet", [1, 3, 7])
+def test_madde_isareti_ozeti_TOPLAMI_dogru_tasir(adet: int) -> None:
+    """Özet notun sayısı BAĞIMSIZ kurulmuş bir belgeden doğrulanır.
+
+    Sayımı kapının kendi kap mantığından türetmek tautoloji olurdu; burada
+    kabın içine KAÇ madde konduğunu test BİLİYOR.
+    """
+    maddeler = "\n".join(f"* {i}. kalip" for i in range(1, adet + 1))
+    govde = f"## Bölüm A\n\n### cta_kaliplari\n\n{maddeler}\n"
+    notlar = _madde_notlari(bd.run(govde, source_name="T"))
+    assert len(notlar) == 1, notlar
+    assert notlar[0].startswith(f"{adet} madde "), notlar[0]
+    assert f"cta_kaliplari {adet}" in notlar[0], notlar[0]
+
+
+def test_madde_isareti_ozeti_KAPLARI_adiyla_sayar() -> None:
+    """Özet not bilgi KAYBETTİRMEMELİ: hangi kapta kaç ihlal olduğu yazılı."""
+    temiz = kaynak()
+    bozuk = _bozulmus_belge(temiz, (False, False, False, False), "*")
+    notlar = _madde_notlari(bd.run(bozuk, source_name="T"))
+    assert "cta_kaliplari" in notlar[0], notlar[0]
+    assert "gorsel_kodlar" in notlar[0], notlar[0]
+
+
+def test_madde_isareti_SOZLESME_isaretinde_not_DOGMAZ() -> None:
+    """NEGATİF KONTROL: `-` kolunda özet not ASLA doğmaz."""
+    assert not _madde_notlari(bd.run(kaynak(), source_name="T"))
+
+
+def test_madde_isareti_ozeti_ADET_SAYIMINI_degistirmez() -> None:
+    """Toplulaştırma yalnız NOTU birleştirir; maddeler yine SAYILIR."""
+    temiz = kaynak()
+    bozuk = _bozulmus_belge(temiz, (False, False, False, False), "*")
+    yildizli = bd.run(bozuk, source_name="T")
+    tire = bd.run(temiz, source_name="T")
+    assert {b for b in _bulgu_kumesi(yildizli) if not _bicim_notu_mu(b)} == (
+        _bulgu_kumesi(tire)
+    )
+
+
+# ── KAPI-F: kapalı küme değeri ASCII yazımda da tanınır ─────────────────────
+
+
+def _turkce_kapali_kume_degerleri() -> list[str]:
+    """Modülden TÜRETİLİR: Türkçe karakter taşıyan her kapalı küme değeri."""
+    degerler: list[str] = []
+    for ad in dir(bd):
+        if not ad.isupper():
+            continue
+        deger = getattr(bd, ad)
+        adaylar = (deger,) if isinstance(deger, str) else deger
+        if not isinstance(adaylar, (tuple, frozenset, set)):
+            continue
+        for aday in adaylar:
+            if isinstance(aday, str) and any(ord(ch) > 127 for ch in aday):
+                degerler.append(aday)
+    return sorted(set(degerler))
+
+
+def _ascii_yazim(metin: str) -> str:
+    tablo = str.maketrans("ıİğĞüÜşŞöÖçÇ", "iIgGuUsSoOcC")
+    return metin.translate(tablo)
+
+
+def test_turkce_kapali_kume_envanteri_BOS_DEGIL() -> None:
+    """NEGATİF KONTROL: küme boşalırsa aşağıdaki matris sessizce tautoloji olur."""
+    envanter = _turkce_kapali_kume_degerleri()
+    assert {"hayır", "içerik-önerilmez"} <= set(envanter), envanter
+
+
+def test_tek_kaynak_hucresi_ascii_yazimda_da_taninir() -> None:
+    """`hayir` ile `hayır` AYNI değerdir — kapalı küme notu DOĞMAZ."""
+    bozuk = kaynak().replace("| hayır |", "| hayir |")
+    rapor = bd.run(bozuk, source_name="T")
+    kume = [b for b in rapor.notlar if "kapalı kümenin dışında" in b.mesaj]
+    assert not kume, [b.mesaj for b in kume]
+
+
+def test_tek_kaynak_ascii_yazimi_TEK_ozet_not_birakir() -> None:
+    """Tolerans SESSİZ değildir: sözleşme yazımı bir kez bildirilir."""
+    bozuk = kaynak().replace("| hayır |", "| hayir |")
+    rapor = bd.run(bozuk, source_name="T")
+    yazim = [b for b in rapor.notlar if "sözleşme yazımı" in b.mesaj]
+    assert len(yazim) == 1, [b.mesaj for b in yazim]
+    assert "hayır" in yazim[0].mesaj
+
+
+def test_tek_kaynak_GERCEKTEN_kume_disiysa_hala_not_alir() -> None:
+    """NEGATİF KONTROL: tolerans uydurma değeri AKLAMAZ."""
+    rapor = bd.run(kaynak().replace("| hayır |", "| belki |"), source_name="T")
+    assert [b for b in rapor.notlar if "kapalı kümenin dışında" in b.mesaj]
+
+
+def test_k120_muafiyeti_ascii_yazimda_da_taninir() -> None:
+    """`icerik-onerilmez` AYNEN `içerik-önerilmez` değeridir (K-120)."""
+    temiz = kaynak(anma_donemi="resmi")
+    beklenen = bd.run(temiz, source_name="T")
+    bozuk = bd.run(
+        temiz.replace(bd.BILINCLI_BOS, _ascii_yazim(bd.BILINCLI_BOS)),
+        source_name="T",
+    )
+    assert _bulgu_kumesi(bozuk) == _bulgu_kumesi(beklenen)

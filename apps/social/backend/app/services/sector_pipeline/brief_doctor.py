@@ -460,6 +460,7 @@ C_TABLOSU_SUTUNLARI = (
 C_NO_INDEKSI = C_TABLOSU_SUTUNLARI.index("no")
 C_ALAN_INDEKSI = C_TABLOSU_SUTUNLARI.index("alan/dönem")
 C_URL_INDEKSI = C_TABLOSU_SUTUNLARI.index("URL")
+C_TEK_KAYNAK_INDEKSI = C_TABLOSU_SUTUNLARI.index("tek kaynak")
 # `no` hücresi: 1'den başlayan ARTAN TAM SAYI, o raporda iddianın KALICI
 # kimliği. Biçim burada, DİZİ kuralı `_c_no_dizisi_ihlalleri`'nde ölçülür.
 _C_NO_RE = re.compile(r"^[1-9]\d*$")
@@ -1476,7 +1477,12 @@ class _Donem:
         if set(self.yuvalar) != set(OZEL_GUN_YUVALARI):
             return False
         return all(
-            BILINCLI_BOS in (yuva.tek_degeri, yuva.tek_anlamli_satir)
+            _deger_gorunumu(BILINCLI_BOS)
+            in {
+                _deger_gorunumu(aday)
+                for aday in (yuva.tek_degeri, yuva.tek_anlamli_satir)
+                if aday is not None
+            }
             for yuva in self.yuvalar.values()
         )
 
@@ -1629,8 +1635,39 @@ _YUVA_DESENI = _yuva_deseni(OZEL_GUN_YUVALARI)
 
 
 def _sadelestir(metin: str) -> str:
-    """Karşılaştırma için sadeleştirme: kırp, markdown vurgusunu ve tırnağı at."""
-    return metin.strip().strip("*`_ ").strip().casefold()
+    """Karşılaştırma için sadeleştirme: markdown süsü düşer, sözcük kalır.
+
+    Süs KÜMESİ `_yapi_gorunumu`'nundur ve ikinci bir kural YAZILMAZ — yapı
+    okuma ile değer karşılaştırması aynı süsü aynı görmek ZORUNDADIR. Tur 12
+    süsü yapı okumada saydam yaptı ama bu anahtara uğramadı; ölçüldü
+    (2026-09-15, Kaynak-1 ve Kaynak-4): kaçışlı alan adı (`ton\\_ve\\_dil`)
+    Bölüm C'de 34 SAHTE not üretiyordu. Anahtar motorla PAYLAŞILDIĞI için
+    (`alan_karsilastirma_anahtari`) bedeli yalnız not değildi: aynı satır
+    motorda da eşleşmiyordu — kapı "geçerli" derken motor "bulamadım" diyecekti.
+    """
+    return _yapi_gorunumu(metin).strip().strip("*`_ ").strip().casefold()
+
+
+_ASCII_KATLAMA = str.maketrans("ıİğĞüÜşŞöÖçÇ", "iIgGuUsSoOcC")
+"""Türkçe harflerin ASCII karşılıkları — KAPALI KÜME DEĞERİ karşılaştırması içindir.
+
+Neden yalnız orada: bir kapalı kümenin üyesi SAYILI ve önceden bilinen bir
+sözcüktür (`hayır` · `içerik-önerilmez`); ASCII yazımı AYNI üyeyi gösterir,
+çünkü küme başka üye taşımaz. Serbest metinde aynı katlama anlam karıştırırdı
+(`açık` ↔ `acık`), bu yüzden `_sadelestir` bu katlamayı YAPMAZ ve motorla
+paylaşılan anahtar da katlamasız KALIR — bu SINIR bilinçlidir, ölçülmedi diye
+değil, kapsamı gereği.
+"""
+
+
+def _deger_gorunumu(metin: str) -> str:
+    """Kapalı küme DEĞERİNİN karşılaştırma görünümü: süs + ASCII yazım saydam.
+
+    Ölçüldü (2026-09-15, Kaynak-3 ve dünkü Claude çıktısı): `tek kaynak`
+    hücresine `hayir` yazan iki araç 31 ve 42 not aldı; ikisi de sözleşmenin
+    KENDİ değerini yazıyordu, yalnız Türkçe harfi ASCII'ye çevirmişti.
+    """
+    return _sadelestir(metin).translate(_ASCII_KATLAMA)
 
 
 def alan_karsilastirma_anahtari(hucre: str) -> str:
@@ -3054,14 +3091,45 @@ def _c_satir_ihlalleri(satir: str, belge: _Belge) -> list[str]:
             f"kaynakta tarih görünmüyorsa AYNEN `{C_TARIH_YOK}` yazılır: "
             f"{tarih!r}"
         )
-    if tek_kaynak and _sadelestir(tek_kaynak) not in {
-        _sadelestir(deger) for deger in C_TEK_KAYNAK_DEGERLERI
+    if tek_kaynak and _deger_gorunumu(tek_kaynak) not in {
+        _deger_gorunumu(deger) for deger in C_TEK_KAYNAK_DEGERLERI
     }:
         mesajlar.append(
             "Bölüm C `tek kaynak` hücresi kapalı kümenin dışında "
             f"({' / '.join(C_TEK_KAYNAK_DEGERLERI)} beklenir): {tek_kaynak!r}"
         )
     return mesajlar
+
+
+def _c_tek_kaynak_yazim_ozeti(belge: _Belge) -> list[str]:
+    """`tek kaynak` hücresinin YAZIM sapması — kaynak başına TEK özet not.
+
+    Tolerans SESSİZ olmaz: değer kabul edilir (anlamı aynıdır) ama sözleşmenin
+    yazımı bir kez bildirilir. Satır başına bildirmek 31 nota çıkıyordu ve
+    gerçek bulguları gömüyordu — ceza aynı, notun sayısı farklı.
+    """
+    kanonik = {_deger_gorunumu(deger): deger for deger in C_TEK_KAYNAK_DEGERLERI}
+    sapanlar: Counter[tuple[str, str]] = Counter()
+    for satir in belge.c_veri_satirlari:
+        hucreler = _hucreler(satir)
+        if len(hucreler) != len(C_TABLOSU_SUTUNLARI):
+            continue
+        hucre = hucreler[C_TEK_KAYNAK_INDEKSI]
+        beklenen = kanonik.get(_deger_gorunumu(hucre))
+        if beklenen is not None and hucre != beklenen:
+            sapanlar[(hucre, beklenen)] += 1
+    if not sapanlar:
+        return []
+    doku = " · ".join(
+        f"{yazim!r} {adet} satır (sözleşme {beklenen!r} ister)"
+        for (yazim, beklenen), adet in sorted(
+            sapanlar.items(), key=lambda p: (-p[1], p[0][0])
+        )
+    )
+    return [
+        f"Bölüm C `tek kaynak` hücresinde sözleşme yazımı DIŞINDA yazım: "
+        f"{doku}; değer KABUL EDİLDİ"
+    ]
 
 
 def _c_no_dizisi_ihlalleri(belge: _Belge) -> list[str]:
@@ -3232,6 +3300,7 @@ def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
         return mesajlar
     for satir in belge.c_veri_satirlari:
         mesajlar.extend(_c_satir_ihlalleri(satir, belge))
+    mesajlar.extend(_c_tek_kaynak_yazim_ozeti(belge))
     mesajlar.extend(_c_no_dizisi_ihlalleri(belge))
     mesajlar.extend(_c_kapsama_ihlalleri(belge))
     return mesajlar
@@ -3491,6 +3560,9 @@ def _kontrol_bicim_sozlesme_disi_bolum(belge: _Belge) -> list[str]:
 def _kontrol_bicim_ayri_madde(belge: _Belge) -> list[str]:
     """Her kalıp / anahtar ifade AYRI madde işareti (-) olsun — adet sayımı bozulmasın."""
     mesajlar: list[str] = []
+    # Sözleşme dışı madde işaretleri KAP ve İŞARET kırılımında toplanır; not
+    # kaynak başına TEK kez, özet olarak düşer (aşağıda).
+    ihlaller: Counter[tuple[str, str]] = Counter()
 
     def tara(etiket: str, yuva: _Yuva) -> None:
         # Çit-farkında (tur 9): kural SÖZLEŞME BİÇİMİ arar ("bu içerik satırı
@@ -3516,11 +3588,12 @@ def _kontrol_bicim_ayri_madde(belge: _Belge) -> list[str]:
             if madde:
                 isaret = satir.strip()[0]
                 if isaret != "-":
-                    mesajlar.append(
-                        f"{etiket}: madde işareti {isaret!r} — sözleşme '-' "
-                        f"ister; madde SAYILDI, biçim düzeltilmeli: "
-                        f"{satir.strip()[:60]!r}"
-                    )
+                    # İhlal BAŞINA not DEĞİL: ölçüldü (2026-09-15, Kaynak-4)
+                    # tek kaynakta 183 kez düşüyordu ve 27 gerçek içerik
+                    # bulgusunu gürültüye gömüyordu. Toplulaştırma yalnız
+                    # NOTUN sayısını değiştirir — sözleşme kuralı, ihlalin
+                    # kendisi ve maddenin SAYILMASI (tur 12 kararı) aynen durur.
+                    ihlaller[(etiket, isaret)] += 1
                 continue
             if _BASLIK_GORUNUMU_RE.match(_yapi_gorunumu(satir)):
                 continue
@@ -3543,7 +3616,37 @@ def _kontrol_bicim_ayri_madde(belge: _Belge) -> list[str]:
             yuva = donem.yuvalar.get(yuva_adi)
             if yuva:
                 tara(f"{donem.ad}/{yuva_adi}", yuva)
+    if ihlaller:
+        mesajlar.append(_madde_isareti_ozeti(ihlaller))
     return mesajlar
+
+
+def _madde_isareti_ozeti(ihlaller: "Counter[tuple[str, str]]") -> str:
+    """Sözleşme dışı madde işaretlerinin TEK özet notu — bilgi kaybı YOK.
+
+    Özet, ihlal başına notun taşıdığı her şeyi taşır: toplam adet, hangi
+    işaret kaç kez, hangi kapta kaç ihlal. Sıra DETERMİNİSTİKTİR (önce adet,
+    sonra ad) — aynı girdi bayt-aynı not üretir.
+    """
+    toplam = sum(ihlaller.values())
+    isaretler: Counter[str] = Counter()
+    for (_, isaret), adet in ihlaller.items():
+        isaretler[isaret] += adet
+    isaret_ozeti = " · ".join(
+        f"{isaret!r} {adet}"
+        for isaret, adet in sorted(isaretler.items(), key=lambda p: (-p[1], p[0]))
+    )
+    kap_ozeti = " · ".join(
+        f"{etiket} {adet}"
+        for (etiket, _), adet in sorted(
+            ihlaller.items(), key=lambda p: (-p[1], p[0][0])
+        )
+    )
+    return (
+        f"{toplam} madde sözleşme dışı işaretle yazılmış ({isaret_ozeti}) — "
+        f"sözleşme '-' ister; madde SAYILDI, biçim düzeltilmeli. "
+        f"Kaplar: {kap_ozeti}"
+    )
 
 
 _DIPNOT_RE = re.compile(r"\[\s*\d+\s*\]|citeturn\w*|[¹²³⁴⁵⁶⁷⁸⁹⁰]")
