@@ -1499,3 +1499,56 @@ def test_exactly_one_dsn_channel_is_required(tmp_path, capsys, monkeypatch):
     with pytest.raises(SystemExit):
         cli.dsn_coz(ikisi, parser)
     assert "tek kanal seçin" in capsys.readouterr().err
+
+
+# ─── Aşama kökleri: üç yazıcı AYNI klasörü sahiplenemez (2026-09-15) ────────
+#
+# ÖLÇÜLDÜ — zincirin İLK gerçek koşumunda, resmî turda: `denetim` ilk saniyede
+# `FileExistsError` ile düştü. Sebep hizalama hatasıdır, servis kusuru DEĞİL:
+#
+#   * `_kaynaklari_oku` kaynakları TESLİM klasöründen okur: `kosu/<run_id>/`
+#   * `build_packet` `<dest>/<run_id>`'i KENDİSİ kurar ve varsa REDDEDER (K-82,
+#     ham katman salt-eklemedir)
+#   * CLI ikisine de AYNI kökü (`kosu/`) veriyordu → paket kökü, kaynakların
+#     durduğu klasörün TA KENDİSİYDİ; çakışma yapısaldı, koşuya bağlı değil.
+#
+# İkinci çakışma aynı kökten doğuyor ve HENÜZ KOŞMADI: `synthesis.run` da
+# `<dest>/<run_id>` kurar ve varsa reddeder — yani `denetim` düzelseydi bu kez
+# `sentez` "sentez kökü ZATEN var" diyecekti.
+#
+# Neden testler görmedi: `build_packet` ve `synthesis.run` testlerde HER ZAMAN
+# taze bir `tmp_path` alır, yani `<dest>/<run_id>` hiç önceden var olmaz. İki
+# servis kendi içinde tutarlıdır; hatalı olan BAĞLANTIDIR ve bağlantının testi
+# yoktu. Bu yüzden iddia burada, KÖKLER düzeyinde pinlenir: `<root>/<run_id>`
+# sahiplenen her aşama AYRI bir kök almalıdır.
+
+
+def _asama_kokleri(run_id: str) -> dict[str, Path]:
+    """Üç aşamanın `<root>/<run_id>` yolu — kavramdan sayılır, elle değil."""
+    return {
+        "teslim": runs.run_folder(run_id),
+        "denetim": cli._denetim_paket_koku() / run_id,
+        "sentez": cli._sentez_koku() / run_id,
+    }
+
+
+def test_asama_kokleri_BIRBIRINDEN_AYRI() -> None:
+    """Her aşama kendi klasörünü kurar; ikisi aynı yola bakarsa tur DÜŞER."""
+    kokler = _asama_kokleri("kosu-" + "a" * 32)
+    assert len(set(kokler.values())) == len(kokler), kokler
+
+
+def test_asama_koklerinin_HICBIRI_otekinin_ALTINDA_degil() -> None:
+    """Ayrı olmak yetmez: biri ötekinin içine kurulursa salt-ekleme bozulur."""
+    kokler = _asama_kokleri("kosu-" + "b" * 32)
+    for ad, yol in kokler.items():
+        for oteki_ad, oteki in kokler.items():
+            if ad == oteki_ad:
+                continue
+            assert oteki not in yol.parents, (ad, oteki_ad, yol, oteki)
+
+
+def test_asama_kokleri_ARASTIRMA_DEPOSUNDA_kalir() -> None:
+    """Kökler operatörün baktığı depodan DIŞARI taşmaz."""
+    for ad, yol in _asama_kokleri("kosu-" + "c" * 32).items():
+        assert runs.ARASTIRMA_DEPOSU_KOKU in yol.parents, (ad, yol)

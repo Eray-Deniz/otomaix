@@ -419,12 +419,35 @@ değişmezi DE reddeder.
 """
 
 
-def _kosu_klasoru_koku() -> Path:
-    """`build_packet(dest=...)` ve `synthesis.run(dest=...)` AYNI kökü ister.
+# ─── Aşama kökleri — `<root>/<run_id>` sahiplenen her yazıcı KENDİ kökünü alır
+#
+# ÖLÇÜLDÜ (2026-09-15, `kosu-11391477…`, zincirin ilk gerçek koşumu): tek kök
+# veriliyordu ve `denetim` ilk saniyede `FileExistsError` ile düştü. Üç yazıcı
+# da `<root>/<run_id>`'i KENDİSİ kurar ve varsa REDDEDER (K-82, ham katman
+# salt-eklemedir) — ama teslim klasörü kaynakları taşıdığı için zaten VARDI.
+# İkinci çakışma aynı kökten doğuyordu ve henüz koşmamıştı: `denetim` paketi
+# kursaydı bu kez `sentez` "sentez kökü ZATEN var" diyecekti.
+#
+# Servisler kendi içinde tutarlıdır; hatalı olan BAĞLANTIYDI. Kurallar burada
+# ayrılır, servis imzalarına dokunulmaz.
 
-    İkisi de `<dest>/<run_id>` kurar; kök `runs.run_folder`'ın ürettiği yolun
-    ebeveynidir ve ikinci bir yol kuralı YAZILMAZ."""
-    return runs.ARASTIRMA_DEPOSU_KOKU / "kosu"
+
+def _denetim_paket_koku() -> Path:
+    """`build_packet(dest=...)` kökü — denetçi paketleri.
+
+    Teslim klasöründen AYRIDIR: orası operatörün araştırma çıktısını bıraktığı
+    yerdir ve `denetim` koşmadan ÖNCE dolu olmak ZORUNDADIR.
+    """
+    return runs.ARASTIRMA_DEPOSU_KOKU / "denetim"
+
+
+def _sentez_koku() -> Path:
+    """`synthesis.run(dest=...)` kökü — sentez turu.
+
+    Denetim paketinden de AYRIDIR: ikisi aynı koşu kimliğini kullanır ve ikisi
+    de kendi kökünün YOKLUĞUNU şart koşar.
+    """
+    return runs.ARASTIRMA_DEPOSU_KOKU / "sentez"
 
 
 async def _kosu_satiri(conn, run_id: str):
@@ -612,7 +635,7 @@ async def _kos_denetim(conn, args) -> Sonuc:
         unit_snapshot=birimler,
         run_id=args.run_id,
         sector_id=satir["sector_id"],
-        dest=_kosu_klasoru_koku(),
+        dest=_denetim_paket_koku(),
     )
     tur = await auditors.run_audit_round(
         conn,
@@ -710,7 +733,7 @@ async def _kos_sentez(conn, args) -> Sonuc:
         removed_history=await _cikarma_gecmisi(conn, satir["sector_id"]),
         holiday_keys=set(await _takvim(conn)),
         runner=auditors.SubprocessRunner(zaman_asimi_sn=args.zaman_asimi_sn),
-        dest=_kosu_klasoru_koku(),
+        dest=_sentez_koku(),
     )
     await runs.record_artifact(
         conn,
