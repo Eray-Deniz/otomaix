@@ -133,8 +133,28 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 
 **Yan fayda:** rol başına ayrı sahne → denetçi-1 de aynı kutuya alındığında simetrik çalışır.
 
-- [ ] **T4** Rol başına geçici sahne dizini: kutulu kullanıcının sahibi olduğu `700` dizin,
-      paketin kopyası, tur sonunda silme. Düşen turda da silinmeli (fail yolunda sızıntı yok).
+- [x] **T4** Rol başına geçici sahne dizini — **BİTTİ 2026-09-17.**
+      `SubprocessRunner._sahne` her `run` çağrısında `mkdtemp` ile taze bir kök açar, rol
+      dizininin kopyasını oraya alır, kökü ve altındaki her şeyi kutulu kullanıcıya devreder,
+      `700`'e çeker ve `finally` ile siler.
+      **Nerede yaşıyor ve neden:** orkestrasyonda değil, `SubprocessRunner`'ın içinde. Sahnenin
+      tek varlık sebebi alt sürecin KİMLİĞİdir; ayrıcalık düşürme (T7) ve ortam beyaz listesi
+      (T8) de aynı sınırda oturuyor. Orkestrasyonun K-79 yol kapıları kanonik yollara bakmaya
+      devam ediyor, tek satırı değişmedi.
+      **Doğrulama — 9 yeni test, hepsi ÇOCUĞUN gözünden ölçer** (`cwd`, okunan içerik, sahiplik
+      ve izin alt sürecin kendisi tarafından basılır):
+      alt süreç kanonik pakette DEĞİL · paket içeriği sahnede VAR · sahne `700` ve sahibi kutulu
+      kullanıcı · **kutulu kullanıcı zinciri gerçekten geçebiliyor** (sahne içinden `sudo -u` ile
+      okuma denemesi) · başarı/hata/zaman-aşımı üç yolda da sahne siliniyor · iki koşum sahne
+      paylaşmıyor · kutu kurulu değilse alt süreç HİÇ koşmuyor (fail-closed).
+      **Totoloji değil — altı mutasyonun altısı yakalandı:** kopyalama kaldırıldı → içerik testi
+      kırmızı · geçici kök devredilmedi → erişim zinciri testi kırmızı · iç dosyalar devredilmedi
+      → iki test kırmızı · silme `finally`'den çıkarıldı → zaman-aşımı testi kırmızı · sabit sahne
+      adı → tazelik testi kırmızı · kutu yoksa sessizce root'a düşme → fail-closed testi kırmızı.
+      *(İlk turda sahiplik testi tek başına "geçici kök devredilmedi" mutasyonunu KAÇIRDI —
+      sahnenin sahibini ölçüyordu ama oraya girilebildiğini ölçmüyordu. Erişim zinciri testi
+      bunun üzerine eklendi.)*
+      **Tam takım:** 4547 passed / 0 failed / 331,41 s (taban 4538, +9 test).
 - [ ] **T5** Sahne dizininin yol kapısından geçtiğini ve kanonik pakete DOKUNMADIĞINI testle
       göster. Paket kökü YERİNDE kalır — `ARASTIRMA_DEPOSU_KOKU` değişmez, mevcut üç-kök testi
       (`test_asama_kokleri_*`) aynen geçerli kalır.
@@ -198,5 +218,10 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
   itiraz etti: *"birine ver diğerine verme"nin mantıklı tarafı ne"*. Ölçüm itirazı haklı çıkardı
   — asimetrinin gerekçesi sanılan yazma kapsamı değil, OKUMA kapsamıydı; ve `/root`'un `700`
   izni sayesinde kutu ucuz. Karar: asimetriyi kalıcılaştırmak yerine kutuyu kur.
+- **2026-09-17 — Sahne runner'ın içinde, orkestrasyonda değil.** Sahne dizini alt sürecin
+  KİMLİĞİ için vardır; ayrıcalık düşürme ve ortam beyaz listesiyle aynı sınırda oturur. Böylece
+  turun K-79 yol kapıları kanonik yollara bakmaya devam etti ve orkestrasyon testlerinin tek
+  satırı değişmedi. Bedeli: sahte runner kullanan testler sahneyi görmez — sahne davranışı
+  GERÇEK alt süreçle ölçülür (9 testin hepsi öyle).
 - **2026-09-17 — Mevcut `codex` kullanıcısı.** Kimliği çalışıyor, yeni giriş gerekmiyor.
   Bedeli: `sudo` üyeliği kaldırılacak; o hesabı kullanan başka bir akış varsa etkilenir.
