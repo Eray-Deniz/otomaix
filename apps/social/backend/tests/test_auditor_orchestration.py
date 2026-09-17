@@ -31,6 +31,8 @@ import ast
 import asyncio
 import builtins
 import logging
+import os
+import pwd
 import shutil
 import subprocess
 import sys
@@ -1129,6 +1131,247 @@ def test_runner_outcome_cannot_claim_success_with_empty_stdout() -> None:
         auditors.RunnerOutcome(durum="tamam", stdout="x", stderr="", exit_code=1)
     with pytest.raises(ValueError):
         auditors.RunnerOutcome(durum="uydurma", stdout="x", stderr="", exit_code=0)
+
+
+# ═══ 8b. SAHNE DİZİNİ — alt süreç KANONİK pakette koşmaz (T4) ═══════════════
+#
+# **Neden var.** Denetçi alt süreçleri artık root DEĞİL, `IZOLASYON_KULLANICISI`
+# adına koşacak (Faz 3). Kanonik paket ağacı `700 root:root` altındadır ve
+# ORADA KALIR — taşınmaz, gevşetilmez: açılan bir ağaç GEÇMİŞ turların denetçi
+# raporlarını kutulu kullanıcıya okunur kılardı ve iki rol AYNI unix
+# kullanıcısında koştuğu için dosya izinleriyle ayrılamazlar (K-79 körlüğü).
+#
+# Onun yerine her koşum, paketin KENDİ KOPYASINI kutulu kullanıcının sahibi
+# olduğu taze bir dizine alır; alt süreç orada koşar; koşum biter bitmez dizin
+# silinir — düşen ve zaman aşımına uğrayan yolda DA. Kalıcı olarak kutulu
+# kullanıcıya açılan hiçbir şey yoktur.
+#
+# Ölçüm ÇOCUĞUN gözünden yapılır: sahte araç kendi `cwd`'sini, okuduğu içeriği
+# ve dizinin sahibini/iznini BASAR. Ebeveynin niyetine değil, alt sürecin
+# gerçekten gördüğüne bakılır.
+
+
+def _sahne_atla() -> str | None:
+    """Ölçüm KURULAMIYORSA sebebi — sessiz yeşil YOK."""
+    if os.geteuid() != 0:
+        return "sahne kutulu kullanıcıya devredilir; devretme root ister"
+    try:
+        pwd.getpwnam(auditors.IZOLASYON_KULLANICISI)
+    except KeyError:
+        return f"{auditors.IZOLASYON_KULLANICISI} kullanıcısı yok — kutu kurulmamış"
+    return None
+
+
+sahne_gerekli = pytest.mark.skipif(
+    _sahne_atla() is not None, reason=str(_sahne_atla())
+)
+
+
+def _kanonik_paket(tmp_path: Path) -> tuple[Path, Path]:
+    """Kanonik rol dizini — gerçek pakette olduğu gibi `700 root:root`."""
+    kanonik = tmp_path / auditors.DENETCI_ROLLERI[0]
+    kanonik.mkdir()
+    (kanonik / "00-GOREV.md").write_text("görev metni", encoding="utf-8")
+    (kanonik / "EK-B-kaynak.md").write_text("kaynak gövdesi", encoding="utf-8")
+    kanonik.chmod(0o700)
+    return kanonik, kanonik / "00-GOREV.md"
+
+
+def _sahne_kos(monkeypatch, tmp_path: Path, kod: str, zaman_asimi: float = 60.0):
+    kanonik, istem = _kanonik_paket(tmp_path)
+    _sahte_arac(monkeypatch, kod)
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=zaman_asimi)
+    sonuc = runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
+    return kanonik, sonuc
+
+
+@sahne_gerekli
+def test_subprocess_runs_in_a_stage_not_the_canonical_packet(
+    monkeypatch, tmp_path
+) -> None:
+    """Alt sürecin `cwd`'si kanonik paket DEĞİLDİR ve onun İÇİNDE de değildir."""
+    kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, "import os; print(os.getcwd())"
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    cocugun_gordugu = Path(sonuc.stdout.strip()).resolve()
+
+    assert cocugun_gordugu != kanonik.resolve(), (
+        "alt süreç KANONİK paketin içinde koştu — sahne hiç kurulmamış"
+    )
+    assert not cocugun_gordugu.is_relative_to(kanonik.resolve()), (
+        f"sahne kanonik paketin ALTINDA: {cocugun_gordugu} — root-only ağacın "
+        "içinde kutulu kullanıcıya dizin açmak ağacı açar"
+    )
+
+
+@sahne_gerekli
+def test_stage_carries_the_packet_contents(monkeypatch, tmp_path) -> None:
+    """Sahne BOŞ bir dizin değil: denetçi kendi paketini orada bulur."""
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        "from pathlib import Path; print(Path('EK-B-kaynak.md').read_text())",
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    assert "kaynak gövdesi" in sonuc.stdout, (
+        "alt süreç paket dosyasını sahnede BULAMADI — kopya eksik"
+    )
+
+
+@sahne_gerekli
+def test_stage_belongs_to_the_box_user_and_is_private(
+    monkeypatch, tmp_path
+) -> None:
+    """Sahne `700` ve sahibi kutulu kullanıcı — ÇOCUĞUN gözünden ölçülür.
+
+    İzin biti tek başına yetmez: `700` root'a aitse kutulu kullanıcı giremez,
+    sahne işe yaramaz. Sahiplik tek başına da yetmez: `755` bir sahne aynı
+    makinedeki her kullanıcıya paketi açar. İkisi BİRLİKTE ölçülür.
+    """
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        "import os,stat; d=os.stat('.'); "
+        "print(d.st_uid, oct(stat.S_IMODE(d.st_mode)))",
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    uid_metni, izin_metni = sonuc.stdout.split()
+    beklenen_uid = pwd.getpwnam(auditors.IZOLASYON_KULLANICISI).pw_uid
+
+    assert int(uid_metni) == beklenen_uid, (
+        f"sahnenin sahibi uid={uid_metni}, kutulu kullanıcı uid="
+        f"{beklenen_uid} — kutulu süreç kendi sahnesine giremez"
+    )
+    assert izin_metni == oct(0o700), (
+        f"sahne izni {izin_metni} — paket makinedeki başka kullanıcılara açık"
+    )
+
+
+@sahne_gerekli
+def test_the_box_user_can_actually_reach_the_stage(monkeypatch, tmp_path) -> None:
+    """Sahne kutulu kullanıcı için GERÇEKTEN ulaşılabilir — muhasebe değil, deneme.
+
+    Sahnenin kendi sahipliğini ölçmek YETMEZ: sahne, kutulu kullanıcının
+    giremediği bir üst dizinin altındaysa sahiplik doğru görünür ve dizin yine
+    de erişilemez olur. Bu ölçüm ZİNCİRİN TAMAMINI dener — geçici kök, sahne ve
+    dosyanın kendisi — ve bunu alt sürecin içinden, kutulu kullanıcı ADINA yapar.
+
+    Ölçüm bugün anlamlıdır çünkü alt süreç hâlâ root koşar (T7 inmedi); yani
+    testin yeşili ayrıcalıktan değil, gerçekten devredilmiş bir zincirden gelir.
+    """
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        "import os,subprocess,sys; "
+        "hedef=os.path.join(os.getcwd(), 'EK-B-kaynak.md'); "
+        f"k=subprocess.run(['sudo','-n','-u','{auditors.IZOLASYON_KULLANICISI}',"
+        "'cat',hedef], capture_output=True, text=True); "
+        "print('RC', k.returncode, k.stdout.strip()); "
+        "sys.stderr.write(k.stderr)",
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    assert sonuc.stdout.startswith("RC 0 "), (
+        f"kutulu kullanıcı sahnedeki paketi OKUYAMADI: {sonuc.stdout.strip()} — "
+        f"stderr: {sonuc.stderr.strip()}"
+    )
+    assert "kaynak gövdesi" in sonuc.stdout
+
+
+@sahne_gerekli
+def test_stage_is_removed_after_a_successful_run(monkeypatch, tmp_path) -> None:
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, "import os; print(os.getcwd())"
+    )
+    sahne = Path(sonuc.stdout.strip())
+    assert not sahne.exists(), f"sahne koşumdan sonra DURUYOR: {sahne}"
+
+
+@sahne_gerekli
+def test_stage_is_removed_when_the_tool_fails(monkeypatch, tmp_path) -> None:
+    """Düşen yolda da sızıntı yok — `finally`, `else` değil."""
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        "import os; print(os.getcwd()); raise SystemExit(4)",
+    )
+    assert sonuc.durum == "hata" and sonuc.exit_code == 4
+    sahne = Path(sonuc.stdout.strip())
+    assert not sahne.exists(), f"düşen koşumun sahnesi DURUYOR: {sahne}"
+
+
+@sahne_gerekli
+def test_each_run_gets_its_own_stage_and_none_outlives_its_run(
+    monkeypatch, tmp_path
+) -> None:
+    """İki koşum sahne PAYLAŞMAZ; birincininki ikincisi başlamadan yok olur.
+
+    Sahnenin rol başına tazeliği K-79'un zaman ayağıdır: iki denetçi AYNI kutulu
+    kullanıcıda koşar, yani rol-2 rol-1'in sahnesini adresleyebilseydi dosya
+    izinleri onu durduramazdı. Turda roller SIRAYLA koşar (K-78), dolayısıyla
+    "her koşum kendi sahnesi + koşum bitince silme" bu kanalı kapatır.
+    """
+    kanonik, istem = _kanonik_paket(tmp_path)
+    _sahte_arac(monkeypatch, "import os; print(os.getcwd())")
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=60.0)
+    rol = auditors.DENETCI_ROLLERI[0]
+
+    birinci = runner.run(rol, kanonik, istem)
+    birinci_sahne = Path(birinci.stdout.strip())
+    assert not birinci_sahne.exists(), "ilk sahne ikinci koşumdan ÖNCE duruyor"
+
+    ikinci = runner.run(rol, kanonik, istem)
+    ikinci_sahne = Path(ikinci.stdout.strip())
+
+    assert birinci_sahne != ikinci_sahne, (
+        f"iki koşum AYNI sahneyi kullandı: {birinci_sahne} — sahne tur başına "
+        "taze değil, kardeş rolün kalıntısı adreslenebilir"
+    )
+    assert not ikinci_sahne.exists()
+
+
+def test_missing_box_user_stops_the_run_before_the_subprocess(
+    monkeypatch, tmp_path
+) -> None:
+    """Kutu kurulu DEĞİLSE koşum hiç başlamaz — devredilemeyen sahne kurulmaz.
+
+    Bu test root gerektirmez: kullanıcı çözümü `chown`'dan ÖNCE gelir. Sessizce
+    root'ta bırakılan bir sahne, kutulu sürecin giremediği bir dizindir; arıza
+    alt sürecin anlamsız çıktısına dönüşeceğine burada durur.
+    """
+    kanonik, istem = _kanonik_paket(tmp_path)
+    cagrildi: list[str] = []
+    monkeypatch.setattr(
+        auditors, "IZOLASYON_KULLANICISI", "olmayan-kullanici-xyz-0"
+    )
+    monkeypatch.setattr(
+        auditors.subprocess,
+        "run",
+        lambda *a, **kw: cagrildi.append("alt-surec"),
+    )
+    _sahte_arac(monkeypatch, "print('rapor')")
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=5.0)
+
+    with pytest.raises(RuntimeError, match="izolasyon kullanıcısı YOK"):
+        runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
+
+    assert not cagrildi, "kutu yokken alt süreç KOŞTU — kapı fail-closed değil"
+
+
+@sahne_gerekli
+def test_stage_is_removed_after_a_timeout(monkeypatch, tmp_path) -> None:
+    """Zaman aşımı ayrı bir çıkış yoludur — istisna, dönüş değil."""
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        "import os,sys,time; print(os.getcwd()); sys.stdout.flush(); "
+        "time.sleep(30)",
+        zaman_asimi=1.0,
+    )
+    assert sonuc.durum == "zaman-asimi"
+    sahne = Path(sonuc.stdout.strip())
+    assert str(sahne), "zaman aşımında stdout taşınmamış — ölçüm kurulamadı"
+    assert not sahne.exists(), f"zaman aşımına uğrayan sahne DURUYOR: {sahne}"
 
 
 # ═══ 9. Düzeltme turu — B1: koşu kimliği paket kimliğine BAĞLI ══════════════

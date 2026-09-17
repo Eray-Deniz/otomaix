@@ -48,13 +48,17 @@ import hashlib
 import json
 import logging
 import os
+import pwd
 import re
+import shutil
 import subprocess
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Protocol, Sequence
+from typing import Any, Callable, Iterator, Mapping, Protocol, Sequence
 from uuid import UUID
 
 from app.services.sector_pipeline import contracts, identity, runs
@@ -1619,6 +1623,16 @@ iki yerde yazılırsa biri sessizce bayatlar.
 """
 
 
+SAHNE_ONEKI = "denetci-sahne-"
+"""Geçici sahne dizinlerinin adlandırma öneki.
+
+Ad ÖNEMLİDİR: kalmış bir sahne (süreç `SIGKILL` yerse `finally` koşmaz) elle
+ya da bir bakım işiyle tanınabilmelidir. Rastgele son ek `mkdtemp`'ten gelir —
+ad tahmin edilemez, çünkü iki denetçi AYNI kutulu kullanıcıda koşar ve
+kardeşinin sahnesini adresleyebilmemelidir.
+"""
+
+
 _CLAUDE_YASAK_ARACLAR = "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task"
 """`claude` alt süreçlerinin KULLANAMAYACAĞI araçlar (2026-09-12 güvenlik review'ı, S-2).
 
@@ -1845,6 +1859,70 @@ class SubprocessRunner:
         izinli = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR")
         return {ad: os.environ[ad] for ad in izinli if ad in os.environ}
 
+    @staticmethod
+    def _kutu_kimligi() -> tuple[int, int]:
+        """Kutulu kullanıcının (uid, gid)'si — YOKSA fail-closed.
+
+        Kullanıcı yoksa sahne devredilemez; devredilemeyen sahne kutulu süreç
+        için ERİŞİLEMEZ bir dizindir. Sessizce root'ta bırakmak, kutuyu kâğıda
+        çevirip koşumu yine de başlatırdı.
+        """
+        try:
+            kayit = pwd.getpwnam(IZOLASYON_KULLANICISI)
+        except KeyError as exc:
+            raise RuntimeError(
+                f"izolasyon kullanıcısı YOK: {IZOLASYON_KULLANICISI!r} — "
+                "sahne dizini devredilemez, denetçi alt süreci BAŞLATILMAZ"
+            ) from exc
+        return kayit.pw_uid, kayit.pw_gid
+
+    @classmethod
+    @contextmanager
+    def _sahne(cls, kaynak: Path) -> Iterator[Path]:
+        """Paketin TEK KULLANIMLIK kopyası — kutulu kullanıcının, `700`, geçici.
+
+        **Neden kopya, neden kanonik ağaç açılmıyor.** Kanonik paket
+        `700 root:root` altındadır ve orada KALIR. O ağacı kutulu kullanıcıya
+        açmak, bu turun paketini değil GEÇMİŞ turların denetçi raporlarını da
+        okunur kılardı; iki rol AYNI unix kullanıcısında koştuğu için dosya
+        izinleriyle birbirinden ayrılamazlar (K-79 körlüğünün dosya ayağı).
+        Denetçinin okuması gereken tek şey KENDİ paketidir — sahnede o vardır.
+
+        **Neden tur başına taze dizin.** Sahne yalnız koşum boyunca yaşar ve
+        `finally` ile silinir: düşen ve zaman aşımına uğrayan yolda da. Rol-1'in
+        sahnesi rol-2 başlamadan yok olur, yani kardeşin paketi zaman içinde de
+        adreslenemez.
+
+        **Devretme fail-closed.** `chown` root gerektirir; başarısızsa sahne
+        kurulmaz ve koşum BAŞLAMAZ. Yarım devredilmiş bir sahne, kutulu sürecin
+        giremediği bir dizindir — hatayı alt sürecin anlamsız çıktısına
+        çevirmek yerine burada durdurulur.
+        """
+        uid, gid = cls._kutu_kimligi()
+        kaynak = Path(kaynak)
+        kok = Path(tempfile.mkdtemp(prefix=SAHNE_ONEKI))
+        try:
+            # Sahne KAYNAĞIN ADINI korur: bugün de `cwd` rol dizinidir, yani
+            # alt sürecin gördüğü ad DEĞİŞMEZ (yeni bir sinyal doğmaz).
+            sahne = kok / kaynak.name
+            shutil.copytree(kaynak, sahne)
+            os.chown(kok, uid, gid, follow_symlinks=False)
+            kok.chmod(0o700)
+            for yol in sorted(kok.rglob("*")):
+                os.chown(yol, uid, gid, follow_symlinks=False)
+            sahne.chmod(0o700)
+            yield sahne
+        finally:
+            # `ignore_errors` DEĞİL: silinemeyen bir sahne sessizce kalıcı
+            # olurdu. Hata günlüğe düşer, koşumun sonucunu değiştirmez.
+            shutil.rmtree(kok, onexc=cls._silme_hatasi)
+
+    @staticmethod
+    def _silme_hatasi(_islev, yol, _istisna) -> None:
+        _LOG.error(
+            "sahne dizini SİLİNEMEDİ, elle temizlenmeli: yol=%s", yol
+        )
+
     def run(self, tool: str, cwd: Path, prompt_path: Path) -> RunnerOutcome:
         # Eşleme ÇAĞRI ANINDA okunur: testler onu yerinden oynatarak gerçek alt
         # süreç davranışını zararsız bir komutla ölçebilsin diye.
@@ -1854,17 +1932,20 @@ class SubprocessRunner:
                 f"araç kapalı kümenin dışında: {tool!r} — "
                 f"{sorted(ARAC_KOMUTLARI)}"
             )
+        # İstem KANONİK yoldan okunur (çağıran root'tur) ve STDIN'e verilir:
+        # sahnedeki kopyadan okumak aynı baytı ikinci bir yoldan almak olurdu.
         istem = Path(prompt_path).read_bytes()
         try:
-            tamamlanan = subprocess.run(  # noqa: S603 — argv KAPALI eşlemeden
-                list(spec.argv),
-                cwd=str(cwd),
-                env=self._alt_surec_ortami(),
-                input=istem,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                timeout=self.zaman_asimi_sn,
-            )
+            with self._sahne(cwd) as sahne:
+                tamamlanan = subprocess.run(  # noqa: S603 — argv KAPALI eşlemeden
+                    list(spec.argv),
+                    cwd=str(sahne),
+                    env=self._alt_surec_ortami(),
+                    input=istem,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    timeout=self.zaman_asimi_sn,
+                )
         except subprocess.TimeoutExpired as exc:
             stdout = self._metin(exc.stdout)
             stderr = self._metin(exc.stderr)
