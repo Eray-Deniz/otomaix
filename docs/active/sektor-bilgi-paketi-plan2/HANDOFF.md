@@ -5,6 +5,12 @@ written: 2026-09-14
 
 # Resume From
 
+> ⚠️ **2026-09-17 — `denetim` ayağı ENGELLİ, bu bölüm olduğu gibi izlenemez.** Tur
+> başlamadı: K-14 sert kapısı iki denetçinin de web erişimi olmadığını ölçtü. Erişimi
+> açmak için önce denetçi alt süreçleri ayrı bir işletim sistemi kullanıcısına alınıyor —
+> ayrı görev: `docs/active/denetci-surec-izolasyonu/`. O görev bitmeden aşağıdaki
+> `denetim` komutu koşturulmaz.
+
 **Sıradaki iş: Task 19 Step 6'nın `denetim` ayağı — iki kör denetçiyi koştur. İş YÜRÜTÜCÜDE,
 Eray'da DEĞİL.**
 
@@ -12,7 +18,7 @@ Aktif koşu **`kosu-a4d4b59607384a30b072cd0395d0f750`** (`calisiyor`). Kapı ü�
 artefaktlar yazıldı; kaynaklar koşu klasöründe (`denetim` oradan okur, DB'den okumaz).
 
 **İlk komut — tabanı gör:**
-`cd apps/social/backend && .venv/bin/python -m pytest tests/ -q` → beklenen `4509 passed`.
+`cd apps/social/backend && .venv/bin/python -m pytest -q` → beklenen **`4547 passed`** (2026-09-17'de ölçüldü; bu satır `4509` diyordu ve üç oturum boyunca bayatlamıştı).
 ⚠️ **Tek koşum.** İki pytest oturumu aynı anda koşarsa ortak test şablon veritabanını
 birbirinden çekerler ve 42 sahte hata üretirler (bu oturumda ölçüldü).
 

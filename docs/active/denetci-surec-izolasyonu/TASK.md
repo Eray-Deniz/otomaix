@@ -202,6 +202,15 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
   raporunu serbest metin alanlarıyla yazıyor (`gerekçe`, `iddia-özeti`) — enjekte edilmiş bir
   talimat bir anahtarı o alanların içine gömerse anahtar bizim veritabanımıza düz metin iner.
   Sızdırma değil, hijyen açığı. **Evi: bu görevin T13'ü** (kanarya kapsamına alınır).
+- **`SIGKILL` sahneyi geride bırakır — DÜŞÜRÜLDÜ, evi yok (2026-09-17).** Sahne silme
+  `finally`'dedir; süreç 9 sinyaliyle ölürse `/tmp/denetci-sahne-*` diskte kalır ve içindeki
+  paket kopyası kutulu kullanıcıya aittir. Bakım işi KURULMADI: süreçleri biz öldürmüyoruz ve
+  servis henüz dağıtılmadı, yani bugün tetikleyicisi yok. **Yeniden açma koşulu:** diskte
+  kalmış bir sahne görülürse, ya da servis kapsayıcıda koşup `kill -9` rutin hâle gelirse.
+  *(Erteleme değil düşürme — "sonra bakarız" demiyoruz, koşul gelmeden açılmaz.)*
+- **Sahne GERÇEK denetçi araçlarıyla hiç koşmadı.** Dokuz test zararsız bir alt süreçle
+  ölçüldü. `HOME` hâlâ `/root`'u gösteriyor ve kutulu kullanıcı oraya giremez — gerçek CLI
+  sahnede kendi kimliğini bulamayabilir. **Evi: T8.**
 - **Servis dağıtımı bağımlılığı.** Backend servisi henüz dağıtılmadı (Plan 2 Task 18'in kalan
   ayağı). Servis kapsayıcıda root olarak koşarsa ayrıcalık düşürmenin orada da çalıştığı ayrıca
   ölçülmeli. **Evi: Plan 2 Task 19 Step 11, servis dağıtımıyla aynı tur.**

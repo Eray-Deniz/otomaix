@@ -6,6 +6,12 @@
   *(Buraya durum cümlesi YAZILMAZ — kanonik ayrım gereği status TASK.md'nin malıdır ve
   burada tutulan kopya her görevde bayatlıyordu: Task 8 → 9 → 10 → 11 dört kez.)*
 
+- **denetci-surec-izolasyonu** — Denetçi alt süreçlerini ayrı bir işletim sistemi
+  kullanıcısının kutusuna almak, sonra ikisine de ağ vermek (2026-09-12 güvenlik
+  review'ının S-2 kalıntısı). Plan 2 Task 19 Step 6'nın `denetim` ayağı BUNU BEKLİYOR.
+  **Durum, sıradaki iş ve açık borçlar:** `docs/active/denetci-surec-izolasyonu/TASK.md`;
+  oturum devri `HANDOFF.md`.
+
 ## Bitti — arşivi Plan 2 ile BİRLİKTE yapılacak
 
 > Bunlar AKTİF DEĞİL; iş beklemiyorlar. `docs/active/` altında duruyorlar çünkü Plan 2'nin
