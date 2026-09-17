@@ -1603,6 +1603,22 @@ class ToolSpec:
         object.__setattr__(self, "argv", deger)
 
 
+IZOLASYON_KULLANICISI = "codex"
+"""Denetçi alt süreçlerinin koşacağı İŞLETİM SİSTEMİ kullanıcısı (2026-09-17).
+
+**Neden kullanıcı sınırı — ÖLÇÜLDÜ.** `--restricted` Claude'un OKUMASINI kendi çalışma
+dizinine hapsediyor; Codex'in `read-only` kum havuzu ise yalnız YAZMAYI ve AĞI kısıtlıyor,
+OKUMAYI kısıtlamıyor: bugünkü denetçi komutuyla `.env` (1658 B) ve `settings.json` (7375 B)
+tam boyutlarıyla okundu. İki araç aynı kutuda DEĞİLDİ; argv simetrisi bunu kapatamaz.
+
+Kullanıcı sınırı kapatır: root'un ev dizini `700`'dür, yani bu kullanıcı oraya hiç giremez —
+ölçüldü, `.env` ve araç kimlik dosyaları ERİŞİLEMEZ, denetim ağacı GÖRÜNMÜYOR.
+
+Sabit BURADA yaşar, tek ev: hem çalıştırıcı hem de kutuyu ölçen tripwire testi bunu okur;
+iki yerde yazılırsa biri sessizce bayatlar.
+"""
+
+
 _CLAUDE_YASAK_ARACLAR = "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task"
 """`claude` alt süreçlerinin KULLANAMAYACAĞI araçlar (2026-09-12 güvenlik review'ı, S-2).
 
