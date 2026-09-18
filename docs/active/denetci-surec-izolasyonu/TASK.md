@@ -325,12 +325,53 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
       beyanı bağımsız sabitlerle ölçülüyor: `denetci-1` → `None`, `denetci-2` → `codex`,
       `sentez` → `None` (eşlemeden okunsaydı yanlış bir profil de geçerdi).
 
-## Faz 4 — Ağı aç
+## Faz 4 — Ağı aç — **BİTTİ 2026-09-18** (T10 · T11 · T12)
 
-- [ ] **T10** Codex denetçisi `workspace-write` + `network_access=true` ile koşsun.
-- [ ] **T11** Claude denetçisinin `--tools` listesine `WebFetch` eklensin.
-- [ ] **T12** K-14 ön kontrolü araç başına DOĞRU yolu ölçsün. Bugünkü tek biçimli prob
-      canlı-getirme ölçüyor; yalnız arama dizini olan bir aracı haksız yere "erişimsiz" sayar.
+> **K-14 KAPISI AÇILDI — canlı ölçüm:** `preflight` iki araç için de `erisim-var` döndü,
+> `tur_baslayabilir=True` (claude 9,9 s · codex 22,8 s). Codex'in izi sahnede `curl | jq`
+> koştuğunu gösteriyor (`/tmp/denetci-sahne-*/denetci-2`). Plan 2 Task 19 Step 6'nın `denetim`
+> ayağını bloke eden şey buydu.
+
+- [x] **T10** Codex denetçisi `workspace-write` + ağ ile koşuyor — **BİTTİ 2026-09-18.**
+      Ayar **argv'ye** yazıldı (`-c sandbox_workspace_write.network_access=true`), global
+      `/root/.codex/config.toml`'a DEĞİL — bağlayıcı kısıt korundu.
+      **Neden `workspace-write` zorunlu:** anahtar `sandbox_workspace_write` altındadır, yani
+      `read-only` kipinde hükümsüzdür. Genişleyen yazma kapsamı `[workdir, /tmp, $TMPDIR]`:
+      workdir SAHNEDİR (tur sonunda silinir, kanonik ağaca dokunmadığı T5'te teste bağlı),
+      `/tmp`'den boru hattı okuma YAPMAZ (2026-09-17 taraması), kardeş rolün sahnesi de artık
+      erişilemez (kutusuz `denetci-1`'in sahnesi çağıranda kalıyor, T7).
+      **Ölçüldü:** kum havuzu satırı `workspace-write [workdir, /tmp, $TMPDIR] (network access
+      enabled)`, canlı `Date` başlığı sistem saatinden 2 sn farkla döndü.
+- [x] **T11** Claude denetçisine `WebFetch` — **BİTTİ 2026-09-18, YALNIZ denetçi rolünde.**
+      `sentez` değişmedi: girdisi diskteki iki rapordur, ağ ona yeni yetenek değil yeni saldırı
+      yüzeyi katardı. `WebSearch` hiçbir rolde izinli değil — denetçinin işi arama değil,
+      sözleşmede ADI GEÇEN kaynağı getirmek.
+
+      **AÇILAN YÜZEY — dürüst etiket.** 2026-09-12 güvenlik review'ı `WebFetch`'i tam da
+      sızdırma kanalı olduğu için yasaklamıştı; K-14 karşılığında bilerek geri açıldı. Bedel:
+      pakete gömülü bir talimat paketin İÇERİĞİNİ bir URL'e taşıyabilir. Kapsam sınırı
+      `--restricted`'tır (dosya araçları sahneye kilitli, 2026-09-18'de yeniden ölçüldü), yani
+      taşınabilecek şey denetçinin KENDİ girdisidir, sırlar değil. **Ölçüm evi: T13 kanaryası.**
+- [x] **T12** K-14 probu TURUN KOŞTUĞU yoldan koşuyor — **BİTTİ 2026-09-18.**
+      **Bulunan kusur maddede yazandan başkaydı.** Madde "araç başına biçim" diyordu; ölçüm
+      daha temel bir şey gösterdi: prob `spec.argv`'yi DOĞRUDAN `subprocess.run`'a veriyordu,
+      yani T7/T8'den sonra **turdan farklı bir ortamı** ölçüyordu (ayrıcalık düşmüyor, `HOME`
+      araca göre ayarlanmıyordu). "Erişim var" beyanı turdakini değil kontrolörünkini ölçerdi —
+      K-14'ün tüm anlamı budur. Prob artık `Runner` kullanıyor: aynı profil, aynı `HOME`, aynı
+      sahne.
+      **Maddedeki asıl gerekçe bugün GEÇERSİZ (ölçüldü):** iki araç da canlı getirme yapıyor,
+      tek biçimli meydan okuma ikisine de adil. Ayrım gerçek bir araçta ölçülmeden eklenmedi.
+      **Daraltma — dürüst etiket:** rc=0 + BOŞ çıktı artık `False` (ölçülmüş erişimsizlik)
+      değil ÖLÇÜM ARIZASI. Hiçbir şey basmayan araç ne erişimi ne erişimsizliği ölçmüştür,
+      dolayısıyla muafiyet üretmemelidir — fail-closed yönde daralma.
+      **Doğrulama:** 2 yeni test (varsayılan koşucu üretim runner'ı + zaman aşımı ona geçiyor ·
+      araca verilen istem GERÇEK dosya ve meydan okumayı taşıyor).
+
+**Faz 4 doğrulaması — 6 mutasyonun 6'sı yakalandı:** prob kendi zaman aşımını kullanmıyor ·
+kirli sonuç ölçüm sayılıyor · isteme meydan okuma yazılmıyor · codex kum havuzu
+`danger-full-access`'e çevrildi · sentez de ağa açıldı · `WebFetch` hem izinli hem yasak yazıldı.
+Üç mevcut güvenlik testi GEVŞETİLMEDİ, rol bazlı sözleşmeye çevrildi (yazma ekseni hiçbir rolde
+izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste ÇELİŞEMEZ — bu kapı yeni).
 
 ## Faz 5 — Kanıt ve kapanış
 
@@ -388,6 +429,9 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 
 # Bu görev bitince sırada ne var (Plan 2'ye dönüş)
 
+> **2026-09-18: `denetim` ayağının önündeki engel KALKTI.** K-14 iki araç için de `erisim-var`
+> ölçtü. Kalan: Faz 5 (T13 kanaryası · T14 tam takım+mutasyon · T15 review).
+
 1. jsonb kodlayıcı kusuru — CLI kendi bağlantısına kodlayıcıyı kurmuyor, yönetici bildirimi
    yazımı düşüyor. Bugün canlıda görünen sonucu: iki koşu birden `calisiyor` kalmış.
 2. Yeni koşu kimliğiyle `denetim` turu (K-82: yarım kalan paket ezilmez).
@@ -418,3 +462,10 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
   varsayılan konmadı: varsayılan, "bu araç neden kutusuz" sorusunu sessizce yutar ve yarın
   eklenen bir aracı beyan almadan root'ta koşturur. Bedeli: her `ToolSpec` çağrısı (testler
   dâhil) profilini yazmak zorunda.
+- **2026-09-18 — `WebFetch` denetçide açık, sentezde kapalı.** Güvenlik review'ının yasağı K-14
+  karşılığında YALNIZ denetçi rolünde geri alındı. Gerekçe rolün işidir: denetçi kaynağı
+  doğrular (ağ gerekir), sentez iki raporu birleştirir (ağ gerekmez). Bedel — paket içeriğinin
+  bir URL'e taşınabilmesi — kabul edildi ve ölçüm evi T13'tür.
+- **2026-09-18 — Prob turun yolundan koşar.** K-14 ön kontrolü kendi alt sürecini kurmayı
+  bıraktı; `Runner`'ı kullanıyor. Ölçülen ortam ile koşulan ortam ayrışırsa K-14 kendi amacını
+  kaybeder. Bedeli: probun dikişi `kosucu`dan `runner`a geçti, sahte de tipli sonuç döndürüyor.
