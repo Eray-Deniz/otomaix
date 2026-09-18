@@ -245,8 +245,37 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 
 - [ ] **T7** Ayrıcalık düşürme: alt süreç root değil, denetçi kullanıcısı olarak koşsun.
       Önce kırmızı test, sonra uygulama.
+
+      **FİZİBİLİTE ÖLÇÜLDÜ 2026-09-18 — mekanizma ÇALIŞIYOR, engel KİMLİK.** Dört koşum,
+      hepsi GERÇEK argv (`ARAC_KOMUTLARI`'ndan okundu), gerçek sahnede, `subprocess.run(...,
+      user=uid, group=gid, extra_groups=[])` ile ayrıcalık düşürülmüş hâlde:
+
+      | # | Araç | `HOME` | Sonuç |
+      |---|---|---|---|
+      | 1 | codex | `/root` (bugünkü beyaz liste) | **rc=1** — `/root/.codex/config.toml: Permission denied` |
+      | 2 | codex | `/home/codex` | **rc=0, `PONG`, 11,8 s** — gerçek model çağrısı, `sandbox: read-only` |
+      | 3 | claude | `/root` | **rc=1** — `Not logged in · Please run /login` (7,2 s) |
+      | 4 | claude | `/home/codex` | **rc=1** — `Not logged in` (0,7 s) |
+
+      **Okunacak üç sonuç:**
+      1. **Ayrıcalık düşürmenin kendisi çalışıyor** — koşum 2 uçtan uca yeşil. Açık
+         problemdeki *"çalışmalı diye varsayılıyor"* satırı KAPANDI, artık ölçüm var.
+      2. **T8 isteğe bağlı değil, T7'nin ÖN KOŞULU.** Bugünkü beyaz liste `HOME`'u miras
+         alıyor ve `/root`'u gösteriyor; kutulu süreç oraya giremediği için İKİ araç da
+         düşüyor (koşum 1 ve 3). `HOME` araç başına ayrışmadan T7 inemez.
+      3. **YENİ ENGEL — Claude Code kimliği kutulu kullanıcıda YOK.** `/home/codex/.claude`
+         dizini hiç yok; `HOME` düzeltilse bile claude `Not logged in` diyor. Codex'te bu
+         sorun yok: `/home/codex/.codex/auth.json` VAR (3981 B). Ölçüldü — iki `auth.json`
+         **aynı hesabı** taşıyor (`account_id` birebir eşit), dosyalar yalnız jeton
+         tazelenmesiyle ayrışmış. Yani Codex tarafında kimlik zaten kutuya taşınmış durumda
+         ve Claude için karşılığı YAPILMAMIŞ. **Karar Eray'a soruldu (aşağıda).**
+
+      *Yan ölçüm:* kutulu Codex sahnede `trust_level` girdisi OLMADAN koştu (`/tmp/t7-probe-*`
+      config'te yok, yine de rc=0) — sahne dizini için güven kaydı gerekmiyor.
 - [ ] **T8** Ortam beyaz listesi araç başına ayrışsın. Bugün `HOME` miras alınıyor ve `/root`'u
       gösteriyor; kutudaki süreç oradan kimliğini okuyamaz.
+      **2026-09-18:** T7 ölçümü bunu ÖN KOŞUL yaptı (yukarıdaki koşum 1 ve 3) — sıra
+      T8 → T7 olabilir; kesin sıra kimlik kararından sonra.
 - [ ] **T9** İzolasyon profiline "hangi kullanıcı" alanı eklensin; bilinmeyen kullanıcı
       fail-closed düşsün (mevcut "her araç profilini beyan eder" yapısı genişletilir).
 
@@ -267,9 +296,18 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 
 # Open Problems
 
-- **T7 ölçülmedi.** Ayrıcalık düşürmenin alt süreçte çalışacağı "çalışmalı" diye varsayılıyor;
-  tutmazsa fazlar yeniden sıralanır. Tahmin kapıya çevrilmeyecek.
+- **T7'nin mekanizması ÖLÇÜLDÜ (2026-09-18) — bu satır kapandı.** Ayrıcalık düşürme gerçek
+  argv ile uçtan uca yeşil koştu (Codex: rc=0, `PONG`, 11,8 s). Yerine iki ölçülmüş engel
+  geçti: `HOME` araç başına ayrışmalı (T8, artık ÖN KOŞUL) ve **Claude Code kimliği kutulu
+  kullanıcıda yok** — karar bekliyor.
   *(T3 bu satırda da şüpheli sayılıyordu — artık iki kez ölçüldü, listeden çıkarıldı.)*
+
+- **KARAR BEKLİYOR — kutulu kullanıcı için Claude Code kimliği.** Codex'in kimliği kutuda VAR
+  (aynı hesap, ayrı jeton dosyası); Claude'unki YOK. Üç yol: (a) `codex` kullanıcısı olarak bir
+  kez `claude` girişi yapılır — Eray'ın tarayıcı adımı, ayrı jeton dosyası doğar; (b) root'un
+  kimlik dosyası kopyalanır — Codex'te fiilen böyle olmuş; (c) claude denetçisi root'ta
+  bırakılır — bu, Eray'ın 2026-09-17'de reddettiği asimetriye geri dönmek olur.
+  **Erteleme değil, açık karar:** T7 bu cevap gelmeden inemez.
 - **T3b'nin ağ-AÇIK varyantı bugün tekrar ölçülmedi.** Kutulu Codex'in ağ açıkken de sırlara
   erişemediği 2026-09-17'nin ilk turunda ölçüldü; kapanış turunda aynı probu koşturma denemesi
   harness sınıflandırıcısı tarafından engellendi. Bugün tazeliği olan ölçüm, aynı kullanıcıyı

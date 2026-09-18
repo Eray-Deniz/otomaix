@@ -322,8 +322,8 @@ def test_external_repo_gitignores_run_folder() -> None:
     assert "kosu/" in satirlar, satirlar
 
 
-def test_external_repo_ignores_the_audit_tree() -> None:
-    """Dış depo kanonik `denetim/` ağacını YOK SAYAR (T6b).
+def test_external_repo_ignores_the_untracked_folders() -> None:
+    """Dış depo izlenmeyen üç klasörü de YOK SAYAR (T6b).
 
     Kardeşi `kosu/`'dan AYRIŞIR ve ayrım BİLİNÇLİDİR: `denetim/` satırı commit
     edilmiş `.gitignore`'da DEĞİL, deponun yerel `.git/info/exclude` dosyasında
@@ -352,11 +352,19 @@ def test_external_repo_ignores_the_audit_tree() -> None:
         "aşağıdaki yeşil hiçbir şey ölçmezdi"
     )
 
-    sonuc = _yok_sayiliyor_mu("denetim/")
-    assert sonuc.returncode == 0, (
-        "dış depo `denetim/` ağacını YOK SAYMIYOR — `git add .` onu commit'e "
-        "sokabilir, HEAD kayar ve pin DÜŞER (o anda CLI'ın her alt komutu "
-        f"fail-closed durur). check-ignore rc={sonuc.returncode}"
+    # Üç yol da AYNI kazanın hedefi: `git add .` hangisini commit'e sokarsa
+    # soksun HEAD kayar ve pin düşer. `denetim/` boru hattının yazdığı ağaç,
+    # diğer ikisi operatörün bıraktığı klasörlerdir; mekanizma aynı olduğu için
+    # ölçüm de aynıdır (Eray kararı, 2026-09-18: üçü birden).
+    sizanlar = [
+        yol
+        for yol in ("denetim/", "Kuyumculuk/", "silinecek/")
+        if _yok_sayiliyor_mu(yol).returncode != 0
+    ]
+    assert not sizanlar, (
+        f"dış depo şunları YOK SAYMIYOR: {sizanlar} — `git add .` onları "
+        "commit'e sokabilir, HEAD kayar ve pin DÜŞER (o anda CLI'ın her alt "
+        "komutu fail-closed durur)"
     )
 
 
