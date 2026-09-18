@@ -1672,6 +1672,23 @@ girdi yaratıp silebilir, yani kardeş sahnelerin ADINI kendi yarattığı
 symlink'lerle değiştirebilirdi.
 """
 
+EV_ONEKI = "denetci-ev-"
+"""Tur-ömürlü `HOME` dizinlerinin öneki (2026-09-18 review, F2)."""
+
+KUTULU_KIMLIK_YOLU = Path(".codex/auth.json")
+"""Tur-ömürlü eve kopyalanan TEK dosya — kutulu aracın kimliği.
+
+Yol kutulu aracın KALICI evine görelidir. Bugün kutuda tek araç var (`codex`);
+ikinci bir araç kutuya alınırsa bu sabit araç başına ayrışmak ZORUNDA (o gün
+`ToolSpec`'e taşınır — bugün taşımak, tek tüketicisi olan bir alanı erkenden
+genelleştirmek olurdu).
+
+**Neden yalnız kimlik.** Eve kopyalanan her şey, ajanın okuyabildiği yüzeydir.
+Araç önbelleği ve eklentileri olmadan da koştuğu ÖLÇÜLDÜ (2026-09-18: tur-ömürlü
+evle üç koşum, üçü de `rc=0`); tek bedeli soğuk önbellek (koşum 6,1-11,2 s,
+kalıcı evde 5,7 s — gerçek tur dakikalar sürdüğü için gürültü seviyesinde).
+"""
+
 SAHNE_ONEKI = "denetci-sahne-"
 """Geçici sahne dizinlerinin adlandırma öneki.
 
@@ -1969,12 +1986,15 @@ class SubprocessRunner:
         )
 
     @staticmethod
-    def _alt_surec_ortami(kayit: "pwd.struct_passwd | None") -> dict[str, str]:
+    def _alt_surec_ortami(ev: Path | None) -> dict[str, str]:
         """Alt sürecin göreceği ortam — BEYAZ LİSTE (2026-09-12 güvenlik review'ı, S-2).
 
-        **`HOME` ARAÇ BAŞINA (T8).** Kutulu araçta `HOME` kullanıcının KENDİ
-        evidir; miras alınan değer `/root`'u gösterir ve kutulu kullanıcı oraya
-        giremez. Ölçüldü (2026-09-18, gerçek argv, ayrıcalık düşürülmüş):
+        **`HOME` ARAÇ BAŞINA (T8) ve TUR BAŞINA (F2).** Kutulu araçta `HOME`
+        o koşuma ait TEK KULLANIMLIK evdir; miras alınan değer `/root`'u
+        gösterir ve kutulu kullanıcı oraya giremez. Kalıcı ev de kullanılmaz:
+        CLI oturum kaydını `$HOME` altına yazar ve kalıcı evde bu kayıtlar
+        turlar arası BİRİKİR (ölçüldü: bir günde 28 kayıt, içlerinde paket
+        izleri) — sonraki tur öncekinin paketini ve raporunu okuyabilirdi. Ölçüldü (2026-09-18, gerçek argv, ayrıcalık düşürülmüş):
         `HOME=/root` ile `codex` *"Failed to read config file
         /root/.codex/config.toml: Permission denied"* diyerek rc=1 döndü;
         `HOME=/home/codex` ile aynı koşum rc=0 ve `PONG` verdi (11,8 s, canlı
@@ -1988,8 +2008,8 @@ class SubprocessRunner:
         """
         izinli = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR")
         ortam = {ad: os.environ[ad] for ad in izinli if ad in os.environ}
-        if kayit is not None:
-            ortam["HOME"] = kayit.pw_dir
+        if ev is not None:
+            ortam["HOME"] = str(ev)
         return ortam
 
     @staticmethod
@@ -2141,6 +2161,66 @@ class SubprocessRunner:
 
     @classmethod
     @contextmanager
+    def _tur_omurlu_ev(
+        cls, kayit: "pwd.struct_passwd | None"
+    ) -> Iterator[Path | None]:
+        """Koşuma ait TEK KULLANIMLIK `HOME` — kimlik içeri, kayıtlar dışarı.
+
+        **Neden (2026-09-18 review, F2).** `codex` CLI her koşumun TAM kaydını
+        `$HOME/.codex/sessions/**/rollout-*.jsonl` altına yazar: istem, paket
+        içeriği ve aracın kendi cevabı. Kalıcı evde bunlar birikiyor ve kutulu
+        kullanıcı hepsini okuyabiliyordu — yani sahnenin "kalıcı hiçbir şey
+        açılmaz" gerekçesi CLI'ın kendi günlüğüyle deliniyordu.
+
+        Desen SAHNENİN AYNISI: tur başına taze, kutulu kullanıcının, tur sonunda
+        silinir. Eve kopyalanan tek şey kimliktir; başka her şey ajanın
+        okuyabildiği yüzeyi büyütürdü.
+
+        **Yenilenen jeton GERİ YAZILIR.** Erişim jetonunun süresi dolduğunda CLI
+        yenileme yapar ve yeni jetonu EVE yazar; ev silinince o yenileme ölür ve
+        kalıcı kopya bayatlar (döndürmeli yenilemede bu, yeniden giriş demektir).
+        Bu yüzden kimlik dosyası koşumda DEĞİŞTİYSE kalıcı yere geri yazılır —
+        değişmediyse DOKUNULMAZ (gereksiz yazım gereksiz risktir).
+
+        Kutusuz araçta `None` döner: `HOME` miras alınır, davranış değişmez.
+        """
+        if kayit is None:
+            yield None
+            return
+        kalici = Path(kayit.pw_dir) / KUTULU_KIMLIK_YOLU
+        if not kalici.is_file():
+            raise RuntimeError(
+                f"kutulu aracın kimlik dosyası YOK: {kalici} — tur-ömürlü eve "
+                "kopyalanacak kimlik bulunamadı, alt süreç BAŞLATILMAZ"
+            )
+        ust = cls._sahne_ust_dizinini_hazirla()
+        ev = Path(tempfile.mkdtemp(prefix=EV_ONEKI, dir=str(ust)))
+        try:
+            hedef = ev / KUTULU_KIMLIK_YOLU
+            hedef.parent.mkdir(parents=True)
+            shutil.copy2(kalici, hedef)
+            once = hedef.read_bytes()
+            ev.chmod(0o700)
+            for yol in sorted(ev.rglob("*")):
+                os.chown(yol, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False)
+            # Kök EN SON devredilir (F4 ile aynı kural): devre kadar ağaç
+            # root-only kalır, yani kutulu kullanıcı içeri giremez.
+            os.chown(ev, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False)
+            yield ev
+            if hedef.is_file() and hedef.read_bytes() != once:
+                shutil.copy2(hedef, kalici)
+                os.chown(kalici, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False)
+                kalici.chmod(0o600)
+                _LOG.info(
+                    "kutulu aracın kimliği koşumda yenilendi, kalıcı kopya "
+                    "güncellendi: %s",
+                    kalici,
+                )
+        finally:
+            shutil.rmtree(ev, onexc=cls._silme_hatasi)
+
+    @classmethod
+    @contextmanager
     def _sahne(
         cls, kaynak: Path, kayit: "pwd.struct_passwd | None"
     ) -> Iterator[Path]:
@@ -2237,11 +2317,11 @@ class SubprocessRunner:
             }
         )
         try:
-            with self._sahne(cwd, kayit) as sahne:
+            with self._tur_omurlu_ev(kayit) as ev, self._sahne(cwd, kayit) as sahne:
                 tamamlanan = subprocess.run(  # noqa: S603 — argv KAPALI eşlemeden
                     list(spec.argv),
                     cwd=str(sahne),
-                    env=self._alt_surec_ortami(kayit),
+                    env=self._alt_surec_ortami(ev),
                     input=istem,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,

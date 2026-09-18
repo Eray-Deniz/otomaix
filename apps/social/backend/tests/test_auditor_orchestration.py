@@ -1720,8 +1720,14 @@ def test_boxed_tool_runs_as_the_box_user_with_its_own_home(
         f"alt süreç uid={gorulen['uid']} ile koştu, beklenen {kayit.pw_uid} — "
         "ayrıcalık düşmedi, kutu KÂĞITTAN"
     )
-    assert gorulen["home"] == kayit.pw_dir, (
-        f"HOME={gorulen['home']!r} — kutulu süreç kendi kimliğini oradan okuyamaz"
+    # HOME artık KALICI ev DEĞİL (F2 fix): tur-ömürlü bir dizin. İddia korunuyor —
+    # araç kimliğini bulabilmeli — ama ev turla birlikte ölüyor.
+    assert gorulen["home"] != kayit.pw_dir, (
+        f"HOME kalıcı ev ({kayit.pw_dir}) — CLI oturum kayıtları turlar arası "
+        "birikir ve sonraki tur önceki turun paketini okuyabilir (F2)"
+    )
+    assert Path(gorulen["home"]).parent == auditors.SAHNE_UST_DIZINI, (
+        f"tur-ömürlü ev adanmış kökün altında değil: {gorulen['home']}"
     )
     assert gorulen["sahne_uid"] == str(kayit.pw_uid)
 
@@ -1931,6 +1937,200 @@ def test_stage_parent_loose_mode_is_repaired_not_rejected(
 
     assert stat.S_IMODE(ust.stat().st_mode) == 0o711, (
         f"gevşek kip onarılmadı: {oct(stat.S_IMODE(ust.stat().st_mode))}"
+    )
+
+
+# ═══ 8f. TUR-ÖMÜRLÜ EV — F2 (oturum kayıtları turla birlikte ölür) ══════════
+#
+# **Bulgu (2026-09-18 dual review, F2).** `codex` CLI her koşumun TAM kaydını
+# `$HOME/.codex/sessions/**/rollout-*.jsonl` altına yazıyor: istem, paket
+# içeriği ve aracın kendi cevabı. Kalıcı evde bunlar birikiyordu ve kutulu
+# kullanıcı hepsini okuyabiliyordu — ölçüldü: bir günde 28 kayıt, içlerinde
+# paket izleri.
+#
+# Bu, sahne tasarımının MERKEZ gerekçesini deviriyordu: "kalıcı hiçbir şey
+# kutulu kullanıcıya açılmaz" deniyordu ki sonraki tur öncekinin paketini ve
+# raporunu okuyamasın. CLI o arşivi kutunun İÇİNDE yeniden kuruyordu.
+#
+# **Çözüm sahnenin deseninin aynısı:** tur başına taze ev, içine YALNIZ kimlik
+# kopyalanır, tur bitince silinir. Kimlik dosyası koşum sırasında DEĞİŞTİYSE
+# (jeton yenilenmesi) kalıcı yere geri yazılır — yoksa yenileme turla birlikte
+# ölür ve kalıcı kopya bayatlar.
+
+
+@sahne_gerekli
+def test_boxed_home_is_per_run_and_carries_the_credential(
+    monkeypatch, tmp_path
+) -> None:
+    """Tur-ömürlü ev: taze, kutulu kullanıcının, kimliği İÇİNDE."""
+    kayit = pwd.getpwnam(auditors.IZOLASYON_KULLANICISI)
+    # Varlık YETMEZ (mutasyonla ölçüldü: boş dosya yazan bir sürüm testi
+    # geçiyordu) — kimliğin BOYUTU kalıcı kopyayla eşleşmeli.
+    kod = (
+        "import os,stat; ev=os.environ['HOME']; d=os.stat(ev); "
+        f"k=os.path.join(ev, {str(auditors.KUTULU_KIMLIK_YOLU)!r}); "
+        "print(ev, d.st_uid, oct(stat.S_IMODE(d.st_mode)), "
+        "os.path.getsize(k) if os.path.exists(k) else -1, sep='|')"
+    )
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, kod, kullanici=auditors.IZOLASYON_KULLANICISI
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    ev, uid, izin, kimlik_boyutu = sonuc.stdout.strip().split("|")
+    beklenen_boyut = (Path(kayit.pw_dir) / auditors.KUTULU_KIMLIK_YOLU).stat().st_size
+
+    assert ev != kayit.pw_dir, "HOME kalıcı ev — kayıtlar turlar arası birikir"
+    assert int(uid) == kayit.pw_uid, f"tur-ömürlü evin sahibi uid={uid}"
+    assert izin == oct(0o700), f"tur-ömürlü ev izni {izin} — başkalarına açık"
+    assert int(kimlik_boyutu) == beklenen_boyut, (
+        f"evdeki kimlik {kimlik_boyutu} bayt, kalıcı kopya {beklenen_boyut} — "
+        "araç kimlik doğrulayamaz (koşum anlamsız)"
+    )
+
+
+@sahne_gerekli
+def test_what_the_tool_writes_into_home_dies_with_the_run(
+    monkeypatch, tmp_path
+) -> None:
+    """F2'nin ASIL iddiası: eve yazılan hiçbir şey turdan sağ çıkmaz.
+
+    Ölçüm CLI'ın kendi oturum kaydını taklit eder: alt süreç `$HOME` altına
+    `.codex/sessions/` ağacı kurup içine paket izi yazar. Tur bitince o ağaç
+    ne evde ne de KALICI evde bulunmalı.
+    """
+    # Dosya adı KOŞUMA ÖZGÜ: sabit bir ad kullanıldığında, tur-ömürlü evi SÖKEN
+    # bir mutasyon koşumunun kalıcı eve bıraktığı artık, SONRAKİ temiz koşumu
+    # haksız yere kırmızıya çeviriyordu (iki kez yaşandı). Test kendi koşumunun
+    # yazdığını ölçmeli, ortamın geçmişini değil.
+    ad = f"rollout-{uuid.uuid4().hex}.jsonl"
+    kod = (
+        "import os; ev=os.environ['HOME']; "
+        "d=os.path.join(ev,'.codex','sessions','2026'); os.makedirs(d, exist_ok=True); "
+        f"open(os.path.join(d,{ad!r}),'w').write('PAKET-IZI'); "
+        "print(ev)"
+    )
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, kod, kullanici=auditors.IZOLASYON_KULLANICISI
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    ev = Path(sonuc.stdout.strip())
+
+    assert not ev.exists(), f"tur-ömürlü ev koşumdan sonra DURUYOR: {ev}"
+    kalici = Path(pwd.getpwnam(auditors.IZOLASYON_KULLANICISI).pw_dir)
+    sizanlar = list(kalici.rglob(ad))
+    for yol in sizanlar:  # ölçüm bitti; testin kendi artığı ortamda bırakılmaz
+        yol.unlink()
+    assert not sizanlar, (
+        f"araç kaydı KALICI eve düştü: {sizanlar} — turlar arası birikme sürüyor"
+    )
+
+
+@sahne_gerekli
+def test_a_refreshed_credential_is_written_back(monkeypatch, tmp_path) -> None:
+    """Jeton yenilenirse kalıcı kopya GÜNCELLENİR — yoksa bayatlar.
+
+    Ölçülmüş tetikleyici: erişim jetonunun süresi 2026-09-27'de doluyor; o gün
+    CLI yenileme yapacak ve yeni jetonu EVE yazacak. Tur-ömürlü ev onu silerse
+    kalıcı kopya eski jetonu taşımaya devam eder ve (döndürmeli yenilemede)
+    bir daha giriş yapmak gerekir.
+    """
+    kalici_kimlik = (
+        Path(pwd.getpwnam(auditors.IZOLASYON_KULLANICISI).pw_dir)
+        / auditors.KUTULU_KIMLIK_YOLU
+    )
+    once = kalici_kimlik.read_bytes()
+    yedek = tmp_path / "kimlik.yedek"
+    yedek.write_bytes(once)
+    try:
+        yeni_icerik = "{\"YENILENMIS\": true}"
+        kod = (
+            "import os; "
+            f"open(os.path.join(os.environ['HOME'], {str(auditors.KUTULU_KIMLIK_YOLU)!r}), 'w')"
+            f".write('{yeni_icerik}'); print('yazdim')"
+        )
+        _kanonik, sonuc = _sahne_kos(
+            monkeypatch, tmp_path, kod, kullanici=auditors.IZOLASYON_KULLANICISI
+        )
+        assert sonuc.durum == "tamam", sonuc.stderr
+
+        assert kalici_kimlik.read_bytes() != once, (
+            "kimlik koşumda DEĞİŞTİ ama kalıcı kopya eski kaldı — yenileme "
+            "turla birlikte öldü, kalıcı jeton bayatlar"
+        )
+        assert "YENILENMIS" in kalici_kimlik.read_text(encoding="utf-8")
+        durum = kalici_kimlik.stat()
+        assert durum.st_uid == pwd.getpwnam(auditors.IZOLASYON_KULLANICISI).pw_uid
+        assert stat.S_IMODE(durum.st_mode) == 0o600, (
+            f"geri yazılan kimliğin izni {oct(stat.S_IMODE(durum.st_mode))} — "
+            "kimlik dosyası yalnız sahibine açık olmalı"
+        )
+    finally:
+        kalici_kimlik.write_bytes(yedek.read_bytes())
+        os.chown(
+            kalici_kimlik,
+            pwd.getpwnam(auditors.IZOLASYON_KULLANICISI).pw_uid,
+            pwd.getpwnam(auditors.IZOLASYON_KULLANICISI).pw_gid,
+        )
+        kalici_kimlik.chmod(0o600)
+
+
+@sahne_gerekli
+def test_unchanged_credential_is_not_rewritten(monkeypatch, tmp_path) -> None:
+    """Değişmemiş kimliğe DOKUNULMAZ — gereksiz yazım, gereksiz risktir."""
+    kalici_kimlik = (
+        Path(pwd.getpwnam(auditors.IZOLASYON_KULLANICISI).pw_dir)
+        / auditors.KUTULU_KIMLIK_YOLU
+    )
+    # `mtime` YETMEZ: `shutil.copy2` onu KORUR, yani her koşumda geri yazan bir
+    # sürüm bu ölçümden kaçardı (mutasyonla ölçüldü). `ctime` üstveri değişimini
+    # gösterir ve yazımda mutlaka ilerler.
+    once = kalici_kimlik.stat()
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, "print('dokunmadim')",
+        kullanici=auditors.IZOLASYON_KULLANICISI,
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    sonra = kalici_kimlik.stat()
+    assert (sonra.st_ctime_ns, sonra.st_mtime_ns) == (
+        once.st_ctime_ns,
+        once.st_mtime_ns,
+    ), "kimlik dosyası değişmediği hâlde yeniden yazıldı"
+
+
+@sahne_gerekli
+def test_missing_credential_stops_the_run(monkeypatch, tmp_path) -> None:
+    """Kimlik YOKSA koşum başlamaz — sessizce kimliksiz eve düşmek YOK.
+
+    Kimliksiz bir evde araç kimlik doğrulayamaz ve anlaşılmaz bir hatayla düşer;
+    arızayı alt sürecin çıktısına çevirmek yerine burada durdurulur. (Bu testin
+    yokluğu mutasyonla ölçüldü: kapı söküldüğünde hiçbir test kırmızı dönmedi.)
+    """
+    monkeypatch.setattr(auditors, "KUTULU_KIMLIK_YOLU", Path(".codex/olmayan.json"))
+    cagrildi: list[str] = []
+    monkeypatch.setattr(
+        auditors.subprocess, "run", lambda *a, **kw: cagrildi.append("alt-surec")
+    )
+    kanonik, istem = _kanonik_paket(tmp_path)
+    _sahte_arac(monkeypatch, "print('x')", kullanici=auditors.IZOLASYON_KULLANICISI)
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=5.0)
+
+    with pytest.raises(RuntimeError, match="kimlik dosyası YOK"):
+        runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
+
+    assert not cagrildi, "kimliksiz koşumda alt süreç KOŞTU — kapı fail-closed değil"
+
+
+def test_unboxed_tool_keeps_the_inherited_home(monkeypatch, tmp_path) -> None:
+    """Kutusuz araç tur-ömürlü ev ALMAZ — `HOME` miras kalır (davranış değişmedi)."""
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        "import os; print(os.environ.get('HOME',''))",
+        kullanici=None,
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    assert sonuc.stdout.strip() == os.environ.get("HOME", ""), (
+        "kutusuz aracın `HOME`'u değiştirildi — beyanı `None`, miras alır"
     )
 
 
