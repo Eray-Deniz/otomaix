@@ -322,6 +322,44 @@ def test_external_repo_gitignores_run_folder() -> None:
     assert "kosu/" in satirlar, satirlar
 
 
+def test_external_repo_ignores_the_audit_tree() -> None:
+    """Dış depo kanonik `denetim/` ağacını YOK SAYAR (T6b).
+
+    Kardeşi `kosu/`'dan AYRIŞIR ve ayrım BİLİNÇLİDİR: `denetim/` satırı commit
+    edilmiş `.gitignore`'da DEĞİL, deponun yerel `.git/info/exclude` dosyasında
+    durur. Sebep ölçüldü — pin kapısı deponun HEAD'ini `pin.commit` ile
+    karşılaştırır (`contracts.verify_pin`), yani `.gitignore`'a tek satır
+    eklemek için atılacak commit pini ANINDA düşürür ve CLI'ın her alt komutu
+    fail-closed durur; toparlamak için monorepo'da ayrı bir pin tazeleme
+    commit'i gerekir. (Eray kararı, 2026-09-18.)
+
+    **Bedeli dürüstçe:** yerel exclude SÜRÜMLENMEZ — depo yeniden klonlanırsa
+    koruma gelmez. Bu test tam o kaybı yakalayan tripwire'dır; bu yüzden satır
+    ARAMAZ, `git check-ignore`'a EFEKTİF kararı sorar (kararın hangi dosyadan
+    geldiği önemsizdir, yok sayılıp sayılmadığı önemlidir).
+    """
+    def _yok_sayiliyor_mu(yol: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git", "-C", str(GERCEK_ARASTIRMA_DEPOSU), "check-ignore", "-v", yol],
+            capture_output=True,
+            text=True,
+        )
+
+    # POZİTİF KONTROL: prob ayrım yapıyor mu? Sözleşme dosyası yok sayılMAmalı.
+    kontrol = _yok_sayiliyor_mu(sorted(CONTRACT_FILES)[0])
+    assert kontrol.returncode != 0, (
+        f"prob her yola 'yok sayılıyor' diyor ({kontrol.stdout.strip()}) — "
+        "aşağıdaki yeşil hiçbir şey ölçmezdi"
+    )
+
+    sonuc = _yok_sayiliyor_mu("denetim/")
+    assert sonuc.returncode == 0, (
+        "dış depo `denetim/` ağacını YOK SAYMIYOR — `git add .` onu commit'e "
+        "sokabilir, HEAD kayar ve pin DÜŞER (o anda CLI'ın her alt komutu "
+        f"fail-closed durur). check-ignore rc={sonuc.returncode}"
+    )
+
+
 # ─── H1: bozuk manifest fail-closed'ı bozamaz (checkpoint bulgusu) ──────────
 
 

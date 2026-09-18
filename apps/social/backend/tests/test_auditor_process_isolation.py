@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from app.services.sector_pipeline import auditors
+from app.services.sector_pipeline import auditors, runs
 
 KULLANICI = auditors.IZOLASYON_KULLANICISI
 
@@ -61,6 +61,38 @@ def _okuma_denemesi(yol: Path, *, kullanici: str | None) -> bool:
     return sonuc.returncode == 0
 
 
+def _kanonik_agac_hedefleri() -> list[Path]:
+    """Kanonik denetçi ağacı — hedefler KAVRAMDAN türetilir, elle yazılmaz (T6).
+
+    **Kavram:** *"boru hattının araştırma deposuna yazdığı ve denetçinin YALNIZ kendi
+    sahnesi üzerinden görmesi gereken her şey."* Üç katman birlikte süpürülür:
+
+    1. **Deponun KÖKÜ** (`runs.ARASTIRMA_DEPOSU_KOKU`) — kutunun dayandığı mekanizma
+       `~root`'un `700` izni olduğu için, depo bir gün `/root` dışına taşınırsa kutu
+       SESSİZCE açılır. Kök ölçülmezse bu kayma görünmez.
+    2. **Kökün DOĞRUDAN çocukları** — elle üç ad yazmak yerine dizin listelenir, yani
+       yarın eklenen bir aşama klasörü kendiliğinden kapsama girer.
+    3. **Aşama ağaçlarının TAMAMI** — kökler `runs.ASAMALAR`'dan türetilir
+       (`kök/<aşama>`), var olanların altındaki her düğüm süpürülür. Asıl korunan şey
+       burada yaşar: GEÇMİŞ turların denetçi raporları. Kutulu kullanıcı onlardan birini
+       okuyabilseydi K-79 körlüğü dosya sistemi üzerinden delinirdi — iki denetçi AYNI
+       unix kullanıcısında koşar, dosya izinleriyle ayrılamazlar.
+
+    **Maliyet dürüstçe:** süpürme tur sayısıyla büyür (bugün ölçüldü: aşama ağaçlarında
+    18 düğüm). Tek bir yaprağı elle seçmek taramayı "zaten bildiğimi tekrar kontrol et"e
+    indirgerdi; yavaşlama olursa bu GÖRÜNÜR bir sinyaldir.
+    """
+    kok = runs.ARASTIRMA_DEPOSU_KOKU
+    if not kok.exists():
+        return []
+    hedefler = [kok, *sorted(kok.iterdir())]
+    for asama in runs.ASAMALAR:
+        agac = kok / asama
+        if agac.is_dir():
+            hedefler.extend(sorted(agac.rglob("*")))
+    return hedefler
+
+
 def _hedefler() -> list[Path]:
     """Yasak hedefler KAVRAMDAN türetilir, elle seçilmez.
 
@@ -68,8 +100,17 @@ def _hedefler() -> list[Path]:
     tam olarak budur (`~root` izni `700`). Listeye elle üç dosya yazmak, taramayı
     "zaten bildiğimi tekrar kontrol et"e indirger; o yüzden kökün KENDİSİ ve altındaki
     VAR OLAN araç/sır yolları birlikte ölçülür.
+
+    Kanonik denetçi ağacı da (T6) AYNI kümededir: yasak-erişim testi ve onun pozitif
+    kontrolü ikisi de bu listeden okur, yani ağaç ayrı bir kapının değil aynı kapının
+    kapsamındadır.
     """
-    adaylar = [ROOT_EVI, BACKEND_ENV, *sorted(ROOT_EVI.glob(".c*"))]
+    adaylar = [
+        ROOT_EVI,
+        BACKEND_ENV,
+        *sorted(ROOT_EVI.glob(".c*")),
+        *_kanonik_agac_hedefleri(),
+    ]
     return [yol for yol in adaylar if yol.exists()]
 
 
@@ -116,4 +157,38 @@ def test_izolasyon_kullanicisinin_sudo_yetkisi_yok() -> None:
     assert "not allowed to run sudo" in cikti, (
         f"{KULLANICI} sudo çalıştırabiliyor — kutu kâğıttan: "
         f"sudo kararı: {cikti.strip()[:200]}"
+    )
+
+
+@pytest.mark.skipif(_atla_gerekcesi() is not None, reason=str(_atla_gerekcesi()))
+def test_kanonik_denetci_agaci_kutulu_kullaniciya_KAPALI() -> None:
+    """Kutulu kullanıcı kanonik `denetim/` ağacına GİREMEZ (T6).
+
+    Yukarıdaki genel tripwire bu ağacı zaten kapsıyor; bu test iddianın KENDİSİNİ
+    adlandırır ve **sessiz yeşili** engeller: ağaç yoksa ya da yalnız boş klasörlerden
+    ibaretse genel test yine yeşil kalırdı ve kimse "geçmiş raporlar okunamıyor"un hiç
+    ölçülmediğini fark etmezdi.
+
+    Ölçüm sahiplik/izin bitine DEĞİL, gerçek okuma denemesine dayanır — sahiplik ölçmek
+    erişim ölçmek değildir (bu görevde bir kez tam bu hata yapıldı).
+    """
+    hedefler = _kanonik_agac_hedefleri()
+    if not hedefler:
+        pytest.skip(
+            f"{runs.ARASTIRMA_DEPOSU_KOKU} YOK — kanonik ağaç bu makinede ölçülemiyor"
+        )
+    raporlar = [
+        yol
+        for yol in hedefler
+        if yol.is_file() and (runs.ARASTIRMA_DEPOSU_KOKU / "denetim") in yol.parents
+    ]
+    assert raporlar, (
+        "denetim ağacında tek bir DOSYA bile yok — 'geçmiş raporlar okunamıyor' "
+        "iddiası ölçülmemiş olurdu (boş klasör hiçbir şey kanıtlamaz)"
+    )
+
+    sizanlar = [yol for yol in hedefler if _okuma_denemesi(yol, kullanici=KULLANICI)]
+    assert not sizanlar, (
+        f"{KULLANICI} kullanıcısı kanonik ağaçtan şunları OKUYABİLDİ: {sizanlar} — "
+        "denetçi kendi sahnesi dışından, geçmiş turların raporlarına erişebilir"
     )
