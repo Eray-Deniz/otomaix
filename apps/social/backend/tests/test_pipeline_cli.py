@@ -19,6 +19,7 @@ burada ölçülür: `recovered` durumu maruziyet kanıtı olmadan ÜRETİLMEZ.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import sys
@@ -36,8 +37,13 @@ import sector_pipeline_cli as cli  # noqa: E402
 
 from app.routers import brands as brands_router  # noqa: E402
 from app.services import notifications  # noqa: E402
-from app.services.sector_pipeline import runs  # noqa: E402
+from app.services.sector_pipeline import (  # noqa: E402
+    auditors,
+    brief_doctor,
+    runs,
+)
 
+from .conftest import _require_test_database  # noqa: E402
 from .test_notifications import _seed_owner_and_brand, _seed_sub_sector  # noqa: E402
 from .test_pipeline_runs import (  # noqa: E402
     ACTOR,
@@ -1626,6 +1632,119 @@ def test_asama_koklerinin_HICBIRI_otekinin_ALTINDA_degil() -> None:
             if ad == oteki_ad:
                 continue
             assert oteki not in yol.parents, (ad, oteki_ad, yol, oteki)
+
+
+async def test_cli_baglantisi_jsonb_SOZLUGU_YAZABILIR(
+    test_db_setup, monkeypatch
+) -> None:
+    """CLI bağlantısı jsonb parametresini SÖZLÜK olarak yazabilmeli.
+
+    **ÖLÇÜLDÜ (2026-09-18):** `sentez` düşünce `mark_incomplete` yönetici
+    bildirimi yazmaya çalıştı, jsonb parametresi `dict` gitti ve `DataError`
+    fırladı; en-iyi-çaba kolu da aynı kusura düştü, ekranda yalnız
+    `komut koşulamadı (DataError)` kaldı — kusur GERÇEK arıza sebebini sildi.
+
+    **Test GERÇEK bağlantı kurar, taklit ETMEZ.** İlk yazımı `asyncpg.connect`'i
+    sahteyle değiştirip `init=` argümanını ölçüyordu; sahte `**kwargs` yuttuğu
+    için test YEŞİLDİ, üretim ise ilk saniyede `TypeError: connect() got an
+    unexpected keyword argument 'init'` verdi — `init` HAVUZ parametresidir,
+    tek bağlantıda kodlayıcı ELLE kurulur. Taklit, ölçmesi gereken şeyin ta
+    kendisini gizledi.
+    """
+    yakalanan: dict = {}
+
+    async def _dispatch(conn, args):
+        yakalanan["donen"] = await conn.fetchval("SELECT $1::jsonb", {"a": 1})
+        return ([], 0)
+
+    monkeypatch.setattr(cli, "dispatch", _dispatch)
+    await cli._baglan_ve_kos(object(), _require_test_database(test_db_setup))
+    assert yakalanan["donen"] == {"a": 1}, yakalanan
+
+
+def test_kok_rehberi_bilinmeyen_sektorde_FAIL_CLOSED() -> None:
+    """EK-K bulunamıyorsa koşu DURUR — sessizce eksik ek GÖNDERİLMEZ.
+
+    Sessiz atlama tam olarak 2026-09-18'de yaşanan şeydir: ek yoktu, araç
+    kontrolü yapamadığını bildirdi ve tur 595 sn sonra düştü. Eksik ek
+    koşumdan ÖNCE görülmeli.
+    """
+    with pytest.raises(cli.CliError) as hata:
+        cli._rehber_metni("boyle-bir-sektor-yok")
+    assert "EK-K" in str(hata.value)
+
+
+def test_kok_rehberi_bilinen_sektorde_METIN_doner() -> None:
+    """Pozitif kontrol: kapı her slug'ı reddeden bir duvar DEĞİLDİR."""
+    from app.core.templates_data import SECTOR_GUIDANCE
+
+    slug = next(iter(SECTOR_GUIDANCE))
+    assert cli._rehber_metni(slug) == SECTOR_GUIDANCE[slug]
+
+
+def _kucuk_paket(tmp_path: Path, run_id: str):
+    """`build_packet`'in KENDİ yazdığı rol yollarını üreten en küçük paket."""
+    kaynaklar = ["# KAYNAK bir\nmetin\n", "# KAYNAK iki\nmetin\n"]
+    return auditors.build_packet(
+        brief="brief",
+        sources=kaynaklar,
+        doctor_reports=[
+            brief_doctor.run(metin, source_name=f"KAYNAK-{sira}")
+            for sira, metin in enumerate(kaynaklar, start=1)
+        ],
+        active_package=None,
+        unit_snapshot={},
+        run_id=run_id,
+        sector_id=uuid.UUID(int=1),
+        dest=tmp_path,
+    )
+
+
+def test_sentez_denetimin_YAZDIGI_rapor_yolundan_okur(tmp_path: Path) -> None:
+    """Yazıcı ile okuyucu AYNI göreli yola bakmak ZORUNDA.
+
+    **ÖLÇÜLDÜ (2026-09-18, resmî tur):** `denetim` geçti (`rc=0`, 956 sn, iki
+    rapor DB'ye indi) ama `sentez` ilk saniyede düştü: *"denetçi raporu yok:
+    kosu/<run_id>/denetci-1/RAPOR-denetci-1.md"*. Raporlar 2026-09-15'te üç kök
+    ayrıldığında `denetim/<run_id>/<rol>/`'e taşındı; OKUYUCU teslim klasöründe
+    kaldı. Yukarıdaki kök testleri köklerin AYRI olduğunu ölçüyordu, hangisinin
+    hangi aşamaya ait olduğunu DEĞİL — aynı boşluğun ikinci örneği.
+    """
+    run_id = "kosu-" + "d" * 32
+    paket = _kucuk_paket(tmp_path, run_id)
+    for rol in auditors.DENETCI_ROLLERI:
+        yazilan = (
+            Path(paket.kopyalar[rol]) / auditors.RAPOR_DOSYA_KALIBI.format(rol)
+        ).relative_to(tmp_path)
+        okunan = cli._denetim_rapor_yolu(run_id, rol).relative_to(
+            cli._denetim_paket_koku()
+        )
+        assert okunan == yazilan, (rol, okunan, yazilan)
+
+
+def test_eksik_rapor_hatasi_DENETIM_kokunu_gosterir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rapor yoksa hata mesajı operatörü DOĞRU klasöre göndermeli.
+
+    Yol-şekli testi tek başına yetmez: `_klasor_girdileri` yardımcıyı hiç
+    kullanmasa da o test yeşil kalırdı. Bu test okuyucunun GERÇEKTEN nereye
+    baktığını ölçer.
+    """
+    monkeypatch.setattr(runs, "ARASTIRMA_DEPOSU_KOKU", tmp_path)
+    run_id = "kosu-" + "e" * 32
+    teslim = runs.run_folder(run_id)
+    teslim.mkdir(parents=True)
+    (teslim / cli.BRIEF_DOSYASI).write_text("brief\n", encoding="utf-8")
+    for sira in (1, 2):
+        (teslim / cli.KAYNAK_KALIBI.format(sira)).write_text(
+            f"# KAYNAK {sira}\nmetin\n", encoding="utf-8"
+        )
+    with pytest.raises(cli.CliError) as hata:
+        asyncio.run(cli._klasor_girdileri(None, run_id, {}))
+    mesaj = str(hata.value)
+    assert str(cli._denetim_paket_koku()) in mesaj, mesaj
+    assert str(teslim) not in mesaj, mesaj
 
 
 def test_asama_kokleri_ARASTIRMA_DEPOSUNDA_kalir() -> None:

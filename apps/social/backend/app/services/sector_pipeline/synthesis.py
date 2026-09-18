@@ -73,6 +73,7 @@ from app.services.sector_content_schema import (
     VIDEO_POOL_KEYS,
     structural_errors,
 )
+from app.services import sector_content_schema as sema
 from app.services.sector_packages import validate_package_content
 from app.services.sector_pipeline import contracts, identity, runs
 from app.services.sector_pipeline.runs import _require_run_id as require_run_id
@@ -134,8 +135,18 @@ MEVZUAT_ALANLARI: tuple[str, ...] = ("yasaklar_ve_hassasiyetler",)
 """Mevzuat/güvenlik bilgisini taşıyan alan(lar) — K-124'ün iki-denetçi kolu."""
 
 _BOLUM_BASLIGI_RE = re.compile(
-    r"^(\d)\)[ \t]+([A-ZÇĞİÖŞÜ_][A-ZÇĞİÖŞÜ_ ]*?)[ \t]*(?:—.*)?$", re.M
+    r"^(?:#{1,6}[ \t]+)?(\d)\)[ \t]+([A-ZÇĞİÖŞÜ_][A-ZÇĞİÖŞÜ_ ]*?)[ \t]*(?:[—(:].*)?$",
+    re.M,
 )
+"""Sentez bölüm başlığı — denetçi kapısıyla AYNI tolerans, aynı gerekçe.
+
+Desen `auditors._BOLUM_BASLIGI_RE`'nin ikizidir. Kusur denetçi turunda ölçüldü
+(iki araç da `## 1) …` yazdı); aynı refleksi sentez aracının göstermesi için
+bir sebep yoktu — tek hata izole değildir, onu doğuran desen buraya
+KOPYALANMIŞTI ve bir sonraki adımda aynı şekilde düşerdi. İkinci tolerans
+(addan sonraki `—`/`(`/`:` süsü) de aynı gün, bu dosyada ÖLÇÜLDÜ: araç
+`# 4) ÖZET (operatör onay ekranı)` yazdı.
+"""
 _JSON_FENCE_RE = re.compile(r"```(?:json)?[ \t]*\n(.*?)\n[ \t]*```", re.S)
 _LISTE_OGESI_RE = re.compile(r"^[ \t]*(?:[-*•]|\d+[.)])[ \t]+(\S.*?)[ \t]*$", re.M)
 
@@ -265,6 +276,34 @@ def _bolumlere_ayir(text: str) -> tuple[dict[str, str], list[str]]:
     return bolumler, []
 
 
+def _satir_satir_json(ham: str) -> list | None:
+    """JSONL gövdesi → liste; gövde JSONL DEĞİLSE `None`.
+
+    **Neden tolerans (ÖLÇÜLDÜ 2026-09-18, 906 sn'lik tur):** araç karar
+    günlüğünü köşeli ayraçsız, satır başına bir nesne olarak yazdı; bir önceki
+    turda AYNI araç düzgün dizi yazmıştı. İki biçim de TEK ANLAMLIDIR — fark
+    yazımdadır, anlamda değil — ve her sapma bir tam turu (~15 dk + jeton)
+    yakıyor.
+
+    **Tolerans KÖRLÜK DEĞİLDİR:** her boş olmayan satır tek başına geçerli bir
+    JSON NESNESİ olmak ZORUNDA. Tek bozuk satır `None` döndürür ve çağıran
+    özgün ayrıştırma hatasını fırlatır (negatif kontrolü testte).
+    """
+    ogeler: list = []
+    for satir in ham.splitlines():
+        parca = satir.strip().rstrip(",")
+        if not parca:
+            continue
+        try:
+            oge = json.loads(parca)
+        except (json.JSONDecodeError, ValueError):
+            return None
+        if not isinstance(oge, dict):
+            return None
+        ogeler.append(oge)
+    return ogeler or None
+
+
 def _json_govdesi(govde: str, etiket: str) -> Any:
     """Bölümün JSON gövdesi — çitli blok varsa O, yoksa bölümün kendisi.
 
@@ -276,6 +315,9 @@ def _json_govdesi(govde: str, etiket: str) -> Any:
     try:
         return json.loads(ham)
     except (json.JSONDecodeError, ValueError) as hata:
+        satirlar = _satir_satir_json(ham)
+        if satirlar is not None:
+            return satirlar
         raise SynthesisFailed(
             f"{etiket} bölümü JSON olarak okunamadı: {hata}"
         ) from hata
@@ -297,12 +339,51 @@ def _liste_ogeleri(govde: str) -> list[str]:
 # ─── 3. İstem kurulumu ──────────────────────────────────────────────────────
 
 
+def _sema_sekli() -> str:
+    """EK-L gövdesi — alan ŞEKİLLERİ yazım kapısının sabitlerinden ÜRETİLİR.
+
+    **Neden makineden (2026-09-18):** aynı gün ÜÇ sözleşme sapması ölçüldü
+    (bölüm başlığı biçimi · `oge_sha` hükmü · `cta_kaliplari` öğe şekli) ve
+    üçü de aynı sınıftan: elle bakımlı düz yazı, makine kapısının okuduğu
+    şemadan sessizce ayrışıyor. Her sapma bir tam turu (~18 dk + jeton)
+    yakıyor. Bu ek sapmayı TEKİL olarak yamamak yerine kaynağı tek yere
+    bağlar: şema değişirse ek kendiliğinden değişir.
+    """
+    satirlar = [
+        "Alan şekilleri AŞAĞIDAKİ gibidir; düz yazı ile çelişirse BU EK geçerlidir.",
+        "",
+        f"- Metin alanları: {', '.join(sema.TEXT_FIELDS)}",
+        f"- Liste alanları: {', '.join(sema.LIST_FIELDS)}",
+        (
+            "- `cta_kaliplari` öğesi NESNEDİR, anahtar kümesi TAM ve kapalı: "
+            f"{{{', '.join(sorted(sema.CTA_ITEM_KEYS))}}} — üçü de metin"
+        ),
+        (
+            "- `video_kodlar` iki havuz taşır: "
+            f"{', '.join(sema.VIDEO_POOL_KEYS)} — ikisi de metin LİSTESİ"
+        ),
+        (
+            "- `ozel_gun[<anahtar>]` yuvaları (hepsi METİN, dizi DEĞİL): "
+            f"{', '.join(sema.SPECIAL_DAY_SLOTS)}"
+        ),
+        (
+            "- `[kanal-bağımlı: X]` etiketinde X kapalı kümedir: "
+            f"{', '.join(sorted(sema.CHANNEL_KEYS))}"
+        ),
+        f"- Bilinçli boş alanın RESMÎ değeri: {sema.DELIBERATELY_EMPTY!r}",
+    ]
+    return "\n".join(satirlar)
+
+
 def _istem_metni(
     gorev_metni: str,
     tur: AuditRound,
     active_package: Mapping | None,
     removed_history: Sequence[Mapping],
     holiday_keys: set[str],
+    *,
+    brief: str,
+    kok_rehberi: str,
 ) -> str:
     """Sentez aracına verilen tek istem dosyası.
 
@@ -317,6 +398,18 @@ def _istem_metni(
         gorev_metni,
         "",
         f"KOŞU TARİHİ: {date.today().isoformat()}",
+        "",
+        # EK-A ve EK-K 2026-09-18'de EKLENDİ. Sözleşme ikisini de "komut
+        # otomatik ekler" diye sayıyordu; istem ikisini de taşımıyordu ve araç
+        # kök rehber nüans kontrolünü YAPAMADAN turu düşürdü.
+        "## EK-A — ARAŞTIRMA BRIEF'İ",
+        brief,
+        "",
+        "## EK-K — KÖK SEKTÖR REHBERİ",
+        kok_rehberi,
+        "",
+        "## EK-L — ŞEMA ŞEKLİ (makineden üretilir)",
+        _sema_sekli(),
         "",
         "## EK-H — AKTİF PAKET",
         json.dumps(active_package, ensure_ascii=False, indent=2, default=str)
@@ -676,6 +769,8 @@ async def _kos(
     tur: AuditRound,
     *,
     run_id: str,
+    brief: str,
+    kok_rehberi: str,
     active_package: Mapping | None,
     removed_history: Sequence[Mapping],
     holiday_keys: set[str],
@@ -721,7 +816,15 @@ async def _kos(
         raise SynthesisFailed(f"sözleşme pin kapısı düştü: {hata}") from hata
 
     # ── KOŞUM BÖLGESİ ───────────────────────────────────────────────────────
-    istem = _istem_metni(gorev_metni, tur, active_package, removed_history, holiday_keys)
+    istem = _istem_metni(
+        gorev_metni,
+        tur,
+        active_package,
+        removed_history,
+        holiday_keys,
+        brief=brief,
+        kok_rehberi=kok_rehberi,
+    )
     kok.mkdir(parents=True)
     istem_yolu = kok / GOREV_DOSYA_ADI
     with istem_yolu.open("x", encoding="utf-8") as akis:
@@ -808,6 +911,8 @@ async def run(
     round: AuditRound,
     *,
     run_id: str,
+    brief: str,
+    kok_rehberi: str,
     active_package: Mapping | None,
     removed_history: Sequence[Mapping],
     holiday_keys: set[str],
@@ -849,6 +954,8 @@ async def run(
             db,
             round,
             run_id=run_id,
+            brief=brief,
+            kok_rehberi=kok_rehberi,
             active_package=active_package,
             removed_history=removed_history,
             holiday_keys=holiday_keys,

@@ -46,6 +46,7 @@ _BACKEND_KOKU = Path(__file__).resolve().parents[1]
 if str(_BACKEND_KOKU) not in sys.path:
     sys.path.insert(0, str(_BACKEND_KOKU))
 
+from app.core.database import _init_connection  # noqa: E402
 from app.services import notifications, sector_packages  # noqa: E402
 from app.services import sector_package_lifecycle as lifecycle  # noqa: E402
 from app.services.sector_pipeline import (  # noqa: E402
@@ -443,6 +444,26 @@ def _denetim_paket_koku() -> Path:
     return runs.ARASTIRMA_DEPOSU_KOKU / "denetim"
 
 
+def _denetim_rapor_yolu(run_id: str, rol: str) -> Path:
+    """Bir denetçi raporunun yolu — YAZICI ile OKUYUCU'nun TEK üreticisi.
+
+    Rapor `build_packet(dest=_denetim_paket_koku())`'in kurduğu rol dizinine
+    yazılır (`<denetim kökü>/<run_id>/<rol>/RAPOR-<rol>.md`), yani TESLİM
+    klasöründe DEĞİL.
+
+    **Neden tek üretici (ÖLÇÜLDÜ 2026-09-18, resmî tur):** `denetim` geçti
+    (`rc=0`, 956 sn) ama `sentez` ilk saniyede düştü — okuyucu hâlâ teslim
+    klasörüne bakıyordu. Raporlar 2026-09-15'te üç kök ayrıldığında taşınmıştı;
+    yol iki yerde ayrı ayrı yazıldığı için biri taşındı, öteki kaldı.
+    """
+    return (
+        _denetim_paket_koku()
+        / run_id
+        / rol
+        / auditors.RAPOR_DOSYA_KALIBI.format(rol)
+    )
+
+
 def _sentez_koku() -> Path:
     """`synthesis.run(dest=...)` kökü — sentez turu.
 
@@ -450,6 +471,39 @@ def _sentez_koku() -> Path:
     de kendi kökünün YOKLUĞUNU şart koşar.
     """
     return runs.ARASTIRMA_DEPOSU_KOKU / "sentez"
+
+
+def _rehber_metni(kok_slug: str) -> str:
+    """EK-K gövdesi — kök sektörün `SECTOR_GUIDANCE` metni. FAIL-CLOSED.
+
+    Sözleşme EK-K'yı "komut otomatik ekler" diye sayar ve aday paketi yazarken
+    kök rehber nüanslarının kaybolmadığını KONTROL ETTİRİR. Ek yoksa kontrol
+    yapılamaz; sessizce eksik göndermek 2026-09-18'de tam olarak bunu üretti
+    (araç 595 sn koştu, kontrolü yapamadığını bildirdi, tur düştü).
+    """
+    from app.core.templates_data import SECTOR_GUIDANCE
+
+    metin = SECTOR_GUIDANCE.get(kok_slug)
+    if not metin:
+        raise CliError(
+            f"EK-K yok: {kok_slug!r} kök sektörünün SECTOR_GUIDANCE metni "
+            "bulunamadı — sentez eksik ekle KOŞMAZ"
+        )
+    return metin
+
+
+async def _kok_sektor_slug(conn, sector_id) -> str:
+    """Koşunun sektörünün KÖK (üst) sektör slug'ı; kök yoksa kendisi."""
+    satir = await conn.fetchrow(
+        "SELECT COALESCE(ust.slug, alt.slug) AS kok_slug "
+        "FROM social.sectors alt "
+        "LEFT JOIN social.sectors ust ON ust.id = alt.parent_sector_id "
+        "WHERE alt.id = $1",
+        sector_id,
+    )
+    if satir is None:
+        raise CliError(f"sektör satırı yok: {sector_id}")
+    return satir["kok_slug"]
 
 
 async def _kosu_satiri(conn, run_id: str):
@@ -695,7 +749,7 @@ async def _kos_denetim(conn, args) -> Sonuc:
 
 
 async def _klasor_girdileri(conn, run_id: str, birimler: dict):
-    """Koşu klasöründen mekanik eleme raporlarını ve DOĞRULANMIŞ çifti kurar.
+    """Teslim klasöründen eleme raporlarını, DENETİM kökünden çifti kurar.
 
     İki şey birlikte döner çünkü ikisi de AYNI kaynak kümesinden türer ve
     ayrı ayrı toplanırlarsa ayrışabilirler: `kaynak_seti_sha` mekanik eleme
@@ -708,14 +762,16 @@ async def _klasor_girdileri(conn, run_id: str, birimler: dict):
     aynı raporu verir.
     """
     kok = runs.run_folder(run_id)
-    _brief, kaynaklar, adlar = _kaynaklari_oku(kok)
+    brief, kaynaklar, adlar = _kaynaklari_oku(kok)
     doktor = [
         brief_doctor.run(metin, source_name=ad)
         for metin, ad in zip(kaynaklar, adlar, strict=True)
     ]
     dogrulanmis = []
     for rol in auditors.DENETCI_ROLLERI:
-        yol = kok / rol / auditors.RAPOR_DOSYA_KALIBI.format(rol)
+        # Kaynaklar TESLİM klasöründen, raporlar DENETİM kökünden okunur —
+        # ikisi 2026-09-15'te ayrıldı (`_denetim_rapor_yolu` gövdesi).
+        yol = _denetim_rapor_yolu(run_id, rol)
         if not yol.is_file():
             raise CliError(f"denetçi raporu yok: {yol} — önce `denetim` koş")
         dogrulanmis.append(
@@ -730,7 +786,7 @@ async def _klasor_girdileri(conn, run_id: str, birimler: dict):
         expected_snapshot_sha=identity.canonical_sha(birimler),
         expected_kaynak_sha=brief_doctor.kaynak_seti_sha(doktor),
     )
-    return doktor, anlasma
+    return brief, doktor, anlasma
 
 
 async def _kos_sentez(conn, args) -> Sonuc:
@@ -741,7 +797,7 @@ async def _kos_sentez(conn, args) -> Sonuc:
     """
     satir = await _kosu_satiri(conn, args.run_id)
     aktif, birimler, _surum = await _aktif_paket(conn, satir["sector_id"])
-    _doktor, anlasma = await _klasor_girdileri(conn, args.run_id, birimler)
+    brief, _doktor, anlasma = await _klasor_girdileri(conn, args.run_id, birimler)
     if not anlasma.gecerli:
         return ([f"mutabakat kapısı: {' · '.join(anlasma.errors)}"], RC_REFUSED)
 
@@ -750,6 +806,10 @@ async def _kos_sentez(conn, args) -> Sonuc:
         conn,
         tur,
         run_id=args.run_id,
+        brief=brief,
+        kok_rehberi=_rehber_metni(
+            await _kok_sektor_slug(conn, satir["sector_id"])
+        ),
         active_package=aktif,
         removed_history=await _cikarma_gecmisi(conn, satir["sector_id"]),
         holiday_keys=set(await _takvim(conn)),
@@ -844,7 +904,7 @@ async def _kos_motor(conn, args) -> Sonuc:
     """
     satir = await _kosu_satiri(conn, args.run_id)
     aktif, birimler, aktif_surum = await _aktif_paket(conn, satir["sector_id"])
-    doktor, anlasma = await _klasor_girdileri(conn, args.run_id, birimler)
+    _brief, doktor, anlasma = await _klasor_girdileri(conn, args.run_id, birimler)
     if not anlasma.gecerli:
         return ([f"mutabakat kapısı: {' · '.join(anlasma.errors)}"], RC_REFUSED)
 
@@ -1380,7 +1440,15 @@ def require_contract_pin() -> None:
 
 
 async def _baglan_ve_kos(args, dsn: str) -> Sonuc:
+    # `init` HAVUZUN kurduğu kodlayıcıların AYNISINI kurar (`app.core.database`).
+    # Olmadan: jsonb parametresi `dict` gider ve `DataError` fırlar. 2026-09-18'de
+    # ölçüldü — `mark_incomplete`'in yönetici bildirimi bu yüzden düştü ve
+    # sentezin GERÇEK arıza sebebini ekrandan sildi.
     connection = await asyncpg.connect(dsn)
+    # ÖLÇÜLDÜ: `init=` HAVUZ parametresidir, `connect()` kabul etmez
+    # (`TypeError: connect() got an unexpected keyword argument 'init'`).
+    # Tek bağlantıda kodlayıcı ELLE kurulur — havuzun kurduğunun aynısı.
+    await _init_connection(connection)
     try:
         return await dispatch(connection, args)
     finally:

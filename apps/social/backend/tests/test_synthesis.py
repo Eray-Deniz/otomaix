@@ -37,6 +37,7 @@ from pathlib import Path
 import pytest
 
 from app.core.database import _init_connection
+from app.services import sector_content_schema
 from app.services.sector_pipeline import auditors, identity, runs, synthesis
 
 REPO_KOK = Path(__file__).resolve().parents[4]
@@ -289,6 +290,10 @@ def _tur(
 # ═══ Sentez çıktısı kurucusu — sözleşmenin KENDİ biçiminden yazıldı ════════
 
 
+BRIEF_METNI = "EK-A gövdesi: kuyumculuk brief'i, ölçüm sabiti."
+KOK_REHBERI_METNI = "EK-K gövdesi: kök sektör rehberi, ölçüm sabiti."
+
+
 def _sentez_metni(
     aday: dict,
     gunluk: list[dict],
@@ -388,6 +393,8 @@ async def _sentez(
         db,
         _tur() if tur is None else tur,
         run_id=run_id,
+        brief=BRIEF_METNI,
+        kok_rehberi=KOK_REHBERI_METNI,
         active_package=_aktif_paket() if aktif is None else aktif,
         removed_history=(),
         holiday_keys=set(),
@@ -1032,6 +1039,124 @@ async def test_synthesis_timeout_marks_incomplete(
     assert sebep
 
 
+MARKDOWN_BASLIK_ONEKLERI = ("", "#", "##", "###", "####", "#####", "######")
+"""Markdown'ın tanıdığı altı başlık seviyesi + çıplak taban (matris ÜRETİLMİŞ)."""
+
+
+def test_karar_gunlugu_SATIR_SATIR_da_okunur() -> None:
+    """DECISION_LOG satır-satır JSON (JSONL) yazılmışsa da okunur.
+
+    **ÖLÇÜLDÜ (2026-09-18, dördüncü tur, 906 sn):** araç günlüğü köşeli ayraçsız,
+    satır başına bir nesne olarak yazdı; bir önceki turda AYNI araç düzgün dizi
+    yazmıştı. Ayrıştırıcı `Extra data: line 2 column 1` ile düştü ve tur yandı.
+    İki biçim de TEK ANLAMLIDIR — belirsizlik yok, yalnız yazım farkı.
+
+    Tolerans sessiz DEĞİL: bozuk bir satır hâlâ turu düşürür (negatif kontrol
+    aşağıdaki testte).
+    """
+    satirlar = '{"a": 1}\n\n{"a": 2}\n'
+    assert synthesis._json_govdesi(f"```json\n{satirlar}```", "DECISION_LOG") == [
+        {"a": 1},
+        {"a": 2},
+    ]
+
+
+def test_bozuk_satir_HALA_turu_dusurur() -> None:
+    """Negatif kontrol: JSONL toleransı ayrıştırıcıyı körleştirmez."""
+    with pytest.raises(synthesis.SynthesisFailed):
+        synthesis._json_govdesi('```json\n{"a": 1}\nbu satır JSON değil\n```', "X")
+
+
+@pytest.mark.parametrize(
+    "sonek", ("", " — açıklama", " (operatör onay ekranı)", ": iki nokta")
+)
+def test_section_gate_accepts_heading_suffixes(sonek: str) -> None:
+    """**ÖLÇÜLDÜ (2026-09-18):** araç `# 4) ÖZET (operatör onay ekranı)` yazdı.
+
+    Kapı o bölümü YOK saydı ve 1074 sn süren, DÖRT BÖLÜMÜ DE ÜRETİLMİŞ tur
+    düştü. Sözleşme `4) ÖZET — operatör onay ekranı için:` yazar; araç aynı
+    açıklamayı parantezle verdi. Addan SONRASI açıklamadır.
+    """
+    metin = re.sub(
+        r"(?m)^(\d\) [A-ZÇĞİÖŞÜ_ ]+?)(?= —|$)", rf"\1{sonek}",
+        _sentez_metni(_tam_icerik(), [], ["Soru?"]),
+    )
+    bolumler, hatalar = synthesis._bolumlere_ayir(metin)
+    assert hatalar == [], (sonek, hatalar)
+    assert tuple(bolumler) == synthesis.SENTEZ_BOLUM_ANAHTARLARI
+
+
+@pytest.mark.parametrize("onek", MARKDOWN_BASLIK_ONEKLERI)
+def test_section_gate_accepts_markdown_heading_marks(onek: str) -> None:
+    """Sentez kapısı da başlık İŞARETİNE değil numara+ada bakar.
+
+    Denetçi kapısındaki kusurun İKİZİ burada duruyordu (aynı desenin kopyası).
+    2026-09-18'de ölçüldü: iki DENETÇİ de bağımsız olarak `## 1) …` yazdı;
+    sentez aracı da aynı refleksle yazsaydı bu kapı bir sonraki adımda aynı
+    şekilde düşerdi. Kusur denetçi turunda görüldüğü için burada da kapatılır
+    (tek hata izole değildir — onu doğuran desen bu dosyaya kopyalanmıştı).
+    """
+    metin = _sentez_metni(_tam_icerik(), [], ["Soru?"])
+    if onek:
+        metin = re.sub(r"(?m)^(\d\) )", rf"{onek} \1", metin)
+    bolumler, hatalar = synthesis._bolumlere_ayir(metin)
+    assert hatalar == [], hatalar
+    assert tuple(bolumler) == synthesis.SENTEZ_BOLUM_ANAHTARLARI
+
+
+def test_section_gate_still_rejects_a_non_heading_prefix() -> None:
+    """Yedi `#` markdown başlığı DEĞİLDİR — tolerans seviyelerle sınırlı."""
+    metin = re.sub(
+        r"(?m)^(\d\) )", r"####### \1", _sentez_metni(_tam_icerik(), [], [])
+    )
+    _, hatalar = synthesis._bolumlere_ayir(metin)
+    assert hatalar, "başlık olmayan önek bölüm sayılmamalı"
+
+
+async def test_istem_EK_L_sema_seklini_SEMADAN_uretir(kosu, tmp_path) -> None:
+    """EK-L alan şekillerini YAZIM KAPISININ şema modülünden türetir.
+
+    **Neden makineden (2026-09-18, üçüncü sözleşme sapması):** `cta_kaliplari`
+    öğesi şemada `{kalip, tur, gerekce}` NESNESİDİR; sözleşmenin düz yazısı
+    yalnız `cta_kaliplari[]` diyordu. Araç düz metin dizisi yazdı ve 1074 sn
+    süren tur yazım kapısında düştü — adayın ÖTEKİ sekiz alanı geçmişti.
+    Aynı gün bu üçüncü kez oldu (başlık biçimi · `oge_sha` · CTA şekli): elle
+    bakımlı düz yazı ile makine kapısı arasındaki sapma tek tek yamanamaz.
+    EK-L kapının OKUDUĞU sabitlerden üretilir; şema değişirse ek kendiliğinden
+    değişir ve bu test anahtar kümesini yeniden ölçer.
+    """
+    icerik = _tam_icerik()
+    _, runner = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    istem = runner.istem_metni
+    assert istem is not None
+    assert "## EK-L" in istem
+    for anahtar in sorted(sector_content_schema.CTA_ITEM_KEYS):
+        assert anahtar in istem, anahtar
+    for yuva in sector_content_schema.SPECIAL_DAY_SLOTS:
+        assert yuva in istem, yuva
+
+
+async def test_istem_EK_A_ve_EK_K_tasir(kosu, tmp_path) -> None:
+    """Sözleşmenin saydığı EK-A (brief) ve EK-K (kök rehber) isteme GİRER.
+
+    **ÖLÇÜLDÜ (2026-09-18, resmî tur):** istem 73 KB'tı ve EK-H/I/J + iki
+    denetçi raporunu taşıyordu; sözleşmenin saydığı **EK-A ve EK-K hiç yoktu.**
+    Araç bunu kendi ağzıyla bildirdi — *"EK-K's absence means the root-guidance
+    nuance check simply cannot be performed"* — ve nüans kontrolünü yapamadan
+    tur düştü. Sözleşme ikisi için de "komut otomatik ekler" der.
+    """
+    icerik = _tam_icerik()
+    _, runner = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    istem = runner.istem_metni
+    assert istem is not None
+    assert "## EK-A" in istem and BRIEF_METNI in istem
+    assert "## EK-K" in istem and KOK_REHBERI_METNI in istem
+
+
 async def test_unparseable_output_marks_incomplete(kosu, tmp_path) -> None:
     """Biçim kapısı: dört bölümü taşımayan çıktı SONUÇ DEĞİLDİR."""
     db, run_id = kosu
@@ -1070,6 +1195,8 @@ async def test_invalid_round_blocks_synthesis(kosu, tmp_path) -> None:
             db,
             gecersiz,
             run_id=run_id,
+            brief=BRIEF_METNI,
+            kok_rehberi=KOK_REHBERI_METNI,
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),
@@ -1100,6 +1227,8 @@ async def test_relative_dest_is_refused(kosu, tmp_path) -> None:
             db,
             _tur(),
             run_id=run_id,
+            brief=BRIEF_METNI,
+            kok_rehberi=KOK_REHBERI_METNI,
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),
@@ -1139,6 +1268,8 @@ async def test_run_id_grammar_gates_the_destination(
             db,
             _tur(),
             run_id=bozuk_id,
+            brief=BRIEF_METNI,
+            kok_rehberi=KOK_REHBERI_METNI,
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),
@@ -1169,6 +1300,8 @@ async def test_round_from_another_snapshot_is_refused(kosu, tmp_path) -> None:
             db,
             _tur(snapshot_sha="b" * 64),
             run_id=run_id,
+            brief=BRIEF_METNI,
+            kok_rehberi=KOK_REHBERI_METNI,
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),
