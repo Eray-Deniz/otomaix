@@ -112,6 +112,7 @@ gerekirse ayrı karar.
       *Geçici artefakt:* `/home/codex/t3-probe/` — **silindi 2026-09-17** (kapanış turunda; `test -e` ile yokluğu doğrulandı).
 
 ## Faz 2 — Paketin yeri → **TASARIM DEĞİŞTİ (2026-09-17): taşıma YOK, sahne dizini VAR**
+## → **FAZ 2 BİTTİ 2026-09-18** (T4 · T5 · T6 · T6b)
 
 **Neden taşıma terk edildi (ölçümle gerekçeli).** İlk tasarım "çıktı ağacını `/root` dışına
 taşı, kutulu kullanıcı okusun" diyordu. İki ölçüm bunu çürüttü:
@@ -195,11 +196,50 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
       (CPython 3.12.3): `mkdtemp` dönüşünü `os.path.abspath`'ten geçirir, o da `..`'yı
       sözdizimsel olarak normalleştirir; symlink normalleşmez. `..` ayağı kaynak tarafında
       ölçülüyor. Gerekçe testin kendi docstring'inde yazılı.
-- [ ] **T6** Kutulu kullanıcının kanonik `denetim/` ağacına GİREMEDİĞİNİ teste bağla
-      (T2'deki tripwire'ın kapsamına alınır — bugün ölçüldü: **DENIED**).
-- [ ] **T6b** Dış depoda `denetim/` **izlenmiyor ama `.gitignore`'da da DEĞİL** (`?? denetim/`).
-      Yanlışlıkla commit edilirse pin düşer ve CLI'ın her alt komutu durur. `.gitignore`'a
-      eklenmeli — `kosu/` zaten orada.
+- [x] **T6** Kanonik `denetim/` ağacı kutulu kullanıcıya KAPALI — **BİTTİ 2026-09-18.**
+      Ağaç, T2 tripwire'ının kapsamına ALINDI: `_hedefler()` artık kanonik ağacı da içeriyor,
+      yani hem yasak-erişim testi hem onun pozitif kontrolü aynı kapıdan okuyor. Üstüne
+      iddianın KENDİNİ adlandıran ayrı bir test eklendi — genel test, ağaç boş olsa da yeşil
+      kalırdı ve "geçmiş raporlar okunamıyor"un hiç ölçülmediği fark edilmezdi.
+
+      **Hedefler kavramdan türetiliyor, elle yazılmıyor:** deponun kökü
+      (`runs.ARASTIRMA_DEPOSU_KOKU`) + kökün DOĞRUDAN çocukları (yarın eklenen aşama klasörü
+      kendiliğinden kapsama girer) + `runs.ASAMALAR`'dan türeyen aşama ağaçlarının TAMAMI.
+      Ölçüldü: **46 düğüm** (toplam hedef 57), koşum **2,5 s**. Kök de ölçülüyor çünkü kutu
+      `~root`'un `700` iznine dayanıyor — depo bir gün `/root` dışına taşınırsa kutu SESSİZCE
+      açılır ve yalnız yaprakları ölçen bir tarama bunu göremez.
+
+      **Anti-vacuity:** test, hedefler arasında `denetim/` altında en az bir GERÇEK DOSYA
+      olmasını şart koşuyor (boş klasör hiçbir şey kanıtlamaz); ağaç yoksa sessiz yeşil değil
+      açık gerekçeli skip.
+
+      **Mutasyon — sızıntı ayağı ayrı kanıtlandı.** İlk mutasyon (depo kökü → `/etc`) testi
+      kırmızı yaptı ama YANLIŞ sebeple (boşluk kapısı ateşledi, sızıntı kapısı değil). İkinci
+      mutasyon doğru kurgulandı: `/tmp` altında dünyaya açık sahte bir `denetim/kosu-x/
+      denetci-1/rapor.md` ağacı kuruldu → test *"codex kullanıcısı kanonik ağaçtan şunları
+      OKUYABİLDİ: …/rapor.md"* diyerek kırmızı döndü. Ölçüm gerçekten erişim ölçüyor.
+      **Tam takım:** 4555 passed / 0 failed / 334,91 s.
+- [x] **T6b** Dış depo `denetim/` ağacını YOK SAYIYOR — **BİTTİ 2026-09-18,
+      `.gitignore` DEĞİL yerel `.git/info/exclude` ile (Eray kararı).**
+
+      **Neden `.gitignore` değil — ölçüldü.** `contracts.verify_pin` deponun HEAD'ini
+      `pin.commit` ile karşılaştırıyor. Yani `.gitignore`'a tek satır eklemek için atılacak
+      commit, pini ANINDA düşürür (HEAD `abb1850` kayar) ve CLI'ın her alt komutu fail-closed
+      durur; toparlamak için monorepo'da ayrı bir pin tazeleme commit'i gerekirdi. Yerel
+      exclude aynı korumayı HEAD'e dokunmadan verir.
+      **Doğrulama:** `git check-ignore -v denetim/` → `.git/info/exclude:7:denetim/` ·
+      `git status` artık `?? denetim/` GÖSTERMİYOR · HEAD hâlâ `abb1850` · pin kapısı taze
+      koşuldu, GEÇTİ.
+
+      **Bedeli dürüstçe: yerel exclude SÜRÜMLENMEZ.** Depo yeniden klonlanırsa koruma gelmez.
+      Kaybı yakalayan tripwire `tests/test_contract_pin.py` içinde, `kosu/` kardeşinin yanında:
+      satır aramaz, `git check-ignore`'a EFEKTİF kararı sorar. Pozitif kontrolü var (sözleşme
+      dosyası yok sayılMAmalı — prob ayrım yapmıyorsa yeşil anlamsızdır). **Mutasyon:** exclude
+      satırı kaldırıldı → test kırmızı (`check-ignore rc=1`), geri kondu → yeşil.
+
+      **Kapsam dışı bırakılan iki komşu:** `Kuyumculuk/` ve `silinecek/` de izlenmiyor ve
+      exclude'da değil; aynı kazayla (`git add .`) aynı sonucu doğururlar. Dar talimat
+      genişletilmedi — Eray'a not düşüldü, kararı onun.
 
 ## Faz 3 — Alt süreci kutuya sok
 
