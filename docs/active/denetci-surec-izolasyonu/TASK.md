@@ -482,12 +482,32 @@ izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste Ç
   `paket icerigi` 4, `KARDES TURUN PAKETI` 1 dosyada; dizin kutulu kullanıcıya OKUNABİLİR.
   Turlar-arası bağımsızlık bozuluyor (tur-içi K-79 körlüğü bozulmuyor — denetci-1 root'ta).
 
-- **F3 [high] — `/tmp` paylaşımı sahne izolasyonunu kırıyor + diskte KALINTI sahne var.**
+- **F3 [high] — KISMEN kapandı 2026-09-18: KEŞİF kapandı, bilinen-yolla erişim KAPANMADI.**
+  Sahne kökü `/tmp`'den çıkarıldı; artık `/var/lib/otomaix-denetci-sahne` altında ve o dizin
+  **root'un, `0711`** — girilir, LİSTELENMEZ. **Kalıntı sahne silindi** (`/tmp/denetci-sahne-uoiaj30t`,
+  2026-09-17; `/tmp`'de sahne kalmadığı doğrulandı).
+  **Kapanış ölçümü (gerçek codex, üretim yolu):** `ls <üst dizin>` → **DENIED** (keşif kapalı);
+  ama yolu prompt'ta VERİLDİĞİNDE kardeş paketi **hâlâ okudu**. Yani kapanan şey adın
+  KEŞFEDİLEBİLİRLİĞİ; `mkdtemp`'in rastgele son eki tahmini pratikte imkânsız kılıyor ama bu
+  "erişim kapalı" DEMEK DEĞİL. **Kalan yüzey:** bir yol sızarsa (örn. F2'deki oturum kayıtları
+  `workdir:` satırını taşıyor) o sahne okunur. F2 kapanmadan bu ayak tam kapanmaz.
+  **Sahiplik/izin sözleşmesi ayrıştırıldı:** üst dizin başkasınınsa koşum DURUR (onarılmaz —
+  root'la `chown`'lamak başkasının dizinini ele geçirmek olurdu); izin yanlışsa ONARILIR (tek
+  gevşek umask tüm turu öldürmemeli — ölçüldü: `mkdir(mode=0o711)` umask 077 altında `0700` üretiyor).
+  **Üç mutasyon yakalandı** (sahiplik kapısı söküldü · yabancı dizin chown'la ele geçirildi ·
+  sahne `/tmp`'ye geri kondu); **bir kol mutasyonla kanıtLANAMADI** ve dürüst etiketi kodda:
+  onarım-sonrası doğrulama (chmod'un sessizce etkisiz kalması) bu makinede provoke edilemedi.
+  *Aşağıdaki özgün bulgu kaydı korunuyor:*
   **Ölçüldü:** kutulu codex `/tmp/denetci-sahne-*`'ı listeledi, kardeş sahnenin paketini OKUDU,
   `/tmp`'ye yazdı (uid 1001, diskten doğrulandı). Ayrıca `/tmp/denetci-sahne-uoiaj30t` **2026-09-17
   11:23'ten kalma** — bu, düşürülen `SIGKILL` kalıntısının yeniden-açma koşuludur ve GERÇEKLEŞTİ.
 
-- **F4 [high] — Sahne, ayrıcalıklı işler bitmeden devrediliyor; `chmod` symlink izliyor.**
+- **F4 [high] — ~~Sahne, ayrıcalıklı işler bitmeden devrediliyor~~ → KAPANDI 2026-09-18.**
+  Sıra ters çevrildi: `chmod`'lar devretmeden ÖNCE, çocuklar sonra, **kök EN SON**. Kök
+  devredilene kadar ağaç root-only `0700`, yani kutulu kullanıcı içeri hiç giremez ve devir anına
+  kadar hiçbir girdiyi değiştiremez. **Doğrulama:** yeni test ayrıcalıklı çağrı dizisini kaydedip
+  "sahne ağacındaki SON işlem kökün devri" invariantını ölçüyor. **İki mutasyon da yakalandı**
+  (eski sıra geri kondu · kök önce devredildi). *Aşağıdaki özgün bulgu kaydı korunuyor:*
   Sıra: `chown(kok)` → çocuklar → **`sahne.chmod(0o700)`**. Devretmeden sonra root hâlâ `codex`'in
   sahip olduğu ağaçta iş yapıyor ve `Path.chmod` symlink İZLER (ölçüldü: hedefin izni 0700 oldu).
   **Kapanışı ucuz:** `chmod`'u devretmeden ÖNCE yap, `kok`'u EN SON devret.
