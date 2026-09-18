@@ -250,14 +250,43 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
       exclude'da değil; aynı kazayla (`git add .`) aynı sonucu doğururlar. Dar talimat
       genişletilmedi — Eray'a not düşüldü, kararı onun.
 
-## Faz 3 — Alt süreci kutuya sok
+## Faz 3 — Alt süreci kutuya sok — **BİTTİ 2026-09-18** (T8 · T7 · T9)
 
-- [ ] **T7** Ayrıcalık düşürme — **YALNIZ `denetci-2` (codex).** Alt süreç root değil, kutulu
-      kullanıcı olarak koşsun. `denetci-1` (claude) root kalır: kapsam düzeltmesi yukarıda,
-      gerekçe ölçülmüş. Önce kırmızı test, sonra uygulama.
-      **Bağlı iş:** sahnenin sahipliği de ARAÇ BAŞINA olmalı. Bugün `_sahne` her koşumda sahneyi
-      kutulu kullanıcıya devrediyor (T4); claude root koşacağı için onun sahnesi root'ta kalmalı
-      — devretmek, kutulu kullanıcıya gereksiz yere paketin kopyasını açar.
+- [x] **T7** Ayrıcalık düşürme — **BİTTİ 2026-09-18, YALNIZ `denetci-2` (codex).**
+      `denetci-1` (claude) çağıranın kimliğiyle koşmaya devam ediyor; kapsam düzeltmesi
+      yukarıda, gerekçe ölçülü.
+
+      **Ne indi.** `ToolSpec` artık izolasyon profilini taşıyor (`kullanici`, **beyan
+      ZORUNLU — varsayılan YOK**; varsayılan olsaydı yarın eklenen bir araç sessizce root'ta
+      koşardı). Kimlik ARACIN beyanından çözülür, modül sabitinden değil. Ayrıcalık düşürme
+      `user`/`group`/`extra_groups=[]` ile yapılıyor (yan gruplar da düşer). **Sahnenin
+      devretmesi de profili izliyor:** kutusuz aracın sahnesi çağıranda kalır — T4'ten kalan
+      tutarsızlık buydu, sahne her koşumda kutuya devrediliyordu ve oraya hiç düşmeyen bir
+      araç için paketin kopyasını boş yere açıyordu.
+
+      **GERÇEK ARAÇLARLA ÜRETİM YOLU KOŞTU** — bu, "sahne gerçek denetçi araçlarıyla hiç
+      koşmadı" borcunu kapatıyor. `SubprocessRunner.run` üzerinden, gerçek argv ile:
+      `denetci-1` (claude, kutusuz) **rc=0, `PONG`, 2,7 s** · `denetci-2` (codex, kutulu)
+      **rc=0, `PONG`, 6,0 s**, alt sürecin kendi bastığı çalışma dizini sahne
+      (`/tmp/denetci-sahne-*/denetci-2`), kum havuzu satırı `sandbox: read-only`. Kanonik
+      ağaç iki rolde de dokunulmadan kaldı (parmak izi: 2 dosya).
+
+      **Doğrulama — 4 yeni test, yazıldığında 4'ü de kırmızı.** Kutulu araç: uid düşüyor,
+      `HOME` kutulu evi gösteriyor, sahne onun. Kutusuz araç: kimlik çağıranın, `HOME` miras,
+      sahne çağıranın. Üçü de ÇOCUĞUN bastığı değerlerden ölçülüyor.
+      **Beş mutasyonun beşi yakalandı:** `HOME` üst yazımı söküldü · ayrıcalık düşürme söküldü ·
+      devretme profili yok sayıp hep kutuya verdi · profil alanına varsayılan kondu ·
+      bilinmeyen kullanıcı sessizce root'a düştü.
+
+      **Ölçülmüş yan bulgu:** kutulu kullanıcı `/root` altındaki sanal ortam yorumlayıcısını
+      ÇALIŞTIRAMIYOR (`PermissionError 13`) — kutunun kendi özelliği. Gerçek araçlar
+      `/usr/bin` altında olduğu için etkilenmiyor; kutulu testler sistem `python3`'ünü
+      kullanıyor, gerekçe yardımcının docstring'inde.
+
+      **Bayatlayan beyan düzeltildi:** `run_audit_round`'un B3 kalan-risk metni *"kum havuzu ·
+      konteyner · ayrı kullanıcı EKLEMEZ"* diyordu; `denetci-2` için artık yanlış. Beyan
+      daraltıldı — kutusuz araç için aynen geçerli, kutulu araç için ayrı kullanıcı VAR,
+      kapsayıcı/ad-alanı izolasyonu hâlâ yok.
 
       **FİZİBİLİTE ÖLÇÜLDÜ 2026-09-18 — mekanizma ÇALIŞIYOR, engel KİMLİK.** Dört koşum,
       hepsi GERÇEK argv (`ARAC_KOMUTLARI`'ndan okundu), gerçek sahnede, `subprocess.run(...,
@@ -285,15 +314,16 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 
       *Yan ölçüm:* kutulu Codex sahnede `trust_level` girdisi OLMADAN koştu (`/tmp/t7-probe-*`
       config'te yok, yine de rc=0) — sahne dizini için güven kaydı gerekmiyor.
-- [ ] **T8** Ortam beyaz listesi araç başına ayrışsın. Bugün `HOME` miras alınıyor ve
-      `/root`'u gösteriyor. **2026-09-18 ölçümü bunu T7'nin ÖN KOŞULU yaptı** ve hedefi
-      netleştirdi: `denetci-2` → `HOME=/home/codex` (kutulu kullanıcının kendi kimliği ORADA
-      VAR ve çalışıyor: rc=0, `PONG`); `denetci-1` → `HOME=/root` (bugünkü gibi, root koştuğu
-      için sorunsuz). Sıra: **T8 → T7**.
-- [ ] **T9** öne alındı — profil "hangi kullanıcı" alanı, T7'nin araç başına çalışmasının
-      MEKANİZMASIDIR (aşağıdaki T9 maddesi). Ayrı bir son-rötuş değil.
-- [ ] **T9** İzolasyon profiline "hangi kullanıcı" alanı eklensin; bilinmeyen kullanıcı
-      fail-closed düşsün (mevcut "her araç profilini beyan eder" yapısı genişletilir).
+- [x] **T8** Ortam beyaz listesi araç başına ayrıştı — **BİTTİ 2026-09-18.** `HOME` artık
+      profilden geliyor: kutulu araçta kullanıcının KENDİ evi (`pwd` kaydından türetilir,
+      sabit yazılmaz), kutusuz araçta miras. Gerekçe ölçüldü: `HOME=/root` ile kutulu `codex`
+      *"Failed to read config file /root/.codex/config.toml: Permission denied"* diyerek
+      düşüyordu.
+- [x] **T9** İzolasyon profilinde "hangi kullanıcı" alanı — **BİTTİ 2026-09-18, T7 ile
+      BİRLİKTE** (son rötuş değil, T7'nin mekanizmasıydı). Beyan zorunlu; bilinmeyen kullanıcı
+      fail-closed düşüyor ve alt süreç HİÇ koşmuyor (mutasyonla kanıtlandı). Gerçek eşlemenin
+      beyanı bağımsız sabitlerle ölçülüyor: `denetci-1` → `None`, `denetci-2` → `codex`,
+      `sentez` → `None` (eşlemeden okunsaydı yanlış bir profil de geçerdi).
 
 ## Faz 4 — Ağı aç
 
@@ -348,9 +378,10 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
   servis henüz dağıtılmadı, yani bugün tetikleyicisi yok. **Yeniden açma koşulu:** diskte
   kalmış bir sahne görülürse, ya da servis kapsayıcıda koşup `kill -9` rutin hâle gelirse.
   *(Erteleme değil düşürme — "sonra bakarız" demiyoruz, koşul gelmeden açılmaz.)*
-- **Sahne GERÇEK denetçi araçlarıyla hiç koşmadı.** Dokuz test zararsız bir alt süreçle
-  ölçüldü. `HOME` hâlâ `/root`'u gösteriyor ve kutulu kullanıcı oraya giremez — gerçek CLI
-  sahnede kendi kimliğini bulamayabilir. **Evi: T8.**
+- **~~Sahne GERÇEK denetçi araçlarıyla hiç koşmadı~~ — KAPANDI 2026-09-18.** İki gerçek araç
+  da üretim yolundan (`SubprocessRunner.run`) koştu ve `PONG` döndürdü: claude kutusuz rc=0
+  (2,7 s), codex kutulu rc=0 (6,0 s), çalışma dizini sahne, kanonik ağaç dokunulmadı.
+  `HOME` sorunu T8 ile çözüldü.
 - **Servis dağıtımı bağımlılığı.** Backend servisi henüz dağıtılmadı (Plan 2 Task 18'in kalan
   ayağı). Servis kapsayıcıda root olarak koşarsa ayrıcalık düşürmenin orada da çalıştığı ayrıca
   ölçülmeli. **Evi: Plan 2 Task 19 Step 11, servis dağıtımıyla aynı tur.**
@@ -383,3 +414,7 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 - **2026-09-18 — Faz 4'ün claude ayağı kutuya BAĞLI DEĞİL.** T11 (claude'a `WebFetch`) bugünkü
   kurulumda inebilir; claude'un okuması zaten hapsedilmiş olduğu için ağ vermek yeni bir okuma
   yolu açmaz. Kutuya bağlı olan tek ayak T10'dur (codex + `network_access=true`).
+- **2026-09-18 — Profil beyanı ZORUNLU, varsayılansız.** `ToolSpec.kullanici` alanına
+  varsayılan konmadı: varsayılan, "bu araç neden kutusuz" sorusunu sessizce yutar ve yarın
+  eklenen bir aracı beyan almadan root'ta koşturur. Bedeli: her `ToolSpec` çağrısı (testler
+  dâhil) profilini yazmak zorunda.
