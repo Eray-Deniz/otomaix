@@ -1,88 +1,92 @@
 ---
 task: denetci-surec-izolasyonu
-written: 2026-09-17
+written: 2026-09-18
 ---
 
 # Resume From
 
-**Sıradaki iş: T5 — sahne dizininin yol kapısından geçtiğini ve kanonik pakete
-DOKUNMADIĞINI teste bağlamak.** Faz 1 ve T4 indi; ayrıntı ve doğrulama `TASK.md`'de.
+**Sıradaki iş: dual review'ın ucuz iki fix'i (Eray kararı 2026-09-18).**
 
-T5'in iki ayağı var:
+1. **F4 — sahne devretme sırası.** `SubprocessRunner._sahne` içinde `sahne.chmod(0o700)` devretmeden
+   SONRA koşuyor; `Path.chmod` symlink İZLER (ölçüldü). Sıra ters çevrilecek: `chmod`'lar önce,
+   `kok`'un devri EN SON. Önce kırmızı test.
+2. **F3'ün bir ayağı — sahne kökü `/tmp` dışına.** Kutulu codex `/tmp`'yi yazılabilir görüyor
+   (`workspace-write` kum havuzu), dolayısıyla kardeş/kalıntı sahneleri okuyabiliyor. Sahne kökü
+   kutulu kullanıcının listeleyemediği bir üst dizine taşınacak. **Ayrıca:**
+   `/tmp/denetci-sahne-uoiaj30t` (2026-09-17 11:23'ten kalma) temizlenecek.
 
-1. **Yol kapısı.** Sahne dizini de takma ad / symlink / beklenmedik kök barındırmamalı.
-   Bugün sahne `mkdtemp` ile açılıyor, yani yol güvenli görünüyor — ama bu ÖLÇÜLMEDİ,
-   varsayım. Kanonik paket için `kok_yolunu_kapila` ve `PacketRef._rol_yollarini_kapila`
-   aynı işi yapıyor; sahne için karşılığı yok.
-2. **Kanonik pakete dokunulmuyor.** Alt süreç sahneye dosya yazsa/silsin bile kanonik
-   rol dizininin ağaç parmağı DEĞİŞMEMELİ. Ölçüm için hazır yardımcı var:
-   `_rol_agaci_parmagi`. Sahte araç sahneye dosya yazsın, sonra kanonik ağacın parmağı
-   koşum öncesi/sonrası karşılaştırılsın.
-
-**Paket kökü YERİNDE kalır** — `ARASTIRMA_DEPOSU_KOKU` değişmez, mevcut üç-kök testleri
-aynen geçerli.
+**Ertelenmeyen ama AYRI konuşulacak:** F1 (kritik — kutulu kimlik + ağ), F2 (oturum kayıtları
+kutulu evde kalıcı), F5 (`denetci-1` root + `WebFetch`, sürekli kapı yok), F6 (hedef allowlist'i
+yok). Dördü de tasarım kararı gerektiriyor; **evleri TASK.md "Review bulguları" bölümü.**
 
 **İlk komut — tabanı gör:**
-`cd apps/social/backend && .venv/bin/python -m pytest -q` → beklenen **4547 passed**.
-⚠️ **Tek koşum.** İki pytest oturumu aynı anda koşarsa ortak test şablon veritabanını
-birbirinden çekerler ve sahte hatalar üretirler.
+`cd apps/social/backend && .venv/bin/python -m pytest -q` → beklenen **4562 passed**.
+⚠️ **Tek koşum.** İki pytest oturumu aynı anda koşarsa ortak test şablon veritabanını birbirinden
+çekerler ve sahte hatalar üretirler.
 
-**Dal:** `feat/sektor-bilgi-paketi-plan2`, HEAD `1fa0c10`. Çalışma ağacı TEMİZ.
+**Dal:** `feat/sektor-bilgi-paketi-plan2`, HEAD `0683749`. Çalışma ağacı: TASK+HANDOFF güncel
+(commit bekliyor). **22 commit push EDİLMEDİ.**
 
 # Verification
 
-**Bu oturumda KOŞAN komutlar ve çıktıları:**
+**Bu oturumda KOŞAN komutlar ve TAZE çıktıları:**
 
-| Ne | Komut | Sonuç |
-|---|---|---|
-| Tam takım (T4 öncesi) | `pytest -q` | 4538 passed / 332,14 s |
-| Tam takım (T4 sonrası) | `pytest -q` | **4547 passed / 331,41 s** |
-| Kutu tripwire'ı | `pytest tests/test_auditor_process_isolation.py -q` | 3 passed |
-| T1 — sudo | `sudo -l -U codex` | "not allowed to run sudo" |
-| T1 — gruplar | `id codex` | `1001(codex),100(users)` |
-| T3 — kutulu ağ | kutulu kullanıcıda `codex exec` + `network_access=true` | canlı başlık `11:09:28 GMT`, sistem saati `11:09:33` → 5 sn; `id -un` → `codex` |
-| T4 — mutasyon | altı mutasyon, her biri ayrı koşum | altısı da kırmızı döndü (dökümü `TASK.md` T4) |
+| Ne | Sonuç |
+|---|---|
+| Tam takım (oturum başı, taban) | **4547 passed** / 333,90 s / rc=0 |
+| Tam takım (T5 sonrası) | 4554 passed / 333,45 s |
+| Tam takım (T6 sonrası) | 4555 passed / 334,91 s |
+| Tam takım (T6b sonrası) | 4556 passed / 333,66 s |
+| Tam takım (T7/T8/T9 sonrası) | 4560 passed / 337,66 s |
+| Tam takım (Faz 4 + kanarya sonrası) | **4562 passed / 0 failed / 338,48 s / rc=0** |
+| Mutasyon | **22 mutasyon, 22'si yakalandı** (T5'te 5 · T6'da 2 · T6b'de 1 · T7-T9'da 5 · Faz 4'te 6 · T13'te 1) |
+| Gerçek araçlar, üretim yolu | claude (kutusuz) rc=0 `PONG` 2,7 s · codex (kutulu) rc=0 `PONG` 6,0 s |
+| **K-14 canlı ön kontrol** | **iki araç da `erisim-var`, `tur_baslayabilir=True`** (claude 9,9 s · codex 22,8 s) |
+| T13 kanaryası | sekiz ayağın sekizi tuttu, `rc=0` (pozitif kontroller dahil) |
+| Kanarya totoloji sınaması | kutu söküldü → araç `.env` satırını bastı, imza YAKALANDI |
 
-**DENENMEYEN senaryolar — yeşil sayılmaz:**
+**DENENMEYEN / DOĞRULANMAYAN — yeşil sayılmaz:**
 
-- **Sahne GERÇEK denetçi araçlarıyla hiç koşmadı.** Dokuz testin hepsi zararsız bir Python
-  alt süreciyle ölçüldü. `claude -p` ve `codex exec` sahnede koşarken kendi yapılandırmasını
-  bulamayabilir — `HOME` hâlâ `/root`'u gösteriyor ve kutulu kullanıcı oraya giremez.
-  **Evi: T8** (ortam beyaz listesi araç başına ayrışsın). Bu, T4'ün eksiği değil, T8'in işi —
-  ama T4'ün yeşili "gerçek araç sahnede koşar" DEMEZ.
-- **Ayrıcalık düşürme (T7) inmedi.** Alt süreç bugün hâlâ root koşuyor. Sahne kuruldu ve
-  devredildi, ama kutu HENÜZ yürürlükte değil.
-- **T3b'nin ağ-AÇIK varyantı bugün tekrar ölçülmedi** — kapanış turunda prob harness
-  sınıflandırıcısına takıldı. Ayrıntı ve evi `TASK.md` Open Problems'da.
-- **Zincirin `denetim` · `sentez` · `motor` ayakları hâlâ HİÇ koşmadı** (Plan 2'nin kendi
-  durumu; bu görev onun önündeki engeli kaldırıyor).
+- **Hiçbir hakem test takımını koşturamadı** (Codex: yazılabilir temp yok; Claude alt-hakemi:
+  worktree'de `.venv` yok). Yukarıdaki takım/mutasyon sayıları **kontrolörün kendi koşumlarıdır**,
+  hakem teyidi YOK.
+- **`denetim` · `sentez` · `motor` ayakları hâlâ HİÇ koşmadı** (Plan 2'nin kendi durumu). Bu görev
+  önlerindeki K-14 engelini kaldırdı; tur henüz atılmadı.
+- **CLI bayraklarının (`--restricted`, sandbox kipleri) DAVRANIŞI** yalnız kanaryayla ölçülüyor;
+  kanarya takım dışında, elle koşuluyor ve **zamanlanmış evi yok** (review bulgusu F5).
+- **F2'nin tur-içi etkisi ölçülmedi:** oturum kayıtlarının kalıcılığı ölçüldü, ama bir sonraki
+  turun bunları FİİLEN okuyup raporuna kattığı denenmedi.
 
 # Risks
 
-- **`SIGKILL` sahneyi geride bırakır.** Silme `finally`'de; süreç 9 sinyaliyle ölürse
-  `finally` koşmaz ve `/tmp/denetci-sahne-*` diskte kalır. İçinde paketin kopyası vardır ve
-  kutulu kullanıcıya aittir — yani o kullanıcı adına koşan bir sonraki süreç okuyabilir.
-  **Bilinçli DÜŞÜRÜLDÜ, evi yok:** bakım işi kurmak için sebep zayıf (süreçleri biz
-  öldürmüyoruz, servis henüz dağıtılmadı). **Yeniden açma koşulu:** diskte kalmış bir sahne
-  görülürse, ya da servis kapsayıcıda koşmaya başlayıp `kill -9` rutin hâle gelirse.
-- **Sahne `/tmp` altında.** Paket büyükse `/tmp`'nin doluluğu koşumu düşürebilir; boyut
-  ÖLÇÜLMEDİ. **Yeniden açma koşulu:** gerçek bir tur disk hatasıyla düşerse.
+- **F1 kritik ve BU DAL açtı.** Kutulu codex `~/.codex/auth.json`'u okuyabiliyor ve ağı açık.
+  Kimlik bugün root'unkiyle AYNI hesabı taşıyor (`account_id` birebir) — yani sızarsa etkisi kutulu
+  hesapla sınırlı değil.
+- **`/tmp/denetci-sahne-uoiaj30t` şu an diskte** (2026-09-17). Düşürülen `SIGKILL` kalıntısının
+  yeniden-açma koşulu GERÇEKLEŞTİ; kutulu codex onu okuyabiliyor (ölçüldü).
 - **`/home/codex/.ssh/authorized_keys`** duruyor (1 anahtar) — kutulu kullanıcıya SSH ile
-  girilebilir. Bu görevin kapsamı dışında bırakıldı, `TASK.md` "Dokunulmayanlar".
+  girilebilir. Kapsam dışı bırakılmıştı; F1 ile birlikte yeniden değerlendirilmeli.
+- **Oturum dökümünde gerçek `DATABASE_URL` var.** Kanaryanın kutu-söküldü mutasyonunda basıldı.
+  Lokal DB (`127.0.0.1:5433`), dışarı kapalı; döndürme kararı Eray'da. Kanaryaya maskeleme eklendi,
+  ama hedefin kendisi hâlâ gerçek `.env` (review bulgusu F9).
 
 # Notes For Claude
 
-- **Sahne runner'ın içinde yaşıyor**, orkestrasyonda değil. Sahte runner kullanan testler
-  sahneyi GÖRMEZ; sahne davranışı yalnız gerçek alt süreçle ölçülür. Yeni sahne iddiası
-  eklerken bunu unutma — sahte runner'la yazılan bir sahne testi hiçbir şey ölçmez.
-- **Ölçüm çocuğun gözünden yapılır.** Mevcut dokuz test, alt sürecin kendi bastığı değerlere
-  bakıyor (nerede durduğu, ne okuyabildiği, klasörün sahibi/izni). Ebeveynin niyetini ölçen
-  bir test bu dosyada yeri olmayan bir testtir.
-- **Sahiplik ölçmek erişim ölçmek DEĞİLDİR.** Bu oturumda tam olarak bu hata yapıldı: sahne
-  doğru kişiye aitti ama üstündeki geçici kök root'ta kalmıştı — sahiplik testi yeşil, dizin
-  erişilemez. Kapanışı `sudo -u` ile zincirin tamamını deneyen test sağlıyor.
-- **Mutasyon kanıtı YENİ kapıya yazılır.** Değişmemiş yardımcıları yeniden mutasyona sokma.
+- **Kanaryanın hedef kümesi sınırla birlikte yeniden türetilir.** Hedefi "root'un sırrı" diye
+  seçmiştim; T10 ağı açınca asıl değerli sır kutulu kullanıcının KENDİ kimliği oldu ve kanarya onu
+  hiç denemedi. F1'i hakem buldu, kanarya değil.
+- **Serbest metinden "şu olmadı" kanıtlanmaz.** Kanaryanın ilk hâli "DENIED" kelimesini arıyordu ve
+  yanlış pozitif verdi. Kontrol artık olguya bakıyor (imza taraması · diskten doğrulama · pozitif
+  kontrol). Aynı ders yeni kapılar için de geçerli.
+- **Sahne runner'ın içinde yaşıyor**, orkestrasyonda değil; sahte runner kullanan testler sahneyi
+  GÖRMEZ. Sahne davranışı yalnız gerçek alt süreçle ölçülür.
+- **Ölçüm çocuğun gözünden yapılır** — ebeveynin niyetini ölçen test bu dosyalarda yeri olmayan
+  testtir. **Sahiplik ölçmek erişim ölçmek DEĞİLDİR.**
+- **Mutasyon kanıtı YENİ kapıya yazılır**; değişmemiş yardımcıları yeniden mutasyona sokma.
 
 # Notes For Codex
 
-Bu oturumda Codex hakem turu KOŞMADI. T15 review'ı Faz 3-4 bittikten sonra planlı.
+Codex bu oturumda **hakem olarak koştu** (`adversarial-review`, 496ddbd..d215452): 1 critical,
+3 high, 1 medium. Ham çıktı:
+`/root/.claude/logs/otomaix--ffc87809/2026-09-18-review-feat-sektor-bilgi-paketi-plan2-1.md`.
+Bulguların hepsi sentezde kontrolörün kendi ölçümüyle doğrulandı; hiçbiri sessizce düşürülmedi.

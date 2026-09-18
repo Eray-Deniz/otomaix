@@ -461,6 +461,52 @@ izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste Ç
   ayağı). Servis kapsayıcıda root olarak koşarsa ayrıcalık düşürmenin orada da çalıştığı ayrıca
   ölçülmeli. **Evi: Plan 2 Task 19 Step 11, servis dağıtımıyla aynı tur.**
 
+## Review bulguları — AÇIK (2026-09-18 dual review, fix-required)
+
+> Kaynak: `docs/reviews/2026-09-18-feat-sektor-bilgi-paketi-plan2.md` (iki bağımsız hakem: fresh
+> Claude subagent + Codex adversarial-review; aralık `496ddbd..d215452`). Altısının da MEKANİZMASI
+> kontrolörün kendi taze ölçümüyle doğrulandı. **`/security-review-claude-codex`'a geçiş bunlar
+> yüzünden BLOKE.**
+
+- **F1 [critical] — Kutulu codex kendi kimliğini okuyabiliyor, ağı da açık.** `HOME=/home/codex`
+  (T8) kutulu sürece `~/.codex/auth.json`'u gösteriyor; kum havuzu okumayı kısıtlamıyor; T10 ağı
+  açtı → oku+gönder zinciri tam. **Ölçüldü:** kutulu codex dosyanın sha önekini (`eebdf1ca1d57413b`)
+  ve boyutunu (3981) bastı, kontrolörün bağımsız ölçümüyle birebir. Bu yolu BU DAL açtı.
+  **Kanarya göremez** — hedefi root'un `.env`'i, kutulu kullanıcının kendi evi değil.
+  *Tasarım kararı gerekiyor (Eray): ayrı/dar kapsamlı kimlik · tur-ömürlü ev · ya da codex'te ağı
+  geri kapatıp web doğrulamasını claude'a bırakmak.*
+
+- **F2 [high] — Kutulu ev turlar arası TAM oturum kaydı tutuyor.** Sahne tasarımının merkez
+  gerekçesi *"kalıcı hiçbir şey kutulu kullanıcıya açılmaz"*dı; CLI o arşivi kutunun İÇİNDE yeniden
+  kuruyor (`~/.codex/sessions/**/rollout-*.jsonl`). **Ölçüldü:** bugün 28 kayıt; `PAKET-ICI` 4,
+  `paket icerigi` 4, `KARDES TURUN PAKETI` 1 dosyada; dizin kutulu kullanıcıya OKUNABİLİR.
+  Turlar-arası bağımsızlık bozuluyor (tur-içi K-79 körlüğü bozulmuyor — denetci-1 root'ta).
+
+- **F3 [high] — `/tmp` paylaşımı sahne izolasyonunu kırıyor + diskte KALINTI sahne var.**
+  **Ölçüldü:** kutulu codex `/tmp/denetci-sahne-*`'ı listeledi, kardeş sahnenin paketini OKUDU,
+  `/tmp`'ye yazdı (uid 1001, diskten doğrulandı). Ayrıca `/tmp/denetci-sahne-uoiaj30t` **2026-09-17
+  11:23'ten kalma** — bu, düşürülen `SIGKILL` kalıntısının yeniden-açma koşuludur ve GERÇEKLEŞTİ.
+
+- **F4 [high] — Sahne, ayrıcalıklı işler bitmeden devrediliyor; `chmod` symlink izliyor.**
+  Sıra: `chown(kok)` → çocuklar → **`sahne.chmod(0o700)`**. Devretmeden sonra root hâlâ `codex`'in
+  sahip olduğu ağaçta iş yapıyor ve `Path.chmod` symlink İZLER (ölçüldü: hedefin izni 0700 oldu).
+  **Kapanışı ucuz:** `chmod`'u devretmeden ÖNCE yap, `kok`'u EN SON devret.
+
+- **F5 [high, BOTH-AGREE] — `denetci-1` root koşarken `WebFetch` kazandı, sürekli kapısı yok.**
+  Ağ yokken `--restricted` gerilemesi "okur ama gönderemez"di; artık doğrudan sızdırma ve süreç
+  root. Testler bayrağın VARLIĞINI ölçüyor, DAVRANIŞINI değil; davranışı ölçen tek şey kanarya —
+  takım dışında, elle, **zamanlanmış evi yok**.
+
+- **F6 [high] — Hedef allowlist'i yok; T13'ün geri-çağrı ayağı karşılanmadı, yeniden tanımlandı.**
+  İki profilde de serbest dış çıkış var; paket içeriği herhangi bir URL'e gidebilir.
+
+**Medium/low (accepted_risk — fix EDİLMEZ, politika gereği):** T6b'nin sürümlenmemesi + kardeş test
+çelişkisi · kutu tripwire'ının sudo yolunda pozitif kontrol yokluğu · kanaryanın GERÇEK `.env`'i
+hedeflemesi · 8 low. Ayrıntı raporda.
+
+**Hakemlerin kapsamadığı (dürüst etiket):** hiçbir hakem test takımını koşturamadı. "4562 passed" ve
+"22 mutasyon" iddiaları kontrolörün kendi taze koşumlarına dayanıyor, hakem teyidi YOK.
+
 # Bu görev bitince sırada ne var (Plan 2'ye dönüş)
 
 > **2026-09-18: `denetim` ayağının önündeki engel KALKTI.** K-14 iki araç için de `erisim-var`
