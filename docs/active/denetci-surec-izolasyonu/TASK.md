@@ -471,12 +471,17 @@ izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste Ç
   ayağı). Servis kapsayıcıda root olarak koşarsa ayrıcalık düşürmenin orada da çalıştığı ayrıca
   ölçülmeli. **Evi: Plan 2 Task 19 Step 11, servis dağıtımıyla aynı tur.**
 
-## Review bulguları — AÇIK (2026-09-18 dual review, fix-required)
+## Review bulguları — F1/F5/F6 KOŞULLU KABUL (2026-09-18 dual review)
 
 > Kaynak: `docs/reviews/2026-09-18-feat-sektor-bilgi-paketi-plan2.md` (iki bağımsız hakem: fresh
 > Claude subagent + Codex adversarial-review; aralık `496ddbd..d215452`). Altısının da MEKANİZMASI
-> kontrolörün kendi taze ölçümüyle doğrulandı. **`/security-review-claude-codex`'a geçiş bunlar
-> yüzünden BLOKE.**
+> kontrolörün kendi taze ölçümüyle doğrulandı.
+>
+> **2026-09-18 — Eray F1, F5 ve F6'yı KOŞULLU KABUL ETTİ.** Etiket: *kabul edilmiş risk,
+> çözülmedi.* **Yeniden açılma koşulu:** denetim paketine ÜÇÜNCÜ TARAFTAN gelen ham içerik
+> girdiği gün üçü birden yeniden açılır (bugün paketleri Eray üretiyor; boru hattının ilan
+> edilmiş tehdit modeli `run_audit_round` gövdesinde *"girdinin özensiz olması, saldırgan
+> olması değil"*). Blok KALKTI — `/security-review-claude-codex` artık koşabilir.
 
 - **F1 [critical] — Kutulu codex kendi kimliğini okuyabiliyor, ağı da açık.** `HOME=/home/codex`
   (T8) kutulu sürece `~/.codex/auth.json`'u gösteriyor; kum havuzu okumayı kısıtlamıyor; T10 ağı
@@ -546,6 +551,33 @@ izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste Ç
 
 - **F6 [high] — Hedef allowlist'i yok; T13'ün geri-çağrı ayağı karşılanmadı, yeniden tanımlandı.**
   İki profilde de serbest dış çıkış var; paket içeriği herhangi bir URL'e gidebilir.
+  **KOŞULLU KABUL 2026-09-18** (yukarıdaki koşul). Kabul edilmeden önce çözüm yolu ÖLÇÜLDÜ —
+  yeniden açıldığı gün sıfırdan araştırılmasın diye buraya yazılıyor:
+
+  **claude ayağı (denetci-1) — mekanizma ÇALIŞIYOR, ölçüldü (kurulu CLI 2.1.276, üç koşum):**
+  izin kipi `manual` + `--permission-prompts none` + pozitif kümede DÜZ `WebFetch` +
+  `--allowedTools "…,WebFetch(domain:example.com)"` ile: listedeki adres GETİRİLDİ · liste dışı
+  adres (`https://example.org/?data=LEAK`) **REDDEDİLDİ, istek hiç kurulmadı** · paket dosyası
+  OKUNDU (iş bozulmuyor). **İki tuzak da ölçüldü, ikisi de sessiz:**
+  (a) kısıtı `--tools` içine yazmak (`--tools "…,WebFetch(domain:x)"`) aracı TAMAMEN düşürür —
+  model "böyle bir araç yok" der, tur K-14'te durur (fail-closed ama iş durur);
+  (b) **bugünkü `plan` kipinde izin kuralı HİÇ BAĞLAMAZ** — `WebFetch` salt-okunur sayılıp
+  otomatik onaylanıyor, yani kural yazılıp "kapattım" sanılabilir. Kalan tasarım sorusu: liste
+  SABİT olamaz (denetçinin işi paketin atıf verdiği rastgele kaynakları doğrulamak) → tur başına
+  paketin İÇİNDEKİ adreslerden türetilmeli.
+
+  **codex ayağı (denetci-2) — yapılandırmayla ÇÖZÜLMÜYOR, ölçüldü:** `SandboxWorkspaceWrite`
+  alanları `writable_roots` · `network_access` · `exclude_tmpdir_env_var` · `exclude_slash_tmp`
+  — adres listesi alanı YOK (binary'deki `allowed_domains` dizesi `WebSearchToolConfig`'e ve
+  tarayıcı aracına ait, kutunun ağına değil). Doğrudan deneme: `codex sandbox` bilinmeyen
+  `sandbox_workspace_write.allowed_domains` anahtarını **uyarısız yuttu** ve liste dışı
+  `https://example.org/?data=LEAK` isteği **200 döndü**. Kalan tek yol işletim sistemi seviyesi:
+  `codex` kullanıcısının doğrudan çıkışını kapatan kural + izinli adresleri geçiren ara sunucu
+  (`HTTP(S)_PROXY`). Bu, F1'in üçüncü seçeneğiyle AYNI iştir — doğru kurulursa F1+F5+F6'yı
+  BİRLİKTE kapatır.
+
+  **Dürüst etiket:** yalnız claude ayağını kapatmak SINIFI kapatmaz — sızdırma yolu codex
+  tarafında açık kalır. Ya ikisi birlikte, ya ikisi de kabul edilmiş risk.
 
 **Medium/low (accepted_risk — fix EDİLMEZ, politika gereği):** T6b'nin sürümlenmemesi + kardeş test
 çelişkisi · kutu tripwire'ının sudo yolunda pozitif kontrol yokluğu · kanaryanın GERÇEK `.env`'i
@@ -564,6 +596,21 @@ hedeflemesi · 8 low. Ayrıntı raporda.
 2. Yeni koşu kimliğiyle `denetim` turu (K-82: yarım kalan paket ezilmez).
 
 # Decisions Log
+
+- **2026-09-18 — F1, F5, F6 koşullu kabul edilmiş risk (Eray kararı).** Üçü de aynı ekseni
+  gösteriyor: *ağa çıkabilen ajan, okuyabildiğini gönderebilir.* Üçünün de parasız YAPISAL
+  kapanışı yok (F1: ayrı abonelik / API anahtarı / çekirdek seviyesi çıkış kuralı; F6: ara
+  sunucu + çıkış kuralı — ölçüldü, aşağıda). **Karar: çözülmedi + kabul edildi**, "handled"
+  DEĞİL. **Yeniden açılma koşulu:** pakete üçüncü taraftan ham içerik girdiği gün. Bedeli
+  açıkça kabul edildi: bugün denetçi alt süreçleri paketin içeriğini herhangi bir adrese
+  taşıyabilir ve kutulu codex tur boyunca kendi kimlik dosyasını okuyabilir. **Kazanılan:**
+  Plan 2'nin `denetim` ayağı açıldı, `/security-review-claude-codex` bloğu kalktı.
+
+- **2026-09-18 — F6'nın çözüm yolu KABULDEN ÖNCE ölçüldü.** Kabul kararı "nasıl kapatılacağı
+  bilinmiyor" diye değil, "maliyeti bugün ödenmiyor" diye verildi. Ölçümler F6 maddesinde
+  duruyor (claude ayağı çalışan mekanizma + iki sessiz tuzak; codex ayağında adres listesi
+  alanının olmadığı iki yöntemle doğrulandı). Gerekçe: koşul gerçekleşip bulgu yeniden
+  açıldığında araştırma sıfırdan başlamasın.
 
 - **2026-09-17 — Asimetri değil kutu.** İlk öneri "Claude'a web ver, Codex'e verme"ydi. Eray
   itiraz etti: *"birine ver diğerine verme"nin mantıklı tarafı ne"*. Ölçüm itirazı haklı çıkardı

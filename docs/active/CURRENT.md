@@ -9,9 +9,10 @@
 - **denetci-surec-izolasyonu** — Denetçi alt süreçlerini ayrı bir işletim sistemi
   kullanıcısının kutusuna almak, sonra ikisine de ağ vermek (2026-09-12 güvenlik
   review'ının S-2 kalıntısı). **2026-09-18: 15/15 madde indi, K-14 kapısı açıldı — Plan 2'nin
-  `denetim` ayağını bloke eden engel KALKTI.** Görev açık kalmaya devam ediyor çünkü dual
-  review'dan üç bulgu (F1 critical + F5/F6 high) KARAR bekliyor; `/security-review-claude-codex`
-  onlar yüzünden hard-block.
+  `denetim` ayağını bloke eden engel KALKTI.** **Aynı gün F1/F5/F6 Eray tarafından KOŞULLU
+  KABUL EDİLDİ** (koşul: denetim paketine üçüncü taraftan ham içerik girdiği gün yeniden
+  açılır) — `/security-review-claude-codex` hard-block'u KALKTI. Görev, Faz 5'in kalan
+  kayıt/kapanış ayakları için açık duruyor.
   **Durum, sıradaki iş ve açık borçlar:** `docs/active/denetci-surec-izolasyonu/TASK.md`;
   oturum devri `HANDOFF.md`.
 

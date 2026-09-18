@@ -1,138 +1,90 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-09-14
+written: 2026-09-18
 ---
 
 # Resume From
 
-> ✅ **2026-09-18 — ENGEL KALKTI.** `denetci-surec-izolasyonu` görevi bitti (15/15) ve K-14
-> canlı ölçüldü: **iki denetçi için de `erisim-var`, `tur_baslayabilir=True`** (claude 9,9 s ·
-> codex 22,8 s). Aşağıdaki `denetim` komutu artık koşturulabilir.
->
-> ⚠️ **Ama önce bir KARAR var.** O görevin dual review'ından üç bulgu açık (F1 critical + F5/F6
-> high): ağa çıkabilen ajan, okuyabildiği her şeyi gönderebilir — en ağırı, kutulu codex'in
-> Eray'ın OpenAI oturum jetonunu okuyabilmesi. Parasız yapısal kapanışı yok; kontrolörün önerisi
-> "koşullu kabul edilmiş risk" (koşul: pakete üçüncü taraf ham içerik girdiği gün yeniden açılır),
-> Eray onaylamadı. Ayrıntı: `docs/active/denetci-surec-izolasyonu/TASK.md` "Review bulguları".
-> **Tur teknik olarak koşabilir; kararı vermeden koşturmak riski sessizce kabul etmek olur.**
+**Zincir `sentez`e kadar TAMAM. Sıradaki iş ERAY'DA: Plan Task 19 Step 7 — K-134 kör yargı.**
 
-**Sıradaki iş: Task 19 Step 6'nın `denetim` ayağı — iki kör denetçiyi koştur. İş YÜRÜTÜCÜDE,
-Eray'da DEĞİL.**
+Motor, operatörün yalnız-sentez yargısı kaydedilmeden **KOŞMAZ** (körlük kalibrasyonun ön
+koşuludur; plan satır 2169). Eray sentez çıktısına bakar, 10 açık soru için yargısını verir,
+yargı kaydedilir — ancak ondan sonra `motor` koşar ve fark koşu raporuna yazılır (Step 8).
 
-Aktif koşu **`kosu-a4d4b59607384a30b072cd0395d0f750`** (`calisiyor`). Kapı üç kaynağa koştu,
-artefaktlar yazıldı; kaynaklar koşu klasöründe (`denetim` oradan okur, DB'den okumaz).
+- Aktif koşu: **`kosu-222706dc643b4b64b66a1f3826f02c1b`** (sektör `kuyumculuk`).
+- Sentez çıktısı: `<araştırma deposu>/sentez/kosu-222706dc…/01-SENTEZ-CIKTISI.md`
+  (4 bölüm: aday paket · 74 satırlık karar günlüğü · 10 açık soru · özet).
+- 10 sorunun konuları: SPK kapsamı/yatırım dili · Ramazan-Kurban · yılbaşı · 23 Nisan ve
+  29 Ekim · kuyumda taksit sınırı · Türkiye'ye özgü görsel kodlar · sistem anahtarı olmayan
+  dönemler (düğün-nişan, mevlüt) · KAYNAK-1'in kaynaksız alanları · kök rehber nüanslarının
+  kaybı · CTA kalıp sayısının brief alt sınırının altında kalması.
+- Sentez her soruda **kendi eğilimini** yazmıştır; kör yargı o eğilimden BAĞIMSIZ alınmalıdır.
 
-**İlk komut — tabanı gör:**
-`cd apps/social/backend && .venv/bin/python -m pytest -q` → beklenen **`4547 passed`** (2026-09-17'de ölçüldü; bu satır `4509` diyordu ve üç oturum boyunca bayatlamıştı).
-⚠️ **Tek koşum.** İki pytest oturumu aynı anda koşarsa ortak test şablon veritabanını
-birbirinden çekerler ve 42 sahte hata üretirler (bu oturumda ölçüldü).
-
-**Denetim komutunun biçimi:**
-```
-cd apps/social/backend && set -a; . .env; set +a
-.venv/bin/python scripts/sector_pipeline_cli.py --database-url-env DATABASE_URL denetim \
-  --run-id kosu-a4d4b59607384a30b072cd0395d0f750 --sektor-slug kuyumculuk \
-  --zaman-asimi-sn <SAYI> --arac-surumu bilinmiyor --tarih <YYYY-MM-DD>
-```
-`--zaman-asimi-sn` VARSAYILANSIZDIR (bilinçli: ölçülmemiş saniye sabitlenmiyor) — değer
-seçilip GEREKÇESİ kayda geçirilir. Denetçiler alt süreçtir (`claude -p` ve `codex exec`,
-ikisi de kurulu: 2.1.270 / 0.151.0) ve UZUN sürer → **arka planda koştur.**
-
-**`denetim` SONRASI sıra:** `sentez` → **[K-134 çatalı: operatörün YALNIZ-SENTEZ yargısı
-KAYDEDİLİR]** → `motor`. **Motor, Eray'ın kör yargısı kaydedilmeden KOŞMAZ** — körlük
-kalibrasyonun ön koşuludur.
-
-**Dal:** `feat/sektor-bilgi-paketi-plan2`. **Kip** `inline` · başlangıç çapası `a806e29` ·
-defter penceresi `a806e29`. **Dış sözleşme deposu:** `/root/otomaix-sosyal-medya-arastirmasi`,
-HEAD `abb1850`, pin GÜNCEL.
-
-⚠️ **Dış depoda COMMIT ATMA.** HEAD değişirse pin bayatlar ve CLI'ın her alt komutu
-fail-closed durur. Kaynak dosyaları bilerek izlenmiyor; kirli ağaç pini DÜŞÜRMEZ.
-
-# Bu oturum ne yaptı — tek cümle
-
-Eray üç araştırmayı üretti; kapı onlara koşarken kapının KENDİ dört kusuru ölçüldü ve
-kapatıldı (üretilmiş matris + fail-closed kollarıyla), kapı üç kaynağa taze koşturuldu.
+**Motor komutu (yargı kaydedildikten SONRA):**
+`motor --run-id kosu-222706dc…` — `--politika-ayari` verilmezse eşikler PASİF kalır (K-24:
+eşik pilot kanıtından sonra belirlenir, uydurulmaz).
 
 # Verification
 
-**Bu oturumda koşulan komutlar ve TAZE çıktıları:**
+**Bu oturumda koşan komutlar ve TAZE çıktıları:**
 
-- Tam takım `pytest tests/ -q`: oturum başı **4412 passed** → kapanışta **4509 passed /
-  0 failed / 326,50 s** (+97 yeni test). Ara koşumlarda 4467 ve 4478 de ölçüldü.
-- `tests/test_brief_doctor.py` tek başına → **1579 passed**.
-- `tests/test_migration_036.py` tek başına → **491 passed**.
-- Süs matrisi YAZILDIĞINDA **47 kırmızı / 1 yeşil** (yalnız süssüz hücre) — tautoloji
-  olmadığı ölçüldü; düzeltmeden sonra 48/48.
-- Eski kod ↔ yeni kod karşılaştırması (commit `3aca9a6` sürümü ayrı modül olarak yüklendi):
-  ChatGPT 17 → **1** · Claude 50 → **45** · Gemini 34 → **119**. ChatGPT ve Claude'un
-  bulguları ilk (markdown) düzeltmede **bit bit aynı** kaldı — gizli yan etki YOK.
-- Canlı veritabanı ÖLÇÜLDÜ: `kuyumculuk` alt sektörü VAR (`7353a672-148f-4add-8920-619f05e839c7`,
-  ebeveyn `e-ticaret-perakende`, TEK alt sektör satırı) · üç marka · `sector_packages` 0 satır.
-- Koşu durumu ÖLÇÜLDÜ: üç koşu satırı; ikisi `tamamlanmadi` (gerekçeli), biri `calisiyor`.
-- Kaçış/vurgu düzeltmeleri KONTROLLÜ DENEYLE doğrulandı (aynı içerik, iki yazım).
+| Ne | Sonuç |
+|---|---|
+| Tam takım — oturum başı | **4573 passed** / 338,49 s / rc=0 |
+| Tam takım — oturum sonu | **4607 passed / 0 failed / 337,55 s / rc=0** (+34 test) |
+| `denetim` (ilk deneme) | `rc=1` REDDEDİLDİ, 1342 sn — biçim kapısı |
+| `denetim` (yeni koşu) | **`rc=0`, 956 sn, `denetci_sayisi: 2`** |
+| Denetim artefaktları (DB) | iki `review` satırı, K-80 damgalı, 25.682 + 11.690 karakter |
+| `sentez` 1-4. denemeler | `rc=1`/`rc=2`: yol · plan kipi · CTA şekli · JSONL (hepsi kayıtlı) |
+| `sentez` (5. deneme) | **`rc=0`, 941 sn, karar 74 · açık soru 10 · taşma yok** |
+| Sentez artefaktı (DB) | `synthesis`, 40.671 karakter, K-80 damgalı |
+| Kodlayıcı testi mutasyonu | düzeltme sökülünce test **KIRMIZI**, geri konunca yeşil |
+| Sözleşme pini | `require_contract_pin()` geçti (dış depo HEAD `aa52191`) |
 
-**Denenmemiş / doğrulanmamış — dürüst liste:**
+**DENENMEYEN / DOĞRULANMAYAN — yeşil sayılmaz:**
 
-- **`denetim` · `sentez` · `motor` HİÇ KOŞMADI.** Zincirin bu ayakları bugüne kadar bir kez
-  bile uçtan uca çalışmadı; ilk gerçek koşumları resmî tur olacak.
-- **Bu oturumun KOD commit'leri bağımsız hakem GÖRMEDİ** ve henüz COMMIT EDİLMEDİ (573 satır,
-  2 dosya). Önceki oturumun görülmemiş kod commit'leri zaten açık kalemdi; bu oturum onu
-  BÜYÜTTÜ. Evi aşağıda.
-- **R-35'in üçüncü ayağı (paket İÇERİĞİ) ölçülemez** — paket içeriği yok. Evi: Step 9 sonrası,
-  Step 10 aktivasyonundan ÖNCE.
-- **Backend SERVİSİ dağıtılmadı** (Task 18 Step 5·6·7). Evi: Task 19 Step 11'den ÖNCE.
-- Test markası arayüzde GÖRÜLMEDİ.
-- `ec_mechanical_sweep` bu oturumda KOŞULMADI.
-- `ruff` / `pyright` ortamda YOK (düzenleyici uyarıları ayrı kalem — aşağıda).
+- **`motor` · yazım kapısı · `katman1/2` · `onay` · `aktive-et` ayakları HİÇ koşmadı.**
+- **Denetçi ve sentez çıktılarının İÇERİĞİNİ hiçbir insan okumadı** — ölçülen şey kapılardan
+  geçtiğidir, doğru olduğu değil. Kör yargı adımı tam da bunun içindir.
+- Koşu satırı **`tamamlanmadi` görünüyor**: dördüncü deneme işaretledi, beşinci başarı geri
+  almıyor. `runs.py:836` motorun başarılı koşumunda `tamamlandi` yazacağı için kalıcı zarar
+  beklenmiyor — ama **bu yol ölçülmedi.**
+- Çalışma ağacı **KİRLİ** (12 dosya) ve dal `feat/sektor-bilgi-paketi-plan2` **28+ commit
+  push EDİLMEDİ**. Kirli ağaçta review güvenilmez — bir sonraki adım önce commit.
+- Dış sözleşme deposunda bugün **üç commit** atıldı (`d894cd9` · `1174fb8` · `aa52191`);
+  pin her seferinde tazelendi ama dış depo da push edilmedi.
 
 # Risks
 
-- **Zincirin ilk gerçek koşumu resmî tur olacak.** Prova önerildi, Eray gerek görmedi
-  (kararı kayıtta). Bir şey tutmazsa resmî turda görülecek.
-- **Kaynakların bulgu dengesi eşit değil:** Gemini 119 not / 3 çeşit (101'i `*` madde
-  alışkanlığı), Claude 45 / 2 çeşit (42'si `hayir`→`hayır`), ChatGPT 1 / 1 çeşit. Denetçiler
-  bu tabloyu görecek; mutabakat sinyali buna göre okunmalı.
-- **Canlıda kurgu marka var** (`Deniz Kuyumculuk (TEST)`). Yeniden açılma anı: Task 20 kapanışı.
-- **S-7 (critical, `accepted_risk`)** — Telegram uçları kimliksiz, iki workflow canlıda aktif.
-- **S-6 (medium, kanıt boşluğu)** — takvim workflow'u SQL'i string birleştirmeyle kuruyor.
-- **M-1 (yüksek)** — uygulama veritabanına KÖK kimlikle bağlanıyor.
-- **`repo-public-exposed-live-credentials`** — depo public, anahtarlar açıkta.
-- **İstemci/sunucu sürüm farkı** — sunucu PostgreSQL 18.3, host araçları 16.15.
+- **F1/F5/F6 koşullu kabul edilmiş risk** (kardeş görev): ağa çıkabilen denetçi okuduğunu
+  gönderebilir. **Yeniden açılma koşulu: pakete üçüncü taraftan ham içerik girdiği gün.**
+- **Kör yargı kirlenebilir.** Sentez her soruda kendi eğilimini yazdı; yargıyı alan taraf o
+  eğilimi "doğru cevap" gibi sunarsa K-134'ün ölçtüğü şey kaybolur.
+- **Biçim toleransları gevşetildi** (başlık süsü, markdown başlığı, JSONL). Her biri negatif
+  kontrollüdür ama tolerans yönü tek yönlüdür: bir daha gevşetmeden önce "bu gerçekten yazım
+  farkı mı, anlam farkı mı" sorulmalı.
+- **Sentez klasörü doluysa tur koşmaz** (`mkdir` `exist_ok` kullanmıyor). Düşen denemeler
+  `DUSMUS-<tarih>-<sebep>-<koşu>` adıyla kenara alındı; desen korunmalı, silme YOK.
 
-# Notes For Claude/Codex
+# Notes For Claude
 
-**Bu oturumda öğrenilenler:**
+- **Model turundan ÖNCE offline replay yap.** Kaydedilmiş çıktı + sahte runner + DB'ye yazmayan
+  işaretleyici ile tüm zincir koşturulur. Bu oturumda üç kez yapıldı ve en az iki boş tur
+  (~15 dk + jeton) önledi; altıncı duvarın olmadığı da böyle ölçüldü.
+- **Testin gerçek API'yi çağırdığından emin ol.** `asyncpg.connect`'i sahteyle değiştiren test
+  `init=` argümanını yuttu ve YEŞİL kaldı; üretim `TypeError` verdi (`init` havuz parametresi).
+  Taklit, ölçmesi gereken şeyi gizledi. Düzeltme gerçek bağlantıyla yeniden yazıldı ve
+  mutasyonla sınandı.
+- **Genel `except` arıza sebebini siler.** `komut koşulamadı (DataError)` satırının arkasında
+  asıl sebep vardı; jsonb kodlayıcısı kurulmadığı için işaretleme de düşüyordu. Kusur, arızayı
+  gizleyerek ikinci kez zarar verdi.
+- **Sözleşme↔kod sapması tek tek yamanmaz.** Aynı gün üç sapma çıktı; kapanış EK-L'yi şema
+  modülünden ÜRETMEK oldu. Yeni bir alan şekli eklenirse yeri orasıdır, düz yazı değil.
+- **Düşen turun çıktısı kanıttır.** Silme; `DUSMUS-…` adıyla kenara al.
 
-1. **Varyantı değil SINIFI kapat — ve deseni KAVRAMDAN türet.** İlk teklifim elle bulunan üç
-   eksene yamaydı. Eray *"eski kaynak dosyalarında da var mı"* diye sorunca iki eksen daha
-   çıktı (harf durumu, kaçışlı nokta) ve yaklaşım değişti: tek sadeleştirme kuralı + üretilmiş
-   matris. Sonra aynı sınıfın DEĞER karşılaştırmasında iki sızıntısı daha bulundu.
-2. **Prob ölçümü kirletir — beklenmedik sonuçta ÖNCE probu sorgula.** Kapı sonuçlarını iki kez
-   yanlış okudum: çıkarma desenim mesajın içindeki tırnakta kesiliyordu ("ChatGPT 3, Claude 1"
-   dedim; gerçek 17 ve 50'ydi). Ayrıca 42 test hatasını koda yazacaktım; iki takımı aynı anda
-   koşturduğum için test veritabanı çakışmıştı.
-3. **Kararı kullanıcıya taşıma — al, gerekçelendir, veto bırak.** H1 başlığı kararını Eray'a
-   sordum; sözleşme sessizdi ama karar bana aitti. Eray itiraz etti: *"yapacağın işe başlatma"*.
-4. **Önceki turun gerekçeli kararını sessizce ezme.** `_MADDE_RE` genişletmesi tur 11'in testle
-   kilitlenmiş kararıyla çelişiyordu. İkisini de koruyan yol bulundu (say + not düş).
-5. **Kendi düzeltmenin yan etkisini ölç.** Pinli sayı 102 → 107; kaynağı izlendi ve sessizce
-   bump edilmedi.
+# Notes For Codex
 
-**Codex çağrısı kurarken:** COMPANION + PROMPT çağıran kabukta; uzun turlar arka planda 1200 s;
-çağrı sonrası `rc` + koşum sayısı + son cümle üçünü kontrol et; aynı oturumda ikinci uzun
-turdan önce kotayı TAZE ölç.
-
-# Evsiz kalan yok — kapanış sweep'i
-
-- **Bu oturumun kod değişikliği (573 satır, 2 dosya) COMMIT EDİLMEDİ.** Ev: **oturum kapanışı,
-  Eray onayıyla** — `/commit`. Onay alınmazsa dal kirli kalır ve sonraki oturum bunu devralır.
-- **Bu oturumun kodu bağımsız hakem GÖRMEDİ.** Ev: mevcut YÜKSEK kalemle BİRLEŞİR
-  (`7068a0b..HEAD` aralığı) — **Task 19 Step 11'den ÖNCE, servis dağıtımıyla aynı turda**
-  `/review-claude-codex` + `/security-review-claude-codex`.
-- **`pyright` tip uyarıları (8 adet, `list[str]` ↔ `list[str | _Mesaj]`).** Dokunduğum satırlar
-  DEĞİL; ilk düzenlememden ÖNCE de vardı. Projenin kapısında pyright YOK.
-  **Dürüst etiket: ÇÖZÜLMEDİ, DÜŞÜRÜLDÜ.** Yeniden açılma koşulu: pyright kalite zincirine
-  eklenirse.
-- **Gemini'nin 101 `*` maddesi ve Claude'un 42 `hayir` yazımı** borç DEĞİL — denetçilere giden
-  kalite sinyalidir; kapı bildiriyor, karar sentez/denetim turunun.
+Bu oturumda Codex **hakem olarak koşmadı**; yalnız `denetci-2` rolünde denetim turunda koştu
+(kutulu kullanıcı, ağ açık, `rc=0`). Bu dalda `/review-claude-codex` ve
+`/security-review-claude-codex` **hâlâ koşmadı** — zincirin yeri Plan Task 19 sonrasıdır ve
+kirli ağaçta koşturulmamalıdır.

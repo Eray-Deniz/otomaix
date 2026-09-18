@@ -23,6 +23,62 @@ Tam takım **4412 passed / 0 failed**; mutasyon 8/8; canlı prova 6/6 rc=0.
 **Task 18 TAMAMLANMADI:** Step 5·6·7 servis dağıtımına bağlı ve Eray kararıyla Task 19'a taşındı.
 **2026-09-12 BEŞİNCİ OTURUM — Task 19 Step 1-4 İNDİ:** dört operatör kararı kapandı, canlıda test markası (`Deniz Kuyumculuk (TEST)`) ve `kuyumculuk` alt sektör satırı açıldı, R-35'in iki ayağı ölçüldü. Brief'in iki kusuru bulundu ve düzeltildi (GÖREV KAPSAMI 'yalnız B' → A+B · K-04b yansıtıldı), pin `abb1850`'a bump edildi (`2f9157a`). **Sıradaki iş: Task 19 Step 5 — ELLE üç araştırma koşusu; iş EMEKTE, Eray'da.**
 **2026-09-14 ALTINCI OTURUM — Step 5 İNDİ, Step 6 kapı ayağı KOŞTU:** Eray üç araştırmayı üretti (`Kuyumculuk/Kaynak-1..3.md`); kapı üçüne de koştu. Kapının KENDİ dört kusuru bulundu ve kapatıldı (aşağıda). **Sıradaki iş: Task 19 Step 6'nın `denetim` ayağı — iki kör denetçi.**
+**2026-09-18 YEDİNCİ OTURUM — `denetim` AYAĞI İNDİ (Step 6 tamam).** İki kör denetçi koştu ve
+iki rapor ham artefakt katmanına yazıldı: `kosu-222706dc643b4b64b66a1f3826f02c1b`, `rc=0`, **956 sn**,
+`denetci_sayisi: 2`, K-80 damgalı iki `review` satırı (25682 + 11690 karakter).
+**İlk deneme REDDEDİLDİ** (`kosu-a4d4b59607384a30b072cd0395d0f750`, 1342 sn) ve iki kusur ölçüldü:
+(a) iki denetçi de bağımsız olarak `## 1) DENETİM TABLOSU` yazdı, biçim kapısının deseni yalnız
+çıplak başlığı tanıyordu → beş bölüm birden "YOK" sayıldı; aynı desenin KOPYASI `synthesis.py`'de
+duruyordu ve bir sonraki adımda aynı şekilde düşerdi — ikisi de kapatıldı (markdown seviyesi
+1-6 kabul, yedinci `#` negatif kontrol).
+(b) Kapı `Kaynak sayısı: <n>` / `beklenen satır: <m>` anahtarlarını arıyordu, sözleşme ise yalnız
+"kaç kaynakla çalıştığını ve beklenen satır sayısını yaz" diyordu; iki denetçi de düz yazı yazdı.
+Sözleşme YAPISALLAŞTIRILDI (2.4, dış depo `d894cd9`, pin tazelendi) — serbest düz yazıdan sayı
+çıkarma yolu bilinçle SEÇİLMEDİ.
+Tam takım **4589 passed / 0 failed / 335,51 s** (öncesi 4573; +16 test).
+**`sentez` KOŞTU ve DÜŞTÜ — dört bulgu, hepsi ölçüldü (2026-09-18).** Model turu koştu (595 sn),
+çıktı diskte (`sentez/<koşu>/01-SENTEZ-CIKTISI.md`) ama DÖRT BÖLÜMÜN HİÇBİRİ yok — araç sentezi
+üretmek yerine "plan" yazdı ve eksik girdileri bildirdi. CLI `rc=2` bastı ve gerçek sebebi GİZLEDİ.
+(1) **jsonb kodlayıcı kusuru artık GÖRÜNÜRLÜĞÜ de kırıyor:** `mark_incomplete` → yönetici bildirimi
+`DataError` fırlattı, en-iyi-çaba kolu da aynı kusura düştü, geriye yalnız `komut koşulamadı
+(DataError)` kaldı. Gerçek sebep ancak stub'lı yeniden üretimle görüldü: *"sentez biçim kapısı:
+dört bölüm … bulunan []"*. Koşu satırı işaretlenemediği için hâlâ `calisiyor` — kusur burada
+tesadüfen işe yaradı.
+(2) **Sentez paketi sözleşmenin saydığı ekleri TAŞIMIYOR:** sözleşme EK-A · EK-F/G · EK-H · EK-I ·
+EK-J · EK-K sayıyor; kod yalnız EK-H/I/J + iki denetçi raporunu (EK-F/G adıyla DEĞİL, "DENETÇİ
+RAPORU — denetci-N" başlığıyla) gömüyor. **EK-A (brief) ve EK-K (kök sektör rehberi) HİÇ yok.**
+Araç bunu kendi ağzıyla bildirdi.
+(3) **Araç `--permission-mode plan` ile koşuyor** ve çıktının ilk cümlesi şu: *"Plan mode's exit
+tool is disabled, so I can't formally hand this off"*. Denetçiler plan kipinde sorunsuz rapor
+üretiyor; sentez rolünden ÜRETİM isteniyor ve araç turu planlama turu sandı.
+(4) **Sözleşme, izolasyonun yasakladığı bir şeyi istiyor:** karar günlüğünün her satırında
+`oge_sha` (kanonik hash) isteniyor, sentez rolünün pozitif araç kümesi ise `Read,Glob,Grep` —
+kabuk YOK, hash hesaplanamaz. Araç uydurmayı REDDETTİ ("a fabricated digest would defeat the
+exact integrity check it exists for"). **Ölçüldü:** motorun `engine.py:2270` kolu `oge_sha`'yı
+zaten nihai içerikten YENİDEN yazıyor — yani en azından o yolda modelin değeri kullanılmıyor.
+(Tüm kollar taranmadı.)
+**SENTEZ GEÇTİ (2026-09-18, beşinci deneme): `rc=0`, 941 sn, `karar_satiri: 74`, `acik_soru: 10`,
+`tasma: hayir`; `synthesis` artefaktı DB'ye indi (40.671 karakter, K-80 damgalı).** Dört düşen
+denemenin çıktısı `sentez/DUSMUS-2026-09-18-<sebep>-<koşu>/` altında SAKLANDI.
+**Beş sapmanın hepsi aynı sınıftı** — araç işini yapıyor, biçimi her turda biraz farklı yazıyor;
+kapılar tek yazıma göre kurulmuştu: (1) plan kipi → kaldırıldı, (2) eksik EK-A/EK-K → eklendi,
+(3) `oge_sha` hükmü → sözleşme 2.4, (4) başlık süsü `( )` / `:` → tolerans, (5) CTA öğe şekli →
+sözleşme 2.5 + **EK-L şemadan üretiliyor**, (6) günlüğün JSONL yazımı → tolerans (bozuk satır
+hâlâ düşürür). Tam takım **4607 passed / 0 failed**.
+**Her turdan ÖNCE offline replay yapıldı** (kaydedilmiş çıktı + sahte runner + DB yazmayan
+işaretleyici): altıncı duvarın olmadığı böyle ölçüldü, boş tur harcanmadı.
+
+**SIRADAKİ İŞ: Plan Task 19 Step 7 — K-134 kör yargı. İŞ ERAY'DA.** Motor, yargı kaydedilmeden
+KOŞMAZ. Sentez çıktısı: `sentez/kosu-222706dc.../01-SENTEZ-CIKTISI.md`.
+
+**Koşu durumu kusuru (yukarıdaki açık kalemin ikinci yüzü):** düşen dördüncü deneme koşuyu
+`tamamlanmadi` işaretledi; beşinci deneme BAŞARILI olduğu hâlde durumu geri almıyor. Motorun
+başarılı koşumu `durum='tamamlandi'` yazacağı için (runs.py:836) kalıcı zarar YOK, ama motor
+koşana kadar satır yanlış görünüyor.
+
+**KARAR BEKLİYOR — yürütücü tek başına kapatamaz** (paket içeriği · izolasyon kipi · sözleşme
+hükmü). Kalanlar: sentez kökü (`sentez/<koşu>/`) DOLU, `mkdir` `exist_ok` KULLANMIYOR → aynı
+kimlikle yeniden koşmak için klasör kenara alınmalı; koşu satırı `calisiyor` ve kullanılabilir.
 Gövde `# Open Problems`'ın ilk kalemlerinde.) Task 1-17 indi. Task 8'in checkpoint'i 2026-09-08'de
 KAPANDI: üretim tarafındaki beş yüksek bulgu kapandı ve iki bağımsız kapanış turuyla
 doğrulandı; test tarafı (B turu) ayrıca incelendi, dört bulgusu kapandı ve mutasyonla
@@ -1391,6 +1447,28 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   onay isteğinde sessiz kayıp.
 
 # Open Problems
+
+- **[DÜŞÜK — DÜŞÜRÜLDÜ, KOŞULLU 2026-09-18] Sentez isteminde EK-F/EK-G adı geçmiyor.**
+  Sözleşme iki denetçi çıktısını `EK-F` / `EK-G` diye sayıyor; istem onları
+  `## DENETÇİ RAPORU — denetci-N` başlığıyla gömüyor. **Ölçüldü:** sözleşmenin ADIM'ları bu iki
+  adı hiçbir yerde KULLANMIYOR (tek geçtiği yer girdi listesi), araç da raporları sorunsuz
+  buldu — beş turun hiçbirinde bu yüzden bir arıza çıkmadı. **Dürüst etiket: çözülmedi +
+  bilinçle düşürüldü** ("uyumlu" DEĞİL). **Yeniden açılma koşulu:** sözleşmenin bir adımı
+  EK-F/EK-G'ye ADIYLA atıf yapmaya başlarsa ya da araç "EK-F yok" derse.
+
+- **[DÜŞÜK — AÇIK, EVSİZ 2026-09-18] Doğrulamada düşen tur koşu satırını İŞARETLEMİYOR.**
+  `run_audit_round` terminal arızalarda `_yarim()` ile `mark_incomplete` çağırıyor, ama rapor
+  doğrulaması / mutabakat kapısı düşünce (3287 ve 3306. satırlar) işaretsiz `AuditRound(..., False)`
+  dönüyor. **Ölçüldü:** `kosu-a4d4b59607384a30b072cd0395d0f750` reddedildikten sonra hâlâ
+  `durum: calisiyor` — yani yeniden koşum yeni kimlik alıyor (K-82) ama eski satır sonsuza kadar
+  "çalışıyor" görünüyor. Aynı görüntü daha önce "iki koşu birden `calisiyor` kalmış" diye
+  jsonb kodlayıcı kusuruna yazılmıştı; **bu ikinci, bağımsız bir yol.**
+  **Dürüst etiket: çözülmedi + evi yok.** Bu turda kapsam dışı bırakıldı (Eray'ın onayı biçim
+  kapısı düzeltmesi + yeniden koşum içindi). Kapanışı ucuz görünüyor (iki dönüş noktası `_yarim`'e
+  bağlanır) ama davranış kararı gerektiriyor: doğrulama arızası "tamamlanmadı" mı, yoksa
+  operatörün düzeltip aynı kimlikle tekrar deneyebileceği bir ara durum mu?
+  **Yeniden açılma koşulu:** `durum` görünümünün doğruluğuna dayanan ilk iş (vade bildirimi,
+  yönetici ekranı, yarım koşu temizliği) ya da denetim/sentez kapılarına dokunan bir sonraki tur.
 
 - **[ORTA — AÇIK, EVİ VAR 2026-09-12] Canlıdaki kurgu test markasının pilottan sonraki
   akıbeti kararlaştırılmadı.** `Deniz Kuyumculuk (TEST)` (`cb1dd79e-5ed4-452e-90cb-9ae1e88a5319`)

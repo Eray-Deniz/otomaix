@@ -9,28 +9,24 @@ written: 2026-09-18
 işletim sistemi kullanıcısına düştü, ağ açıldı ve **K-14 kapısı açıldı**: iki denetçi için de
 `erisim-var`, `tur_baslayabilir=True`.
 
-**Sıradaki gerçek iş bu görevde DEĞİL, Plan 2'de: `denetim` turu.** Onu bloke eden tek şey bu
-görevdi ve engel kalktı. Komut ve gerekçesi `docs/active/sektor-bilgi-paketi-plan2/HANDOFF.md`'de;
-`--zaman-asimi-sn` VARSAYILANSIZDIR, değer seçilip gerekçesi kayda geçirilir. Denetçiler uzun
-sürer → **arka planda koştur.**
+**Engel kalktı ve `denetim` turu AYNI GÜN KOŞTU** (`rc=0`, 956 sn, iki rapor DB'de) — bu görevin
+Plan 2'ye borcu kapandı. Ölçülmüş süreler gelecekteki zaman aşımı seçimi için: denetim turu
+956-1342 sn (iki denetçi sırayla), sentez turu 906-1074 sn (tek araç). Denetçiler uzun sürer →
+**arka planda koştur.**
 
-**AMA ÖNCE KARAR:** dual review'dan üç bulgu AÇIK ve üçü de aynı şeye bakıyor — *ağa çıkabilen
-bir ajan, okuyabildiği her şeyi gönderebilir.* Ayrıntı `TASK.md` "Review bulguları" bölümünde.
+**2026-09-18 — ÜÇ BULGU KARARA BAĞLANDI.** Eray F1 (critical), F5 ve F6'yı (high)
+*koşullu kabul edilmiş risk* olarak kapattı. Etiket dürüst: **çözülmedi + kabul edildi.**
+**Yeniden açılma koşulu:** denetim paketine ÜÇÜNCÜ TARAFTAN gelen ham içerik girdiği gün üçü
+birden yeniden açılır. `/security-review-claude-codex` hard-block'u KALKTI.
 
-- **F1 (critical)** — kutulu codex `~/.codex/auth.json`'u okuyabiliyor; o dosya **Eray'ın kendi
-  OpenAI oturumu** (erişim jetonu 27 Eylül'e kadar geçerli + yenileme jetonu + e-posta + plan).
-  Şifre gerekmez: jeton başlı başına giriş kartıdır. **Parasız yapısal kapanışı YOK.** Üç yol:
-  ayrı abonelik · API anahtarı (abonelik dışı fatura — Eray abonelikle kullanıyor) · tur başına
-  çekirdek-seviyesi çıkış kuralı (para yok, gerçek iş; alan adı→IP tarafı kırılgan).
-- **F5 (high)** — `denetci-1` root koşarken `WebFetch` kazandı; tek duvar CLI'ın `--restricted`'ı
-  ve onun DAVRANIŞINI ölçen tek şey kanarya — takım dışında, elle, zamanlanmış evi yok.
-- **F6 (high)** — hedef allowlist'i yok; paket içeriği herhangi bir URL'e gidebilir.
+**F6'nın çözüm yolu kabulden ÖNCE ölçüldü** (yeniden açıldığı gün sıfırdan araştırılmasın diye,
+ayrıntı `TASK.md`'de): claude ayağında adres listesi mekanizması ÇALIŞIYOR (`manual` kip +
+`--allowedTools "WebFetch(domain:…)"`; liste dışı adres istek kurulmadan reddedildi) ama iki
+sessiz tuzağı var; codex ayağında kutunun ağ ayarında adres listesi alanı YOK (iki yöntemle
+doğrulandı) — tek yol işletim sistemi seviyesinde çıkış kuralı + ara sunucu, ki o da F1 ile
+AYNI iştir.
 
-**Kontrolörün önerisi (Eray onaylamadı, açık duruyor):** üçünü de "koşullu kabul edilmiş risk"
-olarak kapatmak — koşul: *denetim paketine üçüncü taraftan gelen ham içerik girdiği gün yeniden
-açılır.* Gerekçe: boru hattının ilan edilmiş tehdit modeli zaten *"girdinin özensiz olması,
-saldırgan olması değil"* (`run_audit_round` gövdesinde yazılı) ve paketleri bugün Eray üretiyor.
-**Bu karar verilmeden `/security-review-claude-codex` koşmaz** (zincir hard-block).
+**Bu görevde kalan iş YOK.** Sıradaki iş Plan 2'de: `docs/active/sektor-bilgi-paketi-plan2/`.
 
 # Verification
 
