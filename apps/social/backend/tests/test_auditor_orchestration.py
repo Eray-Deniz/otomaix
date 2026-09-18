@@ -1449,9 +1449,15 @@ def test_stage_is_removed_after_a_timeout(monkeypatch, tmp_path) -> None:
 
 
 def _gecici_kok(monkeypatch, yol: Path) -> Path:
-    """`mkdtemp`'in kullanacağı kökü değiştirir — GERÇEK `mkdtemp` koşar."""
+    """Sahne ÜST DİZİNİNİ değiştirir — GERÇEK `mkdtemp` koşar.
+
+    Enjeksiyon noktası F3 fix'iyle `tempfile.tempdir`'den `SAHNE_UST_DIZINI`
+    sabitine taşındı: sahne artık `/tmp`'de DEĞİL, kutulu kullanıcının
+    listeleyemediği adanmış bir kökün altında açılıyor.
+    """
     yol.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr(auditors.tempfile, "tempdir", str(yol))
+    yol.chmod(0o711)
+    monkeypatch.setattr(auditors, "SAHNE_UST_DIZINI", yol)
     return yol
 
 
@@ -1749,6 +1755,183 @@ def test_unboxed_tool_keeps_the_caller_identity_and_a_root_owned_stage(
         "paketin kopyasını boş yere okuyabilir"
     )
     assert gorulen["sahne_uid"] == str(os.getuid())
+
+
+# ═══ 8e. REVIEW DÜZELTMELERİ — F4 (devretme sırası) + F3 (sahne kökü) ═══════
+#
+# Kaynak: 2026-09-18 dual review (`docs/reviews/2026-09-18-feat-sektor-bilgi-
+# paketi-plan2.md`).
+#
+# **F4.** Devretme bittikten SONRA root, artık kutulu kullanıcıya ait olan bir
+# ağaçta `chmod` koşuyordu ve `Path.chmod` symlink İZLER — o kullanıcı adına
+# koşan bir süreç `sahne` girdisini symlink'le değiştirirse root, saldırganın
+# seçtiği yolu `0700` yapardı. Kural: **ayrıcalıklı iş devretmeden ÖNCE biter;
+# kökün devri EN SON işlemdir.**
+#
+# **F3.** Sahne `/tmp` altındaydı; kutulu Codex'in `workspace-write` kum havuzu
+# `/tmp`'yi açıkça yazılabilir sayıyor. Ölçüldü: kutulu araç kardeş sahneleri
+# LİSTELEDİ, birinin paketini OKUDU ve `/tmp`'ye yazdı. Sahne artık adanmış bir
+# kökün altında; o kök `0711` (girilir, LİSTELENMEZ) ve root'un.
+
+
+def test_stage_handover_is_the_last_privileged_step(monkeypatch, tmp_path) -> None:
+    """F4 — devretme SON işlemdir; ondan sonra root o ağaca DOKUNMAZ.
+
+    Bu iddia ÇOCUĞUN gözünden ölçülemez: sıra ebeveynin kendi işlemlerindedir ve
+    çocuk yalnız sonucu görür. O yüzden ölçüm `chmod`/`chown` çağrılarını sırayla
+    kaydeder. Kayıt ebeveynin NİYETİNİ değil, gerçekten koşan çağrı dizisini
+    ölçer — mutasyonla kanıtlanır.
+    """
+    kayit_dizisi: list[tuple[str, str]] = []
+    gercek_chown = auditors.os.chown
+    gercek_chmod = Path.chmod
+
+    def _chown(yol, uid, gid, **kw):
+        kayit_dizisi.append(("chown", str(yol)))
+        return gercek_chown(yol, uid, gid, **kw)
+
+    def _chmod(self, mode, **kw):
+        kayit_dizisi.append(("chmod", str(self)))
+        return gercek_chmod(self, mode, **kw)
+
+    monkeypatch.setattr(auditors.os, "chown", _chown)
+    monkeypatch.setattr(Path, "chmod", _chmod)
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, "print('ok')", kullanici=auditors.IZOLASYON_KULLANICISI
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+
+    sahne_islemleri = [
+        (op, yol) for op, yol in kayit_dizisi if auditors.SAHNE_ONEKI in yol
+    ]
+    assert sahne_islemleri, "sahne üzerinde hiç ayrıcalıklı işlem kaydedilmedi"
+    son_op, son_yol = sahne_islemleri[-1]
+
+    assert son_op == "chown", (
+        f"sahne ağacındaki SON ayrıcalıklı işlem {son_op!r} ({son_yol}) — "
+        "devretmeden sonra root o ağaçta iş yapıyor; `chmod` symlink İZLER, "
+        "yani kutulu kullanıcı root'a istediği yolu `chmod`'latabilir"
+    )
+    # Kök EN SON devredilir: ondan öncesi root-only bir ağaçta koşar.
+    assert son_yol.count("/") == min(y.count("/") for _op, y in sahne_islemleri), (
+        f"son devredilen düğüm KÖK değil ({son_yol}) — kök daha önce devredildiyse "
+        "kutulu kullanıcı, root hâlâ çalışırken ağaca girebilir"
+    )
+
+
+@sahne_gerekli
+def test_stage_root_lives_outside_tmp_in_a_non_listable_parent(
+    monkeypatch, tmp_path
+) -> None:
+    """F3 — sahne `/tmp`'de DEĞİL; üst dizin girilir ama LİSTELENMEZ.
+
+    Ölçüm iki ayaklı ve ikisi de ÇOCUĞUN gözünden: (1) `cwd` adanmış kökün
+    altında mı, (2) kutulu kullanıcı o kökü LİSTELEYEBİLİYOR mu. İkincisi asıl
+    iddiadır — `/tmp`'de sorun izin değil, ENUMERASYONDU: araç kardeş sahnelerin
+    adını görebiliyordu.
+    """
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        "import os; "
+        "print(os.getcwd()); "
+        "print('LISTELEDI' if os.listdir(os.path.dirname(os.path.dirname(os.getcwd()))) "
+        "else 'BOS-LISTE', flush=True)",
+        kullanici=auditors.IZOLASYON_KULLANICISI,
+    )
+    # Not: üst dizin listelenemiyorsa `os.listdir` PermissionError fırlatır →
+    # alt süreç düşer; "tamam" dönmesi listeleyebildiği anlamına gelir.
+    assert sonuc.durum == "hata", (
+        f"kutulu araç sahne üst dizinini LİSTELEYEBİLDİ (durum={sonuc.durum}) — "
+        "kardeş ve kalıntı sahnelerin adları keşfedilebilir"
+    )
+    assert "PermissionError" in sonuc.stderr, (
+        f"beklenen izin reddi yerine başka hata: {sonuc.stderr.strip()[:200]}"
+    )
+    cwd = Path(sonuc.stdout.strip())
+    assert not cwd.is_relative_to(Path("/tmp")), (
+        f"sahne hâlâ /tmp altında: {cwd} — kutulu Codex'in kum havuzu `/tmp`'yi "
+        "yazılabilir sayar"
+    )
+
+
+def test_stage_parent_mode_is_umask_independent(monkeypatch, tmp_path) -> None:
+    """Üst dizinin kipi UMASK'tan bağımsızdır — yoksa kapı kendi kendini düşürür.
+
+    `mkdir`'in `mode` argümanı umask ile maskelenir (ölçüldü: umask `077`
+    altında `0o711` istenirken `0o700` oluşur) ve `exist_ok=True` var olan bir
+    dizinin kipine dokunmaz. İkisi de kapıyı düşürür: kip yanlışsa
+    `_sahne_ust_dizinini_hazirla` fail-closed atar ve o an HİÇBİR denetçi
+    koşamaz — yani gevşek bir umask tüm turu durdururdu.
+    """
+    hedef = tmp_path / "adanmis-kok"
+    monkeypatch.setattr(auditors, "SAHNE_UST_DIZINI", hedef)
+    eski_umask = os.umask(0o077)
+    try:
+        ust = auditors.SubprocessRunner._sahne_ust_dizinini_hazirla()
+    finally:
+        os.umask(eski_umask)
+
+    assert stat.S_IMODE(ust.stat().st_mode) == 0o711, (
+        f"umask 077 altında üst dizin {oct(stat.S_IMODE(ust.stat().st_mode))} "
+        "oldu — kapı kendi kurduğu dizini reddeder ve tur hiç başlamaz"
+    )
+    # Var olan ama YANLIŞ kipli dizin de düzeltilir (ikinci çağrı no-op değil).
+    hedef.chmod(0o700)
+    ust = auditors.SubprocessRunner._sahne_ust_dizinini_hazirla()
+    assert stat.S_IMODE(ust.stat().st_mode) == 0o711
+
+
+@sahne_gerekli
+def test_stage_parent_owned_by_another_user_stops_the_run(
+    monkeypatch, tmp_path
+) -> None:
+    """SAHİPLİK sert kapıdır: başkasının dizini ONARILMAZ, koşum durur.
+
+    Root olarak `chown`'layıp "düzeltmek" başkasının dizinini sessizce ele
+    geçirmek olurdu; o kullanıcı ayrıca kendi dizininde sahne adlarını
+    değiştirebilir.
+    """
+    yabanci = tmp_path / "baskasinin-kok"
+    yabanci.mkdir()
+    kayit = pwd.getpwnam(auditors.IZOLASYON_KULLANICISI)
+    os.chown(yabanci, kayit.pw_uid, kayit.pw_gid)
+    monkeypatch.setattr(auditors, "SAHNE_UST_DIZINI", yabanci)
+    cagrildi: list[str] = []
+    monkeypatch.setattr(
+        auditors.subprocess, "run", lambda *a, **kw: cagrildi.append("alt-surec")
+    )
+    kanonik, istem = _kanonik_paket(tmp_path)
+    _sahte_arac(monkeypatch, "print('x')", kullanici=auditors.IZOLASYON_KULLANICISI)
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=5.0)
+
+    with pytest.raises(RuntimeError, match="root'un DEĞİL"):
+        runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
+
+    assert not cagrildi, "yabancı üst dizinde alt süreç KOŞTU — kapı fail-closed değil"
+    assert os.stat(yabanci).st_uid == kayit.pw_uid, (
+        "yabancı dizinin SAHİBİ değiştirildi — kapı onarmamalı, durdurmalı"
+    )
+
+
+def test_stage_parent_loose_mode_is_repaired_not_rejected(
+    monkeypatch, tmp_path
+) -> None:
+    """İZİN onarılır: tek gevşek umask tüm turu öldürmemeli.
+
+    Karşı kol yukarıdaki sahiplik testidir — ikisi ayrışmazsa "onar" ile
+    "reddet" aynı kovaya düşer ve biri diğerinin yerine geçer.
+    """
+    gevsek = tmp_path / "gevsek-ust"
+    gevsek.mkdir()
+    gevsek.chmod(0o755)
+    monkeypatch.setattr(auditors, "SAHNE_UST_DIZINI", gevsek)
+
+    ust = auditors.SubprocessRunner._sahne_ust_dizinini_hazirla()
+
+    assert stat.S_IMODE(ust.stat().st_mode) == 0o711, (
+        f"gevşek kip onarılmadı: {oct(stat.S_IMODE(ust.stat().st_mode))}"
+    )
 
 
 # ═══ 9. Düzeltme turu — B1: koşu kimliği paket kimliğine BAĞLI ══════════════

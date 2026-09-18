@@ -51,6 +51,7 @@ import os
 import pwd
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -1650,6 +1651,27 @@ iki yerde yazılırsa biri sessizce bayatlar.
 """
 
 
+SAHNE_UST_DIZINI = Path("/var/lib/otomaix-denetci-sahne")
+"""Sahnelerin açıldığı ADANMIŞ kök — `/tmp` DEĞİL (2026-09-18 review, F3).
+
+**Neden `/tmp` terk edildi — ÖLÇÜLDÜ.** Kutulu Codex'in `workspace-write` kum
+havuzu `/tmp` ve `$TMPDIR`'ı AÇIKÇA yazılabilir sayar (`[workdir, /tmp,
+$TMPDIR]`). Sahneler orada olduğu sürece izin bitleri yetmiyordu: kutulu araç
+`/tmp/denetci-sahne-*` dizinlerini LİSTELEDİ, kardeş bir sahnenin paket
+dosyasını OKUDU ve `/tmp`'ye dosya YAZDI (üçü de 2026-09-18'de ölçüldü). Sorun
+sahnenin kendi izni değil, ADININ KEŞFEDİLEBİLİR olmasıydı — iki sahne de AYNI
+kutulu kullanıcıya ait olduğu için ad bilinince izin engel değil.
+
+**Neden `0711`.** Üst dizin GİRİLİR ama LİSTELENMEZ: kutulu süreç kendi
+sahnesine tam yolla ulaşır (`cwd` olarak zaten oradadır), ama kardeşlerinin ve
+kalıntıların adını göremez. `mkdtemp`'in rastgele son eki tahmin etmeyi de
+kapatır.
+
+**Neden root'un.** Üst dizin kutulu kullanıcıya ait olsaydı o kullanıcı içine
+girdi yaratıp silebilir, yani kardeş sahnelerin ADINI kendi yarattığı
+symlink'lerle değiştirebilirdi.
+"""
+
 SAHNE_ONEKI = "denetci-sahne-"
 """Geçici sahne dizinlerinin adlandırma öneki.
 
@@ -2037,6 +2059,63 @@ class SubprocessRunner:
             )
         return yol
 
+    @staticmethod
+    def _sahne_ust_dizinini_hazirla() -> Path:
+        """Adanmış sahne kökü — SAHİPLİK sert kapı, İZİN onarılır.
+
+        İki koşul AYNI şey değildir ve ayrı davranırlar:
+
+        * **Sahiplik sert kapıdır.** Dizin root'un değilse ona DOKUNULMAZ ve
+          koşum başlamaz: başkasına ait bir kökte sahne adları o kullanıcının
+          yarattığı girdilerle değiştirilebilir. Root olarak `chown`'layıp
+          "düzeltmek", başkasının dizinini sessizce ele geçirmek olurdu.
+        * **İzin ONARILIR.** Kip bizim kendi dizinimizin özelliğidir ve iki
+          yoldan yanlış doğabilir: `mkdir`'in `mode`'u UMASK'a tabidir (ölçüldü:
+          umask `077` altında `0o711` istenirken `0o700` oluşur) ve
+          `exist_ok=True` VAR OLAN dizinin kipine hiç dokunmaz. Reddetmek, tek
+          bir gevşek umask yüzünden HİÇBİR denetçinin koşamaması demekti —
+          onarılabilir bir koşulda fail-closed olmak kapıyı değil turu öldürür.
+
+        Onarımdan SONRA kip yeniden ÖLÇÜLÜR: `chmod` sessizce başarısız olursa
+        (dosya sistemi kipi, ACL) sessiz devam etmek kapıyı kâğıda çevirirdi.
+
+        **DÜRÜST ETİKET — o son kontrolün TESTİ YOK.** Bu makinede `chmod` ya
+        başarılı olur ya `OSError` atar (yukarıdaki kol yakalar); "sessizce
+        etkisiz kalma" hâli provoke EDİLEMEDİ, dolayısıyla mutasyonla da
+        kanıtlanamadı (denendi: kontrol söküldüğünde hiçbir test kırmızı
+        dönmedi). Derinlemesine savunma olarak duruyor, ölçülmüş bir kapı
+        olarak DEĞİL.
+        """
+        ust = SAHNE_UST_DIZINI
+        try:
+            ust.mkdir(mode=0o711, parents=True, exist_ok=True)
+        except OSError as exc:
+            raise RuntimeError(
+                f"sahne ÜST DİZİNİ kurulamadı: {ust} ({type(exc).__name__}) — "
+                "sahne açılamaz, denetçi alt süreci BAŞLATILMAZ"
+            ) from exc
+        if ust.stat().st_uid != 0:
+            raise RuntimeError(
+                f"sahne ÜST DİZİNİ root'un DEĞİL: {ust} "
+                f"(sahip uid={ust.stat().st_uid}) — başkasına ait bir kökte "
+                "sahne adları değiştirilebilir; dizin onarılmaz, koşum durur"
+            )
+        try:
+            ust.chmod(0o711)
+        except OSError as exc:
+            raise RuntimeError(
+                f"sahne ÜST DİZİNİ izni onarılamadı: {ust} "
+                f"({type(exc).__name__}) — koşum BAŞLATILMAZ"
+            ) from exc
+        izin = stat.S_IMODE(ust.stat().st_mode)
+        if izin != 0o711:
+            raise RuntimeError(
+                f"sahne ÜST DİZİNİ onarımdan SONRA hâlâ yanlış: {ust} "
+                f"(izin={oct(izin)}, beklenen 0o711) — listelenebilir bir kök, "
+                "kardeş ve kalıntı sahnelerin adlarını keşfedilebilir kılar"
+            )
+        return ust
+
     @classmethod
     def _sahne_kokunu_ac(cls) -> Path:
         """Geçici kök — kanonik paketin AYNI yol kapısından geçer.
@@ -2049,7 +2128,8 @@ class SubprocessRunner:
         Reddedilen kök SİLİNİR: `mkdtemp` onu zaten yaratmıştır ve geride
         bırakılan boş bir sahne kökü, bir sonraki reddetmede birikir.
         """
-        ham = Path(tempfile.mkdtemp(prefix=SAHNE_ONEKI))
+        ust = cls._sahne_ust_dizinini_hazirla()
+        ham = Path(tempfile.mkdtemp(prefix=SAHNE_ONEKI, dir=str(ust)))
         try:
             return kok_yolunu_kapila(ham)
         except ValueError as exc:
@@ -2098,17 +2178,26 @@ class SubprocessRunner:
             # alt sürecin gördüğü ad DEĞİŞMEZ (yeni bir sinyal doğmaz).
             sahne = kok / kaynak.name
             shutil.copytree(kaynak, sahne)
+            # AYRICALIKLI İŞ DEVRETMEDEN ÖNCE BİTER (2026-09-18 review, F4).
+            # Eski sıra `chmod`'u devretmeden SONRA koşuyordu; o an ağaç artık
+            # kutulu kullanıcınındı ve `Path.chmod` symlink İZLER — o kullanıcı
+            # adına koşan bir süreç `sahne` girdisini symlink'le değiştirirse
+            # root, saldırganın seçtiği yolu `0700` yapardı (ölçüldü: symlink'e
+            # uygulanan chmod HEDEFİN iznini değiştiriyor).
             kok.chmod(0o700)
+            sahne.chmod(0o700)
             # Devretme PROFİLİ İZLER: kutusuz aracın sahnesi çağıranda kalır.
             # Onu da kutulu kullanıcıya vermek, oraya hiç düşmeyen bir araç
             # için paketin kopyasını BOŞ YERE açardı.
             if kayit is not None:
-                os.chown(kok, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False)
+                # ÇOCUKLAR ÖNCE, KÖK EN SON: kök devredilene kadar ağaç
+                # root-only `0700`'dür, yani kutulu kullanıcı içeri HİÇ giremez
+                # ve devir anına kadar hiçbir girdiyi değiştiremez.
                 for yol in sorted(kok.rglob("*")):
                     os.chown(
                         yol, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False
                     )
-            sahne.chmod(0o700)
+                os.chown(kok, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False)
             yield sahne
         finally:
             # `ignore_errors` DEĞİL: silinemeyen bir sahne sessizce kalıcı
