@@ -34,6 +34,7 @@ import logging
 import os
 import pwd
 import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -1372,6 +1373,223 @@ def test_stage_is_removed_after_a_timeout(monkeypatch, tmp_path) -> None:
     sahne = Path(sonuc.stdout.strip())
     assert str(sahne), "zaman aşımında stdout taşınmamış — ölçüm kurulamadı"
     assert not sahne.exists(), f"zaman aşımına uğrayan sahne DURUYOR: {sahne}"
+
+
+
+# ═══ 8c. SAHNE YOL KAPISI + KANONİK DOKUNULMAZLIK (T5) ══════════════════════
+#
+# **Neden var.** T4 sahneyi kurdu ama sahnenin KENDİ yolunu hiç ölçmedi: bugün
+# `mkdtemp` kullanıldığı için yol "güvenli görünüyordu" — bu bir VARSAYIMDI.
+# Kanonik paketin yolu iki kapıdan geçer (`kok_yolunu_kapila` ve
+# `PacketRef._rol_yollarini_kapila`: mutlak · kendi canonical'ine eşit ·
+# symlink/takma ad yok). Sahnenin karşılığı YOKTU.
+#
+# Kapı ÜÇ ayaklıdır ve üçü de MEVCUT kuralları yeniden kullanır (yeni kural
+# yazılsaydı aynı ağaç için iki farklı cevap üreten iki kural olurdu):
+#
+# 1. **Sahne KAYNAĞI** mutlak ve kendi canonical'i olmak zorunda — `..` ile
+#    biten bir kaynağın `name`'i `..`'dir ve sahne dizini geçici kökün DIŞINA
+#    düşerdi; symlink'li bir kaynak ise kutulu kullanıcıya paketin değil
+#    symlink'in hedefini kopyalardı.
+# 2. **Sahne KÖKÜ** (mkdtemp'in döndürdüğü) aynı kapıdan geçer — `TMPDIR`
+#    symlink'li ya da `..`'lı bir yeri gösteriyorsa sahne beklenen yerde
+#    DURMAZ ve silme/izin ölçümlerinin hepsi başka bir ağaca bakar.
+# 3. **Kaynak ağacı symlink BARINDIRAMAZ.** `shutil.copytree` varsayılan olarak
+#    symlink'i İZLER: rol dizinine sokulmuş `.env`'e bakan bir symlink,
+#    sahnede GERÇEK İÇERİK olarak belirir ve kutulu kullanıcıya devredilir.
+#    Tur kapısı (`_paket_butunluk_kapisi`) bunu turun başında bir kez ölçer;
+#    runner'ın kendi sınırında ölçülmemişti.
+#
+# Leg 2 — kanonik paket DOKUNULMAZ: alt süreç sahnede ne yaparsa yapsın (yazar,
+# ezer, siler) kanonik rol ağacının parmak izi DEĞİŞMEZ. Ölçüm, paket kurulumun
+# kullandığı AYNI parmak izi yardımcısıyla yapılır.
+
+
+def _gecici_kok(monkeypatch, yol: Path) -> Path:
+    """`mkdtemp`'in kullanacağı kökü değiştirir — GERÇEK `mkdtemp` koşar."""
+    yol.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(auditors.tempfile, "tempdir", str(yol))
+    return yol
+
+
+def _alt_surec_gozetle(monkeypatch) -> list[str]:
+    """Alt sürecin GERÇEKTEN koşup koşmadığını kaydeder (fail-closed kanıtı)."""
+    cagrildi: list[str] = []
+    gercek = auditors.subprocess.run
+
+    def _kaydet(*args, **kwargs):
+        cagrildi.append("alt-surec")
+        return gercek(*args, **kwargs)
+
+    monkeypatch.setattr(auditors.subprocess, "run", _kaydet)
+    return cagrildi
+
+
+def _sahne_kalintisi(kok: Path) -> list[Path]:
+    return sorted(kok.glob(f"{auditors.SAHNE_ONEKI}*"))
+
+
+@sahne_gerekli
+def test_stage_root_gate_positive_control(monkeypatch, tmp_path) -> None:
+    """POZİTİF KONTROL: kök enjeksiyonu `mkdtemp`'e GERÇEKTEN ulaşıyor.
+
+    Bu olmadan aşağıdaki iki reddetme testi vacuous olurdu: `TMPDIR`'ı
+    değiştirmek koşumu hiç etkilemiyorsa, kırmızı da kapıdan değil enjeksiyonun
+    kendisinden gelirdi.
+    """
+    kok = _gecici_kok(monkeypatch, tmp_path / "gercek-kok")
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, "import os; print(os.getcwd())"
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    assert Path(sonuc.stdout.strip()).is_relative_to(kok), (
+        f"sahne enjekte edilen kökün ALTINDA değil: {sonuc.stdout.strip()} — "
+        "ölçüm kurulamadı, reddetme testleri anlamsız"
+    )
+    assert not _sahne_kalintisi(kok), "başarılı koşumdan sahne KALDI"
+
+
+@sahne_gerekli
+def test_stage_root_that_is_an_alias_stops_the_run(monkeypatch, tmp_path) -> None:
+    """Geçici kök takma adlıysa alt süreç HİÇ koşmaz ve sahne KALMAZ.
+
+    **Yalnız symlink biçimi ölçülür — `..` biçimi bu yoldan ERİŞİLEMEZ.**
+    Ölçüldü (CPython 3.12.3): `tempfile.mkdtemp` dönüşünü `os.path.abspath`'ten
+    geçirir, o da `..`'yı SÖZDİZİMSEL olarak normalleştirir
+    (`/t/hedef/../hedef` → `/t/hedef`). Symlink normalleşmez, çünkü `abspath`
+    dosya sistemine bakmaz. Kapının `..` ayağı yine de kaynak tarafında
+    ölçülür (`test_stage_source_that_is_an_alias_stops_the_run[nokta-nokta]`).
+    """
+    taban = tmp_path / "taban"
+    taban.mkdir()
+    (taban / "hedef").mkdir()
+    (taban / "takma").symlink_to(taban / "hedef")
+    _gecici_kok(monkeypatch, taban / "takma")
+    cagrildi = _alt_surec_gozetle(monkeypatch)
+    kanonik, istem = _kanonik_paket(tmp_path)
+    _sahte_arac(monkeypatch, "import os; print(os.getcwd())")
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=30.0)
+
+    with pytest.raises(RuntimeError, match="sahne KÖKÜ"):
+        runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
+
+    assert not cagrildi, "takma adlı kökte alt süreç KOŞTU — kapı fail-closed değil"
+    assert not _sahne_kalintisi(taban / "hedef"), (
+        "reddedilen koşum diskte sahne BIRAKTI — kutulu kullanıcıya devredilmiş "
+        "bir paket kopyası kalıcılaşır"
+    )
+
+
+@sahne_gerekli
+@pytest.mark.parametrize("bicim", ["nokta-nokta", "symlink", "goreli"])
+def test_stage_source_that_is_an_alias_stops_the_run(
+    monkeypatch, tmp_path, bicim
+) -> None:
+    """Sahne KAYNAĞI takma adlıysa koşum başlamaz.
+
+    `..` ile biten bir kaynağın `name`'i `..`'dir: sahne dizini geçici kökün
+    ÜSTÜNE düşer. Symlink'li kaynak ise kopyaya symlink'in HEDEFİNİ taşır.
+    """
+    kok = _gecici_kok(monkeypatch, tmp_path / "gecici")
+    kanonik, istem = _kanonik_paket(tmp_path)
+    if bicim == "nokta-nokta":
+        kaynak = kanonik / ".."
+    elif bicim == "symlink":
+        kaynak = tmp_path / "takma-rol"
+        kaynak.symlink_to(kanonik)
+    else:
+        kaynak = Path(kanonik.name)
+    cagrildi = _alt_surec_gozetle(monkeypatch)
+    _sahte_arac(monkeypatch, "import os; print(os.getcwd())")
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=30.0)
+
+    with pytest.raises(RuntimeError, match="sahne KAYNAĞI"):
+        runner.run(auditors.DENETCI_ROLLERI[0], kaynak, istem)
+
+    assert not cagrildi, "takma adlı kaynakta alt süreç KOŞTU"
+    assert not _sahne_kalintisi(kok), "reddedilen koşum diskte sahne BIRAKTI"
+
+
+@sahne_gerekli
+def test_a_symlink_inside_the_packet_never_reaches_the_stage(
+    monkeypatch, tmp_path
+) -> None:
+    """Kaynak ağacı symlink barındırıyorsa koşum başlamaz.
+
+    `copytree` symlink'i İZLER (varsayılan `symlinks=False`): rol dizinine
+    sokulmuş bir symlink, hedefinin İÇERİĞİNİ sahneye gerçek dosya olarak
+    kopyalar ve o dosya kutulu kullanıcıya devredilir. Yani root-only bir sırrı
+    kutuya taşıyan yol, sahnenin KENDİ izinleri doğruyken bile açıktır.
+    """
+    kok = _gecici_kok(monkeypatch, tmp_path / "gecici")
+    kanonik, istem = _kanonik_paket(tmp_path)
+    gizli = tmp_path / "sir.env"
+    gizli.write_text("ANAHTAR=sızmamalı", encoding="utf-8")
+    (kanonik / "EK-Z-takma.md").symlink_to(gizli)
+    cagrildi = _alt_surec_gozetle(monkeypatch)
+    _sahte_arac(monkeypatch, "import os; print(os.getcwd())")
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=30.0)
+
+    with pytest.raises(RuntimeError, match="symlink"):
+        runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
+
+    assert not cagrildi, "symlink barındıran pakette alt süreç KOŞTU"
+    assert not _sahne_kalintisi(kok), (
+        "reddedilen koşum sahne bıraktı — içinde sırrın KOPYASI olurdu"
+    )
+
+
+@sahne_gerekli
+def test_the_subprocess_cannot_touch_the_canonical_packet(
+    monkeypatch, tmp_path
+) -> None:
+    """Alt süreç sahnede ne yaparsa yapsın KANONİK ağaç değişmez.
+
+    Ölçüm, paket kurulumunun kullandığı AYNI parmak izi yardımcısıyla yapılır
+    (`_rol_agaci_parmagi`) — ikinci bir kural yazılsaydı aynı ağaç için iki
+    farklı cevap üretirdi. Ağaç parmağının yanında dizinin KENDİ sahipliği ve
+    izni de ölçülür: sahne devretmesi kanonik dizine taşsaydı parmak izi
+    değişmezdi ama ağaç kutulu kullanıcıya açılırdı.
+    """
+    kanonik, istem = _kanonik_paket(tmp_path)
+    once, once_reddedilen = auditors._rol_agaci_parmagi(kanonik)
+    once_stat = kanonik.stat()
+    assert once, "ölçüm kurulamadı: kanonik paket BOŞ"
+
+    _sahte_arac(
+        monkeypatch,
+        "from pathlib import Path; "
+        "Path('YENI-RAPOR.md').write_text('alt sürecin yazdığı'); "
+        "Path('EK-B-kaynak.md').write_text('EZİLDİ'); "
+        "Path('00-GOREV.md').unlink(); "
+        "print(sorted(p.name for p in Path('.').iterdir()))",
+    )
+    runner = auditors.SubprocessRunner(zaman_asimi_sn=30.0)
+    sonuc = runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
+
+    assert sonuc.durum == "tamam", sonuc.stderr
+    # POZİTİF KONTROL: çocuk gerçekten yazdı/ezdi/sildi. Bu olmadan aşağıdaki
+    # "değişmedi" iddiası hiçbir şey ölçmez.
+    assert "YENI-RAPOR.md" in sonuc.stdout, (
+        f"alt süreç sahneye yazamadı: {sonuc.stdout.strip()} — dokunulmazlık "
+        "ölçümü vacuous olurdu"
+    )
+    assert "00-GOREV.md" not in sonuc.stdout, "alt süreç sahnede silme YAPAMADI"
+
+    sonra, sonra_reddedilen = auditors._rol_agaci_parmagi(kanonik)
+    assert sonra == once, (
+        "KANONİK ağaç değişti — alt süreç sahnede değil paketin kendisinde koştu"
+    )
+    assert sonra_reddedilen == once_reddedilen
+    assert (kanonik / "00-GOREV.md").exists(), "kanonik paketten dosya SİLİNDİ"
+    assert not (kanonik / "YENI-RAPOR.md").exists()
+
+    sonra_stat = kanonik.stat()
+    assert (sonra_stat.st_uid, sonra_stat.st_gid) == (
+        once_stat.st_uid,
+        once_stat.st_gid,
+    ), "kanonik dizin DEVREDİLDİ — sahne devretmesi kaynağa taştı"
+    assert stat.S_IMODE(sonra_stat.st_mode) == stat.S_IMODE(once_stat.st_mode)
 
 
 # ═══ 9. Düzeltme turu — B1: koşu kimliği paket kimliğine BAĞLI ══════════════

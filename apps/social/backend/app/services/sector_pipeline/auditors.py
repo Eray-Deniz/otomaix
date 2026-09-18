@@ -1876,6 +1876,69 @@ class SubprocessRunner:
             ) from exc
         return kayit.pw_uid, kayit.pw_gid
 
+    @staticmethod
+    def _kaynak_yolunu_kapila(kaynak: Path) -> Path:
+        """Sahne KAYNAĞI: mutlak · kendi canonical'i · symlink BARINDIRMAZ.
+
+        **Neden runner'ın kendi sınırında.** Kanonik paketin yolu iki kapıdan
+        geçer (`kok_yolunu_kapila` + `PacketRef._rol_yollarini_kapila`) ve
+        ağacın düğüm tipleri tur başında bir kez ölçülür
+        (`_paket_butunluk_kapisi`). Sahne o ölçümlerin İKİSİNİ DE devralmaz:
+        kopyalama ve DEVRETME burada olur, yani kutuya ne gireceğine karar
+        veren sınır burasıdır.
+
+        İki ayak, ikisi de MEVCUT kuralı yeniden kullanır — ikinci bir kural
+        yazılsaydı aynı ağaç için iki farklı cevap üreten iki kural olurdu:
+
+        1. **Yol.** `..` ile biten bir kaynağın `name`'i `..`'dir ve sahne
+           dizini geçici kökün ÜSTÜNE düşerdi; symlink'li bir kaynak ise
+           kopyaya paketin değil symlink hedefinin içeriğini taşırdı.
+        2. **Ağacın düğümleri.** `shutil.copytree` varsayılan olarak symlink'i
+           İZLER: rol dizinine sokulmuş, kök-erişimli bir dosyaya bakan symlink
+           sahnede GERÇEK İÇERİK olarak belirir ve kutulu kullanıcıya
+           devredilir — sahnenin kendi izni `700` ve sahibi doğruyken bile.
+           Reddetme, parmak izi yardımcısının KENDİ reddettikleri listesidir.
+        """
+        try:
+            yol = kok_yolunu_kapila(Path(kaynak))
+        except ValueError as exc:
+            raise RuntimeError(
+                f"sahne KAYNAĞI yol kapısını GEÇEMEDİ: {exc} — takma adlı bir "
+                "kaynak, sahneyi beklenen yerin dışına düşürür ya da kopyaya "
+                "paketin değil symlink hedefinin içeriğini taşır"
+            ) from exc
+        _parmak, reddedilen = _rol_agaci_parmagi(yol)
+        if reddedilen:
+            raise RuntimeError(
+                "sahne KAYNAĞI symlink ya da düzenli-olmayan düğüm "
+                f"BARINDIRIYOR: {', '.join(reddedilen)} — `copytree` symlink'i "
+                "İZLER, yani hedefin içeriği sahneye gerçek dosya olarak iner "
+                "ve kutulu kullanıcıya devredilir"
+            )
+        return yol
+
+    @classmethod
+    def _sahne_kokunu_ac(cls) -> Path:
+        """Geçici kök — kanonik paketin AYNI yol kapısından geçer.
+
+        `mkdtemp` kökü `TMPDIR`'dan alır; symlink'li ya da `..`'lı bir TMPDIR,
+        sahneyi beklenen yerin dışına düşürür ve silme/izin ölçümlerinin hepsi
+        BAŞKA bir ağaca bakar. T4 bu yolu "mkdtemp kullanıyoruz, güvenli
+        görünüyor" diye VARSAYMIŞTI; kapı varsayımı ölçüme çevirir.
+
+        Reddedilen kök SİLİNİR: `mkdtemp` onu zaten yaratmıştır ve geride
+        bırakılan boş bir sahne kökü, bir sonraki reddetmede birikir.
+        """
+        ham = Path(tempfile.mkdtemp(prefix=SAHNE_ONEKI))
+        try:
+            return kok_yolunu_kapila(ham)
+        except ValueError as exc:
+            shutil.rmtree(ham, onexc=cls._silme_hatasi)
+            raise RuntimeError(
+                f"sahne KÖKÜ yol kapısını GEÇEMEDİ: {exc} — sahne beklenen "
+                "yerde durmaz, silme ve izin ölçümleri başka bir ağaca bakar"
+            ) from exc
+
     @classmethod
     @contextmanager
     def _sahne(cls, kaynak: Path) -> Iterator[Path]:
@@ -1893,14 +1956,22 @@ class SubprocessRunner:
         sahnesi rol-2 başlamadan yok olur, yani kardeşin paketi zaman içinde de
         adreslenemez.
 
+        **Yol kapısı (T5).** Kaynak da geçici kök de kanonik paketin AYNI
+        kapısından geçer (`_kaynak_yolunu_kapila` · `_sahne_kokunu_ac`): takma
+        adlı bir kaynak sahneyi beklenen yerin dışına düşürür, symlink
+        barındıran bir ağaç ise `copytree` tarafından İZLENİR ve hedefin
+        içeriği kutulu kullanıcıya devredilir.
+
         **Devretme fail-closed.** `chown` root gerektirir; başarısızsa sahne
         kurulmaz ve koşum BAŞLAMAZ. Yarım devredilmiş bir sahne, kutulu sürecin
         giremediği bir dizindir — hatayı alt sürecin anlamsız çıktısına
         çevirmek yerine burada durdurulur.
         """
         uid, gid = cls._kutu_kimligi()
-        kaynak = Path(kaynak)
-        kok = Path(tempfile.mkdtemp(prefix=SAHNE_ONEKI))
+        # Kaynak kapısı geçici kökten ÖNCE: reddedilecek bir kaynak için
+        # dizin yaratmak, silinmesi gereken bir sahne kökü bırakırdı.
+        kaynak = cls._kaynak_yolunu_kapila(kaynak)
+        kok = cls._sahne_kokunu_ac()
         try:
             # Sahne KAYNAĞIN ADINI korur: bugün de `cwd` rol dizinidir, yani
             # alt sürecin gördüğü ad DEĞİŞMEZ (yeni bir sinyal doğmaz).
