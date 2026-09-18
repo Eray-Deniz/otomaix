@@ -373,7 +373,7 @@ kirli sonuç ölçüm sayılıyor · isteme meydan okuma yazılmıyor · codex k
 Üç mevcut güvenlik testi GEVŞETİLMEDİ, rol bazlı sözleşmeye çevrildi (yazma ekseni hiçbir rolde
 izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste ÇELİŞEMEZ — bu kapı yeni).
 
-## Faz 5 — Kanıt ve kapanış — T13 · T14 BİTTİ 2026-09-18; T15 (review) KALDI
+## Faz 5 — Kanıt ve kapanış — **BİTTİ 2026-09-18** (T13 · T14 · T15); güvenlik gözü BLOKE
 
 - [x] **T13** Kanarya — **BİTTİ 2026-09-18.** `scripts/denetci_kanaryasi.py`, gerçek araçlarla,
       üretim yolundan (`SubprocessRunner`), YENİDEN KOŞULABİLİR. Takımın içinde DEĞİL: her ayak
@@ -414,7 +414,17 @@ izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste Ç
       **Bu görevde koşan mutasyonlar: 22, hepsi yakalandı** — T5'te 5, T6'da 2 (biri yanlış
       sebeple kırmızıydı, yeniden kuruldu), T6b'de 1, T7/T8/T9'da 5, Faz 4'te 6, T13'te 1
       (kanaryanın kendisi). Takım tabanı 4547'den 4562'ye çıktı, hiçbir test silinmedi.
-- [ ] **T15** Review — `/review-claude-codex` ve güvenlik gözü, kapsam gerektirdiğinde.
+- [x] **T15** Review — **KOD REVIEW'I KOŞTU 2026-09-18; güvenlik gözü BLOKE.**
+      `/review-claude-codex` iki bağımsız hakemle koştu (fresh Claude subagent + Codex
+      adversarial-review, pinli worktree @ `d215452`, aralık `496ddbd..d215452`). Rapor:
+      `docs/reviews/2026-09-18-feat-sektor-bilgi-paketi-plan2.md`.
+      **Sonuç: 1 critical + 5 high + 3 medium + 8 low.** İki hakem FARKLI eksenler buldu;
+      dokuz bulgunun yalnız ikisi örtüştü. Altı C/H'ın mekanizması kontrolörün kendi taze
+      ölçümüyle doğrulandı, hiçbiri sessizce düşürülmedi.
+      **Kapatılanlar:** F2 (tur-ömürlü ev) · F4 (devretme sırası) · F3 kısmen (keşif kapandı).
+      **Açık:** F1 · F5 · F6 — aşağıdaki bölümde, karar bekliyor.
+      **`/security-review-claude-codex` açık C/H yüzünden HARD-BLOCK** (zincir kuralı; explicit
+      override verilmedi). Güvenlik gözü o üç bulgu karara bağlanmadan koşmaz.
 
 # Open Problems
 

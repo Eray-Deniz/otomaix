@@ -5,11 +5,16 @@ written: 2026-09-14
 
 # Resume From
 
-> ⚠️ **2026-09-17 — `denetim` ayağı ENGELLİ, bu bölüm olduğu gibi izlenemez.** Tur
-> başlamadı: K-14 sert kapısı iki denetçinin de web erişimi olmadığını ölçtü. Erişimi
-> açmak için önce denetçi alt süreçleri ayrı bir işletim sistemi kullanıcısına alınıyor —
-> ayrı görev: `docs/active/denetci-surec-izolasyonu/`. O görev bitmeden aşağıdaki
-> `denetim` komutu koşturulmaz.
+> ✅ **2026-09-18 — ENGEL KALKTI.** `denetci-surec-izolasyonu` görevi bitti (15/15) ve K-14
+> canlı ölçüldü: **iki denetçi için de `erisim-var`, `tur_baslayabilir=True`** (claude 9,9 s ·
+> codex 22,8 s). Aşağıdaki `denetim` komutu artık koşturulabilir.
+>
+> ⚠️ **Ama önce bir KARAR var.** O görevin dual review'ından üç bulgu açık (F1 critical + F5/F6
+> high): ağa çıkabilen ajan, okuyabildiği her şeyi gönderebilir — en ağırı, kutulu codex'in
+> Eray'ın OpenAI oturum jetonunu okuyabilmesi. Parasız yapısal kapanışı yok; kontrolörün önerisi
+> "koşullu kabul edilmiş risk" (koşul: pakete üçüncü taraf ham içerik girdiği gün yeniden açılır),
+> Eray onaylamadı. Ayrıntı: `docs/active/denetci-surec-izolasyonu/TASK.md` "Review bulguları".
+> **Tur teknik olarak koşabilir; kararı vermeden koşturmak riski sessizce kabul etmek olur.**
 
 **Sıradaki iş: Task 19 Step 6'nın `denetim` ayağı — iki kör denetçiyi koştur. İş YÜRÜTÜCÜDE,
 Eray'da DEĞİL.**
