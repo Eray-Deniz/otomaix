@@ -1017,23 +1017,48 @@ def test_toolspec_argv_is_a_tuple_and_non_empty() -> None:
     for ad, spec in auditors.ARAC_KOMUTLARI.items():
         assert isinstance(spec.argv, tuple) and spec.argv, ad
     with pytest.raises(ValueError):
-        auditors.ToolSpec(())
+        auditors.ToolSpec((), kullanici=None)
 
 
 # ═══ 8. SubprocessRunner — GERÇEK alt süreç ölçümü ══════════════════════════
 
 
-def _sahte_arac(monkeypatch, kod: str) -> None:
-    """`ARAC_KOMUTLARI`'nı zararsız bir Python alt süreciyle değiştirir."""
+def _sahte_arac(monkeypatch, kod: str, *, kullanici: str | None = None) -> None:
+    """`ARAC_KOMUTLARI`'nı zararsız bir Python alt süreciyle değiştirir.
+
+    `kullanici` sahte aracın İZOLASYON PROFİLİDİR ve AÇIKÇA verilir: `None`
+    "çağıranın kimliğiyle koş" demektir (bugünkü `denetci-1`), bir ad ise
+    "o kullanıcıya düş" (bugünkü `denetci-2`). Varsayılanı `None` olması
+    kolaylık değil ÖLÇÜM tercihidir — kutulu davranışı ölçen her test onu
+    kendi çağrısında İSTER, yani hangi profilin ölçüldüğü çağrı yerinde görünür.
+    """
     monkeypatch.setattr(
         auditors,
         "ARAC_KOMUTLARI",
         {
             auditors.DENETCI_ROLLERI[0]: auditors.ToolSpec(
-                (sys.executable, "-c", kod)
+                (_yorumlayici(kullanici), "-c", kod), kullanici=kullanici
             )
         },
     )
+
+
+def _yorumlayici(kullanici: str | None) -> str:
+    """Sahte aracın yorumlayıcısı — KUTULU profilde `sys.executable` KULLANILAMAZ.
+
+    Ölçüldü (2026-09-18): sanal ortamın yorumlayıcısı `/root` altındadır ve
+    kutulu kullanıcı onu ÇALIŞTIRAMAZ (`PermissionError 13`). Bu, kutunun kendi
+    özelliğidir — gerçek denetçi araçları `/usr/bin` altında olduğu için
+    etkilenmez (ölçüldü: kutulu `codex exec` rc=0, `PONG`). Kutulu ölçümler bu
+    yüzden sistem yorumlayıcısını kullanır; kutusuz ölçümler sanal ortamınkini
+    kullanmaya devam eder, yani kutusuz yolun davranışı değişmez.
+    """
+    if kullanici is None:
+        return sys.executable
+    sistem = shutil.which("python3")
+    if sistem is None:  # pragma: no cover — sistem python'ı olmayan makine
+        pytest.skip("sistem python3 yok — kutulu alt süreç ölçümü kurulamıyor")
+    return sistem
 
 
 def _kos(monkeypatch, tmp_path: Path, kod: str, zaman_asimi: float = 60.0):
@@ -1178,9 +1203,16 @@ def _kanonik_paket(tmp_path: Path) -> tuple[Path, Path]:
     return kanonik, kanonik / "00-GOREV.md"
 
 
-def _sahne_kos(monkeypatch, tmp_path: Path, kod: str, zaman_asimi: float = 60.0):
+def _sahne_kos(
+    monkeypatch,
+    tmp_path: Path,
+    kod: str,
+    zaman_asimi: float = 60.0,
+    *,
+    kullanici: str | None = auditors.IZOLASYON_KULLANICISI,
+):
     kanonik, istem = _kanonik_paket(tmp_path)
-    _sahte_arac(monkeypatch, kod)
+    _sahte_arac(monkeypatch, kod, kullanici=kullanici)
     runner = auditors.SubprocessRunner(zaman_asimi_sn=zaman_asimi)
     sonuc = runner.run(auditors.DENETCI_ROLLERI[0], kanonik, istem)
     return kanonik, sonuc
@@ -1255,28 +1287,34 @@ def test_the_box_user_can_actually_reach_the_stage(monkeypatch, tmp_path) -> Non
 
     Sahnenin kendi sahipliğini ölçmek YETMEZ: sahne, kutulu kullanıcının
     giremediği bir üst dizinin altındaysa sahiplik doğru görünür ve dizin yine
-    de erişilemez olur. Bu ölçüm ZİNCİRİN TAMAMINI dener — geçici kök, sahne ve
-    dosyanın kendisi — ve bunu alt sürecin içinden, kutulu kullanıcı ADINA yapar.
+    de erişilemez olur. Ölçüm ZİNCİRİN TAMAMINI dener — geçici kök, sahne ve
+    dosyanın kendisi.
 
-    Ölçüm bugün anlamlıdır çünkü alt süreç hâlâ root koşar (T7 inmedi); yani
-    testin yeşili ayrıcalıktan değil, gerçekten devredilmiş bir zincirden gelir.
+    **Mekanizma T7 ile DEĞİŞTİ (2026-09-18), iddia değişmedi.** Önceki yazımda
+    alt süreç root koşuyordu ve zincir `sudo -u` ile deneniyordu; T7'den sonra
+    alt sürecin KENDİSİ kutulu kullanıcıdır, üstelik o kullanıcının `sudo`
+    yetkisi YOKTUR (T1) — eski prob artık *"codex is not in the sudoers file"*
+    döner. Yeni ölçüm daha doğrudandır: OKUYAN kimlik ile BEKLENEN kimlik aynı
+    koşumda birlikte basılır, yani yeşil ancak kutulu kimlik gerçekten okuduğu
+    zaman doğar.
     """
+    kayit = pwd.getpwnam(auditors.IZOLASYON_KULLANICISI)
     _kanonik, sonuc = _sahne_kos(
         monkeypatch,
         tmp_path,
-        "import os,subprocess,sys; "
-        "hedef=os.path.join(os.getcwd(), 'EK-B-kaynak.md'); "
-        f"k=subprocess.run(['sudo','-n','-u','{auditors.IZOLASYON_KULLANICISI}',"
-        "'cat',hedef], capture_output=True, text=True); "
-        "print('RC', k.returncode, k.stdout.strip()); "
-        "sys.stderr.write(k.stderr)",
+        "import os; from pathlib import Path; "
+        "print(os.getuid(), Path('EK-B-kaynak.md').read_text().strip(), sep='|')",
     )
     assert sonuc.durum == "tamam", sonuc.stderr
-    assert sonuc.stdout.startswith("RC 0 "), (
-        f"kutulu kullanıcı sahnedeki paketi OKUYAMADI: {sonuc.stdout.strip()} — "
-        f"stderr: {sonuc.stderr.strip()}"
+    uid_metni, icerik = sonuc.stdout.strip().split("|")
+
+    assert int(uid_metni) == kayit.pw_uid, (
+        f"okuyan kimlik uid={uid_metni}, kutulu kullanıcı {kayit.pw_uid} — "
+        "zincir ayrıcalıkla geçilmiş olabilir, ölçüm kanıt değil"
     )
-    assert "kaynak gövdesi" in sonuc.stdout
+    assert icerik == "kaynak gövdesi", (
+        f"kutulu kullanıcı sahnedeki paketi OKUYAMADI: {sonuc.stdout.strip()!r}"
+    )
 
 
 @sahne_gerekli
@@ -1313,7 +1351,11 @@ def test_each_run_gets_its_own_stage_and_none_outlives_its_run(
     "her koşum kendi sahnesi + koşum bitince silme" bu kanalı kapatır.
     """
     kanonik, istem = _kanonik_paket(tmp_path)
-    _sahte_arac(monkeypatch, "import os; print(os.getcwd())")
+    _sahte_arac(
+        monkeypatch,
+        "import os; print(os.getcwd())",
+        kullanici=auditors.IZOLASYON_KULLANICISI,
+    )
     runner = auditors.SubprocessRunner(zaman_asimi_sn=60.0)
     rol = auditors.DENETCI_ROLLERI[0]
 
@@ -1343,14 +1385,13 @@ def test_missing_box_user_stops_the_run_before_the_subprocess(
     kanonik, istem = _kanonik_paket(tmp_path)
     cagrildi: list[str] = []
     monkeypatch.setattr(
-        auditors, "IZOLASYON_KULLANICISI", "olmayan-kullanici-xyz-0"
-    )
-    monkeypatch.setattr(
         auditors.subprocess,
         "run",
         lambda *a, **kw: cagrildi.append("alt-surec"),
     )
-    _sahte_arac(monkeypatch, "print('rapor')")
+    _sahte_arac(
+        monkeypatch, "print('rapor')", kullanici="olmayan-kullanici-xyz-0"
+    )
     runner = auditors.SubprocessRunner(zaman_asimi_sn=5.0)
 
     with pytest.raises(RuntimeError, match="izolasyon kullanıcısı YOK"):
@@ -1590,6 +1631,122 @@ def test_the_subprocess_cannot_touch_the_canonical_packet(
         once_stat.st_gid,
     ), "kanonik dizin DEVREDİLDİ — sahne devretmesi kaynağa taştı"
     assert stat.S_IMODE(sonra_stat.st_mode) == stat.S_IMODE(once_stat.st_mode)
+
+
+# ═══ 8d. ARAÇ BAŞINA KİMLİK — kutu Codex için (T8 + T7) ═════════════════════
+#
+# **Kapsam düzeltmesi 2026-09-18.** Kutunun ölçülmüş gerekçesi Codex'e özeldir:
+# onun `read-only` kum havuzu yazmayı ve ağı kısıtlar, OKUMAYI kısıtlamaz.
+# Claude'un okuması `--restricted` ile zaten çalışma dizinine hapsedilmiştir
+# (2026-09-18'de yeniden ölçüldü: paket içi OKUNDU, `/etc/hostname` ve
+# `/root/.claude` aracın KENDİ hatasıyla düştü). Bu yüzden ayrıcalık düşürme
+# ARAÇ BAŞINADIR — `denetci-2` kutuya düşer, `denetci-1` çağıranın kimliğiyle
+# koşar.
+#
+# Profil ARAÇLA BİRLİKTE beyan edilir (`ToolSpec.kullanici`) ve beyan ZORUNLUDUR:
+# varsayılan bir değer, "bu araç neden kutusuz" sorusunu sessizce yutardı.
+
+
+def _cocugun_gordugu(sonuc) -> dict[str, str]:
+    """Alt sürecin KENDİ bastığı üç değer: uid · HOME · sahnenin sahibi."""
+    uid, home, sahne_uid = sonuc.stdout.strip().split("|")
+    return {"uid": uid, "home": home, "sahne_uid": sahne_uid}
+
+
+_KIMLIK_PROBU = (
+    "import os; print(os.getuid(), os.environ.get('HOME',''), "
+    "os.stat('.').st_uid, sep='|')"
+)
+
+
+def test_toolspec_requires_an_explicit_isolation_profile() -> None:
+    """Her araç profilini BEYAN EDER — varsayılan YOK (T9'un alanı).
+
+    Beyanın zorunlu olması, "bu araç neden kutusuz" sorusunu görünür kılar:
+    varsayılanı olan bir alan, yeni eklenen bir aracı sessizce root'ta koştururdu.
+    """
+    with pytest.raises(TypeError):
+        auditors.ToolSpec((sys.executable,))  # type: ignore[call-arg]
+
+    auditors.ToolSpec((sys.executable,), kullanici=None)  # açık "kutusuz"
+    auditors.ToolSpec((sys.executable,), kullanici="codex")
+
+    for bozuk in ("", "   "):
+        with pytest.raises(ValueError):
+            auditors.ToolSpec((sys.executable,), kullanici=bozuk)
+
+
+def test_tool_user_declaration_matches_independent_literals() -> None:
+    """Beklenti EŞLEMEDEN okunmaz — kapsam kararının kendisi ölçülür.
+
+    `denetci-1` ve `sentez` bilerek `None`'dır (claude, çağıranın kimliği);
+    `denetci-2` kutuludur. Eşlemeden okunsaydı yanlış bir profil de geçerdi.
+    """
+    olculen = {ad: spec.kullanici for ad, spec in auditors.ARAC_KOMUTLARI.items()}
+
+    assert olculen == {"denetci-1": None, "denetci-2": "codex", "sentez": None}
+
+
+@sahne_gerekli
+def test_boxed_tool_runs_as_the_box_user_with_its_own_home(
+    monkeypatch, tmp_path
+) -> None:
+    """Kutulu araç: uid DÜŞER, `HOME` kutulu kullanıcının evidir, sahne onundur.
+
+    Üç değeri de ÇOCUK basar. `HOME` ayağı T8'dir ve ölçümle zorunlu hâle geldi:
+    miras alınan `HOME` `/root`'u gösteriyor, kutulu kullanıcı oraya giremiyor ve
+    araç kendi kimliğini bulamıyor (2026-09-18: `codex` → `Permission denied`,
+    `claude` → `Not logged in`).
+    """
+    kayit = pwd.getpwnam(auditors.IZOLASYON_KULLANICISI)
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch,
+        tmp_path,
+        _KIMLIK_PROBU,
+        kullanici=auditors.IZOLASYON_KULLANICISI,
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    gorulen = _cocugun_gordugu(sonuc)
+
+    assert gorulen["uid"] == str(kayit.pw_uid), (
+        f"alt süreç uid={gorulen['uid']} ile koştu, beklenen {kayit.pw_uid} — "
+        "ayrıcalık düşmedi, kutu KÂĞITTAN"
+    )
+    assert gorulen["home"] == kayit.pw_dir, (
+        f"HOME={gorulen['home']!r} — kutulu süreç kendi kimliğini oradan okuyamaz"
+    )
+    assert gorulen["sahne_uid"] == str(kayit.pw_uid)
+
+
+@sahne_gerekli
+def test_unboxed_tool_keeps_the_caller_identity_and_a_root_owned_stage(
+    monkeypatch, tmp_path
+) -> None:
+    """Kutusuz araç (`denetci-1`): kimlik ÇAĞIRANIN, sahne de çağıranındır.
+
+    Sahne sahipliği profili İZLER. Kutusuz bir aracın sahnesini kutulu
+    kullanıcıya devretmek, o kullanıcıya paketin kopyasını BOŞ YERE açardı —
+    araç zaten oraya düşmüyor.
+    """
+    _kanonik, sonuc = _sahne_kos(
+        monkeypatch, tmp_path, _KIMLIK_PROBU, kullanici=None
+    )
+    assert sonuc.durum == "tamam", sonuc.stderr
+    gorulen = _cocugun_gordugu(sonuc)
+    kutu = pwd.getpwnam(auditors.IZOLASYON_KULLANICISI)
+
+    assert gorulen["uid"] == str(os.getuid()), (
+        f"kutusuz araç uid={gorulen['uid']} ile koştu, çağıran {os.getuid()} — "
+        "beyan edilmemiş bir ayrıcalık değişimi oldu"
+    )
+    assert gorulen["home"] == os.environ.get("HOME", ""), (
+        "kutusuz aracın `HOME`'u DEĞİŞTİRİLMİŞ — beyanı `None`, yani miras alır"
+    )
+    assert gorulen["sahne_uid"] != str(kutu.pw_uid), (
+        "kutusuz aracın sahnesi kutulu kullanıcıya DEVREDİLDİ — o kullanıcı "
+        "paketin kopyasını boş yere okuyabilir"
+    )
+    assert gorulen["sahne_uid"] == str(os.getuid())
 
 
 # ═══ 9. Düzeltme turu — B1: koşu kimliği paket kimliğine BAĞLI ══════════════

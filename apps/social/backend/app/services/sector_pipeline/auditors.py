@@ -1595,6 +1595,25 @@ class ToolSpec:
 
     argv: tuple[str, ...]
 
+    kullanici: str | None
+    """Alt sürecin koşacağı İŞLETİM SİSTEMİ kullanıcısı — BEYAN ZORUNLUDUR (T9).
+
+    `None` = çağıranın kimliğiyle koş. Bir ad = o kullanıcıya DÜŞ (ayrıcalık
+    düşürme); kullanıcı yoksa koşum hiç başlamaz (fail-closed).
+
+    **Neden varsayılanı YOK.** Varsayılan bir değer, "bu araç neden kutusuz"
+    sorusunu sessizce yutardı: yarın eklenen bir araç beyan etmeden root'ta
+    koşardı. Alan zorunlu olduğu için her araç kendi profilini söyler.
+
+    **Neden araç başına (kapsam düzeltmesi 2026-09-18).** Kutunun ÖLÇÜLMÜŞ
+    gerekçesi Codex'e özeldir — `read-only` kum havuzu yazmayı ve ağı kısıtlar,
+    OKUMAYI kısıtlamaz. Claude'un okuması `--restricted` ile zaten çalışma
+    dizinine hapsedilmiştir (2026-09-18, üç koşum: paket içi OKUNDU; paket dışı
+    iki hedef aracın KENDİ hatasıyla düştü). Tek tip bir "hepsi kutuya" kuralı,
+    ölçümün desteklemediği bir bedeli (kutulu kullanıcı için ayrı Claude
+    kimliği) zorunlu kılardı.
+    """
+
     def __post_init__(self) -> None:
         deger = tuple(self.argv)
         if not deger:
@@ -1605,6 +1624,14 @@ class ToolSpec:
                     f"ToolSpec.argv yalnız boş olmayan dize taşır: {parca!r}"
                 )
         object.__setattr__(self, "argv", deger)
+        if self.kullanici is not None and (
+            not isinstance(self.kullanici, str) or not self.kullanici.strip()
+        ):
+            raise ValueError(
+                f"ToolSpec.kullanici ya None ya da BOŞ OLMAYAN bir kullanıcı "
+                f"adıdır: {self.kullanici!r} — boş ad, kimliği çözülemeyen bir "
+                "beyandır ve fail-closed düşmesi gereken yolu belirsiz bırakır"
+            )
 
 
 IZOLASYON_KULLANICISI = "codex"
@@ -1699,7 +1726,8 @@ YAPILMADI (güvenlik review'ı S-2 kalıntısı).
 ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
     {
         DENETCI_ROLLERI[0]: ToolSpec(
-            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON)
+            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON),
+            kullanici=None,
         ),
         DENETCI_ROLLERI[1]: ToolSpec(
             (
@@ -1711,10 +1739,12 @@ ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
                 "--color",
                 "never",
                 "-",
-            )
+            ),
+            kullanici=IZOLASYON_KULLANICISI,
         ),
         SENTEZ_ARACI: ToolSpec(
-            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON)
+            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON),
+            kullanici=None,
         ),
     }
 )
@@ -1847,8 +1877,16 @@ class SubprocessRunner:
         )
 
     @staticmethod
-    def _alt_surec_ortami() -> dict[str, str]:
+    def _alt_surec_ortami(kayit: "pwd.struct_passwd | None") -> dict[str, str]:
         """Alt sürecin göreceği ortam — BEYAZ LİSTE (2026-09-12 güvenlik review'ı, S-2).
+
+        **`HOME` ARAÇ BAŞINA (T8).** Kutulu araçta `HOME` kullanıcının KENDİ
+        evidir; miras alınan değer `/root`'u gösterir ve kutulu kullanıcı oraya
+        giremez. Ölçüldü (2026-09-18, gerçek argv, ayrıcalık düşürülmüş):
+        `HOME=/root` ile `codex` *"Failed to read config file
+        /root/.codex/config.toml: Permission denied"* diyerek rc=1 döndü;
+        `HOME=/home/codex` ile aynı koşum rc=0 ve `PONG` verdi (11,8 s, canlı
+        model). Kutusuz araçta `HOME` miras alınır — davranış DEĞİŞMEZ.
 
         Miras alınan ortam, enjekte edilmiş bir talimat için hazır bir sızdırma
         kanalıydı: çağıranın ortamına yüklenmiş her anahtar (veritabanı, fal.ai,
@@ -1857,24 +1895,36 @@ class SubprocessRunner:
         kendi yapılandırmalarından okunur, ortamdan DEĞİL.
         """
         izinli = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TMPDIR")
-        return {ad: os.environ[ad] for ad in izinli if ad in os.environ}
+        ortam = {ad: os.environ[ad] for ad in izinli if ad in os.environ}
+        if kayit is not None:
+            ortam["HOME"] = kayit.pw_dir
+        return ortam
 
     @staticmethod
-    def _kutu_kimligi() -> tuple[int, int]:
-        """Kutulu kullanıcının (uid, gid)'si — YOKSA fail-closed.
+    def _kutu_kimligi(kullanici: str | None) -> "pwd.struct_passwd | None":
+        """Aracın BEYAN ETTİĞİ kullanıcının kaydı — yoksa fail-closed.
 
-        Kullanıcı yoksa sahne devredilemez; devredilemeyen sahne kutulu süreç
-        için ERİŞİLEMEZ bir dizindir. Sessizce root'ta bırakmak, kutuyu kâğıda
-        çevirip koşumu yine de başlatırdı.
+        Ad araçtan gelir (`ToolSpec.kullanici`), modül sabitinden DEĞİL: iki
+        araç iki ayrı profil taşıyabilir ve sabiti okuyan bir çözüm ikisini de
+        aynı kutuya iterdi.
+
+        `None` beyanı "çağıranın kimliğiyle koş" demektir ve kayıt da `None`
+        döner — devretme ve ayrıcalık düşürme o yolda HİÇ yapılmaz.
+
+        Beyan edilen kullanıcı yoksa koşum BAŞLAMAZ: sahne devredilemez,
+        devredilemeyen sahne kutulu süreç için ERİŞİLEMEZ bir dizindir.
+        Sessizce root'ta bırakmak, kutuyu kâğıda çevirip koşumu yine de
+        başlatırdı.
         """
+        if kullanici is None:
+            return None
         try:
-            kayit = pwd.getpwnam(IZOLASYON_KULLANICISI)
+            return pwd.getpwnam(kullanici)
         except KeyError as exc:
             raise RuntimeError(
-                f"izolasyon kullanıcısı YOK: {IZOLASYON_KULLANICISI!r} — "
-                "sahne dizini devredilemez, denetçi alt süreci BAŞLATILMAZ"
+                f"izolasyon kullanıcısı YOK: {kullanici!r} — sahne dizini "
+                "devredilemez, denetçi alt süreci BAŞLATILMAZ"
             ) from exc
-        return kayit.pw_uid, kayit.pw_gid
 
     @staticmethod
     def _kaynak_yolunu_kapila(kaynak: Path) -> Path:
@@ -1941,7 +1991,9 @@ class SubprocessRunner:
 
     @classmethod
     @contextmanager
-    def _sahne(cls, kaynak: Path) -> Iterator[Path]:
+    def _sahne(
+        cls, kaynak: Path, kayit: "pwd.struct_passwd | None"
+    ) -> Iterator[Path]:
         """Paketin TEK KULLANIMLIK kopyası — kutulu kullanıcının, `700`, geçici.
 
         **Neden kopya, neden kanonik ağaç açılmıyor.** Kanonik paket
@@ -1967,7 +2019,6 @@ class SubprocessRunner:
         giremediği bir dizindir — hatayı alt sürecin anlamsız çıktısına
         çevirmek yerine burada durdurulur.
         """
-        uid, gid = cls._kutu_kimligi()
         # Kaynak kapısı geçici kökten ÖNCE: reddedilecek bir kaynak için
         # dizin yaratmak, silinmesi gereken bir sahne kökü bırakırdı.
         kaynak = cls._kaynak_yolunu_kapila(kaynak)
@@ -1977,10 +2028,16 @@ class SubprocessRunner:
             # alt sürecin gördüğü ad DEĞİŞMEZ (yeni bir sinyal doğmaz).
             sahne = kok / kaynak.name
             shutil.copytree(kaynak, sahne)
-            os.chown(kok, uid, gid, follow_symlinks=False)
             kok.chmod(0o700)
-            for yol in sorted(kok.rglob("*")):
-                os.chown(yol, uid, gid, follow_symlinks=False)
+            # Devretme PROFİLİ İZLER: kutusuz aracın sahnesi çağıranda kalır.
+            # Onu da kutulu kullanıcıya vermek, oraya hiç düşmeyen bir araç
+            # için paketin kopyasını BOŞ YERE açardı.
+            if kayit is not None:
+                os.chown(kok, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False)
+                for yol in sorted(kok.rglob("*")):
+                    os.chown(
+                        yol, kayit.pw_uid, kayit.pw_gid, follow_symlinks=False
+                    )
             sahne.chmod(0o700)
             yield sahne
         finally:
@@ -2006,16 +2063,31 @@ class SubprocessRunner:
         # İstem KANONİK yoldan okunur (çağıran root'tur) ve STDIN'e verilir:
         # sahnedeki kopyadan okumak aynı baytı ikinci bir yoldan almak olurdu.
         istem = Path(prompt_path).read_bytes()
+        # Kimlik ARACIN beyanından çözülür ve sahneden ÖNCE gelir: beyan
+        # edilen kullanıcı yoksa hiçbir dizin yaratılmadan düşülür.
+        kayit = self._kutu_kimligi(spec.kullanici)
+        # Ayrıcalık düşürme YALNIZ beyan varken: `extra_groups=[]` yan grupları
+        # da düşürür, yoksa çocuk root'un ek gruplarını taşımaya devam ederdi.
+        kimlik_kwargs = (
+            {}
+            if kayit is None
+            else {
+                "user": kayit.pw_uid,
+                "group": kayit.pw_gid,
+                "extra_groups": [],
+            }
+        )
         try:
-            with self._sahne(cwd) as sahne:
+            with self._sahne(cwd, kayit) as sahne:
                 tamamlanan = subprocess.run(  # noqa: S603 — argv KAPALI eşlemeden
                     list(spec.argv),
                     cwd=str(sahne),
-                    env=self._alt_surec_ortami(),
+                    env=self._alt_surec_ortami(kayit),
                     input=istem,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     timeout=self.zaman_asimi_sn,
+                    **kimlik_kwargs,
                 )
         except subprocess.TimeoutExpired as exc:
             stdout = self._metin(exc.stdout)
@@ -2771,13 +2843,17 @@ async def run_audit_round(
     küme de yeniden koşuma açıktır; işaretin amacı satırın `calisiyor` olarak
     ASILI kalmamasıdır.
 
-    **KALAN RİSK — dürüst beyan (B3).** `cwd` bir güvenlik sınırı DEĞİLDİR:
-    işletim sistemi düzeyinde kum havuzu YOKTUR ve kasıtlı düşmanca bir denetçi
-    dosya sistemini gezip kardeş rolün dizinini okuyabilir. Bu turda kapatılan
-    şey İZOLASYON değil, gözlenebilir SIZINTI KANALIDIR: denetçi-1'in raporu
-    denetçi-2 koşarken diskte YOKTUR ve rol yolları takma ad kabul etmez.
-    Tehdit modeli girdinin ÖZENSİZ olmasıdır, SALDIRGAN olması değil; gerçek
-    izolasyon dağıtım katmanının işidir ve bu görevin kapsamı DIŞINDADIR.
+    **KALAN RİSK — dürüst beyan (B3), 2026-09-18'de DARALDI.** `cwd` bir
+    güvenlik sınırı DEĞİLDİR ve bu, kutusuz araç için aynen geçerlidir:
+    `denetci-1` çağıranın kimliğiyle koşar, yani kasıtlı düşmanca bir denetçi
+    dosya sistemini gezebilir — onu bugün tutan şey aracın KENDİ `--restricted`
+    bayrağıdır, işletim sistemi değil. `denetci-2` için beyan ARTIK DAR:
+    o araç ayrı bir işletim sistemi kullanıcısına DÜŞER (`ToolSpec.kullanici`,
+    T7) ve sahnesi o kullanıcıya devredilir, yani root'un evi ona `700` ile
+    kapalıdır. Kapsayıcı/ad-alanı düzeyinde izolasyon hâlâ YOKTUR ve dağıtım
+    katmanının işidir. Bu turda kapatılan şey gözlenebilir SIZINTI KANALIDIR:
+    denetçi-1'in raporu denetçi-2 koşarken diskte YOKTUR ve rol yolları takma
+    ad kabul etmez. Tehdit modeli girdinin ÖZENSİZ olmasıdır.
     `test_cwd_is_not_a_security_boundary_and_the_declaration_is_measured` bu
     beyanı ölçer — izolasyon eklenirse test KIRMIZI olur ve beyan bayat kalamaz.
     Kiralama ve bütünlük kapısı bu sınırı DEĞİŞTİRMEZ: ikisi de dosya sistemi
