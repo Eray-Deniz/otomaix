@@ -476,7 +476,24 @@ izinli değil; ağ ekseni role göre ayrışır; izinli küme ile yasak liste Ç
   *Tasarım kararı gerekiyor (Eray): ayrı/dar kapsamlı kimlik · tur-ömürlü ev · ya da codex'te ağı
   geri kapatıp web doğrulamasını claude'a bırakmak.*
 
-- **F2 [high] — Kutulu ev turlar arası TAM oturum kaydı tutuyor.** Sahne tasarımının merkez
+- **F2 [high] — ~~Kutulu ev turlar arası TAM oturum kaydı tutuyor~~ → KAPANDI 2026-09-18.**
+  **Tur-ömürlü ev uygulandı:** her koşum adanmış kökün altında taze bir `HOME` alır, içine
+  YALNIZ kimlik dosyası kopyalanır (`KUTULU_KIMLIK_YOLU`), tur bitince ev silinir. Desen
+  sahnenin aynısı.
+  **Kapanış ölçümü (gerçek codex, üretim yolu):** koşum `rc=0`, `PONG`, 6,5 s; **kalıcı evdeki
+  oturum kaydı sayısı 36 → 36, hiç artmadı.** Kayıt tur-ömürlü eve düştü ve onunla birlikte
+  silindi.
+  **Jeton yenilenmesi kapatıldı:** kimlik dosyası koşumda DEĞİŞTİYSE kalıcı yere geri yazılır
+  (sahiplik + `0600` korunur), değişmediyse DOKUNULMAZ. Tetikleyici ölçülü: erişim jetonu
+  2026-09-27'de doluyor.
+  **Maliyet ölçüldü:** ev kurulum+silme 28 ms; koşum 6,1-11,2 s (kalıcı evde 5,7 s) — soğuk
+  önbellek farkı, gerçek tur dakikalar sürdüğü için gürültü seviyesinde.
+  **Altı mutasyonun altısı yakalandı** — ama ÜÇÜ ilk turda KAÇTI ve testler güçlendirildi:
+  (a) kimlik kopyalanmayınca "dosya var mı" testi geçiyordu → BOYUT ölçülür oldu; (b) her koşumda
+  geri yazan sürüm `mtime` ölçümünden kaçıyordu (`copy2` mtime'ı korur) → `ctime` eklendi;
+  (c) kimlik yokken fail-closed kapısının TESTİ HİÇ YOKTU → yazıldı.
+  **F1 KAPANMADI:** kimlik tur boyunca hâlâ okunabilir; kapanan şey turlar arası birikme.
+  *Aşağıdaki özgün bulgu kaydı korunuyor:* Sahne tasarımının merkez
   gerekçesi *"kalıcı hiçbir şey kutulu kullanıcıya açılmaz"*dı; CLI o arşivi kutunun İÇİNDE yeniden
   kuruyor (`~/.codex/sessions/**/rollout-*.jsonl`). **Ölçüldü:** bugün 28 kayıt; `PAKET-ICI` 4,
   `paket icerigi` 4, `KARDES TURUN PAKETI` 1 dosyada; dizin kutulu kullanıcıya OKUNABİLİR.
