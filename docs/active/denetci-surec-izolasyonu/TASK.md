@@ -2,7 +2,7 @@
 title: Denetçi alt süreçleri işletim sistemi kutusuna alınsın (S-2 kalıntısı)
 status: active
 started: 2026-09-17
-last-touched: 2026-09-17
+last-touched: 2026-09-18
 blocked-by: null
 source_task: docs/active/sektor-bilgi-paketi-plan2/TASK.md
 ---
@@ -155,9 +155,46 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
       sahnenin sahibini ölçüyordu ama oraya girilebildiğini ölçmüyordu. Erişim zinciri testi
       bunun üzerine eklendi.)*
       **Tam takım:** 4547 passed / 0 failed / 331,41 s (taban 4538, +9 test).
-- [ ] **T5** Sahne dizininin yol kapısından geçtiğini ve kanonik pakete DOKUNMADIĞINI testle
-      göster. Paket kökü YERİNDE kalır — `ARASTIRMA_DEPOSU_KOKU` değişmez, mevcut üç-kök testi
-      (`test_asama_kokleri_*`) aynen geçerli kalır.
+- [x] **T5** Sahne yol kapısı + kanonik dokunulmazlık — **BİTTİ 2026-09-18.**
+      Paket kökü YERİNDE kaldı (`ARASTIRMA_DEPOSU_KOKU` değişmedi, üç-kök testleri aynen
+      geçiyor); orkestrasyonun tek satırı değişmedi.
+
+      **Ayak 1 — yol kapısı.** İki yeni kapı, ikisi de MEVCUT kuralı yeniden kullanır
+      (`kok_yolunu_kapila` ve parmak izi yardımcısının KENDİ reddettikleri listesi — ikinci
+      bir kural aynı ağaç için iki farklı cevap üretirdi):
+      `SubprocessRunner._kaynak_yolunu_kapila` (kaynak mutlak · kendi canonical'i · ağaç
+      symlink BARINDIRMAZ) ve `_sahne_kokunu_ac` (mkdtemp kökü aynı kapıdan geçer, reddedilen
+      kök SİLİNİR). Kaynak kapısı geçici kökten ÖNCE koşar — reddedilecek bir kaynak için
+      dizin yaratmak silinmesi gereken bir kök bırakırdı.
+
+      **GERÇEK AÇIK bulundu ve kapatıldı (varsayım değil, ölçüm).** `shutil.copytree`
+      varsayılan olarak symlink'i İZLER. Rol dizinine bir symlink sokulup runner koşturuldu:
+      alt süreç sahnede `symlink_mi: False` · `icerik: ANAHTAR=sizmamali-123` ·
+      `sahip_uid: 1001` bastı — yani gizli dosyanın İÇERİĞİ sahneye gerçek dosya olarak indi
+      ve kutulu kullanıcıya devredildi. Sahnenin kendi izni `700` ve sahibi doğruyken. Tur
+      kapısı (`_paket_butunluk_kapisi`) bunu turun başında bir kez ölçüyordu; kopyalama ve
+      devretmenin YAPILDIĞI sınırda ölçülmüyordu.
+
+      **Ayak 2 — kanonik dokunulmazlık.** Alt süreç sahnede yazdı, ezdi ve sildi; kanonik rol
+      ağacının parmak izi (paket kurulumunun kullandığı AYNI yardımcı) DEĞİŞMEDİ, dizinin
+      sahipliği ve izni de değişmedi. Pozitif kontrol testin içinde: çocuğun yazma/silmesi
+      GERÇEKTEN olmuşsa iddia anlamlıdır, olmamışsa test vacuous sayılır.
+
+      **Doğrulama — 7 yeni test.** Yazıldığında **6'sı kırmızıydı** (7.'si leg 2 tripwire'ı,
+      yeşil doğdu; totoloji olmadığı mutasyonla kanıtlandı). **Beş mutasyonun beşi yakalandı:**
+      kaynak yol kapısı söküldü → 2 kırmızı · symlink düğüm reddi söküldü → kırmızı · sahne
+      kökü kapısı söküldü → kırmızı · reddedilen kökün silinmesi söküldü → kırmızı · sahne
+      kopya yerine KAYNAĞIN KENDİSİ yapıldı → leg 2 kırmızı.
+      **Tam takım:** 4554 passed / 0 failed / 333,45 s (taban 4547, +7).
+
+      **Kapının maliyeti ÖLÇÜLDÜ:** gerçek rol dizininde (7 dosya) **0,8 ms/koşum** — kaynak
+      ağacı koşum başına bir kez daha özetleniyor (parmak izi yardımcısı yalnız `reddedilen`
+      listesi için çağrılıyor; yeniden kullanım uğruna kabul edildi).
+
+      **Kapsam dürüstlüğü:** geçici kökün `..` biçimi bu yoldan ERİŞİLEMEZ — ölçüldü
+      (CPython 3.12.3): `mkdtemp` dönüşünü `os.path.abspath`'ten geçirir, o da `..`'yı
+      sözdizimsel olarak normalleştirir; symlink normalleşmez. `..` ayağı kaynak tarafında
+      ölçülüyor. Gerekçe testin kendi docstring'inde yazılı.
 - [ ] **T6** Kutulu kullanıcının kanonik `denetim/` ağacına GİREMEDİĞİNİ teste bağla
       (T2'deki tripwire'ın kapsamına alınır — bugün ölçüldü: **DENIED**).
 - [ ] **T6b** Dış depoda `denetim/` **izlenmiyor ama `.gitignore`'da da DEĞİL** (`?? denetim/`).
