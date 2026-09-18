@@ -952,21 +952,101 @@ async def test_package_status_owner_scoped(pkg_db):
 # ─── 10. Hakem turu 13 — kapanan üç yüksek bulgu ────────────────────────────
 
 
-class _SahteKosum:
-    """Alt süreç sonucunun asgari ikizi — `subprocess.run` dönüşü taklit edilir."""
+class _SahteRunner:
+    """`Runner` protokolünün asgari ikizi — TİPLİ sonuç döndürür.
+
+    **Dikiş T12 ile DEĞİŞTİ (2026-09-18):** prob artık ham `subprocess.run`
+    değil `Runner` kullanıyor, çünkü gerçek tur ayrıcalık düşürüp `HOME`'u araca
+    göre ayarlıyor ve prob o ortamı ölçmek zorunda. Sahte de aynı sözleşmeyi
+    taklit eder: `durum` üç değerin biridir ve "temiz çıkıp hiçbir şey basmamak"
+    `tamam` DEĞİLDİR.
+    """
 
     def __init__(self, stdout: str, returncode: int = 0) -> None:
         self.stdout = stdout
-        self.stderr = ""
         self.returncode = returncode
+        self.cagrilar: list[tuple[str, str]] = []
+
+    def run(self, tool, cwd, prompt_path):
+        from app.services.sector_pipeline import auditors
+
+        self.cagrilar.append((tool, str(cwd)))
+        durum = (
+            "tamam" if self.returncode == 0 and self.stdout.strip() else "hata"
+        )
+        return auditors.RunnerOutcome(
+            durum=durum,
+            stdout=self.stdout,
+            stderr="",
+            exit_code=self.returncode,
+        )
 
 
 def _prob(beklenen, cikti, *, rc=0):
-    """Probu enjekte edilmiş getirici ve koşucuyla kurar."""
+    """Probu enjekte edilmiş getirici ve RUNNER ile kurar."""
     return cli._web_probu(
         1.0,
         getirici=lambda _sn: beklenen,
-        kosucu=lambda *a, **k: _SahteKosum(cikti, rc),
+        runner=_SahteRunner(cikti, rc),
+    )
+
+
+def test_web_probe_runs_through_the_production_runner(monkeypatch):
+    """K-14 probu TURUN KOŞTUĞU yoldan koşar — ham alt süreçten DEĞİL (T12).
+
+    İki ayak birlikte ölçülür, çünkü biri tek başına kandırılabilir:
+
+    1. **Varsayılan koşucu üretim runner'ıdır.** Prob kendi `subprocess.run`'ını
+       çağırsaydı ayrıcalık düşürme ve araç başına `HOME` UYGULANMAZDI: ölçülen
+       ortam turdakinden başka olurdu ve "erişim var" beyanı kontrolörün
+       ortamını ölçerdi. Zaman aşımı da runner'a geçmelidir.
+    2. **Araca verilen istem GERÇEK bir dosyadır** ve meydan okumayı taşır —
+       runner onu kanonik yoldan okuyup STDIN'e verir.
+    """
+    from app.services.sector_pipeline import auditors
+
+    kurulan: list[float] = []
+
+    class _CasusRunner(_SahteRunner):
+        def __init__(self, *, zaman_asimi_sn):
+            super().__init__("abc123\n", 0)
+            kurulan.append(zaman_asimi_sn)
+
+    monkeypatch.setattr(auditors, "SubprocessRunner", _CasusRunner)
+    prob = cli._web_probu(7.5, getirici=lambda _sn: "abc123")
+
+    assert prob(auditors.DENETCI_ROLLERI[1]) is True
+    assert kurulan == [7.5], (
+        f"üretim runner'ı probun zaman aşımıyla kurulmadı: {kurulan} — prob "
+        "turdan başka bir sınırla ölçüyor"
+    )
+
+
+def test_web_probe_hands_the_tool_a_real_prompt_file(monkeypatch):
+    """İstem dosyası DİSKTE ve meydan okumayı taşıyor — argv'ye gömülmüyor."""
+    from app.services.sector_pipeline import auditors
+
+    gorulen: dict[str, str] = {}
+
+    class _YakalayanRunner(_SahteRunner):
+        def run(self, tool, cwd, prompt_path):
+            gorulen["dizin"] = str(cwd)
+            gorulen["istem"] = Path(prompt_path).read_text(encoding="utf-8")
+            gorulen["dizin_var"] = str(Path(cwd).is_dir())
+            return super().run(tool, cwd, prompt_path)
+
+    prob = cli._web_probu(
+        1.0, getirici=lambda _sn: "abc123", runner=_YakalayanRunner("abc123\n")
+    )
+    assert prob(auditors.DENETCI_ROLLERI[1]) is True
+
+    assert gorulen["dizin_var"] == "True", "araca VAR OLMAYAN bir dizin verildi"
+    assert cli.WEB_PROB_KAYNAGI in gorulen["istem"], (
+        "istem dosyası meydan okuma kaynağını taşımıyor — prob ölçmüyor"
+    )
+    assert "UNREACHABLE" in gorulen["istem"], (
+        "erişimsizlik cevabının biçimi istemde YOK — araç 'ölçülmüş yokluk' "
+        "kolunu hiç kullanamaz"
     )
 
 
@@ -1048,7 +1128,7 @@ def test_web_probe_reports_measurement_failure_when_challenge_cannot_be_fetched(
     def _patla(_sn):
         raise OSError("ağ yok")
 
-    prob = cli._web_probu(1.0, getirici=_patla, kosucu=lambda *a, **k: _SahteKosum(""))
+    prob = cli._web_probu(1.0, getirici=_patla, runner=_SahteRunner(""))
     with pytest.raises(cli.WebProbeUnavailable):
         prob(auditors_rolleri()[1])
 
@@ -1062,7 +1142,7 @@ def test_web_probe_measurement_failure_grants_no_exemption():
 
     sonuc = auditors.preflight(
         auditors.DENETCI_ROLLERI[1],
-        prob=cli._web_probu(1.0, getirici=_patla, kosucu=lambda *a, **k: _SahteKosum("")),
+        prob=cli._web_probu(1.0, getirici=_patla, runner=_SahteRunner("")),
     )
 
     assert sonuc.durum == auditors.PreflightDurumu.OLCUM_ARIZASI

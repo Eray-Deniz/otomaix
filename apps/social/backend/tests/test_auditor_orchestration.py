@@ -78,17 +78,19 @@ OLCULEN_ARGV: dict[str, tuple[str, ...]] = {
         "--safe-mode",
         "--restricted",
         "--tools",
-        "Read,Glob,Grep",
+        "Read,Glob,Grep,WebFetch",
         "--strict-mcp-config",
         "--disallowedTools",
-        "Bash,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task",
+        "Bash,Write,Edit,NotebookEdit,WebSearch,Task",
     ),
     "denetci-2": (
         "codex",
         "exec",
         "--skip-git-repo-check",
         "--sandbox",
-        "read-only",
+        "workspace-write",
+        "-c",
+        "sandbox_workspace_write.network_access=true",
         "--color",
         "never",
         "-",
@@ -3304,10 +3306,30 @@ IZOLASYON_PROFILLERI: dict[str, tuple[str, ...]] = {
         "--strict-mcp-config",
         "--disallowedTools",
     ),
-    "codex": ("--sandbox", "read-only"),
+    "codex": ("--sandbox",),
 }
 
-YASAK_ARACLAR = ("Bash", "Write", "Edit", "WebFetch", "WebSearch")
+CODEX_IZINLI_KUM_HAVUZLARI = ("read-only", "workspace-write")
+"""Codex için kabul edilen kum havuzu kipleri — KAPALI küme.
+
+`read-only` en dardır; `workspace-write` T10 ile gerekli oldu çünkü ağ anahtarı
+(`sandbox_workspace_write.*`) yalnız o kipte hükümlüdür. `danger-full-access`
+HİÇBİR koşulda kabul edilmez — kum havuzunu tümden kaldırır. Kip değeri
+eşlemeden OKUNMAZ, bu kapalı kümeye karşı ölçülür.
+"""
+
+YAZAN_ARACLAR = ("Bash", "Write", "Edit", "NotebookEdit", "Task", "Agent", "Skill")
+"""Hiçbir rolde izinli kümede bulunamayacak araçlar — yazma/çalıştırma ekseni."""
+
+AG_ARACLARI = ("WebFetch", "WebSearch")
+"""Ağ ekseni — yazma DEĞİL, ama kapsamı ROL'e göre ayrışır (T11).
+
+`WebFetch` denetçi rollerinde İZİNLİDİR (K-14 sert kapısı erişim ister),
+`sentez`te DEĞİLDİR: sentezin girdisi diskteki iki rapordur, ağ ona yeni bir
+yetenek değil yeni bir saldırı yüzeyi katardı. `WebSearch` hiçbir rolde izinli
+değildir — denetçinin işi arama yapmak değil, sözleşmede ADI GEÇEN kaynağı
+getirmektir.
+"""
 
 
 def test_every_tool_argv_carries_an_isolation_boundary() -> None:
@@ -3328,6 +3350,12 @@ def test_every_tool_argv_carries_an_isolation_boundary() -> None:
         for parca in profil:
             if parca not in spec.argv:
                 eksik.append(f"{ad}({ikili}): {parca}")
+        if ikili == "codex":
+            # Kip DEĞERİ kapalı kümeye karşı ölçülür: `--sandbox`'ın varlığı
+            # tek başına sınır değildir, `danger-full-access` de bir değerdir.
+            kip = spec.argv[spec.argv.index("--sandbox") + 1]
+            if kip not in CODEX_IZINLI_KUM_HAVUZLARI:
+                eksik.append(f"{ad}({ikili}): kum havuzu kipi {kip!r}")
 
     assert not eksik, (
         "araç izolasyon sınırı olmadan koşuyor: "
@@ -3336,30 +3364,73 @@ def test_every_tool_argv_carries_an_isolation_boundary() -> None:
     )
 
 
+def _claude_kumeleri(spec) -> tuple[set[str], set[str]]:
+    izinli = {
+        p.strip() for p in spec.argv[spec.argv.index("--tools") + 1].split(",")
+    }
+    yasak = {
+        p.strip()
+        for p in spec.argv[spec.argv.index("--disallowedTools") + 1].split(",")
+    }
+    return izinli, yasak
+
+
 def test_claude_tool_set_is_a_positive_read_only_allowlist() -> None:
-    """İzinli küme POZİTİF ve salt-okunur — yazan/çalıştıran araç KÜMEDE YOK."""
+    """İzinli küme POZİTİF ve salt-okunur; ağ ekseni ROL'e göre ayrışır (T11).
+
+    Yazma/çalıştırma ekseni HİÇBİR rolde izinli değildir. Ağ ekseni ayrıdır ve
+    kapsamı roldendir: `WebFetch` denetçide izinli (K-14 erişim ister), sentezde
+    DEĞİL. Test bunu rol adından türetir — eşlemeden okunsaydı sentezin ağa
+    açılması da sessizce geçerdi.
+    """
     for ad, spec in auditors.ARAC_KOMUTLARI.items():
         if spec.argv[0] != "claude":
             continue
-        i = spec.argv.index("--tools")
-        izinli = {parca.strip() for parca in spec.argv[i + 1].split(",")}
+        izinli, _yasak = _claude_kumeleri(spec)
         assert izinli, f"{ad}: izinli araç kümesi BOŞ — denetçi paketi okuyamaz"
-        yazan = izinli & {
-            "Bash", "Write", "Edit", "NotebookEdit", "WebFetch", "WebSearch",
-            "Task", "Agent", "Skill",
-        }
-        assert not yazan, f"{ad}: izinli kümede yazan/çalıştıran araç var: {sorted(yazan)}"
+
+        yazan = izinli & set(YAZAN_ARACLAR)
+        assert not yazan, (
+            f"{ad}: izinli kümede yazan/çalıştıran araç var: {sorted(yazan)}"
+        )
+        assert "WebSearch" not in izinli, (
+            f"{ad}: `WebSearch` izinli — denetçinin işi arama değil, sözleşmede "
+            "ADI GEÇEN kaynağı getirmektir"
+        )
+        if ad in auditors.DENETCI_ROLLERI:
+            assert "WebFetch" in izinli, (
+                f"{ad}: `WebFetch` izinli kümede YOK — K-14 sert kapısı erişim "
+                "ölçer ve erişimsiz tur BAŞLAMAZ"
+            )
+        else:
+            assert "WebFetch" not in izinli, (
+                f"{ad}: sentez rolü ağa açılmış — girdisi diskteki iki rapordur, "
+                "ağ yeni bir yetenek değil yeni bir saldırı yüzeyidir"
+            )
 
 
 def test_claude_tools_deny_the_dangerous_tool_set() -> None:
-    """`claude` araçlarının yasak listesi tehlikeli araçların HEPSİNİ kapsar."""
+    """Yasak liste tehlikeli araçları kapsar ve izinli kümeyle ÇELİŞMEZ.
+
+    Çelişki kapısı yeni (T11): bir araç hem izinli hem yasak yazılsaydı hangi
+    listenin kazandığı argv'den okunamazdı — sınır belirsiz olurdu.
+    """
     for ad, spec in auditors.ARAC_KOMUTLARI.items():
         if spec.argv[0] != "claude":
             continue
-        i = spec.argv.index("--disallowedTools")
-        yasak = {parca.strip() for parca in spec.argv[i + 1].split(",")}
-        eksik = [arac for arac in YASAK_ARACLAR if arac not in yasak]
+        izinli, yasak = _claude_kumeleri(spec)
+
+        beklenen = set(YAZAN_ARACLAR[:4]) | {"WebSearch"}
+        if ad not in auditors.DENETCI_ROLLERI:
+            beklenen |= {"WebFetch"}
+        eksik = sorted(beklenen - yasak)
         assert not eksik, f"{ad}: yasak listesinde eksik araç: {eksik}"
+
+        cakisan = izinli & yasak
+        assert not cakisan, (
+            f"{ad}: {sorted(cakisan)} hem izinli hem yasak — sınır argv'den "
+            "okunamaz"
+        )
 
 
 def test_runner_child_environment_is_whitelisted(monkeypatch, tmp_path) -> None:

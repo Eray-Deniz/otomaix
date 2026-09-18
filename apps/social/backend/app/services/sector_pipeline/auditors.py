@@ -1681,16 +1681,57 @@ kapalıdır. Denetçinin işi paket dosyalarını OKUMAKTIR, o yüzden küme oku
 araçlarıdır.
 """
 
-_CLAUDE_IZOLASYON = (
-    "--permission-mode",
-    "plan",
-    "--safe-mode",
-    "--restricted",
-    "--tools",
-    _CLAUDE_ARAC_KUMESI,
-    "--strict-mcp-config",
-    "--disallowedTools",
-    _CLAUDE_YASAK_ARACLAR,
+_CLAUDE_DENETCI_ARAC_KUMESI = f"{_CLAUDE_ARAC_KUMESI},WebFetch"
+"""Denetçi rolünün pozitif kümesi — sentezinkine `WebFetch` EKLENİR (T11, K-14).
+
+**Neden yalnız denetçide.** K-14 sert kapısı denetçinin web erişimini ÖLÇER ve
+erişimsiz tur BAŞLAMAZ: denetçinin işi kaynakları doğrulamaktır, doğrulama için
+kaynağa ulaşması gerekir. Sentezin işi ise iki raporu birleştirmektir — girdisi
+zaten diskteki iki metindir, ağa çıkması yeni bir yetenek değil yeni bir
+saldırı yüzeyi olurdu.
+
+**AÇILAN YÜZEY — dürüst etiket.** 2026-09-12 güvenlik review'ı `WebFetch`'i
+tam da sızdırma kanalı olduğu için yasak listesine koymuştu. Kapatılan şey geri
+açılıyor ve bedeli şudur: paket metnine gömülü bir talimat, paketin İÇERİĞİNİ
+bir URL'e taşıyabilir. Kapsam sınırı `--restricted`'tır — dosya araçları çalışma
+dizinine (sahne) kilitlidir, yani taşınabilecek şey denetçinin KENDİ girdisidir,
+sırlar değil (2026-09-18'de yeniden ölçüldü: paket içi OKUNDU, `/etc/hostname`
+ve `/root/.claude` aracın kendi hatasıyla DÜŞTÜ). Bu bedel K-14'ün karşılığında
+bilerek kabul edildi; ölçüm evi T13 kanaryasıdır.
+"""
+
+_CLAUDE_DENETCI_YASAK_ARACLAR = "Bash,Write,Edit,NotebookEdit,WebSearch,Task"
+"""Denetçi rolünün yasak listesi — `WebFetch` ÇIKARILDI, `WebSearch` KALDI.
+
+Pozitif küme zaten kapalıdır; yasak liste derinlemesine savunmadır ve ikisi
+ÇELİŞEMEZ: `WebFetch` hem izinli hem yasak yazılsaydı hangisinin kazandığı
+argv'den okunamazdı. `WebSearch` listede kalır çünkü izinli kümede yoktur ve
+denetçinin işi arama yapmak değil, sözleşmede ADI GEÇEN kaynağı getirmektir.
+"""
+
+
+def _claude_izolasyon(arac_kumesi: str, yasak: str) -> tuple[str, ...]:
+    """Claude izolasyon bayrakları — yalnız araç kümeleri role göre değişir.
+
+    Tek üretici: iki rol için iki ayrı liste elle yazılsaydı biri sessizce
+    bayatlar ve `--safe-mode`/`--restricted` gibi bir katman tek rolden düşerdi.
+    """
+    return (
+        "--permission-mode",
+        "plan",
+        "--safe-mode",
+        "--restricted",
+        "--tools",
+        arac_kumesi,
+        "--strict-mcp-config",
+        "--disallowedTools",
+        yasak,
+    )
+
+
+_CLAUDE_IZOLASYON = _claude_izolasyon(_CLAUDE_ARAC_KUMESI, _CLAUDE_YASAK_ARACLAR)
+_CLAUDE_DENETCI_IZOLASYON = _claude_izolasyon(
+    _CLAUDE_DENETCI_ARAC_KUMESI, _CLAUDE_DENETCI_YASAK_ARACLAR
 )
 """`codex`in `--sandbox read-only`'sinin `claude` karşılığı — simetri KASITLIDIR.
 
@@ -1723,10 +1764,37 @@ YAPILMADI (güvenlik review'ı S-2 kalıntısı).
 """
 
 
+CODEX_AG_ANAHTARI = "sandbox_workspace_write.network_access=true"
+"""Codex denetçisine ağı AÇAN ayar — argv'ye yazılır, global ayara DEĞİL (T10).
+
+**Neden argv.** `/root/.codex/config.toml` DEĞİŞTİRİLMEZ: o dosya `claude-codex`
+komut ailesinin de okuduğu ayardır ve oraya yazmak bu boru hattının dışındaki
+her Codex turunu etkilerdi. Çağrı başına `-c` bu kapsamı tek koşumda tutar.
+
+**Neden `workspace-write` gerekiyor.** Anahtarın kendisi `sandbox_workspace_write`
+altındadır, yani `read-only` kipinde HÜKÜMSÜZDÜR — ağ ancak yazma kipiyle
+birlikte açılır. Genişleyen yazma kapsamı `[workdir, /tmp, $TMPDIR]`'dır:
+workdir SAHNEDİR (tek kullanımlık kopya, tur sonunda silinir ve kanonik ağaca
+dokunmadığı teste bağlı), `/tmp`'den ise boru hattı OKUMA YAPMAZ (taramayla
+ölçüldü, 2026-09-17). Kardeş rolün sahnesi de artık erişilemez: kutusuz
+`denetci-1`'in sahnesi çağıranda kalıyor (T7).
+
+**ÖLÇÜLDÜ 2026-09-18** (kutulu kullanıcı, gerçek CLI): kum havuzu satırı
+`workspace-write [workdir, /tmp, $TMPDIR] (network access enabled)` ve canlı
+`Date` başlığı sistem saatinden 2 saniye farkla döndü — getirme gerçek.
+"""
+
+
 ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
     {
         DENETCI_ROLLERI[0]: ToolSpec(
-            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON),
+            (
+                "claude",
+                "-p",
+                "--output-format",
+                "text",
+                *_CLAUDE_DENETCI_IZOLASYON,
+            ),
             kullanici=None,
         ),
         DENETCI_ROLLERI[1]: ToolSpec(
@@ -1735,7 +1803,9 @@ ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
                 "exec",
                 "--skip-git-repo-check",
                 "--sandbox",
-                "read-only",
+                "workspace-write",
+                "-c",
+                CODEX_AG_ANAHTARI,
                 "--color",
                 "never",
                 "-",

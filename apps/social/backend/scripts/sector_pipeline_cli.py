@@ -33,7 +33,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 from uuid import UUID
 
@@ -532,7 +534,7 @@ def _meydan_okuma_degeri(zaman_asimi_sn: float) -> str:
     return str(yuk[0]["sha"])
 
 
-def _web_probu(zaman_asimi_sn: float, *, getirici=None, kosucu=None):
+def _web_probu(zaman_asimi_sn: float, *, getirici=None, runner=None):
     """K-14 ön kontrolünün ÜRETİM probu — TAZE MEYDAN OKUMA ile ölçer.
 
     **Neden meydan okuma (hakem turu 13, yüksek bulgu).** İlk yazım aracı kendi
@@ -554,15 +556,28 @@ def _web_probu(zaman_asimi_sn: float, *, getirici=None, kosucu=None):
     Karşılaştırma TAM EŞİTLİKTİR, alt dize değil: alt dize eşleşmesi, değeri
     başka bir metnin içine gömen bir cevabı da geçirirdi.
 
-    **ÖLÇÜLMEMİŞ AYAK — dürüst etiket:** olumlu yol CANLI olarak koşulmadı.
-    Bugünkü denetçi-2 komut satırında web arama bayrağı YOKTUR (bu kod tabanında
-    daha önce ölçülüp yazılı), dolayısıyla bugün beklenen sonuç `False`'tur.
-    Olumlu yolun canlı ilk ölçümü Task 19'dur.
-    """
-    import subprocess
+    **PROB, TURUN KOŞTUĞU YOLDAN KOŞAR (T12, 2026-09-18).** Önceki yazım
+    `spec.argv`'yi DOĞRUDAN `subprocess.run`'a veriyordu. T7/T8'den sonra bu
+    yanlış bir ortamı ölçer hâle geldi: gerçek tur ayrıcalık düşürür ve `HOME`'u
+    araca göre ayarlar, prob ise çağıranın kimliğiyle ve çağıranın `HOME`'uyla
+    koşardı. Ölçülen ortam ile koşulan ortam ayrışınca "erişim var" beyanı
+    turdakini DEĞİL, kontrolörünkini ölçerdi — K-14'ün tüm anlamı budur.
+    Prob artık `Runner`'ı kullanır: aynı profil, aynı `HOME`, aynı sahne.
 
+    **DARALTMA — dürüst etiket.** Runner'ın sözleşmesinde "temiz çıkıp hiçbir
+    şey basmamak" da `hata`dır (sessiz başarı YOK). Bu yüzden rc=0 + BOŞ çıktı
+    artık `False` (ölçülmüş erişimsizlik) değil ÖLÇÜM ARIZASIDIR: hiçbir şey
+    basmayan bir araç erişimi de erişimsizliği de ölçmemiştir, dolayısıyla
+    muafiyet üretmemelidir. Fail-closed yönde bir daralmadır.
+
+    **Araç başına biçim ayrımı BUGÜN GEREKMİYOR (ölçüldü).** T12 maddesi "yalnız
+    arama dizini olan bir aracı haksız yere erişimsiz sayar" diyordu; 2026-09-18
+    itibarıyla iki araç da CANLI GETİRME yapıyor (`denetci-1` `WebFetch` ile,
+    `denetci-2` `sandbox_workspace_write.network_access` ile), yani tek biçimli
+    meydan okuma ikisine de adil. Ayrım gerçek bir araçta ölçülmeden eklenmez.
+    """
     getirici = getirici or _meydan_okuma_degeri
-    kosucu = kosucu or subprocess.run
+    runner = runner or auditors.SubprocessRunner(zaman_asimi_sn=zaman_asimi_sn)
 
     def prob(tool: str) -> bool:
         spec = auditors.ARAC_KOMUTLARI[tool]
@@ -583,20 +598,25 @@ def _web_probu(zaman_asimi_sn: float, *, getirici=None, kosucu=None):
             "value of the first element's \"sha\" field, nothing else. If you "
             "cannot reach the network, reply with the single word UNREACHABLE."
         )
+        # İstem DOSYAYA yazılır: runner onu kanonik yoldan okuyup STDIN'e verir
+        # ve dizini sahneye kopyalar — gerçek turdaki yolun aynısı.
+        gecici = Path(tempfile.mkdtemp(prefix=f"k14-prob-{tool}-"))
         try:
-            sonuc = kosucu(  # noqa: S603 — argv DONMUŞ, kabuk YOK
-                list(spec.argv),
-                input=istem,
-                capture_output=True,
-                text=True,
-                timeout=zaman_asimi_sn,
-            )
-        except Exception as hata:  # noqa: BLE001 — araç koşturulamadı
-            raise WebProbeUnavailable(
-                f"{tool}: prob koşturulamadı ({type(hata).__name__}) — "
-                "erişim ÖLÇÜLEMEDİ"
-            ) from hata
-        if sonuc.returncode != 0:
+            dizin = gecici / tool
+            dizin.mkdir()
+            istem_yolu = dizin / auditors.GOREV_DOSYA_ADI
+            istem_yolu.write_text(istem, encoding="utf-8")
+            dizin.chmod(0o700)
+            try:
+                sonuc = runner.run(tool, dizin, istem_yolu)
+            except Exception as hata:  # noqa: BLE001 — araç koşturulamadı
+                raise WebProbeUnavailable(
+                    f"{tool}: prob koşturulamadı ({type(hata).__name__}: {hata}) "
+                    "— erişim ÖLÇÜLEMEDİ"
+                ) from hata
+        finally:
+            shutil.rmtree(gecici, ignore_errors=True)
+        if sonuc.durum != "tamam":
             # SIFIRDAN FARKLI ÇIKIŞ ÖLÇÜM DEĞİLDİR (kapanış turu 3, yüksek).
             # Önceki yazım burada `False` dönüyordu; `preflight` her `False`'u
             # `ERISIM_YOK` sayar ve o durumun `muafiyet_mesru`su DOĞRUdur —
@@ -606,8 +626,9 @@ def _web_probu(zaman_asimi_sn: float, *, getirici=None, kosucu=None):
             # Bu fonksiyonun KENDİ vaadi de zaten "araç çökerse ölçüm arızası"
             # diyordu; kod o vaadi tutmuyordu.
             raise WebProbeUnavailable(
-                f"{tool}: prob sıfırdan farklı çıktı (rc={sonuc.returncode}) — "
-                "erişim ÖLÇÜLMEDİ; muafiyet üretilmez"
+                f"{tool}: prob temiz SONUÇ vermedi (durum={sonuc.durum}, "
+                f"çıkış={sonuc.exit_code}) — erişim ÖLÇÜLMEDİ; muafiyet "
+                "üretilmez"
             )
         # `False` YALNIZ şuna ayrılmıştır: araç temiz çıktı ama taze meydan
         # okumanın karşılığını basamadı. Ölçülmüş erişimsizlik budur.
