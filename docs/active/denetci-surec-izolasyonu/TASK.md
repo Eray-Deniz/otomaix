@@ -9,9 +9,18 @@ source_task: docs/active/sektor-bilgi-paketi-plan2/TASK.md
 
 # Goal
 
-İki denetçi alt sürecini root ayrıcalığından çıkarıp ayrı bir işletim sistemi kullanıcısının
-altında koşturmak; ardından **ikisine de** ağ erişimi vermek. Bugün ağ yalnız Codex tarafında
-tek kalan duvar olduğu için kapalı tutuluyor — kutu kurulunca o duvara gerek kalmaz.
+**İkisine de ağ erişimi vermek.** Bugün ağ, yalnız Codex tarafında tek kalan duvar olduğu
+için kapalı tutuluyor — kutu kurulunca o duvara gerek kalmaz.
+
+⚠️ **KAPSAM DÜZELTMESİ 2026-09-18 (Eray itirazı, ölçümle doğrulandı).** Bu satır önce *"İki
+denetçi alt sürecini root ayrıcalığından çıkar"* diyordu. Yanlıştı: kutunun ÖLÇÜLMÜŞ gerekçesi
+**Codex'e özeldir.** Codex'in `read-only` kum havuzu yazmayı ve ağı kısıtlar, OKUMAYI kısıtlamaz
+(`.env` 1658 B okundu). Claude'un okuması `--restricted` ile zaten kendi çalışma dizinine
+hapsedilmiş — **bugün yeniden ölçüldü**, üç koşum: paket içi dosya OKUNDU (pozitif kontrol),
+`/etc/hostname` ve `/root/.claude` denemeleri aracın kendi hatasıyla DÜŞTÜ
+(*"--restricted confines the file tools to the working directory"*).
+
+Yani kutuya giren **`denetci-2` (codex)**'dir. `denetci-1` (claude) bugünkü gibi root koşar.
 
 Bu, 2026-09-12 güvenlik review'ının S-2 bulgusunun kendi kalıntı notudur:
 *"gerçek süreç izolasyonu (kapsayıcı/ad-alanı ya da araçsız yapılandırılmış-çıktı API'si) bu
@@ -243,8 +252,12 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 
 ## Faz 3 — Alt süreci kutuya sok
 
-- [ ] **T7** Ayrıcalık düşürme: alt süreç root değil, denetçi kullanıcısı olarak koşsun.
-      Önce kırmızı test, sonra uygulama.
+- [ ] **T7** Ayrıcalık düşürme — **YALNIZ `denetci-2` (codex).** Alt süreç root değil, kutulu
+      kullanıcı olarak koşsun. `denetci-1` (claude) root kalır: kapsam düzeltmesi yukarıda,
+      gerekçe ölçülmüş. Önce kırmızı test, sonra uygulama.
+      **Bağlı iş:** sahnenin sahipliği de ARAÇ BAŞINA olmalı. Bugün `_sahne` her koşumda sahneyi
+      kutulu kullanıcıya devrediyor (T4); claude root koşacağı için onun sahnesi root'ta kalmalı
+      — devretmek, kutulu kullanıcıya gereksiz yere paketin kopyasını açar.
 
       **FİZİBİLİTE ÖLÇÜLDÜ 2026-09-18 — mekanizma ÇALIŞIYOR, engel KİMLİK.** Dört koşum,
       hepsi GERÇEK argv (`ARAC_KOMUTLARI`'ndan okundu), gerçek sahnede, `subprocess.run(...,
@@ -272,10 +285,13 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
 
       *Yan ölçüm:* kutulu Codex sahnede `trust_level` girdisi OLMADAN koştu (`/tmp/t7-probe-*`
       config'te yok, yine de rc=0) — sahne dizini için güven kaydı gerekmiyor.
-- [ ] **T8** Ortam beyaz listesi araç başına ayrışsın. Bugün `HOME` miras alınıyor ve `/root`'u
-      gösteriyor; kutudaki süreç oradan kimliğini okuyamaz.
-      **2026-09-18:** T7 ölçümü bunu ÖN KOŞUL yaptı (yukarıdaki koşum 1 ve 3) — sıra
-      T8 → T7 olabilir; kesin sıra kimlik kararından sonra.
+- [ ] **T8** Ortam beyaz listesi araç başına ayrışsın. Bugün `HOME` miras alınıyor ve
+      `/root`'u gösteriyor. **2026-09-18 ölçümü bunu T7'nin ÖN KOŞULU yaptı** ve hedefi
+      netleştirdi: `denetci-2` → `HOME=/home/codex` (kutulu kullanıcının kendi kimliği ORADA
+      VAR ve çalışıyor: rc=0, `PONG`); `denetci-1` → `HOME=/root` (bugünkü gibi, root koştuğu
+      için sorunsuz). Sıra: **T8 → T7**.
+- [ ] **T9** öne alındı — profil "hangi kullanıcı" alanı, T7'nin araç başına çalışmasının
+      MEKANİZMASIDIR (aşağıdaki T9 maddesi). Ayrı bir son-rötuş değil.
 - [ ] **T9** İzolasyon profiline "hangi kullanıcı" alanı eklensin; bilinmeyen kullanıcı
       fail-closed düşsün (mevcut "her araç profilini beyan eder" yapısı genişletilir).
 
@@ -302,12 +318,21 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
   kullanıcıda yok** — karar bekliyor.
   *(T3 bu satırda da şüpheli sayılıyordu — artık iki kez ölçüldü, listeden çıkarıldı.)*
 
-- **KARAR BEKLİYOR — kutulu kullanıcı için Claude Code kimliği.** Codex'in kimliği kutuda VAR
-  (aynı hesap, ayrı jeton dosyası); Claude'unki YOK. Üç yol: (a) `codex` kullanıcısı olarak bir
-  kez `claude` girişi yapılır — Eray'ın tarayıcı adımı, ayrı jeton dosyası doğar; (b) root'un
-  kimlik dosyası kopyalanır — Codex'te fiilen böyle olmuş; (c) claude denetçisi root'ta
-  bırakılır — bu, Eray'ın 2026-09-17'de reddettiği asimetriye geri dönmek olur.
-  **Erteleme değil, açık karar:** T7 bu cevap gelmeden inemez.
+- **~~KARAR BEKLİYOR — kutulu kullanıcı için Claude Code kimliği~~ — KARAR GEREKSİZ, madde
+  YANLIŞ PREMİSLE AÇILMIŞTI (2026-09-18).** Madde "claude da kutulu kullanıcıya geçecek"
+  varsayımına dayanıyordu ve bu varsayım kaydın kendisiyle çelişiyordu: kutunun ölçülmüş
+  gerekçesi Codex'in okuma kapsamıdır, claude'unki `--restricted` ile zaten kapalı. Eray itiraz
+  etti, ölçüm itirazı doğruladı. **Claude girişi GEREKMİYOR, kimlik kopyalama GEREKMİYOR.**
+  *(Ders: "iki denetçi de" cümlesi Goal'de yazılıydı ama ÖLÇÜM Codex-özeldi; hedef cümlesini
+  ölçüme karşı kontrol etmeden zorunluluk türetildi.)*
+
+- **DÜŞÜRÜLDÜ — claude denetçisini de kutuya almak (evi yok, koşullu).** Tek kazancı derinlemesine
+  savunma olurdu: claude'un hapsini işleten CLI'nın KENDİSİ, işletim sistemi değil (bu dürüst
+  etiket `_CLAUDE_IZOLASYON` docstring'inde zaten yazılı). Bugün hiçbir şeyi engellemiyor ve
+  bedeli ölçüldü: kutulu kullanıcıda Claude kimliği YOK (`/home/codex/.claude` yok; `HOME`
+  düzeltilse bile `Not logged in`), yani Eray'ın tarayıcı adımı gerekirdi.
+  **Yeniden açma koşulu:** `--restricted` bayrağı kalkar/adı değişir, ya da bir turda dosya
+  aracının paket dışına çıktığı ÖLÇÜLÜRSE.
 - **T3b'nin ağ-AÇIK varyantı bugün tekrar ölçülmedi.** Kutulu Codex'in ağ açıkken de sırlara
   erişemediği 2026-09-17'nin ilk turunda ölçüldü; kapanış turunda aynı probu koşturma denemesi
   harness sınıflandırıcısı tarafından engellendi. Bugün tazeliği olan ölçüm, aynı kullanıcıyı
@@ -349,3 +374,12 @@ salt-eklemesi bozulmaz). Rapor `stdout`'tan döndüğü için sahneden geri okun
   GERÇEK alt süreçle ölçülür (9 testin hepsi öyle).
 - **2026-09-17 — Mevcut `codex` kullanıcısı.** Kimliği çalışıyor, yeni giriş gerekmiyor.
   Bedeli: `sudo` üyeliği kaldırılacak; o hesabı kullanan başka bir akış varsa etkilenir.
+- **2026-09-18 — Kutu Codex için; claude root kalır.** Eray itiraz etti: kutu "claude için de
+  gerekli" diye sunulmuştu, oysa 2026-09-17'nin kendi ölçümü gerekçeyi Codex'in OKUMA kapsamına
+  bağlamıştı. Bugün claude'un sınırı tazeden ölçüldü ve tuttu (paket içi OKUNDU; `/etc/hostname`
+  ve `/root/.claude` DÜŞTÜ). Sonuç: T7 araç başına uygulanır, Goal cümlesi düzeltildi, uydurulmuş
+  kimlik kararı kapatıldı. **Bedel:** T9 (profilde "hangi kullanıcı" alanı) artık son rötuş değil,
+  T7'nin ön şartı.
+- **2026-09-18 — Faz 4'ün claude ayağı kutuya BAĞLI DEĞİL.** T11 (claude'a `WebFetch`) bugünkü
+  kurulumda inebilir; claude'un okuması zaten hapsedilmiş olduğu için ağ vermek yeni bir okuma
+  yolu açmaz. Kutuya bağlı olan tek ayak T10'dur (codex + `network_access=true`).
