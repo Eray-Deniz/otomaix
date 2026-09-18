@@ -771,6 +771,65 @@ def test_validate_report_requires_five_sections() -> None:
     assert any("YENİDEN DOĞRULAMA ENVANTERİ" in hata for hata in sonuc.errors)
 
 
+MARKDOWN_BASLIK_ONEKLERI = ("", "#", "##", "###", "####", "#####", "######")
+"""Markdown'ın TANIDIĞI başlık seviyeleri + çıplak taban — matris ÜRETİLMİŞTİR.
+
+Elle seçilmiş örnek yerine kavramdan türetilir: CommonMark 1-6 arası `#`
+tanır, yedincisi başlık DEĞİLDİR (negatif kontrol ayrı testte).
+"""
+
+
+BASLIK_SONEKLERI = ("", " — açıklama cümlesi", " (parantez içi açıklama)", ": iki nokta")
+"""Başlık ADINDAN sonra gelebilecek SÜS biçimleri — kavramdan türetilmiş matris.
+
+Sözleşme başlıkları `ad — açıklama` yazar; araçlar aynı açıklamayı parantezle
+ya da iki noktayla da yazıyor (2026-09-18'de ölçüldü: sentez aracı
+`# 4) ÖZET (operatör onay ekranı)` yazdı ve kapı o bölümü YOK saydı).
+"""
+
+
+@pytest.mark.parametrize("sonek", BASLIK_SONEKLERI)
+def test_validate_report_accepts_heading_suffixes(sonek: str) -> None:
+    """Bölümün kimliği numara + AD; addan sonrası açıklamadır, kimlik değil."""
+    metin = re.sub(
+        r"(?m)^(\d\) [A-ZÇĞİÖŞÜ ]+)$", rf"\1{sonek}", _rapor_metni()
+    )
+    sonuc = _dogrula(metin)
+    assert sonuc.gecerli, (sonek, sonuc.errors)
+    assert set(sonuc.rapor.bolumler) == set(auditors.BOLUM_ANAHTARLARI)
+
+
+@pytest.mark.parametrize("onek", MARKDOWN_BASLIK_ONEKLERI)
+def test_validate_report_accepts_markdown_heading_marks(onek: str) -> None:
+    """Bölümün KİMLİĞİ numara+ad; markdown SEVİYESİ biçimdir, kimlik değil.
+
+    **ÖLÇÜLDÜ (2026-09-18, gerçek tur `kosu-a4d4b596…`, 1342 sn):** iki denetçi
+    de BAĞIMSIZ olarak `## 1) DENETİM TABLOSU` yazdı; kapı beş bölümü birden
+    "YOK" saydı ve tamamlanmış iki raporu taşıyan tur reddedildi. Pinli
+    sözleşme başlıkları çıplak yazar ama `#` işaretini YASAKLAMAZ — dayattığı
+    şey numara, ad ve SIRA'dır. Kapı bunu görmediği için biçimsel bir süs
+    22 dakikalık turu çöpe attı.
+    """
+    metin = _rapor_metni()
+    if onek:
+        metin = re.sub(r"(?m)^(\d\) )", rf"{onek} \1", metin)
+    sonuc = _dogrula(metin)
+    assert sonuc.gecerli, sonuc.errors
+    assert set(sonuc.rapor.bolumler) == set(auditors.BOLUM_ANAHTARLARI)
+
+
+def test_validate_report_still_rejects_a_non_heading_prefix() -> None:
+    """Tolerans BAŞLIK seviyeleriyle sınırlıdır — yedi `#` başlık değildir.
+
+    Negatif kontrol olmadan "önek serbest" bir gevşeme kapıyı sessizce açardı:
+    gövde metninde geçen bir satır bölüm başlığı sayılabilirdi.
+    """
+    metin = re.sub(r"(?m)^(\d\) )", r"####### \1", _rapor_metni())
+    sonuc = _dogrula(metin)
+    assert not sonuc.gecerli
+    assert any("bölümü YOK" in hata for hata in sonuc.errors), sonuc.errors
+
+
 def test_validate_report_rejects_swapped_section_order() -> None:
     """Bölüm SIRASI kapıdır — küme doğru olsa bile sıra sapması RED.
 
@@ -1574,8 +1633,15 @@ def _pinli_baslik_hucreleri(metin: str, isaret: str) -> tuple[str, ...]:
     Sözleşme başlık satırını *"aynen şu başlık satırıyla"* diye dayatır; bu
     yardımcı o satırı OKUR. Modüldeki demet burada UYDURULMAZ (İlke 9) —
     sözleşme başlığı değişip demet güncellenmezse test DÜŞER.
+
+    **İşaret SATIR BAŞINDA aranır (2026-09-18).** Önceki yazım ilk GEÇTİĞİ yeri
+    alıyordu; sözleşmenin sürüm günlüğü bölüm adını cümle içinde andığı anda
+    yardımcı yanlış tabloyu okuyor ve test bölüm değişmemişken düşüyordu.
+    Bölümün kendisi daima satır başındadır — çapa oradadır.
     """
-    bas = metin.index(isaret)
+    bolum = re.search(rf"^{re.escape(isaret)}", metin, re.M)
+    assert bolum is not None, f"{isaret!r} bölüm başlığı satır başında YOK"
+    bas = bolum.start()
     eslesme = re.search(r"\n\|(.+?)\|\n\|[-| :]+\|\n", metin[bas:])
     assert eslesme is not None, f"{isaret!r} sonrası başlık satırı YOK"
     return tuple(h.strip() for h in eslesme.group(1).split("|"))

@@ -227,8 +227,26 @@ Toplam satır sayısı (`kaynak × 3`) bu kuralın SONUCUdur, kendisi değil —
 tek sabitten türer ki toplam kapısı ile dağılım kapısı ıraksayamasın."""
 
 _BOLUM_BASLIGI_RE = re.compile(
-    r"^(\d)\)[ \t]+([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ ]*?)[ \t]*(?:—.*)?$", re.M
+    r"^(?:#{1,6}[ \t]+)?(\d)\)[ \t]+([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ ]*?)[ \t]*(?:[—(:].*)?$",
+    re.M,
 )
+"""Bölüm başlığı — markdown başlık işareti İSTEĞE BAĞLI ÖNEKTİR.
+
+**Neden tolerans (ÖLÇÜLDÜ 2026-09-18, `kosu-a4d4b596…`, 1342 sn):** ilk gerçek
+turda iki denetçi de BAĞIMSIZ olarak `## 1) DENETİM TABLOSU` yazdı. Desen
+yalnız çıplak başlığı tanıdığı için kapı beş bölümü birden "YOK" saydı ve
+tamamlanmış iki raporu taşıyan tur reddedildi. Bölümün KİMLİĞİ numara + ad +
+SIRA'dır; `#` seviyesi markdown SÜSÜDÜR ve pinli sözleşme onu yasaklamaz.
+Tolerans altı seviyeyle SINIRLIDIR (CommonMark 1-6); yedinci `#` başlık
+değildir ve negatif kontrolü testtedir.
+
+**Addan SONRASI da açıklamadır (2026-09-18, ikinci ölçüm).** Sözleşme
+`ad — açıklama` yazar; araç aynı açıklamayı PARANTEZLE verdi
+(`# 4) ÖZET (operatör onay ekranı)`) ve kapı bölümü YOK saydı — dört bölümü de
+ÜRETİLMİŞ, 1074 sn süren tur bu yüzden düştü. Üç ayraç kabul edilir: `—` · `(`
+· `:`. Ayraçsız serbest metin KABUL EDİLMEZ (`1) ADAY PAKET için notlar`
+eşleşmez) — ad kümesi büyük harflidir ve süs bir ayraçla başlamak ZORUNDA.
+"""
 _KAYNAK_SAYISI_RE = re.compile(r"[Kk]aynak sayısı[ \t]*:[ \t]*(\d+)")
 _BEKLENEN_SATIR_RE = re.compile(r"[Bb]eklenen satır(?:[ \t]*sayısı)?[ \t]*:[ \t]*(\d+)")
 _AYIRAC_HUCRESI_RE = re.compile(r"^:?-{2,}:?$")
@@ -1749,15 +1767,24 @@ denetçinin işi arama yapmak değil, sözleşmede ADI GEÇEN kaynağı getirmek
 """
 
 
-def _claude_izolasyon(arac_kumesi: str, yasak: str) -> tuple[str, ...]:
-    """Claude izolasyon bayrakları — yalnız araç kümeleri role göre değişir.
+def _claude_izolasyon(
+    arac_kumesi: str, yasak: str, *, plan_kipi: bool
+) -> tuple[str, ...]:
+    """Claude izolasyon bayrakları — araç kümesi ve PLAN KİPİ role göre değişir.
 
     Tek üretici: iki rol için iki ayrı liste elle yazılsaydı biri sessizce
     bayatlar ve `--safe-mode`/`--restricted` gibi bir katman tek rolden düşerdi.
+
+    **`plan_kipi` VARSAYILANSIZDIR (2026-09-18).** Denetçi rolleri RAPOR yazar
+    ve plan kipinde sorunsuz koşar; sentez rolü ARTEFAKT üretir ve plan kipinde
+    ürünü yerine bir PLAN yazdı (ölçüldü: 595 sn, dört bölümün hiçbiri yok,
+    aracın kendi cümlesi *"the plan above is the deliverable of this turn"*).
+    Varsayılan konsaydı yarın eklenen bir rol o kipi sessizce devralırdı.
+    Kaldırılan tek şey plan kipidir: pozitif araç kümesi, `--restricted`,
+    `--safe-mode`, `--strict-mcp-config` ve yasak liste YERİNDE KALIR.
     """
     return (
-        "--permission-mode",
-        "plan",
+        *(("--permission-mode", "plan") if plan_kipi else ()),
         "--safe-mode",
         "--restricted",
         "--tools",
@@ -1768,9 +1795,11 @@ def _claude_izolasyon(arac_kumesi: str, yasak: str) -> tuple[str, ...]:
     )
 
 
-_CLAUDE_IZOLASYON = _claude_izolasyon(_CLAUDE_ARAC_KUMESI, _CLAUDE_YASAK_ARACLAR)
+_CLAUDE_IZOLASYON = _claude_izolasyon(
+    _CLAUDE_ARAC_KUMESI, _CLAUDE_YASAK_ARACLAR, plan_kipi=False
+)
 _CLAUDE_DENETCI_IZOLASYON = _claude_izolasyon(
-    _CLAUDE_DENETCI_ARAC_KUMESI, _CLAUDE_DENETCI_YASAK_ARACLAR
+    _CLAUDE_DENETCI_ARAC_KUMESI, _CLAUDE_DENETCI_YASAK_ARACLAR, plan_kipi=True
 )
 """`codex`in `--sandbox read-only`'sinin `claude` karşılığı — simetri KASITLIDIR.
 

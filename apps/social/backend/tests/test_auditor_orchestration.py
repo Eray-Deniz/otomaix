@@ -95,13 +95,13 @@ OLCULEN_ARGV: dict[str, tuple[str, ...]] = {
         "never",
         "-",
     ),
+    # 2026-09-18: `sentez`ten plan kipi KALDIRILDI (ölçüm gerekçesi
+    # `test_sentez_plan_kipinde_KOSMAZ` gövdesinde).
     "sentez": (
         "claude",
         "-p",
         "--output-format",
         "text",
-        "--permission-mode",
-        "plan",
         "--safe-mode",
         "--restricted",
         "--tools",
@@ -987,6 +987,34 @@ def test_runner_argv_matches_independent_literals() -> None:
     """Beklenti EŞLEMEDEN okunmaz — ölçüm anında yazılmış sabitlerdir."""
     olculen = {ad: spec.argv for ad, spec in auditors.ARAC_KOMUTLARI.items()}
     assert olculen == OLCULEN_ARGV
+
+
+def test_sentez_plan_kipinde_KOSMAZ_denetciler_KOSAR() -> None:
+    """Plan kipi yalnız DENETÇİ rollerinde kalır; sentez ÜRETİM yapar.
+
+    **ÖLÇÜLDÜ (2026-09-18, resmî tur):** sentez aracı 595 sn koştu ve dört
+    bölümün HİÇBİRİNİ yazmadı. Çıktının ilk cümlesi: *"Plan mode's exit tool is
+    disabled, so I can't formally hand this off for approval — the plan above
+    is the deliverable of this turn."* Araç turu PLANLAMA turu sandı.
+    Denetçiler aynı kipte rapor üretiyor (ikisi de koştu, tur `rc=0`), ama
+    sentez rolünden ÜRETİLMİŞ artefakt isteniyor.
+
+    **Güvenlik buradan gelmiyor:** rolün pozitif araç kümesi `Read,Glob,Grep`,
+    yani yazma/çalıştırma aracı ZATEN yok; `--restricted` · `--safe-mode` ·
+    `--strict-mcp-config` · yasak liste yerinde KALIR. Bu test o katmanların
+    düşmediğini de ölçer — plan kipini kaldırmak izolasyonu sökmek DEĞİLDİR.
+    """
+    sentez = auditors.ARAC_KOMUTLARI[auditors.SENTEZ_ARACI].argv
+    assert "--permission-mode" not in sentez, sentez
+    for katman in ("--safe-mode", "--restricted", "--strict-mcp-config"):
+        assert katman in sentez, (katman, sentez)
+    denetci = auditors.ARAC_KOMUTLARI[auditors.DENETCI_ROLLERI[0]].argv
+    assert denetci[denetci.index("--permission-mode") + 1] == "plan"
+    # İskelet aynı kalır: BAYRAK kümesi plan kipi dışında birebir örtüşür
+    # (değerler role göre değişir — araç kümesi ve yasak liste).
+    bayraklar = lambda argv: {p for p in argv if p.startswith("--")}  # noqa: E731
+    assert bayraklar(denetci) - bayraklar(sentez) == {"--permission-mode"}
+    assert bayraklar(sentez) - bayraklar(denetci) == set()
 
 
 def test_toolspec_flags_exist_in_the_installed_cli_help() -> None:
@@ -3681,8 +3709,6 @@ IZOLASYON_PROFILLERI: dict[str, tuple[str, ...]] = {
     # Pozitif araç kümesi ZORUNLU: yasak listesi açık uçludur (CLI'ya eklenen yeni
     # araç kendiliğinden izinli olurdu) — kapanış turu bunu high olarak ölçtü.
     "claude": (
-        "--permission-mode",
-        "plan",
         "--safe-mode",
         "--restricted",
         "--tools",
@@ -3691,6 +3717,18 @@ IZOLASYON_PROFILLERI: dict[str, tuple[str, ...]] = {
     ),
     "codex": ("--sandbox",),
 }
+
+PLAN_KIPI_ZORUNLU_ROLLER = auditors.DENETCI_ROLLERI
+"""Plan kipi ROLE bağlıdır, ikiliye değil (2026-09-18).
+
+Profil ikili başınadır ve `--permission-mode plan` 2026-09-18'e kadar oradaydı.
+O gün ölçüldü: sentez aracı plan kipinde ürününü yazmadı, "planın kendisi
+teslimattır" dedi (595 sn, dört bölümün hiçbiri yok). Kip sentezden kaldırıldı,
+denetçilerde KALDI — ve kural buraya, ROL düzeyine taşındı ki kaldırma
+işlemi ikiliyi savunmasız bırakmasın: ortak katmanlar (`--restricted`,
+`--safe-mode`, pozitif araç kümesi, MCP kapalı, yasak liste) HER claude
+aracında aranmaya devam eder.
+"""
 
 CODEX_IZINLI_KUM_HAVUZLARI = ("read-only", "workspace-write")
 """Codex için kabul edilen kum havuzu kipleri — KAPALI küme.
@@ -3733,6 +3771,13 @@ def test_every_tool_argv_carries_an_isolation_boundary() -> None:
         for parca in profil:
             if parca not in spec.argv:
                 eksik.append(f"{ad}({ikili}): {parca}")
+        # Plan kipi CLAUDE'ın kipidir; `codex` sınırını kum havuzuyla kurar.
+        if (
+            ikili == "claude"
+            and ad in PLAN_KIPI_ZORUNLU_ROLLER
+            and "--permission-mode" not in spec.argv
+        ):
+            eksik.append(f"{ad}({ikili}): --permission-mode plan")
         if ikili == "codex":
             # Kip DEĞERİ kapalı kümeye karşı ölçülür: `--sandbox`'ın varlığı
             # tek başına sınır değildir, `danger-full-access` de bir değerdir.
