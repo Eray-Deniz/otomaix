@@ -133,6 +133,14 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 
 # Current Status
 
+**2026-09-19 SEKİZİNCİ OTURUM — K-134 KÖR YARGI ALINDI (Task 19 Step 7 BİTTİ).**
+Sentezin 10 açık sorusunun tamamı karara bağlandı; kayıt: `K134-KOR-YARGI.md`.
+Yargı motor çıktısı MEVCUT DEĞİLKEN verildi — körlük koşulu karşılandı, **motorun
+önündeki engel KALKTI.** Sorular kapsamlarına göre üçe ayrıldı: 4 kuyumculuk kararı ·
+3 Türkiye takvimi (evsiz, koşullu düşürüldü) · 3 hat kusuru (ikisi kapandı, biri
+Plan 2 sonrasına tarihli ev aldı). Kod DEĞİŞMEDİ, test koşulmadı (gerek yoktu).
+**Sıradaki iş: Task 19 Step 8 — `motor` koşumu + yargı/motor karşılaştırması.**
+
 **YÜRÜTME BAŞLADI (2026-08-30).** Plan onaylıydı; yürütme öncesi ön-tarama planda kapatılmamış
 çapraz-görev sözleşmeleri buldu, onlar bir **arayüz eki** ile kapatıldı, sonra Task 1 indi.
 
@@ -1447,6 +1455,38 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   onay isteğinde sessiz kayıp.
 
 # Open Problems
+
+- **[ORTA — EV VERİLDİ, TETİK: Plan 2 kapanışı] Aktif paket kök rehberi tamamen susturuyor.**
+  **Ölçüldü:** `app/routers/ai.py:505-518` — aktif paket varken `SECTOR_GUIDANCE` HİÇ basılmaz;
+  yasak `core/prompt_builder.py:202`'de de uygulanır ve
+  `tests/prompt_regression/test_packaged_caption.py:161` ile korunur. Kuyumculuk
+  `e-ticaret-perakende`'nin alt sektörü (DB `social.sectors.parent_sector_id`), yani paket
+  aktive olduğu an o marka 623 karakterlik perakende rehberini kaybeder: sosyal kanıt ·
+  platform öncelikleri · caption formülü · fiyat-indirim vurgusu. Paket şemasında bu alanların
+  KARŞILIĞI YOK. **Gerileme, kuyumculuğa özel değil — hangi sektörün paketi açılırsa aynısı.**
+  **Eray kararı (2026-09-19): onarım Plan 2 KAPANINCA, kendi tarihli task'ı olarak.**
+  Ara dönemde kayıp bilinçle kabul edilmiştir. Kapsam ölçüldü: spec §4.1 cümlesi · iki çağrı
+  yeri · bir regresyon testi (yeni alt sistem DEĞİL).
+  **Tetik: Task 20 kapanışı / `/finish-branch-claude-codex` sonrası ilk oturum.**
+
+- **[ORTA — DÜŞÜRÜLDÜ, KOŞULLU 2026-09-19] Sektörler üstü karar katmanı yok.**
+  Sentezin açık soruları motora OLDUĞU GİBİ akıyor (`engine.py:2338`) ve onayı BLOKLUYOR
+  (`approval.py:327-334`); "bu soruya daha önce cevap verildi" diyen bir hafıza YOK.
+  `policy_config.PolicyConfig` yalnız oran/limit eşikleri ve `block_on_legislation` taşır —
+  duran cevap alanı yok (ölçüldü). Sonuç: takvim soruları (Ramazan · yılbaşı · 23 Nisan/29 Ekim)
+  her sektörde yeniden sorulur. **Dürüst etiket: çözülmedi + park edildi, evi yok.**
+  **ÖLÇÜLMEMİŞ VARSAYIM (İlke 9):** "katman kurulursa cevap her sektöre taşınır" iddiası
+  ölçülmedi ve muhtemelen yanlış — Ramazan'ın kuyumcu ile yazılım firması için anlamı aynı
+  değil; taşınabilecek şey cevap değil, varsayılandır.
+  **Yeniden açılma koşulu: İKİNCİ sektörün koşusunda aynı takvim soruları yeniden çıkarsa.**
+
+- **[DÜŞÜK — DÜŞÜRÜLDÜ, KOŞULLU 2026-09-19] Hedefli ek araştırma turu evsiz.**
+  Üç kalem aynı turu bekliyor: (a) Ramazan/Kurban için güncel ve kuyumculuk-özgül Türkiye
+  kaynağı · (b) yerel görsel kodların (`Trabzon hasırı`, `beşi bir yerde`, `kulplu çeyrek`)
+  `gorsel_kodlar` ALANIYLA kaydedilmesi · (c) KAYNAK-1'in boş bıraktığı dört alan ve
+  değerlendirilmeyen 9 dönem. **Hiçbirinin tarihli evi yok.**
+  **Yeniden açılma koşulu: kuyumculuk paketinin İKİNCİ araştırma turu açıldığında —
+  üçü tek seferde koşulur, ayrı ayrı DEĞİL.**
 
 - **[DÜŞÜK — DÜŞÜRÜLDÜ, KOŞULLU 2026-09-18] Sentez isteminde EK-F/EK-G adı geçmiyor.**
   Sözleşme iki denetçi çıktısını `EK-F` / `EK-G` diye sayıyor; istem onları
