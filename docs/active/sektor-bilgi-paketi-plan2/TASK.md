@@ -1624,19 +1624,45 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
      (d) `bayrak_kaydi` yalnız `ekle` yolunda ve altı kapıyı geçen kararlar için doğar — H1'in
      tetikleyicisi sınıfın bir ALT KÜMESİNİ kapsar (kodda etiketli).
 
-  4. **AÇIK — sıra kusuru (küçük). EV: yeni koşu açılmadan ÖNCE.** Motor Katman-1 tasdikini
-     otomatik kapı olarak okuyor, plan sırası ise `motor → yazım → katman1`. `attest_katman1`'in
-     taslak ön koşulu YOK, yani katman1 motordan ÖNCE tasdiklenebilir. **Öneri:** plan Task 19
-     sırasını `katman1 → motor` yap. Düzeltilmezse aynı `regresyon_kapisi` bulgusu yeni koşuda
-     TEKRAR çıkar — bu yüzden evi aşağıdaki "yeni pilot koşusu" kaleminin ÖNÜDÜR, serbest değil.
+  4. **AÇIK — ERAY KARARI BEKLİYOR (2026-09-20 ölçümü kaydın önerisini ÇÜRÜTTÜ).**
+     Mekanizma doğrulandı: motor Katman-1 tasdikini otomatik kapı olarak okuyor; tasdik yoksa
+     `regresyon_kapisi` bulgusu doğuyor ve değişiklik varsa aktivasyonu engelliyor (gerçek
+     koşuda görüldü).
+     **Kaydın önerisi ("plan Task 19 sırasını `katman1 → motor` yap") SPEC'LE ÇELİŞİR:** sıra
+     planın tercihi değil, **spec §13.3'te bağlı** (`motor → karşılaştırma → yazım kapısı →
+     draft → Katman-1 + Katman-2 → onay`). **Ve kapı KALDIRILAMAZ:** spec §9.1 birebir
+     *"prompt regresyonu açık karar DEĞİL, zorunlu kapıdır — geçmeden koşu `activation_eligible`
+     olamaz"* diyor ve §9.2 onu motorun zorunlu kontrolleri arasında sayıyor. Yani spec'in iki
+     hükmü birbirini kilitliyor: ilk koşuda motor hiçbir zaman `activation_eligible` veremez.
+     **ÖLÇÜLMÜŞ ÇIKIŞ YOLU:** Katman-1 ile Katman-2 spec'te aynı adımda paketlenmiş ama
+     bağımlılıkları FARKLI. Katman-2 çıktı-düzeyi kör örneklem — paketin var olmasını ister.
+     Katman-1 ise kod seviyesinde byte-exact prompt regresyonu ve **koşunun taslağına BAĞLI
+     DEĞİL** (ölçüldü: paketli fixture testi kendi fixture paketini DB'ye kendisi yazıyor,
+     koşunun draft'ına bakmıyor).
+     **Öneri (Eray onayı gerekli, çünkü SPEC sırasını değiştirir):** sırayı ikiye ayır —
+     **Katman-1 motordan ÖNCE**, Katman-2 draft'tan sonra kalsın. Spec §13.3 + plan Task 19
+     Step 8/9 birlikte düzenlenir; **kod değişikliği GEREKMEZ** (`katman1` alt komutunun ön
+     koşulu yok, motor tasdiki zaten okuyor).
+     Düzeltilmezse aynı `regresyon_kapisi` bulgusu yeni koşuda TEKRAR çıkar — evi aşağıdaki
+     "yeni pilot koşusu" kaleminin ÖNÜDÜR.
 
-  **Bu dörtten BAĞIMSIZ — AÇIK. EV: yeni koşu açılmadan ÖNCE.** Ölü koşu iş kabul ediyor:
-  `mark_incomplete` koşulsuz ve terminal yazıyor, hiçbir adım başlarken koşunun canlı olup
-  olmadığına bakmıyor, geri açma yolu yok. 2026-09-19'da satır elle onarıldı (Eray onayı);
-  **kusur DURUYOR.** Evi serbest bırakılmadı çünkü kusur doğrudan yeni koşuyu tehdit ediyor:
-  düşen bir adım koşuyu sessizce öldürürse sonraki adımlar bunu fark etmeden çalışır ve
-  ~1900 saniyelik iki model turu bir kez daha yanar. Bu yüzden ödeme sırası, yeni koşunun
-  ÖNÜDÜR.
+  **Bu dörtten BAĞIMSIZ — KAPANDI (2026-09-20, `2bf3d71`).** Ölü koşu iş kabul ediyordu:
+  koşu satırını çeken yardımcı `durum` sütununu HİÇ okumuyordu ve tüm depodaki TEK canlılık
+  kontrolü `record_result`'ın SQL'iydi — yani motorun YAZMASI korumalıydı, öncesi değil.
+  **Kapı `dispatch`'te kuruldu** (ölçüldü: tek ortak darboğaz orası; 20 alt komutun yalnız 3'ü
+  paylaşılan satır yardımcısını kullanıyor). Alt komutlar iki kovaya ayrıldı ve bir test her
+  komutun TAM OLARAK bir kovada olmasını zorunlu kılıyor — yeni adım sınıflandırılmadan geçemez.
+  İkinci ayak: `mark_incomplete` artık TAMAMLANMIŞ koşuyu ezemiyor (`RunAlreadyTerminal`).
+  **Kapsam ölçümle İKİ KEZ daraldı, ikisini de testler yakaladı:** (a) ilk sınıflandırma
+  motordan SONRAKİ adımları da kapıya almıştı — onlar TAMAMLANMIŞ koşuda çalışır ve zaten
+  `load_verified_run`'ın `tamamlandi` kapısından geçiyor, ikinci kapı ikinci doğruluk kaynağı
+  olurdu; gerçek boşluk yalnız `brief-doctor` · `denetim` · `sentez` · `motor`'daydı.
+  (b) `mark_incomplete` koruması ilk yazımda `calisiyor` istiyordu ve yarım koşuyu TEKRAR
+  işaretlemeyi yasaklıyordu — bildirim idempotansı sözleşmesini kırıyordu.
+  **Kaydın bir iddiası kusur DEĞİLDİ:** "geri açma yolu yok" tasarımdır (K-82: yeniden koşum
+  yeni kimlik alır, düzeltme turu yalnız `ret`ten açılır). Kapı da ona uygun konuşuyor.
+  **Tam takım 4640 passed / 0 failed (336 s); dört mutasyon, dördü yakalandı.** Motor sürümüne
+  DOKUNULMADI — bu hat seviyesi bir kapı.
 
   **Eray kararı (2026-09-19, hâlâ geçerli): tören YOK** — spec seansı açılmaz, düzeltme doğrudan
   başlar; review gerekirse düzeltme SIRASINDA çağrılır. Kusur 3 sözleşmeye ve motorun kapı
