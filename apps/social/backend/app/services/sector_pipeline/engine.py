@@ -70,9 +70,11 @@ from app.services.sector_pipeline.auditors import (
     AuditRow,
     KaynakIddiasi,
     ValidatedAuditPair,
+    iddia_evreni as _iddia_evreni_kur,
     kaynak_iddialari_coz,
 )
 from app.services.sector_pipeline.brief_doctor import (
+    TEMEL_ALAN_ANAHTARLARI,
     TEMEL_ALANLAR,
     CIddia,
     RoundGate,
@@ -821,27 +823,17 @@ def _alan_bagi_var(karar_alani: str, denetci_alani: str) -> bool:
 def _arastirma_iddialari(inputs: EngineInputs) -> dict[str, CIddia]:
     """`K1#3` → araştırma iddiası — sentez `kaynak_iddia`'sının ÇÖZÜM tablosu.
 
-    Evren mekanik kapının raporlarından üretilir ve kaynak numarası KONUMDAN
-    türer; bu `_kabul_edilen_etiketler`in kuralının AYNISIDIR (ikinci bir
-    numaralandırma kuralı YAZILMAZ). `build_packet` her `i` için
-    `doctor_reports[i].icerik_ozeti == canonical_sha(sources[i])` eşitliğini
-    fail-closed zorlar, yani sıra kayarsa paket hiç kurulmaz.
-
-    **ELENEN kaynağın iddiası evrene GİRER — ve bu bilinçlidir.** Eleme
-    SAYIMA etki eder (`kaynaklar & kabul_edilen`), ATFIN GEÇERLİLİĞİNE değil:
-    elenen bir kaynağın iddiasını "çözülemez" saymak, yazıldığı anda kusursuz
-    olan bir atfı sonradan BOZUK gösterir ve rapor yanlış kapıyı işaret ederdi
-    ("iddia yok" derken gerçek sebep "kaynak elendi"dir). Fail-open değildir:
-    eklemenin sayısı zaten yalnız KABUL EDİLEN kaynaklardan toplanır.
+    Kural burada YAŞAMAZ, `auditors.iddia_evreni`'nde yaşar ve BU FONKSİYON
+    onun koşu girdisine bağlı GİRİŞİDİR. Numaralandırmanın tek üretici olması
+    yapısal bir şarttır: sentezin istemine giren EK-M dizini de aynı
+    üreticiden çıkar, yani sentezin okuduğu numara ile motorun çözdüğü satır
+    aynı olmak ZORUNDADIR. İki kopya, sentez DOĞRU numarayı yazdığı hâlde
+    kararın düşebileceği bir pencere açardı.
     """
-    evren: dict[str, CIddia] = {}
-    for sira, rapor in enumerate(inputs.mekanik_eleme.raporlar, start=1):
-        for iddia in rapor.iddialar:
-            evren[KaynakIddiasi(kaynak=sira, iddia=iddia.no).etiket] = iddia
-    return evren
+    return _iddia_evreni_kur(inputs.mekanik_eleme.raporlar)
 
 
-_TEMEL_ALAN_ANAHTARLARI = frozenset(
+TEMEL_ALAN_ANAHTARLARI = frozenset(
     alan_karsilastirma_anahtari(ad) for ad in TEMEL_ALANLAR
 )
 """Bölüm A alan adlarının karşılaştırma anahtarları — TEK kural, tek yer."""
@@ -888,7 +880,7 @@ def _iddia_alani_bagli_mi(karar_alani: str, oge_yolu: str, iddia: CIddia) -> str
         return IDDIA_BAGI_VAR
     # Bilinen bir Bölüm A alan adı DÖNEM DEĞİLDİR: yanlış ALAN olarak raporlanır
     # (kapanış turu, orta — iki hakem de buldu: aşırı geniş dönem teşhisi).
-    if alan_karsilastirma_anahtari(iddia.alan) in _TEMEL_ALAN_ANAHTARLARI:
+    if alan_karsilastirma_anahtari(iddia.alan) in TEMEL_ALAN_ANAHTARLARI:
         return IDDIA_BAGI_YOK
     if not iddia.anahtarlar:
         return IDDIA_BAGI_DONEM_COZULEMEDI

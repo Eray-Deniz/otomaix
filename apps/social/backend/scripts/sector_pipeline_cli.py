@@ -797,7 +797,7 @@ async def _kos_sentez(conn, args) -> Sonuc:
     """
     satir = await _kosu_satiri(conn, args.run_id)
     aktif, birimler, _surum = await _aktif_paket(conn, satir["sector_id"])
-    brief, _doktor, anlasma = await _klasor_girdileri(conn, args.run_id, birimler)
+    brief, doktor, anlasma = await _klasor_girdileri(conn, args.run_id, birimler)
     if not anlasma.gecerli:
         return ([f"mutabakat kapısı: {' · '.join(anlasma.errors)}"], RC_REFUSED)
 
@@ -810,6 +810,7 @@ async def _kos_sentez(conn, args) -> Sonuc:
         kok_rehberi=_rehber_metni(
             await _kok_sektor_slug(conn, satir["sector_id"])
         ),
+        doktor_raporlari=doktor,
         active_package=aktif,
         removed_history=await _cikarma_gecmisi(conn, satir["sector_id"]),
         holiday_keys=set(await _takvim(conn)),

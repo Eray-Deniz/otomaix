@@ -86,7 +86,14 @@ from app.services.sector_pipeline.auditors import (
     AuditRound,
     Runner,
     anonymize,
+    iddia_evreni,
+    kaynak_iddialari_coz,
     kok_yolunu_kapila,
+)
+from app.services.sector_pipeline.brief_doctor import (
+    TEMEL_ALAN_ANAHTARLARI,
+    DoctorReport,
+    alan_karsilastirma_anahtari,
 )
 
 SENTEZ_ASAMASI = "sentez"
@@ -375,6 +382,99 @@ def _sema_sekli() -> str:
     return "\n".join(satirlar)
 
 
+def _etiket_sirasi(etiket: str) -> tuple[int, int]:
+    """`K2#13` → `(2, 13)`. Ayrıştırıcı TEK yerdedir, burada yeniden yazılmaz."""
+    iddialar = kaynak_iddialari_coz(etiket)
+    if not iddialar:
+        # Ulaşılmaz olmalı — etiketi üreten `KaynakIddiasi.etiket`'in kendisi.
+        # "Olmalı" bir kapı değildir: çözülemeyen etiket sona alınır, ATILMAZ.
+        return (10**6, 10**6)
+    return (iddialar[0].kaynak, iddialar[0].iddia)
+
+
+def _iddia_dizini(raporlar: Sequence[DoctorReport]) -> str:
+    """EK-M gövdesi — `K<kaynak>#<iddia>` → ALAN dizini, MOTORUN tablosundan.
+
+    **Neden makineden (2026-09-19, canlı koşu `kosu-222706dc…`):** sentez ham
+    araştırma raporlarını göremiyor ve Bölüm C'nin `alan/dönem` hücresini
+    bilemiyor. Sözleşme `kaynak_iddia`'yı ZORUNLU tutuyor, motor da onu alan
+    eşleşmesiyle mekanik doğruluyor; arada kalan sentez numaraları
+    denetçilerin kullanımından TAHMİN etti ve bunu çıktısının ilk cümlesinde
+    beyan etti. Ölçülen bedel: 52 `ekle` kararının 8'i, kalan atıfları doğru
+    olduğu hâlde TEK bir komşu-alan atıfı yüzünden tümüyle düştü
+    (`any(bağsız) → reddet`), ve üç yazım hatasının ikisi buradan doğdu.
+
+    **Eksik olan KURAL DEĞİL VERİYDİ.** Sözleşme bağı zaten doğru tarif
+    ediyor (*"o satırın `alan/dönem` hücresi kararın `alan`ıyla örtüşür —
+    bunu mekanik ayrıştırıcı doğrular, senin beyanın değil"*). Bu yüzden
+    burada yeni bir kural yazılmaz, VAR OLAN kuralın okuduğu tablo modele
+    GÖSTERİLİR.
+
+    **Anahtar, motorun KARŞILAŞTIRDIĞI yazımdır.** Bölüm C hücresi markdown
+    kaçışlı gelebiliyor (`ton\\_ve\\_dil` — canlı koşuda KAYNAK-1'in üç satırı
+    böyleydi) ve motor onu `alan_karsilastirma_anahtari` ile sadeleştirip
+    karşılaştırıyor. Ham hücreyi basmak, sentezin motorun hiç görmediği bir
+    yazıma bakmasına yol açar — aynı kör noktaya ikinci bir kapıdan girmek.
+
+    Dönem satırında bağ ADDAN değil SİSTEM ANAHTARINDAN kurulur (F3'ün
+    kapattığı sınıf): motor `oge_yolu`nun anahtarını `CIddia.anahtarlar`
+    kümesinde arar. Bu yüzden dönem satırı anahtarlarıyla listelenir ve
+    anahtarı ÇÖZÜLEMEYEN satır dürüstçe "bağ kurulamaz" altına yazılır —
+    o numarayı `kaynak_iddia`'ya yazan karar zaten düşecektir.
+    """
+    evren = iddia_evreni(raporlar)
+    alanlar: dict[str, list[str]] = {}
+    donemler: dict[str, list[str]] = {}
+    bagsizlar: list[str] = []
+    # Sıra KAYNAK sonra NUMARA — `K1#3, K1#4, K2#3`. Etiketin kendisi metin
+    # olarak sıralanırsa `K1#10` `K1#3`'ten önce gelir ve dizin, modelin
+    # tarayacağı tek tabloda okunmaz hâle gelir.
+    for etiket, iddia in sorted(
+        evren.items(), key=lambda ikili: _etiket_sirasi(ikili[0])
+    ):
+        anahtar = alan_karsilastirma_anahtari(iddia.alan)
+        if anahtar in TEMEL_ALAN_ANAHTARLARI:
+            alanlar.setdefault(anahtar, []).append(etiket)
+        elif iddia.anahtarlar:
+            for gun in iddia.anahtarlar:
+                donemler.setdefault(gun, []).append(etiket)
+        else:
+            bagsizlar.append(etiket)
+
+    satirlar = [
+        "`kaynak_iddia`'ya YALNIZ buradan numara yaz. Motor bağı BU tablodan",
+        "ölçer; düz yazı ile çelişirse BU EK geçerlidir.",
+        "",
+        "### Bölüm A alanları — kararın `alan` değeri ile EŞLEŞMELİ",
+    ]
+    satirlar.extend(
+        f"- `{anahtar}`: {', '.join(alanlar[anahtar])}" for anahtar in sorted(alanlar)
+    )
+    if not alanlar:
+        satirlar.append("- (yok)")
+    satirlar.extend(
+        [
+            "",
+            "### Bölüm B dönemleri — kararın `oge_yolu` ANAHTARI ile eşleşmeli",
+        ]
+    )
+    satirlar.extend(
+        f"- `{gun}`: {', '.join(donemler[gun])}" for gun in sorted(donemler)
+    )
+    if not donemler:
+        satirlar.append("- (yok)")
+    if bagsizlar:
+        satirlar.extend(
+            [
+                "",
+                "### Bağ KURULAMAYAN iddialar — `kaynak_iddia`'ya YAZMA",
+                "Bu satırların `alan/dönem` hücresi ne Bölüm A alanı ne de sistem",
+                "anahtarı çözülebilen bir dönem: " + ", ".join(bagsizlar),
+            ]
+        )
+    return "\n".join(satirlar)
+
+
 def _istem_metni(
     gorev_metni: str,
     tur: AuditRound,
@@ -384,6 +484,7 @@ def _istem_metni(
     *,
     brief: str,
     kok_rehberi: str,
+    doktor_raporlari: Sequence[DoctorReport],
 ) -> str:
     """Sentez aracına verilen tek istem dosyası.
 
@@ -410,6 +511,9 @@ def _istem_metni(
         "",
         "## EK-L — ŞEMA ŞEKLİ (makineden üretilir)",
         _sema_sekli(),
+        "",
+        "## EK-M — İDDİA DİZİNİ (makineden üretilir)",
+        _iddia_dizini(doktor_raporlari),
         "",
         "## EK-H — AKTİF PAKET",
         json.dumps(active_package, ensure_ascii=False, indent=2, default=str)
@@ -771,6 +875,7 @@ async def _kos(
     run_id: str,
     brief: str,
     kok_rehberi: str,
+    doktor_raporlari: Sequence[DoctorReport],
     active_package: Mapping | None,
     removed_history: Sequence[Mapping],
     holiday_keys: set[str],
@@ -793,6 +898,18 @@ async def _kos(
         raise SynthesisFailed(
             f"sentez kökü ZATEN var: {kok} — ham katman salt-eklemedir, dosya "
             "EZİLMEZ (K-82); yeniden koşum yeni kimlik alır"
+        )
+    # EK-M BOŞ OLAMAZ — fail-closed, ve arıza aracı DOĞURMADAN alınır.
+    # Boş bir dizinle koşmak, kapatılan kusurun ta kendisine geri dönmektir:
+    # sentez `kaynak_iddia` numarasını yine tahmin eder, tur yine ~940 sn ve
+    # jeton harcar, motor yine `any(bağsız) → reddet` ile düşürür. Emsal EK-K:
+    # rehber metni olmayan sektör turu BAŞLATMAZ, turdan sonra düşürmez.
+    if not iddia_evreni(doktor_raporlari):
+        raise SynthesisFailed(
+            "iddia dizini BOŞ — mekanik eleme raporlarının hiçbiri Bölüm C "
+            "iddiası taşımıyor; `kaynak_iddia` zorunlu bir alandır ve dizin "
+            "olmadan yazılması TAHMİNDİR (ölçüldü: 52 `ekle` kararının 8'i "
+            "tahmin yüzünden düştü). Tur BAŞLATILMAZ."
         )
     aktif_birimler = _aktif_birimler(active_package)
     # Tur ile aktif paket AYNI görüntüye bakmak ZORUNDA. İkisi bağımsız
@@ -824,6 +941,7 @@ async def _kos(
         holiday_keys,
         brief=brief,
         kok_rehberi=kok_rehberi,
+        doktor_raporlari=doktor_raporlari,
     )
     kok.mkdir(parents=True)
     istem_yolu = kok / GOREV_DOSYA_ADI
@@ -913,6 +1031,7 @@ async def run(
     run_id: str,
     brief: str,
     kok_rehberi: str,
+    doktor_raporlari: Sequence[DoctorReport],
     active_package: Mapping | None,
     removed_history: Sequence[Mapping],
     holiday_keys: set[str],
@@ -956,6 +1075,7 @@ async def run(
             run_id=run_id,
             brief=brief,
             kok_rehberi=kok_rehberi,
+            doktor_raporlari=doktor_raporlari,
             active_package=active_package,
             removed_history=removed_history,
             holiday_keys=holiday_keys,

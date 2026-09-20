@@ -64,6 +64,7 @@ from uuid import UUID
 
 from app.services.sector_pipeline import contracts, identity, runs
 from app.services.sector_pipeline.brief_doctor import (
+    CIddia,
     DoctorReport,
     kaynak_seti_sha,
     kimlik_bolumlemesi,
@@ -387,6 +388,36 @@ def kaynak_iddialari_coz(ham: str) -> tuple[KaynakIddiasi, ...] | None:
     if iddialar != sorted(set(iddialar)):
         return None
     return tuple(iddialar)
+
+
+def iddia_evreni(raporlar: Sequence[DoctorReport]) -> dict[str, CIddia]:
+    """`K1#3` → araştırma iddiası — NUMARALANDIRMA KURALININ TEK ÜRETİCİSİ.
+
+    Kaynak numarası KONUMDAN türer; bu `_kabul_edilen_etiketler`in kuralının
+    AYNISIDIR (ikinci bir numaralandırma kuralı YAZILMAZ). Sıranın kaymadığını
+    `build_packet` her `i` için `doctor_reports[i].icerik_ozeti ==
+    canonical_sha(sources[i])` eşitliğiyle fail-closed zorlar.
+
+    **İKİ tüketicisi vardır ve ikisi de burayı ÇAĞIRIR.** Motor, sentezin
+    `kaynak_iddia` beyanını bu tablo üstünde çözer; sentezin istemine giren
+    EK-M dizini de buradan üretilir. Kural 2026-09-20'ye kadar motorun
+    içinde ÖZELDİ ve sentez onu hiç göremiyordu — ölçülmüş sonucu, sentezin
+    numaraları tahmin etmesi ve 52 `ekle` kararının 8'inin düşmesiydi. Dizin
+    ikinci bir yerde yeniden yazılsaydı kusur şekil değiştirirdi: sentez
+    DOĞRU numarayı yazdığı hâlde motor başka bir satırı çözerdi.
+
+    **ELENEN kaynağın iddiası evrene GİRER — ve bu bilinçlidir.** Eleme
+    SAYIMA etki eder (`kaynaklar & kabul_edilen`), ATFIN GEÇERLİLİĞİNE değil:
+    elenen bir kaynağın iddiasını "çözülemez" saymak, yazıldığı anda kusursuz
+    olan bir atfı sonradan BOZUK gösterir ve rapor yanlış kapıyı işaret
+    ederdi ("iddia yok" derken gerçek sebep "kaynak elendi"dir). Fail-open
+    değildir: eklemenin sayısı zaten yalnız KABUL EDİLEN kaynaklardan toplanır.
+    """
+    evren: dict[str, CIddia] = {}
+    for sira, rapor in enumerate(raporlar, start=1):
+        for iddia in rapor.iddialar:
+            evren[KaynakIddiasi(kaynak=sira, iddia=iddia.no).etiket] = iddia
+    return evren
 
 
 @dataclass(frozen=True)

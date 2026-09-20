@@ -38,7 +38,14 @@ import pytest
 
 from app.core.database import _init_connection
 from app.services import sector_content_schema
-from app.services.sector_pipeline import auditors, identity, runs, synthesis
+from app.services.sector_pipeline import (
+    auditors,
+    brief_doctor as bd,
+    engine,
+    identity,
+    runs,
+    synthesis,
+)
 
 REPO_KOK = Path(__file__).resolve().parents[4]
 
@@ -294,6 +301,44 @@ BRIEF_METNI = "EK-A gövdesi: kuyumculuk brief'i, ölçüm sabiti."
 KOK_REHBERI_METNI = "EK-K gövdesi: kök sektör rehberi, ölçüm sabiti."
 
 
+def _doktor_raporlari() -> tuple[bd.DoctorReport, ...]:
+    """EK-M'nin kaynağı — canlı koşunun ÖLÇÜLMÜŞ şeklini taşır.
+
+    Üç şekil bilerek birlikte durur, çünkü üçü de canlı koşuda GÖRÜLDÜ
+    (`kosu-222706dc…`, 98 iddia): (a) düz Bölüm A alan adı; (b) markdown
+    KAÇIŞLI alan adı (`ton\\_ve\\_dil` — KAYNAK-1'in üç satırı böyleydi);
+    (c) sistem anahtarı taşıyan DÖNEM satırı.
+    """
+    return (
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="KAYNAK-1",
+            icerik_ozeti=identity.canonical_sha("kaynak-1"),
+            iddialar=(
+                bd.CIddia(no=1, alan="ton_ve_dil"),
+                bd.CIddia(no=2, alan="yasaklar\\_ve\\_hassasiyetler"),
+            ),
+        ),
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="KAYNAK-2",
+            icerik_ozeti=identity.canonical_sha("kaynak-2"),
+            iddialar=(
+                bd.CIddia(no=1, alan="cta_kaliplari"),
+                bd.CIddia(
+                    no=2,
+                    alan="Sevgililer Günü",
+                    anahtarlar=("sevgililer-gunu",),
+                ),
+            ),
+        ),
+    )
+
+
 def _sentez_metni(
     aday: dict,
     gunluk: list[dict],
@@ -382,6 +427,7 @@ async def _sentez(
     tur: auditors.AuditRound | None = None,
     aktif: dict | None = None,
     sonuc: auditors.RunnerOutcome | None = None,
+    doktor: tuple[bd.DoctorReport, ...] | None = None,
 ):
     db, run_id = kosu
     runner = SahteRunner(
@@ -395,6 +441,7 @@ async def _sentez(
         run_id=run_id,
         brief=BRIEF_METNI,
         kok_rehberi=KOK_REHBERI_METNI,
+        doktor_raporlari=_doktor_raporlari() if doktor is None else doktor,
         active_package=_aktif_paket() if aktif is None else aktif,
         removed_history=(),
         holiday_keys=set(),
@@ -427,6 +474,36 @@ def test_section_keys_match_pinned_contract() -> None:
     )
     assert bulunan == OLCULEN_BOLUM_ANAHTARLARI
     assert synthesis.SENTEZ_BOLUM_ANAHTARLARI == OLCULEN_BOLUM_ANAHTARLARI
+
+
+def test_EK_M_pinli_sozlesmenin_GIRDI_listesinde_adlandirilmis() -> None:
+    """Sözleşme EK-M'yi SAYAR ve kod onu ÜRETİR — iki uç birbirine bağlıdır.
+
+    2.5 sürümü EK-L'yi metnin içinde bağladı ama GİRDİLER listesine hiç
+    yazmadı; liste, modelin "elimde ne var" diye baktığı tek yerdir. Aynı
+    sınıfın bir sonraki yüzü, eki koddan kaldırıp sözleşmede bırakmak (ya da
+    tersi) olurdu: sentez var olmayan bir dizine yönlendirilir ve numarayı
+    yine tahmin ederdi — yani kapatılan kusur sessizce geri dönerdi. Bu test
+    iki ucu aynı ölçümde tutar.
+    """
+    metin = (auditors.ARASTIRMA_DEPOSU_KOKU / synthesis.GOREV_DOSYASI).read_text(
+        encoding="utf-8"
+    )
+    girdiler = metin.split("## GİRDİLER")[1].split("## KOŞU MODLARI")[0]
+    # Ölçülen şey LİSTE MADDESİDİR, metinde adın geçmesi değil. İlk yazım
+    # `"EK-M" in girdiler` diyordu ve mutasyonla ÖLÇÜLDÜ: madde tamamen
+    # silindiğinde test YEŞİL kalıyordu, çünkü komşu paragraf da adı anıyor
+    # ("iddianın ALANI ise EK-M'den okunur"). Tespit edemediği bir garantiyi
+    # onaylayan test, testsizlikten kötüdür.
+    maddeler = {
+        satir.split(":")[0].removeprefix("- ").strip()
+        for satir in girdiler.splitlines()
+        if satir.startswith("- EK-")
+    }
+    assert "EK-M" in maddeler, f"EK-M GİRDİ maddesi yok; sayılanlar: {maddeler}"
+    assert "EK-L" in maddeler, "EK-L 2.5'te bağlandı ama listede yok"
+    # Ham kaynak vaadi geri GELMEMELİ: araç onlara erişemiyor.
+    assert "SANA VERİLMEZ" in girdiler
 
 
 def test_suggestion_section_anchor_is_the_measured_heading() -> None:
@@ -1157,6 +1234,118 @@ async def test_istem_EK_A_ve_EK_K_tasir(kosu, tmp_path) -> None:
     assert "## EK-K" in istem and KOK_REHBERI_METNI in istem
 
 
+async def test_istem_EK_M_iddia_dizinini_tasir(kosu, tmp_path) -> None:
+    """Sentez, `kaynak_iddia`'yı TAHMİN ETMEK zorunda KALMAZ: dizin istemde.
+
+    **ÖLÇÜLDÜ (2026-09-19, canlı koşu `kosu-222706dc…`):** sentez ham araştırma
+    raporlarını GÖREMİYOR — sözleşmenin ek listesinde yoklar — ve iddia→alan
+    hücresini bilemediği için numaraları denetçilerin kullanımından TAHMİN etti.
+    Kendi çıktısının ilk cümlesinde bunu beyan da etti. Motor `any(bağsız) →
+    reddet` uyguladığı için (`engine.py` iddia bağı) 52 `ekle` kararının 8'i,
+    TEK bir komşu-alan atıfı yüzünden tümüyle düştü; kalan atıfları doğruydu.
+    Sözleşme kuralı zaten doğru yazıyordu (*"o satırın `alan/dönem` hücresi
+    kararın `alan`ıyla örtüşür"*) — eksik olan KURAL değil VERİYDİ.
+    """
+    icerik = _tam_icerik()
+    _, runner = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    istem = runner.istem_metni
+    assert istem is not None
+    assert "## EK-M" in istem
+    for etiket in ("K1#1", "K1#2", "K2#1", "K2#2"):
+        assert etiket in istem, etiket
+
+
+async def test_EK_M_alan_anahtarini_MOTORUN_GORDUGU_GIBI_yazar(kosu, tmp_path) -> None:
+    """Dizin, motorun KARŞILAŞTIRDIĞI anahtarı gösterir — ham hücreyi değil.
+
+    KAYNAK-1'in üç Bölüm C satırı canlı koşuda markdown KAÇIŞLI geldi
+    (`ton\\_ve\\_dil`). Motor hücreyi `alan_karsilastirma_anahtari` ile
+    sadeleştirip karşılaştırır. Dizin ham hücreyi bassaydı sentez, motorun hiç
+    görmediği bir yazımı okur ve aynı kör noktaya ikinci bir kapıdan girerdi.
+    """
+    icerik = _tam_icerik()
+    _, runner = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    istem = runner.istem_metni
+    assert istem is not None
+    dizin = istem.split("## EK-M")[1].split("## EK-H")[0]
+    assert "yasaklar_ve_hassasiyetler" in dizin
+    assert "yasaklar\\_ve\\_hassasiyetler" not in dizin
+
+
+async def test_EK_M_donem_satirini_SISTEM_ANAHTARIYLA_yazar(kosu, tmp_path) -> None:
+    """Görev B bağı dönem ADINDAN değil SİSTEM ANAHTARINDAN kurulur.
+
+    Motor `oge_yolu`'nun anahtarını (`sevgililer-gunu`) iddianın `anahtarlar`
+    kümesinde arar; günlük addan anahtar TÜRETMEZ (F3'ün kapattığı sınıf).
+    Dizin yalnız "Sevgililer Günü" yazsaydı sentez o köprüyü yine kuramazdı.
+    """
+    icerik = _tam_icerik()
+    _, runner = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik)
+    )
+    istem = runner.istem_metni
+    assert istem is not None
+    dizin = istem.split("## EK-M")[1].split("## EK-H")[0]
+    assert "sevgililer-gunu" in dizin
+    assert "K2#2" in dizin
+
+
+async def test_BOS_iddia_dizini_turu_BASLATMADAN_dusurur(kosu, tmp_path) -> None:
+    """Dizin boşsa tur HİÇ BAŞLAMAZ — EK-K'nın fail-closed emsali.
+
+    Boş bir dizinle koşmak, kapatılan kusurun ta kendisine geri dönmektir:
+    sentez numarayı yine tahmin eder, tur yine ~940 sn ve jeton harcar, motor
+    yine reddeder. Arıza aracı DOĞURMADAN, kabul bölgesinde alınır.
+    """
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    kor = (
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="KAYNAK-1",
+            icerik_ozeti=identity.canonical_sha("kaynak-1"),
+        ),
+    )
+    with pytest.raises(synthesis.SynthesisFailed, match="iddia dizini"):
+        await _sentez(
+            kosu,
+            tmp_path,
+            aday=icerik,
+            gunluk=_model_gunlugu(icerik),
+            doktor=kor,
+        )
+
+
+def test_iddia_evreni_TEK_URETICI_motor_ayni_tabloyu_okur() -> None:
+    """Motorun çözüm tablosu ile EK-M dizini AYNI üreticiden gelir.
+
+    İkinci bir numaralandırma kuralı yazılsaydı dizin `K2#1` derken motor
+    başka bir satırı çözebilir, yani sentez DOĞRU numarayı yazdığı hâlde karar
+    düşerdi. Bağ burada YAPIYLA kurulur: motorun tablosu bu üreticinin ta
+    kendisidir, benzeyen bir kopya değil.
+    """
+    raporlar = _doktor_raporlari()
+    evren = auditors.iddia_evreni(raporlar)
+    assert set(evren) == {"K1#1", "K1#2", "K2#1", "K2#2"}
+    assert evren["K2#2"].anahtarlar == ("sevgililer-gunu",)
+    assert engine._arastirma_iddialari(
+        _EngineGirdisi(bd.gate_round(raporlar))
+    ) == evren
+
+
+class _EngineGirdisi:
+    """`_arastirma_iddialari`'nın okuduğu TEK alanı taşıyan taşıyıcı."""
+
+    def __init__(self, mekanik_eleme) -> None:
+        self.mekanik_eleme = mekanik_eleme
+
+
 async def test_unparseable_output_marks_incomplete(kosu, tmp_path) -> None:
     """Biçim kapısı: dört bölümü taşımayan çıktı SONUÇ DEĞİLDİR."""
     db, run_id = kosu
@@ -1197,6 +1386,7 @@ async def test_invalid_round_blocks_synthesis(kosu, tmp_path) -> None:
             run_id=run_id,
             brief=BRIEF_METNI,
             kok_rehberi=KOK_REHBERI_METNI,
+            doktor_raporlari=_doktor_raporlari(),
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),
@@ -1229,6 +1419,7 @@ async def test_relative_dest_is_refused(kosu, tmp_path) -> None:
             run_id=run_id,
             brief=BRIEF_METNI,
             kok_rehberi=KOK_REHBERI_METNI,
+            doktor_raporlari=_doktor_raporlari(),
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),
@@ -1270,6 +1461,7 @@ async def test_run_id_grammar_gates_the_destination(
             run_id=bozuk_id,
             brief=BRIEF_METNI,
             kok_rehberi=KOK_REHBERI_METNI,
+            doktor_raporlari=_doktor_raporlari(),
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),
@@ -1302,6 +1494,7 @@ async def test_round_from_another_snapshot_is_refused(kosu, tmp_path) -> None:
             run_id=run_id,
             brief=BRIEF_METNI,
             kok_rehberi=KOK_REHBERI_METNI,
+            doktor_raporlari=_doktor_raporlari(),
             active_package=_aktif_paket(),
             removed_history=(),
             holiday_keys=set(),

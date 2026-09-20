@@ -1711,6 +1711,17 @@ def _yapi_gorunumu(satir: str) -> str:
     return _SUS_RE.sub("", satir)
 
 
+TEMEL_ALAN_ANAHTARLARI = frozenset(
+    alan_karsilastirma_anahtari(ad) for ad in TEMEL_ALANLAR
+)
+"""Bölüm A alan adlarının karşılaştırma anahtarları — TEK kural, tek yer.
+
+Motor "bilinen bir alan adı DÖNEM DEĞİLDİR" yargısını, sentez de EK-M
+dizinini alan/dönem diye ayırırken bu kümeyi okur. İki kopya, aynı hücrenin
+bir tarafta alan bir tarafta dönem sayılabildiği bir pencere açardı.
+"""
+
+
 # ─── Doluluk kontrolünün AÇIK BIRAKTIĞI markdown blok biçimleri ────────────
 #
 # Envanter BURADA yaşar ve İKİ yerden okunur: kapsam beyanı (`CHECKS`) metnini
