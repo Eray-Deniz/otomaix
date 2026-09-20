@@ -325,15 +325,18 @@ DENETIM_TABLOSU = (
     _denetim_satiri(4, kaynaklar={1, 2}, sinif="2-2", alan="cta_kaliplari"),
     # Denetçi eklemeye izin VERMEYEN öneri yazmış.
     _denetim_satiri(5, kaynaklar={1, 2}, sinif="2-2", oneri="alma"),
-    # Denetçi TÜKETİLMESİ gereken bir bayrak yazmış; sentez onu düz yazıya
-    # kopyalamamış olabilir — motor artık tipli sütundan okur.
+    # Denetçi TÜKETİLMESİ gereken bir bayrak yazmış. Bu satırı anan karar
+    # BLOKLANMAZ; bilgi `bayrak_kaydi` bulgusuyla kayda geçer (2026-09-20).
     #
-    # YAZIM NOTU (ölçüldü, MEVCUT sınırlama — bu turun ürünü DEĞİL): bayrak adı
-    # ASCII yazımla verilir. `_katla` `ç`/`ğ`/`ş`'yi katlar ama NOKTASIZ `ı`'yı
-    # KATLAMAZ; sözleşmenin kendi yazımı olan `[marka-adı]`, `[kanal-bağımlı]`
-    # ve `[kaynak-bağımlı]` bu yüzden `BAYRAKLAR` kümesiyle EŞLEŞMEZ — ne bu
-    # kapıda ne de eskiden beri var olan `_bayrak_tuketimi` kontrolünde.
-    # Fixture kodun BUGÜN tanıdığı yazımı kullanır; sınır açıkça raporlandı.
+    # YAZIM NOTU DÜZELTİLDİ (2026-09-20, bağımsız hakem — iddia ölçümle YANLIŞ
+    # çıktı). Buradaki eski not "`_katla` NOKTASIZ `ı`'yı KATLAMAZ, o yüzden
+    # `[marka-adı]`/`[kanal-bağımlı]`/`[kaynak-bağımlı]` hiçbir kontrolde
+    # tanınmaz" diyordu. ÖLÇÜLDÜ: kapalı kümenin SEKİZ üyesi, sözleşmenin kendi
+    # Türkçe yazımıyla verildiğinde 8/8 TANINIYOR (`ı` ayağı 2026-09-10'da
+    # eklenmiş — `engine._katla`). Matris elle seçilmedi, kümenin TAMAMI üstünde
+    # üretildi: `test_every_contract_flag_spelling_is_recognised`.
+    # Fixture ASCII yazımı kullanmaya devam eder (okunurluk), ama artık bunun
+    # bir SINIR olduğu iddia edilmiyor.
     _denetim_satiri(6, kaynaklar={1, 2}, sinif="2-2", bayraklar="[marka-adi]"),
 )
 
@@ -1803,8 +1806,8 @@ def test_a_flagged_auditor_row_alone_does_not_block_the_item() -> None:
     Bayrağı o sütuna DENETÇİ yazar ve orada durmaya devam eder; tüketim bir
     sonraki adımda, sentezde olur. Yani sütun "tüketilmedi"nin kanıtı olamaz:
     kapı bayraklı HER satırda ateşliyordu. Canlı koşuda ölçüldü
-    (`kosu-222706dc…`): ürettiği 3 bulgunun 3'ünde de pakete girecek metin
-    TEMİZDİ — bilgi taşımayan, %100 yanlış alarm veren bir kapı.
+    (`kosu-222706dc…`): ürettiği bulguların HEPSİNDE pakete girecek metin temizdi
+    — yani bilgi taşımıyordu. Sayılar ve üreten komut için ölçüm ve UZLAŞTIRMA kaydı: `docs/active/sektor-bilgi-paketi-plan2/K134-MOTOR-KARSILASTIRMA.md` → "Bayrak kapılarının iki ölçümü".
 
     Tüketimin ölçülebilir yüzeyi pakete girecek METİNDİR; onu
     `bayrak_tuketimi` kontrolü ölçer (bu dosyanın 11. bölümü).
@@ -2334,6 +2337,191 @@ def test_an_unconsumed_flag_in_the_package_text_becomes_an_open_question() -> No
     assert "pakete girecek metin" in " ".join(b.detay for b in sonuc.bulgular)
 
 
+KORUNAN_KIMLIK = _mevcut_kimlik("kanca_kaliplari", KORUNAN_KANCA)
+
+
+def _cikar_satiri(metin: str, kimlik: str) -> dict:
+    """AKTİF paketten bir öğeyi düşüren `cikar` satırı (yolu AKTİF pakettendir)."""
+    yol = _yol(AKTIF_ICERIK, "kanca_kaliplari", metin)
+    birim = identity.enumerate_content_units(AKTIF_ICERIK)[yol]
+    return {
+        "tur": "karar",
+        "alan": birim["alan"],
+        "oge_yolu": yol,
+        "unit_id": kimlik,
+        "oge_sha": birim["oge_sha"],
+        "karar": "cikar",
+        "gerekce": "Kaynaklar celisti.",
+        "kanit": DOGRULANMIS_KAYNAK,
+        "aktor": "sentez",
+    }
+
+
+def test_a_flag_is_attributed_only_to_the_living_unit() -> None:
+    """Sıra kayması: ölü satırın AKTİF yolu, adaydaki yaşayan yolla ÇAKIŞABİLİR.
+
+    **Bağımsız hakem bulgusu (2026-09-20, ölçüldü).** Ölü satırların (`cikar`/
+    `kirp`) `oge_yolu`su AKTİF paketin yoludur, yaşayanların ki ADAYIN; yollar
+    SIRA ORDİNALİ taşır. Listenin BAŞINDAN bir öğe çıkınca kalanlar kayar ve iki
+    yol aynı dizgeye düşer. Kontrol yol araması yaptığı için aynı bayrak İKİ
+    bulgu üretiyordu ve biri PAKETTEN ÇIKARILAN birime atfediliyordu — operatöre
+    "attığın öğenin pakete girecek metninde bayrak var" denmiş oluyordu. `unit_id`
+    onay yüzeyinde basılır, yani yanlış atıf operatörün gördüğü şeydir.
+
+    Yön fail-open DEĞİLDİ (fazla bulgu, eksik değil) ama `acik_soru` BLOKLAR.
+    """
+    # ÜRETİM ŞEKLİ: kimlik öğenin malıdır, YOLUN değil. KORUNAN düşerse hayatta
+    # kalan öğe (CIKARILACAK'ın güncellenmiş hâli) KENDİ kimliğini korur ama
+    # yolu [1]'den [0]'a KAYAR — ölü satırın aktif yoluyla aynı dizgeye düşer.
+    # Kimlikler AYRI, yollar AYNI: fixture bunu birebir kurar.
+    kalan = "Kalan kanca kalibi [kopya-şüphesi]"
+    aday = _tam_icerik(kanca_kaliplari=[kalan])
+    yasayan_yol = _yol(aday, "kanca_kaliplari", kalan)
+    olu = _cikar_satiri(KORUNAN_KANCA, KANCA_KIMLIGI)
+    assert olu["oge_yolu"] == yasayan_yol, "çakışma kurulmadı — test bir şey ölçmüyor"
+    assert olu["unit_id"] != CIKAN_KIMLIK, "kimlikler AYRI olmalı"
+    harita = dict(KIMLIKLER)
+    harita[yasayan_yol] = CIKAN_KIMLIK
+    gunluk = _gunluk(
+        aday,
+        kimlikler=harita,
+        degis={yasayan_yol: {"karar": "guncelle", "kanit": DOGRULANMIS_KAYNAK}},
+        ek=(olu,),
+    )
+    sonuc = engine.run_checks(
+        _girdi(
+            icerik=aday,
+            gunluk=gunluk,
+            cift=_cift(
+                statuler_1={KANCA_KIMLIGI: "contradicted"},
+                statuler_2={KANCA_KIMLIGI: "contradicted"},
+            ),
+        )
+    )
+    bayrak = [b for b in sonuc.bulgular if "bayrak" in b.detay]
+    assert len(bayrak) == 1, f"bayrak bulgusu TEK olmalı, {len(bayrak)} geldi"
+    assert bayrak[0].unit_id == CIKAN_KIMLIK, (
+        "bulgu YAŞAYAN birime atfedilmeli; çıkarılan birime atıf operatöre "
+        "pakette olmayan bir metni gösterir"
+    )
+
+
+def test_a_cited_flagged_auditor_row_is_recorded_without_blocking() -> None:
+    """Tipli bayrak sütunu BLOKLAMADAN kayda geçer — bilgi kaybolmaz.
+
+    **Bağımsız hakem bulgusu (2026-09-20).** Bayrak bloğu kaldırıldığında
+    `AuditRow.bayraklar` alanını okuyan üretim kodu KALMAMIŞTI (ölçüldü:
+    `grep`). Bu, kaldırmanın dürüst etiketindeki yeniden-açılma koşulunu
+    ("sentez bayrağı tümden görmezden geldi") TETİKLEYİCİSİZ bırakıyordu: o
+    sınıfı görebilecek tek yapısal veri artık hiç okunmuyordu.
+
+    Politika DEĞİŞMEDİ — bayraklı bir satırı anmak kalemi bloklamaz. Değişen
+    şey bilginin kaydedilmesidir: not satırı karar günlüğünde durur, operatör
+    bayrak başına kuralın gözetildiğini kendi denetler. Motorun bu kuralların
+    ANLAM ayağını ölçemediği dürüst etikettir, kayıt onun yerine geçmez.
+    """
+    sonuc = engine.run_checks(_ekle_girdisi(kanit=BAYRAKLI))
+    assert "acik_soru" not in _siniflar(sonuc), "bayrak BLOKLAMAZ"
+    assert sonuc.uygulanmayan_kararlar == (), "bayrak kararı DÜŞÜRMEZ"
+    kayitlar = [b for b in sonuc.bulgular if b.sinif == "bayrak_kaydi"]
+    assert kayitlar, "tipli bayrak bilgisi kayda geçmedi — tetikleyici yok"
+    assert "marka-adi" in kayitlar[0].detay
+
+
+def test_a_flag_on_a_rejected_addition_does_not_block() -> None:
+    """Motorun ÇÖPE ATTIĞI öğenin metni koşuyu BLOKLAMAZ — not olarak kalır.
+
+    **Bağımsız hakem bulgusu (2026-09-20), ÖLÇÜLDÜ.** Kontrol adayı tarıyor,
+    oysa reddedilen bir `ekle` nihai pakete GİRMEZ (`_nihai_icerik` onu düşürür).
+    Kapı yine `acik_soru` üretiyordu ve `acik_soru` BLOKLAR — yani kapatılan
+    kilit sınıfı yeni bir yoldan geri gelmişti: pakete hiç girmeyecek bir metin
+    aktivasyonu durduruyordu.
+
+    Bulgu SESSİZCE düşmez: uygulama katmanı (`decide`) onu NOT'a çevirir, çünkü
+    sentezin sözleşmeyi ihlal eden bir kalem ÖNERMESİ kayda değer bir olgudur —
+    yalnız bloklama etkisi düşer.
+    """
+    girdi = _ekle_girdisi(
+        kanit=TEK_KAYNAKLI, metin="Yeni kanca kalibi [kopya-şüphesi]"
+    )
+    sonuc = engine.decide(girdi, PolicyConfig())
+    assert "cogunluk-yok" in [
+        k.sebep for k in sonuc.policy_report.uygulanmayan_kararlar
+    ], "senaryo kurulmadı: karar reddedilmedi"
+    bayrak_bulgulari = [
+        b for b in sonuc.policy_report.bulgular if b.kontrol == "bayrak_tuketimi"
+    ]
+    assert bayrak_bulgulari, "bulgu SESSİZCE düşmemeli — kayda dönmeli"
+    assert [b.sinif for b in bayrak_bulgulari] == ["bayrak_kaydi"], (
+        "pakete girmeyen metnin bulgusu BLOKLAYAN sınıfta kalmamalı"
+    )
+    assert "acik-soru-var" not in (sonuc.sebep or "")
+
+
+def test_the_record_only_class_does_not_reach_the_outcome() -> None:
+    """`bayrak_kaydi` SONUCA DOKUNMAZ — `ETKI_KAYIT` kolunun pozitif kontrolü.
+
+    Bu test bir TUZAĞI kapatır: `decide`'ın etki döngüsünde `else` kolu, tanınmayan
+    HER etkiyi `aktivasyon_engeli`'ne çeviriyordu. Kayıt sınıfı açık bir kol
+    yazılmadan eklenseydi, "bloklamayan" diye tanımlanan sınıf aktivasyonu
+    engelleyecekti — yani sınıfın kendi sözleşmesi sessizce yanlış olacaktı.
+    """
+    girdi = _ekle_girdisi(kanit=BAYRAKLI)
+    sonuc = engine.decide(girdi, PolicyConfig())
+    kayitlar = [b for b in sonuc.policy_report.bulgular if b.sinif == "bayrak_kaydi"]
+    assert kayitlar, "senaryo kurulmadı: kayıt bulgusu üretilmedi"
+    assert "bayrak-kaydi" not in (sonuc.sebep or ""), "kayıt sebebe YAZILMAZ"
+    assert sonuc.sonuc == "activation_eligible", (
+        "kayıt sınıfı tek başına sonucu düşürmemeli; "
+        f"sonuc={sonuc.sonuc} sebep={sonuc.sebep}"
+    )
+
+
+def test_a_channel_flag_outside_the_filtered_surfaces_is_an_open_question() -> None:
+    """Kanal bayrağının muafiyeti, ÇALIŞMA ZAMANI filtresinin kapsamı kadardır.
+
+    **Eray kararı (2026-09-20): daralt.** Muafiyet eskiden TÜM yüzeylerde
+    koşulsuzdu, oysa marka-gerçeği filtresi ve etiket temizleme yalnız CTA
+    yüzeylerinde koşuyor (`sector_content_schema._channel_flag_scopes` doktrini).
+    ÖLÇÜLDÜ: `kanca_kaliplari`'na konan `[kanal-bagimli: whatsapp_hatti]` üretim
+    istemine AYNEN basılıyordu — bloğun kendi talimatı "markanın sahip olduğunu
+    bilmediğin kanalı önerme" derken.
+
+    Gerçek koşuda faturası ölçüldü (`kosu-222706dc…`): kanal etiketi taşıyan 7
+    birimin 6'sı zaten CTA yüzeyinde, yalnız 1'i (`gorsel_kodlar`) dışında.
+    """
+    sonuc = engine.run_checks(
+        _ekle_girdisi(
+            kanit=IKI_KAYNAKLI,
+            metin="Yeni kanca kalibi [kanal-bagimli: whatsapp_hatti]",
+        )
+    )
+    assert "acik_soru" in _siniflar(sonuc)
+    assert "filtre" in " ".join(b.detay for b in sonuc.bulgular)
+
+
+def test_a_channel_flag_on_a_cta_surface_stays_silent() -> None:
+    """POZİTİF KONTROL: filtrenin koştuğu yüzeyde kanal bayrağı sağ çıkar.
+
+    Anahtar geçerli kümeden seçilir; anahtar GEÇERLİLİĞİ bu kontrolün işi
+    değildir — yazım kapısı onu CTA yüzeylerinde zaten ölçer (tek kural, tek ev).
+    """
+    aday = _tam_icerik(
+        cta_kaliplari=[
+            {
+                "kalip": "Magazamiza bekleriz [kanal-bagimli: fiziksel_magaza]",
+                "tur": "ziyaret",
+                "gerekce": "Kanal etiketi tasinir.",
+            }
+        ]
+    )
+    harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
+    sonuc = engine.run_checks(
+        _girdi(icerik=aday, gunluk=_gunluk(aday, kimlikler=harita))
+    )
+    assert not [b for b in sonuc.bulgular if "bayrak" in b.detay]
+
+
 def test_a_flag_named_only_in_the_justification_is_silent() -> None:
     """Bayrağı GEREKÇEDE anmak tüketimin KENDİSİDİR — bulgu ÜRETMEZ.
 
@@ -2345,8 +2533,9 @@ def test_a_flag_named_only_in_the_justification_is_silent() -> None:
     soru bloklar — yani denetçinin bayrakladığı bir kalemi içeren paket
     `activation_eligible` OLAMIYORDU.
 
-    Canlı koşuda ölçüldü (`kosu-222706dc…`): 8 açık sorunun 8'i bayrak
-    kapılarından geliyordu ve pakete girecek metinlerin 11'inde 11'i TEMİZDİ.
+    Canlı koşuda ölçüldü (`kosu-222706dc…`): açık soruların tamamı bayrak
+    kapılarından geliyordu ve bayrak taşıyan satırların hiçbirinde pakete girecek
+    metin kirli değildi. Sayılar ve üreten komut için ölçüm ve UZLAŞTIRMA kaydı: `docs/active/sektor-bilgi-paketi-plan2/K134-MOTOR-KARSILASTIRMA.md` → "Bayrak kapılarının iki ölçümü".
     """
     sonuc = engine.run_checks(
         _ekle_girdisi(

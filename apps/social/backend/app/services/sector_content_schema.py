@@ -125,6 +125,28 @@ _BRACKET_SEGMENT_RE = re.compile(r"\[[^\[\]]*\]")
 _CHANNEL_FLAG_RE = re.compile(r"^\[\s*kanal\s*-\s*bagimli\s*:\s*([a-z0-9_]+)\s*\]$")
 
 
+def channel_flag_scope_path(unit_path: str) -> bool:
+    """Bu BİRİM YOLU, kanal bayrağı kuralının uygulandığı bir yüzey mi?
+
+    `_channel_flag_scopes` AYNI doktrini İÇERİK YAPISI üstünde ifade eder; bu
+    fonksiyon onu BİRİM YOLU üstünde ifade eder, çünkü motor içeriği yol yol
+    numaralandırır. İki ifade de TEK kuralın yüzüdür ve o kural şudur: kapsam
+    çalışma zamanı filtresiyle HİZALIDIR — `filter_channel_dependent` ve etiket
+    temizleme yalnız CTA öğelerinde ve özel günün CTA'sında koşar.
+
+    **Motor 2026-09-20'de bu yüklemi kullanmaya başladı (Eray kararı: daralt).**
+    Motorun kanal bayrağı muafiyeti o güne dek TÜM yüzeylerde koşulsuzdu; ölçüldü
+    ki `kanca_kaliplari`'na konan bir kanal etiketi ne eleniyor ne siliniyor,
+    üretim istemine AYNEN basılıyor — bloğun kendi talimatı "markanın sahip
+    olduğunu bilmediğin kanalı veya hizmeti önerme" derken. Muafiyet artık
+    filtrenin kapsamı kadardır.
+
+    Yol biçimleri ÖLÇÜLDÜ (`identity.enumerate_content_units`):
+    `cta_kaliplari[<n>]` ve `ozel_gun/<anahtar>/cta`.
+    """
+    return unit_path.startswith("cta_kaliplari[") or unit_path.endswith("/cta")
+
+
 def _channel_flag_scopes(content: dict) -> list:
     """Bayrak kuralının uygulandığı YÜZEYLER — içeriğin tamamı DEĞİL.
 

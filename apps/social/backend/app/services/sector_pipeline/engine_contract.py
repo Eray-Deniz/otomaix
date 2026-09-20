@@ -32,8 +32,18 @@ BULGU_SINIFLARI: tuple[str, ...] = (
     "regresyon_kapisi",
     "ikinci_aktif",
     "acik_soru",
+    "bayrak_kaydi",
 )
-"""`run_checks`'in üretebileceği bulgu sınıfları — KAPALI, ALTI değer (R7).
+"""`run_checks`'in üretebileceği bulgu sınıfları — KAPALI, YEDİ değer (R7).
+
+**`bayrak_kaydi` 2026-09-20'de eklendi (bağımsız review turu) ve BLOKLAMAYAN İLK
+sınıftır.** Etkisi `ETKI_KAYIT`'tır: onay yüzeyinde GÖRÜNÜR, sonuca dokunmaz.
+İhtiyaç iki bulgudan doğdu: (a) denetçinin tipli bayrak sütununu okuyan kod
+kalmamıştı, yani bayrak başına kuralın gözetilmediği sınıfın TETİKLEYİCİSİ
+yoktu; (b) motorun reddettiği bir kalemin metnindeki bayrak koşuyu BLOKLUYORDU.
+İkisi de "bilgi kaybolmasın ama karar üretmesin" istiyor. Bu küme İÇ
+sözleşmedir (spec §9 / arayüz eki R7) — not sınıfları kümesinin aksine
+pinlenmiş DIŞ sözleşmeyle çivili DEĞİLDİR, o yüzden burada kapanabildi.
 
 Task 12 bu kümeyi IMPORT eder ve DEĞERLERİNİ üretir; Task 13 `BulguIzi.sinif`
 alanında ve dönüşüm tablosunda TÜKETİR. Tanımın burada olmasının sebebi R2/H2'de
@@ -130,7 +140,7 @@ class KararsizMadde:
 class BulguIzi:
     """`run_checks`'in ürettiği bulgunun kalıcı izi."""
 
-    sinif: str  # BULGU_SINIFLARI içinden — KAPALI KÜME (R7, altı değer)
+    sinif: str  # BULGU_SINIFLARI içinden — KAPALI KÜME (R7, yedi değer)
     unit_id: str | None  # birime bağlanamayan bulguda None
     detay: str  # bulguyu doğuran ölçümün tek cümlelik ifadesi
     kontrol: str = ""

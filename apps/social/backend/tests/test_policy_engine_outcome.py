@@ -108,6 +108,9 @@ BEKLENEN_DONUSUM = {
     "regresyon_kapisi": ("aktivasyonu-engeller", "regresyon-kapisi-gecmedi"),
     "ikinci_aktif": ("bloklar", "ikinci-aktif-paket"),
     "acik_soru": ("bloklar", "acik-soru-var"),
+    # 2026-09-20: BLOKLAMAYAN ilk sınıf. Sebep dizesi rapor/denetim içindir;
+    # `decide` onu sebep listesine YAZMAZ (ayrı testte ölçülür).
+    "bayrak_kaydi": ("yalniz-kayit", "bayrak-kaydi"),
 }
 
 SEBEP_BARIYER = "bariyer-asildi"
@@ -335,7 +338,7 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
         tuple(sorted(engine.identity.NOT_SINIFLARI)),
     )
     assert (engine.ENGINE_VERSION, kural_yuzeyi) == (
-        "2.18.0",
+        "2.19.0",
         (
             12,
             (
@@ -354,6 +357,7 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
             ),
             (
                 "acik_soru",
+                "bayrak_kaydi",
                 "ikinci_aktif",
                 "kapsam_ihlali",
                 "mevzuat_dogrulanamadi",
@@ -428,7 +432,7 @@ def test_policy_report_constructed_only_in_engine_module() -> None:
     assert kuranlar == {"app/services/sector_pipeline/engine.py"}
 
 
-# ═══ 2. Dönüşüm tablosu — altı sınıfın altısı (arayüz eki R7) ══════════════
+# ═══ 2. Dönüşüm tablosu — yedi sınıfın yedisi (arayüz eki R7) ═════════════
 
 
 def test_finding_classes_all_have_a_consumer() -> None:
@@ -515,16 +519,31 @@ def test_acik_soru_finding_becomes_blocked() -> None:
 
 
 def test_surviving_flag_does_not_block() -> None:
-    """POZİTİF KONTROL: sağ çıkan TEK bayrak pakete girecek metinde bloklamaz.
+    """POZİTİF KONTROL: sağ çıkan TEK bayrak, FİLTRELİ yüzeyde bloklamaz.
 
-    Bu kol, yukarıdaki testin bayrağın VARLIĞINI değil TÜRÜNÜ ölçtüğünü
-    gösterir: aynı senaryoda yalnız bayrak adı değişir.
+    **İki düzeltme (2026-09-20, bağımsız hakem + Eray kararı):** (a) bayrak artık
+    CTA yüzeyindedir, çünkü kanal bayrağının muafiyeti çalışma zamanı filtresinin
+    kapsamı kadardır ve filtre yalnız CTA'da koşar; (b) anahtar KAPALI kümeden
+    seçildi. Önceki yazım `[kanal-bagimli: reels]`i `kanca_kaliplari`'na koyuyordu:
+    `reels` geçerli anahtar kümesinde YOK ve kanca filtreli bir yüzey DEĞİL — test
+    tam olarak kapatılan boşluğu meşru gösteriyordu.
     """
+    aday = _tam_icerik(
+        cta_kaliplari=[
+            {
+                "kalip": "Magazamiza bekleriz [kanal-bagimli: fiziksel_magaza]",
+                "tur": "ziyaret",
+                "gerekce": "Kanal etiketi tasinir.",
+            }
+        ]
+    )
+    yol = _yol(aday, "cta_kaliplari", aday["cta_kaliplari"][0])
     girdi = _girdi(
-        **_guncelle_parcalari(
-            kanit=DOGRULANMIS_KAYNAK,
-            yeni_metin=f"{GUNCELLENMIS_KANCA} [kanal-bagimli: reels]",
-        )
+        icerik=aday,
+        gunluk=_gunluk(
+            aday, degis={yol: {"karar": "guncelle", "kanit": DOGRULANMIS_KAYNAK}}
+        ),
+        cift=_cift(statuler_1=MUTABIK, statuler_2=MUTABIK),
     )
     sonuc = _karar(girdi)
     assert sonuc.sonuc != "blocked"
