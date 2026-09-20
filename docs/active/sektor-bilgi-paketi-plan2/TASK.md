@@ -1608,10 +1608,14 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
      ölçüldü: alt-hakem aynı yerel PostgreSQL'in scratch veritabanını kurup düşürüyordu; hakem
      bitince temiz koşum geldi.
 
-     **AÇIK CHECKPOINT — kullanıcı kararı bekliyor:** attempt-2'nin açtığı high'ın düzeltmesi o
-     turdan SONRA yapıldı, yani **bağımsız hakem onu görmedi**. Stop-rule "attempt-2 sonrası
-     otomatik 3. pas YOK" dediği için üçüncü tur kendiliğinden koşulmadı. Bugünkü kapanış kanıtı
-     kontrolörün üretilmiş matrisidir, hakem `approve`'u DEĞİLDİR.
+     **CHECKPOINT KAPANDI (2026-09-20).** Eray kararıyla ÜÇÜNCÜ tur koştu — **yalnız Codex**
+     (gerekçe: dar soru, ölçülmüş süre farkı). Verdict **approve, materyal bulgu YOK**: nihai
+     içerikte kirli metin her zaman damgalı açık soru üretiyor, nihai pakette olmayan reddedilmiş
+     içerik yalnız kayıt üretiyor, kalıcılık aynı doğrulanmış içeriği yazıyor, matrisin oracle'ı
+     bağımsız ve monkeypatch vakalar arası sızdırmıyor. **Dürüst sınır:** teyit TEK hakemden geldi
+     (`dual-review: false`, `review_confidence: reduced`) — bu, zincir-ilerlemesi override'ı DEĞİL,
+     kapanış doğrulamasıdır. `/security-review-claude-codex` hâlâ koşmadı ve
+     `security_surface_touched: true` olduğu için ZORUNLU.
 
      **DOĞRULANMADI — yeşil sayma:** (a) yeni kapının `koru` kolu, aktif paketi OLAN bir sektörde
      denenmedi (pilot sektörün aktif paketi yok); (b) bayrak başına kuralın ANLAM ayağı mekanik

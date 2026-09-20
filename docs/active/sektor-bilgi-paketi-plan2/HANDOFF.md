@@ -8,11 +8,11 @@ written: 2026-09-20
 **Kusur 3 kapandı; İKİ review turu (attempt-1 + kapanış) koştu. AÇIK BİR CHECKPOINT VAR (aşağıda).
 SIRADAKİ İŞ: kusur 4 (sıra kusuru) + ölü koşu kusuru — ikisi de yeni pilot koşusunun ÖNÜNDE.**
 
-**AÇIK CHECKPOINT — Eray kararı bekliyor:** kapanış turu, H2 düzeltmemin FAIL-OPEN açtığını buldu
-(reddedilen `guncelle` bayraklı aktif değeri geri yüklüyor ve paket aktive olabiliyordu). Sınıfı
-kapattım ve üretilmiş matrisle kanıtladım, ama **o düzeltmeyi bağımsız hakem GÖRMEDİ** — stop-rule
-"attempt-2 sonrası otomatik 3. pas YOK" diyor. Seçenek: üçüncü tur koşulsun mu, yoksa matris
-kanıt sayılsın mı? Bugünkü kapanış kontrolör yargısıdır, hakem `approve`'u DEĞİLDİR.
+**CHECKPOINT KAPANDI.** Kapanış turu, H2 düzeltmemin FAIL-OPEN açtığını buldu (reddedilen
+`guncelle` bayraklı aktif değeri geri yüklüyor ve paket aktive olabiliyordu). Sınıfı kapattım,
+üretilmiş matrisle kanıtladım; sonra Eray kararıyla **üçüncü tur (yalnız Codex)** koştu ve
+**approve / materyal bulgu YOK** geldi. **Dürüst sınır:** teyit tek hakemden
+(`dual-review: false`). ÜÇ review turu koştu, unresolved critical/high YOK.
 
 **Eray kararı (2026-09-19, hâlâ geçerli): tören YOK.** Spec seansı açılmaz, plan yazılmaz;
 düzeltme doğrudan başlar. Review gerekirse düzeltme SIRASINDA çağrılır — kusur 3'te böyle
@@ -35,9 +35,9 @@ ile 2.17.0 ölçümü farklı sayı verir, ikisi de doğrudur).
 
 # Verification
 
-**Bu oturumda ÜRETİM KODU DEĞİŞTİ.** ÜÇ commit atıldı (`1611d1f` kusur 3 · `9b87c95` attempt-1
-düzeltmeleri · `81d5ed6` kayıt); **kapanış turunun düzeltmeleri henüz commit EDİLMEDİ** (Eray
-onayı bekliyor).
+**Bu oturumda ÜRETİM KODU DEĞİŞTİ.** BEŞ commit atıldı: `1611d1f` (kusur 3) · `9b87c95` +
+`81d5ed6` (attempt-1 düzeltmeleri + kayıt) · `4b776fa` + `4865a45` (kapanış turu düzeltmeleri +
+kayıt). **Push YAPILMADI.** Attempt-3 raporu bu dosyadan sonra commit edilir.
 
 | Ne | Taze çıktı |
 |---|---|
@@ -47,8 +47,9 @@ onayı bekliyor).
 | Test sayısı | 4618 → 4619 → 4625 → **4635** (+1, +6, +10; aritmetik tutuyor) |
 | Motor sürümü | 2.17.0 → 2.18.0 → 2.19.0 → **2.20.0** |
 | Sözleşme | **2.6, DOKUNULMADI** — kusur 3 sözleşme değişikliği gerektirmedi |
-| Review turu | İKİ dual tur: attempt-1 + kapanış-doğrulama; dört hakem koşumu da tamamlandı |
-| Kapanış kanıtı | ÜRETİLMİŞ matris (8 vaka, çift yönlü, 2 mutasyonla sınandı) — hakem approve'u DEĞİL |
+| Review turu | ÜÇ tur: attempt-1 dual · attempt-2 dual · attempt-3 Codex-only; beş hakem koşumu |
+| Kapanış | attempt-3 **approve, materyal bulgu yok** (tek hakem → `dual-review: false`) |
+| Kapanış kanıtı | ÜRETİLMİŞ matris (8 vaka, çift yönlü, 2 mutasyon) + bağımsız hakem teyidi |
 
 **Alt-hakem tam takımı bağımsız koşturdu:** 4619 passed / 332,44 s (düzeltmelerden önceki hâl) —
 benim o anki sayımı doğruladı.

@@ -234,3 +234,64 @@ koşumu yapmadım" diye dürüstçe sınırladı; **kontrol koşumu SONRADAN yap
   **bağımsız hakem onu görmedi.** Stop-rule "attempt-2 sonrası otomatik 3. pas YOK → human
   checkpoint" diyor; bu yüzden üçüncü tur KENDİLİĞİNDEN koşulmadı. Kapanış kanıtı şu an
   **kontrolörün üretilmiş matrisi**, hakem `approve`'u DEĞİL — dürüst etiket.
+
+---
+
+# Attempt 3 — kapanış-doğrulama, CODEX-ONLY (Eray kararı 2026-09-20)
+
+Aralık: `81d5ed6..4865a45` (attempt-2'nin açtığı high'ın düzeltmesi) · workspace: pinned
+worktree @ `4865a45` (clean)
+**dual-review: FALSE · review_confidence: reduced · single-source: codex.**
+Bu tek-hakem KASITLIDIR: Eray "sadece Codex ile üçüncü turu koş" dedi. Gerekçe ölçüme dayanıyordu
+— attempt-1/2'de fail-open'ı Codex, matrisin kör noktasını Claude alt-hakemi bulmuştu; bu tur DAR
+bir soru sınıyor ve Codex turu ~9 dk, alt-hakem turu 21-31 dk sürüyor. **Damga dürüstlük gereği
+düşürülür:** tek hakem, azaltılmış güven.
+
+## Verdict: **approve — materyal bulgu YOK**
+
+Codex'in doğruladıkları (kendi cümleleriyle özetlenmiş, ham çıktı log'da):
+- **H3 KAPANDI.** Nihai içerikte kirli metin HER ZAMAN damgalı bir `bayrak_tuketimi` açık sorusu
+  üretiyor; nihai pakette OLMAYAN reddedilmiş içerik yalnız kayıt üretiyor.
+- **Kalıcılık aynı doğrulanmış nihai içeriği yazıyor** — yani `nihai` ile yazılan ayrışmıyor
+  (sorduğum (a) maddesi).
+- **M4 (süzgeç):** iddialar kontrolü artık YAPISAL olarak tanıyor.
+- **M5 (matris):** iddia edilen 2×2×2 çarpımı gerçekten kapsıyor, oracle BAĞIMSIZ, ve pytest'in
+  `monkeypatch` fixture'ı vakalar arası state sızıntısını engelliyor.
+- Zarf dışı yeniden-keşif yapılmadı, contract-widening istenmedi.
+
+**Codex'in taze ölçümü:** iki motor takımı **392/392 passed**. Komşu bir grup 317 passed + 272
+setup error verdi çünkü `DATABASE_URL` sandbox'ta yok — **asserted failure DEĞİL**. Bu, benim
+ölçümümle tutarlı (aynı sebep: DB erişimi).
+
+## Stop-rule durumu — CHECKPOINT KAPANDI
+
+- `completed_evaluations` = **3** (attempt-1 dual · attempt-2 dual · attempt-3 single) ·
+  `consecutive_degraded` = 0 · `total_invocations` = 3 → terminal backstop (6) DOLMADI.
+- Unresolved critical/high: **yok.**
+- **H3'ün kapanışı artık bağımsız hakem teyidi taşıyor** (`fixed_confirmed`), yalnız kontrolörün
+  matrisi değil. Dürüst sınır: teyit TEK hakemden geldi (`dual-review: false`).
+- **`risk_acceptance` / `dual_review_override` event'i YAZILMADI** — unresolved C/H yok, ve
+  tek-hakem seçimi zincir-ilerlemesini geçmek için değil KAPANIŞI DOĞRULAMAK için yapıldı.
+  Zincirin sonraki adımı (`/security-review-claude-codex`) hâlâ koşmadı ve
+  `security_surface_touched: true` olduğu için ZORUNLU kalıyor.
+
+## Bu review zincirinin toplam maliyeti (ölçüldü)
+
+| Tur | Hakemler | Süre |
+|---|---|---|
+| attempt-1 | Codex + Claude alt-hakemi | Codex ~4 dk · alt-hakem 21 dk |
+| attempt-2 | Codex + Claude alt-hakemi | Codex ~6 dk · alt-hakem 31 dk |
+| attempt-3 | yalnız Codex | ~7 dk |
+| Tam takım koşumları | 4 temiz koşum | 335 + 337 + 334 s (+ çakışma yüzünden boşa giden 3 koşum) |
+
+## Prosedürel kapanış (overclaim YASAK)
+
+Tanımlı pas bütçesi tamamlandı (3 attempt; `total_invocations=3`, `consecutive_degraded=0);
+adlandırılmış closure kontrolleri çalıştı; ledger: `task:sektor-bilgi-paketi-plan2`
+(`completed_evaluations=3`). **Kapsanan alanlar:** bayrak tüketimi kapısının yüzeyi ve dayanağı ·
+kanal bayrağı muafiyetinin kapsamı · ölü satır/sıra kayması · bloklamayan bulgu sınıfının tüm
+tüketicileri · nihai içerik ↔ kalıcılık bağı · testlerin gözlem gücü (süzgeç sınıfı).
+**Denenmeyen/kapsanmayan alanlar:** `yazim` · `katman1/2` · `onay` · `aktive-et` uçtan-uca
+ayakları · aktif paketi OLAN sektörde `koru` kolu · bayrak başına kuralın anlam ayağı ·
+`eski-kaynak` çoğunluk kuralı · attempt-3'te ikinci hakem. **Residual'lar:** dördü TASK.md'de
+koşullu kalemler olarak adlandırıldı. **Exhaustiveness iddiası YOK.**
