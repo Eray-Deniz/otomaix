@@ -1762,11 +1762,24 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 # ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
 # bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
 
-ENGINE_VERSION: str = "2.16.0"
+ENGINE_VERSION: str = "2.17.0"
 """Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
 
 Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
 kuralı değiştiğinde eski koşuların sonucu yenisiyle karşılaştırılamaz.
+
+**2.16.0 → 2.17.0 (2026-09-20).** UYGULAMA KURALI değişti: yuva kümesi
+tamamlanamayan `ozel_gun` dönemi nihai adaya YAZILMAZ, tümüyle düşer. Aynı
+girdi artık farklı bir aday üretiyor — eskiden yarım dönem yazım kapısını
+düşürüyor ve adayın TAMAMI atılıyordu.
+
+**KAPSAM SINIRI, dürüst etiket:** `test_engine_version_is_pinned_to_the_RULE_
+SURFACE` bu değişikliği YAKALAYAMAZ. O testin parmak izi sebep kümesini, kural
+kimliklerini, kontrol adlarını ve not sınıflarını ölçer; ADAY KURMA kuralı
+parmak izinde YOKTUR ve ölçülebilir bir yüzeyi de yoktur. Bu satırların
+bakımı ELLE yapılır: `_nihai_icerik` gövdesi değişince damga da artar. Testin
+kendi belgesi "sürümü tek başına pinlemek tautolojidir" der; burada kapı
+yoktur, dokümante edilmiş bir tripwire vardır.
 
 **2.15.0 → 2.16.0 (2026-09-20).** Uygulanmama sebepleri kapalı kümesi on
 birden on ikiye çıktı: `iddia-alani-uyusmuyor` ayrıldı. Kararın UYGULANIP
@@ -2181,6 +2194,39 @@ def _nihai_icerik(
             ozel_gun.pop(anahtar, None)
             if anahtar not in dusen_anahtarlar:
                 dusen_anahtarlar = dusen_anahtarlar + (anahtar,)
+        # DÖNEM ATOMİKTİR — yarım dönem YAZILMAZ (2026-09-19, ilk motor koşumu).
+        #
+        # Şema dönemin yuva kümesini TAM ister (`set(entry) != SPECIAL_DAY_SLOTS`
+        # → hata); yukarıdaki döngü ise yuvaları TEK TEK çıkarıyordu. Sonuç
+        # ÖLÇÜLDÜ: 10 Kasım'ın beş yuvası da düştü, geriye BOŞ bir girdi kaldı,
+        # yazım kapısı onu reddetti ve motor adayın TAMAMINI attı — aynı koşunun
+        # 51 sağlam kararıyla birlikte. Boş kabuk uç hâldi: TEK yuvanın düşmesi
+        # de aynı sonucu veriyordu.
+        #
+        # Onarım BURADA yapılır çünkü kabuğu bırakan da burasıdır. Yetkisi
+        # tamamlanamayan dönem pakette YOKTUR; yarısı da yoktur. Geri koyma
+        # yolu (`geri_al`) aktif paketteki bir dönemi zaten tamamlar, yani bu
+        # kural pratikte YENİ dönemde ısırır — ama koşul İÇERİĞE sorulur,
+        # dönemin nereden geldiğine değil.
+        for anahtar in sorted(ozel_gun):
+            if set(ozel_gun[anahtar]) == set(SPECIAL_DAY_SLOTS):
+                continue
+            ozel_gun.pop(anahtar)
+            # Kalan yuvaların kimlikleri de içerikte YOKTUR; günlükte kalsalardı
+            # bütünlük kapısı (`check_unit_integrity`) düşerdi.
+            #
+            # KOVA SEÇİMİ K-91'in ayrımıdır ve içerikten ölçülür: pakette ZATEN
+            # OLAN bir dönemin düşmesi paketi DEĞİŞTİRİR (`eslesmeyen_takvim`),
+            # hiç girmemiş bir adayınki DEĞİŞTİRMEZ (`reddedilen_ekleme`). İkisi
+            # tek kovaya konsaydı reddedilen bir ekleme ilk koşuyu "değişiklik
+            # oldu" gösterirdi.
+            onceki_donem = anahtar in _aktif_ozel_gunler(inputs)
+            for unit_id, yol in list(yollar.items()):
+                eslesme = _OZEL_GUN_YOLU.match(yol)
+                if eslesme is None or eslesme.group("anahtar") != anahtar:
+                    continue
+                yollar.pop(unit_id)
+                (takvim_dusenleri if onceki_donem else dusenler).append(unit_id)
 
     # Düşen anahtarın birimleri de nihai içerikte YOKTUR; günlükten çıkarlar.
     for unit_id, yol in list(yollar.items()):

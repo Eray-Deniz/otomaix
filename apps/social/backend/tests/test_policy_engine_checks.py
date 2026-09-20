@@ -32,7 +32,7 @@ from dataclasses import fields as dataclass_fields
 
 import pytest
 
-from app.services.sector_content_schema import structural_errors
+from app.services.sector_content_schema import SPECIAL_DAY_SLOTS, structural_errors
 from app.services.sector_pipeline import auditors, brief_doctor as bd, identity
 from app.services.sector_pipeline import engine
 from app.services.sector_pipeline.policy_config import PolicyConfig
@@ -1603,6 +1603,111 @@ def test_a_claim_about_another_period_does_not_authorise() -> None:
         _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{MEVCUT_DONEM_IDDIA_NO}")
     )
     assert "iddia-alani-uyusmuyor" in _sebepler(sonuc)
+
+
+
+# ═══ Yetkilendirilemeyen dönem — NİHAİ ADAYA yazılmaz ══════════════════════
+
+
+def _yuvalari_reddet(girdi, yuvalar):
+    """Dönemin SEÇİLİ yuvalarının atfını bozar — o kararlar motorda düşer.
+
+    Bozma yolu `kaynak_iddia`'dır ve bilinçlidir: sebep ne olursa olsun
+    (atıf · öneri · çoğunluk) motor o yuvayı adaydan ÇIKARIR, yani ölçülen
+    şey redde giden yol değil REDDİN SONUCUDUR.
+    """
+    import dataclasses
+
+    from app.services.sector_pipeline import synthesis
+
+    satirlar = []
+    for satir in girdi.sentez.karar_gunlugu:
+        yeni = dict(identity.cozulmus(satir))
+        yol = yeni.get("oge_yolu", "")
+        if yol.startswith(f"ozel_gun/{YENI_DONEM_ANAHTARI}/") and (
+            yol.rsplit("/", 1)[-1] in yuvalar
+        ):
+            yeni["kaynak_iddia"] = "K1#404"
+        satirlar.append(yeni)
+    return dataclasses.replace(
+        girdi,
+        sentez=synthesis.SynthesisResult(
+            aday_json=identity.cozulmus(girdi.sentez.aday_json),
+            karar_gunlugu=tuple(satirlar),
+            acik_sorular=girdi.sentez.acik_sorular,
+            onay_ozeti=girdi.sentez.onay_ozeti,
+            tasma=girdi.sentez.tasma,
+        ),
+    )
+
+
+def _yeni_donem_girdisi():
+    return _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}")
+
+
+def test_an_unauthorised_period_is_NOT_left_as_a_shell() -> None:
+    """Yuvaları reddedilen YENİ dönem adaya HİÇ girmez — kabuk bırakılmaz.
+
+    **ÖLÇÜLDÜ (2026-09-19, ilk motor koşumu).** 10 Kasım tek kaynaklıydı, beş
+    yuvası da `cogunluk-yok` ile düştü ve geriye BOŞ bir `ozel_gun` girdisi
+    kaldı; yazım kapısı onu reddetti ve motor adayın TAMAMINI attı — o koşudaki
+    51 sağlam kararla birlikte.
+
+    Dönem şemada ATOMİKTİR (`set(entry) != set(SPECIAL_DAY_SLOTS)` → hata), ama
+    motor yuvaları TEK TEK çıkarıyordu. Yetkilendirilemeyen bir dönem pakette
+    yoktur; yarım hâli de yoktur.
+    """
+    sonuc = engine.decide(
+        _yuvalari_reddet(_yeni_donem_girdisi(), set(SPECIAL_DAY_SLOTS)),
+        PolicyConfig(),
+    )
+    assert sonuc.engine_diff["yazim_hatalari"] == ()
+    assert engine.SEBEP_UYGULANAMAZ != sonuc.sebep
+    assert sonuc.final_candidate is not None
+    assert YENI_DONEM_ANAHTARI not in sonuc.final_candidate["ozel_gun"]
+
+
+def test_ONE_rejected_slot_drops_the_whole_period_not_the_whole_run() -> None:
+    """Kusurun ASIL genişliği: TEK yuva yetse bile aday tümüyle atılıyordu.
+
+    Boş kabuk uç hâldi. Ölçüldü (bu fixture, `decide`): beş yuvadan BİRİ
+    reddedildiğinde de sonuç `blocked` ve uygulanan karar SIFIR oluyordu —
+    yani dönemin tek yuvası, koşunun ÖTEKİ kararlarını da götürüyordu.
+    Dönem atomiktir: yarısı yetkilendirilemeyen dönem tümüyle düşer, koşu
+    devam eder.
+    """
+    sonuc = engine.decide(
+        _yuvalari_reddet(_yeni_donem_girdisi(), {"cta"}), PolicyConfig()
+    )
+    assert sonuc.engine_diff["yazim_hatalari"] == ()
+    assert sonuc.final_candidate is not None
+    assert YENI_DONEM_ANAHTARI not in sonuc.final_candidate["ozel_gun"]
+
+
+def test_a_fully_authorised_period_still_lands() -> None:
+    """POZİTİF KONTROL: kural AŞIRI GENİŞ değil — sağlam dönem adaya girer."""
+    sonuc = engine.decide(_yeni_donem_girdisi(), PolicyConfig())
+    assert sonuc.final_candidate is not None
+    girdi_yuvalari = sonuc.final_candidate["ozel_gun"][YENI_DONEM_ANAHTARI]
+    assert set(girdi_yuvalari) == set(SPECIAL_DAY_SLOTS)
+
+
+def test_a_dropped_new_period_is_NOT_a_package_change() -> None:
+    """K-91: hiç girmemiş dönemin düşmesi paketi DEĞİŞTİRMEZ.
+
+    Ayrım motorun kendi sözleşmesinde kurulu: `reddedilen_ekleme` paket
+    DEĞİŞMEDİ demektir, `eslesmeyen_takvim` ise pakette OLAN bir dönemin
+    düşmesidir ve değişiklik sayılır. Yeni dönem ilkine aittir; ikincisine
+    yazılsaydı tek bir reddedilen ekleme ilk koşuyu "değişiklik oldu"
+    gösterirdi.
+    """
+    sonuc = engine.decide(
+        _yuvalari_reddet(_yeni_donem_girdisi(), set(SPECIAL_DAY_SLOTS)),
+        PolicyConfig(),
+    )
+    dusenler = sonuc.engine_diff["dusen_birimler"]
+    assert dusenler["eslesmeyen_takvim"] == ()
+    assert len(dusenler["reddedilen_ekleme"]) == len(SPECIAL_DAY_SLOTS)
 
 
 def test_a_negative_recommendation_blocks_the_addition() -> None:
