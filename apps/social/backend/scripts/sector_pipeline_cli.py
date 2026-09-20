@@ -1381,6 +1381,110 @@ GOVDELER = {
 }
 """Alt komut → gövde. Ayrıştırıcıdaki küme ile BİREBİR aynı olmak zorundadır."""
 
+KOSUYU_ILERLETEN: frozenset[str] = frozenset(
+    {
+        "brief-doctor",
+        "denetim",
+        "sentez",
+        "motor",
+    }
+)
+"""Koşuya İŞ EKLEYEN alt komutlar — ölü koşuda çalışmaları YASAK (K-82'nin ayağı).
+
+**Kusur 2026-09-20'de ölçüldü:** koşu satırını çeken yardımcı (`_kosu_satiri`)
+`durum` sütununu HİÇ okumuyordu ve tüm depoda canlılık kontrolü TEK yerdeydi —
+`record_result`'ın SQL'i. Yani motorun YAZMASI korumalıydı, ama bu kümenin geri
+kalanı `durum='tamamlanmadi'` bir koşuda çalışmaya devam ediyordu: düşen bir adım
+koşuyu sessizce öldürdükten sonra sonraki adımlar habersiz koşuyor ve ölçülmüş
+~1900 saniyelik iki model turu (denetim 956 sn + sentez 941 sn) yanabiliyordu.
+
+**KÜME İLK YAZIMDAN DARALTILDI — ölçüm sınırı gösterdi.** İlk yazım `yazim` ·
+`duzeltme-yaz` · `katman1` · `katman2` · `hazirlik-onayla` · `onay`'ı da içeriyordu
+ve testler kırıldı: o adımlar TAMAMLANMIŞ koşuda çalışır, çünkü motor sonucu
+yazdığı an `durum='tamamlandi'` olur. Onlara canlılık kapısı koymak doğru olanı
+reddetmek demekti. Üstelik ihtiyaç da yok: `yazim` · `duzeltme-yaz` · `onay` ·
+`aktive-et` koşu satırını `runs.load_verified_run`'dan okur ve o kapı
+`durum='tamamlandi'` İSTER (ölçüldü) — yani `tamamlanmadi` bir koşuyu ZATEN
+reddediyor. İkinci bir kapı ikinci bir doğruluk kaynağı olurdu.
+
+Kalan dört adım, motorun sonucu yazmasından ÖNCE koşan adımlardır: koşu `calisiyor`
+iken çalışırlar ve hiçbir kapıları YOKTU. Paranın yandığı yer de tam burası —
+ölçülmüş maliyet `denetim` 956 sn + `sentez` 941 sn + model parası.
+
+`tur-ac`/`duzeltme-baslat` BU KÜMEDE DEĞİL: koşuyu ilerletmezler, KURARLAR — ve
+ikisinin kendi ön koşulları var. `durum` da değil: tam olarak "bu koşuya ne oldu"
+sorusunu cevaplar, ölü koşuda reddetmek operatörü teşhisten mahrum bırakırdı.
+
+**Tasdik adımları (`katman1`/`katman2`/`hazirlik-onayla`) bilinçle DIŞARIDA:** ölü
+bir koşuya tasdik yazmak zararsızdır, çünkü aktivasyon `load_verified_run`'ın
+`tamamlandi` kapısından geçer — tasdik o koşuyu aktive edilebilir YAPMAZ.
+"""
+
+KOSUYU_ILERLETMEYEN: frozenset[str] = frozenset(
+    {
+        "tur-ac",
+        "duzeltme-baslat",
+        "yazim",
+        "duzeltme-yaz",
+        "katman1",
+        "katman2",
+        "hazirlik-onayla",
+        "onay",
+        "aktive-et",
+        "deaktive-et",
+        "etki-analizi",
+        "olay-plani",
+        "olay-onayla",
+        "olay-geri-al",
+        "vade-bildirimi",
+        "durum",
+    }
+)
+"""Canlılık kapısının DIŞINDA kalan alt komutlar — ayrım AÇIK olsun diye YAZILI.
+
+Tümleyeni hesaplamak yeterdi; küme AÇIKÇA yazılıyor çünkü
+`test_every_subcommand_is_classified_exactly_once` iki kümenin BİRLİKTE tam
+örtüşmesini ölçer. Yarın eklenen bir alt komut sınıflandırılmazsa küme eşitliği
+bozulur ve test düşer — kapı "listeye yazmayı hatırlamaya" bağlı KALMAZ.
+"""
+
+
+async def _canli_kosu_kapisi(conn, args) -> Sonuc | None:
+    """Koşuyu ilerleten komut için canlılık kapısı; geçerse `None` döner.
+
+    FAIL-CLOSED: satır yoksa da reddedilir. Uydurma bir koşu kimliğiyle çağrılan
+    adım, olmayan bir koşuya iş yazmaya çalışıyordu.
+
+    Geri açma yolu YOKTUR ve bu TASARIMDIR (K-82: yeniden koşum YENİ kimlik alır;
+    `duzeltme-baslat` yalnız `ret` kararından açılır ve `tamamlanmadi` koşuları
+    bilerek dışlar). Bu yüzden kapı "koşuyu canlandır" demez, yeni tur önerir.
+    """
+    run_id = getattr(args, "run_id", None)
+    if not run_id:
+        return None
+    satir = await conn.fetchrow(
+        "SELECT durum FROM social.sector_package_runs WHERE run_id = $1", run_id
+    )
+    if satir is None:
+        return (
+            [
+                f"koşu satırı yok: {run_id} — adım iş yazacak bir koşu bulamadı",
+                "önce `tur-ac` ile koşuyu aç.",
+            ],
+            RC_REFUSED,
+        )
+    if satir["durum"] != "calisiyor":
+        return (
+            [
+                f"koşu canlı DEĞİL: {run_id} (durum={satir['durum']}) — "
+                f"`{args.komut}` iş kabul etmez.",
+                "Ölü koşu canlandırılmaz (K-82): yeni tur `tur-ac` ile açılır, "
+                "reddedilmiş bir taslak için `duzeltme-baslat` kullanılır.",
+            ],
+            RC_REFUSED,
+        )
+    return None
+
 ALAN_HATALARI: tuple[type[BaseException], ...] = (
     runs.RunNotVerified,
     runs.CorrectionRunRefused,
@@ -1420,6 +1524,12 @@ async def dispatch(conn, args) -> Sonuc:
         govde = GOVDELER[args.komut]
     except KeyError:  # pragma: no cover — ayrıştırıcı kapalı kümeyi zaten zorlar
         raise CliError(f"tanınmayan alt komut: {args.komut!r}") from None
+
+    if args.komut in KOSUYU_ILERLETEN:
+        # Kapı GÖVDEDEN ÖNCE: iş kabul edilmiş olmasın (ölçülmüş kusur, yukarıda).
+        engel = await _canli_kosu_kapisi(conn, args)
+        if engel is not None:
+            return engel
 
     try:
         return await govde(conn, args)

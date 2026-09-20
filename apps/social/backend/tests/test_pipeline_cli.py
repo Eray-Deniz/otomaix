@@ -213,6 +213,107 @@ async def test_cli_output_is_deterministic(pkg_db):
 # ─── 3. Servis yüzeyine bağlılık (arayüz eki R10 · R11) ─────────────────────
 
 
+# ── Ölü koşu iş KABUL ETMEZ (2026-09-20) ───────────────────────────────────
+#
+# Kusur ÖLÇÜLDÜ: koşu satırını çeken yardımcı `durum` sütununu HİÇ okumuyordu ve
+# tüm depoda canlılık kontrolü TEK yerde vardı — motorun sonucu yazdığı SQL
+# (`WHERE durum = 'calisiyor' AND sonuc IS NULL`). Yani motorun YAZMASI korumalı,
+# ama `denetim`/`sentez`/`yazim`/`katman1`/`katman2`/`onay` ölü bir koşuda
+# çalışmaya devam ediyordu: düşen bir adım koşuyu sessizce öldürdükten sonra
+# sonraki adımlar habersiz koşuyor ve ~1900 saniyelik iki model turu yanıyordu.
+#
+# Kapı `dispatch`'te yaşar çünkü ÖLÇÜLDÜ ki tek ortak darboğaz orasıdır: koşu
+# satırını çeken yardımcıyı 20 alt komutun yalnız ÜÇÜ kullanıyor, ötekiler ya
+# kendi sorgusunu yazıyor ya servis katmanına gidiyor. Gövde gövde kapı koymak
+# "her yeni adıma hatırlatma" borcu üretirdi.
+
+
+async def test_a_dead_run_refuses_a_run_advancing_subcommand(pkg_db, monkeypatch):
+    """`durum != 'calisiyor'` ise koşuyu ilerleten komut GÖVDEYE HİÇ ULAŞMAZ."""
+    await _bos_evren(pkg_db)
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+    await runs.mark_incomplete(
+        pkg_db, run_id=run_id, asama="denetim", sebep="denetim düştü"
+    )
+
+    cagrildi: list[str] = []
+
+    async def _sahte(conn, args):  # pragma: no cover — çağrılmamalı
+        cagrildi.append(args.run_id)
+        return ([], cli.RC_OK)
+
+    # Gövde SENTİNEL ile değiştirilir: kapının gövdeye ULAŞMADIĞI, gövdenin
+    # içine bakmadan ölçülür (dispatch `GOVDELER[args.komut]` ile çözer).
+    monkeypatch.setitem(cli.GOVDELER, "sentez", _sahte)
+
+    satirlar, rc = await cli.dispatch(
+        pkg_db, _args("sentez", *_asgari_argumanlar("sentez"), "--run-id", run_id)
+    )
+
+    assert rc == cli.RC_REFUSED
+    assert cagrildi == [], "ölü koşuda gövde ÇAĞRILMAMALI — iş kabul edilmiş olurdu"
+    assert any("tamamlanmadi" in satir for satir in satirlar), satirlar
+
+
+async def test_a_missing_run_refuses_a_run_advancing_subcommand(pkg_db, monkeypatch):
+    """Koşu satırı YOKSA da reddedilir — fail-closed (uydurma kimlik geçmez)."""
+    cagrildi: list[str] = []
+
+    async def _sahte(conn, args):  # pragma: no cover — çağrılmamalı
+        cagrildi.append(args.run_id)
+        return ([], cli.RC_OK)
+
+    monkeypatch.setitem(cli.GOVDELER, "sentez", _sahte)
+
+    _satirlar, rc = await cli.dispatch(
+        pkg_db,
+        _args("sentez", *_asgari_argumanlar("sentez"), "--run-id", "kosu-olmayan"),
+    )
+
+    assert rc == cli.RC_REFUSED
+    assert cagrildi == []
+
+
+async def test_a_non_advancing_subcommand_still_runs_on_a_dead_run(pkg_db):
+    """Kapı DAR: koşuyu ilerletmeyen komut ölü koşuda da çalışır.
+
+    `durum` alt komutu tam olarak "bu koşuya ne oldu" sorusunu cevaplıyor; ölü
+    koşuda onu reddetmek operatörü teşhisten mahrum bırakırdı.
+    """
+    await _bos_evren(pkg_db)
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+    await runs.mark_incomplete(
+        pkg_db, run_id=run_id, asama="sentez", sebep="sentez düştü"
+    )
+
+    satirlar, rc = await cli.dispatch(pkg_db, _args("durum", "--run-id", run_id))
+
+    assert rc == cli.RC_OK
+    assert any("tamamlanmadi" in satir for satir in satirlar)
+
+
+def test_every_subcommand_is_classified_exactly_once() -> None:
+    """YAPISAL KAPI: her alt komut TAM OLARAK bir kovada.
+
+    Kapıyı "ilerleten komutlar" listesine dayandırmak, yarın eklenen bir komutun
+    listeye yazılmasını HATIRLAMAYA bağlar. Bu test o borcu kaldırır: yeni komut
+    sınıflandırılmazsa küme eşitliği bozulur ve test düşer. Eksen bu oturumda üç
+    kez ısırdığı için kural değil YAPI kuruldu.
+    """
+    ilerleten = set(cli.KOSUYU_ILERLETEN)
+    oteki = set(cli.KOSUYU_ILERLETMEYEN)
+    assert ilerleten.isdisjoint(oteki), sorted(ilerleten & oteki)
+    assert ilerleten | oteki == set(cli.GOVDELER), (
+        "sınıflandırılmamış alt komut(lar): "
+        f"{sorted(set(cli.GOVDELER) - (ilerleten | oteki))}; "
+        f"var olmayan komut sınıflandırılmış: {sorted((ilerleten | oteki) - set(cli.GOVDELER))}"
+    )
+
+
 async def test_yazim_subcommand_calls_write_draft_from_run(pkg_db, monkeypatch):
     """`yazim` yazım kapısını ÇAĞIRIR — ikinci bir taslak yolu yoktur."""
     cagrilar: list[dict] = []

@@ -542,6 +542,32 @@ async def test_mark_incomplete_preserves_row(pkg_db):
     )
 
 
+async def test_mark_incomplete_does_not_overwrite_a_completed_run(pkg_db):
+    """TAMAMLANMIŞ koşu `tamamlanmadi`'ya ÇEVRİLEMEZ — sonuç silinmiş olurdu.
+
+    Kusur 2026-09-20'de ölçüldü: `UPDATE ... WHERE run_id = $1` KOŞULSUZDU, yani
+    geç gelen bir arıza işareti `durum='tamamlandi'` bir satırı `tamamlanmadi`
+    yapabiliyordu. `record_result` kendi yazımını `AND durum = 'calisiyor' AND
+    sonuc IS NULL` ile koruyor; simetrik koruma burada YOKTU.
+    """
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+    await runs.record_result(pkg_db, run_id=run_id, result=_engine_result())
+
+    with pytest.raises(runs.RunAlreadyTerminal):
+        await runs.mark_incomplete(
+            pkg_db, run_id=run_id, asama="motor", sebep="geç gelen arıza işareti"
+        )
+
+    kayit = await pkg_db.fetchrow(
+        "SELECT durum, sebep FROM social.sector_package_runs WHERE run_id = $1",
+        run_id,
+    )
+    assert kayit["durum"] == "tamamlandi", "tamamlanmış koşu EZİLDİ"
+    assert kayit["sebep"] != "geç gelen arıza işareti"
+
+
 async def test_mark_incomplete_writes_admin_event(pkg_db):
     """Yerel arıza n8n `errorWorkflow`'a ULAŞMAZ — outbox satırı bu yüzden var."""
     sector_id = await _sub_sector(pkg_db)

@@ -99,6 +99,27 @@ class RunNotVerified(RuntimeError):
     """Koşu YEDİ kapının en az birinden geçemedi — doğrulanmış koşu üretilmez."""
 
 
+class RunAlreadyTerminal(RuntimeError):
+    """`mark_incomplete` TERMİNAL bir koşuyu ezmeye çalıştı.
+
+    2026-09-20'de eklendi. Yazım KOŞULSUZDU: geç gelen bir arıza işareti
+    `durum='tamamlandi'` bir satırı `tamamlanmadi` yapabiliyor ve tamamlanmış bir
+    koşunun sonucunu görünmez kılabiliyordu. `record_result` kendi yazımını
+    `AND durum = 'calisiyor' AND sonuc IS NULL` ile koruyor; bu, o korumanın
+    simetriğidir.
+
+    Arıza yolunda fırlatıldığında ASIL istisnayı gölgelemez: çağıranların istisna
+    kolu `_en_iyi_cabayla_isaretle` ile sarılıdır ve orada yutulur (ölçüldü,
+    `auditors.py`).
+
+    **KAPSAM DAR:** yalnız `durum='tamamlandi'` reddedilir. Yarım bir koşuyu
+    TEKRAR işaretlemek MEŞRUDUR ve sözleşmenin parçasıdır — bildirim idempotansı
+    tam buna dayanır (`test_admin_event_idempotent_per_run_and_stage` üç ardışık
+    çağrı yapar). İlk yazımda koruma `durum = 'calisiyor'` diye kurulmuştu ve o
+    sözleşmeyi kırıyordu; kendi düzeltmemin yan etkisi ÖLÇÜLEREK daraltıldı.
+    """
+
+
 class CorrectionRunRefused(RuntimeError):
     """Düzeltme turu AÇILAMAZ (K-106/K-72) — ana koşu uygun değil ya da açık tur var."""
 
@@ -714,12 +735,24 @@ async def mark_incomplete(db, *, run_id: str, asama: str, sebep: str) -> None:
         guncellendi = await db.fetchval(
             "UPDATE social.sector_package_runs "
             "SET durum = 'tamamlanmadi', sebep = $2 "
-            "WHERE run_id = $1 RETURNING id",
+            "WHERE run_id = $1 AND durum <> 'tamamlandi' RETURNING id",
             run_id,
             sebep,
         )
         if guncellendi is None:
-            raise ValueError(f"koşu bulunamadı: {run_id!r}")
+            # İKİ hâli AYIRT ET: satır yok mu, yoksa terminal mi? Aynı mesajı
+            # vermek operatöre "koşu kaybolmuş" dedirtirdi.
+            mevcut = await db.fetchval(
+                "SELECT durum FROM social.sector_package_runs WHERE run_id = $1",
+                run_id,
+            )
+            if mevcut is None:
+                raise ValueError(f"koşu bulunamadı: {run_id!r}")
+            raise RunAlreadyTerminal(
+                f"koşu TAMAMLANMIŞ (durum={mevcut!r}): {run_id!r} — yarım "
+                "işareti TERMİNAL satırı EZMEZ; tamamlanmış bir koşunun sonucu "
+                "geç gelen bir arıza işaretiyle görünmez kılınamaz"
+            )
 
         await record_admin_event(
             db,
@@ -2097,6 +2130,7 @@ __all__ = [
     "AffectedSet",
     "ArtifactStampMissing",
     "CorrectionRunRefused",
+    "RunAlreadyTerminal",
     "DURUMLAR",
     "IncidentMembershipLocked",
     "KOSU_TURLERI",
