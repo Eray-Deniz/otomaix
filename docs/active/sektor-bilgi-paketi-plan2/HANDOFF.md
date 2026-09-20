@@ -5,108 +5,147 @@ written: 2026-09-19
 
 # Resume From
 
-**Task 19 Step 7 BİTTİ — K-134 kör yargı alındı. Sıradaki iş Claude'da: Step 8, `motor` koşumu.**
+**Task 19 Step 8 BİTTİ — motor koştu, sonuç `blocked`, karşılaştırma yazıldı.**
 
-Eray sentezin 10 açık sorusunun tamamını cevapladı; motorun önündeki körlük koşulu
-karşılandı. Yargı kaydı: **`K134-KOR-YARGI.md`** (bu klasörde) — her kararın yanında
-dayandığı ham kanıt ve bilinen zayıflığı duruyor.
+**SIRADAKİ İŞ: dört kusurun düzeltilmesi. İŞ CLAUDE'DA, doğrudan başlanır.**
 
-- Aktif koşu: **`kosu-222706dc643b4b64b66a1f3826f02c1b`** (sektör `kuyumculuk`).
-- Motor komutu: `motor --run-id kosu-222706dc…` — `--politika-ayari` VERİLMEZ
-  (K-24: eşikler pilot kanıtından sonra belirlenir, uydurulmaz).
-- Sonra: motorun kararlarıyla kayıtlı yargının farkı koşu raporuna yazılır (spec §15.2).
+**Eray kararı (2026-09-19): tören YOK.** Spec seansı açılmayacak, plan yazılmayacak.
+Kusurlar adlandırılmış ve ölçülmüş; düzeltme doğrudan başlar. **Review gerekirse
+düzeltme sırasında çağrılır** — önden zorunlu kapı YOK.
 
-**Karşılaştırmayı okurken ZORUNLU uyarı — yoksa motor haksız yere hatalı görünür.**
-Dört yargı motorun göremeyeceği girdiye dayanıyor:
-- **Soru 2:** BDDK taksit sınırını Eray doğruladı (iki denetçi de sayfayı açamamıştı).
-- **Soru 3 ve 5:** yerel görsel kodlar + Ramazan/Kurban **operatör eklemesi**; mekanik
-  kaynak bağı KURULAMAZ (sözleşmenin `kaynak_iddia` iki-uçlu bağı, fail-closed).
-- **Soru 6 ve 7:** yılbaşı tür etiketi ve milli günler saf operatör tercihi.
+Okunacak iki yer:
+- **`K134-MOTOR-KARSILASTIRMA.md`** (bu klasörde) — motorun sonucu, nedensel zincir,
+  mutasyon ölçümleri, kör yargı karşılaştırması.
+- **`TASK.md` → `# Open Problems`** ilk kalemi — dört kusur, her birinin ölçümü ve
+  önerilen çözüm yönü.
 
-Motor bu satırlarda `açık-soru` üretirse **hata değildir**; fark raporu sebebi ayrıca yazmalı.
+**Dört kusur, tek satırla:** (1) sentez ham kaynakları görmediği için `kaynak_iddia`
+numaralarını tahmin ediyor → 8 red · (2) yetkilendirilemeyen dönem adaya boş kabuk
+olarak yazılıyor → şema reddi · (3) iki bayrak kapısı birbirini kilitliyor → bayraklı
+kalem içeren paket aktive edilemez · (4) plan sırası `katman1`'i motordan sonraya
+koyuyor, motor onu kapı olarak okuyor. Bunlardan bağımsız beşinci kalem: ölü koşu iş
+kabul etmeye devam ediyor.
 
-**Step 9'a taşınan elle iş (unutulursa paket eksik çıkar):**
-- Yerel görsel kodlar `gorsel_kodlar` alanına elle eklenir, kayıt "kaynak bağı yok" der.
-- Ramazan + Kurban dönem olarak elle eklenir (Kurban'ın hiçbir iddia satırı yok).
-- **29 Ekim görseli sikke üzerinden KURULAMAZ** — sikke yazı taşır, görsel hattı metni
-  yasaklıyor (`caption_generator.py:443`, ölçüldü). Sahne yazısız kurgulanacak.
-- Ramazan görselinde aynı kısıt (`[metin-öğesi]`, çeyrek altın üzerinde yazı).
+**İlk üçü birlikte kapatılınca koşu YEŞİL** (mutasyonla ölçüldü: `activation_eligible`,
+46 karar uygulanıyor, açık soru 0). Düzeltme bittikten sonra **yeni koşu** açılır —
+bu koşu tükendi.
+
+**Koşu `kosu-222706dc…` TÜKENDİ.** Satır `durum='tamamlandi', sonuc='blocked'`.
+`motor` karşılaştır-ve-yaz olduğu için ikinci kez yazmaz; `yazim` ise
+`sonuc='activation_eligible'` ister. **Bu koşudan taslak çıkmaz.** Yeni koşu
+açmak `denetim` (956 sn) + `sentez` (941 sn) turlarını yeniden koşturmak demektir
+ve K-134 körlük tabanı (zaten kullanıldı) tekrar kurulamaz.
+
+**Kusurların ayrıntısı — kanonik yer `TASK.md` Open Problems; buradaki özet
+düzeltmeye başlarken elde durması içindir:**
+
+1. **Sentez ham kaynakları görmüyor** → `kaynak_iddia` numaralarını tahmin ediyor
+   → **8 karar** alan-eşleşmemesinden düşüyor (`ton_ve_dil`, `yasaklar[1]`,
+   `yasaklar[4]` ve beş video sahnesi). Çözüm yönü: iddia→alan dizinini sentez
+   paketine makine-üretimi EK olarak vermek (dizin motorda zaten üretiliyor,
+   `engine.py:821 _arastirma_iddialari`). **Sözleşme değişikliği gerektirir.**
+   Yanında küçük bir kalem: motorun `iddia-arastirmada-yok` etiketi yanıltıcı,
+   gerçek sebep "alan tutmuyor".
+2. **Yetkilendirilemeyen dönem adaya boş kabuk olarak yazılıyor** → 10 Kasım tek
+   kaynaklı, beş anahtarı da `cogunluk-yok` ile düştü, geriye boş `ozel_gun`
+   girdisi kaldı ve şema kapısı reddetti. Çoğunluk yetkisi olmayan dönem adaya
+   HİÇ yazılmamalı.
+3. **Bayrak kapıları birbirini kilitliyor** → biri sentezin düz yazısını, diğeri
+   denetçinin tipli sütununu okuyor; bayraklı kalemi anan her karar açık soru
+   üretiyor ve açık soru blokluyor. Bu hâliyle bayraklı kalem içeren paket
+   `activation_eligible` OLAMAZ. Çözüm yönü: tüketimi düz yazıdan değil yapısal
+   bir alandan oku, iki kapıyı tek kaynağa bağla.
+4. **Sıra kusuru (küçük)** → motor Katman-1 tasdikini kapı olarak okuyor ama plan
+   sırası `motor → yazım → katman1`. `attest_katman1`'in taslak ön koşulu yok;
+   sıra `katman1 → motor` olmalı.
+
+**Bu dörtten BAĞIMSIZ beşinci kalem:** ölü koşu iş kabul ediyor — `mark_incomplete`
+koşulsuz ve terminal; hiçbir adım başlarken koşunun canlı olup olmadığına bakmıyor,
+geri açma yolu yok. Bu oturumda satır elle onarıldı (Eray onayı), **kusur DURUYOR.**
 
 # Verification
 
-**Bu oturumda KOD DEĞİŞMEDİ.** Yalnız `K134-KOR-YARGI.md` yazıldı, `TASK.md`
-güncellendi. Test takımı koşulmadı — değişen kod olmadığı için gerekmedi.
+**Bu oturumda ÜRETİM KODU DEĞİŞMEDİ.** Yazılanlar: `K134-MOTOR-KARSILASTIRMA.md`
+(yeni), `TASK.md`, `HANDOFF.md`. Test takımı koşulmadı — değişen kod olmadığı için
+gerekmedi.
 
 **Koşan komutlar ve taze çıktıları:**
 
 | Ne | Sonuç |
 |---|---|
-| `git status --porcelain` | **temiz** (0 satır) |
-| `git log @{u}..HEAD` | **0** — dal uzak kopyasıyla eşit |
-| `psql social.sectors` | `kuyumculuk` → `parent_sector_id` = `e-ticaret-perakende` |
-| `SECTOR_GUIDANCE` ölçümü | 12 girdi; 4'ü dolu (615-665 krk), 7'si tek cümle (81-114 krk) |
-| Sentez çıktısı diskte | `01-SENTEZ-CIKTISI.md`, 40.900 bayt, 18.09 18:10 |
-
-**Devralınan iki iddia YANLIŞ ÇIKTI (bir önceki HANDOFF):** "çalışma ağacı kirli
-(12 dosya)" ve "28+ commit push edilmedi" — ikisi de ölçümle düştü. Ağaç temiz,
-dal eşit.
+| `motor --run-id kosu-222706dc…` (1. deneme) | **rc=1** — `koşu sonucu ZATEN yazılmış … durum='tamamlanmadi'` |
+| koşu satırı onarımı (`UPDATE … WHERE durum='tamamlanmadi' AND sonuc IS NULL`) | `UPDATE 1` |
+| `motor --run-id kosu-222706dc…` (2. deneme) | **rc=0, 0,47 sn, `sonuc: blocked`** |
+| `psql` koşu satırı | `durum=tamamlandi`, `sonuc=blocked`, `engine_version=2.15.0` |
+| `psql` artefaktlar | `review` ×2 (25682 + 11690), `synthesis` ×1 (40671) |
+| `engine_diff` | `uygulanan_karar_sayisi: 0`, `dusen_birim_sayisi: 14`, `yazim_hatalari: 3` |
+| `barrier_report` | `payda: 0`, eşikler `null` (K-24 pasif) |
+| Araştırma evreni yeniden kuruldu | K1 17 · K2 39 · K3 42 iddia; anılan 19 etiketin 19'u VAR |
+| `engine.decide` mutasyon probu (bellekte, DB'ye yazmadan) | taban varyantı canlı koşumu BİREBİR üretti |
 
 **Ölçülen mekanizmalar (hepsi dosya açılarak):**
-- `ai.py:505-518` — aktif paket varken kök rehber HİÇ basılmaz (if/else, tek kapı).
-- `caption_generator.py:443` — görsel istemde metin/logo katmanı tarif etmek YASAK.
-- `engine.py:2338` — motorun açık soru kimlikleri = kendi bulguları **+ sentezin
-  açık sorularının TAMAMI**.
-- `approval.py:327-334` — açık soru varken onay BLOKLANIR (ikinci kapı).
-- `policy_config.py` — ayar yüzeyi yalnız oran/limit + `block_on_legislation`;
-  **duran cevap alanı YOK.**
-- `hakem-sentez-gorevi.md` `kaynak_iddia` — bağ İKİ UÇLU; (a) ayağı araştırma
-  satırının `alan` hücresinin kararın alanıyla örtüşmesini şart koşar, fail-closed.
+- `runs.py:837` — `record_result` yalnız `durum='calisiyor' AND sonuc IS NULL` satıra yazar.
+- `runs.py` yedi kapı — `yazim`/`onay`/`aktive-et` `sonuc='activation_eligible'` ister.
+- `engine.py:1047` — `any(bağsız) → reddet`; bir tek komşu-alan atıfı kararı düşürür.
+- `engine.py:1180` — bayrak, **denetçi satırının tipli sütunundan** okunur.
+- `engine.py:_bayrak_tuketimi` — bayrak, **sentezin `kanit`+`gerekce` düz yazısından** okunur.
+- `engine.py:2372-2379` — yazım kapısı düşerse aday TÜMÜYLE atılır.
+- `hakem-sentez-gorevi.md:112-128` — ek listesi; ham araştırma raporları listede YOK.
+- `runs.py` `_write_attestation` — katman1 tasdikinin taslak ön koşulu YOK.
 
 **DENENMEYEN / DOĞRULANMAYAN — yeşil sayılmaz:**
-- **`motor` · yazım kapısı · `katman1/2` · `onay` · `aktive-et` ayakları HÂLÂ hiç koşmadı.**
-- Motorun koşum SÜRESİ ölçülmedi (bu ayak hiç koşmadı) — tahmin verilmedi.
-- Koşu satırı hâlâ **`tamamlanmadi`** görünüyor. `runs.py:836`'nın başarılı motor
-  koşumunda `tamamlandi` yazacağı beklentisi **ÖLÇÜLMEDİ**.
+- **`yazim` · `katman1/2` · `onay` · `aktive-et` ayakları HÂLÂ hiç koşmadı.**
+- **ÖLÇÜLDÜ, ama mutasyonla:** üç kusur birlikte kapatıldığında `engine.decide`
+  **`activation_eligible`** veriyor (46 karar uygulanıyor, açık soru 0, yazım
+  hatası 0). Bu, düzeltmelerin GERÇEK kodda aynı sonucu vereceğinin kanıtı
+  DEĞİLDİR — girdi elle kırpıldı, kod değişmedi.
+- Kusur 1'in çözüm yönü (iddia→alan dizini) **denenmedi**; sözleşmeye eklenince
+  sentezin doğru numarayı seçeceği bir VARSAYIMDIR, ölçüm değil.
+- **Prob bir kez kirletti:** ilk mutasyon varyantı atıfları kırparken denetçi
+  satırlarını bırakmış, `ton_ve_dil` için sahte bir "daha derin kanıt sorunu"
+  üretmişti. Bağın çift yönlü olduğu görülünce düzeltildi. Sonraki oturum
+  mutasyon kurarken kırpılan şeyin KARŞI ucunu da kırpsın.
 - `ozel_gun` ve `takvim_temalari` alanlarının çalışma anında içerik üretimini nasıl
-  beslediği ölçülmedi; paket şema yapısına dayanan ifadeler kullanıldı.
+  beslediği hâlâ ölçülmedi (önceki oturumdan devrediyor).
 
 # Risks
 
-- **Kör yargı artık ALINDI — kirlenme riski geçti.** Ama fark raporu yazılırken
-  yukarıdaki "motorun göremeyeceği dört girdi" uyarısı atlanırsa kalibrasyon yanlış
-  okunur ve motor haksız yere hatalı görünür.
-- **SPK kararı bilinçli bir risk kabulüdür.** Eray geniş çerçeveyi seçti; denetçi o
-  çerçeveyi kaynak sayfasında BULAMAMIŞTI (`KAYNAKTA YOK`). Paket doğrulanmamış bir
-  hukuki iddia taşıyacak — gerekçe kayıtta, gizlenmiş değil.
-- **Operatör eklemeleri mekanik bağı olmayan kalemlerdir.** Sayıları arttıkça paketin
-  "her kalem bir kaynağa bağlıdır" garantisi zayıflar; kayıt bunu görünür tutuyor.
-- **F1/F5/F6 koşullu kabul edilmiş risk** (kardeş görev): ağa çıkabilen denetçi
-  okuduğunu gönderebilir. Yeniden açılma koşulu: pakete üçüncü taraftan ham içerik
-  girdiği gün.
+- **Yeni koşu açmak pahalıdır ve körlük tabanını geri getirmez.** İki model turu
+  (~32 dk, ölçülmüş) + para; K-134 kalibrasyonu bir kez alınabilirdi, alındı.
+- **Kusur 2 (bayrak kilidi) kapatılmadan hiçbir koşu aktivasyona ulaşamaz** —
+  denetçiler rutin olarak bayrak koyuyor (bu koşuda 5 birim).
+- **Kusur 3 duruyor:** bir sonraki koşuda da düşen bir adım koşuyu sessizce
+  öldürebilir ve sonraki adımlar bunu fark etmeden çalışmaya devam eder.
+- **SPK kararı bilinçli risk kabulüdür** (önceki oturumdan devrediyor): paket
+  doğrulanmamış bir hukuki iddia taşıyacak, gerekçe `K134-KOR-YARGI.md`'de.
+- **Operatör eklemeleri** (yerel görsel kodlar · Ramazan/Kurban · yılbaşı ·
+  23 Nisan/29 Ekim) mekanik kaynak bağı OLMAYAN kalemlerdir; Step 9'a taşındılar
+  ve paketin "her kalem bir kaynağa bağlıdır" garantisini zayıflatırlar.
 - **Sentez klasörü doluysa tur koşmaz** (`mkdir` `exist_ok` kullanmıyor). Düşen
-  denemeler `DUSMUS-<tarih>-<sebep>-<koşu>` adıyla duruyor; desen korunmalı, silme YOK.
+  denemeler `DUSMUS-<tarih>-<sebep>-<koşu>` adıyla duruyor; silme YOK.
 
 # Notes For Claude
 
-- **Eray ham kanıt istiyor, özet değil.** "Şu kaynak şöyle diyor" özeti yetmedi; kanun
-  maddesi numarası, birebir alıntı ve denetçinin canlı kontrol sonucu istendi. Karar
-  sorusu sorulacaksa kanıt ÖNCE gelir. İki soru bu yüzden geri geldi.
-- **Soru sayısı şikâyeti meşruydu ve ölçümle karşılandı.** "Her sektörde onlarca soru mu
-  cevaplayacağım" sorusu, soruları KAPSAMA göre ayırınca çözüldü (4 sektör + 3 takvim +
-  3 hat kusuru). Sayıyı azaltan şey cevap vermek değil, hangi sorunun gerçekten bu
-  sektöre ait olduğunu ayırmaktı.
-- **Kendi önerine de İlke 7'yi uygula.** "Ortak taban katmanı kurulsun" önerisi evsizdi
-  ve iki ayrı işi (küçük gerileme onarımı + yeni alt sistem) tek pakete bağlamıştı —
-  **Eray yakaladı**, ben değil. Öneri sunmadan önce: evi var mı, over-bundle mı?
-- **Ölçülmemiş fayda iddiası etme.** "Gelecek sektörlerde bu sorular tekrar sorulmaz"
-  dendi ve geri alındı; Ramazan'ın anlamı sektöre göre değişir.
-- **Sentezin gerekçesi yanlış olabilir, sözleşmeyi aç.** Sentez yerel görsel kodları
-  "numara kapsam alanında kullanıldı" diye eleyip geçmişti; gerçek kural alan-eşleşmesi.
-  Fark önemli: çözüm yeni kaynak değil, doğru alanla kaydetmek.
-- **Model turundan ÖNCE offline replay yap** (önceki oturumun notu, hâlâ geçerli).
+- **Bu oturumun dersi: "kalıcı zarar YOK" diye devredilen beklentiyi ÖLÇ.** Geçen
+  HANDOFF "motor koşumu durumu düzeltir" diyordu; motor o satıra hiç ulaşamıyordu.
+  Devralınan her beklenti, üzerine iş kurulmadan önce koşulur.
+- **Motorun red etiketine güvenme, mekanizmayı aç.** `iddia-arastirmada-yok`
+  "numara yok" diyor; numaraların hepsi vardı, sorun alan eşleşmesiydi. Etiket
+  yanlış kapıyı gösteriyor.
+- **Mutasyon probu ucuzdu ve işe yaradı** (`decide` saf, 0,47 sn, DB'ye yazmıyor).
+  Taban varyantının canlı koşumu birebir ürettiği ÖNCE doğrulandı — prob kendi
+  hatasını ölçmesin diye.
+- **Eray ham kanıt istiyor, özet değil** (önceki oturumdan, hâlâ geçerli).
+- **Model turundan ÖNCE offline replay yap** (hâlâ geçerli).
+- **Kendi önerine İlke 7'yi uygula:** aşağıdaki üç kusur için "düzeltelim" demeden
+  önce her birinin tarihli evi var mı, over-bundle mı diye bak.
 
 # Notes For Codex
 
 Codex bu oturumda **koşmadı**. Bu dalda `/review-claude-codex` ve
-`/security-review-claude-codex` **hâlâ koşmadı** — zincirin yeri Plan Task 19 sonrasıdır.
-Çalışma ağacı şu an temiz; bir sonraki oturum kirli ağaçta review koşturmamalı.
+`/security-review-claude-codex` **hâlâ koşmadı** — zincirin yeri Task 19 sonrasıdır.
+
+**Eray kararı (2026-09-19):** dört kusurun düzeltilmesi için önden zorunlu bir review
+kapısı YOK; **gerekirse düzeltme sırasında çağrılır.** Kusur 1 donmuş sözleşmeye ve
+kusur 3 motorun kapı anlamına dokunuyor — review çağırmak için en makul iki yer bunlar.
+Çalışma ağacı review'dan önce temiz olmalı; kirli ağaçta review koşturma.

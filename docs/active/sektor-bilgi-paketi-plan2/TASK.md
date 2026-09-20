@@ -68,13 +68,53 @@ hâlâ düşürür). Tam takım **4607 passed / 0 failed**.
 **Her turdan ÖNCE offline replay yapıldı** (kaydedilmiş çıktı + sahte runner + DB yazmayan
 işaretleyici): altıncı duvarın olmadığı böyle ölçüldü, boş tur harcanmadı.
 
-**SIRADAKİ İŞ: Plan Task 19 Step 7 — K-134 kör yargı. İŞ ERAY'DA.** Motor, yargı kaydedilmeden
-KOŞMAZ. Sentez çıktısı: `sentez/kosu-222706dc.../01-SENTEZ-CIKTISI.md`.
+**2026-09-19 SEKİZİNCİ OTURUM — Step 7 ve Step 8 İNDİ; PİLOT KOŞUSU TÜKENDİ.**
+Eray 10 açık sorunun hepsini cevapladı (`K134-KOR-YARGI.md`), sonra `motor` koştu:
+`rc=0`, **0,47 sn**, sonuç **`blocked`**, motor sürümü `2.15.0`. Karşılaştırma ve
+ölçümler: **`K134-MOTOR-KARSILASTIRMA.md`**.
 
-**Koşu durumu kusuru (yukarıdaki açık kalemin ikinci yüzü):** düşen dördüncü deneme koşuyu
-`tamamlanmadi` işaretledi; beşinci deneme BAŞARILI olduğu hâlde durumu geri almıyor. Motorun
-başarılı koşumu `durum='tamamlandi'` yazacağı için (runs.py:836) kalıcı zarar YOK, ama motor
-koşana kadar satır yanlış görünüyor.
+**Motor koşmadan önce koşu satırı ELLE onarıldı (Eray onayı):** satır
+`durum='tamamlanmadi'` idi (sentezin 4. denemesi 18.09 17:20'de işaretlemiş, 18:10'da
+başarılı olan 5. deneme geri almamıştı) ve `record_result` karşılaştır-ve-yaz olduğu
+için motor REDDEDİLDİ. Satır `durum='calisiyor', sebep=NULL` yapıldı. **Geçen oturumun
+"runs.py başarılı motor koşumunda `tamamlandi` yazar, kalıcı zarar YOK" beklentisi
+ÖLÇÜLDÜ ve YANLIŞ ÇIKTI** — motor o satıra hiç ulaşamıyordu.
+
+**Kusurun kendisi AÇIK:** hiçbir adım başlarken koşunun canlı olup olmadığına bakmıyor;
+ölü işaretlenmiş koşu 941 saniyelik başarılı bir sentezi kabul etti. Geri açma yolu YOK
+(`mark_incomplete` koşulsuz yazıyor, CLI'da karşılığı olan alt komut yok).
+
+**`blocked`ın ölçülmüş zinciri:** 52 `ekle` kararının 14'ü reddedildi → kalan 38'den kurulan
+paket üç şekil hatası verdi (`ton_ve_dil` alanı eksik · `video_kodlar['sahne']` boş havuz ·
+10 Kasım boş anahtar kümesi) → yazım kapısı düşünce motor adayın TAMAMINI atıyor → uygulanan
+karar 0 → ilk koşuda değişiklik yok → `blocked`. Ayrıca 18 açık soru bağımsız olarak blokluyor.
+
+**Mutasyonla ölçülen üç ayrı kusur** (girdi canlı koşudan yeniden kuruldu, `decide` bellekte
+koşuldu, taban varyantı canlı koşumu birebir üretti):
+1. **Alan-dışı atıf — 8 red.** Sentez `kaynak_iddia`'ya komşu alanların iddialarını da yazdı;
+   motor `any(bağsız) → reddet` uyguluyor. Sebebi: **sentez ham kaynakları GÖRMÜYOR** (sözleşme
+   ek listesinde yoklar) ve iddia→alan hücresini bilemiyor; çıktının ilk cümlesinde kendisi
+   söylüyor. Motor etiketi (`iddia-arastirmada-yok`) yanıltıcı — numaraların hepsi VAR.
+2. **Yetkilendirilemeyen dönem adaya yazıldı.** 10 Kasım tek kaynaklı (`cogunluk-yok`), beş anahtarı
+   da düştü, geriye BOŞ `ozel_gun` girdisi kaldı ve şema kapısı onu reddetti.
+3. **Bayrak kapıları birbirini kilitliyor.** `bayrak_tuketimi` sentezin düz yazısını, `yeni_oge_cogunlugu`
+   denetçinin tipli sütununu okuyor; bayraklı bir satırı anan karar için açık soru KAÇINILMAZ.
+   Bayraklar temizlenince motorun 18 açık sorusunun tamamı sıfıra iniyor (iki yönlü mutasyon).
+
+**ÜÇÜ BİRDEN KAPATILINCA KOŞU YEŞİL:** mutasyon varyantı `activation_eligible` veriyor —
+46 karar uygulanıyor, açık soru 0, yazım hatası 0. **Hat çalışıyor; bloklayan şey bu üç
+adlandırılmış kusur.** (Kod değişmedi; bu ölçüm girdiyi elle kırparak yapıldı.)
+
+**Prob kirlenmesi kayda geçti:** ilk mutasyon atıfları kırparken denetçi satırlarını bırakmış ve
+`ton_ve_dil` için sahte bir "daha derin kanıt sorunu" üretmişti; bağ çift yönlü olduğu için
+(her iddia bir satırda geçmeli VE atıf yapılan her satır en az bir iddiayı taşımalı) düzeltildi.
+
+**Koşu 222706dc ARTIK KULLANILAMAZ:** satır `tamamlandi`/`blocked`; `motor` ikinci kez yazmaz,
+`yazim` ise `activation_eligible` ister. Bu koşudan taslak ÇIKMAZ. **Devam yolu KARAR BEKLİYOR.**
+
+**Ayrıca ölçülen sıra kusuru:** motor Katman-1 tasdikini otomatik kapı olarak okuyor
+(`sector_pipeline_cli.py:958`), plan sırası ise `motor → yazım → katman1`. `attest_katman1`'in
+taslak ön koşulu YOK, yani katman1 motordan ÖNCE tasdiklenebilir — plan sırası düzeltilmeli.
 
 **KARAR BEKLİYOR — yürütücü tek başına kapatamaz** (paket içeriği · izolasyon kipi · sözleşme
 hükmü). Kalanlar: sentez kökü (`sentez/<koşu>/`) DOLU, `mkdir` `exist_ok` KULLANMIYOR → aynı
@@ -1455,6 +1495,54 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   onay isteğinde sessiz kayıp.
 
 # Open Problems
+
+- **[YÜKSEK — SIRADAKİ OTURUMUN İŞİ] Pilotu bloklayan dört kusur (2026-09-19, motor koşumundan).**
+  Kaynak ölçüm dosyası: **`K134-MOTOR-KARSILASTIRMA.md`**. Dördü de canlı koşuda ölçüldü;
+  ilk üçü birlikte kapatıldığında mutasyon varyantı **`activation_eligible`** veriyor
+  (46 karar uygulanıyor · açık soru 0 · yazım hatası 0). **Hat çalışıyor; bloklayan bunlar.**
+
+  1. **Sentez ham araştırma raporlarını GÖRMÜYOR → `kaynak_iddia` numaraları tahmin.**
+     Sözleşmenin ek listesi EK-A · EK-F/G · EK-H · EK-I · EK-J · EK-K · EK-L
+     (`hakem-sentez-gorevi.md:112-128`); ham raporlar listede YOK. Sentez iddia→alan
+     hücresini göremediği için numaraları denetçilerin kullanımından tahmin etti ve bunu
+     çıktısının ilk cümlesinde BEYAN ETTİ. Motor `any(bağsız) → reddet` uyguluyor
+     (`engine.py:1047`): tek bir komşu-alan atıfı kararın tamamını düşürüyor. **8 red
+     bundan** (`ton_ve_dil`, `yasaklar[1]`, `yasaklar[4]`, beş video sahnesi) ve üç yazım
+     hatasının ikisi buradan doğuyor.
+     **Öneri:** iddia→alan dizinini sentez paketine makine-üretimi bir EK olarak vermek
+     (EK-L deseni). Dizin motorda ZATEN üretiliyor (`engine.py:821 _arastirma_iddialari`),
+     yeniden yazılmayacak. **Sözleşme değişikliği gerektirir.**
+     **Yan kusur, ayrı kalem:** motorun red etiketi `iddia-arastirmada-yok` YANILTICI —
+     numaraların hepsi araştırmada VAR (ölçüldü: K1 17 · K2 39 · K3 42 iddia; anılan 19
+     etiketin 19'u bulundu). Etiket "numara yok" derken gerçek sebep "alan tutmuyor".
+
+  2. **Yetkilendirilemeyen dönem adaya yazılıyor.** 10 Kasım tek kaynaklı; beş anahtarı da
+     `cogunluk-yok` ile düştü ve geriye BOŞ bir `ozel_gun` girdisi kaldı → şema kapısı
+     reddetti. **Öneri:** sentez, çoğunluk yetkisi olmayan dönemi adaya HİÇ yazmasın
+     (bugün yazıyor ve boş kabuk bırakıyor).
+
+  3. **İki bayrak kapısı birbirini kilitliyor — bayraklı kalem içeren paket aktive EDİLEMEZ.**
+     `bayrak_tuketimi` sentezin kendi `kanit`+`gerekce` DÜZ YAZISINI tarıyor; `yeni_oge_cogunlugu`
+     ise denetçi satırının TİPLİ `bayraklar` sütununu okuyor (`engine.py:1180`) — sentezin o
+     sütuna erişimi yok. Sonuç: bayrağı gerekçede açıklarsan birinci kapı, açıklamazsan ikinci
+     kapı açık soru üretiyor; satırı hiç anmazsan `referans-yok` ile red. Açık soru BLOKLUYOR.
+     Ölçüm iki yönlü: bayraklar temizlenince motorun 18 açık sorusunun TAMAMI sıfıra iniyor.
+     **Sınıf:** serbest düz yazıdan "X tüketildi" negatifini kalıp eşleştirmeyle kanıtlama —
+     daha önce de yakınsamadığı ölçülmüş desen. **Öneri:** tüketimi düz yazıdan değil YAPISAL
+     bir alandan oku (sentez kararına açık bir "tüketilen bayraklar" hücresi), iki kapıyı tek
+     kaynağa bağla.
+
+  4. **Sıra kusuru (küçük).** Motor Katman-1 tasdikini otomatik kapı olarak okuyor
+     (`sector_pipeline_cli.py:958`), plan sırası ise `motor → yazım → katman1`.
+     `attest_katman1`'in taslak ön koşulu YOK (`runs.py` `_write_attestation`), yani katman1
+     motordan ÖNCE tasdiklenebilir. **Öneri:** plan Task 19 sırasını `katman1 → motor` yap.
+
+  **Ayrıca, bu dördünden BAĞIMSIZ:** ölü koşu iş kabul ediyor — `mark_incomplete` koşulsuz ve
+  terminal yazıyor, hiçbir adım başlarken koşunun canlı olup olmadığına bakmıyor, geri açma
+  yolu yok. Bu oturumda satır elle onarıldı (Eray onayı); **kusur DURUYOR.**
+
+  **Eray kararı (2026-09-19): tören YOK — spec seansı açılmayacak.** Düzeltme yeni bir oturumda
+  doğrudan başlar; gerekirse düzeltme sırasında review çağrılır. Bu oturum kapatıldı.
 
 - **[ORTA — EV VERİLDİ, TETİK: Plan 2 kapanışı] Aktif paket kök rehberi tamamen susturuyor.**
   **Ölçüldü:** `app/routers/ai.py:505-518` — aktif paket varken `SECTOR_GUIDANCE` HİÇ basılmaz;
