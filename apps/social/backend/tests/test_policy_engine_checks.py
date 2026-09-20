@@ -1081,6 +1081,7 @@ def _ekle_girdisi(
     *,
     kanit: str,
     kaynak_iddia: str | None = None,
+    gerekce: str | None = None,
     metin: str = "Yeni kanca kalibi",
     ornekle=None,
     cikarmalar=(),
@@ -1090,23 +1091,25 @@ def _ekle_girdisi(
     profil_1=None,
     profil_2=None,
 ):
+    """`metin` PAKETE GİRECEK öğedir, `gerekce` karar günlüğünün düz yazısıdır.
+
+    İkisi AYRI parametredir çünkü bayrak kapısının ölçtüğü yüzey tam olarak
+    bu ayrımdır: sözleşme bayrağı `gerekce`ye YAZDIRIR ("karar + gerekçe
+    olarak decision_log'a geçer") ve `metin`de YASAKLAR ("kalıp metnine
+    yapışık kalmaz"). Tek parametreyle iki yüzey ayrı ayrı ölçülemezdi.
+    """
     aday = _tam_icerik(kanca_kaliplari=[KORUNAN_KANCA, CIKARILACAK_KANCA, metin])
     harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
     yeni_yol = _yol(aday, "kanca_kaliplari", metin)
+    yeni_satir: dict = {"karar": "ekle", "kanit": kanit}
+    if kaynak_iddia is not None:
+        yeni_satir["kaynak_iddia"] = kaynak_iddia
+    if gerekce is not None:
+        yeni_satir["gerekce"] = gerekce
     gunluk = _gunluk(
         aday,
         kimlikler=harita,
-        degis={
-            yeni_yol: (
-                {"karar": "ekle", "kanit": kanit}
-                if kaynak_iddia is None
-                else {
-                    "karar": "ekle",
-                    "kanit": kanit,
-                    "kaynak_iddia": kaynak_iddia,
-                }
-            )
-        },
+        degis={yeni_yol: yeni_satir},
         denetim=DENETIM_TABLOSU if denetim is None else denetim,
     )
     # Mekanik kapı ile çiftin taşıdığı kaynak kimliği AYNI kapıdan türer:
@@ -1793,32 +1796,45 @@ def test_flag_folding_matrix_has_a_negative_arm() -> None:
     assert engine._bayraklar("[]") == set()
 
 
-def test_an_unconsumed_flag_on_the_typed_row_becomes_an_open_question() -> None:
-    """Bayrak SENTEZİN metninde değil, denetçinin TİPLİ sütununda da aranır.
+def test_a_flagged_auditor_row_alone_does_not_block_the_item() -> None:
+    """Denetçinin TİPLİ sütunundaki bayrak, tek başına AÇIK SORU DEĞİLDİR.
 
-    Kapanış turu (yüksek): `_bayrak_tuketimi` bayrakları `kanit`/`gerekce`
-    METNİNDE arıyor; sentez bir bayrağı yazmayı ATLARSA kısıt sessizce
-    kayboluyordu — oysa tipli satırda duruyor.
+    **Kapı 2026-09-20'de KALDIRILDI — dayanağı ölçülerek yanlış bulundu.**
+    Bayrağı o sütuna DENETÇİ yazar ve orada durmaya devam eder; tüketim bir
+    sonraki adımda, sentezde olur. Yani sütun "tüketilmedi"nin kanıtı olamaz:
+    kapı bayraklı HER satırda ateşliyordu. Canlı koşuda ölçüldü
+    (`kosu-222706dc…`): ürettiği 3 bulgunun 3'ünde de pakete girecek metin
+    TEMİZDİ — bilgi taşımayan, %100 yanlış alarm veren bir kapı.
+
+    Tüketimin ölçülebilir yüzeyi pakete girecek METİNDİR; onu
+    `bayrak_tuketimi` kontrolü ölçer (bu dosyanın 11. bölümü).
+
+    **Kapının kapsadığını iddia ettiği ve artık ÖLÇÜLMEYEN sınıf** (dürüst
+    etiket, İlke 7): "sentez bayrağı tümden görmezden geldi ve kalıbı olduğu
+    gibi kopyaladı". Yeni kapı bunu YAKALAMAZ — kopyalanan metinde bayrak
+    yoktur, çünkü bayrak denetçinin ayrı sütunundadır. Kaldırılan kapı da
+    yakalamıyordu (her satırda ateşlediği için sinyal üretmiyordu).
+    **Yeniden açılma koşulu:** bir sonraki gerçek koşuda sentezin bayrak
+    kuralını görmezden geldiği bir kalem çıkarsa.
     """
     sonuc = engine.run_checks(_ekle_girdisi(kanit=BAYRAKLI))
-    assert "acik_soru" in _siniflar(sonuc)
-    detaylar = " ".join(b.detay for b in sonuc.bulgular)
-    assert "tüketilmemiş bayrak" in detaylar
-
-
-def test_the_surviving_flag_does_not_raise_an_open_question() -> None:
-    """BOŞ-KÜME kontrol kolu: sağ çıkan TEK bayrak (`kanal-bagimli`) sessizdir."""
-    tablo = DENETIM_TABLOSU + (
-        _denetim_satiri(
-            7,
-            kaynaklar={1, 2},
-            sinif="2-2",
-            bayraklar="[kanal-bagimli: whatsapp_hatti]",
-        ),
-    )
-    sonuc = engine.run_checks(_ekle_girdisi(kanit="D1#7", denetim=tablo))
     assert "acik_soru" not in _siniflar(sonuc)
     assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_the_flag_gate_does_not_swallow_the_other_arms_of_the_same_check() -> None:
+    """Bayrak bloğu kalktı; AYNI kontrolün bayrak-dışı kolları YERİNDE.
+
+    Bu testin işi kaldırmanın YAN ETKİSİNİ ölçmektir (İlke 6): bayrak bloğu
+    çoğunluk kontrolünün İÇİNDEYDİ, komşu kolların da kaldırılmadığı elle
+    değil kontrol kolu KOLU koşularak gösterilir.
+    """
+    olumsuz = engine.run_checks(_ekle_girdisi(kanit=OLUMSUZ_ONERI))
+    assert "oneri-olumsuz" in _sebepler(olumsuz)
+    celiski = engine.run_checks(_ekle_girdisi(kanit=CELISKILI))
+    assert "acik_soru" in _siniflar(celiski)
+    tekil = engine.run_checks(_ekle_girdisi(kanit=TEK_KAYNAKLI))
+    assert "cogunluk-yok" in _sebepler(tekil)
 
 
 def test_a_contradiction_row_becomes_an_open_question() -> None:
@@ -2301,14 +2317,45 @@ def test_tur_revizyonu_kategori_catismasindan_AYRI_olculur() -> None:
     )
 
 
-def test_unconsumed_flag_becomes_an_open_question() -> None:
-    """Sentezden sağ çıkmaması gereken bayrak motora ulaşırsa AÇIK SORUDUR."""
+def test_an_unconsumed_flag_in_the_package_text_becomes_an_open_question() -> None:
+    """Tüketilmemiş bayrak PAKETE GİRECEK METİNDE duruyorsa AÇIK SORUDUR.
+
+    Ölçülen yüzey sözleşmenin LAFZIDIR: "kalan yedi bayrağın hepsi burada
+    TÜKETİLİR (karar + gerekçe olarak decision_log'a geçer, **kalıp metnine
+    yapışık kalmaz**)" — pinlenmiş `hakem-sentez-gorevi.md`, "ÖTEKİ BAYRAKLAR
+    PAKETE GİRMEZ" genel hükmü.
+    """
     sonuc = engine.run_checks(
         _ekle_girdisi(
-            kanit=f"{DOGRULANMIS_KAYNAK}, {IKINCI_KAYNAK} [kopya-şüphesi]"
+            kanit=IKI_KAYNAKLI, metin="Yeni kanca kalibi [kopya-şüphesi]"
         )
     )
     assert "acik_soru" in _siniflar(sonuc)
+    assert "pakete girecek metin" in " ".join(b.detay for b in sonuc.bulgular)
+
+
+def test_a_flag_named_only_in_the_justification_is_silent() -> None:
+    """Bayrağı GEREKÇEDE anmak tüketimin KENDİSİDİR — bulgu ÜRETMEZ.
+
+    **Kusur 3'ün kilidi buradaydı (2026-09-20).** Kontrol `kanit`+`gerekce`
+    düz yazısını tarıyordu; oysa sözleşme bayrağın tüketimini tam olarak
+    ORAYA yazdırır. Sentez sözleşmeye uyduğu için cezalanıyordu: bayrağı
+    gerekçede açıklarsa bu kapı, açıklamazsa denetçi-sütunu kapısı açık soru
+    üretiyordu, satırı hiç anmazsa `referans-yok` ile reddediliyordu. Açık
+    soru bloklar — yani denetçinin bayrakladığı bir kalemi içeren paket
+    `activation_eligible` OLAMIYORDU.
+
+    Canlı koşuda ölçüldü (`kosu-222706dc…`): 8 açık sorunun 8'i bayrak
+    kapılarından geliyordu ve pakete girecek metinlerin 11'inde 11'i TEMİZDİ.
+    """
+    sonuc = engine.run_checks(
+        _ekle_girdisi(
+            kanit=IKI_KAYNAKLI,
+            gerekce="kopya şüphesi soyutlanarak giderildi [kopya-şüphesi]",
+        )
+    )
+    assert "acik_soru" not in _siniflar(sonuc)
+    assert sonuc.uygulanmayan_kararlar == ()
 
 
 def test_channel_flag_survives_without_a_finding() -> None:

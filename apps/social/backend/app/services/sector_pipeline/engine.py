@@ -1166,32 +1166,20 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
                 )
             )
             continue
-        # Kapanış turu (yüksek): bayraklar SENTEZİN düz yazısından değil,
-        # denetçinin TİPLİ sütunundan da okunur. `_bayrak_tuketimi` kontrolü
-        # bayrakları `kanit`/`gerekce` METNİNDE arar; sentez bir bayrağı
-        # yazmayı ATLARSA kısıt sessizce kaybolurdu — oysa tipli satırda
-        # duruyor. Politika DEĞİŞMEDİ, KAYNAK genişledi: sağ çıkan tek bayrak
-        # `kanal-bagimli`'dır, kalan yedi TÜKETİLMİŞ olmalıdır.
-        tukenmeyen_bayraklar = sorted(
-            {
-                bayrak
-                for parca in atiflar
-                for bayrak in _bayraklar(satir_evreni[parca].bayraklar)
-                if bayrak != SAG_CIKAN_BAYRAK
-            }
-        )
-        if tukenmeyen_bayraklar:
-            bulgular.append(
-                BulguIzi(
-                    sinif="acik_soru",
-                    unit_id=satir["unit_id"],
-                    detay=(
-                        "denetçi satırı tüketilmemiş bayrak taşıyor: "
-                        f"{tukenmeyen_bayraklar} — bayrak sentezde TÜKETİLİR; "
-                        "tipli sütunda duruyorsa kısıt karşılanmamış olabilir"
-                    ),
-                )
-            )
+        # BAYRAK BLOĞU 2026-09-20'de KALDIRILDI — dayanağı ölçülerek yanlış
+        # bulundu. Blok, denetçinin TİPLİ `bayraklar` sütununda tüketilmesi
+        # gereken bir bayrak görünce açık soru üretiyordu. Ne var ki o sütuna
+        # bayrağı DENETÇİ yazar ve bayrak orada durmaya devam eder; tüketim bir
+        # sonraki adımda, SENTEZDE olur. Sütun bu yüzden "tüketilmedi"nin
+        # kanıtı olamaz: blok bayraklı HER satırda ateşliyordu (canlı koşuda
+        # ölçüldü, 3 bulgunun 3'ünde pakete girecek metin TEMİZDİ) ve sentezin
+        # sözleşmeye UYMASINI bloklayan kilidin ikinci yarısıydı.
+        # Tüketimin ölçülebilir yüzeyi pakete girecek METİNDİR ve onu
+        # `_bayrak_tuketimi` ölçer — kural TEK yerde yaşar.
+        # ÖLÇÜLMEYEN KALAN SINIF (dürüst etiket): "sentez bayrağı tümden
+        # görmezden geldi ve kalıbı olduğu gibi kopyaladı" — kopyalanan metinde
+        # bayrak olmadığı için yeni kapı da yakalamaz; kaldırılan blok da
+        # yakalamıyordu (her satırda ateşleyen kapı sinyal üretmez).
         celiskili = sorted(
             {
                 parca
@@ -1344,12 +1332,46 @@ def _url_esit(orneklem_url: str, iddia: CIddia | None) -> bool:
 
 
 def _bayrak_tuketimi(inputs: EngineInputs) -> CheckOutput:
+    """Tüketilmemiş bayrak PAKETE GİRECEK metinde mi? — yüzey sözleşmenin lafzı.
+
+    **Yüzey 2026-09-20'de DEĞİŞTİ (ölçülerek).** Kontrol `kanit`+`gerekce` DÜZ
+    YAZISINI tarıyordu; oysa pinlenmiş sentez sözleşmesi bayrağın tüketimini tam
+    olarak ORAYA yazdırır — "kalan yedi bayrağın hepsi burada TÜKETİLİR (karar +
+    gerekçe olarak decision_log'a geçer, kalıp metnine yapışık kalmaz)". Yani
+    kontrol, sözleşmenin bayrağı yazmasını İSTEDİĞİ yeri tarayıp ceza kesiyordu:
+    sentez sözleşmeye uyduğu için açık soru üretiyordu. Yasak olan yüzey
+    `kalıp metni`dir ("ÖTEKİ BAYRAKLAR PAKETE GİRMEZ" genel hükmü) ve o yüzeyi
+    hiçbir kontrol taramıyordu.
+
+    **Kusur 3'ün kilidi buydu (ölçüldü, `kosu-222706dc…`):** bayraklı bir
+    denetçi satırını anan karar için bayrağı gerekçede AÇIKLARSA bu kapı,
+    AÇIKLAMAZSA çoğunluk kapısının bayrak bloğu (2026-09-20'de KALDIRILDI) açık
+    soru üretiyordu; satırı hiç anmazsa `referans-yok` ile reddediliyordu. Açık
+    soru BLOKLADIĞI için denetçinin bayrakladığı bir kalemi içeren paket
+    `activation_eligible` OLAMIYORDU. Aynı koşumda 8 açık sorunun 8'i bu iki
+    kapıdan geliyordu ve pakete girecek metinlerin 11'inde 11'i TEMİZDİ.
+
+    **Yazım kapısına DEVREDİLMEDİ — kapsam ölçüldü, örtüşmüyor.** Gerçek aday
+    içeriğin 60 metin hücresine tek tek bayrak konduğunda `structural_errors`
+    17'sini reddediyor, 43'ünü GEÇİRİYOR; reddettikleri yalnız CTA yüzeyleri.
+    Motorun bulgu koyduğu alanların (`kanca_kaliplari` · `gorsel_kodlar` ·
+    `video_kodlar` · `takvim_temalari` · `ozel_gun[*].gorsel_vurgu` ·
+    `ton_ve_dil`) hiçbirinde yazım kapısı bayrağı durdurmuyor.
+
+    Yalnız ADAYDA duran öğeler taranır: paketten DÜŞEN bir öğenin (`cikar`)
+    metnindeki bayrak bu turun ürünü değildir ve pakete de girmez. Her yaşayan
+    öğenin bir karar satırı olduğunu `karar_kapsami` kontrolü ölçer; kural
+    burada İKİNCİ kez yazılmaz.
+    """
+    birimler = identity.enumerate_content_units(_aday_icerik(inputs))
     bulgular: list[BulguIzi] = []
     for satir in _karar_satirlari(inputs):
-        metin = " ".join(
-            str(satir.get(alan) or "") for alan in ("kanit", "gerekce")
+        birim = birimler.get(satir.get("oge_yolu"))
+        if birim is None:
+            continue
+        tukenmeyen = sorted(
+            _bayraklar(_metin(birim["deger"])) - {SAG_CIKAN_BAYRAK}
         )
-        tukenmeyen = sorted(_bayraklar(metin) - {SAG_CIKAN_BAYRAK})
         if not tukenmeyen:
             continue
         bulgular.append(
@@ -1357,8 +1379,9 @@ def _bayrak_tuketimi(inputs: EngineInputs) -> CheckOutput:
                 sinif="acik_soru",
                 unit_id=satir["unit_id"],
                 detay=(
-                    f"sentezden sağ çıkmaması gereken bayrak motora ulaştı: "
-                    f"{tukenmeyen} — kalan yedi bayrak sentezde TÜKETİLİR"
+                    f"tüketilmemiş bayrak pakete girecek metinde duruyor: "
+                    f"{tukenmeyen} — kalan yedi bayrak sentezde TÜKETİLİR, "
+                    f"kalıp metnine yapışık kalmaz"
                 ),
             )
         )
@@ -1653,7 +1676,10 @@ CHECKS: tuple[EngineCheck, ...] = (
     ),
     EngineCheck(
         ad="bayrak_tuketimi",
-        aciklama="Sağ çıkan tek bayrak `kanal-bagimli`; kalan yedi tüketilmiş olmalı.",
+        aciklama=(
+            "Pakete girecek metinde sağ çıkan tek bayrak `kanal-bagimli`; "
+            "kalan yedi tüketilmiş olmalı."
+        ),
         calistir=_bayrak_tuketimi,
     ),
     EngineCheck(
@@ -1762,11 +1788,26 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 # ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
 # bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
 
-ENGINE_VERSION: str = "2.17.0"
+ENGINE_VERSION: str = "2.18.0"
 """Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
 
 Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
 kuralı değiştiğinde eski koşuların sonucu yenisiyle karşılaştırılamaz.
+
+**2.17.0 → 2.18.0 (2026-09-20).** İKİ uygulama kuralı değişti, ikisi de bayrak
+tüketimi: (a) `bayrak_tuketimi` artık karar günlüğünün `kanit`+`gerekce` DÜZ
+YAZISINI değil, PAKETE GİRECEK öğe metnini tarar; (b) `yeni_oge_cogunlugu`'nun
+denetçi `bayraklar` sütununu okuyan bayrak bloğu KALDIRILDI. Aynı girdi artık
+farklı karar verir: bayrağını sözleşmeye uygun biçimde gerekçede tüketen bir
+kalem eskiden açık soru üretip BLOKLARKEN artık sessizdir; pakete girecek
+metninde bayrak kalan bir kalem eskiden sessizken artık açık soru üretir.
+Ölçüldü (`kosu-222706dc…`): 8 açık sorunun 8'i bu iki kapıdan geliyordu ve
+pakete girecek metinlerin 11'inde 11'i temizdi.
+
+**KAPSAM SINIRI, dürüst etiket (2.17.0'ın aynısı):** parmak izi bu
+değişikliği de YAKALAMAZ — sebep kümesi, kural kimlikleri, kontrol adları ve
+not sınıfları DEĞİŞMEDİ; değişen şey bir kontrolün TARADIĞI YÜZEY ve bir
+bloğun varlığı. Damga elle artırıldı.
 
 **2.16.0 → 2.17.0 (2026-09-20).** UYGULAMA KURALI değişti: yuva kümesi
 tamamlanamayan `ozel_gun` dönemi nihai adaya YAZILMAZ, tümüyle düşer. Aynı

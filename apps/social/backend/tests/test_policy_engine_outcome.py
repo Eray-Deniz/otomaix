@@ -125,15 +125,20 @@ def _karar(girdi=None, config: PolicyConfig | None = None) -> EngineResult:
     )
 
 
-def _guncelle_parcalari(*, kanit: str) -> dict:
+def _guncelle_parcalari(*, kanit: str, yeni_metin: str | None = None) -> dict:
     """Tek kancayı `guncelle` ile değiştiren turun `_girdi` parçaları.
 
     Parça olarak döner ki çağıran aynı senaryoya `kapilar`/`acik_sorular` gibi
     ikinci bir ekseni EKLEYEBİLSİN — kurulmuş `EngineInputs`'ı alan alan yeniden
     kurmak, yapımdaki görüntü kapısını (R6) ikinci kez koşturmak demektir.
+
+    `yeni_metin` PAKETE GİRECEK kalıp metnidir. 2026-09-20'de eklendi: bayrak
+    kontrolünün yüzeyi karar günlüğünün düz yazısından bu metne taşındı, yani
+    bayrak senaryoları artık adayın İÇERİĞİNDEN kurulur.
     """
     yol = _yol(AKTIF_ICERIK, "kanca_kaliplari", KORUNAN_KANCA)
-    aday = _tam_icerik(kanca_kaliplari=[GUNCELLENMIS_KANCA, CIKARILACAK_KANCA])
+    kanca = GUNCELLENMIS_KANCA if yeni_metin is None else yeni_metin
+    aday = _tam_icerik(kanca_kaliplari=[kanca, CIKARILACAK_KANCA])
     return {
         "icerik": aday,
         "gunluk": _gunluk(aday, degis={yol: {"karar": "guncelle", "kanit": kanit}}),
@@ -330,7 +335,7 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
         tuple(sorted(engine.identity.NOT_SINIFLARI)),
     )
     assert (engine.ENGINE_VERSION, kural_yuzeyi) == (
-        "2.17.0",
+        "2.18.0",
         (
             12,
             (
@@ -492,23 +497,36 @@ def test_second_active_finding_becomes_blocked() -> None:
 
 
 def test_acik_soru_finding_becomes_blocked() -> None:
-    """Tüketilmemiş bayrak `acik_soru` bulgusudur — K-71 gereği bloklar."""
-    hedef = _yol(AKTIF_ICERIK, "kapsam", AKTIF_ICERIK["kapsam"])
-    gunluk = _gunluk(
-        AKTIF_ICERIK, degis={hedef: {"gerekce": "Kalip [genel-gecer: dar degil]."}}
+    """Tüketilmemiş bayrak `acik_soru` bulgusudur — K-71 gereği bloklar.
+
+    Bayrak PAKETE GİRECEK metne konur (yüzey 2026-09-20'de taşındı). Testin
+    konusu bayrak kuralı DEĞİL, `acik_soru → blocked` eşlemesidir; ölçtüğü şey
+    korunsun diye senaryo aynı bulguyu ÜRETEN tek fark olarak kuruldu.
+    """
+    girdi = _girdi(
+        **_guncelle_parcalari(
+            kanit=DOGRULANMIS_KAYNAK,
+            yeni_metin=f"{GUNCELLENMIS_KANCA} [genel-gecer: dar degil]",
+        )
     )
-    sonuc = _karar(_girdi(gunluk=gunluk))
+    sonuc = _karar(girdi)
     assert sonuc.sonuc == "blocked"
     assert BEKLENEN_DONUSUM["acik_soru"][1] in sonuc.sebep
 
 
 def test_surviving_flag_does_not_block() -> None:
-    """POZİTİF KONTROL: sentezden sağ çıkan TEK bayrak bloklamaz."""
-    hedef = _yol(AKTIF_ICERIK, "kapsam", AKTIF_ICERIK["kapsam"])
-    gunluk = _gunluk(
-        AKTIF_ICERIK, degis={hedef: {"gerekce": "Kalip [kanal-bagimli: reels]."}}
+    """POZİTİF KONTROL: sağ çıkan TEK bayrak pakete girecek metinde bloklamaz.
+
+    Bu kol, yukarıdaki testin bayrağın VARLIĞINI değil TÜRÜNÜ ölçtüğünü
+    gösterir: aynı senaryoda yalnız bayrak adı değişir.
+    """
+    girdi = _girdi(
+        **_guncelle_parcalari(
+            kanit=DOGRULANMIS_KAYNAK,
+            yeni_metin=f"{GUNCELLENMIS_KANCA} [kanal-bagimli: reels]",
+        )
     )
-    sonuc = _karar(_girdi(gunluk=gunluk))
+    sonuc = _karar(girdi)
     assert sonuc.sonuc != "blocked"
 
 
