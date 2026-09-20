@@ -840,6 +840,14 @@ TEMEL_ALAN_ANAHTARLARI = frozenset(
 
 IDDIA_BAGI_VAR = "bagli"
 IDDIA_BAGI_YOK = "bagsiz"
+IDDIA_BAGI_EVRENDE_YOK = "evrende-yok"
+"""Numara araştırma evreninde HİÇ YOK — `IDDIA_BAGI_YOK`'tan AYRI teşhis.
+
+`IDDIA_BAGI_YOK` *"iddia var ama bu kararın alanını/dönemini anlatmıyor"*
+demektir. İkisi tek ada sığdırıldığında rapor yanlış kapıyı gösteriyordu
+(ölçüldü: sekiz karar "araştırmada yok" etiketiyle düştü, numaraların hepsi
+araştırmada VARDI).
+"""
 IDDIA_BAGI_DONEM_COZULEMEDI = "donem-cozulemedi"
 
 
@@ -1028,7 +1036,7 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         oge_yolu = _metin(satir.get("oge_yolu"))
         baglar = {
             atif.etiket: (
-                IDDIA_BAGI_YOK
+                IDDIA_BAGI_EVRENDE_YOK
                 if atif.etiket not in iddia_evreni
                 else _iddia_alani_bagli_mi(
                     karar_alani, oge_yolu, iddia_evreni[atif.etiket]
@@ -1036,12 +1044,23 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
             )
             for atif in iddialar
         }
-        if any(bag == IDDIA_BAGI_YOK for bag in baglar.values()):
+        if any(bag == IDDIA_BAGI_EVRENDE_YOK for bag in baglar.values()):
             kayitlar.append(
                 UygulanmayanKarar(
                     unit_id=satir["unit_id"],
                     karar="ekle",
                     sebep="iddia-arastirmada-yok",
+                )
+            )
+            continue
+        # DÜRÜST TEŞHİS: iddia araştırmada VAR, örtüşmeyen ALAN/DÖNEM hücresi.
+        # Tek ad kullanıldığında operatör araştırmayı sorgulamaya gidiyordu.
+        if any(bag == IDDIA_BAGI_YOK for bag in baglar.values()):
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"],
+                    karar="ekle",
+                    sebep="iddia-alani-uyusmuyor",
                 )
             )
             continue
@@ -1743,11 +1762,18 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 # ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
 # bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
 
-ENGINE_VERSION: str = "2.15.0"
+ENGINE_VERSION: str = "2.16.0"
 """Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
 
 Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
 kuralı değiştiğinde eski koşuların sonucu yenisiyle karşılaştırılamaz.
+
+**2.15.0 → 2.16.0 (2026-09-20).** Uygulanmama sebepleri kapalı kümesi on
+birden on ikiye çıktı: `iddia-alani-uyusmuyor` ayrıldı. Kararın UYGULANIP
+uygulanmadığı DEĞİŞMEZ — düşen karar yine düşer — ama koşunun raporladığı
+SEBEP değişir, yani aynı damgayı taşıyan iki koşunun günlüğü artık
+karşılaştırılamaz. Sebep kümesi kural yüzeyinin parçasıdır
+(`test_engine_version_is_pinned_to_the_RULE_SURFACE`).
 
 **2.13.0 → 2.14.0 (2026-09-11, kapanış turu — hakem bulgusu).** İki commit
 boyunca UYGULAMA KURALI değişti ve damga SABİT kalmıştı: yetkilendirme artık
@@ -1785,6 +1811,7 @@ KURAL_KIMLIKLERI: Mapping[str, str] = {
     "celiski": "denetci-celiski-sinifi",
     "kaynak-iddia-yok": "sentez-kaynak-iddia-zorunlulugu",
     "iddia-arastirmada-yok": "arastirma-iddia-bagi",
+    "iddia-alani-uyusmuyor": "arastirma-iddia-alan-bagi",
     "iddia-denetcide-yok": "denetci-iddia-bagi",
     "donem-kimligi-cozulemedi": "arastirma-donem-kimligi",
     "cogunluk-yok": "yeni-oge-cogunlugu",

@@ -46,7 +46,8 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "referans-yok",  # sentez sözleşmesi 2.1: `ekle` en az bir D# referansı ister
     "referans-uyusmuyor",  # atıf BAŞKA bir alanın satırını gösteriyor
     "kaynak-iddia-yok",  # sentez sözleşmesi 2.2: `ekle` `kaynak_iddia` ZORUNLU
-    "iddia-arastirmada-yok",  # numaranın gösterdiği iddia yok ya da alanı örtüşmüyor
+    "iddia-arastirmada-yok",  # numaranın gösterdiği iddia araştırmada HİÇ YOK
+    "iddia-alani-uyusmuyor",  # iddia VAR ama `alan/dönem` hücresi kararla örtüşmüyor
     "iddia-denetcide-yok",  # atıf yapılan denetçi satırı o numarayı taşımıyor
     "donem-kimligi-cozulemedi",  # araştırmanın dönem satırı SİSTEM ANAHTARI taşımıyor (Bölüm B `—`/çözülmedi)
     "oneri-olumsuz",  # denetçi o satırda `alma`/`açık-soru` önermiş
@@ -58,15 +59,24 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
 **Sıra ÖNCELİKTİR** (`engine._reddedilenler`): bir birim birden çok sebeple
 reddedilebilir ve rapora yazılan sebep bu sıradan seçilir. `referans-yok` ·
 `referans-uyusmuyor` · `kaynak-iddia-yok` · `iddia-arastirmada-yok` ·
-`iddia-denetcide-yok` · `donem-kimligi-cozulemedi` · `oneri-olumsuz` · `celiski`,
+`iddia-alani-uyusmuyor` · `iddia-denetcide-yok` · `donem-kimligi-cozulemedi` ·
+`oneri-olumsuz` · `celiski`,
 `cogunluk-yok`'tan ÖNCE
 gelir — hepsinde sayı ya hiç okunamamıştır ya da okunması anlamsızdır;
 "çoğunluk yok" demek okunmuş bir sayı ima ederdi.
 
-**Üç ATIF sebebi AYRI adlandırılır** çünkü ayrı kapılardır ve hangisinin
+**Her ATIF kapısı AYRI adlandırılır** çünkü ayrı kapılardır ve hangisinin
 düştüğü rapordan okunabilmelidir: alan YOK/bozuk · numaranın gösterdiği
-araştırma iddiası yok ya da alanı örtüşmüyor · denetçi satırı o numarayı
-taşımıyor. Bağ İKİ UÇLUDUR (sentez sözleşmesi 2.2); tek uçlu bir bağ kendini
+araştırma iddiası HİÇ YOK · iddia var ama `alan/dönem` hücresi örtüşmüyor ·
+denetçi satırı o numarayı taşımıyor.
+
+**`iddia-alani-uyusmuyor` 2026-09-20'de AYRILDI ve gerekçesi ÖLÇÜLDÜ.** İki
+kapı tek ada sığdırılmıştı; ilk motor koşumunda sekiz karar
+`iddia-arastirmada-yok` etiketiyle düştü ve rapora bakan kişi araştırmayı
+sorgulamaya gitti. Ölçüm tersini söylüyordu: anılan 19 etiketin 19'u da
+araştırmada VARDI, düşüren şey alan uyuşmazlığıydı. Etiket yanlış kapıyı
+gösteriyordu — `donem-kimligi-cozulemedi` için verilen dürüst-teşhis kararının
+aynısı burada da geçerlidir. Bağ İKİ UÇLUDUR (sentez sözleşmesi 2.2); tek uçlu bir bağ kendini
 onaylardı, çünkü iki beyanı da aynı model yazar.
 
 **`donem-kimligi-cozulemedi` AYRI bir sebeptir ve bilinçli olarak DÜRÜST bir

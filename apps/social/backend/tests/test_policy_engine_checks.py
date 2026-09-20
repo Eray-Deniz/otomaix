@@ -1235,11 +1235,36 @@ def test_a_claim_about_another_field_is_not_applied() -> None:
     `K1#4` araştırmada VARDIR ama `cta_kaliplari` hakkındadır; `kanca_kaliplari`
     eklemesi ona dayanamaz. Varlık kontrolü tek başına bırakılsaydı kapatılan
     sınıf bir basamak aşağıda aynen sürerdi.
+
+    **Etiket AYRIDIR ve bu DÜRÜSTLÜK meselesidir (2026-09-19, canlı koşu).**
+    İki ayrı kapı tek ada sığdırılmıştı: motor `iddia-arastirmada-yok` derken
+    sebep aslında alan uyuşmazlığıydı. Rapora bakan kişi "numaralar araştırmada
+    yok" okuyup araştırmayı sorgulamaya gidiyordu — ölçüldü: anılan 19 etiketin
+    19'u de araştırmada VARDI. Aynı dürüst-teşhis kararı `donem-kimligi-
+    cozulemedi` için zaten verilmişti; bu, onun ikizidir.
     """
     sonuc = engine.run_checks(
         _ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#4")
     )
-    assert "iddia-arastirmada-yok" in _sebepler(sonuc)
+    assert "iddia-alani-uyusmuyor" in _sebepler(sonuc)
+    assert "iddia-arastirmada-yok" not in _sebepler(sonuc)
+
+
+def test_absence_and_field_mismatch_get_DIFFERENT_reasons() -> None:
+    """İki kapı, iki ad — rapor hangi kapının düştüğünü SÖYLEMELİ.
+
+    Pozitif kontrol çifttir: var olmayan numara (`K1#404`) araştırma teşhisini,
+    var olan ama başka alana ait numara (`K1#4`) alan teşhisini alır. Tek ad
+    kullanıldığında operatör yanlış kapıya gönderiliyordu.
+    """
+    yok = _sebepler(
+        engine.run_checks(_ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#404"))
+    )
+    uyusmaz = _sebepler(
+        engine.run_checks(_ekle_girdisi(kanit=IKI_KAYNAKLI, kaynak_iddia="K1#4"))
+    )
+    assert "iddia-arastirmada-yok" in yok and "iddia-alani-uyusmuyor" not in yok
+    assert "iddia-alani-uyusmuyor" in uyusmaz and "iddia-arastirmada-yok" not in uyusmaz
 
 
 def test_a_claim_the_cited_auditor_row_does_not_carry_is_not_applied() -> None:
@@ -1556,7 +1581,7 @@ def test_a_known_field_name_is_NOT_diagnosed_as_a_period_problem() -> None:
                 kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", donem_adi=alan, anahtarlar=()
             )
         )
-        assert "iddia-arastirmada-yok" in _sebepler(sonuc), alan
+        assert "iddia-alani-uyusmuyor" in _sebepler(sonuc), alan
         assert "donem-kimligi-cozulemedi" not in _sebepler(sonuc), alan
     # POZİTİF KONTROL: köprüsüz gerçek bir dönem adı HÂLÂ dönem teşhisi alır.
     gercek = engine.run_checks(
@@ -1577,7 +1602,7 @@ def test_a_claim_about_another_period_does_not_authorise() -> None:
     sonuc = engine.run_checks(
         _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{MEVCUT_DONEM_IDDIA_NO}")
     )
-    assert "iddia-arastirmada-yok" in _sebepler(sonuc)
+    assert "iddia-alani-uyusmuyor" in _sebepler(sonuc)
 
 
 def test_a_negative_recommendation_blocks_the_addition() -> None:

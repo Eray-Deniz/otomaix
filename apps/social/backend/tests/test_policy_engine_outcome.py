@@ -296,6 +296,7 @@ def test_uygulanmama_sebepleri_are_closed() -> None:
         "referans-uyusmuyor",
         "kaynak-iddia-yok",
         "iddia-arastirmada-yok",
+        "iddia-alani-uyusmuyor",
         "iddia-denetcide-yok",
         "donem-kimligi-cozulemedi",
         "oneri-olumsuz",
@@ -329,13 +330,14 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
         tuple(sorted(engine.identity.NOT_SINIFLARI)),
     )
     assert (engine.ENGINE_VERSION, kural_yuzeyi) == (
-        "2.15.0",
+        "2.16.0",
         (
-            11,
+            12,
             (
                 "celiski",
                 "cogunluk-yok",
                 "donem-kimligi-cozulemedi",
+                "iddia-alani-uyusmuyor",
                 "iddia-arastirmada-yok",
                 "iddia-denetcide-yok",
                 "kanit-yok",
