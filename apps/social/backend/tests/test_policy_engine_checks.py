@@ -2320,7 +2320,7 @@ def test_tur_revizyonu_kategori_catismasindan_AYRI_olculur() -> None:
     )
 
 
-def test_an_unconsumed_flag_in_the_package_text_becomes_an_open_question() -> None:
+def test_an_unconsumed_flag_in_the_candidate_item_text_is_reported() -> None:
     """Tüketilmemiş bayrak PAKETE GİRECEK METİNDE duruyorsa AÇIK SORUDUR.
 
     Ölçülen yüzey sözleşmenin LAFZIDIR: "kalan yedi bayrağın hepsi burada
@@ -2334,7 +2334,9 @@ def test_an_unconsumed_flag_in_the_package_text_becomes_an_open_question() -> No
         )
     )
     assert "acik_soru" in _siniflar(sonuc)
-    assert "pakete girecek metin" in " ".join(b.detay for b in sonuc.bulgular)
+    assert "aday öğe metninde" in " ".join(b.detay for b in sonuc.bulgular), (
+        "bu KONTROL katmanıdır ve adayı ölçer; nihai yargıyı `decide` verir"
+    )
 
 
 KORUNAN_KIMLIK = _mevcut_kimlik("kanca_kaliplari", KORUNAN_KANCA)
@@ -2398,7 +2400,7 @@ def test_a_flag_is_attributed_only_to_the_living_unit() -> None:
             ),
         )
     )
-    bayrak = [b for b in sonuc.bulgular if "bayrak" in b.detay]
+    bayrak = [b for b in sonuc.bulgular if b.kontrol == "bayrak_tuketimi"]
     assert len(bayrak) == 1, f"bayrak bulgusu TEK olmalı, {len(bayrak)} geldi"
     assert bayrak[0].unit_id == CIKAN_KIMLIK, (
         "bulgu YAŞAYAN birime atfedilmeli; çıkarılan birime atıf operatöre "
@@ -2416,8 +2418,9 @@ def test_a_cited_flagged_auditor_row_is_recorded_without_blocking() -> None:
     sınıfı görebilecek tek yapısal veri artık hiç okunmuyordu.
 
     Politika DEĞİŞMEDİ — bayraklı bir satırı anmak kalemi bloklamaz. Değişen
-    şey bilginin kaydedilmesidir: not satırı karar günlüğünde durur, operatör
-    bayrak başına kuralın gözetildiğini kendi denetler. Motorun bu kuralların
+    şey bilginin kaydedilmesidir: BLOKLAMAYAN `bayrak_kaydi` BULGUSU üretilir ve
+    onay özetinde basılır. (Bu bir `tur="not"` günlük satırı DEĞİLDİR — o küme
+    pinlenmiş dış sözleşmeyle çivili; İlke 1, referans bütünlüğü.) Motorun bu kuralların
     ANLAM ayağını ölçemediği dürüst etikettir, kayıt onun yerine geçmez.
     """
     sonuc = engine.run_checks(_ekle_girdisi(kanit=BAYRAKLI))
@@ -2437,7 +2440,8 @@ def test_a_flag_on_a_rejected_addition_does_not_block() -> None:
     kilit sınıfı yeni bir yoldan geri gelmişti: pakete hiç girmeyecek bir metin
     aktivasyonu durduruyordu.
 
-    Bulgu SESSİZCE düşmez: uygulama katmanı (`decide`) onu NOT'a çevirir, çünkü
+    Bulgu SESSİZCE düşmez: uygulama katmanı (`decide`) onu BLOKLAMAYAN bir bulgu
+    sınıfına (`bayrak_kaydi`) çevirir — `tur="not"` satırına DEĞİL — çünkü
     sentezin sözleşmeyi ihlal eden bir kalem ÖNERMESİ kayda değer bir olgudur —
     yalnız bloklama etkisi düşer.
     """
@@ -2474,6 +2478,106 @@ def test_the_record_only_class_does_not_reach_the_outcome() -> None:
     assert sonuc.sonuc == "activation_eligible", (
         "kayıt sınıfı tek başına sonucu düşürmemeli; "
         f"sonuc={sonuc.sonuc} sebep={sonuc.sebep}"
+    )
+
+
+# ── Sınıf kapanışı: ÜRETİLMİŞ MATRİS (elle seçilmiş örnek değil) ───────────
+#
+# Bu eksen ("kapı hangi içeriği yargılıyor") ÜÇ turda üç ayrı varyantla açıldı:
+#   1. kapı sentezin düz yazısını yargılıyordu (kilit),
+#   2. kapı adayı yargılıyordu → reddedilen öğe blokluyordu,
+#   3. ilk düzeltme ret kümesine baktı → reddedilen `guncelle` AKTİF değeri geri
+#      yükleyince bayraklı içerik `activation_eligible` olabiliyordu (FAIL-OPEN).
+# Varyant yamamak burada bırakıldı. Kapanış TEK bir çift-yönlü kuralla iddia
+# edilir ve TAM ÇARPIMLA kanıtlanır: **bloklar ANCAK VE ANCAK pakete girecek
+# nihai metin tüketilmemiş bayrak taşıyorsa.**
+#
+# Oracle ELLE yazılıdır (bu dosyanın doktrini): beklenen nihai değer "karar
+# uygulanırsa aday metni, uygulanmazsa aktif metin"dir ve bayrak taraması yerel
+# bir listeyle yapılır — üretim sabitlerinden TÜRETİLMEZ.
+
+_ORACLE_BAYRAKLAR = (
+    "kaynak-bagimli", "genel-gecer", "yerel-degil", "kopya-suphesi",
+    "marka-adi", "eski-kaynak", "metin-ogesi",
+)  # `kanal-bagimli` BİLEREK yok: sağ çıkan tek bayrak odur.
+
+_MATRIS_TEMIZ = "Temiz kanca kalibi"
+_MATRIS_BAYRAKLI = "Bayrakli kanca kalibi [kopya-suphesi]"
+_MATRIS_IKINCI = "Ikinci kanca kalibi"
+
+_BAYRAK_MATRISI = tuple(
+    (aktif, aday, uygulanir)
+    for aktif in (_MATRIS_TEMIZ, _MATRIS_BAYRAKLI)
+    for aday in (_MATRIS_TEMIZ + " v2", _MATRIS_BAYRAKLI + " v2")
+    for uygulanir in (True, False)
+)
+
+
+def _oracle_bayrakli(metin: str) -> bool:
+    """ELLE yazılmış oracle: metinde köşeli ayraçlı, sağ çıkmayan bir bayrak var mı?"""
+    return any(f"[{ad}" in metin for ad in _ORACLE_BAYRAKLAR)
+
+
+def _matris_girdisi(monkeypatch, *, aktif_metin: str, aday_metin: str, uygulanir: bool):
+    """Aktif paketi AKTİF METİNLE kurup, o kancaya bir `guncelle` öneren tur.
+
+    Modül sabitleri monkeypatch'lenir çünkü `_girdi`/`_cift`/`_rapor` aktif paketi
+    ve görüntü hash'ini modül düzeyinden okur; matris aktif değeri DEĞİŞTİRMEK
+    zorundadır (fail-open tam orada doğdu).
+    """
+    import sys
+
+    modul = sys.modules[__name__]
+    aktif = _tam_icerik(kanca_kaliplari=[aktif_metin, _MATRIS_IKINCI])
+    harita = _kimlik_haritasi(aktif)
+    aktif_gunluk = _gunluk(aktif, kimlikler=harita)
+    aktif_birimler = identity.decision_units(aktif, aktif_gunluk)
+    monkeypatch.setattr(modul, "AKTIF_ICERIK", aktif)
+    monkeypatch.setattr(modul, "AKTIF_GUNLUK", aktif_gunluk)
+    monkeypatch.setattr(modul, "AKTIF_BIRIMLER", aktif_birimler)
+    monkeypatch.setattr(modul, "AKTIF_GORUNTU_SHA", identity.canonical_sha(aktif_birimler))
+    monkeypatch.setattr(modul, "KIMLIKLER", harita)
+
+    aday = _tam_icerik(kanca_kaliplari=[aday_metin, _MATRIS_IKINCI])
+    yol = _yol(aday, "kanca_kaliplari", aday_metin)
+    kanit = DOGRULANMIS_KAYNAK if uygulanir else TEK_KAYNAKLI
+    gunluk = _gunluk(
+        aday,
+        kimlikler=dict(harita),
+        degis={yol: {"karar": "guncelle", "kanit": kanit}},
+    )
+    hedef_kimlik = harita[_yol(aktif, "kanca_kaliplari", aktif_metin)]
+    statuler = {hedef_kimlik: "needs_update"}
+    return _girdi(
+        icerik=aday,
+        gunluk=gunluk,
+        cift=_cift(statuler_1=statuler, statuler_2=statuler),
+    )
+
+
+@pytest.mark.parametrize("aktif_metin,aday_metin,uygulanir", _BAYRAK_MATRISI)
+def test_blocking_matches_the_final_package_text_exactly(
+    monkeypatch, aktif_metin: str, aday_metin: str, uygulanir: bool
+) -> None:
+    """ÇİFT YÖNLÜ: bloklar ⟺ NİHAİ metin tüketilmemiş bayrak taşır."""
+    girdi = _matris_girdisi(
+        monkeypatch,
+        aktif_metin=aktif_metin,
+        aday_metin=aday_metin,
+        uygulanir=uygulanir,
+    )
+    sonuc = engine.decide(girdi, PolicyConfig())
+    beklenen_nihai = aday_metin if uygulanir else aktif_metin
+    beklenen_blok = _oracle_bayrakli(beklenen_nihai)
+    bayrak_bloklari = [
+        b
+        for b in sonuc.policy_report.bulgular
+        if b.kontrol == "bayrak_tuketimi" and b.sinif == "acik_soru"
+    ]
+    assert bool(bayrak_bloklari) == beklenen_blok, (
+        f"aktif={aktif_metin!r} aday={aday_metin!r} uygulanir={uygulanir} → "
+        f"beklenen nihai={beklenen_nihai!r} (bayraklı={beklenen_blok}); "
+        f"motor bloklayan bayrak bulgusu={[b.detay[:50] for b in bayrak_bloklari]}"
     )
 
 
@@ -2519,7 +2623,122 @@ def test_a_channel_flag_on_a_cta_surface_stays_silent() -> None:
     sonuc = engine.run_checks(
         _girdi(icerik=aday, gunluk=_gunluk(aday, kimlikler=harita))
     )
-    assert not [b for b in sonuc.bulgular if "bayrak" in b.detay]
+    assert not [b for b in sonuc.bulgular if b.kontrol == "bayrak_tuketimi"]
+
+
+def test_a_channel_flag_on_a_special_day_cta_stays_silent() -> None:
+    """İKİNCİ filtreli yüzey: `ozel_gun[*]/cta` de muaftır.
+
+    **Bu testi kapanış-doğrulama turu ZORUNLU kıldı: mutasyon SAĞ KALMIŞTI.**
+    Hakem `channel_flag_scope_path`'in `or unit_path.endswith("/cta")` kolunu sildi
+    ve zarfın altı test modülü (639 test) YEŞİL kaldı — yani o kol hiçbir testin
+    konusu değildi. Kol taşıyıcıdır: düşerse çalışma zamanı filtresinin GERÇEKTEN
+    koştuğu bir yüzeydeki MEŞRU kanal etiketi koşuyu bloklar (`render_special_day_lines`
+    özel günün `cta` yuvasına filtreyi uygular).
+
+    Önceki pozitif kontrol yalnız `cta_kaliplari` kolunu kuruyordu; iki kollu bir
+    yüklemin tek kolunu ölçmek, ölçülmeyen kolu sessizce kabul etmektir.
+    """
+    aday = _tam_icerik()
+    gun = dict(aday["ozel_gun"][TAKVIM_ANAHTARI])
+    gun["cta"] = "Magazamiza bekleriz [kanal-bagimli: fiziksel_magaza]"
+    aday["ozel_gun"] = {TAKVIM_ANAHTARI: gun}
+    harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
+    yol = f"ozel_gun/{TAKVIM_ANAHTARI}/cta"
+    sonuc = engine.run_checks(
+        _girdi(
+            icerik=aday,
+            gunluk=_gunluk(
+                aday,
+                kimlikler=harita,
+                degis={yol: {"karar": "guncelle", "kanit": DOGRULANMIS_KAYNAK}},
+            ),
+            cift=_cift(
+                statuler_1={harita[yol]: "needs_update"},
+                statuler_2={harita[yol]: "needs_update"},
+            ),
+        )
+    )
+    assert not [b for b in sonuc.bulgular if b.kontrol == "bayrak_tuketimi"], (
+        "özel günün CTA'sı filtreli bir yüzeydir; kanal etiketi orada sağ çıkar"
+    )
+
+
+def test_a_rejected_removal_that_restores_a_flagged_item_blocks() -> None:
+    """REDDEDİLEN `cikar` aktif birimi geri koyar — nihai metin kirliyse BLOKLAR.
+
+    Matris `guncelle` yolunu tam çarpımla kapsıyor; `cikar` nihai içeriğe AYRI bir
+    yoldan (`_geri_konanlar`) ulaşır, o yüzden kendi testi var. Kapanış turu bunu
+    81d5ed6'da kalıntı bir kapsam açığı olarak işaretledi; yargı nihai içeriğe
+    taşındıktan sonra kol KAPANDI ve bu test onu çiviliyor.
+    """
+    bayrakli = "Bayrakli aktif kanca [kopya-suphesi]"
+    ikinci = "Ikinci aktif kanca"
+    import sys
+
+    modul = sys.modules[__name__]
+    aktif = _tam_icerik(kanca_kaliplari=[bayrakli, ikinci])
+    harita = _kimlik_haritasi(aktif)
+    aktif_gunluk = _gunluk(aktif, kimlikler=harita)
+    aktif_birimler = identity.decision_units(aktif, aktif_gunluk)
+    eski = {
+        ad: getattr(modul, ad)
+        for ad in ("AKTIF_ICERIK", "AKTIF_GUNLUK", "AKTIF_BIRIMLER", "AKTIF_GORUNTU_SHA", "KIMLIKLER")
+    }
+    try:
+        modul.AKTIF_ICERIK = aktif
+        modul.AKTIF_GUNLUK = aktif_gunluk
+        modul.AKTIF_BIRIMLER = aktif_birimler
+        modul.AKTIF_GORUNTU_SHA = identity.canonical_sha(aktif_birimler)
+        modul.KIMLIKLER = harita
+        cikan_yol = _yol(aktif, "kanca_kaliplari", bayrakli)
+        cikan_kimlik = harita[cikan_yol]
+        ikinci_kimlik = harita[_yol(aktif, "kanca_kaliplari", ikinci)]
+        aday = _tam_icerik(kanca_kaliplari=["Ikinci kanca guncellendi"])
+        y2 = _yol(aday, "kanca_kaliplari", "Ikinci kanca guncellendi")
+        harita_aday = dict(harita)
+        harita_aday[y2] = ikinci_kimlik  # kimlik ÖĞENİN malı, yolun değil
+        birim = identity.enumerate_content_units(aktif)[cikan_yol]
+        gunluk = _gunluk(
+            aday,
+            kimlikler=harita_aday,
+            degis={y2: {"karar": "guncelle", "kanit": DOGRULANMIS_KAYNAK}},
+            ek=(
+                {
+                    "tur": "karar",
+                    "alan": birim["alan"],
+                    "oge_yolu": cikan_yol,
+                    "unit_id": cikan_kimlik,
+                    "oge_sha": birim["oge_sha"],
+                    "karar": "cikar",
+                    "gerekce": "Kaynaklar celisti.",
+                    "kanit": DOGRULANMIS_KAYNAK,
+                    "aktor": "sentez",
+                },
+            ),
+        )
+        sonuc = engine.decide(
+            _girdi(
+                icerik=aday,
+                gunluk=gunluk,
+                cift=_cift(
+                    statuler_1={cikan_kimlik: "contradicted", ikinci_kimlik: "needs_update"},
+                    statuler_2={cikan_kimlik: "supported", ikinci_kimlik: "needs_update"},
+                ),
+            ),
+            PolicyConfig(),
+        )
+    finally:
+        for ad, deger in eski.items():
+            setattr(modul, ad, deger)
+    assert "mutabakat-yok" in [
+        k.sebep for k in sonuc.policy_report.uygulanmayan_kararlar
+    ], "senaryo kurulmadı: çıkarma reddedilmedi"
+    nihai = dict(sonuc.final_candidate or {})
+    assert any(
+        "kopya" in str(v) for v in (nihai.get("kanca_kaliplari") or ())
+    ), "senaryo kurulmadı: bayraklı birim nihai içeriğe geri konmadı"
+    assert sonuc.sonuc == "blocked" and "acik-soru-var" in (sonuc.sebep or "")
 
 
 def test_a_flag_named_only_in_the_justification_is_silent() -> None:

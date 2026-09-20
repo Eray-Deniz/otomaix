@@ -77,7 +77,10 @@ def _kapi_sonuclari(run: runs.VerifiedRun) -> dict:
 RISKLI_ATIF_GERI_EKLEME = "geri_ekleme_celiskisi"
 """Geri-ekleme çelişkisini üreten kontrolün ADI (`BulguIzi.kontrol`).
 
-Sınıf `acik_soru`'dur ve onu BEŞ ayrı kontrol üretir; ayrım ATIFTAN yapılır.
+Sınıf `acik_soru`'dur ve onu DÖRT ayrı kontrol üretir — `yeni_oge_cogunlugu` ·
+`bayrak_tuketimi` · `geri_ekleme_celiskisi` · `kategori_cakismasi`; ayrım ATIFTAN
+yapılır. ("Beş" yazımı tabanda da yanlıştı: sınıfı ÜRETEN kontrolle onu OKUYAN
+süzgeci [`_acik_soru_kimlikleri`] aynı kovaya koyuyordu — 2026-09-20'de ölçüldü.)
 `detay` metnini eşleştirmek referans bütünlüğü olmayan bir bağ olurdu (İlke 1).
 """
 

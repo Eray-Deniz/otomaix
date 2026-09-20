@@ -6,7 +6,7 @@ Altı sözleşme burada pinlenir:
 1. **BULGUYU SONUCA ÇEVİREN TEK YER `decide`'dır.** `run_checks` bulgu üretir
    (Task 12); uygulama/uygulanmama semantiği BU katmanındır (arayüz eki R7).
    Bu yüzden Task 12'nin "uygulanmaz/korunur" iddiaları buraya TAŞINDI.
-2. **ALTI BULGU SINIFININ ALTISININ DA TÜKETİCİSİ VAR.** `BULGU_SINIFLARI`
+2. **YEDİ BULGU SINIFININ YEDİSİNİN DE TÜKETİCİSİ VAR.** `BULGU_SINIFLARI`
    kapalıdır; `decide`'ın dönüşüm tablosu her değeri karşılar — yapısal kapı
    `test_finding_classes_all_have_a_consumer`'dır.
 3. **K-23=B GÜVENLİ VARSAYILAN.** Motorun karar veremediği madde MEVCUT KALIBI
@@ -338,7 +338,7 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
         tuple(sorted(engine.identity.NOT_SINIFLARI)),
     )
     assert (engine.ENGINE_VERSION, kural_yuzeyi) == (
-        "2.19.0",
+        "2.20.0",
         (
             12,
             (

@@ -146,8 +146,11 @@ class BulguIzi:
     kontrol: str = ""
     """Bulguyu ÜRETEN kontrolün adı (`EngineCheck.ad`) — TEK yazıcısı `run_checks`.
 
-    `sinif` riskli sınıfları ayırt ETMEZ: `acik_soru` sınıfını BEŞ ayrı kontrol
-    üretir. Onay yüzeyi (Task 14, K-42) sıralamayı sınıf ADIYLA kurar; bunu
+    `sinif` riskli sınıfları ayırt ETMEZ: `acik_soru` sınıfını DÖRT ayrı kontrol
+    üretir — `yeni_oge_cogunlugu` · `bayrak_tuketimi` · `geri_ekleme_celiskisi` ·
+    `kategori_cakismasi` (2026-09-20'de ÖLÇÜLDÜ; "beş" yazımı tabanda da yanlıştı
+    ve o sınıfı ÜRETEN kontrolle onu OKUYAN süzgeci [`_acik_soru_kimlikleri`] aynı
+    kovaya koyuyordu). Onay yüzeyi (Task 14, K-42) sıralamayı sınıf ADIYLA kurar; bunu
     `detay` metnini eşleştirerek çözmek referans bütünlüğü olmayan bir bağ
     olurdu (İlke 1). Varsayılan boştur çünkü değeri kontrol gövdesi DEĞİL
     toplayıcı yazar; gövdenin yazdığı bir değer `run_checks` tarafından

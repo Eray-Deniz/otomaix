@@ -1183,9 +1183,16 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         # sınıfının yeniden-açılma koşulu TETİKLEYİCİSİZ kalıyordu: o sınıfı
         # görebilecek tek yapısal veri hiç okunmuyordu. `bayrak_kaydi` sınıfı
         # sonuca dokunmaz (`ETKI_KAYIT`), yalnız onay yüzeyine taşır.
-        # ÖLÇÜLMEYEN KALAN (dürüst etiket): bayrak başına kuralın ANLAM ayağı
-        # (ör. "kopya şüphesi soyutlanarak giderildi mi") mekanik değildir; kayıt
-        # onun YERİNE geçmez, operatörün denetimine dayanak olur.
+        # ÖLÇÜLMEYEN KALAN (dürüst etiket, İKİ ayaklı):
+        # (1) Bayrak başına kuralın ANLAM ayağı (ör. "kopya şüphesi soyutlanarak
+        #     giderildi mi") mekanik DEĞİLDİR; kayıt onun YERİNE geçmez.
+        # (2) KAPSAM: bu kayıt yalnız `ekle` yolunda ve yukarıdaki kapıların
+        #     HEPSİNİ geçen kararlar için üretilir (kapanış turu ölçtü). Bayraklı
+        #     bir denetçi satırını anan `guncelle`/`koru` kararı ya da daha erken
+        #     düşen (`kanit-yok` · `referans-yok` · `oneri-olumsuz` …) bir `ekle`
+        #     için kayıt DOĞMAZ. Yani "sınıfın tetikleyicisi var" cümlesi sınıfın
+        #     bir ALT KÜMESİ için doğrudur. Yeniden açılma koşulu: bu yollardan
+        #     birinde gözden kaçan bir bayrak kuralı ihlali ölçülürse.
         kayitli_bayraklar = sorted(
             {
                 bayrak
@@ -1358,87 +1365,89 @@ def _url_esit(orneklem_url: str, iddia: CIddia | None) -> bool:
     return orneklem_url.strip() == iddia.url.strip()
 
 
+def bayrak_ihlalleri(
+    icerik: Mapping, yol_kimlik: Mapping[str, str]
+) -> tuple[tuple[str | None, str, tuple[str, ...]], ...]:
+    """Bir İÇERİKTE tüketilmemiş bayrak taşıyan birimler: (unit_id, yol, bayraklar).
+
+    **Kural TEK yerde yaşar ve İKİ tüketicisi vardır** (2026-09-20 kapanış turu):
+    `bayrak_tuketimi` kontrolü onu ADAY içerik üstünde koşar (sentezin ÖNERDİĞİ),
+    `decide` ise NİHAİ içerik üstünde (pakete GERÇEKTEN girecek olan). İki ayrı
+    yazım olsaydı biri diğerini onaylamayan iki doğruluk kaynağı doğardı — o sınıf
+    bu turda ölçülerek görüldü.
+
+    Muafiyet: kanal bayrağı YALNIZ çalışma zamanı filtresinin koştuğu yüzeylerde
+    sağ çıkar (`channel_flag_scope_path` — doktrinin evi).
+    """
+    bulunan: list[tuple[str | None, str, tuple[str, ...]]] = []
+    for yol, birim in identity.enumerate_content_units(dict(icerik)).items():
+        muaf = {SAG_CIKAN_BAYRAK} if channel_flag_scope_path(yol) else set()
+        tukenmeyen = tuple(sorted(_bayraklar(_metin(birim["deger"])) - muaf))
+        if tukenmeyen:
+            bulunan.append((yol_kimlik.get(yol), yol, tukenmeyen))
+    return tuple(bulunan)
+
+
+def bayrak_detayi(bayraklar: tuple[str, ...], *, nihai: bool) -> str:
+    """Bulgu metni — TEK üretici (iki çağrı yerinde ayrışmasın)."""
+    if SAG_CIKAN_BAYRAK in bayraklar:
+        return (
+            f"kanal bayrağı, marka-gerçeği filtresinin KOŞMADIĞI bir yüzeyde: "
+            f"{list(bayraklar)} — filtre ve etiket temizleme yalnız CTA yüzeylerinde "
+            f"koşar; burada etiket üretim istemine aynen basılır"
+        )
+    nerede = "PAKETE GİRECEK nihai içerikte" if nihai else "aday öğe metninde"
+    return (
+        f"tüketilmemiş bayrak {nerede} duruyor: {list(bayraklar)} — kalan yedi "
+        f"bayrak sentezde TÜKETİLİR, kalıp metnine yapışık kalmaz"
+    )
+
+
 def _bayrak_tuketimi(inputs: EngineInputs) -> CheckOutput:
-    """Tüketilmemiş bayrak PAKETE GİRECEK metinde mi? — yüzey sözleşmenin lafzı.
+    """Tüketilmemiş bayrak ADAY öğe metninde mi? — yüzey sözleşmenin lafzı.
 
     **Yüzey 2026-09-20'de DEĞİŞTİ (ölçülerek).** Kontrol `kanit`+`gerekce` DÜZ
     YAZISINI tarıyordu; oysa pinlenmiş sentez sözleşmesi bayrağın tüketimini tam
     olarak ORAYA yazdırır — "kalan yedi bayrağın hepsi burada TÜKETİLİR (karar +
     gerekçe olarak decision_log'a geçer, kalıp metnine yapışık kalmaz)". Yani
-    kontrol, sözleşmenin bayrağı yazmasını İSTEDİĞİ yeri tarayıp ceza kesiyordu:
-    sentez sözleşmeye uyduğu için açık soru üretiyordu. Yasak olan yüzey
-    `kalıp metni`dir ("ÖTEKİ BAYRAKLAR PAKETE GİRMEZ" genel hükmü) ve o yüzeyi
-    hiçbir kontrol taramıyordu.
+    kontrol, sözleşmenin bayrağı yazmasını İSTEDİĞİ yeri tarayıp ceza kesiyordu.
+    Yasak olan yüzey `kalıp metni`dir ("ÖTEKİ BAYRAKLAR PAKETE GİRMEZ") ve o
+    yüzeyi hiçbir kontrol taramıyordu.
 
-    **Kusur 3'ün kilidi buydu (ölçüldü, `kosu-222706dc…`):** bayraklı bir
-    denetçi satırını anan karar için bayrağı gerekçede AÇIKLARSA bu kapı,
-    AÇIKLAMAZSA çoğunluk kapısının bayrak bloğu (2026-09-20'de KALDIRILDI) açık
-    soru üretiyordu; satırı hiç anmazsa `referans-yok` ile reddediliyordu. Açık
-    soru BLOKLADIĞI için denetçinin bayrakladığı bir kalemi içeren paket
-    `activation_eligible` OLAMIYORDU. O koşumda motorun açık sorularının TAMAMI
-    bu iki kapıdan geliyordu ve bayrak taşıyan satırların HİÇBİRİNDE pakete
-    girecek metin kirli değildi. Sayılar, üreten komutları ve 2026-09-19
-    kaydıyla uzlaştırmaları burada DEĞİL, ölçüm ve UZLAŞTIRMA kaydı: `docs/active/sektor-bilgi-paketi-plan2/K134-MOTOR-KARSILASTIRMA.md` → "Bayrak kapılarının iki ölçümü".
+    **Bu kontrol ADAYı ölçer — SONUCU `decide` verir.** Adayda duran bir bayrak
+    kalemin pakete GİRECEĞİ anlamına gelmez (karar reddedilebilir) ve adayın temiz
+    olması pakete bayrak GİRMEYECEĞİ anlamına da gelmez (reddedilen bir `guncelle`
+    AKTİF değeri geri yükler). İkisi de ölçüldü; bu yüzden bloklama kararı nihai
+    içerik üstünde, `decide` içinde verilir. Burada üretilen bulgu "sentez böyle
+    bir kalem ÖNERDİ" olgusudur.
 
-    **Yazım kapısına DEVREDİLMEDİ — kapsam ölçüldü, örtüşmüyor.** Gerçek aday
+    Ölü satırlar (`cikar`/`kirp`) taranmaz: yolları AKTİF paketindir ve yollar SIRA
+    ORDİNALİ taşıdığı için adaydaki yaşayan bir yolla çakışıp bulguyu ÇIKARILAN
+    birime atfediyorlardı (bağımsız hakem bulgusu, ölçüldü).
+
+    **Yazım kapısına devredilmedi — kapsam ölçüldü, örtüşmüyor.** Gerçek aday
     içeriğin her metin hücresine tek tek bayrak konduğunda `structural_errors`
     yalnız CTA yüzeylerini reddediyor, geri kalanı GEÇİRİYOR (sayılar ve komut
-    ölçüm kaydında).
-    Motorun bulgu koyduğu alanların (`kanca_kaliplari` · `gorsel_kodlar` ·
-    `video_kodlar` · `takvim_temalari` · `ozel_gun[*].gorsel_vurgu` ·
-    `ton_ve_dil`) hiçbirinde yazım kapısı bayrağı durdurmuyor.
-
-    Yalnız ADAYDA duran YAŞAYAN öğeler taranır: paketten DÜŞEN bir öğenin
-    (`cikar`/`kirp`) metnindeki bayrak bu turun ürünü değildir ve pakete de
-    girmez. Adaydaki HER yolun tam bir yaşayan satır tarafından sahiplendiğini
-    `identity.check_unit_integrity` iki yönlü küme eşitliğiyle ölçer ve
-    `_sema_ve_boyut` onu SIRADA İLK, fail-closed koşar; kural burada İKİNCİ kez
-    yazılmaz. (2026-09-20'de düzeltildi: bu satır garantiyi `karar_kapsami`'na
-    atfediyordu — o kontrol AKTİF birimlerin sonuç taşımasını ölçer, kapsama
-    eşitliğini DEĞİL. Kapı gerçekten vardı, adı yanlış yazılmıştı — İlke 1,
-    referans bütünlüğü.)
+    ölçüm kaydında: ölçüm ve UZLAŞTIRMA kaydı:
+    `docs/active/sektor-bilgi-paketi-plan2/K134-MOTOR-KARSILASTIRMA.md`
+    → "Bayrak kapılarının iki ölçümü").
     """
-    birimler = identity.enumerate_content_units(_aday_icerik(inputs))
-    bulgular: list[BulguIzi] = []
-    for satir in _karar_satirlari(inputs):
-        # ÖLÜ satır (`cikar`/`kirp`) TARANMAZ ve yolu ARANMAZ — bağımsız hakem
-        # bulgusu (2026-09-20), ÖLÇÜLDÜ. Ölü satırın `oge_yolu`su AKTİF paketin
-        # yoludur, yaşayanların ki ADAYIN; yollar SIRA ORDİNALİ taşır. Listenin
-        # BAŞINDAN bir öğe düşünce kalanlar kayar ve iki yol AYNI dizgeye düşer:
-        # yol araması aynı bayrağı İKİ kez buluyor ve birini PAKETTEN ÇIKARILAN
-        # birime atfediyordu. `unit_id` onay yüzeyinde basılır, yani operatör
-        # "attığın öğenin pakete girecek metninde bayrak var" cümlesini görüyordu.
-        if satir.get("karar") not in identity.YASAYAN_KARARLAR:
-            continue
-        yol = satir.get("oge_yolu")
-        birim = birimler.get(yol)
-        if birim is None:
-            continue
-        # Kanal bayrağının muafiyeti, ÇALIŞMA ZAMANI filtresinin kapsamı KADARDIR
-        # (Eray kararı 2026-09-20: daralt). Yüklem doktrinin evinden gelir
-        # (`sector_content_schema.channel_flag_scope_path`) — ikinci bir kapsam
-        # ifadesi yazılmaz. Muafiyet eskiden TÜM yüzeylerde koşulsuzdu; ölçüldü ki
-        # filtrenin koşmadığı bir yüzeydeki kanal etiketi ne eleniyor ne siliniyor,
-        # üretim istemine AYNEN basılıyor.
-        muaf = {SAG_CIKAN_BAYRAK} if channel_flag_scope_path(_metin(yol)) else set()
-        tukenmeyen = sorted(_bayraklar(_metin(birim["deger"])) - muaf)
-        if not tukenmeyen:
-            continue
-        if SAG_CIKAN_BAYRAK in tukenmeyen:
-            detay = (
-                f"kanal bayrağı, marka-gerçeği filtresinin KOŞMADIĞI bir yüzeyde: "
-                f"{tukenmeyen} — filtre ve etiket temizleme yalnız CTA yüzeylerinde "
-                f"koşar; burada etiket üretim istemine aynen basılır"
-            )
-        else:
-            detay = (
-                f"tüketilmemiş bayrak pakete girecek metinde duruyor: "
-                f"{tukenmeyen} — kalan yedi bayrak sentezde TÜKETİLİR, "
-                f"kalıp metnine yapışık kalmaz"
-            )
-        bulgular.append(
-            BulguIzi(sinif="acik_soru", unit_id=satir["unit_id"], detay=detay)
+    yol_kimlik = {
+        _metin(satir.get("oge_yolu")): satir["unit_id"]
+        for satir in _karar_satirlari(inputs)
+        if satir.get("karar") in identity.YASAYAN_KARARLAR
+    }
+    bulgular = [
+        BulguIzi(
+            sinif="acik_soru",
+            unit_id=kimlik,
+            detay=bayrak_detayi(bayraklar, nihai=False),
         )
+        for kimlik, _yol, bayraklar in bayrak_ihlalleri(
+            _aday_icerik(inputs), yol_kimlik
+        )
+        if kimlik is not None
+    ]
     return CheckOutput(bulgular=tuple(bulgular))
 
 
@@ -1842,11 +1851,26 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 # ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
 # bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
 
-ENGINE_VERSION: str = "2.19.0"
+ENGINE_VERSION: str = "2.20.0"
 """Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
 
 Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
 kuralı değiştiğinde eski koşuların sonucu yenisiyle karşılaştırılamaz.
+
+**2.19.0 → 2.20.0 (2026-09-20, KAPANIŞ-DOĞRULAMA turunun bulgusu).** Bayrak yargısının
+DAYANAĞI değişti: "karar reddedildi mi" yerine "PAKETE GİRECEK nihai metin kirli mi".
+2.19.0'ın düzeltmesi ret kümesine bakıyordu ve FAIL-OPEN açmıştı — reddedilen bir `guncelle`
+AKTİF değeri geri yükler; aktif değer bayraklıysa paket o bayrakla `activation_eligible`
+olabiliyordu (ÖLÇÜLDÜ: nihai içerik `Eski aktif kanca [kopya-şüphesi]` taşıdı, sebep=None).
+Kural artık TEK fonksiyonda (`bayrak_ihlalleri`) ve İKİ yerde koşuyor: kontrol adayı ölçer,
+`decide` nihai içeriği yargılar. Adayda görünmemiş bir ihlal (geri yüklenen aktif değer)
+`decide`'da YENİ bulgu olarak doğar. Aynı girdi farklı sonuç verir: bayraklı aktif değeri geri
+yükleyen tur artık BLOKLAR.
+
+**KAPSAM SINIRI, dürüst etiket:** parmak izi bu değişikliği YAKALAMAZ — sebep kümesi, kural
+kimlikleri, kontrol adları, bulgu sınıfları ve not sınıfları DEĞİŞMEDİ; değişen şey yargının
+DAYANAĞI. Damga elle artırıldı. Kapanışın kanıtı damga değil, `test_blocking_matches_the_final_
+package_text_exactly` ÜRETİLMİŞ matrisidir (tam çarpım, çift yönlü; iki mutasyonla sınandı).
 
 **2.18.0 → 2.19.0 (2026-09-20, bağımsız review turunun bulguları).** ÜÇ uygulama
 kuralı değişti: (a) `bayrak_tuketimi` ölü satırları (`cikar`/`kirp`) ARTIK taramaz —
@@ -1857,8 +1881,14 @@ kanal etiketi artık açık soru üretir; (c) BLOKLAMAYAN `bayrak_kaydi` sınıf
 ve iki yerde kullanılır: kararın andığı denetçi satırının tipli bayrakları kayda
 geçer, VE motorun REDDETTİĞİ kalemin bayrak bulgusu bloklamak yerine kayda döner.
 Aynı girdi artık farklı sonuç verir: eskiden bloklanan iki durum artık bloklamaz,
-CTA dışı kanal etiketi ise artık bloklar. Parmak izi bu değişikliği YAKALAR
-(`BULGU_ETKILERI` sınıf kümesi büyüdü) — damga elle değil, kapıyla artırıldı.
+CTA dışı kanal etiketi ise artık bloklar.
+
+**KAPSAM SINIRI, dürüst etiket (2026-09-20 kapanış turu düzeltmesi).** Bu paragraf
+önce "parmak izi bu değişikliği YAKALAR" diyordu; ölçüldü ki üç değişiklikten yalnız
+BİRİ yakalanıyor: (c) `BULGU_ETKILERI` sınıf kümesinin büyümesi parmak izindedir,
+ama (a) ölü satır süzgeci ve (b) kanal kapsam daralması sebep kümesini, kural
+kimliklerini, kontrol adlarını ve not sınıflarını DEĞİŞTİRMEZ. Yani damga o ikisi
+için ELLE artırıldı; kapı yalnız üçüncüsünü zorluyor.
 
 **2.17.0 → 2.18.0 (2026-09-20).** İKİ uygulama kuralı değişti, ikisi de bayrak
 tüketimi: (a) `bayrak_tuketimi` artık karar günlüğünün `kanit`+`gerekce` DÜZ
@@ -2535,28 +2565,6 @@ def decide(inputs: EngineInputs, config: PolicyConfig) -> EngineResult:
     """
     outcome = run_checks(inputs)
     reddedilen = _reddedilenler(outcome)
-    # UYGULAMA KATMANININ İŞİ (2026-09-20, bağımsız review turu — ÖLÇÜLDÜ):
-    # `bayrak_tuketimi` adayı tarar, oysa REDDEDİLEN bir `ekle` nihai pakete
-    # GİRMEZ (`_nihai_icerik` onu düşürür). Kapı yine `acik_soru` üretiyordu ve
-    # `acik_soru` BLOKLAR — yani kapatılan kilit sınıfı yeni bir yoldan geri
-    # gelmişti: pakete hiç girmeyecek bir metin aktivasyonu durduruyordu.
-    # Bulgu SESSİZCE DÜŞMEZ, sınıfı KAYDA döner: sentezin sözleşmeyi ihlal eden
-    # bir kalem ÖNERMESİ kayda değer bir olgudur, yalnız bloklama etkisi düşer.
-    # Yeri BURASI çünkü ret kümesi kontrolLERİN çıktısıdır — kontrol saf kalır
-    # ("`run_checks` ölçer; `decide` uygular").
-    outcome = replace(
-        outcome,
-        bulgular=tuple(
-            replace(bulgu, sinif="bayrak_kaydi")
-            if (
-                bulgu.kontrol == "bayrak_tuketimi"
-                and bulgu.sinif == "acik_soru"
-                and bulgu.unit_id in reddedilen
-            )
-            else bulgu
-            for bulgu in outcome.bulgular
-        ),
-    )
     aday_dusenleri = _eslesmeyen_ozel_gunler(
         _aday_icerik(inputs), inputs.takvim_anahtarlari
     )
@@ -2564,6 +2572,57 @@ def decide(inputs: EngineInputs, config: PolicyConfig) -> EngineResult:
     nihai, yollar, dusen_kimlikler, dusen_anahtarlar = _nihai_icerik(
         inputs, reddedilen, aday_dusenleri
     )
+    # BAYRAK YARGISI NİHAİ İÇERİK ÜSTÜNDE VERİLİR (2026-09-20, kapanış turu —
+    # ÖLÇÜLDÜ). İki yanlış yol da bu turda ölçülerek görüldü:
+    #   (a) Kontrol adayı tarıyor; REDDEDİLEN bir `ekle` pakete girmez, ama bulgusu
+    #       `acik_soru` olarak koşuyu BLOKLUYORDU — kapatılan kilit sınıfı yeni bir
+    #       yoldan geri gelmişti.
+    #   (b) İlk düzeltme bunu RET KÜMESİNE bakarak çözmeye çalıştı ve FAIL-OPEN açtı:
+    #       reddedilen bir `guncelle` AKTİF değeri geri yükler. Aktif değer bayraklıysa
+    #       paket o bayrakla `activation_eligible` olabiliyordu (kendi ölçümüm:
+    #       nihai içerik `Eski aktif kanca [kopya-şüphesi]` taşıdı, sebep=None).
+    # Doğru yüklem "karar reddedildi mi" DEĞİL, "pakete girecek metin kirli mi".
+    # Aynı kural (`bayrak_ihlalleri`) burada NİHAİ içerik üstünde koşar: kirli olan
+    # BLOKLAR, adayda önerilmiş ama pakete girmeyen KAYDA döner, ve adayda hiç
+    # görünmemiş bir ihlal (geri yüklenen aktif değer) burada YENİ bulgu olarak doğar.
+    nihai_yol_kimlik = {yol: kimlik for kimlik, yol in (yollar or {}).items()}
+    nihai_ihlaller = {
+        kimlik: bayraklar
+        for kimlik, _yol, bayraklar in bayrak_ihlalleri(nihai, nihai_yol_kimlik)
+        if kimlik is not None
+    }
+    yeniden: list[BulguIzi] = []
+    gorulen_bayrak_kimlikleri: set[str] = set()
+    for bulgu in outcome.bulgular:
+        if bulgu.kontrol != "bayrak_tuketimi":
+            yeniden.append(bulgu)
+            continue
+        gorulen_bayrak_kimlikleri.add(bulgu.unit_id)
+        if bulgu.unit_id in nihai_ihlaller:
+            yeniden.append(
+                replace(
+                    bulgu,
+                    sinif="acik_soru",
+                    detay=bayrak_detayi(nihai_ihlaller[bulgu.unit_id], nihai=True),
+                )
+            )
+        else:
+            # Önerildi ama pakete GİRMEDİ: olgu kayda geçer, bloklamaz.
+            yeniden.append(replace(bulgu, sinif="bayrak_kaydi"))
+    for kimlik, bayraklar in sorted(nihai_ihlaller.items()):
+        if kimlik in gorulen_bayrak_kimlikleri:
+            continue
+        # Adayda YOKTU, nihai içerikte VAR — geri yüklenen aktif değer.
+        yeniden.append(
+            BulguIzi(
+                sinif="acik_soru",
+                unit_id=kimlik,
+                detay=bayrak_detayi(bayraklar, nihai=True),
+                kontrol="bayrak_tuketimi",
+            )
+        )
+    outcome = replace(outcome, bulgular=tuple(yeniden))
+
     takvim_dusenleri = dusen_kimlikler["eslesmeyen_takvim"]
     koru_ihlalleri = _koru_ihlalleri(inputs)
 
