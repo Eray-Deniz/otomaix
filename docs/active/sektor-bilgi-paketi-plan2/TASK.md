@@ -1538,7 +1538,7 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[YÜKSEK — SIRADAKİ OTURUMUN İŞİ] Pilotu bloklayan kusurlar: 1 ve 2 KAPANDI, 3 ve 4 AÇIK.**
+- **[YÜKSEK] Pilotu bloklayan kusurlar: 1 · 2 · 3 KAPANDI; 4 AÇIK (sıra kusuru).**
   Kaynak ölçüm dosyası: **`K134-MOTOR-KARSILASTIRMA.md`** (2026-09-19 koşumunun ölçümleri;
   etiketler o günkü hâliyle durur). Dördü de canlı koşuda ölçülmüştü; ilk üçü birlikte
   kapatıldığında mutasyon varyantı **`activation_eligible`** veriyordu (46 karar · açık soru 0 ·
@@ -1566,18 +1566,33 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
      doğru; çareleri kusur 1'dir. Meşru tek-yuva çıkarma bu kusuru doğuramıyor (yarım aday
      motorun GİRİŞ kapısından geçmiyor).
 
-  3. **AÇIK — SIRADAKİ İŞ. İki bayrak kapısı birbirini kilitliyor; bayraklı kalem içeren paket
-     aktive EDİLEMEZ.** `bayrak_tuketimi` sentezin kendi `kanit`+`gerekce` DÜZ YAZISINI tarıyor;
-     `yeni_oge_cogunlugu` ise denetçi satırının TİPLİ `bayraklar` sütununu okuyor — sentezin o
-     sütuna erişimi yok. Bayrağı gerekçede açıklarsan birinci kapı, açıklamazsan ikinci kapı
-     açık soru üretiyor; satırı hiç anmazsan `referans-yok` ile red. Açık soru BLOKLUYOR.
-     Ölçüm iki yönlü: bayraklar temizlenince motorun 18 açık sorusunun TAMAMI sıfıra iniyor.
-     **Sınıf:** serbest düz yazıdan "X tüketildi" negatifini kalıp eşleştirmeyle kanıtlama —
-     bu projede daha önce yakınsamadığı ölçülmüş desen. **Yön:** tüketimi düz yazıdan değil
-     YAPISAL bir alandan oku (sentez kararında açık "tüketilen bayraklar" hücresi), iki kapıyı
-     tek kaynağa bağla. Sözleşme değişikliği gerektirir.
-     **Uyarı (kusur 1'in dersi):** düzeltmeye başlamadan ÖNCE mekanizmayı aç ve ölç — kusur 1'de
-     kökün teşhisi ölçünce değişti (kural değil, veri eksikti) ve kapsam kusur 2'de daraldı.
+  3. **KAPANDI (2026-09-20, `1611d1f` + düzeltme turu).** Teşhis kayıttakinden FARKLI çıktı:
+     iki kapı da sözleşmenin YASAKLAMADIĞI yüzeyleri tarıyordu — biri (`bayrak_tuketimi`) tam
+     olarak sözleşmenin bayrağı YAZDIRDIĞI yeri (`decision_log` gerekçesi), öteki denetçinin
+     kendi sütununu (bayrağı oraya denetçi yazar, tüketim sonraki adımdadır). Sözleşmenin
+     yasakladığı yüzey — pakete girecek KALIP METNİ — hiçbiri tarafından taranmıyordu.
+     **Sözleşme değişikliği GEREKMEDİ** (kayıt "gerekir" diyordu; ölçüm çürüttü) ve yeni yapısal
+     alan da açılmadı. Kapı A'nın yüzeyi öğe metnine taşındı, kapı B'nin bayrak bloğu kaldırıldı.
+     **Yazım kapısına devredilmedi — kapsam ölçüldü, örtüşmüyor** (60 hücrenin 43'ünü geçiriyor,
+     reddettikleri yalnız CTA).
+     **Bağımsız review turu (dual: Codex + taze Claude alt-hakemi) İKİ HIGH + DÖRT MEDIUM + DÖRT
+     LOW buldu; hepsi düzeltildi** — rapor `docs/reviews/2026-09-20-feat-sektor-bilgi-paketi-plan2.md`:
+     (H1) tipli bayrak bilgisi tümden atılmıştı → BLOKLAMAYAN `bayrak_kaydi` bulgu sınıfı
+     (`ETKI_KAYIT`) ile geri geldi; (H2) motorun REDDETTİĞİ kalemin metni koşuyu blokluyordu →
+     `decide` bulgunun sınıfını kayda düşürür; (M1) ölü satırın aktif yolu sıra kayması yüzünden
+     adaydaki yaşayan yolla çakışıp bulguyu ÇIKARILAN birime atfediyordu → ölü satırlar taranmaz;
+     (M2) kanal bayrağı muafiyeti filtrenin kapsamından genişti → **Eray kararı: DARALT**;
+     (M3) koda yazdığım ölçüm sayıları deponun kaydıyla uzlaşmıyordu ve yanlarında komut yoktu
+     (İlke 9) → sayılar koddan çıktı, uzlaştırma + üreten komut `K134-MOTOR-KARSILASTIRMA.md`
+     → "Bayrak kapılarının iki ölçümü" bölümüne yazıldı. Dört low: bayat/yanlış yorumlar + vakum test.
+     **Codex'in bir ayağı ölçümle REDDEDİLDİ:** "marka-adı bayraklı içerik serbest kalır" —
+     `_check_banned_brand_names` gerçek marka adlarını DB'den çekip arıyor, motordan ÖNCE koşuyor.
+     **Motor sürümü 2.17.0 → 2.19.0.** Tam takım 4625 passed / 0 failed (337 s). Dört mutasyonun
+     dördü de yakalandı.
+     **DOĞRULANMADI — yeşil sayma:** (a) yeni kapının `koru` kolu, aktif paketi OLAN bir sektörde
+     denenmedi (pilot sektörün aktif paketi yok); (b) bayrak başına kuralın ANLAM ayağı mekanik
+     DEĞİLDİR ve `bayrak_kaydi` onun yerine geçmez — operatör denetimine dayanaktır;
+     (c) modelin EK-M'yi doğru kullanacağı hâlâ ölçülmedi (kusur 1'in davranış ayağı).
 
   4. **AÇIK — sıra kusuru (küçük). EV: yeni koşu açılmadan ÖNCE.** Motor Katman-1 tasdikini
      otomatik kapı olarak okuyor, plan sırası ise `motor → yazım → katman1`. `attest_katman1`'in
@@ -1596,6 +1611,23 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   **Eray kararı (2026-09-19, hâlâ geçerli): tören YOK** — spec seansı açılmaz, düzeltme doğrudan
   başlar; review gerekirse düzeltme SIRASINDA çağrılır. Kusur 3 sözleşmeye ve motorun kapı
   anlamına dokunduğu için review çağırmanın en makul yeri orasıdır.
+
+- **[DÜŞÜK — DÜŞÜRÜLDÜ, KOŞULLU 2026-09-20] `eski-kaynak` bayrağının çoğunluk kuralı hiçbir
+  yerde uygulanmıyor.** Sözleşme diyor: *"[eski-kaynak] bayraklı iddia 'ekle' eşiğinde
+  dezavantajlıdır: taze kaynak yoksa tekil iddia gibi işle (mutabakat eşiğini tek başına
+  geçemez)."* **Ölçüldü (grep):** motorda bu kuralın karşılığı YOK — bayrak yalnız
+  `bayrak_kaydi` ile kayda geçer, çoğunluk sayımını etkilemez. **Bu koşudaki parası ÖLÇÜLDÜ:
+  sıfır** — iki ilgili kararda da bayraksız bir atıf zaten 2+ kaynak taşıyor, kural işletilse
+  sonuç değişmiyordu. **Dürüst etiket: çözülmedi + bilinçle düşürüldü** ("uyumlu" DEĞİL).
+  **Yeniden açılma koşulu:** bir kararın çoğunluğu YALNIZ `eski-kaynak` bayraklı atıfa dayandığı
+  ilk vaka.
+
+- **[DÜŞÜK — AÇIK, EV: aktif paketi olan İLK sektör] Yeni bayrak kapısının `koru` kolu
+  doğrulanmadı.** Kapı artık aday içeriğin YAŞAYAN her öğesini tarıyor — `koru` satırları dâhil.
+  Yani aktif pakette DURAN eski bir bayrak bundan sonra açık soru üretir. **Ölçülemedi:** pilot
+  sektörün aktif paketi YOK (ilk koşu), o yüzden bu dal hiç koşmadı. **Dürüst etiket:
+  doğrulanmadı.** Yön fail-closed (fazla bulgu, eksik değil) ama etkisi bir koşuyu bloklamaktır.
+  **Ev:** aktif paketi olan ilk sektörün ilk koşusu — o koşuda bu kol ölçülür.
 
 - **[YÜKSEK — EV: kusur 3 kapandıktan sonraki ilk oturum] Yeni pilot koşusu açılmalı.**
   **ÖN KOŞULLARI (bu koşudan önce ödenecek):** kusur 3 · kusur 4 (sıra) · ölü-koşu kusuru.

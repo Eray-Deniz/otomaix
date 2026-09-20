@@ -217,3 +217,55 @@ taslak ön koşulu YOKTUR (`runs.py`, `_write_attestation`) — yani katman1 mot
 ikincildi (`regresyon_kapisi` yalnız aktivasyonu engeller, değişiklik yokken
 sebep listesine bile girmedi), ama bir sonraki koşuda sıra düzeltilmezse aynı
 bulgu tekrar çıkar.
+
+---
+
+# Bayrak kapılarının iki ölçümü — uzlaştırma (2026-09-20)
+
+**Neden iki ölçüm var:** bu dosyanın yukarıdaki gövdesi **2026-09-19**'un fotoğrafıdır ve
+motor **2.15.0** ile alınmıştır. Kusur 1 ve 2 düzeltmeleri (`c64861f` · `9e4e21a` · `16ae7c6`)
+ret yollarını değiştirdi: EK-M iddia dizini bağlandıktan sonra satırlar **daha erken** düşüyor
+(`iddia-alani-uyusmuyor`), yani çoğunluk kontrolünün bayrak bloğuna **daha az satır ulaşıyor**.
+Bu yüzden aynı koşu kimliği iki farklı sayı verir. İkisi de doğrudur; **karşılaştırma yapan
+okuyucu motor sürümünü birlikte okumalıdır.**
+
+| Ölçüm | Motor | Açık soru (motorun kendi bulgusu) | Bayrak bulgusu | Bayraklı satır / pakete girecek metni kirli olan |
+|---|---|---|---|---|
+| 2026-09-19 (yukarıdaki gövde) | 2.15.0 | **18** | 18 (5 birim · 8 bulgu tablosu §"Motorun operatörde OLMAYAN katkısı") | ölçülmedi |
+| 2026-09-20 (kusur 3 turu) | 2.17.0 | **8** | 8 → kapı A 5 · kapı B 3 | **11 / 0** |
+
+**`11` sayısı nedir:** karar günlüğünde ÜÇ yüzeyden herhangi birinde bayrak taşıyan karar
+satırı sayısı (A: sentezin `kanit`+`gerekce` düz yazısı = 5 · B: denetçinin tipli `bayraklar`
+sütunu = 10 · C: pakete girecek öğe metni = **0**). Birleşimi 11 satırdır. Yukarıdaki gövdenin
+"5 birim" tablosu yalnız **kapı B'nin bulgu ürettiği** birimleri sayar — farklı bir küme,
+çelişki değil.
+
+**Yazım kapısı kapsamı (aynı gün, aynı koşunun gerçek adayı):** 60 metin hücresine tek tek
+`[eski-kaynak]` konduğunda `structural_errors` **17**'sini reddetti, **43**'ünü geçirdi;
+reddedilenlerin tamamı CTA yüzeyleri (`cta_kaliplari` 12 + `ozel_gun[*].cta` 5).
+
+**Kanal etiketi yüzey dağılımı (daraltma kararının faturası):** aday içerikte sağ çıkan kanal
+bayrağını taşıyan **7** birimin **6**'sı filtreli yüzeyde (CTA), **1**'i değil
+(`gorsel_kodlar` → `[kanal-bağımlı: fiziksel_magaza]`).
+
+## Üreten komut — dürüst etiket
+
+Sayılar **commit'li bir test değil**, tek kullanımlık problarla alındı; probların kendisi
+korunmadı (scratchpad). Yeniden üretmek için gereken şey şudur ve bağlayıcı olan budur:
+
+1. Motorun gerçek girdisini kur — `sector_pipeline_cli` içindeki `_kosu_satiri` ·
+   `_aktif_paket` · `_klasor_girdileri` · `_takvim` çağrılarıyla ve DB'deki `synthesis`
+   artefaktından `SynthesisResult` ile, `_kos_motor`'un yaptığı sırayla. **`record_result`
+   ÇAĞRILMAZ** (ölçüm salt-okunur).
+2. `engine.decide(girdiler, PolicyConfig())` → `policy_report.bulgular` sayılır.
+3. Üç yüzey: `engine._bayraklar` sırayla (a) satırın `kanit`+`gerekce` birleşimine,
+   (b) `engine._denetci_satirlari(girdiler)[<atıf>].bayraklar`'a, (c) aday içerik biriminin
+   değerine uygulanır; `SAG_CIKAN_BAYRAK` çıkarılır.
+4. Yazım kapısı kapsamı: aday içeriğin her yaprak metnine tek tek bayrak eklenip
+   `sector_content_schema.structural_errors` çağrılır.
+
+**Prob kirlenmesi ölçüldü ve üç kez düzeltildi** (bu oturum): (a) `final_candidate` blocked
+sonuçta boştur → nihai içerik `engine._nihai_icerik`ten okunmalı, (b) taban içerik şema-geçersiz
+olursa her mutasyon alakasız sebeple reddedilir → taban gerçek aday olmalı, (c) prob motorun
+kendi yüklemini kopyalamamalı, çağırmalı. Prob yazan sonraki oturum: **önce taban varyantının
+canlı sonucu birebir ürettiğini doğrula.**
