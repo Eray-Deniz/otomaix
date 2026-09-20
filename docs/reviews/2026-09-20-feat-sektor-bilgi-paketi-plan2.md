@@ -121,3 +121,116 @@ benim o anki sayımı doğruladı.
 - **Dürüst etiket:** işaretçiler MUTLAK yoldur, ham kanıt proje klonuyla TAŞINMAZ (K4 kabul
   edilen risk). Alt-hakemin `.claude.md` dosyası onun KENDİ raporudur; ana Claude'un sentezi
   ve disposition'ı bu dosyadır.
+
+---
+
+# Attempt 2 — kapanış-doğrulama (aynı pinli sözleşme, sınırlı etki zarfı)
+
+Aralık: `022d75d..81d5ed6` · workspace: pinned worktree @ `81d5ed6` (clean)
+dual-review: **true** (Codex `adversarial-review` + taze Claude alt-hakemi, ikisi de KOŞTU)
+Contract-widening istenmedi; zarf dışı yeni C/H sinyali YOK.
+
+## Adlandırılmış bulguların kapanış yargısı
+
+| # | Codex | Claude alt-hakemi | Sonuç |
+|---|---|---|---|
+| H1 | kapandı | kapandı (kapsamı dar → low) | **kapandı**, kapsam sınırı etiketlendi |
+| H2 | "adlandırılmış vaka kapandı, ama genelleştirme YENİ high açtı" | kapandı; maskeleme riskini ölçtü, bulgu çıkmadı | **yeni high → düzeltildi** (aşağıda) |
+| M1 · M2 · M3 · L1–L4 | kapandı | kapandı | **kapandı** |
+
+**Geriledi: hiçbiri.** İki hakem de bunu ayrı ayrı ölçtü (mutasyonla).
+
+## YENİ high (attempt-2'nin ürünü) — ve kapanışı
+
+**[H3 — high, single-source: codex, claude-confirmed] Reddedilen `guncelle` AKTİF değeri geri
+yükler; 2.19.0'ın düzeltmesi FAIL-OPEN açmıştı.** Sınıf düşürmesi "birim ret kümesinde mi" diye
+bakıyordu; oysa yalnız reddedilen bir `ekle` pakete girmemeyi GARANTİ eder. Kendi ölçümüm
+(Codex'in iddiasını olduğu gibi almadım):
+
+```
+SONUC             : activation_eligible   sebep=None
+NİHAİ kanca_kaliplari: ('Eski aktif kanca [kopya-şüphesi]', ...)
+>>> BLOKLANDI MI: HAYIR — fail-open
+```
+
+Yani paket yasak bir bayrakla aktive edilebiliyordu. Önceki hâl fazla bulgu üretiyordu; bu
+düzeltme SESSİZ kalıyordu — daha kötü yön.
+
+**Disposition: fixed — VARYANT DEĞİL SINIF kapatıldı.** Bu eksen üç turda üç varyantla açıldı
+(düz yazı → aday → ret kümesi). Yamamak bırakıldı: doğru yüklem "karar reddedildi mi" DEĞİL,
+"pakete girecek nihai metin kirli mi". Kural TEK fonksiyonda (`bayrak_ihlalleri`) ve İKİ yerde
+koşuyor — kontrol adayı ölçer, `decide` nihai içeriği yargılar. Adayda görünmemiş bir ihlal
+(geri yüklenen aktif değer) `decide`'da YENİ bulgu olarak doğar.
+
+**Kapanış kanıtı ÜRETİLMİŞ MATRİS** (`test_blocking_matches_the_final_package_text_exactly`):
+aktif metin (bayraklı/temiz) × aday metin (bayraklı/temiz) × karar (uygulandı/reddedildi) = 8
+vakanın TAM ÇARPIMI, çift yönlü iddia ("bloklar ⟺ nihai metin kirli"), oracle ELLE yazılı.
+İki mutasyonla dişi sınandı: fail-open geri konunca tam o vaka kırmızı; düşürme tümden
+kaldırılınca ters yöndeki vaka kırmızı.
+
+## Attempt-2'nin öteki bulguları
+
+- **[medium — claude] `/cta` kolu ÖLÇÜLMÜYOR; mutasyon SAĞ KALDI.** Hakem
+  `channel_flag_scope_path`'in `or unit_path.endswith("/cta")` kolunu sildi ve 639 test yeşil
+  kaldı. **Disposition: fixed** — kol için test yazıldı.
+  **Kapatırken KENDİ testimde daha kötü bir kusur buldum:** ilk yazımın süzgeci
+  `"bayrak" in b.detay` idi ve kanal mesajı **"bayrağı"** yazıyor (ğ ≠ k) → süzgeç onu HİÇ
+  görmüyordu. Yani test tespit edemediği bir garantiyi onaylıyordu; mutasyon düzeltmeden SONRA
+  da sağ kaldı. Üç süzgeç yapısal ölçüte (`b.kontrol == "bayrak_tuketimi"`) çevrildi; mutasyon
+  ancak ondan sonra yakalandı.
+- **[low — claude] `_bayrak_tuketimi`'nin ilan ettiği yüzey taradığından geniş; reddedilen
+  `cikar` aktif birimi geri koyuyor ve taranmıyor.** **ÖLÇÜMLE GEÇERSİZ:** hakem `81d5ed6`'yı
+  inceledi; yargı nihai içeriğe taşındıktan sonra bu kol KAPANDI — kendi probum `blocked` +
+  `acik-soru-var` veriyor ve nihai içerikte bayraklı birim görülüyor. Yine de kola test yazıldı
+  (`test_a_rejected_removal_that_restores_a_flagged_item_blocks`).
+- **[low ×4 — claude] fixed:** modül başlığı "ALTI bulgu sınıfı" → yedi · `bayrak_kaydi`'nın
+  test anlatımında "NOT" denmesi (o küme pinli dış sözleşmeyle çivili, üretilen şey BULGU) ·
+  2.19.0 damga notunun "parmak izi YAKALAR" iddiası (üç değişiklikten yalnız biri yakalanıyor) ·
+  `channel_flag_scope_path(_metin(yol))` nit'i.
+- **[low — claude] H1 tetikleyicisinin KAPSAMI:** kayıt yalnız `ekle` yolunda ve altı kapıyı
+  geçen kararlar için doğar. **Disposition: fixed (etiketleme)** — kodda iki ayaklı dürüst etiket
+  + yeniden açılma koşulu.
+- **[low pre-existing — claude] "`acik_soru` sınıfını BEŞ ayrı kontrol üretir" yanlış.**
+  Kendi ölçümüm: `sinif="acik_soru"` beş fonksiyonda geçiyor ama biri kontrol DEĞİL, o sınıfı
+  OKUYAN süzgeç (`_acik_soru_kimlikleri`) → üreten **dört** kontrol. İki sitede düzeltildi.
+
+## Hakemlerin ölçüp BULGU ÇIKARMADIĞI riskler (kayda geçer)
+
+- Bloklamayan sınıfı yanlış işleyen tüketici **YOK** — depo geneli tarandı: `decide` açık
+  `ETKI_KAYIT` kolu · `readiness.BLOKLAYAN_BULGU_SINIFLARI` etkiden TÜREİYOR · `_acik_soru_kimlikleri`
+  sınıf bazlı süzüyor · `approval._bulgu_ayrimi` sınıfı `uyarilar`'a taşıyor ve operatör özetinde
+  **basıyor** (yani "onay yüzeyine taşır" iddiası DOĞRULANDI) · migration'larda sınıf sayan
+  CHECK/enum yok.
+- Sınıf düşürmesinin bloklaması gerekeni maskeleme yolu ölçüldü; tek şüpheli yol
+  (`_eylem`'in `birim is None` kolu) `_karar_kapsami` tarafından `kapsam_ihlali` ile zaten
+  bloklanıyor.
+- Codex'in attempt-1'de reddedilen ayağının reddi DOĞRULANDI (marka adı kapısı motordan önce,
+  fail-closed).
+
+## Doğrulama (taze çıktı, düzeltmelerden SONRA)
+
+| Ne | Sonuç |
+|---|---|
+| Tam takım (TEMİZ koşum) | **4635 passed / 0 failed**, 334,21 s |
+| Test sayısı | 4625 → 4635 (+10: 8 matris vakası + 2 test; aritmetik tutuyor) |
+| Motor sürümü | 2.19.0 → **2.20.0** (parmak izi bunu YAKALAMAZ — dürüst etiket damganın yanında) |
+| Matris | 8/8, çift yönlü, iki mutasyonla sınandı |
+| `/cta` kolu mutasyonu | süzgeç düzeltildikten SONRA yakalanıyor |
+
+**TAM TAKIM SAPMASI — dürüst etiket ve çözümü.** Hem alt-hakem hem ben, düzeltme turu sırasında
+temiz tam koşum ÜRETEMEDİK (46/20 · 58/51 · 39/22 hata). Düşen kümenin TAMAMI DB/migration
+altyapısıydı, zarf modüllerinde sıfır düşüş, küme koşumlar arası DEĞİŞİYOR ve izole koşumda
+geçiyor. **Sebep alt-hakem bitince ölçüldü:** `otomaix_test_scratch` scratch veritabanını iki
+koşum birlikte kurup düşürüyor. Alt-hakem "kesinlikle çevresel demiyorum, tabanda kontrol
+koşumu yapmadım" diye dürüstçe sınırladı; **kontrol koşumu SONRADAN yapıldı ve temiz geldi
+(4635/0)** — atıf artık ölçülmüş.
+
+## Stop-rule durumu — kullanıcı checkpoint'i
+
+- `completed_evaluations` = **2** (attempt-1 dual, attempt-2 dual) · `consecutive_degraded` = 0 ·
+  `total_invocations` = 2 → terminal backstop (6) DOLMADI.
+- Unresolved critical/high: **yok.**
+- **AMA:** attempt-2'nin açtığı high'ın (H3) düzeltmesi **attempt-2'den SONRA** yapıldı, yani
+  **bağımsız hakem onu görmedi.** Stop-rule "attempt-2 sonrası otomatik 3. pas YOK → human
+  checkpoint" diyor; bu yüzden üçüncü tur KENDİLİĞİNDEN koşulmadı. Kapanış kanıtı şu an
+  **kontrolörün üretilmiş matrisi**, hakem `approve`'u DEĞİL — dürüst etiket.

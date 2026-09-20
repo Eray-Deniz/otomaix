@@ -1589,10 +1589,36 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
      `_check_banned_brand_names` gerçek marka adlarını DB'den çekip arıyor, motordan ÖNCE koşuyor.
      **Motor sürümü 2.17.0 → 2.19.0.** Tam takım 4625 passed / 0 failed (337 s). Dört mutasyonun
      dördü de yakalandı.
+     **KAPANIŞ-DOĞRULAMA TURU (attempt-2, dual) KOŞTU ve YENİ BİR HIGH buldu.** Adlandırılmış
+     bulguların hepsi kapalı, hiçbiri gerilemedi; ama H2 için yaptığım düzeltme FAIL-OPEN açmıştı:
+     sınıf düşürmesi "birim ret kümesinde mi" diye bakıyordu, oysa yalnız reddedilen bir `ekle`
+     pakete girmemeyi garanti eder — reddedilen bir `guncelle` AKTİF değeri geri yükler ve o değer
+     bayraklıysa paket `activation_eligible` olabiliyordu (kendi ölçümüm: nihai içerik
+     `Eski aktif kanca [kopya-şüphesi]` taşıdı, sebep=None).
+     **Bu eksen üç turda üç varyantla açıldığı için VARYANT DEĞİL SINIF kapatıldı:** yargının
+     dayanağı artık "pakete girecek NİHAİ metin kirli mi". Kural tek fonksiyonda
+     (`bayrak_ihlalleri`), iki yerde koşuyor (kontrol adayı ölçer, `decide` nihai içeriği yargılar).
+     Kapanış kanıtı **üretilmiş matris**: aktif × aday × (uygulandı/reddedildi) tam çarpımı,
+     çift yönlü, elle yazılmış oracle, iki mutasyonla sınandı. Motor **2.20.0**.
+     Ayrıca: sağ kalan bir mutasyon (`/cta` kolu) kapatıldı ve kapatırken KENDİ testimin süzgeci
+     (`"bayrak" in detay`) kanal mesajını ("bayrağı", ğ≠k) hiç görmediği ölçüldü — üç süzgeç
+     yapısal ölçüte çevrildi. Altı low düzeltildi; biri (`cikar` geri yükleme) ölçümde GEÇERSİZ
+     çıktı çünkü hakem yeniden tasarımdan önceki commit'i incelemişti.
+     **Tam takım: 4635 passed / 0 failed (334 s).** Düzeltme turu sırasındaki 39-58 hatanın sebebi
+     ölçüldü: alt-hakem aynı yerel PostgreSQL'in scratch veritabanını kurup düşürüyordu; hakem
+     bitince temiz koşum geldi.
+
+     **AÇIK CHECKPOINT — kullanıcı kararı bekliyor:** attempt-2'nin açtığı high'ın düzeltmesi o
+     turdan SONRA yapıldı, yani **bağımsız hakem onu görmedi**. Stop-rule "attempt-2 sonrası
+     otomatik 3. pas YOK" dediği için üçüncü tur kendiliğinden koşulmadı. Bugünkü kapanış kanıtı
+     kontrolörün üretilmiş matrisidir, hakem `approve`'u DEĞİLDİR.
+
      **DOĞRULANMADI — yeşil sayma:** (a) yeni kapının `koru` kolu, aktif paketi OLAN bir sektörde
      denenmedi (pilot sektörün aktif paketi yok); (b) bayrak başına kuralın ANLAM ayağı mekanik
      DEĞİLDİR ve `bayrak_kaydi` onun yerine geçmez — operatör denetimine dayanaktır;
-     (c) modelin EK-M'yi doğru kullanacağı hâlâ ölçülmedi (kusur 1'in davranış ayağı).
+     (c) modelin EK-M'yi doğru kullanacağı hâlâ ölçülmedi (kusur 1'in davranış ayağı);
+     (d) `bayrak_kaydi` yalnız `ekle` yolunda ve altı kapıyı geçen kararlar için doğar — H1'in
+     tetikleyicisi sınıfın bir ALT KÜMESİNİ kapsar (kodda etiketli).
 
   4. **AÇIK — sıra kusuru (küçük). EV: yeni koşu açılmadan ÖNCE.** Motor Katman-1 tasdikini
      otomatik kapı olarak okuyor, plan sırası ise `motor → yazım → katman1`. `attest_katman1`'in

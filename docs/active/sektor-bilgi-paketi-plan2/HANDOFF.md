@@ -5,8 +5,14 @@ written: 2026-09-20
 
 # Resume From
 
-**Kusur 3 KAPANDI ve bağımsız review turundan geçti. SIRADAKİ İŞ: kusur 4 (sıra kusuru) + ölü
-koşu kusuru — ikisi de yeni pilot koşusunun ÖNÜNDE. İŞ CLAUDE'DA.**
+**Kusur 3 kapandı; İKİ review turu (attempt-1 + kapanış) koştu. AÇIK BİR CHECKPOINT VAR (aşağıda).
+SIRADAKİ İŞ: kusur 4 (sıra kusuru) + ölü koşu kusuru — ikisi de yeni pilot koşusunun ÖNÜNDE.**
+
+**AÇIK CHECKPOINT — Eray kararı bekliyor:** kapanış turu, H2 düzeltmemin FAIL-OPEN açtığını buldu
+(reddedilen `guncelle` bayraklı aktif değeri geri yüklüyor ve paket aktive olabiliyordu). Sınıfı
+kapattım ve üretilmiş matrisle kanıtladım, ama **o düzeltmeyi bağımsız hakem GÖRMEDİ** — stop-rule
+"attempt-2 sonrası otomatik 3. pas YOK" diyor. Seçenek: üçüncü tur koşulsun mu, yoksa matris
+kanıt sayılsın mı? Bugünkü kapanış kontrolör yargısıdır, hakem `approve`'u DEĞİLDİR.
 
 **Eray kararı (2026-09-19, hâlâ geçerli): tören YOK.** Spec seansı açılmaz, plan yazılmaz;
 düzeltme doğrudan başlar. Review gerekirse düzeltme SIRASINDA çağrılır — kusur 3'te böyle
@@ -29,26 +35,36 @@ ile 2.17.0 ölçümü farklı sayı verir, ikisi de doğrudur).
 
 # Verification
 
-**Bu oturumda ÜRETİM KODU DEĞİŞTİ.** Bir commit (`1611d1f`) atıldı; review turunun düzeltmeleri
-**henüz commit edilmedi** (Eray onayı bekliyor).
+**Bu oturumda ÜRETİM KODU DEĞİŞTİ.** ÜÇ commit atıldı (`1611d1f` kusur 3 · `9b87c95` attempt-1
+düzeltmeleri · `81d5ed6` kayıt); **kapanış turunun düzeltmeleri henüz commit EDİLMEDİ** (Eray
+onayı bekliyor).
 
 | Ne | Taze çıktı |
 |---|---|
 | Tam takım (kusur 3 ilk hâli) | 4619 passed / 0 failed, 335,51 s |
-| Tam takım (review düzeltmelerinden SONRA, SON) | **4625 passed / 0 failed**, 337,31 s |
-| Test sayısı | 4618 → 4619 → **4625** (+1, sonra +6; aritmetik tutuyor) |
-| Motor sürümü | 2.17.0 → 2.18.0 → **2.19.0** |
+| Tam takım (review düzeltmelerinden SONRA) | 4625 passed / 0 failed, 337,31 s |
+| Tam takım (kapanış turu düzeltmelerinden SONRA, SON) | **4635 passed / 0 failed**, 334,21 s |
+| Test sayısı | 4618 → 4619 → 4625 → **4635** (+1, +6, +10; aritmetik tutuyor) |
+| Motor sürümü | 2.17.0 → 2.18.0 → 2.19.0 → **2.20.0** |
 | Sözleşme | **2.6, DOKUNULMADI** — kusur 3 sözleşme değişikliği gerektirmedi |
-| Dual review | Codex `adversarial-review` + taze Claude alt-hakemi, ikisi de KOŞTU |
+| Review turu | İKİ dual tur: attempt-1 + kapanış-doğrulama; dört hakem koşumu da tamamlandı |
+| Kapanış kanıtı | ÜRETİLMİŞ matris (8 vaka, çift yönlü, 2 mutasyonla sınandı) — hakem approve'u DEĞİL |
 
 **Alt-hakem tam takımı bağımsız koşturdu:** 4619 passed / 332,44 s (düzeltmelerden önceki hâl) —
 benim o anki sayımı doğruladı.
 
-**Mutasyonla ölçülen kapılar (dördü de yakalandı; hepsi yedekten geri alındı, bayt-eşit doğrulandı):**
+**Mutasyonla ölçülen kapılar — YEDİ mutasyon, yedisi de yakalandı; hepsi yedekten geri alındı ve
+`cmp` ile bayt-eşit doğrulandı:**
 - Ölü satır süzgeci kaldırıldı → çakışma testi kırmızı.
 - Kanal muafiyeti yine koşulsuz yapıldı → CTA-dışı testi kırmızı.
-- `decide` sınıf düşürmesi kaldırıldı → reddedilen-ekleme testi kırmızı.
 - Tipli bayrak kaydı kaldırıldı → iki test kırmızı.
+- `decide` sınıf düşürmesi kaldırıldı → reddedilen-ekleme testi kırmızı.
+- Yargı yine ret kümesine bağlandı (FAIL-OPEN geri) → matrisin tam o vakası kırmızı.
+- Düşürme tümden kaldırıldı (her bayrak bloklar) → matrisin TERS yöndeki vakası kırmızı.
+- `channel_flag_scope_path`'in `/cta` kolu silindi → özel gün CTA testi kırmızı.
+  **Dürüst etiket:** bu son mutasyon ilk denemede SAĞ KALDI, çünkü testimin süzgeci
+  `"bayrak" in detay` idi ve kanal mesajı "bayrağı" yazıyor (ğ≠k) — süzgeç onu hiç görmüyordu.
+  Yapısal ölçüte (`b.kontrol == "bayrak_tuketimi"`) çevrildikten SONRA yakalandı.
 
 **Gerçek koşuda (`kosu-222706dc…`) ölçülen davranış, yeni motorla:** bayrak kaynaklı açık soru
 **8 → 1**. Kalan 1, daraltma kararının ÖNGÖRÜLEN faturası: `gorsel_kodlar` kaleminin
@@ -68,6 +84,12 @@ karar), sentezin kendi açık soruları ve kusur 4'ün regresyon kapısı yüzü
 - **`yazim` · `katman1/2` · `onay` · `aktive-et` ayakları HÂLÂ hiç koşmadı.**
 - Bu oturumda **DB'ye hiçbir şey yazılmadı**; koşu satırlarına dokunulmadı, `record_result`
   çağrılmadı.
+
+**TAM TAKIM SAPMASI ÖLÇÜLDÜ — sonraki oturum için tuzak.** Düzeltme turu sırasında üç ayrı tam
+koşum 39-58 hata verdi (`FATAL: database "otomaix_test_scratch" does not exist`). Sebep kod DEĞİL:
+alt-hakem aynı yerel PostgreSQL'in scratch veritabanını kurup düşürüyordu. Hakem bitince temiz
+koşum geldi (4635/0). **Arka planda test koşan bir iş varken tam takımı koşturma** — çıktı birebir
+gerilemeye benziyor.
 
 **PROB ÜÇ KEZ KİRLENDİ, üçü de düzeltildi.** (1) Yazım kapısı kapsamını ölçen ilk prob taban
 içeriği şema-geçersiz kurmuştu → her mutasyon alakasız sebeple reddediliyordu; taban gerçek
