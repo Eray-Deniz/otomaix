@@ -116,6 +116,48 @@ adlandırılmış kusur.** (Kod değişmedi; bu ölçüm girdiyi elle kırparak 
 (`sector_pipeline_cli.py:958`), plan sırası ise `motor → yazım → katman1`. `attest_katman1`'in
 taslak ön koşulu YOK, yani katman1 motordan ÖNCE tasdiklenebilir — plan sırası düzeltilmeli.
 
+**2026-09-20 DOKUZUNCU OTURUM — KUSUR 1 ve KUSUR 2 KAPANDI.** Tören yok kararı uygulandı:
+spec/plan açılmadı, düzeltme doğrudan yapıldı. Motor sürümü `2.15.0` → `2.17.0`; sözleşme 2.6
+(dış depo `d907e05`), pin tazelendi. Tam takım **4618 passed / 0 failed**.
+
+**Kusur 1 — sentez artık iddia dizinini GÖRÜYOR (EK-M).** Dizin motorun `kaynak_iddia`'yı
+çözerken okuduğu tablonun TA KENDİSİNDEN üretilir: numaralandırma kuralı motorun içinden
+çıkarılıp tek bir genel üreticiye (`auditors.iddia_evreni`) taşındı, iki taraf da onu çağırır.
+İkinci bir kopya, sentezin DOĞRU numarayı yazdığı hâlde motorun başka satırı çözebildiği bir
+pencere açardı. Dizin motorun KARŞILAŞTIRDIĞI anahtarı basar (Bölüm C hücresi kaçışlı gelebiliyor),
+dönem satırını sistem anahtarıyla listeler, anahtarı çözülemeyen satırı "yazma" başlığı altına alır.
+**Boş dizin turu BAŞLATMAZ** (EK-K emsali) — boş dizinle koşmak kusura geri dönmektir.
+**Sözleşmenin üç tutulamaz vaadi düzeltildi:** "ham kaynaklara gerektiğinde bak" · "her alanın ham
+kaynak kesiti bağlamda bulunur" · "tek denetçili iddiada önce ham kaynağa bak" — aracın ham
+kaynaklara erişimi YOK; üçü de EK-M'ye bağlandı. 2.5'te bağlanmış ama girdi listesine hiç
+yazılmamış EK-L de listeye girdi.
+**Kökün teşhisi DEĞİŞTİ:** sözleşmenin KURALI zaten doğruydu (*"o satırın `alan/dönem` hücresi
+kararın `alan`ıyla örtüşür"*); eksik olan kural değil VERİYDİ.
+**Ölçüm (canlı koşunun kendi baytlarıyla, motorun gerçek girdisinden):** 52 `ekle` kararının 8'i
+alan-dışı atıf taşıyor ve **sekizinde de** kararın kendi alanına ait doğru atıflar zaten duruyor;
+dizin 8 vakanın 8'inde tahmini yalanlıyor. Gerçek veriyle üretilen EK-M 1551 bayt.
+**Yan kalem de kapandı:** `iddia-arastirmada-yok` iki ayrı kapıyı tek adla söylüyordu; artık
+"araştırmada yok" ile `iddia-alani-uyusmuyor` ayrı. Arayüz eki R-D3 hizalandı.
+
+**Kusur 2 — yetkilendirilemeyen dönem adaya HİÇ yazılmıyor; kusur kayıttakinden GENİŞ çıktı.**
+Boş kabuk uç hâldi. `decide` ile uçtan uca ölçüldü: 5 yuvanın 5'i kabul → `activation_eligible`,
+5 karar; **TEK yuva reddedildiğinde → `blocked`, 0 karar.** Yani dönemin tek yuvası koşunun
+ÖTEKİ kararlarını da götürüyordu (canlı koşuda 51 sağlam karar). Dönem şemada ATOMİK, motor ise
+yuvaları tek tek çıkarıyordu. Düzeltme `_nihai_icerik`'te: yuva kümesi tamamlanamayan dönem
+tümüyle düşer; kova seçimi K-91'in ayrımıyla İÇERİKTEN ölçülür (pakette olan dönem düşerse
+değişiklik, hiç girmemiş aday düşerse değil).
+**KAPSAM DARALTILDI — üç şekil hatasının yalnız biri motor kusuru.** `ton_ve_dil` eksik alanı ve
+`video_kodlar['sahne']` boş havuzu ZORUNLU yapılar; yetkilendirilmiş içerik yoksa ve geri
+dönülecek aktif değer yoksa motorun bloklaması DOĞRUDUR — çaresi kusur 1'dir, daha gevşek bir
+kapı değil. Ayrıca ölçüldü: meşru "tek yuva çıkarma" bu kusuru DOĞURAMAZ, çünkü yarım yuvalı aday
+motorun GİRİŞ şema kapısından geçemiyor.
+**Kendi açtığım borç, dürüst etiketle kapatıldı:** bu bir UYGULAMA KURALI değişikliğiydi, damga
+arttı — ama `test_engine_version_is_pinned_to_the_RULE_SURFACE` bunu YAKALAYAMAZ (parmak izi sebep
+kümesini/kontrol adlarını ölçer, aday kurma kuralını değil). Sınır damganın yanına yazıldı;
+regex'le kapatılmaya ÇALIŞILMADI (yakınsamadığı ölçülmüş desen).
+
+**SIRADAKİ İŞ: Kusur 3 (bayrak kilidi). İŞ CLAUDE'DA.** Kusur 4 (sıra) ve ölü-koşu kalemi açık.
+
 **KARAR BEKLİYOR — yürütücü tek başına kapatamaz** (paket içeriği · izolasyon kipi · sözleşme
 hükmü). Kalanlar: sentez kökü (`sentez/<koşu>/`) DOLU, `mkdir` `exist_ok` KULLANMIYOR → aynı
 kimlikle yeniden koşmak için klasör kenara alınmalı; koşu satırı `calisiyor` ve kullanılabilir.
@@ -1496,53 +1538,68 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[YÜKSEK — SIRADAKİ OTURUMUN İŞİ] Pilotu bloklayan dört kusur (2026-09-19, motor koşumundan).**
-  Kaynak ölçüm dosyası: **`K134-MOTOR-KARSILASTIRMA.md`**. Dördü de canlı koşuda ölçüldü;
-  ilk üçü birlikte kapatıldığında mutasyon varyantı **`activation_eligible`** veriyor
-  (46 karar uygulanıyor · açık soru 0 · yazım hatası 0). **Hat çalışıyor; bloklayan bunlar.**
+- **[YÜKSEK — SIRADAKİ OTURUMUN İŞİ] Pilotu bloklayan kusurlar: 1 ve 2 KAPANDI, 3 ve 4 AÇIK.**
+  Kaynak ölçüm dosyası: **`K134-MOTOR-KARSILASTIRMA.md`** (2026-09-19 koşumunun ölçümleri;
+  etiketler o günkü hâliyle durur). Dördü de canlı koşuda ölçülmüştü; ilk üçü birlikte
+  kapatıldığında mutasyon varyantı **`activation_eligible`** veriyordu (46 karar · açık soru 0 ·
+  yazım hatası 0).
 
-  1. **Sentez ham araştırma raporlarını GÖRMÜYOR → `kaynak_iddia` numaraları tahmin.**
-     Sözleşmenin ek listesi EK-A · EK-F/G · EK-H · EK-I · EK-J · EK-K · EK-L
-     (`hakem-sentez-gorevi.md:112-128`); ham raporlar listede YOK. Sentez iddia→alan
-     hücresini göremediği için numaraları denetçilerin kullanımından tahmin etti ve bunu
-     çıktısının ilk cümlesinde BEYAN ETTİ. Motor `any(bağsız) → reddet` uyguluyor
-     (`engine.py:1047`): tek bir komşu-alan atıfı kararın tamamını düşürüyor. **8 red
-     bundan** (`ton_ve_dil`, `yasaklar[1]`, `yasaklar[4]`, beş video sahnesi) ve üç yazım
-     hatasının ikisi buradan doğuyor.
-     **Öneri:** iddia→alan dizinini sentez paketine makine-üretimi bir EK olarak vermek
-     (EK-L deseni). Dizin motorda ZATEN üretiliyor (`engine.py:821 _arastirma_iddialari`),
-     yeniden yazılmayacak. **Sözleşme değişikliği gerektirir.**
-     **Yan kusur, ayrı kalem:** motorun red etiketi `iddia-arastirmada-yok` YANILTICI —
-     numaraların hepsi araştırmada VAR (ölçüldü: K1 17 · K2 39 · K3 42 iddia; anılan 19
-     etiketin 19'u bulundu). Etiket "numara yok" derken gerçek sebep "alan tutmuyor".
+  1. **KAPANDI (2026-09-20, `c64861f` + `9e4e21a`; sözleşme dış depo `d907e05`).** Sentez ham
+     araştırma raporlarını göremediği için `kaynak_iddia` numaralarını tahmin ediyordu. Artık
+     **EK-M iddia dizini** istemde ve motorun çözüm tablosunun TA KENDİSİNDEN üretiliyor;
+     numaralandırma kuralı tek üreticide (`auditors.iddia_evreni`). Boş dizin turu başlatmaz.
+     Sözleşmenin üç tutulamaz ham-kaynak vaadi EK-M'ye bağlandı, EK-L girdi listesine girdi.
+     Yan kalem de kapandı: red etiketi `iddia-arastirmada-yok` / `iddia-alani-uyusmuyor` diye
+     AYRILDI, arayüz eki R-D3 hizalandı.
+     **DOĞRULANMADI — yeşil sayma:** modelin dizini gerçekten doğru kullanacağı ÖLÇÜLMEDİ.
+     Yapısal körlük kalktı ve 8 vakanın 8'inde dizin tahmini yalanlıyor; ama davranış iddiası
+     GERÇEK bir sentez turu ister (ölçülmüş maliyet: bir önceki sentez turu 941 sn + para).
+     Bu doğrulamanın evi: kusur 3 kapandıktan SONRA açılacak yeni koşu (aşağıdaki "yeni koşu"
+     kalemi) — ayrı bir tur harcanmaz.
 
-  2. **Yetkilendirilemeyen dönem adaya yazılıyor.** 10 Kasım tek kaynaklı; beş anahtarı da
-     `cogunluk-yok` ile düştü ve geriye BOŞ bir `ozel_gun` girdisi kaldı → şema kapısı
-     reddetti. **Öneri:** sentez, çoğunluk yetkisi olmayan dönemi adaya HİÇ yazmasın
-     (bugün yazıyor ve boş kabuk bırakıyor).
+  2. **KAPANDI (2026-09-20, `16ae7c6`).** Kusur kayıttakinden GENİŞ çıktı: boş kabuk uç hâldi,
+     dönemin TEK yuvası reddedildiğinde de aday tümüyle atılıyordu (ölçüldü: 5/5 kabul →
+     `activation_eligible` 5 karar; 1 yuva red → `blocked` 0 karar). Dönem şemada atomik; yuva
+     kümesi tamamlanamayan dönem artık tümüyle düşer, kova K-91 ayrımıyla içerikten seçilir.
+     **Kapsam daraltıldı:** öteki iki şekil hatası (`ton_ve_dil` eksik alan · `video_kodlar`
+     boş havuz) motor kusuru DEĞİL — zorunlu yapılar, yetkilendirilmiş içerik yokken bloklamak
+     doğru; çareleri kusur 1'dir. Meşru tek-yuva çıkarma bu kusuru doğuramıyor (yarım aday
+     motorun GİRİŞ kapısından geçmiyor).
 
-  3. **İki bayrak kapısı birbirini kilitliyor — bayraklı kalem içeren paket aktive EDİLEMEZ.**
-     `bayrak_tuketimi` sentezin kendi `kanit`+`gerekce` DÜZ YAZISINI tarıyor; `yeni_oge_cogunlugu`
-     ise denetçi satırının TİPLİ `bayraklar` sütununu okuyor (`engine.py:1180`) — sentezin o
-     sütuna erişimi yok. Sonuç: bayrağı gerekçede açıklarsan birinci kapı, açıklamazsan ikinci
-     kapı açık soru üretiyor; satırı hiç anmazsan `referans-yok` ile red. Açık soru BLOKLUYOR.
+  3. **AÇIK — SIRADAKİ İŞ. İki bayrak kapısı birbirini kilitliyor; bayraklı kalem içeren paket
+     aktive EDİLEMEZ.** `bayrak_tuketimi` sentezin kendi `kanit`+`gerekce` DÜZ YAZISINI tarıyor;
+     `yeni_oge_cogunlugu` ise denetçi satırının TİPLİ `bayraklar` sütununu okuyor — sentezin o
+     sütuna erişimi yok. Bayrağı gerekçede açıklarsan birinci kapı, açıklamazsan ikinci kapı
+     açık soru üretiyor; satırı hiç anmazsan `referans-yok` ile red. Açık soru BLOKLUYOR.
      Ölçüm iki yönlü: bayraklar temizlenince motorun 18 açık sorusunun TAMAMI sıfıra iniyor.
      **Sınıf:** serbest düz yazıdan "X tüketildi" negatifini kalıp eşleştirmeyle kanıtlama —
-     daha önce de yakınsamadığı ölçülmüş desen. **Öneri:** tüketimi düz yazıdan değil YAPISAL
-     bir alandan oku (sentez kararına açık bir "tüketilen bayraklar" hücresi), iki kapıyı tek
-     kaynağa bağla.
+     bu projede daha önce yakınsamadığı ölçülmüş desen. **Yön:** tüketimi düz yazıdan değil
+     YAPISAL bir alandan oku (sentez kararında açık "tüketilen bayraklar" hücresi), iki kapıyı
+     tek kaynağa bağla. Sözleşme değişikliği gerektirir.
+     **Uyarı (kusur 1'in dersi):** düzeltmeye başlamadan ÖNCE mekanizmayı aç ve ölç — kusur 1'de
+     kökün teşhisi ölçünce değişti (kural değil, veri eksikti) ve kapsam kusur 2'de daraldı.
 
-  4. **Sıra kusuru (küçük).** Motor Katman-1 tasdikini otomatik kapı olarak okuyor
-     (`sector_pipeline_cli.py:958`), plan sırası ise `motor → yazım → katman1`.
-     `attest_katman1`'in taslak ön koşulu YOK (`runs.py` `_write_attestation`), yani katman1
+  4. **AÇIK — sıra kusuru (küçük).** Motor Katman-1 tasdikini otomatik kapı olarak okuyor, plan
+     sırası ise `motor → yazım → katman1`. `attest_katman1`'in taslak ön koşulu YOK, yani katman1
      motordan ÖNCE tasdiklenebilir. **Öneri:** plan Task 19 sırasını `katman1 → motor` yap.
 
-  **Ayrıca, bu dördünden BAĞIMSIZ:** ölü koşu iş kabul ediyor — `mark_incomplete` koşulsuz ve
-  terminal yazıyor, hiçbir adım başlarken koşunun canlı olup olmadığına bakmıyor, geri açma
-  yolu yok. Bu oturumda satır elle onarıldı (Eray onayı); **kusur DURUYOR.**
+  **Bu dörtten BAĞIMSIZ — AÇIK:** ölü koşu iş kabul ediyor. `mark_incomplete` koşulsuz ve
+  terminal yazıyor, hiçbir adım başlarken koşunun canlı olup olmadığına bakmıyor, geri açma yolu
+  yok. 2026-09-19'da satır elle onarıldı (Eray onayı); **kusur DURUYOR.**
 
-  **Eray kararı (2026-09-19): tören YOK — spec seansı açılmayacak.** Düzeltme yeni bir oturumda
-  doğrudan başlar; gerekirse düzeltme sırasında review çağrılır. Bu oturum kapatıldı.
+  **Eray kararı (2026-09-19, hâlâ geçerli): tören YOK** — spec seansı açılmaz, düzeltme doğrudan
+  başlar; review gerekirse düzeltme SIRASINDA çağrılır. Kusur 3 sözleşmeye ve motorun kapı
+  anlamına dokunduğu için review çağırmanın en makul yeri orasıdır.
+
+- **[YÜKSEK — EV: kusur 3 kapandıktan sonraki ilk oturum] Yeni pilot koşusu açılmalı.**
+  Koşu `kosu-222706dc…` TÜKENDİ (`tamamlandi`/`blocked`); `motor` ikinci kez yazmaz, `yazim`
+  `activation_eligible` ister — o koşudan taslak ÇIKMAZ. Düzeltmelerin gerçek kodda işe yarayıp
+  yaramadığı (kusur 1'in davranış ayağı dâhil) ancak yeni koşuda ölçülür.
+  **Ölçülmüş maliyet:** `denetim` 956 sn + `sentez` 941 sn + para. **K-134 körlük tabanı geri
+  GELMEZ** — kalibrasyon bir kez alınabilirdi, alındı.
+  **Koşmadan önce:** sentez kökü (`sentez/<koşu>/`) DOLU ve `mkdir` `exist_ok` kullanmıyor;
+  yeni koşum yeni kimlik alır. Model turundan ÖNCE offline replay yapılır (kayıtlı çıktı + sahte
+  runner) — bu oturumda da EK-M'nin gerçek gövdesi böyle görüldü, tur harcanmadı.
 
 - **[ORTA — EV VERİLDİ, TETİK: Plan 2 kapanışı] Aktif paket kök rehberi tamamen susturuyor.**
   **Ölçüldü:** `app/routers/ai.py:505-518` — aktif paket varken `SECTOR_GUIDANCE` HİÇ basılmaz;

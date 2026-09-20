@@ -1,151 +1,112 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-09-19
+written: 2026-09-20
 ---
 
 # Resume From
 
-**Task 19 Step 8 BİTTİ — motor koştu, sonuç `blocked`, karşılaştırma yazıldı.**
+**Kusur 1 ve Kusur 2 KAPANDI. SIRADAKİ İŞ: Kusur 3 — bayrak kilidi. İŞ CLAUDE'DA.**
 
-**SIRADAKİ İŞ: dört kusurun düzeltilmesi. İŞ CLAUDE'DA, doğrudan başlanır.**
+**Eray kararı (2026-09-19, hâlâ geçerli): tören YOK.** Spec seansı açılmaz, plan yazılmaz;
+düzeltme doğrudan başlar. Review gerekirse düzeltme SIRASINDA çağrılır. Kusur 3 hem sözleşmeye
+hem motorun kapı anlamına dokunduğu için review çağırmanın en makul yeri orasıdır.
 
-**Eray kararı (2026-09-19): tören YOK.** Spec seansı açılmayacak, plan yazılmayacak.
-Kusurlar adlandırılmış ve ölçülmüş; düzeltme doğrudan başlar. **Review gerekirse
-düzeltme sırasında çağrılır** — önden zorunlu kapı YOK.
+Okunacak yer: **`TASK.md` → `# Open Problems`** ilk kalemi (3. ve 4. maddeler + ölü-koşu kalemi
++ "yeni pilot koşusu" kalemi). Ölçüm dosyası `K134-MOTOR-KARSILASTIRMA.md` 2026-09-19'un
+fotoğrafıdır; red etiketleri o günkü adlarıyla durur (`iddia-arastirmada-yok` artık ikiye ayrıldı).
 
-Okunacak iki yer:
-- **`K134-MOTOR-KARSILASTIRMA.md`** (bu klasörde) — motorun sonucu, nedensel zincir,
-  mutasyon ölçümleri, kör yargı karşılaştırması.
-- **`TASK.md` → `# Open Problems`** ilk kalemi — dört kusur, her birinin ölçümü ve
-  önerilen çözüm yönü.
+**Kusur 3, tek paragraf:** motorda iki bayrak kontrolü var ve aynı kalem için ikisi birden
+kaçınılmaz. `bayrak_tuketimi` sentezin kendi `kanit`+`gerekce` DÜZ YAZISINI tarıyor;
+`yeni_oge_cogunlugu` ise denetçi satırının TİPLİ `bayraklar` sütununu okuyor ve sentezin o sütuna
+erişimi yok. Bayrağı gerekçede açıklarsan birinci kapı, açıklamazsan ikinci kapı açık soru
+üretiyor; satırı hiç anmazsan `referans-yok` ile red düşüyor. Açık soru BLOKLUYOR — yani
+denetçinin bayrakladığı bir kalemi içeren paket bugün `activation_eligible` OLAMAZ.
+**Yön:** tüketimi düz yazıdan değil YAPISAL bir alandan oku, iki kapıyı tek kaynağa bağla.
 
-**Dört kusur, tek satırla:** (1) sentez ham kaynakları görmediği için `kaynak_iddia`
-numaralarını tahmin ediyor → 8 red · (2) yetkilendirilemeyen dönem adaya boş kabuk
-olarak yazılıyor → şema reddi · (3) iki bayrak kapısı birbirini kilitliyor → bayraklı
-kalem içeren paket aktive edilemez · (4) plan sırası `katman1`'i motordan sonraya
-koyuyor, motor onu kapı olarak okuyor. Bunlardan bağımsız beşinci kalem: ölü koşu iş
-kabul etmeye devam ediyor.
-
-**İlk üçü birlikte kapatılınca koşu YEŞİL** (mutasyonla ölçüldü: `activation_eligible`,
-46 karar uygulanıyor, açık soru 0). Düzeltme bittikten sonra **yeni koşu** açılır —
-bu koşu tükendi.
-
-**Koşu `kosu-222706dc…` TÜKENDİ.** Satır `durum='tamamlandi', sonuc='blocked'`.
-`motor` karşılaştır-ve-yaz olduğu için ikinci kez yazmaz; `yazim` ise
-`sonuc='activation_eligible'` ister. **Bu koşudan taslak çıkmaz.** Yeni koşu
-açmak `denetim` (956 sn) + `sentez` (941 sn) turlarını yeniden koşturmak demektir
-ve K-134 körlük tabanı (zaten kullanıldı) tekrar kurulamaz.
-
-**Kusurların ayrıntısı — kanonik yer `TASK.md` Open Problems; buradaki özet
-düzeltmeye başlarken elde durması içindir:**
-
-1. **Sentez ham kaynakları görmüyor** → `kaynak_iddia` numaralarını tahmin ediyor
-   → **8 karar** alan-eşleşmemesinden düşüyor (`ton_ve_dil`, `yasaklar[1]`,
-   `yasaklar[4]` ve beş video sahnesi). Çözüm yönü: iddia→alan dizinini sentez
-   paketine makine-üretimi EK olarak vermek (dizin motorda zaten üretiliyor,
-   `engine.py:821 _arastirma_iddialari`). **Sözleşme değişikliği gerektirir.**
-   Yanında küçük bir kalem: motorun `iddia-arastirmada-yok` etiketi yanıltıcı,
-   gerçek sebep "alan tutmuyor".
-2. **Yetkilendirilemeyen dönem adaya boş kabuk olarak yazılıyor** → 10 Kasım tek
-   kaynaklı, beş anahtarı da `cogunluk-yok` ile düştü, geriye boş `ozel_gun`
-   girdisi kaldı ve şema kapısı reddetti. Çoğunluk yetkisi olmayan dönem adaya
-   HİÇ yazılmamalı.
-3. **Bayrak kapıları birbirini kilitliyor** → biri sentezin düz yazısını, diğeri
-   denetçinin tipli sütununu okuyor; bayraklı kalemi anan her karar açık soru
-   üretiyor ve açık soru blokluyor. Bu hâliyle bayraklı kalem içeren paket
-   `activation_eligible` OLAMAZ. Çözüm yönü: tüketimi düz yazıdan değil yapısal
-   bir alandan oku, iki kapıyı tek kaynağa bağla.
-4. **Sıra kusuru (küçük)** → motor Katman-1 tasdikini kapı olarak okuyor ama plan
-   sırası `motor → yazım → katman1`. `attest_katman1`'in taslak ön koşulu yok;
-   sıra `katman1 → motor` olmalı.
-
-**Bu dörtten BAĞIMSIZ beşinci kalem:** ölü koşu iş kabul ediyor — `mark_incomplete`
-koşulsuz ve terminal; hiçbir adım başlarken koşunun canlı olup olmadığına bakmıyor,
-geri açma yolu yok. Bu oturumda satır elle onarıldı (Eray onayı), **kusur DURUYOR.**
+**Kusur 3'e girmeden önce iki ders (ikisi de bu oturumda ölçümle çıktı):**
+- **Mekanizmayı aç, kaydın teşhisine güvenme.** Kusur 1'de kök teşhis ölçünce DEĞİŞTİ: sözleşmenin
+  kuralı zaten doğruydu, eksik olan veriydi. Kusur 2'de kusur kayıttakinden GENİŞ çıktı (boş kabuk
+  değil, tek yuva bile yetiyordu) ama kapsam DARALDI (üç şekil hatasının yalnız biri motor kusuru).
+- **Sınıfı ölç, varyantı yamama.** Kusur 3'ün sınıfı ("serbest düz yazıdan negatif kanıtlama") bu
+  projede daha önce yakınsamadığı ölçülmüş bir desendir. Regex'le kapatmaya çalışma.
 
 # Verification
 
-**Bu oturumda ÜRETİM KODU DEĞİŞMEDİ.** Yazılanlar: `K134-MOTOR-KARSILASTIRMA.md`
-(yeni), `TASK.md`, `HANDOFF.md`. Test takımı koşulmadı — değişen kod olmadığı için
-gerekmedi.
+**Bu oturumda ÜRETİM KODU DEĞİŞTİ.** Dört commit bu dalda, bir commit dış sözleşme deposunda.
 
-**Koşan komutlar ve taze çıktıları:**
-
-| Ne | Sonuç |
+| Ne | Taze çıktı |
 |---|---|
-| `motor --run-id kosu-222706dc…` (1. deneme) | **rc=1** — `koşu sonucu ZATEN yazılmış … durum='tamamlanmadi'` |
-| koşu satırı onarımı (`UPDATE … WHERE durum='tamamlanmadi' AND sonuc IS NULL`) | `UPDATE 1` |
-| `motor --run-id kosu-222706dc…` (2. deneme) | **rc=0, 0,47 sn, `sonuc: blocked`** |
-| `psql` koşu satırı | `durum=tamamlandi`, `sonuc=blocked`, `engine_version=2.15.0` |
-| `psql` artefaktlar | `review` ×2 (25682 + 11690), `synthesis` ×1 (40671) |
-| `engine_diff` | `uygulanan_karar_sayisi: 0`, `dusen_birim_sayisi: 14`, `yazim_hatalari: 3` |
-| `barrier_report` | `payda: 0`, eşikler `null` (K-24 pasif) |
-| Araştırma evreni yeniden kuruldu | K1 17 · K2 39 · K3 42 iddia; anılan 19 etiketin 19'u VAR |
-| `engine.decide` mutasyon probu (bellekte, DB'ye yazmadan) | taban varyantı canlı koşumu BİREBİR üretti |
+| Tam takım (kusur 1 sonrası) | **4613 passed / 0 failed**, 337,96 s |
+| Tam takım (etiket ayrımı sonrası) | **4614 passed / 0 failed**, 335,75 s |
+| Tam takım (kusur 2 sonrası, SON) | **4618 passed / 0 failed**, 334,08 s |
+| Motor sürümü | `2.15.0` → **`2.17.0`** (iki ayrı uygulama-kuralı değişikliği) |
+| Sözleşme | 2.5 → **2.6**, dış depo `d907e05`; pin tazelendi (üç dosyanın hash'i + HEAD) |
+| Başlangıç taban | 4607 — **önceki oturumun kaydından, bu oturumda taze ölçülmedi**; eklenen test sayısı 11, toplam tutuyor |
 
-**Ölçülen mekanizmalar (hepsi dosya açılarak):**
-- `runs.py:837` — `record_result` yalnız `durum='calisiyor' AND sonuc IS NULL` satıra yazar.
-- `runs.py` yedi kapı — `yazim`/`onay`/`aktive-et` `sonuc='activation_eligible'` ister.
-- `engine.py:1047` — `any(bağsız) → reddet`; bir tek komşu-alan atıfı kararı düşürür.
-- `engine.py:1180` — bayrak, **denetçi satırının tipli sütunundan** okunur.
-- `engine.py:_bayrak_tuketimi` — bayrak, **sentezin `kanit`+`gerekce` düz yazısından** okunur.
-- `engine.py:2372-2379` — yazım kapısı düşerse aday TÜMÜYLE atılır.
-- `hakem-sentez-gorevi.md:112-128` — ek listesi; ham araştırma raporları listede YOK.
-- `runs.py` `_write_attestation` — katman1 tasdikinin taslak ön koşulu YOK.
+**Mutasyonla ölçülen kapılar (hepsi yedekten geri alındı, bayt-eşit doğrulandı):**
+- EK-M istemden çıkarıldı → 3 test kırmızı.
+- Sözleşmeden EK-M girdi maddesi silindi → kırmızı. EK-L maddesi silindi → kırmızı.
+- Atomik dönem kuralı motordan kaldırıldı → 2 test kırmızı, pozitif kontrol YEŞİL kaldı
+  (kural aşırı geniş değil).
+
+**KENDİ TESTİM YANLIŞ ÇIKTI ve mutasyon yakaladı.** Sözleşme–kod bağını ölçen ilk yazım,
+EK-M maddesi TAMAMEN silindiğinde YEŞİL kalıyordu: komşu bir cümle de adı anıyordu. Test artık
+liste MADDESİNİ ölçüyor. Ders: kapıyı yazdıktan sonra mutasyonla sına, yoksa tespit edemediği
+bir garantiyi onaylayan bir test kalır.
+
+**PROB İKİ KEZ KİRLENDİ, ikisi de düzeltildi.** (1) İlk prob motorun bağ kuralını KOPYALAMIŞTI ve
+`ozel_gun` satırlarını yanlış "bağsız" sayıyordu → motorun kendi fonksiyonu çağrıldı. (2) İkinci
+prob sentezin HAM çıktısını okuyordu; motor DB'ye yazılan İŞLENMİŞ karar günlüğünü okuyor →
+ölçüm motorun gerçek girdisine taşındı. Sonraki oturum: probu yazınca önce taban varyantının
+canlı sonucu birebir ürettiğini doğrula.
 
 **DENENMEYEN / DOĞRULANMAYAN — yeşil sayılmaz:**
+- **Modelin EK-M'yi gerçekten doğru kullanacağı ÖLÇÜLMEDİ.** Yapısal körlük kalktı; 8 vakanın
+  8'inde dizin tahmini yalanlıyor ve doğru atıf zaten mevcut. Davranış iddiası GERÇEK bir sentez
+  turu ister. Evi: kusur 3 kapandıktan sonraki yeni koşu (ayrı tur harcanmaz).
 - **`yazim` · `katman1/2` · `onay` · `aktive-et` ayakları HÂLÂ hiç koşmadı.**
-- **ÖLÇÜLDÜ, ama mutasyonla:** üç kusur birlikte kapatıldığında `engine.decide`
-  **`activation_eligible`** veriyor (46 karar uygulanıyor, açık soru 0, yazım
-  hatası 0). Bu, düzeltmelerin GERÇEK kodda aynı sonucu vereceğinin kanıtı
-  DEĞİLDİR — girdi elle kırpıldı, kod değişmedi.
-- Kusur 1'in çözüm yönü (iddia→alan dizini) **denenmedi**; sözleşmeye eklenince
-  sentezin doğru numarayı seçeceği bir VARSAYIMDIR, ölçüm değil.
-- **Prob bir kez kirletti:** ilk mutasyon varyantı atıfları kırparken denetçi
-  satırlarını bırakmış, `ton_ve_dil` için sahte bir "daha derin kanıt sorunu"
-  üretmişti. Bağın çift yönlü olduğu görülünce düzeltildi. Sonraki oturum
-  mutasyon kurarken kırpılan şeyin KARŞI ucunu da kırpsın.
-- `ozel_gun` ve `takvim_temalari` alanlarının çalışma anında içerik üretimini nasıl
-  beslediği hâlâ ölçülmedi (önceki oturumdan devrediyor).
+- **Sürüm kapısının kör noktası, dürüst etiketle kayıtlı:** `test_engine_version_is_pinned_to_the_
+  RULE_SURFACE` ADAY KURMA kuralını ölçmez (parmak izi sebep kümesi · kural kimlikleri · kontrol
+  adları · not sınıfları). Kusur 2'nin damga artışı bu yüzden ELLE yapıldı. Sınır damganın yanına
+  yazıldı; regex'le kapatılmaya ÇALIŞILMADI.
+- `ozel_gun` ve `takvim_temalari` alanlarının çalışma anında içerik üretimini nasıl beslediği
+  hâlâ ölçülmedi (önceki oturumlardan devrediyor).
+- Bu oturumda **DB'ye hiçbir şey yazılmadı**; koşu satırlarına dokunulmadı.
 
 # Risks
 
-- **Yeni koşu açmak pahalıdır ve körlük tabanını geri getirmez.** İki model turu
-  (~32 dk, ölçülmüş) + para; K-134 kalibrasyonu bir kez alınabilirdi, alındı.
-- **Kusur 2 (bayrak kilidi) kapatılmadan hiçbir koşu aktivasyona ulaşamaz** —
-  denetçiler rutin olarak bayrak koyuyor (bu koşuda 5 birim).
-- **Kusur 3 duruyor:** bir sonraki koşuda da düşen bir adım koşuyu sessizce
-  öldürebilir ve sonraki adımlar bunu fark etmeden çalışmaya devam eder.
-- **SPK kararı bilinçli risk kabulüdür** (önceki oturumdan devrediyor): paket
-  doğrulanmamış bir hukuki iddia taşıyacak, gerekçe `K134-KOR-YARGI.md`'de.
-- **Operatör eklemeleri** (yerel görsel kodlar · Ramazan/Kurban · yılbaşı ·
-  23 Nisan/29 Ekim) mekanik kaynak bağı OLMAYAN kalemlerdir; Step 9'a taşındılar
-  ve paketin "her kalem bir kaynağa bağlıdır" garantisini zayıflatırlar.
-- **Sentez klasörü doluysa tur koşmaz** (`mkdir` `exist_ok` kullanmıyor). Düşen
-  denemeler `DUSMUS-<tarih>-<sebep>-<koşu>` adıyla duruyor; silme YOK.
+- **Kusur 3 kapanmadan hiçbir koşu aktivasyona ulaşamaz** — denetçiler rutin olarak bayrak
+  koyuyor (son koşuda 5 birim, 8 bulgu).
+- **Ölü koşu kusuru DURUYOR:** düşen bir adım koşuyu sessizce öldürebilir ve sonraki adımlar bunu
+  fark etmeden çalışmaya devam eder. Geri açma yolu yok.
+- **Yeni koşu pahalı ve körlük tabanını geri getirmez:** `denetim` 956 sn + `sentez` 941 sn + para;
+  K-134 kalibrasyonu bir kez alınabilirdi.
+- **SPK kararı bilinçli risk kabulüdür** (önceki oturumlardan): paket doğrulanmamış bir hukuki
+  iddia taşıyacak, gerekçe `K134-KOR-YARGI.md`'de.
+- **Operatör eklemeleri** (yerel görsel kodlar · Ramazan/Kurban · yılbaşı · 23 Nisan/29 Ekim)
+  mekanik kaynak bağı OLMAYAN kalemlerdir ve paketin "her kalem bir kaynağa bağlıdır" garantisini
+  zayıflatırlar.
+- **Sentez klasörü doluysa tur koşmaz** (`mkdir` `exist_ok` kullanmıyor). Düşen denemeler
+  `DUSMUS-<tarih>-<sebep>-<koşu>` adıyla duruyor; silme YOK.
 
 # Notes For Claude
 
-- **Bu oturumun dersi: "kalıcı zarar YOK" diye devredilen beklentiyi ÖLÇ.** Geçen
-  HANDOFF "motor koşumu durumu düzeltir" diyordu; motor o satıra hiç ulaşamıyordu.
-  Devralınan her beklenti, üzerine iş kurulmadan önce koşulur.
-- **Motorun red etiketine güvenme, mekanizmayı aç.** `iddia-arastirmada-yok`
-  "numara yok" diyor; numaraların hepsi vardı, sorun alan eşleşmesiydi. Etiket
-  yanlış kapıyı gösteriyor.
-- **Mutasyon probu ucuzdu ve işe yaradı** (`decide` saf, 0,47 sn, DB'ye yazmıyor).
-  Taban varyantının canlı koşumu birebir ürettiği ÖNCE doğrulandı — prob kendi
-  hatasını ölçmesin diye.
-- **Eray ham kanıt istiyor, özet değil** (önceki oturumdan, hâlâ geçerli).
-- **Model turundan ÖNCE offline replay yap** (hâlâ geçerli).
-- **Kendi önerine İlke 7'yi uygula:** aşağıdaki üç kusur için "düzeltelim" demeden
-  önce her birinin tarihli evi var mı, over-bundle mı diye bak.
+- **Eray ham kanıt istiyor, özet değil** (hâlâ geçerli).
+- **Model turundan ÖNCE offline replay yap** (hâlâ geçerli — bu oturumda EK-M'nin gerçek gövdesi
+  böyle görüldü, 1551 bayt, tur harcanmadı).
+- **CEVAP BEKLEYEN SORU — Eray'a soruldu, yanıt gelmedi.** Araştırma deposunun
+  (`otomaix-sosyal-medya-arastirmasi`) çalışma ağacında **42 dosya silinmiş ama commit edilmemiş**
+  duruyor (SWEEP-*, TASLAK-*, `kuyumculuk.md`). Bu oturumdan ÖNCE de vardı; dokunulmadı, sözleşme
+  commit'i yalnız kendi dosyasıyla atıldı. Pin'i etkilemiyor (pin üç dosyanın hash'i + HEAD).
+  **Koşul:** yanıt gelmeden bu dosyalara dokunulmaz; o depoda commit atılacaksa yine yalnız
+  hedef dosya adlandırılarak atılır.
+- **Kendi önerine İlke 7'yi uygula:** kusur 3 için "şunu da düzeltelim" demeden önce her birinin
+  tarihli evi var mı, over-bundle mı diye bak.
 
 # Notes For Codex
 
 Codex bu oturumda **koşmadı**. Bu dalda `/review-claude-codex` ve
 `/security-review-claude-codex` **hâlâ koşmadı** — zincirin yeri Task 19 sonrasıdır.
 
-**Eray kararı (2026-09-19):** dört kusurun düzeltilmesi için önden zorunlu bir review
-kapısı YOK; **gerekirse düzeltme sırasında çağrılır.** Kusur 1 donmuş sözleşmeye ve
-kusur 3 motorun kapı anlamına dokunuyor — review çağırmak için en makul iki yer bunlar.
-Çalışma ağacı review'dan önce temiz olmalı; kirli ağaçta review koşturma.
+**Review için en makul yer kusur 3'ün içidir:** sözleşmeye ve motorun kapı anlamına dokunuyor.
+Çalışma ağacı review'dan önce TEMİZ olmalı; kirli ağaçta review koşturma.
