@@ -1579,19 +1579,27 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
      **Uyarı (kusur 1'in dersi):** düzeltmeye başlamadan ÖNCE mekanizmayı aç ve ölç — kusur 1'de
      kökün teşhisi ölçünce değişti (kural değil, veri eksikti) ve kapsam kusur 2'de daraldı.
 
-  4. **AÇIK — sıra kusuru (küçük).** Motor Katman-1 tasdikini otomatik kapı olarak okuyor, plan
-     sırası ise `motor → yazım → katman1`. `attest_katman1`'in taslak ön koşulu YOK, yani katman1
-     motordan ÖNCE tasdiklenebilir. **Öneri:** plan Task 19 sırasını `katman1 → motor` yap.
+  4. **AÇIK — sıra kusuru (küçük). EV: yeni koşu açılmadan ÖNCE.** Motor Katman-1 tasdikini
+     otomatik kapı olarak okuyor, plan sırası ise `motor → yazım → katman1`. `attest_katman1`'in
+     taslak ön koşulu YOK, yani katman1 motordan ÖNCE tasdiklenebilir. **Öneri:** plan Task 19
+     sırasını `katman1 → motor` yap. Düzeltilmezse aynı `regresyon_kapisi` bulgusu yeni koşuda
+     TEKRAR çıkar — bu yüzden evi aşağıdaki "yeni pilot koşusu" kaleminin ÖNÜDÜR, serbest değil.
 
-  **Bu dörtten BAĞIMSIZ — AÇIK:** ölü koşu iş kabul ediyor. `mark_incomplete` koşulsuz ve
-  terminal yazıyor, hiçbir adım başlarken koşunun canlı olup olmadığına bakmıyor, geri açma yolu
-  yok. 2026-09-19'da satır elle onarıldı (Eray onayı); **kusur DURUYOR.**
+  **Bu dörtten BAĞIMSIZ — AÇIK. EV: yeni koşu açılmadan ÖNCE.** Ölü koşu iş kabul ediyor:
+  `mark_incomplete` koşulsuz ve terminal yazıyor, hiçbir adım başlarken koşunun canlı olup
+  olmadığına bakmıyor, geri açma yolu yok. 2026-09-19'da satır elle onarıldı (Eray onayı);
+  **kusur DURUYOR.** Evi serbest bırakılmadı çünkü kusur doğrudan yeni koşuyu tehdit ediyor:
+  düşen bir adım koşuyu sessizce öldürürse sonraki adımlar bunu fark etmeden çalışır ve
+  ~1900 saniyelik iki model turu bir kez daha yanar. Bu yüzden ödeme sırası, yeni koşunun
+  ÖNÜDÜR.
 
   **Eray kararı (2026-09-19, hâlâ geçerli): tören YOK** — spec seansı açılmaz, düzeltme doğrudan
   başlar; review gerekirse düzeltme SIRASINDA çağrılır. Kusur 3 sözleşmeye ve motorun kapı
   anlamına dokunduğu için review çağırmanın en makul yeri orasıdır.
 
 - **[YÜKSEK — EV: kusur 3 kapandıktan sonraki ilk oturum] Yeni pilot koşusu açılmalı.**
+  **ÖN KOŞULLARI (bu koşudan önce ödenecek):** kusur 3 · kusur 4 (sıra) · ölü-koşu kusuru.
+  Üçü de yukarıda adlandırıldı ve evleri BU kalemin önüdür.
   Koşu `kosu-222706dc…` TÜKENDİ (`tamamlandi`/`blocked`); `motor` ikinci kez yazmaz, `yazim`
   `activation_eligible` ister — o koşudan taslak ÇIKMAZ. Düzeltmelerin gerçek kodda işe yarayıp
   yaramadığı (kusur 1'in davranış ayağı dâhil) ancak yeni koşuda ölçülür.
