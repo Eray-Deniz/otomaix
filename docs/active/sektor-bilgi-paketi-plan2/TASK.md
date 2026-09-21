@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-12
+last-touched: 2026-09-21
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -115,6 +115,7 @@ adlandırılmış kusur.** (Kod değişmedi; bu ölçüm girdiyi elle kırparak 
 **Ayrıca ölçülen sıra kusuru:** motor Katman-1 tasdikini otomatik kapı olarak okuyor
 (`sector_pipeline_cli.py:958`), plan sırası ise `motor → yazım → katman1`. `attest_katman1`'in
 taslak ön koşulu YOK, yani katman1 motordan ÖNCE tasdiklenebilir — plan sırası düzeltilmeli.
+**(2026-09-21: DÜZELTİLDİ — spec §13.3 + plan Task 19 Step 8/9; Open Problems madde 4.)**
 
 **2026-09-20 DOKUZUNCU OTURUM — KUSUR 1 ve KUSUR 2 KAPANDI.** Tören yok kararı uygulandı:
 spec/plan açılmadı, düzeltme doğrudan yapıldı. Motor sürümü `2.15.0` → `2.17.0`; sözleşme 2.6
@@ -215,7 +216,30 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 
 # Current Status
 
-**2026-09-21 ONUNCU OTURUM — KUSUR 4 KAPANDI (belge değişikliği).** Katman-1/Katman-2 sırası
+**2026-09-21 ON BİRİNCİ OTURUM — KÖK SEBEP YER DEĞİŞTİRDİ: KURAL DEĞİL, ARAŞTIRMA ŞABLONU.**
+Kaynak-1..6 (dış depo `Kuyumculuk/`) iki bağımsız analizle incelendi, ortak tablo çıkarıldı, iki
+itiraz turu ve Codex etki analizi işlendi. **Ölçülen kök sebep:** kalıplar Bölüm C'ye bağlanmıyor
+(kalıp maddesi/kaynak satırı oranı 0,09–0,37; Gemini raporlarında CTA/video/takvim için 0 satır),
+denetçi "üç raporda var" dediği kalıbı satırsız olduğu için `tekil` sınıflıyor → CTA havuzu 3.
+Bekleyen eşik kararı belirtiye bakıyordu. **Karar (Eray):** eşik gevşetilmez; şablon üç grupta
+düzeltilir, kayıt `otomaix-sosyal-medya-arastirmasi/_sablon-duzenleme.md` (Grup 1-2 onaylı;
+"aynı dış kaynak → 3-3 sayılır" kararı verildi). **Yapıldı:** `_SABLON.md` üçüncü revizyon
+(Grup 1 + 2 + Grup 3'ün şablon tarafı: 9 sütunlu Bölüm C, kapsama kuralı, `[C: …]`,
+`kaynak-bulunamadı`), `kuyumculuk.md` yeniden türetildi. **Commit edilmedi; pin testi kırık
+(beklenen).** ÖLÇÜLDÜ: eski ayrıştırıcı 9 sütunlu satırı düşürür (42 → 0 iddia) → şablon
+tek başına canlıya inemez. **Sıradaki iş: Grup 3 kod tarafı** (Open Problems ilk madde).
+Koşu `kosu-7705437723ce4730ac0ae70cf6986bc8` hâlâ `calisiyor`, motor koşturulmadı.
+
+**2026-09-21 ONUNCU OTURUM — SIRA KUSURU KAPANDI, YENİ KOŞU YANLIŞ GİRDİYLE KOŞTU.**
+Koşu `kosu-7705437723ce4730ac0ae70cf6986bc8` açıldı; denetim (18 dk 49 sn) ve sentez (16 dk 04 sn)
+koştu. **Motor KOŞTURULMADI** — kuru koşum `blocked` verdiği için yazdırmadım; koşu satırı hâlâ
+`calisiyor`. **Kusur 4'ün fiksi gerçek koşuda doğrulandı:** `regresyon_kapisi` bulgusu YOK, tek
+sebep `acik-soru-var`, 41 `ekle` uygulanıyor, 14 bulgunun hepsi bloklamayan `bayrak_kaydi`.
+**Tur boşa gitti çünkü brief eski hâliyle kopyalandı:** Eray'ın 2026-09-19 yargıları
+(`K134-KOR-YARGI.md`) brief'e yazılmamıştı, sentez 8 sorunun 6'sını yeniden sordu.
+**Sıradaki iş: kanıt eşiğini alan sınıfına göre ayırma kararı** (aşağıda, Open Problems).
+
+**2026-09-21 (aynı oturum, önce) — KUSUR 4 KAPANDI (belge değişikliği).** Katman-1/Katman-2 sırası
 Eray onayıyla ikiye ayrıldı: Katman-1 tam sweep + tasdik **motordan ÖNCE**, Katman-2 `draft`tan
 sonra. Değişen: spec §13.3 · plan Task 19 (sıra paragrafı + Step 8/9). **Kod DEĞİŞMEDİ, test
 koşulmadı** (koşacak kod değişikliği yok). Pilotu bloklayan dört kusurun DÖRDÜ de kapandı.
@@ -1561,6 +1585,46 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   onay isteğinde sessiz kayıp.
 
 # Open Problems
+
+- **[YÜKSEK — SIRADAKİ İŞ, 2026-09-21] Grup 3 kod tarafı: şablonun üçüncü revizyonunu hat tanımalı.**
+  Tasarım `otomaix-sosyal-medya-arastirmasi/_sablon-duzenleme.md` (Grup 3 + Ek §2.1-2.3 + §3
+  senaryoları). Kalemler: (1) `brief_doctor.py` — `C_TABLOSU_SUTUNLARI` 7 → 9 (`destek`, `yer`),
+  `CIddia`'ya `destek`/`uyarlama`/`yer`, kapsama sayımı (madde alanı madde başına, metin alanı
+  alan başına), `[C: …]` geri bağlantı ayrıştırma (gövde içi atıf yasağının istisnası), aynı
+  satıra çok madde = not, `kaynak-bulunamadı` = K-120'den AYRI değer (not, elemez, "en az 6"
+  sayımına girmez); (2) `synthesis.py` EK-M dizini `destek`/`uyarlama`/`yer` basar; sentez
+  sözleşmesi kaynaksız birimi karar günlüğüne "kaynaksız" notuyla yazar, etiketler pakete
+  SIZMAZ; (3) `engine.py` kabul eşlemesi: mutabakat = VARLIK (`destek=yok` dahil), kanıt kapısı
+  = bağlı satırlardan en az biri {risk: mevzuat, veri | içerik: uygulama, öneri, veri}, hepsi
+  `yok` → içerikte bekletme / riskte açık soru; K-126 aynen; çelişen denetçi sonuçları kuralı;
+  (4) `hakem-denetci-gorevi.md`: kaynaksız satır da `kaynak-iddialari`ne yazılır, uyum (örneklem)
+  ile güç (K-123) ayrı ölçülür, aynı URL → not; `hakem-sentez-gorevi.md`: kabul eşlemesi;
+  (5) pin manifesti `shared/contracts/research-contracts.pin.json` (dış depo commit'i sonrası);
+  (6) testler: mevcut 8 dosya + Ek §3'teki 10 senaryo; regresyon: paketsiz byte-exact, paketli
+  üretimde etiket sızıntısı sıfır. Eski raporlar (Kaynak-1..6) yeni sürüme çevrilmez, test verisi.
+  **Sonra:** Eray üç araştırmayı yeni brief'le alır → tek tur. Evi: Task 19'a ek adım (Step 5-r)
+  ya da ayrı task — Eray kararı; süre ÖLÇÜLMEDİ.
+
+- **[PARKTA — 2026-09-21, Grup 3 ölçülene kadar] Yeni kalıp kanıt eşiği ALAN AYRIMI yapmıyor.**
+  Karar ALINMADI ve alınmayacak: kök sebep şablonda (yukarı). Grup 3 indikten ve bir tur
+  koştuktan sonra CTA sayısı hâlâ 5'in altındaysa yeniden açılır. Aşağıdaki kayıt tarihî.
+  **Ölçüldü:** bir kalıbın pakete girmesi için üç araştırmanın ikisinde geçmesi gerekiyor
+  (`KAYNAK_TABANI_YENI_OGE = 2`); tek kaynaklıysa K-126 istisnası iki şartı BİRLİKTE arıyor
+  (resmî/birincil kaynak + denetçinin URL'yi canlı açması). Bu eşik **hukuki iddiaya da içerik
+  kalıbına da aynı** uygulanıyor. Sonuç ölçüldü: CTA havuzu 3'te kaldı (brief 5 istiyor) ve elenen
+  üç aday — eski altın değişimi (taklas) · WhatsApp danışma · satış sonrası bakım-parlatma —
+  brief'in KENDİ kapsam satırında yazılı hizmetler. Üçünden biri kanal etiketli olduğu için
+  mağazası doğrulanmamış markada havuz İKİYE düşüyor.
+  **Eray'ın itirazı (bu oturum):** 3 CTA ile hep aynı gönderi üretilir; ayrıca elle içerik ekleme
+  ÇÖZÜM DEĞİLDİR — hattın amacı manuel işten kurtulmak (bu yolu açıkça reddetti).
+  **Öneri (ONAY ALINMADI):** eşiği alan sınıfına göre ayır — hukuki/yasak/hassasiyet alanlarında
+  bugünkü katı kural kalsın; içerik kalıbı alanlarında (CTA · kanca · görsel/video kodları ·
+  takvim temaları) brief kapsamına bağlı ve bayraksız kalem için tek denetçi tespiti yetsin.
+  Kopyalama koruması ayrı bayraklardadır (marka adı · kopya şüphesi · genel-geçer), dokunulmaz.
+  **ÖLÇÜLMEDİ (tahmin etiketi):** bu değişikliğin 8 açık sorudan kaçını kapatacağı; CTA sayısı,
+  KAYNAK-1'in atıfsız alanları ve Ramazan/Kurban dönem temaları aynı eşiğe takılı görünüyor ama
+  ölçüm ancak kural değişip tur tekrar koştuğunda gelir.
+  **Kapsam:** sözleşme (dış depo `hakem-sentez-gorevi.md`) + motor kuralı + testler, sonra TEK tur.
 
 - **[YÜKSEK] Pilotu bloklayan DÖRT kusurun DÖRDÜ DE KAPANDI (4'ü 2026-09-21'de).**
   Kaynak ölçüm dosyası: **`K134-MOTOR-KARSILASTIRMA.md`** (2026-09-19 koşumunun ölçümleri;
