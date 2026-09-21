@@ -88,7 +88,7 @@ KENDİ içerme modelinden türer ve TEK yerde yaşar (`_ic_ice_izler`): bölüm 
 maddesi · Bölüm C eşleme satırı. Sabit kümelerde SIRA da ölçülür; açık kümelerde
 (madde · dönem · eşleme satırı) yalnız TEKRAR ölçülür. **Gerekçe tur 3'te DÜZELTİLDİ,
 davranış DEĞİŞMEDİ:** sözleşme o düzeylerde sıra dayatMIYOR değil — `_SABLON.md` satır
-73-75 her listede ÖNEM SIRASI dayatır (sektöre özgülük → kaynak sayısı ve gücü → Türkiye
+162-164 her listede ÖNEM SIRASI dayatır (sektöre özgülük → kaynak sayısı ve gücü → Türkiye
 yerelliği). Ama önem SEMANTİK bir yargıdır ve mekanik kapı doğrulayamaz; ölçüldü ki iki
 çağrı kalıbı takas edildiğinde rapor `gecti / 0 not` verir. Uydurulmuş bir sıra kuralı
 gerçek çıktıyı gürültüye boğardı, bu yüzden YAZILMAZ ve sınır artık kapsam beyanında
@@ -453,14 +453,43 @@ C_TABLOSU_SUTUNLARI = (
     "URL",
     "tarih",
     "tek kaynak",
+    "destek",
+    "yer",
 )
 # Hücre KONUMLARI addan TÜRER, elle sayılmaz. Sözleşme 2026-09-11'de başa bir
 # sütun (`no`) ekledi ve elle yazılmış her indeks bir kaydırma hatası adayıydı;
 # ad→konum türetmesi sözleşme yeniden sıra değiştirdiğinde kendiliğinden uyar.
 C_NO_INDEKSI = C_TABLOSU_SUTUNLARI.index("no")
 C_ALAN_INDEKSI = C_TABLOSU_SUTUNLARI.index("alan/dönem")
+C_IDDIA_INDEKSI = C_TABLOSU_SUTUNLARI.index("iddia")
+C_KAYNAK_ADI_INDEKSI = C_TABLOSU_SUTUNLARI.index("kaynak adı")
 C_URL_INDEKSI = C_TABLOSU_SUTUNLARI.index("URL")
 C_TEK_KAYNAK_INDEKSI = C_TABLOSU_SUTUNLARI.index("tek kaynak")
+C_DESTEK_INDEKSI = C_TABLOSU_SUTUNLARI.index("destek")
+C_YER_INDEKSI = C_TABLOSU_SUTUNLARI.index("yer")
+# ESKİ sözleşme sürümünün sütun sayısı (2026-09-11 … 2026-09-21, `destek` ve
+# `yer` yokken). Bu sayıda gelen satır KABUL EDİLMEZ (iddia üretmez — fail
+# closed); yalnız teşhis mesajı "eski sürüm" diye adlandırır ki operatör
+# raporu yeniden üretmesi gerektiğini görsün, sütun sayısını saymasın.
+C_ESKI_SUTUN_SAYISI = 7
+# `destek` hücresi KAPALI kümedir (Grup 2 kabul eşlemesi, dış depo `0824c0f`):
+# araştırmacının BEYANIDIR, doğrulama denetçinindir. `yok` = dış kaynak
+# bulunamadı; satır yine yazılır (kapsama kuralı), onu "kaynaklı" YAPMAZ.
+C_DESTEK_DEGERLERI = ("uygulama", "öneri", "veri", "mevzuat", "yok")
+C_DESTEK_YOK = "yok"
+# `destek=yok` satırının sabit hücreleri — sözleşme "aynen" der.
+C_URL_KAYNAK_YOK = "kaynak-yok"
+C_HUCRE_YOK = "—"
+# `yer` hücresi: sayfa açılmadıysa AYNEN bu değer; konum UYDURULMAZ.
+C_YER_ACILMADI = "açılmadı"
+# `[uyarlama]` etiketi `iddia` hücresinde: kalıp kaynakta yok, araştırmacı
+# kaynağın gösterdiği pratikten TÜRETTİ. Satır dayandığı kaynağın `destek`
+# değerini taşır; motor kabul eşlemesinde alan sınıfına göre sayar/saymaz.
+_UYARLAMA_ETIKET_RE = re.compile(r"\[\s*uyarlama\s*\]", re.IGNORECASE)
+# GERİ BAĞLANTI `[C: 4, 9]` — maddenin dayandığı Bölüm C numaraları. Gövde içi
+# atıf yasağının TEK istisnasıdır (sözleşme Bölüm 5, kapsama kuralı).
+_GERI_BAGLANTI_RE = re.compile(r"\[\s*C\s*:\s*([^\]]*)\]")
+_GERI_BAGLANTI_NO_RE = re.compile(r"^[1-9]\d*$")
 # `no` hücresi: 1'den başlayan ARTAN TAM SAYI, o raporda iddianın KALICI
 # kimliği. Biçim burada, DİZİ kuralı `_c_no_dizisi_ihlalleri`'nde ölçülür.
 _C_NO_RE = re.compile(r"^[1-9]\d*$")
@@ -633,6 +662,13 @@ KANAL_ANAHTARLARI = (
 
 # K-120'nin resmî değeri — AYNEN bu yazım.
 BILINCLI_BOS = "içerik-önerilmez"
+# DESTEKSİZ DÖNEM — İKİNCİ MUAFİYET (dış depo `0824c0f`, Grup 2): hiç dış
+# kaynak bulunamayan dönemin DÖRT yuvasına yazılan tek değer. K-120'nin
+# "bilinçli boş"undan AYRI bir değerdir ("eksik kanıt"); ayrı sözcükle yazılır,
+# ayrı işlenir: doluluk kontrolü tanır (NOT düşer, elemez), dönem "en az 6"
+# sayımına GİRMEZ, adet alt sınırları ve dil kuralı uygulanmaz. Yalnız YENİ
+# adaylar içindir — aktif paketteki dönem bu değerle ÇIKARILMAZ (K-122).
+KAYNAK_BULUNAMADI = "kaynak-bulunamadı"
 
 # K-127 (Eray, 2026-08-23): koşunun geçerlilik TABANI. Kaynak SAYISI kapısıdır.
 KAYNAK_TABANI = 2
@@ -1474,10 +1510,25 @@ class _Donem:
         brief'in dayattığı `####` + gövde — üçü de AYNI değeri taşır. Değişmeyen
         şart: DÖRT yuva, TEK anlamlı içerik, AYNEN `içerik-önerilmez` yazımı.
         """
+        return self._dort_yuva_tek_deger(BILINCLI_BOS)
+
+    @property
+    def kaynaksiz(self) -> bool:
+        """İkinci muafiyet: DÖRT yuvanın hepsi AYNEN `kaynak-bulunamadı` mı?
+
+        K-120 ile AYNI tanıma kuralı (dört yuva · tek anlamlı içerik · aynen
+        yazım) — ikinci bir tanıma kuralı YAZILMAZ; değişen yalnız değerdir ve
+        değerin anlamı: bu "bilinçli boş" değil "eksik kanıt"tır. İki değer
+        birbirinin yerine YAZILMAZ — iki yuva biri, iki yuva öteki olan dönem
+        ne muafiyeti alır ne ötekini: dört yuvası "boş" sayılır ve not düşer.
+        """
+        return self._dort_yuva_tek_deger(KAYNAK_BULUNAMADI)
+
+    def _dort_yuva_tek_deger(self, deger: str) -> bool:
         if set(self.yuvalar) != set(OZEL_GUN_YUVALARI):
             return False
         return all(
-            _deger_gorunumu(BILINCLI_BOS)
+            _deger_gorunumu(deger)
             in {
                 _deger_gorunumu(aday)
                 for aday in (yuva.tek_degeri, yuva.tek_anlamli_satir)
@@ -1668,6 +1719,15 @@ def _deger_gorunumu(metin: str) -> str:
     KENDİ değerini yazıyordu, yalnız Türkçe harfi ASCII'ye çevirmişti.
     """
     return _sadelestir(metin).translate(_ASCII_KATLAMA)
+
+
+def _c_kanonik_deger(hucre: str, degerler: Sequence[str]) -> str:
+    """Kapalı kümeli hücrenin KANONİK üyesi; kümede yoksa BOŞ (fail-closed)."""
+    gorunum = _deger_gorunumu(hucre)
+    for deger in degerler:
+        if _deger_gorunumu(deger) == gorunum:
+            return deger
+    return ""
 
 
 def alan_karsilastirma_anahtari(hucre: str) -> str:
@@ -2729,7 +2789,7 @@ def _iz_ihlalleri(
 
     **Gerekçe tur 3'te DÜZELTİLDİ (davranış DEĞİŞMEDİ).** Önceki gerekçe
     "sözleşme o düzeyde bir sıra DAYATMAZ" diyordu ve YANLIŞTI: pinli sözleşme
-    (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI dayatır — ölçüt sırasıyla
+    (`_SABLON.md` satır 162-164) her listede ÖNEM SIRASI dayatır — ölçüt sırasıyla
     sektöre özgülük, kaynak sayısı ve gücü, Türkiye yerelliği. Doğru gerekçe
     şudur: sözleşme sıra DAYATIR ama önem SEMANTİK bir yargıdır ve mekanik kapı
     onu DOĞRULAYAMAZ. Ölçüldü: iki çağrı kalıbı takas edildiğinde rapor
@@ -2910,6 +2970,16 @@ def _kontrol_bolum_ve_alan(belge: _Belge) -> list[str]:
     for donem in belge.donemler:
         if donem.bilincli_bos:
             continue  # K-120: bilinçli boş dönem doluluk kontrolünü GEÇER.
+        if donem.kaynaksiz:
+            # İKİNCİ MUAFİYET: doluluk kontrolü değeri TANIR — eksik alan
+            # saymaz — ama K-120'nin aksine SESSİZ geçmez: sözleşme "not düşer,
+            # elemez" der. Not, dönemin sayıma ve pakete girmediğini kaydeder.
+            mesajlar.append(
+                f"{donem.ad}: dört yuva da `{KAYNAK_BULUNAMADI}` — desteksiz "
+                f"dönem (eksik kanıt, `{BILINCLI_BOS}` DEĞİL); dönem sayımına "
+                "ve pakete GİRMEZ, kayıtta kalır"
+            )
+            continue
         for yuva_adi in OZEL_GUN_YUVALARI:
             yuva = donem.yuvalar.get(yuva_adi)
             if yuva is None:
@@ -2927,8 +2997,23 @@ def _essiz_donem_sayisi(belge: _Belge) -> int:
 
     Ölçüldü: aynı dönem adı iki kez yazıldığında `>=6 dönem` alt sınırı TEKRARLA
     sağlanıyor ve kapı sessiz kalıyordu (ayrıştırılan 6, essiz ad 5).
+
+    **Desteksiz dönem SAYILMAZ** (ikinci muafiyet, dış depo `0824c0f`): sözleşme
+    *"böyle dönem 'en az 6' sayımına GİRMEZ"* der. Biçimce geçerli bir eksiklik
+    kaydı içerik yeterliliği sayılmaz — altı `kaynak-bulunamadı` dönemi alt
+    sınırı SAĞLAMAZ. Aynı ad hem dolu hem desteksiz yazılmışsa dolu görünüm
+    sayılır (tekrar zaten ayrı ölçülür).
     """
-    return len(_ilk_gorunum_sirasi(belge.donem_sirasi))
+    kaynaksiz = {
+        _sadelestir(donem.ad) for donem in belge.donemler if donem.kaynaksiz
+    }
+    dolu = {
+        _sadelestir(donem.ad) for donem in belge.donemler if not donem.kaynaksiz
+    }
+    sayilmayan = kaynaksiz - dolu
+    return len(
+        [ad for ad in _ilk_gorunum_sirasi(belge.donem_sirasi) if ad not in sayilmayan]
+    )
 
 
 def _kontrol_adet_alt_sinirlari(belge: _Belge) -> list[str]:
@@ -2969,8 +3054,8 @@ def _kontrol_adet_alt_sinirlari(belge: _Belge) -> list[str]:
             f"{DONEM_ALT_SINIRI}"
         )
     for donem in belge.donemler:
-        if donem.bilincli_bos:
-            # K-120: bu dönemde alt sınır denetimi UYGULANMAZ.
+        if donem.bilincli_bos or donem.kaynaksiz:
+            # K-120 / ikinci muafiyet: bu dönemde alt sınır denetimi UYGULANMAZ.
             continue
         for yuva_adi, alt_sinir in DONEM_YUVA_ALT_SINIRLARI.items():
             yuva = donem.yuvalar.get(yuva_adi)
@@ -2990,9 +3075,9 @@ def _ingilizce_yuzeyler(belge: _Belge) -> list[tuple[str, str]]:
     for havuz, yuva in belge.video_havuzlari.items():
         yuzeyler += [(f"video_kodlar.{havuz}", madde) for madde in yuva.maddeler]
     for donem in belge.donemler:
-        if donem.bilincli_bos:
-            # `içerik-önerilmez` Türkçe'dir ve resmî değerdir — dil kuralı bu
-            # dala UYGULANMAZ (K-120).
+        if donem.bilincli_bos or donem.kaynaksiz:
+            # `içerik-önerilmez` ve `kaynak-bulunamadı` Türkçe'dir ve resmî
+            # değerdir — dil kuralı bu iki dala UYGULANMAZ (K-120 / ikinci muafiyet).
             continue
         yuva = donem.yuvalar.get("gorsel_vurgu")
         if yuva:
@@ -3047,15 +3132,31 @@ def _c_satir_ihlalleri(satir: str, belge: _Belge) -> list[str]:
         # Sütun sayısı tutmuyorsa hangi hücrenin ne olduğu BİLİNMEZ; hücre
         # denetimi yapılmaz, yoksa kaydırılmış sütunlar üstünde uydurma not
         # üretilirdi.
+        #
+        # ESKİ SÜRÜM (7 sütun) AYRICA ADLANDIRILIR (dış depo `0824c0f`): eski
+        # rapor yeni hatta girdi olarak KULLANILMAZ ve sessizce yeni anlama
+        # çevrilmez — eksik `destek`/`yer` hücresine olumlu varsayım atanmaz.
+        # Satır iddia üretmez (`_c_iddialari`); teşhis, operatörün sütun
+        # saymadan "rapor eski sözleşmeyle üretilmiş" görmesi içindir.
+        eski = (
+            " — ESKİ sözleşme sürümü (`destek` ve `yer` sütunları yok); rapor "
+            "yeni şablonla yeniden üretilir, eski satır yeni anlama çevrilmez"
+            if len(hucreler) == C_ESKI_SUTUN_SAYISI
+            else ""
+        )
         return [
             f"Bölüm C satırı {len(hucreler)} sütunlu — sözleşme "
-            f"{len(C_TABLOSU_SUTUNLARI)} SABİT sütun ister: {kisa!r}"
+            f"{len(C_TABLOSU_SUTUNLARI)} SABİT sütun ister{eski}: {kisa!r}"
         ]
     mesajlar: list[str] = []
     for ad, hucre in zip(C_TABLOSU_SUTUNLARI, hucreler):
         if not hucre:
             mesajlar.append(f"Bölüm C satırında `{ad}` hücresi BOŞ: {kisa!r}")
-    no, alan, iddia, _kaynak_adi, url, tarih, tek_kaynak = hucreler
+    no, alan, iddia, kaynak_adi, url, tarih, tek_kaynak, destek, yer = hucreler
+    # `destek=yok` satırının ÖZEL hücre sözleşmesi (kapsama kuralı): URL aynen
+    # `kaynak-yok`, `kaynak adı` ve `yer` aynen `—`. Bu satır kaynaksız birimi
+    # GÖRÜNÜR kılar, "kaynaklı" YAPMAZ — motor `destek`e bakar.
+    kaynaksiz = _deger_gorunumu(destek) == _deger_gorunumu(C_DESTEK_YOK)
 
     # `no` HÜCRESİNİN BİÇİMİ (dizi kuralı ayrı ölçülür). Sözleşme: *"1'den
     # başlayan ARTAN TAM SAYIDIR ve bu raporda o iddianın KALICI KİMLİĞİDİR"*.
@@ -3085,8 +3186,24 @@ def _c_satir_ihlalleri(satir: str, belge: _Belge) -> list[str]:
                 f"{C_IDDIA_KELIME_UST_SINIRI} kelime ister (iddia ÖZETİDİR, "
                 f"cümlesi değil): {kisa!r}"
             )
-    if url:
-        if "http://" in url:
+    if url and kaynaksiz:
+        # Kapsama kuralının TEK istisnası: `destek=yok` satırında URL AYNEN
+        # `kaynak-yok`. Açılabilir bir adres yazılmışsa beyan kendi içinde
+        # çelişir (kaynak var mı yok mu?) — hücre denetimi bunu bildirir.
+        if _deger_gorunumu(url) != _deger_gorunumu(C_URL_KAYNAK_YOK):
+            mesajlar.append(
+                f"Bölüm C `destek=yok` satırında `URL` hücresi AYNEN "
+                f"`{C_URL_KAYNAK_YOK}` yazılır (kaynaksız birim adres "
+                f"taşıyamaz): {url!r}"
+            )
+    elif url:
+        if _deger_gorunumu(url) == _deger_gorunumu(C_URL_KAYNAK_YOK):
+            mesajlar.append(
+                f"Bölüm C `URL` hücresi `{C_URL_KAYNAK_YOK}` YALNIZ "
+                f"`destek={C_DESTEK_YOK}` satırında kabul edilir; bu satırın "
+                f"desteği {destek!r}: {kisa!r}"
+            )
+        elif "http://" in url:
             mesajlar.append(
                 f"Bölüm C `URL` hücresi `http://` bağlantı taşıyor: {url!r}"
             )
@@ -3096,15 +3213,54 @@ def _c_satir_ihlalleri(satir: str, belge: _Belge) -> list[str]:
                 "bağlantıdan ibaret olmalı (oturum-içi atıf kodu · dipnot "
                 f"numarası · alan adı kısaltması kabul edilmez): {url!r}"
             )
-    if tarih and tarih != C_TARIH_YOK and not _C_TARIH_RE.match(tarih):
+    if destek and _deger_gorunumu(destek) not in {
+        _deger_gorunumu(deger) for deger in C_DESTEK_DEGERLERI
+    }:
+        mesajlar.append(
+            "Bölüm C `destek` hücresi kapalı kümenin dışında "
+            f"({' / '.join(C_DESTEK_DEGERLERI)} beklenir): {destek!r}"
+        )
+    if kaynaksiz:
+        # Sözleşme: `destek=yok` satırında `kaynak adı` ve `yer` AYNEN `—`.
+        # Uydurma bir kaynak adı ya da konum, kaynaksız satırı kaynaklı
+        # GÖSTERİRDİ — hücre denetimi bunu bildirir, satır yine iddia üretir.
+        if kaynak_adi and kaynak_adi != C_HUCRE_YOK:
+            mesajlar.append(
+                f"Bölüm C `destek=yok` satırında `kaynak adı` hücresi AYNEN "
+                f"`{C_HUCRE_YOK}` yazılır: {kaynak_adi!r}"
+            )
+        if yer and yer != C_HUCRE_YOK:
+            mesajlar.append(
+                f"Bölüm C `destek=yok` satırında `yer` hücresi AYNEN "
+                f"`{C_HUCRE_YOK}` yazılır: {yer!r}"
+            )
+    elif yer == C_HUCRE_YOK:
+        mesajlar.append(
+            f"Bölüm C `yer` hücresi `{C_HUCRE_YOK}` YALNIZ `destek={C_DESTEK_YOK}` "
+            f"satırında kabul edilir; kaynaklı satırda konum ya da AYNEN "
+            f"`{C_YER_ACILMADI}` yazılır: {kisa!r}"
+        )
+    # `destek=yok` satırında `tarih` ve `tek kaynak` hücreleri için sözleşme
+    # bir değer ADLANDIRMAZ (yalnız URL · kaynak adı · yer'i adlandırır); kaynağı
+    # olmayan satırın yayın tarihi ve bağımsızlığı anlamsızdır. `—` bu iki
+    # hücrede TOLERE edilir — sözleşmenin adlandırdığı değerler de kabul.
+    if (
+        tarih
+        and tarih != C_TARIH_YOK
+        and not (kaynaksiz and tarih == C_HUCRE_YOK)
+        and not _C_TARIH_RE.match(tarih)
+    ):
         mesajlar.append(
             f"Bölüm C `tarih` hücresi `YYYY-AA` ya da `YYYY-AA-GG` değil; "
             f"kaynakta tarih görünmüyorsa AYNEN `{C_TARIH_YOK}` yazılır: "
             f"{tarih!r}"
         )
-    if tek_kaynak and _deger_gorunumu(tek_kaynak) not in {
-        _deger_gorunumu(deger) for deger in C_TEK_KAYNAK_DEGERLERI
-    }:
+    if (
+        tek_kaynak
+        and not (kaynaksiz and tek_kaynak == C_HUCRE_YOK)
+        and _deger_gorunumu(tek_kaynak)
+        not in {_deger_gorunumu(deger) for deger in C_TEK_KAYNAK_DEGERLERI}
+    ):
         mesajlar.append(
             "Bölüm C `tek kaynak` hücresi kapalı kümenin dışında "
             f"({' / '.join(C_TEK_KAYNAK_DEGERLERI)} beklenir): {tek_kaynak!r}"
@@ -3119,13 +3275,29 @@ def _c_tek_kaynak_yazim_ozeti(belge: _Belge) -> list[str]:
     yazımı bir kez bildirilir. Satır başına bildirmek 31 nota çıkıyordu ve
     gerçek bulguları gömüyordu — ceza aynı, notun sayısı farklı.
     """
-    kanonik = {_deger_gorunumu(deger): deger for deger in C_TEK_KAYNAK_DEGERLERI}
+    return _c_kapali_kume_yazim_ozeti(
+        belge, "tek kaynak", C_TEK_KAYNAK_INDEKSI, C_TEK_KAYNAK_DEGERLERI
+    )
+
+
+def _c_destek_yazim_ozeti(belge: _Belge) -> list[str]:
+    """`destek` hücresi için AYNI tolerans (`oneri` ↔ `öneri`) — ikinci kural yok."""
+    return _c_kapali_kume_yazim_ozeti(
+        belge, "destek", C_DESTEK_INDEKSI, C_DESTEK_DEGERLERI
+    )
+
+
+def _c_kapali_kume_yazim_ozeti(
+    belge: _Belge, ad: str, indeks: int, degerler: Sequence[str]
+) -> list[str]:
+    """Kapalı kümeli bir hücrenin yazım sapması — kaynak başına TEK özet not."""
+    kanonik = {_deger_gorunumu(deger): deger for deger in degerler}
     sapanlar: Counter[tuple[str, str]] = Counter()
     for satir in belge.c_veri_satirlari:
         hucreler = _hucreler(satir)
         if len(hucreler) != len(C_TABLOSU_SUTUNLARI):
             continue
-        hucre = hucreler[C_TEK_KAYNAK_INDEKSI]
+        hucre = hucreler[indeks]
         beklenen = kanonik.get(_deger_gorunumu(hucre))
         if beklenen is not None and hucre != beklenen:
             sapanlar[(hucre, beklenen)] += 1
@@ -3138,7 +3310,7 @@ def _c_tek_kaynak_yazim_ozeti(belge: _Belge) -> list[str]:
         )
     )
     return [
-        f"Bölüm C `tek kaynak` hücresinde sözleşme yazımı DIŞINDA yazım: "
+        f"Bölüm C `{ad}` hücresinde sözleşme yazımı DIŞINDA yazım: "
         f"{doku}; değer KABUL EDİLDİ"
     ]
 
@@ -3225,6 +3397,28 @@ class CIddia:
     doğru ama URL başka bir adresse istisna AÇILMAZ. `run`'ı atlayan çağıranda boş
     kalır ve boş URL hiçbir örneklem satırıyla eşleşmez (fail-closed).
     """
+    destek: str = ""
+    """`destek` hücresi, KANONİK yazımla (`C_DESTEK_DEGERLERI` üyesi) ya da BOŞ.
+
+    Grup 3 TAŞIMA YOLU (dış depo `0824c0f`): araştırmacının destek BEYANI
+    `K<n>#<no>` kimliğiyle senteze (EK-M) ve motora (kabul eşlemesi) ulaşır.
+    Kapalı kümenin DIŞINDAKİ yazım burada BOŞA düşer — motor boş desteği
+    kanıt kapısında SAYMAZ (fail-closed); satır denetimi sapmayı ayrıca
+    bildirmiştir. `run`'ı atlayan eski çağıranda (varsayılan) boştur.
+    """
+    uyarlama: bool = False
+    """`iddia` hücresi `[uyarlama]` etiketi taşıyor mu.
+
+    Kalıbın kendisi kaynakta YOK, araştırmacı kaynağın gösterdiği pratikten
+    türetti; satır dayandığı kaynağın `destek` değerini taşır. Motor bunu alan
+    sınıfına göre sayar: içerik alanında sayılır, risk alanında SAYILMAZ.
+    """
+    yer: str = ""
+    """`yer` hücresi AYNEN — iddianın kaynak İÇİNDEKİ konumu (ya da `açılmadı`).
+
+    Motor bununla bir şey ÖLÇMEZ; denetçinin ve sentezin kaynağı hızla
+    bulabilmesi için taşınır (EK-M). Karar girdisi DEĞİLDİR.
+    """
 
 
 def _c_iddialari(belge: _Belge) -> tuple[CIddia, ...]:
@@ -3245,12 +3439,27 @@ def _c_iddialari(belge: _Belge) -> tuple[CIddia, ...]:
         alan = hucreler[C_ALAN_INDEKSI]
         if not _C_NO_RE.match(ham_no) or not alan:
             continue
+        # `destek` KANONİK yazıma çevrilir (`oneri` → `öneri`); kapalı kümenin
+        # dışındaki yazım BOŞA düşer — motor boşu saymaz. `kaynak-yok` URL'si
+        # taşınmaz: hiçbir örneklem satırıyla eşleşmemesi gereken bir yer
+        # tutucudur, adres değil.
+        destek = _c_kanonik_deger(hucreler[C_DESTEK_INDEKSI], C_DESTEK_DEGERLERI)
+        url = hucreler[C_URL_INDEKSI].strip()
+        if _deger_gorunumu(url) == _deger_gorunumu(C_URL_KAYNAK_YOK):
+            url = ""
         iddialar.append(
             CIddia(
                 no=int(ham_no),
                 alan=alan,
                 anahtarlar=belge.donem_anahtarlari.get(_sadelestir(alan), ()),
-                url=hucreler[C_URL_INDEKSI].strip(),
+                url=url,
+                destek=destek,
+                uyarlama=bool(
+                    _UYARLAMA_ETIKET_RE.search(
+                        _yapi_gorunumu(hucreler[C_IDDIA_INDEKSI])
+                    )
+                ),
+                yer=hucreler[C_YER_INDEKSI].strip(),
             )
         )
     # Tekrar eden numara KİMLİK DEĞİLDİR: hangi satırı gösterdiği belirsiz olan
@@ -3292,6 +3501,25 @@ def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
         # burada ikinci bir boşluk notu üretmek aynı arızayı iki kez sayardı.
         return mesajlar
     if not belge.c_baslik_satiri_var:
+        # ESKİ SÜRÜM BAŞLIĞI (7 sütun) AYRICA ADLANDIRILIR — satır düzeyindeki
+        # teşhisle AYNI gerekçe: eski rapor (Kaynak-1..6) yeni hatta girdi
+        # olmaz ve sessizce yeni anlama çevrilmez. Ölçüldü (2026-09-21):
+        # Kaynak-1 ve Kaynak-3 bu koldan düşüyor, satır koluna hiç ulaşmıyor.
+        eski_baslik = any(
+            _hucreler(satir) == list(C_TABLOSU_SUTUNLARI[:C_ESKI_SUTUN_SAYISI])
+            for satir in _citsiz_satirlar(c_satirlari)
+            if _TABLO_RE.match(satir)
+        )
+        if eski_baslik:
+            mesajlar.append(
+                _kap(
+                    "Bölüm C ESKİ sözleşme sürümünün başlık satırını taşıyor "
+                    f"({C_ESKI_SUTUN_SAYISI} sütun; `destek` ve `yer` yok) — rapor "
+                    "yeni şablonla yeniden üretilir, eski satır yeni anlama "
+                    "çevrilmez; hiçbir iddia çözülmez"
+                )
+            )
+            return mesajlar
         mesajlar.append(
             _kap(
                 "Bölüm C sözleşmenin başlık satırını taşımıyor — sabit sütunlu "
@@ -3312,8 +3540,190 @@ def _kontrol_url_bicimi(belge: _Belge) -> list[str | _Mesaj]:
     for satir in belge.c_veri_satirlari:
         mesajlar.extend(_c_satir_ihlalleri(satir, belge))
     mesajlar.extend(_c_tek_kaynak_yazim_ozeti(belge))
+    mesajlar.extend(_c_destek_yazim_ozeti(belge))
     mesajlar.extend(_c_no_dizisi_ihlalleri(belge))
     mesajlar.extend(_c_kapsama_ihlalleri(belge))
+    return mesajlar
+
+
+@dataclass(frozen=True)
+class _GeriBaglantiYuzeyi:
+    """Kapsama kuralının BİRİMİ: bir yüzeyin (alan ya da dönem/yuva) birimleri.
+
+    `madde_mi=True` → her madde ayrı birimdir ve her biri kendi `[C: …]`
+    etiketini taşır; `False` → yüzey TEK birimdir (düz metin alanı), etiket
+    alanın sonundadır. `hedef` bağlanan Bölüm C satırının `alan/dönem`
+    hücresinin karşılaştırma anahtarıdır.
+    """
+
+    ad: str
+    hedef: str
+    birimler: tuple[str, ...]
+    madde_mi: bool
+
+
+def _geri_baglanti_yuzeyleri(belge: _Belge) -> list[_GeriBaglantiYuzeyi]:
+    """Kapsama kuralının kapsadığı yüzeyler — sözleşmenin KENDİ listesi.
+
+    Sözleşme Bölüm 5 kapsama kuralı: MADDE alanları `cta_kaliplari` ·
+    `kanca_kaliplari` · `gorsel_kodlar` · `video_kodlar` · `takvim_temalari` ·
+    `yasaklar_ve_hassasiyetler` + Bölüm B `kanca` · `cta` · `gorsel_vurgu`;
+    METİN alanları `kapsam` · `ton_ve_dil` + Bölüm B `mesaj_ekseni`. İki küme
+    kanonik sabitlerden TÜRER (`LISTE_ALANLARI` / `METIN_ALANLARI` /
+    `OZEL_GUN_LISTE_YUVALARI`), elle yazılmaz.
+
+    Muaf dönemler (K-120 bilinçli boş · ikinci muafiyet desteksiz) birim
+    ÜRETMEZ: dört yuvası tek bir resmî değerdir, madde değil.
+    """
+    yuzeyler: list[_GeriBaglantiYuzeyi] = []
+    for ad in TEMEL_ALANLAR:
+        yuva = belge.alanlar.get(ad)
+        if yuva is None:
+            continue
+        if ad in METIN_ALANLARI:
+            govde = " ".join([yuva.inline] + _citsiz_satirlar(yuva.satirlar)).strip()
+            birimler = (govde,) if govde else ()
+            yuzeyler.append(_GeriBaglantiYuzeyi(ad, _sadelestir(ad), birimler, False))
+        else:
+            yuzeyler.append(
+                _GeriBaglantiYuzeyi(
+                    ad, _sadelestir(ad), tuple(yuva.citsiz_maddeler), True
+                )
+            )
+    for donem in belge.donemler:
+        if donem.bilincli_bos or donem.kaynaksiz:
+            continue
+        hedef = _sadelestir(donem.ad)
+        for yuva_adi in OZEL_GUN_YUVALARI:
+            yuva = donem.yuvalar.get(yuva_adi)
+            if yuva is None:
+                continue
+            kimlik = f"{donem.ad}/{yuva_adi}"
+            if yuva_adi in OZEL_GUN_LISTE_YUVALARI:
+                yuzeyler.append(
+                    _GeriBaglantiYuzeyi(
+                        kimlik, hedef, tuple(yuva.citsiz_maddeler), True
+                    )
+                )
+            else:
+                govde = " ".join(
+                    [yuva.inline] + _citsiz_satirlar(yuva.satirlar)
+                ).strip()
+                yuzeyler.append(
+                    _GeriBaglantiYuzeyi(kimlik, hedef, (govde,) if govde else (), False)
+                )
+    return yuzeyler
+
+
+def _geri_baglanti_numaralari(metin: str) -> tuple[list[int], int, int]:
+    """Bir birimin `[C: …]` etiketlerinden ÇÖZÜLEN numaralar.
+
+    Döndürür: (çözülen numaralar, etiket sayısı, bozuk yazımlı parça sayısı).
+    Etiket YOKSA `(… , 0, 0)`. Yazım kapalıdır: virgülle ayrılmış, 1'den
+    başlayan tam sayılar; başka her parça bozuktur ve numara ÜRETMEZ
+    (fail-closed — `3a` "sanki 3'müş gibi" bağlanmaz). Markdown süsü saydamdır
+    (`\\[C: 4\\]` kaçışlı yazım da etikettir — `_yapi_gorunumu`).
+    """
+    etiketler = _GERI_BAGLANTI_RE.findall(_yapi_gorunumu(metin))
+    numaralar: list[int] = []
+    bozuk = 0
+    for govde in etiketler:
+        parcalar = [parca.strip() for parca in govde.split(",")]
+        # BOŞ ETİKET (`[C: ]` · `[C: , ]`) BOZUKTUR (Codex bulgu 3, orta —
+        # ÖLÇÜLDÜ 2026-09-21): etiket var ama numara yok, kapsama eksikliği
+        # "eksiksiz bağlantı" gibi geçiyordu. Sözleşme etiketin en az bir
+        # numara taşımasını ister; boş parça sayılmaz, boş etiket sayılır.
+        if not any(parcalar):
+            bozuk += 1
+            continue
+        for parca in parcalar:
+            if not parca:
+                continue
+            if _GERI_BAGLANTI_NO_RE.match(parca):
+                numaralar.append(int(parca))
+            else:
+                bozuk += 1
+    return numaralar, len(etiketler), bozuk
+
+
+def _kontrol_geri_baglanti(belge: _Belge) -> list[str | _Mesaj]:
+    """KAPSAMA KURALI — her birim Bölüm C'de en az bir satırla temsil edilir.
+
+    Sözleşme Bölüm 5 (dış depo `0824c0f`, Grup 3): madde alanlarında HER MADDE,
+    metin alanlarında ALAN BAŞINA en az bir satır; bağ, birimin sonundaki
+    `[C: 4, 9]` geri bağlantısıyla kurulur. Kapı burada YALNIZ KİMLİK ve ALAN
+    BÜTÜNLÜĞÜNÜ ölçer (görev bölüşümü, sözleşme metni): etiket var mı · numara
+    Bölüm C'de çözülüyor mu · satırın `alan/dönem`i birimin alanıyla uyuşuyor
+    mu. Bağlanan satırın birimi GERÇEKTEN destekleyip desteklemediği anlam
+    yargısıdır ve DENETÇİNİNDİR — burada ölçülmez. Aynı satıra birden çok
+    birimin bağlanması NOT olarak görünür, kapı değildir (sözleşme).
+
+    Mesajlar YÜZEY başına toplanır (alan ya da dönem/yuva): birim başına not,
+    eski biçimli bir raporda yüzlerce satıra çıkar ve gerçek bulguyu gömerdi.
+
+    Bölüm C tablosu HİÇ yoksa (başlık satırı yok) bu kontrol susar: yokluğu
+    `url-bicimi` zaten bildirir ve her birim "çözülmeyen numara" diye ikinci
+    kez sayılmaz. Bağ evreni `_c_iddialari`'dır — motorun ve EK-M'nin okuduğu
+    tablonun TA KENDİSİ; ikinci bir çözüm kuralı YAZILMAZ.
+    """
+    if not belge.c_baslik_satiri_var:
+        return []
+    evren = {iddia.no: iddia for iddia in _c_iddialari(belge)}
+    mesajlar: list[str | _Mesaj] = []
+    bagli: Counter[int] = Counter()
+    for yuzey in _geri_baglanti_yuzeyleri(belge):
+        etiketsiz = 0
+        bozuk_toplam = 0
+        cozulmeyen: list[int] = []
+        uyusmayan: list[int] = []
+        for birim in yuzey.birimler:
+            numaralar, etiket_sayisi, bozuk = _geri_baglanti_numaralari(birim)
+            bozuk_toplam += bozuk
+            if etiket_sayisi == 0:
+                etiketsiz += 1
+                continue
+            if numaralar != sorted(set(numaralar)):
+                bozuk_toplam += 1
+            for no in numaralar:
+                iddia = evren.get(no)
+                if iddia is None:
+                    cozulmeyen.append(no)
+                elif _sadelestir(iddia.alan) != yuzey.hedef:
+                    uyusmayan.append(no)
+                else:
+                    bagli[no] += 1
+        birim_adi, ayrilma = ("madde", "maddeden") if yuzey.madde_mi else ("alan", "alandan")
+        if etiketsiz:
+            mesajlar.append(
+                f"`{yuzey.ad}`: {len(yuzey.birimler)} {ayrilma} {etiketsiz}'i "
+                f"`[C: …]` geri bağlantısı taşımıyor — kapsama kuralı her "
+                f"{birim_adi} için Bölüm C'de en az bir satır ister "
+                f"(kaynaksız birimin satırı `destek={C_DESTEK_YOK}` ile YAZILIR)"
+            )
+        if bozuk_toplam:
+            mesajlar.append(
+                f"`{yuzey.ad}`: {bozuk_toplam} geri bağlantı parçası sözleşme "
+                "yazımında değil (`[C: 4, 9]` — virgülle ayrılmış, artan tam "
+                "sayılar); bozuk parça bağ KURMAZ"
+            )
+        if cozulmeyen:
+            mesajlar.append(
+                f"`{yuzey.ad}`: geri bağlantı Bölüm C'de ÇÖZÜLMEYEN numara "
+                f"gösteriyor: {sorted(set(cozulmeyen))} — satır yok ya da "
+                "kimliği bozuk; bağ kurulmaz"
+            )
+        if uyusmayan:
+            mesajlar.append(
+                f"`{yuzey.ad}`: geri bağlantı BAŞKA alan/dönemin satırını "
+                f"gösteriyor: {sorted(set(uyusmayan))} — satırın `alan/dönem` "
+                f"hücresi `{yuzey.ad.split('/')[0]}` olmalı"
+            )
+    coklu = {no: adet for no, adet in sorted(bagli.items()) if adet > 1}
+    if coklu:
+        mesajlar.append(
+            "Bölüm C'de birden çok birimin bağlandığı satırlar (NOT, kapı "
+            f"değil — sözleşme izin verir): {coklu}"
+        )
     return mesajlar
 
 
@@ -3780,7 +4190,7 @@ CHECKS: tuple[Check, ...] = (
                 "video havuzu · dönem yuvası) SIRA ölçülür. Açık kümelerde "
                 "(madde · dönem · Bölüm C eşleme satırı) yalnız TEKRAR ölçülür — "
                 "ve bunun sebebi sözleşmenin sıra dayatmaması DEĞİLDİR: "
-                "sözleşme (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI "
+                "sözleşme (`_SABLON.md` satır 162-164) her listede ÖNEM SIRASI "
                 "dayatır (sektöre özgülük → kaynak sayısı ve gücü → Türkiye "
                 "yerelliği). Önem SEMANTİK bir yargıdır ve mekanik kapı onu "
                 "DOĞRULAYAMAZ; ölçüldü ki iki çağrı kalıbı takas edildiğinde "
@@ -3880,7 +4290,33 @@ CHECKS: tuple[Check, ...] = (
                 "(denetçi ADIM 1'de kaynak başına 3 iddia örnekleyip "
                 "bağlantıyı açar). Bu ailenin temiz çıkması Bölüm C'nin "
                 "BİÇİMİNE uyduğu anlamına gelir, içeriğinin DOĞRU olduğu "
-                "anlamına GELMEZ."
+                "anlamına GELMEZ. `destek` ve `yer` sütunları (dış depo "
+                "`0824c0f`): `destek` kapalı küme + `destek=yok` satırının sabit "
+                "hücreleri (`URL`=`kaynak-yok` · `kaynak adı`/`yer`=`—`) ölçülür; "
+                "`yer` hücresinin kaynakta GERÇEKTEN o konumu gösterdiği "
+                "ölçülmez (anlam yargısı, denetçinin işi)."
+            ),
+        ),
+    ),
+    Check(
+        kimlik="url-bicimi/geri-baglanti",
+        aile="url-bicimi",
+        seviye=SEVIYE_NOT,
+        aciklama=(
+            "KAPSAMA KURALI: her madde / metin alanı `[C: …]` geri bağlantısıyla "
+            "Bölüm C'de en az bir satıra bağlanır — kimlik ve alan bütünlüğü"
+        ),
+        kural=_kontrol_geri_baglanti,
+        kapsam_sinirlari=(
+            (
+                "url-bicimi/geri-baglanti: kapı YALNIZ kimlik ve alan "
+                "bütünlüğünü ölçer — etiket var mı, numara Bölüm C'de çözülüyor "
+                "mu, satırın `alan/dönem` hücresi birimin alanıyla uyuşuyor mu. "
+                "Bağlanan satırın birimi GERÇEKTEN desteklediği ÖLÇÜLMEZ (anlam "
+                "yargısı — denetçi `kaynak-iddialari` sütunuyla beyan eder). "
+                "Aynı satıra birden çok birimin bağlanması NOT olarak "
+                "gösterilir, engellenmez. Muaf dönemler (`içerik-önerilmez` · "
+                "`kaynak-bulunamadı`) birim üretmez ve ölçülmez."
             ),
         ),
     ),

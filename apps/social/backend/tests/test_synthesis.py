@@ -1628,3 +1628,107 @@ def test_thawed_content_passes_the_writing_gate() -> None:
     sonuc = _sonuc(_tam_icerik())
     assert structural_errors(identity.cozulmus(sonuc.aday_json)) == []
     assert structural_errors(dict(sonuc.aday_json)) != []
+
+
+# ═══ Grup 3 — EK-M kanıt kaydı + araştırma etiketi sızıntısı (`0824c0f`) ═══
+
+
+def _kanit_kayitli_raporlar() -> tuple[bd.DoctorReport, ...]:
+    return (
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="KAYNAK-1",
+            icerik_ozeti=identity.canonical_sha("kaynak-1"),
+            iddialar=(
+                bd.CIddia(no=1, alan="cta_kaliplari", destek="öneri", yer="Bölüm 2"),
+                bd.CIddia(no=2, alan="cta_kaliplari", destek="yok", yer="—"),
+                bd.CIddia(no=3, alan="kanca_kaliplari", destek="uygulama", uyarlama=True, yer="s. 4"),
+            ),
+        ),
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="KAYNAK-2",
+            icerik_ozeti=identity.canonical_sha("kaynak-2"),
+            iddialar=(bd.CIddia(no=1, alan="cta_kaliplari", destek="veri", yer="açılmadı"),),
+        ),
+    )
+
+
+async def test_EK_M_her_numaranin_yaninda_kanit_kaydini_basar(kosu, tmp_path) -> None:
+    """TAŞIMA YOLU: destek · `[uyarlama]` · yer sentezin gördüğü dizinde durur."""
+    icerik = _tam_icerik()
+    _, runner = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), doktor=_kanit_kayitli_raporlar()
+    )
+    dizin = runner.istem_metni.split("## EK-M")[1].split("## EK-H")[0]
+    assert "K1#1 {destek=öneri; yer=Bölüm 2}" in dizin
+    assert "K1#2 {destek=yok; yer=—}" in dizin
+    assert "K1#3 {destek=uygulama [uyarlama]; yer=s. 4}" in dizin
+    assert "K2#1 {destek=veri; yer=açılmadı}" in dizin
+    # Sentezin okuyacağı kural dizinin BAŞINDADIR: kaynaksız birim aday olmaz.
+    assert "kaynaksız:" in dizin and "reddedilen-aday" in dizin
+
+
+def test_EK_M_eski_kayitta_bos_alanlar_soru_isaretiyle_basilir() -> None:
+    """Destek/yer bilinmiyorsa (eski `CIddia`) uydurma değer YAZILMAZ."""
+    assert synthesis._iddia_gorunumu("K1#1", bd.CIddia(no=1, alan="kapsam")) == "K1#1 {destek=?; yer=?}"
+
+
+@pytest.mark.parametrize(
+    "degisiklik,yol",
+    [
+        ({"kanca_kaliplari": [KORUNAN_METIN, CIKARILACAK_METIN + " [C: 3]"]}, "kanca_kaliplari[1]"),
+        ({"kapsam": "Kuyumculuk perakendesi [uyarlama]"}, "kapsam"),
+        (
+            {"cta_kaliplari": [{"kalip": "Vitrini görün", "tur": "ziyaret", "gerekce": "destek=öneri, K1#3"}]},
+            "cta_kaliplari[0]",
+        ),
+        ({"video_kodlar": {"hareket": ["yavaş kaydırma yer=Bölüm 2"], "sahne": ["tezgâh üstü"]}}, "video_kodlar/hareket[0]"),
+    ],
+)
+def test_arastirma_etiketi_tasiyan_paket_reddedilir(degisiklik: dict, yol: str) -> None:
+    """ARAŞTIRMA BİLGİSİ ≠ PAKET İÇERİĞİ (Codex Ek 2.3): kanıt kaydı paket metnine sızmaz."""
+    icerik = _tam_icerik(**degisiklik)
+    assert synthesis.arastirma_etiketi_sizintilari(icerik) == [yol]
+    birimler = identity.enumerate_content_units(icerik)
+    kimlikler = _yol_kimlik(icerik)
+    gunluk = [
+        {
+            "tur": "karar", "alan": birimler[y]["alan"], "oge_yolu": y, "unit_id": kimlikler[y],
+            "oge_sha": birimler[y]["oge_sha"], "karar": "koru", "gerekce": "Taşındı.", "kanit": "",
+            "aktor": "sentez",
+        }
+        for y in sorted(birimler)
+    ]
+    hatalar = synthesis.validate(_sonuc(icerik, gunluk))
+    assert len(hatalar) == 1 and hatalar[0].startswith(f"{yol}: paket metni araştırma etiketi taşıyor"), hatalar
+
+
+def test_koseli_ayracli_degisken_ve_kanal_bayragi_sizinti_degildir() -> None:
+    """Kontrol kolu: sözleşmenin İZİN VERDİĞİ ayraçlar deseni tetiklemez."""
+    icerik = _tam_icerik(
+        kanca_kaliplari=[KORUNAN_METIN, "[duygusal an] + [ürün bağlantısı] + [davet]"],
+        cta_kaliplari=[{"kalip": "randevu daveti [kanal-bağımlı: randevu_sistemi]", "tur": "satis", "gerekce": "D1#3"}],
+    )
+    assert synthesis.arastirma_etiketi_sizintilari(icerik) == []
+
+
+@pytest.mark.parametrize(
+    "metin", [r"kalıp \[uyarlama\]", r"kalıp \[C\: 3\]", r"kalıp \[C: 3\]", r"kalıp destek\=öneri"]
+)
+def test_kacisli_arastirma_etiketi_de_sizinti_sayilir(metin: str) -> None:
+    """Codex bulgu 5 (orta): markdown kaçışlı yazım kapıdan geçiyordu."""
+    assert synthesis.arastirma_etiketi_sizintilari(_tam_icerik(kapsam=metin)) == ["kapsam"]
+
+
+def test_ek_m_ve_sozlesme_kaynaksiz_risk_maddesini_ekle_yoluna_yonlendirir() -> None:
+    """Codex bulgu 2 (yüksek): "aday yapma, not düş" içerikle SINIRLI; risk maddesi `ekle` ile
+    motora gider ki açık soru açılsın. Kural EK-M başlığında ve pinli sözleşmede birlikte durur."""
+    dizin = synthesis._iddia_dizini(_kanit_kayitli_raporlar())
+    assert "RİSK maddesini" in dizin and "yine `ekle` olarak yaz" in dizin
+    sozlesme = (synthesis.ARASTIRMA_DEPOSU_KOKU / synthesis.GOREV_DOSYASI).read_text(encoding="utf-8")
+    assert "RİSK maddesini" in sozlesme and "`ekle` olarak YAZ" in sozlesme

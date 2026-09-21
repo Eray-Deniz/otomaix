@@ -230,6 +230,29 @@ düzeltilir, kayıt `otomaix-sosyal-medya-arastirmasi/_sablon-duzenleme.md` (Gru
 tek başına canlıya inemez. **Sıradaki iş: Grup 3 kod tarafı** (Open Problems ilk madde).
 Koşu `kosu-7705437723ce4730ac0ae70cf6986bc8` hâlâ `calisiyor`, motor koşturulmadı.
 
+**2026-09-21 ON İKİNCİ OTURUM — GRUP 3 KOD TARAFI İNDİ, COMMIT BEKLİYOR.** Altı kalemin altısı
+yazıldı: (1) brief-doctor 9 sütun (`destek`·`yer`), `destek=yok` satırının sabit hücreleri,
+`CIddia` üç alan kazandı, `[C: …]` geri bağlantı + kapsama kontrolü (`url-bicimi/geri-baglanti`
+kimliğiyle, aile dokuza ÇIKMADI), `kaynak-bulunamadı` ikinci muafiyet (not düşer, sayıma girmez),
+eski 7 sütunlu rapor "ESKİ sözleşme sürümü" diye adlandırılır ve iddia üretmez; (2) EK-M her
+numaranın yanına `{destek=…; yer=…}` + `[uyarlama]` basar; sentez `validate` paket metninde
+araştırma etiketi (`[C:` · `[uyarlama]` · `destek=` · `yer=`) görünce REDDEDER; (3) motor
+kanıt kapısı: mutabakat=varlık, çelişen URL sonuçları → açık soru, alan sınıfına göre destek
+kümesi, hepsi `yok` → içerikte `kaynaksiz-bekletme` (açık soru YOK) / riskte açık soru; sebep
+kümesi 12 → 15, motor damgası 2.21.0; (4) iki sözleşme (denetçi 2.5, sentez 2.7) dış depoda
+DÜZENLENDİ, commit YOK; (5) pin GEÇİCİ olarak dış HEAD `0824c0f` + disk hash'lerine çekildi —
+dış commit sonrası `commit` alanı yeniden yazılacak; (6) tam takım **4693 passed / 1 failed**
+(kırık test aynı oturumda düzeltildi, `test_brief_doctor.py` yeniden **1632 passed**); yedi
+mutasyonun yedisi yakalandı (kanıt kapısı · çelişki · sızıntı · EK-M · geri bağlantı · kaynaksız
+muafiyet · `destek=yok` hücre kuralı). Gerçek Kaynak-1/3 yeni kapıdan geçirildi: 0 iddia + "ESKİ
+sürüm" notu (ölçüldü). **Alan sınıfı K-129'un mekanik kuralıyla seçilir — rakam içeren HER
+içerik maddesi risk sayılır ve `öneri` desteğiyle açık soruya düşer; tasarım böyle yazıyor,
+canlıda kaç maddeyi vuracağı ÖLÇÜLMEDİ.** **Aynı akşam Eray Codex'i dışarıdan koşturdu: 5 bulgu
+(2 yüksek: URL'siz satırın beyanı kanıt sayılıyordu · sentez talimatı kaynaksız risk maddesinin açık
+soru yolunu kapatıyordu; 3 orta: boş `[C: ]` geçiyordu · `KAYNAKTA YOK` URL eşitliği aramıyordu ·
+kaçışlı etiket sızıyordu) — 5'i de bellekte yeniden üretilip kapatıldı, 8 regresyon testi; tam
+takım 4704 passed / 0 failed (401 s).** Sıradaki iş Open Problems ilk maddede.
+
 **2026-09-21 ONUNCU OTURUM — SIRA KUSURU KAPANDI, YENİ KOŞU YANLIŞ GİRDİYLE KOŞTU.**
 Koşu `kosu-7705437723ce4730ac0ae70cf6986bc8` açıldı; denetim (18 dk 49 sn) ve sentez (16 dk 04 sn)
 koştu. **Motor KOŞTURULMADI** — kuru koşum `blocked` verdiği için yazdırmadım; koşu satırı hâlâ
@@ -1586,7 +1609,17 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[YÜKSEK — SIRADAKİ İŞ, 2026-09-21] Grup 3 kod tarafı: şablonun üçüncü revizyonunu hat tanımalı.**
+- **[YÜKSEK — SIRADAKİ İŞ, 2026-09-21 akşam] Grup 3 KOD İNDİ; kapanış zinciri bekliyor.**
+  Sıra: (a) dış depo commit — YAPILDI `34a34db` (yalnız iki sözleşme; Eray'ın 44 silinmiş
+  taslak dosyası çalışma ağacında duruyor, DOKUNULMADI); (b) pin `commit` alanı — YAPILDI;
+  (c) monorepo tek commit — YAPILDI (bu oturumun son commit'i, push yok);
+  (d) `/review-claude-codex` ZORUNLU — SIRADAKİ (ayrıştırıcı + motor + sentez değişti); (e) Eray üç
+  araştırmayı yeni brief'le alır → tek tur; ilk turda ölçülecekler: LLM'lerin 9 sütunu ve
+  `[C: …]`'yi yazma isabeti · brief-doctor not sayısı · kaç içerik maddesinin K-129 rakam
+  kuralıyla risk sınıfına düşüp açık soruya gittiği · CTA havuzu 5'i buluyor mu (eşik kararı
+  bununla yeniden açılır ya da kapanır). Evi hâlâ Eray kararı: Task 19'a ek adım (Step 5-r)
+  ya da ayrı task. Süre: kod oturumu ÖLÇÜLMEDİ; tam takım 400 s (ölçüldü).
+  Aşağıdaki kalem listesi TARİHÎ (uygulandı, silinmedi):
   Tasarım `otomaix-sosyal-medya-arastirmasi/_sablon-duzenleme.md` (Grup 3 + Ek §2.1-2.3 + §3
   senaryoları). Kalemler: (1) `brief_doctor.py` — `C_TABLOSU_SUTUNLARI` 7 → 9 (`destek`, `yer`),
   `CIddia`'ya `destek`/`uyarlama`/`yer`, kapsama sayımı (madde alanı madde başına, metin alanı
@@ -2666,6 +2699,38 @@ kayda geçer. Sonraki turlar `T8-fixB`, `T8-fixB5`, `T8-fixB6` ile çakışması
 Clean/Accepted-risk dallarında koşar; son bağımsız hakem verdict'i `needs-attention`'dı ve
 onun blokeri (B5) bağımsız yeniden-doğrulama GÖRMEDEN kapatıldı. Fail-safe yön: taban
 `2b468e8d` KALIR ve Task 7 + Task 8 + bütün düzeltmeleri kendiliğinden yeniden kapsar.
+
+## Grup 3 — kod tarafı (2026-09-21, on ikinci oturum)
+
+- **Aile kümesi DOKUZA ÇIKMADI:** geri bağlantı kontrolü `url-bicimi` ailesinde ikinci `Check`
+  olarak yaşar (`url-bicimi/geri-baglanti`) — `bicim-kurallari` emsali; K-89 dondurması korunur.
+- **Geri bağlantı mesajları YÜZEY başına toplanır** (alan ya da dönem/yuva): birim başına not
+  eski biçimli raporda yüzlerce satıra çıkar, gerçek bulguyu gömer.
+- **Aynı satıra çok birim = NOT** (sözleşme "kapı değil" der); temiz fixture her birime ayrı
+  satır açar ki taban `gecti` kalsın.
+- **`destek=yok` satırında `tarih`/`tek kaynak` `—` TOLERE edilir** — sözleşme bu iki hücre için
+  değer adlandırmaz (yalnız URL · kaynak adı · yer'i adlandırır); kaynaksız satırın tarihi ve
+  bağımsızlığı anlamsızdır. Şablon değiştirilmedi, kod toleransı belgelendi.
+- **Kapalı kümenin dışındaki `destek` yazımı BOŞA düşer**, satır yine iddia üretir; motor boşu
+  `yok` gibi işler (sayılmaz, fail-closed). ASCII yazım (`oneri`) kanonik üyeye çevrilir + tek not.
+- **Alan sınıfı = `_mevzuat_mi`** (K-129 mekanik kuralı, yeni kural yazılmadı): rakam içeren her
+  aday risk sınıfına düşer. Bilinçli; canlı etkisi ölçülmedi, ilk turda ölçülecek.
+- **Çelişki kontrolü mutabakattan ÖNCE** koşar (K-126 açılmadan); `DOĞRULANDI` yalnız URL'si
+  araştırma satırına eşit örneklemden sayılır (K-126 eşitliği), `KAYNAKTA YOK` kimlikle sayılır
+  (olumsuz beyan kopya hatasıyla susturulmaz).
+- **Sızıntı kapısı sentezin `validate`'inde**, motorda değil: paket metnine sızan etiket
+  sentez çıktısı kapısında düşer; regex `[C:` · `[uyarlama]` · `destek=` · `yer=` — köşeli
+  değişken ve kanal bayrağı desene girmez (kontrol kolu test edildi).
+- **Eski raporlar (Kaynak-1..6)** iki koldan adlandırılır: eski BAŞLIK satırı (kap iddiası,
+  gerçek Kaynak-1/3 buradan düşüyor — ölçüldü) ve 7 sütunlu VERİ satırı; ikisinde de iddia
+  üretilmez, "yeni anlama çevrilmez".
+- **Eray kararı gerektiren şey YOK** — Grup 1-2 onayı ve `0824c0f` şablonu bağlayıcıydı; teknik
+  sınama `/review-claude-codex`'e bırakıldı (İlke 8).
+- **Codex dış incelemesi (aynı akşam) iki kuralı düzeltti:** `KAYNAKTA YOK` de "aynı iddia, AYNI
+  URL" ister (fail-closed gerekçesiyle kimlikle sayılıyordu — kararlaştırılan kural ağır bastı);
+  URL'si olmayan satırın destek beyanı kanıt kapısında `yok` sayılır (mutabakat için satır korunur).
+  Sentez sözleşmesi: "hepsi `yok` → aday yapma" YALNIZ içerik kalıbı; risk maddesi `ekle` ile
+  motora gider ki açık soru açılsın.
 
 # Review Ledger
 

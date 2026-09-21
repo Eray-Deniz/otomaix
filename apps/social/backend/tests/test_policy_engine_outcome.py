@@ -310,6 +310,9 @@ def test_uygulanmama_sebepleri_are_closed() -> None:
         "oneri-olumsuz",
         "celiski",
         "cogunluk-yok",
+        "url-sonucu-celiskili",
+        "kanit-turu-yetersiz",
+        "kaynaksiz-bekletme",
     }
 
 
@@ -338,9 +341,9 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
         tuple(sorted(engine.identity.NOT_SINIFLARI)),
     )
     assert (engine.ENGINE_VERSION, kural_yuzeyi) == (
-        "2.20.0",
+        "2.21.0",
         (
-            12,
+            15,
             (
                 "celiski",
                 "cogunluk-yok",
@@ -348,12 +351,15 @@ def test_engine_version_is_pinned_to_the_RULE_SURFACE() -> None:
                 "iddia-alani-uyusmuyor",
                 "iddia-arastirmada-yok",
                 "iddia-denetcide-yok",
+                "kanit-turu-yetersiz",
                 "kanit-yok",
                 "kaynak-iddia-yok",
+                "kaynaksiz-bekletme",
                 "mutabakat-yok",
                 "oneri-olumsuz",
                 "referans-uyusmuyor",
                 "referans-yok",
+                "url-sonucu-celiskili",
             ),
             (
                 "acik_soru",

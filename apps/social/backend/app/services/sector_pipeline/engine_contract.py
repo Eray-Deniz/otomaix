@@ -63,6 +63,9 @@ UYGULANMAMA_SEBEPLERI: tuple[str, ...] = (
     "oneri-olumsuz",  # denetçi o satırda `alma`/`açık-soru` önermiş
     "celiski",  # denetçi satırı `çelişki` sınıfında — sayı yetse de girmez
     "cogunluk-yok",  # yeni öğe 2-3 yapısal çoğunluk kuralı
+    "url-sonucu-celiskili",  # aynı iddia: bir denetçi `DOĞRULANDI`, öteki `KAYNAKTA YOK`
+    "kanit-turu-yetersiz",  # kanıt kapısı: bağlı satırların desteği alan sınıfının kümesinde değil
+    "kaynaksiz-bekletme",  # içerik kalıbı, bağlı satırların HEPSİ `destek=yok` — bekletme, açık soru değil
 )
 """Aday kararın uygulanmama sebepleri — KAPALI küme. UYDURULMUŞ değer YOK.
 

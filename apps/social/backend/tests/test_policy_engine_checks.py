@@ -236,6 +236,12 @@ def _aktif_paket() -> dict:
 DOGRULANMIS_KAYNAK = "KAYNAK-1"
 IKINCI_KAYNAK = "KAYNAK-2"
 DOGRULANMIS_URL = "https://resmi.example/mevzuat-2026"
+# Araştırma satırlarının varsayılan `destek` beyanı (kanıt kapısı, `0824c0f`).
+# `veri` her iki alan sınıfının kanıt kapısında SAYILIR (risk: mevzuat·veri;
+# içerik: uygulama·öneri·veri) — mevcut testlerin ölçtüğü kapılar (çoğunluk ·
+# K-126 · atıf bağı) kanıt kapısına takılmadan görünür kalır; kapının kendisi
+# `destek` değerini değiştiren ayrı testlerde ölçülür.
+VARSAYILAN_DESTEK = "veri"
 COZULEMEYEN_KANIT = "D1#42"
 
 
@@ -479,12 +485,14 @@ def _arastirma_iddialari(denetim=None) -> tuple[bd.CIddia, ...]:
     iddialar[MEVCUT_DONEM_IDDIA_NO] = MEVCUT_DONEM_ADI
     # Her araştırma satırı fixture'ın doğrulanmış URL'sini taşır: K-126 ikinci
     # ayağı kimlik VE URL eşitliğini birlikte arar (attempt-3 F2).
+    # Her satır VARSAYILAN olarak `VARSAYILAN_DESTEK` beyanı taşır (`0824c0f`).
     return tuple(
         bd.CIddia(
             no=no,
             alan=alan,
             anahtarlar=DONEM_ANAHTARLARI.get(alan, ()),
             url=DOGRULANMIS_URL,
+            destek=VARSAYILAN_DESTEK,
         )
         for no, alan in sorted(iddialar.items())
     )
@@ -1464,6 +1472,7 @@ def _ozel_gun_ekle_girdisi(
                 alan=YENI_DONEM_ADI if donem_adi is None else donem_adi,
                 anahtarlar=(YENI_DONEM_ANAHTARI,) if anahtarlar is None else anahtarlar,
                 url=DOGRULANMIS_URL,
+                destek=VARSAYILAN_DESTEK,
             )
             if iddia.no == YENI_DONEM_IDDIA_NO
             else iddia
@@ -3660,3 +3669,260 @@ def test_malformed_url_does_not_pass_the_majority_gate() -> None:
         )
     )
     assert "kanit-yok" in _sebepler(sonuc)
+
+
+# ═══ 10b. Kanıt kapısı — destek türü, alan sınıfına göre (Grup 2/3, `0824c0f`) ═══
+#
+# İKİ AYRI SORU, İKİ AYRI SAYIM: MUTABAKAT (kaç araştırmada var — `destek=yok`
+# satırı da sayılır) ve KANIT KAPISI (bağlı satırlardan en az birinin desteği
+# alan sınıfının kümesinde mi). Sınıf K-129'un mekanik kuralıyla seçilir:
+# `yasaklar_ve_hassasiyetler` ya da tarih/sayı/mevzuat işaretli metin → RİSK.
+
+
+def _iddialarla(destek_k1: str, destek_k2: str, *, uyarlama: bool = False) -> bd.RoundGate:
+    """`K1#1` ve `K2#1` satırlarının desteğini kaynak başına ayrı kurar."""
+
+    def _kaynak(destek: str) -> tuple[bd.CIddia, ...]:
+        return tuple(
+            bd.CIddia(
+                no=i.no, alan=i.alan, anahtarlar=i.anahtarlar, url=i.url,
+                destek=destek, uyarlama=uyarlama,
+            )
+            if i.no == 1
+            else i
+            for i in _arastirma_iddialari(DENETIM_TABLOSU)
+        )
+
+    return bd.gate_round(
+        [
+            bd.DoctorReport(
+                sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi=ad,
+                icerik_ozeti=_ozet(ad), iddialar=_kaynak(destek),
+            )
+            for ad, destek in ((DOGRULANMIS_KAYNAK, destek_k1), (IKINCI_KAYNAK, destek_k2))
+        ]
+    )
+
+
+IKI_KAYNAKLI_IDDIA = auditors.KaynakIddiasi(kaynak=1, iddia=1)
+RISK_METNI = "Yeni kanca kalibi 2026 ayar beyani"
+"""Rakam + mevzuat kelimesi: `_mevzuat_mi` bunu RİSK sınıfına düşürür."""
+
+
+def _kanit_girdisi(
+    *,
+    destek_k1: str = "yok",
+    destek_k2: str = "yok",
+    uyarlama: bool = False,
+    metin: str = "Yeni kanca kalibi",
+    ornekle_1=None,
+    ornekle_2=None,
+    kanit: str = IKI_KAYNAKLI,
+    kaynak_iddia: str = "K1#1, K2#1",
+    profil_1=None,
+    profil_2=None,
+):
+    aday = _tam_icerik(kanca_kaliplari=[KORUNAN_KANCA, CIKARILACAK_KANCA, metin])
+    harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
+    yeni_yol = _yol(aday, "kanca_kaliplari", metin)
+    gunluk = _gunluk(
+        aday,
+        kimlikler=harita,
+        degis={yeni_yol: {"karar": "ekle", "kanit": kanit, "kaynak_iddia": kaynak_iddia}},
+        denetim=DENETIM_TABLOSU,
+    )
+    mekanik = _iddialarla(destek_k1, destek_k2, uyarlama=uyarlama)
+    return _girdi(
+        icerik=aday,
+        gunluk=gunluk,
+        cift=_cift(
+            ornekle_1=ornekle_1,
+            ornekle_2=ornekle_2,
+            kaynak_sha=_kaynak_seti_sha(mekanik),
+            profil_1=profil_1,
+            profil_2=profil_2,
+        ),
+        kapi=mekanik,
+    )
+
+
+def test_icerik_kalibi_hepsi_yok_ise_bekletilir_acik_soru_acmaz() -> None:
+    """Mutabakat GEÇTİ (iki araştırmada var) ama dış kanıt yok → bekletme."""
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1="yok", destek_k2="yok"))
+    assert _sebepler(sonuc) == ["kaynaksiz-bekletme"]
+    assert "acik_soru" not in _siniflar(sonuc)
+    assert "cogunluk-yok" not in _sebepler(sonuc)
+
+
+def test_icerik_kalibi_tek_satir_oneriyle_gecer() -> None:
+    """Kalıp iki araştırmada var, yalnız birinde dış kaynaklı → kabul (Grup 2 örneği)."""
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1="öneri", destek_k2="yok"))
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+@pytest.mark.parametrize("destek", ["uygulama", "öneri", "veri"])
+def test_icerik_kalibinda_sayilan_destek_turleri(destek: str) -> None:
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1=destek))
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_icerik_kalibinda_mevzuat_tek_basina_sayilmaz_ama_acik_soru_acmaz() -> None:
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1="mevzuat"))
+    assert _sebepler(sonuc) == ["kanit-turu-yetersiz"]
+    assert "acik_soru" not in _siniflar(sonuc)
+
+
+def test_risk_maddesi_oneriyle_gecmez_acik_soru_acar() -> None:
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1="öneri", destek_k2="uygulama", metin=RISK_METNI))
+    assert _sebepler(sonuc) == ["kanit-turu-yetersiz"]
+    assert "acik_soru" in _siniflar(sonuc)
+    detay = next(b.detay for b in sonuc.bulgular if b.sinif == "acik_soru")
+    assert "K-129" in detay and "K1#1" in detay
+
+
+def test_risk_maddesi_hepsi_yok_ise_acik_soru() -> None:
+    sonuc = engine.run_checks(_kanit_girdisi(metin=RISK_METNI))
+    assert "acik_soru" in _siniflar(sonuc)
+    assert _sebepler(sonuc) == ["kanit-turu-yetersiz"]
+
+
+@pytest.mark.parametrize("destek", ["mevzuat", "veri"])
+def test_risk_maddesinde_sayilan_destek_turleri(destek: str) -> None:
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1=destek, metin=RISK_METNI))
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_uyarlama_icerikte_sayilir_riskte_sayilmaz() -> None:
+    icerik = engine.run_checks(_kanit_girdisi(destek_k1="uygulama", uyarlama=True))
+    assert icerik.uygulanmayan_kararlar == ()
+    risk = engine.run_checks(_kanit_girdisi(destek_k1="mevzuat", uyarlama=True, metin=RISK_METNI))
+    assert _sebepler(risk) == ["kanit-turu-yetersiz"]
+    assert "[uyarlama]" in next(b.detay for b in risk.bulgular if b.sinif == "acik_soru")
+
+
+def test_kaynakta_yok_sonucu_beyani_dusurur() -> None:
+    """Araştırmacı `öneri` demiş, denetçi sayfayı açıp `KAYNAKTA YOK` yazmış → `yok`."""
+    kaynakta_yok = _ornekle(erisildi=True, uyumlu=False, iddia=IKI_KAYNAKLI_IDDIA)
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1="öneri", ornekle_1=kaynakta_yok))
+    assert _sebepler(sonuc) == ["kaynaksiz-bekletme"]
+
+
+def test_url_acilmadi_beyani_dusurmez() -> None:
+    acilmadi = _ornekle(erisildi=False, uyumlu=False, iddia=IKI_KAYNAKLI_IDDIA)
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1="öneri", ornekle_1=acilmadi))
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_celisen_denetci_sonuclari_acik_soruya_duser() -> None:
+    """Biri `DOĞRULANDI`, öteki `KAYNAKTA YOK` → çelişki; kanıt kapısı ÖLÇÜLMEZ."""
+    sonuc = engine.run_checks(
+        _kanit_girdisi(
+            destek_k1="öneri",
+            ornekle_1=_ornekle(erisildi=True, uyumlu=True, iddia=IKI_KAYNAKLI_IDDIA),
+            ornekle_2=_ornekle(erisildi=True, uyumlu=False, iddia=IKI_KAYNAKLI_IDDIA),
+        )
+    )
+    assert _sebepler(sonuc) == ["url-sonucu-celiskili"]
+    assert "acik_soru" in _siniflar(sonuc)
+    assert "K1#1" in next(b.detay for b in sonuc.bulgular if b.sinif == "acik_soru")
+
+
+def test_dogrulandi_ve_url_acilmadi_celiski_degildir() -> None:
+    sonuc = engine.run_checks(
+        _kanit_girdisi(
+            destek_k1="öneri",
+            ornekle_1=_ornekle(erisildi=True, uyumlu=True, iddia=IKI_KAYNAKLI_IDDIA),
+            ornekle_2=_ornekle(erisildi=False, uyumlu=False, iddia=IKI_KAYNAKLI_IDDIA),
+        )
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_baska_iddianin_kaynakta_yok_sonucu_bu_iddiayi_dusurmez() -> None:
+    """Kimlik eşleşmesi: `K1#2` için yazılan `KAYNAKTA YOK`, `K1#1`'in beyanını düşürmez."""
+    baska = _ornekle(erisildi=True, uyumlu=False, iddia=TEK_KAYNAKLI_IDDIA)
+    sonuc = engine.run_checks(_kanit_girdisi(destek_k1="öneri", ornekle_1=baska))
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_k126_istisnasi_celiskide_acilmaz() -> None:
+    """Tek kaynaklı iddia: resmî + bir `DOĞRULANDI` yeterdi; öteki `KAYNAKTA YOK` derse çelişki."""
+    resmi = _profil(True, False)
+    dogrulandi = _ornekle(erisildi=True, uyumlu=True, iddia=TEK_KAYNAKLI_IDDIA)
+    kaynakta_yok = _ornekle(erisildi=True, uyumlu=False, iddia=TEK_KAYNAKLI_IDDIA)
+    acik = engine.run_checks(
+        _ekle_girdisi(kanit=TEK_KAYNAKLI, kaynak_iddia="K1#2", ornekle=dogrulandi, profil_1=resmi, profil_2=resmi)
+    )
+    assert acik.uygulanmayan_kararlar == (), _sebepler(acik)
+    celiskili = engine.run_checks(
+        _kanit_girdisi(
+            kanit=TEK_KAYNAKLI, kaynak_iddia="K1#2", ornekle_1=dogrulandi, ornekle_2=kaynakta_yok,
+            profil_1=resmi, profil_2=resmi,
+        )
+    )
+    assert _sebepler(celiskili) == ["url-sonucu-celiskili"]
+
+
+def test_kanit_kapisi_sebepleri_kapali_kumede_ve_kural_kimligi_tasir() -> None:
+    for sebep in ("url-sonucu-celiskili", "kanit-turu-yetersiz", "kaynaksiz-bekletme"):
+        assert sebep in UYGULANMAMA_SEBEPLERI
+        assert engine.KURAL_KIMLIKLERI[sebep]
+
+
+# ── Codex bulguları (2026-09-21, dış inceleme) — 1 (yüksek) ve 4 (orta) ────
+
+
+def _urlsuz_iddialarla(destek: str) -> bd.RoundGate:
+    """`K1#1`/`K2#1` destek taşır ama URL'si BOŞ (`kaynak-yok` yazılmış hatalı satır)."""
+    iddialar = tuple(
+        bd.CIddia(no=i.no, alan=i.alan, anahtarlar=i.anahtarlar, url="", destek=destek)
+        if i.no == 1
+        else i
+        for i in _arastirma_iddialari(DENETIM_TABLOSU)
+    )
+    return bd.gate_round(
+        [
+            bd.DoctorReport(
+                sonuc=bd.SONUC_GECTI, notlar=(), elemeler=(), kaynak_adi=ad,
+                icerik_ozeti=_ozet(ad), iddialar=iddialar,
+            )
+            for ad in (DOGRULANMIS_KAYNAK, IKINCI_KAYNAK)
+        ]
+    )
+
+
+def test_urlsiz_satirin_destek_beyani_kanit_sayilmaz() -> None:
+    """Codex bulgu 1 (yüksek): `destek=öneri` + `URL=kaynak-yok` kapıyı GEÇİYORDU."""
+    aday = _tam_icerik(kanca_kaliplari=[KORUNAN_KANCA, CIKARILACAK_KANCA, "Yeni kanca kalibi"])
+    harita = _kimlik_haritasi(AKTIF_ICERIK, aday)
+    yol = _yol(aday, "kanca_kaliplari", "Yeni kanca kalibi")
+    gunluk = _gunluk(
+        aday, kimlikler=harita,
+        degis={yol: {"karar": "ekle", "kanit": IKI_KAYNAKLI, "kaynak_iddia": "K1#1, K2#1"}},
+        denetim=DENETIM_TABLOSU,
+    )
+    mekanik = _urlsuz_iddialarla("öneri")
+    sonuc = engine.run_checks(
+        _girdi(icerik=aday, gunluk=gunluk, cift=_cift(kaynak_sha=_kaynak_seti_sha(mekanik)), kapi=mekanik)
+    )
+    assert _sebepler(sonuc) == ["kaynaksiz-bekletme"]
+
+
+def test_baska_urlnin_kaynakta_yok_sonucu_bu_iddiayi_dusurmez_ve_celiski_yapmaz() -> None:
+    """Codex bulgu 4 (orta): kural "aynı iddia, AYNI URL" — başka sayfanın sonucu okunmaz."""
+    baska_sayfa = (
+        auditors.UrlCheck(
+            url="https://baska.example/sayfa", kaynak=DOGRULANMIS_KAYNAK,
+            erisildi=True, icerik_uyumlu=False, not_metni="", iddia=IKI_KAYNAKLI_IDDIA,
+        ),
+    )
+    dusurmez = engine.run_checks(_kanit_girdisi(destek_k1="öneri", ornekle_1=baska_sayfa))
+    assert dusurmez.uygulanmayan_kararlar == ()
+    celiski_yok = engine.run_checks(
+        _kanit_girdisi(
+            destek_k1="öneri",
+            ornekle_1=_ornekle(erisildi=True, uyumlu=True, iddia=IKI_KAYNAKLI_IDDIA),
+            ornekle_2=baska_sayfa,
+        )
+    )
+    assert celiski_yok.uygulanmayan_kararlar == ()

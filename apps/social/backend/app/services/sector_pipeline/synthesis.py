@@ -92,6 +92,7 @@ from app.services.sector_pipeline.auditors import (
 )
 from app.services.sector_pipeline.brief_doctor import (
     TEMEL_ALAN_ANAHTARLARI,
+    CIddia,
     DoctorReport,
     alan_karsilastirma_anahtari,
 )
@@ -240,6 +241,15 @@ def validate(result: SynthesisResult) -> list[str]:
     """
     icerik = identity.cozulmus(result.aday_json)
     hatalar = list(structural_errors(icerik))
+    if not hatalar:
+        # Şekil geçtiyse birimler numaralandırılabilir; araştırma etiketi
+        # taşıyan birim sonucu DÜŞÜRÜR (Codex Ek 2.3 — kanıt kaydı pakete sızmaz).
+        hatalar.extend(
+            f"{yol}: paket metni araştırma etiketi taşıyor (`[C: …]` · "
+            "`[uyarlama]` · `destek=` · `yer=`) — kanıt kaydı karar girdisidir, "
+            "paket içeriği değil"
+            for yol in arastirma_etiketi_sizintilari(icerik)
+        )
     gunluk = [dict(satir) for satir in result.karar_gunlugu]
     hatalar.extend(identity.validate_decision_log(gunluk))
     if not hatalar:
@@ -392,6 +402,52 @@ def _etiket_sirasi(etiket: str) -> tuple[int, int]:
     return (iddialar[0].kaynak, iddialar[0].iddia)
 
 
+def _iddia_gorunumu(etiket: str, iddia: CIddia) -> str:
+    """EK-M satır parçası: `K1#3 {destek=öneri; yer=Bölüm 2}` (+ `[uyarlama]`)."""
+    destek = iddia.destek or "?"
+    if iddia.uyarlama:
+        destek = f"{destek} [uyarlama]"
+    yer = iddia.yer or "?"
+    return f"{etiket} {{destek={destek}; yer={yer}}}"
+
+
+# ARAŞTIRMA BİLGİSİ ≠ PAKET İÇERİĞİ (Codex Ek 2.3, dış depo `0824c0f`): geri
+# bağlantı, uyarlama etiketi, destek ve yer KANIT kayıtlarıdır; sentez bunları
+# KARAR verirken kullanır, nihai paket metnine YAZMAZ. Bu desen aday paketin
+# HER metin biriminde aranır ve bulunursa sonuç REDDEDİLİR (fail-closed) —
+# "EK-L değişmez" hükmü bu koşulla geçerlidir. Köşeli ayraçlı DEĞİŞKEN
+# (`[duygusal an]`) ve kanal bayrağı (`[kanal-bağımlı: …]`) desene GİRMEZ.
+_ARASTIRMA_ETIKETI_RE = re.compile(
+    r"\[\s*C\s*:|\[\s*uyarlama\s*\]|\bdestek\s*=|\byer\s*=", re.IGNORECASE
+)
+
+
+def arastirma_etiketi_sizintilari(icerik: Mapping) -> list[str]:
+    """Aday paket metninde araştırma etiketi taşıyan birimler — yol listesi.
+
+    TEK kural, TEK yer: `validate` (sentez çıktısı kapısı) burayı çağırır;
+    regresyon testi de aynı fonksiyonu çağırır. Birim kümesi
+    `identity.enumerate_content_units`'ten gelir — paket şemasının okuduğu
+    yollar; ikinci bir gezinti yazılmaz. Sözlük öğeler (CTA nesnesi) JSON
+    olarak taranır ki `gerekce` alanı da kapsansın.
+    """
+    sizanlar: list[str] = []
+    for yol, birim in identity.enumerate_content_units(dict(icerik)).items():
+        deger = birim["deger"]
+        metin = (
+            deger
+            if isinstance(deger, str)
+            else json.dumps(deger, ensure_ascii=False, sort_keys=True, default=str)
+        )
+        # MARKDOWN KAÇIŞI SAYDAM (Codex bulgu 5, orta — ÖLÇÜLDÜ 2026-09-21):
+        # `\[uyarlama\]` ve `\[C\: 3\]` kapıdan geçiyordu. Desen ters eğik
+        # çizgisi düşürülmüş metinde aranır — brief-doctor'un `_yapi_gorunumu`
+        # ilkesiyle aynı yön: süs anlamı değiştirmez, kapıyı da geçirmez.
+        if _ARASTIRMA_ETIKETI_RE.search(metin.replace("\\", "")):
+            sizanlar.append(yol)
+    return sizanlar
+
+
 def _iddia_dizini(raporlar: Sequence[DoctorReport]) -> str:
     """EK-M gövdesi — `K<kaynak>#<iddia>` → ALAN dizini, MOTORUN tablosundan.
 
@@ -433,17 +489,39 @@ def _iddia_dizini(raporlar: Sequence[DoctorReport]) -> str:
         evren.items(), key=lambda ikili: _etiket_sirasi(ikili[0])
     ):
         anahtar = alan_karsilastirma_anahtari(iddia.alan)
+        # TAŞIMA YOLU (Grup 3, dış depo `0824c0f`): destek beyanı · `[uyarlama]`
+        # etiketi · kaynak içi yer, iddianın kimliğiyle BİRLİKTE basılır —
+        # sentez kaynaksız birimi GÖREREK karar yazar (aday yapmaz, günlüğe
+        # "kaynaksız" notuyla geçirir), motor aynı alanları kabul eşlemesinde
+        # kullanır. Ham hücre değil, brief-doctor'un kanonik değeri basılır.
+        gorunum = _iddia_gorunumu(etiket, iddia)
         if anahtar in TEMEL_ALAN_ANAHTARLARI:
-            alanlar.setdefault(anahtar, []).append(etiket)
+            alanlar.setdefault(anahtar, []).append(gorunum)
         elif iddia.anahtarlar:
             for gun in iddia.anahtarlar:
-                donemler.setdefault(gun, []).append(etiket)
+                donemler.setdefault(gun, []).append(gorunum)
         else:
             bagsizlar.append(etiket)
 
     satirlar = [
         "`kaynak_iddia`'ya YALNIZ buradan numara yaz. Motor bağı BU tablodan",
         "ölçer; düz yazı ile çelişirse BU EK geçerlidir.",
+        "",
+        "Her numaranın yanında araştırmacının KANIT KAYDI durur:",
+        "`{destek=<tür>; yer=<kaynak içi konum>}` — `destek` kapalı küme",
+        "(`uygulama` · `öneri` · `veri` · `mevzuat` · `yok`), `[uyarlama]` kalıbın",
+        "kaynaktan TÜRETİLDİĞİNİ söyler. `destek=yok` satırı kalıbın araştırmada",
+        "VAR olduğunu gösterir ama dış kanıt taşımaz: mutabakata (kaç araştırmada",
+        "var) sayılır, kanıt kapısına SAYILMAZ. Bağladığın satırların HEPSİ",
+        "`destek=yok` ise ALAN SINIFINA bak: İÇERİK kalıbını (CTA · kanca ·",
+        "görsel · video · takvim · dönem yuvası) ADAY YAPMA — `tur: \"not\"`,",
+        "`sinif: \"reddedilen-aday\"` satırıyla, gerekçesi `kaynaksız:` ile",
+        "başlayarak günlüğe yaz; RİSK maddesini (`yasaklar_ve_hassasiyetler` ya da",
+        "mevzuat/tarih/sayı içeren madde) yine `ekle` olarak yaz — motor onu AÇIK",
+        "SORUYA düşürür, insan karar verir; not satırı o yolu kapatır.",
+        "Bu kayıtlar KANIT bilgisidir: paket metnine (`kalip` ·",
+        "`gerekce` · görsel/video kodu · dönem yuvası) `[C: …]`, `[uyarlama]`,",
+        "`destek=` ya da `yer=` YAZMA — yazım kapısı reddeder.",
         "",
         "### Bölüm A alanları — kararın `alan` değeri ile EŞLEŞMELİ",
     ]

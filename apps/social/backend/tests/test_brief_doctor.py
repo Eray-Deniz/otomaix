@@ -146,6 +146,7 @@ def kaynak(
     bozuk_kanal_anahtari: bool = False,
     bozuk_sistem_anahtari: bool = False,
     sektore_ozgu_donem: bool = False,
+    kaynaksiz_donemi: str | None = None,
 ) -> str:
     """`_SABLON.md` biçimine uyan bir araştırma çıktısı üretir.
 
@@ -155,8 +156,38 @@ def kaynak(
     `anma_donemi`: `None` (yok) · `"resmi"` (dört yuva da AYNEN
     `içerik-önerilmez`) · `"serbest"` (serbest cümleyle boşluk — sözleşme bunu
     boş alan sayar).
+
+    `kaynaksiz_donemi` (ikinci muafiyet, `0824c0f`): `None` (yok) · `"resmi"`
+    (SON dönemin dört yuvası da AYNEN `kaynak-bulunamadı`) · `"karisik"` (iki
+    yuva `kaynak-bulunamadı`, iki yuva `içerik-önerilmez` — iki değer
+    birbirinin yerine YAZILMAZ, dönem hiçbir muafiyeti almaz).
     """
     satirlar: list[str] = ["ARAŞTIRMA GÖREVİ: kuyumculuk sektörü çıktısı", ""]
+
+    # ── Bölüm C satırları BİRİMLERLE BİRLİKTE üretilir (dış depo `0824c0f`) ──
+    #
+    # Kapsama kuralı her maddeyi ve her metin alanını Bölüm C'de en az bir
+    # satıra `[C: n]` geri bağlantısıyla bağlar. Fixture bu yüzden satırı
+    # birimi yazarken açar: `c_no(alan)` sözleşmenin DOKUZ sütunlu satırını
+    # kuyruğa ekler ve birimin sonuna yazılacak numarayı döndürür. Numara
+    # belge sırasında 1'den artar — `no` dizisi kuralı kendiliğinden tutar.
+    # Her birim KENDİ satırını alır ki temiz kaynak "aynı satıra birden çok
+    # birim bağlı" notunu almasın (o not ayrı testte bilerek üretilir).
+    c_rows: list[str] = []
+
+    def c_no(alan: str) -> int:
+        n = len(c_rows) + 1
+        url = f"https://sektor-yayini.example/kaynak-{n:02d}"
+        if bozuk_url and n == 1:
+            url = "sektor-yayini.example/kaynak-01"
+        c_rows.append(
+            f"| {n} | {alan} | Sektore ozgu bulgu {n:02d} | "
+            f"Sektor Yayini {n:02d} | {url} | 2025-03 | hayır | öneri | Bölüm 2 |"
+        )
+        return n
+
+    def bagla(alan: str, metin: str) -> str:
+        return f"{metin} [C: {c_no(alan)}]"
 
     donem_adlari = list(_DONEM_ADLARI[:donem])
     donem_turleri = list(_DONEM_TURLERI[:donem])
@@ -173,17 +204,24 @@ def kaynak(
         satirlar += ["## Bölüm A — GÖREV A paketi", ""]
         satirlar += [
             "### kapsam ve tanim" if yeniden_adlandirilmis_baslik else "### kapsam",
-            "Altin ve pirlanta taki perakendesi; saat haric tutulur.",
+            bagla("kapsam", "Altin ve pirlanta taki perakendesi; saat haric tutulur."),
             "",
         ]
-        ton = "Resmiyet olculu; duygu ekseni guven ve kalicilik uzerinedir."
+        ton = bagla(
+            "ton_ve_dil",
+            "Resmiyet olculu; duygu ekseni guven ve kalicilik uzerinedir.",
+        )
         if dipnot:
             ton += " [1]"
         satirlar += ["### ton_ve_dil", ton, ""]
 
         satirlar += ["### cta_kaliplari"]
         satirlar += [
-            f"- [urun-{i}] icin randevu daveti — satis — Sektore ozgu guven vurgusu."
+            "- "
+            + bagla(
+                "cta_kaliplari",
+                f"[urun-{i}] icin randevu daveti — satis — Sektore ozgu guven vurgusu.",
+            )
             for i in range(1, cta + 1)
         ]
         if birlesik_madde:
@@ -194,33 +232,48 @@ def kaynak(
 
         satirlar += ["### kanca_kaliplari"]
         satirlar += [
-            f"- [duygusal an-{i}] + [urun bagi] + [davet]" for i in range(1, kanca + 1)
+            "- " + bagla("kanca_kaliplari", f"[duygusal an-{i}] + [urun bagi] + [davet]")
+            for i in range(1, kanca + 1)
         ]
         satirlar += [""]
 
         satirlar += ["### gorsel_kodlar"]
         gorsel_maddeler = [
-            f"- soft diffused light macro composition {i:02d}"
+            f"soft diffused light macro composition {i:02d}"
             for i in range(1, gorsel + 1)
         ]
         if turkce_gorsel_kod and gorsel_maddeler:
-            gorsel_maddeler[0] = "- yumusak ışık altında makro çekim"
-        satirlar += gorsel_maddeler
+            gorsel_maddeler[0] = "yumusak ışık altında makro çekim"
+        satirlar += ["- " + bagla("gorsel_kodlar", madde) for madde in gorsel_maddeler]
         satirlar += [""]
 
         satirlar += ["### video_kodlar", "#### hareket"]
-        satirlar += [f"- slow orbital rotation {i:02d}" for i in range(1, hareket + 1)]
+        satirlar += [
+            "- " + bagla("video_kodlar", f"slow orbital rotation {i:02d}")
+            for i in range(1, hareket + 1)
+        ]
         satirlar += ["#### sahne"]
-        satirlar += [f"- velvet tray reveal scene {i:02d}" for i in range(1, sahne + 1)]
+        satirlar += [
+            "- " + bagla("video_kodlar", f"velvet tray reveal scene {i:02d}")
+            for i in range(1, sahne + 1)
+        ]
         satirlar += [""]
 
         satirlar += ["### takvim_temalari"]
-        satirlar += [f"- {ad} — donemin icerik acisi." for ad in donem_adlari]
+        satirlar += [
+            "- " + bagla("takvim_temalari", f"{ad} — donemin icerik acisi.")
+            for ad in donem_adlari
+        ]
         satirlar += [""]
 
         satirlar += ["### yasaklar_ve_hassasiyetler"]
         satirlar += [
-            f"- Yasak {i} — mevzuat gerekcesiyle asla yapilmaz." for i in range(1, 5)
+            "- "
+            + bagla(
+                "yasaklar_ve_hassasiyetler",
+                f"Yasak {i} — mevzuat gerekcesiyle asla yapilmaz.",
+            )
+            for i in range(1, 5)
         ]
         satirlar += [""]
 
@@ -255,21 +308,37 @@ def kaynak(
                     f"gorsel_vurgu: {deger}",
                     "",
                 ]
+                # Muaf dönem birim üretmez ama BÜTÜNLÜK kuralı dönem başına en
+                # az bir Bölüm C satırı arar; satır açılır, bağlantı yazılmaz.
+                c_no(ad)
                 continue
-            satirlar += [f"mesaj_ekseni: {ad} icin duygusal eksen."]
+            if kaynaksiz_donemi is not None and ad == donem_adlari[-1]:
+                degerler = ["kaynak-bulunamadı"] * 4
+                if kaynaksiz_donemi == "karisik":
+                    degerler[1] = degerler[3] = "içerik-önerilmez"
+                satirlar += [
+                    f"mesaj_ekseni: {degerler[0]}",
+                    f"kanca: {degerler[1]}",
+                    f"cta: {degerler[2]}",
+                    f"gorsel_vurgu: {degerler[3]}",
+                    "",
+                ]
+                c_no(ad)
+                continue
+            satirlar += ["mesaj_ekseni: " + bagla(ad, f"{ad} icin duygusal eksen.")]
             satirlar += ["kanca"]
             satirlar += [
-                f"- [an-{i}] + [urun bagi] acilis kalibi"
+                "- " + bagla(ad, f"[an-{i}] + [urun bagi] acilis kalibi")
                 for i in range(1, donem_kanca + 1)
             ]
             satirlar += ["cta"]
             satirlar += [
-                f"- randevu daveti {i} — satis — Gerekce cumlesi."
+                "- " + bagla(ad, f"randevu daveti {i} — satis — Gerekce cumlesi.")
                 for i in range(1, donem_cta + 1)
             ]
             satirlar += ["gorsel_vurgu"]
             satirlar += [
-                f"- warm candlelit close up {i:02d}"
+                "- " + bagla(ad, f"warm candlelit close up {i:02d}")
                 for i in range(1, donem_gorsel + 1)
             ]
             satirlar += [""]
@@ -278,23 +347,26 @@ def kaynak(
     #
     # Sözleşme 2026-09-07'de bu bölümü SABİT SÜTUNLU tabloya çevirdi (dış depo
     # `7964ed6`); fixture serbest madde listesi olmaktan çıktı. Satır kümesi
-    # ELLE yazılmaz: sekiz alan + belgede İŞLENEN dönemler üstünde üretilir,
-    # çünkü kapı artık BÜTÜNLÜK de ölçüyor (her alan/dönem için ≥1 satır).
+    # ELLE yazılmaz: birimler yazılırken `c_no` ile açılır (yukarıda), çünkü
+    # kapı artık hem BÜTÜNLÜĞÜ (her alan/dönem için ≥1 satır) hem KAPSAMAYI
+    # (her birimin `[C: n]` geri bağlantısı) ölçüyor. Eksik Bölüm A/B'de o
+    # birimlerin satırı da doğmaz — eksik bölüm ayrı ailenin konusudur.
     if eksik_bolum != "C":
+        # Eksik Bölüm A/B'de o bölümün birimleri hiç yazılmadığı için satırı
+        # da doğmadı; bütünlük ailesi bunu ikinci kez saymasın diye satırlar
+        # eski fixture'daki gibi alan/dönem başına BİR kez açılır.
+        if eksik_bolum == "A":
+            for ad in bd.TEMEL_ALANLAR:
+                c_no(ad)
+        if eksik_bolum == "B":
+            for ad in donem_adlari:
+                c_no(ad)
         satirlar += ["## Bölüm C — KAYNAKLAR", ""]
         satirlar += [
             "| " + " | ".join(bd.C_TABLOSU_SUTUNLARI) + " |",
             "|" + "---|" * len(bd.C_TABLOSU_SUTUNLARI),
         ]
-        anahtarlar = list(bd.TEMEL_ALANLAR) + list(donem_adlari)
-        for sira, anahtar in enumerate(anahtarlar, start=1):
-            url = f"https://sektor-yayini.example/kaynak-{sira:02d}"
-            if bozuk_url and sira == 1:
-                url = "sektor-yayini.example/kaynak-01"
-            satirlar += [
-                f"| {sira} | {anahtar} | Sektore ozgu bulgu {sira:02d} | "
-                f"Sektor Yayini {sira:02d} | {url} | 2025-03 | hayır |"
-            ]
+        satirlar += c_rows
         satirlar += [""]
 
     # ── Bölüm D ──────────────────────────────────────────────────────────
@@ -1120,14 +1192,24 @@ def _sozlesme_c_sutunlari() -> tuple[str, ...]:
 def test_bolum_c_sabitleri_pinlenmis_sablondan_okunur() -> None:
     metin = _pinli_sablon()
     assert _sozlesme_c_sutunlari() == bd.C_TABLOSU_SUTUNLARI
-    assert len(bd.C_TABLOSU_SUTUNLARI) == 7
+    assert len(bd.C_TABLOSU_SUTUNLARI) == 9
 
     sinir = re.search(r"`iddia` hücresi EN FAZLA (\d+) KELİME", metin)
     assert sinir is not None, "sözleşmede `iddia` kelime sınırı bulunamadı"
     assert int(sinir.group(1)) == bd.C_IDDIA_KELIME_UST_SINIRI
 
-    tarih = re.search(r"aynen `([\w-]+)` yaz", metin)
+    tarih = re.search(r"tarih görünmüyorsa aynen `([\w-]+)` yaz", metin)
     assert tarih is not None and tarih.group(1) == bd.C_TARIH_YOK
+
+    # `destek` kapalı kümesi ve `destek=yok` satırının sabit hücreleri (0824c0f).
+    destek = re.search(
+        r"`destek` hücresini aynen şu beş yazımdan biriyle yaz:\s*\n\s*(.+?)\.", metin, re.S
+    )
+    assert destek is not None, "sözleşmede `destek` kapalı kümesi bulunamadı"
+    assert tuple(re.findall(r"`([^`]+)`", destek.group(1))) == bd.C_DESTEK_DEGERLERI
+    assert "`URL` hücresi aynen `" + bd.C_URL_KAYNAK_YOK + "` yazılır" in metin
+    assert "Sayfayı açmadıysan `" + bd.C_YER_ACILMADI + "` yaz" in metin
+    assert "`kaynak-bulunamadı`" in metin and bd.KAYNAK_BULUNAMADI == "kaynak-bulunamadı"
 
     tek = re.search(r"`tek kaynak` hücresi `(\w+)` ya da `([\wıİğĞşŞçÇöÖüÜ]+)`", metin)
     assert tek is not None and tek.groups() == bd.C_TEK_KAYNAK_DEGERLERI
@@ -1668,11 +1750,11 @@ def test_icerik_ozeti_run_tarafindan_uretilir_ve_bicimi_zorlanir() -> None:
 
 # **Tur 3 DÜZELTMESİ (davranış DEĞİŞMEZ, gerekçe değişir).** Eski gerekçe
 # "sözleşme bu düzeyde SIRA dayatmaz" diyordu ve YANLIŞTI: pinli sözleşme
-# (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI dayatır. Hücreler yine boş
+# (`_SABLON.md` satır 162-164) her listede ÖNEM SIRASI dayatır. Hücreler yine boş
 # kalır — ama doğru gerekçeyle: önem SEMANTİK bir yargıdır, mekanik kapı
 # doğrulayamaz. Ölçümü `test_sozlesme_onem_sirasi_dayatir_ama_kapi_olcemez`'te.
 _ACIK_KUME_GEREKCESI = (
-    "sözleşme bu düzeyde ÖNEM SIRASI dayatır (_SABLON.md satır 73-75) ama önem "
+    "sözleşme bu düzeyde ÖNEM SIRASI dayatır (_SABLON.md satır 162-164) ama önem "
     "SEMANTİK bir yargıdır; mekanik kapı DOĞRULAYAMAZ — uydurulmuş bir sıra "
     "kuralı gerçek çıktıyı gürültüye boğardı (İlke 9)"
 )
@@ -2140,7 +2222,7 @@ C_DIZI_MATRISI = (
     ),
 )
 
-# Geçerli sütun sayısı ARTIK 7'dir; bozma kümesi sözleşmenin sütun sayısından
+# Geçerli sütun sayısı ARTIK 9'dur (`destek` · `yer`, dış depo `0824c0f`); bozma kümesi sözleşmenin sütun sayısından
 # TÜRER, elle sayılmaz — yoksa sütun eklendiği gün "7 sütunlu" bozması sessizce
 # GEÇERLİ bir satıra dönüşür ve kapı ölçülmemiş kalırdı.
 _C_SUTUN_SAYISI = len(bd.C_TABLOSU_SUTUNLARI)
@@ -2174,11 +2256,11 @@ def test_bolum_c_hucre_sozlesmesi(metin: str, iz: str) -> None:
 
 def test_bolum_c_hucre_matrisi_bos_kume_ve_taban_kollari() -> None:
     """Matris gerçekten ÜRETİLDİ mi, taban BOŞA yeşil mi?"""
-    assert len(C_DOLULUK_MATRISI) == len(bd.C_TABLOSU_SUTUNLARI) == 7
+    assert len(C_DOLULUK_MATRISI) == len(bd.C_TABLOSU_SUTUNLARI) == 9
     assert len(C_DEGER_MATRISI) == 9
     assert len(C_DIZI_MATRISI) == 2
-    assert len(C_SEKIL_MATRISI) == 3 + len(_C_BOZUK_SUTUN_SAYILARI) == 10
-    assert len(C_HUCRE_MATRISI) == 7 + 9 + 2 + 10 == 28, len(C_HUCRE_MATRISI)
+    assert len(C_SEKIL_MATRISI) == 3 + len(_C_BOZUK_SUTUN_SAYILARI) == 12
+    assert len(C_HUCRE_MATRISI) == 9 + 9 + 2 + 12 == 32, len(C_HUCRE_MATRISI)
     adlar = [ad for ad, *_ in C_HUCRE_MATRISI]
     assert len(set(adlar)) == len(adlar), "hücreler ÇAKIŞIYOR"
     # Her hücre belgeyi GERÇEKTEN değiştiriyor.
@@ -2996,7 +3078,7 @@ def test_gerekce_denetim_kapisi_iki_ayri_yerden_mutasyona_duyarli() -> None:
 #
 # Bir önceki turun iç içe matrisinde SIRA hücreleri "sözleşme bu düzeyde sıra
 # DAYATMAZ" gerekçesiyle boş bırakılmıştı. Gerekçe YANLIŞTI: pinli sözleşme
-# (`_SABLON.md` satır 73-75) her listede ÖNEM SIRASI dayatır. Ölçüldü ki iki
+# (`_SABLON.md` satır 162-164) her listede ÖNEM SIRASI dayatır. Ölçüldü ki iki
 # çağrı kalıbı takas edildiğinde rapor `gecti / 0 not` veriyor. Davranış AYNEN
 # KORUNUR — önem SEMANTİK bir yargıdır, uydurma bir sıra kuralı gerçek çıktıyı
 # gürültüye boğardı — ama gerekçe düzelir ve kapsam beyanına GEÇER.
@@ -3030,7 +3112,7 @@ def test_sozlesme_onem_sirasi_dayatir_ama_kapi_olcemez() -> None:
     # Dürüst beyan: ölçülemeyen kural RAPORDA "doğrulanmadı" etiketiyle yaşar.
     birlesik = " ".join(rapor.kapsam_sinirlari)
     assert "ÖNEM SIRASI" in birlesik and "DOĞRULAYAMAZ" in birlesik
-    assert "73-75" in birlesik, "beyan sözleşme satırını göstermeli"
+    assert "162-164" in birlesik, "beyan sözleşme satırını göstermeli"
 
 
 def test_kapsam_beyani_sekizinci_kalemi_tasir() -> None:
@@ -3048,8 +3130,8 @@ def test_kapsam_beyani_sekizinci_kalemi_tasir() -> None:
     """
     beyanlar = bd.run(TEMIZ, source_name="P").kapsam_sinirlari
     turetilen = sum(len(check.kapsam_sinirlari) for check in bd.CHECKS)
-    assert len(beyanlar) == turetilen == 8, beyanlar
-    assert len(set(beyanlar)) == 8, "beyanlar tekrar ediyor"
+    assert len(beyanlar) == turetilen == 9, beyanlar
+    assert len(set(beyanlar)) == 9, "beyanlar tekrar ediyor"
     doluluk = [b for b in beyanlar if b.startswith("bolum-ve-alan-tamligi/doluluk")]
     assert len(doluluk) == 1 and "markdown TABLOSU" in doluluk[0], beyanlar
     kapsam = [b for b in beyanlar if b.startswith("bolum-ve-alan-tamligi/cit-kapsami")]
@@ -3612,6 +3694,8 @@ def _kap_korpusu() -> tuple[str, ...]:
         c_eslemesini_kaldir(TEMIZ),
         c_veri_satirlarini_kaldir(TEMIZ),
         c_ilk_satiri_kaldir(TEMIZ),
+        # Grup 3 (`0824c0f`): ESKİ sürüm başlığı ayrı bir kap yoludur.
+        _eski_surum_tablosu(TEMIZ),
     )
 
 
@@ -3678,13 +3762,14 @@ def test_kap_kategorisi_uretim_yerinde_BEYAN_edilir() -> None:
         "_kontrol_url_bicimi",
         "_tablo_sekli_ihlalleri",
     ), beyan_eden
-    # SEKİZ çağrı yeri: bölüm boş · tablo yok · başlıksız sayımı · dönem-öncesi
-    # sayımı · tablo dönem sonrası · Bölüm C başlık satırı yok · Bölüm C
-    # tablosu veri satırsız · Bölüm C alan/dönem kapsaması eksik.
+    # DOKUZ çağrı yeri: bölüm boş · tablo yok · başlıksız sayımı · dönem-öncesi
+    # sayımı · tablo dönem sonrası · Bölüm C başlık satırı yok · Bölüm C ESKİ
+    # sürüm başlığı (0824c0f) · Bölüm C tablosu veri satırsız · Bölüm C
+    # alan/dönem kapsaması eksik.
     # 4. AYAK: Bölüm C'nin TEK kap iddiası (eşleme satırı yok) ÜÇE çıktı —
     # sözleşme sabit sütunlu tabloyu dayattığı için kabın YOKLUĞU artık üç
     # ayrı yapısal soruya ayrılabiliyor.
-    assert _kap_cagri_sayisi() == 8, _kap_cagri_sayisi()
+    assert _kap_cagri_sayisi() == 9, _kap_cagri_sayisi()
     assert _kap_atesleyen_fonksiyonlar(_kap_korpusu()) == set(beyan_eden)
     # ...ve kategori BULGUYA yazılıyor: korpusta gerçekten KAP bulgusu var.
     kap_bulgulari = {
@@ -3699,7 +3784,7 @@ def test_kap_kategorisi_uretim_yerinde_BEYAN_edilir() -> None:
     # ürünüyle görünür.
     assert len(kap_bulgulari) == len(bd.BOLUM_HARFLERI) + (
         _kap_cagri_sayisi() - 1
-    ) == 12, sorted(_mesajlari(kap_bulgulari))
+    ) == 13, sorted(_mesajlari(kap_bulgulari))
     # ...ve BLOĞA AİT notlar muafiyete sızmıyor: satır/sütun notları DOKUNULMAZ.
     bloga_ait = _not_kumesi(gerekce_tablosunu_boz(TEMIZ))
     assert bloga_ait and all(not bd.kap_iddiasi_mi(b) for b in bloga_ait), sorted(
@@ -6611,3 +6696,287 @@ def test_k120_muafiyeti_ascii_yazimda_da_taninir() -> None:
         source_name="T",
     )
     assert _bulgu_kumesi(bozuk) == _bulgu_kumesi(beklenen)
+
+
+# ═══ Grup 3 — dokuz sütun · geri bağlantı · kaynak-bulunamadı (`0824c0f`) ═══
+#
+# Şablonun üçüncü revizyonu: Bölüm C `destek` ve `yer` sütunlarını kazandı,
+# her birim `[C: n]` geri bağlantısıyla bir satıra bağlandı, desteksiz dönem
+# resmî `kaynak-bulunamadı` değerini aldı. ÖLÇÜLMÜŞ kırılma (2026-09-21):
+# yalnız şablona iki sütun eklenince 42 satırlık Kaynak-3'ten 0 iddia çözülüyor
+# ve sentez turu başlamıyordu — ayrıştırıcı ve şablon aynı commit'te iner.
+
+
+def _c_kaynaksiz_satir(metin: str, **hucreler: str) -> str:
+    """İlk Bölüm C satırını sözleşmenin `destek=yok` satırına çevirir; `hucreler`
+    ile tek tek hücre EZİLİR (bozma kolu)."""
+    varsayilan = {
+        "destek": bd.C_DESTEK_YOK,
+        "URL": bd.C_URL_KAYNAK_YOK,
+        "kaynak adı": bd.C_HUCRE_YOK,
+        "yer": bd.C_HUCRE_YOK,
+    }
+    varsayilan.update(hucreler)
+    for ad, deger in varsayilan.items():
+        metin = _c_hucreleri_degistir(metin, bd.C_TABLOSU_SUTUNLARI.index(ad), deger)
+    return metin
+
+
+def _c_notlari(metin: str) -> list[str]:
+    rapor = bd.run(metin, source_name="P")
+    return [b.mesaj for b in rapor.notlar if b.aile == "url-bicimi"]
+
+
+def test_temiz_kaynak_grup3_sonrasi_hala_gecti() -> None:
+    """Taban: dokuz sütun + her birimde geri bağlantı → 0 not, `gecti`."""
+    rapor = bd.run(TEMIZ, source_name="P")
+    assert rapor.sonuc == bd.SONUC_GECTI, _mesajlar(rapor)
+    assert rapor.notlar == ()
+
+
+def test_iddia_destek_uyarlama_ve_yer_tasir() -> None:
+    """TAŞIMA YOLU: `CIddia` destek · uyarlama · yer alanlarını Bölüm C'den alır."""
+    metin = _c_hucreleri_degistir(TEMIZ, bd.C_TABLOSU_SUTUNLARI.index("iddia"), "Eski pratik [uyarlama]")
+    metin = _c_hucreleri_degistir(metin, bd.C_TABLOSU_SUTUNLARI.index("destek"), "uygulama")
+    metin = _c_hucreleri_degistir(metin, bd.C_TABLOSU_SUTUNLARI.index("yer"), "PDF s. 4")
+    ilk = bd.run(metin, source_name="P").iddialar[0]
+    assert (ilk.no, ilk.destek, ilk.uyarlama, ilk.yer) == (1, "uygulama", True, "PDF s. 4")
+    temiz = bd.run(TEMIZ, source_name="P").iddialar[0]
+    assert (temiz.destek, temiz.uyarlama, temiz.yer) == ("öneri", False, "Bölüm 2")
+
+
+def test_destek_ascii_yazimi_kanonik_uyeye_cevrilir_ve_bir_kez_not_duser() -> None:
+    """`oneri` ↔ `öneri`: değer KABUL, yazım sapması kaynak başına TEK not."""
+    metin = _c_hucreleri_degistir(TEMIZ, bd.C_TABLOSU_SUTUNLARI.index("destek"), "oneri")
+    rapor = bd.run(metin, source_name="P")
+    assert rapor.iddialar[0].destek == "öneri"
+    notlar = [b.mesaj for b in rapor.notlar if "`destek` hücresinde" in b.mesaj]
+    assert len(notlar) == 1 and "KABUL EDİLDİ" in notlar[0], _mesajlar(rapor)
+
+
+def test_destek_kapali_kume_disi_not_duser_ve_iddia_bos_destekle_tasinir() -> None:
+    """Kümede olmayan yazım NOT alır; iddia yine çözülür ama desteği BOŞTUR (fail-closed)."""
+    metin = _c_hucreleri_degistir(TEMIZ, bd.C_TABLOSU_SUTUNLARI.index("destek"), "belki")
+    rapor = bd.run(metin, source_name="P")
+    assert any("`destek` hücresi kapalı kümenin dışında" in m for m in _c_notlari(metin))
+    assert rapor.iddialar[0].no == 1 and rapor.iddialar[0].destek == ""
+
+
+def test_kaynaksiz_satir_sozlesme_hucreleriyle_temiz_gecer_ve_url_tasimaz() -> None:
+    """`destek=yok` + `kaynak-yok` + `—`/`—`: NOT yok; `CIddia.url` BOŞ (örneklemle eşleşmez)."""
+    metin = _c_kaynaksiz_satir(TEMIZ)
+    assert _c_notlari(metin) == [], _c_notlari(metin)
+    ilk = bd.run(metin, source_name="P").iddialar[0]
+    assert (ilk.destek, ilk.url) == (bd.C_DESTEK_YOK, "")
+
+
+@pytest.mark.parametrize(
+    "hucre,deger,iz",
+    [
+        ("URL", "https://sektor-yayini.example/kaynak-01", "AYNEN `kaynak-yok` yazılır"),
+        ("kaynak adı", "Sektor Yayini 01", "`kaynak adı` hücresi AYNEN `—`"),
+        ("yer", "Bölüm 2", "`yer` hücresi AYNEN `—`"),
+    ],
+)
+def test_kaynaksiz_satirin_sabit_hucreleri_olculur(hucre: str, deger: str, iz: str) -> None:
+    """Kaynaksız satırı KAYNAKLI gösteren her hücre kendi izini üretir."""
+    metin = _c_kaynaksiz_satir(TEMIZ, **{hucre: deger})
+    assert any(iz in m for m in _c_notlari(metin)), _c_notlari(metin)
+
+
+def test_kaynaksiz_satirda_tarih_ve_tek_kaynak_cizgisi_tolere_edilir() -> None:
+    """Sözleşme bu iki hücre için değer ADLANDIRMAZ; `—` not üretmez."""
+    metin = _c_kaynaksiz_satir(TEMIZ, **{"tarih": "—", "tek kaynak": "—"})
+    assert _c_notlari(metin) == [], _c_notlari(metin)
+
+
+def test_kaynakli_satirda_kaynak_yok_ve_cizgi_reddedilir() -> None:
+    """`kaynak-yok` URL'si ve `—` yer'i YALNIZ `destek=yok` satırında kabul edilir."""
+    url = _c_hucreleri_degistir(TEMIZ, bd.C_TABLOSU_SUTUNLARI.index("URL"), "kaynak-yok")
+    assert any("YALNIZ `destek=yok` satırında" in m for m in _c_notlari(url))
+    yer = _c_hucreleri_degistir(TEMIZ, bd.C_TABLOSU_SUTUNLARI.index("yer"), "—")
+    assert any("`yer` hücresi `—` YALNIZ" in m for m in _c_notlari(yer))
+
+
+def test_yedi_sutunlu_eski_satir_eski_surum_diye_teshis_edilir_ve_iddia_uretmez() -> None:
+    """Eski biçim SESSİZCE yeni anlama çevrilmez: teşhis adlandırılır, iddia düşer."""
+    metin = c_sutun_sayisini_boz(TEMIZ, bd.C_ESKI_SUTUN_SAYISI)
+    notlar = _c_notlari(metin)
+    assert any("ESKİ sözleşme sürümü" in m for m in notlar), notlar
+    assert 1 not in {iddia.no for iddia in bd.run(metin, source_name="P").iddialar}
+    # Kontrol kolu: başka bir sütun sayısı bu etiketi ALMAZ.
+    assert not any("ESKİ sözleşme sürümü" in m for m in _c_notlari(c_sutun_sayisini_boz(TEMIZ, 5)))
+
+
+# ── Geri bağlantı / kapsama kuralı ──────────────────────────────────────────
+
+
+def _cta_maddesini_degistir(metin: str, sira: int, donusum) -> str:
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, "### cta_kaliplari")
+    maddeler = [k for k in range(i + 1, j) if satirlar[k].lstrip().startswith("- ")]
+    k = maddeler[sira]
+    satirlar[k] = donusum(satirlar[k])
+    return "".join(satirlar)
+
+
+def _geri_baglanti_notlari(metin: str) -> list[str]:
+    rapor = bd.run(metin, source_name="P")
+    return [b.mesaj for b in rapor.notlar if b.kontrol == "url-bicimi/geri-baglanti"]
+
+
+def test_geri_baglanti_kontrolu_url_bicimi_ailesinde_ayri_kimlikle_yasar() -> None:
+    kimlikler = {c.kimlik: c.aile for c in bd.CHECKS}
+    assert kimlikler["url-bicimi/geri-baglanti"] == "url-bicimi"
+
+
+def test_etiketsiz_madde_yuzey_basina_toplanan_not_uretir() -> None:
+    metin = _cta_maddesini_degistir(TEMIZ, 0, lambda s: re.sub(r"\s*\[C: \d+\]", "", s))
+    notlar = _geri_baglanti_notlari(metin)
+    assert len(notlar) == 1 and notlar[0].startswith("`cta_kaliplari`: 5 maddeden 1'i `[C: …]`"), notlar
+
+
+def test_etiketsiz_metin_alani_alan_basina_not_uretir() -> None:
+    metin = TEMIZ.replace("saat haric tutulur. [C: 1]", "saat haric tutulur.")
+    assert metin != TEMIZ
+    notlar = _geri_baglanti_notlari(metin)
+    assert len(notlar) == 1 and notlar[0].startswith("`kapsam`: 1 alandan 1'i"), notlar
+
+
+def test_cozulmeyen_numara_ve_baska_alanin_satiri_ayri_teshis_alir() -> None:
+    yok = _cta_maddesini_degistir(TEMIZ, 0, lambda s: re.sub(r"\[C: \d+\]", "[C: 999]", s))
+    assert any("ÇÖZÜLMEYEN numara gösteriyor: [999]" in m for m in _geri_baglanti_notlari(yok))
+    # 1 numaralı satır `kapsam`ın satırıdır — CTA ona bağlanamaz.
+    baska = _cta_maddesini_degistir(TEMIZ, 0, lambda s: re.sub(r"\[C: \d+\]", "[C: 1]", s))
+    notlar = _geri_baglanti_notlari(baska)
+    assert any("BAŞKA alan/dönemin satırını gösteriyor: [1]" in m for m in notlar), notlar
+
+
+def test_ayni_satira_bagli_iki_madde_not_olarak_gorunur_kapi_degil() -> None:
+    """Sözleşme: birden çok madde aynı satıra bağlanabilir, kapı NOT gösterir."""
+    satirlar = TEMIZ.splitlines(True)
+    i, j = _md_blok(satirlar, "### cta_kaliplari")
+    maddeler = [k for k in range(i + 1, j) if satirlar[k].lstrip().startswith("- ")]
+    ilk_no = re.search(r"\[C: (\d+)\]", satirlar[maddeler[0]]).group(1)
+    satirlar[maddeler[1]] = re.sub(r"\[C: \d+\]", f"[C: {ilk_no}]", satirlar[maddeler[1]])
+    notlar = _geri_baglanti_notlari("".join(satirlar))
+    assert len(notlar) == 1 and "birden çok birimin bağlandığı" in notlar[0], notlar
+    assert f"{{{ilk_no}: 2}}" in notlar[0]
+
+
+def test_bozuk_yazimli_geri_baglanti_bag_kurmaz() -> None:
+    metin = _cta_maddesini_degistir(TEMIZ, 0, lambda s: re.sub(r"\[C: \d+\]", "[C: 3a]", s))
+    notlar = _geri_baglanti_notlari(metin)
+    assert any("sözleşme yazımında değil" in m for m in notlar), notlar
+
+
+def test_kacisli_geri_baglanti_etikettir() -> None:
+    """Markdown kaçışı saydam: `\\[C: 4\\]` yazan araç not almaz (tur 12 emsali)."""
+    metin = _cta_maddesini_degistir(TEMIZ, 0, lambda s: re.sub(r"\[C: (\d+)\]", r"\\[C: \1\\]", s))
+    assert metin != TEMIZ
+    assert _geri_baglanti_notlari(metin) == []
+
+
+def test_geri_baglanti_govde_dipnotu_sayilmaz() -> None:
+    """`[C: …]` gövde içi atıf yasağının TEK istisnasıdır — dipnot notu üretmez."""
+    rapor = bd.run(TEMIZ, source_name="P")
+    assert not [b for b in rapor.notlar if b.kontrol == "bicim-kurallari/govde-dipnotu"]
+    # Kontrol kolu: gerçek dipnot hâlâ yakalanıyor.
+    assert [b for b in _rapor(dipnot=True).notlar if b.kontrol == "bicim-kurallari/govde-dipnotu"]
+
+
+def test_bolum_c_yoksa_geri_baglanti_kontrolu_susar() -> None:
+    """Yokluğu `url-bicimi` bildirir; her birim ikinci kez sayılmaz."""
+    assert _geri_baglanti_notlari(kaynak(eksik_bolum="C")) == []
+
+
+def test_muaf_donemler_geri_baglanti_birimi_uretmez() -> None:
+    assert _geri_baglanti_notlari(kaynak(anma_donemi="resmi")) == []
+    assert _geri_baglanti_notlari(kaynak(kaynaksiz_donemi="resmi")) == []
+
+
+# ── Desteksiz dönem — ikinci muafiyet (`kaynak-bulunamadı`) ─────────────────
+
+
+def test_kaynaksiz_donem_not_duser_elemez_ve_sayima_girmez() -> None:
+    rapor = _rapor(kaynaksiz_donemi="resmi")
+    assert rapor.sonuc == bd.SONUC_NOTLU_GECTI
+    mesajlar = [b.mesaj for b in rapor.notlar]
+    desteksiz = [m for m in mesajlar if "desteksiz dönem" in m]
+    assert len(desteksiz) == 1 and "`kaynak-bulunamadı`" in desteksiz[0], mesajlar
+    # Dönem "en az 6" sayımına GİRMEZ: altı dönemden biri desteksiz → 5.
+    assert any("5 ESSİZ dönem işliyor, alt sınır 6" in m for m in mesajlar), mesajlar
+    # Yuva doluluğu · yuva alt sınırı · dil kuralı bu dönemde UYGULANMAZ.
+    assert not any("başlığı yok" in m or "boş —" in m for m in mesajlar), mesajlar
+    assert not any("madde, alt sınır" in m for m in mesajlar), mesajlar
+    assert "dil-kurali" not in _aileler(rapor)
+    assert len(mesajlar) == 2, mesajlar
+
+
+def test_yedi_donemle_kaynaksiz_donem_alt_siniri_bozmaz() -> None:
+    """Yedi dönemden biri desteksiz → altı SAYILAN dönem, alt sınır notu YOK."""
+    rapor = _rapor(donem=7, kaynaksiz_donemi="resmi")
+    assert not any("ESSİZ dönem" in b.mesaj for b in rapor.notlar), _mesajlar(rapor)
+
+
+def test_karisik_degerler_hicbir_muafiyeti_almaz() -> None:
+    """İki yuva `kaynak-bulunamadı`, iki yuva `içerik-önerilmez` → muafiyet YOK.
+
+    Dönem olağan dönem gibi ölçülür: tek değerli yuvalar alt sınırı sağlamaz ve
+    geri bağlantı taşımaz — iki değer birbirinin yerine yazılamaz.
+    """
+    rapor = _rapor(kaynaksiz_donemi="karisik")
+    mesajlar = [b.mesaj for b in rapor.notlar]
+    assert not any("desteksiz dönem" in m for m in mesajlar), mesajlar
+    for yuva, alt in (("kanca", 2), ("cta", 2), ("gorsel_vurgu", 5)):
+        assert any(f"`{yuva}` 1 madde, alt sınır {alt}" in m for m in mesajlar), mesajlar
+    assert not any("ESSİZ dönem" in m for m in mesajlar), mesajlar
+
+
+def test_kaynak_bulunamadi_ascii_yazimi_ayni_uyedir() -> None:
+    metin = kaynak(kaynaksiz_donemi="resmi").replace("kaynak-bulunamadı", "kaynak-bulunamadi")
+    rapor = bd.run(metin, source_name="P")
+    assert any("desteksiz dönem" in b.mesaj for b in rapor.notlar), _mesajlar(rapor)
+
+
+def _eski_surum_tablosu(metin: str) -> str:
+    """Bölüm C'yi ESKİ (7 sütunlu) sözleşme biçimine indirger — Kaynak-1..6'nın şekli."""
+    eski = bd.C_TABLOSU_SUTUNLARI[: bd.C_ESKI_SUTUN_SAYISI]
+
+    def donusum(blok: str) -> str:
+        cikti = []
+        for satir in blok.splitlines(True):
+            govde = satir.strip()
+            if not govde.startswith("|"):
+                cikti.append(satir)
+            elif set(govde) <= set("|-: "):
+                cikti.append("|" + "---|" * len(eski) + "\n")
+            else:
+                hucreler = [h.strip() for h in govde.strip("|").split("|")][: len(eski)]
+                cikti.append("| " + " | ".join(hucreler) + " |\n")
+        return "".join(cikti)
+
+    return _bolum_degistir(metin, "C", donusum)
+
+
+def test_eski_surum_basligi_ayrica_teshis_edilir_ve_hicbir_iddia_cozulmez() -> None:
+    """ÖLÇÜLDÜ (2026-09-21): Kaynak-1/3 başlık kolundan düşüyor, satır koluna ulaşmıyor.
+
+    Teşhis eski sürümü ADLANDIRIR; geri bağlantı kontrolü susar (yokluğu bir
+    kez sayılır); iddia evreni BOŞTUR — sentez turu bu raporla başlamaz.
+    """
+    metin = _eski_surum_tablosu(TEMIZ)
+    assert metin != TEMIZ
+    rapor = bd.run(metin, source_name="P")
+    notlar = [b.mesaj for b in rapor.notlar if b.aile == "url-bicimi"]
+    assert len(notlar) == 1 and "ESKİ sözleşme sürümünün başlık satırını" in notlar[0], notlar
+    assert rapor.iddialar == ()
+    assert _geri_baglanti_notlari(metin) == []
+
+
+@pytest.mark.parametrize("etiket", ["[C: ]", "[C: , ]"])
+def test_bos_geri_baglanti_eksiksiz_gibi_gecmez(etiket: str) -> None:
+    """Codex bulgu 3 (orta): boş etiket `gecti` veriyordu; artık bozuk sayılır, bağ kurmaz."""
+    metin = _cta_maddesini_degistir(TEMIZ, 0, lambda s: re.sub(r"\[C: \d+\]", etiket, s))
+    notlar = _geri_baglanti_notlari(metin)
+    assert any("sözleşme yazımında değil" in m for m in notlar), notlar

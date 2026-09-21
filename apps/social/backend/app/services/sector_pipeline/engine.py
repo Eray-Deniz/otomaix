@@ -53,7 +53,7 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from app.services.sector_content_schema import (
     channel_flag_scope_path,
@@ -75,6 +75,7 @@ from app.services.sector_pipeline.auditors import (
     kaynak_iddialari_coz,
 )
 from app.services.sector_pipeline.brief_doctor import (
+    C_DESTEK_YOK,
     TEMEL_ALAN_ANAHTARLARI,
     TEMEL_ALANLAR,
     CIddia,
@@ -1250,9 +1251,58 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
             for parca in tasiyan
             for no in satir_evreni[parca].kaynaklar
         } & kabul_edilen
-        if len(kaynaklar) >= KAYNAK_TABANI_YENI_OGE:
+        # ÇELİŞEN DENETÇİ SONUÇLARI (Grup 2 çelişki kuralı, dış depo `0824c0f`):
+        # aynı iddia için biri `DOĞRULANDI`, öteki `KAYNAKTA YOK` yazmışsa
+        # ÇELİŞKİ — karar açık soruya düşer, K-126 istisnası AÇILMAZ ve kanıt
+        # kapısı ölçülmez (hangi beyanın doğru olduğu insan kararıdır).
+        # `URL AÇILMADI` çelişki DEĞİLDİR: beyan kalır, yalnız istisnaya giremez.
+        celisen = sorted(
+            atif.etiket
+            for atif in iddialar
+            if _url_sonucu_celiskili(inputs, atif, iddia_evreni.get(atif.etiket))
+        )
+        if celisen:
+            bulgular.append(
+                BulguIzi(
+                    sinif="acik_soru",
+                    unit_id=satir["unit_id"],
+                    detay=(
+                        "iki denetçi aynı iddianın URL örnekleminde çelişiyor "
+                        f"(`DOĞRULANDI` ↔ `KAYNAKTA YOK`): {celisen} — kalıp "
+                        "otomatik girmez, karar operatöre bırakılır"
+                    ),
+                )
+            )
+            kayitlar.append(
+                UygulanmayanKarar(
+                    unit_id=satir["unit_id"],
+                    karar="ekle",
+                    sebep="url-sonucu-celiskili",
+                )
+            )
             continue
-        # K-126 TEK-KAYNAK İSTİSNASI ARTIK İŞLER (2026-09-11).
+        if len(kaynaklar) >= KAYNAK_TABANI_YENI_OGE or (
+            len(kaynaklar) == 1
+            and _tek_kaynak_istisnasi(inputs, kaynaklar, iddia_kumesi, iddia_evreni)
+        ):
+            # MUTABAKAT = VARLIK geçti (iki kaynak ya da K-126). Kanıt kapısı
+            # AYRI bir sorudur ve mutabakattan BAĞIMSIZ ölçülür (Grup 2, Codex
+            # Ek 2.1): bağlanan satırlardan EN AZ BİRİNİN `destek` türü alan
+            # sınıfının kümesinde mi?
+            kapi = _kanit_kapisi(inputs, satir, karar_alani, iddialar, iddia_evreni)
+            if kapi is None:
+                continue
+            sebep, acik_soru = kapi
+            if acik_soru is not None:
+                bulgular.append(
+                    BulguIzi(sinif="acik_soru", unit_id=satir["unit_id"], detay=acik_soru)
+                )
+            kayitlar.append(
+                UygulanmayanKarar(unit_id=satir["unit_id"], karar="ekle", sebep=sebep)
+            )
+            continue
+        # K-126 TEK-KAYNAK İSTİSNASI ARTIK İŞLER (2026-09-11) — yukarıdaki
+        # koşulun ikinci kolu. Aşağıdaki açıklama kolun gerekçesidir.
         #
         # Spec §9.4: *"istisna yalnız (1) kaynak resmî (K-123 ölçütü) + (2) en az
         # bir denetçinin canlı URL doğrulaması (açıp içerik uyumunu kaydetmesi)
@@ -1266,10 +1316,6 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         # sütununu ekledi (dış depo `12beec1`); yargı artık TİPLİ taşınıyor.
         # Kök çözüm koda değil SÖZLEŞMEYE yapıldı — motor hâlâ hiçbir şey
         # ÇIKARSAMAZ, okur.
-        if len(kaynaklar) == 1 and _tek_kaynak_istisnasi(
-            inputs, kaynaklar, iddia_kumesi, iddia_evreni
-        ):
-            continue
         kayitlar.append(
             UygulanmayanKarar(
                 unit_id=satir["unit_id"], karar="ekle", sebep="cogunluk-yok"
@@ -1278,6 +1324,131 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
     return CheckOutput(
         bulgular=tuple(bulgular), uygulanmayan_kararlar=tuple(kayitlar)
     )
+
+
+# ─── KANIT KAPISI — destek türü, alan sınıfına göre (Grup 2/3, `0824c0f`) ───
+#
+# İKİ AYRI SORU, İKİ AYRI SAYIM (Codex Ek 2.1). MUTABAKAT = kalıbın kaç
+# araştırmada VAR olduğu (`destek=yok` satırı da sayılır — yukarıda, denetçinin
+# `kaynaklar` sütunundan). KANIT KAPISI = bağlanan satırlardan EN AZ BİRİNİN
+# destek türü, alan sınıfının kümesinde mi. Mutabakattan bağımsızdır.
+#
+# | Alan sınıfı | Sayılan destek | Hepsi `yok` |
+# |---|---|---|
+# | Risk (K-129: `yasaklar_ve_hassasiyetler` + mevzuat/tarih/sayı) | mevzuat · veri | AÇIK SORU |
+# | İçerik kalıbı (CTA · kanca · görsel · video · takvim · dönem) | uygulama · öneri · veri | BEKLETME |
+#
+# Bekletme: pakete girmez, açık soru AÇMAZ, kayıtta kalır (`kaynaksiz-bekletme`).
+# `[uyarlama]` etiketli satır içerik alanında sayılır, risk alanında SAYILMAZ.
+# Denetçi `KAYNAKTA YOK` yazmışsa o satırın desteği `yok` sayılır (beyan
+# araştırmacınındır, doğrulama denetçinin). Kapı hiçbir şey ÇIKARSAMAZ: destek
+# beyanı Bölüm C'den (`CIddia.destek`), doğrulama URL örnekleminden okunur.
+
+RISK_KANIT_DESTEKLERI: frozenset[str] = frozenset({"mevzuat", "veri"})
+ICERIK_KANIT_DESTEKLERI: frozenset[str] = frozenset({"uygulama", "öneri", "veri"})
+
+
+def _url_sonuclari(
+    inputs: EngineInputs, atif: KaynakIddiasi, iddia: CIddia | None
+) -> tuple[bool, bool]:
+    """İki denetçinin bu İDDİA için URL örneklem sonuçları: (doğrulandı, kaynakta yok).
+
+    İKİ sonuç da yalnız araştırma satırının URL'siyle TAM eşit örneklem
+    satırından sayılır (K-126 ile AYNI eşitlik). Kararlaştırılan kural
+    *"aynı iddia, AYNI URL"*dir (dış depo `_sablon-duzenleme.md`, çelişki
+    kuralı): başka bir sayfanın olumsuz sonucu bu iddianın kanıtını düşürmez,
+    başka bir sayfanın olumlu sonucu bu iddiayı doğrulamaz. İlk yazım olumsuz
+    kolu kimlikle sayıyordu ve Codex karşı örneğiyle ÖLÇÜLDÜ (2026-09-21):
+    ikinci denetçinin URL'si tamamen başka bir adresken satır "çelişkili"
+    çıkıyordu. Yanlış URL ayrı bir kopya hatasıdır; buradan okunmaz.
+    `URL AÇILMADI` ikisine de girmez.
+    """
+    dogrulandi = kaynakta_yok = False
+    cift = inputs.denetci_envanterleri
+    for rapor in (cift.birinci, cift.ikinci):
+        for kontrol in rapor.url_orneklem:
+            if kontrol.iddia != atif or not kontrol.erisildi:
+                continue
+            if not _url_esit(kontrol.url, iddia):
+                continue
+            if kontrol.icerik_uyumlu:
+                dogrulandi = True
+            else:
+                kaynakta_yok = True
+    return dogrulandi, kaynakta_yok
+
+
+def _url_sonucu_celiskili(
+    inputs: EngineInputs, atif: KaynakIddiasi, iddia: CIddia | None
+) -> bool:
+    """Aynı iddia için biri `DOĞRULANDI`, öteki `KAYNAKTA YOK` mu?"""
+    dogrulandi, kaynakta_yok = _url_sonuclari(inputs, atif, iddia)
+    return dogrulandi and kaynakta_yok
+
+
+def _etkin_destek(inputs: EngineInputs, atif: KaynakIddiasi, iddia: CIddia) -> str:
+    """Araştırmacının beyanı, denetçinin doğrulamasıyla DÜŞÜRÜLMÜŞ hâli.
+
+    `KAYNAKTA YOK` çıkan satırın desteği `yok` sayılır (Grup 2 bağ kuralı).
+    Kapalı kümenin dışındaki yazım brief-doctor'da BOŞA düşmüştür; boş destek
+    burada `yok` gibi işlenir — sayılmaz (fail-closed).
+
+    **URL'si OLMAYAN satır dış kanıt TAŞIMAZ (Codex bulgu 1, yüksek — ÖLÇÜLDÜ
+    2026-09-21):** `destek=öneri` + `URL=kaynak-yok` yazan hatalı satıra
+    brief-doctor not düşüyor, ama taşıdığı kayıtta URL boşalırken beyan
+    korunuyordu ve motor URL'nin yokluğuna bakmadan sayıyordu. Satır mutabakat
+    için (varlık) korunur; kanıt kapısında açılabilir adresi olmayan beyan
+    `yok` sayılır — denetçi hiçbir zaman açamayacağı bir adresi doğrulayamaz.
+    """
+    if not iddia.url.strip():
+        return C_DESTEK_YOK
+    _, kaynakta_yok = _url_sonuclari(inputs, atif, iddia)
+    if kaynakta_yok or not iddia.destek:
+        return C_DESTEK_YOK
+    return iddia.destek
+
+
+def _kanit_kapisi(
+    inputs: EngineInputs,
+    satir: Mapping,
+    karar_alani: str,
+    iddialar: Sequence[KaynakIddiasi],
+    iddia_evreni: Mapping[str, CIddia],
+) -> tuple[str, str | None] | None:
+    """Kanıt kapısı — geçerse `None`; düşerse `(sebep, açık soru detayı | None)`.
+
+    Alan sınıfı K-129'un MEKANİK kuralıyla seçilir (`_mevzuat_mi`): kararın
+    alanı `yasaklar_ve_hassasiyetler` ise ya da adayın metni tarih/sayı/mevzuat
+    işareti taşıyorsa RİSK, değilse İÇERİK. Risk sınıfında düşen karar AÇIK
+    SORU açar (insan kararı); içerik sınıfında düşen karar BEKLETİLİR — pakete
+    girmez, açık soru açmaz, kayıtta kalır. Bu asimetri sözleşmenindir.
+    """
+    risk = _mevzuat_mi(karar_alani, _satir_metni(inputs, satir))
+    sayilan = RISK_KANIT_DESTEKLERI if risk else ICERIK_KANIT_DESTEKLERI
+    destekler: dict[str, str] = {}
+    for atif in iddialar:
+        iddia = iddia_evreni[atif.etiket]
+        destek = _etkin_destek(inputs, atif, iddia)
+        etiket = f"{destek}[uyarlama]" if iddia.uyarlama else destek
+        destekler[atif.etiket] = etiket
+        if destek in sayilan and not (risk and iddia.uyarlama):
+            return None
+    hepsi_yok = all(
+        etiket.split("[")[0] == C_DESTEK_YOK for etiket in destekler.values()
+    )
+    if risk:
+        return (
+            "kanit-turu-yetersiz",
+            (
+                "risk sınıfı kalıp (K-129) kanıt kapısını geçmedi — bağlı "
+                f"satırların desteği {destekler}; sayılan: "
+                f"{sorted(RISK_KANIT_DESTEKLERI)} (`[uyarlama]` risk alanında "
+                "sayılmaz); karar operatöre bırakılır"
+            ),
+        )
+    if hepsi_yok:
+        return ("kaynaksiz-bekletme", None)
+    return ("kanit-turu-yetersiz", None)
 
 
 def _tek_kaynak_istisnasi(
@@ -1851,7 +2022,7 @@ def run_checks(inputs: EngineInputs) -> CheckOutcome:
 # ölçer; `decide` uygular. "Kanıt yoksa karar uygulanmaz, kalıp korunur" cümlesi
 # bir UYGULAMA semantiğidir ve karşılığı bu katmandadır.
 
-ENGINE_VERSION: str = "2.20.0"
+ENGINE_VERSION: str = "2.21.0"
 """Motor sözleşmesinin sürümü (K-97) — `decide` her üç sonuçta da damgalar.
 
 Sözleşme değişince ARTAR: dönüşüm tablosu, bariyer mekanizması ya da uygulama
@@ -1973,6 +2144,9 @@ KURAL_KIMLIKLERI: Mapping[str, str] = {
     "iddia-denetcide-yok": "denetci-iddia-bagi",
     "donem-kimligi-cozulemedi": "arastirma-donem-kimligi",
     "cogunluk-yok": "yeni-oge-cogunlugu",
+    "url-sonucu-celiskili": "denetci-url-sonucu-celiskisi",
+    "kanit-turu-yetersiz": "kanit-kapisi-destek-turu",
+    "kaynaksiz-bekletme": "kanit-kapisi-kaynaksiz-bekletme",
 }
 """K-145: uygulanmayan her kararın KURAL kimliği — `UYGULANMAMA_SEBEPLERI` ile
 birebir. Sebep kapalı kümededir; eşlemenin eksik kalması `KeyError` ile
