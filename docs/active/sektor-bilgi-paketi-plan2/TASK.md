@@ -215,6 +215,15 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 
 # Current Status
 
+**2026-09-21 ONUNCU OTURUM — KUSUR 4 KAPANDI (belge değişikliği).** Katman-1/Katman-2 sırası
+Eray onayıyla ikiye ayrıldı: Katman-1 tam sweep + tasdik **motordan ÖNCE**, Katman-2 `draft`tan
+sonra. Değişen: spec §13.3 · plan Task 19 (sıra paragrafı + Step 8/9). **Kod DEĞİŞMEDİ, test
+koşulmadı** (koşacak kod değişikliği yok). Pilotu bloklayan dört kusurun DÖRDÜ de kapandı.
+**Sıradaki iş: yeni pilot koşusu** (`tur-ac` → … → yeni sırayla Katman-1 → motor → …).
+Ölçülmüş maliyet: `denetim` ~956 sn + `sentez` ~941 sn + model parası; model turundan önce
+offline replay. **Zincir borcu: `/security-review-claude-codex` bu dalda HİÇ koşmadı ve
+`security_surface_touched: true` (fail-closed) — zorunlu.**
+
 **2026-09-19 SEKİZİNCİ OTURUM — K-134 KÖR YARGI ALINDI (Task 19 Step 7 BİTTİ).**
 Sentezin 10 açık sorusunun tamamı karara bağlandı; kayıt: `K134-KOR-YARGI.md`.
 Yargı motor çıktısı MEVCUT DEĞİLKEN verildi — körlük koşulu karşılandı, **motorun
@@ -863,6 +872,21 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Decisions Log
 
+- **2026-09-21 — Katman-1/Katman-2 sırası AYRILDI (Eray onayı; kusur 4 kapandı):** spec §13.3
+  "İlk paket koşusu" zinciri ikiye ayrıldı — **Katman-1 tam sweep + tasdik motordan ÖNCE**,
+  Katman-2 `draft`tan sonra. Gerekçe ölçülmüştü: §9.1 prompt regresyonunu zorunlu kapı sayar,
+  motor tasdiki okur, tasdik iki adım sonra doğuyordu → ilk koşu kilitleniyordu (2026-09-19
+  pilot koşusunda `regresyon_kapisi` bulgusu). **Ayrılabilmesinin dayanağı ölçümdür:** Katman-2
+  çıktı-düzeyi kör örneklem olduğu için taslağa muhtaç, Katman-1 ise değil — paketli fixture
+  testleri kendi sabit test paketini testin İÇİNDE kurar (`tests/prompt_regression/
+  test_packaged_caption.py`, `_package_content`), koşunun `draft`ını okumaz; `katman1` alt
+  komutunun koşu satırı dışında ön koşulu yok ve ölü-koşu kapısının DIŞINDA (CLI'da bilinçle
+  öyle sınıflanmış). **Kod DEĞİŞMEDİ** — yalnız spec §13.3 + plan Task 19 (bağlayıcı sıra
+  paragrafı + Step 8 + Step 9). Kapı kaldırılmadı. **K-134 körlüğü bozulmadı:** Katman-1 motor
+  çıktısı üretmez, operatörün kör yargısı (Step 7) hâlâ motordan önce alınır.
+  **Bilinçli maliyet (İlke 9 etiketi — ölçülmedi):** tasdik kod parmak izi taşımaz, bayat
+  tasdikin MEKANİK kapısı yoktur; korunma tek: prompt yüzeyine dokunan her değişiklikten sonra
+  Katman-1'i yeniden koşmak (spec §13.2(7)). Bu risk yeni koşuda gözlenecek.
 - **2026-09-11 — Task 17 hazırlık kapısı = indi; checkpoint 14 BEŞ turda kapandı:**
   hakem F1-F5 üretti; F2 (üretici kimliği damgadan değil `model`'den), F3 (kalıcı raporun TİPLİ
   okuyucusu + yaprak tip değişmezleri), F4 (bloklayan sınıflar motorun etki tablosundan türetilir),
@@ -1538,7 +1562,7 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[YÜKSEK] Pilotu bloklayan kusurlar: 1 · 2 · 3 KAPANDI; 4 AÇIK (sıra kusuru).**
+- **[YÜKSEK] Pilotu bloklayan DÖRT kusurun DÖRDÜ DE KAPANDI (4'ü 2026-09-21'de).**
   Kaynak ölçüm dosyası: **`K134-MOTOR-KARSILASTIRMA.md`** (2026-09-19 koşumunun ölçümleri;
   etiketler o günkü hâliyle durur). Dördü de canlı koşuda ölçülmüştü; ilk üçü birlikte
   kapatıldığında mutasyon varyantı **`activation_eligible`** veriyordu (46 karar · açık soru 0 ·
@@ -1624,13 +1648,13 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
      (d) `bayrak_kaydi` yalnız `ekle` yolunda ve altı kapıyı geçen kararlar için doğar — H1'in
      tetikleyicisi sınıfın bir ALT KÜMESİNİ kapsar (kodda etiketli).
 
-  4. **AÇIK — ERAY KARARI BEKLİYOR (2026-09-20 ölçümü kaydın önerisini ÇÜRÜTTÜ).**
+  4. **KAPANDI (2026-09-21, Eray onayı — belge değişikliği; kod DOKUNULMADI).**
      Mekanizma doğrulandı: motor Katman-1 tasdikini otomatik kapı olarak okuyor; tasdik yoksa
      `regresyon_kapisi` bulgusu doğuyor ve değişiklik varsa aktivasyonu engelliyor (gerçek
      koşuda görüldü).
      **Kaydın önerisi ("plan Task 19 sırasını `katman1 → motor` yap") SPEC'LE ÇELİŞİR:** sıra
-     planın tercihi değil, **spec §13.3'te bağlı** (`motor → karşılaştırma → yazım kapısı →
-     draft → Katman-1 + Katman-2 → onay`). **Ve kapı KALDIRILAMAZ:** spec §9.1 birebir
+     planın tercihi değil, **spec §13.3'te bağlıydı** (o günkü hâliyle: `motor → karşılaştırma →
+     yazım kapısı → draft → Katman-1 + Katman-2 → onay`; 2026-09-21'de değişti — aşağıya bak). **Ve kapı KALDIRILAMAZ:** spec §9.1 birebir
      *"prompt regresyonu açık karar DEĞİL, zorunlu kapıdır — geçmeden koşu `activation_eligible`
      olamaz"* diyor ve §9.2 onu motorun zorunlu kontrolleri arasında sayıyor. Yani spec'in iki
      hükmü birbirini kilitliyor: ilk koşuda motor hiçbir zaman `activation_eligible` veremez.
@@ -1639,12 +1663,18 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
      Katman-1 ise kod seviyesinde byte-exact prompt regresyonu ve **koşunun taslağına BAĞLI
      DEĞİL** (ölçüldü: paketli fixture testi kendi fixture paketini DB'ye kendisi yazıyor,
      koşunun draft'ına bakmıyor).
-     **Öneri (Eray onayı gerekli, çünkü SPEC sırasını değiştirir):** sırayı ikiye ayır —
-     **Katman-1 motordan ÖNCE**, Katman-2 draft'tan sonra kalsın. Spec §13.3 + plan Task 19
-     Step 8/9 birlikte düzenlenir; **kod değişikliği GEREKMEZ** (`katman1` alt komutunun ön
-     koşulu yok, motor tasdiki zaten okuyor).
-     Düzeltilmezse aynı `regresyon_kapisi` bulgusu yeni koşuda TEKRAR çıkar — evi aşağıdaki
-     "yeni pilot koşusu" kaleminin ÖNÜDÜR.
+     **UYGULANDI (2026-09-21):** sıra ikiye ayrıldı — **Katman-1 tam sweep + tasdik motordan
+     ÖNCE**, Katman-2 `draft`tan sonra. Değişen iki belge: spec §13.3 (sıra satırı + gerekçe
+     kutusu) · plan Task 19 (bağlayıcı sıra paragrafı + Step 8 "(a) Katman-1 → (b) motor" +
+     Step 9 "yalnız Katman-2"). **Kod DEĞİŞMEDİ, test koşulmadı** — koşacak bir kod değişikliği
+     yok; kapı da kaldırılmadı. Sıra cümlesinin üç kardeş sitesi tarandı (`grep "Katman-1 +
+     Katman-2"` → spec · plan · bu kayıt); dağıtım runbook'undaki Katman-1 satırı koşu sırası
+     DEĞİL, dağıtım öncesi kalite kapısıdır — dokunulmadı.
+     **DOĞRULANMADI — yeşil sayma:** (a) yeni sıranın gerçekten `activation_eligible` ürettiği
+     ÖLÇÜLMEDİ; evi yeni pilot koşusudur. (b) Tasdik kod parmak izi taşımadığı için **bayat
+     tasdikin mekanik kapısı YOKTUR** — Katman-1 ile onay arasında prompt yüzeyine dokunulursa
+     tasdik sessizce bayatlar; tek korunma spec §13.2(7)'nin "her artımda yeniden koş" hükmüdür
+     ve bu ELLE disiplindir.
 
   **Bu dörtten BAĞIMSIZ — KAPANDI (2026-09-20, `2bf3d71`).** Ölü koşu iş kabul ediyordu:
   koşu satırını çeken yardımcı `durum` sütununu HİÇ okumuyordu ve tüm depodaki TEK canlılık
@@ -1686,8 +1716,9 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   **Ev:** aktif paketi olan ilk sektörün ilk koşusu — o koşuda bu kol ölçülür.
 
 - **[YÜKSEK — EV: kusur 3 kapandıktan sonraki ilk oturum] Yeni pilot koşusu açılmalı.**
-  **ÖN KOŞULLARI (bu koşudan önce ödenecek):** kusur 3 · kusur 4 (sıra) · ölü-koşu kusuru.
-  Üçü de yukarıda adlandırıldı ve evleri BU kalemin önüdür.
+  **ÖN KOŞULLARI ÖDENDİ (2026-09-21):** kusur 3 · kusur 4 (sıra) · ölü-koşu kusuru — üçü de
+  kapandı. Bu kalemin önünde başka ön koşul YOK; kalan tek zincir borcu
+  `/security-review-claude-codex` (bu dalda hiç koşmadı, `security_surface_touched: true`).
   Koşu `kosu-222706dc…` TÜKENDİ (`tamamlandi`/`blocked`); `motor` ikinci kez yazmaz, `yazim`
   `activation_eligible` ister — o koşudan taslak ÇIKMAZ. Düzeltmelerin gerçek kodda işe yarayıp
   yaramadığı (kusur 1'in davranış ayağı dâhil) ancak yeni koşuda ölçülür.

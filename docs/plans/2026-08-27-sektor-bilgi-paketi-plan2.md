@@ -2143,8 +2143,16 @@ markası, araştırmaların K-18 gereği yeniden üretilmesi, resmî zincirin u�
 **Bağlayıcı sıra (spec §13.3 "İlk paket koşusu" + K-134 kalibrasyon çatalı):**
 brief (A+B — ilk pakette yalnız-B geçersiz) → üç araç elle → koşu klasörü → mekanik kapı →
 iki kör denetçi → sentez → **[K-134 çatalı: operatörün yalnız-sentez yargısı KAYDEDİLİR]** →
-**motor** → karşılaştırma → yazım kapısı → `draft` → Katman-1 + Katman-2 → onay →
-aktivasyon (ilk pakette yalnız ikinci adım) → markalara öneri/teyit → ilk üretim gözlemi.
+**Katman-1 tam sweep + tasdik** → **motor** → karşılaştırma → yazım kapısı → `draft` →
+**Katman-2** → onay → aktivasyon (ilk pakette yalnız ikinci adım) → markalara öneri/teyit →
+ilk üretim gözlemi.
+
+**Katman-1 sıra hükmü (2026-09-21, Eray onayı — spec §13.3 ile birlikte değişti):** Katman-1
+motordan ÖNCE koşar ve tasdiki yazılır; Katman-2 `draft`tan sonra kalır. Gerekçe spec §13.3'ün
+kutusunda: motorun zorunlu regresyon kapısı tasdiki okur, tasdik motordan sonra doğarsa ilk koşu
+kilitlenir (2026-09-19 pilot koşusunda ölçüldü). Kod değişikliği GEREKMEDİ. **Bayat tasdik
+mekanik olarak yakalanmaz** — prompt yüzeyine dokunan her değişiklikten sonra Katman-1 yeniden
+koşulur (spec §13.2(7)).
 
 **K-134 sıra hükmü (review turu düzeltmesi):** ilk yazımda motor ve onay birlikte
 koşuluyor, operatörün "bağımsız yargısı" ondan SONRA isteniyordu — motor çıktısı ortadayken
@@ -2169,10 +2177,18 @@ Operatörün yargısı motor koşmadan ÖNCE kaydedilir; `onay` bir kez, en sond
 - [ ] **Step 7:** **K-134 çatalı — kalibrasyon tabanı:** operatör YALNIZ sentez çıktısına
   (karar günlüğü + açık sorular) bakar, yargısını yazar ve kaydeder. Motor çıktısı bu anda
   MEVCUT DEĞİLDİR — körlük kalibrasyonun ön koşuludur.
-- [ ] **Step 8:** `motor` alt komutunu koş; operatörün kayıtlı yargısıyla motorun kararlarını
-  karşılaştır ve farkı koşu raporuna yaz (spec §15.2'nin istediği kalibrasyon verisi).
-- [ ] **Step 9:** Yazım kapısı → `draft`; ardından Katman-1 tam sweep + Katman-2 kör
-  örneklem koş. Katman-2 **kapı değildir** — koşulması ve sunulması ön koşuldur, sonucu değil.
+- [ ] **Step 8:** **(a) Katman-1 tam sweep** koş (`pytest tests/prompt_regression/ -q` —
+  tek bayt fark YOK) ve tasdiki yaz: `katman1 --run-id … --kosum-kimligi … --sonuc PASS`.
+  Motordan ÖNCE koşar (yukarıdaki sıra hükmü); `katman1` alt komutunun koşu satırı dışında ön
+  koşulu yoktur ve ölü-koşu kapısının DIŞINDADIR. **FAIL gelirse motor koşturulmaz** — regresyon
+  zorunlu kapıdır (spec §9.1). **(b)** `motor` alt komutunu koş; operatörün kayıtlı yargısıyla
+  motorun kararlarını karşılaştır ve farkı koşu raporuna yaz (spec §15.2'nin istediği
+  kalibrasyon verisi).
+- [ ] **Step 9:** Yazım kapısı → `draft`; ardından **Katman-2 kör örneklem** koş ve tasdikini
+  yaz. Katman-2 **kapı değildir** — koşulması ve sunulması ön koşuldur, sonucu değil.
+  **Katman-1 burada DEĞİL, Step 8(a)'dadır.** Step 8(a) ile buranın arasında prompt yüzeyine
+  dokunan bir değişiklik yapıldıysa Katman-1 yeniden koşulur ve tasdik tazelenir
+  (spec §13.2(7); bayat tasdikin mekanik kapısı YOKTUR).
 - [ ] **Step 10:** `onay` (TEK kez) + `aktive-et` (ilk pakette yalnız ikinci adım;
   kanıt `expected_no_active=True`).
 - [ ] **Step 11:** **Task 15 elle arayüz doğrulaması (Plan 1'den devralınan borç — evi

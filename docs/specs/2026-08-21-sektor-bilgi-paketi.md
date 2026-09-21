@@ -1319,9 +1319,26 @@ geçerlidir (mevcut çalışma sözleşmesi).
 
 - **İlk paket koşusu:** brief iki görevle (A+B — yalnız-B ilk pakette geçersiz) →
   üç araç elle → klasör (K-17) → mekanik kapı → iki kör denetçi → sentez (hepsi
-  `ekle` evreni) → motor → yazım kapısı → `draft` → Katman-1 + Katman-2 → onay →
-  aktivasyon (ilk pakette yalnız ikinci adım) → markalara öneri/teyit → ilk üretim
-  gözlemi.
+  `ekle` evreni) → **Katman-1 tam sweep + tasdik** → motor → yazım kapısı → `draft` →
+  **Katman-2** → onay → aktivasyon (ilk pakette yalnız ikinci adım) → markalara
+  öneri/teyit → ilk üretim gözlemi.
+
+  > **[SIRA DEĞİŞİKLİĞİ — 2026-09-21, Eray onayı]** İlk yazımda Katman-1 ile Katman-2
+  > AYNI adımda, motorun ve `draft`ın ARKASINDA duruyordu. Bu sıra ilk koşuda
+  > kilitleniyordu: §9.1 prompt regresyonunu **zorunlu kapı** sayar ve motor tasdiki
+  > otomatik kapı olarak okur; tasdik iki adım sonra doğduğu için motor hiçbir zaman
+  > `activation_eligible` veremiyordu (2026-09-19 pilot koşusunda ÖLÇÜLDÜ:
+  > `regresyon_kapisi` bulgusu doğdu). İki katman aynı adımda paketlenmişti ama
+  > **bağımlılıkları farklıdır:** Katman-2 çıktı-düzeyi kör örneklemdir, paketin var
+  > olmasını ister; Katman-1 kod seviyesinde byte-exact prompt regresyonudur ve
+  > **koşunun taslağına bağlı DEĞİLDİR** (ölçüldü: paketli fixture testleri kendi sabit
+  > test paketini testin içinde kurar, koşunun `draft`ını okumaz; `katman1` alt
+  > komutunun da koşu satırı dışında ön koşulu yoktur). Kapının kendisi KALDIRILMADI.
+  > **Bilinçli maliyet:** tasdik "hangi koşum · hangi sonuç · kim · ne zaman" kaydeder,
+  > kodun o andan sonra değişip değişmediğini MEKANİK olarak yakalamaz. Bu yüzden
+  > 13.2(7)'nin "her artımda Katman-1 yeniden koşulur" hükmü bu sırada daha ağır
+  > basar: prompt yüzeyine dokunan her değişiklikten sonra Katman-1 yeniden koşulur ve
+  > tasdik tazelenir. **Bayat tasdik riski ölçülmedi — mekanik kapısı yoktur.**
 - **Periyodik tur:** periyot değeri **K-149 — KAPANDI (Eray, 2026-08-23): 6 ayla
   başlanır** (ilk tur süresi ölçülünce revize edilebilir; acil mevzuat tur-dışı kolla
   karşılanır); saklama **K-26 — KAPANDI (Eray,
