@@ -5,110 +5,111 @@ written: 2026-09-22
 
 # Resume From
 
-**SIRADAKİ İŞ, TEK CÜMLE: Grup 3 kodu review'dan geçti ve KAPANDI (attempt-1 dual → düzeltme `fceb2d2`
-→ attempt-2 kapanış dual, unresolved C/H = 0); sırada Eray'ın üç araştırmayı YENİ brief'le
-(`Kuyumculuk/kuyumculuk.md`, üçüncü revizyon) alması → tek tur.** Push EDİLMEDİ. Kalem listesi ve ilk
-turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions Log "Grup 3 — kod tarafı".
+**SIRADAKİ İŞ, TEK CÜMLE: `/review-claude-codex` koş (bugünkü 1062 satırı bağımsız göz görmedi),
+temizse YENİ koşu aç — üç düzeltme canlıda HİÇ sınanmadı.** Üç commit indi (`95d846b` pin ·
+`4a260f2` sentez onarımı · `ec5010e` Codex brief'leri), ağaç temiz, push YAPILMADI.
 
-**Bugün ne oldu (2026-09-22):**
-1. `/review-claude-codex` (dual) koştu: 2 high · 3 medium · 4 low. İki high'ı da orkestratör kendi probuyla
-   doğruladı: **H1** zorunlu `[C: n]` etiketi tekrar/adet anahtarına giriyordu (özdeş beş CTA farklı etiketle
-   `gecti/0 not`); **H2** eski 7 sütunlu rapor 0 iddiayla tura giriyor, denetçi anınca motor çoğunluğa
-   sayıyordu ("eski raporlar yeni hatta girmez" hükmü kodda zorlanmıyordu).
-2. Eray kararı: H1 + H2 (+ M1) düzeltilir → kapanış turu → üç araştırma. M2 (Katman-1 tasdiği ölü koşuda
-   yazılabilir; hakemler çelişti) **Eray kararı: BIRAK** (örnekli açıklama sonrası; kodun belgeli gerekçesi) — `accepted_risk`.
-3. Düzeltme `fceb2d2` (TDD: 10 test önce kırmızı, 10/10 mutasyon yakalandı): `_madde_anahtari` etiketi
-   düşürür; `iddiasiz_kaynaklar` tek üretici, paket kurucu ve sentez karışık kümeyi REDDEDER (süzmez);
-   motor yalnız iddia bağı taşıyan kaynağı sayar (üretimde no-op — ayrıştırıcı zaten eşitlik zorluyor,
-   savunma katmanı); üç `RunAlreadyTerminal` sarması + `ALAN_HATALARI`; tekrar notu `{ad}` literali gitti.
-4. Kapanış turu (attempt-2, dual, sözleşme hash'i EŞİT): dördü de KAPANDI; Codex bulgu yok; Claude 6 low
-   (N1-N6). N1 · N2 · N4 · N5 · N6 gönüllü düzeltildi (belge/test/log; **bağımsız hakem görmedi**), N3
-   `accepted_risk`.
-5. Commit'ler: `1e9a133` docs(reviews) attempt-1 · `fceb2d2` fix(hat) H1+H2+M1+L4 · `317664f` fix(hat) gönüllü low
-   düzeltmeleri · kapanış raporu + TASK/HANDOFF · `5e4a767` iki karar kaydı. Push EDİLMEDİ.
-6. Oturum sonu (Eray'la): M2 ve "atıf artıkları" kararları BIRAK/KALSIN (kayıtlarda). Dış depoda
-   tasarım dokümanının durum satırı güncellendi (`221baa7`), iki fazlalık `.bak` silindi, üç araca
-   brief'le birlikte sohbete yapıştırılacak **sektörsüz ön yazı** `_ON-YAZI.md` olarak `_SABLON.md`'nin
-   yanına kondu (`38b475b`; şablon revize edilince 3-5. maddeleri aynı commit'te gözden geçirilir).
-   Eski↔yeni brief farkı tablo olarak Eray'a verildi (yeni şart: her maddeye `[C: …]`, CTA/kancaya
-   bağlam etiketi + gerekçe, Bölüm C'de `destek`/`yer`, kaynaksız kalıp ve dönem etiketle kaydedilir).
+**Bugün ne oldu (2026-09-22) — üç araştırma alındı, iki tur yandı, hat onarıldı:**
 
-**YENİ RAPORLAR GELDİĞİNDE SIRA (taze oturum):** koşu `222706dc` terminal → `tur-ac` ile YENİ koşu;
-brief + üç rapor koşu klasörüne runbook'taki adlarla (`docs/plans/PLAN2-DAGITIM-RUNBOOK.md`, Step 5-6
-kaydı TASK "Task 19 Step 5-6") — kör etiket KAYNAK-1..3 alım sırasında verilir, dosya adından
-bağımsızdır; eski `Kuyumculuk/Kaynak-1..6.md` test verisi olarak KALIR, üstüne yazılmasın (öneri:
-yenileri `Kaynak-7..9` diye kaydet). Sonra kaynak başına `brief-doctor` → `denetim` → `sentez` → kör
-yargı (K-134) → `katman1` → `motor` (spec §13.3 sırası, 2026-09-21 düzeltmesi). İLK TURDA ÖLÇÜLECEKLER
-TASK Open Problems ilk maddede (9 sütun/etiket isabeti · brief-doctor not sayısı · K-129 rakam kuralı
-payı · CTA havuzu ≥ 5 → parktaki eşik kararı). Ön yazıya rağmen rapor başında/sonunda araç cümlesi ya da
-kod çiti kalmışsa kaydetmeden önce ELLE temizlenir (kod çiti içi mekanik kapıda sayılmaz).
+1. Eray üç raporu yeni brief'le üretti (`Kuyumculuk/Kaynak-1-yeni.md` · `-2-yeni` · `-3-yeni`).
+   Mekanik kapı üçünü de geçirdi, hiçbiri elenmedi: not **29 · 5 · 33**, Bölüm C iddiası
+   **25 · 50 · 45** (önceki tur 119 · 1 · 45). Araç adı sızıntısı 0, kod çiti 0.
+2. **Baskın not sınıfı `url-bicimi/geri-baglanti` (25 · 5 · 28):** madde bir alanda yazılmış ama
+   gösterdiği kaynak satırının alan hücresinde BAŞKA alan yazıyor — üç araç da bir kaynağı birden
+   çok alanda kullanmış. Yan bulgular: Gemini `destek` hücresine kapalı küme dışından `uyarlama`
+   yazmış; Claude iki satırda tarihi sözleşme biçiminde yazmamış.
+3. **Koşu 1 `kosu-3f22d638…` DÜŞTÜ (sentez).** Model düşünmeyi cevapla aynı mesaja koydu, 64.000
+   jetonluk bütçe doldu, cevap kesildi; `text` kipi yalnız son mesajı bastığı için ilk mesajın
+   22.230 karakteri artefakta girmedi. CLI kendiliğinden devam etti ama devam mesajında da dört
+   bölümün ikisini yazmadan bitirdi — içerik gerçekten yarımdı.
+4. **Koşu 2 `kosu-8a2081d4…` DÜŞTÜ ama sebebi BENDİM.** Sentez cevabı TAM geldi (41.433 karakter,
+   dört bölüm, biçim kapısı 0 hata); o tur eklediğim kümülatif jeton tavanı kapısı koşuyu öldürdü.
+   Kapı yanlış şeyi sayıyordu (zarfın `output_tokens` alanı TÜM turların toplamı). Kapı kaldırıldı.
+   Bedeli bir denetçi turu.
+5. **Codex iki tur danışıldı ve sessiz bir veri kaybı buldu** — kendim de ölçtüm: `_json_govdesi`
+   çitli blokları `.search()` ile okuyordu, yani yalnız ilkini. `kosu-7705437…` 79 kaydın 60'ını
+   döndürüyordu ve **veritabanına da 60 kayıtla indi.**
+6. **Üç kusur kapandı (`4a260f2`):** (a) okuyucu bütün blokları okur, belirsiz çokluğu reddeder,
+   çit etiketi serbest; (b) çıktı-biçimi hatasına BİR düzeltme çağrısı hakkı, koşu `calisiyor`
+   kalır; (c) sentez `stream-json --verbose` ile koşar, gövde bütün `assistant` olaylarının metin
+   bloklarından kurulur, ham akış diske yazılır.
 
-**Dosya durumu:**
-- Dış depo: `34a34db` (iki sözleşme; pin ona bağlı). Eray'ın 41 silinmiş dosyası + 3 yeni (`.bak`, `sentez/`)
-  çalışma ağacında hâlâ commit'lenmemiş — bana ait değil, dokunulmadı.
-- Brief `Kuyumculuk/kuyumculuk.md`: bilinçli olarak depo dışı (`.git/info/exclude`), 2-5. bölümleri şablonla
-  BAYT BAYT aynı (bugün ölçüldü); sürümü araştırma kaydedilirken `girdi_ozeti` hash'iyle DB'ye iner.
-- Monorepo: ağaç temiz; push Eray kararı (sayı `git log @{u}..HEAD` ile ölçülür, buraya yazılmaz).
-- Dış depo: `38b475b`; Eray'ın 41 silinmiş dosyası + `sentez/` hâlâ commit dışı (dokunulmadı).
+**YENİ KOŞU AÇARKEN (taze oturum):**
+`tur-ac --sector-id 7353a672-148f-4add-8920-619f05e839c7 --kosu-turu ilk` → koşu klasörü
+`/root/otomaix-sosyal-medya-arastirmasi/kosu/<koşu>/` içine `brief.md` (= `Kuyumculuk/kuyumculuk.md`,
+sha `f33a2544…`) + `KAYNAK-1/2/3.md` (= `Kaynak-1-yeni` · `-2-yeni` · `-3-yeni`) → kaynak başına
+`brief-doctor` (damga `model=<Gemini|ChatGPT|Claude>; surum=bilinmiyor; tarih=<gün>; girdi_ozeti=<brief sha>`;
+**kör etiket eşlemesi Eray onaylı: KAYNAK-1=Gemini · 2=ChatGPT · 3=Claude**) → `denetim`
+(`--zaman-asimi-sn 1800`, `--arac-surumu "claude-2.1.278 / codex-cli-0.155.1"`) → `sentez`
+(`--arac-surumu "claude-2.1.278"`) → kör yargı (K-134) → `katman1` → `motor`.
+**İLK TURDA ÖLÇÜLECEKLER** TASK Open Problems'ta: 9 sütun/etiket isabeti · brief-doctor not sayısı ·
+K-129 rakam kuralı payı · CTA havuzu ≥ 5.
 
 # Verification
 
 | Ne | Taze çıktı |
 |---|---|
-| Tam takım, gönüllü low düzeltmeleri SONRASI (`pytest -q`) | **4714 passed / 0 failed / 417,0 s** |
-| Tam takım, `fceb2d2` için | 4714 passed / 402,5 s |
-| Tam takım, review ÖNCESİ (`8f54f15`) | 4704 passed / 402,6 s |
-| Mutasyon (dosya yedeğiyle geri alındı) | attempt-1 düzeltmeleri 10/10 yakalandı · N2 1/1 |
-| Orkestratör probları (düzeltme sonrası) | aynı gövde + farklı etiket → `notlu-gecti / 2 not`; eski rapor → 0 iddia, adıyla bildiriliyor |
-| Codex kapanış turu | rc=0, 491 s, çıktı tam, "no material findings" |
-| Tasarım dokümanı ↔ kod (Ek §1-§4 tek tek) | Ek'in tek açık kalemi H2 idi → kapandı; "atıf artıkları silinir" satırı kodda NOT olarak (6 gerçek raporda 0 artık) — Eray kararı: böyle kalsın |
+| Tam takım (son hâl) | **4746 passed / 0 failed / 397,4 s** |
+| Tam takım (okuyucu düzeltmesinden sonra) | 4728 passed / 406,9 s |
+| Tam takım (gün başı, değişiklik öncesi) | 4714 passed / 417,0 s |
+| Mutasyon — okuyucu (4 mutasyon) | 4/4 yakalandı |
+| Mutasyon — düzeltme hakkı (5 mutasyon) | 5/5 yakalandı |
+| Mutasyon — akış kipi (6 mutasyon) | 6/6 yakalandı |
+| Mutasyon geri alma | kaynak dosyalar yedekle BİREBİR aynı (üç turda da) |
+| Okuyucu düzeltmesi ↔ gerçek kayıtlar | `kosu-7705437…` 60 → **79/79** · `DUSMUS-…jsonl` 61 → **90/90**; tek bloklu dördünde gerileme YOK |
+| `MAX_THINKING_TOKENS` bağlamıyor | çocuk ortamında ÖLÇÜLDÜ (`/proc/<pid>/environ` = 16000), model 56.502 jeton düşündü |
+| `CLAUDE_CODE_MAX_OUTPUT_TOKENS` uygulanıyor | 200 jetonluk kol tam o sınırda düştü; CLI mesajı anahtarın adını söylüyor |
+| `--verbose` akış kipinin ön koşulu | onsuz `rc=1`: *"--output-format=stream-json requires --verbose"* |
+| Akış olay biçimi | ölçüldü: aynı `message.id` birden çok olay · `result.result` = son metin bloğu · olay `usage`'ı parçalı |
 
 **DENENMEYEN / DOĞRULANMAYAN:**
-- Yeni şablonla hiçbir gerçek rapor alınmadı; LLM'lerin 9 sütunu, `[C: …]`'yi, `kaynak-bulunamadı`yı doğru
-  yazması ÖLÇÜLMEDİ. Bu turun amacı tam olarak bu.
-- **K-129 rakam kuralı** canlıda kaç içerik maddesini açık soruya düşürecek — ÖLÇÜLMEDİ (L2). İlk turda
-  `kanit-turu-yetersiz` sebepli açık soruların alan dağılımı sayılacak.
-- Gönüllü low düzeltmeleri (N1 · N2 · N4 · N5 · N6) bağımsız hakem GÖRMEDİ — yalnız tam takım + N2 mutasyonu.
-- N3: motor aşamasında bağımsız iddiasız-kaynak kapısı yok; erişilebilirlik ÖLÇÜLMEDİ (taze koşuda denetim ve
-  sentez kapıları önce reddeder).
-- M3 (kapı TOCTOU): canlı yarış penceresi ölçülmedi; tek operatör CLI.
-- `/security-review-claude-codex` dalda hâlâ borç (security_surface `uncertain → true`).
-- Grup 3 kod oturumunun süresi hâlâ ölçülmedi; review turu: iki hakem ~12 dk (Codex 701 s), kapanış ~12 dk (Codex 491 s).
+- **Üç düzeltmenin hiçbiri canlı koşumda sınanmadı.** Yalnız testler + kayıtlı çıktılar.
+- `/review-claude-codex` bugünkü değişikliği GÖRMEDİ; `/security-review-claude-codex` dalda hiç
+  koşmadı ve bugün güvenlik yüzeyine dokunuldu (alt süreç çıktı yolu, koşu köküne yeni dosyalar).
+- 128.000 tavanının kesilmeyi önleyip önlemediği ÖLÇÜLMEDİ (deneme tavana yaklaşmadı: 63.188).
+- Düzeltme çağrısının gerçek bir bozuk çıktıyı düzeltip düzeltemeyeceği ÖLÇÜLMEDİ (yalnız sahte
+  runner ile).
+- Markdown tablosu yazan model davranışının tekrar edip etmediği bilinmiyor (tek gözlem).
 
 **TUZAKLAR:**
-- **Codex review turu 480 s'ye SIĞMIYOR** (ölçüldü: 701 s ve 491 s); doğrudan 1200 s ile arka planda koş, yoksa
-  tur boşa gider. Kota kapısı bayat okuyup PAUSE diyebilir — `resets_at_primary` ile pencerenin geçtiğini ölç.
-- `iddiasiz_kaynaklar` ELENMİŞ raporu atlar (elenmiş zaten girdi değil); testte doğrudan kurulan `DoctorReport`
-  artık `iddialar=` taşımalı, yoksa paket/sentez reddeder (fixture yardımcıları güncellendi).
-- Pin'i dış commit'ten ÖNCE bump etme; dış commit'e Eray'ın silinmiş 41 dosyasını KATMA.
-- Koşu `kosu-222706dc…` terminal; eski Kaynak-1..6 yeni hatta girdi olamaz (artık MEKANİK olarak reddedilir).
+- **Bekleme kontrolünü `pgrep -f` ile kurma.** Bugün İKİ KEZ komut kendi komut satırını gördü ve
+  sonsuza kadar bekledi; bir keresinde 66 dakika boşa gitti. PID ile bekle (`kill -0 <pid>`).
+- **Mutasyonun uygulandığını doğrula.** Bir mutasyon kodu değiştirdi ama davranışı değiştirmedi
+  (kontrol `try` bloğunun dışındaydı) ve "yakalanmadı" sonucu SAHTEYDİ.
+- Sentez kökü (`sentez/<koşu>/`) `exist_ok` kullanmıyor; düşen turun kökü elle `DUSMUS-…` diye
+  yeniden adlandırılır (mevcut konvansiyon).
+- Koşu `3f22d638` ve `8a2081d4` TERMİNAL; `7705437` sahipsiz `calisiyor`.
+- Eray'ın dış depodaki 41 silinmiş dosyası hâlâ commit dışı — BANA AİT DEĞİL, dokunulmadı.
 
 # Risks
 
-- Yeni şablon + 9 sütun + geri bağlantı LLM'e yapısal yük; ilk turda brief-doctor notu artabilir (not elemez,
-  ama sentez girdisi kirlenir). Bir rapor Bölüm C'yi hiç çözemezse artık TUR DURUR (H2 kapısı) — "yeniden üret"
-  cevabı doğru ama tur maliyeti tekrar eder.
-- Kanıt kapısı içerikte `öneri`yi kabul ediyor; tarihsiz ajans blogu "öneri" sayılırsa zayıf kaynaklı kalıp
-  mutabakatla girer.
-- Denetçi örneklemi kaynak başına 3 satır; örneklenmeyen iddiada beyan olduğu gibi geçer (kanıt kapısı
-  beyanı örneklemsiz KABUL eder — tasarım gereği).
-- M2: ölü koşuya Katman-1 tasdiği yazılabilir (aktivasyon etkisi yok, yanıltıcı kayıt riski) — Eray kararı (2026-09-22): bırak.
+- Geri bağlantı notları (25 · 5 · 28) elemiyor ama sentez girdisini kirletiyor; bu turda kaç
+  maddenin kapsamasız kaldığı ölçülmedi.
+- Desteksiz kalıplar (bakım, ücretsiz parlatma, **taklas**) denetçi raporlarında yine dış kanıtsız
+  görünüyor — parktaki CTA eşiği sorusu aynı yerden vuracak gibi.
+- Düzeltme hakkı turu kurtarır ama maliyeti ikiye katlar (~12 dk + 2,45 USD). Bir tur içinde iki
+  model çağrısı normal sayılmalı.
+- `json` çıktı kipinin çağıranı yok (YAGNI borcu, Open Problems'ta).
 
 # Notes For Claude
 
-- Eray'ın talimat sırası: "H1 + H2 (+ M1) düzeltmesi → kapanış turu → yeni kaynak dosyaları". Üçü tamam;
-  sıradaki adım Eray'da (araştırma üretimi). Bu oturumda Claude'a düşen tek şey commit onayı.
-- Review komut disiplininden bugün ölçülenler: hakem prompt'una spec/plan gömülmez (280 KB), pinli dosya +
-  hash; tasarım dokümanı da gömülmedi (shell'e gömme yasağı). Tek-kaynaklı C/H orkestratör probuyla
-  "claude-confirmed" yapıldı (ikisi de).
-- İlke 9: buradaki sayılar bu oturumun koşumlarıdır; sonraki oturum tam takımı yeniden koşar.
-- Kapanış turu Codex'in TASK/HANDOFF'u okuduğunu gösterdi (worktree'de commit'li) — hakem bağımsızlığı için
-  active layer prompt'a enjekte edilmez ama dosya ağaçta görünür; kabul edilen sınır.
+- **Bugünün dersi, açıkça:** iki öneri de (düşünme tavanı, jeton kapısı) tutmadı ve ikincisi
+  sağlam bir turu öldürdü. Eray bunu yüzüme söyledi ve haklıydı. Ölçülmemiş mekanizmaya kapı
+  kurma; tek koşumluk probu kanıt sayma (1.511 → 1.053 farkı gürültüydü, yine de üstüne inşa
+  ettim).
+- Codex'in iki turu da değerliydi: sessiz kayıt kaybını o buldu, beni iki yerde düzeltti
+  ("128.000 olsaydı biterdi" bir tahmindi; "8 denemenin 3'ü geçti" güvenilir bir oran değil) ve
+  denetimi tekrar koşmadan çevrimdışı deneme yapılabileceğini o söyledi. Brief'ler commit'li:
+  `SENTEZ-KESILME-SORUNU.md` + `…-GUNCELLEME.md`.
+- Sekiz kayıtlı sentez çıktısı `sentez/` altında duruyor ve **bedava regresyon verisi**; okuyucu
+  ya da biçim kapısı değişirse önce onlara karşı koş.
 
 # Notes For Codex
 
-Attempt-1 (701 s): 1 high (H2), 2 medium (M2 Katman-1 kapı dışı — Claude hakemiyle çelişti, Eray kararı: bırak;
-M3 TOCTOU). Kapanış (491 s): approve, dört bulgu da closed, bulgu yok; kapsam beyanı tam. Kalan dikkat
-listesi bir sonraki `/security-review-claude-codex` için: (1) `iddiasiz_kaynaklar` elenmiş-atlama sınırı,
-(2) paket/sentez reddinin operatör görünürlüğü (bildirim metni), (3) `RunAlreadyTerminal` yakalamalarının
-başka DB hatalarını yutmadığı (Claude hakemi kod okumasıyla "yutmuyor" dedi; ölçülmedi), (4) N3 motor kapısı.
+Bu oturumda Codex üç tur danıştı ve üçü de değerliydi; kalan dikkat listesi bir sonraki
+`/review-claude-codex` ve `/security-review-claude-codex` için:
+(1) düzeltme döngüsünün `SynthesisOutputError` sınırı gerçekten dar mı — terminal bir hata
+yanlışlıkla düzeltilebilir sınıfa düşüyor mu; (2) akış okuyucusunun metin birleştirmesi, araç
+öncesi "hazırlık cümlesi" gibi gövde dışı metni belgeye sokar mı; (3) koşu köküne yazılan yeni
+dosyaların (`02-…`, `*-SENTEZ-AKISI.jsonl`) sahne kopyasına girip bir sonraki çağrının bağlamını
+değiştirmesi; (4) `json` kipinin çağıransız kalması.

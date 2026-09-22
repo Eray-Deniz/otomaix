@@ -230,6 +230,51 @@ düzeltilir, kayıt `otomaix-sosyal-medya-arastirmasi/_sablon-duzenleme.md` (Gru
 tek başına canlıya inemez. **Sıradaki iş: Grup 3 kod tarafı** (Open Problems ilk madde).
 Koşu `kosu-7705437723ce4730ac0ae70cf6986bc8` hâlâ `calisiyor`, motor koşturulmadı.
 
+**2026-09-22 ON ÜÇÜNCÜ OTURUM — ÜÇ ARAŞTIRMA ALINDI, İKİ TUR YANDI, SENTEZ HATTI ONARILDI.**
+Eray üç raporu yeni brief'le üretti; iki koşu açıldı ve İKİSİ DE TERMİNAL oldu, paket ÇIKMADI.
+Oturumun ürünü kod tarafında: sentez hattının üç kusuru ölçüldü ve kapatıldı (`4a260f2`).
+
+*Koşu 1 (`kosu-3f22d638…`):* mekanik kapı üçünü de geçirdi (not 29·5·33, iddia 25·50·45; önceki
+tur 119·1·45). Baskın not sınıfı `url-bicimi/geri-baglanti` (25·5·28): madde bir alanda yazılmış
+ama gösterdiği kaynak satırının alan hücresinde başka alan yazıyor — üç araç da bir kaynağı
+birden çok alanda kullanmış. Denetim 25,5 dk. **Sentez DÜŞTÜ:** model düşünmeyi cevapla AYNI
+mesaja koydu, 64.000 jetonluk mesaj bütçesi doldu, cevap kesildi; `--output-format text` yalnız
+SON mesajı bastığı için ilk mesajın 22.230 karakteri artefakta hiç girmedi. CLI kendiliğinden
+devam etti (*"Output token limit hit. Resume directly"*) ama devam mesajında da dört bölümün
+ikisini yazmadan bitirdi — yani içerik gerçekten yarımdı.
+
+*Koşu 2 (`kosu-8a2081d4…`):* denetim 24,4 dk, kaynak seti damgası koşu 1'le birebir aynı. Sentez
+cevabı bu kez TAM geldi (41.433 karakter, dört bölüm, biçim kapısı 0 hata) — **ama Claude'un o
+tur eklediği jeton tavanı kapısı koşuyu öldürdü.** Kapı yanlış şeyi sayıyordu (zarfın
+`output_tokens` alanı TÜM turların toplamı; model düşünmesini ayrı tura koymuştu → 79.022 ≥
+48.000). Kapı kaldırıldı. Bedeli: bir denetçi turu.
+
+*Çevrimdışı deneme (2,45 USD, 11,6 dk):* koşu 1'in kayıtlı istemiyle, `CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000`
+ile koşuldu. Kesilme olmadı ama toplam 63.188 jeton — zaten 64.000'in altı, yani **tavan sorusu
+ÖLÇÜLMEDİ.** Bunun yerine başka kusur çıktı: karar günlüğü JSONL yerine markdown TABLOSU yazılmış.
+
+*Kapatılan üç kusur (`4a260f2`, 32 yeni test, 15 mutasyonun 15'i yakalandı):*
+1. **Sessiz kayıt kaybı.** `_json_govdesi` çitli blokları `.search()` ile okuyordu — yalnız
+   ilkini. Altı ayrıştırılabilir çıktının İKİSİ günlüğü iki bloğa bölmüştü: `kosu-7705437…`
+   79 kaydın 60'ını, `DUSMUS-…-jsonl` 90 kaydın 61'ini döndürüyordu. **Birincisi
+   VERİTABANINA da 60 kayıtla indi** — reddedilen adayların izi hiç yazılmadı. Bulan: Codex.
+2. **Biçim kayması bütün koşuyu götürüyordu.** Artık çıktı-biçimi hatası için BİR düzeltme
+   çağrısı hakkı var; koşu o sırada `calisiyor` kalır. Sınır dar: eksik/sırasız bölüm,
+   okunamayan JSON, yanlış tip, boş özet düzeltilebilir; pin sapması, eksik denetçi, aracın
+   koşmaması, ölçümsüz zarf, veritabanı hatası ve içerik yazım kapısı terminal KALIR.
+3. **Yalnız son mesaj yakalanıyordu.** Sentez artık `stream-json --verbose` ile koşuyor,
+   gövde BÜTÜN `assistant` olaylarının metin bloklarından kuruluyor, ham olay akışı diske
+   yazılıyor (`01-SENTEZ-AKISI.jsonl`).
+
+*Denenip YANLIŞLANAN iki şey (tekrar edilmesin):* `MAX_THINKING_TOKENS=16000` çocuğun ortamına
+ULAŞTI (`/proc/<pid>/environ` ile ölçüldü) ve model yine 56.502 jeton düşündü — bağlamıyor;
+nöbetçi test koydum. Kümülatif jeton tavanı kapısı ise sağlam bir turu öldürdü (yukarıda).
+
+Tam takım **4746 passed / 0 failed / 397,4 s** (öncesi 4714).
+
+**Sıradaki iş: `/review-claude-codex` (bugünkü 1062 satır bağımsız göz görmedi) → sonra YENİ
+koşu.** Üç düzeltme canlıda HİÇ sınanmadı.
+
 **2026-09-21 ON İKİNCİ OTURUM — GRUP 3 KOD TARAFI İNDİ, COMMIT BEKLİYOR.** Altı kalemin altısı
 yazıldı: (1) brief-doctor 9 sütun (`destek`·`yer`), `destek=yok` satırının sabit hücreleri,
 `CIddia` üç alan kazandı, `[C: …]` geri bağlantı + kapsama kontrolü (`url-bicimi/geri-baglanti`
@@ -918,6 +963,24 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   taşındı ve geri alındı: kaydı ikiye bölüyordu).
 
 # Decisions Log
+
+## Sentez dayanıklılığı (2026-09-22, on üçüncü oturum)
+
+- **Düzeltme hakkı = 1, kapsam DAR.** Yalnız model çıktısının BİÇİMİ düzeltilebilir. Gerekçe:
+  düzeltme çağrısı ölçülmüş olarak ~12 dk + 2,45 USD; bir hak denetçi turunu kurtarmaya yeter,
+  ikincisinin kazandıracağını gösteren ölçüm YOK. Araç arızası, pin sapması, veritabanı hatası
+  ve içerik yazım kapısı KAPSAM DIŞI — tekrar sormak arızayı gizler.
+- **Belge BAŞTAN istenir, parça istenmez.** Kesilmiş gövdeyle yeni parçayı birleştirmek, model
+  bölümü yeniden yazmış ya da JSON ortasında kesilmiş olabileceği için UYDURMA üretir.
+- **Markdown tablosu otomatik KABUL EDİLMEZ.** Dönüştürücü alan mirasını düz yazıdan yorumlamak
+  zorunda kalırdı (`aktor`, `oge_sha` tabloda değil). Çözüm katı sözleşme, okuyucu değil.
+- **Belirsiz blok çokluğu REDDEDİLİR.** Bütün bloklar tek nesneyse hangisinin geçerli olduğu
+  gövdeden anlaşılmaz; seçmek uydurma olur.
+- **Ham olay akışı diske yazılır.** Bugünkü teşhis, alt süreç oturum kaydının TESADÜFEN kalıcı
+  `HOME` altına düşmesi sayesinde yapılabildi; kutulu rolde o kayıt silinir. Tesadüf kanıt
+  altyapısı değildir.
+- **Yanlışlanan iki deneme kodda BIRAKILMADI.** Vaat ettiğini yapmayan ayar kodda dururken bir
+  sonraki oturum ona güvenir. `MAX_THINKING_TOKENS` için nöbetçi test kondu.
 
 - **2026-09-21 — Katman-1/Katman-2 sırası AYRILDI (Eray onayı; kusur 4 kapandı):** spec §13.3
   "İlk paket koşusu" zinciri ikiye ayrıldı — **Katman-1 tam sweep + tasdik motordan ÖNCE**,
@@ -1608,6 +1671,47 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   onay isteğinde sessiz kayıp.
 
 # Open Problems
+
+- **[YÜKSEK — SIRADAKİ İŞ] Bugünkü 1062 satır bağımsız hakem GÖRMEDİ.**
+  `4a260f2` sentez ve denetçi koşum yollarını değiştirdi (çıktı biçimi, düzeltme döngüsü,
+  okuyucu). `/review-claude-codex` bu dalda bugünkü değişikliği görmedi;
+  `/security-review-claude-codex` ise dalda HİÇ koşmadı ve bugün güvenlik yüzeyine dokunuldu
+  (alt süreç çıktı yolu + koşu köküne yazılan yeni dosyalar). Para harcayan yeni turdan ÖNCE
+  review koşulmalı: bugün iki kez, kendi eklediğim şey zarar verdi.
+
+- **[YÜKSEK] Üç düzeltme CANLIDA HİÇ SINANMADI.** Okuyucu, düzeltme hakkı ve akış kipi yalnız
+  testlerle ve kayıtlı çıktılarla doğrulandı. Gerçek koşumda ne olacağı ÖLÇÜLMEDİ. Yeni koşu
+  maliyeti ölçülmüş: denetim ~24-25 dk + para, sentez ~12-15 dk + ~2,45 USD.
+
+- **[ORTA — ÖLÇÜLMEDİ] `CLAUDE_CODE_MAX_OUTPUT_TOKENS=128000` tavanının kesilmeyi önleyip
+  önlemediği bilinmiyor.** Anahtarın UYGULANDIĞI ölçüldü (200 jetonluk kol tam o sınırda
+  düştü, CLI mesajı anahtarın adını söylüyor) ama çevrimdışı deneme tavana hiç yaklaşmadı
+  (63.188 < 64.000). Opus 5 kataloğu `default 64000, upper 128000` diyor. Codex'in duruşu:
+  pahalı tavan deneylerini öncelik yapma. **Şu an koda EKLENMEDİ.** Tetikleyici: yeni koşuda
+  yine kesilme görülürse.
+
+- **[ORTA] Sözleşmede karar günlüğünün YAZIM BİÇİMİ tanımlı DEĞİL.** Pinli
+  `hakem-sentez-gorevi.md` alanları ve örnek nesneyi anlatıyor ama "tek JSONL bloğu, satır
+  başına tam nesne, markdown tablo yok" hükmü YOK (dosyada arandı, sıfır isabet). Çevrimdışı
+  deneme tam da bu boşluğa düştü: model tablo yazdı. Okuyucu tabloyu KABUL ETMİYOR ve bu
+  bilinçli — o örnekte `aktor` ve `oge_sha` tabloda değil üstündeki düz yazıda, yani
+  dönüştürücü biçim çevirmez, ALAN UYDURUR. Kapsam: dış depo sözleşme değişikliği + pin
+  yenilemesi + review zinciri.
+  **EV (tarihli):** yeni koşuda karar günlüğü yine sözleşme dışı biçimde gelirse o oturumda
+  ZORUNLU olur (okuyucu tabloyu reddettiği için tur düşer, yani iş kendini dayatır);
+  gelmezse Plan 2 kapanış sweep'ine (`/finish-branch-claude-codex`) kalır.
+
+- **[DÜŞÜK — YAGNI borcu] `json` çıktı kipinin artık ÇAĞIRANI YOK.** Sentez `stream-json`'a
+  geçti; `_zarfi_coz` ve `cikti_bicimi="json"` yolu yalnız testlerden çağrılıyor. Bilinçli
+  olarak silmedim (oturum kapanışında kapsam genişletmemek için).
+  **EV (tarihli):** Plan 2 kapanışından ÖNCEKİ `/simplify-claude-codex` turu. Silinirse
+  `_zarfi_coz`, `json` üyesi ve ilgili testler birlikte gider.
+
+- **[DÜŞÜK] Sahipsiz koşu: `kosu-7705437…` hâlâ `calisiyor`.** 21 Eylül'den kalma, motora hiç
+  gitmedi, kimse beklemiyor. Kapatma yolu K-82 kapsamında elle karar ister.
+  **EV (tarihli):** Plan 2 kapanış sweep'i (`/finish-branch-claude-codex`) — orada Eray'a tek
+  soru olarak sorulur. O güne kadar DOKUNULMAZ. Ayrıca sentez artefaktı eksik kayıtlı (yukarıdaki okuyucu kusuru) — geçmiş
+  kayıt DÜZELMEZ, yalnız bu notla işaretli kalır.
 
 - **[KAPANDI 2026-09-22 — SIRADAKİ İŞ: üç araştırma yeni brief'le alınır (Eray, emek onda)]**
   Review turu (dual, `c0d073a..8f54f15`) 2 high buldu; **düzeltme `fceb2d2`** (+ gönüllü low
