@@ -1672,12 +1672,28 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[YÜKSEK — SIRADAKİ İŞ] Bugünkü 1062 satır bağımsız hakem GÖRMEDİ.**
-  `4a260f2` sentez ve denetçi koşum yollarını değiştirdi (çıktı biçimi, düzeltme döngüsü,
-  okuyucu). `/review-claude-codex` bu dalda bugünkü değişikliği görmedi;
-  `/security-review-claude-codex` ise dalda HİÇ koşmadı ve bugün güvenlik yüzeyine dokunuldu
-  (alt süreç çıktı yolu + koşu köküne yazılan yeni dosyalar). Para harcayan yeni turdan ÖNCE
-  review koşulmalı: bugün iki kez, kendi eklediğim şey zarar verdi.
+- **[ORTA × 5 — SIRADAKİ İŞ, yeni koşudan ÖNCE (Eray kararı 2026-09-22)] `4a260f2`'nin kendi
+  ürettiği beş kusur.** `/review-claude-codex` koştu (`a8882a0..be5c320`, **tek hakem** — Codex
+  kotaya çarptı, Eray Claude-only kapanışı seçti; `review_confidence: reduced`). C/H YOK. Beşi de
+  orkestratör tarafından dosya açılarak/prob koşularak doğrulandı; `accepted_risk`'e ALINMADI
+  (kendi gerilememiz). Rapor: `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-sentez-onarimi.md`.
+  - **M1 `auditors/akis-okuyucu-govde-disi-metin`:** `_akisi_coz` bütün metin bloklarını araç
+    çağrısına bakmadan birleştiriyor. Prob: araç öncesi "Görev dosyasına bakayım." ilk başlığa
+    yapışıyor → 1. bölüm kayıp → ücretli düzeltme turu; belge ortasındaki ara metin sessizce
+    bölüme giriyor. Öneri: araç çağrısı görülünce birikeni sıfırla.
+  - **M2 `synthesis/duzeltme-sahnesi-onceki-cikti`:** 2. deneme aynı `kok`'la sahneleniyor,
+    filtresiz `copytree` önceki reddedilen çıktıyı + akışı görünür kılıyor. Öneri: denemeye
+    özel temiz alt dizin.
+  - **M3 `auditors/ham-akis-hata-yolunda-yazilmiyor`:** `ham_akis` yalnız `kod==0`'da; zaman
+    aşımı / ayrıştırılamayan akışta kanıt kayboluyor. Öneri: durumdan bağımsız doldur, durum
+    kontrolünden önce yaz.
+  - **M4 `tests/duzeltilebilir-sinif-kollari-sabitlenmemis`:** testlerde `SynthesisOutputError`
+    0 kez; JSON/tip/boş-özet kolları mutasyona açık. Öneri: markdown tablolu ilk çıktıyla 2
+    çağrılık test + `pytest.raises(SynthesisOutputError)`.
+  - **M5 `tests/duzeltme-istemi-somut-hata-sinamiyor`:** aranan dize sabit metinde zaten var.
+  Dokuz low aynı dosyalarda (rapor L1-L9) — birlikte kapatmak ucuz, zorunlu değil.
+  **Sıra:** düzelt → `/review-claude-codex` kapanış turu (dual; Codex kotası 19:09 UTC'de açıldı)
+  → `/security-review-claude-codex` (dalda hiç koşmadı, güvenlik yüzeyine dokunuldu) → yeni koşu.
 
 - **[YÜKSEK] Üç düzeltme CANLIDA HİÇ SINANMADI.** Okuyucu, düzeltme hakkı ve akış kipi yalnız
   testlerle ve kayıtlı çıktılarla doğrulandı. Gerçek koşumda ne olacağı ÖLÇÜLMEDİ. Yeni koşu
@@ -2939,3 +2955,29 @@ Authoritative state (stop-rule; locator `docs/reviews/.ledger-index/296deb840d9a
 - 2026-09-22 attempt-2 · `policy_accepted`: N3 (low). Gönüllü düzeltme (kapanış sonrası commit): N1 · N2 · N4 · N5 · N6 — bağımsız hakem GÖRMEDİ; tam takım 4714 passed / 417 s.
 - 2026-09-22 · chain-advance: dual ✓ ∧ unresolved C/H yok → `/security-review-claude-codex` SERBEST (security_surface `uncertain → true`, zorunlu kalır; dalın mevcut borcu).
 - Rapor (kapanış): `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-closure.md`.
+
+---
+
+**Per-target header — 2026-09-22 (yeni hedef: sentez onarımı `4a260f2`)**
+- `review_target_id`: `code-review:feat-sektor-bilgi-paketi-plan2-sentez-onarimi:a8882a0eeddec0e707ef953ad23462ba167c645e`
+- `ledger_locator`: `task:sektor-bilgi-paketi-plan2` (attempt-1'de kuruldu; index `docs/reviews/.ledger-index/6fde040e…0f69.locator`)
+- `pinned_contract_hash`: `a76100bd551cefc7474b35b6c68ecec85cb4b87deb201770a503770b905808d0` (7 alan, önceki hedeflerle AYNI)
+- `completed_evaluations`: 1 · `total_invocations`: 1 · `consecutive_degraded`: 1 (attempt-1: Claude ran / Codex failed — kota, kesik tur `rc=1`; single-reviewer)
+
+**Per-cluster (sentez onarımı hedefi)**
+
+| cluster_key | first_seen | review_attempts | fix_attempts | reopen | severity_trajectory | temporal_origin | finding_relation | evidence_basis | evidence_confidence | current_disposition | bound_contract |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `auditors/akis-okuyucu-govde-disi-metin` (M1) | attempt-1 (2026-09-22) | 1 | 0 | 0 | [medium] | introduced_by_fix (`4a260f2`) | original_finding | alt-hakem probu + orkestratör probu (birebir aynı çıktı) | confirmed | open (fix — Eray kararı) | `a76100bd…` |
+| `synthesis/duzeltme-sahnesi-onceki-cikti` (M2) | attempt-1 | 1 | 0 | 0 | [medium] | introduced_by_fix | original_finding | kod okuması (`kok` cwd + filtresiz copytree) | confirmed | open (fix) | `a76100bd…` |
+| `auditors/ham-akis-hata-yolunda-yazilmiyor` (M3) | attempt-1 | 1 | 0 | 0 | [medium] | introduced_by_fix | original_finding | kod okuması | confirmed | open (fix) | `a76100bd…` |
+| `tests/duzeltilebilir-sinif-kollari-sabitlenmemis` (M4) | attempt-1 | 1 | 0 | 0 | [medium] | introduced_by_fix | original_finding | grep 0 isabet; mutasyon koşulmadı | confirmed | open (fix) | `a76100bd…` |
+| `tests/duzeltme-istemi-somut-hata-sinamiyor` (M5) | attempt-1 | 1 | 0 | 0 | [medium] | introduced_by_fix | original_finding | sabit metin `synthesis.py:408` | confirmed | open (fix) | `a76100bd…` |
+| L1-L9 (rapor) | attempt-1 | 1 | 0 | 0 | [low] | introduced_by_fix | original_finding | alt-hakem okuma | confirmed | accepted_risk (policy_accepted; L1'in evi Open Problems) | `a76100bd…` |
+
+**Event log (append-only) — sentez onarımı hedefi**
+- 2026-09-22 attempt-1 · `closure_observation`: single-reviewer (Claude ran; Codex kota ile kesildi, "approve" ara mesajı karar sayılmadı); sözleşme pinlendi (`a76100bd…`).
+- 2026-09-22 attempt-1 · `policy_accepted`: L1-L9 (low, ch-only-v1).
+- 2026-09-22 · M1-M5: `accepted_risk` YAZILMADI — introduced_by_fix; Eray kararı: yeni koşudan önce düzelt.
+- 2026-09-22 · chain-advance: dual EKSİK → `/security-review-claude-codex` explicit override ister; ilerletilmedi (önce M1-M5 fix + dual kapanış turu).
+- Rapor: `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-sentez-onarimi.md`.

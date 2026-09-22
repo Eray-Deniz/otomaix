@@ -5,9 +5,12 @@ written: 2026-09-22
 
 # Resume From
 
-**SIRADAKİ İŞ, TEK CÜMLE: `/review-claude-codex` koş (bugünkü 1062 satırı bağımsız göz görmedi),
-temizse YENİ koşu aç — üç düzeltme canlıda HİÇ sınanmadı.** Üç commit indi (`95d846b` pin ·
-`4a260f2` sentez onarımı · `ec5010e` Codex brief'leri), ağaç temiz, push YAPILMADI.
+**SIRADAKİ İŞ, TEK CÜMLE: review'ın bulduğu beş orta kusuru düzelt (TASK Open Problems M1-M5),
+sonra dual kapanış turu → güvenlik review → YENİ koşu.** Review 2026-09-22 akşamı koştu,
+**tek hakemle** (Codex kotaya çarptı; Eray Claude-only kapanışı seçti): C/H yok, 5 orta (hepsi
+`4a260f2`'nin kendi ürünü, hepsi orkestratör tarafından doğrulandı), 9 düşük. Rapor:
+`docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-sentez-onarimi.md`. En pahalısı M1: araç
+çağrısından önceki hazırlık cümlesi belgeye karışıyor (prob ile ölçüldü). Push YAPILMADI.
 
 **Bugün ne oldu (2026-09-22) — üç araştırma alındı, iki tur yandı, hat onarıldı:**
 
@@ -64,7 +67,7 @@ K-129 rakam kuralı payı · CTA havuzu ≥ 5.
 
 **DENENMEYEN / DOĞRULANMAYAN:**
 - **Üç düzeltmenin hiçbiri canlı koşumda sınanmadı.** Yalnız testler + kayıtlı çıktılar.
-- `/review-claude-codex` bugünkü değişikliği GÖRMEDİ; `/security-review-claude-codex` dalda hiç
+- `/review-claude-codex` bugünkü değişikliği yalnız TEK hakemle gördü (Codex kotaya çarptı; ikinci göz yok); `/security-review-claude-codex` dalda hiç
   koşmadı ve bugün güvenlik yüzeyine dokunuldu (alt süreç çıktı yolu, koşu köküne yeni dosyalar).
 - 128.000 tavanının kesilmeyi önleyip önlemediği ÖLÇÜLMEDİ (deneme tavana yaklaşmadı: 63.188).
 - Düzeltme çağrısının gerçek bir bozuk çıktıyı düzeltip düzeltemeyeceği ÖLÇÜLMEDİ (yalnız sahte
@@ -92,6 +95,12 @@ K-129 rakam kuralı payı · CTA havuzu ≥ 5.
 - `json` çıktı kipinin çağıranı yok (YAGNI borcu, Open Problems'ta).
 
 # Notes For Claude
+
+- **Review özeti (2026-09-22 akşam, tek hakem):** "Notes For Codex"taki dört sorudan (2) ve (3)
+  gerçek çıktı → M1 · M2; (1) temiz; (4) = L1. Düzeltmeden sonra kapanış turu DUAL koşmalı —
+  bu rapor ikinci göz görmeden kapandı. Codex'in kesik turundaki "approve" karar DEĞİLDİ.
+- **Alt ajan modeli 2026-09-22'de Opus 5.5'e yükseltildi** (`~/.claude` settings + hook; 23 test
+  PASS, alt ajan kendini `claude-opus-5-5` bildirdi). `~/.claude` tarafı commit'lenmedi.
 
 - **Bugünün dersi, açıkça:** iki öneri de (düşünme tavanı, jeton kapısı) tutmadı ve ikincisi
   sağlam bir turu öldürdü. Eray bunu yüzüme söyledi ve haklıydı. Ölçülmemiş mekanizmaya kapı
