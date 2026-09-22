@@ -1949,10 +1949,13 @@ class SayanRunner:
         self.sonuclar = list(sonuclar)
         self.cagrilar: list[tuple[str, Path, Path]] = []
         self.istemler: list[str] = []
+        self.sahneler: list[list[str]] = []
 
     def run(self, tool: str, cwd: Path, prompt_path: Path) -> auditors.RunnerOutcome:
         self.cagrilar.append((tool, cwd, prompt_path))
         self.istemler.append(prompt_path.read_text(encoding="utf-8"))
+        # Sahne ÇAĞRI ANINDA okunur: modelin araçlarla görebileceği küme budur.
+        self.sahneler.append(sorted(p.name for p in cwd.rglob("*")))
         sira = min(len(self.cagrilar), len(self.sonuclar)) - 1
         return self.sonuclar[sira]
 
@@ -2006,8 +2009,11 @@ async def test_duzeltme_istemi_SOMUT_hatalari_tasir(kosu, tmp_path) -> None:
 
     duzeltme_istemi = runner.istemler[1]
     assert duzeltme_istemi != runner.istemler[0], "düzeltme istemi ilkiyle AYNI"
-    assert "ADAY PAKET" in duzeltme_istemi
-    assert OLCULEN_BOLUM_ANAHTARLARI[0] in duzeltme_istemi
+    # Doğrulayıcının SOMUT cümlesi aranır. Bölüm adları düzeltme ekinin sabit
+    # metninde zaten geçtiği için onları aramak hiçbir şey ölçmezdi (review
+    # 2026-09-22 M5: `> {hata}` satırı silinse test yeşil kalıyordu).
+    assert "sentez biçim kapısı" in duzeltme_istemi
+    assert "bulunan []" in duzeltme_istemi
 
 
 async def test_duzeltme_hakki_TEK_tur_sonra_terminal(kosu, tmp_path) -> None:
@@ -2114,3 +2120,121 @@ async def test_akis_YOKSA_akis_dosyasi_uydurulmaz(kosu, tmp_path) -> None:
 
     kok = tmp_path / "sentez-kokleri" / run_id
     assert not list(kok.glob("*-SENTEZ-AKISI.jsonl"))
+
+
+async def test_ARAC_ARIZASINDA_da_ham_akis_diske_YAZILIR(kosu, tmp_path) -> None:
+    """Akış ayrıştırılamadığında kanıt EN ÇOK o an gerekir (review 2026-09-22 M3).
+
+    Yarıda kalan ya da başarı beyan etmeyen akış runner'da `hata` olur; önceki
+    yazım dosyayı yalnız başarılı yolda yazıyordu, yani kesilme vakası — bu
+    kaydın var olma sebebi — tam da kanıtsız kalıyordu.
+    """
+    db, run_id = kosu
+    akis = '{"type":"assistant","message":{"content":[{"type":"text","text":"yar"}]}}\n'
+    runner = SayanRunner(
+        auditors.RunnerOutcome(
+            durum="hata", stdout="", stderr="result olayı YOK", exit_code=1,
+            ham_akis=akis,
+        )
+    )
+
+    with pytest.raises(synthesis.SynthesisFailed, match="sonuç ÜRETMEDİ"):
+        await _sentez_runnerla(kosu, tmp_path, runner)
+
+    kok = tmp_path / "sentez-kokleri" / run_id
+    assert (kok / "01-SENTEZ-AKISI.jsonl").read_text(encoding="utf-8") == akis
+    assert not (kok / "01-SENTEZ-CIKTISI.md").exists(), (
+        "sonuç üretmeyen araç için çıktı dosyası UYDURULDU"
+    )
+
+
+async def test_duzeltme_SAHNESI_onceki_denemeyi_GORMEZ(kosu, tmp_path) -> None:
+    """Her deneme yalnız KENDİ istemini görür (review 2026-09-22 M2).
+
+    Düzeltme istemi "belgeyi BAŞTAN yaz" der; sahne önceki denemenin reddedilen
+    çıktısını ve ham akışını taşısaydı model oradan parça kopyalayabilir ve
+    girdi denemeden denemeye BEYANSIZ değişirdi. Kalıcı kayıt kökte kalır.
+    """
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+    bozuk = auditors.RunnerOutcome(
+        durum="tamam", stdout="dört bölümün hiçbiri yok", stderr="", exit_code=0,
+        ham_akis='{"type":"result"}\n',
+        olcum={"cikti_jetonu": 1, "dusunme_jetonu": 0, "tur_sayisi": 1,
+               "maliyet_usd": None},
+    )
+    runner = SayanRunner(bozuk, _tamam(_sentez_metni(icerik, gunluk, [])))
+
+    await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert runner.sahneler == [
+        [synthesis.GOREV_DOSYA_ADI],
+        ["02-SENTEZ-DUZELTME.md"],
+    ], runner.sahneler
+    kok = tmp_path / "sentez-kokleri" / run_id
+    for _arac, sahne, _istem in runner.cagrilar:
+        assert sahne != kok, "sahne kaynağı kalıcı kökün KENDİSİ"
+        assert sahne.name == run_id, "sahne kaynağı koşu adını taşımıyor"
+    kalici = sorted(p.name for p in kok.iterdir())
+    assert kalici == [
+        "00-SENTEZ-GOREVI.md", "01-SENTEZ-AKISI.jsonl", "01-SENTEZ-CIKTISI.md",
+        "02-SENTEZ-CIKTISI.md", "02-SENTEZ-DUZELTME.md",
+    ], kalici
+
+
+def _tablolu_gunluk_metni(icerik: dict, gunluk: list[dict]) -> str:
+    """Karar günlüğünü markdown TABLOSU olarak yazan belge (ölçülmüş arıza)."""
+    metin = _sentez_metni(icerik, gunluk, [])
+    blok = "```json\n" + json.dumps(gunluk, ensure_ascii=False) + "\n```\n"
+    assert blok in metin
+    return metin.replace(blok, "| aktor | karar |\n|---|---|\n| sentez | ekle |\n")
+
+
+async def test_TABLOLU_karar_gunlugu_DUZELTME_ile_kurtarilir(kosu, tmp_path) -> None:
+    """GÜNCELLEME'deki gerçek arıza: günlük tablo yazıldı → düzeltme hakkı."""
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+    runner = SayanRunner(
+        _tamam(_tablolu_gunluk_metni(icerik, gunluk)),
+        _tamam(_sentez_metni(icerik, gunluk, [])),
+    )
+
+    await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 2, "tablolu günlük düzeltme hakkına GİRMEDİ"
+    assert (await _durum(db, run_id)) == ("calisiyor", None)
+
+
+def _coklu_nesneli_aday(icerik: dict, gunluk: list[dict]) -> str:
+    metin = _sentez_metni(icerik, gunluk, [])
+    blok = "```json\n" + json.dumps(icerik, ensure_ascii=False) + "\n```\n"
+    return metin.replace(blok, blok + blok)
+
+
+@pytest.mark.parametrize(
+    "uret, beklenen",
+    [
+        (lambda i, g: "dört bölümün hiçbiri yok", "sentez biçim kapısı"),
+        (lambda i, g: _sentez_metni([], g, []), "nesne DEĞİL"),  # pyright: ignore[reportArgumentType] — bilerek yanlış tip
+        (lambda i, g: _sentez_metni(i, {"tek": 1}, []), "liste DEĞİL"),  # pyright: ignore[reportArgumentType] — bilerek yanlış tip
+        (lambda i, g: _sentez_metni(i, g, [], ozet=""), "BOŞ"),
+        (_coklu_nesneli_aday, "birden çok çitli blok"),
+        (_tablolu_gunluk_metni, "JSON olarak okunamadı"),
+    ],
+    ids=["bolum-yok", "aday-nesne-degil", "gunluk-liste-degil", "ozet-bos",
+         "coklu-nesne", "tablolu-gunluk"],
+)
+def test_bicim_hatalari_DUZELTILEBILIR_sinifta(uret, beklenen) -> None:
+    """Her biçim kolu `SynthesisOutputError` atar — üst sınıf YETMEZ.
+
+    `pytest.raises(SynthesisFailed)` üst sınıfı da kabul eder; bir kol terminal
+    sınıfa geri çevrilse yeşil kalırdı ve o biçim hatası düzeltme hakkını
+    sessizce kaybederdi (review 2026-09-22 M4).
+    """
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+
+    with pytest.raises(synthesis.SynthesisOutputError, match=beklenen):
+        synthesis._cikti_bicimini_coz(uret(icerik, gunluk))

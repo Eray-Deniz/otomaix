@@ -4189,6 +4189,148 @@ def test_akis_kipi_eksik_ya_da_hatali_akisi_KABUL_ETMEZ(
     assert sonuc.durum == "hata", etiket
 
 
+def _araci_akis(*olaylar: dict) -> str:
+    """Araç çağrılı akış — `_akis_olaylari`'nın kapsamadığı olay sırası.
+
+    Ölçülmüş biçim (2026-09-22 `probe/sj2.out`): `tool_use` bir `assistant`
+    olayının içinde gelir, sonucu `user` olayındadır; belge metni son araç
+    çağrısından SONRA gelir.
+    """
+    satirlar = [json.dumps({"type": "system", "subtype": "init", "tools": []})]
+    for olay in olaylar:
+        satirlar.append(json.dumps(olay, ensure_ascii=False))
+    son_metin = next(
+        (o["message"]["content"][0]["text"] for o in reversed(olaylar)
+         if o["type"] == "assistant" and o["message"]["content"][0]["type"] == "text"),
+        "",
+    )
+    satirlar.append(json.dumps({
+        "type": "result", "subtype": "success", "is_error": False,
+        "stop_reason": "end_turn", "num_turns": 2, "result": son_metin,
+        "total_cost_usd": 0.1, "usage": {"output_tokens": 10},
+    }, ensure_ascii=False))
+    return "\n".join(satirlar) + "\n"
+
+
+def _metin_olayi(metin: str) -> dict:
+    return {"type": "assistant", "message": {
+        "id": "msg_x", "role": "assistant",
+        "content": [{"type": "text", "text": metin}]}}
+
+
+def _arac_olaylari() -> tuple[dict, dict]:
+    return (
+        {"type": "assistant", "message": {
+            "id": "msg_x", "role": "assistant",
+            "content": [{"type": "tool_use", "id": "t1", "name": "Read",
+                         "input": {"file_path": "00-SENTEZ-GOREVI.md"}}]}},
+        {"type": "user", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "..."}]}},
+    )
+
+
+def test_akis_kipi_ARAC_ONCESI_hazirlik_metnini_GOVDEYE_katmaz(
+    monkeypatch, tmp_path
+) -> None:
+    """Araç çağrısından önceki metin hazırlıktır, belge değil (review 2026-09-22 M1).
+
+    Önceki yazımda satır sonu taşımayan hazırlık cümlesi ilk başlığa yapışıyor
+    ve 1. bölümü kaybettiriyordu (ölçüldü: bulunan [(2,…),(3,…),(4,…)]) — yani
+    her araç kullanan turda ücretli bir düzeltme çağrısı.
+    """
+    akis = _araci_akis(
+        _metin_olayi("Görev dosyasına bakayım."), *_arac_olaylari(),
+        _metin_olayi("# BELGE\n"),
+    )
+    sonuc = _akis_kos(monkeypatch, tmp_path, akis)
+    assert sonuc.durum == "tamam"
+    assert sonuc.stdout == "# BELGE\n", sonuc.stdout
+
+
+def test_akis_kipi_ARAC_CAGRISI_govdeyi_bolerse_ONCESI_SESSIZCE_girmez(
+    monkeypatch, tmp_path
+) -> None:
+    """Araç çağrısı belgeyi bölerse gövde yalnız SON parçadır.
+
+    Önceki yazım iki parçayı ve araya düşen ara metni birleştirip biçim
+    kapısından geçirebiliyordu (ölçüldü: ÖZET'e "Belge tamamlandı." girdi).
+    Yarım gövde biçim kapısında GÖRÜNÜR biçimde düşer; sessiz kirlenme olmaz.
+    """
+    akis = _araci_akis(
+        _metin_olayi("ILK YARI\n"), *_arac_olaylari(), _metin_olayi("SON YARI\n"),
+    )
+    sonuc = _akis_kos(monkeypatch, tmp_path, akis)
+    assert sonuc.stdout == "SON YARI\n", sonuc.stdout
+
+
+def test_akis_kipi_ARACSIZ_devam_zinciri_BIRLESIR(monkeypatch, tmp_path) -> None:
+    """Kontrol kolu: araç çağrısı yoksa kesilme→devam parçaları birleşir.
+
+    Sıfırlama YALNIZ araç çağrısında olur; ölçülmüş kesilme vakasında CLI
+    kendiliğinden devam ettirdi ve ilk parça belgenin başıydı.
+    """
+    akis = _araci_akis(_metin_olayi("BAS\n"), _metin_olayi("SON\n"))
+    sonuc = _akis_kos(monkeypatch, tmp_path, akis)
+    assert sonuc.stdout == "BAS\nSON\n", sonuc.stdout
+
+
+@pytest.mark.parametrize(
+    "akis",
+    [
+        '{"type": "assistant", "message": {"content": [{"type": "text", "text": "A"}]}}\n',
+        _akis_olaylari("A", is_error=True),
+        "bu satır JSON değil\n",
+    ],
+    ids=["result-yok", "is-error", "ayristirilamaz"],
+)
+def test_akis_kipi_HATALI_akista_da_HAM_akisi_korur(
+    monkeypatch, tmp_path, akis
+) -> None:
+    """Kanıt en çok arızada gerekir (review 2026-09-22 M3)."""
+    sonuc = _akis_kos(monkeypatch, tmp_path, akis)
+    assert sonuc.durum == "hata"
+    assert sonuc.ham_akis == akis
+
+
+def test_akis_kipi_SIFIRDAN_FARKLI_cikista_HAM_akisi_korur(
+    monkeypatch, tmp_path
+) -> None:
+    akis = _akis_olaylari("A")
+    kod = "import sys; sys.stdin.read(); sys.stdout.write(%r); sys.exit(3)" % akis
+    monkeypatch.setattr(auditors, "ARAC_KOMUTLARI", {
+        auditors.SENTEZ_ARACI: auditors.ToolSpec(
+            (sys.executable, "-c", kod), kullanici=None, cikti_bicimi="stream-json",
+        )
+    })
+    istem = tmp_path / "00-GOREV.md"
+    istem.write_text("görev", encoding="utf-8")
+    sonuc = auditors.SubprocessRunner(zaman_asimi_sn=60.0).run(
+        auditors.SENTEZ_ARACI, tmp_path, istem
+    )
+    assert sonuc.durum == "hata"
+    assert sonuc.ham_akis == akis
+
+
+def test_akis_kipi_ZAMAN_ASIMINDA_kismi_akisi_korur(monkeypatch, tmp_path) -> None:
+    kismi = '{"type": "system", "subtype": "init"}\n'
+    kod = (
+        "import sys, time; sys.stdin.read(); sys.stdout.write(%r); "
+        "sys.stdout.flush(); time.sleep(30)" % kismi
+    )
+    monkeypatch.setattr(auditors, "ARAC_KOMUTLARI", {
+        auditors.SENTEZ_ARACI: auditors.ToolSpec(
+            (sys.executable, "-c", kod), kullanici=None, cikti_bicimi="stream-json",
+        )
+    })
+    istem = tmp_path / "00-GOREV.md"
+    istem.write_text("görev", encoding="utf-8")
+    sonuc = auditors.SubprocessRunner(zaman_asimi_sn=2.0).run(
+        auditors.SENTEZ_ARACI, tmp_path, istem
+    )
+    assert sonuc.durum == "zaman-asimi"
+    assert sonuc.ham_akis == kismi
+
+
 def test_sentez_araci_AKIS_kipinde_kosar() -> None:
     """Sentez profili akış kipini BEYAN eder; denetçiler `text` kipinde kalır."""
     sentez = auditors.ARAC_KOMUTLARI[auditors.SENTEZ_ARACI]

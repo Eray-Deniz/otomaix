@@ -64,6 +64,8 @@ import copy
 import json
 import logging
 import re
+import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -1128,6 +1130,27 @@ def _kimlik_bagla(
 # ─── 5. Koşum ───────────────────────────────────────────────────────────────
 
 
+def _denemeyi_kos(runner: Runner, kok: Path, istem_yolu: Path) -> RunnerOutcome:
+    """Denemeyi YALNIZ kendi istemini içeren temiz bir sahne kaynağıyla koşar.
+
+    Kalıcı kök (`kok`) her denemenin istemini, çıktısını ve ham akışını
+    biriktirir. Onu sahne kaynağı yapmak, düzeltme denemesine önceki denemenin
+    reddedilen gövdesini ve akışını okunabilir kılıyordu — "belgeyi BAŞTAN
+    yaz" talimatıyla çelişen, girdiyi denemeden denemeye BEYANSIZ değiştiren
+    bir kanal (review 2026-09-22 M2). Her deneme artık ilk denemenin gördüğünü
+    görür: tek dosya, kendi istemi. Dizin adı kökünkiyle aynıdır; ilk
+    denemenin görünümü değişmez.
+
+    İstem runner'a yine KANONİK yolundan verilir (runner onu STDIN'e okur);
+    buradaki kopya yalnız modelin araçlarla görebileceği kümedir.
+    """
+    with tempfile.TemporaryDirectory(prefix="sentez-sahne-") as gecici:
+        kaynak = Path(gecici).resolve() / kok.name
+        kaynak.mkdir()
+        shutil.copyfile(istem_yolu, kaynak / istem_yolu.name)
+        return runner.run(SENTEZ_ARACI, kaynak, istem_yolu)
+
+
 async def _kos(
     db,
     tur: AuditRound,
@@ -1232,7 +1255,18 @@ async def _kos(
         with istem_yolu.open("x", encoding="utf-8") as akis:
             akis.write(suanki_istem)
 
-        sonuc = runner.run(SENTEZ_ARACI, kok, istem_yolu)
+        sonuc = _denemeyi_kos(runner, kok, istem_yolu)
+        if sonuc.ham_akis is not None:
+            # Ham olay akışı: gövdenin nasıl kurulduğunun KANITI. Durum
+            # kontrolünden ÖNCE yazılır — yarıda kalan ya da başarı beyan
+            # etmeyen akış tam da teşhis edilecek olandır (review 2026-09-22
+            # M3). Yoksa dosya UYDURULMAZ — boş bir `.jsonl`, akışın olduğunu
+            # ima ederdi.
+            akis_adi = _cikti_dosya_adi(deneme).replace(
+                "-SENTEZ-CIKTISI.md", "-SENTEZ-AKISI.jsonl"
+            )
+            with (kok / akis_adi).open("x", encoding="utf-8") as dosya:
+                dosya.write(sonuc.ham_akis)
         if sonuc.durum != "tamam":
             # Araç arızası MODEL ÇIKTI HATASI DEĞİLDİR: tekrar sormak arızayı
             # gizler ve ikinci kez ödetir.
@@ -1242,14 +1276,6 @@ async def _kos(
             )
         with (kok / _cikti_dosya_adi(deneme)).open("x", encoding="utf-8") as akis:
             akis.write(sonuc.stdout)
-        if sonuc.ham_akis is not None:
-            # Ham olay akışı: gövdenin nasıl kurulduğunun KANITI. Yoksa dosya
-            # UYDURULMAZ — boş bir `.jsonl`, akışın olduğunu ima ederdi.
-            akis_adi = _cikti_dosya_adi(deneme).replace(
-                "-SENTEZ-CIKTISI.md", "-SENTEZ-AKISI.jsonl"
-            )
-            with (kok / akis_adi).open("x", encoding="utf-8") as dosya:
-                dosya.write(sonuc.ham_akis)
 
         # Çıktı dosyası ÖNCE yazılır: kesilmiş gövde de teşhis için diskte kalsın.
         _cikti_butcesini_dogrula(sonuc)

@@ -2010,7 +2010,7 @@ class RunnerOutcome:
     stderr: str
     exit_code: int | None
     ham_akis: str | None = None
-    """Ham olay akışı — yalnız `stream-json` kipinde vardır.
+    """Ham olay akışı — yalnız `stream-json` kipinde, koşumun DURUMUNDAN bağımsız.
 
     Teşhis izidir: bugün kesilen bir cevabı geri kurmak, alt sürecin oturum
     kaydının TESADÜFEN kalıcı `HOME` altına düşmesi sayesinde mümkün oldu.
@@ -2468,21 +2468,28 @@ class SubprocessRunner:
             stderr = self._metin(exc.stderr)
             self._gunlukle(tool, "zaman-asimi", stderr)
             return RunnerOutcome(
-                durum="zaman-asimi", stdout=stdout, stderr=stderr, exit_code=None
+                durum="zaman-asimi",
+                stdout=stdout,
+                stderr=stderr,
+                exit_code=None,
+                # Kısmi akış da kanıttır: kesilen turu geri kurmanın tek yolu.
+                ham_akis=stdout if spec.cikti_bicimi == "stream-json" else None,
             )
 
         stdout = self._metin(tamamlanan.stdout)
         stderr = self._metin(tamamlanan.stderr)
         kod = tamamlanan.returncode
         olcum: Mapping[str, object] | None = None
-        ham_akis: str | None = None
+        # Ham akış DURUMDAN BAĞIMSIZ saklanır: kanıt en çok arızada gerekir —
+        # yarıda kalan ya da başarı beyan etmeyen akış tam da teşhis edilecek
+        # olandır (review 2026-09-22 M3).
+        ham_akis = stdout if spec.cikti_bicimi == "stream-json" else None
         if kod == 0 and spec.cikti_bicimi == "json":
             stdout, olcum, zarf_hatasi = self._zarfi_coz(stdout)
             if zarf_hatasi is not None:
                 stderr = f"{stderr}\n{zarf_hatasi}".strip()
                 kod = 1
         elif kod == 0 and spec.cikti_bicimi == "stream-json":
-            ham_akis = stdout
             stdout, olcum, akis_hatasi = self._akisi_coz(stdout)
             if akis_hatasi is not None:
                 stderr = f"{stderr}\n{akis_hatasi}".strip()
@@ -2572,6 +2579,13 @@ class SubprocessRunner:
         → text) ve her olay TEK blok taşıyor. Kimliğe göre "ilkini tut" demek,
         metin bloğunu düşürmek olurdu.
 
+        **Araç çağrısı biriken metni SIFIRLAR.** Araçtan önce yazılan metin
+        hazırlıktır ("Görev dosyasına bakayım."), belge değil: satır sonu
+        taşımadığında ilk başlığa yapışıp 1. bölümü kaybettiriyordu, belgenin
+        ortasına düştüğünde ise sessizce bir bölüme giriyordu (review
+        2026-09-22 M1, ikisi de ölçüldü). Belge son araç çağrısından SONRA
+        gelen metindir; araçsız kesilme→devam zinciri yine birleşir.
+
         **Ölçüm `result` olayından alınır, olaylar TOPLANMAZ:** asistan
         olaylarının `usage`'ı parçalıdır (ölçüldü: 8 · 8 · 16 · 2 · 2).
         Bitiş nedeni de yalnız orada dolu gelir.
@@ -2591,8 +2605,12 @@ class SubprocessRunner:
             if olay.get("type") == "assistant":
                 icerik = (olay.get("message") or {}).get("content") or []
                 for blok in icerik:
-                    if isinstance(blok, dict) and blok.get("type") == "text":
+                    if not isinstance(blok, dict):
+                        continue
+                    if blok.get("type") == "text":
                         parcalar.append(blok.get("text") or "")
+                    elif blok.get("type") == "tool_use":
+                        parcalar.clear()
             elif olay.get("type") == "result":
                 kapanis = olay
         if kapanis is None:
