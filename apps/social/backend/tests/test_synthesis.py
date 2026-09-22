@@ -379,7 +379,32 @@ class SahteRunner:
 
 
 def _tamam(metin: str) -> auditors.RunnerOutcome:
-    return auditors.RunnerOutcome(durum="tamam", stdout=metin, stderr="", exit_code=0)
+    """Sağlıklı bir `json` koşumu — ÖLÇÜMÜYLE birlikte.
+
+    Sentez 2026-09-22'den beri `json` kipinde koşar ve her sonuç kendi ölçümünü
+    taşır; ölçümsüz bir sonuç artık kapıdan geçmez. Buradaki jeton değeri
+    21 Eylül'ün gerçek koşumundan alınmıştır (24.178), yani sağlıklı bir turun
+    ÖLÇÜLMÜŞ büyüklüğüdür — tavanın altında olduğu o ölçümle bilinir.
+    """
+    return auditors.RunnerOutcome(
+        durum="tamam",
+        stdout=metin,
+        stderr="",
+        exit_code=0,
+        olcum={
+            "cikti_jetonu": 24178,
+            "dusunme_jetonu": 33,
+            "tur_sayisi": 1,
+            "maliyet_usd": None,
+        },
+    )
+
+
+def _olcumsuz(metin: str) -> auditors.RunnerOutcome:
+    """Zarfı okunamamış koşum — ölçüm YOK (kapının kırmızı kolu)."""
+    return auditors.RunnerOutcome(
+        durum="tamam", stdout=metin, stderr="", exit_code=0
+    )
 
 
 # ═══ Koşu dikişi ═══════════════════════════════════════════════════════════
@@ -1138,6 +1163,95 @@ def test_karar_gunlugu_SATIR_SATIR_da_okunur() -> None:
     ]
 
 
+def test_COK_bloklu_govde_HICBIR_kaydi_atlamaz() -> None:
+    """İki çitli blok = tek günlük; okuyucu ikisini de okur.
+
+    **ÖLÇÜLDÜ (2026-09-22, kayıtlı çıktılar):** okuyucu `.search()` ile yalnız
+    İLK bloğu alıyordu. Altı ayrıştırılabilir çıktının İKİSİ günlüğü iki bloğa
+    bölmüştü ve kayıp SESSİZDİ:
+
+    | çıktı | dosyada | okuyucunun döndürdüğü | atlanan |
+    |---|---|---|---|
+    | `kosu-7705437…` (21 Eylül, GEÇEN tur) | 79 | 60 | **19** |
+    | `DUSMUS-2026-09-18-jsonl-…` | 90 | 61 | **29** |
+
+    Birincisi veritabanına da böyle indi: `sector_research_artifacts` içindeki
+    sentez artefaktı 60 kayıt taşıyor, 79 değil — reddedilen adayların izi hiç
+    yazılmamış.
+
+    Beklenti üretim kodundan TÜRETİLMEZ: aşağıdaki gövde sözleşmenin kendi
+    yazımından elle kurulmuştur.
+    """
+    govde = (
+        "```json\n"
+        '{"tur": "karar", "unit_id": "ku-1"}\n'
+        '{"tur": "karar", "unit_id": "ku-2"}\n'
+        "```\n"
+        "Araya açıklama cümlesi girebilir.\n"
+        "```json\n"
+        '{"tur": "not", "unit_id": "ku-3"}\n'
+        "```\n"
+    )
+    assert synthesis._json_govdesi(govde, "DECISION_LOG") == [
+        {"tur": "karar", "unit_id": "ku-1"},
+        {"tur": "karar", "unit_id": "ku-2"},
+        {"tur": "not", "unit_id": "ku-3"},
+    ]
+
+
+def test_COK_blok_DIZI_yazimiyla_da_birlesir() -> None:
+    """Aynı kural JSON DİZİSİ yazımında da geçerli — iki dizi tek günlüktür."""
+    govde = (
+        '```json\n[{"tur": "karar", "unit_id": "ku-1"}]\n```\n'
+        '```json\n[{"tur": "not", "unit_id": "ku-2"}]\n```\n'
+    )
+    assert synthesis._json_govdesi(govde, "DECISION_LOG") == [
+        {"tur": "karar", "unit_id": "ku-1"},
+        {"tur": "not", "unit_id": "ku-2"},
+    ]
+
+
+def test_COK_blok_NESNE_iceriyorsa_ACIKCA_reddedilir() -> None:
+    """Birleştirilemeyen çokluk sessizce tekleştirilmez — tur düşer.
+
+    Aday paket TEK nesnedir; iki nesneyi birleştirmek hangisinin geçerli
+    olduğunu UYDURMAK olurdu. Okuyucu burada susmaz, reddeder.
+    """
+    govde = '```json\n{"kapsam": "a"}\n```\n```json\n{"kapsam": "b"}\n```\n'
+    with pytest.raises(synthesis.SynthesisFailed, match="tek NESNE"):
+        synthesis._json_govdesi(govde, "ADAY PAKET")
+
+
+def test_bozuk_IKINCI_blok_sessizce_atlanmaz() -> None:
+    """Negatif kontrol: kayıpsızlık, bozuk bloğu yutmak DEĞİLDİR."""
+    govde = (
+        '```json\n{"tur": "karar"}\n```\n'
+        "```json\nbu satır JSON değil\n```\n"
+    )
+    with pytest.raises(synthesis.SynthesisFailed):
+        synthesis._json_govdesi(govde, "DECISION_LOG")
+
+
+def test_jsonl_etiketli_cit_de_CIT_sayilir() -> None:
+    """`jsonl` etiketli çit tanınır — bugün yalnız tesadüfen çalışıyordu.
+
+    Desen `json` ve çıplak etiketi tanıyor, `jsonl`i tanımıyordu; o çıktılar
+    çit bulunamadığı için gövdenin TAMAMINI satır satır tarayan yedek yola
+    düşüyor ve tesadüfen doğru sonucu veriyordu. Tesadüf sözleşme değildir.
+    """
+    govde = (
+        "```jsonl\n"
+        '{"tur": "karar", "unit_id": "ku-1"}\n'
+        '{"tur": "not", "unit_id": "ku-2"}\n'
+        "```\n"
+        "çitin DIŞINDA kalan bu cümle gövdeye karışmamalı: {\"tur\": \"karar\"}\n"
+    )
+    assert synthesis._json_govdesi(govde, "DECISION_LOG") == [
+        {"tur": "karar", "unit_id": "ku-1"},
+        {"tur": "not", "unit_id": "ku-2"},
+    ]
+
+
 def test_bozuk_satir_HALA_turu_dusurur() -> None:
     """Negatif kontrol: JSONL toleransı ayrıştırıcıyı körleştirmez."""
     with pytest.raises(synthesis.SynthesisFailed):
@@ -1786,3 +1900,217 @@ async def test_ariza_isareti_terminal_kosuda_ozgun_istisnayi_golgelemez(kosu, tm
     with pytest.raises(synthesis.SynthesisFailed, match="iddia"):
         await _sentez(kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), doktor=kor)
     assert (await _durum(db, run_id))[0] == "tamamlandi"
+
+
+# ═══ Çıktı bütçesi kapısı — kesilen cevap SESSİZ geçmez (2026-09-22) ═════════
+#
+# Ölçülmüş arıza: `kosu-3f22d638…` sentezinde düşünme 51.564 jeton yedi, cevap
+# 64.000'lik tek mesaj bütçesinde `max_tokens` ile kesildi, model ikinci mesajda
+# devam etti ve son mesaj TEK BAŞINA diske yazıldı. Bütçe kümülatiftir (ölçüldü,
+# 2026-09-22 probu: iki mesajlık koşumda zarf 160 jeton dedi, kayıttaki iki
+# mesajın toplamı da 160). Yani bildirilen toplam tavanı aşıyorsa cevap tek
+# mesajda kalmamıştır.
+
+
+async def test_olcumsuz_kosum_kapiyi_SESSIZCE_gecmez(kosu, tmp_path) -> None:
+    """Ölçüm taşımayan bir koşum JSON kipinde olamaz — taşımıyorsa tur düşer.
+
+    `text` kipi ölçüm üretmez ve sentez artık `json` kipinde koşar; ölçümün
+    yokluğu "her şey yolunda" demek DEĞİLDİR, zarfın okunamadığı demektir.
+    """
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+    metin = _sentez_metni(icerik, gunluk, [])
+
+    with pytest.raises(synthesis.SynthesisFailed, match="ÖLÇÜM"):
+        await _sentez(
+            kosu, tmp_path, aday=icerik, gunluk=gunluk, sonuc=_olcumsuz(metin)
+        )
+
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+# ═══ Sınırlı düzeltme hakkı — biçim hatası turu ÖLDÜRMEZ (2026-09-22) ═══════
+#
+# Ölçülmüş gerekçe: sentez aşaması sekiz kayıtlı denemede birbirinden FARKLI
+# sebeplerle düştü (plan kipi · karar günlüğü biçimi · CTA şekli · kesilme) ve
+# her düşüş koşuyu K-82 gereği terminal yaptığı için 24-25 dakikalık denetçi
+# turunu da beraberinde götürdü. Düzeltme hakkı o bedeli kaldırır.
+#
+# SINIR: yalnız MODEL ÇIKTISININ BİÇİMİ düzeltilebilir. Pin sapması, eksik
+# denetçi, veritabanı hatası, araç koşmaması — hiçbiri döngüye girmez.
+
+
+class SayanRunner:
+    """Çağrı başına AYRI sonuç döndürür; kaç kez çağrıldığını sayar."""
+
+    def __init__(self, *sonuclar: auditors.RunnerOutcome) -> None:
+        self.sonuclar = list(sonuclar)
+        self.cagrilar: list[tuple[str, Path, Path]] = []
+        self.istemler: list[str] = []
+
+    def run(self, tool: str, cwd: Path, prompt_path: Path) -> auditors.RunnerOutcome:
+        self.cagrilar.append((tool, cwd, prompt_path))
+        self.istemler.append(prompt_path.read_text(encoding="utf-8"))
+        sira = min(len(self.cagrilar), len(self.sonuclar)) - 1
+        return self.sonuclar[sira]
+
+
+async def _sentez_runnerla(kosu, tmp_path, runner):
+    db, run_id = kosu
+    return await synthesis.run(
+        db,
+        _tur(),
+        run_id=run_id,
+        brief=BRIEF_METNI,
+        kok_rehberi=KOK_REHBERI_METNI,
+        doktor_raporlari=_doktor_raporlari(),
+        active_package=_aktif_paket(),
+        removed_history=(),
+        holiday_keys=set(),
+        runner=runner,
+        dest=tmp_path / "sentez-kokleri",
+    )
+
+
+async def test_bicim_hatasi_DUZELTME_cagrisiyla_kurtarilir(kosu, tmp_path) -> None:
+    """İlk çıktı bölüm kapısını geçmiyor; ikinci çağrı turu kurtarır."""
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+    runner = SayanRunner(
+        _tamam("dört bölümün hiçbiri yok, serbest metin"),
+        _tamam(_sentez_metni(icerik, gunluk, [])),
+    )
+
+    uretilen = await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 2, "düzeltme çağrısı YAPILMADI"
+    assert uretilen.aday_json["kapsam"] == icerik["kapsam"]
+    assert (await _durum(db, run_id)) == ("calisiyor", None), (
+        "kurtarılan tur koşuyu terminal yaptı — düzeltme hakkının anlamı kalmaz"
+    )
+
+
+async def test_duzeltme_istemi_SOMUT_hatalari_tasir(kosu, tmp_path) -> None:
+    """"Devam et" yetmez (ölçüldü): istem doğrulayıcının bulduğu hatayı söyler."""
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+    runner = SayanRunner(
+        _tamam("dört bölümün hiçbiri yok, serbest metin"),
+        _tamam(_sentez_metni(icerik, gunluk, [])),
+    )
+
+    await _sentez_runnerla(kosu, tmp_path, runner)
+
+    duzeltme_istemi = runner.istemler[1]
+    assert duzeltme_istemi != runner.istemler[0], "düzeltme istemi ilkiyle AYNI"
+    assert "ADAY PAKET" in duzeltme_istemi
+    assert OLCULEN_BOLUM_ANAHTARLARI[0] in duzeltme_istemi
+
+
+async def test_duzeltme_hakki_TEK_tur_sonra_terminal(kosu, tmp_path) -> None:
+    """Hak tükenince mevcut terminal yol koşar — döngü sonsuz değil."""
+    db, run_id = kosu
+    bozuk = _tamam("dört bölümün hiçbiri yok, serbest metin")
+    runner = SayanRunner(bozuk, bozuk, bozuk)
+
+    with pytest.raises(synthesis.SynthesisFailed):
+        await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 1 + synthesis.SENTEZ_DUZELTME_HAKKI
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+async def test_her_denemenin_ham_ciktisi_AYRI_dosyada(kosu, tmp_path) -> None:
+    """Önceki çıktı EZİLMEZ — teşhis izi korunur (K-82 kanıt disiplini)."""
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+    runner = SayanRunner(
+        _tamam("dört bölümün hiçbiri yok, serbest metin"),
+        _tamam(_sentez_metni(icerik, gunluk, [])),
+    )
+    db, run_id = kosu
+
+    await _sentez_runnerla(kosu, tmp_path, runner)
+
+    kok = tmp_path / "sentez-kokleri" / run_id
+    ciktilar = sorted(p.name for p in kok.glob("*-SENTEZ-CIKTISI.md"))
+    assert ciktilar == ["01-SENTEZ-CIKTISI.md", "02-SENTEZ-CIKTISI.md"], ciktilar
+    assert "hiçbiri yok" in (kok / "01-SENTEZ-CIKTISI.md").read_text(encoding="utf-8")
+
+
+async def test_arac_KOSMAZSA_duzeltme_denenmez(kosu, tmp_path) -> None:
+    """Sınır testi: araç arızası model çıktı hatası DEĞİLDİR, hemen terminal.
+
+    Aksi hâlde zaman aşımına uğrayan ya da hiç koşmayan bir araç için ikinci
+    kez ödenirdi ve arıza gizlenirdi.
+    """
+    db, run_id = kosu
+    runner = SayanRunner(
+        auditors.RunnerOutcome(durum="hata", stdout="", stderr="çöktü", exit_code=1)
+    )
+
+    with pytest.raises(synthesis.SynthesisFailed, match="sonuç ÜRETMEDİ"):
+        await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 1, "araç arızasında düzeltme çağrısı yapıldı"
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+async def test_yazim_kapisi_hatasi_duzeltme_kapsaminda_DEGIL(kosu, tmp_path) -> None:
+    """Bilinçli sınır: içerik kapısı düşerse düzeltme denenmez, tur düşer.
+
+    Kapsam ölçümle genişletilir — bugün elimizde bu sınıfın tekrarladığına dair
+    veri YOK ve her genişletme bir model çağrısı daha ödetir.
+    """
+    db, run_id = kosu
+    icerik = _tam_icerik(kapsam="")
+    gunluk = _model_gunlugu(icerik)
+    runner = SayanRunner(_tamam(_sentez_metni(icerik, gunluk, [])))
+
+    with pytest.raises(synthesis.SynthesisFailed, match="yazım kapısı"):
+        await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 1
+    assert (await _durum(db, run_id))[0] == "tamamlanmadi"
+
+
+async def test_ham_olay_akisi_diske_YAZILIR(kosu, tmp_path) -> None:
+    """Akış kipinde ham olaylar koşu kökünde saklanır — teşhis izi.
+
+    Bugün kesilen bir cevabı geri kurmak, alt sürecin oturum kaydının
+    TESADÜFEN kalıcı `HOME` altına düşmesi sayesinde mümkün oldu; kutulu bir
+    rolde o kayıt tur sonunda silinir. Kanıt tesadüfe bırakılmaz.
+    """
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+    akis = '{"type":"result","subtype":"success"}\n'
+    sonuc = auditors.RunnerOutcome(
+        durum="tamam",
+        stdout=_sentez_metni(icerik, gunluk, []),
+        stderr="",
+        exit_code=0,
+        ham_akis=akis,
+        olcum={"cikti_jetonu": 24178, "dusunme_jetonu": 33,
+               "tur_sayisi": 1, "maliyet_usd": 2.45, "bitis_nedeni": "end_turn"},
+    )
+
+    await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk, sonuc=sonuc)
+
+    kok = tmp_path / "sentez-kokleri" / run_id
+    assert (kok / "01-SENTEZ-AKISI.jsonl").read_text(encoding="utf-8") == akis
+
+
+async def test_akis_YOKSA_akis_dosyasi_uydurulmaz(kosu, tmp_path) -> None:
+    """Kontrol kolu: ham akış taşımayan koşum boş dosya bırakmaz."""
+    db, run_id = kosu
+    icerik = _tam_icerik()
+    gunluk = _model_gunlugu(icerik)
+
+    await _sentez(kosu, tmp_path, aday=icerik, gunluk=gunluk)
+
+    kok = tmp_path / "sentez-kokleri" / run_id
+    assert not list(kok.glob("*-SENTEZ-AKISI.jsonl"))

@@ -30,6 +30,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import builtins
+import json
 import logging
 import os
 import pwd
@@ -97,11 +98,17 @@ OLCULEN_ARGV: dict[str, tuple[str, ...]] = {
     ),
     # 2026-09-18: `sentez`ten plan kipi KALDIRILDI (ölçüm gerekçesi
     # `test_sentez_plan_kipinde_KOSMAZ` gövdesinde).
+    # 2026-09-22: çıktı biçimi `text` → `stream-json --verbose`. Gerekçe
+    # ölçüldü — `text` de `json` de YALNIZ SON asistan mesajını verir;
+    # `kosu-3f22d638…` sentezinde cevap iki mesaja bölündü ve ilk mesajın
+    # 22.230 karakteri artefakta hiç girmedi. Akış kipi bütün metin bloklarını
+    # taşır. `--verbose` akış kipinin ÖN KOŞULUDUR (kurulu CLI yardımı).
     "sentez": (
         "claude",
         "-p",
         "--output-format",
-        "text",
+        "stream-json",
+        "--verbose",
         "--safe-mode",
         "--restricted",
         "--tools",
@@ -1012,11 +1019,14 @@ def test_sentez_plan_kipinde_KOSMAZ_denetciler_KOSAR() -> None:
         assert katman in sentez, (katman, sentez)
     denetci = auditors.ARAC_KOMUTLARI[auditors.DENETCI_ROLLERI[0]].argv
     assert denetci[denetci.index("--permission-mode") + 1] == "plan"
-    # İskelet aynı kalır: BAYRAK kümesi plan kipi dışında birebir örtüşür
-    # (değerler role göre değişir — araç kümesi ve yasak liste).
+    # İskelet örtüşür; İKİ bilinçli fark vardır ve ikisi de adıyla yazılır:
+    #   * `--permission-mode` YALNIZ denetçide (plan kipi; gerekçe yukarıda).
+    #   * `--verbose` YALNIZ sentezde — akış kipinin ön koşuludur (kurulu CLI
+    #     yardımı: "--output-format=stream-json" ile birlikte istenir).
+    # Güvenlik katmanları bu farkların DIŞINDADIR ve ikisinde de aynıdır.
     bayraklar = lambda argv: {p for p in argv if p.startswith("--")}  # noqa: E731
     assert bayraklar(denetci) - bayraklar(sentez) == {"--permission-mode"}
-    assert bayraklar(sentez) - bayraklar(denetci) == set()
+    assert bayraklar(sentez) - bayraklar(denetci) == {"--verbose"}
 
 
 def test_toolspec_flags_exist_in_the_installed_cli_help() -> None:
@@ -1049,7 +1059,7 @@ def test_toolspec_argv_is_a_tuple_and_non_empty() -> None:
     for ad, spec in auditors.ARAC_KOMUTLARI.items():
         assert isinstance(spec.argv, tuple) and spec.argv, ad
     with pytest.raises(ValueError):
-        auditors.ToolSpec((), kullanici=None)
+        auditors.ToolSpec((), kullanici=None, cikti_bicimi="text")
 
 
 # ═══ 8. SubprocessRunner — GERÇEK alt süreç ölçümü ══════════════════════════
@@ -1069,7 +1079,9 @@ def _sahte_arac(monkeypatch, kod: str, *, kullanici: str | None = None) -> None:
         "ARAC_KOMUTLARI",
         {
             auditors.DENETCI_ROLLERI[0]: auditors.ToolSpec(
-                (_yorumlayici(kullanici), "-c", kod), kullanici=kullanici
+                (_yorumlayici(kullanici), "-c", kod),
+                kullanici=kullanici,
+                cikti_bicimi="text",
             )
         },
     )
@@ -1706,12 +1718,14 @@ def test_toolspec_requires_an_explicit_isolation_profile() -> None:
     with pytest.raises(TypeError):
         auditors.ToolSpec((sys.executable,))  # type: ignore[call-arg]
 
-    auditors.ToolSpec((sys.executable,), kullanici=None)  # açık "kutusuz"
-    auditors.ToolSpec((sys.executable,), kullanici="codex")
+    auditors.ToolSpec(
+        (sys.executable,), kullanici=None, cikti_bicimi="text"
+    )  # açık "kutusuz"
+    auditors.ToolSpec((sys.executable,), kullanici="codex", cikti_bicimi="text")
 
     for bozuk in ("", "   "):
         with pytest.raises(ValueError):
-            auditors.ToolSpec((sys.executable,), kullanici=bozuk)
+            auditors.ToolSpec((sys.executable,), kullanici=bozuk, cikti_bicimi="text")
 
 
 def test_tool_user_declaration_matches_independent_literals() -> None:
@@ -3899,3 +3913,286 @@ async def test_yarim_tur_terminal_kosuda_isaretleme_hatasiyla_patlamaz(kosu):
     tur = await _tur_kos(db, paket, runner=SahteRunner(ciktilar), run_id=run_id)
     assert tur.gecerli is False and tur.sebep
     assert (await _durum(db, run_id))[0] == "tamamlandi"
+
+
+# ═══ 14. Çıktı bütçesi — düşünme tavanı ve JSON zarfı (2026-09-22) ═══════════
+#
+# Ölçülmüş arıza (koşu `kosu-3f22d638…`, sentez): tek koşumda düşünmeye 51.564
+# jeton gitti, 64.000'lik çıktı bütçesi doldu, cevap `max_tokens` ile kesildi ve
+# model ikinci bir mesajda devam etti. `--output-format text` YALNIZ son mesajı
+# basar; ilk mesajdaki 22.230 karakter artefakta hiç girmedi. Aynı görev bir gün
+# önce 33 düşünme jetonuyla 42.327 karakteri TEK mesaja sığdırmıştı — yani sınırı
+# zorlayan cevabın boyutu değil, düşünmenin bütçeyi yemesiydi.
+#
+# Buradaki beklentiler üretim kodundan TÜRETİLMEZ: jeton sayıları yukarıdaki
+# koşumun ham ölçümleridir, zarf alan adları kurulu CLI'nın `--output-format
+# json` çıktısından elle okunmuştur (2026-09-22 probu).
+
+
+def test_alt_surec_ortami_dusunme_ayari_TASIMAZ(monkeypatch) -> None:
+    """Yanlışlanan denemenin nöbetçisi: tavan ortamına geri SIZMASIN.
+
+    2026-09-22: `MAX_THINKING_TOKENS=16000` alt sürecin ortamına yazıldı,
+    değerin çocuğa ULAŞTIĞI `/proc/<pid>/environ` ile ölçüldü ve model yine
+    56.502 jeton düşündü — ayar bağlamıyor. Vaat ettiğini yapmayan bir anahtar
+    kodda durursa bir sonraki oturum ona güvenir; bu test onu geri gelirse
+    kırmızıya çevirir. Anahtar GERÇEKTEN bağladığı ölçülürse bu test o ölçümle
+    birlikte değişir — sessizce değil.
+    """
+    monkeypatch.setenv("MAX_THINKING_TOKENS", "999999")
+    ortam = auditors.SubprocessRunner._alt_surec_ortami(None)
+    assert "MAX_THINKING_TOKENS" not in ortam
+
+
+def test_arac_cikti_bicimini_BEYAN_eder() -> None:
+    """Biçim araç başına BEYAN edilir; varsayılan YOK, kapalı küme.
+
+    `kullanici` emsali: varsayılan konsaydı yarın eklenen bir araç çıktı
+    sözleşmesini sessizce devralırdı.
+    """
+    with pytest.raises(TypeError):
+        auditors.ToolSpec((sys.executable,), kullanici=None)  # type: ignore[call-arg]
+
+    with pytest.raises(ValueError, match="cikti_bicimi"):
+        auditors.ToolSpec((sys.executable,), kullanici=None, cikti_bicimi="xml")
+
+    assert auditors.ARAC_KOMUTLARI[auditors.SENTEZ_ARACI].cikti_bicimi == (
+        "stream-json"
+    )
+    for rol in auditors.DENETCI_ROLLERI:
+        assert auditors.ARAC_KOMUTLARI[rol].cikti_bicimi == "text"
+
+
+def _json_zarfi(**ustune) -> str:
+    zarf = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "stop_reason": "end_turn",
+        "num_turns": 1,
+        "result": "RAPOR GÖVDESİ",
+        "total_cost_usd": 0.42,
+        "usage": {
+            "output_tokens": 24178,
+            "output_tokens_details": {"thinking_tokens": 33},
+        },
+    }
+    zarf.update(ustune)
+    return json.dumps(zarf)
+
+
+def _json_arac(monkeypatch, zarf: str) -> None:
+    kod = "import sys; sys.stdin.read(); print(%r)" % zarf
+    monkeypatch.setattr(
+        auditors,
+        "ARAC_KOMUTLARI",
+        {
+            auditors.SENTEZ_ARACI: auditors.ToolSpec(
+                (sys.executable, "-c", kod), kullanici=None, cikti_bicimi="json"
+            )
+        },
+    )
+
+
+def test_json_zarfindan_rapor_govdesi_ve_olcum_cikar(monkeypatch, tmp_path) -> None:
+    """JSON kipinde gövde `result`tır ve koşum ÖLÇÜMÜ yanında taşınır.
+
+    Ölçüm olmadan bir sonraki kesilme yine oturum kayıtlarından geri
+    kurulurdu; bu tur onu 40 dakika sürdü.
+    """
+    _json_arac(monkeypatch, _json_zarfi())
+    istem = tmp_path / "00-GOREV.md"
+    istem.write_text("görev", encoding="utf-8")
+
+    sonuc = auditors.SubprocessRunner(zaman_asimi_sn=60.0).run(
+        auditors.SENTEZ_ARACI, tmp_path, istem
+    )
+
+    assert sonuc.durum == "tamam"
+    assert sonuc.stdout.strip() == "RAPOR GÖVDESİ"
+    assert sonuc.olcum is not None
+    assert sonuc.olcum["cikti_jetonu"] == 24178
+    assert sonuc.olcum["dusunme_jetonu"] == 33
+    assert sonuc.olcum["tur_sayisi"] == 1
+
+
+def test_metin_kipinde_olcum_YOKTUR_uydurulmaz(monkeypatch, tmp_path) -> None:
+    """Kontrol kolu: `text` kipi ölçüm TAŞIMAZ — sıfır yazmak yalan olurdu."""
+    sonuc = _kos(monkeypatch, tmp_path, "print('rapor')")
+    assert sonuc.durum == "tamam"
+    assert sonuc.olcum is None
+
+
+@pytest.mark.parametrize(
+    "zarf, etiket",
+    [
+        (_json_zarfi(is_error=True), "is_error"),
+        (_json_zarfi(subtype="error_during_execution"), "subtype"),
+        (_json_zarfi(result=""), "boş gövde"),
+        ("{bozuk json", "ayrıştırılamayan zarf"),
+    ],
+)
+def test_bozuk_json_zarfi_BASARI_sayilmaz(monkeypatch, tmp_path, zarf, etiket) -> None:
+    """Zarf başarıyı BEYAN etmiyorsa koşum `hata`dır — sessiz kabul yok."""
+    _json_arac(monkeypatch, zarf)
+    istem = tmp_path / "00-GOREV.md"
+    istem.write_text("görev", encoding="utf-8")
+
+    sonuc = auditors.SubprocessRunner(zaman_asimi_sn=60.0).run(
+        auditors.SENTEZ_ARACI, tmp_path, istem
+    )
+
+    assert sonuc.durum == "hata", etiket
+
+
+# ═══ 15. Akış kipi — çok mesajlı çıktı KAYBOLMAZ (2026-09-22) ════════════════
+#
+# `--output-format text` ve `json` YALNIZ SON asistan mesajını verir. Ölçüldü
+# (`kosu-3f22d638…`): cevap iki mesaja bölündü, ilk mesajın 22.230 karakteri
+# artefakta hiç girmedi. Akış kipi bütün metin bloklarını taşır.
+#
+# Olay biçimi kurulu CLI'dan ÖLÇÜLDÜ (2026-09-22 probu), üretim kodundan
+# türetilmedi:
+#   * `assistant` olayı TEK içerik bloğu taşır; AYNI `message.id` birden çok
+#     olay üretir (thinking → tool_use → text). Kimliğe göre tekilleştirmek
+#     metin bloğunu KAYBETTİRİR.
+#   * `assistant` olaylarında `stop_reason` boştur; bitiş nedeni ve KÜMÜLATİF
+#     kullanım `result` olayındadır.
+#   * `result.result` son metin bloğuna EŞİTTİR — ikisini birden eklemek çift
+#     sayar (ölçüldü: 1.734 karakter, assistant5 ile birebir).
+
+
+def _akis_olaylari(*metinler: str, sonuc_metni: str | None = None, **ustune) -> str:
+    """Ölçülmüş olay biçimiyle sahte akış üretir."""
+    satirlar = [json.dumps({"type": "system", "subtype": "init", "tools": []})]
+    for sira, metin in enumerate(metinler, start=1):
+        satirlar.append(json.dumps({
+            "type": "assistant",
+            "message": {
+                "id": f"msg_{sira // 2}",  # AYNI kimlik iki olayda görünür
+                "role": "assistant",
+                "stop_reason": None,
+                "content": [{"type": "thinking", "thinking": "..."}],
+                "usage": {"output_tokens": 7},
+            },
+        }, ensure_ascii=False))
+        satirlar.append(json.dumps({
+            "type": "assistant",
+            "message": {
+                "id": f"msg_{sira // 2}",
+                "role": "assistant",
+                "stop_reason": None,
+                "content": [{"type": "text", "text": metin}],
+                "usage": {"output_tokens": 7},
+            },
+        }, ensure_ascii=False))
+    sonuc = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "stop_reason": "end_turn",
+        "num_turns": len(metinler),
+        "result": sonuc_metni if sonuc_metni is not None else (metinler[-1] if metinler else ""),
+        "total_cost_usd": 2.45,
+        "usage": {
+            "output_tokens": 63188,
+            "output_tokens_details": {"thinking_tokens": 46976},
+        },
+    }
+    sonuc.update(ustune)
+    satirlar.append(json.dumps(sonuc, ensure_ascii=False))
+    return "\n".join(satirlar) + "\n"
+
+
+def _akis_arac(monkeypatch, akis: str) -> None:
+    kod = "import sys; sys.stdin.read(); sys.stdout.write(%r)" % akis
+    monkeypatch.setattr(
+        auditors,
+        "ARAC_KOMUTLARI",
+        {
+            auditors.SENTEZ_ARACI: auditors.ToolSpec(
+                (sys.executable, "-c", kod),
+                kullanici=None,
+                cikti_bicimi="stream-json",
+            )
+        },
+    )
+
+
+def _akis_kos(monkeypatch, tmp_path, akis: str):
+    _akis_arac(monkeypatch, akis)
+    istem = tmp_path / "00-GOREV.md"
+    istem.write_text("görev", encoding="utf-8")
+    return auditors.SubprocessRunner(zaman_asimi_sn=60.0).run(
+        auditors.SENTEZ_ARACI, tmp_path, istem
+    )
+
+
+def test_akis_kipi_TUM_metin_bloklarini_birlestirir(monkeypatch, tmp_path) -> None:
+    """İki mesaja bölünen cevabın İLK parçası da gövdededir."""
+    sonuc = _akis_kos(
+        monkeypatch, tmp_path, _akis_olaylari("BIRINCI PARCA\n", "IKINCI PARCA\n")
+    )
+    assert sonuc.durum == "tamam"
+    assert sonuc.stdout == "BIRINCI PARCA\nIKINCI PARCA\n"
+
+
+def test_akis_kipi_SON_mesaji_CIFT_saymaz(monkeypatch, tmp_path) -> None:
+    """`result.result` son metin bloğuna eşittir; ikisi birden eklenmez."""
+    sonuc = _akis_kos(
+        monkeypatch, tmp_path, _akis_olaylari("A", "B", sonuc_metni="B")
+    )
+    assert sonuc.stdout == "AB", sonuc.stdout
+
+
+def test_akis_kipi_olcumu_RESULT_olayindan_alir(monkeypatch, tmp_path) -> None:
+    """Ölçüm kümülatiftir ve `result` olayındadır — olay olay TOPLANMAZ.
+
+    Asistan olaylarının `usage`'ı parçalıdır (ölçüldü: 8 · 8 · 16 · 2 · 2);
+    toplamak gerçek tüketimi vermez.
+    """
+    sonuc = _akis_kos(monkeypatch, tmp_path, _akis_olaylari("A", "B"))
+    assert sonuc.olcum is not None
+    assert sonuc.olcum["cikti_jetonu"] == 63188
+    assert sonuc.olcum["dusunme_jetonu"] == 46976
+    assert sonuc.olcum["tur_sayisi"] == 2
+    assert sonuc.olcum["bitis_nedeni"] == "end_turn"
+
+
+def test_akis_kipi_HAM_akisi_korur(monkeypatch, tmp_path) -> None:
+    """Ham olay akışı saklanır — teşhis oturum kaydına muhtaç kalmasın.
+
+    Bugün bu iş, alt sürecin oturum kaydının tesadüfen kalıcı `HOME` altına
+    düşmesi sayesinde yapılabildi. Tesadüf kanıt altyapısı değildir.
+    """
+    akis = _akis_olaylari("A", "B")
+    sonuc = _akis_kos(monkeypatch, tmp_path, akis)
+    assert sonuc.ham_akis == akis
+
+
+@pytest.mark.parametrize(
+    "akis, etiket",
+    [
+        ('{"type": "assistant", "message": {"content": [{"type": "text", "text": "A"}]}}\n',
+         "result olayı YOK"),
+        (_akis_olaylari("A", is_error=True), "is_error"),
+        (_akis_olaylari("A", subtype="error_during_execution"), "subtype"),
+        (_akis_olaylari(), "hiç metin bloğu yok"),
+        ("bu satır JSON değil\n", "ayrıştırılamayan akış"),
+    ],
+)
+def test_akis_kipi_eksik_ya_da_hatali_akisi_KABUL_ETMEZ(
+    monkeypatch, tmp_path, akis, etiket
+) -> None:
+    """Akış yarıda kalmışsa ya da başarı beyan etmiyorsa koşum `hata`dır."""
+    sonuc = _akis_kos(monkeypatch, tmp_path, akis)
+    assert sonuc.durum == "hata", etiket
+
+
+def test_sentez_araci_AKIS_kipinde_kosar() -> None:
+    """Sentez profili akış kipini BEYAN eder; denetçiler `text` kipinde kalır."""
+    sentez = auditors.ARAC_KOMUTLARI[auditors.SENTEZ_ARACI]
+    assert sentez.cikti_bicimi == "stream-json"
+    assert "stream-json" in sentez.argv and "--verbose" in sentez.argv
+    for rol in auditors.DENETCI_ROLLERI:
+        assert auditors.ARAC_KOMUTLARI[rol].cikti_bicimi == "text"

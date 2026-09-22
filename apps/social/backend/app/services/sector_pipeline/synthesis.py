@@ -86,6 +86,7 @@ from app.services.sector_pipeline.auditors import (
     SENTEZ_ARACI,
     AuditRound,
     Runner,
+    RunnerOutcome,
     anonymize,
     iddia_evreni,
     kaynak_iddialari_coz,
@@ -109,6 +110,28 @@ GOREV_DOSYASI = "hakem-sentez-gorevi.md"
 
 GOREV_DOSYA_ADI = "00-SENTEZ-GOREVI.md"
 CIKTI_DOSYA_ADI = "01-SENTEZ-CIKTISI.md"
+
+SENTEZ_DUZELTME_HAKKI = 1
+"""İlk üretimden SONRA kaç düzeltme çağrısı yapılabilir.
+
+**Neden var (2026-09-22 ölçümü).** Sekiz kayıtlı sentez denemesi birbirinden
+FARKLI sebeplerle düştü — plan kipi · karar günlüğü biçimi · CTA şekli ·
+kesilme. Her düşüş koşuyu K-82 gereği terminal yaptığı için 24-25 dakikalık
+denetçi turunu da beraberinde götürdü; bir günde iki kez ödendi.
+
+**Neden 1.** Düzeltme çağrısı ÜCRETLİDİR (ölçüldü: tek sentez çağrısı 11,6
+dakika · 2,45 USD). Bir hak, denetçi turunu kurtarmaya yeter; ikinci hakkın
+kazandıracağını gösteren ÖLÇÜM yok. Sayı ölçümle artar, tahminle değil.
+"""
+
+
+def _cikti_dosya_adi(deneme: int) -> str:
+    """Deneme başına AYRI çıktı dosyası — önceki EZİLMEZ.
+
+    İlk denemenin adı `CIKTI_DOSYA_ADI` ile birebir aynıdır: düzeltme hakkı
+    eklenmesi, tek denemede biten turların dosya adını DEĞİŞTİRMEZ.
+    """
+    return CIKTI_DOSYA_ADI if deneme == 1 else f"{deneme:02d}-SENTEZ-CIKTISI.md"
 
 SENTEZ_BOLUM_ANAHTARLARI: tuple[str, ...] = (
     "ADAY PAKET",
@@ -159,7 +182,15 @@ KOPYALANMIŞTI ve bir sonraki adımda aynı şekilde düşerdi. İkinci tolerans
 (addan sonraki `—`/`(`/`:` süsü) de aynı gün, bu dosyada ÖLÇÜLDÜ: araç
 `# 4) ÖZET (operatör onay ekranı)` yazdı.
 """
-_JSON_FENCE_RE = re.compile(r"```(?:json)?[ \t]*\n(.*?)\n[ \t]*```", re.S)
+_JSON_FENCE_RE = re.compile(r"```[A-Za-z0-9_-]*[ \t]*\n(.*?)\n[ \t]*```", re.S)
+"""Çitli blok deseni — etiket SERBEST, çünkü etiketi model seçiyor.
+
+**Neden `json` sabiti KALDIRILDI (2026-09-22).** Desen `json` ve çıplak etiketi
+tanıyor, `jsonl`i TANIMIYORDU. O çıktılarda hiç çit bulunmuyor, okuyucu
+gövdenin TAMAMINI satır satır tarayan yedek yola düşüyor ve tesadüfen doğru
+sonucu veriyordu — yani doğruluk, modelin seçtiği etikete bağlıydı. Etiket
+serbest bırakılınca davranış her iki yazımda da AYNI yoldan geçer.
+"""
 _LISTE_OGESI_RE = re.compile(r"^[ \t]*(?:[-*•]|\d+[.)])[ \t]+(\S.*?)[ \t]*$", re.M)
 
 _LISTE_YOLU_RE = re.compile(r"^(?P<alan>[a-z_]+)\[(?P<sira>\d+)\]$")
@@ -168,6 +199,24 @@ _VIDEO_YOLU_RE = re.compile(r"^video_kodlar/(?P<havuz>[a-z]+)\[(?P<sira>\d+)\]$"
 
 class SynthesisFailed(RuntimeError):
     """Sentez terminal arızası — yarım sonuç motora ULAŞMAZ."""
+
+
+class SynthesisOutputError(SynthesisFailed):
+    """Model ÇIKTISININ biçimi hatalı — aynı girdiyle düzeltme istenebilir.
+
+    `SynthesisFailed` terminal anlam taşır ve öyle KALIR; bu alt sınıf o
+    kümenin içinden YALNIZ "modelin yazdığı belge yanlış biçimde" hâlini
+    ayırır. Ayrım dar tutulur, çünkü her genişletme bir model çağrısı daha
+    ödetir:
+
+    **Kapsamda:** eksik/sırasız bölüm · okunamayan JSON gövdesi · bölümün
+    beklenen tipte olmaması · boş özet.
+
+    **Kapsam DIŞI (hemen terminal):** sözleşme pin sapması · eksik denetçi ·
+    geçersiz tur · aracın hiç koşmaması ya da zaman aşımı · ölçüm taşımayan
+    zarf · veritabanı hatası · içerik yazım kapısı. Bunların hiçbiri "modele
+    tekrar sor" ile düzelmez; tekrar sormak arızayı gizler.
+    """
 
 
 @dataclass(frozen=True)
@@ -274,6 +323,93 @@ def validate(result: SynthesisResult) -> list[str]:
 # ─── 2. Çıktı ayrıştırma ────────────────────────────────────────────────────
 
 
+def _cikti_butcesini_dogrula(sonuc: RunnerOutcome) -> None:
+    """Koşum kendi ÖLÇÜMÜNÜ taşımalı; taşımıyorsa zarf okunamamıştır.
+
+    Ölçümün YOKLUĞU başarı sayılmaz: sentez `json` kipinde koşar, yani ölçüm
+    taşımayan bir sonuç zarfın okunamadığı anlamına gelir ve o hâlde gövdenin
+    tam olup olmadığı BİLİNMEZ (İlke 9(4): doğrulanmamış, "sorunsuz" değil).
+
+    **BURADA JETON TAVANI YOKTUR — denendi ve ZARAR VERDİ (2026-09-22).**
+    Kısa ömürlü bir kapı, bildirilen kümülatif çıktı jetonu 48.000'i aşınca
+    turu düşürüyordu. Ölçüm yanlış şeyi sayıyordu: zarfın `output_tokens`
+    alanı TÜM turların toplamıdır ve model düşünmesini AYRI bir mesaja
+    koyabilir. `kosu-8a2081d4…` koşumunda düşünme turu 56.554 jeton yedi,
+    cevap turu 22.468 jetonla 39.082 karakteri TEK mesajda ve `end_turn` ile
+    tamamladı; dosya dört bölümün dördünü de taşıyordu (biçim kapısı 0 hata).
+    Kapı o sağlam turu öldürdü ve bir denetçi turunu (24 dk + para) çöpe attı.
+    Kesilmenin doğru işareti bir mesajın `max_tokens` ile bitmesidir ve `json`
+    zarfı yalnız SON mesajın `stop_reason`'ını verir — yani bu zarfla
+    ölçülemez. Vekil bir sayıyla kapı kurulmaz.
+    """
+    olcum = sonuc.olcum
+    if olcum is None:
+        raise SynthesisFailed(
+            "sentez koşumu ÖLÇÜM taşımıyor — `json` kipinde zarf okunamamış "
+            "demektir; gövdenin kesilip kesilmediği doğrulanamaz"
+        )
+
+
+def _cikti_bicimini_coz(ham: str) -> tuple[dict, list, list[str], str]:
+    """Modelin yazdığı belgeyi dört parçaya çözer.
+
+    Bu fonksiyonun attığı HER hata `SynthesisOutputError`'dur, yani düzeltme
+    hakkı kapsamındadır. Kapsamı genişletmek isteyen, hatayı BURAYA taşır —
+    böylece "ne düzeltilebilir" sorusunun tek bir yeri olur.
+    """
+    bolumler, hatalar = _bolumlere_ayir(ham)
+    if hatalar:
+        raise SynthesisOutputError("; ".join(hatalar))
+
+    aday = _json_govdesi(
+        bolumler[SENTEZ_BOLUM_ANAHTARLARI[0]], SENTEZ_BOLUM_ANAHTARLARI[0]
+    )
+    if not isinstance(aday, dict):
+        raise SynthesisOutputError(
+            f"{SENTEZ_BOLUM_ANAHTARLARI[0]} nesne DEĞİL: {type(aday).__name__}"
+        )
+    ham_gunluk = _json_govdesi(
+        bolumler[SENTEZ_BOLUM_ANAHTARLARI[1]], SENTEZ_BOLUM_ANAHTARLARI[1]
+    )
+    if not isinstance(ham_gunluk, list):
+        raise SynthesisOutputError(
+            f"{SENTEZ_BOLUM_ANAHTARLARI[1]} liste DEĞİL: {type(ham_gunluk).__name__}"
+        )
+    sorular = _liste_ogeleri(bolumler[SENTEZ_BOLUM_ANAHTARLARI[2]])
+    ozet = bolumler[SENTEZ_BOLUM_ANAHTARLARI[3]].strip()
+    if not ozet:
+        raise SynthesisOutputError(
+            f"{SENTEZ_BOLUM_ANAHTARLARI[3]} BOŞ — onay ekranının girdisi boş olamaz"
+        )
+    return aday, ham_gunluk, sorular, ozet
+
+
+def _duzeltme_istemi(istem: str, hata: SynthesisOutputError, deneme: int) -> str:
+    """Özgün istem + doğrulayıcının SOMUT hatası.
+
+    **"Devam et" YETMEZ — ölçüldü (2026-09-22).** `kosu-3f22d638…` koşumunda
+    araç kendiliğinden devam etti (*"Output token limit hit. Resume directly"*)
+    ve devam mesajında da dört bölümün ikisini yazmadan bitirdi. Modele NEYİN
+    yanlış olduğu söylenmezse aynı belgeyi aynı kusurla üretir.
+
+    Belge BAŞTAN istenir, parça istenmez: kesilmiş bir gövdeyle yeni parçayı
+    birleştirmek, modelin bölümü yeniden yazmış ya da JSON ortasında kesilmiş
+    olma ihtimali yüzünden UYDURMA üretir.
+    """
+    return (
+        f"{istem}\n\n"
+        "---\n\n"
+        f"## ÖNCEKİ DENEME REDDEDİLDİ (deneme {deneme})\n\n"
+        "Yukarıdaki görevi bir kez ürettin; çıktı mekanik doğrulamadan GEÇMEDİ. "
+        "Doğrulayıcının bulduğu somut hata:\n\n"
+        f"> {hata}\n\n"
+        "Şimdi belgenin TAMAMINI baştan yaz. Parça, ek ya da yama gönderme: "
+        "dört bölüm de (`ADAY PAKET` · `DECISION_LOG` · `AÇIK SORULAR` · "
+        "`ÖZET`) eksiksiz, numaralı ve sözleşmedeki SIRAYLA olmalı. "
+        "Açıklama, özür ya da ne yaptığının özeti YAZMA — yalnız belgeyi ver.\n"
+    )
+
+
 def _bolumlere_ayir(text: str) -> tuple[dict[str, str], list[str]]:
     """Çıktıyı dört bölüme ayırır; küme ya da SIRA sapmışsa hata döner."""
     eslesmeler = list(_BOLUM_BASLIGI_RE.finditer(text))
@@ -326,20 +462,62 @@ def _satir_satir_json(ham: str) -> list | None:
 
 
 def _json_govdesi(govde: str, etiket: str) -> Any:
-    """Bölümün JSON gövdesi — çitli blok varsa O, yoksa bölümün kendisi.
+    """Bölümün JSON gövdesi — çitli blokların TAMAMI, yoksa bölümün kendisi.
 
-    İki okuma yolu YOKTUR: çit varsa gövde çitin içidir; model çiti unutursa
+    İki okuma yolu YOKTUR: çit varsa gövde çitlerin içidir; model çiti unutursa
     bölümün tamamı denenir. Ayrıştırılamayan gövde SESSİZ boş sonuç üretmez.
+
+    **BİRDEN ÇOK BLOK KAYIP ÜRETMEZ (2026-09-22 ölçümü).** Önceki yazım
+    `.search()` ile yalnız İLK bloğu alıyordu ve kalanı sessizce düşürüyordu.
+    Kayıtlı sekiz çıktının ayrıştırılabilen altısında bu iki kez gerçekleşti:
+    `kosu-7705437…` 79 kaydın 60'ını, `DUSMUS-2026-09-18-jsonl-…` 90 kaydın
+    61'ini döndürüyordu. Birincisi VERİTABANINA da 60 kayıtla indi — reddedilen
+    adayların denetim izi hiç yazılmadı.
+
+    Bugünkü kural: her blok AYRI ayrıştırılır ve sonuçlar BİRLEŞTİRİLİR, ama
+    yalnız birleştirilebilir olanlar. Bloklardan biri liste değilse (ör. aday
+    paket gibi TEK nesne) çokluk ANLAMSIZDIR ve reddedilir — hangi nesnenin
+    geçerli olduğunu seçmek UYDURMA olurdu. Bozuk blok da yutulmaz: kayıpsızlık,
+    hatayı görmezden gelmek değildir.
     """
-    eslesme = _JSON_FENCE_RE.search(govde)
-    ham = eslesme.group(1) if eslesme else govde
+    bloklar = [parca for parca in _JSON_FENCE_RE.findall(govde)]
+    if not bloklar:
+        return _tek_govde(govde, etiket)
+    if len(bloklar) == 1:
+        return _tek_govde(bloklar[0], etiket)
+
+    okunan = [_tek_govde(parca, f"{etiket} (blok {sira})")
+              for sira, parca in enumerate(bloklar, start=1)]
+    if all(isinstance(parca, dict) for parca in okunan):
+        # Hepsi NESNE: bölüm ya tek nesneliktir (aday paket) ya da her blok tek
+        # kayıtlık bir günlüktür — ikisi bu gövdeden AYIRT EDİLEMEZ. Birini
+        # seçmek uydurma olurdu, o yüzden reddedilir.
+        raise SynthesisOutputError(
+            f"{etiket} bölümü birden çok çitli blok taşıyor ve hepsi tek NESNE "
+            f"({len(okunan)} blok) — hangisinin geçerli olduğu ya da bunların "
+            "tek bir günlük mü olduğu gövdeden anlaşılmıyor; bölüm TEK blokta "
+            "yazılmalı"
+        )
+    # En az biri liste: bölüm KAYIT DİZİSİDİR. Tek kayıtlık blok (`{...}`) o
+    # dizinin bir öğesidir; atılmaz, tek öğelik liste gibi eklenir.
+    birlesik: list[Any] = []
+    for parca in okunan:
+        if isinstance(parca, list):
+            birlesik.extend(parca)
+        else:
+            birlesik.append(parca)
+    return birlesik
+
+
+def _tek_govde(ham: str, etiket: str) -> Any:
+    """Tek bir gövdeyi okur: önce JSON, sonra satır-satır JSON (JSONL)."""
     try:
         return json.loads(ham)
     except (json.JSONDecodeError, ValueError) as hata:
         satirlar = _satir_satir_json(ham)
         if satirlar is not None:
             return satirlar
-        raise SynthesisFailed(
+        raise SynthesisOutputError(
             f"{etiket} bölümü JSON olarak okunamadı: {hata}"
         ) from hata
 
@@ -1037,43 +1215,52 @@ async def _kos(
         doktor_raporlari=doktor_raporlari,
     )
     kok.mkdir(parents=True)
-    istem_yolu = kok / GOREV_DOSYA_ADI
-    with istem_yolu.open("x", encoding="utf-8") as akis:
-        akis.write(istem)
 
-    sonuc = runner.run(SENTEZ_ARACI, kok, istem_yolu)
-    if sonuc.durum != "tamam":
-        raise SynthesisFailed(
-            f"sentez aracı sonuç ÜRETMEDİ: durum={sonuc.durum!r}, "
-            f"cikis={sonuc.exit_code!r}"
+    # ── ÜRETİM + SINIRLI DÜZELTME ───────────────────────────────────────────
+    # Koşu satırı bu döngü boyunca `calisiyor` KALIR: girdiler, denetçi
+    # raporları, sözleşme ve görüntü sabittir; değişen tek şey modelin yazdığı
+    # belgedir. Deneme sırası YENİ BİR KOŞU KİMLİĞİ DEĞİLDİR (K-83 ile
+    # karıştırılmaz) — aynı sentez işleminin içindeki tekrar denemedir.
+    suanki_istem = istem
+    deneme = 0
+    while True:
+        deneme += 1
+        istem_adi = (
+            GOREV_DOSYA_ADI if deneme == 1 else f"{deneme:02d}-SENTEZ-DUZELTME.md"
         )
-    with (kok / CIKTI_DOSYA_ADI).open("x", encoding="utf-8") as akis:
-        akis.write(sonuc.stdout)
+        istem_yolu = kok / istem_adi
+        with istem_yolu.open("x", encoding="utf-8") as akis:
+            akis.write(suanki_istem)
 
-    bolumler, hatalar = _bolumlere_ayir(sonuc.stdout)
-    if hatalar:
-        raise SynthesisFailed("; ".join(hatalar))
+        sonuc = runner.run(SENTEZ_ARACI, kok, istem_yolu)
+        if sonuc.durum != "tamam":
+            # Araç arızası MODEL ÇIKTI HATASI DEĞİLDİR: tekrar sormak arızayı
+            # gizler ve ikinci kez ödetir.
+            raise SynthesisFailed(
+                f"sentez aracı sonuç ÜRETMEDİ: durum={sonuc.durum!r}, "
+                f"cikis={sonuc.exit_code!r}"
+            )
+        with (kok / _cikti_dosya_adi(deneme)).open("x", encoding="utf-8") as akis:
+            akis.write(sonuc.stdout)
+        if sonuc.ham_akis is not None:
+            # Ham olay akışı: gövdenin nasıl kurulduğunun KANITI. Yoksa dosya
+            # UYDURULMAZ — boş bir `.jsonl`, akışın olduğunu ima ederdi.
+            akis_adi = _cikti_dosya_adi(deneme).replace(
+                "-SENTEZ-CIKTISI.md", "-SENTEZ-AKISI.jsonl"
+            )
+            with (kok / akis_adi).open("x", encoding="utf-8") as dosya:
+                dosya.write(sonuc.ham_akis)
 
-    aday = _json_govdesi(
-        bolumler[SENTEZ_BOLUM_ANAHTARLARI[0]], SENTEZ_BOLUM_ANAHTARLARI[0]
-    )
-    if not isinstance(aday, dict):
-        raise SynthesisFailed(
-            f"{SENTEZ_BOLUM_ANAHTARLARI[0]} nesne DEĞİL: {type(aday).__name__}"
-        )
-    ham_gunluk = _json_govdesi(
-        bolumler[SENTEZ_BOLUM_ANAHTARLARI[1]], SENTEZ_BOLUM_ANAHTARLARI[1]
-    )
-    if not isinstance(ham_gunluk, list):
-        raise SynthesisFailed(
-            f"{SENTEZ_BOLUM_ANAHTARLARI[1]} liste DEĞİL: {type(ham_gunluk).__name__}"
-        )
-    sorular = _liste_ogeleri(bolumler[SENTEZ_BOLUM_ANAHTARLARI[2]])
-    ozet = bolumler[SENTEZ_BOLUM_ANAHTARLARI[3]].strip()
-    if not ozet:
-        raise SynthesisFailed(
-            f"{SENTEZ_BOLUM_ANAHTARLARI[3]} BOŞ — onay ekranının girdisi boş olamaz"
-        )
+        # Çıktı dosyası ÖNCE yazılır: kesilmiş gövde de teşhis için diskte kalsın.
+        _cikti_butcesini_dogrula(sonuc)
+
+        try:
+            aday, ham_gunluk, sorular, ozet = _cikti_bicimini_coz(sonuc.stdout)
+            break
+        except SynthesisOutputError as hata:
+            if deneme > SENTEZ_DUZELTME_HAKKI:
+                raise
+            suanki_istem = _duzeltme_istemi(istem, hata, deneme)
 
     gunluk, sorular = _kimlik_bagla(aday, ham_gunluk, aktif_birimler, tur, sorular)
 

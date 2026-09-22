@@ -1658,6 +1658,14 @@ class ToolSpec:
 
     argv: tuple[str, ...]
 
+    cikti_bicimi: str
+    """Aracın çıktı sözleşmesi — BEYAN ZORUNLUDUR, varsayılanı YOK.
+
+    `kullanici` emsali: varsayılan konsaydı yarın eklenen bir araç sözleşmeyi
+    sessizce devralır ve zarfı ayrıştırılmayan bir çıktı "rapor gövdesi" diye
+    akardı. Kapalı küme `CIKTI_BICIMLERI`'dir.
+    """
+
     kullanici: str | None
     """Alt sürecin koşacağı İŞLETİM SİSTEMİ kullanıcısı — BEYAN ZORUNLUDUR (T9).
 
@@ -1695,6 +1703,34 @@ class ToolSpec:
                 f"adıdır: {self.kullanici!r} — boş ad, kimliği çözülemeyen bir "
                 "beyandır ve fail-closed düşmesi gereken yolu belirsiz bırakır"
             )
+        if self.cikti_bicimi not in CIKTI_BICIMLERI:
+            raise ValueError(
+                f"ToolSpec.cikti_bicimi kapalı kümenin dışında: "
+                f"{self.cikti_bicimi!r} — {list(CIKTI_BICIMLERI)}"
+            )
+
+
+CIKTI_BICIMLERI: tuple[str, ...] = ("text", "json", "stream-json")
+"""Araçların BEYAN ettiği çıktı sözleşmeleri — kapalı küme.
+
+**YANLIŞLANMIŞ DENEME — tekrar edilmesin (2026-09-22).** Aynı gün `claude`
+alt süreçlerine `MAX_THINKING_TOKENS=16000` yazıldı; değer çocuğun ortamında
+ÖLÇÜLDÜ (`/proc/<pid>/environ`, canlı koşum) ve model yine **56.502** jeton
+düşündü — tavan BAĞLAMADI. Öncesindeki iki kollu prob (1.511 → 1.053) tek
+koşumluktu ve gürültüyle karıştırıldı. Değişken kaldırıldı: vaat ettiği sınırı
+uygulamayan bir ayar, kodda durduğu sürece yanlış güven üretir.
+
+`text`: stdout doğrudan rapor gövdesidir. `json`: stdout, CLI'nın sonuç zarfıdır;
+gövde `result` alanındadır ve zarf koşum ÖLÇÜMÜNÜ de taşır (jeton, tur, maliyet).
+`stream-json`: stdout satır satır OLAY akışıdır; gövde BÜTÜN `assistant`
+olaylarının metin bloklarından kurulur.
+
+**Neden akış kipi var (2026-09-22 ölçümü).** `text` ve `json` YALNIZ SON asistan
+mesajını verir. `kosu-3f22d638…` koşumunda cevap iki mesaja bölündü ve ilk
+mesajın 22.230 karakteri artefakta HİÇ girmedi — kayıp sessizdi.
+Ölçüm, kesilen bir cevabı oturum kayıtlarından geri kurmak zorunda kalmamak
+içindir — 2026-09-22'de o iş 40 dakika sürdü.
+"""
 
 
 IZOLASYON_KULLANICISI = "codex"
@@ -1908,6 +1944,7 @@ ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
                 *_CLAUDE_DENETCI_IZOLASYON,
             ),
             kullanici=None,
+            cikti_bicimi="text",
         ),
         DENETCI_ROLLERI[1]: ToolSpec(
             (
@@ -1923,10 +1960,19 @@ ARAC_KOMUTLARI: Mapping[str, ToolSpec] = MappingProxyType(
                 "-",
             ),
             kullanici=IZOLASYON_KULLANICISI,
+            cikti_bicimi="text",
         ),
         SENTEZ_ARACI: ToolSpec(
-            ("claude", "-p", "--output-format", "text", *_CLAUDE_IZOLASYON),
+            (
+                "claude",
+                "-p",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                *_CLAUDE_IZOLASYON,
+            ),
             kullanici=None,
+            cikti_bicimi="stream-json",
         ),
     }
 )
@@ -1963,6 +2009,22 @@ class RunnerOutcome:
     stdout: str
     stderr: str
     exit_code: int | None
+    ham_akis: str | None = None
+    """Ham olay akışı — yalnız `stream-json` kipinde vardır.
+
+    Teşhis izidir: bugün kesilen bir cevabı geri kurmak, alt sürecin oturum
+    kaydının TESADÜFEN kalıcı `HOME` altına düşmesi sayesinde mümkün oldu.
+    Tesadüf kanıt altyapısı değildir.
+    """
+
+    olcum: Mapping[str, object] | None = None
+    """Koşumun kendi ÖLÇÜMÜ — `json` ve `stream-json` kiplerinde vardır.
+
+    `None` "ölçüm YOK" demektir ve bu dürüst etikettir: `text` kipinde CLI
+    jeton/tur/maliyet bildirmez ve buraya sıfır yazmak uydurma olurdu (İlke 9).
+    Anahtarlar: `cikti_jetonu` (kümülatif — ölçüldü 2026-09-22) · `dusunme_jetonu` ·
+    `tur_sayisi` · `maliyet_usd`.
+    """
 
     def __post_init__(self) -> None:
         if self.durum not in RUNNER_DURUMLARI:
@@ -2412,6 +2474,19 @@ class SubprocessRunner:
         stdout = self._metin(tamamlanan.stdout)
         stderr = self._metin(tamamlanan.stderr)
         kod = tamamlanan.returncode
+        olcum: Mapping[str, object] | None = None
+        ham_akis: str | None = None
+        if kod == 0 and spec.cikti_bicimi == "json":
+            stdout, olcum, zarf_hatasi = self._zarfi_coz(stdout)
+            if zarf_hatasi is not None:
+                stderr = f"{stderr}\n{zarf_hatasi}".strip()
+                kod = 1
+        elif kod == 0 and spec.cikti_bicimi == "stream-json":
+            ham_akis = stdout
+            stdout, olcum, akis_hatasi = self._akisi_coz(stdout)
+            if akis_hatasi is not None:
+                stderr = f"{stderr}\n{akis_hatasi}".strip()
+                kod = 1
         if kod != 0:
             durum = "hata"
         elif not stdout.strip():
@@ -2421,9 +2496,132 @@ class SubprocessRunner:
         else:
             durum = "tamam"
         self._gunlukle(tool, durum, stderr)
+        if olcum is not None:
+            _LOG.info(
+                "alt süreç ölçümü: arac=%s tur=%s cikti_jetonu=%s "
+                "dusunme_jetonu=%s maliyet_usd=%s",
+                tool,
+                olcum.get("tur_sayisi"),
+                olcum.get("cikti_jetonu"),
+                olcum.get("dusunme_jetonu"),
+                olcum.get("maliyet_usd"),
+            )
         return RunnerOutcome(
-            durum=durum, stdout=stdout, stderr=stderr, exit_code=kod
+            durum=durum,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=kod,
+            ham_akis=ham_akis,
+            olcum=olcum,
         )
+
+    @staticmethod
+    def _zarfi_coz(
+        ham: str,
+    ) -> tuple[str, Mapping[str, object] | None, str | None]:
+        """CLI sonuç zarfını gövde + ölçüme ayırır; zarf bozuksa SEBEBİ döner.
+
+        Zarf BAŞARIYI BEYAN ETMEK zorundadır (`subtype == "success"` ve
+        `is_error` yanlış). Beyan yoksa gövde okunmaz: hata zarfının `result`
+        alanı da dolu gelebilir ve o metin rapor sanılırsa arıza sessizce
+        geçerdi.
+
+        Alan adları kurulu CLI'nın çıktısından ELLE okundu (2026-09-22 probu);
+        üretim kodundan türetilmiş bir şema değildir.
+        """
+        try:
+            zarf = json.loads(ham)
+        except (json.JSONDecodeError, ValueError) as hata:
+            return "", None, f"sonuç zarfı ayrıştırılamadı: {hata}"
+        if not isinstance(zarf, dict):
+            return "", None, f"sonuç zarfı nesne DEĞİL: {type(zarf).__name__}"
+        if zarf.get("is_error") or zarf.get("subtype") != "success":
+            return (
+                "",
+                None,
+                "sonuç zarfı başarı BEYAN ETMİYOR: "
+                f"subtype={zarf.get('subtype')!r} is_error={zarf.get('is_error')!r}",
+            )
+        govde = zarf.get("result")
+        if not isinstance(govde, str):
+            return "", None, f"sonuç zarfının gövdesi dize DEĞİL: {type(govde).__name__}"
+        kullanim = zarf.get("usage") or {}
+        ayrinti = kullanim.get("output_tokens_details") or {}
+        olcum = {
+            "cikti_jetonu": kullanim.get("output_tokens"),
+            "dusunme_jetonu": ayrinti.get("thinking_tokens"),
+            "tur_sayisi": zarf.get("num_turns"),
+            "maliyet_usd": zarf.get("total_cost_usd"),
+            "bitis_nedeni": zarf.get("stop_reason"),
+        }
+        return govde, olcum, None
+
+    @staticmethod
+    def _akisi_coz(
+        ham: str,
+    ) -> tuple[str, Mapping[str, object] | None, str | None]:
+        """Olay akışını gövde + ölçüme ayırır; akış bozuksa SEBEBİ döner.
+
+        **Gövde TEK KAYNAKTAN kurulur:** bütün `assistant` olaylarının `text`
+        blokları, geliş sırasıyla. `result.result` AYRICA EKLENMEZ — ölçüldü
+        (2026-09-22): o alan son metin bloğuna birebir eşit (1.734 karakter),
+        ikisini birden eklemek gövdeyi çift sayardı.
+
+        **Mesaj kimliğine göre tekilleştirme YAPILMAZ.** Ölçüldü: aynı
+        `message.id` birden çok `assistant` olayı üretiyor (thinking → tool_use
+        → text) ve her olay TEK blok taşıyor. Kimliğe göre "ilkini tut" demek,
+        metin bloğunu düşürmek olurdu.
+
+        **Ölçüm `result` olayından alınır, olaylar TOPLANMAZ:** asistan
+        olaylarının `usage`'ı parçalıdır (ölçüldü: 8 · 8 · 16 · 2 · 2).
+        Bitiş nedeni de yalnız orada dolu gelir.
+        """
+        parcalar: list[str] = []
+        kapanis: dict[str, Any] | None = None
+        for satir in ham.splitlines():
+            satir = satir.strip()
+            if not satir:
+                continue
+            try:
+                olay = json.loads(satir)
+            except (json.JSONDecodeError, ValueError) as hata:
+                return "", None, f"olay akışı ayrıştırılamadı: {hata}"
+            if not isinstance(olay, dict):
+                continue
+            if olay.get("type") == "assistant":
+                icerik = (olay.get("message") or {}).get("content") or []
+                for blok in icerik:
+                    if isinstance(blok, dict) and blok.get("type") == "text":
+                        parcalar.append(blok.get("text") or "")
+            elif olay.get("type") == "result":
+                kapanis = olay
+        if kapanis is None:
+            return (
+                "",
+                None,
+                "olay akışında `result` olayı YOK — akış yarıda kalmış demektir; "
+                "eldeki parçalar TAM sayılmaz",
+            )
+        if kapanis.get("is_error") or kapanis.get("subtype") != "success":
+            return (
+                "",
+                None,
+                "akış başarı BEYAN ETMİYOR: "
+                f"subtype={kapanis.get('subtype')!r} is_error={kapanis.get('is_error')!r}",
+            )
+        govde = "".join(parcalar)
+        if not govde.strip():
+            return "", None, "akışta hiç metin bloğu YOK — gövde kurulamadı"
+        kullanim = kapanis.get("usage") or {}
+        ayrinti = kullanim.get("output_tokens_details") or {}
+        olcum = {
+            "cikti_jetonu": kullanim.get("output_tokens"),
+            "dusunme_jetonu": ayrinti.get("thinking_tokens"),
+            "tur_sayisi": kapanis.get("num_turns"),
+            "maliyet_usd": kapanis.get("total_cost_usd"),
+            "bitis_nedeni": kapanis.get("stop_reason"),
+        }
+        return govde, olcum, None
 
 
 @dataclass(frozen=True)
