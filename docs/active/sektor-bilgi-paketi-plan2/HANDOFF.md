@@ -16,7 +16,7 @@ turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions 
    `gecti/0 not`); **H2** eski 7 sütunlu rapor 0 iddiayla tura giriyor, denetçi anınca motor çoğunluğa
    sayıyordu ("eski raporlar yeni hatta girmez" hükmü kodda zorlanmıyordu).
 2. Eray kararı: H1 + H2 (+ M1) düzeltilir → kapanış turu → üç araştırma. M2 (Katman-1 tasdiği ölü koşuda
-   yazılabilir; hakemler çelişti) **cevaplanmadı** — Claude önerisi "bırak" (kodun belgeli gerekçesi), politika gereği `accepted_risk`; Eray isterse yeniden açılır.
+   yazılabilir; hakemler çelişti) **Eray kararı: BIRAK** (örnekli açıklama sonrası; kodun belgeli gerekçesi) — `accepted_risk`.
 3. Düzeltme `fceb2d2` (TDD: 10 test önce kırmızı, 10/10 mutasyon yakalandı): `_madde_anahtari` etiketi
    düşürür; `iddiasiz_kaynaklar` tek üretici, paket kurucu ve sentez karışık kümeyi REDDEDER (süzmez);
    motor yalnız iddia bağı taşıyan kaynağı sayar (üretimde no-op — ayrıştırıcı zaten eşitlik zorluyor,
@@ -25,14 +25,14 @@ turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions 
    (N1-N6). N1 · N2 · N4 · N5 · N6 gönüllü düzeltildi (belge/test/log; **bağımsız hakem görmedi**), N3
    `accepted_risk`.
 5. Commit'ler: `1e9a133` docs(reviews) attempt-1 · `fceb2d2` fix(hat) H1+H2+M1+L4 · `317664f` fix(hat) gönüllü low
-   düzeltmeleri · son docs commit'i kapanış raporu + TASK/HANDOFF (bu dosya). Push EDİLMEDİ (5 commit ileride).
+   düzeltmeleri · son docs commit'i kapanış raporu + TASK/HANDOFF (bu dosya). Push EDİLMEDİ.
 
 **Dosya durumu:**
 - Dış depo: `34a34db` (iki sözleşme; pin ona bağlı). Eray'ın 41 silinmiş dosyası + 3 yeni (`.bak`, `sentez/`)
   çalışma ağacında hâlâ commit'lenmemiş — bana ait değil, dokunulmadı.
 - Brief `Kuyumculuk/kuyumculuk.md`: bilinçli olarak depo dışı (`.git/info/exclude`), 2-5. bölümleri şablonla
   BAYT BAYT aynı (bugün ölçüldü); sürümü araştırma kaydedilirken `girdi_ozeti` hash'iyle DB'ye iner.
-- Monorepo: ağaç temiz; dal `origin`'in 5 commit ilerisinde, push Eray kararı.
+- Monorepo: ağaç temiz; push Eray kararı (sayı `git log @{u}..HEAD` ile ölçülür, buraya yazılmaz).
 
 # Verification
 
@@ -44,7 +44,7 @@ turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions 
 | Mutasyon (dosya yedeğiyle geri alındı) | attempt-1 düzeltmeleri 10/10 yakalandı · N2 1/1 |
 | Orkestratör probları (düzeltme sonrası) | aynı gövde + farklı etiket → `notlu-gecti / 2 not`; eski rapor → 0 iddia, adıyla bildiriliyor |
 | Codex kapanış turu | rc=0, 491 s, çıktı tam, "no material findings" |
-| Tasarım dokümanı ↔ kod (Ek §1-§4 tek tek) | Ek'in tek açık kalemi H2 idi → kapandı; "atıf artıkları silinir" satırı kodda NOT olarak (6 gerçek raporda 0 artık) — Claude önerisi: kalsın; Eray cevaplamadı |
+| Tasarım dokümanı ↔ kod (Ek §1-§4 tek tek) | Ek'in tek açık kalemi H2 idi → kapandı; "atıf artıkları silinir" satırı kodda NOT olarak (6 gerçek raporda 0 artık) — Eray kararı: böyle kalsın |
 
 **DENENMEYEN / DOĞRULANMAYAN:**
 - Yeni şablonla hiçbir gerçek rapor alınmadı; LLM'lerin 9 sütunu, `[C: …]`'yi, `kaynak-bulunamadı`yı doğru
@@ -75,7 +75,7 @@ turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions 
   mutabakatla girer.
 - Denetçi örneklemi kaynak başına 3 satır; örneklenmeyen iddiada beyan olduğu gibi geçer (kanıt kapısı
   beyanı örneklemsiz KABUL eder — tasarım gereği).
-- M2: ölü koşuya Katman-1 tasdiği yazılabilir (aktivasyon etkisi yok, yanıltıcı kayıt riski) — karar AÇIK, Claude önerisi "bırak".
+- M2: ölü koşuya Katman-1 tasdiği yazılabilir (aktivasyon etkisi yok, yanıltıcı kayıt riski) — Eray kararı (2026-09-22): bırak.
 
 # Notes For Claude
 
@@ -90,7 +90,7 @@ turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions 
 
 # Notes For Codex
 
-Attempt-1 (701 s): 1 high (H2), 2 medium (M2 Katman-1 kapı dışı — Claude hakemiyle çelişti, karar Eray'da açık;
+Attempt-1 (701 s): 1 high (H2), 2 medium (M2 Katman-1 kapı dışı — Claude hakemiyle çelişti, Eray kararı: bırak;
 M3 TOCTOU). Kapanış (491 s): approve, dört bulgu da closed, bulgu yok; kapsam beyanı tam. Kalan dikkat
 listesi bir sonraki `/security-review-claude-codex` için: (1) `iddiasiz_kaynaklar` elenmiş-atlama sınırı,
 (2) paket/sentez reddinin operatör görünürlüğü (bildirim metni), (3) `RunAlreadyTerminal` yakalamalarının

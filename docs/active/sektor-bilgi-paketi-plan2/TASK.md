@@ -1638,10 +1638,10 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   3. **M1 `runs/RunAlreadyTerminal-sarilmamis-cagri-yerleri`** (medium, kendi açtığımız gerileme
      `2bf3d71`) — `synthesis.py:1164` · `auditors.py:3188` · `cli:367` sarılı değil; `ALAN_HATALARI`'nda
      yok; `runs.py:108` docstring yanlış. Aynı turda kapat.
-  Kabul edilen risk (politika ch-only-v1; Eray'a soruldu, AÇIK CEVAP GELMEDİ — Claude önerisi "bırak"):
-  M2 Katman-1 kapı dışında (belgeli karar `cli:1418`; hakemler çelişti), M3 kapı TOCTOU, L1-L3.
-  "Araç atıf artıkları silinir" tasarım satırı kodda not olarak duruyor (6 raporda 0 artık) — Claude
-  önerisi: kalsın, ilk tur artık gösterirse açılır; Eray cevaplamadı.
+  Kabul edilen risk (politika ch-only-v1): M2 Katman-1 kapı dışında (belgeli karar `cli:1418`; hakemler
+  çelişti) — **Eray kararı (2026-09-22, örnekli açıklama sonrası): BIRAK**; M3 kapı TOCTOU, L1-L3.
+  "Araç atıf artıkları silinir" tasarım satırı kodda not olarak duruyor (6 raporda 0 artık) — **Eray kararı
+  (2026-09-22): BÖYLE KALSIN**; ilk tur artık gösterirse yeniden açılır.
 
 - **[YÜKSEK — SIRADAKİ İŞ, 2026-09-21 akşam] Grup 3 KOD İNDİ; kapanış zinciri bekliyor.**
   Sıra: (a) dış depo commit — YAPILDI `34a34db` (yalnız iki sözleşme; Eray'ın 44 silinmiş
@@ -2817,7 +2817,7 @@ Authoritative state (stop-rule; locator `docs/reviews/.ledger-index/296deb840d9a
 | `brief-doctor/geri-baglanti-etiketi-tekrar-ve-adet-yuzeyi` (H1) | attempt-1 (2026-09-22) | 2 | 1 (`fceb2d2`) | 0 | [high, high→fixed] (claude) | introduced_by_fix (`8f54f15`) | original_finding | kapanış: iki hakem + orkestratör probu (deney `notlu-gecti/2 not`, kontrol `gecti/0 not`) + taze takım 4714 PASS; mutasyon 2/2 | confirmed | **fixed** (`fixed_confirmed`, dual) | `a76100bd…` |
 | `hat/eski-surum-rapor-mutabakata-oy-verir` (H2) | attempt-1 | 2 | 1 (`fceb2d2`) | 0 | [high, high→fixed] (codex) | introduced_by_fix (`8f54f15` — karışık sürüm penceresi bu revizyonla açıldı) | original_finding | kapanış: iki hakem + orkestratör probu (eski rapor adıyla bildiriliyor; paket + sentez reddediyor) + taze takım PASS; mutasyon 4/4; motor katmanı üretimde no-op (N1) — gerçek kapanış paket + sentez kapıları | confirmed | **fixed** (`fixed_confirmed`, dual) | `a76100bd…` |
 | `runs/RunAlreadyTerminal-sarilmamis-cagri-yerleri` (M1) | attempt-1 | 2 | 1 (`fceb2d2`) | 0 | [medium] (claude) | introduced_by_fix (`2bf3d71`) | touched_surface_regression | kapanış: 5 çağrı ifadesi tarandı; mutasyon 4/4 | confirmed | fixed (gönüllü; `policy_accepted` kaydı duruyor) | `a76100bd…` |
-| `cli/katman1-canlilik-kapisi-disinda` (M2) | attempt-1 | 1 | 0 | 0 | [medium] (codex; claude "tutarlı") | pre_existing (bilinçli dışlama `cli:1418`) | original_finding | kod okuması; hakemler-arası çelişki | confirmed (davranış) | accepted_risk (policy_accepted) — Eray'a soruldu, cevap YOK; Claude önerisi "bırak" | `a76100bd…` |
+| `cli/katman1-canlilik-kapisi-disinda` (M2) | attempt-1 | 1 | 0 | 0 | [medium] (codex; claude "tutarlı") | pre_existing (bilinçli dışlama `cli:1418`) | original_finding | kod okuması; hakemler-arası çelişki | confirmed (davranış) | accepted_risk (policy_accepted) — Eray kararı 2026-09-22: bırak | `a76100bd…` |
 | `cli/canlilik-kapisi-toctou` (M3) | attempt-1 | 1 | 0 | 0 | [medium] (codex) | pre_existing (kapı öncesi hiç kapı yoktu) | original_finding | statik | partial | accepted_risk (policy_accepted; güvenlik-nitelikli değil) | `a76100bd…` |
 | `brief-doctor/c-kapsama-docstring-bayat` (L1) · `engine/mevzuat-mi-rakam-vekili-kapsam` (L2) · `cli/e305` (L3) | attempt-1 | 1 | 0 | 0 | [low] | introduced_by_fix | original_finding | alt-hakem okuma | confirmed | accepted_risk (policy_accepted) | `a76100bd…` |
 | `brief-doctor/tekrar-notu-ad-literal` (L4, aralık dışı `ce69294`) | attempt-1 | 2 | 1 (`fceb2d2`) | 0 | [low] | pre_existing | original_finding | kapanış: ölçüldü (madde metni basılıyor); mutasyon 1/1 | confirmed | fixed (gönüllü) | `a76100bd…` |
