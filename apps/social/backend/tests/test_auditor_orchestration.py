@@ -300,6 +300,8 @@ def _doctor(kaynak_adi: str, metin: str) -> bd.DoctorReport:
         elemeler=(),
         kaynak_adi=kaynak_adi,
         icerik_ozeti=identity.canonical_sha(metin),
+        # `run` üretimi rapor her zaman iddia taşır (review 2026-09-22 H2).
+        iddialar=(bd.CIddia(no=1, alan="cta_kaliplari"),),
     )
 
 
@@ -3881,3 +3883,19 @@ def test_runner_child_environment_is_whitelisted(monkeypatch, tmp_path) -> None:
         "enjekte edilmiş bir talimat için doğrudan sızdırma kanalı"
     )
     assert "PATHSIZ" not in sonuc.stdout, "beyaz liste çalışmayı kırdı (PATH yok)"
+
+
+async def test_yarim_tur_terminal_kosuda_isaretleme_hatasiyla_patlamaz(kosu):
+    """Review 2026-09-22 M1: `_yarim` `mark_incomplete`'i sarmıyordu — terminal satırda
+    `RunAlreadyTerminal` fırlar, tur sonucu hiç dönmezdi."""
+    db, run_id, paket = kosu
+    from tests.test_pipeline_runs import _engine_result
+
+    await runs.record_result(db, run_id=run_id, result=_engine_result())
+    ciktilar = _iki_gecerli_rapor()
+    ciktilar[auditors.DENETCI_ROLLERI[1]] = auditors.RunnerOutcome(
+        durum="hata", stdout="", stderr="araç düştü", exit_code=1
+    )
+    tur = await _tur_kos(db, paket, runner=SahteRunner(ciktilar), run_id=run_id)
+    assert tur.gecerli is False and tur.sebep
+    assert (await _durum(db, run_id))[0] == "tamamlandi"

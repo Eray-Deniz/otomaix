@@ -6980,3 +6980,65 @@ def test_bos_geri_baglanti_eksiksiz_gibi_gecmez(etiket: str) -> None:
     metin = _cta_maddesini_degistir(TEMIZ, 0, lambda s: re.sub(r"\[C: \d+\]", etiket, s))
     notlar = _geri_baglanti_notlari(metin)
     assert any("sözleşme yazımında değil" in m for m in notlar), notlar
+
+
+# ═══ Review 2026-09-22 — H1: `[C: n]` etiketi tekrar/adet YÜZEYİNE GİRMEZ ═══
+#
+# ÖLÇÜLDÜ (orkestratör probu, kontrol kollu): özdeş beş CTA gövdesi, madde
+# başına FARKLI `[C: n]` etiketiyle `gecti / 0 not` veriyordu; aynı etiketle
+# `notlu-gecti / 3 not`. Etiket KİMLİK metadatasıdır, maddenin içeriği değil;
+# karşılaştırma anahtarı bu ayrımı yapmıyordu.
+
+_ETIKET_SONU_RE = re.compile(r"\s*\[\s*C\s*:[^\]]*\]\s*$")
+
+
+def _cta_govdelerini_ayni_yap(metin: str, *, ayni_etiket: bool) -> str:
+    """Beş CTA maddesinin GÖVDESİNİ aynılaştırır; etiket korunur ya da teke iner."""
+    satirlar = metin.splitlines(True)
+    i, j = _md_blok(satirlar, "### cta_kaliplari")
+    maddeler = [k for k in range(i + 1, j) if satirlar[k].lstrip().startswith("- ")]
+    ilk = satirlar[maddeler[0]].rstrip("\n")
+    govde = _ETIKET_SONU_RE.sub("", ilk)
+    ilk_etiket = _ETIKET_SONU_RE.search(ilk).group(0)
+    for k in maddeler:
+        satir = satirlar[k].rstrip("\n")
+        etiket = ilk_etiket if ayni_etiket else _ETIKET_SONU_RE.search(satir).group(0)
+        satirlar[k] = govde + etiket + "\n"
+    return "".join(satirlar)
+
+
+def test_geri_baglanti_etiketi_tekrar_ve_adet_kapilarini_susturmaz() -> None:
+    """Aynı gövde + farklı etiket → tekrar notu VE adet alt sınırı notu (ikisi de)."""
+    deney = bd.run(_cta_govdelerini_ayni_yap(TEMIZ, ayni_etiket=False), source_name="P")
+    mesajlar = [b.mesaj for b in deney.notlar]
+    assert any("`cta_kaliplari` içinde bir madde 5 kez yazılmış" in m for m in mesajlar), mesajlar
+    assert any("`cta_kaliplari` 1 madde taşıyor, sözleşme alt sınırı 5" in m for m in mesajlar), mesajlar
+    # Kontrol kolu: temiz fixture iki notu da ÜRETMEZ — kapı hep-not değil.
+    temiz = [b.mesaj for b in bd.run(TEMIZ, source_name="P").notlar]
+    assert not any("kez yazılmış" in m or "alt sınırı 5" in m for m in temiz), temiz
+
+
+def test_tekrar_notu_tekrarlanan_maddenin_metnini_tasir() -> None:
+    """L4 (`ce69294`): düz string'deki `{{ad}}` f-string'den geçmiyordu, operatör literal `{ad}` görüyordu."""
+    rapor = bd.run(_cta_govdelerini_ayni_yap(TEMIZ, ayni_etiket=True), source_name="P")
+    notlar = [b.mesaj for b in rapor.notlar if "kez yazılmış" in b.mesaj]
+    assert notlar, "tekrar notu yok"
+    assert all("{ad}" not in m for m in notlar), notlar
+    assert any("randevu daveti" in m for m in notlar), notlar
+
+
+# ═══ Review 2026-09-22 — H2(a): iddia çözmeyen kaynak tura GİRMEZ ═══════════
+
+
+def test_iddia_cozmeyen_kaynak_adiyla_bilinir_ve_kapi_bildiriminde_gorunur() -> None:
+    """Eski (7 sütun) rapor `notlu-gecti` + 0 iddia ile sessizce geçerli sayılıyordu."""
+    eski = bd.run(_eski_surum_tablosu(TEMIZ), source_name="KAYNAK-1")
+    yeni = bd.run(TEMIZ, source_name="KAYNAK-2")
+    assert eski.iddialar == () and yeni.iddialar
+    assert bd.iddiasiz_kaynaklar([eski, yeni]) == ("KAYNAK-1",)
+    gate = bd.gate_round([eski, yeni])
+    assert "KAYNAK-1" in gate.bildirim and "iddia" in gate.bildirim.casefold(), gate.bildirim
+    # Kontrol kolu: iki temiz rapor → bildirim BOŞ, iddiasız küme BOŞ.
+    ucuncu = bd.run(kaynak(cta=6), source_name="KAYNAK-3")
+    assert bd.iddiasiz_kaynaklar([yeni, ucuncu]) == ()
+    assert bd.gate_round([yeni, ucuncu]).bildirim == ""

@@ -364,12 +364,17 @@ async def _kos_brief_doctor(conn, args) -> Sonuc:
         metin = Path(args.kaynak_dosya).read_text(encoding="utf-8")
         rapor = brief_doctor.run(metin, source_name=args.kaynak_adi)
     except Exception as hata:
-        await runs.mark_incomplete(
-            conn,
-            run_id=args.run_id,
-            asama="brief-doctor",
-            sebep=f"{type(hata).__name__}",
-        )
+        try:
+            await runs.mark_incomplete(
+                conn,
+                run_id=args.run_id,
+                asama="brief-doctor",
+                sebep=f"{type(hata).__name__}",
+            )
+        except runs.RunAlreadyTerminal:
+            # Review 2026-09-22 M1: terminal satır EZİLMEZ; özgün arıza yine
+            # bildirilir (yarış penceresi — kapı `calisiyor` görmüştü).
+            pass
         return ([f"brief-doctor yarım kaldı: {type(hata).__name__}"], RC_REFUSED)
 
     await runs.record_artifact(
@@ -1487,6 +1492,7 @@ async def _canli_kosu_kapisi(conn, args) -> Sonuc | None:
 
 ALAN_HATALARI: tuple[type[BaseException], ...] = (
     runs.RunNotVerified,
+    runs.RunAlreadyTerminal,
     runs.CorrectionRunRefused,
     runs.ArtifactStampMissing,
     runs.RollbackEvidenceUnavailable,

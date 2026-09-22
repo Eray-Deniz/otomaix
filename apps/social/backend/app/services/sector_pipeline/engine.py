@@ -1246,10 +1246,16 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         # `tasiyan == set(atiflar)` olmasını zaten garanti eder; küme yine de
         # BURADA da daraltılır — tek bir yerde tutulan bir değişmez, o yer
         # değişince sessizce kaybolur.
+        # Review 2026-09-22 H2(b): sayım satırın LİSTELEDİĞİ kaynaklardan değil,
+        # satırın İDDİA BAĞI kurduğu kaynaklardan. Sözleşme `kaynaklar` kümesini
+        # `kaynak-iddialari`ndaki kaynaklarla eşit tutar; iddiasız anılan kaynak
+        # (eski sürüm rapor) çoğunluğa oy VEREMEZ — paket kapısından bağımsız
+        # ikinci katman.
         kaynaklar = {
-            KAYNAK_ETIKETI.format(no)
+            KAYNAK_ETIKETI.format(atif.kaynak)
             for parca in tasiyan
-            for no in satir_evreni[parca].kaynaklar
+            for atif in satir_evreni[parca].kaynak_iddialari
+            if atif.kaynak in satir_evreni[parca].kaynaklar
         } & kabul_edilen
         # ÇELİŞEN DENETÇİ SONUÇLARI (Grup 2 çelişki kuralı, dış depo `0824c0f`):
         # aynı iddia için biri `DOĞRULANDI`, öteki `KAYNAKTA YOK` yazmışsa

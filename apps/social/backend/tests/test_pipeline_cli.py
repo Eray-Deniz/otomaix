@@ -40,6 +40,7 @@ from app.services import notifications  # noqa: E402
 from app.services.sector_pipeline import (  # noqa: E402
     auditors,
     brief_doctor,
+    identity,
     runs,
 )
 
@@ -1790,7 +1791,16 @@ def _kucuk_paket(tmp_path: Path, run_id: str):
         brief="brief",
         sources=kaynaklar,
         doctor_reports=[
-            brief_doctor.run(metin, source_name=f"KAYNAK-{sira}")
+            # `run` üretimi rapor her zaman iddia taşır; iddiasız rapor pakete
+            # giremez (review 2026-09-22 H2) — en küçük paket bunu taklit eder.
+            brief_doctor.DoctorReport(
+                sonuc=brief_doctor.SONUC_GECTI,
+                notlar=(),
+                elemeler=(),
+                kaynak_adi=f"KAYNAK-{sira}",
+                icerik_ozeti=identity.canonical_sha(metin),
+                iddialar=(brief_doctor.CIddia(no=1, alan="cta_kaliplari"),),
+            )
             for sira, metin in enumerate(kaynaklar, start=1)
         ],
         active_package=None,
@@ -1852,3 +1862,46 @@ def test_asama_kokleri_ARASTIRMA_DEPOSUNDA_kalir() -> None:
     """Kökler operatörün baktığı depodan DIŞARI taşmaz."""
     for ad, yol in _asama_kokleri("kosu-" + "c" * 32).items():
         assert runs.ARASTIRMA_DEPOSU_KOKU in yol.parents, (ad, yol)
+
+
+# ═══ Review 2026-09-22 — M1 ═════════════════════════════════════════════════
+
+
+def test_run_already_terminal_is_a_classified_domain_error() -> None:
+    """`RunAlreadyTerminal` alan hatasıdır: ham traceback değil, temiz `RC_REFUSED`."""
+    assert runs.RunAlreadyTerminal in cli.ALAN_HATALARI
+
+
+async def test_brief_doctor_arizasi_terminal_kosuda_ozgun_hatayi_bildirir(pkg_db, monkeypatch):
+    """Arıza kolundaki `mark_incomplete` terminal satırda fırlarsa ÖZGÜN hata kaybolmamalı."""
+    await _bos_evren(pkg_db)
+    sector_id = await _sub_sector(pkg_db)
+    run_id = runs.new_run_id()
+    await runs.open_run(pkg_db, sector_id=sector_id, run_id=run_id, kosu_turu="ilk")
+    from tests.test_pipeline_runs import _engine_result
+
+    await runs.record_result(pkg_db, run_id=run_id, result=_engine_result())
+
+    def _patla(source_text, *, source_name):
+        raise RuntimeError("araç düştü")
+
+    monkeypatch.setattr(cli.brief_doctor, "run", _patla)
+    satirlar, rc = await cli._kos_brief_doctor(
+        pkg_db,
+        _args(
+            "brief-doctor",
+            "--run-id",
+            run_id,
+            "--kaynak-dosya",
+            str(BACKEND_KOKU / "tests" / "__init__.py"),
+            "--kaynak-adi",
+            "KAYNAK-1",
+            "--sektor-slug",
+            "kuyumculuk",
+            "--damga",
+            runs.build_stamp(
+                model="brief-doctor", surum="1", tarih="2026-09-11", girdi_ozeti="test"
+            ),
+        ),
+    )
+    assert rc == cli.RC_REFUSED and "RuntimeError" in " ".join(satirlar), satirlar

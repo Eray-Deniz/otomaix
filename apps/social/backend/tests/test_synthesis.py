@@ -1732,3 +1732,47 @@ def test_ek_m_ve_sozlesme_kaynaksiz_risk_maddesini_ekle_yoluna_yonlendirir() -> 
     assert "RİSK maddesini" in dizin and "yine `ekle` olarak yaz" in dizin
     sozlesme = (synthesis.ARASTIRMA_DEPOSU_KOKU / synthesis.GOREV_DOSYASI).read_text(encoding="utf-8")
     assert "RİSK maddesini" in sozlesme and "`ekle` olarak YAZ" in sozlesme
+
+
+# ═══ Review 2026-09-22 — H2 ve M1 ═══════════════════════════════════════════
+
+
+async def test_iddia_cozmeyen_rapor_karisik_kumede_de_turu_baslatmaz(kosu, tmp_path) -> None:
+    """H2: kapı yalnız TOPLU dizine bakıyordu; eski + yeni karışımı geçiyordu."""
+    icerik = _tam_icerik()
+    karisik = (
+        _doktor_raporlari()[0],
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="KAYNAK-9",
+            icerik_ozeti=identity.canonical_sha("kaynak-9"),
+        ),
+    )
+    with pytest.raises(synthesis.SynthesisFailed, match="KAYNAK-9"):
+        await _sentez(
+            kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), doktor=karisik
+        )
+
+
+async def test_ariza_isareti_terminal_kosuda_ozgun_istisnayi_golgelemez(kosu, tmp_path) -> None:
+    """M1: `except SynthesisFailed` kolu `mark_incomplete`'i sarmıyordu; terminal
+    satırda `RunAlreadyTerminal` fırlayıp `raise`'a hiç gelinmiyordu."""
+    db, run_id = kosu
+    from tests.test_pipeline_runs import _engine_result
+
+    await runs.record_result(db, run_id=run_id, result=_engine_result())
+    icerik = _tam_icerik()
+    kor = (
+        bd.DoctorReport(
+            sonuc=bd.SONUC_GECTI,
+            notlar=(),
+            elemeler=(),
+            kaynak_adi="KAYNAK-1",
+            icerik_ozeti=identity.canonical_sha("kaynak-1"),
+        ),
+    )
+    with pytest.raises(synthesis.SynthesisFailed, match="iddia"):
+        await _sentez(kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), doktor=kor)
+    assert (await _durum(db, run_id))[0] == "tamamlandi"

@@ -66,6 +66,7 @@ from app.services.sector_pipeline import contracts, identity, runs
 from app.services.sector_pipeline.brief_doctor import (
     CIddia,
     DoctorReport,
+    iddiasiz_kaynaklar,
     kaynak_seti_sha,
     kimlik_bolumlemesi,
 )
@@ -1155,6 +1156,18 @@ def build_packet(
             f"{len(gecerli_kimlikler)} < {KAYNAK_TABANI} — elemeden sonra tek "
             "kaynak kalan koşuda denetim YAPILMAZ, koşu durur ve yöneticiye "
             "bildirilir (K-127)"
+        )
+    iddiasiz = iddiasiz_kaynaklar(doctor_reports)
+    if iddiasiz:
+        # Review 2026-09-22 H2: iddia çözmeyen rapor (eski sözleşme sürümü)
+        # pakete giriyor, denetçi anınca motor çoğunluğa sayıyordu. Küme
+        # olduğu gibi REDDEDİLİR — kaynak süzüp yeniden numaralandırmak K
+        # etiketlerini kaydırırdı.
+        raise ValueError(
+            f"Bölüm C iddiası ÇÖZMEYEN kaynak(lar): {list(iddiasiz)} — eski "
+            "sözleşme sürümü ya da okunamayan tablo; karışık küme denetime "
+            "GİRMEZ (K-18: araştırma yeni şablonla yeniden üretilir), kaynak "
+            "süzülüp yeniden numaralandırılmaz"
         )
     if len(doctor_reports) != len(sources):
         raise ValueError(
@@ -3185,9 +3198,19 @@ async def run_audit_round(
         )
 
     async def _yarim(asama_sebebi: str) -> AuditRound:
-        await runs.mark_incomplete(
-            db, run_id=run_id, asama=DENETIM_ASAMASI, sebep=asama_sebebi
-        )
+        try:
+            await runs.mark_incomplete(
+                db, run_id=run_id, asama=DENETIM_ASAMASI, sebep=asama_sebebi
+            )
+        except runs.RunAlreadyTerminal:
+            # Review 2026-09-22 M1: terminal satır EZİLMEZ ve tur sonucu yine
+            # döner — başka bir yazım hatası (DataError) YUTULMAZ, yükselir.
+            _LOG.warning(
+                "denetim yarım işareti terminal koşuya yazılamadı, satır "
+                "korunur: run_id=%s sebep=%s",
+                run_id,
+                asama_sebebi,
+            )
         return AuditRound((), False, asama_sebebi)
 
     async def _en_iyi_cabayla_isaretle(sebep: str) -> None:

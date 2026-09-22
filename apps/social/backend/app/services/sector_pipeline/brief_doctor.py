@@ -1430,7 +1430,7 @@ class _Yuva:
         gorulen: set[str] = set()
         essiz: list[str] = []
         for madde in self.citsiz_maddeler:
-            anahtar = _sadelestir(madde)
+            anahtar = _madde_anahtari(madde)
             if not anahtar or anahtar in _BOSLUK_IFADELERI or anahtar in gorulen:
                 continue
             gorulen.add(anahtar)
@@ -1697,6 +1697,21 @@ def _sadelestir(metin: str) -> str:
     motorda da eşleşmiyordu — kapı "geçerli" derken motor "bulamadım" diyecekti.
     """
     return _yapi_gorunumu(metin).strip().strip("*`_ ").strip().casefold()
+
+
+def _madde_anahtari(madde: str) -> str:
+    """Madde TEKRARI ve ADET sayımının ortak anahtarı — `[C: …]` etiketi DÜŞER.
+
+    Review 2026-09-22 H1 (ÖLÇÜLDÜ, kontrol kollu): zorunlu geri bağlantı
+    etiketi madde metninin parçası ve madde başına FARKLI olduğu için özdeş
+    beş kalıp `_sadelestir` yüzeyinde "benzersiz" sayılıyor, tekrar izi ve
+    `cta ≥ 5` alt sınırı SUSUYORDU (aynı gövde + farklı etiket `gecti/0 not`,
+    aynı etiket `notlu-gecti/3 not`). Etiket KİMLİK metadatasıdır, içeriğin
+    parçası değil; iki sayım yüzeyi de BURADAN okur. `_sadelestir`'e
+    DOKUNULMAZ — o anahtar alan/dönem adı ve yüzey hedefi için de kullanılır
+    ve etiket orada geçmez.
+    """
+    return _sadelestir(_GERI_BAGLANTI_RE.sub("", madde))
 
 
 _ASCII_KATLAMA = str.maketrans("ıİğĞüÜşŞöÖçÇ", "iIgGuUsSoOcC")
@@ -2820,7 +2835,7 @@ def _madde_izi(yuva: _Yuva) -> tuple[str, ...]:
     sayar"); sayım çit-farkındaysa iz de öyle olmak zorundadır, yoksa aynı
     içerik iki farklı yüzeyden okunur ve kapı kendi içinde çelişir.
     """
-    return tuple(_sadelestir(madde) for madde in yuva.citsiz_maddeler)
+    return tuple(_madde_anahtari(madde) for madde in yuva.citsiz_maddeler)
 
 
 def _ic_ice_izler(
@@ -2883,7 +2898,7 @@ def _ic_ice_izler(
                     _madde_izi(yuva),
                     None,
                     f"`{ad}` içinde bir madde {{adet}} kez yazılmış — adet "
-                    "alt sınırı ESSİZ madde sayar: {{ad}}",
+                    "alt sınırı ESSİZ madde sayar: {ad}",
                     None,
                 )
             )
@@ -2893,7 +2908,7 @@ def _ic_ice_izler(
                 _madde_izi(yuva),
                 None,
                 f"`video_kodlar.{havuz}` içinde bir madde {{adet}} kez "
-                "yazılmış — adet alt sınırı ESSİZ madde sayar: {{ad}}",
+                "yazılmış — adet alt sınırı ESSİZ madde sayar: {ad}",
                 None,
             )
         )
@@ -2917,7 +2932,7 @@ def _ic_ice_izler(
                         _madde_izi(yuva),
                         None,
                         f"{donem.ad}/`{yuva_adi}` içinde bir madde {{adet}} "
-                        "kez yazılmış — adet alt sınırı ESSİZ madde sayar: {{ad}}",
+                        "kez yazılmış — adet alt sınırı ESSİZ madde sayar: {ad}",
                         None,
                     )
                 )
@@ -4491,6 +4506,30 @@ _kimlik_bolumlemesi = kimlik_bolumlemesi
 """Geriye uyum: modül içi çağrı yerleri ve onları çivileyen testler."""
 
 
+def iddiasiz_kaynaklar(raporlar: Sequence[DoctorReport]) -> tuple[str, ...]:
+    """Bölüm C iddiası ÇÖZMEYEN raporların kaynak adları — tura giremezler.
+
+    Review 2026-09-22 H2 (ÖLÇÜLDÜ): eski (7 sütun) sözleşme sürümüyle üretilmiş
+    rapor `notlu-gecti` + 0 iddia ile kimlik sayımına giriyor, sentez kapısı
+    yalnız TOPLU dizine bakıyor ve denetçi o kaynağı anınca motor çoğunluğa
+    sayıyordu. Tasarımın "eski raporlar yeni hatta girdi olmaz" hükmü kodda
+    ZORLANMIYORDU. Kapsama kuralı her maddeye en az bir C satırı ister; iddia
+    çözmeyen rapor ya eski sürümdür ya tablosu okunamamıştır — ikisi de K-18
+    gereği yeniden üretilir, sessizce yeni anlama çevrilmez. Tek üreticidir:
+    paket kurucu (`auditors.build_packet`) ve sentez (`synthesis._kos`) buradan
+    okur; K-127 kimlik SAYIMI değişmez, bildirim adıyla taşır.
+    """
+    adlar: list[str] = []
+    for rapor in raporlar:
+        # Elenmiş rapor zaten girdi değildir; burada yalnız SIZABİLECEK olan
+        # (elenmemiş ama iddiasız) rapor adlandırılır.
+        if rapor.sonuc == SONUC_ELENDI or rapor.iddialar:
+            continue
+        if rapor.kaynak_adi not in adlar:
+            adlar.append(rapor.kaynak_adi)
+    return tuple(adlar)
+
+
 def gate_round(reports: Sequence[DoctorReport]) -> RoundGate:
     """K-127 kaynak tabanı kapısı — kaynak SAYISI kapısı, içerik eşiği DEĞİL.
 
@@ -4524,6 +4563,13 @@ def gate_round(reports: Sequence[DoctorReport]) -> RoundGate:
         parcalar.append(
             f"Tekrar eden kaynak kimliği: {list(tekrar)} — aynı kimlik BİR "
             "bağımsız kaynak sayılır (K-127 iki BAĞIMSIZ kaynak ister)."
+        )
+    iddiasiz = iddiasiz_kaynaklar(raporlar)
+    if iddiasiz:
+        parcalar.append(
+            f"Bölüm C iddiası ÇÖZMEYEN kaynak(lar): {list(iddiasiz)} — eski "
+            "sözleşme sürümü ya da okunamayan tablo; tura GİRMEZ, denetim ve "
+            "sentez bu kümeyi reddeder (K-18: yeni şablonla yeniden üretilir)."
         )
     return RoundGate(
         dur=dur,

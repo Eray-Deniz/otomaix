@@ -60,6 +60,8 @@ kullanır — ikinci bir yol kuralı YAZILMAZ.
 
 from __future__ import annotations
 
+import logging
+
 import copy
 import json
 import re
@@ -95,7 +97,10 @@ from app.services.sector_pipeline.brief_doctor import (
     CIddia,
     DoctorReport,
     alan_karsilastirma_anahtari,
+    iddiasiz_kaynaklar,
 )
+
+_LOG = logging.getLogger(__name__)
 
 SENTEZ_ASAMASI = "sentez"
 """`runs.ASAMALAR` içindeki aşama adı — bildirim anahtarı koşu + aşamadır."""
@@ -982,6 +987,17 @@ async def _kos(
     # sentez `kaynak_iddia` numarasını yine tahmin eder, tur yine ~940 sn ve
     # jeton harcar, motor yine `any(bağsız) → reddet` ile düşürür. Emsal EK-K:
     # rehber metni olmayan sektör turu BAŞLATMAZ, turdan sonra düşürmez.
+    # Review 2026-09-22 H2: TOPLU dizin dolu olsa da iddia çözmeyen tek bir rapor
+    # (eski sözleşme sürümü) tura girip denetçi/motor yolunda oy verebiliyordu.
+    # Rapor BAŞINA ölçülür; karışık küme reddedilir, kaynak süzülmez.
+    iddiasiz = iddiasiz_kaynaklar(doktor_raporlari)
+    if iddiasiz:
+        raise SynthesisFailed(
+            f"iddia dizini EKSİK — Bölüm C iddiası çözmeyen kaynak(lar): "
+            f"{list(iddiasiz)}; eski sözleşme sürümü ya da okunamayan tablo, "
+            "karışık küme tura GİRMEZ (K-18: araştırma yeni şablonla yeniden "
+            "üretilir). Tur BAŞLATILMAZ."
+        )
     if not iddia_evreni(doktor_raporlari):
         raise SynthesisFailed(
             "iddia dizini BOŞ — mekanik eleme raporlarının hiçbiri Bölüm C "
@@ -1161,9 +1177,19 @@ async def run(
             dest=dest,
         )
     except SynthesisFailed as ariza:
-        await runs.mark_incomplete(
-            db, run_id=run_id, asama=SENTEZ_ASAMASI, sebep=str(ariza)
-        )
+        try:
+            await runs.mark_incomplete(
+                db, run_id=run_id, asama=SENTEZ_ASAMASI, sebep=str(ariza)
+            )
+        except runs.RunAlreadyTerminal:
+            # Review 2026-09-22 M1: terminal satır EZİLMEZ; işaret düşerse ÖZGÜN
+            # arıza yine çağırana ulaşır (`raise` bu kolda hiç atlanmaz).
+            _LOG.warning(
+                "sentez arızası terminal koşuya işlenemedi, satır korunur: "
+                "run_id=%s",
+                run_id,
+                exc_info=True,
+            )
         raise
     except BaseException as beklenmeyen:
         # EN İYİ ÇABA: işaretin kendisi düşerse özgün istisna YUTULMAZ.

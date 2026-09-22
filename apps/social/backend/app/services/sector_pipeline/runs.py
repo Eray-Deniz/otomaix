@@ -108,9 +108,12 @@ class RunAlreadyTerminal(RuntimeError):
     `AND durum = 'calisiyor' AND sonuc IS NULL` ile koruyor; bu, o korumanın
     simetriğidir.
 
-    Arıza yolunda fırlatıldığında ASIL istisnayı gölgelemez: çağıranların istisna
-    kolu `_en_iyi_cabayla_isaretle` ile sarılıdır ve orada yutulur (ölçüldü,
-    `auditors.py`).
+    Arıza yolunda fırlatıldığında ASIL istisnayı gölgelemez — ama bu, çağıranın
+    işidir, bu sınıfın vaadi değil. Review 2026-09-22 M1: cümle "çağıranların
+    hepsi sarılı" diyordu ve ÜÇ çağrı yerinden yalnız biri sarılıydı
+    (`auditors._en_iyi_cabayla_isaretle`); `synthesis.run`'ın arıza kolu,
+    `auditors._yarim` ve CLI `_kos_brief_doctor` sarılı DEĞİLDİ. Dördü de artık
+    bu istisnayı yerinde yakalar; CLI ayrıca onu `ALAN_HATALARI`'nda sayar.
 
     **KAPSAM DAR:** yalnız `durum='tamamlandi'` reddedilir. Yarım bir koşuyu
     TEKRAR işaretlemek MEŞRUDUR ve sözleşmenin parçasıdır — bildirim idempotansı

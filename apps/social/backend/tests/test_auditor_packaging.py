@@ -361,6 +361,9 @@ def _rapor(kaynak_adi: str, kaynak_metni: str, **sapma) -> bd.DoctorReport:
         "elemeler": (),
         "kaynak_adi": kaynak_adi,
         "icerik_ozeti": identity.canonical_sha(kaynak_metni),
+        # Kapsama kuralı gereği `run` üretimi rapor HER ZAMAN iddia taşır;
+        # iddiasız rapor tura giremez (review 2026-09-22 H2).
+        "iddialar": (bd.CIddia(no=1, alan="cta_kaliplari"),),
     }
     alanlar.update(sapma)
     return bd.DoctorReport(**alanlar)
@@ -1437,6 +1440,7 @@ def test_build_packet_rejects_a_round_below_the_source_floor(tmp_path: Path) -> 
                 elemeler=(),
                 kaynak_adi=f"kaynak-{sira}",
                 icerik_ozeti=identity.canonical_sha(metin),
+                iddialar=(bd.CIddia(no=1, alan="cta_kaliplari"),),
             )
         )
         for sira, metin in enumerate(kaynaklar)
@@ -1482,6 +1486,7 @@ def test_build_packet_accepts_the_floor_exactly(tmp_path: Path) -> None:
                 elemeler=(),
                 kaynak_adi=f"kaynak-{sira}",
                 icerik_ozeti=identity.canonical_sha(metin),
+                iddialar=(bd.CIddia(no=1, alan="cta_kaliplari"),),
             )
         )
         for sira, metin in enumerate(kaynaklar)
@@ -2060,3 +2065,17 @@ def test_audit_table_rejects_an_empty_table() -> None:
     sonuc = _dogrula(_rapor_metni(denetim=DENETIM_BASLIGI))
     assert sonuc.rapor is None
     assert "DENETİM TABLOSU" in " · ".join(sonuc.errors)
+
+
+def test_build_packet_rejects_a_report_that_resolves_no_claim(tmp_path: Path) -> None:
+    """Review 2026-09-22 H2: eski sözleşme sürümüyle üretilmiş rapor 0 iddia çözer ve
+    yine de pakete giriyordu — denetçi onu anınca motor çoğunluğa sayıyordu.
+    Karışık küme denetime GİRMEZ; kaynak süzüp yeniden numaralandırma YAPILMAZ."""
+    raporlar = [
+        _rapor(ad, metin)
+        for ad, metin in zip(ARAC_ADLI_KIMLIKLER, KAYNAK_METINLERI)
+    ]
+    raporlar[1] = _rapor(ARAC_ADLI_KIMLIKLER[1], KAYNAK_METINLERI[1], iddialar=())
+    with pytest.raises(ValueError, match="iddia") as hata:
+        _paket(tmp_path / "iddiasiz", raporlar=raporlar)
+    assert ARAC_ADLI_KIMLIKLER[1] in str(hata.value)

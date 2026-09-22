@@ -3926,3 +3926,22 @@ def test_baska_urlnin_kaynakta_yok_sonucu_bu_iddiayi_dusurmez_ve_celiski_yapmaz(
         )
     )
     assert celiski_yok.uygulanmayan_kararlar == ()
+
+
+def test_kaynak_yalniz_bagli_iddia_tasiyorsa_cogunluga_sayilir() -> None:
+    """Review 2026-09-22 H2(b): motor satırın LİSTELEDİĞİ her kaynağı sayıyordu;
+    iddia bağı olmayan kaynak (eski sürüm rapor) çoğunluğa oy verebiliyordu.
+    Sözleşme `kaynaklar` = `kaynak-iddialari`ndaki kaynaklar der; motor bunu ölçer."""
+    yalniz_k2 = _denetim_satiri(
+        7,
+        kaynaklar={1, 2},
+        sinif="2-2",
+        kaynak_iddialari={auditors.KaynakIddiasi(kaynak=2, iddia=7)},
+    )
+    tam = _denetim_satiri(8, kaynaklar={1, 2}, sinif="2-2")
+    denetim = DENETIM_TABLOSU + (yalniz_k2, tam)
+    eksik = engine.run_checks(_ekle_girdisi(kanit="D1#7", denetim=denetim))
+    assert "cogunluk-yok" in _sebepler(eksik), _sebepler(eksik)
+    # Kontrol kolu: iki kaynağın da iddiası bağlıysa çoğunluk GEÇER.
+    tamam = engine.run_checks(_ekle_girdisi(kanit="D1#8", denetim=denetim))
+    assert "cogunluk-yok" not in _sebepler(tamam), _sebepler(tamam)
