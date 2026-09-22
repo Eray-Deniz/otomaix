@@ -1247,10 +1247,14 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
         # BURADA da daraltılır — tek bir yerde tutulan bir değişmez, o yer
         # değişince sessizce kaybolur.
         # Review 2026-09-22 H2(b): sayım satırın LİSTELEDİĞİ kaynaklardan değil,
-        # satırın İDDİA BAĞI kurduğu kaynaklardan. Sözleşme `kaynaklar` kümesini
-        # `kaynak-iddialari`ndaki kaynaklarla eşit tutar; iddiasız anılan kaynak
-        # (eski sürüm rapor) çoğunluğa oy VEREMEZ — paket kapısından bağımsız
-        # ikinci katman.
+        # satırın İDDİA BAĞI kurduğu kaynaklardan. SAVUNMA KATMANI — üretim
+        # yolunda ERİŞİLMEZ (kapanış turu N1, ölçüldü): denetçi tablosu
+        # ayrıştırıcısı `kaynaklar` ile `kaynak-iddialari` kaynak kümesinin
+        # eşitliğini zaten çift yönlü zorlar (`auditors.py`, "EŞİT olmak
+        # zorundadır"), yani ayrıştırıcıdan gelen hiçbir satırda bu süzgeç bir
+        # şey elemez. H2'nin GERÇEK kapanışı paket + sentez kapılarındadır
+        # (`iddiasiz_kaynaklar`); bu kol o eşitlik kapısı kaldırılırsa devreye
+        # girer.
         kaynaklar = {
             KAYNAK_ETIKETI.format(atif.kaynak)
             for parca in tasiyan

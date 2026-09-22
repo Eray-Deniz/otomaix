@@ -374,7 +374,15 @@ async def _kos_brief_doctor(conn, args) -> Sonuc:
         except runs.RunAlreadyTerminal:
             # Review 2026-09-22 M1: terminal satır EZİLMEZ; özgün arıza yine
             # bildirilir (yarış penceresi — kapı `calisiyor` görmüştü).
-            pass
+            # Kapanış turu N5: sessiz `pass` değil — operatör bunu da görür.
+            return (
+                [
+                    f"brief-doctor yarım kaldı: {type(hata).__name__}",
+                    "yarım işareti yazılamadı: koşu bu arada TAMAMLANMIŞ, "
+                    "terminal satır korunur",
+                ],
+                RC_REFUSED,
+            )
         return ([f"brief-doctor yarım kaldı: {type(hata).__name__}"], RC_REFUSED)
 
     await runs.record_artifact(

@@ -1303,16 +1303,26 @@ async def test_BOS_iddia_dizini_turu_BASLATMADAN_dusurur(kosu, tmp_path) -> None
     """
     db, run_id = kosu
     icerik = _tam_icerik()
+    # ELENMİŞ tek rapor: `iddiasiz_kaynaklar` elenmişi atlar, dolayısıyla bu
+    # fixture yeni EKSİK kapısını değil, yalnız BOŞ-dizin kapısını tetikler
+    # (kapanış turu N2: eski fixture artık öteki kapıya düşüyordu).
     kor = (
         bd.DoctorReport(
-            sonuc=bd.SONUC_GECTI,
+            sonuc=bd.SONUC_ELENDI,
             notlar=(),
-            elemeler=(),
+            elemeler=(
+                bd.Bulgu(
+                    kontrol="sahte-kontrol",
+                    aile="bolum-ve-alan-tamligi",
+                    seviye=bd.SEVIYE_ELEME,
+                    mesaj="elenmis kaynak",
+                ),
+            ),
             kaynak_adi="KAYNAK-1",
             icerik_ozeti=identity.canonical_sha("kaynak-1"),
         ),
     )
-    with pytest.raises(synthesis.SynthesisFailed, match="iddia dizini"):
+    with pytest.raises(synthesis.SynthesisFailed, match="iddia dizini BOŞ"):
         await _sentez(
             kosu,
             tmp_path,

@@ -110,10 +110,11 @@ class RunAlreadyTerminal(RuntimeError):
 
     Arıza yolunda fırlatıldığında ASIL istisnayı gölgelemez — ama bu, çağıranın
     işidir, bu sınıfın vaadi değil. Review 2026-09-22 M1: cümle "çağıranların
-    hepsi sarılı" diyordu ve ÜÇ çağrı yerinden yalnız biri sarılıydı
-    (`auditors._en_iyi_cabayla_isaretle`); `synthesis.run`'ın arıza kolu,
-    `auditors._yarim` ve CLI `_kos_brief_doctor` sarılı DEĞİLDİ. Dördü de artık
-    bu istisnayı yerinde yakalar; CLI ayrıca onu `ALAN_HATALARI`'nda sayar.
+    hepsi sarılı" diyordu; BEŞ çağrı ifadesinin (dört çağıran fonksiyon) ikisi
+    sarılıydı (`auditors._en_iyi_cabayla_isaretle`, `synthesis.run`'ın
+    beklenmeyen-istisna kolu), üçü DEĞİLDİ (`synthesis.run`'ın arıza kolu,
+    `auditors._yarim`, CLI `_kos_brief_doctor`). Beşi de artık bu istisnayı
+    yerinde yakalar; CLI ayrıca onu `ALAN_HATALARI`'nda sayar.
 
     **KAPSAM DAR:** yalnız `durum='tamamlandi'` reddedilir. Yarım bir koşuyu
     TEKRAR işaretlemek MEŞRUDUR ve sözleşmenin parçasıdır — bildirim idempotansı

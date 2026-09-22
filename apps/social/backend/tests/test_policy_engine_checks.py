@@ -3929,9 +3929,14 @@ def test_baska_urlnin_kaynakta_yok_sonucu_bu_iddiayi_dusurmez_ve_celiski_yapmaz(
 
 
 def test_kaynak_yalniz_bagli_iddia_tasiyorsa_cogunluga_sayilir() -> None:
-    """Review 2026-09-22 H2(b): motor satırın LİSTELEDİĞİ her kaynağı sayıyordu;
-    iddia bağı olmayan kaynak (eski sürüm rapor) çoğunluğa oy verebiliyordu.
-    Sözleşme `kaynaklar` = `kaynak-iddialari`ndaki kaynaklar der; motor bunu ölçer."""
+    """Review 2026-09-22 H2(b): motor satırın LİSTELEDİĞİ her kaynağı sayıyordu.
+
+    SINIR (kapanış turu N1): bu satır ayrıştırıcının KURAMAYACAĞI bir satırdır —
+    `auditors._denetim_tablosu` iki sütunun kaynak kümesi eşitliğini zorlar.
+    Test savunma katmanını çiviler; üretim yolunda H2'yi kapatan şey paket ve
+    sentez kapılarıdır (`iddiasiz_kaynaklar`). Eşitlik kapısı sökülürse bu kol
+    tek başına ölçülür hâle gelir.
+    """
     yalniz_k2 = _denetim_satiri(
         7,
         kaynaklar={1, 2},
