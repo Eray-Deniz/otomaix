@@ -966,6 +966,11 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 ## Sentez dayanıklılığı (2026-09-22, on üçüncü oturum)
 
+- **2026-09-22 akşam (on dördüncü oturum) — review yükü kararı (Eray):** tek hakemli review'ın 5
+  medium'u `5eb73a3`'te düzeltildi; kapanış review'ı koşulmaz, sıradaki iş canlı koşu; güvenlik
+  review'ı merge öncesine kalır. Gerekçe: C/H yok, düzeltme test + mutasyonla ölçüldü, review
+  zinciri işi durduruyordu.
+
 - **Düzeltme hakkı = 1, kapsam DAR.** Yalnız model çıktısının BİÇİMİ düzeltilebilir. Gerekçe:
   düzeltme çağrısı ölçülmüş olarak ~12 dk + 2,45 USD; bir hak denetçi turunu kurtarmaya yeter,
   ikincisinin kazandıracağını gösteren ölçüm YOK. Araç arızası, pin sapması, veritabanı hatası
@@ -1672,10 +1677,14 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[DÜZELTİLDİ `5eb73a3` — SIRADAKİ İŞ: dual kapanış turu] `4a260f2`'nin kendi ürettiği beş
-  kusur.** Düzeltme: 17 yeni test, 12/12 mutasyon, tam takım 4763 passed / 406,4 s; canlıda
-  SINANMADI, bağımsız hakem GÖRMEDİ. Kapanış = `/review-claude-codex` attempt-2 (aynı sözleşme,
-  hedef `code-review:feat-sektor-bilgi-paketi-plan2-sentez-onarimi:a8882a0…`, envelope `5eb73a3`).
+- **[DÜZELTİLDİ `5eb73a3` — SIRADAKİ İŞ: YENİ CANLI KOŞU] `4a260f2`'nin kendi ürettiği beş
+  kusur.** Düzeltme: 17 yeni test, 12/12 mutasyon, tam takım 4763 passed / 406,4 s.
+  **Kapanış review'ı KOŞULMAYACAK (Eray kararı 2026-09-22: "review yapmaktan iş yapamıyoruz")**
+  — dürüst etiket: düzeltmeyi bağımsız hakem GÖRMEDİ; asıl sınav canlı koşu. Yeniden açılma
+  koşulu: canlı koşuda okuyucu / düzeltme hakkı / akış kaydı yollarında beklenmeyen davranış.
+  `/security-review-claude-codex` evi: Plan 2 merge'ünden ÖNCE (`/finish-branch-claude-codex`
+  öncesi), koşudan önce DEĞİL. Rapor L1-L9 (low) evi: L1 ile aynı — Plan 2 kapanışından önceki
+  `/simplify-claude-codex` turu.
   Ayrıntı (tarihsel): `/review-claude-codex` koştu (`a8882a0..be5c320`, **tek hakem** — Codex
   kotaya çarptı, Eray Claude-only kapanışı seçti; `review_confidence: reduced`). C/H YOK. Beşi de
   orkestratör tarafından dosya açılarak/prob koşularak doğrulandı; `accepted_risk`'e ALINMADI
@@ -2984,4 +2993,5 @@ Authoritative state (stop-rule; locator `docs/reviews/.ledger-index/296deb840d9a
 - 2026-09-22 · M1-M5: `accepted_risk` YAZILMADI — introduced_by_fix; Eray kararı: yeni koşudan önce düzelt.
 - 2026-09-22 · chain-advance: dual EKSİK → `/security-review-claude-codex` explicit override ister; ilerletilmedi (önce M1-M5 fix + dual kapanış turu).
 - Rapor: `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-sentez-onarimi.md`.
-- 2026-09-22 fix · `5eb73a3`: M1 · M2 · M3 · M4 · M5 (fix_attempts 0→1); 17 yeni test; 12/12 mutasyon; tam takım 4763 passed / 406,4 s. `fixed_confirmed` BEKLİYOR (kapanış turu).
+- 2026-09-22 fix · `5eb73a3`: M1 · M2 · M3 · M4 · M5 (fix_attempts 0→1); 17 yeni test; 12/12 mutasyon; tam takım 4763 passed / 406,4 s.
+- 2026-09-22 · Eray kararı: kapanış turu (attempt-2) KOŞULMAYACAK. M1-M5 disposition `fixed` (orkestratör testi + mutasyon), `fixed_confirmed` YAZILMADI — ikinci hakem teyidi yok. Yeniden açılma: canlı koşuda bu yollarda sapma.
