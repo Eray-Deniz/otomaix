@@ -73,6 +73,10 @@ Her biri önce bellekte yeniden üretildi, sonra düzeltildi; 8 regresyon testi 
 
 # Notes For Claude
 
+- **2026-09-22 review turu (dual) koştu:** 2 high (H1 etiket/tekrar yüzeyi · H2 eski rapor oy verir),
+  3 medium, 4 low; ikisi de orkestratör probuyla doğrulandı. Eray kararı: H1+H2(+M1) fix →
+  `/review-claude-codex` kapanış → üç araştırma. Ayrıntı TASK Open Problems ilk madde + rapor.
+  Codex ilk çağrıda 480 s'de düştü, 1200 s tekrar 701 s'de bitti — bu aralıkta Codex turu 480 s'ye SIĞMAZ.
 - Eray'ın bugünkü talimatı "Grup 3'e başla" idi; seçenek sunulmadı, dosyadakiler yapıldı.
   Kararı sorulacak tek şey: dış depo + monorepo commit onayı (çalışma kuralı) ve Grup 3'ün evi.
 - İlke 9: buradaki sayılar bu oturumun koşumlarıdır; sonraki oturum tam takımı yeniden koşar.

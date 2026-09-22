@@ -1609,6 +1609,31 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
+- **[YÜKSEK — SIRADAKİ İŞ, 2026-09-22] Review turu (dual, `c0d073a..8f54f15`) 2 high buldu; ikisi de
+  orkestratör ölçümüyle doğrulandı. Rapor: `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2.md`.
+  Eray kararı (2026-09-22): H1 + H2 (+ M1) düzeltilir → `/review-claude-codex` kapanış turu
+  (attempt-2, aynı sözleşme `a76100bd…`) → sonra üç araştırma yeni brief'le alınır.
+  1. **H1 `brief-doctor/geri-baglanti-etiketi-tekrar-ve-adet-yuzeyi`** — `_madde_izi` ve
+     `essiz_maddeler` ham madde metnini karşılaştırıyor; zorunlu `[C: n]` etiketi metnin parçası ve
+     madde başına farklı → özdeş beş madde "benzersiz" sayılıyor, tekrar izi + adet alt sınırı susuyor.
+     Ölçüldü: aynı gövde + farklı etiket `gecti/0 not`; aynı etiket `notlu-gecti/3 not`.
+     Fix: anahtar üretiminde etiketi düşür (`_GERI_BAGLANTI_RE.sub` → `_sadelestir`), tek yardımcı;
+     `_sadelestir`'e dokunma. Regresyon: beş özdeş CTA + farklı etiket → iki not. L4 (`{{ad}}` literal,
+     `ce69294`) aynı mesaj yolunda — birlikte kapat.
+  2. **H2 `hat/eski-surum-rapor-mutabakata-oy-verir`** — eski 7 sütunlu rapor `notlu-gecti` + 0 iddia;
+     sentez kapısı yalnız TOPLU dizine bakıyor; motor satırın listelediği her kaynağı sayıyor
+     (`engine.py:1243-1247`). Tasarımın "eski raporlar yeni hatta girmez" hükmü kodda ZORLANMIYOR.
+     Ölçüldü: eski + 2 yeni → dizin 220, K1# yok, kapı açık. Fix: (a) `gate_round`'da rapor başına
+     sözleşme-sürümü durumu — eski/karışık küme denetçi koşmadan reddedilir, K-127 tabanına sayılmaz;
+     (b) savunma: motor yalnız `kaynak_iddialari`'nda iddia taşıyan kaynakları sayar. Kaynak süzüp
+     yeniden numaralandırma YAPILMAZ (K etiketleri kayar).
+  3. **M1 `runs/RunAlreadyTerminal-sarilmamis-cagri-yerleri`** (medium, kendi açtığımız gerileme
+     `2bf3d71`) — `synthesis.py:1164` · `auditors.py:3188` · `cli:367` sarılı değil; `ALAN_HATALARI`'nda
+     yok; `runs.py:108` docstring yanlış. Aynı turda kapat.
+  Kabul edilen risk (Eray, 2026-09-22): M2 Katman-1 kapı dışında (belgeli karar `cli:1418`), M3 kapı
+  TOCTOU, L1-L3. "Araç atıf artıkları silinir" tasarım satırı kodda not olarak duruyor (6 raporda 0 artık) —
+  ilk tur artık gösterirse açılır.
+
 - **[YÜKSEK — SIRADAKİ İŞ, 2026-09-21 akşam] Grup 3 KOD İNDİ; kapanış zinciri bekliyor.**
   Sıra: (a) dış depo commit — YAPILDI `34a34db` (yalnız iki sözleşme; Eray'ın 44 silinmiş
   taslak dosyası çalışma ağacında duruyor, DOKUNULMADI); (b) pin `commit` alanı — YAPILDI;
@@ -2767,3 +2792,28 @@ Authoritative state (stop-rule; locator `docs/reviews/.ledger-index/296deb840d9a
 - 2026-09-11 attempt-2 · `fixed_confirmed`: F1 · F2 · F3 (reduced confidence — dual eksik). Unresolved C/H: YOK.
 - 2026-09-11 attempt-2 · `policy_accepted`: N1 · N2 (low). Gönüllü düzeltme `90aee2c` (T18-review3-fix2): N2 + N1/(2); bağımsız hakem GÖRMEDİ.
 - 2026-09-11 · chain-advance: **dual-review eksik** → `/security-review-claude-codex` explicit override ister; bugün ilerletilmedi.
+
+---
+
+**Per-target header — 2026-09-22 (yeni hedef: Grup 3 + ölü koşu kapısı)**
+- `review_target_id`: `code-review:feat-sektor-bilgi-paketi-plan2:c0d073a5729af79da145bd951f3007b03dad737f`
+- `ledger_locator`: `task:sektor-bilgi-paketi-plan2` (attempt-1'de kuruldu; index `docs/reviews/.ledger-index/945bf4bb…a549.locator`)
+- `pinned_contract_hash`: `a76100bd551cefc7474b35b6c68ecec85cb4b87deb201770a503770b905808d0` (7 alan, önceki hedefle AYNI)
+- `completed_evaluations`: 1 · `total_invocations`: 1 · `consecutive_degraded`: 0 (attempt-1 tam dual: Claude ran / Codex ran — ilk Codex çağrısı 480 s timeout, 1200 s tekrar 701 s'de bitti)
+
+**Per-cluster (2026-09-22 hedefi)**
+
+| cluster_key | first_seen | review_attempts | fix_attempts | reopen | severity_trajectory | temporal_origin | finding_relation | evidence_basis | evidence_confidence | current_disposition | bound_contract |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `brief-doctor/geri-baglanti-etiketi-tekrar-ve-adet-yuzeyi` (H1) | attempt-1 (2026-09-22) | 1 | 0 | 0 | [high] (claude) | introduced_by_fix (`8f54f15`) | original_finding | orkestratör probu: aynı gövde+farklı etiket 0 not / aynı etiket 3 not | confirmed | **open** (fix-required) | `a76100bd…` |
+| `hat/eski-surum-rapor-mutabakata-oy-verir` (H2) | attempt-1 | 1 | 0 | 0 | [high] (codex) | introduced_by_fix (`8f54f15` — karışık sürüm penceresi bu revizyonla açıldı) | original_finding | orkestratör probu: eski rapor notlu-gecti + 0 iddia + dizin 220; motor sayımı `engine.py:1243-1247` kod okuması | confirmed (3. halka statik) | **open** (fix-required) | `a76100bd…` |
+| `runs/RunAlreadyTerminal-sarilmamis-cagri-yerleri` (M1) | attempt-1 | 1 | 0 | 0 | [medium] (claude) | introduced_by_fix (`2bf3d71`) | touched_surface_regression | kod okuması: `synthesis.py:1164` · `auditors.py:3188` · `cli:367` | confirmed | accepted_risk (policy_accepted) — **fix önerisi: H1/H2 turunda** | `a76100bd…` |
+| `cli/katman1-canlilik-kapisi-disinda` (M2) | attempt-1 | 1 | 0 | 0 | [medium] (codex; claude "tutarlı") | pre_existing (bilinçli dışlama `cli:1418`) | original_finding | kod okuması; hakemler-arası çelişki | confirmed (davranış) | accepted_risk (policy_accepted) — Eray kararı bekler | `a76100bd…` |
+| `cli/canlilik-kapisi-toctou` (M3) | attempt-1 | 1 | 0 | 0 | [medium] (codex) | pre_existing (kapı öncesi hiç kapı yoktu) | original_finding | statik | partial | accepted_risk (policy_accepted; güvenlik-nitelikli değil) | `a76100bd…` |
+| `brief-doctor/c-kapsama-docstring-bayat` (L1) · `engine/mevzuat-mi-rakam-vekili-kapsam` (L2) · `cli/e305` (L3) · `brief-doctor/tekrar-notu-ad-literal` (L4, aralık dışı `ce69294`) | attempt-1 | 1 | 0 | 0 | [low] | L1-L3 introduced_by_fix · L4 pre_existing | original_finding | alt-hakem okuma (L4 çıktıyla gösterildi) | confirmed | accepted_risk (policy_accepted); L4 H1 ile birlikte | `a76100bd…` |
+
+**Event log (append-only) — 2026-09-22 hedefi**
+- 2026-09-22 attempt-1 · `closure_observation`: tam dual review tamamlandı; sözleşme pinlendi (`a76100bd…`); taze takım 4704 passed / 402,6 s.
+- 2026-09-22 attempt-1 · `policy_accepted`: M1 · M2 · M3 · L1 · L2 · L3 · L4 (medium/low, ch-only-v1).
+- 2026-09-22 · chain-advance: dual ✓, **unresolved C/H = 2 (H1, H2) → `/security-review-claude-codex` HARD-BLOCK**; sıradaki: executor fix + `/review-claude-codex` kapanış (attempt-2, aynı sözleşme).
+- Rapor: `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2.md`.
