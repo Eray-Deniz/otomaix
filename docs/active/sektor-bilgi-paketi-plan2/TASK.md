@@ -1672,8 +1672,11 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[ORTA × 5 — SIRADAKİ İŞ, yeni koşudan ÖNCE (Eray kararı 2026-09-22)] `4a260f2`'nin kendi
-  ürettiği beş kusur.** `/review-claude-codex` koştu (`a8882a0..be5c320`, **tek hakem** — Codex
+- **[DÜZELTİLDİ `5eb73a3` — SIRADAKİ İŞ: dual kapanış turu] `4a260f2`'nin kendi ürettiği beş
+  kusur.** Düzeltme: 17 yeni test, 12/12 mutasyon, tam takım 4763 passed / 406,4 s; canlıda
+  SINANMADI, bağımsız hakem GÖRMEDİ. Kapanış = `/review-claude-codex` attempt-2 (aynı sözleşme,
+  hedef `code-review:feat-sektor-bilgi-paketi-plan2-sentez-onarimi:a8882a0…`, envelope `5eb73a3`).
+  Ayrıntı (tarihsel): `/review-claude-codex` koştu (`a8882a0..be5c320`, **tek hakem** — Codex
   kotaya çarptı, Eray Claude-only kapanışı seçti; `review_confidence: reduced`). C/H YOK. Beşi de
   orkestratör tarafından dosya açılarak/prob koşularak doğrulandı; `accepted_risk`'e ALINMADI
   (kendi gerilememiz). Rapor: `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-sentez-onarimi.md`.
@@ -2981,3 +2984,4 @@ Authoritative state (stop-rule; locator `docs/reviews/.ledger-index/296deb840d9a
 - 2026-09-22 · M1-M5: `accepted_risk` YAZILMADI — introduced_by_fix; Eray kararı: yeni koşudan önce düzelt.
 - 2026-09-22 · chain-advance: dual EKSİK → `/security-review-claude-codex` explicit override ister; ilerletilmedi (önce M1-M5 fix + dual kapanış turu).
 - Rapor: `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-sentez-onarimi.md`.
+- 2026-09-22 fix · `5eb73a3`: M1 · M2 · M3 · M4 · M5 (fix_attempts 0→1); 17 yeni test; 12/12 mutasyon; tam takım 4763 passed / 406,4 s. `fixed_confirmed` BEKLİYOR (kapanış turu).

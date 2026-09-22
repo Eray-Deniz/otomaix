@@ -5,8 +5,9 @@ written: 2026-09-22
 
 # Resume From
 
-**SIRADAKİ İŞ, TEK CÜMLE: review'ın bulduğu beş orta kusuru düzelt (TASK Open Problems M1-M5),
-sonra dual kapanış turu → güvenlik review → YENİ koşu.** Review 2026-09-22 akşamı koştu,
+**SIRADAKİ İŞ, TEK CÜMLE: `/review-claude-codex` kapanış turu (attempt-2, DUAL — Codex kotası
+19:09 UTC'de açıldı) `5eb73a3` için → `/security-review-claude-codex` → YENİ koşu.** Beş orta
+kusur `5eb73a3`'te düzeltildi (17 test, 12/12 mutasyon, tam takım 4763 passed / 406,4 s). Review 2026-09-22 akşamı koştu,
 **tek hakemle** (Codex kotaya çarptı; Eray Claude-only kapanışı seçti): C/H yok, 5 orta (hepsi
 `4a260f2`'nin kendi ürünü, hepsi orkestratör tarafından doğrulandı), 9 düşük. Rapor:
 `docs/reviews/2026-09-22-feat-sektor-bilgi-paketi-plan2-sentez-onarimi.md`. En pahalısı M1: araç
@@ -95,6 +96,10 @@ K-129 rakam kuralı payı · CTA havuzu ≥ 5.
 - `json` çıktı kipinin çağıranı yok (YAGNI borcu, Open Problems'ta).
 
 # Notes For Claude
+
+- **Mutasyon tuzağı (2026-09-22, yeni):** ardışık mutasyonlar aynı saniyede ve aynı bayt
+  farkıyla uygulanınca Python eski `.pyc`'yi kullandı → iki SAHTE "yakalanmadı". Her
+  mutasyondan önce `__pycache__` sil + `python -B`.
 
 - **Review özeti (2026-09-22 akşam, tek hakem):** "Notes For Codex"taki dört sorudan (2) ve (3)
   gerçek çıktı → M1 · M2; (1) temiz; (4) = L1. Düzeltmeden sonra kapanış turu DUAL koşmalı —
