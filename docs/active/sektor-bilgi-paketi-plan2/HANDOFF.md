@@ -53,7 +53,9 @@ K-129 rakam kuralı payı · CTA havuzu ≥ 5.
 
 | Ne | Taze çıktı |
 |---|---|
-| Tam takım (son hâl) | **4746 passed / 0 failed / 397,4 s** |
+| Tam takım (son hâl, `5eb73a3`) | **4763 passed / 0 failed / 406,4 s** |
+| Mutasyon — review düzeltmesi (12 mutasyon) | 12/12 yakalandı (`.pyc` temizlenerek) |
+| Tam takım (`4a260f2` sonrası) | 4746 passed / 0 failed / 397,4 s |
 | Tam takım (okuyucu düzeltmesinden sonra) | 4728 passed / 406,9 s |
 | Tam takım (gün başı, değişiklik öncesi) | 4714 passed / 417,0 s |
 | Mutasyon — okuyucu (4 mutasyon) | 4/4 yakalandı |
@@ -105,7 +107,7 @@ K-129 rakam kuralı payı · CTA havuzu ≥ 5.
   gerçek çıktı → M1 · M2; (1) temiz; (4) = L1. Düzeltmeden sonra kapanış turu DUAL koşmalı —
   bu rapor ikinci göz görmeden kapandı. Codex'in kesik turundaki "approve" karar DEĞİLDİ.
 - **Alt ajan modeli 2026-09-22'de Opus 5.5'e yükseltildi** (`~/.claude` settings + hook; 23 test
-  PASS, alt ajan kendini `claude-opus-5-5` bildirdi). `~/.claude` tarafı commit'lenmedi.
+  PASS, alt ajan kendini `claude-opus-5-5` bildirdi). `~/.claude` commit `5053924` (yalnız model satırı; settings'teki diğer değişiklikler Eray'ın, dokunulmadı).
 
 - **Bugünün dersi, açıkça:** iki öneri de (düşünme tavanı, jeton kapısı) tutmadı ve ikincisi
   sağlam bir turu öldürdü. Eray bunu yüzüme söyledi ve haklıydı. Ölçülmemiş mekanizmaya kapı
