@@ -25,7 +25,23 @@ turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions 
    (N1-N6). N1 · N2 · N4 · N5 · N6 gönüllü düzeltildi (belge/test/log; **bağımsız hakem görmedi**), N3
    `accepted_risk`.
 5. Commit'ler: `1e9a133` docs(reviews) attempt-1 · `fceb2d2` fix(hat) H1+H2+M1+L4 · `317664f` fix(hat) gönüllü low
-   düzeltmeleri · son docs commit'i kapanış raporu + TASK/HANDOFF (bu dosya). Push EDİLMEDİ.
+   düzeltmeleri · kapanış raporu + TASK/HANDOFF · `5e4a767` iki karar kaydı. Push EDİLMEDİ.
+6. Oturum sonu (Eray'la): M2 ve "atıf artıkları" kararları BIRAK/KALSIN (kayıtlarda). Dış depoda
+   tasarım dokümanının durum satırı güncellendi (`221baa7`), iki fazlalık `.bak` silindi, üç araca
+   brief'le birlikte sohbete yapıştırılacak **sektörsüz ön yazı** `_ON-YAZI.md` olarak `_SABLON.md`'nin
+   yanına kondu (`38b475b`; şablon revize edilince 3-5. maddeleri aynı commit'te gözden geçirilir).
+   Eski↔yeni brief farkı tablo olarak Eray'a verildi (yeni şart: her maddeye `[C: …]`, CTA/kancaya
+   bağlam etiketi + gerekçe, Bölüm C'de `destek`/`yer`, kaynaksız kalıp ve dönem etiketle kaydedilir).
+
+**YENİ RAPORLAR GELDİĞİNDE SIRA (taze oturum):** koşu `222706dc` terminal → `tur-ac` ile YENİ koşu;
+brief + üç rapor koşu klasörüne runbook'taki adlarla (`docs/plans/PLAN2-DAGITIM-RUNBOOK.md`, Step 5-6
+kaydı TASK "Task 19 Step 5-6") — kör etiket KAYNAK-1..3 alım sırasında verilir, dosya adından
+bağımsızdır; eski `Kuyumculuk/Kaynak-1..6.md` test verisi olarak KALIR, üstüne yazılmasın (öneri:
+yenileri `Kaynak-7..9` diye kaydet). Sonra kaynak başına `brief-doctor` → `denetim` → `sentez` → kör
+yargı (K-134) → `katman1` → `motor` (spec §13.3 sırası, 2026-09-21 düzeltmesi). İLK TURDA ÖLÇÜLECEKLER
+TASK Open Problems ilk maddede (9 sütun/etiket isabeti · brief-doctor not sayısı · K-129 rakam kuralı
+payı · CTA havuzu ≥ 5 → parktaki eşik kararı). Ön yazıya rağmen rapor başında/sonunda araç cümlesi ya da
+kod çiti kalmışsa kaydetmeden önce ELLE temizlenir (kod çiti içi mekanik kapıda sayılmaz).
 
 **Dosya durumu:**
 - Dış depo: `34a34db` (iki sözleşme; pin ona bağlı). Eray'ın 41 silinmiş dosyası + 3 yeni (`.bak`, `sentez/`)
@@ -33,6 +49,7 @@ turda ölçülecekler TASK.md Open Problems ilk iki maddede; kararlar Decisions 
 - Brief `Kuyumculuk/kuyumculuk.md`: bilinçli olarak depo dışı (`.git/info/exclude`), 2-5. bölümleri şablonla
   BAYT BAYT aynı (bugün ölçüldü); sürümü araştırma kaydedilirken `girdi_ozeti` hash'iyle DB'ye iner.
 - Monorepo: ağaç temiz; push Eray kararı (sayı `git log @{u}..HEAD` ile ölçülür, buraya yazılmaz).
+- Dış depo: `38b475b`; Eray'ın 41 silinmiş dosyası + `sentez/` hâlâ commit dışı (dokunulmadı).
 
 # Verification
 
