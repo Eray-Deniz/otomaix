@@ -1794,7 +1794,7 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   istem yüzeyine giden caption/idea bloğu 2.681–3.330, özel gün satırları 519–686 karakter; büyüklük 9 bayram
   gününün kopyası + video/görsel kodlarından) · Katman-2 kör örneklem (`K2-KOR-ORNEKLEM-23e19d03.md`: paketli
   seçim 2/4, 8 çağrı 0,273 USD) · onay kaydedildi (snapshot `ac1a062b…`, 252 sn, actor eray).
-- **[AÇIK — evi YOK, tarih Eray'da] Yetki belgesi numarası + işletme unvanı marka ayarlarında yok.** Paket
+- **[AÇIK — EVİ VAR 2026-09-23: `otomaix-sosyal-medya-arastirmasi/marka-dna-mimari-karar-dokumani.md` §6.B G8 (Marka DNA spec girdisi); tarih Eray'da] Yetki belgesi numarası + işletme unvanı marka ayarlarında yok.** Paket
   maddesi (Kuyum Ticareti Hakkında Yönetmelik m.11/2-b — resmî PDF'ten okundu: "Her türlü kuyum reklamında
   yetki belgesi numarasına ve yetki belgesindeki işletme adı veya unvanına yer verir") üretimde uygulanamıyor;
   Katman-2'de model numarasız "yetki belgesi … mağazamızda mevcuttur" satırı ekledi. Eray kararı (2026-09-23):
