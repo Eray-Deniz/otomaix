@@ -38,8 +38,13 @@ from .engine import KONTROL_ADLARI
 KARARLAR: tuple[str, ...] = ("onay", "ret")
 """Onay kararları — KAPALI küme (036 CHECK'iyle birebir)."""
 
-SNAPSHOT_SEMA: int = 2
+SNAPSHOT_SEMA: int = 3
 """Görüntü şeması sürümü — okuyucu bilinmeyen şemada DURUR.
+
+**2 → 3 (2026-09-23, migration 037):** görüntü `operator_kararlari` alanını kazandı —
+operatörün açık sorulara verdiği cevaplar ve pakete uyguladığı işlemler; K-129 okumasıyla
+risk sınıfına düşen işlem `hukuki` işaretlidir (Eray: kaynaksız ekleme serbest, etiketli).
+Dondurulmuş görüntü hiçbir ortamda YOK (ölçüldü: `approval_snapshot` dolu koşu 0).
 
 **1 → 2 (2026-09-11, attempt-3 F3):** görüntü `kategori_catismalari` alanını kazandı —
 karar günlüğündeki `tur-kategori-catismasi` notlarının `konu` üçlüsü (anahtar · paket
@@ -338,6 +343,7 @@ async def _goruntu_kur(db, run: runs.VerifiedRun, *, actor: str) -> dict:
             and kapilar["katman1"] == "PASS"
             and kapilar["katman2"]["sunuldu"] is True
         ),
+        "operator_kararlari": _operator_kararlari(run),
         "geri_ekleme_celiskileri": geri_ekleme,
         "kararsizlar": [
             {"unit_id": madde["unit_id"], "sebep": madde["sebep"]}
@@ -359,6 +365,29 @@ async def _goruntu_kur(db, run: runs.VerifiedRun, *, actor: str) -> dict:
         },
     }
     return goruntu
+
+
+def _operator_kararlari(run: runs.VerifiedRun) -> list[dict]:
+    """Operatörün işlemleri — soru başına, `hukuki` işaretiyle (migration 037)."""
+    kayit = identity.cozulmus(run.operator_kararlari) if run.operator_kararlari else None
+    if not kayit:
+        return []
+    return [
+        {
+            "soru": karar["soru"],
+            "cevap": karar["cevap"],
+            "islemler": [
+                {
+                    "islem": islem["islem"],
+                    "alan": islem["alan"],
+                    "unit_id": islem["unit_id"],
+                    "hukuki": islem["hukuki"],
+                }
+                for islem in karar["islemler"]
+            ],
+        }
+        for karar in kayit["kararlar"]
+    ]
 
 
 async def _dondur(db, *, run_id: str, goruntu: dict) -> dict:
@@ -549,6 +578,20 @@ def render_summary(snapshot: Mapping[str, Any]) -> str:
         # listenin boyunu yazıyordu; motor kendi kimliklerini sentezin
         # sorularının ÖNÜNE koyduğu için kaybolan hep sentezin son sorusuydu.
         satirlar += _satirlar("Açık sorular", list(snapshot["acik_sorular"]))
+
+    if snapshot["operator_kararlari"]:
+        # Eray (2026-09-23): kaynaksız operatör işlemi serbest ama GÖRÜNÜR;
+        # hukuki olan ayrıca işaretlenir — kanıtı iki denetçi değil operatördür.
+        islemler = [
+            f"{k['soru']} · {i['islem']} · {i['alan']} · {i['unit_id']}"
+            + (" · HUKUKİ — operatör kararı" if i["hukuki"] else "")
+            for k in snapshot["operator_kararlari"]
+            for i in k["islemler"]
+        ]
+        satirlar.append(
+            f"Operatör kararları: {len(snapshot['operator_kararlari'])} soru kapatıldı"
+        )
+        satirlar += _satirlar("Operatör işlemleri (kaynaksız)", islemler)
 
     satirlar.append("")
     satirlar += _satirlar(

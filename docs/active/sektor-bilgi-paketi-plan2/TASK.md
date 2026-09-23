@@ -984,6 +984,31 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Decisions Log
 
+## Operatör kararları — açık soruların kapanış yolu (2026-09-23, on dördüncü oturum)
+
+- **Boşluk ölçüldü:** motor sentezin her açık sorusunda `blocked` der (`engine.py` `_acik_soru_kimlikleri`
+  + `acik-soru-var`), cevabı alan giriş YOKTU; `blocked` koşu taslak yazmaz, `duzeltme-baslat` yalnız
+  `ret` kararlı taslaktan açılır (`runs.open_correction_run`). Planın Task 19 sırası motorun `blocked`
+  diyeceğini hiç öngörmüyordu. Önceki devir notunun "düzeltme turu" yolu bu yüzden YOKTU.
+- **Karar (Eray):** spec töreni atlandı ("direkt çözüm"); operatör cevapları ve eklemeleri pakete
+  **kaynaksız, etiketli** girer — karar günlüğünde `aktor=insan`, gerekçe `operatör kararı (<soru>)`,
+  onay özetinde ayrı liste, K-129 okumasıyla risk sınıfına düşen işlem "HUKUKİ — operatör kararı".
+- **Mekanizma:** `operator-karar` alt komutu (`--kuru` ile yazmadan) · `operator_decisions.uygula`
+  motoru BUGÜNKÜ sürümle yeniden koşar, her açık soru TAM bir kez cevaplanmadan geçmez, açık soru
+  DIŞINDA bir engel varsa reddeder, işlem sonrası şema · günlük · birim bütünlüğü · bayrak · takvim
+  kapılarını yeniden koşar · migration 037 (`sector_run_operator_decisions`, AYRI tablo — 036'nın
+  kapalı kolon kümesi yeniden uygulamada doğrulanıyor, kolon eklemek onu bozuyordu; yabancı anahtar
+  yok, 036 geri alma yolunu durduruyordu) · motorun ilk sonucu `motor_ilk_sonucu`'nda saklanır ·
+  onay görüntüsü şeması 2 → 3.
+- **Sorulmayan dört ayrıntı (Eray):** görsel vurgu mevcutlardan seçilsin (8 Mart · 24 Kasım → Anneler
+  Günü'nünkü; Babalar Günü · bayramlar → Yılbaşı'nınki) · "birikim" yok · 24 Kasım çağrısız
+  (`içerik-önerilmez`) · bayramlar arife dahil (Ramazan 4, Kurban 5 takvim günü — takvim gün gün
+  kayıtlı, paket anahtarı günün adıyla birebir eşleşir). **Ek (Eray onayı):** motorun bağ hatasıyla
+  düşürdüğü yetki belgesi maddesi S3 altında geri eklendi.
+- **Uygulandı:** migration 037 canlı veritabanına uygulandı; `kosu-23e19d03` → `activation_eligible`,
+  açık soru 11 → 0, 26 işlem (birim düzeyinde 78, hukuki 4). Karar dosyası
+  `operator-kararlari-23e19d03.json` (metinleri Claude yazdı, Eray onayladı).
+
 ## Canlı koşu, motor düzeltmeleri, K-129 revizyonu (2026-09-23, on dördüncü oturum)
 
 - **Sayaç (`3fc7ad8`):** liste öğesi = bölümdeki EN SIĞ madde girintisi; daha derin satırlar öğeye
@@ -1731,14 +1756,15 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   sözleşmesi 2.6: örneklem önceliği) + otomaix'te `synthesis.py` satırı ve pin. Sözleşmedeki 43 örnek
   `_mevzuat_mi` ile birebir aynı sonucu verdi; motor listesindeki her kelime sözleşmede var. Canlı
   koşuda SINANMADI — modelin yeni okumayla sınıflandırdığı bir sonraki koşuda görülür.
-- **[SIRADAKİ İŞ 2] `kosu-23e19d03` düzeltme turu** — kör yargı kararlarıyla (`K134-KOR-YARGI-23e19d03.md`
-  özet tablosu). SORULMAYAN ayrıntılar bu turda: 8 Mart ve Babalar Günü görsel vurgu yuvası (operatör
-  eklemesi mi boş mu) · Ramazan/Kurban "birikim" ifadesi · Öğretmenler Günü'nde denetçilerin `alma`
-  dediği iki CTA. `duzeltme-baslat`'ın ön koşulu (koşu `blocked`; K-72 "reddedilmiş koşu") ÖLÇÜLMEDİ —
-  önce oku. DB'deki motor sonucu düzeltmelerden önceki motorun ürünü; tur yeni motorla koşar.
+- **[KAPANDI 2026-09-23] `kosu-23e19d03` kör yargı kararları uygulandı** — "düzeltme turu" yolu bu
+  koşuya uygulanamıyordu (ölçüldü, Decisions Log "Operatör kararları"); yerine `operator-karar` yazıldı.
+- **[SIRADAKİ İŞ] `kosu-23e19d03` → taslak → onay → aktivasyon.** Sıra: Katman-1 tasdikini TAZELE
+  (bugünkü tasdik `1892375`'te alındı; `6c2276e` sentez istem satırını değiştirdi — spec §13.2(7),
+  bayat tasdikin mekanik kapısı yok) → `yazim` → Katman-2 kör örneklem + tasdik → `onay` → `aktive-et`
+  (ilk paket: yalnız ikinci adım). Onay özetinde 4 "HUKUKİ — operatör kararı" satırı görünür.
 - **[ÖLÇÜLDÜ — karar Eray'da] CTA ≥ 5 eşiği (Grup 3 (e)):** sentez adayı 4 (aynı girdiyle sabah 6);
   yeni motorla dördü de uygulanır; kör yargı +2 CTA (Soru 9) ve +4 hizmet CTA'sı (Soru 10a) ekledi.
-  Eşik kararı düzeltme turunun sonucuyla verilir.
+  Operatör kararlarından sonra havuz **10** (ölçüldü, kuru koşu çıktısı); eşik kararı Eray'da.
 - **[DÜŞÜRÜLDÜ — yeniden açılma koşullu] Sektör risk sözlüğü:** Decisions Log 2026-09-23. Evi: yeni bir
   sektörün ilk koşusu (aynı ölçüm).
 - **[DÜŞÜRÜLDÜ — etkisiz] Sahipsiz koşular:** `kosu-2851dc22…` (2026-09-23, sayaç kusuru yüzünden

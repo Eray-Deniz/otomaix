@@ -56,6 +56,7 @@ from app.services.sector_pipeline import (  # noqa: E402
     contracts,
     engine,
     identity,
+    operator_decisions,
     policy_config,
     readiness,
     readiness_items,
@@ -99,6 +100,7 @@ RUN_SUBCOMMANDS: frozenset[str] = frozenset(
         "denetim",
         "sentez",
         "motor",
+        "operator-karar",
         "katman1",
         "katman2",
         "hazirlik-onayla",
@@ -230,6 +232,19 @@ def build_parser() -> argparse.ArgumentParser:
             "Motor ayar dosyası (JSON). Verilmezse eşikler PASİF kalır — K-24: "
             "eşikler pilot kanıtından sonra belirlenir, uydurulmaz."
         ),
+    )
+
+    p = _ekle(
+        "operator-karar",
+        "Açık sorularla durmuş koşuya operatör kararlarını uygular (migration 037).",
+    )
+    p.add_argument("--run-id", required=True)
+    p.add_argument("--karar-dosyasi", required=True, type=Path)
+    p.add_argument("--actor", required=True)
+    p.add_argument(
+        "--kuru",
+        action="store_true",
+        help="Kararları uygular ve sonucu basar, veritabanına YAZMAZ.",
     )
 
     # ── Yazım kapısı (arayüz eki R10) ───────────────────────────────────
@@ -910,11 +925,12 @@ async def _takvim(conn) -> dict[str, str]:
     return takvim
 
 
-async def _kos_motor(conn, args) -> Sonuc:
-    """Politika motorunu koşturur ve koşu sonucunu yazar (K-22=A).
+async def _motor_girdileri(conn, args):
+    """Motorun girdileri + ayarı — `motor` ve `operator-karar` AYNI kurulumu okur.
 
     Girdiler kalıcı katmandan OKUNUR: sentez artefaktı, denetçi çifti, mekanik
-    eleme ve otomatik kapılar. Motor `active`'e geçirme yetkisi TAŞIMAZ (K-28).
+    eleme ve otomatik kapılar. Kapı düşerse `Sonuc` döner (ret), geçerse
+    `(girdiler, ayar)`.
     """
     satir = await _kosu_satiri(conn, args.run_id)
     aktif, birimler, aktif_surum = await _aktif_paket(conn, satir["sector_id"])
@@ -973,12 +989,99 @@ async def _kos_motor(conn, args) -> Sonuc:
             tek_aktif_ihlali=tek_aktif_ihlali,
         ),
     )
+    return girdiler, ayar
+
+
+async def _kos_motor(conn, args) -> Sonuc:
+    """Politika motorunu koşturur ve koşu sonucunu yazar (K-22=A).
+
+    Motor `active`'e geçirme yetkisi TAŞIMAZ (K-28).
+    """
+    kurulum = await _motor_girdileri(conn, args)
+    if not isinstance(kurulum[0], engine.EngineInputs):
+        return kurulum
+    girdiler, ayar = kurulum
     sonuc = engine.decide(girdiler, ayar)
     await runs.record_result(conn, run_id=args.run_id, result=sonuc)
     return (
         [f"run_id: {args.run_id}", f"sonuc: {sonuc.sonuc}"],
         RC_OK,
     )
+
+
+async def _kos_operator_karar(conn, args) -> Sonuc:
+    """Açık sorularla durmuş koşuya operatör kararlarını uygular (migration 037).
+
+    Motor BUGÜNKÜ sürümüyle aynı girdilerden yeniden koşar (DB'deki sonuç eski
+    bir motorun ürünü olabilir), karar dosyası sonucun üstüne uygulanır ve
+    paketin bütün kapıları yeniden koşar. `--kuru` yazmadan sonucu basar.
+    Motorun ilk sonucu `motor_ilk_sonucu`'nda saklanır.
+    """
+    satir = await conn.fetchrow(
+        "SELECT r.durum, r.sonuc, r.package_id, r.engine_config_sha, "
+        "  EXISTS (SELECT 1 FROM social.sector_run_operator_decisions d "
+        "          WHERE d.run_id = r.run_id) AS kararli "
+        "FROM social.sector_package_runs r WHERE r.run_id = $1",
+        args.run_id,
+    )
+    if satir is None:
+        return ([f"koşu satırı yok: {args.run_id}"], RC_REFUSED)
+    if satir["durum"] != "tamamlandi" or satir["sonuc"] != "blocked":
+        return (
+            [
+                f"koşu {args.run_id}: durum={satir['durum']} sonuc={satir['sonuc']} — "
+                "operatör kararı yalnız motorun `blocked` dediği koşuya yazılır"
+            ],
+            RC_REFUSED,
+        )
+    if satir["package_id"] is not None or satir["kararli"]:
+        return (
+            [f"koşu {args.run_id} taslağa bağlı ya da zaten operatör kararı almış"],
+            RC_REFUSED,
+        )
+    try:
+        dosya = json.loads(args.karar_dosyasi.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as hata:
+        return ([f"karar dosyası okunamadı: {type(hata).__name__}"], RC_REFUSED)
+
+    args.politika_ayari = None
+    kurulum = await _motor_girdileri(conn, args)
+    if not isinstance(kurulum[0], engine.EngineInputs):
+        return kurulum
+    girdiler, ayar = kurulum
+    if policy_config.config_sha(ayar) != satir["engine_config_sha"]:
+        return (
+            [
+                "motorun ilk koşusu farklı bir politika ayarıyla yapılmış — operatör "
+                "kararı varsayılan ayarla yeniden koşar ve sonucu karşılaştırılamaz"
+            ],
+            RC_REFUSED,
+        )
+    motor_sonucu = engine.decide(girdiler, ayar)
+    try:
+        yeni, kayit = operator_decisions.uygula(
+            motor_sonucu,
+            dosya=dosya,
+            sentez_sorulari=girdiler.sentez.acik_sorular,
+            takvim_anahtarlari=girdiler.takvim_anahtarlari,
+            actor=runs.require_actor(args.actor),
+        )
+    except operator_decisions.OperatorKarariReddedildi as hata:
+        return ([f"operatör kararı reddedildi: {hata}"], RC_REFUSED)
+
+    islemler = [i for k in kayit["kararlar"] for i in k["islemler"]]
+    satirlar = [
+        f"run_id: {args.run_id}",
+        f"sonuc: {yeni.sonuc}",
+        f"kapanan soru: {len(kayit['kararlar'])}",
+        f"islem: {len(islemler)} (hukuki: {sum(1 for i in islemler if i['hukuki'])})",
+    ]
+    if args.kuru:
+        return (satirlar + ["kuru koşu: YAZILMADI"], RC_OK)
+    await runs.record_operator_resolution(
+        conn, run_id=args.run_id, result=yeni, kararlar=kayit, actor=args.actor
+    )
+    return (satirlar + ["yazildi"], RC_OK)
 
 
 async def _kos_yazim(conn, args) -> Sonuc:
@@ -1377,6 +1480,7 @@ GOVDELER = {
     "denetim": _kos_denetim,
     "sentez": _kos_sentez,
     "motor": _kos_motor,
+    "operator-karar": _kos_operator_karar,
     "yazim": _kos_yazim,
     "duzeltme-yaz": _kos_duzeltme_yaz,
     "katman1": _kos_katman1,
@@ -1437,6 +1541,7 @@ KOSUYU_ILERLETMEYEN: frozenset[str] = frozenset(
     {
         "tur-ac",
         "duzeltme-baslat",
+        "operator-karar",
         "yazim",
         "duzeltme-yaz",
         "katman1",

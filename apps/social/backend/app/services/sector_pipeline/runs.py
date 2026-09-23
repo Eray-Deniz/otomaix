@@ -353,9 +353,13 @@ class VerifiedRun:
     katman1_attestation: Mapping | None
     katman2_attestation: Mapping | None
     readiness_attestation: Mapping | None
+    # Migration 037 (`sector_run_operator_decisions.kararlar`): dolu ise koşunun
+    # sonucu, operatör kararları uygulanmış sonuçtur.
+    operator_kararlari: Mapping | None = None
 
     def __post_init__(self) -> None:
         for _alan in (
+            "operator_kararlari",
             "final_candidate",
             "final_decision_log",
             "policy_report",
@@ -979,7 +983,75 @@ async def load_verified_run(db, *, run_id: str, for_update: bool = True) -> Veri
         katman1_attestation=row["katman1_attestation"],
         katman2_attestation=row["katman2_attestation"],
         readiness_attestation=row["readiness_attestation"],
+        operator_kararlari=await db.fetchval(
+            "SELECT kararlar FROM social.sector_run_operator_decisions WHERE run_id = $1",
+            run_id,
+        ),
     )
+
+
+async def record_operator_resolution(
+    db, *, run_id: str, result: EngineResult, kararlar: Mapping[str, Any], actor: str
+) -> None:
+    """Operatör kararları uygulanmış sonucu yazar; motorun ilk sonucunu SAKLAR.
+
+    Motorun satırdaki sonucu `motor_ilk_sonucu`'na SQL içinde, kilitli satırdan
+    kopyalanır — Python'dan geçen bir kopya satırdakiyle ayrışabilirdi.
+
+    **Tek sefer, karşılaştır-ve-yaz.** Yalnız `tamamlandi` + `blocked`, taslağa
+    bağlanmamış, onay görüntüsü dondurulmamış ve daha önce operatör kararı
+    almamış koşuya yazılır. Yazılmış bir operatör kararının geri alma yolu
+    taslağın reddi ve düzeltme turudur (K-72) — ezilmez.
+    """
+    _require_run_id(run_id)
+    sahip = require_actor(actor)
+    if type(result) is not EngineResult or result.sonuc == "blocked":
+        raise ValueError(
+            "operatör sonucu `blocked` olmayan bir EngineResult olmalı — açık soru "
+            "kalmış bir sonuç yazılmaz"
+        )
+    eksik = [ad for ad in F19_ALANLARI if getattr(result, ad) in (None, (), {})]
+    if result.sonuc == "activation_eligible" and eksik:
+        raise ValueError(f"F19: {eksik} alanları operatör sonucunda da ZORUNLU")
+
+    degerler = {
+        kolon: _coz(getattr(result, alan)) for alan, kolon in _SONUC_KOLON_ESLEMESI
+    }
+    degerler["policy_report"] = result.policy_report.as_payload()
+    kolonlar = [kolon for _alan, kolon in _SONUC_KOLON_ESLEMESI]
+    atamalar = ", ".join(f"{kolon} = ${i + 2}" for i, kolon in enumerate(kolonlar))
+    ilk_sonuc = ", ".join(f"'{kolon}', {kolon}" for kolon in kolonlar)
+
+    async with db.transaction():
+        uygun = await db.fetchval(
+            "SELECT r.id FROM social.sector_package_runs r "
+            "WHERE r.run_id = $1 AND r.durum = 'tamamlandi' AND r.sonuc = 'blocked' "
+            "  AND r.package_id IS NULL AND r.approval_snapshot IS NULL "
+            "  AND r.approval_karar IS NULL "
+            "  AND NOT EXISTS (SELECT 1 FROM social.sector_run_operator_decisions d "
+            "                  WHERE d.run_id = r.run_id) "
+            "FOR UPDATE",
+            run_id,
+        )
+        if uygun is None:
+            raise ValueError(
+                f"operatör kararı yazılamaz: {run_id!r} — yalnız `blocked`, taslaksız, "
+                "onaysız ve daha önce karar almamış koşuya yazılır"
+            )
+        await db.execute(
+            "INSERT INTO social.sector_run_operator_decisions "
+            "(run_id, kararlar, motor_ilk_sonucu, actor) "
+            f"SELECT run_id, $2, jsonb_build_object({ilk_sonuc}), $3 "
+            "FROM social.sector_package_runs WHERE run_id = $1",
+            run_id,
+            identity.cozulmus(kararlar),
+            sahip,
+        )
+        await db.execute(
+            f"UPDATE social.sector_package_runs SET {atamalar} WHERE run_id = $1",
+            run_id,
+            *[degerler[kolon] for kolon in kolonlar],
+        )
 
 
 # ─── 6. Kapı tasdikleri (F18) ───────────────────────────────────────────────

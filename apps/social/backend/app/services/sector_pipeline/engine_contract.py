@@ -204,7 +204,10 @@ class PolicyReport:
     """K-95 politika raporu — koşu satırının `policy_report` kolonuna yazılan tip.
 
     **TEK ÜRETİCİSİ `engine.decide`'dır** (Task 13). Başka hiçbir modül bu sınıfı
-    KURMAZ; serbest sözlükten üretilen bir politika raporu yolu YOKTUR.
+    KURMAZ; serbest sözlükten üretilen bir politika raporu yolu YOKTUR. Tek
+    istisna `operator_decisions.uygula`'dır (migration 037): raporu kurmaz,
+    `decide`'ın raporundan yalnız operatörün cevapladığı açık soru kimliklerini
+    `dataclasses.replace` ile düşürür.
 
     Dört alanın dördü de ZORUNLUDUR; boş rapor `PolicyReport((), (), (), ())`
     biçiminde **boş demetlerle** ifade edilir, `None` ile DEĞİL.

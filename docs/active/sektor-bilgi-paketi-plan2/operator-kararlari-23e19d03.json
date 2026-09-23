@@ -1,0 +1,324 @@
+{
+ "kararlar": [
+  {
+   "soru": "S1",
+   "soru_basi": "**İndirim referans süresi",
+   "cevap": "Süre yazılmasın: indirim öncesi fiyat mevzuata uygun gösterilir, gün sayısı verilmez.",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "yasaklar_ve_hassasiyetler",
+     "deger": "İndirim duyurusunda indirim öncesi fiyatı yürürlükteki mevzuata uygun göster; fiyatı önce yükseltip sonra indirimli gibi sunma (gölge indirim)."
+    }
+   ]
+  },
+  {
+   "soru": "ku-4b1336036851",
+   "cevap": "S1 ile aynı madde: 10 gün yazılmaz, süresiz genel madde eklendi.",
+   "islemler": []
+  },
+  {
+   "soru": "S2",
+   "soru_basi": "**Getiri dili yasağının hukuki dayanağı",
+   "cevap": "SPK çerçevesi eklensin, doğrulanmadığı notuyla.",
+   "islemler": [
+    {
+     "islem": "degistir",
+     "unit_id": "ku-a1578a5f3402",
+     "deger": "Altını 'kesin kazandırır', 'değer kaybetmez' gibi getiri ya da değer garantisiyle sunma, yatırım tavsiyesi verme. İzinsiz yatırım danışmanlığı SPK mevzuatınca suç sayılabilir (bu dayanağın fiziki altına uygulandığı doğrulanmadı)."
+    }
+   ]
+  },
+  {
+   "soru": "S3",
+   "soru_basi": "**Beklemedeki hukuki kalemler",
+   "cevap": "3a birim/gram fiyatı girsin; 3b MASAK paket dışı; 3c cayma hakkı girmesin; 3d ceza aralığı eklenmesin. Ek: motorun bağ hatasıyla düşürdüğü yetki belgesi maddesi (iki denetçi de doğruladı) geri eklensin.",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "yasaklar_ve_hassasiyetler",
+     "deger": "Fiyat içeren paylaşımda yalnız toplam fiyatı verme; gram (birim) fiyatını da görünür yaz."
+    },
+    {
+     "islem": "ekle",
+     "alan": "yasaklar_ve_hassasiyetler",
+     "deger": "Her kuyum reklamında yetki belgesi numarası ile işletme adı ya da unvanı yer almadan paylaşım yapma (Kuyum Ticareti Hakkında Yönetmelik m.11/2-b)."
+    }
+   ]
+  },
+  {
+   "soru": "S4",
+   "soru_basi": "**8 Mart (`dunya-kadinlar-gunu`)",
+   "cevap": "Kutlama olarak girsin; görsel vurgu mevcutlardan (Anneler Günü) seçildi.",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "dunya-kadinlar-gunu",
+     "deger": {
+      "tur": "kutlama",
+      "mesaj_ekseni": "Kadınların emeğini ve gücünü kutlamak; takı satın alma eylemiyle özdeşleştirilmez, satış baskısı yoktur.",
+      "kanca": "[ilham veren bir kadın ya da gündelik emek] + [takdir] + [kuşaktan kuşağa aktarılan değer]",
+      "cta": "ilham aldığınız kadını anma ve günün mesajını paylaşma daveti",
+      "gorsel_vurgu": "pearl necklace close-up, gold pendant on pastel surface, soft warm natural light, hands presenting an open jewelry box, delicate bracelet on wrist"
+     }
+    }
+   ]
+  },
+  {
+   "soru": "S5",
+   "soru_basi": "**Ramazan ve Kurban Bayramı",
+   "cevap": "İkisi de karma olarak girsin (operatör eklemesi, kaynak bağı zayıf); 'birikim' yok; arife dahil tüm günler.",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "ramazan-bayrami-arife",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "ramazan-bayrami-1-gun",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "ramazan-bayrami-2-gun",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "ramazan-bayrami-3-gun",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "kurban-bayrami-arife",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "kurban-bayrami-1-gun",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "kurban-bayrami-2-gun",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "kurban-bayrami-3-gun",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "kurban-bayrami-4-gun",
+     "deger": {
+      "tur": "karma",
+      "mesaj_ekseni": "Bayram ziyareti ve hediye geleneği: aile büyüklerine ve çocuklara çeyrek ya da gram altın, bebek altını ya da küçük bir takı; hediye yatırım ya da getiri diliyle sunulmaz.",
+      "kanca": "[bayram ziyareti anı] + [büyüklere ya da çocuklara hediye] + [geleneğin anlamı] · [bayram hediyesi kararsızlığı] + [çeyrek mi gram mı, takı mı] + [seçim ipucu]",
+      "cta": "bayram hediyesi seçenekleri + çeyrek, gram altın ya da küçük takı + mağazada seçim daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    }
+   ]
+  },
+  {
+   "soru": "S6",
+   "soru_basi": "**24 Kasım Öğretmenler Günü",
+   "cevap": "Ticari fırsat olarak girsin, satın alma çağrısı olmadan.",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "24-kasim-ogretmenler-gunu",
+     "deger": {
+      "tur": "ticari-firsat",
+      "mesaj_ekseni": "Öğretmene teşekkür: küçük, sembolik bir anı; değerli hediye ya da ortak para toplama dili kullanılmaz.",
+      "kanca": "[öğretmenin bir öğrencide bıraktığı iz] + [teşekkür] + [küçük bir anı]",
+      "cta": "içerik-önerilmez",
+      "gorsel_vurgu": "pearl necklace close-up, gold pendant on pastel surface, soft warm natural light, hands presenting an open jewelry box, delicate bracelet on wrist"
+     }
+    }
+   ]
+  },
+  {
+   "soru": "S7",
+   "soru_basi": "**Babalar Günü ve 29 Ekim",
+   "cevap": "Babalar Günü ticari fırsat olarak girsin (görsel vurgu mevcutlardan: Yılbaşı); 29 Ekim kutlama olarak, satışsız, sikke yazısız.",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "babalar-gunu",
+     "deger": {
+      "tur": "ticari-firsat",
+      "mesaj_ekseni": "Babaya minnet ve kişisel stil: erkek yüzüğü, bileklik ya da kol düğmesi.",
+      "kanca": "[babayla paylaşılan bir an] + [teşekkür] + [stiline uygun takı önerisi]",
+      "cta": "babanın stili + erkek yüzüğü ya da bileklik seçenekleri + mağazada deneme daveti [kanal-bağımlı: fiziksel_magaza]",
+      "gorsel_vurgu": "warm festive bokeh background, plain gift box with satin ribbon, controlled sparkle on diamond jewelry, gold pendant catching warm light, jewelry gift arrangement in soft warm light"
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "ozel_gun",
+     "anahtar": "cumhuriyet-bayrami",
+     "deger": {
+      "tur": "kutlama",
+      "mesaj_ekseni": "Cumhuriyet'in kuruluşunu saygı ve gururla kutlamak; satış mesajı yoktur.",
+      "kanca": "[Cumhuriyet'in anlamı] + [kuşaktan kuşağa aktarılan değer] + [kutlama]",
+      "cta": "Cumhuriyet Bayramı kutlama mesajını paylaşma daveti",
+      "gorsel_vurgu": "gold coin photographed edge-on or at a low angle with no legible text or inscription, red and white tones, soft even light"
+     }
+    }
+   ]
+  },
+  {
+   "soru": "S8",
+   "soru_basi": "**Duygusal an ve hediye kararsızlığı kancaları",
+   "cevap": "İki kanca da girsin.",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "kanca_kaliplari",
+     "deger": "[takı töreni ya da teslim anı] + [o anın duygusu] + [takının taşıdığı hatıra]"
+    },
+    {
+     "islem": "ekle",
+     "alan": "kanca_kaliplari",
+     "deger": "[hediye kararsızlığı] + [alıcının stili] + [kolye mi yüzük mü, hangi takı tipi]"
+    }
+   ]
+  },
+  {
+   "soru": "S9",
+   "soru_basi": "**CTA uyuşmazlıkları",
+   "cevap": "İki CTA da girsin (aciliyet ve yatırım dili ayıklanmış).",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "cta_kaliplari",
+     "deger": {
+      "kalip": "bütçe + ayar ve gramaj seçenekleri + karşılaştırarak seçme daveti",
+      "tur": "satis",
+      "gerekce": "Kuyumda karar ürün niteliği karşılaştırılarak verilir; aciliyet ve yatırım dili yok."
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "cta_kaliplari",
+     "deger": {
+      "kalip": "özel gün + kişiye özel tasarım ya da isim işleme + erken sipariş daveti",
+      "tur": "satis",
+      "gerekce": "Kişiye özel iş hazırlık süresi ister; teslim süresi markanın kendi hizmetine göre söylenir."
+     }
+    }
+   ]
+  },
+  {
+   "soru": "S10",
+   "soru_basi": "**Kuyuma özgü ama dış kanıtsız ya da bağsız kalıplar",
+   "cevap": "10a dört hizmet CTA'sı girsin ('ücretsiz' vaadi yok); 10b üç görsel kod girsin (yazısız).",
+   "islemler": [
+    {
+     "islem": "ekle",
+     "alan": "cta_kaliplari",
+     "deger": {
+      "kalip": "yüzük ölçüsü uymuyor + ölçülendirme hizmeti + mağazaya davet [kanal-bağımlı: fiziksel_magaza]",
+      "tur": "hizmet",
+      "gerekce": "Ölçü uyumu kuyumcunun temel hizmetidir; ücret vaadi yok."
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "cta_kaliplari",
+     "deger": {
+      "kalip": "eski ya da kullanılmayan takı + taklas (değişim) seçeneği + mağazada değerlendirme daveti [kanal-bağımlı: fiziksel_magaza]",
+      "tur": "hizmet",
+      "gerekce": "Taklas kuyuma özgü bir hizmettir."
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "cta_kaliplari",
+     "deger": {
+      "kalip": "takı bakımı ya da onarımı + mağazada kontrol daveti [kanal-bağımlı: fiziksel_magaza]",
+      "tur": "hizmet",
+      "gerekce": "Bakım ve onarım bağlılık yaratır; 'ücretsiz' vaadi markanın gerçek hizmetine bağlı olduğu için yazılmaz."
+     }
+    },
+    {
+     "islem": "ekle",
+     "alan": "cta_kaliplari",
+     "deger": {
+      "kalip": "doğum ya da mevlüt hediyesi + kulplu çeyrek ya da bebek altını seçenekleri + WhatsApp'tan danışma daveti [kanal-bağımlı: whatsapp_hatti]",
+      "tur": "hizmet",
+      "gerekce": "Türkiye'ye özgü güçlü bir hediye geleneği."
+     }
+    },
+    {
+     "islem": "degistir",
+     "unit_id": "ku-cb22cf851046",
+     "deger": "macro close-up of faceted gemstone, prong and pavé setting detail, soft directional light, controlled reflections on polished gold, crisp stone sparkle, dark burgundy velvet surface, black velvet high contrast, draped silk surface, white marble surface with negative space around a ring, neutral backdrop emphasizing metal tone, ring worn on hand for scale, bracelet on wrist, pendant on collarbone, earrings on ear close-up, centered single ring, symmetrical earring pair, matching jewelry set arranged symmetrically, overhead flat lay of a jewelry set, filigree (telkari) and openwork detail in the warm tone of 22-karat gold, minted gold coin shown edge-on or at an angle with no legible text or stamp, natural and lab-grown diamonds side by side with no labels or text"
+    }
+   ]
+  }
+ ]
+}

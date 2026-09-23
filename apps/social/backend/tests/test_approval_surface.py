@@ -856,7 +856,7 @@ async def test_second_decision_is_refused(pkg_db) -> None:
     ) == "onay"
 
 
-@pytest.mark.parametrize("sema", [None, 0, 1, 3, "2"])
+@pytest.mark.parametrize("sema", [None, 0, 1, 2, 4, "3"])
 def test_renderers_refuse_unknown_snapshot_schema(sema) -> None:
     """Bilinmeyen şema OKUNMAZ — iki gösterici de fail-closed durur."""
     goruntu = {"sema": sema} if sema is not None else {}
@@ -1359,6 +1359,7 @@ async def test_snapshot_core_field_set_is_closed(pkg_db) -> None:
         "onaylanabilir",
         "icerik_hashleri",
         "acik_sorular",
+        "operator_kararlari",  # 2026-09-23 migration 037 — mutasyon vakası: test_operator_decisions
         "geri_ekleme_celiskileri",
         "kararsizlar",
         "cikarmalar",
