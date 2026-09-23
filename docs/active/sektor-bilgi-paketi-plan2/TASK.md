@@ -1797,7 +1797,7 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   - **md-18** — Claude önerisi: paketin 2. sürümüne (ilk periyodik koşu). **Eray açıkça onaylamadı →
     sıradaki oturumda sorulur.**
   - **Pilot ölçümleri + rapor** — EV: Task 19 Step 12-13, md-17'den sonra.
-  - **Dış depo G8 düzenlemesi commit'lenmedi** — EV: dış deponun bir sonraki commit'i, pin aynı adımda.
+  - **[KAPANDI] Dış depo G8 düzenlemesi** — `dfa55f8` commit'lendi, pin taşındı (`b355822`).
   - **[DÜŞÜRÜLDÜ — koşullu]** `sector_pipeline` motor modüllerinin konteynerde import edilememesi:
     tasarım sınırı (CLI çalışma ağacından koşar). Yeniden açılma koşulu: CLI'nin konteynerde
     koşturulmasına karar verilirse.

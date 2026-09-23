@@ -56,8 +56,8 @@ pin) → "düzeltme turu" yolunun `blocked` koşuya UYGULANAMADIĞI ölçüldü 
 - Canlı model çağrısı gerekirse anahtar `/root/.anthropic-key` (0600, 2026-09-23 Eray oluşturdu);
   yalnız süreç ortamına verilir, dosyaya kopyalanmaz. Yerel `backend/.env`'de anahtar YOK.
 - Dış depo (`otomaix-sosyal-medya-arastirmasi`) commit'i pin'i bayatlatır → sektör CLI'si reddeder;
-  commit ederken pin aynı adımda güncellenir. **Şu an:** `marka-dna-mimari-karar-dokumani.md` (G8
-  eklendi) commit'lenmemiş — Eray'ın silmeleri de aynı ağaçta, DOKUNULMADI.
+  commit ederken pin aynı adımda güncellenir. G8 dış depoda `dfa55f8` olarak commit'lendi, pin ona
+  taşındı (`b355822`); dış deponun remote'u YOK (push edilmez). Eray'ın silmeleri DOKUNULMADI.
 - Mutasyonda `__pycache__` sil + `python -B`; geri dönüş dosya yedeğiyle.
 - `~/.claude/settings.json`'da Eray'ın commit'lenmemiş değişiklikleri — dokunulmadı.
 
