@@ -545,7 +545,10 @@ def render_summary(snapshot: Mapping[str, Any]) -> str:
             "ONAYLANAMAZ — açık sorular kapanmadan onay verilemez (K-71)."
         )
     if snapshot["acik_sorular"]:
-        satirlar += _satirlar("Açık sorular", list(snapshot["acik_sorular"])[:10])
+        # KESİLMEZ (2026-09-23): ilk 10'la sınırlı basım, başlığa kesilmiş
+        # listenin boyunu yazıyordu; motor kendi kimliklerini sentezin
+        # sorularının ÖNÜNE koyduğu için kaybolan hep sentezin son sorusuydu.
+        satirlar += _satirlar("Açık sorular", list(snapshot["acik_sorular"]))
 
     satirlar.append("")
     satirlar += _satirlar(

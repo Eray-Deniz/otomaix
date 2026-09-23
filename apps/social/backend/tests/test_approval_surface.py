@@ -462,6 +462,32 @@ async def test_open_questions_prevent_approvable_result(pkg_db) -> None:
     assert "as-1" in ozet
 
 
+async def test_summary_lists_every_open_question(pkg_db) -> None:
+    """Özet açık soruları KESMEZ; başlıktaki sayı tam sayıdır.
+
+    2026-09-23: özet ilk 10'u basıyordu ve başlık kesilmiş listenin boyunu
+    yazıyordu. Motor sentezin sorularının ÖNÜNE kendi kimliklerini koyar
+    (`engine._acik_soru_kimlikleri`); 10 sentez sorusu + 1 motor sorusunda
+    sentezin sonuncusu ekrandan iz bırakmadan düşüyordu.
+    """
+    kimlikler = tuple(f"as-{sira:02d}" for sira in range(1, 12))
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _onaya_hazir_kosu(
+        pkg_db,
+        sector_id,
+        policy_report=_policy_report(acik_soru_kimlikleri=kimlikler),
+    )
+
+    goruntu = await approval.build_and_freeze_from_run(
+        pkg_db, run_id=run_id, actor=ACTOR
+    )
+
+    ozet = approval.render_summary(goruntu)
+    assert f"Açık sorular: {len(kimlikler)}" in ozet
+    for kimlik in kimlikler:
+        assert f"  - {kimlik}" in ozet
+
+
 async def test_summary_never_lists_patterns(pkg_db) -> None:
     """Spec §9.6: yönetici kalıp listesi GÖRMEZ."""
     sector_id = await _sub_sector(pkg_db)
