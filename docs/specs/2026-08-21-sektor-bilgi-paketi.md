@@ -951,7 +951,17 @@ değil. **Fallback sentez raporunu yerinde değiştirmez** — motor nihai aday�
 - Mutabakat kapısı benimsenirse iki kalem ayrıca kesinleşir: bloklayan alan listesi
   **K-129 — KAPANDI (Eray, 2026-08-23): SABİT** — yasaklar-ve-hassasiyetler alanının
   tamamı + mevzuat/tarih/sayı iddiası içeren tüm maddeler (mekanik, yorumsuz; spec
-  revizyonuyla genişletilebilir) · tek-kaynak istisna sözleşmesi **K-126 — KAPANDI (Eray, 2026-08-23):
+  revizyonuyla genişletilebilir). **REVİZYON (Eray, 2026-09-23) — "iddia"nın mekanik
+  okuması:** hukuki dil (tüm sektörlerde ortak liste; kelime başından, Türkçe harf
+  katlanmadan) + madde/sayılı atıf + nicel iddia (yüzde, para, büyük istatistik).
+  Tek başına rakam — tarih, ölçü, adet, model adı — iddia DEĞİLDİR; tarih yalnız hukuki
+  bağlamla risktir. Gerekçe canlı ölçüm (`kosu-23e19d03`): ilk okuma (her rakam +
+  alt-dize kelime listesi) 28 içerik maddesinin 5'ini "ayar"/"360-degree" yüzünden
+  düşürüyor, "… ibaresi zorunlu" gibi hukuki dili kaçırıyordu. Sektöre özel sözlük
+  ölçülerek DÜŞÜRÜLDÜ (302 içerik maddesinde 6 ek yakalama, 6'sı yanlış alarm);
+  yeniden açılma koşulu: yeni bir sektörün ilk koşusunda aynı ölçüm, kuralın "normal"
+  dediği bir içerik maddesinde yasak bir ifadenin olumlu geçtiğini gösterirse ·
+  tek-kaynak istisna sözleşmesi **K-126 — KAPANDI (Eray, 2026-08-23):
   TANIMLANIR** — istisna yalnız (1) kaynak resmî (K-123 ölçütü) + (2) en az bir
   denetçinin canlı URL doğrulaması (açıp içerik uyumunu kaydetmesi) birlikteyken çalışır.
 

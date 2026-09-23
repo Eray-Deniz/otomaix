@@ -136,37 +136,97 @@ SAG_CIKAN_BAYRAK = "kanal-bagimli"
 _BAYRAK_RE = re.compile(r"\[([^\]]*)\]")
 
 MEVZUAT_ANAHTAR_KELIMELERI: tuple[str, ...] = (
-    "mevzuat",
     "kanun",
-    "yonetmelik",
-    "teblig",
+    "yönetmeli",
+    "tebliğ",
+    "genelge",
+    "mevzuat",
+    "resmî gazete",
+    "resmi gazete",
     "yasa",
-    "madde",
+    "zorunlu",
+    "ceza",
+    "yaptırım",
+    "ruhsat",
+    "yetki belgesi",
+    "cayma hakkı",
+    "tüketici hak",
     "vergi",
     "kdv",
-    "ayar",
-    "damga",
-    "garanti",
-    "tuketici",
-    "iade",
-    "standart",
+    "bakanlı",
+    "reklam kurulu",
+    "rekabet kurumu",
+    "spk",
+    "bddk",
+    "rtük",
+    "kvkk",
+    "epdk",
+    "btk",
+    "titck",
 )
-"""K-129'un ikinci kolu: mevzuat iddiası taşıyan maddelerin MEKANİK işaretleri.
+"""K-129'un ikinci kolu: HUKUKİ DİL işaretleri — tüm sektörlerde ORTAK (rev. 2026-09-23).
 
-K-129 kapandı ve SABİTTİR: `yasaklar_ve_hassasiyetler` alanının tamamı + mevzuat/
-tarih/sayı iddiası içeren tüm maddeler (spec §9.4). Tarih ve sayı ayağı rakam
-varlığıyla, mevzuat ayağı bu aksan-katlanmış kelime listesiyle ölçülür. Liste
-GENİŞ tutulur: yanlış-pozitif yönü bloklamaya (fail-closed), yanlış-negatif yönü
-mevzuat uyuşmazlığını sessizce geçirmeye (fail-open) çıkar. Genişletmesi spec
-revizyonudur.
+K-129 (Eray, 2026-08-23): `yasaklar_ve_hassasiyetler` alanının tamamı + mevzuat/tarih/
+sayı İDDİASI içeren tüm maddeler, mekanik ve yorumsuz (spec §9.4). İlk okuma "iddia"yı
+HERHANGİ bir rakam ve alt-dize kelime listesi ("ayar", "damga", "standart", "garanti"…)
+olarak ölçüyordu. **Revizyon (Eray, 2026-09-23), canlı ölçümle:** `kosu-23e19d03…`
+paketinin 28 içerik maddesinin 5'i yalnız "ayar" (kuyumculuğun ölçü birimi) ve
+"360-degree" yüzünden risk sayıldı ve kanıt kapısında düştü; 12 sektörün rehber
+metninde "yasak"ın içindeki "yasa", "B2B"deki 2 ateşliyordu; buna karşılık hukuki
+dil kaçıyordu ("… ibaresi zorunlu", "Reklam Kurulu cezaları"). Bugünkü ölçü:
 
-**Eşleme ALT-DİZEDİR ve bu bilinçlidir.** Türkçe eklemeli bir dildir: "ayar"
-kelimesi metinde "ayarı", "ayarında", "ayarlar" olarak geçer ve kelime-sınırı
-ankoru bunları KAÇIRIR. Alt-dize eşlemesinin bedeli, kelimeyi içinde barındıran
-ilgisiz bir sözcüğün de eşleşmesidir (yanlış-pozitif) — yön fail-closed olduğu
-için bu bedel bilinçle kabul edilir. Kabul edilmiş kalan risk: rakam kolu
-sıradan sayısal metni de mevzuat sayar (checkpoint 9, orta — accepted_risk).
+* **Kelime BAŞINDAN eşleşir, alt-dize DEĞİL** (`_HUKUKI_DIL_RE`). Türkçe eklemelidir
+  ("kanunu", "cezası"): baştan eşleme ekleri yakalar; alt-dize ise "piyasa"da ve
+  "yaşam"da "yasa"yı buluyordu. Ünsüz yumuşaması için KÖK yazılır ("yönetmeli" →
+  yönetmelik/yönetmeliğe); "yasa" kökü "yasak"/"yasal"ı da kapsar.
+* **Türkçe harf KATLANMAZ** ("yaşam" ≠ "yasa"); ASCII yazılmış metin kaçmasın diye her
+  kelimenin katlanmış EŞİ desene otomatik eklenir (`_ascii_esi`).
+* **Tek başına rakam iddia DEĞİLDİR:** tarih ("29 Ekim"), ölçü ("128 GB"), adet, model
+  adı. Nicel iddia = yüzde, para tutarı, büyük istatistik (`_NICEL_IDDIA_RE`); madde/
+  sayılı atıf ayrı koldur (`_HUKUKI_ATIF_RE`).
+* **Sektör sözlüğü YOK — ölçülerek düşürüldü (2026-09-23):** sekiz sentez çıktısındaki
+  302 içerik maddesinde, yasak metinlerinden çıkan aday ifadeler ("kesin kazandırır",
+  "sentetik", "laboratuvar üretimi" …) 6 ek yakalama verdi, 6'sı da yanlış alarm
+  (eğitici ayrım ya da YASAKLAYAN cümle: "yatırım diliyle sunulmaz"). Yeniden açılma
+  koşulu: yeni bir sektörün ilk koşusunda aynı ölçüm, bu kuralın "normal" dediği bir
+  içerik maddesinde yasak bir ifadenin OLUMLU geçtiğini gösterirse.
+* **Kalan yanlış-negatif (dürüst etiket, ölçüldü):** hukuki olup bu işaretleri
+  taşımayan iddia içerik sınıfında kalır — `kosu-23e19d03` araştırmasının 25 mevzuat
+  destekli iddiasından 9'u (5'i yasak alanında; orada alan kuralı yakalar). Eski
+  kuralın da kaçırdığı 9 vardı; küme farklıdır. Genişletme spec revizyonudur.
 """
+
+_TR_ASCII = str.maketrans("çğıöşüâîû", "cgiosuaiu")
+_KELIME_BASI = r"(?<![0-9a-zçğıöşüâîû])"
+
+
+def _ascii_esi(metin: str) -> str:
+    return metin.translate(_TR_ASCII)
+
+
+def _turkce_kucuk(metin: str) -> str:
+    """Türkçe küçük harf — `I`→`ı`, `İ`→`i`; aksan KATLANMAZ (`_katla`'nın tersine)."""
+    return metin.replace("I", "ı").replace("İ", "i").lower()
+
+
+_HUKUKI_DIL_RE = re.compile(
+    _KELIME_BASI
+    + "(?:"
+    + "|".join(
+        sorted(
+            {re.escape(bicim) for k in MEVZUAT_ANAHTAR_KELIMELERI for bicim in (k, _ascii_esi(k))},
+            key=len,
+            reverse=True,
+        )
+    )
+    + ")"
+)
+_HUKUKI_ATIF_RE = re.compile(_KELIME_BASI + r"(?:madde\s*\d|md?\.\s*\d|\d+\s*say[ıi]l[ıi])")
+_NICEL_IDDIA_RE = re.compile(
+    r"%\s*\d|\d\s*%|y[üu]zde\s*\d|binde\s*\d|(?:₺|\$|€)\s*\d"
+    r"|\d[\d.,]*\s*(?:tl|₺|lira|usd|dolar|euro|avro|€|\$|bin|milyon|milyar)(?![0-9a-zçğıöşüâîû])"
+    r"|(?<![\d.,])\d{1,3}(?:\.\d{3})+(?!\d)"
+)
 
 _CIKARMA_DESTEKLEYEN = frozenset({"contradicted"})
 _GUNCELLEME_DESTEKLEYEN = frozenset({"contradicted", "needs_update"})
@@ -408,13 +468,19 @@ def _satir_metni(inputs: EngineInputs, satir: Mapping) -> str:
 
 
 def _mevzuat_mi(alan: str, metin: str) -> bool:
-    """K-129 — mekanik, yorumsuz: alan listesi + tarih/sayı + mevzuat kelimesi."""
+    """K-129 — mekanik, yorumsuz: yasak alanı + hukuki dil + hukuki atıf + nicel iddia.
+
+    Tek başına rakam risk DEĞİLDİR (rev. 2026-09-23). Ölçü ve gerekçe:
+    `MEVZUAT_ANAHTAR_KELIMELERI`.
+    """
     if alan in MEVZUAT_ALANLARI:
         return True
-    katlanmis = _katla(metin)
-    if any(ch.isdigit() for ch in katlanmis):
-        return True
-    return any(kelime in katlanmis for kelime in MEVZUAT_ANAHTAR_KELIMELERI)
+    kucuk = _turkce_kucuk(metin)
+    return bool(
+        _HUKUKI_DIL_RE.search(kucuk)
+        or _HUKUKI_ATIF_RE.search(kucuk)
+        or _NICEL_IDDIA_RE.search(kucuk)
+    )
 
 
 def _referanslar(inputs: EngineInputs) -> set[str]:
@@ -1411,7 +1477,7 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
 #
 # | Alan sınıfı | Sayılan destek | Hepsi `yok` |
 # |---|---|---|
-# | Risk (K-129: `yasaklar_ve_hassasiyetler` + mevzuat/tarih/sayı) | mevzuat · veri | AÇIK SORU |
+# | Risk (K-129: `yasaklar_ve_hassasiyetler` + hukuki dil · atıf · nicel iddia) | mevzuat · veri | AÇIK SORU |
 # | İçerik kalıbı (CTA · kanca · görsel · video · takvim · dönem) | uygulama · öneri · veri | BEKLETME |
 #
 # Bekletme: pakete girmez, açık soru AÇMAZ, kayıtta kalır (`kaynaksiz-bekletme`).
@@ -1494,8 +1560,9 @@ def _kanit_kapisi(
     """Kanıt kapısı — geçerse `None`; düşerse `(sebep, açık soru detayı | None)`.
 
     Alan sınıfı K-129'un MEKANİK kuralıyla seçilir (`_mevzuat_mi`): kararın
-    alanı `yasaklar_ve_hassasiyetler` ise ya da adayın metni tarih/sayı/mevzuat
-    işareti taşıyorsa RİSK, değilse İÇERİK. Risk sınıfında düşen karar AÇIK
+    alanı `yasaklar_ve_hassasiyetler` ise ya da adayın metni hukuki dil, madde atfı
+    ya da nicel iddia (yüzde, para, büyük istatistik) taşıyorsa RİSK, değilse İÇERİK
+    (rev. 2026-09-23 — tek başına rakam risk DEĞİLDİR). Risk sınıfında düşen karar AÇIK
     SORU açar (insan kararı); içerik sınıfında düşen karar BEKLETİLİR — pakete
     girmez, açık soru açmaz, kayıtta kalır. Bu asimetri sözleşmenindir.
     """

@@ -1425,7 +1425,10 @@ bayrak tüketimi · geri-ekleme çelişkisi · kategori çakışması (K-03: pak
   listesi) **`mevzuat_uyusmazligi` bulgusu** üretilir. Onu `blocked`'a çeviren `decide`'dır
   ve **her zaman** çevirir — **bu, benimsenen K-125 kararının sonucudur, K-128'in DEĞİL.**
 - **K-129 listesi kodda sabittir:** `yasaklar_ve_hassasiyetler` alanının tamamı + mevzuat/
-  tarih/sayı iddiası içeren tüm maddeler.
+  tarih/sayı iddiası içeren tüm maddeler. **Revizyon (Eray, 2026-09-23):** iddia = hukuki
+  dil (ortak liste, kelime başından, harf katlanmadan) + madde/sayılı atıf + nicel iddia
+  (yüzde, para, büyük istatistik); tek başına rakam risk değildir (spec §9.4 revizyonu,
+  `engine.MEVZUAT_ANAHTAR_KELIMELERI`).
 - **K-128 ile karışma YASAK (review turu düzeltmesi):** ilk yazımda `run_checks` mevzuat
   uyuşmazlığında doğrudan `blocked` dönüyordu; Task 13'ün `block_on_legislation` bayrağı
   bu yüzden hiçbir şeyi pasifleştiremiyordu — plan aynı kapıyı hem "kurulmaz" hem

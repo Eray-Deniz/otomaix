@@ -1024,6 +1024,50 @@ def test_cikar_without_two_auditor_agreement_keeps_pattern() -> None:
 # ═══ 9. Kontrol: mevzuat kolları (K-129 / K-125 / K-128) ══════════════════
 
 
+# K-129 revizyonu (Eray, 2026-09-23) — örnekler canlı koşudan (`kosu-23e19d03…`
+# paketi ve araştırması) ve 12 sektörün rehber metninden; beklenti ELLE yazıldı.
+@pytest.mark.parametrize(
+    "metin",
+    [
+        "ürün + ayar, gram, ölçü ve taş bilgisi + ürün sayfasında inceleme daveti",
+        "slow 360-degree turntable rotation",
+        "29 Ekim Cumhuriyet Bayramı gurur ve ortak miras ekseninde kutlanır",
+        "128 GB depolama ve 24 saat destekle hemen sipariş ver",
+        "Yaşam tarzına uygun bakım rutinini keşfet",
+        "altın piyasasındaki güncel modeller",
+        "500 g pakette 3 adımda hazırla",
+        "B2B müşterilere özel paket için randevu al",
+    ],
+)
+def test_ordinary_numbers_and_sector_vocabulary_are_not_legislation(metin: str) -> None:
+    assert engine._mevzuat_mi("cta_kaliplari", metin) is False
+
+
+@pytest.mark.parametrize(
+    "metin",
+    [
+        "Sentetik taş reklamda sentetik/laboratuvar/yapay üretim ibaresi zorunlu",
+        "Aldatıcı reklam ve haksız ticari uygulamalarda Reklam Kurulu cezaları",
+        "2 yıl yasal garanti ile güvenle al",
+        "İzinsiz yatırım tavsiyesi SPK mevzuatınca suçtur",
+        "Kuyum Ticareti Hakkında Yönetmeliğe aykırı",
+        "Teblig hukumlerine uygun",
+        "6362 sayılı düzenleme kapsamında",
+        "Yetki belgesi m.11/2-b gereği",
+        "%99 etkili formül",
+        "KDV dahil 49,90 TL'ye kapına gelsin",
+        "2025'te 552 bin 237 çift evlendi",
+        "kaba evlenme hızı binde 6,43",
+    ],
+)
+def test_legal_language_and_quantitative_claims_are_legislation(metin: str) -> None:
+    assert engine._mevzuat_mi("cta_kaliplari", metin) is True
+
+
+def test_the_prohibitions_field_is_always_legislation() -> None:
+    assert engine._mevzuat_mi("yasaklar_ve_hassasiyetler", "sade bir cümle") is True
+
+
 def test_legislation_disagreement_emits_mevzuat_uyusmazligi_finding() -> None:
     """K-129 alanında uyuşmazlık BULGU üretir — kayıt değil."""
     sonuc = engine.run_checks(
@@ -1039,19 +1083,33 @@ def test_legislation_disagreement_emits_mevzuat_uyusmazligi_finding() -> None:
     assert "mevzuat_uyusmazligi" in _siniflar(sonuc)
 
 
-def test_number_claim_outside_the_field_list_is_legislation() -> None:
-    """K-129'un ikinci kolu: sayı/tarih iddiası taşıyan madde de mevzuattır."""
-    sonuc = engine.run_checks(
+def _tema_uyusmazligi(yeni_metin: str):
+    return engine.run_checks(
         _guncelle_girdisi(
             alan="takvim_temalari",
             eski="Sevgililer Gunu hediye secimi",
-            yeni_metin="Sevgililer Gunu 2026 kampanya takvimi",
+            yeni_metin=yeni_metin,
             kanit=DOGRULANMIS_KAYNAK,
             statuler_1=MUTABIK_TEMA,
             statuler_2={TEMA_KIMLIGI: "supported"},
         )
     )
+
+
+def test_number_claim_outside_the_field_list_is_legislation() -> None:
+    """K-129'un ikinci kolu: nicel İDDİA (yüzde) taşıyan madde de mevzuattır."""
+    sonuc = _tema_uyusmazligi("Sevgililer Gunu %30 indirim takvimi")
     assert "mevzuat_uyusmazligi" in _siniflar(sonuc)
+
+
+def test_a_bare_year_is_not_a_number_claim() -> None:
+    """K-129 revizyonu (Eray, 2026-09-23): tek başına rakam iddia DEĞİLDİR.
+
+    İlk okuma herhangi bir rakamı mevzuat sayıyordu; tarih ve yıl taşıyan her takvim
+    maddesi mevzuat uyuşmazlığına düşüyordu.
+    """
+    sonuc = _tema_uyusmazligi("Sevgililer Gunu 2026 kampanya takvimi")
+    assert "mevzuat_uyusmazligi" not in _siniflar(sonuc)
 
 
 def test_plain_item_disagreement_is_not_legislation() -> None:
@@ -3748,7 +3806,7 @@ def test_malformed_url_does_not_pass_the_majority_gate() -> None:
 # İKİ AYRI SORU, İKİ AYRI SAYIM: MUTABAKAT (kaç araştırmada var — `destek=yok`
 # satırı da sayılır) ve KANIT KAPISI (bağlı satırlardan en az birinin desteği
 # alan sınıfının kümesinde mi). Sınıf K-129'un mekanik kuralıyla seçilir:
-# `yasaklar_ve_hassasiyetler` ya da tarih/sayı/mevzuat işaretli metin → RİSK.
+# `yasaklar_ve_hassasiyetler` ya da hukuki dil / atıf / nicel iddia taşıyan metin → RİSK.
 
 
 def _iddialarla(destek_k1: str, destek_k2: str, *, uyarlama: bool = False) -> bd.RoundGate:
@@ -3777,8 +3835,8 @@ def _iddialarla(destek_k1: str, destek_k2: str, *, uyarlama: bool = False) -> bd
 
 
 IKI_KAYNAKLI_IDDIA = auditors.KaynakIddiasi(kaynak=1, iddia=1)
-RISK_METNI = "Yeni kanca kalibi 2026 ayar beyani"
-"""Rakam + mevzuat kelimesi: `_mevzuat_mi` bunu RİSK sınıfına düşürür."""
+RISK_METNI = "Yeni kanca kalibi yonetmelik geregi zorunlu beyan"
+"""Hukuki dil (ASCII yazım): `_mevzuat_mi` bunu RİSK sınıfına düşürür."""
 
 
 def _kanit_girdisi(
