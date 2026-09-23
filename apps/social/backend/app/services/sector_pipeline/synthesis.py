@@ -193,7 +193,10 @@ gövdenin TAMAMINI satır satır tarayan yedek yola düşüyor ve tesadüfen do�
 sonucu veriyordu — yani doğruluk, modelin seçtiği etikete bağlıydı. Etiket
 serbest bırakılınca davranış her iki yazımda da AYNI yoldan geçer.
 """
-_LISTE_OGESI_RE = re.compile(r"^[ \t]*(?:[-*•]|\d+[.)])[ \t]+(\S.*?)[ \t]*$", re.M)
+_LISTE_OGESI_RE = re.compile(
+    r"^(?P<girinti>[ \t]*)(?:[-*•]|\d+[.)])[ \t]+(?P<metin>\S.*?)[ \t]*$"
+)
+_OGE_AYRACI = " — "
 
 _LISTE_YOLU_RE = re.compile(r"^(?P<alan>[a-z_]+)\[(?P<sira>\d+)\]$")
 _VIDEO_YOLU_RE = re.compile(r"^video_kodlar/(?P<havuz>[a-z]+)\[(?P<sira>\d+)\]$")
@@ -525,16 +528,44 @@ def _tek_govde(ham: str, etiket: str) -> Any:
 
 
 def _liste_ogeleri(govde: str) -> list[str]:
-    """Madde imli satırları öğe olarak okur.
+    """ÜST DÜZEY madde imli satırları öğe olarak okur; daha derin girintili
+    satırlar bir önceki öğeye katılır.
 
     **KAPSAM SINIRI, sessizce atlanmaz.** Kural YAPISALDIR: madde imi (`-`,
-    `*`, `•`, `1.`, `1)`) taşıyan satırlar sayılır. İmsiz serbest düz yazı SIFIR
-    öğe verir. Bu, serbest metinden madde SAYISI çıkarmaya çalışan bir yaklaşımın
-    (semantik olumsuzlama) bilinçle terk edilmiş hâlidir; buradaki sayı bir KAPI
-    değil, yalnız `tasma` işaretinin girdisidir — yanlış saymak hiçbir koşuyu
-    durdurmaz, yalnız işareti eksik/fazla koyar.
+    `*`, `•`, `1.`, `1)`) taşıyan satırlardan girintisi bölümdeki EN SIĞ olanlar
+    öğe başlatır — sütun 0 değil, çünkü bütün liste girintili yazılabilir. Daha
+    derin girintili boş olmayan satır (alt madde ya da devam satırı) bir önceki
+    öğeye `_OGE_AYRACI` ile katılır: içerik kaybolmaz, sayı artmaz. İmsiz serbest
+    düz yazı SIFIR öğe verir; üst düzeyde ya da daha sığda duran imsiz satır hiçbir
+    öğeye katılmaz. Üst maddeyle AYNI girintide yazılmış alt madde yapısal olarak
+    ayırt edilemez ve ayrı öğe sayılır.
+
+    **Neden (2026-09-23, ölçüldü):** eski kural HER madde imli satırı sayıyordu.
+    `kosu-2851dc22…` sentezi her açık soruyu bir üst madde + iki girintili alt
+    madde ("İki taraf", "Eğilimim") olarak yazdı — sözleşme her soru için bu üçünü
+    ister, biçim dayatmaz. 10 soru 30 sayıldı, denetçi-1'in 5 önerisi 9 sayıldı;
+    `tasma` iki koldan da yanlış yandı ve 30 parça motorun açık soru kimliklerine,
+    oradan onay ekranına taşındı.
+
+    Buradaki sayı bir KAPI değil, yalnız `tasma` işaretinin girdisidir — yanlış
+    saymak hiçbir koşuyu durdurmaz, yalnız işareti eksik/fazla koyar. Serbest
+    metinden madde SAYISI çıkarmaya çalışan bir yaklaşım (semantik olumsuzlama)
+    bilinçle terk edilmiştir.
     """
-    return [m.group(1) for m in _LISTE_OGESI_RE.finditer(govde)]
+    satirlar = [satir.expandtabs(4) for satir in govde.splitlines()]
+    eslesmeler = [_LISTE_OGESI_RE.match(satir) for satir in satirlar]
+    girintiler = [len(m.group("girinti")) for m in eslesmeler if m]
+    if not girintiler:
+        return []
+    ust_duzey = min(girintiler)
+    ogeler: list[list[str]] = []
+    for satir, eslesme in zip(satirlar, eslesmeler):
+        girinti = len(satir) - len(satir.lstrip(" "))
+        if eslesme and girinti == ust_duzey:
+            ogeler.append([eslesme.group("metin")])
+        elif ogeler and girinti > ust_duzey and satir.strip():
+            ogeler[-1].append(eslesme.group("metin") if eslesme else satir.strip())
+    return [_OGE_AYRACI.join(parcalar) for parcalar in ogeler]
 
 
 # ─── 3. İstem kurulumu ──────────────────────────────────────────────────────

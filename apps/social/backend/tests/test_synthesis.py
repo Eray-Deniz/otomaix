@@ -225,10 +225,15 @@ def _rapor(
     *,
     envanter: tuple[auditors.InventoryRow, ...] = (),
     oneri_sayisi: int = 1,
+    oneri_govdesi: str | None = None,
     ornekle: tuple[auditors.UrlCheck, ...] | None = None,
     snapshot_sha: str | None = None,
 ) -> auditors.AuditReport:
-    oneriler = "\n".join(f"- Öneri {sira}" for sira in range(1, oneri_sayisi + 1))
+    oneriler = (
+        oneri_govdesi
+        if oneri_govdesi is not None
+        else "\n".join(f"- Öneri {sira}" for sira in range(1, oneri_sayisi + 1))
+    )
     bolumler = {
         ad: (oneriler if ad == "AÇIK SORU ÖNERİLERİ" else f"{ad} gövdesi")
         for ad in auditors.BOLUM_ANAHTARLARI
@@ -270,6 +275,7 @@ def _tur(
     envanter_1: tuple[auditors.InventoryRow, ...] = (),
     envanter_2: tuple[auditors.InventoryRow, ...] = (),
     oneri_sayisi: int = 1,
+    oneri_govdesi_1: str | None = None,
     ornekle_1: tuple[auditors.UrlCheck, ...] | None = None,
     snapshot_sha: str | None = None,
 ) -> auditors.AuditRound:
@@ -279,6 +285,7 @@ def _tur(
                 auditors.DENETCI_ROLLERI[0],
                 envanter=envanter_1,
                 oneri_sayisi=oneri_sayisi,
+                oneri_govdesi=oneri_govdesi_1,
                 ornekle=ornekle_1,
                 snapshot_sha=snapshot_sha,
             ),
@@ -1004,6 +1011,107 @@ async def test_counts_at_the_cap_do_not_overflow(kosu, tmp_path) -> None:
         tur=tur,
     )
     assert sonuc.tasma is False
+
+
+# Sözleşme her açık soru için "konu, iki taraf, senin eğilimin" ister ama BİÇİM
+# dayatmaz (`hakem-sentez-gorevi.md`, AÇIK SORULAR maddesi). 2026-09-23 canlı
+# koşumunda (`kosu-2851dc22…`) model konuyu üst maddeye, iki tarafı ve eğilimi
+# girintili alt maddelere yazdı: 10 soru 30 sayıldı, `tasma` yanlış yandı.
+def _ic_ice_soru(sira: int) -> str:
+    return (
+        f"**Konu {sira}**\n"
+        f"   - **İki taraf:** K1 evet diyor, K2 hayır diyor ({sira}).\n"
+        f"   - **Eğilimim:** evet ({sira})."
+    )
+
+
+@pytest.mark.parametrize(
+    "soru_sayisi, tasma",
+    [(OLCULEN_ACIK_SORU_TAVANI, False), (OLCULEN_ACIK_SORU_TAVANI + 1, True)],
+)
+async def test_nested_sub_bullets_belong_to_their_question(
+    kosu, tmp_path, soru_sayisi, tasma
+) -> None:
+    """Alt madde ayrı soru DEĞİLDİR; üst maddesine katılır ve içeriği kaybolmaz."""
+    sorular = [_ic_ice_soru(sira) for sira in range(1, soru_sayisi + 1)]
+    icerik = _tam_icerik()
+    sonuc, _ = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), sorular=sorular
+    )
+    assert len(sonuc.acik_sorular) == soru_sayisi
+    assert sonuc.tasma is tasma
+    for sira, soru in enumerate(sonuc.acik_sorular, start=1):
+        assert soru.startswith(f"**Konu {sira}**")
+        assert f"K2 hayır diyor ({sira})" in soru
+        assert f"**Eğilimim:** evet ({sira})" in soru
+
+
+@pytest.mark.parametrize(
+    "ust_madde, tasma",
+    [(OLCULEN_DENETCI_ONERI_TAVANI, False), (OLCULEN_DENETCI_ONERI_TAVANI + 1, True)],
+)
+async def test_nested_auditor_suggestions_count_by_top_level(
+    kosu, tmp_path, ust_madde, tasma
+) -> None:
+    """K-75 kolu da aynı kuralla sayar: denetçi-1 aynı gün bir önerisini üç alt
+    maddeye böldü ve 5 öneri 9 sayıldı."""
+    govde = "\n".join(
+        [f"{sira}. **Öneri {sira}:** gerekçe." for sira in range(1, ust_madde)]
+        + [
+            f"{ust_madde}. **Dönem seçimi çelişkileri:**",
+            "   - 8 Mart'ın türü",
+            "   - Öğretmenler Günü",
+            "   - 10 Kasım",
+        ]
+    )
+    icerik = _tam_icerik()
+    tur = _tur(oneri_govdesi_1=govde)
+    sonuc, _ = await _sentez(
+        kosu, tmp_path, aday=icerik, gunluk=_model_gunlugu(icerik), tur=tur
+    )
+    assert sonuc.tasma is tasma
+
+
+def test_live_output_numbered_questions_keep_their_sub_bullets() -> None:
+    """`kosu-2851dc22…` çıktısından BİREBİR: `9.` altında üç, `10.` altında dört
+    boşluk girinti — alt maddenin girintisi numaranın genişliğiyle değişir."""
+    govde = (
+        "9. **Zorunlu bilgiler hangi yüzeyde verilecek?**\n"
+        "   - **Konu:** Yetki belgesi numarası, işletme unvanı ve sentetik ibaresi"
+        " reklamda zorunlu, ama üretim hattı görselde metni yasaklıyor.\n"
+        "   - **Eğilimim:** Bu bilgiler gönderi metninde ya da açıklamada zorunlu"
+        " tutulsun. Bu bir operatör ya da ürün kararı.\n"
+        "10. **Araştırma katmanı eksikleri ve K-126'nın birimi**\n"
+        "    - **Konu:** K1#15 ve K1#19'da destek türü geçersiz (\"?\"). K3'ün görsel"
+        " ve video maddelerinin Bölüm C bağlantısı yok. KAYNAK PROFİLİ'nin `resmi`"
+        " sütunu tümüyle `hayır` olduğu için K-126 istisnası rapor düzeyinde fiilen"
+        " kapanıyor (D1 soru 4).\n"
+        "    - **Eğilimim:** Resmîlik, iddia düzeyinde ve dış kaynak üzerinden"
+        " değerlendirilsin.\n"
+        "\n"
+        "---\n"
+    )
+    ogeler = synthesis._liste_ogeleri(govde)
+    assert len(ogeler) == 2
+    assert ogeler[0].startswith("**Zorunlu bilgiler hangi yüzeyde verilecek?**")
+    assert "gönderi metninde ya da açıklamada" in ogeler[0]
+    assert ogeler[1].startswith("**Araştırma katmanı eksikleri")
+    # Bölümü kapatan `---` üst düzeyde imsiz satırdır; son soruya KATILMAZ.
+    assert ogeler[1].endswith("dış kaynak üzerinden değerlendirilsin.")
+
+
+def test_uniformly_indented_list_counts_at_its_own_top_level() -> None:
+    """Üst düzey = bölümdeki EN SIĞ madde girintisi, sütun 0 DEĞİL; daha derin
+    girintili satır (alt madde ya da devam satırı) bir önceki öğeye katılır,
+    yalnız boşluktan oluşan satır hiçbir şey katmaz."""
+    govde = "  - Birinci\n    devamı\n    \n    - alt\n  - İkinci\n"
+    assert synthesis._liste_ogeleri(govde) == ["Birinci — devamı — alt", "İkinci"]
+
+
+def test_tab_indented_sub_bullet_belongs_to_its_item() -> None:
+    """Sekme girintisi de girintidir: sekmeli alt madde ayrı öğe SAYILMAZ."""
+    govde = "1. Üst\n\t- alt\n2. İkinci\n"
+    assert synthesis._liste_ogeleri(govde) == ["Üst — alt", "İkinci"]
 
 
 # ═══ 6. Çıktı doğrulayıcı — `validate` ═════════════════════════════════════
