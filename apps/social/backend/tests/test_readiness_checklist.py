@@ -65,7 +65,9 @@ async def _hazir_kosu(db) -> str:
     sector_id = await _sub_sector(db)
     run_id, _ = await _yazilmis_ve_onayli(db, sector_id, hazirlik=False)
     for model in ("arac-1", "arac-2", "arac-3"):
-        await _artefakt(db, run_id, kind="research", model=model, brief_ref="brief-v1")
+        # Araştırmalar hatta `brief-doctor`'dan girer: araç başına bir damga,
+        # `girdi_ozeti` = brief'in sha256'sı (md-03 bunu okur).
+        await _artefakt(db, run_id, kind="mechanical_gate", model=model)
     for model in ("denetci-1", "denetci-2"):
         await _artefakt(db, run_id, kind="review", model=model)
     await _artefakt(db, run_id, kind="synthesis", model="sentez")
@@ -290,7 +292,7 @@ async def test_md03_refuses_three_stamps_from_one_producer(pkg_db):  # noqa: F81
             pkg_db,
             run_id=run_id,
             sector_slug="kuyumculuk",
-            kind="research",
+            kind="mechanical_gate",
             source=runs.build_stamp(
                 model="arac-1", surum="2026-09", tarih=tarih, girdi_ozeti="brief-sha"
             ),
@@ -374,7 +376,7 @@ async def test_malformed_artifact_stamp_fails_only_its_own_probe(pkg_db):  # noq
         "(run_id, sector_slug, kind, source, content_md) VALUES ($1, $2, $3, $4, $5)",
         run_id,
         "kuyumculuk",
-        "research",
+        "mechanical_gate",
         "damgasiz-kaynak",
         "# bozuk",
     )
@@ -612,3 +614,87 @@ def test_attest_readiness_URETIM_cagirani_YALNIZ_cli_onay_yoludur():
     # POZİTİF KONTROL: dedektör gerçekten çağrı buluyor mu?
     assert cagiranlar, "hiç çağıran bulunamadı — dedektör bozuk, kapı ölçmüyor"
     assert cagiranlar == {"scripts/sector_pipeline_cli.py"}
+
+
+# ═══ 2026-09-23 — ilk canlı değerlendirmenin iki düzeltmesi ═══════════════
+
+
+async def test_md03_requires_one_brief_digest_across_tools(pkg_db):  # noqa: F811
+    """Üç araç FARKLI brief'le koştuysa madde düşer (girdi özeti tek olmalı)."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id, _ = await _yazilmis_ve_onayli(pkg_db, sector_id, hazirlik=False)
+    for model, ozet in (("arac-1", "brief-a"), ("arac-2", "brief-a"), ("arac-3", "brief-b")):
+        await runs.record_artifact(
+            pkg_db,
+            run_id=run_id,
+            sector_slug="kuyumculuk",
+            kind="mechanical_gate",
+            source=runs.build_stamp(
+                model=model, surum="2026-09", tarih="2026-09-11", girdi_ozeti=ozet
+            ),
+            content_md="# rapor",
+        )
+
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+
+    assert _satir(rapor, "md-03").durum == "gecmedi"
+    assert "2 ayrı brief" in _satir(rapor, "md-03").detay
+
+
+async def test_md03_passes_on_the_positive_control(pkg_db):  # noqa: F811
+    run_id = await _hazir_kosu(pkg_db)
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+    assert _satir(rapor, "md-03").durum == "gecti"
+
+
+async def _acik_soru_bulgulu(pkg_db, unit_id: str) -> str:
+    run_id = await _hazir_kosu(pkg_db)
+    rapor = await pkg_db.fetchval(
+        "SELECT policy_report FROM social.sector_package_runs WHERE run_id = $1", run_id
+    )
+    rapor = dict(rapor)
+    rapor["bulgular"] = list(rapor["bulgular"]) + [
+        {"sinif": "acik_soru", "unit_id": unit_id, "detay": "çelişki", "kontrol": "celiski"}
+    ]
+    await pkg_db.execute(
+        "UPDATE social.sector_package_runs SET policy_report = $2 WHERE run_id = $1",
+        run_id,
+        rapor,
+    )
+    return run_id
+
+
+async def _operator_karari(pkg_db, run_id: str, soru: str) -> None:
+    await pkg_db.execute(
+        "INSERT INTO social.sector_run_operator_decisions "
+        "(run_id, kararlar, motor_ilk_sonucu, actor) VALUES ($1, $2, $3, 'eray')",
+        run_id,
+        {"kararlar": [{"soru": soru, "cevap": "x", "islemler": []}]},
+        {"sonuc": "blocked"},
+    )
+
+
+async def test_md16_answered_unit_question_does_not_block(pkg_db):  # noqa: F811
+    """Operatörün cevapladığı motor sorusu bulgusu bloklamaz; cevapsız bloklar."""
+    run_id = await _acik_soru_bulgulu(pkg_db, "ku-aaaaaaaaaaaa")
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+    assert _satir(rapor, "md-16").durum == "gecmedi"  # pozitif kontrol
+
+    await _operator_karari(pkg_db, run_id, "ku-aaaaaaaaaaaa")
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+    assert _satir(rapor, "md-16").durum == "gecti"
+
+
+async def test_md16_answer_to_another_question_still_blocks(pkg_db):  # noqa: F811
+    run_id = await _acik_soru_bulgulu(pkg_db, "ku-aaaaaaaaaaaa")
+    await _operator_karari(pkg_db, run_id, "ku-bbbbbbbbbbbb")
+    rapor = await readiness.evaluate(pkg_db, run_id=run_id)
+    assert _satir(rapor, "md-16").durum == "gecmedi"
+
+
+async def test_kanit_parmakizi_covers_operator_decisions(pkg_db):  # noqa: F811
+    """md-16 operatör kaydını OKUR — parmak izi de kapsamalı."""
+    run_id = await _hazir_kosu(pkg_db)
+    once = await runs.kanit_parmakizi(pkg_db, run_id=run_id)
+    await _operator_karari(pkg_db, run_id, "S1")
+    assert await runs.kanit_parmakizi(pkg_db, run_id=run_id) != once

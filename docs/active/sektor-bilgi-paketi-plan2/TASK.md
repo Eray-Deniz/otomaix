@@ -1758,6 +1758,14 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   koşuda SINANMADI — modelin yeni okumayla sınıflandırdığı bir sonraki koşuda görülür.
 - **[KAPANDI 2026-09-23] `kosu-23e19d03` kör yargı kararları uygulandı** — "düzeltme turu" yolu bu
   koşuya uygulanamıyordu (ölçüldü, Decisions Log "Operatör kararları"); yerine `operator-karar` yazıldı.
+- **[HAZIRLIK LİSTESİ — Eray onayı 2026-09-23] md-17 ve md-18 AKTİVASYON SONRASI doğrulanacak:** liste tek
+  onayla yazılır ve not alanı yoktur; iki madde "yapıldı" diye DEĞİL, bu koşulla onaylandı. md-17: test
+  markasıyla bir paylaşım üretilir, `posts.package_id/package_version` + `generation_stamps` okunur.
+  md-18: `deaktive-et` → yeniden aktivasyon canlıda denenir. Bugün iki prob düzeltildi: md-03 hiçbir
+  komutun yazmadığı `research` türünü okuyordu (10 koşunun 10'unda 0 satır) → `mechanical_gate` damgaları
+  (üç araç, tek `girdi_ozeti` = brief sha256); md-16 operatörün cevapladığı motor sorusunu bloklayıcı
+  sayıyordu (operatör kararlarının kendi yan etkisi) → cevaplanan birim sorusu hariç; kanıt parmak izi
+  operatör kaydını kapsar.
 - **[SIRADAKİ İŞ] `kosu-23e19d03` aktivasyonu (`aktive-et`, ilk paket: yalnız ikinci adım) — Eray'ın AYRI
   onayıyla.** 2026-09-23 yapılanlar: Katman-1 tazelendi (`fa52d9d`, 124 passed, PASS) · `yazim` → taslak
   `66654971-d90e-4cec-92da-61e723a8ec8f` sürüm 1 (uyarı: içerik 15.157 karakter > 6.000 hedefi; ölçüldü —
@@ -1773,9 +1781,9 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 - **[AÇIK — küçük] Onay özeti sadeleştirmesi:** operatör işlemleri birim düzeyinde listeleniyor (bayramlar
   45 satır) ve "Motor kararsızları" yerine operatör metni yazılmış maddeleri "mevcut kalıp korundu" diye
   gösteriyor. Evi: aktivasyondan sonraki ilk kod turu.
-- **[ÖLÇÜLDÜ — karar Eray'da] CTA ≥ 5 eşiği (Grup 3 (e)):** sentez adayı 4 (aynı girdiyle sabah 6);
-  yeni motorla dördü de uygulanır; kör yargı +2 CTA (Soru 9) ve +4 hizmet CTA'sı (Soru 10a) ekledi.
-  Operatör kararlarından sonra havuz **10** (ölçüldü, taslak paket); eşik kararı Eray'da.
+- **[KAPANDI 2026-09-23, Eray] CTA ≥ 5 eşiği (Grup 3 (e)):** kapı YAPILMAZ. "En az 5" brief'te araştırmacıya
+  verilen alt sınır olarak kalır; fazlası sakınca değildir. Ölçülen: sentez adayı 4, operatör kararlarıyla 10;
+  istem yüzeyine giden paket bloğu kanal süzgeciyle 2.681–3.330 karakter (6.000 hedefinin altında).
 - **[DÜŞÜRÜLDÜ — yeniden açılma koşullu] Sektör risk sözlüğü:** Decisions Log 2026-09-23. Evi: yeni bir
   sektörün ilk koşusu (aynı ölçüm).
 - **[DÜŞÜRÜLDÜ — etkisiz] Sahipsiz koşular:** `kosu-2851dc22…` (2026-09-23, sayaç kusuru yüzünden

@@ -28,10 +28,14 @@ from dataclasses import dataclass
 from app.services.sector_pipeline import (
     auditors,
     engine,
+    identity,
     readiness_items,
     runs,
 )
 from app.services.sector_pipeline.engine_contract import PolicyReport
+
+MEKANIK_KAPI_TURU = "mechanical_gate"
+"""`brief-doctor`'un araç başına yazdığı artefakt türü (`runs.ARTEFAKT_TURLERI`)."""
 
 OLCUM_BICIMLERI: tuple[str, ...] = ("otomatik", "elle")
 """Maddenin nasıl işaretlendiği — KAPALI küme."""
@@ -123,6 +127,8 @@ class _Kanit:
 
     kosu: Mapping
     artefaktlar: Sequence[Mapping]
+    # Migration 037: operatörün açık soru cevapları (yoksa `None`). md-16 onu okur.
+    operator_kararlari: Mapping | None = None
 
     def ureticiler(self, kind: str) -> set[str]:
         """O türdeki artefaktları ÜRETEN kimlikler (damgadaki `model`).
@@ -185,24 +191,29 @@ def _politika_raporu(kanit: _Kanit) -> PolicyReport | None:
 
 
 def _uc_arac_ayni_brief(kanit: _Kanit) -> tuple[bool, str]:
-    """ÜÇ AYRI ÜRETİCİ + TEK brief referansı.
+    """ÜÇ AYRI araç + TEK brief özeti — mekanik kapı kayıtlarından.
 
-    Araçların HANGİLERİ olduğu doğrulanamaz: üç araçlı araştırma dış depoda elle
-    koşulur ve kanonik bir araç kimliği listesi YOKTUR. Ölçülen şey "üç ayrı
-    üretici kimliği"dir; `detay` bunu olduğu gibi söyler (İlke 9).
+    **Kaynak düzeltildi (2026-09-23, ilk canlı değerlendirme).** İlk yazım
+    `research` türünü ve `brief_ref` kolonunu okuyordu; hiçbir komut o türü
+    YAZMIYOR (ölçüldü: 10 koşunun 10'unda 0 satır) ve madde üç araç aynı brief'le
+    koşmuş olsa da düşüyordu. Araştırma raporları hatta `brief-doctor`'dan
+    `mechanical_gate` türüyle, araç başına bir K-80 damgasıyla girer; damganın
+    `girdi_ozeti`'si brief'in sha256'sıdır (`kosu-23e19d03`: üç damga da
+    `brief.md`'nin sha256'sına eşit — ölçüldü).
+
+    Araçların HANGİLERİ olduğu doğrulanamaz: kanonik araç kimliği listesi YOKTUR.
+    Ölçülen şey "üç ayrı üretici kimliği + tek girdi özeti"dir (İlke 9).
     """
-    ureticiler = kanit.ureticiler("research")
-    briefler = {
-        satir["brief_ref"]
-        for satir in kanit.artefaktlar
-        if satir["kind"] == "research"
-    }
-    yeterli = len(ureticiler) >= 3 and len(briefler) == 1 and None not in briefler
+    satirlar = [s for s in kanit.artefaktlar if s["kind"] == MEKANIK_KAPI_TURU]
+    damgalar = [runs.parse_stamp(s["source"]) for s in satirlar]
+    ureticiler = {d["model"] for d in damgalar}
+    ozetler = {d["girdi_ozeti"] for d in damgalar}
+    yeterli = len(ureticiler) >= 3 and len(ozetler) == 1
     return (
         yeterli,
-        f"ham artefakt katmanı: {len(ureticiler)} AYRI üretici kimliği "
-        f"({', '.join(sorted(ureticiler)) or 'yok'}), {len(briefler)} ayrı brief "
-        "referansı — araç kimlikleri doğrulanamaz, yalnız ayrıklık ölçülür",
+        f"mekanik kapı kayıtları: {len(ureticiler)} AYRI üretici kimliği "
+        f"({', '.join(sorted(ureticiler)) or 'yok'}), {len(ozetler)} ayrı brief "
+        "özeti — araç kimlikleri doğrulanamaz, yalnız ayrıklık ölçülür",
     )
 
 
@@ -285,14 +296,26 @@ def _bloklayan_uyusmazlik_yok(kanit: _Kanit) -> tuple[bool, str]:
             False,
             "koşu satırı: politika raporu YOK ya da ŞEKLİ BOZUK — bulgu sayılamaz",
         )
+    # Operatörün cevapladığı motor birimi sorusu (migration 037) artık açık
+    # değildir: bulgu raporda denetim izi olarak kalır, BLOKLAMAZ. Cevaplanmamış
+    # her bulgu bloklamaya devam eder.
+    cevaplanan = {
+        karar["soru"]
+        for karar in (kanit.operator_kararlari or {}).get("kararlar", ())
+        if identity.UNIT_ID_RE.match(karar["soru"])
+    }
     bulgular = [
-        bulgu for bulgu in rapor.bulgular if bulgu.sinif in BLOKLAYAN_BULGU_SINIFLARI
+        bulgu
+        for bulgu in rapor.bulgular
+        if bulgu.sinif in BLOKLAYAN_BULGU_SINIFLARI
+        and not (bulgu.sinif == "acik_soru" and bulgu.unit_id in cevaplanan)
     ]
     acik_sorular = rapor.acik_soru_kimlikleri
     return (
         not bulgular and not acik_sorular,
         f"politika raporu: {len(bulgular)} bloklayıcı bulgu, "
-        f"{len(acik_sorular)} açık soru",
+        f"{len(acik_sorular)} açık soru"
+        + (f" (operatörün cevapladığı {len(cevaplanan)} birim sorusu hariç)" if cevaplanan else ""),
     )
 
 
@@ -377,7 +400,11 @@ async def evaluate(db, *, run_id: str) -> ReadinessReport:
     if kosu is None:
         raise runs.RunNotVerified(f"koşu satırı yok: {run_id!r}")
     artefaktlar = await _artefakt_satirlari(db, run_id)
-    kanit = _Kanit(kosu=kosu, artefaktlar=artefaktlar)
+    kanit = _Kanit(
+        kosu=kosu,
+        artefaktlar=artefaktlar,
+        operator_kararlari=await runs.operator_kararlari(db, run_id=run_id),
+    )
 
     satirlar: list[MaddeSonucu] = []
     for madde in CHECKLIST:

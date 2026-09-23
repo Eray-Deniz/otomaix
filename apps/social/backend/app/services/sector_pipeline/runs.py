@@ -983,10 +983,19 @@ async def load_verified_run(db, *, run_id: str, for_update: bool = True) -> Veri
         katman1_attestation=row["katman1_attestation"],
         katman2_attestation=row["katman2_attestation"],
         readiness_attestation=row["readiness_attestation"],
-        operator_kararlari=await db.fetchval(
-            "SELECT kararlar FROM social.sector_run_operator_decisions WHERE run_id = $1",
-            run_id,
-        ),
+        operator_kararlari=await operator_kararlari(db, run_id=run_id),
+    )
+
+
+async def operator_kararlari(db, *, run_id: str) -> Mapping | None:
+    """Koşunun operatör kararları kaydı (migration 037); yoksa `None`.
+
+    TEK okuyucu: doğrulanmış görünüm, hazırlık problu md-16 ve kanıt parmak izi
+    aynı satırı buradan okur.
+    """
+    return await db.fetchval(
+        "SELECT kararlar FROM social.sector_run_operator_decisions WHERE run_id = $1",
+        run_id,
     )
 
 
@@ -1158,8 +1167,11 @@ async def kanit_parmakizi(db, *, run_id: str) -> str:
         "WHERE run_id = $1 ORDER BY kind, source, brief_ref",
         run_id,
     )
+    # (c) Operatör kararları (migration 037): md-16 onları OKUR, dolayısıyla
+    # kanıt kümesinin parçasıdır — okunan ile parmak izinin kapsadığı ayrışmaz.
     return identity.canonical_sha(
         {
+            "operator_kararlari": await operator_kararlari(db, run_id=run_id),
             "kosu": {ad: kosu[ad] for ad in kolonlar},
             "artefaktlar": [
                 {
