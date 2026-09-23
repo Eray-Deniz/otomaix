@@ -984,6 +984,28 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Decisions Log
 
+## main'e birleştirme + canlı dağıtım (2026-09-23, Eray)
+
+- **Bağımsız review / security review BİLİNÇLİ OLARAK GEÇİLDİ (Eray: "bugüne kadar plan 2 için onlarca
+  review yaptık").** Kapsam: operatör kararları (`fa52d9d`), hazırlık düzeltmeleri (`11366af`) ve
+  12 Eylül'den beri hakem görmemiş commit'ler. Zincirin `/review-claude-codex` ve
+  `/security-review-claude-codex` ayakları bu dal için koşulmadı; merge onlarsız yapıldı.
+- **Merge:** `main` `d5d72e1` → `11366af`, fast-forward (main'de dalda olmayan commit 0 — ölçüldü).
+- **Push dağıtımı TETİKLEMEDİ:** Coolify'da auto-deploy açık ama 150 sn içinde kuyruk boş kaldı;
+  deploy Eray'ın Coolify düğmesiyle koştu (18:35–18:36, commit `11366af`, rolling update).
+- **Ön koşul (S-1):** `N8N_TELEGRAM_APPROVAL_SECRET` Coolify'a eklendi (Eray, 18:20) — değer 12 Eylül'de
+  üretilmiş `/root/otomaix-tg-approval.secret`, n8n kimliği `qbPEK2DKQgMmFor8`. Konteyner değeri dosyayla
+  eşleşiyor (sha256 parmak izi, değer basılmadan). `N8N_CRM_EVENT_SECRET` KURULMADI: n8n kimliği de
+  yok, CRM workflow'ları pasif — çağrı fail-closed atlanır, bugünkü durumdan fark yok.
+- **Doğrulama:** `/health` 200 (db ok, redis ok) · `app.main`, `sector_packages`, `calendar`,
+  `sector_package_lifecycle` konteynerde import ediliyor · son 5 dk logda hata yok.
+- **Bilinen sınır:** `sector_pipeline` motor/denetçi/sentez modülleri konteynerde import EDİLEMEZ
+  (`auditors.py:201` monorepo yolu `parents[6]`) — API bunları kullanmaz; operatör CLI'si 2026-09-12
+  kararıyla sunucudaki çalışma ağacından canlı DB'ye karşı koşar.
+- **Doğrulanmadı:** takvim ucunun dönem alanı (uç kimlik istiyor, 401) · n8n Telegram webhook düğümü
+  kimliğe HENÜZ bağlanmadı (runbook Adım 7; Eray onayıyla, düğüm bazında) · md-17/md-18 (aktivasyon sonrası,
+  marka ataması video sistemi değişikliğinden sonra — Eray).
+
 ## Operatör kararları — açık soruların kapanış yolu (2026-09-23, on dördüncü oturum)
 
 - **Boşluk ölçüldü:** motor sentezin her açık sorusunda `blocked` der (`engine.py` `_acik_soru_kimlikleri`
