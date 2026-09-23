@@ -1182,6 +1182,105 @@ def _denemeyi_kos(runner: Runner, kok: Path, istem_yolu: Path) -> RunnerOutcome:
         return runner.run(SENTEZ_ARACI, kaynak, istem_yolu)
 
 
+def _denemeyi_uret(
+    runner: Runner,
+    kok: Path,
+    istem_yolu: Path,
+    deneme: int,
+    *,
+    aktif_birimler: Mapping[str, Mapping],
+    tur: AuditRound,
+) -> tuple[dict, list[dict], list[str], str]:
+    """Tek deneme: aracı koşar, kanıt dosyalarını yazar, çıktıyı çözer ve kimliğe bağlar.
+
+    Model ya da araç kaynaklı her düşüş `SynthesisFailed` olarak yükselir (biçim
+    düşüşü onun alt sınıfı `SynthesisOutputError`); hangisinin düzeltme hakkı
+    kullandıracağına ÇAĞIRAN karar verir. Kimlik bağı (`_kimlik_bagla`) deneme
+    İÇİNDEDİR, çünkü motorun bağ kapıları bağlanmış günlüğü okur (2026-09-23).
+    """
+    sonuc = _denemeyi_kos(runner, kok, istem_yolu)
+    if sonuc.ham_akis is not None:
+        # Ham olay akışı: gövdenin nasıl kurulduğunun KANITI. Durum
+        # kontrolünden ÖNCE yazılır — yarıda kalan ya da başarı beyan
+        # etmeyen akış tam da teşhis edilecek olandır (review 2026-09-22
+        # M3). Yoksa dosya UYDURULMAZ — boş bir `.jsonl`, akışın olduğunu
+        # ima ederdi.
+        akis_adi = _cikti_dosya_adi(deneme).replace(
+            "-SENTEZ-CIKTISI.md", "-SENTEZ-AKISI.jsonl"
+        )
+        with (kok / akis_adi).open("x", encoding="utf-8") as dosya:
+            dosya.write(sonuc.ham_akis)
+    if sonuc.durum != "tamam":
+        # Araç arızası MODEL ÇIKTI HATASI DEĞİLDİR: tekrar sormak arızayı
+        # gizler ve ikinci kez ödetir.
+        raise SynthesisFailed(
+            f"sentez aracı sonuç ÜRETMEDİ: durum={sonuc.durum!r}, "
+            f"cikis={sonuc.exit_code!r}"
+        )
+    with (kok / _cikti_dosya_adi(deneme)).open("x", encoding="utf-8") as akis:
+        akis.write(sonuc.stdout)
+
+    # Çıktı dosyası ÖNCE yazılır: kesilmiş gövde de teşhis için diskte kalsın.
+    _cikti_butcesini_dogrula(sonuc)
+    aday, ham_gunluk, sorular, ozet = _cikti_bicimini_coz(sonuc.stdout)
+    gunluk, sorular = _kimlik_bagla(aday, ham_gunluk, aktif_birimler, tur, sorular)
+    return aday, gunluk, sorular, ozet
+
+
+_BAG_SEBEBI_ACIKLAMASI: dict[str, str] = {
+    "kanit-yok": "`kanit` alanı sözleşmenin kapalı biçimine uymuyor",
+    "referans-yok": "`kanit`te çözülemeyen ya da hiç olmayan bir denetçi satırı atfı var",
+    "referans-uyusmuyor": "`kanit`te gösterilen denetçi satırı BAŞKA bir alanı ya da dönemi anlatıyor",
+    "kaynak-iddia-yok": "`kaynak_iddia` boş",
+    "iddia-arastirmada-yok": "`kaynak_iddia` numarası EK-M dizininde yok",
+    "iddia-alani-uyusmuyor": (
+        "`kaynak_iddia` numarasının araştırma satırı BAŞKA bir alanı anlatıyor "
+        "(EK-M'deki alan hücresine bak)"
+    ),
+    "donem-kimligi-cozulemedi": "`kaynak_iddia` numarasının dönemi sistem anahtarına çözülmüyor",
+    "iddia-denetcide-yok": (
+        "`kaynak_iddia` numarası `kanit`teki denetçi satırlarının iddia sütununda "
+        "geçmiyor ya da atıf yapılan satırlardan biri hiçbir iddiayı taşımıyor"
+    ),
+}
+
+
+def _bag_hatalari(gunluk: Sequence[Mapping], tur: AuditRound, doktor_raporlari) -> list:
+    """Motorun `ekle` bağ kapıları — sentez turunda, düzeltme hakkı kullanılabilirken.
+
+    Kural motorda TEK yerde yaşar (`engine.ekle_bagini_coz`). Motor bu modülü
+    modül düzeyinde içe aktarır (`MEVZUAT_ALANLARI` · `SynthesisResult` ·
+    `dogrulanmis_referanslar`); ters yön döngü kurardı, içe aktarma bu yüzden
+    çağrı anındadır.
+    """
+    from app.services.sector_pipeline import engine
+
+    return engine.ekle_bag_hatalari(
+        gunluk, denetci_raporlari=tur.reports, doktor_raporlari=doktor_raporlari
+    )
+
+
+def _bag_hatasi_metni(hatalar: Sequence) -> str:
+    """Düzeltme isteminin SOMUT hatası — kararı alanı, yolu ve atıflarıyla gösterir."""
+    satirlar = [
+        f"bağ kapısı (motorla AYNI kural): {len(hatalar)} `ekle` kararının atfı "
+        "tutarsız; bu kararlar motorda UYGULANMAZ ve pakete girmez."
+    ]
+    for hata in hatalar:
+        s = hata.satir
+        satirlar.append(
+            f"- alan `{s.get('alan')}`, öğe `{s.get('oge_yolu')}`, kanit "
+            f"`{s.get('kanit')}`, kaynak_iddia `{s.get('kaynak_iddia')}`: "
+            f"{_BAG_SEBEBI_ACIKLAMASI.get(hata.sebep, hata.sebep)}"
+        )
+    satirlar.append(
+        "Her kararı EK-M dizinindeki DOĞRU numaraya ve o numarayı taşıyan, AYNI "
+        "alanı anlatan denetçi satırına bağla. Doğru bağ kurulamıyorsa kalıbı aday "
+        "paketten çıkar ve `reddedilen-aday` not satırı yaz."
+    )
+    return "\n".join(satirlar)
+
+
 async def _kos(
     db,
     tur: AuditRound,
@@ -1277,6 +1376,11 @@ async def _kos(
     # karıştırılmaz) — aynı sentez işleminin içindeki tekrar denemedir.
     suanki_istem = istem
     deneme = 0
+    # Bağ düzeltmesi için açılan tur sonucu KÖTÜLEŞTİREMEZ (2026-09-23): bağ
+    # hatası koşuyu öldürmez, motor o kararı uygulamaz. Düzeltme turu araç,
+    # bütçe, biçim ya da kimlik kapısında düşerse ya da DAHA ÇOK bağ hatası
+    # getirirse biçimi geçerli önceki deneme kullanılır.
+    yedek: tuple | None = None
     while True:
         deneme += 1
         istem_adi = (
@@ -1286,40 +1390,37 @@ async def _kos(
         with istem_yolu.open("x", encoding="utf-8") as akis:
             akis.write(suanki_istem)
 
-        sonuc = _denemeyi_kos(runner, kok, istem_yolu)
-        if sonuc.ham_akis is not None:
-            # Ham olay akışı: gövdenin nasıl kurulduğunun KANITI. Durum
-            # kontrolünden ÖNCE yazılır — yarıda kalan ya da başarı beyan
-            # etmeyen akış tam da teşhis edilecek olandır (review 2026-09-22
-            # M3). Yoksa dosya UYDURULMAZ — boş bir `.jsonl`, akışın olduğunu
-            # ima ederdi.
-            akis_adi = _cikti_dosya_adi(deneme).replace(
-                "-SENTEZ-CIKTISI.md", "-SENTEZ-AKISI.jsonl"
-            )
-            with (kok / akis_adi).open("x", encoding="utf-8") as dosya:
-                dosya.write(sonuc.ham_akis)
-        if sonuc.durum != "tamam":
-            # Araç arızası MODEL ÇIKTI HATASI DEĞİLDİR: tekrar sormak arızayı
-            # gizler ve ikinci kez ödetir.
-            raise SynthesisFailed(
-                f"sentez aracı sonuç ÜRETMEDİ: durum={sonuc.durum!r}, "
-                f"cikis={sonuc.exit_code!r}"
-            )
-        with (kok / _cikti_dosya_adi(deneme)).open("x", encoding="utf-8") as akis:
-            akis.write(sonuc.stdout)
-
-        # Çıktı dosyası ÖNCE yazılır: kesilmiş gövde de teşhis için diskte kalsın.
-        _cikti_butcesini_dogrula(sonuc)
-
         try:
-            aday, ham_gunluk, sorular, ozet = _cikti_bicimini_coz(sonuc.stdout)
-            break
-        except SynthesisOutputError as hata:
-            if deneme > SENTEZ_DUZELTME_HAKKI:
+            aday, gunluk, sorular, ozet = _denemeyi_uret(
+                runner, kok, istem_yolu, deneme, aktif_birimler=aktif_birimler, tur=tur
+            )
+        except SynthesisFailed as hata:
+            if yedek is not None:
+                _LOG.warning(
+                    "sentez: bağ düzeltmesi denemesi düştü (%s) — önceki deneme kullanılıyor",
+                    hata,
+                )
+                aday, gunluk, sorular, ozet, bag_hatalari = yedek
+                break
+            if not isinstance(hata, SynthesisOutputError) or deneme > SENTEZ_DUZELTME_HAKKI:
                 raise
             suanki_istem = _duzeltme_istemi(istem, hata, deneme)
+            continue
 
-    gunluk, sorular = _kimlik_bagla(aday, ham_gunluk, aktif_birimler, tur, sorular)
+        bag_hatalari = _bag_hatalari(gunluk, tur, doktor_raporlari)
+        if yedek is not None and len(yedek[4]) < len(bag_hatalari):
+            aday, gunluk, sorular, ozet, bag_hatalari = yedek
+        if not bag_hatalari or deneme > SENTEZ_DUZELTME_HAKKI:
+            break
+        yedek = (aday, gunluk, sorular, ozet, bag_hatalari)
+        suanki_istem = _duzeltme_istemi(
+            istem, SynthesisOutputError(_bag_hatasi_metni(bag_hatalari)), deneme
+        )
+    if bag_hatalari:
+        _LOG.warning(
+            "sentez: %d `ekle` kararı bağ kapısını geçemedi — motor uygulamayacak",
+            len(bag_hatalari),
+        )
 
     # Plan 1 yazım kapısı YENİDEN KULLANILIR. İki dış girdisinden marka adları
     # çağırandan değil VERİTABANINDAN okunur (R8 doktrini): çağıran boş liste

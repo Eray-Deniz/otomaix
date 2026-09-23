@@ -81,6 +81,7 @@ from app.services.sector_pipeline.brief_doctor import (
     CIddia,
     RoundGate,
     alan_karsilastirma_anahtari,
+    gate_round,
     kaynak_seti_sha,
     kimlik_bolumlemesi,
 )
@@ -676,13 +677,16 @@ def _kabul_edilen_etiketler(inputs: EngineInputs) -> set[str]:
     burada YOKTUR ve kurulması arayüz eki revizyonu ister. Açık borç olarak
     TASK.md'ye yazılır; bu katmanda kapatılamaz.
     """
-    gecerli, _elenen, _tekrar, _ozetsiz = kimlik_bolumlemesi(
-        inputs.mekanik_eleme.raporlar
-    )
+    return _kabul_edilen_etiketler_raporlardan(inputs.mekanik_eleme.raporlar)
+
+
+def _kabul_edilen_etiketler_raporlardan(raporlar: Sequence) -> set[str]:
+    """`_kabul_edilen_etiketler`'in rapor listesi üstündeki çekirdeği — sentez kapısı da okur."""
+    gecerli, _elenen, _tekrar, _ozetsiz = kimlik_bolumlemesi(raporlar)
     gecerli_adlar = set(gecerli)
     return {
         KAYNAK_ETIKETI.format(sira + 1)
-        for sira, rapor in enumerate(inputs.mekanik_eleme.raporlar)
+        for sira, rapor in enumerate(raporlar)
         if rapor.kaynak_adi in gecerli_adlar
     }
 
@@ -798,8 +802,13 @@ def _denetci_satirlari(inputs: EngineInputs) -> dict[str, AuditRow]:
     varsayıma çevrilmesini önler.
     """
     cift = inputs.denetci_envanterleri
+    return _denetci_satir_evreni((cift.birinci, cift.ikinci))
+
+
+def _denetci_satir_evreni(raporlar: Sequence) -> dict[str, AuditRow]:
+    """`_denetci_satirlari`'nın çekirdeği — sentez kapısı `AuditRound.reports`'tan okur."""
     evren: dict[str, AuditRow] = {}
-    for rapor in (cift.birinci, cift.ikinci):
+    for rapor in raporlar:
         onek = _denetci_onegi(rapor.denetci)
         for satir in rapor.denetim_tablosu:
             evren[f"{onek}#{satir.no}"] = satir
@@ -954,6 +963,202 @@ def _iddiasiz_atiflar(atiflar: list[str], tasiyan: set[str]) -> list[str]:
     return sorted(set(atiflar) - tasiyan)
 
 
+@dataclass(frozen=True)
+class EkleBagi:
+    """`ekle` satırının ÇÖZÜLMÜŞ bağı — politika adımları bunun üstünde koşar."""
+
+    atiflar: tuple[str, ...]
+    iddialar: tuple
+    iddia_kumesi: frozenset
+    tasiyan: frozenset[str]
+    karar_alani: str
+
+
+def ekle_bagini_coz(
+    satir: Mapping[str, Any],
+    *,
+    kabul_edilen: set[str],
+    satir_evreni: Mapping[str, AuditRow],
+    iddia_evreni: Mapping[str, CIddia],
+) -> "str | EkleBagi":
+    """Bir `ekle` satırının BAĞ kapıları — ret sebebini ya da çözülmüş bağı döner.
+
+    Bağ kapıları sentezin YAZDIĞI atıfların tutarlılığını ölçer (dilbilgisi,
+    denetçi satırı, araştırma iddiası, alan ve dönem bağı, iki uçlu iddia
+    bağı); politika kapıları (denetçi önerisi, çelişki, çoğunluk, kanıt türü)
+    bu fonksiyonun DIŞINDADIR. Ayrım bilinçlidir: bağ hatası modelin
+    düzeltebileceği bir yazım hatasıdır, politika sonucu değildir. Kural TEK
+    yerde yaşar — motor (`_yeni_oge_cogunlugu`) ve sentez kapısı
+    (`ekle_bag_hatalari`) bu fonksiyonu çağırır (2026-09-23: kurallar yalnız
+    motordaydı; sentezden geçen yanlış bağ düzeltme hakkı kullanılmadan
+    motorda sessizce düşüyordu).
+    """
+    kanit = satir.get("kanit") or ""
+    bilesenler = kanit_bilesenleri(kanit, kabul_edilen)
+    if bilesenler is None:
+        return "kanit-yok"
+    atiflar = [parca for parca in bilesenler if _SATIR_ATIF_RE.match(parca)]
+    # F3 (hakem turu 1, orta — ÖLÇÜLDÜ): ÇÖZÜLEMEYEN atıf SESSİZCE ELENMEZ.
+    # Eski yazım `if parca in satir_evreni` ile süzüyordu; `D1#1, D2#999`
+    # gibi bir satır-numarası yazım hatasında geçerli satır kararı TEK
+    # BAŞINA yetkilendiriyor ve hatalı atıf provenanstan kayboluyordu.
+    # Biri bile çözülmüyorsa alan yapısal kanıt TAŞIMAZ (fail-closed).
+    cozulemeyen = [parca for parca in atiflar if parca not in satir_evreni]
+    if not atiflar or cozulemeyen:
+        return "referans-yok"
+    cozulen = [satir_evreni[parca] for parca in atiflar]
+    # F2 (hakem turu 1, YÜKSEK — ÖLÇÜLDÜ): atıf ADAYA BAĞLI olmak zorunda.
+    # Eski yazım yalnız `kaynaklar` ve `sinif` okuyordu; `kanca_kaliplari`
+    # eklemesi `cta_kaliplari` hakkındaki bir satırı gösterip çoğunluk
+    # kapısını geçebiliyordu. Bu sentez sapmasının OLAĞAN biçimidir.
+    # Görev B satırlarında denetçi alanı `ozel_gun/{anahtar}/{başlık}` yazar,
+    # karar satırı ise yalnız `ozel_gun` — bu ilk kapı ÖNEK eşleşmesidir; dönemin
+    # KENDİSİ aşağıda, iddia bağı kurulduktan sonra ayrıca ölçülür
+    # (`_denetci_donem_bagi_var`, sözleşme 2.3).
+    karar_alani = _metin(satir.get("alan"))
+    uyusmayan = sorted(
+        {
+            parca
+            for parca in atiflar
+            if not _alan_bagi_var(karar_alani, satir_evreni[parca].alan)
+        }
+    )
+    if uyusmayan:
+        return "referans-uyusmuyor"
+    # ATIF ADAYA BAĞLANIR — bağ İKİ UÇLUDUR (sentez sözleşmesi 2.2, dış depo
+    # `12beec1`). Alan düzeyindeki yetkilendirme aynı ekseni üç hakem turunda
+    # üç varyantla açık bırakıyordu: `kanca_kaliplari` hakkındaki HERHANGİ bir
+    # denetçi satırı, o listeye giren HERHANGİ bir kalıbı yetkilendirebiliyordu.
+    # Varyant yamamak bırakıldı; kapanış, üç beyanın da AYNI üst kaynağa —
+    # araştırma iddiasının numarasına — çivilenmesidir.
+    kaynak_iddia = _metin(satir.get("kaynak_iddia"))
+    iddialar = kaynak_iddialari_coz(kaynak_iddia) if kaynak_iddia else None
+    if not iddialar:
+        return "kaynak-iddia-yok"
+    # (a) Numaranın gösterdiği satır araştırma raporunda GERÇEKTEN var ve
+    #     alanı kararın alanıyla örtüşüyor. Doğrulayan MEKANİK ayrıştırıcıdır,
+    #     sentezin beyanı DEĞİL — tek uçlu bir bağ kendini onaylardı, çünkü
+    #     iki beyanı da aynı model yazıyor.
+    oge_yolu = _metin(satir.get("oge_yolu"))
+    baglar = {
+        atif.etiket: (
+            IDDIA_BAGI_EVRENDE_YOK
+            if atif.etiket not in iddia_evreni
+            else _iddia_alani_bagli_mi(
+                karar_alani, oge_yolu, iddia_evreni[atif.etiket]
+            )
+        )
+        for atif in iddialar
+    }
+    if any(bag == IDDIA_BAGI_EVRENDE_YOK for bag in baglar.values()):
+        return "iddia-arastirmada-yok"
+    # DÜRÜST TEŞHİS: iddia araştırmada VAR, örtüşmeyen ALAN/DÖNEM hücresi.
+    # Tek ad kullanıldığında operatör araştırmayı sorgulamaya gidiyordu.
+    if any(bag == IDDIA_BAGI_YOK for bag in baglar.values()):
+        return "iddia-alani-uyusmuyor"
+    # DÜRÜST TEŞHİS (F3): iddia araştırmada VAR, çözülemeyen DÖNEM KİMLİĞİ.
+    if any(
+        bag == IDDIA_BAGI_DONEM_COZULEMEDI for bag in baglar.values()
+    ):
+        return "donem-kimligi-cozulemedi"
+    # GÖREV B: denetçi satırının anahtarı KARARIN DÖNEMİNE ait olmalı
+    # (denetçi sözleşmesi 2.3). `_alan_bagi_var` yalnız `ozel_gun/` önekini
+    # ölçer; "herhangi bir dönemin denetçi satırı herhangi bir özel gün
+    # eklemesini yetkilendirir" o önekle AÇIK kalırdı. Eşleşme anahtar
+    # bazında değil DÖNEM bazındadır: bağlanan iddiaların anahtar kümesi.
+    donem_anahtarlari = frozenset(
+        anahtar
+        for atif in iddialar
+        for anahtar in iddia_evreni[atif.etiket].anahtarlar
+    )
+    donem_uyusmayan = sorted(
+        {
+            parca
+            for parca in atiflar
+            if not _denetci_donem_bagi_var(
+                oge_yolu, satir_evreni[parca].alan, donem_anahtarlari
+            )
+        }
+    )
+    if donem_uyusmayan:
+        return "referans-uyusmuyor"
+    # (b) `kanit`te gösterilen denetçi satırı AYNI numarayı taşıyor. Üçüncü
+    #     taraf olmadan zincir kapanmaz: denetçinin sütunu, sentezin beyanını
+    #     bağımsız bir belgede doğrular.
+    #
+    # BAĞ ÇİFT YÖNLÜDÜR (hakem turu 1, F2/yüksek — ÖLÇÜLDÜ). İlk yazım yalnız
+    # "her iddia BİR satırda geçsin" diyordu ve SAYIMI `cozulen`in TAMAMINDAN
+    # topluyordu. Ölçüldü: tek kaynaklı bir iddia (`K1#2`), atfa AYNI ALANDAN
+    # alakasız bir satır eklenerek iki-kaynaklık çoğunluk devralıyor ve bu turda
+    # açılan K-126 istisnası tamamen ATLANIYOR. Yani kapatıldığı iddia edilen
+    # sınıf — "aynı alandaki HERHANGİ bir denetçi satırı yetkilendirir" —
+    # yetkilendirme ayağında kapanmış, SAYIM ayağında yaşamaya devam ediyordu.
+    # Varyant yamamak yerine bağ simetrik kuruldu: her iddia bir satırda
+    # geçmeli VE her atıf yapılan satır en az bir iddiayı taşımalıdır.
+    iddia_kumesi = set(iddialar)
+    tasiyan = {
+        parca
+        for parca in atiflar
+        if iddia_kumesi & satir_evreni[parca].kaynak_iddialari
+    }
+    denetcide_yok = sorted(
+        atif.etiket
+        for atif in iddialar
+        if not any(atif in satir_evreni[parca].kaynak_iddialari for parca in atiflar)
+    )
+    iddiasiz_atif = _iddiasiz_atiflar(atiflar, tasiyan)
+    if denetcide_yok or iddiasiz_atif:
+        return "iddia-denetcide-yok"
+    return EkleBagi(
+        atiflar=tuple(atiflar),
+        iddialar=tuple(iddialar),
+        iddia_kumesi=frozenset(iddia_kumesi),
+        tasiyan=frozenset(tasiyan),
+        karar_alani=karar_alani,
+    )
+
+
+@dataclass(frozen=True)
+class BagHatasi:
+    """Karar günlüğünde bağ kapısından geçemeyen bir `ekle` satırı."""
+
+    sira: int
+    satir: Mapping[str, Any]
+    sebep: str
+
+
+def ekle_bag_hatalari(
+    karar_gunlugu: Sequence[Mapping[str, Any]],
+    *,
+    denetci_raporlari: Sequence,
+    doktor_raporlari: Sequence,
+) -> list[BagHatasi]:
+    """Sentez kapısının bağ denetimi — motorun `ekle` bağ kapılarının AYNISI.
+
+    Evrenler motorunkiyle AYNI kaynaklardan kurulur: CLI motora ve sentez
+    turuna aynı denetçi çiftini (`anlasma.cift`) ve aynı mekanik eleme
+    raporlarını verir; kör etiketler ve iddia dizini motordaki gibi
+    `gate_round(...).raporlar`'dan okunur.
+    """
+    raporlar = gate_round(doktor_raporlari).raporlar
+    kabul_edilen = _kabul_edilen_etiketler_raporlardan(raporlar)
+    satir_evreni = _denetci_satir_evreni(denetci_raporlari)
+    iddia_evreni = _iddia_evreni_kur(raporlar)
+    hatalar: list[BagHatasi] = []
+    for sira, satir in enumerate(karar_gunlugu):
+        if satir.get("tur") != "karar" or satir.get("karar") != "ekle":
+            continue
+        bag = ekle_bagini_coz(
+            satir,
+            kabul_edilen=kabul_edilen,
+            satir_evreni=satir_evreni,
+            iddia_evreni=iddia_evreni,
+        )
+        if isinstance(bag, str):
+            hatalar.append(BagHatasi(sira=sira, satir=satir, sebep=bag))
+    return hatalar
+
+
 def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
     """Yeni öğenin yapısal çoğunluğu — sayı DENETÇİNİN SÜTUNUNDAN okunur.
 
@@ -987,179 +1192,20 @@ def _yeni_oge_cogunlugu(inputs: EngineInputs) -> CheckOutput:
     for satir in _karar_satirlari(inputs):
         if satir.get("karar") != "ekle":
             continue
-        kanit = satir.get("kanit") or ""
-        bilesenler = kanit_bilesenleri(kanit, kabul_edilen)
-        if bilesenler is None:
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"], karar="ekle", sebep="kanit-yok"
-                )
-            )
-            continue
-        atiflar = [parca for parca in bilesenler if _SATIR_ATIF_RE.match(parca)]
-        # F3 (hakem turu 1, orta — ÖLÇÜLDÜ): ÇÖZÜLEMEYEN atıf SESSİZCE ELENMEZ.
-        # Eski yazım `if parca in satir_evreni` ile süzüyordu; `D1#1, D2#999`
-        # gibi bir satır-numarası yazım hatasında geçerli satır kararı TEK
-        # BAŞINA yetkilendiriyor ve hatalı atıf provenanstan kayboluyordu.
-        # Biri bile çözülmüyorsa alan yapısal kanıt TAŞIMAZ (fail-closed).
-        cozulemeyen = [parca for parca in atiflar if parca not in satir_evreni]
-        if not atiflar or cozulemeyen:
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"], karar="ekle", sebep="referans-yok"
-                )
-            )
-            continue
-        cozulen = [satir_evreni[parca] for parca in atiflar]
-        # F2 (hakem turu 1, YÜKSEK — ÖLÇÜLDÜ): atıf ADAYA BAĞLI olmak zorunda.
-        # Eski yazım yalnız `kaynaklar` ve `sinif` okuyordu; `kanca_kaliplari`
-        # eklemesi `cta_kaliplari` hakkındaki bir satırı gösterip çoğunluk
-        # kapısını geçebiliyordu. Bu sentez sapmasının OLAĞAN biçimidir.
-        # Görev B satırlarında denetçi alanı `ozel_gun/{anahtar}/{başlık}` yazar,
-        # karar satırı ise yalnız `ozel_gun` — bu ilk kapı ÖNEK eşleşmesidir; dönemin
-        # KENDİSİ aşağıda, iddia bağı kurulduktan sonra ayrıca ölçülür
-        # (`_denetci_donem_bagi_var`, sözleşme 2.3).
-        karar_alani = _metin(satir.get("alan"))
-        uyusmayan = sorted(
-            {
-                parca
-                for parca in atiflar
-                if not _alan_bagi_var(karar_alani, satir_evreni[parca].alan)
-            }
+        bag = ekle_bagini_coz(
+            satir,
+            kabul_edilen=kabul_edilen,
+            satir_evreni=satir_evreni,
+            iddia_evreni=iddia_evreni,
         )
-        if uyusmayan:
+        if isinstance(bag, str):
             kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"],
-                    karar="ekle",
-                    sebep="referans-uyusmuyor",
-                )
+                UygulanmayanKarar(unit_id=satir["unit_id"], karar="ekle", sebep=bag)
             )
             continue
-        # ATIF ADAYA BAĞLANIR — bağ İKİ UÇLUDUR (sentez sözleşmesi 2.2, dış depo
-        # `12beec1`). Alan düzeyindeki yetkilendirme aynı ekseni üç hakem turunda
-        # üç varyantla açık bırakıyordu: `kanca_kaliplari` hakkındaki HERHANGİ bir
-        # denetçi satırı, o listeye giren HERHANGİ bir kalıbı yetkilendirebiliyordu.
-        # Varyant yamamak bırakıldı; kapanış, üç beyanın da AYNI üst kaynağa —
-        # araştırma iddiasının numarasına — çivilenmesidir.
-        kaynak_iddia = _metin(satir.get("kaynak_iddia"))
-        iddialar = kaynak_iddialari_coz(kaynak_iddia) if kaynak_iddia else None
-        if not iddialar:
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"], karar="ekle", sebep="kaynak-iddia-yok"
-                )
-            )
-            continue
-        # (a) Numaranın gösterdiği satır araştırma raporunda GERÇEKTEN var ve
-        #     alanı kararın alanıyla örtüşüyor. Doğrulayan MEKANİK ayrıştırıcıdır,
-        #     sentezin beyanı DEĞİL — tek uçlu bir bağ kendini onaylardı, çünkü
-        #     iki beyanı da aynı model yazıyor.
-        oge_yolu = _metin(satir.get("oge_yolu"))
-        baglar = {
-            atif.etiket: (
-                IDDIA_BAGI_EVRENDE_YOK
-                if atif.etiket not in iddia_evreni
-                else _iddia_alani_bagli_mi(
-                    karar_alani, oge_yolu, iddia_evreni[atif.etiket]
-                )
-            )
-            for atif in iddialar
-        }
-        if any(bag == IDDIA_BAGI_EVRENDE_YOK for bag in baglar.values()):
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"],
-                    karar="ekle",
-                    sebep="iddia-arastirmada-yok",
-                )
-            )
-            continue
-        # DÜRÜST TEŞHİS: iddia araştırmada VAR, örtüşmeyen ALAN/DÖNEM hücresi.
-        # Tek ad kullanıldığında operatör araştırmayı sorgulamaya gidiyordu.
-        if any(bag == IDDIA_BAGI_YOK for bag in baglar.values()):
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"],
-                    karar="ekle",
-                    sebep="iddia-alani-uyusmuyor",
-                )
-            )
-            continue
-        # DÜRÜST TEŞHİS (F3): iddia araştırmada VAR, çözülemeyen DÖNEM KİMLİĞİ.
-        if any(
-            bag == IDDIA_BAGI_DONEM_COZULEMEDI for bag in baglar.values()
-        ):
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"],
-                    karar="ekle",
-                    sebep="donem-kimligi-cozulemedi",
-                )
-            )
-            continue
-        # GÖREV B: denetçi satırının anahtarı KARARIN DÖNEMİNE ait olmalı
-        # (denetçi sözleşmesi 2.3). `_alan_bagi_var` yalnız `ozel_gun/` önekini
-        # ölçer; "herhangi bir dönemin denetçi satırı herhangi bir özel gün
-        # eklemesini yetkilendirir" o önekle AÇIK kalırdı. Eşleşme anahtar
-        # bazında değil DÖNEM bazındadır: bağlanan iddiaların anahtar kümesi.
-        donem_anahtarlari = frozenset(
-            anahtar
-            for atif in iddialar
-            for anahtar in iddia_evreni[atif.etiket].anahtarlar
-        )
-        donem_uyusmayan = sorted(
-            {
-                parca
-                for parca in atiflar
-                if not _denetci_donem_bagi_var(
-                    oge_yolu, satir_evreni[parca].alan, donem_anahtarlari
-                )
-            }
-        )
-        if donem_uyusmayan:
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"],
-                    karar="ekle",
-                    sebep="referans-uyusmuyor",
-                )
-            )
-            continue
-        # (b) `kanit`te gösterilen denetçi satırı AYNI numarayı taşıyor. Üçüncü
-        #     taraf olmadan zincir kapanmaz: denetçinin sütunu, sentezin beyanını
-        #     bağımsız bir belgede doğrular.
-        #
-        # BAĞ ÇİFT YÖNLÜDÜR (hakem turu 1, F2/yüksek — ÖLÇÜLDÜ). İlk yazım yalnız
-        # "her iddia BİR satırda geçsin" diyordu ve SAYIMI `cozulen`in TAMAMINDAN
-        # topluyordu. Ölçüldü: tek kaynaklı bir iddia (`K1#2`), atfa AYNI ALANDAN
-        # alakasız bir satır eklenerek iki-kaynaklık çoğunluk devralıyor ve bu turda
-        # açılan K-126 istisnası tamamen ATLANIYOR. Yani kapatıldığı iddia edilen
-        # sınıf — "aynı alandaki HERHANGİ bir denetçi satırı yetkilendirir" —
-        # yetkilendirme ayağında kapanmış, SAYIM ayağında yaşamaya devam ediyordu.
-        # Varyant yamamak yerine bağ simetrik kuruldu: her iddia bir satırda
-        # geçmeli VE her atıf yapılan satır en az bir iddiayı taşımalıdır.
-        iddia_kumesi = set(iddialar)
-        tasiyan = {
-            parca
-            for parca in atiflar
-            if iddia_kumesi & satir_evreni[parca].kaynak_iddialari
-        }
-        denetcide_yok = sorted(
-            atif.etiket
-            for atif in iddialar
-            if not any(atif in satir_evreni[parca].kaynak_iddialari for parca in atiflar)
-        )
-        iddiasiz_atif = _iddiasiz_atiflar(atiflar, tasiyan)
-        if denetcide_yok or iddiasiz_atif:
-            kayitlar.append(
-                UygulanmayanKarar(
-                    unit_id=satir["unit_id"],
-                    karar="ekle",
-                    sebep="iddia-denetcide-yok",
-                )
-            )
-            continue
+        atiflar, iddialar = list(bag.atiflar), list(bag.iddialar)
+        iddia_kumesi, tasiyan = set(bag.iddia_kumesi), set(bag.tasiyan)
+        karar_alani = bag.karar_alani
         # F2'nin ikinci ayağı: denetçi o satırda `alma`/`açık-soru` önermişse
         # kalıp GİRMEZ. Sayı yetse bile: denetçinin ÖNERİ sütunu tam olarak bu
         # soruyu cevaplıyor ve motor onu görmezden gelemez.

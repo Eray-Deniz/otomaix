@@ -1777,6 +1777,31 @@ def test_auditor_field_is_read_through_the_shared_comparison_key() -> None:
     assert engine._alan_bagi_var("video_kodlar", "video_kodlar_eski.hareket") is False
 
 
+def test_the_synthesis_gate_reads_the_same_binding_verdict_as_the_engine() -> None:
+    """`ekle_bag_hatalari` motorun bağ kapılarının AYNISIDIR — iki yol, tek kural.
+
+    2026-09-23: bağ kuralları yalnız motordaydı; sentezden geçen yanlış bağ
+    düzeltme hakkı kullanılmadan motorda düşüyordu. Sentez artık aynı fonksiyonu
+    çağırır; bu test iki çağıranın aynı hükmü okuduğunu ölçer.
+    """
+    for girdi, beklenen in (
+        (_ekle_girdisi(kanit=BASKA_ALAN), ["referans-uyusmuyor"]),
+        (_ekle_girdisi(kanit="D1#99"), ["referans-yok"]),
+        (_ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}"), []),
+    ):
+        cift = girdi.denetci_envanterleri
+        hatalar = engine.ekle_bag_hatalari(
+            girdi.sentez.karar_gunlugu,
+            denetci_raporlari=(cift.birinci, cift.ikinci),
+            doktor_raporlari=girdi.mekanik_eleme.raporlar,
+        )
+        assert [hata.sebep for hata in hatalar] == beklenen
+        motor = [
+            k.sebep for k in engine.run_checks(girdi).uygulanmayan_kararlar
+        ]
+        assert set(beklenen) <= set(motor)
+
+
 def test_a_dotted_auditor_row_of_the_same_period_binds() -> None:
     """Noktalı Görev B yazımı (`ozel_gun.{dönem}.{başlık}`) aynı dönemin kararına bağlanır."""
     sonuc = engine.run_checks(

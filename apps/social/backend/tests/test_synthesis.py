@@ -2155,6 +2155,115 @@ async def test_her_denemenin_ham_ciktisi_AYRI_dosyada(kosu, tmp_path) -> None:
     assert "hiçbiri yok" in (kok / "01-SENTEZ-CIKTISI.md").read_text(encoding="utf-8")
 
 
+# ── Bağ kapısı sentezde — motorla AYNI kural (2026-09-23) ──────────────────
+#
+# `kosu-23e19d03…`: sentez yetki belgesi maddesini kapsam satırlarına (K1#1,
+# K3#1) bağladı; kural yalnız motorda olduğu için düzeltme hakkı kullanılmadı ve
+# iki denetçinin canlı doğruladığı madde motorda sessizce düştü.
+#
+# Test turunun denetçi satırı (`D1#1`) `cta_kaliplari`'nı anlatır ve `K2#1`'i
+# taşır; `K2#1` araştırmada bir CTA iddiasıdır, `K1#1` ise `ton_ve_dil`'dir.
+
+DOGRU_BAG = "K2#1"
+YANLIS_BAG = "K1#1"
+
+
+def _cta_ekleyen_cikti(*kaynak_iddialari: str) -> str:
+    """Her `kaynak_iddia` için bir yeni CTA ekleyen sentez çıktısı."""
+    yeniler = [
+        {"kalip": f"Karşılaştırıp seçme daveti {sira}", "tur": "davet", "gerekce": "Seçim."}
+        for sira in range(len(kaynak_iddialari))
+    ]
+    icerik = _tam_icerik(cta_kaliplari=[*AKTIF_ICERIK["cta_kaliplari"], *yeniler])
+    gunluk = _model_gunlugu(icerik)
+    for sira, kaynak_iddia in enumerate(kaynak_iddialari, start=1):
+        gunluk.append(
+            _satir(
+                "ekle",
+                f"ku-99999999999{sira}",
+                f"cta_kaliplari[{sira}]",
+                "cta_kaliplari",
+                kanit="D1#1",
+                kaynak_iddia=kaynak_iddia,
+            )
+        )
+    return _sentez_metni(icerik, gunluk, [])
+
+
+def _ekle_iddialari(uretilen) -> list[str]:
+    return sorted(
+        s["kaynak_iddia"] for s in _satirlar(uretilen).values() if s["karar"] == "ekle"
+    )
+
+
+async def test_bag_hatasi_DUZELTME_hakkini_kullanir(kosu, tmp_path) -> None:
+    """Yanlış bağ düzeltme hakkını kullandırır; istem SOMUT bağ hatasını söyler."""
+    db, run_id = kosu
+    runner = SayanRunner(
+        _tamam(_cta_ekleyen_cikti(YANLIS_BAG)), _tamam(_cta_ekleyen_cikti(DOGRU_BAG))
+    )
+
+    uretilen = await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 2, "bağ hatası düzeltme çağrısı AÇMADI"
+    assert "bağ kapısı" in runner.istemler[1]
+    assert f"kaynak_iddia `{YANLIS_BAG}`" in runner.istemler[1]
+    assert "araştırma satırı BAŞKA bir alanı anlatıyor" in runner.istemler[1]
+    assert _ekle_iddialari(uretilen) == [DOGRU_BAG]
+    assert (await _durum(db, run_id)) == ("calisiyor", None)
+
+
+async def test_dogru_bagda_duzeltme_ACILMAZ(kosu, tmp_path) -> None:
+    """Pozitif kontrol: kapıdan geçen bağ ikinci ücretli çağrıyı TETİKLEMEZ."""
+    runner = SayanRunner(_tamam(_cta_ekleyen_cikti(DOGRU_BAG)))
+
+    uretilen = await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 1
+    assert _ekle_iddialari(uretilen) == [DOGRU_BAG]
+
+
+async def test_bag_hatasi_KALIRSA_kosu_olmez(kosu, tmp_path) -> None:
+    """Hak tükenince bağ hatası koşuyu öldürmez — motor o kararı uygulamaz (bugünkü gibi)."""
+    db, run_id = kosu
+    bozuk = _tamam(_cta_ekleyen_cikti(YANLIS_BAG))
+    runner = SayanRunner(bozuk, bozuk, bozuk)
+
+    uretilen = await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 1 + synthesis.SENTEZ_DUZELTME_HAKKI
+    assert _ekle_iddialari(uretilen) == [YANLIS_BAG]
+    assert (await _durum(db, run_id)) == ("calisiyor", None)
+
+
+async def test_bag_duzeltmesi_BICIMDE_duserse_onceki_deneme_kullanilir(kosu, tmp_path) -> None:
+    """Bağ için açılan tur sonucu KÖTÜLEŞTİREMEZ: biçimde düşen düzeltme koşuyu öldürmez."""
+    db, run_id = kosu
+    runner = SayanRunner(
+        _tamam(_cta_ekleyen_cikti(YANLIS_BAG)),
+        _tamam("dört bölümün hiçbiri yok, serbest metin"),
+    )
+
+    uretilen = await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 2
+    assert _ekle_iddialari(uretilen) == [YANLIS_BAG]
+    assert (await _durum(db, run_id)) == ("calisiyor", None)
+
+
+async def test_duzeltme_bag_hatasini_ARTIRIRSA_onceki_tutulur(kosu, tmp_path) -> None:
+    """Düzeltme daha çok bağ hatası getirirse önceki deneme kalır."""
+    runner = SayanRunner(
+        _tamam(_cta_ekleyen_cikti(YANLIS_BAG)),
+        _tamam(_cta_ekleyen_cikti(YANLIS_BAG, YANLIS_BAG)),
+    )
+
+    uretilen = await _sentez_runnerla(kosu, tmp_path, runner)
+
+    assert len(runner.cagrilar) == 2
+    assert _ekle_iddialari(uretilen) == [YANLIS_BAG]
+
+
 async def test_arac_KOSMAZSA_duzeltme_denenmez(kosu, tmp_path) -> None:
     """Sınır testi: araç arızası model çıktı hatası DEĞİLDİR, hemen terminal.
 
