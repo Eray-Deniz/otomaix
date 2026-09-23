@@ -814,12 +814,30 @@ def _alan_bagi_var(karar_alani: str, denetci_alani: str) -> bool:
     `ozel_gun/{dönem}/{başlık}` biçimindedir, karar satırı ise yalnız `ozel_gun`
     taşır. Bu yüzden bağ TAM EŞİTLİK ya da `<alan>/` ÖNEKİDİR — serbest alt dizge
     DEĞİL: `ozel_gun` öneki `ozel_gunler` gibi bir adı yanlışlıkla kapsamasın.
+    İki taraf da `_denetci_alan_anahtari`'ndan okunur (süs, harf, `.` ayracı).
     """
-    if not karar_alani or not denetci_alani:
+    karar = alan_karsilastirma_anahtari(karar_alani or "")
+    denetci = _denetci_alan_anahtari(denetci_alani or "")
+    if not karar or not denetci:
         return False
-    return denetci_alani == karar_alani or denetci_alani.startswith(
-        f"{karar_alani}/"
-    )
+    return denetci == karar or denetci.startswith(f"{karar}/")
+
+
+def _denetci_alan_anahtari(alan: str) -> str:
+    """Denetçi `alan` hücresinin karşılaştırma anahtarı — araştırma iddiasınınkiyle AYNI kural.
+
+    `alan_karsilastirma_anahtari` süsü düşürür ve harfi katlar; üstüne alt alan
+    ayracı `.` → `/` kanonikleşir. Denetçi sözleşmesi alt havuz yazımını
+    TANIMLAMAZ (`hakem-denetci-gorevi.md`'de `video_kodlar` hiç geçmiyor), rapor
+    kapısı ikisini de kabul eder. Ölçüldü (2026-09-23, `kosu-23e19d03…`):
+    Denetçi-2 `video_kodlar.hareket` yazdı, Denetçi-1 `video_kodlar`; eşleştirici
+    ham metni karşılaştırdığı için sekiz video eklemesinin sekizi
+    `referans-uyusmuyor` ile düştü. Çeviri hiçbir adı başka bir ada
+    dönüştüremez: şema alan adlarının ve tatil anahtarlarının hiçbiri nokta
+    taşımaz (ölçüldü: 11 ad, 25 anahtar). Anahtar yerine GÖRÜNEN ad yazılmış bir
+    hücre ("Kurban Bayramı 1. Gün") çeviriden önce de sonra da eşleşmez.
+    """
+    return alan_karsilastirma_anahtari(alan).replace(".", "/")
 
 
 def _arastirma_iddialari(inputs: EngineInputs) -> dict[str, CIddia]:
@@ -914,7 +932,9 @@ def _denetci_donem_bagi_var(
     iddiaların dönem anahtar kümesinde olmalıdır. Küme boşsa (Görev A kararı)
     yalnız eşitlik geçer.
     """
-    eslesme = _DENETCI_OZEL_GUN_ALANI.match(denetci_alani)
+    # Alan kapısıyla AYNI anahtar: o noktalı yazımı kabul ederken burası ham
+    # metni okusaydı eşleşme `None` döner ve kapı "Görev A" sanıp geçerdi.
+    eslesme = _DENETCI_OZEL_GUN_ALANI.match(_denetci_alan_anahtari(denetci_alani))
     karar = _OZEL_GUN_YOLU.match(oge_yolu)
     if eslesme is None or karar is None:
         return True

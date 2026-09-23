@@ -1410,6 +1410,7 @@ def _ozel_gun_ekle_girdisi(
     donem_adi: str | None = None,
     anahtarlar: tuple[str, ...] | None = None,
     denetci_anahtari: str | None = None,
+    ayrac: str = "/",
 ):
     """`ozel_gun` alanına yeni bir kanca ekleyen karar.
 
@@ -1442,7 +1443,7 @@ def _ozel_gun_ekle_girdisi(
             7,
             kaynaklar={1, 2},
             sinif="2-2",
-            alan=f"ozel_gun/{denetci_anahtari or YENI_DONEM_ANAHTARI}/kanca",
+            alan=f"ozel_gun{ayrac}{denetci_anahtari or YENI_DONEM_ANAHTARI}{ayrac}kanca",
             kaynak_iddialari={
                 auditors.KaynakIddiasi(kaynak=1, iddia=YENI_DONEM_IDDIA_NO),
                 auditors.KaynakIddiasi(kaynak=2, iddia=YENI_DONEM_IDDIA_NO),
@@ -1753,6 +1754,52 @@ def test_special_day_field_prefix_binds_to_the_decision() -> None:
     assert engine._alan_bagi_var("ozel_gun", "ozel_gunler") is False
     assert engine._alan_bagi_var("ozel_gun", "cta_kaliplari") is False
     assert engine._alan_bagi_var("", "ozel_gun") is False
+
+
+def test_auditor_field_is_read_through_the_shared_comparison_key() -> None:
+    """Denetçi `alan` hücresi de araştırma iddiasıyla AYNI anahtardan okunur.
+
+    2026-09-23 (`kosu-23e19d03…`, ölçüldü): Denetçi-2 video satırlarını
+    `video_kodlar.hareket` / `video_kodlar.sahne` yazdı, Denetçi-1 `video_kodlar`
+    (21 Eylül'de roller tersti). Denetçi sözleşmesi alt havuz yazımını tanımlamaz,
+    rapor kapısı ikisini de kabul eder; eşleştirici yalnız tam eşitliği ve `/`
+    önekini tanıdığı için sekiz video eklemesinin sekizi `referans-uyusmuyor` ile
+    düştü. Aynı sınıf süslü ya da büyük harfli ad — araştırma tarafında
+    2026-09-15'te kapanmıştı, denetçi tarafında açık kalmıştı.
+    """
+    assert engine._alan_bagi_var("video_kodlar", "video_kodlar.hareket") is True
+    assert engine._alan_bagi_var("video_kodlar", "video_kodlar.sahne") is True
+    assert engine._alan_bagi_var("video_kodlar", "`video_kodlar`") is True
+    assert engine._alan_bagi_var("video_kodlar", "Video_Kodlar") is True
+    assert engine._alan_bagi_var("ozel_gun", "ozel_gun.ramazan.kanca") is True
+    # Komşu ad hâlâ kapsanmaz: ayraç yalnız alan adının TAMAMINDAN sonra tanınır.
+    assert engine._alan_bagi_var("video_kodlar", "video_kodlari") is False
+    assert engine._alan_bagi_var("video_kodlar", "video_kodlar_eski.hareket") is False
+
+
+def test_a_dotted_auditor_row_of_the_same_period_binds() -> None:
+    """Noktalı Görev B yazımı (`ozel_gun.{dönem}.{başlık}`) aynı dönemin kararına bağlanır."""
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}", ayrac=".")
+    )
+    assert sonuc.uygulanmayan_kararlar == ()
+
+
+def test_a_dotted_auditor_row_of_another_period_still_does_not_authorise() -> None:
+    """Ayraç tanınınca dönem kapısı da AYNI anahtarı okumak ZORUNDA.
+
+    `_denetci_donem_bagi_var` tanımadığı yazımda "eşleşti" der (Görev A yolu).
+    Alan kapısı noktalı yazımı kabul edip dönem kapısı etmeseydi, başka dönemin
+    satırı `ozel_gun.{dönem}.kanca` yazılarak eklemeyi yetkilendirirdi.
+    """
+    sonuc = engine.run_checks(
+        _ozel_gun_ekle_girdisi(
+            kaynak_iddia=f"K1#{YENI_DONEM_IDDIA_NO}",
+            denetci_anahtari=TAKVIM_ANAHTARI,
+            ayrac=".",
+        )
+    )
+    assert "referans-uyusmuyor" in _sebepler(sonuc)
 
 
 def _pinli_sozlesme(ad: str) -> str:
