@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-22
+last-touched: 2026-09-23
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -216,6 +216,26 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 
 # Current Status
 
+**2026-09-23 ON DÖRDÜNCÜ OTURUM — İKİ CANLI KOŞU, KÖR YARGI; BEŞ KUSUR KAPANDI (motor 3, sentez 1, onay 1).**
+*Koşu 1 (`kosu-2851dc22…`):* denetim 21,5 dk; sentez tek denemede (7 dk 49 sn · 1,77 USD; araç çağrısı
+yok, düzeltme hakkı kullanılmadı, akış kaydı yazıldı) — 22 Eylül onarımlarının canlıdaki ilk sınavı,
+düşüş tekrarlanmadı. Sentez açık soruları üst madde + girintili alt madde yazdı; sayaç 10 soruyu 30
+saydı (taşma yanlış alarmı; 30 parça motora ve onay ekranına gidiyordu). Eray: önce düzelt, yeni koşu
+→ `3fc7ad8` (sayaç) + `1892375` (onay özeti açık soruları kesmez). Koşu **bırakıldı, `calisiyor`
+durumunda sahipsiz**.
+*Koşu 2 (`kosu-23e19d03…`, aynı brief ve kaynaklar):* denetim 18,5 dk; sentez tek denemede (9 dk 22 sn ·
+2,09 USD); iç içe biçim yine geldi, yeni sayaç 10 saydı. **K-134 kör yargı alındı** (10 soru,
+senaryolu — `K134-KOR-YARGI-23e19d03.md`). `katman1` PASS (`pytest tests/prompt_regression/ -q @
+1892375`, actor eray, Eray onayı) → `motor` → `blocked`.
+*Motor ölçümü üç kusur gösterdi* (Eray: "sentezden geçen motordan nasıl geçmez"): denetçi alt havuz
+yazımı (`video_kodlar.hareket`) eşleşmiyordu → 8 video kodunun 8'i düştü → `218c886`; bağ kuralları
+yalnız motordaydı → iki denetçinin canlı doğruladığı yetki belgesi maddesi sessizce düştü → `f9443c7`
+(sentez aynı kuralı düzeltme hakkıyla uygular); K-129 her rakamı ve alt-dize kelimeyi risk sayıyordu
+("ayar", "360") → `6fd7416` (ortak kural; sektör sözlüğü ölçülüp düşürüldü). Üçünden sonra bu koşunun
+motoru (yazmadan yeniden oynatma): uygulanmayan kararlar yalnız yetki belgesi bağ hatası + indirim
+çelişkisi, motorun kendi açık sorusu 1. **DB'deki motor sonucu düzeltmelerden ÖNCEKİ motorun ürünüdür.**
+**Sıradaki iş:** Open Problems ilk iki madde.
+
 **2026-09-21 ON BİRİNCİ OTURUM — KÖK SEBEP YER DEĞİŞTİRDİ: KURAL DEĞİL, ARAŞTIRMA ŞABLONU.**
 Kaynak-1..6 (dış depo `Kuyumculuk/`) iki bağımsız analizle incelendi, ortak tablo çıkarıldı, iki
 itiraz turu ve Codex etki analizi işlendi. **Ölçülen kök sebep:** kalıplar Bölüm C'ye bağlanmıyor
@@ -292,7 +312,7 @@ mutasyonun yedisi yakalandı (kanıt kapısı · çelişki · sızıntı · EK-M
 muafiyet · `destek=yok` hücre kuralı). Gerçek Kaynak-1/3 yeni kapıdan geçirildi: 0 iddia + "ESKİ
 sürüm" notu (ölçüldü). **Alan sınıfı K-129'un mekanik kuralıyla seçilir — rakam içeren HER
 içerik maddesi risk sayılır ve `öneri` desteğiyle açık soruya düşer; tasarım böyle yazıyor,
-canlıda kaç maddeyi vuracağı ÖLÇÜLMEDİ.** **Aynı akşam Eray Codex'i dışarıdan koşturdu: 5 bulgu
+canlıda kaç maddeyi vuracağı ÖLÇÜLMEDİ.** *(→ Ölçüldü ve REVİZE edildi 2026-09-23, `6fd7416`.)* **Aynı akşam Eray Codex'i dışarıdan koşturdu: 5 bulgu
 (2 yüksek: URL'siz satırın beyanı kanıt sayılıyordu · sentez talimatı kaynaksız risk maddesinin açık
 soru yolunu kapatıyordu; 3 orta: boş `[C: ]` geçiyordu · `KAYNAKTA YOK` URL eşitliği aramıyordu ·
 kaçışlı etiket sızıyordu) — 5'i de bellekte yeniden üretilip kapatıldı, 8 regresyon testi; tam
@@ -963,6 +983,35 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   taşındı ve geri alındı: kaydı ikiye bölüyordu).
 
 # Decisions Log
+
+## Canlı koşu, motor düzeltmeleri, K-129 revizyonu (2026-09-23, on dördüncü oturum)
+
+- **Sayaç (`3fc7ad8`):** liste öğesi = bölümdeki EN SIĞ madde girintisi; daha derin satırlar öğeye
+  katılır. Sözleşme her soru için "konu, iki taraf, eğilim" ister, biçim dayatmaz — kusur sayaçtaydı.
+- **Onay özeti (`1892375`):** açık sorular kesilmez, başlık tam sayıyı yazar. `[:10]` için kodda da
+  iki spec'te de gerekçe yoktu (ölçüldü).
+- **Denetçi alan anahtarı (`218c886`):** denetçi `alan` hücresi araştırma tarafıyla AYNI anahtardan
+  (süs + harf) ve `.` → `/` ile okunur; dönem kapısı da aynı anahtarı okur (okumasaydı noktalı başka
+  dönem satırı eklemeyi yetkilendirirdi — mutasyonla ölçüldü).
+- **Bağ kuralları sentezde (`f9443c7`; Eray yönü: "bağlantı kurallarını sentezin kontrolüne de
+  koy"):** kural motorda TEK yerde (`ekle_bagini_coz`), sentez çağrı anında içe aktarır. Düzeltme turu
+  sonucu KÖTÜLEŞTİREMEZ (düşerse ya da daha çok bağ hatası getirirse önceki geçerli deneme); son
+  denemede kalan bağ hatası koşuyu öldürmez, motor düşürür. Politika sonuçları (öneri, çelişki,
+  çoğunluk, kanıt türü) sentez kapısına GİRMEZ.
+- **K-129 revizyonu (`6fd7416`, Eray 2026-09-23):** iddia = hukuki dil (ortak liste, kelime başından,
+  Türkçe harf katlanmadan, ASCII eşleriyle) + madde/sayılı atıf + nicel iddia (yüzde, para, büyük
+  istatistik). Tek başına rakam risk değil; **tarih yalnız hukuki bağlamla risk** (Eray açık onayı).
+  Kabul edilen bedel (örnekli açıklama sonrası): işaretsiz hukuki iddia içerik sınıfında kalır (25
+  mevzuat iddiasının 9'u; 5'i yasak alanında) ve "yasal" demeyen "2 yıl garanti" normal sayılır.
+- **Sektör risk sözlüğü DÜŞÜRÜLDÜ (Eray: "ortak kural ile halledebiliyorsak girmeyelim"):** sekiz
+  sentez çıktısındaki 302 içerik maddesinde, yasak metinlerinden mekanik çıkan aday ifadeler 6 ek
+  yakalama verdi, 6'sı yanlış alarm (eğitici ayrım · YASAKLAYAN cümle). **Yeniden açılma koşulu:** yeni
+  bir sektörün ilk koşusunda aynı ölçüm — aday = raporların ve sentezin yasak metinlerindeki tırnaklı
+  ifadeler; sayılan = ortak kuralın "normal" dediği içerik maddelerinde adayın OLUMLU geçtiği madde —
+  en az bir gerçek yakalama gösterirse.
+- **Kör yargı soruları senaryolu sorulur** (Eray: "bu soruyu ve bundan sonrakileri örnek senaryo ile
+  açıkla"); öneri verilmez, sentezin eğilimi etiketli gösterilir, kaynaklar K1/K2/K3.
+- **`katman1` tasdikinde actor = eray** (Eray açık onayı; önceki koşunun tasdikiyle tutarlı).
 
 ## Sentez dayanıklılığı (2026-09-22, on üçüncü oturum)
 
@@ -1677,7 +1726,32 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[DÜZELTİLDİ `5eb73a3` — SIRADAKİ İŞ: YENİ CANLI KOŞU] `4a260f2`'nin kendi ürettiği beş
+- **[SIRADAKİ İŞ 1 — bir sonraki canlı koşudan ÖNCE] Modele giden K-129 metinleri eski okumada.**
+  `synthesis.py` görev metnindeki "RİSK maddesini (`yasaklar_ve_hassasiyetler` ya da mevzuat/tarih/sayı
+  içeren madde)" satırı + dış sözleşmeler `hakem-sentez-gorevi.md` (210 · 226 · 276) ve
+  `hakem-denetci-gorevi.md` (150) + pin (`shared/contracts/research-contracts.pin.json`). Tek adımda
+  değişir (model iki tanım görmesin). Dış depoda Eray'ın commit'lenmemiş silmeleri var — yalnız bu
+  dosyalar eklenir.
+- **[SIRADAKİ İŞ 2] `kosu-23e19d03` düzeltme turu** — kör yargı kararlarıyla (`K134-KOR-YARGI-23e19d03.md`
+  özet tablosu). SORULMAYAN ayrıntılar bu turda: 8 Mart ve Babalar Günü görsel vurgu yuvası (operatör
+  eklemesi mi boş mu) · Ramazan/Kurban "birikim" ifadesi · Öğretmenler Günü'nde denetçilerin `alma`
+  dediği iki CTA. `duzeltme-baslat`'ın ön koşulu (koşu `blocked`; K-72 "reddedilmiş koşu") ÖLÇÜLMEDİ —
+  önce oku. DB'deki motor sonucu düzeltmelerden önceki motorun ürünü; tur yeni motorla koşar.
+- **[ÖLÇÜLDÜ — karar Eray'da] CTA ≥ 5 eşiği (Grup 3 (e)):** sentez adayı 4 (aynı girdiyle sabah 6);
+  yeni motorla dördü de uygulanır; kör yargı +2 CTA (Soru 9) ve +4 hizmet CTA'sı (Soru 10a) ekledi.
+  Eşik kararı düzeltme turunun sonucuyla verilir.
+- **[DÜŞÜRÜLDÜ — yeniden açılma koşullu] Sektör risk sözlüğü:** Decisions Log 2026-09-23. Evi: yeni bir
+  sektörün ilk koşusu (aynı ölçüm).
+- **[DÜŞÜRÜLDÜ — etkisiz] Sahipsiz koşular:** `kosu-2851dc22…` (2026-09-23, sayaç kusuru yüzünden
+  bırakıldı) ve `kosu-7705437…` `calisiyor` durumunda; kapatan komut yok. Engellemiyorlar (ölçüldü: ikisi
+  dururken `tur-ac` iki yeni koşu açtı). Yeniden açılma koşulu: sahipsiz bir koşu bir kapıyı, listeyi ya
+  da aktivasyonu etkilerse.
+- **Grup 3 (e) "ilk turda ölçülecekler" — dördü ölçüldü (2026-09-23):** geri bağlantı notları 25·5·28
+  ve aşağı akışta 8 video + yetki belgesi atıf/alan uyuşmazlığı (ikisi de kapandı) · brief-doctor not
+  29·5·33 · K-129: 28 maddenin 5'i ("ayar" 4, "360" 1) → revizyonla 0 · CTA havuzu yukarıda.
+
+- **[DÜZELTİLDİ `5eb73a3` — CANLIDA KOŞTU 2026-09-23, yeniden açılma koşulu TETİKLENMEDİ: iki
+  sentez tek denemede geçti, akış kaydı yazıldı; düzeltme hakkı yolu canlıda HİÇ çalışmadı] `4a260f2`'nin kendi ürettiği beş
   kusur.** Düzeltme: 17 yeni test, 12/12 mutasyon, tam takım 4763 passed / 406,4 s.
   **Kapanış review'ı KOŞULMAYACAK (Eray kararı 2026-09-22: "review yapmaktan iş yapamıyoruz")**
   — dürüst etiket: düzeltmeyi bağımsız hakem GÖRMEDİ; asıl sınav canlı koşu. Yeniden açılma
@@ -2881,6 +2955,7 @@ onun blokeri (B5) bağımsız yeniden-doğrulama GÖRMEDEN kapatıldı. Fail-saf
   `yok` gibi işler (sayılmaz, fail-closed). ASCII yazım (`oneri`) kanonik üyeye çevrilir + tek not.
 - **Alan sınıfı = `_mevzuat_mi`** (K-129 mekanik kuralı, yeni kural yazılmadı): rakam içeren her
   aday risk sınıfına düşer. Bilinçli; canlı etkisi ölçülmedi, ilk turda ölçülecek.
+  *(→ Ölçüldü ve REVİZE edildi 2026-09-23, `6fd7416` — üstteki Decisions Log.)*
 - **Çelişki kontrolü mutabakattan ÖNCE** koşar (K-126 açılmadan); `DOĞRULANDI` yalnız URL'si
   araştırma satırına eşit örneklemden sayılır (K-126 eşitliği), `KAYNAKTA YOK` kimlikle sayılır
   (olumsuz beyan kopya hatasıyla susturulmaz).
