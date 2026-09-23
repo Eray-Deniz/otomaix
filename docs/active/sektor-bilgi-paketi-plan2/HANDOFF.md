@@ -5,10 +5,9 @@ written: 2026-09-23
 
 # Resume From
 
-**SIRADAKİ İŞ (TASK Open Problems):** `kosu-23e19d03` artık `activation_eligible` (operatör kararları
-yazıldı). Sıra: **Katman-1 tasdikini tazele** (tasdik `1892375`'te; `6c2276e` sentez istem satırını
-değiştirdi — spec §13.2(7)) → `yazim` → Katman-2 kör örneklem + tasdik → `onay` → `aktive-et`. Onay
-özetinde 4 "HUKUKİ — operatör kararı" satırı görünür. CTA ≥ 5 eşik kararı Eray'da (havuz şimdi 10).
+**SIRADAKİ İŞ (TASK Open Problems):** `kosu-23e19d03` ONAYLANDI (taslak `66654971…` sürüm 1, snapshot
+`ac1a062b…`). Kalan tek adım `aktive-et` — Eray'ın AYRI onayıyla; sonra Task 19 Step 11 (marka
+öneri/teyit + arayüz doğrulaması). Açık: yetki belgesi numarası marka ayarlarında yok (evi yok, tarih Eray'da).
 
 **Bugün (2026-09-23) ne oldu:** iki canlı koşu (ikisi de sentezi tek denemede geçti — 22 Eylül onarımları
 canlıda ilk kez sınandı); kör yargı alındı; motor `blocked`. Beş kusur kapandı, hepsi push'suz dalda:
@@ -34,6 +33,8 @@ koşuya uygulanamıyordu — `blocked` koşunun açık sorularını kapatan giri
 | Tam takım (operatör kararları) | **4836 passed / 0 failed / 408,1 s** (33 yeni test) |
 | Mutasyon (operatör kararları) | 10/10 yakalandı (kapsam · diğer-engel · bayrak · takvim · koru→guncelle · ekle→reddedilen-aday · no_change · soru_basi · HUKUKİ etiketi · görüntü alanı); kaynaklar bayt bayt geri döndü |
 | `23e19d03` kuru + yazım | `operator-karar --kuru` rc=0 → yazım rc=0: `activation_eligible`, açık soru 11 → 0, 78 birim işlemi (hukuki 4); `motor_ilk_sonucu.sonuc=blocked`; `load_verified_run` yedi kapıdan geçti |
+| Katman-1 tazeleme | `pytest tests/prompt_regression/ -q` @ `fa52d9d` → 124 passed; tasdik PASS |
+| Taslak + Katman-2 + onay | `yazim` rc=0 (sürüm 1) · Katman-2 8 çağrı 0,273 USD, kör seçim paketli 2/4 · `onay` rc=0, 252 sn |
 | Migration 037 canlı | `psql --single-transaction -f 037_operator_decisions.sql` → `CREATE TABLE`; `\d` beklenen şekil |
 
 **DENENMEYEN / DOĞRULANMAYAN:**

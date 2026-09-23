@@ -1758,13 +1758,24 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   koşuda SINANMADI — modelin yeni okumayla sınıflandırdığı bir sonraki koşuda görülür.
 - **[KAPANDI 2026-09-23] `kosu-23e19d03` kör yargı kararları uygulandı** — "düzeltme turu" yolu bu
   koşuya uygulanamıyordu (ölçüldü, Decisions Log "Operatör kararları"); yerine `operator-karar` yazıldı.
-- **[SIRADAKİ İŞ] `kosu-23e19d03` → taslak → onay → aktivasyon.** Sıra: Katman-1 tasdikini TAZELE
-  (bugünkü tasdik `1892375`'te alındı; `6c2276e` sentez istem satırını değiştirdi — spec §13.2(7),
-  bayat tasdikin mekanik kapısı yok) → `yazim` → Katman-2 kör örneklem + tasdik → `onay` → `aktive-et`
-  (ilk paket: yalnız ikinci adım). Onay özetinde 4 "HUKUKİ — operatör kararı" satırı görünür.
+- **[SIRADAKİ İŞ] `kosu-23e19d03` aktivasyonu (`aktive-et`, ilk paket: yalnız ikinci adım) — Eray'ın AYRI
+  onayıyla.** 2026-09-23 yapılanlar: Katman-1 tazelendi (`fa52d9d`, 124 passed, PASS) · `yazim` → taslak
+  `66654971-d90e-4cec-92da-61e723a8ec8f` sürüm 1 (uyarı: içerik 15.157 karakter > 6.000 hedefi; ölçüldü —
+  istem yüzeyine giden caption/idea bloğu 2.681–3.330, özel gün satırları 519–686 karakter; büyüklük 9 bayram
+  gününün kopyası + video/görsel kodlarından) · Katman-2 kör örneklem (`K2-KOR-ORNEKLEM-23e19d03.md`: paketli
+  seçim 2/4, 8 çağrı 0,273 USD) · onay kaydedildi (snapshot `ac1a062b…`, 252 sn, actor eray).
+- **[AÇIK — evi YOK, tarih Eray'da] Yetki belgesi numarası + işletme unvanı marka ayarlarında yok.** Paket
+  maddesi (Kuyum Ticareti Hakkında Yönetmelik m.11/2-b — resmî PDF'ten okundu: "Her türlü kuyum reklamında
+  yetki belgesi numarasına ve yetki belgesindeki işletme adı veya unvanına yer verir") üretimde uygulanamıyor;
+  Katman-2'de model numarasız "yetki belgesi … mağazamızda mevcuttur" satırı ekledi. Eray kararı (2026-09-23):
+  paket onaylandı, marka ayarlarına alan eklemek AYRI iş (yeni alt sistem → spec). O iş inene kadar numarasız
+  satır üretimde çıkabilir (kabul edilen risk). Gözlem: incelenen kuyumcu postları kurala uymuyor (Eray).
+- **[AÇIK — küçük] Onay özeti sadeleştirmesi:** operatör işlemleri birim düzeyinde listeleniyor (bayramlar
+  45 satır) ve "Motor kararsızları" yerine operatör metni yazılmış maddeleri "mevcut kalıp korundu" diye
+  gösteriyor. Evi: aktivasyondan sonraki ilk kod turu.
 - **[ÖLÇÜLDÜ — karar Eray'da] CTA ≥ 5 eşiği (Grup 3 (e)):** sentez adayı 4 (aynı girdiyle sabah 6);
   yeni motorla dördü de uygulanır; kör yargı +2 CTA (Soru 9) ve +4 hizmet CTA'sı (Soru 10a) ekledi.
-  Operatör kararlarından sonra havuz **10** (ölçüldü, kuru koşu çıktısı); eşik kararı Eray'da.
+  Operatör kararlarından sonra havuz **10** (ölçüldü, taslak paket); eşik kararı Eray'da.
 - **[DÜŞÜRÜLDÜ — yeniden açılma koşullu] Sektör risk sözlüğü:** Decisions Log 2026-09-23. Evi: yeni bir
   sektörün ilk koşusu (aynı ölçüm).
 - **[DÜŞÜRÜLDÜ — etkisiz] Sahipsiz koşular:** `kosu-2851dc22…` (2026-09-23, sayaç kusuru yüzünden
