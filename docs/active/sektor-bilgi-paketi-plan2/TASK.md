@@ -1788,7 +1788,20 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   (üç araç, tek `girdi_ozeti` = brief sha256); md-16 operatörün cevapladığı motor sorusunu bloklayıcı
   sayıyordu (operatör kararlarının kendi yan etkisi) → cevaplanan birim sorusu hariç; kanıt parmak izi
   operatör kaydını kapsar.
-- **[SIRADAKİ İŞ] `kosu-23e19d03` aktivasyonu (`aktive-et`, ilk paket: yalnız ikinci adım) — Eray'ın AYRI
+- **[KAPANIŞ SWEEP'İ 2026-09-23 — kalan işlerin evleri]**
+  - **n8n Telegram webhook düğümünü kimliğe bağla** — EV: runbook Adım 7, sıradaki oturumun ilk işi
+    (Eray onayıyla, düğüm bazında).
+  - **Takvim ucunun dönem alanı** — EV: runbook Adım 6; aynı oturumda (kimlikli istek ya da arayüz).
+  - **Marka ataması + md-17** — EV: Task 19 Step 11; TETİK: Eray'ın video üretim sistemi değişikliği
+    (Eray kararı 2026-09-23). Tarih Eray'da.
+  - **md-18** — Claude önerisi: paketin 2. sürümüne (ilk periyodik koşu). **Eray açıkça onaylamadı →
+    sıradaki oturumda sorulur.**
+  - **Pilot ölçümleri + rapor** — EV: Task 19 Step 12-13, md-17'den sonra.
+  - **Dış depo G8 düzenlemesi commit'lenmedi** — EV: dış deponun bir sonraki commit'i, pin aynı adımda.
+  - **[DÜŞÜRÜLDÜ — koşullu]** `sector_pipeline` motor modüllerinin konteynerde import edilememesi:
+    tasarım sınırı (CLI çalışma ağacından koşar). Yeniden açılma koşulu: CLI'nin konteynerde
+    koşturulmasına karar verilirse.
+- **[TAMAMLANDI 2026-09-23] `kosu-23e19d03` aktivasyonu (`aktive-et`, ilk paket: yalnız ikinci adım) — Eray'ın AYRI
   onayıyla.** 2026-09-23 yapılanlar: Katman-1 tazelendi (`fa52d9d`, 124 passed, PASS) · `yazim` → taslak
   `66654971-d90e-4cec-92da-61e723a8ec8f` sürüm 1 (uyarı: içerik 15.157 karakter > 6.000 hedefi; ölçüldü —
   istem yüzeyine giden caption/idea bloğu 2.681–3.330, özel gün satırları 519–686 karakter; büyüklük 9 bayram
