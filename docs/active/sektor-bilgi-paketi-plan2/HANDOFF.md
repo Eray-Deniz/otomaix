@@ -5,12 +5,9 @@ written: 2026-09-23
 
 # Resume From
 
-**SIRADAKİ İŞ, İKİ ADIM (TASK Open Problems ilk iki madde):**
-1. **Modele giden K-129 metinleri** — `6fd7416` motorun okumasını değiştirdi ama modele giden metinler
-   eski: `synthesis.py` görev metnindeki "RİSK maddesini (… mevzuat/tarih/sayı içeren madde)" satırı +
-   dış depo `hakem-sentez-gorevi.md` (210 · 226 · 276) ve `hakem-denetci-gorevi.md` (150) + pin
-   (`shared/contracts/research-contracts.pin.json`). Tek adımda değişir. **Bir sonraki canlı koşudan ÖNCE.**
-   Dış depoda Eray'ın commit'lenmemiş silmeleri var — yalnız bu dosyaları ekle.
+**SIRADAKİ İŞ (TASK Open Problems):**
+1. ~~Modele giden K-129 metinleri~~ — KAPANDI: dış depo `7fb81c3` + otomaix pin/`synthesis.py`
+   (TASK Open Problems). Tam takım 4802 passed / 0 failed / 403,8 s. Canlıda sınanmadı.
 2. **`kosu-23e19d03` düzeltme turu** — kör yargı kararlarıyla (`K134-KOR-YARGI-23e19d03.md` özet
    tablosu). Önce `duzeltme-baslat`'ın ön koşulunu OKU (koşu `blocked`; K-72 "reddedilmiş koşu" diyor —
    ölçülmedi). Sorulmayan ayrıntılar bu turda Eray'a senaryolu sorulur: 8 Mart ve Babalar Günü görsel
@@ -58,8 +55,8 @@ alan anahtarı (8 video kodunun 8'i düşüyordu) · `f9443c7` bağ kuralları s
   2,09 USD kadar; düzeltme çağrısı ölçülmedi).
 - K-129 ortak kuralının yanlış-negatifi: işaretsiz hukuki iddia içerik sınıfında kalır (ölçüldü: 25
   mevzuat iddiasının 9'u, 5'i yasak alanında); "yasal" demeyen "2 yıl garanti" normal sayılır.
-- Model şu an eski K-129 metnini görüyor (Resume 1) — tarih/rakam içeren maddeleri gereksiz temkinle
-  yazabilir; motor artık öyle saymıyor.
+- Model artık motorla aynı K-129 okumasını görüyor (`7fb81c3`); modelin bu okumayla sınıflandırması
+  canlıda henüz görülmedi — ilk koşuda sentez günlüğündeki `kaynaksız:` notlarına bak.
 
 # Notes For Claude
 

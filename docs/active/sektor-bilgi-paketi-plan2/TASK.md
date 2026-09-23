@@ -1726,12 +1726,11 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
-- **[SIRADAKİ İŞ 1 — bir sonraki canlı koşudan ÖNCE] Modele giden K-129 metinleri eski okumada.**
-  `synthesis.py` görev metnindeki "RİSK maddesini (`yasaklar_ve_hassasiyetler` ya da mevzuat/tarih/sayı
-  içeren madde)" satırı + dış sözleşmeler `hakem-sentez-gorevi.md` (210 · 226 · 276) ve
-  `hakem-denetci-gorevi.md` (150) + pin (`shared/contracts/research-contracts.pin.json`). Tek adımda
-  değişir (model iki tanım görmesin). Dış depoda Eray'ın commit'lenmemiş silmeleri var — yalnız bu
-  dosyalar eklenir.
+- **[KAPANDI 2026-09-23] Modele giden K-129 metinleri motorla hizalandı.** Dış depo `7fb81c3`
+  (sentez sözleşmesi 2.8: üç yer + ADIM 2 tablosunun altında motorun tam kelime listesi · denetçi
+  sözleşmesi 2.6: örneklem önceliği) + otomaix'te `synthesis.py` satırı ve pin. Sözleşmedeki 43 örnek
+  `_mevzuat_mi` ile birebir aynı sonucu verdi; motor listesindeki her kelime sözleşmede var. Canlı
+  koşuda SINANMADI — modelin yeni okumayla sınıflandırdığı bir sonraki koşuda görülür.
 - **[SIRADAKİ İŞ 2] `kosu-23e19d03` düzeltme turu** — kör yargı kararlarıyla (`K134-KOR-YARGI-23e19d03.md`
   özet tablosu). SORULMAYAN ayrıntılar bu turda: 8 Mart ve Babalar Günü görsel vurgu yuvası (operatör
   eklemesi mi boş mu) · Ramazan/Kurban "birikim" ifadesi · Öğretmenler Günü'nde denetçilerin `alma`
