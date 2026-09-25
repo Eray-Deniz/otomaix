@@ -525,6 +525,17 @@ _SOFT_TONE_PREFIX_RE = re.compile(r"^\s*(?P<key>[^:]+?)\s*:\s*(?P<rest>.*)$", re
 _HOOK_TAG_KEY_RE = re.compile(r"(?<![a-z0-9])tur(?![a-z0-9])")
 
 
+def _visible_text(text: str) -> str:
+    """Metnin okunuşu: NFKC + görünmez biçim karakterleri (`Cf`) düşürülmüş.
+
+    `_canonical_marker_text` ile aynı `Cf` kuralı; ondan farkı büyük/küçük harfi
+    ve tireleri KORUMASIdır — sonuç kalıp metni olarak geri döner.
+    """
+    return "".join(
+        ch for ch in unicodedata.normalize("NFKC", text) if unicodedata.category(ch) != "Cf"
+    )
+
+
 def hook_type(item: str) -> tuple[str, str]:
     """Kanca öğesini `(kalıp metni, tür)` olarak ayırır (plan D12).
 
@@ -536,10 +547,16 @@ def hook_type(item: str) -> tuple[str, str]:
     Etiket değeri tür sözlüğü dışındaysa da `ValueError`; yazım kapısı ikisini de
     yapısal hataya çevirir.
     """
-    key_count = len(_HOOK_TAG_KEY_RE.findall(_fold_turkish(item)))
+    # Ayrıştırma metnin OKUNUŞU üzerinden yapılır (checkpoint 1 tur 2, Codex F1):
+    # görünmez biçim karakteri (`Cf`) ve genişlik varyantı baytı değiştirir ama
+    # okunuşu değiştirmez; ham metinde aransaydı `tü\u200br` anahtarı görünmez
+    # olur ve kanca sessizce `satis` sayılırdı. Kanal bayraklarındaki ölçüyle aynı
+    # sınıf (`_canonical_marker_text`), aynı kural: `Cf` düşer, NFKC uygulanır.
+    visible = _visible_text(item)
+    key_count = len(_HOOK_TAG_KEY_RE.findall(_fold_turkish(visible)))
     if key_count == 0:
-        return item.strip(), DEFAULT_HOOK_TYPE
-    match = _HOOK_TAG_RE.search(item)
+        return visible.strip(), DEFAULT_HOOK_TYPE
+    match = _HOOK_TAG_RE.search(visible)
     if (
         key_count != 1
         or match is None
@@ -555,7 +572,7 @@ def hook_type(item: str) -> tuple[str, str]:
             f"kanca tür etiketi {match.group('value')!r} tür sözlüğünde yok — "
             f"geçerli değerler: {', '.join(POST_TYPES)}"
         )
-    return item[: match.start()].strip(), value
+    return visible[: match.start()].strip(), value
 
 
 def split_tone_lines(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -567,7 +584,7 @@ def split_tone_lines(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """
     rules: list[str] = []
     soft: list[str] = []
-    for raw in text.splitlines():
+    for raw in _visible_text(text).splitlines():
         line = raw.strip()
         if not line:
             continue

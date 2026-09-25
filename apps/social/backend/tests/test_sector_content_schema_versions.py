@@ -201,3 +201,39 @@ def test_hook_type_key_only_in_single_terminal_tag_generated(form, position, cou
 def test_hook_literal_parentheses_without_the_key_stay_untagged(literal):
     item = f"{_HOOK_TEXT} {literal}"
     assert hook_type(item) == (item, "satis")
+
+
+# Checkpoint 1 tur 2 (Codex, F1 yeniden açıldı): görünmez biçim karakteri (Unicode `Cf`)
+# anahtarın ya da etiketin içine girince etiket yine sessizce kayboluyordu. Sınıf
+# "okunuşu aynı, baytı farklı metin"dir; kanal bayraklarındaki ortak ölçüyle kapatılır.
+_INVISIBLES = ("​", "‌", "‍", "⁠", "­", "﻿")
+_TAG = "(tür: hizmet)"
+
+
+@pytest.mark.parametrize(
+    ("char", "position"), list(itertools.product(_INVISIBLES, range(len(_TAG) + 1)))
+)
+def test_invisible_characters_never_hide_the_tag_generated(char, position):
+    tag = _TAG[:position] + char + _TAG[position:]
+    item = f"{_HOOK_TEXT} {tag}"
+    assert hook_type(item) == (_HOOK_TEXT, "hizmet")
+    content = _v2_content()
+    content["kanca_kaliplari"] = [item]
+    assert structural_errors(content, schema_version=2) == []
+
+
+@pytest.mark.parametrize("variant", ["（tür: hizmet）", "(ｔüｒ: hizmet)", "(tür： hizmet)"])
+def test_width_variants_never_silently_default(variant):
+    """Tam genişlikli biçimler ya doğru etiketlenir ya reddedilir — sessiz `satis` YOK."""
+    item = f"{_HOOK_TEXT} {variant}"
+    try:
+        assert hook_type(item) == (_HOOK_TEXT, "hizmet")
+    except ValueError:
+        pass
+
+
+@pytest.mark.parametrize("char", _INVISIBLES)
+def test_soft_tone_prefix_read_on_visible_text(char):
+    rules, soft = split_tone_lines(f"Ayar açıkça söylenir.\nton (yu{char}muşak): danışman dili")
+    assert rules == ("Ayar açıkça söylenir.",)
+    assert soft == ("danışman dili",)
