@@ -774,8 +774,8 @@ def test_final_pair_passes_the_writing_gate() -> None:
     sonuc = _karar(_uygulanmayan_guncelle())
     icerik = identity.cozulmus(sonuc.final_candidate)
     gunluk = [identity.cozulmus(satir) for satir in sonuc.final_decision_log]
-    assert structural_errors(icerik) == []
-    assert identity.check_unit_integrity(icerik, gunluk) == []
+    assert structural_errors(icerik, schema_version=2) == []
+    assert identity.check_unit_integrity(icerik, gunluk, schema_version=2) == []
 
 
 def test_paths_are_renumbered_after_a_rejected_addition() -> None:
@@ -783,7 +783,7 @@ def test_paths_are_renumbered_after_a_rejected_addition() -> None:
     sonuc = _karar(_basa_ekleme_girdisi(kanit=DOGRULANMIS_KAYNAK))
     icerik = identity.cozulmus(sonuc.final_candidate)
     gunluk = [identity.cozulmus(satir) for satir in sonuc.final_decision_log]
-    assert identity.check_unit_integrity(icerik, gunluk) == []
+    assert identity.check_unit_integrity(icerik, gunluk, schema_version=2) == []
     korunan_yol = _yol(icerik, "kanca_kaliplari", KORUNAN_KANCA)
     satir = next(s for s in gunluk if s["unit_id"] == KIMLIKLER[_yol(AKTIF_ICERIK, "kanca_kaliplari", KORUNAN_KANCA)])
     assert satir["oge_yolu"] == korunan_yol
@@ -906,7 +906,7 @@ def test_rejected_update_of_structured_item_does_not_block() -> None:
     assert sonuc.final_candidate["cta_kaliplari"][0]["kalip"] == (
         AKTIF_ICERIK["cta_kaliplari"][0]["kalip"]
     )
-    assert structural_errors(identity.cozulmus(sonuc.final_candidate)) == []
+    assert structural_errors(identity.cozulmus(sonuc.final_candidate), schema_version=2) == []
 
 
 def test_one_unit_counts_once_even_with_two_reasons() -> None:
@@ -1062,9 +1062,9 @@ def test_addition_removal_matrix_keeps_pair_valid_and_order_stable(
     assert sonuc.final_candidate is not None, f"çift üretilemedi: {sonuc.sebep}"
     icerik = identity.cozulmus(sonuc.final_candidate)
     gunluk = [identity.cozulmus(satir) for satir in sonuc.final_decision_log]
-    assert structural_errors(icerik) == []
+    assert structural_errors(icerik, schema_version=2) == []
     assert identity.validate_decision_log(gunluk) == []
-    assert identity.check_unit_integrity(icerik, gunluk) == []
+    assert identity.check_unit_integrity(icerik, gunluk, schema_version=2) == []
 
     liste = list(icerik["kanca_kaliplari"])
     # Çıkarma: kabul edilirse öğe YOK, reddedilirse KORUNUR (K-23=B).
@@ -1154,7 +1154,7 @@ def test_restored_unmatched_calendar_key_stays_out() -> None:
     assert TAKVIM_ANAHTARI in sonuc.engine_diff["eslesmeyen_ozel_gunler"]
     gunluk = [identity.cozulmus(satir) for satir in sonuc.final_decision_log]
     assert identity.check_unit_integrity(
-        identity.cozulmus(sonuc.final_candidate), gunluk
+        identity.cozulmus(sonuc.final_candidate), gunluk, schema_version=2,
     ) == []
 
 

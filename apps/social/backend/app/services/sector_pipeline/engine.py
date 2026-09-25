@@ -57,6 +57,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from app.services.sector_content_schema import (
     channel_flag_scope_path,
+    CURRENT_SCHEMA_VERSION,
     LIST_FIELDS,
     SPECIAL_DAY_SLOTS,
     TEXT_FIELDS,
@@ -553,7 +554,10 @@ def _aktif_ozel_gunler(inputs: EngineInputs) -> dict:
 def _sema_ve_boyut(inputs: EngineInputs) -> CheckOutput:
     icerik = _aday_icerik(inputs)
     try:
-        identity.decision_units(icerik, _gunluk(inputs))
+        # Aday YENİ içeriktir → güncel şema sürümü (tasarım notu 2026-09-25 §3.9).
+        identity.decision_units(
+            icerik, _gunluk(inputs), schema_version=CURRENT_SCHEMA_VERSION
+        )
     except (ValueError, TypeError) as exc:
         raise EngineInputError(f"şema kapısı düştü: {exc}") from exc
 
@@ -2949,7 +2953,7 @@ def decide(inputs: EngineInputs, config: PolicyConfig) -> EngineResult:
     content_sha: str | None = None
     decision_log_sha: str | None = None
     cift_hatalari: list[str] = []
-    yazim_hatalari = structural_errors(nihai)
+    yazim_hatalari = structural_errors(nihai, schema_version=CURRENT_SCHEMA_VERSION)
     if not yazim_hatalari:
         aday_gunluk, aday_uygulanan = _nihai_gunluk(
             inputs, outcome, reddedilen, nihai, yollar
@@ -2961,7 +2965,9 @@ def decide(inputs: EngineInputs, config: PolicyConfig) -> EngineResult:
         duz_gunluk = [identity.cozulmus(satir) for satir in aday_gunluk]
         cift_hatalari = identity.validate_decision_log(
             duz_gunluk
-        ) + identity.check_unit_integrity(nihai, duz_gunluk)
+        ) + identity.check_unit_integrity(
+            nihai, duz_gunluk, schema_version=CURRENT_SCHEMA_VERSION
+        )
         if not cift_hatalari:
             nihai_icerik = nihai
             nihai_gunluk = aday_gunluk

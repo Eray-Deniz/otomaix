@@ -281,7 +281,7 @@ def test_decision_units_derived_from_living_log_rows():
     rows[1].update(unit_id="ku-000000000002", karar="guncelle")
     rows[2].update(unit_id="ku-000000000003", karar="ekle")
 
-    units = identity.decision_units(content, rows)
+    units = identity.decision_units(content, rows, schema_version=1)
     assert len(units) == BEKLENEN_BIRIM_SAYISI
     assert {"ku-000000000001", "ku-000000000002", "ku-000000000003"} <= set(units)
     assert units["ku-000000000002"]["oge_yolu"] == paths[1]
@@ -308,7 +308,7 @@ def test_cikar_row_drops_unit_from_set():
             kanit="Mevzuat 2026-01-01'de yürürlükten kalktı.",
         )
     )
-    units = identity.decision_units(content, rows)
+    units = identity.decision_units(content, rows, schema_version=1)
     assert len(units) == BEKLENEN_BIRIM_SAYISI  # boş küme bu testi kandırırdı
     assert "ku-000000000009" not in units
 
@@ -331,10 +331,10 @@ def test_kirp_row_is_not_a_living_unit():
             oge_sha="b" * 64,
         )
     )
-    yasayanlar = identity.decision_units(content, rows)
+    yasayanlar = identity.decision_units(content, rows, schema_version=1)
     assert len(yasayanlar) == BEKLENEN_BIRIM_SAYISI, sorted(yasayanlar)  # boş küme kandırırdı
     assert "ku-000000000077" not in yasayanlar
-    assert identity.check_unit_integrity(content, rows) == []
+    assert identity.check_unit_integrity(content, rows, schema_version=1) == []
 
 
 def test_decision_units_refuses_an_inconsistent_pair():
@@ -356,7 +356,7 @@ def test_decision_units_refuses_an_inconsistent_pair():
         )
     )
     with pytest.raises(ValueError, match="içerik ile karar günlüğü tutarsız"):
-        identity.decision_units(content, rows)
+        identity.decision_units(content, rows, schema_version=1)
 
 
 def test_decision_units_refuses_a_log_that_leaves_content_unowned():
@@ -364,7 +364,7 @@ def test_decision_units_refuses_a_log_that_leaves_content_unowned():
     content = _valid_content()
     rows = [r for r in _log_for(content) if r["oge_yolu"] != "kapsam"]
     with pytest.raises(ValueError, match="içerik ile karar günlüğü tutarsız"):
-        identity.decision_units(content, rows)
+        identity.decision_units(content, rows, schema_version=1)
 
 
 def test_decision_units_names_the_content_gate_when_content_is_malformed():
@@ -377,7 +377,7 @@ def test_decision_units_names_the_content_gate_when_content_is_malformed():
     bozuk = _valid_content()
     del bozuk["kapsam"]
     with pytest.raises(ValueError, match="içerik yazım kapısını geçmedi"):
-        identity.decision_units(bozuk, [])
+        identity.decision_units(bozuk, [], schema_version=1)
 
 
 def test_decision_units_refuses_an_invalid_log():
@@ -387,7 +387,7 @@ def test_decision_units_refuses_an_invalid_log():
     yapıyor; geçersiz günlükten üretilmiş bir görüntü sessizce oraya akardı.
     """
     with pytest.raises(ValueError, match="karar günlüğü şemayı geçmedi"):
-        identity.decision_units(_valid_content(), [_karar_row(karar="birlestir")])
+        identity.decision_units(_valid_content(), [_karar_row(karar="birlestir")], schema_version=1)
 
 
 # ─── 4. Kanonik yol grameri + çokluk ────────────────────────────────────────
@@ -420,7 +420,7 @@ def test_duplicate_identical_text_gets_distinct_paths():
     for row in rows:
         if row["oge_yolu"] == "kanca_kaliplari[1]":
             row["oge_yolu"] = "kanca_kaliplari[0]"
-    errors = identity.check_unit_integrity(content, rows)
+    errors = identity.check_unit_integrity(content, rows, schema_version=1)
     assert any("kanca_kaliplari[1]" in e for e in errors), errors
 
 
@@ -455,7 +455,7 @@ def test_integrity_passes_on_consistent_package():
     content = _valid_content()
     rows = _log_for(content)
     assert len(rows) == BEKLENEN_BIRIM_SAYISI, rows  # boş günlük bu testi kandırırdı
-    assert identity.check_unit_integrity(content, rows) == []
+    assert identity.check_unit_integrity(content, rows, schema_version=1) == []
 
 
 def test_integrity_rejects_orphan_content_item():
@@ -465,7 +465,7 @@ def test_integrity_rejects_orphan_content_item():
     """
     content = _valid_content()
     rows = [r for r in _log_for(content) if r["oge_yolu"] != "kanca_kaliplari[0]"]
-    errors = identity.check_unit_integrity(content, rows)
+    errors = identity.check_unit_integrity(content, rows, schema_version=1)
     assert any(
         "sahipsiz öğe" in e and "kanca_kaliplari[0]" in e for e in errors
     ), errors
@@ -486,7 +486,7 @@ def test_integrity_rejects_ghost_unit():
             oge_sha="c" * 64,
         )
     )
-    errors = identity.check_unit_integrity(content, rows)
+    errors = identity.check_unit_integrity(content, rows, schema_version=1)
     assert any(
         "hayalet birim" in e and "kanca_kaliplari[42]" in e for e in errors
     ), errors
@@ -503,7 +503,7 @@ def test_integrity_rejects_row_claiming_the_wrong_field():
     rows = _log_for(content)
     hedef = next(r for r in rows if r["oge_yolu"] == "kapsam")
     hedef["alan"] = "kanca_kaliplari"
-    errors = identity.check_unit_integrity(content, rows)
+    errors = identity.check_unit_integrity(content, rows, schema_version=1)
     assert any("alan uyuşmazlığı" in e and "kapsam" in e for e in errors), errors
 
 
@@ -512,7 +512,7 @@ def test_integrity_rejects_stale_sha_on_correct_path():
     content = _valid_content()
     rows = _log_for(content)
     rows[0]["oge_sha"] = "d" * 64
-    errors = identity.check_unit_integrity(content, rows)
+    errors = identity.check_unit_integrity(content, rows, schema_version=1)
     assert any("bayat oge_sha" in e and rows[0]["oge_yolu"] in e for e in errors), errors
 
 
@@ -528,7 +528,7 @@ def test_integrity_rejects_two_units_claiming_one_path():
             oge_sha=rows[0]["oge_sha"],
         )
     )
-    errors = identity.check_unit_integrity(content, rows)
+    errors = identity.check_unit_integrity(content, rows, schema_version=1)
     assert any("aynı yolu iki yaşayan birim" in e for e in errors), errors
 
 
@@ -537,7 +537,7 @@ def test_integrity_refuses_a_log_that_fails_the_schema():
     content = _valid_content()
     rows = _log_for(content)
     rows[0]["aktor"] = "robot"
-    errors = identity.check_unit_integrity(content, rows)
+    errors = identity.check_unit_integrity(content, rows, schema_version=1)
     assert any("aktor değeri kapalı kümenin dışında" in e for e in errors), errors
 
 
@@ -547,11 +547,11 @@ def test_first_package_assigns_new_id_to_every_enumerated_unit():
     units = identity.enumerate_content_units(content)
     assert len(units) == BEKLENEN_BIRIM_SAYISI, sorted(units)  # boş sayım kandırırdı
     rows = _log_for(content, karar="ekle")
-    derived = identity.decision_units(content, rows)
+    derived = identity.decision_units(content, rows, schema_version=1)
     assert len(derived) == len(units)
     assert {u["oge_yolu"] for u in derived.values()} == set(units)
     assert all(UNIT_ID_RE.match(uid) for uid in derived)
-    assert identity.check_unit_integrity(content, rows) == []
+    assert identity.check_unit_integrity(content, rows, schema_version=1) == []
 
 
 # ─── 6. Şema göçü YOK ───────────────────────────────────────────────────────
@@ -564,11 +564,11 @@ def test_content_schema_unchanged_plan1_validator_still_passes():
     `unit_id` eklenmiş öğe REDDEDİLİR. Bu test hem şemanın değişmediğini
     (pozitif kontrol) hem de değiştirilemeyeceğini (negatif kontrol) ölçer.
     """
-    assert structural_errors(_valid_content()) == []
+    assert structural_errors(_valid_content(), schema_version=1) == []
 
     kirli = _valid_content()
     kirli["cta_kaliplari"][0]["unit_id"] = identity.new_unit_id()
-    errors = structural_errors(kirli)
+    errors = structural_errors(kirli, schema_version=1)
     assert any("anahtar kümesi" in e for e in errors), errors
 
 

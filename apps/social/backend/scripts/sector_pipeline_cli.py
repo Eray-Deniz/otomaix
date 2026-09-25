@@ -556,7 +556,11 @@ async def _aktif_paket(conn, sector_id):
         return None, {}, None
     icerik = _coz(satir["content"])
     gunluk = _coz(satir["decision_log"]) or []
-    return icerik, identity.decision_units(icerik, gunluk), satir["schema_version"]
+    # Saklı paket → SATIRIN sürümü (tasarım notu 2026-09-25 §3.9).
+    birimler = identity.decision_units(
+        icerik, gunluk, schema_version=satir["schema_version"]
+    )
+    return icerik, birimler, satir["schema_version"]
 
 
 def _coz(deger):

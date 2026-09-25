@@ -155,7 +155,7 @@ def test_non_blocked_result_is_refused() -> None:
 def _butunluk(yeni) -> None:
     icerik = identity.cozulmus(yeni.final_candidate)
     gunluk = [identity.cozulmus(s) for s in yeni.final_decision_log]
-    assert identity.check_unit_integrity(icerik, gunluk) == []
+    assert identity.check_unit_integrity(icerik, gunluk, schema_version=2) == []
     assert yeni.content_sha == engine.canonical_content_sha(icerik)
     assert yeni.decision_log_sha == identity.canonical_sha(gunluk)
 
@@ -405,4 +405,46 @@ async def test_operator_record_drift_after_freeze_refuses_decision(pkg_db) -> No
     with pytest.raises(approval.ApprovalRefused):
         await approval.record_decision(
             pkg_db, run_id=run_id, karar="onay", actor=ACTOR, seconds=1, snapshot_sha=sha
+        )
+
+
+# ═══ Şema 2 — `sektor_gercekleri` (tasarım notu 2026-09-25 §3.9; plan Task 3) ══════
+
+
+def test_operator_ekle_degistir_cikar_sektor_gercekleri_on_v2_candidate() -> None:
+    """Operatör yolu yeni alanı `LIST_FIELDS` üzerinden tanır — üç işlem."""
+    bos = KIMLIKLER["sektor_gercekleri[0]"]
+    assert AKTIF_ICERIK["sektor_gercekleri"] == ["içerik-önerilmez"]
+    gercek = "22 ayar saf değildir; saf altın 24 ayardır."
+
+    yeni, _ = _uygula(
+        _cevaplar(S1=[{"islem": "degistir", "unit_id": bos, "deger": gercek}])
+    )
+    _butunluk(yeni)
+    assert identity.cozulmus(yeni.final_candidate)["sektor_gercekleri"] == [gercek]
+
+    yeni, kayit = _uygula(
+        _cevaplar(S1=[
+            {"islem": "degistir", "unit_id": bos, "deger": gercek},
+            {"islem": "ekle", "alan": "sektor_gercekleri", "deger": "Gram fiyatı günlük değişir."},
+        ])
+    )
+    _butunluk(yeni)
+    assert identity.cozulmus(yeni.final_candidate)["sektor_gercekleri"] == [
+        gercek,
+        "Gram fiyatı günlük değişir.",
+    ]
+    assert kayit["kararlar"][0]["islemler"][1]["yol"] == "sektor_gercekleri[1]"
+
+    # `cikar` son öğeyi düşürürse yapısal kapı boş listeyi reddeder.
+    with pytest.raises(od.OperatorKarariReddedildi, match="sektor_gercekleri boş"):
+        _uygula(_cevaplar(S1=[{"islem": "cikar", "unit_id": bos}]))
+
+
+def test_operator_ekle_missing_new_field_rejected() -> None:
+    """Alan adayda YOKSA operatör yolu açılmaz: eksik alan motorda yapısal sebeptir."""
+    eksik = {k: v for k, v in AKTIF_ICERIK.items() if k != "sektor_gercekleri"}
+    with pytest.raises(engine.EngineInputError, match="şema"):
+        engine.decide(
+            _girdi(icerik=eksik, acik_sorular=(SORU_1, SORU_2)), PolicyConfig()
         )

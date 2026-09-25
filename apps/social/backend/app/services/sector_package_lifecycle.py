@@ -981,6 +981,7 @@ async def _gate_content_and_log(
     *,
     sector_id: UUID,
     content: dict,
+    schema_version: int,
     decision_log: list[dict] | None,
 ) -> None:
     """İçerik + karar günlüğü yazım kapısı — TEK kopya (Plan 2 Task 15).
@@ -1018,8 +1019,11 @@ async def _gate_content_and_log(
     }
     brand_rows = await db.fetch("SELECT name FROM social.brands WHERE name IS NOT NULL")
 
+    # İçerik, YAZILACAĞI satırın şema sürümüyle denetlenir: içerik ↔ sürüm
+    # uyuşmazlığı taslağa yazılamaz (tasarım notu 2026-09-25 §3.9).
     result = validate_package_content(
         content,
+        schema_version=schema_version,
         banned_brand_names=[row["name"] for row in brand_rows],
         holiday_keys=holiday_keys,
     )
@@ -1042,7 +1046,9 @@ async def _gate_content_and_log(
         # kırpılan öğe aday pakete girmez, yani yolu içerikte olmayacaktır.
         # Kapı "her satırın yolu içerikte olsun" diye yazılsaydı gerçek bir
         # kırpma taşıyan her paket reddedilirdi.
-        pair_errors = identity.check_unit_integrity(content, decision_log)
+        pair_errors = identity.check_unit_integrity(
+            content, decision_log, schema_version=schema_version
+        )
         if pair_errors:
             raise ValueError(
                 "içerik ile karar günlüğü tutarsız: " + "; ".join(pair_errors)
@@ -1125,7 +1131,11 @@ async def insert_draft(
     """
     owner = _require_actor(actor)
     await _gate_content_and_log(
-        db, sector_id=sector_id, content=content, decision_log=decision_log
+        db,
+        sector_id=sector_id,
+        content=content,
+        schema_version=schema_version,
+        decision_log=decision_log,
     )
 
     return await db.fetchval(
@@ -1157,9 +1167,14 @@ async def _update_draft_row(
     package_id: UUID,
     sector_id: UUID,
     content: dict,
+    schema_version: int,
     decision_log: list[dict],
 ) -> None:
     """K-106 yerinde güncelleme — ÖZEL ilkel, public API DEĞİL.
+
+    **Şema sürümü içerikle AYNI güncellemede yazılır** (tasarım notu 2026-09-25
+    §3.9). Kapı içeriği verilen sürümle denetler; satırın sürüm kolonu eski
+    kalsaydı okuyucu yeni içeriği eski kuralla okur ve paketi düşürürdü.
 
     **Yazım kapısı BURADA da koşar.** K-135 paket tablosuna tek yazma yüzeyi
     olduğunu söyler; iki yazıcının iki kapı listesi olsaydı yerinde güncelleme,
@@ -1185,15 +1200,21 @@ async def _update_draft_row(
     yeni bir sürüm YAKMAZ.
     """
     await _gate_content_and_log(
-        db, sector_id=sector_id, content=content, decision_log=decision_log
+        db,
+        sector_id=sector_id,
+        content=content,
+        schema_version=schema_version,
+        decision_log=decision_log,
     )
 
     guncellendi = await db.fetchval(
-        "UPDATE social.sector_packages SET content = $2, decision_log = $3 "
+        "UPDATE social.sector_packages "
+        "SET content = $2, decision_log = $3, schema_version = $4 "
         "WHERE id = $1 AND status = 'draft' RETURNING id",
         package_id,
         content,
         decision_log,
+        schema_version,
     )
     if guncellendi is None:
         raise LifecycleError(

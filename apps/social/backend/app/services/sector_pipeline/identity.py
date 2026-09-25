@@ -25,7 +25,9 @@ Bağlanan çözüm:
   ile yaşayan satırların `oge_yolu` kümesi BİREBİR aynı olmalı (fazlası
   hayalet birim, eksiği sahipsiz öğe) **ve** her satırın `oge_sha`'sı o
   yoldaki öğenin taze hash'iyle eşleşmeli. Tek yönlü kontrol YETMEZ.
-* `schema_version` ARTIRILMAZ, Plan 1 doğrulayıcısına DOKUNULMAZ.
+* `schema_version` her çağrıda AÇIKÇA seçilir (tasarım notu 2026-09-25 §3.9 —
+  önceki "ARTIRILMAZ" hükmü o notla değişti): saklı paket satırın sürümüyle,
+  yeni aday güncel sürümle birimlere ayrılır.
 
 **Bağımlılık yönü.** Bu modül alan adlarını, yuva adlarını, "anlamlı metin"
 ölçüsünü ve yapısal yazım kapısını ortak YAPRAK modülden (`sector_content_schema`)
@@ -621,7 +623,9 @@ def _yasayan_satirlar(decision_log: list[dict]):
             yield row
 
 
-def decision_units(content: dict, decision_log: list[dict]) -> dict[str, dict]:
+def decision_units(
+    content: dict, decision_log: list[dict], *, schema_version: int
+) -> dict[str, dict]:
     """Paketin karar birimleri: `unit_id` → birim kaydı.
 
     R6: bu fonksiyon **anlık görüntünün TEK üreticisidir** — Task 9'un
@@ -641,13 +645,13 @@ def decision_units(content: dict, decision_log: list[dict]) -> dict[str, dict]:
     # Üç kapı, ÜÇ AYRI mesaj: düşen kapının adı hata metninden okunabilmeli.
     # Hepsi tek başlık altında toplansaydı bozuk bir içerik "günlük tutarsız"
     # diye anılırdı ve okuyucu yanlış artefaktı incelerdi.
-    errors = structural_errors(content)
+    errors = structural_errors(content, schema_version=schema_version)
     if errors:
         raise ValueError("içerik yazım kapısını geçmedi: " + "; ".join(errors))
     errors = validate_decision_log(decision_log)
     if errors:
         raise ValueError("karar günlüğü şemayı geçmedi: " + "; ".join(errors))
-    errors = check_unit_integrity(content, decision_log)
+    errors = check_unit_integrity(content, decision_log, schema_version=schema_version)
     if errors:
         raise ValueError("içerik ile karar günlüğü tutarsız: " + "; ".join(errors))
 
@@ -669,7 +673,9 @@ def decision_units(content: dict, decision_log: list[dict]) -> dict[str, dict]:
     return derived
 
 
-def check_unit_integrity(content: dict, decision_log: list[dict]) -> list[str]:
+def check_unit_integrity(
+    content: dict, decision_log: list[dict], *, schema_version: int
+) -> list[str]:
     """Eşleme GERÇEKTEN kapsayıcı mı — İKİ YÖNLÜ küme eşitliği + hash eşleşmesi.
 
     Üç kapı birden aranır ve hiçbiri diğerinin yerine geçmez:
@@ -688,7 +694,7 @@ def check_unit_integrity(content: dict, decision_log: list[dict]) -> list[str]:
     Fail-closed: içerik yazım kapısını ya da günlük şema kapısını geçmiyorsa
     bütünlük ÖLÇÜLMEZ, o hatalar döner.
     """
-    errors = list(structural_errors(content))
+    errors = list(structural_errors(content, schema_version=schema_version))
     errors.extend(validate_decision_log(decision_log))
     if errors:
         return errors

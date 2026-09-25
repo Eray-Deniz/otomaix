@@ -124,6 +124,7 @@ class ValidationResult:
 def validate_package_content(
     content: dict,
     *,
+    schema_version: int,
     banned_brand_names: list[str],
     holiday_keys: set[str],
 ) -> ValidationResult:
@@ -131,10 +132,13 @@ def validate_package_content(
 
     `holiday_keys` sistem takviminden türetilmiş NORMALİZE anahtar kümesidir —
     çağıran onu `normalize_special_day_key` ile üretir (K-01b yazım ayağı).
+
+    `schema_version` içeriğin YAZILACAĞI satırın sürümüdür (tasarım notu
+    2026-09-25 §3.9, plan D2): içerik ile sürüm uyuşmazsa taslağa yazılamaz.
     """
     result = ValidationResult()
 
-    structural = structural_errors(content)
+    structural = structural_errors(content, schema_version=schema_version)
     if structural:
         result.errors.extend(structural)
     if not isinstance(content, dict):
@@ -275,7 +279,8 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
     try:
         row = await db.fetchrow(
             """
-            SELECT p.id, p.version, p.content, s.slug AS sub_sector_slug
+            SELECT p.id, p.version, p.schema_version, p.content,
+                   s.slug AS sub_sector_slug
             FROM social.sector_packages p
             JOIN social.sectors s ON s.id = p.sector_id
             WHERE p.sector_id = $1 AND p.status = 'active'
@@ -310,7 +315,10 @@ async def resolve_package_context(db, brand: dict) -> SectorPackageContext | Non
         # yazılabilen her paket okunabilir, okunamayan paket hiç açılmaz. Boş
         # sözlüğü geçirmek hatayı tüketiciye (Task 10 render'ı) taşırdı ve
         # K-15(a) alan-düzeyi atlama dalı bilinçle YOK.
-        problems = structural_errors(content)
+        # Satır KENDİ şema sürümüyle doğrulanır (tasarım notu 2026-09-25 §3.9):
+        # canlıdaki 1. sürüm okunmaya devam eder; 1. sürüm satırına sızan onuncu
+        # alan ise okunamaz ve aşağıdaki olayla yöneticiye bildirilir.
+        problems = structural_errors(content, schema_version=row["schema_version"])
         if problems:
             logger.warning(
                 "sektör paketi içeriği yapısal olarak geçersiz, paketsiz yola "

@@ -119,7 +119,7 @@ def test_normalize_key_rejects_empty_input(raw):
 def test_validator_accepts_reference_content():
     """Sabit geçerli içerik temiz geçer — diğer testlerin ön koşulu."""
     result = validate_package_content(
-        _valid_content(), banned_brand_names=["Altınbaş"], holiday_keys=HOLIDAY_KEYS
+        _valid_content(), schema_version=1, banned_brand_names=["Altınbaş"], holiday_keys=HOLIDAY_KEYS
     )
     assert result.ok, result.errors
     assert result.errors == []
@@ -129,7 +129,7 @@ def test_validator_rejects_unknown_field():
     """Kapalı küme: şemada olmayan alan REDDEDİLİR."""
     result = validate_package_content(
         _valid_content(bonus_alan="şemada yok"),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -141,7 +141,7 @@ def test_validator_rejects_missing_field():
     content = _valid_content()
     del content["gorsel_kodlar"]
     result = validate_package_content(
-        content, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+        content, schema_version=1, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
     assert any("gorsel_kodlar" in e for e in result.errors)
@@ -161,7 +161,7 @@ def test_validator_rejects_unknown_special_day_key():
         }
     )
     result = validate_package_content(
-        content, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+        content, schema_version=1, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
     assert any("uydurma-gun" in e for e in result.errors)
@@ -181,7 +181,7 @@ def test_validator_accepts_icerik_onerilmez():
         }
     )
     result = validate_package_content(
-        content, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+        content, schema_version=1, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert result.ok, result.errors
 
@@ -189,7 +189,7 @@ def test_validator_accepts_icerik_onerilmez():
 def test_validator_rejects_plain_empty_value():
     """Sıradan boş değer geçerli DEĞİL — özel temsil olmadan boş bırakılamaz."""
     result = validate_package_content(
-        _valid_content(kapsam="  "), banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+        _valid_content(kapsam="  "), schema_version=1, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
     assert any("kapsam" in e for e in result.errors)
@@ -201,7 +201,7 @@ def test_validator_rejects_brand_name_text():
         kanca_kaliplari=["Altınbaş vitrininde gördüğünüz modeli sorun"]
     )
     result = validate_package_content(
-        content, banned_brand_names=["Altınbaş"], holiday_keys=HOLIDAY_KEYS
+        content, schema_version=1, banned_brand_names=["Altınbaş"], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
     assert any("Altınbaş" in e for e in result.errors)
@@ -221,7 +221,7 @@ def test_validator_finds_brand_name_in_nested_text():
         }
     )
     result = validate_package_content(
-        content, banned_brand_names=["altınbaş"], holiday_keys=HOLIDAY_KEYS
+        content, schema_version=1, banned_brand_names=["altınbaş"], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
 
@@ -230,7 +230,7 @@ def test_validator_size_warning_not_rejection():
     """~6.000 karakter tavanı UYARI üretir, RED üretmez (tasarım hedefi, kapı değil)."""
     result = validate_package_content(
         _valid_content(kapsam="uzun metin. " * 700),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert result.ok, result.errors
@@ -242,7 +242,7 @@ def test_validator_rejects_video_kodlar_without_two_substructures():
     """`video_kodlar` İKİ havuz taşır: `hareket` ve `sahne` (K-02 = A ile bağlandı)."""
     result = validate_package_content(
         _valid_content(video_kodlar={"hareket": ["tek havuz"]}),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -259,7 +259,7 @@ def test_validator_rejects_unbound_video_substructure_names():
     """
     result = validate_package_content(
         _valid_content(video_kodlar={"motion": ["a"], "scene": ["b"]}),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -272,7 +272,7 @@ def test_validator_accepts_multi_entry_pools():
         _valid_content(
             video_kodlar={"hareket": ["a", "b", "c"], "sahne": ["d", "e"]}
         ),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert result.ok, result.errors
@@ -286,7 +286,7 @@ def test_validator_rejects_video_substructure_that_is_not_a_list():
     """
     result = validate_package_content(
         _valid_content(video_kodlar={"hareket": "tek cümle", "sahne": ["b"]}),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -424,7 +424,7 @@ def test_validator_rejects_cta_item_missing_fields():
     """`cta_kaliplari` öğesi {kalip, tur, gerekce} taşımalı (spec §3.4)."""
     result = validate_package_content(
         _valid_content(cta_kaliplari=[{"kalip": "Mağazada görün"}]),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -435,7 +435,7 @@ def test_validator_rejects_wrong_field_types():
     """Metin alanına dizi, dizi alanına metin geçirilemez."""
     result = validate_package_content(
         _valid_content(kapsam=["metin değil"], kanca_kaliplari="dizi değil"),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -447,7 +447,7 @@ def test_validator_rejects_non_dict_ozel_gun():
     """`ozel_gun` nesne değilse anahtar doğrulaması hiç koşamaz — reddedilir."""
     result = validate_package_content(
         _valid_content(ozel_gun=["liste"]),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -457,7 +457,7 @@ def test_validator_rejects_non_dict_ozel_gun():
 def test_validator_rejects_non_dict_content():
     """`content` hiç nesne değilse tek hatayla durulur."""
     result = validate_package_content(
-        ["nesne değil"], banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+        ["nesne değil"], schema_version=1, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
     assert result.errors == ["content nesne değil: list"]
@@ -473,7 +473,7 @@ def test_validator_rejects_empty_video_substructure(bad_pool):
     """
     result = validate_package_content(
         _valid_content(video_kodlar={"hareket": bad_pool, "sahne": ["b"]}),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -486,7 +486,7 @@ def test_validator_rejects_special_day_missing_slot():
         ozel_gun={CUMHURIYET_KEY: {"tur": "kutlama", "mesaj_ekseni": "x"}}
     )
     result = validate_package_content(
-        content, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+        content, schema_version=1, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok
     # Anahtar kümesi TAM olmalı: eksik alan da fazlalık da aynı kapıdan döner.
@@ -504,7 +504,7 @@ def test_validator_rejects_special_day_missing_slot():
 
 def _reject(**overrides) -> list[str]:
     result = validate_package_content(
-        _valid_content(**overrides), banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
+        _valid_content(**overrides), schema_version=1, banned_brand_names=[], holiday_keys=HOLIDAY_KEYS
     )
     assert not result.ok, "bozuk içerik KABUL edildi"
     return result.errors
@@ -580,7 +580,7 @@ def test_validator_catches_brand_name_across_turkish_casing(banned, text):
     """Marka adı Türkçe harf dönüşümleri ve eklerle GİZLENEMEZ."""
     result = validate_package_content(
         _valid_content(kanca_kaliplari=[text]),
-        banned_brand_names=[banned],
+        schema_version=1, banned_brand_names=[banned],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok, f"{banned!r} adı {text!r} içinde kaçtı"
@@ -595,7 +595,7 @@ def test_validator_does_not_reject_ordinary_word_containing_brand_name():
     """
     result = validate_package_content(
         _valid_content(kanca_kaliplari=["Mağazada deneyin"]),
-        banned_brand_names=["Ada"],
+        schema_version=1, banned_brand_names=["Ada"],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert result.ok, result.errors
@@ -606,7 +606,7 @@ def test_validator_catches_brand_name_in_dict_key():
     entry = {s: "x" for s in ("tur", "mesaj_ekseni", "kanca", "cta", "gorsel_vurgu")}
     result = validate_package_content(
         _valid_content(ozel_gun={CUMHURIYET_KEY: entry}),
-        banned_brand_names=[CUMHURIYET_KEY.split("-")[0]],
+        schema_version=1, banned_brand_names=[CUMHURIYET_KEY.split("-")[0]],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -680,7 +680,7 @@ def test_validator_catches_brand_name_in_decomposed_unicode(brand):
     assert decomposed != brand or unicodedata.normalize("NFC", decomposed) == brand
     result = validate_package_content(
         _valid_content(kanca_kaliplari=[f"{decomposed} dükkanı"]),
-        banned_brand_names=[brand],
+        schema_version=1, banned_brand_names=[brand],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok, f"{brand!r} ayrışık biçimde kaçtı"
@@ -691,7 +691,7 @@ def test_validator_catches_decomposed_banned_name_against_composed_text(brand):
     """Ters yön: YASAK ad ayrışık, metin birleşik yazılmış."""
     result = validate_package_content(
         _valid_content(kanca_kaliplari=[f"{brand} dükkanı"]),
-        banned_brand_names=[unicodedata.normalize("NFD", brand)],
+        schema_version=1, banned_brand_names=[unicodedata.normalize("NFD", brand)],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert not result.ok
@@ -714,7 +714,7 @@ def test_validator_accepts_sentinel_cta_item():
     """Tüm CTA listesi bilinçli boş olabilir (K-120) — dalın bekçisi budur."""
     result = validate_package_content(
         _valid_content(cta_kaliplari=[DELIBERATELY_EMPTY]),
-        banned_brand_names=[],
+        schema_version=1, banned_brand_names=[],
         holiday_keys=HOLIDAY_KEYS,
     )
     assert result.ok, result.errors
@@ -782,7 +782,7 @@ def test_brand_name_matching_is_representation_closed(brand):
         for text in forms:
             result = validate_package_content(
                 _valid_content(kanca_kaliplari=[f"{text} dükkanı"]),
-                banned_brand_names=[banned],
+                schema_version=1, banned_brand_names=[banned],
                 holiday_keys=HOLIDAY_KEYS,
             )
             if result.ok:

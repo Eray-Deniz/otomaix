@@ -72,6 +72,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from app.services.sector_content_schema import (
+    CURRENT_SCHEMA_VERSION,
     LIST_FIELDS,
     VIDEO_POOL_KEYS,
     structural_errors,
@@ -298,7 +299,7 @@ def validate(result: SynthesisResult) -> list[str]:
     kural kopyalansaydı yazım kapısıyla sentez kapısı sürüm sürüm ayrışırdı.
     """
     icerik = identity.cozulmus(result.aday_json)
-    hatalar = list(structural_errors(icerik))
+    hatalar = list(structural_errors(icerik, schema_version=CURRENT_SCHEMA_VERSION))
     if not hatalar:
         # Şekil geçtiyse birimler numaralandırılabilir; araştırma etiketi
         # taşıyan birim sonucu DÜŞÜRÜR (Codex Ek 2.3 — kanıt kaydı pakete sızmaz).
@@ -313,7 +314,11 @@ def validate(result: SynthesisResult) -> list[str]:
     if not hatalar:
         # Bütünlük ancak iki kapı da geçilmişse ÖLÇÜLEBİLİR; `check_unit_integrity`
         # kendi içinde de bunu sorar, ama hatayı iki kez raporlamayalım.
-        hatalar.extend(identity.check_unit_integrity(icerik, gunluk))
+        hatalar.extend(
+            identity.check_unit_integrity(
+                icerik, gunluk, schema_version=CURRENT_SCHEMA_VERSION
+            )
+        )
     for sira, satir in enumerate(gunluk):
         if satir.get("tur") != "karar":
             continue
@@ -843,13 +848,16 @@ def _aktif_birimler(active_package: Mapping | None) -> dict[str, dict]:
     try:
         icerik = active_package["content"]
         gunluk = active_package["decision_log"]
+        # Saklı paket → SATIRIN sürümü (tasarım notu 2026-09-25 §3.9).
+        surum = active_package["schema_version"]
     except (KeyError, TypeError) as hata:
         raise SynthesisFailed(
-            "aktif paket `content` + `decision_log` taşımak ZORUNDA — kimlik "
+            "aktif paket `content` + `decision_log` + `schema_version` taşımak "
+            "ZORUNDA — kimlik "
             f"taşıması bu çiftten türer: {hata}"
         ) from hata
     try:
-        return identity.decision_units(dict(icerik), list(gunluk))
+        return identity.decision_units(dict(icerik), list(gunluk), schema_version=surum)
     except (ValueError, TypeError) as hata:
         raise SynthesisFailed(f"aktif paket kimlik kapısını geçmedi: {hata}") from hata
 
@@ -1432,6 +1440,7 @@ async def _kos(
     )
     dogrulama = validate_package_content(
         aday,
+        schema_version=CURRENT_SCHEMA_VERSION,
         banned_brand_names=[satir["name"] for satir in marka_satirlari],
         holiday_keys=set(holiday_keys),
     )

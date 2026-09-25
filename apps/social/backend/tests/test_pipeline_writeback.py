@@ -83,8 +83,12 @@ async def _sub_sector(db) -> uuid.UUID:
 
 
 def _icerik(**overrides) -> dict:
-    """Yazım kapısını GEÇEN içerik — Plan 1'in kendi geçerli örneği."""
-    content = _valid_content()
+    """Yazım kapısını GEÇEN içerik — Plan 1'in geçerli örneği + şema-2 alanı.
+
+    Koşudan yazılan taslak güncel şema sürümüyle (2) yazılır (tasarım notu
+    2026-09-25 §3.9); aday içerik bu yüzden `sektor_gercekleri` taşır.
+    """
+    content = _valid_content(sektor_gercekleri=["içerik-önerilmez"])
     content.update(overrides)
     return content
 
@@ -328,6 +332,18 @@ async def test_persisted_eligible_run_writes_draft(pkg_db):
         "SELECT package_id FROM social.sector_package_runs WHERE run_id = $1", run_id
     )
     assert bagli == package_id, "koşu satırı yazılan taslağa BAĞLANMALI"
+
+
+async def test_writeback_writes_schema_version_2(pkg_db):
+    """Koşudan yazılan taslak güncel şema sürümüyle yazılır (tasarım notu 2026-09-25 §3.9)."""
+    sector_id = await _sub_sector(pkg_db)
+    run_id = await _kosu(pkg_db, sector_id)
+
+    package_id = await writeback.write_draft_from_run(pkg_db, run_id=run_id, actor=ACTOR)
+
+    assert await pkg_db.fetchval(
+        "SELECT schema_version FROM social.sector_packages WHERE id = $1", package_id
+    ) == 2
 
 
 async def test_unpersisted_result_object_rejected(pkg_db):
@@ -1602,7 +1618,7 @@ async def test_in_place_update_rewrites_content_and_log_together(pkg_db):
     assert sonraki_yollar != onceki_yollar, "kayma hiç olmadı — test bir şey ölçmüyor"
     # ASIL SÖZLEŞME: yazılan çift KENDİ İÇİNDE tutarlı; bayat yol KALMADI.
     assert identity.check_unit_integrity(
-        sonraki["content"], [dict(s) for s in sonraki["decision_log"]]
+        sonraki["content"], [dict(s) for s in sonraki["decision_log"]], schema_version=2,
     ) == []
 
 

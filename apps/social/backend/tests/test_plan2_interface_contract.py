@@ -508,7 +508,7 @@ async def test_insert_draft_accepts_decision_log(pkg_db):
         package_id,
     )
     assert row["decision_log"] == decision_log
-    assert identity.check_unit_integrity(row["content"], row["decision_log"]) == []
+    assert identity.check_unit_integrity(row["content"], row["decision_log"], schema_version=1) == []
 
 
 async def test_insert_draft_rejects_a_decision_log_that_fails_the_schema(pkg_db):
@@ -655,7 +655,7 @@ async def test_insert_draft_accepts_a_log_carrying_kirp_and_cikar_rows(pkg_db):
         package_id,
     )
     assert row["decision_log"] == decision_log
-    assert identity.check_unit_integrity(row["content"], row["decision_log"]) == []
+    assert identity.check_unit_integrity(row["content"], row["decision_log"], schema_version=1) == []
 
 
 async def test_insert_draft_with_an_empty_decision_log_keeps_the_plan1_trace(pkg_db):
@@ -697,7 +697,7 @@ def test_validate_package_content_documented_signature():
     """`(content, *, banned_brand_names, holiday_keys) -> ValidationResult`."""
     result = validate_package_content(
         _valid_content(),
-        banned_brand_names=["Altınbaş"],
+        schema_version=1, banned_brand_names=["Altınbaş"],
         holiday_keys={CUMHURIYET_KEY},
     )
     assert isinstance(result, ValidationResult)
@@ -705,7 +705,7 @@ def test_validate_package_content_documented_signature():
 
     # `holiday_keys` gerçekten tüketiliyor: takvimde olmayan anahtar REDDEDİLİR.
     kapali = validate_package_content(
-        _valid_content(), banned_brand_names=[], holiday_keys=set()
+        _valid_content(), schema_version=1, banned_brand_names=[], holiday_keys=set()
     )
     assert not kapali.ok
 
@@ -905,7 +905,7 @@ def test_video_kodlar_delivers_two_pools():
     """`hareket` + `sahne`, ikisi de liste — tek havuz sözleşmeyi karşılamaz."""
     tek_havuz = _valid_content(video_kodlar={"hareket": ["Slow orbit."]})
     result = validate_package_content(
-        tek_havuz, banned_brand_names=[], holiday_keys={CUMHURIYET_KEY}
+        tek_havuz, schema_version=1, banned_brand_names=[], holiday_keys={CUMHURIYET_KEY}
     )
     assert not result.ok
     assert any("video_kodlar" in error for error in result.errors)
@@ -914,7 +914,7 @@ def test_video_kodlar_delivers_two_pools():
         video_kodlar={"hareket": "Slow orbit.", "sahne": "Boutique interior."}
     )
     result = validate_package_content(
-        tek_cumle, banned_brand_names=[], holiday_keys={CUMHURIYET_KEY}
+        tek_cumle, schema_version=1, banned_brand_names=[], holiday_keys={CUMHURIYET_KEY}
     )
     assert not result.ok
 

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any
+from typing import Any, Mapping
 
 
 # ─── Kapalı değer kümeleri ──────────────────────────────────────────────────
@@ -39,13 +39,40 @@ _TR_ASCII = str.maketrans(
 # Spec §3.4 kapalı kümesi: sekiz temel alan + `ozel_gun`. Şema değişimi
 # `schema_version` ile taşınır, bu küme sessizce genişletilmez.
 TEXT_FIELDS = ("kapsam", "ton_ve_dil", "gorsel_kodlar")
-LIST_FIELDS = (
+_V1_LIST_FIELDS = (
     "cta_kaliplari",
     "kanca_kaliplari",
     "takvim_temalari",
     "yasaklar_ve_hassasiyetler",
 )
-CONTENT_FIELDS = frozenset(TEXT_FIELDS + LIST_FIELDS + ("video_kodlar", "ozel_gun"))
+
+# Şema 2 (tasarım notu 2026-09-25 §3.9): dokuz alan + `sektor_gercekleri` —
+# kaynaklı sektör doğruları, zorunlu kural bloğunda basılır. Mevcut dokuz alanın
+# adı ve tipi DEĞİŞMEZ.
+SECTOR_FACTS_FIELD = "sektor_gercekleri"
+
+# Güncel (şema-2) liste alanları. Şema-1 içerikte `sektor_gercekleri` yoktur;
+# alan-alan dolaşan tüketiciler alanın içerikte olup olmadığına bakar.
+LIST_FIELDS = _V1_LIST_FIELDS + (SECTOR_FACTS_FIELD,)
+
+# Alan kümesi SATIRIN şema sürümüne bağlıdır. Sürümü içerikten çıkarmak
+# reddedildi (plan D2): 1. sürüm satırına sızan onuncu alanı 2. sürüm sayar ve
+# kapalı kümeyi deler. Her çağrı yeri sürümü AÇIKÇA seçer.
+SCHEMA_FIELDS: Mapping[int, frozenset[str]] = {
+    1: frozenset(TEXT_FIELDS + _V1_LIST_FIELDS + ("video_kodlar", "ozel_gun")),
+    2: frozenset(TEXT_FIELDS + LIST_FIELDS + ("video_kodlar", "ozel_gun")),
+}
+CURRENT_SCHEMA_VERSION = 2
+
+# Güncel sürümün alan kümesi (geriye uyumlu ad).
+CONTENT_FIELDS = SCHEMA_FIELDS[CURRENT_SCHEMA_VERSION]
+
+# Tek tür sözlüğü (tasarım notu §3.1): gönderi türü, kanca etiketi ve model
+# çıktısı aynı beş değeri kullanır.
+POST_TYPES: tuple[str, ...] = ("satis", "hizmet", "bilgi", "kutlama", "anma")
+
+# Etiketsiz kanca `satis` sayılır (§3.1: bugünkü dört kanca öyle).
+DEFAULT_HOOK_TYPE = "satis"
 
 # K-120: boş alanın RESMÎ temsili. Sıradan boş dizeden ayrıdır — "bilinçli boş"
 # ile "doldurulmamış" aynı şey olsaydı eksik iş dolu görünürdü.
@@ -94,7 +121,7 @@ _DASH_LOOKALIKES = frozenset({"−", "⁃", "˗", "➖"})
 # ─── Yapısal yazım kapısı ───────────────────────────────────────────────────
 
 
-def structural_errors(content: Any) -> list[str]:
+def structural_errors(content: Any, *, schema_version: int) -> list[str]:
     """İçeriğin DIŞ GİRDİ GEREKTİRMEYEN yapısal hataları (spec §3.4).
 
     Yazım kapısı ile çalışma zamanı çözümleyicisi AYNI listeyi kullanır. Ayrı
@@ -102,14 +129,26 @@ def structural_errors(content: Any) -> list[str]:
     aynı olduklarında "yazılabilen her paket okunabilir" tek cümleyle doğrudur.
 
     Yan etkisiz ve saf: çözümleyici bunu üretim yolunda çağırır.
+
+    **Sürüm varsayılansızdır ve anahtar-yalnızdır (plan D2).** Saklı paket
+    satırın sürümüyle, yeni aday güncel sürümle denetlenir; bu seçimi çağıran
+    yapar. Bilinmeyen sürüm istisna değil HATA METNİDİR — çalışma zamanı onu
+    öteki yapısal hatalar gibi paketsiz yola düşürür.
     """
+    if schema_version not in SCHEMA_FIELDS:
+        return [
+            f"bilinmeyen şema sürümü: {schema_version!r} — "
+            f"tanımlı sürümler {sorted(SCHEMA_FIELDS)}"
+        ]
     errors: list[str] = []
     if not isinstance(content, dict):
         return [f"content nesne değil: {type(content).__name__}"]
-    _check_closed_field_set(content, errors)
+    _check_closed_field_set(content, SCHEMA_FIELDS[schema_version], errors)
     _check_field_shapes(content, errors)
     _check_special_day_shapes(content.get("ozel_gun"), errors)
     _check_channel_markers(content, errors)
+    if schema_version >= 2:
+        _check_hook_tags(content.get("kanca_kaliplari"), errors)
     return errors
 
 
@@ -231,14 +270,16 @@ def _check_channel_markers(content: dict, errors: list[str]) -> None:
                 )
 
 
-def _check_closed_field_set(content: dict, errors: list[str]) -> None:
-    unknown = sorted(set(content) - CONTENT_FIELDS)
+def _check_closed_field_set(
+    content: dict, fields: frozenset[str], errors: list[str]
+) -> None:
+    unknown = sorted(set(content) - fields)
     if unknown:
         errors.append(
             f"şema dışı alan(lar): {unknown} — alan kümesi kapalıdır, "
             "genişletme `schema_version` ile taşınır"
         )
-    missing = sorted(CONTENT_FIELDS - set(content))
+    missing = sorted(fields - set(content))
     if missing:
         errors.append(f"eksik alan(lar): {missing}")
 
@@ -466,3 +507,68 @@ def _canonical_marker_text(text: str) -> str:
         else:
             canonical.append(char)
     return "".join(canonical)
+
+
+# ─── Şema-2 içerik gramerleri (plan D12) ───────────────────────────────────
+
+
+# Kanca öğesinin sonundaki isteğe bağlı tür etiketi: `(tür: <değer>)`.
+# `tür` yazımı katlanarak karşılaştırılır (`tur`, `TÜR` aynı etiket).
+_HOOK_TAG_RE = re.compile(r"\(\s*(?P<key>[^():]+?)\s*:\s*(?P<value>[^()]*?)\s*\)\s*$")
+
+# `ton_ve_dil` içinde yumuşak yönlendirme satırının öneki (K-118).
+_SOFT_TONE_PREFIX_RE = re.compile(r"^\s*(?P<key>[^:]+?)\s*:\s*(?P<rest>.*)$", re.DOTALL)
+
+
+def hook_type(item: str) -> tuple[str, str]:
+    """Kanca öğesini `(kalıp metni, tür)` olarak ayırır (plan D12).
+
+    Etiketsiz öğe `satis` sayılır. Etiket değeri tür sözlüğü dışındaysa
+    `ValueError` — sessiz varsayılan YOK; yazım kapısı bunu yapısal hataya çevirir.
+    """
+    match = _HOOK_TAG_RE.search(item)
+    if match is None or _fold_turkish(match.group("key")) != "tur":
+        return item.strip(), DEFAULT_HOOK_TYPE
+    value = _fold_turkish(match.group("value"))
+    if value not in POST_TYPES:
+        raise ValueError(
+            f"kanca tür etiketi {match.group('value')!r} tür sözlüğünde yok — "
+            f"geçerli değerler: {', '.join(POST_TYPES)}"
+        )
+    return item[: match.start()].strip(), value
+
+
+def split_tone_lines(text: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """`ton_ve_dil`i `(kural satırları, yumuşak satırlar)` olarak ayırır (plan D12).
+
+    Her boş olmayan satır bir kuraldır; `ton (yumuşak):` önekli satır yumuşak
+    yönlendirmedir (K-118) ve kimlik almaz — önek atılarak döner. Tek paragraf
+    (1. sürüm) tek kuraldır.
+    """
+    rules: list[str] = []
+    soft: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        match = _SOFT_TONE_PREFIX_RE.match(line)
+        if match is not None and _fold_turkish(match.group("key")) == "ton (yumusak)":
+            rest = match.group("rest").strip()
+            if rest:
+                soft.append(rest)
+            continue
+        rules.append(line)
+    return tuple(rules), tuple(soft)
+
+
+def _check_hook_tags(hooks: Any, errors: list[str]) -> None:
+    """Şema-2: kanca tür etiketi sözlükten olmalı (1. sürüm içerikte etiket yok)."""
+    if not isinstance(hooks, list):
+        return
+    for index, item in enumerate(hooks):
+        if not isinstance(item, str):
+            continue
+        try:
+            hook_type(item)
+        except ValueError as exc:
+            errors.append(f"kanca_kaliplari[{index}]: {exc}")

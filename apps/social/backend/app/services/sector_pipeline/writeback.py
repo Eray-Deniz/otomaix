@@ -38,15 +38,16 @@ from __future__ import annotations
 from uuid import UUID
 
 from app.services import sector_package_lifecycle as lifecycle
+from app.services.sector_content_schema import CURRENT_SCHEMA_VERSION
 from app.services.sector_pipeline import identity, readiness_items, runs
 
-SCHEMA_SURUMU = 1
-"""Yazılan taslağın içerik şema sürümü.
+SCHEMA_SURUMU = CURRENT_SCHEMA_VERSION
+"""Yazılan taslağın içerik şema sürümü — güncel sürüm (tasarım notu 2026-09-25 §3.9).
 
-Sabittir ve ARTIRILMAZ: `identity` modülünün açılış hükmü Plan 1 doğrulayıcısına
-dokunulmamasını bağlar, yani Plan 2 boyunca içerik şeması sürüm 1'de kalır.
-Değer bir çağıran parametresi DEĞİLDİR — olsaydı doğrulayıcının kapsamadığı bir
-sürüm numarası taslağa yazılabilirdi.
+Motor ve sentez yeni adayı güncel sürümle denetler; taslak da aynı sürümle yazılır.
+(2026-09-25'e dek sabit 1'di: `identity`'nin açılış hükmü Plan 2 boyunca şemayı
+sürüm 1'de tutuyordu; §3.9 onu değiştirdi.) Değer bir çağıran parametresi
+DEĞİLDİR — olsaydı doğrulayıcının kapsamadığı bir sürüm numarası taslağa yazılabilirdi.
 """
 
 
@@ -182,6 +183,7 @@ async def update_draft_from_run(db, *, run_id: str, actor: str) -> None:
             package_id=run.package_id,
             sector_id=run.sector_id,
             content=_cozulmus_aday(run),
+            schema_version=SCHEMA_SURUMU,
             decision_log=_cozulmus_gunluk(run),
         )
 

@@ -137,6 +137,9 @@ def _tam_icerik(**degisiklik) -> dict:
                 "gorsel_vurgu": "Bayrak ve altin dokusu",
             }
         },
+        # Şema 2 (tasarım notu 2026-09-25 §3.9): bilinçli boş sektör gerçekleri —
+        # motorun anlam kontrollerini etkilemeyen asgari şema-2 içerik.
+        "sektor_gercekleri": ["içerik-önerilmez"],
     }
     icerik.update(degisiklik)
     return icerik
@@ -222,12 +225,12 @@ def _kaynak_iddiasini_tamamla(satir: dict, denetim=None) -> None:
 
 
 AKTIF_GUNLUK = _gunluk(AKTIF_ICERIK)
-AKTIF_BIRIMLER = identity.decision_units(AKTIF_ICERIK, AKTIF_GUNLUK)
+AKTIF_BIRIMLER = identity.decision_units(AKTIF_ICERIK, AKTIF_GUNLUK, schema_version=2)
 AKTIF_GORUNTU_SHA = identity.canonical_sha(AKTIF_BIRIMLER)
 
 
 def _aktif_paket() -> dict:
-    return {"schema_version": 1, "content": AKTIF_ICERIK, "decision_log": AKTIF_GUNLUK}
+    return {"schema_version": 2, "content": AKTIF_ICERIK, "decision_log": AKTIF_GUNLUK}
 
 
 # ═══ Denetçi kurucuları ════════════════════════════════════════════════════
@@ -569,7 +572,7 @@ def _girdi(
     return engine.EngineInputs(
         sentez=_sonuc(aday, log, acik_sorular=acik_sorular),
         aktif_paket=_aktif_paket() if aktif else None,
-        aktif_schema_version=1 if aktif else None,
+        aktif_schema_version=2 if aktif else None,
         aktif_birimler=birimler,
         mevcut_birim_sayisi=len(birimler),
         ilk_kosu=not aktif,
@@ -601,8 +604,8 @@ def _sebepler(sonuc: engine.CheckOutcome) -> list[str]:
 
 def test_fixture_content_passes_the_writing_gate() -> None:
     """Ölçüm ancak girdi gerçekten geçerliyse anlamlıdır."""
-    assert structural_errors(AKTIF_ICERIK) == []
-    assert identity.check_unit_integrity(AKTIF_ICERIK, AKTIF_GUNLUK) == []
+    assert structural_errors(AKTIF_ICERIK, schema_version=2) == []
+    assert identity.check_unit_integrity(AKTIF_ICERIK, AKTIF_GUNLUK, schema_version=2) == []
 
 
 # ═══ 2. Girdi sözleşmesi (arayüz eki R5) ═══════════════════════════════════
@@ -652,7 +655,7 @@ def test_engine_inputs_rejects_inconsistent_unit_count() -> None:
         engine.EngineInputs(
             sentez=_sonuc(AKTIF_ICERIK, AKTIF_GUNLUK),
             aktif_paket=_aktif_paket(),
-            aktif_schema_version=1,
+            aktif_schema_version=2,
             aktif_birimler=AKTIF_BIRIMLER,
             mevcut_birim_sayisi=len(AKTIF_BIRIMLER) + 1,
             ilk_kosu=False,
@@ -2670,7 +2673,7 @@ def _matris_girdisi(monkeypatch, *, aktif_metin: str, aday_metin: str, uygulanir
     aktif = _tam_icerik(kanca_kaliplari=[aktif_metin, _MATRIS_IKINCI])
     harita = _kimlik_haritasi(aktif)
     aktif_gunluk = _gunluk(aktif, kimlikler=harita)
-    aktif_birimler = identity.decision_units(aktif, aktif_gunluk)
+    aktif_birimler = identity.decision_units(aktif, aktif_gunluk, schema_version=2)
     monkeypatch.setattr(modul, "AKTIF_ICERIK", aktif)
     monkeypatch.setattr(modul, "AKTIF_GUNLUK", aktif_gunluk)
     monkeypatch.setattr(modul, "AKTIF_BIRIMLER", aktif_birimler)
@@ -2819,7 +2822,7 @@ def test_a_rejected_removal_that_restores_a_flagged_item_blocks() -> None:
     aktif = _tam_icerik(kanca_kaliplari=[bayrakli, ikinci])
     harita = _kimlik_haritasi(aktif)
     aktif_gunluk = _gunluk(aktif, kimlikler=harita)
-    aktif_birimler = identity.decision_units(aktif, aktif_gunluk)
+    aktif_birimler = identity.decision_units(aktif, aktif_gunluk, schema_version=2)
     eski = {
         ad: getattr(modul, ad)
         for ad in ("AKTIF_ICERIK", "AKTIF_GUNLUK", "AKTIF_BIRIMLER", "AKTIF_GORUNTU_SHA", "KIMLIKLER")
@@ -3245,7 +3248,7 @@ def test_engine_rejects_a_mechanical_gate_from_another_run() -> None:
         engine.EngineInputs(
             sentez=_sonuc(AKTIF_ICERIK, _gunluk(AKTIF_ICERIK)),
             aktif_paket=_aktif_paket(),
-            aktif_schema_version=1,
+            aktif_schema_version=2,
             aktif_birimler=AKTIF_BIRIMLER,
             mevcut_birim_sayisi=len(AKTIF_BIRIMLER),
             ilk_kosu=False,
@@ -3403,12 +3406,12 @@ def test_stale_audit_pair_is_rejected() -> None:
     """
     degisik = _tam_icerik(kapsam="Degismis kapsam metni.")
     gunluk = _gunluk(degisik, kimlikler=_kimlik_haritasi(AKTIF_ICERIK, degisik))
-    birimler = identity.decision_units(degisik, gunluk)
+    birimler = identity.decision_units(degisik, gunluk, schema_version=2)
     with pytest.raises(ValueError, match="aktif görüntüye ait değil"):
         engine.EngineInputs(
             sentez=_sonuc(degisik, gunluk),
             aktif_paket={"schema_version": 1, "content": degisik, "decision_log": gunluk},
-            aktif_schema_version=1,
+            aktif_schema_version=2,
             aktif_birimler=birimler,
             mevcut_birim_sayisi=len(birimler),
             ilk_kosu=False,

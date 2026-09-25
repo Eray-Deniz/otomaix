@@ -741,7 +741,7 @@ def test_malformed_marker_is_rejected_at_write_gate():
         }
 
     # Önce pozitif kontrol: kurallı etiket taşıyan içerik TEMİZ geçer.
-    assert structural_errors(content_with("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
+    assert structural_errors(content_with("Yaz [kanal-bağımlı: whatsapp_hatti]"), schema_version=1) == []
 
     malformed = {
         "kapanış ayracı yok": "Yaz [kanal-bağımlı: whatsapp_hatti",
@@ -757,7 +757,7 @@ def test_malformed_marker_is_rejected_at_write_gate():
         "iç içe ayraç": "Yaz [[kanal-bağımlı: whatsapp_hatti]]",
         "serbest metin ayracı": "Yaz [bkz. 3] ve [kanal-bağımlı: whatsapp_hatti]",
     }
-    escapes = [name for name, text in malformed.items() if not structural_errors(content_with(text))]
+    escapes = [name for name, text in malformed.items() if not structural_errors(content_with(text), schema_version=1)]
 
     assert not escapes, f"yazım kapısından geçen bozuk etiket: {escapes}"
 
@@ -794,12 +794,12 @@ def test_only_the_channel_flag_may_appear_in_package_content():
     from app.services.sector_packages import structural_errors
 
     consumed_upstream = ("[eski-kaynak]", "[kopya-şüphesi]", "[yerel-değil]", "[kaynak-bağımlı]")
-    escapes = [f for f in consumed_upstream if not structural_errors(_flag_content(f"Yaz {f}"))]
+    escapes = [f for f in consumed_upstream if not structural_errors(_flag_content(f"Yaz {f}"), schema_version=1)]
 
     assert not escapes, f"sentezde tüketilmesi gereken bayrak pakete girdi: {escapes}"
 
     # Pozitif kontrol: kanal bayrağı geçer.
-    assert structural_errors(_flag_content("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
+    assert structural_errors(_flag_content("Yaz [kanal-bağımlı: whatsapp_hatti]"), schema_version=1) == []
 
 
 def test_misspelled_channel_flag_is_rejected():
@@ -818,7 +818,7 @@ def test_misspelled_channel_flag_is_rejected():
         "[kanal-baglantili]",
         "[kanal-bagimli]",  # değer YOK — kanal adı taşımayan kanal bayrağı
     )
-    escapes = [f for f in misspelled if not structural_errors(_flag_content(f"WhatsApp {f}"))]
+    escapes = [f for f in misspelled if not structural_errors(_flag_content(f"WhatsApp {f}"), schema_version=1)]
 
     assert not escapes, f"yanlış yazılmış bayrak pakete girdi: {escapes}"
 
@@ -837,7 +837,7 @@ def test_unbracketed_marker_is_a_documented_limit_not_a_closure():
     from app.services.sector_packages import structural_errors
 
     assert structural_errors(
-        _flag_content("Yaz kanal-bağımlı whatsapp_hatti")
+        _flag_content("Yaz kanal-bağımlı whatsapp_hatti"), schema_version=1,
     ) == [], "sınır kapandıysa iddia güncellenmeli"
 
 
@@ -851,7 +851,7 @@ def test_write_gate_rejection_makes_runtime_fallback_consistent():
     from app.services import sector_packages as sp
 
     source = inspect.getsource(sp.resolve_package_context)
-    assert "structural_errors(content)" in source
+    assert 'structural_errors(content, schema_version=row["schema_version"])' in source
 
 
 async def test_brand_update_surface_does_not_erase_concurrent_kit_state(kit_db):
@@ -1038,15 +1038,15 @@ def test_ordinary_brackets_are_free_outside_cta_patterns():
         "ozel_gun": {},
     }
 
-    assert structural_errors(content) == []
+    assert structural_errors(content, schema_version=1) == []
 
 
 def test_brackets_inside_cta_patterns_must_be_flags():
     """CTA kalıbının içinde ayraç yalnız bayrak demektir — kural orada katı."""
     from app.services.sector_packages import structural_errors
 
-    assert structural_errors(_flag_content("Yaz [yakın plan]")) != []
-    assert structural_errors(_flag_content("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
+    assert structural_errors(_flag_content("Yaz [yakın plan]"), schema_version=1) != []
+    assert structural_errors(_flag_content("Yaz [kanal-bağımlı: whatsapp_hatti]"), schema_version=1) == []
 
 
 def test_special_day_cta_brackets_must_be_flags():
@@ -1066,6 +1066,6 @@ def test_special_day_cta_brackets_must_be_flags():
         }
         return content
 
-    assert structural_errors(with_special_day("Yaz [kanal-bagimll: whatsapp_hatti]")) != []
-    assert structural_errors(with_special_day("Yaz [kanal-bağımlı: whatsapp_hatti]")) == []
-    assert structural_errors(with_special_day("Yaz")) == []
+    assert structural_errors(with_special_day("Yaz [kanal-bagimll: whatsapp_hatti]"), schema_version=1) != []
+    assert structural_errors(with_special_day("Yaz [kanal-bağımlı: whatsapp_hatti]"), schema_version=1) == []
+    assert structural_errors(with_special_day("Yaz"), schema_version=1) == []

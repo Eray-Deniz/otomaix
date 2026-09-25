@@ -33,6 +33,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 from app.services.sector_content_schema import (
     CTA_ITEM_KEYS,
+    CURRENT_SCHEMA_VERSION,
     LIST_FIELDS,
     SPECIAL_DAY_SLOTS,
     TEXT_FIELDS,
@@ -484,9 +485,12 @@ def uygula(
         _yolu_tazele(satirlar[s["unit_id"]]) if s in yasayan else s for s in gunluk
     ] + [_yolu_tazele(satirlar[s["unit_id"]]) for s in yeni_satirlar]
 
-    hatalar = list(structural_errors(yeni_icerik))
+    # Operatör yolu YENİ adayı değiştirir → güncel şema sürümü (tasarım notu §3.9).
+    hatalar = list(structural_errors(yeni_icerik, schema_version=CURRENT_SCHEMA_VERSION))
     hatalar += identity.validate_decision_log(yeni_gunluk)
-    hatalar += identity.check_unit_integrity(yeni_icerik, yeni_gunluk)
+    hatalar += identity.check_unit_integrity(
+        yeni_icerik, yeni_gunluk, schema_version=CURRENT_SCHEMA_VERSION
+    )
     bilinmeyen = sorted(set(yeni_icerik.get("ozel_gun", {})) - set(takvim_anahtarlari))
     if bilinmeyen:
         hatalar.append(f"sistem takviminde olmayan özel gün: {bilinmeyen}")

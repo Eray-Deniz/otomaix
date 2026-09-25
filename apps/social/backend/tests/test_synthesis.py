@@ -91,6 +91,9 @@ def _tam_icerik(**degisiklik) -> dict:
         "yasaklar_ve_hassasiyetler": [MEVZUAT_METNI],
         "video_kodlar": {"hareket": ["yavaş kaydırma"], "sahne": ["tezgâh üstü"]},
         "ozel_gun": {},
+        # Şema 2 (tasarım notu 2026-09-25 §3.9): bilinçli boş sektör gerçekleri —
+        # motorun anlam kontrollerini etkilemeyen asgari şema-2 içerik.
+        "sektor_gercekleri": ["içerik-önerilmez"],
     }
     icerik.update(degisiklik)
     return icerik
@@ -118,7 +121,7 @@ def _aktif_paket() -> dict:
     birimler = identity.enumerate_content_units(icerik)
     kimlikler = _yol_kimlik(icerik)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "content": icerik,
         "decision_log": [
             {
@@ -216,7 +219,7 @@ def _aktif_gorunti_sha() -> str:
     """Aktif paketin görüntü kimliği — `PacketRef` ile AYNI ölçümden."""
     paket = _aktif_paket()
     return identity.canonical_sha(
-        identity.decision_units(paket["content"], paket["decision_log"])
+        identity.decision_units(paket["content"], paket["decision_log"], schema_version=2)
     )
 
 
@@ -690,7 +693,7 @@ async def test_produced_log_passes_check_unit_integrity(kosu, tmp_path) -> None:
     )
     assert (
         identity.check_unit_integrity(
-            identity.cozulmus(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu]
+            identity.cozulmus(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu], schema_version=2,
         )
         == []
     )
@@ -783,7 +786,7 @@ async def test_cikar_ekle_pair_links_via_yerine_gecer(kosu, tmp_path) -> None:
     assert ekle[0]["yerine_gecer"] == UNIT_CIKAR
     assert (
         identity.check_unit_integrity(
-            identity.cozulmus(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu]
+            identity.cozulmus(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu], schema_version=2,
         )
         == []
     )
@@ -816,7 +819,7 @@ async def test_cikar_without_evidence_becomes_open_question(kosu, tmp_path) -> N
     assert any(UNIT_CIKAR in soru for soru in sonuc.acik_sorular)
     assert (
         identity.check_unit_integrity(
-            identity.cozulmus(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu]
+            identity.cozulmus(sonuc.aday_json), [dict(s) for s in sonuc.karar_gunlugu], schema_version=2,
         )
         == []
     )
@@ -1836,7 +1839,7 @@ async def test_rejected_removal_of_a_still_present_unit_is_a_noop(
     assert (
         identity.check_unit_integrity(
             identity.cozulmus(sonuc.aday_json),
-            [dict(s) for s in sonuc.karar_gunlugu],
+            [dict(s) for s in sonuc.karar_gunlugu], schema_version=2,
         )
         == []
     )
@@ -1858,8 +1861,8 @@ def test_thawed_content_passes_the_writing_gate() -> None:
     from app.services.sector_content_schema import structural_errors
 
     sonuc = _sonuc(_tam_icerik())
-    assert structural_errors(identity.cozulmus(sonuc.aday_json)) == []
-    assert structural_errors(dict(sonuc.aday_json)) != []
+    assert structural_errors(identity.cozulmus(sonuc.aday_json), schema_version=2) == []
+    assert structural_errors(dict(sonuc.aday_json), schema_version=2) != []
 
 
 # ═══ Grup 3 — EK-M kanıt kaydı + araştırma etiketi sızıntısı (`0824c0f`) ═══
