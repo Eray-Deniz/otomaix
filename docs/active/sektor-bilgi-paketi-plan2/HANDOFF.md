@@ -1,92 +1,83 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-09-23 (on dördüncü oturum kapanışı)
+written: 2026-09-25 (on altıncı oturum kapanışı)
 ---
 
 # Resume From
 
-**KUYUMCULUK PAKETİ CANLIDA AKTİF** (`66654971-d90e-4cec-92da-61e723a8ec8f`, sürüm 1, koşu
-`kosu-23e19d03…`). Dal `main`'e fast-forward edildi (`11366af`), backend Coolify'da o commit'ten
-koşuyor. **Kuyumculuğa atanmış marka YOK** → paket henüz hiçbir üretime girmiyor.
+**Kuyumculuk paketi canlıda aktif** (`66654971-d90e-4cec-92da-61e723a8ec8f`, sürüm 1), **kuyumculuğa atanmış
+marka YOK** → hiçbir üretime girmiyor. Paket 25 Eylül sınavında **yetersiz** çıktı (0. madde: kural koyamıyor).
 
-**Sıradaki işler (Eray'ın sırası):**
-1. ~~n8n Telegram onay webhook düğümünü bağla~~ **2026-09-25 YAPILDI** (webhook + zamanlayıcı; TASK Decisions Log) —
-   Ölçüldü: başlıksız 403 · yanlış başlık 403 · doğru başlık 200. Canlı yedekler oturum scratchpad'indeydi.
-2. **Video üretim sistemi değişikliği** (Eray) → ardından **marka ataması** (Task 19 Step 11,
-   `Deniz Kuyumculuk (TEST)` → kuyumculuk, arayüzden, Eray'ın gözüyle) + bir paylaşım üretimi →
-   **md-17** (`posts.package_id/package_version` + `generation_stamps` okunur).
-3. **md-18 (geri alma canlı denemesi):** Claude önerdi → paketin **2. sürümüne** bırak (bugün
-   `deaktive-et` tek paketi arşivler, yeniden aktive EDİLEMEZ, kuyumculuk paketsiz kalır).
-   **Eray ONAYLADI 2026-09-25.**
-**2026-09-25 — paket yeterlilik analizi (13 bulgu, 3 küme):** TASK Open Problems ilk madde; hangi
-   kümeden başlanacağı Eray'da. Ölçüm yolu A/B/C canlı paylaşım oluşturmaz.
-4. Pilot ölçümleri + koşu raporu (Task 19 Step 12-13) → Task 20 kapanış → `/finish-branch-claude-codex`.
+**Bu oturumun ürünü: 0. maddenin tasarımı yazıldı ve ONAYLANDI** —
+`docs/specs/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (`spec-approved`, Codex 5 tur, son tur
+`approve`, 18:11–18:43 UTC). Eray'ın yedi kararı (K-A..K-G) ve dört hakem turunun düzeltmeleri notun §2, §3, §7'sinde.
+**Uygulama BAŞLAMADI, kod DEĞİŞMEDİ.**
 
-**Bugün (2026-09-23) ne oldu — sırayla:** K-129 metinleri modele hizalandı (dış depo `7fb81c3`,
-pin) → "düzeltme turu" yolunun `blocked` koşuya UYGULANAMADIĞI ölçüldü (tasarım boşluğu) → Eray
-"spec atla" dedi → **operatör kararları yolu** yazıldı (`operator-karar`, migration 037, `fa52d9d`)
-→ 11 açık soru kapandı (26 işlem, 4 hukuki) → Katman-1 tazelendi → taslak → Katman-2 kör örneklem
-(8 çağrı, 0,273 USD, paketli seçim 2/4) → onay (252 sn) → hazırlık listesinin iki probu düzeltildi
-(`11366af`) → hazırlık tasdiki (md-17/md-18 koşullu) → **aktivasyon** → CTA ≥ 5 kapatıldı (kapı yok)
-→ merge + deploy (review'lar Eray kararıyla BİLİNÇLİ geçildi) → yetki belgesi işine ev verildi (G8).
+**Sıradaki iş (Eray "başla" demedi; sor):** `/write-plan-claude-codex` ile uygulama planı → uygulama (kod: iki
+blok + `resolve_post_type` + `kural_uyumu` kapısı + iki migration; paket 2. sürümü: anma günleri, `sektor_gercekleri`,
+ton bölünmesi, takvim temaları kopya temizliği) → `KALIBRASYON-2.md` yazılır → sınav tekrarı (ücretli, ~1,6 USD tahmin,
+Eray onayı). **Eray'ın diğer sırası değişmedi:** video üretim sistemi değişikliği → marka ataması (Task 19 Step 11)
+→ md-17 → pilot ölçümleri → Task 20 → `/finish-branch-claude-codex`. md-18 paketin 2. sürümünde.
+
+**Bugün (2026-09-25, 16. oturum) ne oldu:** Eray üç soruyu cevapladı (istek her kuralın üstünde · anma günleri
+pakete+takvime · zorunlu/seçmeli ayrımı) → K-119 iptal → kalıp seçimi analizi (19 çıktı elle okundu) → gönderi türü
+tasarımı (özel gün → kod · ürün modu → kod varsayılanı + model `bilgi` istisnası · genel mod → model) → sektör
+şablonu reddi (vault + canlı DB ile ölçüldü) → tasarım notu → hakemin unuttuğu 7 alan nota işlendi → Codex 5 tur:
+F1 critical (istek yasal sınırları da ezer) → **Eray: şimdilik her kuralın üstünde, onay anında çiğnenen kural
+gösterilir** → kural-kural zorunlu beyan (`kural_uyumu`) + kod kapısı + "sessiz ihlal 0" sınav kapısı.
 
 # Verification
 
 | Ne | Taze çıktı |
 |---|---|
-| Tam takım (`11366af`) | **4841 passed / 0 failed / 407,8 s** (`fa52d9d`'de 4836) |
-| Mutasyon | operatör kararları 10/10 · hazırlık düzeltmeleri 4/4; kaynaklar bayt bayt geri döndü |
-| Katman-1 | `pytest tests/prompt_regression/ -q` @ `fa52d9d` → 124 passed; tasdik PASS |
-| Operatör kararı canlı | `--kuru` rc=0 → yazım rc=0; `activation_eligible`, açık soru 11 → 0; `load_verified_run` yedi kapı geçti |
-| Hazırlık | bloklayan 0; `--onayla` rc=0; `aktive-et` rc=0 → paket `active` |
-| Canlı API | `/health` 200 (db ok, redis ok); `N8N_TELEGRAM_APPROVAL_SECRET` konteyner değeri dosyayla eşleşiyor (sha256, değer basılmadan); `app.main`/`calendar`/`sector_packages`/`lifecycle` import ok; 5 dk logda hata yok |
+| Codex zinciri | 5 tur rc=0; Tur 1 needs-attention (1C+3H) → Tur 5 approve; ham log `~/.claude/logs/otomaix--ffc87809/2026-09-25-feat-sektor-bilgi-paketi-plan2.md` |
+| Notun kod/yol atıfları | `prompt_builder.py:154/366/390-398`, `sector_packages.py:487`, `generation_stamps` kolonları, `schema_version` kolonu, `ADMIN_NOTIFIED_EVENTS` — hepsi grep/sed ile doğrulandı |
+| Takvim ↔ paket | canonical DB: takvim 25 gün, paket 16; pakette olup takvimde olmayan 0; takvimde olup pakette olmayan 9 (18 Mart, 10 Kasım dâhil); yıllık n8n işi 18 Mart + 10 Kasım üretiyor |
+| Şablon kullanımı | vault: 22 sektör şablonu 2026-04-15 terk; DB 81 gönderi: ürün modu 39 · genel 36 · özel gün 6 · sektör şablonu 6 (terk öncesi) |
+| Kalıp kullanımı (sınav, elle) | 19 paketli çıktı: kanca kalıbı açık 1 · CTA kalıbı açık 4 (Claude okuması, hakem ölçümü değil) |
+| Tam takım / Katman-1 | **KOŞULMADI** (kod değişmedi) |
 
 **DENENMEYEN / DOĞRULANMAYAN:**
-- Takvim ucunun dönem alanı (uç kimlik istiyor, 401) — arayüzden takvim sayfasında görülür.
-- md-17 · md-18 (yukarıda) · marka ataması arayüzü.
-- Operatör kararları + hazırlık düzeltmeleri + 12 Eylül'den beri hakem görmemiş commit'ler bağımsız
-  review/security review GÖRMEDİ (Eray kararı: bilinçli geçildi — TASK Decisions Log).
-- `037_down.sql` testle sınanmadı. Operatör metinleri (Claude yazdı, Eray onayladı) üretimde yalnız
-  4 konuluk Katman-2'de görüldü.
+- Notun hiçbir mekanizması kodda yok: `resolve_post_type`, `kural_uyumu` kapısı, iki blok, şema-2 okuyucu, iki migration.
+- "Sessiz ihlal" oranı (model `uyuldu` deyip çiğner mi) ÖLÇÜLMEDİ — sınav tekrarında kapı.
+- Şablon "link yoksa CTA ekleme" kuralı ile paket CTA çatışması canlıda ölçülmedi (sınav şablonsuz koştu).
+- Kota kapısı bayat okuma veriyor (17 %/3 %, 4 saat eski); beş tur sorunsuz koştu, gerçek kalan kota bilinmiyor.
+- Önceki devirden: zamanlayıcının başlıklı onay çağrısı canlıda hiç koşmadı; madde 16 kanal satırı; 11(b); S06 ret
+  mesajı arayüzde; "ysatisfa"; kısa video/fikir yüzeyi ölçülmedi.
 
 **TUZAKLAR:**
-- **Coolify: `main`'e push dağıtımı TETİKLEMİYOR** (auto-deploy açık ama 150 sn kuyruk boş kaldı —
-  ölçüldü). Deploy = Eray Coolify'da düğmeye basar. Watch path yok: üç uygulama da `main`'den.
-- `sector_pipeline` motor/denetçi/sentez modülleri konteynerde import EDİLEMEZ (`auditors.py:201`,
-  `parents[6]`); operatör CLI'si sunucudaki çalışma ağacından canlı DB'ye karşı koşar (12 Eylül kararı).
-- Canlı model çağrısı gerekirse anahtar `/root/.anthropic-key` (0600, 2026-09-23 Eray oluşturdu);
-  yalnız süreç ortamına verilir, dosyaya kopyalanmaz. Yerel `backend/.env`'de anahtar YOK.
-- Dış depo (`otomaix-sosyal-medya-arastirmasi`) commit'i pin'i bayatlatır → sektör CLI'si reddeder;
-  commit ederken pin aynı adımda güncellenir. G8 dış depoda `dfa55f8` olarak commit'lendi, pin ona
-  taşındı (`b355822`); dış deponun remote'u YOK (push edilmez). Eray'ın silmeleri DOKUNULMADI.
-- Mutasyonda `__pycache__` sil + `python -B`; geri dönüş dosya yedeğiyle.
-- `~/.claude/settings.json`'da Eray'ın commit'lenmemiş değişiklikleri — dokunulmadı.
+- Hakem turu: `run_codex_scan` arka planda (`run_in_background`, `CSS_CALL_TIMEOUT=1200s`), prompt Write tool ile
+  `~/.claude/tmp/<log-basename>.prompt`'a, SETUP fence her turdan önce (dosya trap'le silinir). Substrat eski
+  review/migration/test dosyalarını "sır" diye dışlıyor (yanlış pozitif sınıfı, promptta not düşüyor) — bulgu değil.
+- Kapanış turundan ÖNCE sınıf süpürmesi: kaldırılan alan adını grep'le, "her X kimlik alır" kümesini KODDAN say
+  (F1 bu yüzden 4 tur sürdü — memory `feedback_close_the_class_not_the_variant`).
+- Katalogdan sayma: `templates_data.py` 28 şablon tanımlı ama 6'sı canlı; önce vault, sonra DB (memory
+  `feedback_count_from_usage_not_catalog`).
+- Coolify: `main`'e push dağıtımı TETİKLEMİYOR; Eray düğmeye basar. Canlı model anahtarı `/root/.anthropic-key`.
+- Ücretli koşu öncesi tutar + açık onay (Eray 2026-09-25: "sizin hatanızın bedelini ödeyemem").
 
 # Risks
 
-- **Paket kuyumculuğa marka atandığı an üretime girer**; canlıdaki kod artık dalın kodu (`11366af`).
-  Atama henüz yok, etkisi sıfır.
-- Yetki belgesi numarası marka ayarlarında yok → üretimde numarasız "yetki belgesi … mağazamızda"
-  satırı çıkabilir (Eray kabul etti). **Evi:** `marka-dna-mimari-karar-dokumani.md` §6.B G8; tarih Eray'da.
-- Aktif paket kök perakende rehberini susturuyor (TASK Open Problems, tetik Plan 2 kapanışı).
-- Operatör kararı tek seferlik; yanlış bir metnin düzeltilmesi = ret + düzeltme turu (canlıda hiç koşmadı).
-- Geçerli iki eski Anthropic anahtarı (`…cV5…mwAA` Telegram bot, `…X0C…BgAA` 27 Temmuz'da
-  karantinaya alınmış ama İPTAL EDİLMEMİŞ) Claude geçmiş dosyalarında açık metin — Eray'a iptal önerildi.
+- **K-A (şimdilik):** kullanıcı isteği mevzuat yasaklarını, kişisel veriyi ve uydurma yasağını da ezer; azaltıcı
+  yalnız onay anında ifşa. Eray tetik/tarih vermedi; canlıya müşteri alınmadan yeniden değerlendirme Claude'un notu.
+- Paket bu hâliyle markaya atanırsa sınavdaki kritik hatalar gerçek paylaşımda çıkabilir — **atama 0. madde
+  uygulanmadan yapılmamalı** (Claude risk notu; Eray'a söylendi).
+- Paketli Katman-1 fixture'ları uygulamada yeniden temellenecek (kasıtlı); paketsiz yol bayt-bayt korunur (kapı).
+- Önceki devirden: yetki belgesi numarası (G8) · kök perakende rehberi susuyor · iki eski Anthropic anahtarı iptal
+  edilmedi.
 
 # Notes For Claude
 
-- **Kayda bakmadan "yok" deme:** bu oturumda iki kez oldu — "düzeltme turu" yolu (önceki devir notu,
-  ölçülmemişti) ve "sırrı yeniden üretelim" (değer 12 Eylül'de üretilmiş, `/root/otomaix-tg-approval.secret`).
-  Önce `docs/active/CURRENT.md`, TASK, runbook, security-review grep'le.
-- Eray soyut soruya "clarify" / sert tepki veriyor: önce somut örnek ve ham kanıt, sonra tek soru.
-- Dar talimatı genişletme (Katman-1 "başla" = yalnız Katman-1); her canlı yazımdan önce ayrı onay.
-- Hazırlık listesi ilk kez canlıda koştu; md-03/md-16 düzeltildi. Başka probların da ilk canlı koşumda
-  yanlış yere bakıyor olabileceği ÖLÇÜLMEDİ.
+- **Eray'ın sorduğunu cevapla; kısa tut; kanıtla gel.** Bu oturumda "madde ne demek", "seçmeli olunca hiç seçmeyebilir
+  mi", "türü kim belirleyecek", "hangi mod" soruları geldi — her biri ölçümle cevaplandı, öneri menüsü değil.
+- Sektör şablonu önerme; tür şablonun değil gönderinin özelliği (K-F). Kullanıcıya tür seçtirme yalnız sınav tür hatası
+  gösterirse.
+- `uyarilar` alanı YOK — `kural_uyumu` (kural başına karar). Bu adı kullanan eski cümle görürsen tarihçedir.
+- Commit: HANDOFF/TASK/spec oturum sonunda Eray onayıyla tek commit'te (bu dosyanın commit'i); push EDİLMEDİ.
 
 # Notes For Codex
 
-Bu dal review'sız merge edildi (Eray kararı). İleride bir review turu açılırsa dikkat listesi:
-`operator_decisions.uygula` (karar dosyası dış girdi — işlem kümesi kapalı mı, motorun başka kapısını
-aşabiliyor mu) · `runs.record_operator_resolution` (f-string SQL; kolon adları sabit eşlemeden) ·
-`readiness` md-03/md-16 değişiklikleri ve parmak izinin operatör kaydını kapsaması · sentez geçici
-sahne dizini ve `_HUKUKI_DIL_RE`/`_NICEL_IDDIA_RE` karmaşıklığı (önceki notlar).
+Uygulama planı review'ında dikkat: (1) `resolve_post_type` üç dal × gün türü × ürün türü matrisi; (2) `kural_uyumu`
+kapısı: kimlik tamlığı + karar değeri + kanıt alanları + gün bloğu `G*` kimlikleri (üretilmiş matris); (3) şema-2
+okuyucu geriye uyumlu (sürüm 1 dokuz alanla okunur), geri dönüş tabanı runbook satırı + `package_read_error` testi;
+(4) paketsiz yol bayt-bayt (Katman-1); (5) `KALIBRASYON-2.md` sınavdan önce sabit, eski ölçüt aynen yanında.

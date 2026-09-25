@@ -2,7 +2,7 @@
 title: Sektör Bilgi Paketi — Plan 2 (işletim hattı)
 status: active
 started: 2026-08-27
-last-touched: 2026-09-23
+last-touched: 2026-09-25
 blocked-by: null
 source_plan: docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md
 ---
@@ -984,6 +984,67 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Decisions Log
 
+## 0. madde — Eray'ın üç cevabı ve ölçülen zemin (2026-09-25, on altıncı oturum)
+
+**Soru 2 — istek kuralla çatışırsa:** Eray: **kullanıcı isteği geçerli.** Gerekçe: gönderi yayınlanmadan önce
+kullanıcı onay vermek zorunda olacak; sorumluluk kullanıcıda. Spec §4.6 / K-118 ile aynı yönde (paket,
+kullanıcının somut isteğinin ALTINDA). **Açık kalan:** K-119 (2026-08-23, Eray) `anma` satış yasağını
+kullanıcı isteğinin ÜSTÜNE koyardı — tek istisna. **Eray (aynı oturum, soruldu): İSTİSNA KALKSIN** — anma
+günlerinde de kullanıcı isteği geçerli; model istenen satış çağrısını yazar, sorumluluk onay veren kullanıcıda.
+K-119 bu kararla İPTAL; anma varsayılanı ("satış çağrısı kullanma") kullanıcı açıkça istemedikçe sürer.
+S08/S09 çıktıları yeni kurala göre kritik hata sayılmaz (istek açıkça satış istemişti).
+Kanıt: S08 isteği "yeni koleksiyon indirimimizi hatırlat" · S09 isteği "'18 Mart'a özel fiyat' yaz" — ikisinde
+de satış İSTEKTEN geldi. S10 (Cumhuriyet Bayramı, pakette `kutlama`, K-119 satırı talimattaydı): istek
+"her kanaldan satış çağrısı yap" → paketli metin satış çağrısı YAZMADI, paketsiz "hemen sipariş verin" yazdı
+(`olcum/sonuc-sinav/b-sonuc.json` S10). Yani açık "kullanıcı isteğinin üstündedir" satırı talimatta varken
+uyuluyor; yokken uyulmuyor.
+
+**Soru 3 — anma günleri:** Eray: **hem pakette hem takvimde; pakette olup takvimde olmayan gün takvime de
+işlenir.** Ölçüldü (bu oturum, canonical DB + `normalize_special_day_key`): takvim 2026 = 25 gün, paket = 16;
+**pakette olup takvimde olmayan gün 0** (yazım kapısı `_check_special_day_keys` zaten reddeder); **takvimde
+olup pakette olmayan 9 gün:** 18 Mart, 23 Nisan, 1 Mayıs, 19 Mayıs, 15 Temmuz, Okula Dönüş, 30 Ağustos,
+10 Kasım, Black Friday. Takvim kategorisi sözlüğü {national, religious, commercial} — "anma" kategorisi YOK;
+anma türü yalnız paketin `ozel_gun[].tur` alanında yaşar. Yıllık n8n takvim işi 18 Mart ve 10 Kasım'ı her yıl
+üretiyor (`turkey-calendar-update.json`, ölçüldü). Operatör kararı yolu `ozel_gun` ekleyebiliyor
+(`operator_decisions.py:290`, beş yuva: tur · mesaj_ekseni · kanca · cta · gorsel_vurgu). **Ev: paketin
+2. sürümü** (madde 14 ile aynı). Anma sayılacak günler Eray'a soruldu (öneri: 18 Mart · 10 Kasım · 15 Temmuz).
+
+**Devamı (aynı oturum) — dört karar daha + tasarım notu yazıldı:** K-D zorunlu/seçmeli ayrımı kabul ·
+K-E alt sınır YOK ("her gönderide bir kanca ve bir CTA" reddedildi) · K-F sektör şablonu YOK (vault: 22 şablon
+2026-04-15'te terk; canlı 81 gönderide sektör şablonu 6, hepsi terk öncesi) · K-G gönderi türü: özel gün → kod
+(gün kaydı) · ürün modu → kod varsayılanı (product→satış, service→hizmet) + modelin "bilgi" istisnası · genel
+mod → model; çıktıya `gonderi_turu` + `uyarilar` yazılır; kullanıcıya alan sorulmaz. Canlı dağılım: ürün modu 39 ·
+genel 36 · özel gün 6. **Tasarım notu:** `docs/specs/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md`
+(status: draft; Codex hakem turu KOŞULMADI; uygulama BAŞLAMADI). **Codex hakem Tur 1 (18:11–18:15 UTC): needs-attention — 1 critical + 3 high, hepsi
+doğrulandı.** F1 (critical: K-A yasal/uydurma sınırlarını isteğe açıyor) → **Eray kararı (aynı gün): şimdilik
+her kuralın üstünde kalır, ama onay anında çiğnenen kural kullanıcıya gösterilir** — nota §3.12 (gönderi satırına
+`gonderi_turu` + `uyarilar` kolonları; onay yüzeyi kural adıyla gösterir) olarak bağlandı; eski spec §4.6 madde 1
+kullanıcı isteği karşısında kalktı. F2 (yeni alan 1. sürümü okunamaz kılar) → şema sürümüne bağlı alan kümesi.
+F3 (`generation_stamps`te kolon yok) → gönderi satırı kolonları, iki şema değişikliği açıkça yazıldı. F4 (sınav
+kapısı yeniden adlandırmayla geçilebilir) → eski ölçüt karşılaştırma, yeni ölçüt `KALIBRASYON-2.md` ayrı kapı.
+Plan notu (genel modda kod süzemez) → iki katmanlı süzgeç. **Tur 2 (18:27–18:30):** F2/F3/F4 kapalı; F1 açık (serbest uyarı listesi boş bırakılabilir) → kural-kural zorunlu
+beyan `kural_uyumu` + kod kapısı + sınavda "sessiz ihlal 0" kapısı; iki yeni high: N1 öncelik satırı marka DNA/ürün
+bilgisini düşürmüş → §4.6 madde 2–3 korunarak yeniden yazıldı; N2 2. sürüm aktifken kod geri dönüşü → geri dönüş
+tabanı + md-18 bağı (2. sürüm aktivasyonu md-18 geri alma denemesinden sonra). **Tur 3 (18:33–18:35):** N1 + plan notu kapalı; F1 (gün kuralları kimlik kümesi dışında) → küme = basılan her
+bağlayıcı kural; N2 (md-18 bağı döngüsel) → taban runbook kuralı, altına inmek sessiz değil (`package_read_error`
+yönetici bildirimi, ölçüldü), md-18 bağı kaldırıldı; N3 (yasak kelime çelişkisi) → tek sıra: açık istek kazanır,
+ifşa evi Marka DNA işi. **Tur 4 (18:37–18:40):** N2/N3/PN-2 kapalı; F1 dar (anma saygı kısıtı numarasız) → gün bloğunun bağlayıcı
+satırları render'dan eksiksiz sayıldı; N4 (kapsam kuralı `uyarilar`a yazdırıyordu) → `kural_uyumu`, atıf sınıf olarak
+süpürüldü. **Tur 5 (18:41–18:43): `approve`** — on kapanış teyit, yeni bulgu yok. **Not `spec-approved`,
+`codex_review_status: approved`, 5 tur.** Sıradaki: `/write-plan-claude-codex` (uygulama planı) → uygulama → sınav
+tekrarı (`KALIBRASYON-2.md` önce). Ham log
+`~/.claude/logs/otomaix--ffc87809/2026-09-25-feat-sektor-bilgi-paketi-plan2.md`. **Ayrımın unutulan yedi kalemi Eray onayıyla
+nota işlendi** (§3.3-A kapsam kuralı + iki talimat kuralı + kanal/hizmet listesi · §3.4 gün kaydı yuvaları ayrı yetkiyle ·
+§3.7 ton paragrafı bölünmesi + takvim temaları kopya temizliği · §3.9 yeni şema alanı `sektor_gercekleri` ·
+§3.10 video havuzları kayıt · §3.11 tam liste). Şema bugün dokuz alanla kapalı; onuncu alan tek şema değişikliği. Kanıt hattı düzeltmesi: "paketli seçim 2/4"
+hakem tercihiydi, kalıp kullanımı değil — kalıp kullanımını hiçbir ölçüm saymamıştı; 19 çıktı elle okundu
+(kanca 1, CTA 4 açık).
+
+**Soru 1 — hangi maddeler zorunlu:** Eray "madde" kavramını sordu. Somut karşılık: modele giden blok altı
+bölüm (`_CORE_SURFACE_FIELDS`): kapsam · ton ve dil (3 kural) · kanca 4 · CTA 9 · takvim temaları 5 ·
+yasaklar 5; tepesinde K-04 "2-3 öğe seç" talimatı. Öneri (Eray vetosuna açık): **zorunlu** = ton ve dil'in üç
+kuralı + yasaklar 5 + kanal kuralı; **seçmeli** = kanca · CTA · takvim temaları · görsel dil.
+
 ## n8n Telegram onay kimliği bağlandı (2026-09-25, on beşinci oturum, Eray onayıyla)
 
 - **Etki taraması önce yapıldı:** onay adresini (`/webhook/telegram-content-approval`) iki yer çağırıyor —
@@ -1817,7 +1878,9 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
       `USAGE_INSTRUCTION` ve "rakamı yazma" kuralı talimat metninde okundu.
     - *Bağlı maddeler:* 2 (gramaj çelişkisi) · 15 (kullanıcı önceliği) · 16 (olmayan kanal) · 17 (uydurma bilgi)
       bu sorunun belirtileridir; 0 çözülmeden ayrı ayrı yamanmaz.
-    - *Ev:* tasarım değişikliği — Eray onayıyla sonraki adım.
+    - *Ev:* **TASARIM ONAYLI (2026-09-25):** `docs/specs/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md`
+      (`spec-approved`; Codex 5 tur, son tur approve; uygulama BAŞLAMADI). Sıradaki: `/write-plan-claude-codex` →
+      uygulama → sınav tekrarı. Madde 14 (anma günleri) ve 17 ("22 ayar saf değil") bu tasarımın 2. sürüm içeriğine bağlı.
 
   **Küme 1 — Kod/motor düzeltmesi (içerik doğru olsa da üretimde bozuluyor).** 1, 2 ve 11 için EV YOK —
   Eray karar verir. 12'nin evi var (kabul edilmiş tetik: Plan 2 kapanışı).
