@@ -1788,6 +1788,120 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 
 # Open Problems
 
+- **[AÇIK 2026-09-25] Kuyumculuk paketi (`66654971…`, sürüm 1) yeterlilik analizi — 13 bulgu.** Claude +
+  Codex analizi birleştirildi; Codex iddiaları kod/veriye karşı ölçüldü ("Ölçüm" satırları bu oturumun
+  komutlarıdır). **Hangi kümeden başlanacağı Eray'da.** Her madde: Sorun · Nereden çıkıyor · Çözüm · Ölçüm.
+  Canlı paylaşım oluşturmadan ölçüm yolu: (A) kural taraması (model yok) → (B) kuru üretim + otomatik denetim
+  (gönderi kaydı yok; birim ölçülmüş 0,034 USD/çağrı, 100 çağrı ≈ 3,4 USD **tahmin**) → (C) kör insan
+  değerlendirmesi. Başarı eşiği B'den SONRA konur.
+
+  **Küme 1 — Kod/entegrasyon (içerik doğru olsa da üretimde bozuluyor). EVİ YOK — Eray karar verir.**
+
+  - **1. CTA alternatifleri kanal filtresinde kayboluyor** (Codex)
+    - *Sorun:* Yılbaşı, Anneler Günü ve Sevgililer Günü CTA'sı iki alternatifi `·` ile tek metinde taşıyor;
+      markada alternatiflerden birinin kanalı varsa bile ikisi birden düşüyor.
+    - *Nereden çıkıyor:* Sentez alternatifleri tek metne birleştirmiş + `filter_channel_dependent`
+      (`sector_packages.py:448`) metindeki bütün etiketleri birlikte şart koşuyor. Motorun yapısal kontrolü
+      bu anlam uyuşmazlığını yakalamıyor.
+    - *Çözüm:* Alternatifleri ayrı öğe olarak temsil et, her birine kendi kanal koşulunu uygula; bütün kanal
+      kombinasyonlarını nihai paket üzerinde sına.
+    - *Ölçüm:* 4 kanalın tüm alt kümeleri × 3 gün = 48 bileşim → 24'ünde uygun alternatif düşüyor (günde 8).
+
+  - **2. Gramaj ve teknik bilgi talimatları çelişiyor** (Codex)
+    - *Sorun:* Paket "ayar, gramaj, taş niteliği açıkça söylenir" + gram fiyatı istiyor; genel kural
+      "gr/mm rakamını caption'a yazma, his diline çevir" diyor.
+    - *Nereden çıkıyor:* Prompt entegrasyonu — iki talimat aynı istekte birleşiyor. Paket veya kaynak hatası değil.
+    - *Çözüm:* Zorunlu ürün bilgilerini ve doğrulanmış nitelikleri genel "teknik ayrıntıyı sadeleştir"
+      kuralından ayır; birleşik prompt üzerinde çelişki kontrolü yap.
+    - *Ölçüm:* `prompt_builder.py:430-434` okundu; kural yalnız ürün açıklaması girilmiş üretimde devreye girer.
+
+  - **12. Paket kök perakende rehberini susturuyor** (Codex; mevcut madde, aşağıda)
+    - *Sorun:* Paket aktifken genel perakende rehberi (623 kr: sosyal kanıt vb.) hiç basılmıyor; yararlı
+      kuralların bir kısmı pakete aktarılmamış.
+    - *Nereden çıkıyor:* Entegrasyon tasarımı (paket rehberin YERİNE geçer, `ai.py:505-518`) + sentezin kapsam seçimi.
+    - *Çözüm:* Korunması gereken genel kuralları belirle, paketli üretimde de kapsa; paketli/paketsiz prompt
+      karşılaştırmasına "kaybolan rehberlik" kontrolü ekle.
+    - *Ölçüm:* Mevcut maddede ölçülmüş. Tetik: Plan 2 kapanışı.
+
+  **Küme 2 — Operatör kararıyla giren maddeler (kararı Eray yeniden verir). Tarih Eray'da.**
+
+  - **4. Gram fiyatı zorunluluğu bütün fiyatlı paylaşımlara genellenmiş** (Codex)
+    - *Sorun:* Kural her fiyatlı sosyal medya paylaşımında gram fiyatı istiyor; incelenen kaynak bu kapsamı kanıtlamıyor.
+    - *Nereden çıkıyor:* Operatör kararı S3/3a; tek kaynaklı madde için denetçi soru açmış, sentez yeniden doğrulama önermiş.
+    - *Çözüm:* Mağazadaki fiyat gösterimi ile sosyal medya reklamı yükümlülüğünü ayrı doğrula; yalnız kaynağın
+      desteklediği kapsamı pakete al.
+    - *Ölçüm:* Karar kaydında "operatör eklemesi — araştırma kaynağı yok". Mevzuatın sosyal medyayı kapsayıp
+      kapsamadığı Claude tarafından KONTROL EDİLMEDİ.
+
+  - **6. İndirim kuralı uygulanabilir ayrıntı vermiyor** (Codex)
+    - *Sorun:* "Mevzuata uygun göster" demekle yetiniyor; model hangi fiyatı nasıl göstereceğini çıkaramaz.
+    - *Nereden çıkıyor:* Operatör kararı S1 "süre yazılmasın" — bilinçli tercih; denetçiler süreyi bulmuştu.
+    - *Çözüm:* Genel ifade korunacaksa geçerli fiyatlandırma kuralını başka doğrulanmış kaynaktan üretime ver;
+      indirim senaryosunu beklenen hesap ve gerekli verilerle sına.
+    - *Ölçüm:* Karar kaydıyla doğrulandı.
+
+  - **7. Öğretmenler Günü alanları birbirini tutmuyor** (Claude + Codex)
+    - *Sorun:* Tür "ticari fırsat", CTA "içerik-önerilmez", görsel açık takı kutusu (Anneler Günü görselinin kopyası).
+    - *Nereden çıkıyor:* Operatör kararı S6 "ticari fırsat olarak girsin, satın alma çağrısı olmadan" →
+      CTA'sızlık kasıtlı. Sentez günü elemişti (araştırmada dayanak yok, hediye etiği tartışmalı).
+    - *Çözüm:* Amaç satışsız teşekkürse tür, mesaj, CTA ve görseli birlikte buna hizala; beş alanı tek senaryo
+      olarak denetle.
+    - *Ölçüm:* Karar kaydıyla doğrulandı; kalan uyumsuzluk tür etiketi + takı görseli.
+
+  - **8. Doğal/lab pırlanta etiketsiz yan yana görseli riskli** (Codex)
+    - *Sorun:* `gorsel_kodlar`daki görsel "görünüşten ayırt edilebilir" izlenimi verebilir; sentetik ibare
+      yükümlülüğüyle gerilimli.
+    - *Nereden çıkıyor:* Sentez "muhtemel uydurma" notuyla reddetmişti (açık soru 10); pakette var.
+    - *Çözüm:* Görünüşten ayrım izlenimini önle; ürün türü ile gönderi açıklamasının tutarlılığını ve sentetik
+      ibaresinin son çıktıda gerçekten bulunmasını sına.
+    - *Ölçüm:* Ret kaydı görüldü; hangi kararla geri girdiği AÇILMADI. Tek başına kesin ihlal değil.
+
+  **Küme 3 — Paket içeriği. EV: paketin 2. sürümü** (md-18 ile aynı ev).
+
+  - **5. SPK dayanağının fiziki altına uygulanabilirliği doğrulanmamış** (Claude + Codex)
+    - *Sorun:* Madde doğrulanmamış bir hukuki gerekçe taşıyor.
+    - *Nereden çıkıyor:* Denetçiler kapsam belirsizliğini bildirmiş; operatör kararı S2 ile "doğrulanmadı" notuyla eklendi.
+    - *Çözüm:* Getiri garantisi yasağını koru; doğrulanmamış gerekçeyi üretim talimatından ayır; kesin ifade için
+      birincil kaynak ara.
+    - *Ölçüm:* Karar kaydıyla doğrulandı.
+
+  - **9. Kapsamdaki ürünlerin pakette karşılığı yok** (Claude)
+    - *Sorun:* Gümüş ve ziynet kapsamda var, başka hiçbir bölümde yok; Reşat/Cumhuriyet altını hiç yok;
+      bilezik yalnız bir takvim temasında.
+    - *Nereden çıkıyor:* Paket derlemesi — kapsam yazılmış ama kanca, CTA, görsel ona göre doldurulmamış.
+    - *Çözüm:* Her kapsam ürününün en az kanca + CTA + görselde karşılığı olsun; bunu sayılabilir otomatik kontrole bağla.
+    - *Ölçüm:* Paket metninde terim terim tarandı.
+
+  - **10. Çeşitlilik düşük, görseller kopya** (Claude + Codex)
+    - *Sorun:* 16 özel gün = 8 farklı içerik (9 bayram birebir aynı); görsel vurgu 4 metin; bayram görseli
+      (hediye kutusu/pırlanta) çeyrek/gram altın mesajıyla uyuşmuyor.
+    - *Nereden çıkıyor:* Nihai paket / operatör eklemeleri; ayrı gün kaydı ayrı içerik fikri demek değil.
+    - *Çözüm:* Gün sayısı ile özgün içerik sayısını ayrı ölç; ortak bayram kalıbını bir kez say; farklılaştırmayı
+      kullanım ihtiyacına göre yap (önce bayram görseli).
+    - *Ölçüm:* Veride gruplanarak sayıldı: 8 grup, 4 görsel metni.
+
+  - **11. 115 kararın 76'sında araştırma kaynağı boş** (Codex)
+    - *Sorun:* Kaynaklı bilgi ile insan tercihi aynı güvenceyle görünüyor. 76 yanlış bilgi olduğu anlamına GELMİYOR.
+    - *Nereden çıkıyor:* Operatör ekleme yolu maddeyi "araştırma kaynağı yok" etiketiyle yazıyor; mevcut
+      kaynak bağları korunmuyor.
+    - *Çözüm:* Operatör eklemelerinde kaynak bağlarını koru; kaynaklı / kaynaksız öneri / ürün tercihini ayrı
+      göster; sonradan eklenen metni de nihai içerik denetiminden geçir.
+    - *Ölçüm:* `decision_log` sayıldı: 115 kararın 76'sında `kaynak_iddia` yok.
+
+  **Başka evdeki maddeler**
+
+  - **3. Yetki belgesi kuralı uygulanamıyor** (Claude + Codex) — EV: marka DNA karar dokümanı §6.B G8 (mevcut madde).
+    - *Sorun:* Numara ve unvan marka verisinde yok; model numarasız "yetki belgesi … mağazamızda mevcuttur" uyduruyor.
+    - *Nereden çıkıyor:* Marka verisi + üretim kodu; kural iki denetçide doğrulanmış, veri üretime ulaşmıyor.
+    - *Çözüm:* Numara ve unvanı doğrulanmış marka verisi olarak sağla; eksikken uydurma ifadeyi engelle.
+    - *Ölçüm:* 23 Eylül Katman-2 kör örneklemde görüldü.
+
+  - **13. Yeterlilik kanıtı dar** (Claude + Codex) — EV: Task 19 Step 12-13 pilot ölçümleri.
+    - *Sorun:* Tek kör değerlendirme 4 konu; paketli tercih 2/4.
+    - *Nereden çıkıyor:* Kabul süreci; şema ve karar kapılarının geçmesi içerik kalitesini kanıtlamıyor.
+    - *Çözüm:* Yukarıdaki A/B/C yolu; doğruluk, uygulanabilirlik ve çeşitliliği ayrı ölç.
+    - *Ölçüm:* `K2-KOR-ORNEKLEM-23e19d03.md`.
+
 - **[KAPANDI 2026-09-23] Modele giden K-129 metinleri motorla hizalandı.** Dış depo `7fb81c3`
   (sentez sözleşmesi 2.8: üç yer + ADIM 2 tablosunun altında motorun tam kelime listesi · denetçi
   sözleşmesi 2.6: örneklem önceliği) + otomaix'te `synthesis.py` satırı ve pin. Sözleşmedeki 43 örnek

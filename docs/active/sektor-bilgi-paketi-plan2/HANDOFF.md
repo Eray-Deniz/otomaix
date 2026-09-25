@@ -18,6 +18,8 @@ koşuyor. **Kuyumculuğa atanmış marka YOK** → paket henüz hiçbir üretime
 3. **md-18 (geri alma canlı denemesi):** Claude önerdi → paketin **2. sürümüne** bırak (bugün
    `deaktive-et` tek paketi arşivler, yeniden aktive EDİLEMEZ, kuyumculuk paketsiz kalır).
    **Eray ONAYLADI 2026-09-25.**
+**2026-09-25 — paket yeterlilik analizi (13 bulgu, 3 küme):** TASK Open Problems ilk madde; hangi
+   kümeden başlanacağı Eray'da. Ölçüm yolu A/B/C canlı paylaşım oluşturmaz.
 4. Pilot ölçümleri + koşu raporu (Task 19 Step 12-13) → Task 20 kapanış → `/finish-branch-claude-codex`.
 
 **Bugün (2026-09-23) ne oldu — sırayla:** K-129 metinleri modele hizalandı (dış depo `7fb81c3`,
