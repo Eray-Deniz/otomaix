@@ -6,6 +6,11 @@
   *(Buraya durum cümlesi YAZILMAZ — kanonik ayrım gereği status TASK.md'nin malıdır ve
   burada tutulan kopya her görevde bayatlıyordu: Task 8 → 9 → 10 → 11 dört kez.)*
 
+- **paket-zorunlu-kurallar-ve-gonderi-turu** — Plan 2 madde 0'ın uygulaması: paket kuralları zorunlu blok,
+  gönderi türü, kural beyanı + ifşa, paketin 2. sürümü (22 görev). **Durum:**
+  `docs/active/paket-zorunlu-kurallar-ve-gonderi-turu/TASK.md`; oturum devri `HANDOFF.md`. Yürütme bu görevde
+  açık; Plan 2'nin yürütme satırları park (Plan 2 TASK.md `# Execution State`).
+
 - **denetci-surec-izolasyonu** — Denetçi alt süreçlerini ayrı bir işletim sistemi
   kullanıcısının kutusuna almak, sonra ikisine de ağ vermek (2026-09-12 güvenlik
   review'ının S-2 kalıntısı). **2026-09-18: 15/15 madde indi, K-14 kapısı açıldı — Plan 2'nin

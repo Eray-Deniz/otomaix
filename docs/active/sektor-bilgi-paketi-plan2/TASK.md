@@ -179,14 +179,21 @@ risk kabulüyle** alındı (2026-08-27); o an son iki düzeltme partisi incelenm
 
 # Execution State
 
-- execute_mode: inline
-- execute_started: 2026-08-30 11:36
-- execute_start_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
-- ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
-- execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
-- execute_branch: feat/sektor-bilgi-paketi-plan2
-- cp_count: 11
-- last_checkpoint_ref: 4a9d98f8ae30c5eb19f97e5fd2d5e31fda5eb361
+> **DURAKLATILDI (2026-09-25 20:3x UTC, Eray kararı "ayrı görev olarak aç").** Madde 0'ın uygulama planı ayrı
+> aktif görevde yürüyor (`docs/active/paket-zorunlu-kurallar-ve-gonderi-turu/`). Yürütücü `docs/active` altında
+> yürütme durumu taşıyan TAM BİR `TASK.md` ister (`ec_state_dir`), o yüzden Plan 2'nin satırları aşağıya GİRİNTİLİ
+> park edildi (girinti okuyucunun `^- ` desenine takılmaz). **Plan 2'ye dönüşte:** yeni görev `waiting-review`
+> ya da kapanmış olmalı (onun satırları kaldırılmış), sonra aşağıdaki satırların girintisi silinir — değerler
+> DEĞİŞTİRİLMEZ. Karar kaydı: Decisions Log "Madde 0 ayrı göreve alındı".
+>
+>     - execute_mode: inline
+>     - execute_started: 2026-08-30 11:36
+>     - execute_start_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
+>     - ledger_window_ref: a806e29a1ea6a2f82e097fb90fe9c6b8c07b7fb9
+>     - execute_review_log: /root/.claude/logs/otomaix--ffc87809/2026-08-30-feat-sektor-bilgi-paketi-plan2-execute.md
+>     - execute_branch: feat/sektor-bilgi-paketi-plan2
+>     - cp_count: 11
+>     - last_checkpoint_ref: 4a9d98f8ae30c5eb19f97e5fd2d5e31fda5eb361
 
 > **`cp_count` ile düz yazıdaki checkpoint NUMARASI aynı şey DEĞİLDİR — sapma değil, iki ayrı
 > sayaç (2026-09-11'de bir oturum açılışını yanılttı, o yüzden burada yazılı).** Numara KOŞAN
@@ -983,6 +990,17 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
   taşındı ve geri alındı: kaydı ikiye bölüyordu).
 
 # Decisions Log
+
+## Madde 0 ayrı göreve alındı (2026-09-25, on sekizinci oturum, Eray kararı)
+
+- **Karar:** madde 0'ın uygulama planı (`docs/plans/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md`) ayrı
+  aktif görevde yürür: `docs/active/paket-zorunlu-kurallar-ve-gonderi-turu/`. Aynı gün önce "plan mevcut görevde
+  kalsın" denmişti; o öneri Claude'undu ve yürütücünün görev başına TEK plan izlediği (`source_plan` +
+  `execute_start_ref` taşıyan tam bir `TASK.md`) kontrol edilmeden verilmişti. Kısıt gösterilince Eray ayrı görevi
+  seçti. Plan 2'nin yürütme satırları `# Execution State` altında girintili park edildi; dönüş yolu orada yazılı.
+- **Aynı günün kayda geçmemiş iki kararı (madde 0 "Ev" satırında vardı, burada kanonik):** (1) paketin 2. sürümü
+  yeni tam koşuyla, planın Aşama B'si olarak; (2) X2 (makbuz yarışı): "Kuralı yaz, kilidi koda bırak" — plan
+  `unresolved_high_severity_override: true`, Task 13'te zorunlu gerçek veritabanı yarış testi.
 
 ## 0. madde — Eray'ın üç cevabı ve ölçülen zemin (2026-09-25, on altıncı oturum)
 
@@ -1883,8 +1901,8 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
       `docs/plans/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (`plan-approved`; Codex ön-analiz + 4 review
       turu; `unresolved_high_severity_override: true` — X2 makbuz yarışı, Eray kararıyla Task 13 yürütme
       checkpoint'ine bırakıldı: "Kuralı yaz, kilidi koda bırak"). Eray kararı (aynı gün): paketin 2. sürümü **yeni tam
-      koşuyla**, planın Aşama B'si olarak. Uygulama BAŞLAMADI. Sıradaki: `/execute-plan-claude-codex` (bu plan bu
-      görevin içinde yürür; ayrı aktif görev açılmadı — Eray kararı). Madde 14 (anma günleri) ve 17 ("22 ayar saf
+      koşuyla**, planın Aşama B'si olarak. **Yürütme ayrı aktif görevde (2026-09-25, Eray kararı):**
+      `docs/active/paket-zorunlu-kurallar-ve-gonderi-turu/` — durum oradan okunur. Madde 14 (anma günleri) ve 17 ("22 ayar saf
       değil") bu tasarımın 2. sürüm içeriğine bağlı (plan Task 19).
 
   **Küme 1 — Kod/motor düzeltmesi (içerik doğru olsa da üretimde bozuluyor).** 1, 2 ve 11 için EV YOK —
