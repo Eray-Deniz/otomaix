@@ -26,7 +26,11 @@ tam koşuyla üretilip sınavdan geçtikten sonra etkinleşsin. Spec: `docs/spec
 
 # Current Status
 
-Yürütme açık (2026-09-25). "Nerede kalındı" git defterinden okunur (`ec_ledger_view`, commit footer'ları).
+Yürütme açık. "Nerede kalındı" git defterinden okunur (`ec_ledger_view`, commit footer'ları).
+**2026-09-25 oturum sonu: Task 1–6 indi; Eray talimatıyla Task 6 sonrası DURULDU.** Checkpoint 2 kapanmadı:
+F2 (Open Problems) için Eray kararı verildi (dar muafiyet), uygulama sıradaki oturumun İLK işi. Task 7 başlamadı.
+`last_checkpoint_ref` hiç ilerletilmedi (iki checkpoint de approve almadı) → sıradaki checkpoint tabanı hâlâ
+`execute_start_ref`.
 
 # Decisions Log
 
@@ -39,7 +43,15 @@ Yürütme açık (2026-09-25). "Nerede kalındı" git defterinden okunur (`ec_le
   yeniden açıldı → sistemik-sınıf DUR → Eray: riski kabul et, devam (override; Open Problems'ta).
 - Task 4 kararı (yürütücü): araştırma şablonuna 9. alan BAŞLIĞI açılmadı — `brief_doctor` alan başlıklarını ve
   Bölüm C iddia hücrelerini 8 alanlık kapalı kümeye bağlar (`test_temel_alanlar_pinlenmis_sablondan_okunur`),
-  mevcut üç kaynak raporda alan yok; şablon adı bir notla taşır, sentez alanı kaynaklı iddialardan türetir.
+  mevcut üç kaynak raporda alan yok; şablon adı bir notla taşır. (Sentezin alanı doldurması aşağıdaki
+  2026-09-25 kararıyla kalktı.)
+- Checkpoint coalesce (Eray): T4 + CLI düzeltmesi + T5 + T6 checkpointleri Task 6 sonrasında TEK turda koşuldu.
+- **Sektör gerçekleri yalnız operatör kararıyla girer (Eray, checkpoint 2 F2 tur 1):** sentez alanı HER ZAMAN
+  `["içerik-önerilmez"]` yazar, kaynaklı doğruları `onay_ozeti`nde iddia kimliğiyle önerir (dış depo `5ecf2d9`,
+  pin `531ef92`). Reddedilen seçenek: motora `kapsam`/`yasaklar` → `sektor_gercekleri` köprüsü.
+- **F2 tur 2 kararı (Eray): dar muafiyet** — `sektor_gercekleri` alanında YALNIZ birebir `içerik-önerilmez`
+  öğesi kaynak bağı istemez; gerçek doğrularda alan/kaynak bağı aynen. Reddedilen: alanı şema-2'de isteğe bağlı
+  yapmak (spec "boş olmayan liste" hükmünü değiştirirdi). Uygulanmadı — Open Problems F2.
 - Plandan devralınan kararlar: 2. sürüm yeni tam koşuyla (Aşama B) · X2 "Kuralı yaz, kilidi koda bırak"
   (`unresolved_high_severity_override: true`; Task 13 gerçek veritabanı yarış testi zorunlu).
 
@@ -53,8 +65,18 @@ Yürütme açık (2026-09-25). "Nerede kalındı" git defterinden okunur (`ec_le
   metninde yalnız Latin harf·rakam·noktalama·sembol·boşluk; canlı paketin 15.157 karakterinin 0'ı dışında —
   seçilmedi). Ev: final Codex incelemesi (Adım 11) bu override'ı yeniden değerlendirir; yeniden açılma koşulu:
   paket içeriğine üçüncü taraf ham metni girdiği gün ya da sınavda tür uyuşmazlığı görülürse.
-- **Task 19 ön koşulu — CLI aktif paket biçimi (plan dışı kusur, 2026-09-25).** `sector_pipeline_cli._aktif_paket`
+- **[AÇIK — sıradaki oturumun ilk işi] F2 (high, Codex checkpoint 2) — zorunlu boş sektör gerçeği motorda
+  bloke eder.** Sentezin yazdığı `sektor_gercekleri: ["içerik-önerilmez"]` birimi ilk adayda (aktif paket yok ya
+  da aktif şema-1) `ekle` kararı ister; `engine.py::ekle_bagini_coz` her `ekle` için aynı alanın denetçi satırı +
+  araştırma iddiasını arar, bulamaz → birim silinir → boş liste şema-2 kapısından düşer → `blocked`; operatör yolu
+  motordan SONRA açıldığı için kurtaramaz (Task 19 DUR-1). Karar verildi: dar muafiyet (Decisions Log). Codex'in
+  saydığı dokunulacak yerler: `synthesis.py::_kimlik_bagla`, `identity.py::check_unit_integrity`,
+  `engine.py::ekle_bagini_coz` + `_nihai_icerik`, aynı kalıp `engine.py::_yeni_oge_cogunlugu`, operatör yolu.
+  Kabul: aktif paket YOK ve aktif ŞEMA-1 için sentez→motor→operatör uçtan uca test (kaynaklarda sektör-gerçeği
+  alanı olmadan) + muafiyetin gerçek bir doğruya genişlemediğini gösteren negatif test; sonra checkpoint 2
+  kapanış turu (tur 3).
+- **Task 19 ön koşulu — CLI aktif paket biçimi (plan dışı kusur, 2026-09-25) — DÜZELTİLDİ (`354a536`).** `sector_pipeline_cli._aktif_paket`
   aktif paketi yalnız içerik olarak veriyordu; sentez (`_aktif_birimler`, EK-H'deki `unit_id`'ler) ve motor
   (`_aktif_ozel_gunler`) `{schema_version, content, decision_log}` sarmalı okur → aktif paket varken ikinci koşu
   sentezde düşerdi. Düzeltme ayrı commit (`T0-aktifsarmal`); denetçi paketi yalnız içeriği almaya devam eder.
-  Ek (Codex tur 1 notu): aktif şema-1 + yeni aday şema-2 yolunun uçtan uca motor testi yok — Task 19'dan ÖNCE eklenir.
+  Kalan: aktif şema-1 + yeni aday şema-2 yolunun uçtan uca motor testi — F2 düzeltmesinin kabul testiyle AYNI iş.

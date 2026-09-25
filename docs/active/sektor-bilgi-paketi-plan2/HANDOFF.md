@@ -14,27 +14,14 @@ iki aşama). Hat planı (yarım): `docs/plans/2026-08-27-sektor-bilgi-paketi-pla
 # Current State
 
 Bu oturumda uygulama planı yazıldı ve onaylandı; **kod DEĞİŞMEDİ**. Kuyumculuk paketi 1. sürüm canlıda aktif, markaya
-atanmamış. **Blocked: evet — tek karar:** yürütücü görev başına TEK plan izliyor (aşağıda); Eray kararı gerek.
+atanmamış. **Blocked: hayır** — karar verildi (ayrı görev).
 
 # Resume From
 
-**İlk iş — Eray'a sor (yürütme durumu çakışması, ölçüldü 20:2x):** `/execute-plan-claude-codex` planı görevin
-`TASK.md` frontmatter'ındaki `source_plan`'dan okur (`ec_plan_path`) ve `docs/active` altında `- execute_start_ref:`
-taşıyan TAM BİR `TASK.md` ister (`ec_state_dir`). Bu görevin `TASK.md`'si Plan 2'yi gösteriyor ve Plan 2'nin yürütme
-durumunu taşıyor (`# Execution State` bölümü: `execute_mode` · `execute_started` · `execute_start_ref` ·
-`ledger_window_ref` · `execute_review_log` · `execute_branch` · `cp_count` · `last_checkpoint_ref`; 2026-08-30'dan). Eray bugün
-"plan mevcut görevde kalsın" dedi — bu öneri Claude'undu ve bu kısıt kontrol EDİLMEDEN verildi. Seçenekler:
-- **(Öneri) Ayrı aktif görev:** `docs/active/paket-zorunlu-kurallar-ve-gonderi-turu/` (source_plan = yeni plan);
-  Plan 2'nin `# Execution State` satırları bu `TASK.md`'den çıkarılıp Decisions Log'a "duraklatıldı, geri konacak
-  satırlar" olarak yazılır (Plan 2'nin kalanı zaten Eray'ın video sistemi değişikliğine bağlı).
-- Aynı görev: `source_plan` geçici olarak yeni plana, Plan 2 satırları park — geri dönüşte iki yönlü elle değişim.
-Karar sonrası: `/execute-plan-claude-codex docs/plans/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md`
-(öneri: görev başına alt ajan — 2026-09-08 "bölerek dispatch" kararı). Task 1–2 commit'siz, Task 3'ün atomik
-commit'inde iner (`merged-into T3`).
-
-İlgili dosyalar: plan · spec · `apps/social/backend/app/services/{sector_content_schema,sector_packages}.py` ·
-`app/core/{prompt_builder,caption_generator}.py` · `app/routers/posts.py` · `app/services/short_video.py` ·
-`shared/db/migrations/` (sıradaki 038) · `shared/n8n-workflows/telegram-content-approval.json`.
+**Madde 0 ayrı görevde yürüyor (Eray kararı 2026-09-25, ikinci oturum):**
+`docs/active/paket-zorunlu-kurallar-ve-gonderi-turu/` — devir notu orada; Task 1–6 indi, sıradaki iş F2 düzeltmesi.
+Bu görevin yürütme satırları `TASK.md` `# Execution State` altında girintili park; dönüş yolu orada yazılı.
+Aşağıdaki bölümler madde 0 planının YAZILDIĞI oturuma aittir (tarihsel).
 
 # Verification
 
