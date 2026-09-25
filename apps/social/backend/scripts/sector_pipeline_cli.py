@@ -546,7 +546,14 @@ async def _kosu_satiri(conn, run_id: str):
 
 
 async def _aktif_paket(conn, sector_id):
-    """Sektörün aktif paketi + karar birimleri görüntüsü (R6 tek üretici)."""
+    """Sektörün aktif paketi + karar birimleri görüntüsü (R6 tek üretici).
+
+    Aktif paket, tüketicilerinin okuduğu SARMAL biçimde döner:
+    `{schema_version, content, decision_log}` — sentez (`_aktif_birimler`, EK-H'de
+    `unit_id`'ler) ve motor (`_aktif_ozel_gunler`) bu anahtarları okur. 2026-09-25'e
+    dek yalnız içerik dönüyordu; ikinci koşu sentezde düşerdi (ilk koşuda aktif
+    paket yoktu, kusur görünmedi). Denetçi paketi yalnız içeriği alır (çağrı yerinde).
+    """
     satir = await conn.fetchrow(
         "SELECT content, decision_log, schema_version FROM social.sector_packages "
         "WHERE sector_id = $1 AND status = 'active'",
@@ -560,7 +567,12 @@ async def _aktif_paket(conn, sector_id):
     birimler = identity.decision_units(
         icerik, gunluk, schema_version=satir["schema_version"]
     )
-    return icerik, birimler, satir["schema_version"]
+    sarmal = {
+        "schema_version": satir["schema_version"],
+        "content": icerik,
+        "decision_log": gunluk,
+    }
+    return sarmal, birimler, satir["schema_version"]
 
 
 def _coz(deger):
@@ -738,7 +750,9 @@ async def _kos_denetim(conn, args) -> Sonuc:
         brief=brief,
         sources=kaynaklar,
         doctor_reports=raporlar,
-        active_package=aktif,
+        # Kör denetçi girdisi DEĞİŞMEZ: denetçi paketi bugüne dek yalnız içeriği
+        # taşıyordu; karar günlüğü (sentezin gerekçeleri) denetçiye gitmez.
+        active_package=aktif["content"] if aktif is not None else None,
         unit_snapshot=birimler,
         run_id=args.run_id,
         sector_id=satir["sector_id"],

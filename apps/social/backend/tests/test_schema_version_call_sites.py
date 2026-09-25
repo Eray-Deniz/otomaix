@@ -108,3 +108,48 @@ def test_synthesis_active_units_use_the_rows_version():
     eksik = {k: v for k, v in paket.items() if k != "schema_version"}
     with pytest.raises(synthesis.SynthesisFailed, match="schema_version"):
         synthesis._aktif_birimler(eksik)
+
+
+async def test_cli_active_package_is_the_wrapper_its_consumers_read(db):
+    """CLI aktif paketi sentez ve motorun okuduğu SARMAL biçimde verir.
+
+    Kusur (2026-09-25, Task 3 sırasında bulundu): `_aktif_paket` yalnız içerik
+    sözlüğünü döndürüyordu; `synthesis._aktif_birimler` `content` +
+    `decision_log` + `schema_version` okur (aksi hâlde `SynthesisFailed`),
+    motor `_aktif_ozel_gunler` `content` altından okur (aksi hâlde özel günler
+    boş görünür), sentez istemi EK-H'de `unit_id`'leri göstermek zorundadır.
+    Testler bu yolu yalnız "aktif paket yok" hâliyle koşuyordu.
+    """
+    from app.services.sector_pipeline import engine, synthesis
+
+    await _init_connection(db)
+    root_id = await db.fetchval(
+        "SELECT id FROM social.sectors WHERE parent_sector_id IS NULL LIMIT 1"
+    )
+    sector_id = await db.fetchval(
+        "INSERT INTO social.sectors (slug, display_name, parent_sector_id) "
+        "VALUES ($1, 'Alt', $2) RETURNING id",
+        f"alt-{uuid.uuid4().hex[:8]}",
+        root_id,
+    )
+    content = _valid_content()
+    log = _log_for(content)
+    await db.execute(
+        "INSERT INTO social.sector_packages "
+        "(sector_id, version, status, schema_version, content, decision_log) "
+        "VALUES ($1, 1, 'active', 1, $2, $3)",
+        sector_id,
+        content,
+        log,
+    )
+
+    aktif, birimler, surum = await cli._aktif_paket(db, sector_id)
+
+    assert aktif == {"schema_version": 1, "content": content, "decision_log": log}
+    assert surum == 1
+    assert synthesis._aktif_birimler(aktif) == birimler
+
+    class _Girdi:
+        aktif_paket = aktif
+
+    assert engine._aktif_ozel_gunler(_Girdi()) == content["ozel_gun"]
