@@ -1,0 +1,719 @@
+[
+ {
+  "id": "K01",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/2"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "Klasik düz alyanslarımız"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/2"
+  },
+  "tercih": "A",
+  "gerekce": "A mağazada denemeye çağırırken 14 ayar bilgisini de veriyor; iki metinde de gram bilgisi yok."
+ },
+ {
+  "id": "K02",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B randevulu danışmanlığa açıkça davet ediyor; A randevu önerse de birebir danışmanlığı belirtmiyor."
+ },
+ {
+  "id": "K03",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız e-ticaret kanalı belirtilmesine rağmen fiziksel tartı kontrolü öneriliyor.",
+     "alinti": "Tartıyı mutlaka gözünle gör."
+    },
+    {
+     "aciklama": "Belirtilen tek kanal e-ticaret sitesi olduğu hâlde mesajlaşmaya yönlendiriyor.",
+     "alinti": "Sorularınız için bize yazın"
+    }
+   ],
+   "beklenen": "1/2"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız e-ticaret kanalı belirtilmesine rağmen ürünü deneyerek seçmeyi öneriyor.",
+     "alinti": "Deneyerek karar verin."
+    },
+    {
+     "aciklama": "Belirtilen tek kanal e-ticaret sitesi olduğu hâlde mesajlaşmaya yönlendiriyor.",
+     "alinti": "bize mesaj atın"
+    }
+   ],
+   "beklenen": "1/2"
+  },
+  "tercih": "eşit",
+  "gerekce": "İkisi de bilgi veriyor, ancak ürün sayfasına yönlendirmiyor ve yalnız e-ticaret kanalıyla uyuşmayan öneriler içeriyor."
+ },
+ {
+  "id": "K04",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Ürün bilgisinde Darphane basımı yalnız çeyrek altın için verilmişken gram külçeye de atfediliyor.",
+     "alinti": "Darphane basımı gram külçe"
+    },
+    {
+     "aciklama": "Yalnız fiziksel mağaza kanalı belirtilmesine rağmen mesajlaşmaya yönlendiriyor.",
+     "alinti": "ya da mesaj gönderin"
+    }
+   ],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Birikiminize değer katmak için doğru zaman."
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/1"
+  },
+  "tercih": "A",
+  "gerekce": "A getiri dili kullanmıyor; ürün niteliği ve iletişim kanalıyla ilgili ifadeleri yine de düzeltilmeli."
+ },
+ {
+  "id": "K05",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B sipariş öncesi bilgi almak için WhatsApp davetini açıkça veriyor."
+ },
+ {
+  "id": "K06",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Kaplamanın etkisini koşulsuz ve uzun süreli bir sonuç gibi vaat ediyor.",
+     "alinti": "kararma derdi olmadan uzun süre ilk günkü gibi parlak kalır"
+    },
+    {
+     "aciklama": "Belirtilen tek kanal e-ticaret sitesi olduğu hâlde mesajlaşmaya yönlendiriyor.",
+     "alinti": "bize yazın"
+    }
+   ],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Biyografide bağlantı bulunduğu dosyada belirtilmiyor.",
+     "alinti": "biyografimizdeki bağlantıya tıklayın"
+    }
+   ],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B gümüşün ayarını veriyor ve kararmaya karşı daha ölçülü bir ifade kullanıyor."
+ },
+ {
+  "id": "K07",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Cümlenin anlamını bozan yazım hatası var.",
+     "alinti": "Anından kalma yüzüğü"
+    }
+   ],
+   "beklenen": "2/2"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Belirtilmeyen bir randevu kanalına yönlendiriyor.",
+     "alinti": "Randevunu şimdi oluştur"
+    },
+    {
+     "aciklama": "Dayanağı verilmeyen beklemeden teslim vaadi içeriyor.",
+     "alinti": "beklemeye gerek kalmadan teslim al"
+    }
+   ],
+   "beklenen": "2/2"
+  },
+  "tercih": "A",
+  "gerekce": "A mağaza davetini ücret veya teslim süresi vaadi olmadan yapıyor; yazım hatası düzeltilmeli."
+ },
+ {
+  "id": "K08",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Belirtilmeyen bir randevu kanalına yönlendiriyor.",
+     "alinti": "Hemen randevu alın"
+    }
+   ],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B mağazada değerlendirmeye çağırıyor ve belirtilmeyen bir randevu imkânı varsaymıyor."
+ },
+ {
+  "id": "K09",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Açılış cümlesinde belirgin yazım bozukluğu var.",
+     "alinti": "Yeni ysatisfa yeni başlangıçlar"
+    }
+   ],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Yeni yılınız kutlu olsun!"
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/1"
+  },
+  "tercih": "A",
+  "gerekce": "A mağaza davetini içeriyor; açılıştaki yazım bozukluğu yayından önce düzeltilmeli."
+ },
+ {
+  "id": "K10",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Deniz Kuyumculuk ailesi olarak sevgiyle dolu bir gün diliyoruz."
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Tüm annelerin Anneler Günü kutlu olsun."
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/1"
+  },
+  "tercih": "B",
+  "gerekce": "İkisinde de e-ticaret daveti eksik; B takı hediyesi bağını daha somut kuruyor."
+ },
+ {
+  "id": "K11",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "A",
+  "gerekce": "A baskı kurmadan seçenekleri karşılaştırmaya ve mağazada incelemeye davet ediyor."
+ },
+ {
+  "id": "K12",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/2"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/2"
+  },
+  "tercih": "eşit",
+  "gerekce": "İkisi de getiri dilinden kaçınıyor, fakat çeyrek ve gram altın hediye geleneğini metinde işlemiyor."
+ },
+ {
+  "id": "K13",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B anma mesajını daha yalın biçimde veriyor ve satış çağrısı içermiyor."
+ },
+ {
+  "id": "K14",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "eşit",
+  "gerekce": "İki metin de Öğretmenler Günü'nü satın alma çağrısı olmadan kutluyor."
+ },
+ {
+  "id": "K15",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "22 ayar altın, 20 gram ağırlık\n💰 72.000 TL"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Bileziği yatırım tercihi olarak sunuyor.",
+     "alinti": "Hem yatırım hem şıklık arayanlar için"
+    },
+    {
+     "aciklama": "Yalnız fiziksel mağaza kanalı belirtilmesine rağmen mesajlaşmaya yönlendiriyor.",
+     "alinti": "mesaj gönderin"
+    }
+   ],
+   "beklenen": "0/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B istenen gram fiyatını gösteriyor ve mağazada denemeye davet ediyor."
+ },
+ {
+  "id": "K16",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız fiziksel mağaza kanalı belirtilmesine rağmen mesajlaşmaya yönlendiriyor.",
+     "alinti": "veya mesaj gönderin"
+    }
+   ],
+   "beklenen": "2/2"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "kaçırılmayacak fırsat!"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız fiziksel mağaza kanalı belirtilmesine rağmen mesajla siparişe yönlendiriyor.",
+     "alinti": "Sipariş ve detaylı bilgi için bize ulaş"
+    },
+    {
+     "aciklama": "Belirtilmeyen bir teslimat hizmeti vaat ediyor.",
+     "alinti": "küpeni hemen kapı önüne getirelim"
+    }
+   ],
+   "beklenen": "1/2"
+  },
+  "tercih": "A",
+  "gerekce": "A önceki ve yeni fiyatı baskı kurmadan gösteriyor; mesaj çağrısı çıkarılmalı."
+ },
+ {
+  "id": "K17",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "yüzyıllardır değerini koruyan en köklü yatırım aracı"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız fiziksel mağaza kanalı belirtilmesine rağmen mesajlaşmaya yönlendiriyor.",
+     "alinti": "veya Mesaj At"
+    }
+   ],
+   "beklenen": "0/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B getiri garantisi vermiyor ve ürün bilgisini mağazada incelemeye yönlendiriyor."
+ },
+ {
+  "id": "K18",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız e-ticaret sitesi kanalı belirtilmesine rağmen mağazaya çağırıyor.",
+     "alinti": "mağazamıza bekleriz"
+    },
+    {
+     "aciklama": "Siteye yönlendiren ifadede yazım ve kişi uyumu bozukluğu var.",
+     "alinti": "sitemden inceleyin"
+    }
+   ],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Dosyada dayanağı bulunmayan bir yönetmelik yükümlülüğü ileri sürüyor.",
+     "alinti": "Yönetmelik gereği belirtiyoruz"
+    }
+   ],
+   "beklenen": "1/1"
+  },
+  "tercih": "B",
+  "gerekce": "B taşın laboratuvar üretimi olduğunu açıkça söylüyor ve mağaza kanalına yönlendirmiyor; yönetmelik iddiası çıkarılmalı."
+ },
+ {
+  "id": "K19",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Sarı altının sıcak tonları"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız e-ticaret sitesi kanalı belirtilmesine rağmen mağazaya yönlendiriyor.",
+     "alinti": "Deniz Kuyumculuk mağazasından keşfet"
+    }
+   ],
+   "beklenen": "0/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Ayar, gramaj ve fiyat detayı için mesaj atın"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Belirtilen tek kanal e-ticaret sitesi olduğu hâlde mesajlaşmaya yönlendiriyor.",
+     "alinti": "mesaj atın"
+    }
+   ],
+   "beklenen": "0/1"
+  },
+  "tercih": "B",
+  "gerekce": "B en azından 14 ayarı belirtiyor; gramajı metne ekleyip mesaj çağrısını siteye yönlendirmeli."
+ },
+ {
+  "id": "K20",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok",
+     "alinti": ""
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/1"
+  },
+  "tercih": "A",
+  "gerekce": "A setin üç parçasını somut biçimde anlatıyor ve mağazada incelemeye davet ediyor."
+ }
+]

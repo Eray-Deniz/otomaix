@@ -1798,6 +1798,27 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   kod/motor düzeltmesi (EV: yok, Eray karar verir — paketin 2. sürümü motor düzeltmesinin evi SAYILMAZ) ·
   operatör kararının yeniden verilmesi (Eray) · ölçüm (EV: Task 19 Step 12-13).
 
+  **EN ÜST ÖNCELİK — 0. Paket kural koyamıyor: modele seçmeli öneri havuzu olarak gidiyor** (Eray yakaladı,
+  2026-09-25; Claude ve Codex kaçırdı — semptomu "genel kuralla çelişki" diye kaydedip geçtiler)
+    - *Sorun:* Paketin yasakları ve sektör gerçekleri ("ayar, gramaj açıkça söylenir", getiri dili yok, olmayan
+      kanal yok) üretilen metinde uygulanmıyor. Gramaj paketli metinlerde 14'te 0 kez yazıldı.
+    - *Nereden çıkıyor:* Tasarım. (1) Paket bloğu yalnız kök `SECTOR_GUIDANCE`'ın YERİNE geçer; genel
+      kuralların üstünde yetkisi yok — çatışmada genel kural kazanır. (2) Blok `USAGE_INSTRUCTION` ile başlar:
+      "Bu dağarcıktan içeriğe uyan 2-3 öğeyi seç; listeyi tamamlamaya çalışma" (`sector_packages.py:487`,
+      spec §4.5 / K-04 — liste doldurmayı önlemek için bilinçli konmuş). Yasaklar ve ton kuralı da bu seçmeli
+      havuzun içinde. (3) Genel "KULLANICI İSTEĞİ HER ZAMAN ÖNCELİKLİDİR" kuralı paketi de eziyor olabilir
+      (madde 15, ölçülmedi). Tasarım turunda da onlarca review turunda da "girdi mi" kontrol edildi, "uyuldu mu"
+      edilmedi.
+    - *Çözüm:* Paketi iki blok olarak modele ver: **zorunlu kurallar** (yasaklar, sektör gerçekleri — ayar/gram
+      yazılır, 22 ayar saf değildir —, anma günü satış yasağı) genel kuralların ÜSTÜNDE ve kullanıcı isteğinin
+      ezemeyeceği biçimde; **seçmeli dağarcık** (kanca, CTA, görsel) bugünkü "2-3 seç" talimatıyla. Sonra aynı
+      20 sınav senaryosu aynı eşikle yeniden koşulur (maliyet ≈ 1,6 USD, bugünkü ölçülmüş koşudan **tahmin**).
+    - *Ölçüm:* Gramaj 14'te 0 (paketli), 14'te 1 (paketsiz); ayar 23'te 13 / 23'te 7 (iki küme, bu oturum).
+      `USAGE_INSTRUCTION` ve "rakamı yazma" kuralı talimat metninde okundu.
+    - *Bağlı maddeler:* 2 (gramaj çelişkisi) · 15 (kullanıcı önceliği) · 16 (olmayan kanal) · 17 (uydurma bilgi)
+      bu sorunun belirtileridir; 0 çözülmeden ayrı ayrı yamanmaz.
+    - *Ev:* tasarım değişikliği — Eray onayıyla sonraki adım.
+
   **Küme 1 — Kod/motor düzeltmesi (içerik doğru olsa da üretimde bozuluyor).** 1, 2 ve 11 için EV YOK —
   Eray karar verir. 12'nin evi var (kabul edilmiş tetik: Plan 2 kapanışı).
 
@@ -1907,6 +1928,59 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
     - *Çözüm:* Gün sayısı ile özgün içerik sayısını ayrı ölç; ortak bayram kalıbını bir kez say; farklılaştırmayı
       kullanım ihtiyacına göre yap (önce bayram görseli).
     - *Ölçüm:* Veride gruplanarak sayıldı: 8 grup, 4 görsel metni.
+
+  **Küme 4 — 2026-09-25 ölçümünden çıkanlar (A/B/C koşuldu; sonuç: PAKET YETERLİ DEĞİL).** Kayıt:
+  `olcum/SONUC-sinav-2026-09-25.md` + `olcum/KALIBRASYON.md`. Eşik (Eray): hakem ≥15/20 paketli tercih
+  (**17/20 — sağlandı**) VE paketli metinde kritik hata 0 (**en az 5 senaryoda tartışmasız — sağlanmadı**).
+  Eray kör okuma: paketli 9 · paketsiz 4 · ikisi de olmaz 7. Maliyet: ayar 1,4065 + sınav 1,5781 + duman
+  0,1519 USD. **Evleri Eray'da.**
+
+  - **14. Anma günleri pakette yok → anma gününde satış** (Claude; ÖLÇÜLDÜ)
+    - *Sorun:* 10 Kasım ve 18 Mart'ta paketli metin satış çağrısı yaptı ("18 Mart'a özel fiyat").
+    - *Nereden çıkıyor:* Paketin 16 özel gününün hiçbiri anma türünde değil; anma satış yasağı yalnız paketin
+      tanıdığı günde devreye giriyor. S08/S09 paketli talimatında dönem bloğu 0 kez geçiyor.
+    - *Çözüm:* Paketin 2. sürümüne sistem takvimindeki anma günlerini (`national` kategorisindeki anma/
+      kutlama günleri) anma türüyle ekle; ya da paket o günü tanımasa da takvim kategorisinden satış yasağı uygula.
+    - *Ölçüm:* `grep -c "DÖNEM KALIPLARI"` S08/S09 paketli = 0; paket türleri okundu (anma yok).
+
+  - **15. Genel "KULLANICI İSTEĞİ HER ZAMAN ÖNCELİKLİDİR" kuralı paket ilkelerini eziyor olabilir** (Claude; HİPOTEZ)
+    - *Sorun:* Paketli kritik hataların çoğu markanın isteğini uygulamaktan doğdu: ücretsiz/aynı gün (S02),
+      olmayan kanal (S04, S12), müşteri adı (S16), dinî hüküm (S17), görselde çeyrek (S19).
+    - *Nereden çıkıyor:* Genel talimatın başındaki kural, kullanıcı isteğinin "sektör rehberini … GEÇERSİZ
+      KILAR" dediğini söylüyor. Paket kuralı ile istek çatışınca istek kazanıyor olabilir.
+    - *Çözüm:* Yasal/etik ve uydurma-bilgi kurallarını kullanıcı önceliğinin DIŞINA al (istek sahneyi/üslubu
+      belirler, gerçeği ve yasağı değil); istek bir yasağı çiğniyorsa metin yazılmasın ya da uyarıyla yazılsın.
+    - *Ölçüm:* ÖLÇÜLMEDİ. Doğrulama yolu: aynı sınav senaryoları kural yumuşatılmış talimatla A/B.
+
+  - **16. Olmayan kanal kuralı talimatta var ama uygulanmıyor** (Claude + Codex; ÖLÇÜLDÜ)
+    - *Sorun:* Paket kullanım talimatı "markanın sahip olduğunu bilmediğin kanalı önerme" diyor; S04 (yalnız
+      site) mağazaya, S12 (yalnız mağaza) WhatsApp'a çağırdı.
+    - *Nereden çıkıyor:* Kanal bilgisi modele yalnız CTA süzgecinden dolaylı gidiyor; markanın kanal listesi
+      talimatta açıkça yazmıyor olabilir (açılmadı) + 15. madde.
+    - *Çözüm:* Markanın kanal listesini talimata açık satır olarak yaz; çıktıyı kanal listesine karşı otomatik
+      tara (ölçüm aracındaki `kanal-disi` kuralı üretime taşınabilir).
+    - *Ölçüm:* Hakem alıntıları metinde bulundu; kanal satırının talimatta olup olmadığı AÇILMADI.
+
+  - **17. Model uydurma ve yanlış ürün bilgisi yazıyor** (Codex; ÖLÇÜLDÜ)
+    - *Sorun:* "Su geçirmez", "darbelere dayanıklı" (S07), taş uydurma (S18), "kararma derdi yaşatmaz, bakım
+      gerektirmez" (S20), "22 ayar saf altın" (S03, S12), "round brilliant" (S01).
+    - *Nereden çıkıyor:* Talimatta "bilgi uydurma" yasağı var; model yine de istekteki ya da genel bilgiyi
+      yazıyor. Paketin "ayar, gramaj açıkça söylenir" kuralı gramaj çelişkisiyle (madde 2) zayıflıyor.
+    - *Çözüm:* Madde 2 ve 15 ile birlikte ele al; ayrıca "22 ayar = saf değil" gibi sektör doğrularını pakete ekle.
+    - *Ölçüm:* Alıntılar metinde bulundu.
+
+  - **18. Paketli yol bazen hiç metin üretmiyor** (Claude; ÖLÇÜLDÜ, 40'ta 1)
+    - *Sorun:* S06'da model doğru gerekçeyle reddetti; üretim akışı `error: true` + boş metin döner.
+    - *Nereden çıkıyor:* Ret beklenen ve doğru davranış; ama kullanıcıya nasıl gösterildiği ölçülmedi.
+    - *Çözüm:* Arayüzde ret mesajının kullanıcıya düzgün gösterildiğini doğrula.
+    - *Ölçüm:* `sonuc-sinav/b-sonuc.json` S06 paketli `ham.error=true`. Arayüz AÇILMADI.
+
+  - **19. "ysatisfa" yazım bozukluğu** (Codex + Claude; ÖLÇÜLDÜ, nedeni belirlenmedi)
+    - *Sorun:* Ayar K09 paketli metinde iki koşunun ikisinde "Yeni ysatisfa…".
+    - *Nereden çıkıyor:* Aday: talimattaki ASCII etiketler (`tür: satis`, `ticari-firsat`); K10/K11 aynı
+      etiketleri taşıyıp bozulmadı. Belirlenmedi.
+    - *Çözüm:* Etiketleri Türkçe karakterli ya da modele gitmeyen biçime al, K09'u yeniden koş.
+    - *Ölçüm:* `KALIBRASYON.md` açık gözlem.
 
   **Başka evdeki maddeler**
 

@@ -1,0 +1,827 @@
+[
+ {
+  "id": "K01",
+  "baslik": "Alyans satışı",
+  "kanal": "M",
+  "paketli_kr": 15567,
+  "paketsiz_kr": 12182,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K02",
+  "baslik": "Tektaş satışı",
+  "kanal": "MW",
+  "paketli_kr": 15781,
+  "paketsiz_kr": 12186,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 9"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K03",
+  "baslik": "22 ayar bilezik, bilgi amaçlı",
+  "kanal": "E",
+  "paketli_kr": 15318,
+  "paketsiz_kr": 12196,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 4"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K04",
+  "baslik": "Gram ve çeyrek altın satışı",
+  "kanal": "M",
+  "paketli_kr": 15570,
+  "paketsiz_kr": 12185,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K05",
+  "baslik": "Doğum hediyesi bebek altını",
+  "kanal": "MW",
+  "paketli_kr": 15810,
+  "paketsiz_kr": 12215,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 9"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K06",
+  "baslik": "Gümüş kolye",
+  "kanal": "E",
+  "paketli_kr": 15274,
+  "paketsiz_kr": 12152,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 4"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K07",
+  "baslik": "Yüzük ölçülendirme hizmeti",
+  "kanal": "M",
+  "paketli_kr": 13585,
+  "paketsiz_kr": 10200,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K08",
+  "baslik": "Taklas (eski takı değişimi)",
+  "kanal": "M",
+  "paketli_kr": 13595,
+  "paketsiz_kr": 10210,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K09",
+  "baslik": "Yılbaşı — yalnız mağaza",
+  "kanal": "M",
+  "paketli_kr": 14876,
+  "paketsiz_kr": 10790,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A2-donem-blogu",
+    "gecti": true,
+    "detay": "`yilbasi` dönem bloğu talimatta"
+   },
+   {
+    "kod": "A3-donem-cta",
+    "gecti": false,
+    "detay": "kanala uygun 1/2 alternatif var → CTA satırı YOK (alternatif kayboldu)"
+   },
+   {
+    "kod": "A9-donem-gorsel",
+    "gecti": true,
+    "detay": "günün görsel vurgusu talimatta VAR"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K10",
+  "baslik": "Anneler Günü — yalnız e-ticaret",
+  "kanal": "E",
+  "paketli_kr": 14592,
+  "paketsiz_kr": 10823,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 4"
+   },
+   {
+    "kod": "A2-donem-blogu",
+    "gecti": true,
+    "detay": "`anneler-gunu` dönem bloğu talimatta"
+   },
+   {
+    "kod": "A3-donem-cta",
+    "gecti": false,
+    "detay": "kanala uygun 1/2 alternatif var → CTA satırı YOK (alternatif kayboldu)"
+   },
+   {
+    "kod": "A9-donem-gorsel",
+    "gecti": true,
+    "detay": "günün görsel vurgusu talimatta VAR"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K11",
+  "baslik": "Sevgililer Günü — tüm kanallar",
+  "kanal": "H",
+  "paketli_kr": 15389,
+  "paketsiz_kr": 10829,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 10"
+   },
+   {
+    "kod": "A2-donem-blogu",
+    "gecti": true,
+    "detay": "`sevgililer-gunu` dönem bloğu talimatta"
+   },
+   {
+    "kod": "A3-donem-cta",
+    "gecti": true,
+    "detay": "kanala uygun 2/2 alternatif var → CTA satırı VAR"
+   },
+   {
+    "kod": "A9-donem-gorsel",
+    "gecti": true,
+    "detay": "günün görsel vurgusu talimatta VAR"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K12",
+  "baslik": "Kurban Bayramı 1. gün",
+  "kanal": "M",
+  "paketli_kr": 14988,
+  "paketsiz_kr": 10771,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A2-donem-blogu",
+    "gecti": true,
+    "detay": "`kurban-bayrami-1-gun` dönem bloğu talimatta"
+   },
+   {
+    "kod": "A3-donem-cta",
+    "gecti": true,
+    "detay": "kanala uygun 1/1 alternatif var → CTA satırı VAR"
+   },
+   {
+    "kod": "A9-donem-gorsel",
+    "gecti": true,
+    "detay": "günün görsel vurgusu talimatta VAR"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K13",
+  "baslik": "Cumhuriyet Bayramı",
+  "kanal": "M",
+  "paketli_kr": 14980,
+  "paketsiz_kr": 10812,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A2-donem-blogu",
+    "gecti": true,
+    "detay": "`cumhuriyet-bayrami` dönem bloğu talimatta"
+   },
+   {
+    "kod": "A3-donem-cta",
+    "gecti": true,
+    "detay": "kanala uygun 1/1 alternatif var → CTA satırı VAR"
+   },
+   {
+    "kod": "A9-donem-gorsel",
+    "gecti": true,
+    "detay": "günün görsel vurgusu talimatta VAR"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K14",
+  "baslik": "Öğretmenler Günü",
+  "kanal": "M",
+  "paketli_kr": 14799,
+  "paketsiz_kr": 10840,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A2-donem-blogu",
+    "gecti": true,
+    "detay": "`24-kasim-ogretmenler-gunu` dönem bloğu talimatta"
+   },
+   {
+    "kod": "A3-donem-cta",
+    "gecti": true,
+    "detay": "kanala uygun 1/1 alternatif var → CTA satırı VAR"
+   },
+   {
+    "kod": "A9-donem-gorsel",
+    "gecti": true,
+    "detay": "günün görsel vurgusu talimatta VAR"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K15",
+  "baslik": "Fiyatı verilmiş bilezik",
+  "kanal": "M",
+  "paketli_kr": 15562,
+  "paketsiz_kr": 12177,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K16",
+  "baslik": "İndirim duyurusu",
+  "kanal": "M",
+  "paketli_kr": 15550,
+  "paketsiz_kr": 12165,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K17",
+  "baslik": "Kullanıcı yatırım dili istiyor",
+  "kanal": "M",
+  "paketli_kr": 15547,
+  "paketsiz_kr": 12162,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K18",
+  "baslik": "Laboratuvar pırlantası",
+  "kanal": "E",
+  "paketli_kr": 15312,
+  "paketsiz_kr": 12190,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 4"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K19",
+  "baslik": "Ürün açıklamasında gramaj",
+  "kanal": "E",
+  "paketli_kr": 15261,
+  "paketsiz_kr": 12139,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 4"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ },
+ {
+  "id": "K20",
+  "baslik": "Yetki belgesi numarası yok",
+  "kanal": "M",
+  "paketli_kr": 15526,
+  "paketsiz_kr": 12141,
+  "kontroller": [
+   {
+    "kod": "A1-paket-blogu",
+    "gecti": true,
+    "detay": "paket bloğu talimatta"
+   },
+   {
+    "kod": "A8-etiket-sizintisi",
+    "gecti": true,
+    "detay": "ham `[kanal-bağımlı: …]` etiketi modele gitmiyor"
+   },
+   {
+    "kod": "A4-cta-listesi",
+    "gecti": true,
+    "detay": "kanala uygun liste CTA sayısı: 7"
+   },
+   {
+    "kod": "A5-gramaj-celiskisi",
+    "gecti": false,
+    "detay": "paket 'ayar, gramaj açıkça söylenir' derken genel kural 'caption'da rakamı yazma' AYNI talimatta"
+   },
+   {
+    "kod": "A6-rehber-kaybi",
+    "gecti": true,
+    "detay": "paketsizde perakende rehberi VAR, paketlide YOK (613 kr) — bilgi amaçlı: kayıp beklenen tasarım, içeriği ayrıca incelenir"
+   },
+   {
+    "kod": "A7-yasaklar",
+    "gecti": true,
+    "detay": "yasaklar bloğu talimatta"
+   }
+  ]
+ }
+]

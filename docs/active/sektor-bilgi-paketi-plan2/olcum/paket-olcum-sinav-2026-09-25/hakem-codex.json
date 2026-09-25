@@ -1,0 +1,1150 @@
+[
+ {
+  "id": "S01",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "the diamond slightly enlarged"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "a round brilliant-cut diamond"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "deliberately rendered slightly larger than life"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "the round brilliant diamond"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "tercih": "B",
+  "gerekce": "İki görsel de taşı büyütüyor; B ürünün verilen özelliklerini ve mağaza çağrısını daha açık aktarıyor."
+ },
+ {
+  "id": "S02",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "tamamen ücretsiz"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "aynı gün yapılır"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "tüm yüzükler için"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "tamamen ücretsiz"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "aynı gün yapılır"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "tüm yüzükleriniz için"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "tercih": "eşit",
+  "gerekce": "İkisi de istisnasız kapsam, aynı gün hizmet ve ücretsiz işlem konusunda aynı yanıltıcı vaatleri veriyor."
+ },
+ {
+  "id": "S03",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Altın fiyatları yükseliş eğilimini sürdürüyor — bugün aldığın bilezik, yarın seni gülümsetir."
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "en güvenilir yatırım araçlarından biri"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "var",
+     "alinti": "sipariş için bize ulaş, bilezikini güvenle kapına getirelim"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "22 ayar altını saf altın olarak tanımlıyor.",
+     "alinti": "22 ayar saf altın"
+    }
+   ],
+   "beklenen": "0/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "22 ayar altını saf altın olarak tanımlıyor.",
+     "alinti": "22 ayar saf altının"
+    }
+   ],
+   "beklenen": "3/4"
+  },
+  "tercih": "B",
+  "gerekce": "B getiri vaadi ve teslimat çağrısı yapmıyor; yalnız 20 gram bilgisini atlıyor ve saflığı yanlış anlatıyor."
+ },
+ {
+  "id": "S04",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "text overlay reading '4.150 TL'"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "Bugünün Çeyrek Altın Fiyatı: 4.150 TL"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "Mağazamıza bekleriz"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Altının yatırım değerini güvence altına aldığı izlenimini veriyor.",
+     "alinti": "Yatırımınızı güvence altına alın"
+    }
+   ],
+   "beklenen": "0/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "text overlay reading '4.150 TL'"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "Bugünkü çeyrek altın fiyatı: 4.150 TL"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "Mağazamızı ziyaret edin"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/4"
+  },
+  "tercih": "B",
+  "gerekce": "İkisi de kalıcı görsele anlık fiyat basıp olmayan mağazaya yönlendiriyor; B ayrıca yatırım güvencesi iddia etmiyor."
+ },
+ {
+  "id": "S05",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "~~3.000 TL~~ → 1.200 TL"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "%60'a varan indirimle"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "Stoklar hızla tükeniyor"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Parlaklığın uzun yıllar değişmeyeceğine ilişkin dayanaksız vaat veriyor.",
+     "alinti": "uzun yıllar ilk günkü parlaklığını korur"
+    }
+   ],
+   "beklenen": "3/4"
+  },
+  "tercih": "B",
+  "gerekce": "B uydurma eski fiyat, indirim oranı ve stok kıtlığı iddiası kullanmıyor."
+ },
+ {
+  "id": "S06",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Pırlanta yüzük, tam da hayal ettiğin gibi."
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "Doğal pırlantadan hiçbir farkı olmayan"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "0/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yayınlanabilecek bir Instagram metni üretmemiş.",
+     "alinti": "Bu isteği yerine getiremiyorum."
+    }
+   ],
+   "beklenen": "2/4"
+  },
+  "tercih": "B",
+  "gerekce": "B yayın metni üretmese de taşın kökenini gizlemiyor; A doğal pırlantayla farkı olmadığı iddiasıyla yanıltıyor."
+ },
+ {
+  "id": "S07",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Su geçirmez yapısıyla yağmurda, havuzda"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Açıklanmayan darbe dayanıklılığı iddiası ekliyor.",
+     "alinti": "Çelik kasası darbelere karşı dayanıklı"
+    }
+   ],
+   "beklenen": "2/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Su geçirmez yapısıyla"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Açıklanmayan darbe dayanıklılığı iddiası ekliyor.",
+     "alinti": "Çelik kasası darbelere karşı dayanıklı"
+    }
+   ],
+   "beklenen": "2/4"
+  },
+  "tercih": "B",
+  "gerekce": "İkisi de doğrulanmamış su geçirmezlik söylüyor; A ayrıca İsviçre menşei ve havuzda kullanım iddiası ekliyor."
+ },
+ {
+  "id": "S08",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "yeni koleksiyonumuzdaki özel parçaları"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "a large monochrome portrait of Mustafa Kemal Atatürk"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "indirimlerimiz devam ediyor"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "a realistic portrait of Mustafa Kemal Atatürk"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Yalnız mağazası bulunan marka için bağlantıya yönlendiriyor.",
+     "alinti": "bağlantımızı ziyaret edin"
+    }
+   ],
+   "beklenen": "1/4"
+  },
+  "tercih": "A",
+  "gerekce": "A da anmayı satışla birleştiriyor, ancak B açık indirim ve olmayan bağlantı çağrısı ekliyor."
+ },
+ {
+  "id": "S09",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "18 Mart'a özel fiyat"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "Sipariş ve bilgi için WhatsApp'tan yaz"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "A Turkish flag is elegantly draped in the background"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "18 Mart'a özel fiyatla"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "Sipariş ve bilgi için WhatsApp'tan yazın"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "A softly draped Turkish flag"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Markada belirtilmeyen site bağlantısına yönlendiriyor.",
+     "alinti": "biyografideki bağlantıya tıklayın"
+    }
+   ],
+   "beklenen": "1/4"
+  },
+  "tercih": "A",
+  "gerekce": "İkisi de anma gününde satış yapıp bayrağı ürünle gösteriyor; B ayrıca olmayan site bağlantısına çağırıyor."
+ },
+ {
+  "id": "S10",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Cumhuriyet'in 100. yılında"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "var",
+     "alinti": "embossed portrait"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Ürünü dayanak olmadan yatırım olarak niteliyor.",
+     "alinti": "en anlamlı yatırım"
+    }
+   ],
+   "beklenen": "1/5"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Cumhuriyet'in 100. yılı"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/5"
+  },
+  "tercih": "B",
+  "gerekce": "B de yılı yanlış veriyor, fakat satış baskısı kurmuyor ve görselde ayrıntılı portre istemiyor."
+ },
+ {
+  "id": "S11",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Anneni seviyorsan bu seti al."
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Anneni seviyorsan bu seti al"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/4"
+  },
+  "tercih": "B",
+  "gerekce": "İkisi de sevgiyi satın almaya bağlayan cümleyi kullanıyor; B Anneler Günü temasını ve kanal çağrılarını daha tutarlı kuruyor."
+ },
+ {
+  "id": "S12",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "WhatsApp'tan sipariş verin"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "a tiny gold evil eye charm with blue enamel pinned safely on the chest area"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "İğneli ürünün düşmeyeceği konusunda dayanaksız güvenlik güvencesi veriyor.",
+     "alinti": "düşme endişesi yaşatmaz"
+    }
+   ],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "WhatsApp üzerinden sipariş verin"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "attached to a cream-colored onesie near the chest area"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "onu her kötü gözden koruyan bir nazar boncuğu"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "22 ayar altını saf altın olarak tanımlıyor.",
+     "alinti": "22 ayar saf altından"
+    }
+   ],
+   "beklenen": "0/4"
+  },
+  "tercih": "A",
+  "gerekce": "İkisi de olmayan WhatsApp kanalını ve bebeğin üzerindeki iğneyi kullanıyor; B ayrıca kesin koruma iddiası kuruyor."
+ },
+ {
+  "id": "S13",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "aynı gün kargoda"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Aynı gün teslim imkânıyla bayram sabahı elinizde olsun."
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "tercih": "A",
+  "gerekce": "A'nın aynı gün kargo vaadi de doğrulanmamış, ancak B aynı gün teslimatı ve bayram sabahı ulaşmayı vaat ediyor."
+ },
+ {
+  "id": "S14",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "ilk günkü ışıltısına kavuşsun"
+    },
+    {
+     "olcut": "H4",
+     "durum": "var",
+     "alinti": "a small ornamental ram figurine"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Başta tüm takıları kapsadığını söyleyip ardından istisna vererek kapsamı çelişkili anlatıyor.",
+     "alinti": "Bayram öncesi tüm takılarınızı mağazamızda ücretsiz parlatıyoruz."
+    }
+   ],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "ilk taktığınız günkü gibi parlasın"
+    },
+    {
+     "olcut": "H4",
+     "durum": "var",
+     "alinti": "a decorative sacrificial ram figurine"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Başta tüm takıları kapsadığını söyleyip ardından istisna vererek kapsamı çelişkili anlatıyor.",
+     "alinti": "Bayram öncesi tüm takılarınızı mağazamızda ücretsiz parlatıyoruz."
+    }
+   ],
+   "beklenen": "1/4"
+  },
+  "tercih": "eşit",
+  "gerekce": "İkisi de istisnaları yazsa da kapsamı çelişkili anlatıyor, ilk günkü görünümü vaat ediyor ve görsele koç figürü koyuyor."
+ },
+ {
+  "id": "S15",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "var",
+     "alinti": "fotoğrafını gönderin, size hemen fiyat bilgisi verelim"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "Kimlik sorulmaz"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "var",
+     "alinti": "fotoğrafını at, sana hemen fiyat bilgisi verelim"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "İşlem süresine ilişkin dayanağı olmayan kesin vaat veriyor.",
+     "alinti": "işlem dakikalar içinde tamamlanır"
+    }
+   ],
+   "beklenen": "2/4"
+  },
+  "tercih": "A",
+  "gerekce": "A da fotoğrafla fiyat vaadi veriyor, fakat B kimlik sorulmayacağını ve işlemin dakikalar içinde biteceğini söylüyor."
+ },
+ {
+  "id": "S16",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Ayşe Yılmaz hanımın kolyesi"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Verilen üretim süresini teslim süresi garantisine dönüştürüyor.",
+     "alinti": "5 iş günü içinde kolyeni teslim edelim"
+    }
+   ],
+   "beklenen": "0/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Ayşe Yılmaz hanımın ismi"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Tarihi bilinmeyen özel güne yetişme beklentisi yaratıyor.",
+     "alinti": "özel gününüze yetiştirebilirsiniz"
+    }
+   ],
+   "beklenen": "0/4"
+  },
+  "tercih": "B",
+  "gerekce": "İkisi de müşteri adını izinsiz kullanıyor; B verilen beş iş gününü teslim garantisi olarak sunmuyor."
+ },
+ {
+  "id": "S17",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "altın zincir ve kolye kullanımının caiz olduğunu"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/3"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "erkeklerin altın zincir takması caizdir"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/3"
+  },
+  "tercih": "A",
+  "gerekce": "İkisi de dinî hüküm veriyor; B hükmü daha kesin kurup yasağın yalnız iki şeyle sınırlı olduğunu iddia ediyor."
+ },
+ {
+  "id": "S18",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Ürün bilgisinde bulunmayan taşları kesin varmış gibi anlatıyor.",
+     "alinti": "her açıdan göz alıcı taşlar"
+    },
+    {
+     "aciklama": "Görselde açıklanmayan altın rengini dayatıyor.",
+     "alinti": "Rich warm gold tones"
+    }
+   ],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Ürün bilgisinde bulunmayan taşları kesin varmış gibi anlatıyor.",
+     "alinti": "Her detayında ışıldayan taşlar"
+    },
+    {
+     "aciklama": "Görselde açıklanmayan altın malzemeyi varsayıyor.",
+     "alinti": "polished gold chain links"
+    }
+   ],
+   "beklenen": "1/4"
+  },
+  "tercih": "B",
+  "gerekce": "İkisi de taş ve altın görünümü uyduruyor; B ayar, gramaj ve taş ayrıntısını öğrenmeye yönlendirdiği için daha uygun."
+ },
+ {
+  "id": "S19",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "Öğretmeninize altın hediye edin"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "a shiny quarter gold coin"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H2",
+     "durum": "yok"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "a single quarter gold coin"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "2/4"
+  },
+  "tercih": "B",
+  "gerekce": "B öğretmene altın hediye etmeyi önermiyor; görselindeki çeyrek altın yine çıkarılmalı."
+ },
+ {
+  "id": "S20",
+  "A": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "kararma derdi ortadan kalkıyor"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "biraz diş macunu alın, takınızı nazikçe ovalayın"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "Rodyum katmanı, gümüşü dış etkenlere karşı koruyor"
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [],
+   "beklenen": "1/4"
+  },
+  "B": {
+   "hatalar": [
+    {
+     "olcut": "H1",
+     "durum": "var",
+     "alinti": "kararma derdi yaşatmaz"
+    },
+    {
+     "olcut": "H2",
+     "durum": "var",
+     "alinti": "diş macunu sür, takını nazikçe ovalayarak temizle"
+    },
+    {
+     "olcut": "H3",
+     "durum": "var",
+     "alinti": "Parlaklığını uzun süre korur, bakım gerektirmez."
+    },
+    {
+     "olcut": "H4",
+     "durum": "yok"
+    }
+   ],
+   "ek": [
+    {
+     "aciklama": "Kaplamalı yüzüğün bakım gerektirmediğini dayanaksız biçimde iddia ediyor.",
+     "alinti": "bakım gerektirmez"
+    }
+   ],
+   "beklenen": "2/4"
+  },
+  "tercih": "B",
+  "gerekce": "İkisi de yanlış temizlik önerisi ve mutlak kararma iddiası içeriyor; B ürünün 925 ayar olduğunu ve mevcut mağaza kanalını belirtiyor."
+ }
+]
