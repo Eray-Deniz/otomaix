@@ -1791,11 +1791,15 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
 - **[AÇIK 2026-09-25] Kuyumculuk paketi (`66654971…`, sürüm 1) yeterlilik analizi — 13 bulgu.** Claude +
   Codex analizi birleştirildi; Codex iddiaları kod/veriye karşı ölçüldü ("Ölçüm" satırları bu oturumun
   komutlarıdır). **Hangi kümeden başlanacağı Eray'da.** Her madde: Sorun · Nereden çıkıyor · Çözüm · Ölçüm.
-  Canlı paylaşım oluşturmadan ölçüm yolu: (A) kural taraması (model yok) → (B) kuru üretim + otomatik denetim
-  (gönderi kaydı yok; birim ölçülmüş 0,034 USD/çağrı, 100 çağrı ≈ 3,4 USD **tahmin**) → (C) kör insan
-  değerlendirmesi. Başarı eşiği B'den SONRA konur.
+  **2026-09-25 düzeltme turu (Codex ikinci okuma, 7 eksik — yedisi de ölçülerek kabul edildi):** eşik yöntemi,
+  11'in iki ayrı kökü + dağılımı, 8'in karar zinciri (S10b), 9'un terim taraması yanlışı, senaryo kümesi,
+  kuru üretimin sınırı, küme/ev uyuşmazlığı. Ölçüm yolunun tam tanımı 13. maddede.
+  **Kümeler İŞ TÜRÜNE göre ayrıdır ve her iş kendi evine bağlıdır:** paket revizyonu (EV: paketin 2. sürümü) ·
+  kod/motor düzeltmesi (EV: yok, Eray karar verir — paketin 2. sürümü motor düzeltmesinin evi SAYILMAZ) ·
+  operatör kararının yeniden verilmesi (Eray) · ölçüm (EV: Task 19 Step 12-13).
 
-  **Küme 1 — Kod/entegrasyon (içerik doğru olsa da üretimde bozuluyor). EVİ YOK — Eray karar verir.**
+  **Küme 1 — Kod/motor düzeltmesi (içerik doğru olsa da üretimde bozuluyor).** 1, 2 ve 11 için EV YOK —
+  Eray karar verir. 12'nin evi var (kabul edilmiş tetik: Plan 2 kapanışı).
 
   - **1. CTA alternatifleri kanal filtresinde kayboluyor** (Codex)
     - *Sorun:* Yılbaşı, Anneler Günü ve Sevgililer Günü CTA'sı iki alternatifi `·` ile tek metinde taşıyor;
@@ -1815,13 +1819,28 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
       kuralından ayır; birleşik prompt üzerinde çelişki kontrolü yap.
     - *Ölçüm:* `prompt_builder.py:430-434` okundu; kural yalnız ürün açıklaması girilmiş üretimde devreye girer.
 
-  - **12. Paket kök perakende rehberini susturuyor** (Codex; mevcut madde, aşağıda)
+  - **12. Paket kök perakende rehberini susturuyor** (Codex; mevcut madde, aşağıda — EV: Plan 2 kapanışı)
     - *Sorun:* Paket aktifken genel perakende rehberi (623 kr: sosyal kanıt vb.) hiç basılmıyor; yararlı
       kuralların bir kısmı pakete aktarılmamış.
     - *Nereden çıkıyor:* Entegrasyon tasarımı (paket rehberin YERİNE geçer, `ai.py:505-518`) + sentezin kapsam seçimi.
     - *Çözüm:* Korunması gereken genel kuralları belirle, paketli üretimde de kapsa; paketli/paketsiz prompt
       karşılaştırmasına "kaybolan rehberlik" kontrolü ekle.
     - *Ölçüm:* Mevcut maddede ölçülmüş. Tetik: Plan 2 kapanışı.
+
+  - **11. Operatör kararlarında kaynak bağı iki yönde bozuk** (Codex; 2026-09-25 düzeltmesiyle iki köke ayrıldı)
+    - *Sorun (a) — yeni madde kaynaksız:* 115 kararın 76'sında `kaynak_iddia` yok → kaynaklı bilgi ile insan
+      tercihi aynı güvenceyle görünüyor. Dağılım: özel gün 65 · CTA 6 · yasaklar 3 · kanca 2. 76 yanlış bilgi
+      olduğu anlamına GELMİYOR.
+    - *Sorun (b) — değişen metin eski kaynağı taşıyor:* `degistir` metni değiştirir ama satırın kaynak bağını
+      korur (`operator_decisions.py:321-335`; yalnız `kural_kimligi`/`kural_surumu` düşer) → değişmiş metin,
+      artık desteklemeyebilecek eski kaynaklarla destekleniyormuş görünür. Bu pakette kaynaklı insan kararı 2.
+    - *Nereden çıkıyor:* Motorun operatör ekleme/değiştirme yolu: (a) yeni maddeye kaynak bağlanamıyor,
+      (b) değişen metnin atıfları yeniden doğrulanmıyor.
+    - *Çözüm:* (a) operatör eklemesine kaynak bağlama yolu aç; kaynaklı / kaynaksız öneri / ürün tercihini ayrı
+      göster. (b) `degistir`de kaynak bağını "yeniden doğrulanmadı" diye işaretle ya da düşür. İkisinde de
+      sonradan eklenen/değişen metni nihai içerik denetiminden geçir.
+    - *Ölçüm:* `decision_log` sayıldı (76 → 65/6/3/2); `degistir` kodu okundu. (b)'nin bu pakette yanlış bir
+      atıf ürettiği ÖLÇÜLMEDİ — iki kaynaklı insan kararının metni kaynağına karşı açılmadı.
 
   **Küme 2 — Operatör kararıyla giren maddeler (kararı Eray yeniden verir). Tarih Eray'da.**
 
@@ -1848,15 +1867,19 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
       olarak denetle.
     - *Ölçüm:* Karar kaydıyla doğrulandı; kalan uyumsuzluk tür etiketi + takı görseli.
 
-  - **8. Doğal/lab pırlanta etiketsiz yan yana görseli riskli** (Codex)
-    - *Sorun:* `gorsel_kodlar`daki görsel "görünüşten ayırt edilebilir" izlenimi verebilir; sentetik ibare
-      yükümlülüğüyle gerilimli.
-    - *Nereden çıkıyor:* Sentez "muhtemel uydurma" notuyla reddetmişti (açık soru 10); pakette var.
-    - *Çözüm:* Görünüşten ayrım izlenimini önle; ürün türü ile gönderi açıklamasının tutarlılığını ve sentetik
-      ibaresinin son çıktıda gerçekten bulunmasını sına.
-    - *Ölçüm:* Ret kaydı görüldü; hangi kararla geri girdiği AÇILMADI. Tek başına kesin ihlal değil.
+  - **8. Doğal/lab pırlanta görselinde sentetik açıklaması son çıktıda sınanmadı** (Codex; 2026-09-25 düzeltildi)
+    - *Sorun:* `gorsel_kodlar`daki etiketsiz doğal–lab karşılaştırma görseli "görünüşten ayırt edilebilir"
+      izlenimi verebilir. Görselde metin yasak olduğu için "sentetik" ibaresi ancak gönderi metninde taşınabilir;
+      bunun üretilen son çıktıda gerçekten yer aldığı doğrulanmadı.
+    - *Nereden çıkıyor:* Karar zinciri: sentez "muhtemel uydurma" notuyla reddetti (D1#30 açık-soru) → operatör
+      kararı **S10b** üç yerel görseli (telkari · yazısız ziynet/çeyrek · doğal–lab) geri aldı; kararın ZORUNLU
+      zayıflık notu: "ibare gönderi metninde taşınmalı" (`K134-KOR-YARGI-23e19d03.md:188-198`). Bu şart
+      üretim koduna bağlanmadı.
+    - *Çözüm:* Doğal–lab görseli kullanılan her üretimde gönderi metninde sentetik ibaresini zorunlu kıl ya da
+      görseli bu şart karşılanamıyorsa kullanma; ürün türü ile açıklamanın tutarlılığını son çıktıda sına.
+    - *Ölçüm:* Karar zinciri K134 kaydında okundu. Şartın üretimde uygulanıp uygulanmadığı ÖLÇÜLMEDİ.
 
-  **Küme 3 — Paket içeriği. EV: paketin 2. sürümü** (md-18 ile aynı ev).
+  **Küme 3 — Paket revizyonu. EV: paketin 2. sürümü** (md-18 ile aynı ev; yalnız içerik — motor işi değil).
 
   - **5. SPK dayanağının fiziki altına uygulanabilirliği doğrulanmamış** (Claude + Codex)
     - *Sorun:* Madde doğrulanmamış bir hukuki gerekçe taşıyor.
@@ -1865,12 +1888,17 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
       birincil kaynak ara.
     - *Ölçüm:* Karar kaydıyla doğrulandı.
 
-  - **9. Kapsamdaki ürünlerin pakette karşılığı yok** (Claude)
-    - *Sorun:* Gümüş ve ziynet kapsamda var, başka hiçbir bölümde yok; Reşat/Cumhuriyet altını hiç yok;
-      bilezik yalnız bir takvim temasında.
-    - *Nereden çıkıyor:* Paket derlemesi — kapsam yazılmış ama kanca, CTA, görsel ona göre doldurulmamış.
-    - *Çözüm:* Her kapsam ürününün en az kanca + CTA + görselde karşılığı olsun; bunu sayılabilir otomatik kontrole bağla.
-    - *Ölçüm:* Paket metninde terim terim tarandı.
+  - **9. Kapsam ürünlerinin karşılanma durumu sınıflanmamış** (Claude; 2026-09-25 düzeltildi)
+    - *Sorun:* Kapsamdaki ürünlerin (gümüş, ziynet, bilezik, alyans, set, bebek altını, onarım…) paketin
+      kanca/CTA/görsel/özel gün bölümlerinde gerçekten karşılanıp karşılanmadığı bilinmiyor.
+    - *Nereden çıkıyor:* İlk tespit HATALIYDI: yalnız Türkçe terim taraması yapıldı. İngilizce görsel kodlarda
+      "bracelet on wrist" ve "minted gold coin" (S10b'deki yazısız ziynet/çeyrek) var → "ziynet hiç yok",
+      "bilezik yalnız takvimde" yanlıştı. "silver" da arandı: gümüş hiçbir bölümde yok. Kelime varlığı yeterli
+      kapsamı, kelime yokluğu da kapsam eksikliğini kanıtlamaz.
+    - *Çözüm:* Kelime sayımı yerine ürün × kullanım senaryosu üzerinden her ürünü sınıfla: karşılanıyor /
+      ürün-marka verisi gerekiyor / eksik / kapsam dışı. "Her ürün kanca + CTA + görselde geçsin" kuralı
+      KONMAZ (gereksiz tekrar üretir).
+    - *Ölçüm:* Türkçe + İngilizce terim araması (bu oturum). Senaryo bazlı sınıflama YAPILMADI.
 
   - **10. Çeşitlilik düşük, görseller kopya** (Claude + Codex)
     - *Sorun:* 16 özel gün = 8 farklı içerik (9 bayram birebir aynı); görsel vurgu 4 metin; bayram görseli
@@ -1879,14 +1907,6 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
     - *Çözüm:* Gün sayısı ile özgün içerik sayısını ayrı ölç; ortak bayram kalıbını bir kez say; farklılaştırmayı
       kullanım ihtiyacına göre yap (önce bayram görseli).
     - *Ölçüm:* Veride gruplanarak sayıldı: 8 grup, 4 görsel metni.
-
-  - **11. 115 kararın 76'sında araştırma kaynağı boş** (Codex)
-    - *Sorun:* Kaynaklı bilgi ile insan tercihi aynı güvenceyle görünüyor. 76 yanlış bilgi olduğu anlamına GELMİYOR.
-    - *Nereden çıkıyor:* Operatör ekleme yolu maddeyi "araştırma kaynağı yok" etiketiyle yazıyor; mevcut
-      kaynak bağları korunmuyor.
-    - *Çözüm:* Operatör eklemelerinde kaynak bağlarını koru; kaynaklı / kaynaksız öneri / ürün tercihini ayrı
-      göster; sonradan eklenen metni de nihai içerik denetiminden geçir.
-    - *Ölçüm:* `decision_log` sayıldı: 115 kararın 76'sında `kaynak_iddia` yok.
 
   **Başka evdeki maddeler**
 
@@ -1899,7 +1919,23 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   - **13. Yeterlilik kanıtı dar** (Claude + Codex) — EV: Task 19 Step 12-13 pilot ölçümleri.
     - *Sorun:* Tek kör değerlendirme 4 konu; paketli tercih 2/4.
     - *Nereden çıkıyor:* Kabul süreci; şema ve karar kapılarının geçmesi içerik kalitesini kanıtlamıyor.
-    - *Çözüm:* Yukarıdaki A/B/C yolu; doğruluk, uygulanabilirlik ve çeşitliliği ayrı ölç.
+    - *Çözüm — canlı paylaşım oluşturmayan ölçüm yolu (2026-09-25 düzeltmesiyle tamamlandı):*
+      - **Senaryo kümesi paket metninden BAĞIMSIZ kurulur:** ürün aileleri · içerik amaçları (satış/bilgi/
+        hizmet/kutlama) · kanal ve hizmet varlığı · eksik ürün bilgisi · özel günler. Her senaryoya **beklenen
+        davranış + hata ölçütü** yazılır. "100 çağrı" bir kapsam tanımı DEĞİLDİR.
+      - **(A) Yazmasız istem kontrolü — model çağrısı yok, ücretsiz:** her senaryo için modele gidecek birleşik
+        talimat üretilip kuralla denetlenir (çelişki, kanal kaybı, kaybolan rehberlik, eksik zorunlu bilgi).
+        Kaynak URL'sinin varlığı ile iddiayı gerçekten desteklemesi AYRI denetlenir.
+      - **(B) Ücretli model değerlendirmesi:** aynı senaryolar paketli/paketsiz yazdırılır, çıktı hata
+        ölçütlerine karşı otomatik taranır. Birim ölçülmüş 0,034 USD/çağrı; toplam senaryo sayısına bağlı
+        (**tahmin**). **Sınırı yazılı olmalı:** kullanılacak çağrı yolu (23 Eylül: `generate_captions` doğrudan),
+        izin verilen yan etkiler (gönderi kaydı dışında DB olayı, medya işi, dış servis — `caption_generator.py`
+        içinde DB yazımı görülmedi, çağrı yolunun geri kalanı ÖLÇÜLMEDİ) ve ölçülemeyenler (metin, nihai
+        görsel/video kalitesini kanıtlamaz; görsel üretilmez — fal.ai kredisi).
+      - **(C) Kör insan değerlendirmesi:** Eray (mümkünse gerçek kuyumcu) paketli/paketsiz çiftleri görmeden seçer.
+      - **Eşik yöntemi:** ilk koşu YALNIZ kalibrasyondur. Ölçütler ondan sonra SABİTLENİR, yeterlilik kararı
+        önceden görülmemiş AYRI bir senaryo kümesiyle verilir (aynı sonuçlara uyan eşik seçilmesin). Kritik
+        doğruluk hataları (hukuki ihlal, uydurma bilgi) ortalama kalite puanıyla örtülmez — ayrı sayılır.
     - *Ölçüm:* `K2-KOR-ORNEKLEM-23e19d03.md`.
 
 - **[KAPANDI 2026-09-23] Modele giden K-129 metinleri motorla hizalandı.** Dış depo `7fb81c3`
