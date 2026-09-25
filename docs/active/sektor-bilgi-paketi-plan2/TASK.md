@@ -1879,8 +1879,13 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
     - *Bağlı maddeler:* 2 (gramaj çelişkisi) · 15 (kullanıcı önceliği) · 16 (olmayan kanal) · 17 (uydurma bilgi)
       bu sorunun belirtileridir; 0 çözülmeden ayrı ayrı yamanmaz.
     - *Ev:* **TASARIM ONAYLI (2026-09-25):** `docs/specs/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md`
-      (`spec-approved`; Codex 5 tur, son tur approve; uygulama BAŞLAMADI). Sıradaki: `/write-plan-claude-codex` →
-      uygulama → sınav tekrarı. Madde 14 (anma günleri) ve 17 ("22 ayar saf değil") bu tasarımın 2. sürüm içeriğine bağlı.
+      (`spec-approved`; Codex 5 tur, son tur approve). **PLAN ONAYLI (2026-09-25, `fbd3d4e`):**
+      `docs/plans/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (`plan-approved`; Codex ön-analiz + 4 review
+      turu; `unresolved_high_severity_override: true` — X2 makbuz yarışı, Eray kararıyla Task 13 yürütme
+      checkpoint'ine bırakıldı: "Kuralı yaz, kilidi koda bırak"). Eray kararı (aynı gün): paketin 2. sürümü **yeni tam
+      koşuyla**, planın Aşama B'si olarak. Uygulama BAŞLAMADI. Sıradaki: `/execute-plan-claude-codex` (bu plan bu
+      görevin içinde yürür; ayrı aktif görev açılmadı — Eray kararı). Madde 14 (anma günleri) ve 17 ("22 ayar saf
+      değil") bu tasarımın 2. sürüm içeriğine bağlı (plan Task 19).
 
   **Küme 1 — Kod/motor düzeltmesi (içerik doğru olsa da üretimde bozuluyor).** 1, 2 ve 11 için EV YOK —
   Eray karar verir. 12'nin evi var (kabul edilmiş tetik: Plan 2 kapanışı).
