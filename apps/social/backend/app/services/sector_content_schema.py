@@ -520,15 +520,35 @@ _HOOK_TAG_RE = re.compile(r"\(\s*(?P<key>[^():]+?)\s*:\s*(?P<value>[^()]*?)\s*\)
 _SOFT_TONE_PREFIX_RE = re.compile(r"^\s*(?P<key>[^:]+?)\s*:\s*(?P<rest>.*)$", re.DOTALL)
 
 
+# `tür` anahtarının KENDİSİ (katlanmış metinde tam sözcük): `tura`, `türü`, `Türk`
+# eşleşmez. Anahtarın her geçişi sayılır — tanınan etiket dışında kalan geçiş hatadır.
+_HOOK_TAG_KEY_RE = re.compile(r"(?<![a-z0-9])tur(?![a-z0-9])")
+
+
 def hook_type(item: str) -> tuple[str, str]:
     """Kanca öğesini `(kalıp metni, tür)` olarak ayırır (plan D12).
 
-    Etiketsiz öğe `satis` sayılır. Etiket değeri tür sözlüğü dışındaysa
-    `ValueError` — sessiz varsayılan YOK; yazım kapısı bunu yapısal hataya çevirir.
+    Etiketsiz öğe `satis` sayılır. Kural POZİTİFTİR: `tür` anahtarı YALNIZ
+    kalıbın sonundaki TEK ve kurallı `(tür: <değer>)` etiketinde geçebilir.
+    Anahtar başka biçimde (ortada, başta, köşeli ayraçla, iki noktasız, iki kez)
+    geçerse `ValueError` — tanınmayan etiket kancayı sessizce `satis` yapmaz
+    (checkpoint 1, Codex high). Anahtarı taşımayan düz parantez etiket değildir.
+    Etiket değeri tür sözlüğü dışındaysa da `ValueError`; yazım kapısı ikisini de
+    yapısal hataya çevirir.
     """
-    match = _HOOK_TAG_RE.search(item)
-    if match is None or _fold_turkish(match.group("key")) != "tur":
+    key_count = len(_HOOK_TAG_KEY_RE.findall(_fold_turkish(item)))
+    if key_count == 0:
         return item.strip(), DEFAULT_HOOK_TYPE
+    match = _HOOK_TAG_RE.search(item)
+    if (
+        key_count != 1
+        or match is None
+        or _fold_turkish(match.group("key")) != "tur"
+    ):
+        raise ValueError(
+            "kanca tür etiketi yalnız kalıbın SONUNDA, tek ve `(tür: <değer>)` "
+            f"biçiminde yazılır: {item!r}"
+        )
     value = _fold_turkish(match.group("value"))
     if value not in POST_TYPES:
         raise ValueError(

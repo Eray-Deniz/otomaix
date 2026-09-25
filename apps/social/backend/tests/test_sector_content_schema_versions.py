@@ -156,3 +156,48 @@ def test_split_tone_lines_soft_prefix():
     )
     assert soft == ("güven eksenli danışman dili", "duygu ekseni anı ve hediye")
 
+
+
+# Checkpoint 1 (Codex, high): tür anahtarı taşıyan ama TANINMAYAN her biçim kancayı
+# sessizce `satis` yapıyordu. Kural pozitiftir: `tür` anahtarı YALNIZ kalıbın sonundaki
+# TEK ve kurallı `(tür: <değer>)` etiketinde geçebilir; başka her biçim yapısal hatadır.
+_TAG_FORMS = {
+    "paren-colon": "(tür: {v})",
+    "paren-space": "(tür {v})",
+    "paren-equals": "(tür={v})",
+    "bracket-colon": "[tür: {v}]",
+    "bare-colon": "tür: {v}",
+    "upper-paren-colon": "(TÜR: {v})",
+}
+
+
+@pytest.mark.parametrize(
+    ("form", "position", "count"),
+    list(itertools.product(_TAG_FORMS, ("terminal", "middle", "leading"), (1, 2))),
+)
+def test_hook_type_key_only_in_single_terminal_tag_generated(form, position, count):
+    tag = " ".join(_TAG_FORMS[form].format(v=v) for v in ("hizmet", "bilgi")[:count])
+    item = {
+        "terminal": f"{_HOOK_TEXT} {tag}",
+        "middle": f"{_HOOK_TEXT} {tag} (kanal: instagram)",
+        "leading": f"{tag} {_HOOK_TEXT}",
+    }[position]
+    well_formed = form in ("paren-colon", "upper-paren-colon")
+
+    if well_formed and position == "terminal" and count == 1:
+        assert hook_type(item) == (_HOOK_TEXT, "hizmet")
+        return
+    with pytest.raises(ValueError):
+        hook_type(item)
+    content = _v2_content()
+    content["kanca_kaliplari"] = [item]
+    assert any("kanca_kaliplari[0]" in e for e in structural_errors(content, schema_version=2))
+
+
+@pytest.mark.parametrize(
+    "literal",
+    ["(örnek: yüzük)", "(Türk işi)", "(türü fark etmez)", "(kanal: instagram)", "(tura çıkın)"],
+)
+def test_hook_literal_parentheses_without_the_key_stay_untagged(literal):
+    item = f"{_HOOK_TEXT} {literal}"
+    assert hook_type(item) == (item, "satis")
