@@ -10,15 +10,14 @@ written: 2026-09-23 (on dördüncü oturum kapanışı)
 koşuyor. **Kuyumculuğa atanmış marka YOK** → paket henüz hiçbir üretime girmiyor.
 
 **Sıradaki işler (Eray'ın sırası):**
-1. **n8n Telegram onay webhook düğümünü `qbPEK2DKQgMmFor8` kimliğine bağla** (runbook Adım 7) —
-   canlıyı oku, düğüm bazında karşılaştır, yalnız `nodes`+`connections` yükle; Eray onayıyla.
-   Backend anahtarı gönderiyor; n8n doğrulamıyor (bugünkü gibi kimliksiz de kabul ediyor).
+1. ~~n8n Telegram onay webhook düğümünü bağla~~ **2026-09-25 YAPILDI** (webhook + zamanlayıcı; TASK Decisions Log) —
+   Ölçüldü: başlıksız 403 · yanlış başlık 403 · doğru başlık 200. Canlı yedekler oturum scratchpad'indeydi.
 2. **Video üretim sistemi değişikliği** (Eray) → ardından **marka ataması** (Task 19 Step 11,
    `Deniz Kuyumculuk (TEST)` → kuyumculuk, arayüzden, Eray'ın gözüyle) + bir paylaşım üretimi →
    **md-17** (`posts.package_id/package_version` + `generation_stamps` okunur).
 3. **md-18 (geri alma canlı denemesi):** Claude önerdi → paketin **2. sürümüne** bırak (bugün
    `deaktive-et` tek paketi arşivler, yeniden aktive EDİLEMEZ, kuyumculuk paketsiz kalır).
-   **Eray AÇIKÇA ONAYLAMADI** — ilk iş sor.
+   **Eray ONAYLADI 2026-09-25.**
 4. Pilot ölçümleri + koşu raporu (Task 19 Step 12-13) → Task 20 kapanış → `/finish-branch-claude-codex`.
 
 **Bugün (2026-09-23) ne oldu — sırayla:** K-129 metinleri modele hizalandı (dış depo `7fb81c3`,

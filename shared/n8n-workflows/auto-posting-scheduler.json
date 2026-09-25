@@ -192,7 +192,15 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ post_id: $('Post Üret').item.json.data.post_id, brand_id: $('Her Config İçin').item.json.brand_id, telegram_bot_token: $('Her Config İçin').item.json.telegram_bot_token, telegram_chat_id: $('Her Config İçin').item.json.telegram_chat_id }) }}",
-        "options": {}
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "qbPEK2DKQgMmFor8",
+          "name": "Otomaix Telegram Approval Key"
+        }
       }
     },
     {

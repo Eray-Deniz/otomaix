@@ -380,8 +380,14 @@
   sahiplik · workspace Telegram ayarları · erken hata). Operatör o sırada onay gönderemedi,
   arayüz düzenleniyordu. **Ev / tetik:** onay akışına dokunan bir sonraki iş.
   **Yan etki dürüstçe:** ölçüm sırasında iki hatalı koşum (`55910`, `55911`) benim probumdur.
+  **2026-09-25 ek ölçüm:** korumasız giriş kapandı (403). Sahte `post_id` ile atılan doğru başlıklı prob
+  (`63964`) gösterdi ki backend var olmayan gönderi için `{"success":true,"data":null}` dönüyor, akış
+  durmadan ilerliyor ve Telegram'ın 404'ü `continueOnFail` yüzünden koşumu **"success"** olarak
+  kaydediyor → bu akışta hatalar n8n kayıtlarında görünmez. Aynı ev/tetik.
 
-- **telegram-onay-credential-baglanmadi** (proposed, KURULUM — tetikli) — `Otomaix Telegram
+- **[KAPANDI 2026-09-25] telegram-onay-credential-baglanmadi** — webhook düğümü ve zamanlayıcının
+  onay çağrısı `qbPEK2DKQgMmFor8`'e bağlandı; başlıksız/yanlış başlık 403, doğru başlık 200. Kayıt:
+  plan2 TASK Decisions Log (2026-09-25). Aşağısı tarihçedir. — `Otomaix Telegram
   Approval Key` Header Auth kimliği 2026-09-12'de n8n'de YARATILDI (`qbPEK2DKQgMmFor8`;
   başlık `X-Telegram-Approval-Key`, sır `/root/otomaix-tg-approval.secret`), ama webhook
   düğümüne **BAĞLANMADI** — bilinçli: bağlansaydı koruma gerçekten devreye girer ve başlık

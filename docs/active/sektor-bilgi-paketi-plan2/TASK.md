@@ -984,6 +984,21 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 
 # Decisions Log
 
+## n8n Telegram onay kimliği bağlandı (2026-09-25, on beşinci oturum, Eray onayıyla)
+
+- **Etki taraması önce yapıldı:** onay adresini (`/webhook/telegram-content-approval`) iki yer çağırıyor —
+  backend (anahtarı gönderiyor) ve **Auto Posting Scheduler** (`Nz4651wCfBHP4G9l`, anahtarsız çağırıyordu;
+  gövdesinde müşterinin bot şifresi var). 18 workflow tarandı, başka çağıran yok. Zamanlayıcının son 250
+  koşusu (20–25 Eylül) "Config Yok"ta bitti; canlı DB'de açık otomatik paylaşım ayarı 0 → bugünkü etki sıfır.
+- **Eray kararı: ikisi birlikte değişti.** Canlı tanım yedeklendi, yükleme gövdesi = canlı tanım + tek düğüm
+  (ad/ayarlar canlıdan): onay webhook'u `1TJ4S6zPWbdXlSEY` → `qbPEK2DKQgMmFor8`; zamanlayıcının
+  `Telegram Onay Tetikle` düğümü aynı kimlikle başlık gönderir. PUT ikisi 200, ikisi `active=true`.
+- **Ölçüm:** başlıksız 403 · yanlış başlık 403 · doğru başlık 200 (12 Eylül'de ilk ikisi 200'dü).
+  Doğru başlıklı prob (`63964`, sahte `post_id`) Telegram'a mesaj GÖNDERMEDİ (bot şifresi yok → Telegram 404).
+- **Depo hizalandı:** `auto-posting-scheduler.json` düğümüne aynı kimlik; iki dosyada kimlik/auth farkı 0.
+- **Doğrulanmadı:** zamanlayıcının başlıklı çağrısı canlıda hiç koşmadı (açık ayar yok) — ilk gerçek
+  Telegram onaylı otomatik paylaşımda görülür.
+
 ## main'e birleştirme + canlı dağıtım (2026-09-23, Eray)
 
 - **Bağımsız review / security review BİLİNÇLİ OLARAK GEÇİLDİ (Eray: "bugüne kadar plan 2 için onlarca
@@ -1002,8 +1017,8 @@ tetiklemediği kalemler. Buraya yazılmayan "sonra yaparız" sözü tutulmaz.
 - **Bilinen sınır:** `sector_pipeline` motor/denetçi/sentez modülleri konteynerde import EDİLEMEZ
   (`auditors.py:201` monorepo yolu `parents[6]`) — API bunları kullanmaz; operatör CLI'si 2026-09-12
   kararıyla sunucudaki çalışma ağacından canlı DB'ye karşı koşar.
-- **Doğrulanmadı:** takvim ucunun dönem alanı (uç kimlik istiyor, 401) · n8n Telegram webhook düğümü
-  kimliğe HENÜZ bağlanmadı (runbook Adım 7; Eray onayıyla, düğüm bazında) · md-17/md-18 (aktivasyon sonrası,
+- **Doğrulanmadı:** takvim ucunun dönem alanı (uç kimlik istiyor, 401) · ~~n8n Telegram webhook düğümü
+  kimliğe HENÜZ bağlanmadı~~ (2026-09-25 bağlandı, yukarıdaki kayıt) · md-17/md-18 (aktivasyon sonrası,
   marka ataması video sistemi değişikliğinden sonra — Eray).
 
 ## Operatör kararları — açık soruların kapanış yolu (2026-09-23, on dördüncü oturum)
@@ -1794,8 +1809,9 @@ orada düzeltilir. **Bu oturumda yapılmadı.**
   - **Takvim ucunun dönem alanı** — EV: runbook Adım 6; aynı oturumda (kimlikli istek ya da arayüz).
   - **Marka ataması + md-17** — EV: Task 19 Step 11; TETİK: Eray'ın video üretim sistemi değişikliği
     (Eray kararı 2026-09-23). Tarih Eray'da.
-  - **md-18** — Claude önerisi: paketin 2. sürümüne (ilk periyodik koşu). **Eray açıkça onaylamadı →
-    sıradaki oturumda sorulur.**
+  - **md-18** — EV: paketin 2. sürümü (ilk periyodik koşu). **Eray onayladı 2026-09-25** ("evet, 2.
+    sürüme bırak"). Gerekçe: bugün `deaktive-et` tek paketi arşivler, yeniden aktive edilemez →
+    kuyumculuk paketsiz kalırdı.
   - **Pilot ölçümleri + rapor** — EV: Task 19 Step 12-13, md-17'den sonra.
   - **[KAPANDI] Dış depo G8 düzenlemesi** — `dfa55f8` commit'lendi, pin taşındı (`b355822`).
   - **[DÜŞÜRÜLDÜ — koşullu]** `sector_pipeline` motor modüllerinin konteynerde import edilememesi:
