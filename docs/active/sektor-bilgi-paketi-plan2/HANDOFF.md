@@ -1,83 +1,76 @@
 ---
 task: sektor-bilgi-paketi-plan2
-written: 2026-09-25 (on altıncı oturum kapanışı)
+written: 2026-09-25 20:24 UTC (on yedinci oturum kapanışı)
 ---
+
+# Context
+
+Görev: `sektor-bilgi-paketi-plan2` · dal `feat/sektor-bilgi-paketi-plan2` (uzak dalın 6 commit ÖNÜNDE, push YOK).
+Madde 0 tasarımı: `docs/specs/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (spec-approved).
+Madde 0 planı: `docs/plans/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (`plan-approved`, `fbd3d4e`; 22 görev,
+iki aşama). Hat planı (yarım): `docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`. Last updated: 2026-09-25 20:24 UTC.
+
+# Current State
+
+Bu oturumda uygulama planı yazıldı ve onaylandı; **kod DEĞİŞMEDİ**. Kuyumculuk paketi 1. sürüm canlıda aktif, markaya
+atanmamış. **Blocked: evet — tek karar:** yürütücü görev başına TEK plan izliyor (aşağıda); Eray kararı gerek.
 
 # Resume From
 
-**Kuyumculuk paketi canlıda aktif** (`66654971-d90e-4cec-92da-61e723a8ec8f`, sürüm 1), **kuyumculuğa atanmış
-marka YOK** → hiçbir üretime girmiyor. Paket 25 Eylül sınavında **yetersiz** çıktı (0. madde: kural koyamıyor).
+**İlk iş — Eray'a sor (yürütme durumu çakışması, ölçüldü 20:2x):** `/execute-plan-claude-codex` planı görevin
+`TASK.md` frontmatter'ındaki `source_plan`'dan okur (`ec_plan_path`) ve `docs/active` altında `- execute_start_ref:`
+taşıyan TAM BİR `TASK.md` ister (`ec_state_dir`). Bu görevin `TASK.md`'si Plan 2'yi gösteriyor ve Plan 2'nin yürütme
+durumunu taşıyor (`# Execution State` bölümü: `execute_mode` · `execute_started` · `execute_start_ref` ·
+`ledger_window_ref` · `execute_review_log` · `execute_branch` · `cp_count` · `last_checkpoint_ref`; 2026-08-30'dan). Eray bugün
+"plan mevcut görevde kalsın" dedi — bu öneri Claude'undu ve bu kısıt kontrol EDİLMEDEN verildi. Seçenekler:
+- **(Öneri) Ayrı aktif görev:** `docs/active/paket-zorunlu-kurallar-ve-gonderi-turu/` (source_plan = yeni plan);
+  Plan 2'nin `# Execution State` satırları bu `TASK.md`'den çıkarılıp Decisions Log'a "duraklatıldı, geri konacak
+  satırlar" olarak yazılır (Plan 2'nin kalanı zaten Eray'ın video sistemi değişikliğine bağlı).
+- Aynı görev: `source_plan` geçici olarak yeni plana, Plan 2 satırları park — geri dönüşte iki yönlü elle değişim.
+Karar sonrası: `/execute-plan-claude-codex docs/plans/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md`
+(öneri: görev başına alt ajan — 2026-09-08 "bölerek dispatch" kararı). Task 1–2 commit'siz, Task 3'ün atomik
+commit'inde iner (`merged-into T3`).
 
-**Bu oturumun ürünü: 0. maddenin tasarımı yazıldı ve ONAYLANDI** —
-`docs/specs/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (`spec-approved`, Codex 5 tur, son tur
-`approve`, 18:11–18:43 UTC). Eray'ın yedi kararı (K-A..K-G) ve dört hakem turunun düzeltmeleri notun §2, §3, §7'sinde.
-**Uygulama BAŞLAMADI, kod DEĞİŞMEDİ.**
-
-**Sıradaki iş (Eray "başla" demedi; sor):** `/write-plan-claude-codex` ile uygulama planı → uygulama (kod: iki
-blok + `resolve_post_type` + `kural_uyumu` kapısı + iki migration; paket 2. sürümü: anma günleri, `sektor_gercekleri`,
-ton bölünmesi, takvim temaları kopya temizliği) → `KALIBRASYON-2.md` yazılır → sınav tekrarı (ücretli, ~1,6 USD tahmin,
-Eray onayı). **Eray'ın diğer sırası değişmedi:** video üretim sistemi değişikliği → marka ataması (Task 19 Step 11)
-→ md-17 → pilot ölçümleri → Task 20 → `/finish-branch-claude-codex`. md-18 paketin 2. sürümünde.
-
-**Bugün (2026-09-25, 16. oturum) ne oldu:** Eray üç soruyu cevapladı (istek her kuralın üstünde · anma günleri
-pakete+takvime · zorunlu/seçmeli ayrımı) → K-119 iptal → kalıp seçimi analizi (19 çıktı elle okundu) → gönderi türü
-tasarımı (özel gün → kod · ürün modu → kod varsayılanı + model `bilgi` istisnası · genel mod → model) → sektör
-şablonu reddi (vault + canlı DB ile ölçüldü) → tasarım notu → hakemin unuttuğu 7 alan nota işlendi → Codex 5 tur:
-F1 critical (istek yasal sınırları da ezer) → **Eray: şimdilik her kuralın üstünde, onay anında çiğnenen kural
-gösterilir** → kural-kural zorunlu beyan (`kural_uyumu`) + kod kapısı + "sessiz ihlal 0" sınav kapısı.
+İlgili dosyalar: plan · spec · `apps/social/backend/app/services/{sector_content_schema,sector_packages}.py` ·
+`app/core/{prompt_builder,caption_generator}.py` · `app/routers/posts.py` · `app/services/short_video.py` ·
+`shared/db/migrations/` (sıradaki 038) · `shared/n8n-workflows/telegram-content-approval.json`.
 
 # Verification
 
-| Ne | Taze çıktı |
+| Ne | Taze çıktı (bu oturum) |
 |---|---|
-| Codex zinciri | 5 tur rc=0; Tur 1 needs-attention (1C+3H) → Tur 5 approve; ham log `~/.claude/logs/otomaix--ffc87809/2026-09-25-feat-sektor-bilgi-paketi-plan2.md` |
-| Notun kod/yol atıfları | `prompt_builder.py:154/366/390-398`, `sector_packages.py:487`, `generation_stamps` kolonları, `schema_version` kolonu, `ADMIN_NOTIFIED_EVENTS` — hepsi grep/sed ile doğrulandı |
-| Takvim ↔ paket | canonical DB: takvim 25 gün, paket 16; pakette olup takvimde olmayan 0; takvimde olup pakette olmayan 9 (18 Mart, 10 Kasım dâhil); yıllık n8n işi 18 Mart + 10 Kasım üretiyor |
-| Şablon kullanımı | vault: 22 sektör şablonu 2026-04-15 terk; DB 81 gönderi: ürün modu 39 · genel 36 · özel gün 6 · sektör şablonu 6 (terk öncesi) |
-| Kalıp kullanımı (sınav, elle) | 19 paketli çıktı: kanca kalıbı açık 1 · CTA kalıbı açık 4 (Claude okuması, hakem ölçümü değil) |
-| Tam takım / Katman-1 | **KOŞULMADI** (kod değişmedi) |
+| Plan kapıları | `_ec_plan_header_gate <plan>` → 22, rc=0, bozuk başlık yok · `plan-lint.sh` temiz · `command-blocks-maint.sh verify` PASS · 22 görevin hepsinde commit ya da `merged-into` |
+| Codex | ön-analiz 19:04–19:08 (rc=0) + 4 review turu (19:35–41 · 19:53–58 · 20:05–09 · 20:11–13, hepsi rc=0); 13 bulgu (1C·9H·3M), 12 hakem teyitli kapalı, X2 kapsamı daraltıldı (Eray); log `~/.claude/logs/otomaix--ffc87809/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu-plan.md` |
+| DB (psql salt-okuma) | paketli gönderi 0/81 · `generation_stamps` 0 · atanmış marka 0 · otomatik yayın ayarı 0 · 1. sürüm gün türleri karma 9 / kutlama 2 / ticari-firsat 5 · `brand_products.type` + `is_active` var |
+| Sınav verisi | paketli çıktı 472–717 jeton (ort. 594; `olcum/sonuc-sinav/b-sonuc.json`) |
 
-**DENENMEYEN / DOĞRULANMAYAN:**
-- Notun hiçbir mekanizması kodda yok: `resolve_post_type`, `kural_uyumu` kapısı, iki blok, şema-2 okuyucu, iki migration.
-- "Sessiz ihlal" oranı (model `uyuldu` deyip çiğner mi) ÖLÇÜLMEDİ — sınav tekrarında kapı.
-- Şablon "link yoksa CTA ekleme" kuralı ile paket CTA çatışması canlıda ölçülmedi (sınav şablonsuz koştu).
-- Kota kapısı bayat okuma veriyor (17 %/3 %, 4 saat eski); beş tur sorunsuz koştu, gerçek kalan kota bilinmiyor.
-- Önceki devirden: zamanlayıcının başlıklı onay çağrısı canlıda hiç koşmadı; madde 16 kanal satırı; 11(b); S06 ret
-  mesajı arayüzde; "ysatisfa"; kısa video/fikir yüzeyi ölçülmedi.
-
-**TUZAKLAR:**
-- Hakem turu: `run_codex_scan` arka planda (`run_in_background`, `CSS_CALL_TIMEOUT=1200s`), prompt Write tool ile
-  `~/.claude/tmp/<log-basename>.prompt`'a, SETUP fence her turdan önce (dosya trap'le silinir). Substrat eski
-  review/migration/test dosyalarını "sır" diye dışlıyor (yanlış pozitif sınıfı, promptta not düşüyor) — bulgu değil.
-- Kapanış turundan ÖNCE sınıf süpürmesi: kaldırılan alan adını grep'le, "her X kimlik alır" kümesini KODDAN say
-  (F1 bu yüzden 4 tur sürdü — memory `feedback_close_the_class_not_the_variant`).
-- Katalogdan sayma: `templates_data.py` 28 şablon tanımlı ama 6'sı canlı; önce vault, sonra DB (memory
-  `feedback_count_from_usage_not_catalog`).
-- Coolify: `main`'e push dağıtımı TETİKLEMİYOR; Eray düğmeye basar. Canlı model anahtarı `/root/.anthropic-key`.
-- Ücretli koşu öncesi tutar + açık onay (Eray 2026-09-25: "sizin hatanızın bedelini ödeyemem").
+**KOŞULMADI:** kod yok → test, tam takım, Katman-1 koşulmadı. Telegram sınırları (1024/4096) belge değeri, ölçülmedi.
 
 # Risks
 
-- **K-A (şimdilik):** kullanıcı isteği mevzuat yasaklarını, kişisel veriyi ve uydurma yasağını da ezer; azaltıcı
-  yalnız onay anında ifşa. Eray tetik/tarih vermedi; canlıya müşteri alınmadan yeniden değerlendirme Claude'un notu.
-- Paket bu hâliyle markaya atanırsa sınavdaki kritik hatalar gerçek paylaşımda çıkabilir — **atama 0. madde
-  uygulanmadan yapılmamalı** (Claude risk notu; Eray'a söylendi).
-- Paketli Katman-1 fixture'ları uygulamada yeniden temellenecek (kasıtlı); paketsiz yol bayt-bayt korunur (kapı).
-- Önceki devirden: yetki belgesi numarası (G8) · kök perakende rehberi susuyor · iki eski Anthropic anahtarı iptal
-  edilmedi.
+- **X2 (makbuz yarışı) plan düzeyinde hakem teyitsiz** — `unresolved_high_severity_override: true`; Task 13'te zorunlu
+  gerçek veritabanı yarış testi + checkpoint'te Codex sınar.
+- D13 kullanıcıya görünür değişiklik: makbuzu kaybolan paketli metin kaydedilemez (422), yeniden üretilir.
+- Aşama B: yeni koşu açık soruyla durmazsa operatör yolu açılmaz (planın DUR-1'i).
+- Kota okuması bayat kalıyor (12 %/6 %): `adversarial-review` çağrıları okumayı tazelemiyor.
+- Önceki devirden sürenler: K-A (istek yasal yasakları da ezer; müşteri öncesi yeniden bak) · atama madde 0'dan önce
+  YAPILMAZ · yetki belgesi no (G8) · madde 12 · iki eski Anthropic anahtarı · sızmış anahtarlar (Plan 2 sonrası ilk iş).
 
 # Notes For Claude
 
-- **Eray'ın sorduğunu cevapla; kısa tut; kanıtla gel.** Bu oturumda "madde ne demek", "seçmeli olunca hiç seçmeyebilir
-  mi", "türü kim belirleyecek", "hangi mod" soruları geldi — her biri ölçümle cevaplandı, öneri menüsü değil.
-- Sektör şablonu önerme; tür şablonun değil gönderinin özelliği (K-F). Kullanıcıya tür seçtirme yalnız sınav tür hatası
-  gösterirse.
-- `uyarilar` alanı YOK — `kural_uyumu` (kural başına karar). Bu adı kullanan eski cümle görürsen tarihçedir.
-- Commit: HANDOFF/TASK/spec oturum sonunda Eray onayıyla tek commit'te (bu dosyanın commit'i); push EDİLMEDİ.
+- **Eray kararları (2026-09-25, bu oturum) — `TASK.md` Decisions Log'a HENÜZ yazılmadı** (yalnız madde 0 "Ev" satırında):
+  (1) 2. sürüm yeni tam koşuyla, planın Aşama B'si; (2) X2: "Kuralı yaz, kilidi koda bırak"; (3) plan mevcut görevde
+  kalsın — yukarıdaki kısıtla YENİDEN sorulacak.
+- Codex substratı 7 ana dosyayı sır taramasıyla dışlıyor (`caption_generator.py`, `posts.py`, `ai.py`, `short_video.py`,
+  `runs.py`, `writeback.py`, n8n `telegram-content-approval.json`) → checkpoint'lerde ilgili kesitleri `sed` ile çıkar,
+  sır tara, prompt sonuna VERİ olarak `cat` ile ekle (oturum karalama dosyası kalıcı değil; yeniden üret).
+- Güvenlik denetimi `rm -f -- "$DEĞİŞKEN"` biçimini engelliyor → prompt dosyası ve trap'te sabit tam yol kullan.
+- `_ec_plan_*` yardımcıları argümanı değil aktif `TASK.md`'nin `source_plan`'ını okur; başka planı denetlemek için
+  `_ec_plan_header_gate "<mutlak yol>"`.
+- Codex tur süresi bu oturumda 2,5–6 dk; ikinci turdan önce maliyeti tek satırla bildir.
 
 # Notes For Codex
 
-Uygulama planı review'ında dikkat: (1) `resolve_post_type` üç dal × gün türü × ürün türü matrisi; (2) `kural_uyumu`
-kapısı: kimlik tamlığı + karar değeri + kanıt alanları + gün bloğu `G*` kimlikleri (üretilmiş matris); (3) şema-2
-okuyucu geriye uyumlu (sürüm 1 dokuz alanla okunur), geri dönüş tabanı runbook satırı + `package_read_error` testi;
-(4) paketsiz yol bayt-bayt (Katman-1); (5) `KALIBRASYON-2.md` sınavdan önce sabit, eski ölçüt aynen yanında.
+Plan checkpoint'lerinde: planın sonundaki "Codex plan review kayıtları" kapalı bulguları yeniden açma; X2 Task 13
+checkpoint'inde gerçek veritabanı yarış testiyle doğrulanacak (tek kazanan, kaybeden için ücretli çağrı 0); paketsiz yol
+bayt-bayt (13 golden) korunmalı; dışlanan dosyalar prompta VERİ olarak eklenir.
