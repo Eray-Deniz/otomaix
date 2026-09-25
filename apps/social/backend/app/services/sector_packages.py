@@ -25,7 +25,7 @@ import random
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal, Mapping
 from uuid import UUID
 
 from app.services.package_events import log_package_event
@@ -634,6 +634,75 @@ def render_package_block(
 
     parts.append(f"--- {BLOCK_HEADER} SONU ---")
     return "\n".join(parts)
+
+
+# ─── Gönderi türü çözümleme (tasarım notu 2026-09-25 §3.1, §3.2; K-G) ────────
+
+
+@dataclass(frozen=True)
+class PostTypeResolution:
+    """Koddan çözülen gönderi türü ve kaynağı.
+
+    `tur is None` yalnız `kaynak == "model"` iken: türü model belirler ve yazar.
+    """
+
+    tur: str | None
+    kaynak: Literal["gun_kaydi", "urun_varsayilan", "model"]
+
+
+# Gün kaydı `tur` → gönderi türü (§3.1). Anahtarlar `normalize_special_day_key`
+# ile katlanmış biçimdedir — gün anahtarıyla aynı tek normalleştirme (K-01b).
+DAY_TYPE_TO_POST_TYPE: Mapping[str, str] = {
+    "ticari-firsat": "satis",
+    "karma": "satis",
+    "kutlama": "kutlama",
+    "anma": "anma",
+}
+
+# `brand_products.type` → ürün modunun varsayılan türü (§3.2 madde 2).
+PRODUCT_TYPE_TO_POST_TYPE: Mapping[str, str] = {"product": "satis", "service": "hizmet"}
+
+
+def _fold_day_type(raw: Any) -> str:
+    """Gün türünü eşleme anahtarına katlar: Türkçe harf + büyük/küçük + ayırıcı.
+
+    Yaprağın `_fold_turkish`'i kullanılır, `normalize_special_day_key` DEĞİL:
+    o, önce `lower()` uyguladığı için büyük `İ`yi birleşen işaretle bölüyor
+    (ölçüldü: `"TİCARİ FIRSAT"` → `ti-cari-firsat`). Gün anahtarında iki taraf
+    aynı fonksiyonu kullandığından zararsızdır; tür eşlemesinde ise sessiz ret olurdu.
+    """
+    if not isinstance(raw, str):
+        return ""
+    return re.sub(r"[^a-z0-9]+", "-", _fold_turkish(raw)).strip("-")
+
+
+def resolve_post_type(
+    day_entry: Mapping | None, product: Mapping | None
+) -> PostTypeResolution:
+    """Gönderi türünü KODDAN çözer (§3.2). Öncelik: gün kaydı > ürün kaydı > model.
+
+    `day_entry`, `match_special_day` ile bulunmuş paket gün kaydıdır (tek eşleşme
+    ölçüsü, K-01b) — çağıran geçirir. Sessiz varsayılan YOKTUR: eşlemede olmayan
+    gün türü de, türü okunmamış ürün de `ValueError` olur; içerik kusuru ya da
+    eksik sorgu `model` kaynağına düşüp gizlenmez.
+    """
+    if day_entry is not None:
+        raw = day_entry.get("tur")
+        key = _fold_day_type(raw)
+        if key not in DAY_TYPE_TO_POST_TYPE:
+            raise ValueError(
+                f"gün türü {raw!r} eşlemede yok — geçerli: {sorted(DAY_TYPE_TO_POST_TYPE)}"
+            )
+        return PostTypeResolution(DAY_TYPE_TO_POST_TYPE[key], "gun_kaydi")
+    if product is not None:
+        product_type = product.get("type")
+        if product_type not in PRODUCT_TYPE_TO_POST_TYPE:
+            raise ValueError(
+                f"ürün `type` okunmadı ya da geçersiz: {product_type!r} — çağıran "
+                f"`brand_products.type` değerini ({sorted(PRODUCT_TYPE_TO_POST_TYPE)}) geçirmeli"
+            )
+        return PostTypeResolution(PRODUCT_TYPE_TO_POST_TYPE[product_type], "urun_varsayilan")
+    return PostTypeResolution(None, "model")
 
 
 def match_special_day(context, day_name: str) -> tuple[str | None, str | None]:
