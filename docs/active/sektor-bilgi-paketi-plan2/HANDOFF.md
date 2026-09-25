@@ -5,7 +5,8 @@ written: 2026-09-25 20:24 UTC (on yedinci oturum kapanışı)
 
 # Context
 
-Görev: `sektor-bilgi-paketi-plan2` · dal `feat/sektor-bilgi-paketi-plan2` (uzak dalın 6 commit ÖNÜNDE, push YOK).
+Görev: `sektor-bilgi-paketi-plan2` · dal `feat/sektor-bilgi-paketi-plan2` (push durumu `git status -sb` ile ölçülür;
+2026-09-25 20:3x UTC'de `9e22790`'a kadar push edildi — Eray onayı).
 Madde 0 tasarımı: `docs/specs/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (spec-approved).
 Madde 0 planı: `docs/plans/2026-09-25-paket-zorunlu-kurallar-ve-gonderi-turu.md` (`plan-approved`, `fbd3d4e`; 22 görev,
 iki aşama). Hat planı (yarım): `docs/plans/2026-08-27-sektor-bilgi-paketi-plan2.md`. Last updated: 2026-09-25 20:24 UTC.
