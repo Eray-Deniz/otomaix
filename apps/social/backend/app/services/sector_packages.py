@@ -25,7 +25,7 @@ import random
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, Sequence
 from uuid import UUID
 
 from app.services.package_events import log_package_event
@@ -47,7 +47,9 @@ from app.services.sector_content_schema import (
     _has_meaningful_text,
     _TR_ASCII,
     _walk_strings,
+    SECTOR_FACTS_FIELD,
     has_meaningful_text,
+    split_tone_lines,
     structural_errors,
 )
 from app.services.sector_resolver import _normalize_slug
@@ -634,6 +636,155 @@ def render_package_block(
 
     parts.append(f"--- {BLOCK_HEADER} SONU ---")
     return "\n".join(parts)
+
+
+# ─── Zorunlu blok (tasarım notu 2026-09-25 §3.3-A, §3.11; plan Task 6, D3) ────
+
+
+@dataclass(frozen=True)
+class RenderedRules:
+    """Basılan metin + basılan BAĞLAYICI kuralların haritası (plan D3).
+
+    `rules` basım sırasıyla `(kimlik, kural metni)` çiftleridir. Kapı modelin
+    beyanını bu haritaya karşı denetler; basan ve denetleyen aynı kaynağa bakar.
+    """
+
+    text: str
+    rules: tuple[tuple[str, str], ...]
+
+
+MANDATORY_BLOCK_HEADER = "SEKTÖR PAKETİ · ZORUNLU KURALLAR"
+
+# §3.3-A öncelik satırı — spec metniyle BİREBİR (yalnız spec içi "(§3.12)" atfı
+# istemde anlamsız olduğu için düşürüldü). Son cümle beyan cümlesidir; fikir
+# yüzeyinde beyan istenmez (D11), orada yalnız "isteğe uy" kısmı basılır.
+_PRIORITY_BASE = (
+    "Bu kurallar şablon varsayılanlarının, genel yazım kurallarının ve ürün açıklaması/teknik "
+    "spec kuralının ÜSTÜNDEDİR; ama KULLANICI İSTEĞİNİN, gerçek ÜRÜN BİLGİSİNİN ve MARKA "
+    "DNA'sının (markaya özgü yasak kelimeler dâhil) ALTINDADIR. Ürün bilgisiyle çelişen paket "
+    "kuralı uygulanmaz; marka yasak kelimesi paket kuralına ve genel kurallara karşı kazanır."
+)
+MANDATORY_PRIORITY_LINE = (
+    _PRIORITY_BASE
+    + " Kullanıcı isteği bir kuralla çatışıyorsa isteğe uy ve her çiğnenen kuralı "
+    "`kural_uyumu`nda 'istek gereği çiğnendi' diye işaretle."
+)
+_PRIORITY_LINE_IDEA = _PRIORITY_BASE + " Kullanıcı isteği bir kuralla çatışıyorsa isteğe uy."
+
+# §3.3-A "tek öncelik sırası" (Tur-3 N3).
+MANDATORY_PRIORITY_ORDER_LINE = (
+    "Öncelik sırası: kullanıcının açık isteği > gerçek ürün bilgisi = marka DNA'sı "
+    "(yasak kelimeler dâhil) > paket zorunlu kuralları > genel yazım/teknik-spec "
+    "kuralları > şablon varsayılanları."
+)
+
+_SCOPE_RULE = "Kapsam dışı ürün için paketin kalıplarını uygulama"
+_SCOPE_RULE_DECLARATION = (
+    "; bu durumu `kural_uyumu`nda bu kuralın satırına `uygulanamadi` + neden "
+    "('ürün kapsam dışı: <ürün>') olarak yaz"
+)
+_CONFLICT_RULE = "Ürün veya marka bilgisiyle çelişen kalıbı kullanma."
+_CHANNEL_SERVICE_RULE = "Markanın sahip olmadığı kanalı VEYA HİZMETİ önerme."
+
+# Kanal anahtarının istemde okunan adı (kapalı küme `CHANNEL_KEYS` ile aynı).
+_CHANNEL_NAMES = {
+    "eticaret_sitesi": "e-ticaret sitesi",
+    "fiziksel_magaza": "fiziksel mağaza",
+    "randevu_sistemi": "randevu sistemi",
+    "whatsapp_hatti": "WhatsApp hattı",
+}
+
+_MANDATORY_SURFACES = ("caption", "idea")
+
+
+class _RuleWriter:
+    """Bağlayıcı satırın TEK basım yolu: kimlik atar ve haritaya yazar (D3).
+
+    Bir bağlayıcı satır ancak buradan geçerek basılır; kimliksiz bağlayıcı satır
+    yapısal olarak üretilemez (üretilmiş matris testi pinler).
+    """
+
+    def __init__(self, prefix: str) -> None:
+        self._prefix = prefix
+        self.lines: list[str] = []
+        self.rules: list[tuple[str, str]] = []
+
+    def rule(self, text: str) -> None:
+        rule_id = f"{self._prefix}{len(self.rules) + 1}"
+        self.rules.append((rule_id, text))
+        self.lines.append(f"{rule_id}: {text}")
+
+    def plain(self, line: str) -> None:
+        self.lines.append(line)
+
+
+def _binding_items(value: Any) -> list[str]:
+    """Liste alanının kural öğeleri — bilinçli boş (K-120) kural DEĞİLDİR."""
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if item != DELIBERATELY_EMPTY]
+
+
+def render_mandatory_block(
+    context: SectorPackageContext,
+    *,
+    surface: Literal["caption", "idea"],
+    channels: Any,
+    services: Sequence[str],
+) -> RenderedRules:
+    """Paketin kurallarını tek ZORUNLU blokta, `Z*` kimlikleriyle basar (§3.3-A).
+
+    Blok Tier 2'dedir (D4): marka + paket sürümü + hizmet listesi + kanallara
+    bağlıdır, türe bağlı DEĞİLDİR — aynı girdi aynı baytı üretir (Katman-1).
+    Beyan cümleleri yalnız başlık yüzeyinde basılır (D11).
+    """
+    if surface not in _MANDATORY_SURFACES:
+        raise ValueError(
+            f"bilinmeyen enjeksiyon yüzeyi: {surface!r} — tanımlı yüzeyler: "
+            + ", ".join(_MANDATORY_SURFACES)
+        )
+    caption = surface == "caption"
+    content = context.content
+    out = _RuleWriter("Z")
+    out.plain(f"\n--- {MANDATORY_BLOCK_HEADER} ({context.sub_sector_slug}) ---")
+
+    out.plain(f"Kapsam: {content.get('kapsam', '')}")
+    out.rule(_SCOPE_RULE + (_SCOPE_RULE_DECLARATION if caption else "") + ".")
+
+    tone_rules, tone_soft = split_tone_lines(str(content.get("ton_ve_dil", "")))
+    if tone_rules:
+        out.plain("Ton ve dil:")
+        for line in tone_rules:
+            out.rule(line)
+    for line in tone_soft:
+        out.plain(f"Ton (yumuşak yönlendirme): {line}")
+
+    facts = _binding_items(content.get(SECTOR_FACTS_FIELD))
+    if facts:
+        out.plain("Sektör gerçekleri:")
+        for fact in facts:
+            out.rule(fact)
+
+    bans = _binding_items(content.get("yasaklar_ve_hassasiyetler"))
+    if bans:
+        out.plain("Yasaklar ve hassasiyetler:")
+        for ban in bans:
+            out.rule(ban)
+
+    out.rule(_CONFLICT_RULE)
+    out.rule(_CHANNEL_SERVICE_RULE)
+    verified = sorted(_verified_channels(channels))
+    out.plain(
+        "Markanın kanalları: "
+        + (", ".join(_CHANNEL_NAMES[key] for key in verified) if verified else "doğrulanmış kanal yok")
+    )
+    names = [str(name) for name in services]
+    out.plain("Markanın hizmetleri: " + (", ".join(names) if names else "kayıtlı hizmet yok"))
+
+    out.plain(MANDATORY_PRIORITY_LINE if caption else _PRIORITY_LINE_IDEA)
+    out.plain(MANDATORY_PRIORITY_ORDER_LINE)
+    out.plain(f"--- {MANDATORY_BLOCK_HEADER} SONU ---")
+    return RenderedRules(text="\n".join(out.lines), rules=tuple(out.rules))
 
 
 # ─── Gönderi türü çözümleme (tasarım notu 2026-09-25 §3.1, §3.2; K-G) ────────
